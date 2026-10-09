@@ -155,3 +155,30 @@ test("ziele-auswertung: ein Vorschlag außerhalb des Schemas oder mit dem Token 
   assert.deepEqual(verraten.laeufe.map(({ status }) => status), [0, 1]);
   assert.match(verraten.laeufe[1].stdout, /Antwort enthielt das Token/);
 });
+
+test("ziele-auswertung: die Antwort „keiner, weil …“ ergibt ein system-Issue mit der Begründung und ohne Bauauftrag", async (context) => {
+  const issues = [vorherVorkommen(ERSTES, "src/a.js"), neuesVorkommen(ZWEITES, "src/b.js")];
+  const keiner = { mechanismus: "keiner", dateien: [], rotprobe: "", begruendung: "keiner, weil der Befund nur in Altcode vorkommt." };
+  const lauf = await auswertung(context, { issues }, { antwort: keiner });
+  assert.deepEqual(lauf.laeufe.map(({ status }) => status), [0, 0, 0, 0]);
+  const [system] = systemIssues(lauf.github);
+  assert.match(system.body, /^- Mechanismus: keiner$/m);
+  assert.match(system.body, /^> keiner, weil der Befund nur in Altcode vorkommt\.$/m);
+  assert.match(system.body, /^Kein Mechanismus vorgeschlagen\. Antonio entscheidet, ob das Issue so geschlossen wird\.$/m);
+});
+
+test("ziele-auswertung: die Antwort „bestehende Prüfung ändern oder entfernen“ ergibt einen Vorschlag an Antonio", async (context) => {
+  const issues = [vorherVorkommen(ERSTES, "src/a.js"), neuesVorkommen(ZWEITES, "src/b.js")];
+  const aendern = {
+    mechanismus: "pruefung-aendern",
+    dateien: ["tools/basis-vergleich.mjs"],
+    rotprobe: "",
+    begruendung: "bestehende Prüfung ändern oder entfernen: jscpd meldet hier eine gewollte Wiederholung.",
+  };
+  const lauf = await auswertung(context, { issues }, { antwort: aendern });
+  assert.deepEqual(lauf.laeufe.map(({ status }) => status), [0, 0, 0, 0]);
+  const [system] = systemIssues(lauf.github);
+  assert.match(system.body, /^- Mechanismus: pruefung-aendern$/m);
+  assert.match(system.body, /^- Dateien: `tools\/basis-vergleich\.mjs`$/m);
+  assert.match(system.body, /^Vorschlag an Antonio: eine bestehende Prüfung ändern oder entfernen\. Umgesetzt wird erst nach seiner Entscheidung\.$/m);
+});
