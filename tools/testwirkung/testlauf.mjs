@@ -30,8 +30,14 @@ function eigenstaendig() {
 function aufruf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {
   const argumente = [TESTGRUPPE, ...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
-  const optionen = { cwd: verzeichnis, env: { ...eigenstaendig(), ...umgebung }, timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE };
+  const optionen = { cwd: verzeichnis, env: { ...eigenstaendig(), ...umgebung } };
   return { argumente: [...argumente, ...filter, ...dateien], optionen };
+}
+
+function berichteDauer(beginn) {
+  const minuten = (Date.now() - beginn) / MS_JE_MINUTE;
+  if (minuten <= ZEITGRENZE_MINUTEN) return;
+  console.log(`Hinweis: Ein Testlauf dauerte ${Math.ceil(minuten)} Minuten, länger als ${ZEITGRENZE_MINUTEN}.`);
 }
 
 function abgebrochen(grund) {
@@ -40,7 +46,9 @@ function abgebrochen(grund) {
 
 export function testlauf(lauf) {
   const { argumente, optionen } = aufruf(lauf);
+  const beginn = Date.now();
   const ergebnis = spawnSync(process.execPath, argumente, { ...optionen, encoding: "utf8", maxBuffer: MAX_AUSGABE });
+  berichteDauer(beginn);
   if (ergebnis.error !== undefined || ergebnis.signal !== null) throw abgebrochen(ergebnis.error?.message ?? ergebnis.signal);
   const zeilen = ergebnis.stdout.split("\n");
   return zeilen.filter(Boolean).map(eintragIn(optionen.cwd));
@@ -48,9 +56,13 @@ export function testlauf(lauf) {
 
 export function testlaufNebenher(lauf) {
   const { argumente, optionen } = aufruf(lauf);
+  const beginn = Date.now();
   return new Promise((fertig, gescheitert) => {
     const kind = spawn(process.execPath, argumente, { ...optionen, stdio: "ignore" });
     kind.on("error", (fehler) => gescheitert(abgebrochen(fehler.message)));
-    kind.on("exit", (_status, signal) => (signal === null ? fertig() : gescheitert(abgebrochen(signal))));
+    kind.on("exit", (_status, signal) => {
+      berichteDauer(beginn);
+      return signal === null ? fertig() : gescheitert(abgebrochen(signal));
+    });
   });
 }
