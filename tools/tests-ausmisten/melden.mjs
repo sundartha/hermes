@@ -7,6 +7,7 @@ import { PLAN, ladeVorhandene, paketName } from "./artefakte.mjs";
 import {
   BASIS,
   BRANCH,
+  UNVERAENDERT,
   beschraenke,
   beschreibung,
   entscheide,
@@ -14,7 +15,6 @@ import {
   pruefePlan,
   vereinige,
 } from "./entscheiden.mjs";
-import { UNVERAENDERT } from "./ausnehmen.mjs";
 import {
   FREIGEBER,
   freigegeben,
