@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { delimiter } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import {
@@ -43,6 +44,11 @@ const ZEITSTEMPEL = "2026-10-08T10:00:00.0000000Z";
 const ERSTE_JOB_ID = 800;
 const JOBS_JE_PAKET = 2;
 const LAUF_ADRESSE = `https://github.com/${REPOSITORY}/actions/runs/${LAUF_ID}`;
+const OHNE_PAKETE = ["--import", fileURLToPath(new URL("ausmisten/ohne-pakete.mjs", import.meta.url))];
+
+function starteWieImJob(args, cwd, umgebung) {
+  return starte(WERKZEUG, { args, cwd, umgebung, vorab: OHNE_PAKETE });
+}
 
 function artefaktDaten(name, master, felder = {}) {
   const gemeinsam = {
@@ -197,7 +203,7 @@ async function melde(context, angabe = {}) {
     PATH: `${gh.pfad}${delimiter}${process.env.PATH}`,
   };
   const args = ["melden", ...(fall.pr ? ["--pr"] : [])];
-  const ergebnis = await starte(WERKZEUG, { args, cwd: repo.ordner, umgebung });
+  const ergebnis = await starteWieImJob(args, repo.ordner, umgebung);
   const status = github.anfragen.find(
     ({ methode, pfad }) => methode === "POST" && pfad.includes("/statuses/"),
   );
@@ -232,6 +238,13 @@ test("ausmisten-melden: gleiche Tötungen auf Basis und Branch setzen den Status
   assert.equal(ergebnis.gesetzt.target_url, LAUF_ADRESSE);
   assert.ok(ergebnis.gesetzt.description.length <= MAX_BESCHREIBUNG);
   assert.match(ergebnis.gesetzt.description, /getötet Basis 2, Branch 2/);
+});
+
+test("ausmisten-melden: ohne installierte Pakete bricht ein Befehl ab, der ein Fremdpaket lädt", async (context) => {
+  const repo = ausmistenRepo(context);
+  const ergebnis = await starteWieImJob(["planen", "--aus", "plan"], repo.ordner, {});
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.match(ergebnis.ausgabe, /Abbruch: Fremdpaket \S+ geladen von /);
 });
 
 test("ausmisten-melden: ein fehlendes Artefakt setzt failure", async (context) => {
