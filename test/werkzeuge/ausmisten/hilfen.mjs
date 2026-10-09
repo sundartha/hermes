@@ -84,8 +84,8 @@ export function ausmistenRepo(context, dateien = {}) {
   };
 }
 
-export async function starte(werkzeug, { args, cwd, umgebung }) {
-  const kind = spawn(process.execPath, [join(REPO_ROOT, werkzeug), ...args], {
+export async function starte(werkzeug, { args, cwd, umgebung, vorab = [] }) {
+  const kind = spawn(process.execPath, [...vorab, join(REPO_ROOT, werkzeug), ...args], {
     cwd,
     env: { ...isolatedEnvironment(), ...umgebung },
   });

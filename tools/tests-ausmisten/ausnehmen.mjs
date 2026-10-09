@@ -1,11 +1,11 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 
+import { UNVERAENDERT } from "./entscheiden.mjs";
 import { syntaxbaum } from "./importe.mjs";
 import { git, gitGelingt } from "./pfade.mjs";
 
 export const TROCKENLAUF_GESCHEITERT = /There were failed tests in the initial test run/;
-export const UNVERAENDERT = "unverändert";
 const SONDERZEICHEN = /[.*+?^${}()|[\]\\]/g;
 const START = "test:start";
 const BESTANDEN = "test:pass";

@@ -6,6 +6,7 @@ export const FORMAT = 3;
 export const BASIS = "basis";
 export const BRANCH = "branch";
 export const PLAN_ART = "plan";
+export const UNVERAENDERT = "unverändert";
 export const MAX_PAKETE = 20;
 const SHA = /^[0-9a-f]{40}$/;
 const PRUEFSUMME = /^[0-9a-f]{64}$/;
