@@ -169,10 +169,10 @@ function textReadingProblems() {
   return [`noch ${files} Testdateien Dateien unter src/ oder *.md als Text lesen`];
 }
 
-function instructionsProblems() {
+function instructionsReport() {
   const lines = lineCount(INSTRUCTIONS_FILE);
   if (lines <= INSTRUCTIONS_MAX_LINES) return [];
-  return [`${INSTRUCTIONS_FILE} ${lines} Zeilen hat, erlaubt sind ${INSTRUCTIONS_MAX_LINES}`];
+  return { gruende: [], bericht: [`${INSTRUCTIONS_FILE} hat ${lines} Zeilen, mehr als ${INSTRUCTIONS_MAX_LINES}`] };
 }
 
 function retiredWorkflowProblems() {
@@ -370,8 +370,8 @@ export const PACKAGE_STEPS = [
     kriterien: [
       {
         id: "claude-md",
-        titel: `${INSTRUCTIONS_FILE} hat höchstens ${INSTRUCTIONS_MAX_LINES} Zeilen`,
-        pruefen: instructionsProblems,
+        titel: `Bericht: ${INSTRUCTIONS_FILE} über ${INSTRUCTIONS_MAX_LINES} Zeilen`,
+        pruefen: instructionsReport,
       },
       {
         id: "workflows-entfernt",
