@@ -105,6 +105,43 @@ test("basis-vergleich: gelöschte Kommentare in einer bekannten Kopie machen kei
   expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
 });
 
+const ZWEITE_FUNKTION = `export function produkt(werte) {
+  let ergebnis = 1;
+  for (const wert of werte) ergebnis *= wert + 3;
+  const teil = ergebnis / werte.length;
+  return { ergebnis, teil, anzahl: werte.length, voll: werte.length > 0 };
+}
+`;
+const DRITTE_FUNKTION = `export function spanne(werte) {
+  let kleinste = werte[0];
+  for (const wert of werte) kleinste = Math.min(kleinste, wert - 4);
+  const groesste = Math.max(...werte);
+  return { kleinste, groesste, anzahl: werte.length, gleich: kleinste === groesste };
+}
+`;
+const GROSSE_KOPIE = `${DUPLICATED_BLOCK}${ZWEITE_FUNKTION}`;
+
+test("basis-vergleich: eine bekannte Kopie, die zwischen denselben Dateien kleiner wird, ist keine neue", (context) => {
+  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
+  write(probed, "src/eins.js", DUPLICATED_BLOCK);
+  write(probed, "src/zwei.js", DUPLICATED_BLOCK);
+  expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
+});
+
+test("basis-vergleich: eine bekannte Kopie, die zwischen denselben Dateien größer wird, ist neu", (context) => {
+  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
+  write(probed, "src/eins.js", `${GROSSE_KOPIE}${DRITTE_FUNKTION}`);
+  write(probed, "src/zwei.js", `${GROSSE_KOPIE}${DRITTE_FUNKTION}`);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: bleibt die bekannte Kopie, ist eine zusätzliche kleinere Kopie zwischen denselben Dateien neu", (context) => {
+  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
+  write(probed, "src/eins.js", `${GROSSE_KOPIE}const nurEins = "eins";\n${DRITTE_FUNKTION}`);
+  write(probed, "src/zwei.js", `${GROSSE_KOPIE}let nurZwei = [2];\n${DRITTE_FUNKTION}`);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
 test("basis-vergleich: die Basislinie waechst weder durch Kuerzen noch durch Anlegen", (context) => {
   const probed = probe(context, JSCPD, "jscpd");
   write(probed, "src/zwei.js", OTHER_CODE);
