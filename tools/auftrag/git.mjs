@@ -31,7 +31,7 @@ function verfolgteAenderungen(basis, cwd) {
   return eintraege
     .filter(Boolean)
     .map((eintrag) => eintrag.split("\t", NUMSTAT_FELDER))
-    .map(([hinzu, weg, pfad]) => ({ pfad, zeilen: zeilenzahl(hinzu) + zeilenzahl(weg) }));
+    .map(([hinzu, , pfad]) => ({ pfad, zeilen: zeilenzahl(hinzu) }));
 }
 
 function neueDateien(cwd) {

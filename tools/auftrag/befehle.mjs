@@ -75,7 +75,7 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   for (const zeile of [...verstoesse, ...hinweise]) console.log(zeile);
   const urteil = verstoesse.length === 0 ? "grün" : "rot";
   console.log(
-    `${urteil}: ${aenderungen.length} Dateien geändert, ${produktzeilen} Zeilen Produktcode, Rolle ${rolle}.`,
+    `${urteil}: ${aenderungen.length} Dateien geändert, ${produktzeilen} neue Zeilen Produktcode, Rolle ${rolle}.`,
   );
   return verstoesse.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
