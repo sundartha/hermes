@@ -32,5 +32,5 @@ export function werkzeugBefehl(pfad, argumente = []) {
 }
 
 export function eslintBefehl(argumente) {
-  return nodeBefehl(join(WERKZEUG_ROOT, "node_modules/eslint/bin/eslint.js"), argumente);
+  return nodeBefehl(join(WERKZEUG_ROOT, "node_modules/eslint/bin/eslint.js"), ["--pass-on-unpruned-suppressions", ...argumente]);
 }
