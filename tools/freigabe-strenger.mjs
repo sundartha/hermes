@@ -12,6 +12,7 @@ const TEST_FILE = /^test\/.+\.test\.js$/;
 const TEXT_LIST_SUFFIX = ".txt";
 const LINE_BREAK = "\n";
 const WHOLE_FILE = "";
+const SUPPRESSION_COUNTS = "count";
 
 const OLD_FINDING_LISTS = new Map([
   ["tools/basis/jscpd.json", "befunde"],
@@ -26,6 +27,7 @@ const OLD_FINDING_LISTS = new Map([
   ["tools/basis/test-importe.json", WHOLE_FILE],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
   ["tools/basis/katalog-ohne-test.txt", WHOLE_FILE],
+  ["eslint-suppressions.json", SUPPRESSION_COUNTS],
 ]);
 
 function parsed(commit, path) {
@@ -60,7 +62,31 @@ function isShorterSubsequence(shorter, longer) {
   return shorter.length < longer.length;
 }
 
+function isLowerCount(before, after) {
+  const entryKeys = Object.keys(after ?? {});
+  const sameShape = entryKeys.length === 1 && entryKeys[0] === SUPPRESSION_COUNTS;
+  const count = after?.[SUPPRESSION_COUNTS];
+  return sameShape && Number.isInteger(count) && count > 0 && count <= before?.[SUPPRESSION_COUNTS];
+}
+
+function countEntries(content) {
+  if (!isRecord(content)) return undefined;
+  const files = Object.values(content);
+  if (!files.every(isRecord)) return undefined;
+  return Object.entries(content).flatMap(([file, rules]) =>
+    Object.entries(rules).map(([rule, entry]) => ({ file, rule, entry })),
+  );
+}
+
+function onlyLowersCounts(before, after) {
+  const [old, current] = [countEntries(before), countEntries(after)];
+  if (old === undefined || current === undefined) return false;
+  const holds = current.every(({ file, rule, entry }) => isLowerCount(before[file]?.[rule], entry));
+  return holds && !isDeepStrictEqual(before, after);
+}
+
 function onlyDropsEntries(before, after, key) {
+  if (key === SUPPRESSION_COUNTS) return onlyLowersCounts(before, after);
   const [old, current] = [listParts(before, key), listParts(after, key)];
   if (!Array.isArray(old.entries) || !Array.isArray(current.entries)) return false;
   return (
