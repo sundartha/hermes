@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
-import { GRUEN, ROT, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
+import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { frage } from "./einsatz.mjs";
 import { phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
@@ -27,9 +27,10 @@ function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
 }
 
-function fehlerausgabe({ runde, grund, pruefungen }) {
+function fehlerausgabe({ runde, grund, pruefungen, agenten }) {
   const rot = pruefungen.filter(({ exitCode }) => exitCode !== 0);
-  return [`Runde ${runde}: ${grund}`, ...rot.flatMap(({ name, zeilen }) => [`${name}:`, ...zeilen])].join("\n");
+  const zeilen = rot.flatMap(({ name, zeilen: belegzeilen }) => [`${name}:`, ...belegzeilen]);
+  return [`Runde ${runde}: ${grund}`, ...zeilen, ...hinweiseDesBaus(agenten)].join("\n");
 }
 
 function planPrompt(phase, auftrag, satz) {
@@ -185,7 +186,9 @@ class Runden {
   entscheidung(ergebnis, gestoppt = this.gestoppt()) {
     const { phase, auftrag, root } = this.kontext;
     const notiz = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
-    const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notiz.antwort.trim() || gestoppt.verlauf.join("\n\n"), ""].join("\n");
+    const hinweise = hinweiseDesBaus(ergebnis.agenten);
+    const notizText = notiz.antwort.trim() || gestoppt.verlauf.join("\n\n");
+    const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notizText, "", ...hinweise, ...(hinweise.length > 0 ? [""] : [])].join("\n");
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);
     schreibeBeleg(root, { ...ergebnis, runden: this.fehler, entscheidung: { text, agenten: notiz.sitzungen, ...veroeffentlicht } });
     console.log(`Auftrag ${auftrag.id}: Entscheidung nötig. ${veroeffentlicht.hinweis}`);

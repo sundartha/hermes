@@ -139,6 +139,22 @@ test("ein grüner Auftrag committet einmal und schreibt die Belegdatei mit Befeh
   assert.match(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8"), /2 !== 4/);
 });
 
+test("die Commit-Nachricht zeigt die letzte Antwort des Bau-Agenten eingerückt, ohne Antwort keinen Abschnitt", (context) => {
+  const drehbuch = {
+    test: { "test/rechnen.test.js": ROTER_TEST },
+    bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" },
+  };
+  const antwort = "Ich habe nur verdopple angepasst.\nPaket: 99";
+  const mit = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { ...drehbuch, "bau-antwort": antwort } });
+  assert.equal(mit.lauf.status, 0, mit.lauf.stdout + mit.lauf.stderr);
+  const nachricht = runIn(mit.repo, "git", ["log", "-1", "--format=%B"]).stdout;
+  assert.ok(nachricht.includes("\nHinweise des Bau-Agenten:\n> Ich habe nur verdopple angepasst.\n> Paket: 99\n"), nachricht);
+  assert.doesNotMatch(nachricht, /^Paket: 99$/m);
+  const ohne = starte(context, { auftrag: funktion("2 !== 4"), drehbuch });
+  assert.equal(ohne.lauf.status, 0, ohne.lauf.stdout + ohne.lauf.stderr);
+  assert.doesNotMatch(runIn(ohne.repo, "git", ["log", "-1", "--format=%B"]).stdout, /Hinweise des Bau-Agenten/);
+});
+
 test("ein roter Test mit falschem Fehlertext stoppt den Auftrag vor dem Bau-Agenten", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: {} };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("3 !== 4"), drehbuch });
