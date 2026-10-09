@@ -1790,7 +1790,7 @@
       "count": 14
     },
     "no-magic-numbers": {
-      "count": 9
+      "count": 8
     }
   },
   "test/budget-nan-fail-closed.test.js": {

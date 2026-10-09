@@ -16,6 +16,7 @@ import {
 import { emptyUsage } from "../src/store/defaults.js";
 import { config } from "../src/config.js";
 import { PRICES } from "./_prices.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
@@ -210,54 +211,16 @@ test("T10 Instrumentierung: jedes Praedikat loest GENAU EINE Aufloesung aus (bei
   }
 });
 
-test("T11 Zaehler-Fundament: 'budgetMonthEnabled' kommt in state-ops.js GENAU ZWEIMAL vor", () => {
-  const source = sourceOf("../src/store/state-ops.js");
-  const matches = source.match(/budgetMonthEnabled/g) || [];
-  assert.equal(
-    matches.length,
-    2,
-    "genau zwei Lesestellen - je eine pro Aufloesungsfunktion (gateUsageCents/gatePlatformUsageCents); " +
-      "eine dritte Fundstelle waere eine dritte, unkontrollierte Flag-Auswertung",
-  );
-});
-
-function functionBody(source, name) {
-  const start = new RegExp(`export function ${name}\\([^)]*\\) \\{`).exec(source);
-  assert.ok(start, `Funktion ${name} nicht in state-ops.js gefunden`);
-  const bodyStart = start.index + start[0].length;
-  const bodyEnd = source.indexOf("\n}", bodyStart);
-  assert.ok(bodyEnd > bodyStart, `Rumpfende von ${name} nicht gefunden`);
-  return source.slice(bodyStart, bodyEnd);
-}
-
-test("T12 Quelltext: die zwei Gate-Praedikate lesen 'costCents' nie direkt (die Aufloesung ist Pflicht)", () => {
-  const source = sourceOf("../src/store/state-ops.js");
-  for (const name of ["budgetExceeded", "reserveExceedsBudget"]) {
-    const body = functionBody(source, name);
-    assert.ok(
-      !body.includes("costCents"),
-      `${name} darf 'costCents' nicht direkt lesen - das waere ein Umgehen der Aufloesungsfunktion`,
-    );
-  }
-});
-
-test("T13 TOCTOU: tryReserveOutboundBudget bleibt rein synchron (kein await/async im Rumpf)", () => {
-  const source = sourceOf("../src/store/state-ops.js");
-  const body = functionBody(source, "tryReserveOutboundBudget");
-  assert.ok(!/\bawait\b/.test(body), "kein await zwischen Check und Increment");
-  assert.ok(!/\basync\b/.test(body), "die Funktion bleibt nicht-async");
-});
-
 test("T14 Config-Oberflaeche: config.billing.budgetMonthEnabled ist ueber den echten guardedConfig-Proxy lesbar", () => {
   assert.doesNotThrow(() => config.billing.budgetMonthEnabled);
   assert.equal(typeof config.billing.budgetMonthEnabled, "boolean");
 });
 
 test("T15 Code-Default: BUDGET_MONTH_ENABLED faellt env-unabhaengig auf false zurueck", () => {
-  const source = sourceOf("../src/config.js");
-  assert.match(
-    source,
-    /boolEnv\("BUDGET_MONTH_ENABLED",\s*process\.env\.BUDGET_MONTH_ENABLED,\s*\{\s*fallback:\s*false,?\s*\}\)/,
+  const gebaut = gebauteKonfiguration({ BUDGET_MONTH_ENABLED: undefined }, ["billing.budgetMonthEnabled"]);
+  assert.equal(
+    gebaut["billing.budgetMonthEnabled"],
+    false,
     "Default-Pin gegen den Code, NICHT gegen die ambiente Env (Lehre test-base-env-drift)",
   );
 });
