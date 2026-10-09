@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, signValue } from "../src/web-auth.js";
+import { WEB_SITZUNGS_GEHEIMNIS } from "./gemeinsam/erfundene-geheimnisse.js";
 
-const SECRET = "test-secret-012345678901234567890";
+const SECRET = WEB_SITZUNGS_GEHEIMNIS;
 const FUTURE = new Date(Date.now() + 3600_000).toISOString();
 const PAST = new Date(Date.now() - 1000).toISOString();
 

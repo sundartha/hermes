@@ -10,8 +10,14 @@ import {
 } from "../../src/billing/webhook.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import {
+  STRIPE_ALARM_GEHEIMNIS,
+  STRIPE_FALSCHES_GEHEIMNIS,
+  STRIPE_ROUTEN_GEHEIMNIS,
+  STRIPE_SIGNATUR_GEHEIMNIS,
+} from "../gemeinsam/erfundene-geheimnisse.js";
 
-const SECRET = "whsec_aaaaaaaaaaaa";
+const SECRET = STRIPE_SIGNATUR_GEHEIMNIS;
 const NOW = 1_700_000_000;
 const BODY = '{"id":"evt_1","type":"customer.subscription.updated"}';
 const SIGNATURE_HEX_LENGTH = 64;
@@ -305,8 +311,8 @@ async function postSignedBody(handler, body, signingSecret) {
   return res;
 }
 
-const ROUTE_SECRET = "whsec_bbbbbbbbbbbb";
-const WRONG_SECRET = "whsec_cccccccccccc";
+const ROUTE_SECRET = STRIPE_ROUTEN_GEHEIMNIS;
+const WRONG_SECRET = STRIPE_FALSCHES_GEHEIMNIS;
 const RAW_BODY = "not-json";
 
 test("stripe-webhook-Route: korrektes config.billing.stripeWebhookSecret -> Signatur besteht, faellt am JSON.parse (400 bad payload, kein Audit-Reject)", async () => {
@@ -333,7 +339,7 @@ test("stripe-webhook-Route: falsches Secret -> Signaturpruefung schlaegt fehl (4
   );
 });
 
-const ALARM_SECRET = "whsec_dddddddddddd";
+const ALARM_SECRET = STRIPE_ALARM_GEHEIMNIS;
 const ALARM_CUSTOMER = "cus_alarm1";
 const ALARM_TENANT = "t_alarm1";
 const ALARM_SMS_TO = "+491711234567";

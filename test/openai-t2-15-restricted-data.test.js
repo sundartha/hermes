@@ -16,6 +16,15 @@ import {
   ROOT,
   BASE_ENV,
 } from "./helpers.js";
+import {
+  LANGE_TOKEN,
+  PASSWORT_BEISPIEL,
+  PEM_RSA_ANFANG,
+  PEM_RSA_ENDE,
+  PGP_ANFANG,
+  PGP_ENDE,
+  TOKEN_FORMEN,
+} from "./gemeinsam/erfundene-geheimnisse.js";
 
 const TEST_SECRET = "openai-t2-15-restricted-data-test-secret-min-32-zeichen";
 const TARGET = "+4915112340077";
@@ -24,50 +33,22 @@ const CONFIRMATION_CODE_SHAPE = /^[0-9A-HJKMNP-TV-Z]{6}$/;
 const CARD = "4111 1111 1111 1111";
 const CARD_COMPACT = "4111111111111111";
 const SSN_VALUE = "123-45-6789";
-const PASSWORD_VALUE = ["Hunter2", "secret!"].join("");
+const PASSWORD_VALUE = PASSWORT_BEISPIEL;
 const IBAN = "DE89 3704 0044 0532 0130 00";
 const PHONE_WITHOUT_PLUS = "4917000000001";
 
-const TOKEN_BODY_UNIT = "Ab3_x-9Q";
-const SK_PROJ_BODY_UNITS = 20;
-const SK_ANT_BODY_UNITS = 12;
-const JWT_PAYLOAD_CHARS = 700;
-const JWT_SIGNATURE_CHARS = 342;
-const GITHUB_PAT_SECRET_CHARS = 59;
 const TOKEN_TAIL_CHARS = 16;
 
 function longTokenFixtures() {
-  const body = (units) => TOKEN_BODY_UNIT.repeat(units);
-  return {
-    skProj: "sk" + "-proj-" + body(SK_PROJ_BODY_UNITS),
-    skAnt: "sk" + "-ant-api03-" + body(SK_ANT_BODY_UNITS) + "AA",
-    longJwt: [
-      "ey" + "JhbGciOiJSUzI1NiJ9",
-      "ey" + "J" + "a".repeat(JWT_PAYLOAD_CHARS),
-      "b".repeat(JWT_SIGNATURE_CHARS),
-    ].join("."),
-    githubPat: "github" + "_pat_" + "11ABCDEFG0123456789abc" + "_" + "x".repeat(GITHUB_PAT_SECRET_CHARS),
-  };
+  return LANGE_TOKEN;
 }
 
 function pemMarker(kind) {
-  return [`-----${kind}`, "RSA PRIVATE KEY-----"].join(" ");
+  return kind === "BEGIN" ? PEM_RSA_ANFANG : PEM_RSA_ENDE;
 }
 
 function secretFormatFixtures() {
-  const pemHeader = ["-----BEGIN", "PRIVATE KEY-----"].join(" ");
-  const pemFooter = ["-----END", "PRIVATE KEY-----"].join(" ");
-  return [
-    ...Object.values(longTokenFixtures()),
-    "AK" + "IA" + "1234567890ABCDEF",
-    "gh" + "p_" + "a1B2c3D4e5f6G7h8I9j0K1l2M3n4O5p6Q7r8",
-    "xo" + "xb-" + "1234567890-abcdefghijklmnop",
-    "sk" + "_live_" + "a1B2c3D4e5F6g7H8i9J0",
-    "AI" + "za" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5Pq6r7",
-    "sk" + "-" + "a1B2c3D4e5F6g7H8i9J0k1L2",
-    ["ey" + "JhbGciOiJub25lIn0", "ey" + "JzdWIiOiJ0ZXN0LXQyLTE1In0", "c2lnbmF0dXJlLXRlc3Q"].join("."),
-    `${pemHeader}\nMIIBVwIBADANBgkqhkiG9w0BAQEFAASCAT8w\n${pemFooter}`,
-  ];
+  return [...Object.values(LANGE_TOKEN), ...TOKEN_FORMEN, "xo" + "xb-" + "1234567890-abcdefghijklmnop"];
 }
 
 const CARD_POSITIVES = [
@@ -267,10 +248,9 @@ test("T1e-4: private Schluessel - Kopfzeile genuegt; ohne END bis Textende, lang
 });
 
 test("T1e-5: PGP-Schluesselblock - Kopfzeile genuegt, mit END als Block, ohne END bis Textende", () => {
-  const pgpMarker = (kind) => [`-----${kind} PGP`, "PRIVATE KEY BLOCK-----"].join(" ");
-  const block = `${pgpMarker("BEGIN")}\n\nlQOYBGTest\n${pgpMarker("END")}`;
+  const block = `${PGP_ANFANG}\n\nlQOYBGTest\n${PGP_ENDE}`;
   assert.equal(maskRestrictedText(`A ${block} B`), "A [restricted-credential] B");
-  assert.equal(maskRestrictedText(`A ${pgpMarker("BEGIN")}\nlQOYBGTest`), "A [restricted-credential]");
+  assert.equal(maskRestrictedText(`A ${PGP_ANFANG}\nlQOYBGTest`), "A [restricted-credential]");
 });
 
 const IBAN_SAMPLE_SIZE = 400;

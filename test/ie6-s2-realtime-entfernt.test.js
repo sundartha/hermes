@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { WEBSOCKET_BEISPIEL_SCHLUESSEL } from "./gemeinsam/erfundene-geheimnisse.js";
 import {
   startServer,
   postTelnyxIncoming,
@@ -14,7 +15,6 @@ import {
 
 const HTTP_OK = 200;
 const HTTP_SWITCHING_PROTOCOLS = 101;
-const WS_SAMPLE_NONCE = "dGhlIHNhbXBsZSBub25jZQ==";
 const REARM_REST_MS = 10_000;
 const REARM_MAX_DURATION_S = 180;
 const ALTER_OPENAI_SCHLUESSEL = "sk-alt-nie-gelesen";
@@ -42,7 +42,7 @@ function requestWebSocketUpgrade(srv, pfad) {
         Connection: "Upgrade",
         Upgrade: "websocket",
         "Sec-WebSocket-Version": "13",
-        "Sec-WebSocket-Key": WS_SAMPLE_NONCE,
+        "Sec-WebSocket-Key": WEBSOCKET_BEISPIEL_SCHLUESSEL,
       },
     });
     req.on("upgrade", (res) => {

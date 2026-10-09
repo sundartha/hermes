@@ -6,28 +6,9 @@ title = "gitleaks config — Vodafone Agent"
 [extend]
 useDefault = true
 
-# Pfad-basierte Allowlist (bewusst gewaehlt statt Regel-Deaktivierung: nur die
-# benannten Dateien werden ausgenommen, alle Regeln bleiben fuer den Rest aktiv).
-# Alle Eintraege enthalten ausschliesslich Platzhalter oder deterministische
-# Test-Fixtures — keine echten Secrets.
-#
-# Verifiziert mit gitleaks 8.30.1 (Default-Rulesets sind versionsabhaengig):
-#   gitleaks detect --source . --config gitleaks.toml   -> "no leaks found", exit 0
-#   (gleicher Scan ohne die web-auth-Zeile               -> "leaks found: 1")
-# Letzteres beweist: useDefault=true haelt das Ruleset aktiv; die Allowlist,
-# nicht ein leeres Ruleset, unterdrueckt den False-Positive.
-#
-# AKTUELL (8.30.1) triggert nur das web-auth-Fixture das Default-Ruleset. Die
-# ersten beiden Pfade sind rein DEFENSIV gelistet (ihre Platzhalter sk-ant-...,
-# ACxxxx... matchen 8.30.1 noch nicht) — sie schuetzen vor kuenftigen
-# Ruleset-Verschaerfungen, ohne heute schon einen Treffer zu unterdruecken.
 [allowlist]
-  description = "Bekannte Platzhalter (.env.example) und Test-Fixtures — keine echten Secrets"
+  description = "Platzhalter in .env.example und die eine Datei mit erfundenen Testgeheimnissen"
   paths = [
-    # Defensiv: Doku-Vorlage sk-ant-..., ACxxxxxx..., leere Werte — kein echtes Secret.
     '''\.env\.example$''',
-    # Defensiv: Test-Helfer test-anthropic-key (deterministisch).
-    '''test/helpers\.js$''',
-    # Real noetig: const SECRET = "test-secret-0123..." -> generic-api-key False-Positive.
-    '''test/web-auth-middleware\.test\.js$''',
+    '''^test/gemeinsam/erfundene-geheimnisse\.js$''',
   ]
