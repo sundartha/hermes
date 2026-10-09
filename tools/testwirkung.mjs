@@ -50,6 +50,14 @@ function neueTests(basis) {
   };
 }
 
+function alleTestsIn(dateien) {
+  return dateien.flatMap((datei) =>
+    testaufrufe(datei, readFileSync(datei, "utf8"))
+      .filter(({ name }) => name !== undefined)
+      .map(({ name, vorfahren }) => ({ datei, name, vorfahren })),
+  );
+}
+
 function schluessel({ datei, name }) {
   return `${datei} › ${name}`;
 }
@@ -72,9 +80,11 @@ function mitHilfsdatei(vergleich) {
   return vergleich.some((datei) => !TESTDATEI.test(datei));
 }
 
-function erreichbarkeit(basis, { bestehende, katalog, vergleich }) {
-  const aufrufmuster = (aufrufe) => aufrufe.flatMap(({ muster }) => muster);
-  const geaenderte = bestehende.map(({ datei, alt, neu }) => ({ datei, alt: aufrufmuster(alt), neu: aufrufmuster(neu) }));
+function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
+  const aufrufmuster = (datei, quelltext) => testaufrufe(datei, quelltext).flatMap(({ muster }) => muster);
+  const geaenderte = geaenderteDateien
+    .filter((datei) => inBasis(basis, datei) !== undefined)
+    .map((datei) => ({ datei, alt: aufrufmuster(datei, inBasis(basis, datei)), neu: aufrufmuster(datei, readFileSync(datei, "utf8")) }));
   const katalogtests = mitHilfsdatei(vergleich)
     ? katalog.map((test) => ({ datei: test.datei, alt: namensmuster([test]), neu: namensmuster([test]) }))
     : [];
@@ -114,19 +124,20 @@ function befund(test, { ohnePruefung, wiederholungen }) {
   const gruen = weitere.filter((ergebnisse) => ergebnisse.length > 0 && !ergebnisse.includes(false)).length;
   return {
     kennung,
-    fehlt: laeufe.flatMap((ergebnisse, index) => (ergebnisse.length === 0 ? [laufname(index)] : [])),
-    leer: ersterLauf.includes(true),
+    fehlt: ersterLauf === undefined ? [] : laeufe.flatMap((ergebnisse, index) => (ergebnisse.length === 0 ? [laufname(index)] : [])),
+    leer: ersterLauf?.includes(true) === true,
     wackelt: rot > 0 && gruen > 0,
     rot,
   };
 }
 
 function befunde(tests, wiederholt) {
-  if (tests.length === 0) return [];
-  const ohnePruefung = lauf(tests, UNTER_ATTRAPPE);
+  const alle = vereint(tests, wiederholt);
+  if (alle.length === 0) return [];
+  const ohnePruefung = tests.length === 0 ? new Map() : lauf(tests, UNTER_ATTRAPPE);
   const wiederholungen = wiederholt.length === 0 ? [] : Array.from({ length: WIEDERHOLUNGEN }, () => lauf(wiederholt, []));
   const zuWiederholen = new Set(wiederholt.map(schluessel));
-  return tests.map((test) =>
+  return alle.map((test) =>
     befund(test, { ohnePruefung, wiederholungen: zuWiederholen.has(schluessel(test)) ? wiederholungen : [] }),
   );
 }
@@ -169,6 +180,11 @@ function katalogzeile(ergebnisse, wiederholt) {
   return `Katalogtests: ${ergebnisse.length} geprüft, ${leer} ohne wirksame Prüfung, ${wackeln} von ${wiederholt.length} geänderten wackeln in ${WIEDERHOLUNGEN} Läufen, ${fehlen} nicht gelaufen.`;
 }
 
+function wiederholtZeile(ergebnisse, wiederholt) {
+  const { wackeln, fehlen } = zaehlung(ergebnisse);
+  return `Tests geänderter Testdateien: ${wiederholt.length} in ${WIEDERHOLUNGEN} Läufen wiederholt, ${wackeln} wackeln, ${fehlen} nicht gelaufen.`;
+}
+
 function einfuegungszeile({ geprueft, verstoesse: ohneWirkung, hinweise }) {
   return `Geänderte bestehende Tests: ${geprueft} geprüft, ${ohneWirkung.length} ohne Wirkung nach der Änderung, ${hinweise.length} schon auf der Basis ohne Wirkung.`;
 }
@@ -191,10 +207,11 @@ async function main() {
   const katalog = katalogtests(values.basis);
   const geaendert = new Set(geaenderteTestdateien(values.basis));
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
-  const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt));
+  const inGeaenderten = alleTestsIn([...geaendert]);
+  const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten));
   const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
   const eingefuegt = pruefeGeaenderte(values.basis, bestehende);
-  const auftrag = { bestehende, katalog: katalog.tests, vergleich: geaenderteSkripte(values.basis) };
+  const auftrag = { bestehende, geaenderteDateien: [...geaendert], katalog: katalog.tests, vergleich: geaenderteSkripte(values.basis) };
   const erreichbar = await erreichbarkeit(values.basis, auftrag);
   const weitergegeben = weitergabe(values.basis, auftrag);
   const gefunden = [
@@ -208,6 +225,7 @@ async function main() {
   for (const hinweis of eingefuegt.hinweise) console.log(`Hinweis: ${hinweis}`);
   const urteil = gefunden.length === 0 ? "grün" : "rot";
   console.log(katalogzeile(nurDie(ergebnisse, katalog.tests), nurDie(ergebnisse, beruehrt)));
+  console.log(wiederholtZeile(nurDie(ergebnisse, inGeaenderten), inGeaenderten));
   console.log(einfuegungszeile(eingefuegt));
   console.log(erreichbarZeile(erreichbar));
   console.log(weitergabeZeile(weitergegeben));
