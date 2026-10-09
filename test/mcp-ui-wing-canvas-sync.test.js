@@ -2,14 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { ausgelieferteWidgets, skriptbloecke } from "./gemeinsam/ausgelieferte-widgets.js";
 
 const dsPath = fileURLToPath(new URL("../design-system/components/brand/wing-canvas-engine.js", import.meta.url));
-const srcPath = fileURLToPath(new URL("../src/ui/wing-canvas-engine.js", import.meta.url));
 
-test("T-wing-canvas-sync: design-system-Quelle und src/ui-Kopie sind byte-identisch", () => {
-  assert.equal(
-    readFileSync(srcPath, "utf8"),
-    readFileSync(dsPath, "utf8"),
+test("T-wing-canvas-sync: design-system-Quelle und src/ui-Kopie sind byte-identisch", async () => {
+  const engine = readFileSync(dsPath, "utf8");
+  const widgets = Object.entries(await ausgelieferteWidgets());
+  assert.ok(widgets.length > 0, "keine ausgelieferten Widgets gefunden");
+  assert.deepEqual(
+    widgets.filter(([, html]) => !skriptbloecke(html).includes(engine)).map(([widget]) => widget),
+    [],
     "wing-canvas-engine.js ist an beiden Orten auseinandergelaufen - beide Dateien synchron pflegen",
   );
 });
