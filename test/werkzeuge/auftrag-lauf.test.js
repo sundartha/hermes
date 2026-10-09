@@ -9,6 +9,8 @@ import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, probeReposit
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_ROT = 1;
 const ZEILEN_UEBER_GRENZE = 401;
+const GELOESCHTE_ZEILEN = 360;
+const NEUE_ZEILEN = 50;
 const ANTWORTEN_JE_SITZUNG = 2;
 const AUSFUEHRBAR = 0o755;
 const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
@@ -163,6 +165,16 @@ test("der Bau-Agent wird an Bereich, Zeilengrenze, geschützten Dateien, Tests u
     assert.ok(JSON.stringify(beleg).includes(erwartet), `${erwartet}: ${JSON.stringify(beleg)}`);
     assert.equal(kopf, basis, erwartet);
   }
+});
+
+test("gelöschte Zeilen zählen nicht zur Grenze: 360 gelöscht und 50 neu besteht sie", (context) => {
+  const dateien = { "src/lang.js": "export const ZEILE = 1;\n".repeat(GELOESCHTE_ZEILEN) };
+  const drehbuch = { bau: { "src/lang.js": "export const ZEILE = 2;\n".repeat(NEUE_ZEILEN) } };
+  const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const grenze = beleg.pruefungen.find(({ name }) => name === "grenzen bau");
+  assert.equal(grenze.exitCode, 0);
+  assert.ok(grenze.zeilen.includes(`grün: 1 Dateien geändert, ${NEUE_ZEILEN} neue Zeilen Produktcode, Rolle bau.`), grenze.zeilen.join("\n"));
 });
 
 test("der Test-Agent darf nur den Abnahmetest und erwartete Testdateien ändern", (context) => {

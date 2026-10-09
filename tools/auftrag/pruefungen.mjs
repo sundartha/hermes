@@ -108,7 +108,7 @@ export function grenzBefunde(kontext, aenderungen) {
   const produktzeilen = produkt.reduce((summe, { zeilen }) => summe + zeilen, 0);
   if (produktzeilen > MAX_PRODUKTZEILEN) {
     verstoesse.push(
-      `Verstoß: ${produktzeilen} Zeilen Produktcode geändert, erlaubt sind ${MAX_PRODUKTZEILEN}.`,
+      `Verstoß: ${produktzeilen} neue Zeilen Produktcode, erlaubt sind ${MAX_PRODUKTZEILEN}.`,
     );
   }
   const hinweise =
