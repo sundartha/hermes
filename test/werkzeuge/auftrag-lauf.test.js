@@ -193,6 +193,19 @@ test("lauf mit unvollständiger Phase startet keinen Agenten", (context) => {
   assert.equal(existsSync(join(werkzeug, "prompt-test.txt")), false);
 });
 
+test("eine leere Liste wasDarfNiePassieren ist gültig, ein leerer Satz darin nicht", (context) => {
+  const drehbuch = {
+    test: { "test/rechnen.test.js": ROTER_TEST },
+    bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" },
+  };
+  const leer = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [] }, drehbuch });
+  assert.equal(leer.lauf.status, 0, leer.lauf.stdout + leer.lauf.stderr);
+  assert.equal(leer.beleg.ergebnis, "grün");
+  const ohneSatz = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [""] }, drehbuch });
+  assert.equal(ohneSatz.lauf.status, EXIT_ROT);
+  assert.match(ohneSatz.lauf.stderr, /wasDarfNiePassieren muss eine Liste von Sätzen sein/);
+});
+
 const NEU_MUTANT = "src/rechnen.js:2:7 ConditionalExpression → false";
 const ALT_MUTANT = "src/text.js:2:10 MethodExpression → text";
 const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";

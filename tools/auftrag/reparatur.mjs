@@ -26,13 +26,6 @@ const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const LABEL = "entscheidung";
 const CODEBLOCK = "```";
-const NIE = {
-  wiederholung: "Der Reproduktionstest wird nicht verändert, abgeschwächt oder übersprungen.",
-  gleichzeitig: "Die Reparatur ändert kein Verhalten außerhalb des gemeldeten Befunds.",
-  zeitueberschreitung: "Kein Test wird langsamer, weil die Reparatur wartet.",
-  abbruch: "Ein Abbruch hinterlässt keinen halb reparierten Stand im Commit.",
-};
-
 function zielDer(vorher) {
   return [...vorher].find(([, kategorie]) => kategorie === ERWARTUNG)?.[0] ?? null;
 }
@@ -65,7 +58,7 @@ export function reparaturPhase(befund, { pr }) {
     vorbild: befund.datei,
     abnahme: REPRODUKTION,
     erwarteterFehler: "ERR_ASSERTION",
-    wasDarfNiePassieren: NIE,
+    wasDarfNiePassieren: [],
   };
   return {
     phase: `reparatur-${sha.slice(0, KURZ)}`,
