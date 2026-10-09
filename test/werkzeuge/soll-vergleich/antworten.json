@@ -85,20 +85,6 @@
         "pull": true
       },
       "role_name": "admin"
-    },
-    {
-      "login": "sundartha-bot",
-      "id": 335012687,
-      "type": "User",
-      "site_admin": false,
-      "permissions": {
-        "admin": false,
-        "maintain": false,
-        "push": true,
-        "triage": true,
-        "pull": true
-      },
-      "role_name": "write"
     }
   ],
   "codeowners": {

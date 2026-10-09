@@ -38,6 +38,8 @@ const HTTP_SERVER_ERROR = 500;
 const CHILD_TIMEOUT_MS = 30_000;
 const BYPASS_ROLE_ID = 5;
 const FOREIGN_ACCOUNT_ID = 4242;
+const LOCKED_ACCOUNT_ID = 335012687;
+const AGENT_APP_ID = 5250443;
 const FOREIGN_RULESET_ID = 24600000;
 const NOT_PROVABLE = "nicht prüfbar mit den Rechten dieses Tokens";
 const runFile = promisify(execFile);
@@ -334,6 +336,17 @@ test("Soll-Vergleich: darf in phase-schutz ein weiterer Akteur vorbei, endet er 
   ]);
 });
 
+test("Soll-Vergleich: darf in phase-schutz das gesperrte Konto vorbei, ist das eine Abweichung, die App nicht", async (context) => {
+  const locked = { actor_id: LOCKED_ACCOUNT_ID, actor_type: "User", bypass_mode: "always" };
+  const phase = recording("ruleset-phase-owner");
+  const result = await compare(context, {
+    changes: { [PHASE_RULESET]: () => answer({ ...phase, bypass_actors: [locked, ...phase.bypass_actors] }) },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [PHASE_AREA, `bypass_actors[User ${LOCKED_ACCOUNT_ID}]`, "nicht im Soll", JSON.stringify(locked)]);
+  assert.doesNotMatch(result.stdout, new RegExp(`Integration ${AGENT_APP_ID}`));
+});
+
 test("Soll-Vergleich: gibt es auf GitHub ein Ruleset, das nicht im Soll steht, endet er mit 1", async (context) => {
   const result = await compare(context, {
     changes: {
@@ -371,12 +384,12 @@ test("Soll-Vergleich: fehlt bypass_actors von phase-schutz in der Bot-Sicht, ble
   assert.match(result.stdout, new RegExp(`^- ${PHASE_AREA} bypass_actors: ${NOT_PROVABLE} `, "m"));
 });
 
-test("Soll-Vergleich: hat sundartha-bot plötzlich admin, endet er mit 1", async (context) => {
+test("Soll-Vergleich: hat jonas986 plötzlich nur noch write, endet er mit 1", async (context) => {
   const result = await compare(context, {
-    changes: { [COLLABORATORS]: (list) => withRole(list, "sundartha-bot", "admin") },
+    changes: { [COLLABORATORS]: (list) => withRole(list, "jonas986", "write") },
   });
   assert.equal(result.code, EXIT_DEVIATION, result.stderr);
-  assertRow(result, ["Mitarbeiter", "sundartha-bot", "write", "admin"]);
+  assertRow(result, ["Mitarbeiter", "jonas986", "admin", "write"]);
 });
 
 test("Soll-Vergleich: ein zusätzliches Konto ergibt Exit 1", async (context) => {
