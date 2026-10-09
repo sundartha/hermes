@@ -55,7 +55,9 @@ const REGELN = [
       : null;
   },
   ({ commits }) => {
-    const sicherheit = commits.some(({ befunde }) => befunde.some((befund) => befund.sicherheit));
+    const sicherheit = commits.some(({ befunde }) =>
+      befunde.some((befund) => befund.sicherheit && befund.schwere === BLOCKER),
+    );
     return sicherheit
       ? { state: ROT, description: "Sicherheitsbefund, Details nicht öffentlich" }
       : null;

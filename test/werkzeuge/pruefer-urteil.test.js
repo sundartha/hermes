@@ -104,25 +104,24 @@ test("ein BLOCKER, der auch auf der Basis an der Erwartung scheitert, hält nich
   );
 });
 
-test("ein Sicherheitsmerker setzt failure ohne Details und wird kein Issue", () => {
-  const { state, description, issues } = urteile({
-    commits: [
-      commit({
-        befunde: [
-          { sicherheit: true, schwere: "HINWEIS" },
-          befund({ schwere: "SOLLTE", reproduktion: "" }),
-        ],
-      }),
-    ],
-  });
-  assert.deepEqual(
-    [state, description],
-    ["failure", "Sicherheitsbefund, Details nicht öffentlich"],
-  );
-  assert.deepEqual(
-    issues.map(({ befund: { schwere } }) => schwere),
-    ["SOLLTE"],
-  );
+test("nur ein BLOCKER mit Sicherheitsmerker setzt failure ohne Details; kein Sicherheitsbefund wird ein öffentliches Issue", () => {
+  const ohneBlocker = [
+    { sicherheit: true, schwere: "HINWEIS" },
+    { sicherheit: true, schwere: "SOLLTE" },
+    befund({ schwere: "SOLLTE", reproduktion: "" }),
+  ];
+  const faelle = [
+    [ohneBlocker, ["success", "1 Commits geprüft, 0 übernommen"]],
+    [[{ sicherheit: true, schwere: "BLOCKER" }, ...ohneBlocker], ["failure", "Sicherheitsbefund, Details nicht öffentlich"]],
+  ];
+  for (const [befunde, erwartet] of faelle) {
+    const { state, description, issues } = urteile({ commits: [commit({ befunde })] });
+    assert.deepEqual([state, description], erwartet);
+    assert.deepEqual(
+      issues.map(({ befund: { schwere, sicherheit } }) => [schwere, sicherheit]),
+      [["SOLLTE", false]],
+    );
+  }
 });
 
 test("ohne Nachstellung wartet der Status, fehlt sie nach dem Nachstellen, ist er error", () => {
