@@ -24,6 +24,9 @@ const ERGEBNIS_DES_BAUS = [
   "Geht der Auftrag nur, wenn vorher etwas außerhalb seines Bereichs geändert wird, hörst du auf und antwortest als Letztes mit genau einer Zeile:",
   "Voraussetzung fehlt: <ein Satz, was vorher passieren muss>",
   "",
+  "Muss der Auftrag eine Funktion ändern, die noch Einträge in `eslint-suppressions.json` hat, änderst du sie nicht selbst. Du hörst auf und antwortest als Letztes mit genau einer Zeile, die alle betroffenen Funktionen nennt:",
+  "Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …",
+  "",
 ].join("\n");
 
 function limitSperre({ root, phase }) {
