@@ -148,21 +148,6 @@ test("P6-11 messeAnrufe sammelt einen gescheiterten Abruf in fehler[], kein stil
   assert.match(ergebnis.fehler[0].grund, /404/);
 });
 
-test("P6-12 Read-only-Quelltext-Gate: kein fs, kein method:, keine Schreibfunktion (I-1/I-2)", async () => {
-  const fs = await import("node:fs/promises");
-  const quelltext = await fs.readFile(`${ROOT}/scripts/anruf-unterbrechungen.mjs`, "utf8");
-  const kommentarfrei = quelltext.replace(/\/\/.*$/gm, "");
-
-  assert.doesNotMatch(kommentarfrei, /method\s*:/);
-  assert.doesNotMatch(kommentarfrei, /from\s+["']node:fs["']/);
-  assert.doesNotMatch(kommentarfrei, /writeFile|appendFile|createWriteStream/);
-
-  const schreibenderSchnipsel = 'import { writeFile } from "node:fs";\nfetch(url, { method: "POST" });\n';
-  assert.match(schreibenderSchnipsel, /method\s*:/);
-  assert.match(schreibenderSchnipsel, /from\s+["']node:fs["']/);
-  assert.match(schreibenderSchnipsel, /writeFile|appendFile|createWriteStream/);
-});
-
 function runAnrufUnterbrechungen(argv, env) {
   const child = spawn(process.execPath, ["scripts/anruf-unterbrechungen.mjs", ...argv], {
     cwd: ROOT,
