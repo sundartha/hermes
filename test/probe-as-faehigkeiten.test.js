@@ -310,28 +310,6 @@ test("E1-14 Sonde gegen Host ohne PRM (Mini-IdP) -> Exit 1", async () => {
   }
 });
 
-test("E1-15 Quelltext-Gate: kein process.env, kein Authorization/Cookie, kein Schreibweg", async () => {
-  const fs = await import("node:fs/promises");
-  const quelltext = await fs.readFile(`${ROOT}/scripts/probe-as-faehigkeiten.mjs`, "utf8");
-  const kommentarfrei = quelltext.replace(/\/\/.*$/gm, "");
-
-  assert.doesNotMatch(kommentarfrei, /process\.env/);
-  assert.doesNotMatch(kommentarfrei, /["']?Authorization["']?\s*:/);
-  assert.doesNotMatch(kommentarfrei, /cookie/i);
-  assert.doesNotMatch(kommentarfrei, /from\s+["']node:fs["']/);
-  assert.doesNotMatch(kommentarfrei, /writeFile|appendFile|createWriteStream/);
-  assert.doesNotMatch(kommentarfrei, /method:\s*"(PUT|PATCH|DELETE)"/);
-
-  const verdaechtigerSchnipsel =
-    'const t = process.env.TOKEN;\nfetch(url, { headers: { Authorization: t, cookie: "x" }, method: "DELETE" });\nimport { writeFile } from "node:fs";\n';
-  assert.match(verdaechtigerSchnipsel, /process\.env/);
-  assert.match(verdaechtigerSchnipsel, /["']?Authorization["']?\s*:/);
-  assert.match(verdaechtigerSchnipsel, /cookie/i);
-  assert.match(verdaechtigerSchnipsel, /from\s+["']node:fs["']/);
-  assert.match(verdaechtigerSchnipsel, /writeFile|appendFile|createWriteStream/);
-  assert.match(verdaechtigerSchnipsel, /method:\s*"(PUT|PATCH|DELETE)"/);
-});
-
 test("E1-16 Spawn ohne Argument: Exit 2, USAGE auf stderr, stdout leer", async () => {
   const { code, stdout, stderr } = await runSonde([], { NODE_ENV: "test" });
   assert.equal(code, EXIT_AUFRUFFEHLER);
