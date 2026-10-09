@@ -208,6 +208,7 @@ test("eine leere Liste wasDarfNiePassieren ist gültig, ein leerer Satz darin ni
 
 const NEU_MUTANT = "src/rechnen.js:2:7 ConditionalExpression → false";
 const ALT_MUTANT = "src/text.js:2:10 MethodExpression → text";
+const GLEICHWERTIG_MIT_GRUND = `Gleichwertig: ${NEU_MUTANT}, weil die Sieben ohne Sonderfall dasselbe Ergebnis hätte`;
 const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";
 const lies = (pfad) => readFileSync(pfad, "utf8");
 const alt = process.argv.includes("--alter-stand");
@@ -229,7 +230,7 @@ function pruefung(beleg, name) {
 
 test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung, sonst ergänzt der Test-Agent", (context) => {
   const faelle = [
-    { zusatz: { "bau-nachrunde-antwort": `Gleichwertig: ${NEU_MUTANT}` }, letzte: "mutation nach Bau", nachricht: `Gleichwertig: ${NEU_MUTANT}` },
+    { zusatz: { "bau-nachrunde-antwort": GLEICHWERTIG_MIT_GRUND }, letzte: "mutation nach Bau", nachricht: GLEICHWERTIG_MIT_GRUND },
     { zusatz: { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST } }, letzte: "mutation nach Test", nachricht: "Art: funktion" },
   ];
   for (const { zusatz, letzte, nachricht } of faelle) {

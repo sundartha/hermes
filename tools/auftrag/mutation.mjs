@@ -6,9 +6,15 @@ const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const GLEICHWERTIG = "Gleichwertig: ";
+const BEGRUENDET = ", weil ";
+const MELDUNG = /^Gleichwertig: (.+?), weil (\S.*)$/gm;
 
 function treffer(text, muster) {
   return [...text.matchAll(muster)].map(([, wert]) => wert.trim());
+}
+
+function meldungen(text) {
+  return [...text.matchAll(MELDUNG)].map(([, mutant, grund]) => ({ mutant: mutant.trim(), grund: grund.trim() }));
 }
 
 function liste(mutanten) {
@@ -16,7 +22,7 @@ function liste(mutanten) {
 }
 
 function gleichwertige(lauf) {
-  return lauf.berichtszeilen.filter((zeile) => zeile.startsWith(GLEICHWERTIG)).map((zeile) => zeile.slice(GLEICHWERTIG.length));
+  return lauf.berichtszeilen.filter((zeile) => zeile.startsWith(GLEICHWERTIG)).map((zeile) => zeile.slice(GLEICHWERTIG.length, zeile.indexOf(BEGRUENDET)));
 }
 
 function mutanten(lauf, name, argumente) {
@@ -37,6 +43,8 @@ function bauNachrunde(ueberlebende) {
     liste(ueberlebende),
     "",
     "Streiche oder vereinfache den Code, den kein Test verlangt. Tests änderst du nicht.",
+    "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt Streichen mit einer Zeile je Mutant:",
+    "Gleichwertig: <Mutant>, weil <ein Satz>",
     "",
   ].join("\n");
 }
@@ -49,9 +57,9 @@ function testNachrunde({ phase, auftrag }, ueberlebende, stand) {
 function bauKorrigiert(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
   if (!lauf.agent("bau", bauNachrunde(ueberlebende), sitzung)) return false;
-  const gemeldet = treffer(lauf.agenten.at(-1).antwort, /^Gleichwertig: (.+)$/gm);
-  for (const mutant of gemeldet.filter((eintrag) => ueberlebende.includes(eintrag))) {
-    lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}`);
+  const gemeldet = meldungen(lauf.agenten.at(-1).antwort);
+  for (const { mutant, grund } of gemeldet.filter((eintrag) => ueberlebende.includes(eintrag.mutant))) {
+    lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
   }
   return lauf.bauSchritte().slice(1).every((schritt) => schritt());
 }
