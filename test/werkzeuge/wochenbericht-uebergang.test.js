@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
 
+import { incentiveSection } from "../../tools/wochenbericht/anreize.mjs";
 import { raiseEmptyLists, transitionLists, transitionSection } from "../../tools/wochenbericht/uebergang.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
+const JETZT = new Date("2026-10-12T05:23:00Z");
+const IN_DER_WOCHE = "2026-10-08T10:00:00Z";
+const VOR_DER_WOCHE = "2026-09-30T10:00:00Z";
 const OBERGRENZE = 25;
 
 async function attrappe(context, antworten) {
@@ -70,4 +74,41 @@ test("Wochenbericht: legt kein Issue für eine leere Liste an, wenn die Obergren
   const offen = Array.from({ length: OBERGRENZE }, (_wert, nummer) => ({ title: `Offen ${nummer}` }));
   await raiseEmptyLists([{ path: "tools/basis/knip.json", count: 0 }], offen, { limit: OBERGRENZE });
   assert.deepEqual(schreibvorgaenge, []);
+});
+
+function antwortenFuerAnreize(url) {
+  if (url.pathname.endsWith("/commits")) {
+    return [
+      { commit: { message: "Baue um\n\nWarum: x\n\nGleichwertig: a.js:3 > zu >=, weil die Grenze nie erreicht wird\nGleichwertig: a.js:9 + zu -, weil null addiert wird\nPaket: AN1" } },
+      { commit: { message: "Ändere b\n\nWarum: y\n\nGleichwertig: ohne Begründung\nPaket: AN1" } },
+    ];
+  }
+  if (url.pathname.endsWith("/issues/comments")) {
+    return [
+      { created_at: IN_DER_WOCHE, body: "## Entscheidung nötig\n\nAuftrag passt nicht: Der Abnahmetest prüft das Gegenteil des Ziels." },
+      { created_at: VOR_DER_WOCHE, body: "Auftrag passt nicht: alt" },
+      { created_at: IN_DER_WOCHE, body: "Voraussetzung fehlt: Altfunktionen aufräumen: src/a.js:rechne" },
+    ];
+  }
+  if (url.pathname.endsWith("/issues/11/events")) return [{ event: "closed", commit_id: "a".repeat(40) }];
+  if (url.pathname.endsWith("/issues/12/events")) return [{ event: "closed", commit_id: null }];
+  if (url.pathname.endsWith("/issues") && url.searchParams.get("labels") === "pruefer") {
+    return [
+      { number: 11, closed_at: IN_DER_WOCHE },
+      { number: 12, closed_at: IN_DER_WOCHE },
+      { number: 13, closed_at: VOR_DER_WOCHE },
+      { number: 14, closed_at: IN_DER_WOCHE, pull_request: {} },
+    ];
+  }
+  return [];
+}
+
+test("Wochenbericht: zählt angenommene Gleichwertig-Meldungen, Ausstiege „Auftrag passt nicht“ und Prüfer-Issues mit und ohne Änderung", async (context) => {
+  await attrappe(context, antwortenFuerAnreize);
+  assert.deepEqual(await incentiveSection(JETZT), [
+    "- Angenommene Gleichwertig-Meldungen in Commits auf master: 2",
+    "- Ausstiege „Auftrag passt nicht“ in Kommentaren: 1",
+    "- Geschlossene Prüfer-Issues: 1 mit einer Änderung, 1 ohne Änderung",
+    "",
+  ]);
 });

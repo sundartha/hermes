@@ -22,6 +22,7 @@ import {
   scheduledRedStreaks,
   systemstandLines,
 } from "./wochenbericht/stand.mjs";
+import { incentiveSection } from "./wochenbericht/anreize.mjs";
 import { raiseEmptyLists, transitionLists, transitionSection } from "./wochenbericht/uebergang.mjs";
 import { germanDate, isoWeek } from "./wochenbericht/zeit.mjs";
 
@@ -102,10 +103,11 @@ function section(title, lines) {
 
 async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
   const runs = await workflowRuns(workflows, now);
-  const [approvals, merges, reverts] = await Promise.all([
+  const [approvals, merges, reverts, incentives] = await Promise.all([
     approvalSection(),
     mergeSection(now),
     revertSection(now),
+    incentiveSection(now),
   ]);
   const lines = [
     `Stand ${germanDate(now)}, Commit ${headCommit()}. Zeitraum: die letzten sieben Tage, bei den Kosten zusätzlich der laufende Monat.`,
@@ -117,6 +119,7 @@ async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
     ...section("Merges ohne Menschen", merges),
     ...section("Rücknahmen", reverts),
     ...section("Übergangslisten", transitionSection(transitionLists())),
+    ...section("Ausstiege, Gleichwertige und Prüfer-Issues", incentives),
     ...section("Kosten", costSection(runs, readBudget(), now)),
     ...section("Issues automatischer Läufe", [
       `${openIssues.length} offen, Obergrenze ${OPEN_ISSUE_LIMIT}.`,
