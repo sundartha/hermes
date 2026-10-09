@@ -43,7 +43,14 @@ const MAX_BEGRUENDUNG = 1200;
 const MAX_ADRESSEN = 20;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
-export const MECHANISMEN = ["typ", "lint-regel", "pruefskript", "test", "konfiguration"];
+const KEINER = "keiner";
+const PRUEFUNG_AENDERN = "pruefung-aendern";
+export const MECHANISMEN = ["typ", "lint-regel", "pruefskript", "test", "konfiguration", KEINER, PRUEFUNG_AENDERN];
+const SCHLUSS = {
+  [KEINER]: "Kein Mechanismus vorgeschlagen. Antonio entscheidet, ob das Issue so geschlossen wird.",
+  [PRUEFUNG_AENDERN]: "Vorschlag an Antonio: eine bestehende Prüfung ändern oder entfernen. Umgesetzt wird erst nach seiner Entscheidung.",
+};
+const SCHLUSS_MECHANISMUS = "Umsetzung wie ein Paket; Mechanismen in geschützten Dateien brauchen ein Approve.";
 const SICHERER_PFAD = /^[\w./@-]+$/;
 const SCHEMA = {
   type: "object",
@@ -257,7 +264,7 @@ export function systemText(kandidat, vorschlag, lauf) {
     "Vorkommen:",
     ...vorkommen,
     "",
-    "Umsetzung wie ein Paket; Mechanismen in geschützten Dateien brauchen ein Approve.",
+    SCHLUSS[vorschlag.mechanismus] ?? SCHLUSS_MECHANISMUS,
     "",
     `Lauf: ${lauf}`,
     "",
