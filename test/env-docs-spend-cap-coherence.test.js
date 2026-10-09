@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eurToCents } from "../src/config.js";
 import { spendCapCoherence } from "../src/boot-guard.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -20,10 +21,10 @@ function readRenderValue(text, name) {
   return m[1].trim();
 }
 
-function readCodeFallback(text, envName) {
-  const m = text.match(new RegExp(`numEnv\\(\\s*"${envName}",[^)]*?fallback:\\s*(-?\\d+(?:\\.\\d+)?)`));
-  if (!m) throw new Error(`numEnv-Fallback fuer ${envName} nicht in src/config.js gefunden`);
-  return Number(m[1]);
+function gebauteStandardwerte(felderJeVariable) {
+  const ohneVariablen = Object.fromEntries(Object.keys(felderJeVariable).map((name) => [name, undefined]));
+  const gebaut = gebauteKonfiguration(ohneVariablen, Object.values(felderJeVariable));
+  return Object.fromEntries(Object.entries(felderJeVariable).map(([name, feld]) => [name, gebaut[feld]]));
 }
 
 test(".env.example: ausgelieferte Budget-Achsen sind kohaerent (kein fataler Boot-Refusal)", () => {
@@ -55,11 +56,15 @@ test("render.yaml: ausgelieferte Budget-Achsen sind kohaerent (kein fataler Boot
 });
 
 test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein fataler Boot-Refusal)", () => {
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const standard = gebauteStandardwerte({
+    DEFAULT_TENANT_BUDGET_CENTS: "billing.defaultTenantBudgetCents",
+    MAX_BUDGET_EUR: "billing.platformSpendCapCents",
+    VOICE_TARIFF_DEFAULT_CENTS: "billing.voiceTariffDefaultCents",
+  });
   const findings = spendCapCoherence({
-    tenantDefaultCents: readCodeFallback(configSrc, "DEFAULT_TENANT_BUDGET_CENTS"),
-    platformCapCents: eurToCents(readCodeFallback(configSrc, "MAX_BUDGET_EUR")),
-    maxTariffCents: readCodeFallback(configSrc, "VOICE_TARIFF_DEFAULT_CENTS"),
+    tenantDefaultCents: standard.DEFAULT_TENANT_BUDGET_CENTS,
+    platformCapCents: standard.MAX_BUDGET_EUR,
+    maxTariffCents: standard.VOICE_TARIFF_DEFAULT_CENTS,
   });
   assert.equal(
     findings.some((f) => f.fatal),
@@ -71,11 +76,11 @@ test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein
 const WORST_CASE_TARIFF_CENTS_PER_MIN = 30;
 
 test("KS-P6: der ausgelieferte Worst-Case-Tarif ist 30 ct/min - dieselbe Zahl in allen drei Quellen", () => {
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const standard = gebauteStandardwerte({ VOICE_TARIFF_DEFAULT_CENTS: "billing.voiceTariffDefaultCents" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   assert.equal(
-    readCodeFallback(configSrc, "VOICE_TARIFF_DEFAULT_CENTS"),
+    standard.VOICE_TARIFF_DEFAULT_CENTS,
     WORST_CASE_TARIFF_CENTS_PER_MIN,
     "src/config.js numEnv-Fallback",
   );
@@ -95,10 +100,13 @@ const RETENTION_DAYS_DEFAULT = 30;
 const DIAGNOSTIC_RETENTION_DAYS_DEFAULT = 7;
 
 test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/config.js und .env.example ueberein", () => {
-  const configSource = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const standard = gebauteStandardwerte({
+    RETENTION_DAYS: "privacy.retentionDays",
+    DIAGNOSTIC_RETENTION_DAYS: "privacy.diagnosticRetentionDays",
+  });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
-  assert.equal(readCodeFallback(configSource, "RETENTION_DAYS"), RETENTION_DAYS_DEFAULT);
-  assert.equal(readCodeFallback(configSource, "DIAGNOSTIC_RETENTION_DAYS"), DIAGNOSTIC_RETENTION_DAYS_DEFAULT);
+  assert.equal(standard.RETENTION_DAYS, RETENTION_DAYS_DEFAULT);
+  assert.equal(standard.DIAGNOSTIC_RETENTION_DAYS, DIAGNOSTIC_RETENTION_DAYS_DEFAULT);
   assert.equal(Number(readEnvValue(envExample, "RETENTION_DAYS")), RETENTION_DAYS_DEFAULT);
   assert.equal(Number(readEnvValue(envExample, "DIAGNOSTIC_RETENTION_DAYS")), DIAGNOSTIC_RETENTION_DAYS_DEFAULT);
   assert.ok(
@@ -107,21 +115,15 @@ test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/confi
   );
 });
 
-function readBoolCodeFallback(text, envName) {
-  const match = text.match(new RegExp(`boolEnv\\(\\s*"${envName}",[^)]*?fallback:\\s*(true|false)`));
-  if (!match) throw new Error(`boolEnv-Fallback fuer ${envName} nicht in src/config.js gefunden`);
-  return match[1] === "true";
-}
-
 const EL_INBOUND_SHIPPED_DEFAULT = false;
 
 test("IE3-7: ELEVENLABS_INBOUND_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
   const name = "ELEVENLABS_INBOUND_ENABLED";
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const standard = gebauteStandardwerte({ [name]: "voice.elevenLabsInbound.enabled" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   assert.equal(
-    readBoolCodeFallback(configSrc, name),
+    standard[name],
     EL_INBOUND_SHIPPED_DEFAULT,
     "src/config.js boolEnv-Fallback",
   );
@@ -133,11 +135,11 @@ const BUDGET_WATCHDOG_SHIPPED_MS = 15000;
 
 test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
   const name = "BUDGET_WATCHDOG_INTERVAL_MS";
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const standard = gebauteStandardwerte({ [name]: "safety.budgetWatchdogIntervalMs" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   assert.equal(
-    readCodeFallback(configSrc, name),
+    standard[name],
     BUDGET_WATCHDOG_SHIPPED_MS,
     "src/config.js numEnv-Fallback",
   );

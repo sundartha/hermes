@@ -2208,7 +2208,7 @@
   },
   "test/env-docs-spend-cap-coherence.test.js": {
     "id-length": {
-      "count": 6
+      "count": 5
     }
   },
   "test/erase-tenant-cli.test.js": {
