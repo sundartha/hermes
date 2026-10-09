@@ -98,7 +98,7 @@ test("fehlt der Prüfer-Status am PR-Kopf, ist er rot oder von einem anderen Ers
   const varianten = [
     [],
     [{ ...PRUEFER_ERFOLG, state: "failure" }],
-    [{ ...PRUEFER_ERFOLG, creator: { login: "sundartha-bot" } }],
+    [{ ...PRUEFER_ERFOLG, creator: { login: "sundartha-agent[bot]" } }],
   ];
   for (const statusse of varianten) {
     const lauf = await uebertrage(context, { statusse });
