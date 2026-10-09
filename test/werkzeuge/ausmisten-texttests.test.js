@@ -20,6 +20,18 @@ import {
   texttest,
 } from "./ausmisten/texttest.mjs";
 
+function erwarteSichtbarOhneSperre(ergebnis, stand) {
+  assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
+  assert.ok(
+    ergebnis.melden.ausgabe.includes(
+      `Ausgenommen: ${TEXTTEST}: ${TEXTFALL} (umgebaute Datei ${EINGANG_QUELLE}, im Branch ${stand})`,
+    ),
+    ergebnis.melden.ausgabe,
+  );
+  assert.doesNotMatch(ergebnis.melden.ausgabe, /Freigabe/);
+  assert.equal(ergebnis.status.state, "success");
+}
+
 function artefakt(artefakte, name) {
   return JSON.parse(readFileSync(join(artefakte, name, `${name}.json`), "utf8"));
 }
@@ -34,7 +46,7 @@ async function basisMit(context, { master, branch }) {
   return { stand, basis: await messePaket(stand, { art: "basis", paket: 0 }) };
 }
 
-test("ausmisten-texttests: ein Texttest auf der umgebauten Datei wird sichtbar ausgenommen, und sein Löschen braucht die Freigabe", async (context) => {
+test("ausmisten-texttests: ein Texttest auf der umgebauten Datei wird sichtbar ausgenommen, und sein Löschen bleibt sichtbar, ohne zu sperren", async (context) => {
   const dateien = { [TEXTTEST]: MIT_TEXT };
   const branch = { weg: [], neu: { [TEXTTEST]: texttest(fall(VERHALTEN, KUERZEN)) } };
   const ergebnis = await messeUndMelde(context, branch, { dateien });
@@ -47,12 +59,7 @@ test("ausmisten-texttests: ein Texttest auf der umgebauten Datei wird sichtbar a
     { datei: EINGANG_QUELLE, test: TEXTTEST, name: TEXTFALL, imBranch: "gelöscht" },
   ]);
   assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
-  assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
-  assert.match(
-    ergebnis.melden.ausgabe,
-    /Freigabe nötig: Ausgenommener Testfall im Branch gelöscht: test\/post\/text\.test\.js: liest den Quelltext/,
-  );
-  assert.equal(ergebnis.status.state, "failure");
+  erwarteSichtbarOhneSperre(ergebnis, "gelöscht");
 });
 
 test("ausmisten-texttests: ein ausgenommener Fall tötet keinen Mutanten", async (context) => {
@@ -90,13 +97,13 @@ function standDes(repo, kopf) {
   return imBranch({ test: TEXTTEST, name: TEXTFALL }, lauf, [GRAPH]);
 }
 
-test("ausmisten-texttests: eine geänderte Hilfsdatei unter test/, die ein ausgenommener Fall über eine andere erreicht, braucht die Freigabe", (context) => {
+test("ausmisten-texttests: eine geänderte Hilfsdatei unter test/, die ein ausgenommener Fall über eine andere erreicht, wird als geänderte Hilfsdatei gemeldet", (context) => {
   const repo = hilfsRepo(context);
   const kopf = repo.committe({ [TIEF]: "export const TIEF = 2;\n" });
   assert.equal(standDes(repo, kopf), `Hilfsdatei geändert: ${TIEF}`);
 });
 
-test("ausmisten-texttests: eine ganz gleiche Testdatei mit gleichen Hilfsdateien braucht keine Freigabe", (context) => {
+test("ausmisten-texttests: eine ganz gleiche Testdatei mit gleichen Hilfsdateien gilt als unverändert", (context) => {
   const repo = hilfsRepo(context);
   const kopf = repo.committe(
     { [EINGANG_QUELLE]: "export function eingang(text) {\n  return text;\n}\n" },
@@ -105,22 +112,15 @@ test("ausmisten-texttests: eine ganz gleiche Testdatei mit gleichen Hilfsdateien
   assert.equal(standDes(repo, kopf), "unverändert");
 });
 
-function erwarteFreigabe(ergebnis, stand) {
+function erwarteGeaendert(ergebnis, stand) {
   assert.equal(ergebnis.basis.status, EXIT_GRUEN, ergebnis.basis.ausgabe);
   const [ausgenommen] = ergebnis.gelesen.ausgenommen;
   assert.equal(ausgenommen.imBranch, stand);
   assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
-  assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
-  assert.ok(
-    ergebnis.melden.ausgabe.includes(
-      `Freigabe nötig: Ausgenommener Testfall im Branch ${stand}: ${TEXTTEST}: ${TEXTFALL}`,
-    ),
-    ergebnis.melden.ausgabe,
-  );
-  assert.equal(ergebnis.status.state, "failure");
+  erwarteSichtbarOhneSperre(ergebnis, stand);
 }
 
-test("ausmisten-texttests: ein ausgenommener Fall in einer sonst geänderten Datei braucht die Freigabe", async (context) => {
+test("ausmisten-texttests: ein ausgenommener Fall in einer sonst geänderten Datei wird gemeldet, ohne zu sperren", async (context) => {
   const dateien = { [TEXTTEST]: MIT_TEXT };
   const neu = texttest(fall(TEXTFALL, LESEN), fall(VERHALTEN, KUERZEN), fall(ANDERER, TABULATOR));
   const ergebnis = await messeUndMelde(
@@ -128,10 +128,10 @@ test("ausmisten-texttests: ein ausgenommener Fall in einer sonst geänderten Dat
     { weg: [DOPPELT], neu: { [TEXTTEST]: neu } },
     { dateien },
   );
-  erwarteFreigabe(ergebnis, "Datei geändert");
+  erwarteGeaendert(ergebnis, "Datei geändert");
 });
 
-test("ausmisten-texttests: ausgenommen-umfeld-geaendert: eine geänderte Konstante außerhalb des ausgenommenen Falls braucht die Freigabe", async (context) => {
+test("ausmisten-texttests: ausgenommen-umfeld-geaendert: eine geänderte Konstante außerhalb des ausgenommenen Falls wird gemeldet, ohne zu sperren", async (context) => {
   const mitMuster = (muster) =>
     texttest(
       [`const MUSTER = ${JSON.stringify(muster)};`, ""],
@@ -144,10 +144,10 @@ test("ausmisten-texttests: ausgenommen-umfeld-geaendert: eine geänderte Konstan
     { weg: [DOPPELT], neu: { [TEXTTEST]: mitMuster("") } },
     { dateien },
   );
-  erwarteFreigabe(ergebnis, "Datei geändert");
+  erwarteGeaendert(ergebnis, "Datei geändert");
 });
 
-test("ausmisten-texttests: ein geänderter ausgenommener Fall braucht die Freigabe", async (context) => {
+test("ausmisten-texttests: ein geänderter ausgenommener Fall wird als geändert festgehalten", async (context) => {
   const geaendert = [...LESEN.slice(0, 1), 'assert.ok(quelle.includes("trim"));'];
   const { stand, basis } = await basisMit(context, {
     master: MIT_TEXT,

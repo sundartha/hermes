@@ -8,9 +8,7 @@ import { DOPPELT, RECHNEN_TEST, ausmistenRepo, starte } from "./ausmisten/hilfen
 import { EXIT_GRUEN, EXIT_ROT, WIRKSAME_TESTS, messeUndMelde } from "./ausmisten/messung.mjs";
 import {
   KUERZEN,
-  MIT_MUSTER,
   MIT_TEXT,
-  TEXTFALL,
   TEXTTEST,
   VERHALTEN,
   fall,
@@ -159,39 +157,17 @@ test("ausmisten-lokal: eine gesenkte Unterdrückung des eigenen Tests endet weit
   assert.match(ergebnis.ausgabe, /Lokal: grün bis auf die Freigabe durch Antonio im PR \(Exit 3\)/);
 });
 
-test("ausmisten-lokal: ein gelöschter ausgenommener Texttest endet mit Exit 3 und nennt Fall und Freigabe", async (context) => {
+test("ausmisten-lokal: ein gelöschter ausgenommener Texttest endet mit Exit 0 und nennt den Fall ohne Freigabe", async (context) => {
   const repo = lokalesRepo(context, [], {
     dateien: { [TEXTTEST]: MIT_TEXT },
     neu: { [TEXTTEST]: texttest(fall(VERHALTEN, KUERZEN)) },
   });
   const ergebnis = await lokal(context, repo);
-  assert.equal(ergebnis.status, EXIT_FREIGABE, ergebnis.ausgabe);
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
   assert.match(
     ergebnis.ausgabe,
     /Ausgenommen: test\/post\/text\.test\.js: liest den Quelltext \(umgebaute Datei src\/post\/eingang\.js, im Branch gelöscht\)/,
   );
-  assert.match(
-    ergebnis.ausgabe,
-    /Freigabe nötig: Ausgenommener Testfall im Branch gelöscht: test\/post\/text\.test\.js: liest den Quelltext/,
-  );
-  assert.doesNotMatch(ergebnis.ausgabe, /Lokal: grün\n/);
-});
-
-test("ausmisten-lokal: eine geänderte Konstante außerhalb eines ausgenommenen Falls endet mit Exit 3", async (context) => {
-  const mitMuster = (muster) =>
-    texttest(
-      [`const MUSTER = ${JSON.stringify(muster)};`, ""],
-      fall(TEXTFALL, MIT_MUSTER),
-      fall(VERHALTEN, KUERZEN),
-    );
-  const repo = lokalesRepo(context, [], {
-    dateien: { [TEXTTEST]: mitMuster("return text.trim();") },
-    neu: { [TEXTTEST]: mitMuster("") },
-  });
-  const ergebnis = await lokal(context, repo);
-  assert.equal(ergebnis.status, EXIT_FREIGABE, ergebnis.ausgabe);
-  assert.match(
-    ergebnis.ausgabe,
-    /Freigabe nötig: Ausgenommener Testfall im Branch Datei geändert: test\/post\/text\.test\.js: liest den Quelltext/,
-  );
+  assert.doesNotMatch(ergebnis.ausgabe, /Freigabe nötig/);
+  assert.match(ergebnis.ausgabe, /Lokal: grün\n/);
 });

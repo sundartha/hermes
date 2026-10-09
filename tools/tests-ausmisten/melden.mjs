@@ -140,7 +140,7 @@ async function artefakte(github, { jobs, erwartet }) {
   return {
     ...gemessenesErgebnis(teile),
     issue: plan.daten.issue,
-    punkte: freigabePunkte(plan.daten, teile[BASIS]),
+    punkte: freigabePunkte(plan.daten),
     fehler: [...bisher, ...fehler],
   };
 }
@@ -153,22 +153,16 @@ export function ausgenommeneFaelle(basisTeile) {
   return eindeutig(basisTeile.flatMap(({ ausgenommen = [] }) => ausgenommen));
 }
 
-export function freigabePunkte(plan, basisTeile) {
-  const faelle = eindeutig(
-    ausgenommeneFaelle(basisTeile)
-      .filter(({ imBranch }) => imBranch !== UNVERAENDERT)
-      .map(({ test, name, imBranch }) => ({ test, name, imBranch })),
+export function zeigeAusnahmen(faelle) {
+  for (const { datei, test, name, imBranch } of faelle)
+    console.log(`Ausgenommen: ${test}: ${name} (umgebaute Datei ${datei}, im Branch ${imBranch})`);
+}
+
+export function freigabePunkte(plan) {
+  return (plan.unterdrueckungen ?? []).map(
+    ({ datei, regel, vorher, nachher }) =>
+      `Unterdrückung in eslint-suppressions.json gesenkt: ${datei} ${regel} ${vorher} → ${nachher}`,
   );
-  return [
-    ...faelle.map(
-      ({ test, name, imBranch }) =>
-        `Ausgenommener Testfall im Branch ${imBranch}: ${test}: ${name}`,
-    ),
-    ...(plan.unterdrueckungen ?? []).map(
-      ({ datei, regel, vorher, nachher }) =>
-        `Unterdrückung in eslint-suppressions.json gesenkt: ${datei} ${regel} ${vorher} → ${nachher}`,
-    ),
-  ];
 }
 
 function gemessenesErgebnis(teile) {
@@ -193,7 +187,7 @@ function abbruchVerstoesse(abgebrochen) {
 }
 
 export function urteilAusTeilen(teile, { fehler, plan }) {
-  const punkte = freigabePunkte(plan, teile[BASIS]);
+  const punkte = freigabePunkte(plan);
   return urteilFuer({ ...gemessenesErgebnis(teile), punkte, fehler });
 }
 
@@ -246,6 +240,24 @@ function ausnahmenZeilen(ausgenommen) {
   ];
 }
 
+function veraenderteAusnahmenZeilen(ausgenommen) {
+  const faelle = eindeutig(
+    ausgenommen
+      .filter(({ imBranch }) => imBranch !== UNVERAENDERT)
+      .map(({ test, name, imBranch }) => ({ test, name, imBranch })),
+  );
+  if (faelle.length === 0) return [];
+  return [
+    "## Ausgenommene Testfälle, im Branch gelöscht oder geändert",
+    "",
+    ...faelle.map(
+      ({ test, name, imBranch }) =>
+        `- Ausgenommener Testfall im Branch ${imBranch}: ${test}: ${name}`,
+    ),
+    "",
+  ];
+}
+
 function freigabeZeilen({ punkte = [], freigabe }, kopf) {
   if (punkte.length === 0) return [];
   const stand = freigabe
@@ -288,6 +300,7 @@ export function prText({
     "Jeder Mutant, den die alten Fassungen der geänderten Tests getötet haben, ist auch mit den Tests dieses Branches getötet, im Gate-Lauf ebenso.",
     "",
     ...freigabeZeilen(urteil, kopf),
+    ...veraenderteAusnahmenZeilen(ausgenommen),
     ...ausnahmenZeilen(ausgenommen),
     ...issueZeilen(issue),
     "",
@@ -328,6 +341,7 @@ export async function melden({ pr }, abhaengigkeiten = standardAbhaengigkeiten()
   const gelesen = await artefakte(github, { jobs, erwartet });
   const urteil = await mitFreigabe(github, urteilFuer(gelesen), herkunft);
   const adresse = laufAdresse();
+  zeigeAusnahmen(gelesen.ausgenommen ?? []);
   for (const verstoss of urteil.verstoesse) console.log(`Verstoß: ${verstoss}`);
   const text = urteil.kurz ?? beschreibung(urteil);
   console.log(`${herkunft.branch} ${herkunft.kopf}: ${text}`);
