@@ -7,7 +7,6 @@ import { test } from "node:test";
 import { commitNachricht } from "../../tools/ziele/nachricht.mjs";
 import { REPO_ROOT, isolatedEnvironment } from "./probe-repo.js";
 import {
-  BOT,
   LAUF,
   arbeitsordner,
   ausgabenAus,
@@ -233,7 +232,7 @@ test("ziele-pruefen: Gegenprobe, eine gültige Ein-Datei-Änderung endet mit gen
   const branch = `refs/heads/aufraeumen/knip-${LAUF}`;
   assert.equal(git(ursprung, ["rev-list", "--count", `${master}..${branch}`]), "1");
   assert.deepEqual(git(ursprung, ["diff", "--name-only", master, branch]).split("\n"), ["src/frei.js"]);
-  assert.equal(git(ursprung, ["log", "-1", "--format=%an %(trailers:key=Sorte,valueonly)", branch]), `${BOT} knip`);
+  assert.equal(git(ursprung, ["log", "-1", "--format=%an <%ae> %(trailers:key=Sorte,valueonly)", branch]), "sundartha-agent[bot] <340129717+sundartha-agent[bot]@users.noreply.github.com> knip");
   assert.equal(commitlint(git(ursprung, ["log", "-1", "--format=%B", branch])).status, 0);
   assert.equal(claude.protokoll().umgebung.CLAUDE_CODE_OAUTH_TOKEN, "schein-token");
 });

@@ -114,6 +114,12 @@ test("ziele-vorpruefen: ein offener eigener PR blockiert den Lauf, bevor ein Age
   assert.deepEqual(schreibende(github), []);
 });
 
+test("ziele-vorpruefen: ein offener Aufräum-PR von sundartha-agent[bot] zählt als eigener und blockiert", async (context) => {
+  const pr = eigenerPr(EIGENER_PR, { user: "sundartha-agent[bot]" });
+  const { ausgabe } = await vorpruefe(context, repoMitBefund(context), { anfang: { pulls: [pr], laeufe: { "ci.yml": [ciLauf()] } } });
+  assert.equal(ausgabe.grund, `eigener PR #${EIGENER_PR} ist noch offen`);
+});
+
 test("ziele-vorpruefen: offene Dependabot-PRs blockieren nicht", async (context) => {
   const repo = repoMitBefund(context);
   const dependabot = { ...eigenerPr(DEPENDABOT_PR, { user: "dependabot[bot]" }), head: { ref: "dependabot/npm_and_yarn/alle-1", sha: scheinSha("d") } };

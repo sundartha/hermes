@@ -1,8 +1,8 @@
 import { KONTEXT } from "../auftrag/pruefer-urteil.mjs";
 import { CI_DATEI, kommentiere, offeneIssues } from "./github.mjs";
 
-export const BOT = "sundartha-bot";
-export const BOT_EMAIL = "335012687+sundartha-bot@users.noreply.github.com";
+export const BOT = "sundartha-agent[bot]";
+export const BOT_EMAIL = "340129717+sundartha-agent[bot]@users.noreply.github.com";
 export const BRANCH_PRAEFIX = "aufraeumen/";
 const EIGENER_BRANCH = /^aufraeumen\/([a-z]+)-[\w-]+$/;
 const EIGENER_TITEL = /^Aufräumen: [a-z]+ in (.+)$/;
