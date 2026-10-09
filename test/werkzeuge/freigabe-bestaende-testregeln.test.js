@@ -74,3 +74,38 @@ test("freigabe-strenger: ein neuer Eintrag in einem Bestand der Testregeln ist n
   });
   assert.deepEqual([befunde, importe], [null, null]);
 });
+
+const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+
+function unterdrueckungen(zahlen) {
+  const eintraege = Object.entries(zahlen).map(([datei, count]) => [datei, { complexity: { count } }]);
+  return `${JSON.stringify(Object.fromEntries(eintraege))}\n`;
+}
+
+test("freigabe-strenger: eine gesenkte Zahl in eslint-suppressions.json ist strenger", (context) => {
+  const faelle = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungen({ "src/a.js": 3, "src/b.js": 1 }),
+    nachher: unterdrueckungen({ "src/a.js": 2, "src/b.js": 1 }),
+  });
+  assert.deepEqual(faelle, [{ path: UNTERDRUECKUNGEN, fall: ALTBEFUNDE_GESTRICHEN }]);
+});
+
+test("freigabe-strenger: ein gestrichener Eintrag in eslint-suppressions.json ist strenger", (context) => {
+  const faelle = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungen({ "src/a.js": 3, "src/b.js": 1 }),
+    nachher: unterdrueckungen({ "src/a.js": 3 }),
+  });
+  assert.deepEqual(faelle, [{ path: UNTERDRUECKUNGEN, fall: ALTBEFUNDE_GESTRICHEN }]);
+});
+
+test("freigabe-strenger: eine erhöhte oder neue Zahl in eslint-suppressions.json ist nicht strenger", (context) => {
+  const erhoeht = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungen({ "src/a.js": 3, "src/b.js": 1 }),
+    nachher: unterdrueckungen({ "src/a.js": 2, "src/b.js": 2 }),
+  });
+  const neu = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungen({ "src/a.js": 3 }),
+    nachher: unterdrueckungen({ "src/a.js": 2, "src/c.js": 1 }),
+  });
+  assert.deepEqual([erhoeht, neu], [null, null]);
+});
