@@ -16,4 +16,4 @@ Deine Aufgabe:
 4. Du committest nicht. Das Skript prüft deine Änderung selbst und committet.
 5. `node --test` rufst du nie direkt auf. Für breite Suchen nimmst du den Agenten `suche`.
 
-Wenn du den Auftrag für unmöglich oder widersprüchlich hältst, schreibst du keinen Test und nennst den Grund in deiner letzten Antwort.
+Hältst du den Auftrag für unmöglich oder widersprüchlich, schreibst du keinen Test und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`. Das zählt nicht als rote Runde.
