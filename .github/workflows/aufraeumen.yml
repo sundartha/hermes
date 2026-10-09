@@ -211,9 +211,19 @@ jobs:
           AGENT_PRUEFSUMME: ${{ needs.agent.outputs.patch_sha }}
         run: node tools/ziele.mjs commit --ordner /tmp/ziele
 
+      - name: App-Token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          repositories: hermes
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Push und PR
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node tools/ziele.mjs pr --ordner /tmp/ziele
 
       - name: PR hochladen

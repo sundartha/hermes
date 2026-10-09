@@ -39,9 +39,19 @@ jobs:
         with:
           node-version: 22
 
+      - name: App-Token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          repositories: hermes
+          permission-contents: write
+          permission-actions: read
+
       - name: Soll-Vergleich
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -o pipefail
           node tools/soll-vergleich.mjs | tee -a "$GITHUB_STEP_SUMMARY"
@@ -64,28 +74,52 @@ jobs:
         with:
           node-version: 22
 
+      - name: App-Token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          repositories: hermes
+          permission-contents: write
+          permission-pull-requests: write
+          permission-actions: read
+          permission-checks: read
+
       - name: Git einrichten
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           gh auth setup-git
-          bot_id=$(gh api users/sundartha-bot --jq .id)
-          git config user.name sundartha-bot
-          git config user.email "${bot_id}+sundartha-bot@users.noreply.github.com"
+          git config user.name 'sundartha-agent[bot]'
+          git config user.email '340129717+sundartha-agent[bot]@users.noreply.github.com'
           git remote add upstream https://github.com/sundartha/hermes.git
 
       - name: Rot-Proben
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -o pipefail
           node tools/rotproben-woche.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: App-Token für das Aufräumen
+        if: always()
+        id: app-token-aufraeumen
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          repositories: hermes
+          permission-contents: write
+          permission-pull-requests: write
+          permission-actions: read
+          permission-checks: read
+
       - name: Aufräumen
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token-aufraeumen.outputs.token }}
         run: node tools/rotproben-woche.mjs --aufraeumen
 
   meldung:

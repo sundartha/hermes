@@ -1,5 +1,5 @@
 {
-  "titel": "Ausmisten-Workflow mit workflow_run, Environment wartung und Bot-Token",
+  "titel": "Ausmisten-Workflow mit workflow_run, Environment wartung und App-Token",
   "dateien": {
     ".github/workflows/ausmisten-eingang.yml": [
       "name: Ausmisten-Eingang",
@@ -36,9 +36,18 @@
       "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
       "        with:",
       "          persist-credentials: false",
+      "      - name: App-Token",
+      "        id: app-token",
+      "        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+      "        with:",
+      "          app-id: ${{ vars.AGENT_APP_ID }}",
+      "          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}",
+      "          repositories: hermes",
+      "          permission-contents: write",
+      "          permission-pull-requests: write",
       "      - name: PR öffnen",
       "        env:",
-      "          GH_TOKEN: ${{ secrets.BOT_TOKEN }}",
+      "          GH_TOKEN: ${{ steps.app-token.outputs.token }}",
       "        run: node tools/tests-ausmisten.mjs melden --artefakte /tmp/ausmisten --pr"
     ]
   },

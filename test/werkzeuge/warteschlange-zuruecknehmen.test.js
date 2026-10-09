@@ -17,7 +17,7 @@ import {
 } from "./warteschlange/hilfen.mjs";
 
 const RUECKNAHME_PR = 8;
-const BOT_TOKEN = "bot-probe-token";
+const AGENT_TOKEN = "agent-probe-token";
 const LAUF_TOKEN = "lauf-probe-token";
 const ZWEIMAL_ROT = [{ datei: ROTER_TEST, test: ROTER_NAME, grund: "zweimal rot" }];
 const STANDARD_RUECKNAHME = /^Revert ".+"\n\nThis reverts commit [0-9a-f]{40}\.$/;
@@ -50,7 +50,7 @@ async function nimmZurueck(context, optionen = {}) {
       GITHUB_API_URL: github.url,
       GITHUB_GRAPHQL_URL: github.graphql,
       GH_TOKEN: LAUF_TOKEN,
-      BOT_TOKEN,
+      AGENT_TOKEN,
       GITHUB_REPOSITORY: REPO,
       GITHUB_OUTPUT: ausgabe.pfad,
       GITHUB_EVENT_PATH: ciEreignis(context, {
@@ -92,7 +92,7 @@ test("ein kaputter Merge wird als Rücknahme-PR mit zwei Standard-Reverts angele
   for (const nachricht of nachrichten) assert.match(nachricht, STANDARD_RUECKNAHME);
   assert.ok(nachrichten[0].includes(lauf.stand.erster), "die ältere Änderung wird zuletzt zurückgenommen");
   const angelegt = lauf.github.anfragen.find(({ methode, pfad }) => methode === "POST" && pfad === `${API_PFAD}/pulls`);
-  assert.equal(angelegt.token, BOT_TOKEN);
+  assert.equal(angelegt.token, AGENT_TOKEN);
   assert.equal(angelegt.rumpf.title, "Rücknahme von #7");
   assert.equal(angelegt.rumpf.head, "revert/7");
   assert.equal(angelegt.rumpf.base, "master");
@@ -103,10 +103,10 @@ test("die Rücknahme pusht nie auf master und reiht nur mit --auto ein", async (
   const lauf = await nimmZurueck(context);
   assert.equal(lauf.masterImOrigin, lauf.stand.zweiter);
   assert.deepEqual(lauf.ghAufrufe, [
-    { args: ["pr", "merge", String(RUECKNAHME_PR), "--repo", REPO, "--auto"], token: BOT_TOKEN },
+    { args: ["pr", "merge", String(RUECKNAHME_PR), "--repo", REPO, "--auto"], token: AGENT_TOKEN },
   ]);
   const gesendet = lauf.github.anfragen.filter(({ methode }) => methode !== "GET");
-  assert.ok(gesendet.every(({ token }) => token === BOT_TOKEN), JSON.stringify(gesendet));
+  assert.ok(gesendet.every(({ token }) => token === AGENT_TOKEN), JSON.stringify(gesendet));
 });
 
 test("ist master auch nach einer Rücknahme rot, gibt es keine zweite Rücknahme", async (context) => {

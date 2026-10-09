@@ -96,7 +96,7 @@ function nimmZurueck({ aelteste, kopf }, root) {
 }
 
 function schiebe(nummer, root) {
-  const helfer = "!f() { echo username=x-access-token; echo \"password=$BOT_TOKEN\"; }; f";
+  const helfer = "!f() { echo username=x-access-token; echo \"password=$AGENT_TOKEN\"; }; f";
   const umgebung = {
     ...env,
     GIT_CONFIG_COUNT: "2",
@@ -115,7 +115,7 @@ async function vorneEinreihen(neu) {
   try {
     const antwort = await fetch(adresse, {
       method: "POST",
-      headers: { Authorization: `Bearer ${env.BOT_TOKEN}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${env.AGENT_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ query: EINREIHEN, variables: { id: neu.node_id } }),
     });
     const { errors } = await antwort.json();
@@ -130,7 +130,7 @@ async function vorneEinreihen(neu) {
 function einreihen(neu, repo) {
   const gh = env.HERMES_GH ?? "gh";
   const lauf = spawnSync(gh, ["pr", "merge", String(neu.number), "--repo", repo, "--auto"], {
-    env: { ...env, GH_TOKEN: env.BOT_TOKEN },
+    env: { ...env, GH_TOKEN: env.AGENT_TOKEN },
     encoding: "utf8",
   });
   return lauf.status === 0;
@@ -151,7 +151,7 @@ async function legeRuecknahmeAn({ lauf, bereich }, root, github) {
     return { art: ROT, wert: `Konflikt beim Zurücknehmen von #${bereich.pr.number}` };
   }
   schiebe(bereich.pr.number, root);
-  const bot = githubZugang({ token: env.BOT_TOKEN });
+  const bot = githubZugang({ token: env.AGENT_TOKEN });
   const neu = await bot.sende("POST", "/pulls", {
     title: `Rücknahme von #${bereich.pr.number}`,
     head: `${RUECKNAHME_PRAEFIX}${bereich.pr.number}`,
