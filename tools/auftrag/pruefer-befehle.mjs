@@ -7,7 +7,7 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { env } from "node:process";
 
 import { stelleNach } from "./nachstellen.mjs";
@@ -15,7 +15,7 @@ import { gitAusgabe, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
 import { artefaktName, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
 import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
-import { legeIssuesAn } from "./pruefer-issues.mjs";
+import { issueTitel, legeIssuesAn } from "./pruefer-issues.mjs";
 import {
   ANMELDUNG_GRUND,
   LIMIT_GRUND,
@@ -24,10 +24,12 @@ import {
   pruefeCommit,
 } from "./pruefer-lauf.mjs";
 import {
+  ABLAGE_DATEI,
   ERGEBNIS_DATEI,
   FORMAT,
   NACHSTELLUNG_DATEI,
   SCHWEREN,
+  ablageAus,
   ergebnisAus,
   nachstellungAus,
   reproduzierbareBlocker,
@@ -39,7 +41,10 @@ export const PRUEFER_OPTIONEN = new Map([
   ["pruefen", ["head", "pr-branch", "aus"]],
   ["nachstellen", ["ergebnis", "pr", "basis", "aus"]],
   ["entscheiden", ["ergebnis"]],
+  ["ablegen", ["ablage", "repo"]],
 ]);
+const ABLAGE_GRUND = "Sicherheitsbezug, nicht öffentlich";
+const ABLAGE_TITEL = "Sicherheit: ";
 const STOP_GRUENDE = new Set([LIMIT_GRUND, ANMELDUNG_GRUND, TOKEN_GRUND]);
 const ISSUE_IM_TEXT = /\b(?:closes|fixes|resolves)\s+#(\d+)\b/i;
 const PHASEN_BRANCH = /^phase\/(\d+)-/;
@@ -145,16 +150,36 @@ function meldeCommit({ sha, zustand, grund, uebernommen: frueher, zaehler }) {
 
 async function pruefeAlle(commits, frueher, { kontext, schreibe }) {
   const ergebnisse = [];
+  const ablage = [];
   let abbruch = "";
   schreibe(ergebnisse);
   for (const commit of commits) {
-    const eintrag = await einerVon(commit, { frueher, abbruch, kontext });
+    const { ablage: hinweise = [], ...eintrag } = await einerVon(commit, { frueher, abbruch, kontext });
+    ablage.push(...hinweise.map((befund) => ({ sha: eintrag.sha, befund })));
     ergebnisse.push(eintrag);
     meldeCommit(eintrag);
     schreibe(ergebnisse);
     if (!abbruch && STOP_GRUENDE.has(eintrag.grund)) abbruch = `${eintrag.grund}, nicht gestartet`;
   }
-  return ergebnisse;
+  return { ergebnisse, ablage };
+}
+
+function legeAblageBereit({ ablage: ordner }, hinweise) {
+  if (env.GITHUB_OUTPUT && hinweise.length > 0) appendFileSync(env.GITHUB_OUTPUT, `hinweise=${hinweise.length}\n`);
+  if (!ordner) {
+    console.log(`Sicherheitshinweise ohne Ablage: ${hinweise.length}.`);
+    return;
+  }
+  mkdirSync(ordner, { recursive: true });
+  const inhalt = { format: FORMAT, hinweise };
+  writeFileSync(join(ordner, ABLAGE_DATEI), `${JSON.stringify(inhalt)}\n`);
+  console.log(`Sicherheitshinweise für die Ablage: ${hinweise.length}.`);
+}
+
+function ablageImArtefakt({ ablage, aus }) {
+  if (!ablage) return false;
+  const abstand = relative(resolve(aus), resolve(ablage));
+  return abstand !== ".." && !abstand.startsWith(`..${sep}`) && !isAbsolute(abstand);
 }
 
 function schreibeErgebnis(aus, ergebnis) {
@@ -178,6 +203,7 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   const ausloeser = ausloesenderLauf();
   if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
   const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
+  if (ablageImArtefakt(optionen)) throw new Error("Die Ablage darf nicht im Ordner --aus liegen, der hochgeladen wird.");
   const pr = await offenerPr(github, head);
   const basis = basisVon(pr, head, root);
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
@@ -201,7 +227,8 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
     auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
   const schreibe = (fertig) =>
     schreibeErgebnis(aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
-  const commits = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
+  const { ergebnisse: commits, ablage } = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
+  legeAblageBereit(optionen, ablage);
   meldeSumme({ ...kopf, commits });
   return 0;
 }
@@ -261,11 +288,26 @@ async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
   return 0;
 }
 
+async function ablegen(optionen, root, { github = githubZugang({ repo: optionen.repo }) } = {}) {
+  const hinweise = ablageAus(leseDatei(optionen.ablage, ABLAGE_DATEI) ?? "");
+  if (hinweise === null) throw new Error(`${ABLAGE_DATEI} fehlt oder ist ungültig.`);
+  const issues = hinweise.map(({ sha, befund }) => ({
+    titel: `${ABLAGE_TITEL}${issueTitel(befund)}`,
+    sha,
+    befund,
+    grund: ABLAGE_GRUND,
+  }));
+  const ergebnis = await legeIssuesAn(issues, github);
+  console.log(`Ablage ${github.repo}: Issues neu ${ergebnis.neu}, schon offen ${ergebnis.vorhanden}.`);
+  return 0;
+}
+
 const UNTERBEFEHLE = new Map([
   ["artefakt", artefakt],
   ["pruefen", pruefen],
   ["nachstellen", (optionen) => stelleNach(optionen)],
   ["entscheiden", entscheiden],
+  ["ablegen", ablegen],
 ]);
 
 export function pruefer(art, optionen, root) {
@@ -273,4 +315,4 @@ export function pruefer(art, optionen, root) {
   return befehl(optionen, root);
 }
 
-export { artefakt, pruefen, entscheiden };
+export { artefakt, pruefen, entscheiden, ablegen };

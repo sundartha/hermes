@@ -55,13 +55,30 @@ jobs:
         run: git fetch --no-tags origin "$HEAD_SHA" master
 
       - name: Commits prüfen
+        id: pruefen
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_BRANCH: ${{ github.event.workflow_run.head_branch }}
           PR_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
-        run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --pr-repo "$PR_REPO" --aus /tmp/pruefer-ergebnis
+        run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --pr-repo "$PR_REPO" --aus /tmp/pruefer-ergebnis --ablage /tmp/pruefer-ablage
+
+      - name: App-Token für die Ablage
+        id: ablage-token
+        if: vars.ABLAGE_APP_ID != '' && steps.pruefen.outputs.hinweise != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.ABLAGE_APP_ID }}
+          private-key: ${{ secrets.ABLAGE_APP_PRIVATE_KEY }}
+          repositories: hermes-sicherheit
+          permission-issues: write
+
+      - name: Sicherheitshinweise nicht öffentlich ablegen
+        if: steps.ablage-token.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.ablage-token.outputs.token }}
+        run: node tools/auftrag.mjs pruefer ablegen --ablage /tmp/pruefer-ablage --repo sundartha/hermes-sicherheit
 
       - name: Ergebnis hochladen
         if: always() && steps.artefakt.outputs.artefakt != ''

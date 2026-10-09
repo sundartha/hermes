@@ -7,6 +7,7 @@ export const ZUSTAENDE = [GEPRUEFT, NICHT_GELAUFEN, UNVOLLSTAENDIG];
 export const KATEGORIEN = ["erwartung", "laden", "umgebung", "zeit", "gruen"];
 export const ERGEBNIS_DATEI = "ergebnis.json";
 export const NACHSTELLUNG_DATEI = "nachstellung.json";
+export const ABLAGE_DATEI = "sicherheitshinweise.json";
 export const FORMAT = 1;
 const URTEILE = ["BESTANDEN", "NICHT_BESTANDEN"];
 const TEXTFELDER = ["id", "datei", "beleg", "reproduktion", "reparatur"];
@@ -77,6 +78,23 @@ function befundAus(wert) {
 
 export function gekuerzt(befund) {
   return befund.sicherheit ? { sicherheit: true, schwere: befund.schwere } : befund;
+}
+
+export function gehoertInAblage(befund) {
+  return befund.sicherheit && befund.schwere !== BLOCKER;
+}
+
+function ablageEintrag(wert) {
+  if (!istObjekt(wert) || !COMMIT_SHA.test(wert.sha ?? "")) return null;
+  const befund = befundAus(wert.befund);
+  return befund && gehoertInAblage(befund) ? { sha: wert.sha, befund } : null;
+}
+
+export function ablageAus(inhalt) {
+  const wert = alsJson(inhalt);
+  if (!istObjekt(wert) || wert.format !== FORMAT || !Array.isArray(wert.hinweise)) return null;
+  const hinweise = wert.hinweise.map(ablageEintrag);
+  return hinweise.includes(null) ? null : hinweise;
 }
 
 export function befundeDerAntwort(wert) {
