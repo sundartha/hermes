@@ -236,3 +236,44 @@ test("ziele-pruefen: Gegenprobe, eine gültige Ein-Datei-Änderung endet mit gen
   assert.equal(commitlint(git(ursprung, ["log", "-1", "--format=%B", branch])).status, 0);
   assert.equal(claude.protokoll().umgebung.CLAUDE_CODE_OAUTH_TOKEN, "schein-token");
 });
+
+const ALT = quelltext(["export function rechne(wert) {\n  var doppelt = wert * 2;\n  return doppelt;\n}"]);
+const ALT_ZIEL = { sorte: "altfunktion", datei: "src/alt.js", funktion: "rechne", zielbefunde: ["rechne ab Zeile 1: 1 Befunde (no-var)"], arten: ["altfunktion"], tests: ["test/alt.test.js"] };
+
+function altRepo(context) {
+  return zieleRepo(context, {
+    "src/main.js": quelltext(['import { rechne } from "./alt.js";', "console.log(rechne(2));"]),
+    "src/alt.js": ALT,
+    "test/alt.test.js": testFuer("src/main.js"),
+    "eslint-suppressions.json": JSON.stringify({ "src/alt.js": { "no-var": { count: 1 } } }),
+  });
+}
+
+test("ziele-pruefen: Altfunktion, eine umgebaute Funktion ohne ihre Befunde besteht und lässt eslint-suppressions.json unberührt", async (context) => {
+  const repo = altRepo(context);
+  const patch = patchVon(repo, { "src/alt.js": ALT.replace("var doppelt", "const doppelt") });
+  const ergebnis = await pruefe(context, repo, { patch, felder: ALT_ZIEL });
+  assert.deepEqual([ergebnis.status, ergebnis.pruefung.ausgang, ergebnis.pruefung.dateien], [0, "weiter", ["M src/alt.js"]]);
+});
+
+test("ziele-pruefen: Altfunktion, ein Befund, der nur in eine neue Hilfsfunktion wandert, blockiert mit AR-nicht-behoben", async (context) => {
+  const repo = altRepo(context);
+  const verschoben = quelltext(["function verdopple(wert) {\n  var doppelt = wert * 2;\n  return doppelt;\n}", "export function rechne(wert) {\n  return verdopple(wert);\n}"]);
+  const patch = patchVon(repo, { "src/alt.js": verschoben });
+  assert.deepEqual(verstoss(await pruefe(context, repo, { patch, felder: ALT_ZIEL })), [0, "blockiert", "AR-nicht-behoben src/alt.js"]);
+});
+
+test("ziele-pruefen: eine zu hohe Zahl in eslint-suppressions.json kürzt der Fixer, die Prüfung besteht, und der Commit enthält nur die kleinere Liste", async (context) => {
+  const repo = altRepo(context);
+  repo.committe({ "src/alt.js": ALT.replace("var doppelt", "const doppelt") });
+  const master = repo.sha();
+  const github = await githubAttrappe(context, { laeufe: { "ci.yml": [ciLauf()] } });
+  const ordner = arbeitsordner(context, { "ausgaben.txt": "" });
+  const env = umgebung(github, { GITHUB_OUTPUT: join(ordner, "ausgaben.txt") });
+  const kontext = { repo, ordner, env, master };
+  for (const name of ["vorpruefen", "waehlen", "fixen", "pruefen"]) await schritt(name, kontext);
+  assert.deepEqual(gelesen(ordner, "pruefung/pruefung.json").dateien, ["M eslint-suppressions.json"]);
+  const { patch_sha: fixerSumme } = ausgabenAus(join(ordner, "ausgaben.txt"));
+  await schritt("commit", { ...kontext, env: { ...env, ZIEL_PRUEFSUMME: fixerSumme }, master: null });
+  assert.equal(git(repo.ordner, ["show", "HEAD:eslint-suppressions.json"]).replace(/\s/g, ""), "{}");
+});

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-import { BASIS, JSCPD } from "./sorten.mjs";
+import { ALTFUNKTION, BASIS, JSCPD } from "./sorten.mjs";
 
 const MAX_BETREFF = 72;
 const DATUM_LAENGE = 10;
@@ -9,6 +9,7 @@ const BETREFF = new Map([
   [BASIS, (datei) => `Kürze die Basislinie ${datei}`],
   [JSCPD, (datei) => `Fasse Kopien in ${datei} zusammen`],
   ["knip", (datei) => `Entferne toten Code aus ${datei}`],
+  [ALTFUNKTION, (datei) => `Baue eine Altfunktion in ${datei} um`],
 ]);
 
 const WARUM = new Map([
@@ -26,6 +27,11 @@ const WARUM = new Map([
     "knip",
     (datei, anzahl) =>
       `knip meldet ${anzahl} Befunde toten Codes in ${datei}. Toter Code erschwert Lesen und Prüfen; das Verhalten bleibt gleich.`,
+  ],
+  [
+    ALTFUNKTION,
+    (datei) =>
+      `Eine Funktion in ${datei} hat noch eingefrorene Lint-Befunde in eslint-suppressions.json. Der Umbau ändert nur ihre Struktur, damit die Liste kleiner wird; das Verhalten bleibt gleich.`,
   ],
 ]);
 

@@ -39,7 +39,7 @@ const SCHEMA = {
   properties: {
     geaendert: { type: "boolean" },
     datei: { type: "string", maxLength: MAX_PFAD },
-    sorte: { type: "string", enum: ["knip", "jscpd"] },
+    sorte: { type: "string", enum: ["knip", "jscpd", "altfunktion"] },
     behobeneBefunde: { type: "array", maxItems: MAX_BEHOBEN, items: { type: "string", maxLength: MAX_PFAD } },
   },
 };

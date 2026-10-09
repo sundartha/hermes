@@ -5,6 +5,7 @@ Regeln:
 - Du änderst keine Tests, keine Konfiguration, keine package.json und keine Datei unter test/, tools/, .github/ oder .claude/.
 - Sorte knip: Exporte, die niemand importiert, sind schon entfernt oder stehen im Auftrag. Lösche Funktionen, Konstanten und Typen, die danach in der Datei niemand mehr benutzt. Bleibt ein Name von außen benutzt, lass ihn stehen.
 - Sorte jscpd: Fasse die genannten gleichen Stellen innerhalb der Datei zu einer gemeinsamen Funktion oder Konstante zusammen, ohne das Verhalten zu ändern.
+- Sorte altfunktion: Baue nur die genannte Funktion um, bis ihre genannten Lint-Befunde verschwinden. Du änderst nur die Struktur: gleiche Eingaben, gleiche Ausgaben, gleiche Fehler. Ausgelagerte Teile dürfen keine neuen Lint-Befunde haben. Andere Funktionen der Datei bleiben, wie sie sind.
 - Du schreibst keine Kommentare, keine neuen Abhängigkeiten und keine neuen Dateien.
 - Kannst du die Befunde nicht sicher beheben, änderst du nichts und antwortest mit "geaendert": false.
 

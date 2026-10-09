@@ -175,13 +175,13 @@ test("ziele-auswahl: eine Datei mit eingefrorenen ESLint-Verstößen ist für js
   const probe = repo(context, {
     "eslint-suppressions.json": JSON.stringify({ "src/kopie.js": { "no-var": { count: 1 } }, "src/frei.js": { "no-var": { count: 1 } } }),
     "src/main.js": hauptdatei([["frei", "frei.js"], ["eins", "kopie.js"], ["zwei", "kopie.js"]]),
-    "src/frei.js": exporte(["frei", "unbenutzt"]),
-    "src/kopie.js": quelltext([block("eins"), block("zwei")]),
+    "src/frei.js": `${exporte(["frei", "unbenutzt"])}var stand = 1;\n`,
+    "src/kopie.js": quelltext([block("eins"), block("zwei"), "var stand = 1;"]),
   });
   const pulls = [{ ...eigenerPr(KNIP_PR, { sorte: "knip", state: "closed" }), merged_at: "2026-10-01T00:00:00Z" }];
   const { ziel } = await waehle(context, probe, { pulls });
   assert.deepEqual([ziel.sorte, ziel.datei, ziel.agentErlaubt], ["knip", "src/frei.js", false]);
-  assert.deepEqual(ziel.uebersprungen, ["jscpd ohne Kandidaten"]);
+  assert.deepEqual(ziel.uebersprungen, ["jscpd ohne Kandidaten", "altfunktion ohne Kandidaten"]);
 });
 
 test("ziele-auswahl: ein doppelter Export ist nur Kandidat, wenn der wegfallende Name nirgends sonst steht und der Agent erlaubt ist", async (context) => {
@@ -192,7 +192,8 @@ test("ziele-auswahl: ein doppelter Export ist nur Kandidat, wenn der wegfallende
   const erlaubt = await waehle(context, repo(context, dateien));
   assert.deepEqual([erlaubt.ziel.datei, erlaubt.ziel.agentErlaubt], ["src/frei.js", true]);
   assert.ok(erlaubt.ziel.zielbefunde.includes("duplicates einmal+doppelt (entfernbar: doppelt)"), erlaubt.ziel.zielbefunde.join("; "));
-  const unterdrueckt = await waehle(context, repo(context, { ...dateien, "eslint-suppressions.json": JSON.stringify({ "src/frei.js": { "no-var": { count: 1 } } }) }));
+  const mitAltbefund = { "src/frei.js": `${dateien["src/frei.js"]}var stand = 1;\n`, "eslint-suppressions.json": JSON.stringify({ "src/frei.js": { "no-var": { count: 1 } } }) };
+  const unterdrueckt = await waehle(context, repo(context, { ...dateien, ...mitAltbefund }));
   assert.equal(unterdrueckt.ziel.ausgang, "sauber");
 });
 
@@ -270,4 +271,37 @@ test("ziele-auswahl: ohne Kandidaten endet die Wahl sauber", async (context) => 
   assert.equal(status, 0);
   assert.equal(ziel.ausgang, "sauber");
   assert.match(ziel.grund, /knip ohne Kandidaten; jscpd ohne Kandidaten/);
+});
+
+const JSCPD_PR = 8;
+
+function altfunktion(name, faktor = 2) {
+  return `export function ${name}(wert) {\n  var doppelt = wert * ${faktor};\n  return doppelt;\n}`;
+}
+
+test("ziele-auswahl: Altfunktion wählt eine Funktion mit eingefrorenen Befunden, zuerst in der am häufigsten geänderten Datei", async (context) => {
+  const probe = repo(context, {
+    "src/main.js": hauptdatei([["selten", "alt.js"], ["oft", "zeit.js"]]),
+    "src/alt.js": quelltext([altfunktion("selten")]),
+    "src/zeit.js": quelltext([altfunktion("oft")]),
+    "eslint-suppressions.json": JSON.stringify({ "src/alt.js": { "no-var": { count: 1 } }, "src/zeit.js": { "no-var": { count: 1 } } }),
+  });
+  probe.committe({ "src/zeit.js": quelltext([altfunktion("oft", 3)]) });
+  probe.committe({ "src/zeit.js": quelltext([altfunktion("oft", 4)]) });
+  const pulls = [{ ...eigenerPr(JSCPD_PR, { sorte: "jscpd", state: "closed" }), merged_at: "2026-10-01T00:00:00Z" }];
+  const { ziel } = await waehle(context, probe, { pulls });
+  assert.deepEqual([ziel.sorte, ziel.datei, ziel.funktion, ziel.agentErlaubt], ["altfunktion", "src/zeit.js", "oft", true]);
+  assert.deepEqual(ziel.zielbefunde, ["oft ab Zeile 1: 1 Befunde (no-var)"]);
+});
+
+test("ziele-auswahl: eine zu hohe Zahl in eslint-suppressions.json wird zuerst gekürzt, und die Wahl lässt die Datei unverändert", async (context) => {
+  const unterdrueckungen = JSON.stringify({ "src/frei.js": { "no-var": { count: 1 } } });
+  const probe = repo(context, {
+    "src/main.js": hauptdatei([["frei", "frei.js"]]),
+    "src/frei.js": exporte(["frei", "unbenutzt"]),
+    "eslint-suppressions.json": unterdrueckungen,
+  });
+  const { ziel } = await waehle(context, probe);
+  assert.deepEqual([ziel.sorte, ziel.datei, ziel.arten, ziel.zielbefunde], ["basis", "eslint-suppressions.json", ["unterdrueckungen"], ["src/frei.js no-var 1 → 0"]]);
+  assert.equal(readFileSync(join(probe.ordner, "eslint-suppressions.json"), "utf8"), unterdrueckungen);
 });
