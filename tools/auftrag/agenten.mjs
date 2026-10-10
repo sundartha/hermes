@@ -84,8 +84,8 @@ export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   ].join("\n");
 }
 
-function beobachte(befehl, { root, umgebung, eingabe, auftrag, pruefleiter }) {
-  const daten = JSON.stringify({ befehl, eingabe, auftrag, pruefleiter });
+function beobachte(befehl, { root, umgebung, eingabe }) {
+  const daten = JSON.stringify({ befehl, eingabe });
   const lauf = spawnSync(execPath, [WAECHTER], { cwd: root, env: umgebung, input: daten, encoding: "utf8" });
   try {
     return JSON.parse(lauf.stdout);
@@ -94,7 +94,7 @@ function beobachte(befehl, { root, umgebung, eingabe, auftrag, pruefleiter }) {
   }
 }
 
-export function starteAgent({ rolle, auftrag, root, pruefleiter, fortsetzung }, prompt, start = {}) {
+export function starteAgent({ rolle, auftrag, root, fortsetzung }, prompt, start = {}) {
   const agent = start.agent ?? agentFuer(rolle, auftrag.bereich);
   const sitzung = fortsetzung ?? randomUUID();
   const befehl = [
@@ -110,6 +110,6 @@ export function starteAgent({ rolle, auftrag, root, pruefleiter, fortsetzung }, 
     ...VERLAUF_AUSGABE,
   ];
   const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag.abnahme };
-  const lauf = beobachte(befehl, { root, umgebung, eingabe: prompt, auftrag, pruefleiter });
+  const lauf = beobachte(befehl, { root, umgebung, eingabe: prompt });
   return { rolle, agent, sitzung, befehl: befehl.join(" "), ...lauf };
 }
