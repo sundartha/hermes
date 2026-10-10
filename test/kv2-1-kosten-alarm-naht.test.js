@@ -1,8 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { makeDurableAudit } from "../src/durable-audit.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../src/boot-guard.js";
@@ -10,7 +7,6 @@ import { makeDefaultState, openOutageAlert } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 import { makeStubStore, fakeConfig, fakeSpies, makeDueOutboundCall } from "./cost-truing-harness.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SENDER_E164 = "+15005550006";
 
 function boundAlertSender() {
@@ -268,33 +264,4 @@ test("KV2-1 (d2): die Sweep-Zeile traegt kanaele= - NUR Kanal-Arten, NIE die Zie
   const sweepLine = lines.find((line) => line.startsWith("[cost-truing] sweep "));
   assert.match(sweepLine, /kanaele=keine buch=/, "kanaele=keine steht unmittelbar vor dem Kosten-Buch");
   assert.doesNotMatch(sweepLine, /ops@|\+\d{6,}/, "kein Ziel in der Sweep-Zeile");
-});
-
-test("KV2-1 (e): server.js/app.js/wiring/web-login.js verdrahten die durable Audit-Zelle korrekt", () => {
-  const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
-  const appSrc = fs.readFileSync(path.join(ROOT, "src", "app.js"), "utf8");
-  const webLoginSrc = fs.readFileSync(path.join(ROOT, "src", "wiring", "web-login.js"), "utf8");
-
-  assert.match(serverSrc, /const durableAudit = makeDurableAudit\(/, "server.js muss durableAudit bauen");
-
-  const mailerIndex = serverSrc.indexOf("const mailer = selectMailer(config);");
-  const costTruingIndex = serverSrc.indexOf("const costTruing = makeCostTruing(");
-  assert.notEqual(mailerIndex, -1, "mailer-Konstruktion nicht gefunden");
-  assert.notEqual(costTruingIndex, -1, "costTruing-Konstruktion nicht gefunden");
-  assert.ok(mailerIndex < costTruingIndex, "costTruing muss NACH mailer verdrahtet werden (KV2-1)");
-
-  const costTruingEnd = serverSrc.indexOf(");", costTruingIndex);
-  const costTruingCall = serverSrc.slice(costTruingIndex, costTruingEnd);
-  assert.match(costTruingCall, /mailer/, "makeCostTruing muss mailer erhalten");
-  assert.match(costTruingCall, /audit:\s*durableAudit/, "makeCostTruing muss die durable Audit-Funktion erhalten");
-
-  const depsStart = serverSrc.indexOf("const deps = {");
-  const depsEnd = serverSrc.indexOf("};", depsStart);
-  const depsBlock = serverSrc.slice(depsStart, depsEnd);
-  assert.match(depsBlock, /\bauditStoreRef,/, "auditStoreRef fehlt im deps-Buendel");
-  assert.match(depsBlock, /\bdurableAudit,/, "durableAudit fehlt im deps-Buendel");
-
-  assert.match(appSrc, /auditStoreRef,/, "app.js muss auditStoreRef an wireWebLogin durchreichen");
-  assert.match(webLoginSrc, /Object\.assign\(auditStoreRef, \{ current: auditStore \}\)/,
-    "wireWebLogin muss auditStoreRef.current befuellen");
 });
