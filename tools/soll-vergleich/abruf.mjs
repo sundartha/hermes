@@ -51,6 +51,14 @@ async function environment(basis, name) {
   };
 }
 
+async function repoStand(basis) {
+  const [repo, meldungen] = await Promise.all([
+    api(basis),
+    api(`${basis}/private-vulnerability-reporting`),
+  ]);
+  return { ...repo, private_vulnerability_reporting: meldungen.enabled };
+}
+
 function weitereRulesets(basis, soll) {
   return Promise.all(
     soll.weitere_rulesets.map(({ id }) =>
@@ -67,7 +75,7 @@ export async function istStand(soll) {
       api(`${basis}/rulesets/${soll.ruleset.id}`),
       alleSeiten(`${basis}/rulesets`, (seite) => seite),
       weitereRulesets(basis, soll),
-      api(basis),
+      repoStand(basis),
       alleSeiten(`${basis}/collaborators?affiliation=all`, (seite) => seite),
       codeownersFehler(basis),
       alleSeiten(`${basis}/environments`, (seite) => seite?.environments),
