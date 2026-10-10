@@ -43,10 +43,12 @@ const REGELN = new Map([
   ["RENDER_API_URL", standardOderLoopback(RENDER_API_STANDARD)],
   ["RENDER_SERVICE_ID", muster(/^srv-[a-z0-9]{1,60}$/)],
   ["HERMES_DEPLOY_TOKEN", muster(/^\S{32,512}$/)],
+  ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
 const GITHUB_PFLICHT = ["GITHUB_TOKEN", "GITHUB_REPOSITORY"];
 const GEHEIM = ["GITHUB_TOKEN", "RENDER_API_KEY", "HERMES_DEPLOY_TOKEN"];
+const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
 const BEFEHLE = new Map([
   [
@@ -84,6 +86,20 @@ const BEFEHLE = new Map([
       freiwillig: ["RENDER_API_URL"],
     },
   ],
+  [
+    "zurueckrollen",
+    {
+      pflicht: ["RENDER_API_KEY", "RENDER_SERVICE_ID", "PRODUKTION_URL"],
+      freiwillig: ["RENDER_API_URL", "GITHUB_WORKSPACE", ...NOTFALL_AKTEURE],
+    },
+  ],
+  [
+    "anrufpause",
+    {
+      pflicht: ["HERMES_DEPLOY_TOKEN", "PRODUKTION_URL"],
+      freiwillig: NOTFALL_AKTEURE,
+    },
+  ],
 ]);
 
 function gueltig(name, wert) {
@@ -112,6 +128,7 @@ function werteBauen(umgebung) {
     ereignisName: umgebung.GITHUB_EVENT_NAME,
     ereignisPfad: umgebung.GITHUB_EVENT_PATH,
     akteure: [umgebung.GITHUB_ACTOR, umgebung.GITHUB_TRIGGERING_ACTOR].filter(Boolean),
+    inActions: umgebung.GITHUB_ACTIONS === "true",
     ref: umgebung.GITHUB_REF || null,
     ausgabeDatei: umgebung.GITHUB_OUTPUT || null,
     repoDir: umgebung.GITHUB_WORKSPACE || cwd(),
@@ -125,12 +142,17 @@ function werteBauen(umgebung) {
   };
 }
 
+function maskenWirken(regeln, umgebung) {
+  return umgebung.GITHUB_ACTIONS === "true" || !regeln.freiwillig.includes("GITHUB_ACTIONS");
+}
+
 export function einstellungenLesen(befehl, umgebung, ausgabe) {
   const regeln = BEFEHLE.get(befehl);
   const falsch = ungueltigeNamen(regeln, umgebung);
   for (const name of falsch) ausgabe.melde("einstellung_ungueltig", { name });
   if (falsch.length > 0) throw new Abbruch("einstellungen");
   const eigene = [...regeln.pflicht, ...regeln.freiwillig];
-  ausgabe.maskiere(GEHEIM.filter((name) => eigene.includes(name)).map((name) => umgebung[name]));
+  const geheimnisse = GEHEIM.filter((name) => eigene.includes(name)).map((name) => umgebung[name]);
+  if (maskenWirken(regeln, umgebung)) ausgabe.maskiere(geheimnisse);
   return Object.freeze(werteBauen(umgebung));
 }
