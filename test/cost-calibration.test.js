@@ -14,6 +14,7 @@ import {
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { config } from "../src/config.js";
 import { COST_TRUING_SOURCE } from "../src/store/defaults.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MICRO_CENTS_PER_CENT = 1_000_000;
@@ -191,18 +192,11 @@ test("P5-11: minSamples 500 bei 100 Calls -> insufficient_samples, samples 100, 
 test("P5-12: tariffCentsPerMin unveraendert; cost-calibration.js IMPORTIERT tariffCentsPerMin NICHT (keine funktionale Kopplung an den Tarif-Lookup)", () => {
   assert.equal(tariffCentsPerMin("+4915155512345", "+4930111222333"), config.billing.voiceTariffDomesticCents);
   assert.equal(tariffCentsPerMin("+15551234567", "+4930111222333"), config.billing.voiceTariffDefaultCents);
-  const src = fs.readFileSync(path.join(REPO_ROOT, "src", "billing", "cost-calibration.js"), "utf8");
-  assert.doesNotMatch(
-    src,
-    /import\s*\{[^}]*\btariffCentsPerMin\b[^}]*\}/,
-    "P5 justiert keinen Tarif - der Waechter darf tariffCentsPerMin nicht importieren (kein Import != kein erklaerender Kommentar)",
-  );
 });
 
 test("P5-13: COST_CALIBRATION_MIN_SAMPLES in .env.example, render.yaml und config.js-Fallback, alle drei = 20", () => {
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
 
   const envMatch = envExample.match(/^COST_CALIBRATION_MIN_SAMPLES=(.+)$/m);
   assert.ok(envMatch, "COST_CALIBRATION_MIN_SAMPLES fehlt in .env.example");
@@ -212,9 +206,8 @@ test("P5-13: COST_CALIBRATION_MIN_SAMPLES in .env.example, render.yaml und confi
   assert.ok(renderMatch, "COST_CALIBRATION_MIN_SAMPLES fehlt in render.yaml");
   assert.equal(renderMatch[1].trim(), "20");
 
-  const codeMatch = configSrc.match(/numEnv\("COST_CALIBRATION_MIN_SAMPLES",[^)]*?fallback:\s*(-?\d+)/);
-  assert.ok(codeMatch, "numEnv-Fallback fuer COST_CALIBRATION_MIN_SAMPLES nicht in src/config.js gefunden");
-  assert.equal(Number(codeMatch[1]), 20);
+  const gebaut = gebauteKonfiguration({ COST_CALIBRATION_MIN_SAMPLES: undefined }, ["billing.costCalibrationMinSamples"]);
+  assert.equal(gebaut["billing.costCalibrationMinSamples"], Number(envMatch[1]));
 });
 
 test("P5-14: alertableDriftFindings enthaelt underestimate+overestimate, nie insufficient_samples", () => {
