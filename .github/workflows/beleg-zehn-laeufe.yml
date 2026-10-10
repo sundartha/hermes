@@ -1,0 +1,67 @@
+name: Beleg zehn Läufe
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions: {}
+
+concurrency:
+  group: beleg-zehn-laeufe-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  suite:
+    name: Volle Suite ${{ matrix.lauf }}/10
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lauf: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Volle Suite ohne zweiten Lauf
+        run: npm test -- -- --test-concurrency=4
+
+  wackelig:
+    name: Kein offenes Issue wackelig
+    needs: suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: read
+    steps:
+      - name: Offene Issues mit Label wackelig
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/labels/wackelig" --jq .name
+          offen=$(gh api --paginate "repos/$REPO/issues?labels=wackelig&state=open&per_page=100" --jq '.[] | select(.pull_request == null) | "#\(.number) \(.title)"')
+          if [ -n "$offen" ]; then
+            printf 'Offene Issues mit Label wackelig:\n%s\n' "$offen"
+            exit 1
+          fi
+          echo "Kein offenes Issue mit Label wackelig."
