@@ -14,6 +14,7 @@ import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 export { BOOTSTRAP_TENANT_ID };
+export { anrufpauseSetzen } from "./state-ops.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
 
@@ -662,6 +663,7 @@ async function hydrate(client) {
   state.profiles = await hydrateProfiles(client);
   state.platformTtsUsage = await hydratePlatformTtsUsage(client);
   state.costCrossCheck = await hydrateCostCrossCheck(client);
+  state.anrufpause = await hydrateAnrufpause(client);
   state.platformNumberUse = await hydratePlatformNumberUse(client);
   state.outageAlerts = await hydrateOutageAlerts(client);
   await hydrateSubIndex(client, state);
@@ -688,6 +690,11 @@ async function hydrateCostCrossCheck(client) {
   ).rows;
   if (rows.length === 0) return emptyCostCrossCheck();
   return { lastCheckedMonthKey: rows[0].last_checked_month_key };
+}
+
+async function hydrateAnrufpause(client) {
+  const { rows } = await client.query(`SELECT an FROM platform_anrufpause WHERE id = 1`);
+  return rows[0]?.an === true;
 }
 
 async function hydratePlatformNumberUse(client) {
@@ -1209,6 +1216,7 @@ async function flush(client, state, preFlush) {
     await flushProfiles(client, state.profiles);
     await flushPlatformTtsUsage(client, state.platformTtsUsage);
     await flushCostCrossCheck(client, state.costCrossCheck);
+    await flushAnrufpause(client, state.anrufpause === true);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1627,6 +1635,14 @@ async function flushCostCrossCheck(client, row) {
     `INSERT INTO cost_cross_check (id, last_checked_month_key) VALUES (1,$1)
      ON CONFLICT (id) DO UPDATE SET last_checked_month_key=EXCLUDED.last_checked_month_key`,
     [row.lastCheckedMonthKey],
+  );
+}
+
+async function flushAnrufpause(client, an) {
+  await client.query(
+    `INSERT INTO platform_anrufpause (id, an) VALUES (1,$1)
+     ON CONFLICT (id) DO UPDATE SET an=EXCLUDED.an`,
+    [an],
   );
 }
 
