@@ -1,23 +1,4 @@
 {
-  ".claude/workflows/phase-impl-lean.js": {
-    "id-length": {
-      "count": 5
-    },
-    "no-magic-numbers": {
-      "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 3
-    }
-  },
-  ".claude/workflows/phase-impl.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 3
-    }
-  },
   "apps/hermes-animation-lab/scripts/capture-keyposes.mjs": {
     "id-length": {
       "count": 3
@@ -1219,14 +1200,6 @@
       "count": 3
     }
   },
-  "test/billing-setup-checkout-route.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/billing-subscribe.test.js": {
     "max-params": {
       "count": 1
@@ -1528,11 +1501,6 @@
   "test/persona-style-pg.test.js": {
     "no-restricted-syntax": {
       "count": 3
-    }
-  },
-  "test/place-call-error.test.js": {
-    "no-param-reassign": {
-      "count": 1
     }
   },
   "test/probe-auth-table.test.js": {
