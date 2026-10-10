@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import {
   DOPPELT,
+  EINGANG_QUELLE,
   FREMDE_QUELLE,
   GATE_TEST,
   GRUNDDATEIEN,
@@ -27,6 +29,18 @@ const MAX_MUTANTEN_JE_PAKET = 3000;
 const SHA256_ZEICHEN = 64;
 const ISSUE_IM_TEST = 42;
 const BERECHNET_TEST = "test/post/berechnet.test.js";
+const EINRUECKUNG = 2;
+const ERSTE_ZEILE_DES_ZWEITEN_TEILS = 5;
+const ZWEI_FUNKTIONEN = [
+  "export function eingang(text) {",
+  "  return text.trim();",
+  "}",
+  "",
+  "export function leer(text) {",
+  "  return text.length === 0;",
+  "}",
+  "",
+].join("\n");
 
 test("ausmisten-messung: ein Mutant, den der gelöschte Test tötet und ein unveränderter Test auch, bleibt grün", async (context) => {
   const ergebnis = await messeUndMelde(context, { weg: [DOPPELT] });
@@ -212,4 +226,49 @@ test("ausmisten-messung: ohne genaue Issue-Zeile bleibt der Plan ohne Issue", as
   const stand = await plane(context, { weg: [DOPPELT], nachricht });
   assert.equal(stand.planen.status, EXIT_GRUEN, stand.planen.ausgabe);
   assert.equal(geplant(stand).issue, null);
+});
+
+function basisMutanten(artefakte, paket) {
+  const name = `basis-${paket}`;
+  return JSON.parse(readFileSync(join(artefakte, name, `${name}.json`), "utf8")).mutanten;
+}
+
+function startzeile(schluessel) {
+  return Number(schluessel.slice(EINGANG_QUELLE.length + 1).split(":")[0]);
+}
+
+function schreibeGeteiltenPlan(artefakte) {
+  const datei = join(artefakte, "plan", "plan.json");
+  const plan = JSON.parse(readFileSync(datei, "utf8"));
+  const teile = [
+    { von: 1, bis: ERSTE_ZEILE_DES_ZWEITEN_TEILS - 1 },
+    { von: ERSTE_ZEILE_DES_ZWEITEN_TEILS, bis: null },
+  ];
+  plan.pakete = teile.map((teil) => ({ mutanten: 1, dateien: [EINGANG_QUELLE], teil }));
+  plan.frueher = [null, null];
+  const text = `${JSON.stringify(plan, null, EINRUECKUNG)}\n`;
+  writeFileSync(datei, text);
+  return createHash("sha256").update(text).digest("hex");
+}
+
+test("ausmisten-messung: zwei Teile einer Datei messen zusammen genau die Mutanten der ganzen Datei", async (context) => {
+  const stand = await plane(context, { weg: [DOPPELT] }, { [EINGANG_QUELLE]: ZWEI_FUNKTIONEN });
+  assert.equal(stand.planen.status, EXIT_GRUEN, stand.planen.ausgabe);
+  const ganz = await messePaket(stand, { art: "basis", paket: 0 });
+  assert.equal(ganz.status, EXIT_GRUEN, ganz.ausgabe);
+  const ganzeDatei = basisMutanten(stand.artefakte, 0);
+
+  const summe = schreibeGeteiltenPlan(stand.artefakte);
+  const teile = [];
+  for (const paket of [0, 1]) {
+    const zusatz = { PLAN_PRUEFSUMME: summe };
+    const lauf = await messePaket(stand, { art: "basis", paket, zusatz });
+    assert.equal(lauf.status, EXIT_GRUEN, lauf.ausgabe);
+    teile.push(basisMutanten(stand.artefakte, paket));
+  }
+
+  assert.deepEqual({ ...teile[0], ...teile[1] }, ganzeDatei);
+  const [erster, zweiter] = teile.map((mutanten) => Object.keys(mutanten).map(startzeile));
+  assert.ok(erster.length > 0 && erster.every((zeile) => zeile < ERSTE_ZEILE_DES_ZWEITEN_TEILS));
+  assert.ok(zweiter.length > 0 && zweiter.every((zeile) => zeile >= ERSTE_ZEILE_DES_ZWEITEN_TEILS));
 });
