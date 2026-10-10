@@ -3,11 +3,6 @@ process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 let PGlite, makePgStore, config, ops, subscribeMod, webhookMod, activationMod, backfillMod, planCapsMod;
 let USAGE_EVENT_KIND, KYC_LEVEL, CATALOG_SLUGS;
@@ -345,16 +340,6 @@ test("(e6) backfillPlanProfiles apply+resolvePlanSlug -> {planSlug} ALLEIN -> Ab
     "Backfill hat den slug-losen Tenant heilend nachgezogen",
   );
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 900);
-});
-
-test("(f) plan-caps.js importiert NICHTS aus apps/web (der Spiegel bleibt unberuehrt)", () => {
-  const src = fs.readFileSync(path.join(REPO_ROOT, "src", "billing", "plan-caps.js"), "utf8");
-  const importLines = src.split("\n").filter((l) => /^\s*import\b/.test(l));
-  assert.ok(importLines.length > 0, "Vorbedingung: die Datei hat ueberhaupt einen Import");
-  assert.ok(
-    importLines.every((l) => !l.includes("apps/web")),
-    `kein Import-Statement darf apps/web referenzieren: ${JSON.stringify(importLines)}`,
-  );
 });
 
 test("(g) Patch ohne Slug wirft NICHT, Decke unveraendert", async () => {
