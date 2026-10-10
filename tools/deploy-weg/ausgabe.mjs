@@ -3,6 +3,7 @@ import { stdout } from "node:process";
 
 export const COMMIT_MUSTER = /^[0-9a-f]{40}$/;
 export const TEIL_MUSTER = /^[A-Za-z][\w.:/-]{0,79}$/;
+export const DEPLOY_ID = /^dep-[a-z0-9]{1,60}$/;
 const CHECK_MUSTER = /^[\p{L}\p{N}][\p{L}\p{N} .:_()/-]{0,99}$/u;
 const AUSGABE_NAME = /^[a-z]{1,20}(?:_[a-z]{1,20})?$/;
 const PLATZHALTER = /\{(\w+)\}/g;
@@ -64,6 +65,8 @@ const SCHRITTE = new Set([
   "deploy_suche",
   "deploy_status",
   "healthz",
+  "rollback",
+  "anrufpause",
 ]);
 const EINSTELLUNGEN = new Set([
   "GITHUB_TOKEN",
@@ -85,13 +88,15 @@ const EINSTELLUNGEN = new Set([
   "RENDER_API_URL",
   "RENDER_SERVICE_ID",
   "HERMES_DEPLOY_TOKEN",
+  "GITHUB_ACTIONS",
 ]);
+const AUSLIEFERN = new Set(["commit", "checksPass", "off"]);
 const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -156,6 +161,57 @@ const KATALOG = new Map([
   ["abgebrochen", "Deploy abgebrochen: HTTP {http}"],
   ["deploy_gescheitert", "Rot: der Deploy endet mit {status}"],
   ["live", "Produktion fährt jetzt {commit}"],
+  ["ausliefern_vorher", "Automatisches Ausliefern bei Render vor dem Rollback: {ausliefern}"],
+  ["ausliefern_nachher", "Automatisches Ausliefern bei Render nach dem Rollback: {ausliefern}"],
+  ["ausliefern_unlesbar", "Automatisches Ausliefern bei Render nicht lesbar: HTTP {http}"],
+  [
+    "ausliefern_zurueckgesetzt",
+    "Automatisches Ausliefern auf {ausliefern} zurückgesetzt: HTTP {http}",
+  ],
+  ["ausliefern_wie_vorher", "Automatisches Ausliefern wie vor dem Rollback: {ok}"],
+  ["rot_kein_live", "Rot: Render meldet keinen laufenden Deploy"],
+  ["rot_kein_ziel", "Rot: Render kennt keinen passenden früheren Deploy für den Rollback"],
+  ["rollback_ziel", "Rollback-Ziel: der frühere Deploy von Commit {commit}"],
+  [
+    "umgebung_geaendert",
+    "Warnung: seit dem Ziel-Deploy liefen {anzahl} Deploys wegen geänderter Umgebungsvariablen; der Rollback nimmt die alten Werte",
+  ],
+  ["umgebung_nicht_pruefbar", "Warnung: geänderte Umgebungsvariablen nicht prüfbar (HTTP {http})"],
+  [
+    "umgebung_save_only",
+    "Hinweis: Änderungen an Umgebungsvariablen mit „Save only“ sind nicht erkennbar; der Rollback nimmt die Werte des Ziel-Deploys",
+  ],
+  ["rollback_ausgeloest", "Rollback angefordert: HTTP {http}"],
+  [
+    "rollback_abgelehnt",
+    "Render lehnt den Rollback ab (HTTP {http}). Render erlaubt auf Free nur Rollbacks auf die zwei letzten früheren Deploys; jetzt die Anrufpause oder das Render-Dashboard nutzen.",
+  ],
+  ["rollback_laeuft_trotzdem", "Rollback läuft trotzdem: Deploy {id}"],
+  ["rollback_nicht_gefunden", "Kein Rollback-Deploy gefunden (Deploy-Liste: HTTP {http})"],
+  [
+    "live_zuerst_abschalten",
+    "Vom Mac: zuerst den Workflow live abschalten: gh workflow disable live.yml --repo sundartha/hermes",
+  ],
+  [
+    "live_wieder_einschalten",
+    "Workflow live bleibt abgeschaltet. Erst wieder einschalten, wenn die Korrektur auf master gemergt ist: gh workflow enable live.yml --repo sundartha/hermes (oder in GitHub unter Actions → live → Enable workflow).",
+  ],
+  [
+    "ziel_ohne_anrufpause",
+    "Warnung: Der Ziel-Stand kennt die Anrufpause nicht: eine eingeschaltete Pause wirkt jetzt nicht mehr, nur OUTBOUND_FROZEN mit Neustart sperrt; beim nächsten Deploy ab V6 gilt der gespeicherte Wert wieder.",
+  ],
+  ["probe_auth_produktion", "Negativproben ohne Zugangsdaten gegen Produktion: Exit {exit}"],
+  [
+    "rot_probe_auth_fehlt",
+    "Rot: die Negativproben des Ziel-Commits lassen sich nicht aus Git holen",
+  ],
+  ["probeanruf", "Jetzt Probeanruf an eine Nummer von Sundartha; er muss gelingen."],
+  ["anrufpause_angefordert", "Anrufpause angefordert: HTTP {http}"],
+  ["anrufpause_stand", "Anrufpause in Produktion: {an}"],
+  ["rot_anrufpause_abweichend", "Rot: Produktion meldet die Anrufpause nicht wie verlangt"],
+  ["anrufe_weiter", "Laufende Anrufe: {anzahl}, sie laufen weiter"],
+  ["anrufe_nicht_lesbar", "Warnung: laufende Anrufe nicht lesbar (HTTP {http})"],
+  ["anrufpause_probe", "Jetzt ein Versuch über place_call; er muss mit „pausiert“ scheitern."],
 ]);
 
 function ganzeZahl(wert) {
@@ -177,11 +233,13 @@ function istWahrheit(wert) {
 const PRUEFER = new Map([
   ["commit", istText(COMMIT_MUSTER)],
   ["teil", istText(TEIL_MUSTER)],
+  ["id", istText(DEPLOY_ID)],
   ["check", istText(CHECK_MUSTER)],
   ["status", ausMenge(STATUS_WOERTER)],
   ["schritt", ausMenge(SCHRITTE)],
   ["name", ausMenge(EINSTELLUNGEN)],
   ["ereignis", ausMenge(EREIGNISSE)],
+  ["ausliefern", ausMenge(AUSLIEFERN)],
   ["http", ganzeZahl],
   ["exit", ganzeZahl],
   ["anzahl", ganzeZahl],
@@ -190,6 +248,7 @@ const PRUEFER = new Map([
   ["ok", istWahrheit],
   ["deploy", istWahrheit],
   ["hoertest", istWahrheit],
+  ["an", istWahrheit],
 ]);
 
 export class AusgabeVerweigert extends Error {

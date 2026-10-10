@@ -17,6 +17,7 @@ export const PR_KOPF = "b".repeat(SHA_LAENGE);
 export const NEUERER = "d".repeat(SHA_LAENGE);
 export const REPO = "sundartha/hermes";
 export const DEPLOY_ID = "dep-probeneu";
+export const ROLLBACK_ID = "dep-proberueck";
 export const ALTER_DEPLOY = "dep-probealt";
 export const RENDER_SCHLUESSEL = "rnd_probeschluessel_geheim";
 export const DEPLOY_TOKEN = "d".repeat(SHA_LAENGE);
@@ -26,10 +27,11 @@ export const ACTIONS_APP = 15368;
 export const HTTP_OK = 200;
 export const HTTP_ANGELEGT = 201;
 export const HTTP_ANGENOMMEN = 202;
+export const KEINE_ANTWORT = 0;
 export const HTTP_NICHT_ANGEMELDET = 401;
 export const HTTP_NICHT_GEFUNDEN = 404;
 export const HTTP_KONFLIKT = 409;
-const RENDER_SERVICE_PFAD = "/render/v1/services/" + SERVICE_ID;
+export const RENDER_SERVICE_PFAD = "/render/v1/services/" + SERVICE_ID;
 export const DEPLOYS_PFAD = RENDER_SERVICE_PFAD + "/deploys";
 export const KURZE_TAKTE = Object.freeze({ taktMs: 1000, schutzgrenzeMs: 5000 });
 export const KURZE_DEPLOY_TAKTE = Object.freeze({
@@ -39,6 +41,7 @@ export const KURZE_DEPLOY_TAKTE = Object.freeze({
   healthz: KURZE_TAKTE,
 });
 const ANGELEGT = "angelegt";
+const ZURUECKGEROLLT = "zurueckgerollt";
 const JSON_TYP = "application/json";
 const HTML_TYP = "text/html; charset=utf-8";
 export const LADESEITE = Object.freeze([
@@ -80,6 +83,19 @@ export function weltAnlegen(abweichung = {}) {
     neuInListe: [true],
     deployStatus: ["build_in_progress", "update_in_progress", "live"],
     alteDeploys: [],
+    deployListe: null,
+    listeNachRollback: null,
+    listeStatus: HTTP_OK,
+    dienst: [{ autoDeploy: "no", autoDeployTrigger: "off" }],
+    dienstStatus: [HTTP_OK],
+    aendernStatus: HTTP_OK,
+    rollbackStatus: HTTP_ANGELEGT,
+    rollbackAntwort: { id: ROLLBACK_ID, trigger: "rollback", status: "created" },
+    ereignisStatus: HTTP_OK,
+    ereignisse: [],
+    pausen: [false],
+    pauseAntwort: null,
+    pauseGelesen: null,
     vergleiche: {},
     pulls: [
       {
@@ -156,8 +172,40 @@ function deployEintrag(id) {
   return { cursor: id, deploy: { id, commit: { id: COMMIT_C }, trigger: "api", status: "queued" } };
 }
 
+function gezeigteListe(welt) {
+  const spaeter = welt.merker.has(ZURUECKGEROLLT) && welt.listeNachRollback !== null;
+  return spaeter ? welt.listeNachRollback : welt.deployListe;
+}
+
+function deployListe(welt) {
+  if (welt.deployListe !== null) {
+    const liste = gezeigteListe(welt).map((deploy) => ({ cursor: deploy.id, deploy }));
+    return [welt.listeStatus, liste];
+  }
+  const alte = welt.alteDeploys.map(deployEintrag);
+  const sichtbar = welt.merker.has(ANGELEGT) && naechster(welt.neuInListe);
+  return [HTTP_OK, sichtbar ? [deployEintrag(DEPLOY_ID), ...alte] : alte];
+}
+
+function dienstRouten(welt) {
+  return [
+    ["GET", /^$/, () => [naechster(welt.dienstStatus), naechster(welt.dienst)]],
+    ["PATCH", /^$/, (_treffer, eintrag) => [welt.aendernStatus, eintrag.koerper]],
+    [
+      "POST",
+      /^\/rollback$/,
+      () => {
+        welt.merker.add(ZURUECKGEROLLT);
+        return [welt.rollbackStatus, welt.rollbackAntwort];
+      },
+    ],
+    ["GET", /^\/events\?/, () => [welt.ereignisStatus, welt.ereignisse]],
+  ];
+}
+
 function renderRouten(welt) {
   return [
+    ...dienstRouten(welt),
     [
       "POST",
       /^\/deploys$/,
@@ -167,15 +215,7 @@ function renderRouten(welt) {
         return [welt.ausloesenStatus, angelegt ? deployEintrag(DEPLOY_ID).deploy : null];
       },
     ],
-    [
-      "GET",
-      /^\/deploys\?limit=20$/,
-      () => {
-        const alte = welt.alteDeploys.map(deployEintrag);
-        const sichtbar = welt.merker.has(ANGELEGT) && naechster(welt.neuInListe);
-        return [HTTP_OK, sichtbar ? [deployEintrag(DEPLOY_ID), ...alte] : alte];
-      },
-    ],
+    ["GET", /^\/deploys\?limit=20$/, () => deployListe(welt)],
     [
       "GET",
       /^\/deploys\/([\w-]+)$/,
@@ -201,8 +241,34 @@ function produktionHealthz(welt, uhr) {
   };
 }
 
+function mitToken(antwort) {
+  return (_treffer, eintrag) =>
+    eintrag.kopf === "Bearer " + DEPLOY_TOKEN
+      ? antwort(eintrag)
+      : [HTTP_NICHT_ANGEMELDET, { error: "unauthorized" }];
+}
+
+function pauseSetzen(welt) {
+  return mitToken((eintrag) => {
+    welt.pausen.push(eintrag.koerper.an);
+    return [HTTP_OK, { an: welt.pauseAntwort ?? welt.pausen.at(-1) }];
+  });
+}
+
+function pauseLesen(welt) {
+  return mitToken(() => [HTTP_OK, { an: welt.pauseGelesen ?? welt.pausen.at(-1) }]);
+}
+
+function anrufpauseRouten(welt) {
+  return [
+    ["GET", /^\/prod\/intern\/anrufpause$/, pauseLesen(welt)],
+    ["POST", /^\/prod\/intern\/anrufpause$/, pauseSetzen(welt)],
+  ];
+}
+
 function hermesRouten(welt, uhr) {
   return [
+    ...anrufpauseRouten(welt),
     ["GET", /^\/prod\/healthz$/, produktionHealthz(welt, uhr)],
     [
       "GET",
@@ -217,7 +283,7 @@ function hermesRouten(welt, uhr) {
       /^\/staging\/healthz$/,
       () => [HTTP_OK, { ok: true, commit: naechster(welt.staging) }],
     ],
-    ["POST", /^\/staging\/mcp$/, () => [welt.mcpStatus, {}]],
+    ["POST", /^\/(?:staging|prod)\/mcp$/, () => [welt.mcpStatus, {}]],
   ];
 }
 
@@ -265,6 +331,10 @@ export async function attrappeStarten(kontext, welt, uhr = null) {
     };
     anfragen.push(eintrag);
     const [status, inhalt, typ = JSON_TYP] = beantworten(alleBereiche, eintrag);
+    if (status === KEINE_ANTWORT) {
+      antwort.destroy();
+      return;
+    }
     antwort.writeHead(status, { "content-type": typ });
     antwort.end(koerperText(inhalt));
   });
@@ -371,6 +441,15 @@ export async function werkzeugStarten(argumente, umgebung) {
   kind.stderr.on("data", (teil) => (ausgabe += teil));
   const [status] = await once(kind, "close");
   return { status, ausgabe };
+}
+
+export async function ohneAnfragenStarten(kontext, argumentListen) {
+  const attrappe = await attrappeStarten(kontext, weltAnlegen());
+  const laeufe = [];
+  for (const argumente of argumentListen) {
+    laeufe.push(await werkzeugStarten(argumente, umgebungFuer(attrappe.basis)));
+  }
+  return { attrappe, laeufe };
 }
 
 export async function entscheidenMit(kontext, optionen = {}) {

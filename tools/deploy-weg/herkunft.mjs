@@ -46,9 +46,18 @@ export function ausStagingLauf(lauf, repository) {
   return { commit, gruende, hand: false };
 }
 
-function freigebendeAkteure(nutzlast, einstellungen) {
-  const akteure = [nutzlast.sender?.login, ...einstellungen.akteure].filter(Boolean);
+function alleFreigebend(akteure) {
   return akteure.length > 0 && akteure.every((login) => APPROVERS.includes(login));
+}
+
+function freigebendeAkteure(nutzlast, einstellungen) {
+  return alleFreigebend([nutzlast.sender?.login, ...einstellungen.akteure].filter(Boolean));
+}
+
+export function notfallErlaubt(einstellungen, ausgabe) {
+  if (!einstellungen.inActions || alleFreigebend(einstellungen.akteure)) return true;
+  ausgabe.melde("rot_hand_nutzer");
+  return false;
 }
 
 function aufMaster(nutzlast, einstellungen) {

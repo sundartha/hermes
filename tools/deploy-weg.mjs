@@ -12,7 +12,9 @@ import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
 import { hoertest } from "./deploy-weg/hoertest.mjs";
+import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
+import { VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
 
 const EXIT_OK = 0;
 const EXIT_ROT = 1;
@@ -23,6 +25,10 @@ const ENDE_FRIST_MS = 5000;
 
 function commitLesen(wert) {
   return COMMIT_MUSTER.test(wert) ? wert : null;
+}
+
+function zielLesen(wert) {
+  return wert === VORHER ? wert : commitLesen(wert);
 }
 
 function teileLesen(wert) {
@@ -46,6 +52,8 @@ const ARGUMENTE = new Map([
   ["--produktion", commitLesen],
   ["--teile", teileLesen],
   ["--frisch-geweckt", jaNeinLesen],
+  ["--ziel", zielLesen],
+  ["--an", jaNeinLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -98,6 +106,22 @@ const BEFEHLE = new Map([
           frischGeweckt: werte.get("--frisch-geweckt"),
           ausgabe,
         }),
+    },
+  ],
+  [
+    "zurueckrollen",
+    {
+      argumente: ["--ziel"],
+      ausfuehren: ({ einstellungen, werte, ausgabe }) =>
+        zurueckrollen({ einstellungen, ziel: werte.get("--ziel"), ausgabe }),
+    },
+  ],
+  [
+    "anrufpause",
+    {
+      argumente: ["--an"],
+      ausfuehren: ({ einstellungen, werte, ausgabe }) =>
+        anrufpause({ einstellungen, an: werte.get("--an"), ausgabe }),
     },
   ],
 ]);

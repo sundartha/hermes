@@ -11,7 +11,9 @@ const HTTP_OK = 200;
 const KEINE_ANTWORT = 0;
 const DEPLOY_PFAD = "/deploys";
 const HEALTHZ_PFAD = "/healthz";
+const ANRUFPAUSE_PFAD = "/intern/anrufpause";
 const LISTE_GROESSE = 20;
+const EREIGNIS_GROESSE = "100";
 const TOOLS_LIST = Object.freeze({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
 
 function datenAus(text) {
@@ -88,15 +90,30 @@ export function githubZugang({ githubUrl, githubToken, repository }) {
   });
 }
 
+function ereignisFilter(seit) {
+  const filter = new URLSearchParams({
+    type: "deploy_started",
+    startTime: seit,
+    limit: EREIGNIS_GROESSE,
+  });
+  return "/events?" + filter.toString();
+}
+
 export function renderZugang({ renderUrl, renderSchluessel, serviceId }) {
   const kopf = { authorization: "Bearer " + renderSchluessel };
-  const basis = renderUrl + "/services/" + encodeURIComponent(serviceId) + DEPLOY_PFAD;
+  const dienst = renderUrl + "/services/" + encodeURIComponent(serviceId);
+  const basis = dienst + DEPLOY_PFAD;
   const einzeln = (id) => basis + "/" + encodeURIComponent(id);
   return Object.freeze({
     ausloesen: (commit) => anfrage(basis, { methode: "POST", kopf, koerper: { commitId: commit } }),
     liste: () => anfrage(basis + "?limit=" + LISTE_GROESSE, { kopf }),
     lesen: (id) => anfrage(einzeln(id), { kopf }),
     abbrechen: (id) => anfrage(einzeln(id) + "/cancel", { methode: "POST", kopf }),
+    dienst: () => anfrage(dienst, { kopf }),
+    dienstAendern: (koerper) => anfrage(dienst, { methode: "PATCH", kopf, koerper }),
+    zurueckrollen: (deployId) =>
+      anfrage(dienst + "/rollback", { methode: "POST", kopf, koerper: { deployId } }),
+    ereignisse: (seit) => anfrage(dienst + ereignisFilter(seit), { kopf }),
   });
 }
 
@@ -106,6 +123,7 @@ function anzahlLaufend(daten) {
 }
 
 export function hermesZugang(basisUrl, deployToken = null) {
+  const internKopf = { authorization: "Bearer " + deployToken, "cache-control": "no-store" };
   return Object.freeze({
     async commit() {
       const { status, daten } = await anfrage(basisUrl + HEALTHZ_PFAD);
@@ -116,10 +134,14 @@ export function hermesZugang(basisUrl, deployToken = null) {
       await anfrage(basisUrl + HEALTHZ_PFAD);
     },
     async anrufe() {
-      const kopf = { authorization: "Bearer " + deployToken, "cache-control": "no-store" };
-      const { status, daten } = await anfrage(basisUrl + "/intern/anrufe-laufend", { kopf });
+      const { status, daten } = await anfrage(basisUrl + "/intern/anrufe-laufend", {
+        kopf: internKopf,
+      });
       return { status, laufend: status === HTTP_OK ? anzahlLaufend(daten) : null };
     },
+    anrufpauseLesen: () => anfrage(basisUrl + ANRUFPAUSE_PFAD, { kopf: internKopf }),
+    anrufpauseSetzen: (an) =>
+      anfrage(basisUrl + ANRUFPAUSE_PFAD, { methode: "POST", kopf: internKopf, koerper: { an } }),
     async mcpOhneAnmeldung() {
       const kopf = { accept: MCP_TYP };
       const optionen = { methode: "POST", kopf, koerper: TOOLS_LIST };

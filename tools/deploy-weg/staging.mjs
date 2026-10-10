@@ -14,15 +14,19 @@ const EXIT_NICHT_GESTARTET = 127;
 const ERREICHT = "erreicht";
 const UEBERHOLT = "ueberholt";
 
-export function probeAuthStarten({ url, commit }) {
+export function skriptStarten(pfad, argumente) {
   return new Promise((fertig) => {
-    const kind = spawn("bash", [PROBE_AUTH, url, commit], {
+    const kind = spawn("bash", [pfad, ...argumente], {
       stdio: "ignore",
       env: { PATH: env.PATH ?? "" },
     });
     kind.on("error", () => fertig(EXIT_NICHT_GESTARTET));
     kind.on("close", (code) => fertig(code ?? EXIT_NICHT_GESTARTET));
   });
+}
+
+export function probeAuthStarten({ url, commit }) {
+  return skriptStarten(PROBE_AUTH, [url, commit]);
 }
 
 function gemeldetMelden(ausgabe, gemeldet) {
