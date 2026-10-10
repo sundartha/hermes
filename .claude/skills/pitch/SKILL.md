@@ -1,6 +1,6 @@
 ---
 name: pitch
-description: Schreibt mit dem Nutzer den Pitch für eine größere Änderung an Hermes nach fester Vorlage, lässt unabhängige Agenten Premortem, Design Doc, Sicherheitsprüfung und Gegenprüfung schreiben und legt alles zur Freigabe vor. Verwenden, sobald der Nutzer und die Sitzung eine Änderung im Gespräch als größere Änderung festgelegt haben, auch wenn er das Wort Pitch nicht benutzt.
+description: Schreibt mit dem Nutzer den Pitch für eine größere Änderung an Hermes nach fester Vorlage, lässt unabhängige Agenten Premortem, Design Doc, Sicherheitsprüfung und Gegenprüfung schreiben, legt alles zur Freigabe vor und lässt die freigegebene Änderung danach in Aufträge zerlegen. Verwenden, sobald der Nutzer und die Sitzung eine Änderung im Gespräch als größere Änderung festgelegt haben, auch wenn er das Wort Pitch nicht benutzt.
 ---
 
 # Pitch schreiben
@@ -16,6 +16,7 @@ Kopiere diese Liste in deine Antwort und hake sie ab:
 - [ ] 3. Grobe Lösung und Szenarien schreiben
 - [ ] 4. Premortem-Agent starten, Ausgänge eintragen
 - [ ] 5. Design Doc, Sicherheitsprüfung und Gegenprüfung erstellen lassen, alles im Chat zur Freigabe vorlegen
+- [ ] 6. Zerlegen lassen und Abdeckung prüfen
 
 ### 1. Datei anlegen
 Kopiere `vorlage.md` nach `plaene/P-<nächste freie Nummer>-<kurzname>/pitch.md`. Verwende genau diese Struktur; jeder Abschnitt bleibt stehen. `beispiel.md` zeigt einen fertigen Pitch.
@@ -62,6 +63,8 @@ Sind alle Fragen unter „Vor dem Bau zu klären“ beantwortet, setz den Status
    - Eine Widerlegung kommt als Vorschlag in die Freigabeliste.
    Neue Werte und Routen aus Design Doc und Sicherheitsprüfung trägst du unter „Neue Begriffe“ ein. Meldet ein Agent einen Befund im bestehenden Code, behandle ihn als vertraulichen Fehler nach Abschnitt 3b des Skills `aenderung`, schreib ihn in kein Dokument und mach mit diesem Pitch weiter.
 4. Leg dem Nutzer hier im Chat eine einzige nummerierte Liste vor, jeden Punkt mit Empfehlung:
+   - jeden Widerspruch zwischen Pitch, Design Doc und Sicherheitsprüfung als eigenen Punkt, etwa ein Szenario, eine Reihenfolge, eine Grenze oder einen Begriff, die in einem Dokument anders stehen als in einem anderen; such ihn vorher in allen drei Dokumenten und empfiehl, welche Fassung gilt. Vergleich dabei das Verhalten, nicht nur den Wortlaut: wer in welchem Schritt was darf oder bekommt;
+   - jede Stelle, an der ein Dokument einer der „Absoluten Regeln“ in `CLAUDE.md` widerspricht, als eigenen Punkt, mit der Frage, ob die Regel vorher geändert wird oder das Verhalten wegfällt;
    - die Entscheidungen, Rückfragen und offenen Fragen aus „Zur Freigabe“ im Design Doc;
    - die höchstens drei schwersten Angriffswege aus „Zur Freigabe“ in der Sicherheitsprüfung, mit der Frage, ob das seiner Einschätzung entspricht und ob ihm ein Angriffsweg fehlt;
    - alles, was hingenommen, weggelassen oder übertragen werden soll, aus Premortem, Design Doc und Sicherheitsprüfung;
@@ -69,4 +72,14 @@ Sind alle Fragen unter „Vor dem Bau zu klären“ beantwortet, setz den Status
    - was sich durch Premortem und Gegenprüfung geändert hat und welche Entscheidungen er mit „wie empfohlen“ übernommen hat.
    Zu „hinnehmen“ und „übertragen“ erklärst du die Einzelheiten nur im Chat; in den Dokumenten steht nur, was offen bleibt, weil das Repo öffentlich ist.
 
+Zu jedem Widerspruch passt du nach der Antwort alle betroffenen Dokumente an, bis sie dasselbe sagen; gibt der Nutzer frei, ohne dazu etwas zu sagen, gilt deine Empfehlung.
+
 Nimmt der Nutzer einen Vorschlag an, der ein Szenario, einen Begriff oder eine Entscheidung ändert, passt du Pitch, Design Doc und Sicherheitsprüfung an. Der Nutzer gibt mit einem Wort im Chat frei; dann setzt du den Status aller Dokumente auf „freigegeben“. Will er etwas ändern, änderst du es und passt die betroffenen Dokumente an.
+
+### 6. Zerlegung
+Nach der Freigabe, ohne Rückfrage:
+
+1. Starte den Agenten `planung` mit den Pfaden von Pitch, Design Doc (falls es eins gibt) und Sicherheitsprüfung, ohne Zusammenfassung des Gesprächs. Antwortet er „Zerlegung passt nicht: …“, legst du den Grund dem Nutzer vor, und ihr entscheidet, ob sich Pitch, Design Doc oder Sicherheitsprüfung ändern. Ändert sich eins, geht es mit den geänderten Dokumenten zurück zu Schritt 5. Liefert er keine Phasendatei, schreibst du sie nicht selbst und setzt keinen anderen Agenten an seine Stelle; du sagst es dem Nutzer.
+2. Führe `node tools/auftrag.mjs pruefe plaene/P-<Nummer>-<kurzname>/phase.json` und danach `node tools/abdeckung-pruefen.mjs plaene/P-<Nummer>-<kurzname>/` aus. Beide müssen „grün“ melden.
+3. Meldet einer der beiden etwas anderes als „grün“, startest du den Agenten `planung` genau einmal neu, mit denselben Pfaden und der vollständigen Ausgabe beider Befehle, und führst danach beide Befehle erneut aus. Ist es dann nicht grün, legst du die Ausgabe dem Nutzer vor. Die Phasendatei änderst du nie selbst.
+4. Sind beide grün, zeig dem Nutzer die Antwort des Planers zusammen mit den beiden grünen Zeilen. Nennt sie Aufgaben für einen Owner, legst du sie dem Nutzer vor, bevor Teil 2 startet. Nennt sie fehlende Szenarien, entscheidet der Nutzer, ob sie in den Pitch kommen; nimmt er eins an, geht es mit den geänderten Dokumenten zurück zu Schritt 5. Sonst machst du mit Punkt 2 von „Teil 2 starten“ im Skill `aenderung` weiter.
