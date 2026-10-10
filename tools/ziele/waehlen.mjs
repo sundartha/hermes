@@ -15,6 +15,7 @@ import { befundZeiten } from "./befunde.mjs";
 import { nimmGithubZugang } from "./github.mjs";
 import { pausierteSorten } from "./pause.mjs";
 import { eigenePrs } from "./prs.mjs";
+import { DURCHGANG_DATEI, durchgang } from "./rangliste.mjs";
 import { istUnterdrueckt, kandidatenGrund, schutzLage, testsFuer } from "./schutz.mjs";
 import {
   ALTFUNKTION,
@@ -73,30 +74,29 @@ function zielText(root, datei, eintrag) {
   return `${eintrag.text} (entfernbar: ${entfernbareNamen(root, datei, eintrag).join(", ")})`;
 }
 
-function brennpunkt(root, datei) {
-  return Number(gitAusgabe(["rev-list", "--count", "HEAD", "--", datei], root).trim());
+function rangDer(datei, { rang }) {
+  return rang.get(datei) ?? rang.size;
 }
 
-function altfunktionKandidat([datei, [ziel]], { root, schutz }) {
+function altfunktionKandidat([datei, [ziel]], kontext) {
   const zielbefunde = [ziel.text];
-  return { datei, zielbefunde, arten: [ziel.art], agentErlaubt: true, tests: testsFuer(datei, schutz), funktion: ziel.funktion, aenderungen: brennpunkt(root, datei) };
+  return { datei, zielbefunde, arten: [ziel.art], agentErlaubt: true, tests: testsFuer(datei, kontext.schutz), funktion: ziel.funktion, rang: rangDer(datei, kontext) };
 }
 
-function kandidat([datei, liste], { root, schutz }) {
+function kandidat([datei, liste], kontext) {
+  const { root, schutz } = kontext;
   return {
     datei,
     zielbefunde: liste.map((eintrag) => zielText(root, datei, eintrag)),
     arten: liste.map(({ art }) => art),
     agentErlaubt: !istUnterdrueckt(datei, schutz),
     tests: testsFuer(datei, schutz),
+    rang: rangDer(datei, kontext),
   };
 }
 
 function vorrang(links, rechts) {
-  const haeufiger = (rechts.aenderungen ?? 0) - (links.aenderungen ?? 0);
-  if (haeufiger !== 0) return haeufiger;
-  const mehr = rechts.zielbefunde.length - links.zielbefunde.length;
-  return mehr === 0 ? links.datei.localeCompare(rechts.datei) : mehr;
+  return links.rang - rechts.rang || rechts.zielbefunde.length - links.zielbefunde.length || links.datei.localeCompare(rechts.datei);
 }
 
 export function kandidatenDer(sorte, kontext) {
@@ -117,9 +117,9 @@ function basisZiel(root, sperren) {
   return null;
 }
 
-async function reihumZiel({ root, pausiert, prs, sperren }) {
+async function reihumZiel({ root, pausiert, prs, sperren, rang }) {
   const letzte = prs.find((pr) => pr.sorte !== BASIS)?.sorte;
-  const kontext = { root, schutz: await schutzLage(root), ...sperren };
+  const kontext = { root, schutz: await schutzLage(root), rang, ...sperren };
   const uebersprungen = [];
   for (const sorte of reihum(letzte)) {
     if (pausiert.has(sorte)) {
@@ -133,13 +133,14 @@ async function reihumZiel({ root, pausiert, prs, sperren }) {
   return { ziel: null, uebersprungen };
 }
 
-export async function waehle({ github, root }) {
+export async function waehle({ github, root, rangliste }) {
   const master = masterSha(root);
   const { pausiert, befunde } = await pausierteSorten({ github, root });
   const prs = await eigenePrs(github, "all");
   const sperren = { ausgeschlossen: ausgeschlosseneDateien(await befundZeiten(github), root), verworfen: verworfeneZiele(prs, root) };
+  const rang = new Map(rangliste.map(({ datei }, index) => [datei, index]));
   const basis = pausiert.has(BASIS) ? null : basisZiel(root, sperren);
-  const { ziel, uebersprungen } = basis ? { ziel: basis, uebersprungen: [] } : await reihumZiel({ root, pausiert, prs, sperren });
+  const { ziel, uebersprungen } = basis ? { ziel: basis, uebersprungen: [] } : await reihumZiel({ root, pausiert, prs, sperren, rang });
   if (pausiert.has(BASIS)) uebersprungen.unshift(`${BASIS} pausiert: ${pausiert.get(BASIS)}`);
   if (ziel) return { ...ergebnisVon(WEITER, ""), master, ...ziel, befunde, uebersprungen };
   const ausgang = pausiert.size > 0 ? BLOCKIERT : SAUBER;
@@ -150,7 +151,9 @@ export async function waehle({ github, root }) {
 export async function befehl({ ordner }, root, { github = nimmGithubZugang() } = {}) {
   const vorpruefung = leseJson(join(ordner, ORDNER), VORPRUEFUNG);
   if (vorpruefung?.ausgang !== WEITER) throw new Error("die Vorprüfung hat nicht „weiter“ ergeben");
-  const ergebnis = await waehle({ github, root });
+  const gesammelt = await durchgang({ github, root });
+  schreibeJson(join(ordner, ORDNER), DURCHGANG_DATEI, { master: masterSha(root), ...gesammelt });
+  const ergebnis = await waehle({ github, root, rangliste: gesammelt.rangliste });
   schreibeJson(join(ordner, ORDNER), DATEI, ergebnis);
   setzeAusgaben({ ausgang: ergebnis.ausgang, grund: ergebnis.grund, sorte: ergebnis.sorte ?? "", datei: ergebnis.datei ?? "" });
   console.log(`Ziel: ${ergebnis.ausgang}${ergebnis.datei ? ` ${ergebnis.sorte} in ${ergebnis.datei}` : ""}${ergebnis.grund ? ` (${ergebnis.grund})` : ""}`);
