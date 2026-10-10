@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { sammelText } from "../../tools/ziele/sammel.mjs";
+
 import {
   arbeitsordner,
+  botIssue,
   ersatzGh,
   gelesen,
   githubAttrappe,
@@ -19,6 +22,9 @@ import {
 const WEITER = { ausgang: "weiter", grund: "", befunde: [], start: new Date().toISOString() };
 const AUFRAEUM_COMMITS = 20;
 const ECHTE_AENDERUNGEN = 3;
+const PRUEFER_ISSUES = 40;
+const ERSTES_PRUEFER_ISSUE = 100;
+const SAMMEL_TITEL = "Aufräumen: Rangliste und Befunde";
 
 function exporte(namen) {
   return quelltext(namen.map((name) => `export function ${name}() {\n  return "${name}";\n}`));
@@ -115,4 +121,61 @@ test("ziele-rangliste: ein Aufräum-PR einer Art, die nicht in tools/ziele/umbau
   const ergebnis = gelesen(ordner, "pr/pr.json");
   assert.deepEqual([ergebnis.ausgang, ergebnis.pr, ergebnis.autoMerge], ["geaendert", pr.number, false]);
   assert.match(ergebnis.grund, /umbau/);
+});
+
+function prueferIssues() {
+  const dateien = ["src/gross.js", "src/klein.js", "src/main.js", "test/haupt.test.js"];
+  return Array.from({ length: PRUEFER_ISSUES }, (_wert, index) => {
+    const titel = `Prüfer: G${(index % 5) + 1} in \`${dateien[index % dateien.length]}\``;
+    return botIssue(ERSTES_PRUEFER_ISSUE + index, titel, { labels: [{ name: "pruefer" }] });
+  });
+}
+
+async function vollerLauf(context, repo, github) {
+  const ordner = await waehle(context, repo, github);
+  const lauf = await starteZiele(["ergebnis", "--ordner", ordner, "--workflow", "aufraeumen"], { cwd: repo.ordner, env: umgebung(github) });
+  assert.equal(lauf.status, 0, lauf.stderr);
+}
+
+test("ziele-rangliste: Läufe mit vielen Befunden legen höchstens ein Sammel-Issue an und ersetzen danach nur dessen Text", async (context) => {
+  const repo = repoMitBrennpunkt(context);
+  repo.committe({ "eslint-suppressions.json": JSON.stringify({ "src/gross.js": { "no-var": { count: 7 } }, "src/klein.js": { "no-var": { count: 2 } } }) }, "Friere Verstöße ein");
+  const github = await githubAttrappe(context, { issues: prueferIssues() });
+  await vollerLauf(context, repo, github);
+  await vollerLauf(context, repo, github);
+  const sammel = github.zustand.issues.filter(({ title }) => title === SAMMEL_TITEL);
+  assert.equal(sammel.length, 1);
+  assert.equal(github.zustand.issues.length, PRUEFER_ISSUES + 1);
+  const schreibend = github.zustand.anfragen.filter((anfrage) => /^(?:POST|PATCH) \/issues/.test(anfrage));
+  assert.deepEqual(schreibend, ["POST /issues", `PATCH /issues/${sammel[0].number}`]);
+  assert.deepEqual(github.zustand.kommentare, []);
+  const [issue] = sammel;
+  assert.deepEqual([issue.state, issue.labels.map(({ name }) => name), issue.user.login], ["open", ["aufraeumen"], "github-actions[bot]"]);
+  assert.match(issue.body, /`pruefer` 40/);
+  assert.match(issue.body, /`eslint` 9/);
+  assert.match(issue.body, /^- `G1` in 4 Dateien$/m);
+  assert.match(issue.body, /^\| 1 \| `src\/gross\.js` \|/m);
+  assert.ok(issue.body.length <= 65_536);
+});
+
+test("ziele-rangliste: ein geschlossenes Sammel-Issue öffnet der nächste Lauf wieder, ein gleichnamiges Issue eines Menschen bleibt unberührt", async (context) => {
+  const repo = repoMitBrennpunkt(context);
+  const fremd = botIssue(ERSTES_PRUEFER_ISSUE, SAMMEL_TITEL, { labels: [{ name: "aufraeumen" }], user: { login: "jemand" } });
+  const github = await githubAttrappe(context, { issues: [fremd] });
+  await vollerLauf(context, repo, github);
+  const [eigenes] = github.zustand.issues.filter(({ title, user }) => title === SAMMEL_TITEL && user.login !== "jemand");
+  eigenes.state = "closed";
+  await vollerLauf(context, repo, github);
+  assert.deepEqual(github.zustand.issues.map(({ number, state }) => [number, state]), [[ERSTES_PRUEFER_ISSUE, "open"], [eigenes.number, "open"]]);
+  assert.equal(fremd.body, "");
+  assert.deepEqual(github.zustand.ereignisse.map(({ nummer, event }) => [nummer, event]), [[eigenes.number, "reopened"]]);
+});
+
+test("ziele-rangliste: der Text des Sammel-Issues bleibt bei einer langen Rangliste unter 60 000 Zeichen und nennt den Rest", () => {
+  const rangliste = Array.from({ length: 3000 }, (_wert, index) => ({ datei: `src/datei-${index}.js`, befunde: 1, pruefungen: ["knip"], aenderungen: 1, umfang: 1, brennpunkt: 1 }));
+  const text = sammelText({ durchgang: { master: "a".repeat(40), befunde: [], vorschlaege: [], rangliste }, ergebnis: { lauf: "4242" } });
+  assert.ok(text.length <= 60_000);
+  const gezeigt = (text.match(/^\| \d+ \| `src\/datei-/gm) ?? []).length;
+  assert.ok(gezeigt > 500);
+  assert.ok(text.endsWith(`Die übrigen ${3000 - gezeigt} Dateien stehen in \`durchgang.json\` im Artefakt \`ziel\` des Laufs.`));
 });

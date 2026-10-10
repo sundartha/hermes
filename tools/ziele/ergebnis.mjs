@@ -16,6 +16,8 @@ import {
 } from "./ausgabe.mjs";
 import { IDS, befund, gueltigeBefunde, meldeBefunde } from "./befunde.mjs";
 import { nimmGithubZugang } from "./github.mjs";
+import { DURCHGANG_DATEI } from "./rangliste.mjs";
+import { schreibeSammelIssue } from "./sammel.mjs";
 
 export const ERGEBNIS_ORDNER = "ergebnis";
 export const ERGEBNIS_DATEI = "ergebnis.json";
@@ -28,7 +30,7 @@ export const QUELLEN = {
     ["ziel", "ziel.json", ["master", "sorte", "datei"]],
     ["agent", "agent.json", ["tokens", "zuege"]],
     ["pruefung", "pruefung.json", []],
-    ["pr", "pr.json", ["pr"]],
+    ["pr", "pr.json", ["pr", "autoMerge"]],
   ],
   auswertung: [
     ["zaehlung", "zaehlung.json", ["master", "start"]],
@@ -83,12 +85,25 @@ export function fuehreZusammen(teile, { workflow, jetzt }) {
     sorte: mit("sorte"),
     datei: mit("datei"),
     pr: mit("pr"),
+    autoMerge: mit("autoMerge"),
     issue: mit("issue"),
     tokens: summe(teile, "tokens"),
     zuege: summe(teile, "zuege"),
     dauerSekunden: Number.isFinite(start) ? Math.round((jetzt - start) / MS_JE_SEKUNDE) : null,
     befunde: gueltigeBefunde([...teile.flatMap((teil) => teil.befunde), ...prBefunde(teile)]),
   };
+}
+
+async function sammelIssue(github, { ordner, workflow, ergebnis }) {
+  const durchgang = workflow === "aufraeumen" ? leseJson(join(ordner, "ziel"), DURCHGANG_DATEI) : null;
+  if (durchgang === null) return "";
+  try {
+    const { nummer, art } = await schreibeSammelIssue(github, { durchgang, ergebnis });
+    return `Sammel-Issue #${nummer} (${art})`;
+  } catch (fehler) {
+    console.error(`Sammel-Issue nicht geschrieben: ${fehler.message}`);
+    return `Sammel-Issue nicht geschrieben: ${fehler.message}`;
+  }
 }
 
 export async function befehl({ ordner, workflow }, root, { github = nimmGithubZugang() } = {}) {
@@ -98,6 +113,7 @@ export async function befehl({ ordner, workflow }, root, { github = nimmGithubZu
   const ergebnis = fuehreZusammen(teile, { workflow, jetzt: Date.now() });
   const gemeldet = await meldeBefunde(github, ergebnis.befunde, ergebnis.lauf);
   schreibeJson(join(ordner, ERGEBNIS_ORDNER), ERGEBNIS_DATEI, ergebnis);
+  const sammel = await sammelIssue(github, { ordner, workflow, ergebnis });
   setzeAusgaben({ ausgang: ergebnis.ausgang });
   zusammenfassung([
     `## ${workflow === "aufraeumen" ? "Aufräumen" : "Auswertung"}: ${ergebnis.ausgang}`,
@@ -108,6 +124,7 @@ export async function befehl({ ordner, workflow }, root, { github = nimmGithubZu
     ergebnis.issue ? `Issue: #${ergebnis.issue}` : "",
     `Tokens ${ergebnis.tokens}, Züge ${ergebnis.zuege}, Dauer ${ergebnis.dauerSekunden ?? "?"} s`,
     ...gemeldet.map(({ nummer, art }) => `Befund-Issue #${nummer} (${art})`),
+    sammel,
   ].filter(Boolean));
   return 0;
 }
