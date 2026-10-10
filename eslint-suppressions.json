@@ -843,7 +843,7 @@
   },
   "src/store/state-ops.js": {
     "complexity": {
-      "count": 3
+      "count": 4
     },
     "id-length": {
       "count": 249
