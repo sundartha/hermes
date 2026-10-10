@@ -1,0 +1,115 @@
+name: notfall
+
+on:
+  workflow_dispatch:
+    inputs:
+      aktion:
+        description: Was im Notfall passieren soll
+        type: choice
+        required: true
+        options:
+          - zurueckrollen
+          - anrufe-pausieren
+          - anrufe-freigeben
+      ziel:
+        description: Ziel des Rollbacks, vorher oder ein Commit mit 40 Zeichen
+        type: string
+        required: false
+        default: vorher
+
+permissions: {}
+
+jobs:
+  live-anhalten:
+    name: Workflow live abschalten
+    if: >-
+      inputs.aktion == 'zurueckrollen' &&
+      github.ref == 'refs/heads/master' &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Workflow live abschalten
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable live.yml --repo "$GITHUB_REPOSITORY"
+
+  zurueckrollen:
+    name: Zurückrollen
+    needs: live-anhalten
+    if: >-
+      always() &&
+      inputs.aktion == 'zurueckrollen' &&
+      github.ref == 'refs/heads/master' &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: produktion
+    permissions:
+      contents: read
+    concurrency:
+      group: notfall-rollback
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Zurückrollen
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: srv-d8m0fhflk1mc73bno570
+          PRODUKTION_URL: https://app.sundartha.com
+          ZIEL: ${{ inputs.ziel }}
+        run: node tools/deploy-weg.mjs zurueckrollen --ziel "$ZIEL"
+
+  anrufpause:
+    name: Anrufpause
+    if: >-
+      (inputs.aktion == 'anrufe-pausieren' || inputs.aktion == 'anrufe-freigeben') &&
+      github.ref == 'refs/heads/master' &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
+      contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: produktion
+    permissions:
+      contents: read
+    concurrency:
+      group: notfall-anrufpause
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Anrufe pausieren
+        if: inputs.aktion == 'anrufe-pausieren'
+        env:
+          HERMES_DEPLOY_TOKEN: ${{ secrets.HERMES_DEPLOY_TOKEN }}
+          PRODUKTION_URL: https://app.sundartha.com
+        run: node tools/deploy-weg.mjs anrufpause --an ja
+
+      - name: Anrufe freigeben
+        if: inputs.aktion == 'anrufe-freigeben'
+        env:
+          HERMES_DEPLOY_TOKEN: ${{ secrets.HERMES_DEPLOY_TOKEN }}
+          PRODUKTION_URL: https://app.sundartha.com
+        run: node tools/deploy-weg.mjs anrufpause --an nein
