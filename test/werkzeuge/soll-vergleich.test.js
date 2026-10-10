@@ -19,6 +19,7 @@ const PHASE_RULESET = `${BASE}/rulesets/24519520`;
 const PHASE = "phase-schutz";
 const PHASE_AREA = `Ruleset ${PHASE}`;
 const COLLABORATORS = `${BASE}/collaborators`;
+const REPORTING = `${BASE}/private-vulnerability-reporting`;
 const CODEOWNERS = `${BASE}/contents/.github/CODEOWNERS`;
 const ENVIRONMENTS = `${BASE}/environments`;
 const ENVIRONMENT = `${BASE}/environments/rotproben`;
@@ -73,6 +74,7 @@ function recordedRoutes(environments = MEASURED_ENVIRONMENTS) {
     [RULESETS, answer(recording("rulesets"))],
     [PHASE_RULESET, answer(recording("ruleset-phase-owner"))],
     [BASE, answer(answers.repo)],
+    [REPORTING, answer({ enabled: true })],
     [COLLABORATORS, answer(answers.collaborators)],
     [CODEOWNERS, answer(answers.codeowners)],
     [`${BASE}/codeowners/errors`, answer(answers.codeownersErrors)],
@@ -407,6 +409,14 @@ test("Soll-Vergleich: ist Squash erlaubt, endet er mit 1", async (context) => {
   });
   assert.equal(result.code, EXIT_DEVIATION, result.stderr);
   assertRow(result, ["Repo-Einstellungen", "allow_squash_merge", "false", "true"]);
+});
+
+test("Soll-Vergleich: ist die Meldefunktion für Sicherheitslücken aus, endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    changes: { [REPORTING]: () => answer({ enabled: false }) },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, ["Repo-Einstellungen", "private_vulnerability_reporting", "true", "false"]);
 });
 
 test("Soll-Vergleich: require_last_push_approval true ergibt Exit 1", async (context) => {
