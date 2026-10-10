@@ -6,7 +6,7 @@ Ergebnisse eines beauftragten Pentests kommen auf demselben Weg herein, je Lück
 
 ## Was danach passiert
 
-1. Wir prüfen die Meldung und legen die Schwere fest. Wird die Lücke ausgenutzt oder ist sie ohne Anmeldung leicht auszunutzen, schalten wir die betroffene Funktion sofort ab. Ist sie mit Folgen für Daten, Anrufe oder Kosten ausnutzbar, beheben wir sie binnen 30 Tagen, sonst binnen 90 Tagen.
+1. Wir prüfen die Meldung und legen die Schwere fest. Wird die Lücke ausgenutzt oder ist sie ohne Anmeldung leicht auszunutzen, schalten wir die betroffene Funktion meist ab. Ist sie mit Folgen für Daten, Anrufe oder Kosten ausnutzbar, beheben wir sie binnen 30 Tagen, sonst binnen 90 Tagen.
 2. Den Fix bauen wir im Verborgenen. Rückfragen stellen wir dir in der Meldung.
 3. Sobald der Fix ausgeliefert ist, veröffentlichen wir den Sicherheitshinweis. Bis dahin steht über die Lücke nichts öffentlich im Repo.
 
