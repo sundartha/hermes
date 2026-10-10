@@ -89,7 +89,7 @@ test("ziele-pruefen: ändert der Agent einen Test, wählt der nächste Lauf dies
   const repo = probe(context);
   const github = await githubAttrappe(context);
   const master = repo.sha();
-  assert.deepEqual(await kandidatenDateien(context, repo, github), ["src/andere.js", "src/frei.js"]);
+  assert.deepEqual(await kandidatenDateien(context, repo, github), ["src/frei.js", "src/andere.js"]);
   const patch = patchVon(repo, { "src/frei.js": FREI_SAUBER, "test/frei.test.js": `${testFuer("src/main.js")}\n` });
   const geprueft = await pruefe(context, repo, { patch, github });
   frisch(repo, master);
