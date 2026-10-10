@@ -60,7 +60,7 @@ Sind alle Fragen unter „Vor dem Bau zu klären“ beantwortet, setz den Status
    - Ein Szenario, das ohne den Schutz nicht rot würde, schreibst du um.
    - Ein umgangener Schutz wird ein zusätzliches Szenario.
    - Eine Widerlegung kommt als Vorschlag in die Freigabeliste.
-   Neue Werte und Routen aus Design Doc und Sicherheitsprüfung trägst du unter „Neue Begriffe“ ein. Meldet ein Agent einen Befund im bestehenden Code, leg ihn als vertraulichen Fehler an (Advisory-Entwurf) und schreib ihn in kein Dokument.
+   Neue Werte und Routen aus Design Doc und Sicherheitsprüfung trägst du unter „Neue Begriffe“ ein. Meldet ein Agent einen Befund im bestehenden Code, behandle ihn als vertraulichen Fehler nach Abschnitt 3b des Skills `aenderung`, schreib ihn in kein Dokument und mach mit diesem Pitch weiter.
 4. Leg dem Nutzer hier im Chat eine einzige nummerierte Liste vor, jeden Punkt mit Empfehlung:
    - die Entscheidungen, Rückfragen und offenen Fragen aus „Zur Freigabe“ im Design Doc;
    - die höchstens drei schwersten Angriffswege aus „Zur Freigabe“ in der Sicherheitsprüfung, mit der Frage, ob das seiner Einschätzung entspricht und ob ihm ein Angriffsweg fehlt;
