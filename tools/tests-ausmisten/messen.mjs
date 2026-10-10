@@ -199,17 +199,24 @@ function nachTests(datei, tests, graph) {
   return [...gruppen(zuerst), ...gruppen(tests.filter((test) => !direkt.has(test)))];
 }
 
-function offen(datei, { stati, ziele }) {
-  if (ziele === undefined) return stati.size === 0 ? [datei] : offeneBereiche(datei, stati);
+function ganzerTeil(datei, teil) {
+  if (teil === undefined) return datei;
+  const bis = teil.bis ?? readFileSync(datei, "utf8").split("\n").length;
+  return `${datei}:${teil.von}-${bis}`;
+}
+
+function offen(datei, { stati, ziele, teil }) {
+  if (ziele === undefined)
+    return stati.size === 0 ? [ganzerTeil(datei, teil)] : offeneBereiche(datei, stati);
   const uebrig = [...ziele].filter(([schluessel]) => rang(stati.get(schluessel)?.status) === 0);
   return [...new Set(uebrig.map(([, [von, bis]]) => `${datei}:${von}-${bis}`))];
 }
 
-async function messe({ datei, testgruppen, ziele, erlaubt = () => true }) {
+async function messe({ datei, testgruppen, ziele, teil, erlaubt = () => true }) {
   const stati = new Map();
   const ausgenommen = [];
   for (const gruppe of testgruppen) {
-    const mutate = offen(datei, { stati, ziele });
+    const mutate = offen(datei, { stati, ziele, teil });
     if (mutate.length === 0) break;
     const lauf = await messeGruppe({ datei, mutate, gruppe, erlaubt });
     ausgenommen.push(...lauf.ausgenommen);
@@ -258,7 +265,7 @@ function uebernimm(ziel, stati) {
   for (const [schluessel, { status, zeilen }] of stati) ziel.set(schluessel, { status, zeilen });
 }
 
-export async function messeGegenAlte({ dateien, alt, gateAlt }) {
+export async function messeGegenAlte({ dateien, alt, gateAlt, teil }) {
   const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [], ausgenommen: [] };
   for (const datei of dateien) {
     for (const [art, tests] of [
@@ -267,7 +274,7 @@ export async function messeGegenAlte({ dateien, alt, gateAlt }) {
     ]) {
       if (tests.length === 0) continue;
       const beginn = Date.now();
-      const { stati, ausgenommen } = await messe({ datei, testgruppen: gruppen(tests) });
+      const { stati, ausgenommen } = await messe({ datei, testgruppen: gruppen(tests), teil });
       uebernimm(ergebnis[art], stati);
       ergebnis.ausgenommen.push(...ausgenommen);
       protokolliere(ergebnis, { datei, art, stati, tests, beginn });

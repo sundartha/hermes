@@ -34,6 +34,7 @@ const ZEILENZAHL = /:(\d+)$/;
 const ZAHLENSPALTE = /^(\d+)\t(\d+)\t/;
 const EINRUECKUNG = 2;
 const MS_JE_SEKUNDE = 1000;
+const SEKUNDEN_JE_MINUTE = 60;
 const ISSUE_ZEILE = /^Issue: #(\d{1,9})$/m;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
@@ -164,8 +165,8 @@ async function suche(quelle, { lauf, schluessel }) {
 
 async function fruehereBasis(quelle, { lauf, pakete, alt }) {
   const { basisSchluessel } = await import("./zwischenspeicher.mjs");
-  const schluessel = pakete.map(({ dateien }) =>
-    basisSchluessel({ master: lauf.master, dateien, alt }),
+  const schluessel = pakete.map(({ dateien, teil }) =>
+    basisSchluessel({ master: lauf.master, dateien, alt, teil }),
   );
   let frueher;
   try {
@@ -185,15 +186,30 @@ async function fruehereBasis(quelle, { lauf, pakete, alt }) {
   return frueher;
 }
 
+function zeigePakete(pakete, schwelle) {
+  pakete.forEach(({ dateien, teil, sekunden }, nummer) => {
+    const zeilen = teil === undefined ? "" : ` Zeilen ${teil.von} bis ${teil.bis ?? "Ende"}`;
+    const minuten = Math.ceil(sekunden / SEKUNDEN_JE_MINUTE);
+    console.log(`Paket ${nummer}: ${dateien.join(", ")}${zeilen}, geschätzt ${minuten} Minuten.`);
+    if (minuten > schwelle)
+      console.log(
+        `Warnung: Paket ${nummer} lässt sich nicht weiter teilen und liegt über der Schwelle von ${schwelle} Minuten.`,
+      );
+  });
+}
+
 export async function planen({ aus, speicher }) {
   const vorbereitung = await vorbereitet();
   const { lauf } = vorbereitung;
   const { menge, neu } = await mengen(vorbereitung);
-  const { zaehle, packe } = await import("./planen.mjs");
+  const { zaehle, packe, SCHWELLE_MINUTEN } = await import("./planen.mjs");
   const zahlen = await zaehle(menge.dateien);
-  const pakete = packe(zahlen);
+  const { sekunden: testlauf } = await vorbereitung.werkzeug.trockenlauf(menge.alt);
+  const pakete = packe(zahlen, testlauf);
   const geschaetzt = zahlen.reduce((summe, { mutanten }) => summe + mutanten, 0);
   console.log(`${geschaetzt} Mutanten geschätzt, ${pakete.length} Pakete.`);
+  console.log(`Ein Testlauf dauert ${testlauf.toFixed(1)} s.`);
+  zeigePakete(pakete, SCHWELLE_MINUTEN);
   const quelle = { speicher, token: env.GITHUB_TOKEN };
   const frueher = await fruehereBasis(quelle, { lauf, pakete, alt: menge.alt });
   schreibeErgebnis(aus, PLAN_ART, {
@@ -203,7 +219,7 @@ export async function planen({ aus, speicher }) {
     issue: issueDes(lauf.kopf),
     pakete,
     frueher,
-    geschaetzt: zahlen,
+    geschaetzt: zahlen.map(({ datei, mutanten }) => ({ datei, mutanten })),
     unterdrueckungen: gesenkteUnterdrueckungen({ von: lauf.master, bis: lauf.kopf }),
   });
   setzeAusgaben({ pakete: JSON.stringify(pakete.map((_paket, index) => index)) });
@@ -222,14 +238,15 @@ function paketDes(plan, paket) {
   if (!Number.isInteger(nummer) || nummer < 0 || nummer >= plan.pakete.length) {
     throw new Error(`Paket ${paket} steht nicht im Plan.`);
   }
-  return { nummer, dateien: plan.pakete[nummer].dateien };
+  const { dateien, teil } = plan.pakete[nummer];
+  return { nummer, dateien, teil };
 }
 
-async function messwerte(werkzeug, { dateien, alt }) {
+async function messwerte(werkzeug, { dateien, alt, teil }) {
   const gates = werkzeug.gateMenge();
   const vorlauf = await werkzeug.trockenlauf(alt);
   const gateAlt = alt.filter((test) => gates.has(test));
-  const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt });
+  const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt, teil });
   return {
     mutanten: statusListe(gemessen.mutanten),
     gate: statusListe(gemessen.gate),
@@ -264,16 +281,17 @@ export async function basis({ aus, planDaten, paket }) {
   const vorbereitung = await vorbereitet();
   const { lauf, werkzeug } = vorbereitung;
   const plan = geplant(planDaten, lauf);
-  const { nummer, dateien } = paketDes(plan, paket);
+  const { nummer, dateien, teil } = paketDes(plan, paket);
   const branchSicht = await werkzeug.imStand(lauf.kopf, async () => ({
     graph: await werkzeug.importgraph(),
     gates: werkzeug.gateMenge(),
   }));
   const { alt, neu } = plan.tests;
   const { basisSchluessel } = await import("./zwischenspeicher.mjs");
-  const schluessel = basisSchluessel({ master: lauf.master, dateien, alt });
+  const schluessel = basisSchluessel({ master: lauf.master, dateien, alt, teil });
   const werte =
-    wiederverwendbar(plan, { nummer, schluessel }) ?? (await messwerte(werkzeug, { dateien, alt }));
+    wiederverwendbar(plan, { nummer, schluessel }) ??
+    (await messwerte(werkzeug, { dateien, alt, teil }));
   const graphen =
     werte.ausgenommen.length > 0 ? [await werkzeug.importgraph(), branchSicht.graph] : [];
   werte.ausgenommen = werte.ausgenommen.map((fall) => ({
