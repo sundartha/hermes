@@ -942,7 +942,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 17
+      "count": 16
     },
     "no-param-reassign": {
       "count": 13

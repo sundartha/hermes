@@ -84,6 +84,7 @@ const STATE_FIELD_DEFAULTS = Object.freeze({
   subIndex: () => ({}),
   platformTtsUsage: emptyPlatformTtsUsage,
   costCrossCheck: emptyCostCrossCheck,
+  anrufpause: () => false,
   platformNumberUse: () => [],
   outageAlerts: () => [],
 });

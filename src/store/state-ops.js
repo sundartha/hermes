@@ -93,8 +93,23 @@ export function makeDefaultState() {
     platformSpendWarnedMonth: null,
     platformTtsUsage: emptyPlatformTtsUsage(),
     costCrossCheck: emptyCostCrossCheck(),
+    anrufpause: false,
     subIndex: {},
   };
+}
+
+export async function anrufpauseSetzen(speicher, an) {
+  const zustand = speicher.load();
+  const vorher = zustand.anrufpause;
+  zustand.anrufpause = an;
+  try {
+    speicher.save();
+    await speicher.drainFlushes();
+  } catch (err) {
+    zustand.anrufpause = vorher;
+    throw err;
+  }
+  return an;
 }
 
 export function newId(prefix) {

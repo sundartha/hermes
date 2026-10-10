@@ -32,6 +32,8 @@ oeffentlich|POST|/webhooks/elevenlabs/consult|403|keine|Werkzeug-Token fehlt -> 
 oeffentlich|POST|/webhooks/elevenlabs/lookup|403|keine|Werkzeug-Token fehlt -> 403, gleiche Bauart wie consult (Thema B)
 oeffentlich|POST|/webhooks/elevenlabs/init|403|keine|Init-Token fehlt -> 403, auch bei leerem ELEVENLABS_INIT_WEBHOOK_TOKEN (IEL-B6)
 oeffentlich|GET|/intern/anrufe-laufend|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket 15)
+oeffentlich|GET|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
+oeffentlich|POST|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login

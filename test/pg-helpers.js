@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID, anrufpauseSetzen } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
 import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
@@ -23,6 +23,7 @@ export async function makePgTestStore() {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
   store = makePgStore(runner);
+  store.setzeAnrufpause = (an) => anrufpauseSetzen(store, an);
   await store.init();
   return { store, db, runner };
 }

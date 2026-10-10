@@ -23,6 +23,7 @@ import { localeFor } from "../i18n/locales.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_FORBIDDEN = 403;
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
@@ -40,6 +41,14 @@ const denialAudit = (grund, ctx, detailSuffix = "") => ({
   grund,
   detail: `to=${ctx.to} grund=${grund}${detailSuffix}`,
 });
+
+function ausgehendGesperrt(config, store) {
+  if (config.safety.outboundFrozen)
+    return { fehler: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).", auditZusatz: "" };
+  if (store.anrufpauseAktiv?.())
+    return { fehler: "Ausgehende Anrufe sind pausiert (Anrufpause).", auditZusatz: " quelle=anrufpause" };
+  return null;
+}
 
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
@@ -360,11 +369,11 @@ export function makeOutboundGates({
     {
       name: "outbound_frozen",
       run(ctx) {
-        if (!config.safety.outboundFrozen) return null;
-        return deny(
-          403,
-          { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." },
-          denialAudit("frozen", ctx),
+        const sperre = ausgehendGesperrt(config, store);
+        return sperre && deny(
+          HTTP_FORBIDDEN,
+          { error: sperre.fehler },
+          denialAudit("frozen", ctx, sperre.auditZusatz),
         );
       },
     },

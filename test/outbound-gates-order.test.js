@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
+import { makeOutboundGates, runOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { emergencyBrakeSeconds } from "../src/call-duration.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -133,6 +133,40 @@ test("outbound_frozen: config.outboundFrozen -> 403 grund=frozen, kein requested
   assert.equal(denial.status, 403);
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=frozen`);
   assert.equal(requestTenantCalls, 0, "outbound_frozen feuert VOR resolve_identity");
+});
+
+const PAUSENTEXT = "Ausgehende Anrufe sind pausiert (Anrufpause).";
+const SPERRTEXT = "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).";
+const SPERRFAELLE = [
+  { fall: "nur Anrufpause", frozen: false, pause: true, text: PAUSENTEXT, zusatz: " quelle=anrufpause" },
+  { fall: "nur OUTBOUND_FROZEN", frozen: true, pause: false, text: SPERRTEXT, zusatz: "" },
+  { fall: "beides an", frozen: true, pause: true, text: SPERRTEXT, zusatz: "" },
+];
+
+function sperrGates(frozen, pause, requestTenant = () => "T") {
+  const deps = makeDeps({ config: { outboundFrozen: frozen }, store: { anrufpauseAktiv: () => pause } });
+  return makeOutboundGates({ ...deps, requestTenant }).gates;
+}
+
+test("outbound_frozen: Anrufpause und OUTBOUND_FROZEN sperren mit eigenem Text und Audit, OUTBOUND_FROZEN gewinnt", async () => {
+  for (const { fall, frozen, pause, text, zusatz } of SPERRFAELLE) {
+    const mandantenAbfragen = [];
+    const gates = sperrGates(frozen, pause, () => mandantenAbfragen.push(fall));
+    const denial = await runOutboundGates({ gates, ctx: baseCtx() });
+    assert.equal(denial.status, 403, fall);
+    assert.deepEqual(denial.body, { error: text }, fall);
+    assert.deepEqual(
+      denial.audit,
+      { event: "place_call_denied", grund: "frozen", detail: `to=${VALID_TO} grund=frozen${zusatz}` },
+      fall,
+    );
+    assert.deepEqual(mandantenAbfragen, [], fall);
+  }
+});
+
+test("outbound_frozen: ohne Anrufpause und ohne OUTBOUND_FROZEN laesst das Gate mit null durch", async () => {
+  assert.equal(await gateBy(sperrGates(false, false), "outbound_frozen").run(baseCtx()), null);
+  assert.equal(await gateBy(makeOutboundGates(makeDeps()).gates, "outbound_frozen").run(baseCtx()), null);
 });
 
 test("tenant_reject: unbekannte Identitaet -> 403 grund=tenant_unbekannt requestedBy=...", async () => {

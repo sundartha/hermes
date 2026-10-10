@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
+import { anrufpauseSetzen } from "./store/state-ops.js";
 import { makeChainMutex } from "./chain-mutex.js";
 
 async function createPgBackend() {
@@ -180,6 +181,14 @@ export const {
   confirmNewsletterRecipientByToken,
   unsubscribeNewsletterRecipientByToken,
 } = backend;
+
+export function anrufpauseAktiv() {
+  return load().anrufpause === true;
+}
+
+export function setzeAnrufpause(an) {
+  return anrufpauseSetzen(backend, an);
+}
 
 export { classifyCallTime } from "./store/state-ops.js";
 export { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";

@@ -25,13 +25,17 @@ export function laufendeAnrufe(store, nowMs) {
   return calls.filter((call) => laeuft(call, nowMs, store)).length;
 }
 
+export function deployTokenAbgewiesen(config, req, res) {
+  res.set("Cache-Control", KEIN_ZWISCHENSPEICHER);
+  if (deployTokenGueltig(config, req.headers.authorization)) return false;
+  auditAuthFailed(req, AUTH_FAILED_GRUND.DEPLOY_TOKEN);
+  res.status(HTTP_UNAUTHORIZED).json(ABGELEHNT);
+  return true;
+}
+
 export function anrufeLaufendHandler({ config, store }) {
   return function anrufeLaufend(req, res) {
-    res.set("Cache-Control", KEIN_ZWISCHENSPEICHER);
-    if (!deployTokenGueltig(config, req.headers.authorization)) {
-      auditAuthFailed(req, AUTH_FAILED_GRUND.DEPLOY_TOKEN);
-      return res.status(HTTP_UNAUTHORIZED).json(ABGELEHNT);
-    }
+    if (deployTokenAbgewiesen(config, req, res)) return undefined;
     return res.json({ laufend: laufendeAnrufe(store, Date.now()) });
   };
 }

@@ -683,6 +683,11 @@ CREATE TABLE IF NOT EXISTS platform_tts_usage (
   warned_cycle TEXT
 );
 
+CREATE TABLE IF NOT EXISTS platform_anrufpause (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  an BOOLEAN NOT NULL DEFAULT false
+);
+
 -- cost_cross_check: GLOBAL, keine Tenant-Bindung (KV-M4 - die monatliche Gegenprobe
 -- Provider-Rechnung/Ist-Kosten/Gate-Buchung ist plattformweit, EIN Telnyx-Konto, Muster
 -- platform_tts_usage oben). Singleton-Tabelle (id-CHECK erzwingt genau eine Zeile) statt
@@ -1074,6 +1079,8 @@ ALTER TABLE usage_event        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_event        FORCE  ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage FORCE  ROW LEVEL SECURITY;
+ALTER TABLE platform_anrufpause ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_anrufpause FORCE  ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
 ALTER TABLE outage_alert       ENABLE ROW LEVEL SECURITY;
@@ -1125,6 +1132,8 @@ CREATE POLICY profile_global ON profile USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON platform_tts_usage;
 DROP POLICY IF EXISTS platform_tts_usage_global ON platform_tts_usage;
 CREATE POLICY platform_tts_usage_global ON platform_tts_usage USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS platform_anrufpause_global ON platform_anrufpause;
+CREATE POLICY platform_anrufpause_global ON platform_anrufpause USING (true) WITH CHECK (true);
 -- cost_cross_check: GLOBAL wie platform_tts_usage - keine Tenant-Dimension, kein
 -- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv
 -- (Muster platform_tts_usage_global).

@@ -1,6 +1,7 @@
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 import { ANRUFE_LAUFEND_PATH } from "./routes/intern-anrufe-laufend.js";
+import { ANRUFPAUSE_PATH } from "./routes/intern-anrufpause.js";
 import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
 
 export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
@@ -143,6 +144,18 @@ export const PUBLIC_ROUTES = Object.freeze([
     path: ANRUFE_LAUFEND_PATH,
     reason:
       "HANDLER-INTERNE AUTH (Paket 15, Deploy-Weg): der Deploy-Workflow fragt vor dem Umschalten, ob Anrufe laufen, und hat keine Sitzung. Absicherung im Handler: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_DEPLOY_TOKEN>'; leer oder kuerzer als DEPLOY_TOKEN_MIN_LENGTH -> JEDER Aufruf abgelehnt. Jede Ablehnung 401 mit konstantem Koerper, egal ob das Token gesetzt ist (gleiche Probe-Erwartung auf Staging und Produktion). Drossel ist der globale Per-IP-Limiter. Antwort nur {laufend: <zahl>} mit no-store - keine Nummer, keine Kennung, kein Inhalt. Liest nur, schreibt nichts, loest nichts aus.",
+  },
+  {
+    method: "GET",
+    path: ANRUFPAUSE_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (Paket V6, Anrufpause): der Betreiber fragt ohne Sitzung, ob ausgehende Anrufe pausiert sind. Dieselbe Pruefung wie GET /intern/anrufe-laufend (deployTokenAbgewiesen): safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_DEPLOY_TOKEN>'; leer oder kuerzer als DEPLOY_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit. Antwort nur {an: <boolean>} mit no-store. Liest nur, schreibt nichts, loest nichts aus.",
+  },
+  {
+    method: "POST",
+    path: ANRUFPAUSE_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (Paket V6, Anrufpause): der Betreiber schaltet die Pause ausgehender Anrufe ohne Neustart und ohne Sitzung. Dieselbe Token-Pruefung wie GET /intern/anrufe-laufend (deployTokenAbgewiesen), vor jeder Koerperpruefung; ohne gueltiges Token 401 und nichts aendert sich. Koerper genau {an: <boolean>}, sonst 400 und nichts aendert sich. Die Route kann nur SPERREN: an=true laesst das Gate outbound_frozen jeden neuen Anruf ablehnen, an=false hebt nur die Pause auf, nie OUTBOUND_FROZEN. Sie startet keinen Anruf, beruehrt keinen laufenden Anruf, antwortet erst nach dem dauerhaften Schreiben; scheitert das Schreiben, gilt der alte Wert weiter und die Antwort ist 503 {error: 'persist_failed'} ohne Fehlerdetails (Audit anrufpause_fehlgeschlagen). no-store, Audit ohne Personenbezug. Drossel ist der globale Per-IP-Limiter.",
   },
   {
     method: "GET",
