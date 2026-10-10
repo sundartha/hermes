@@ -1,14 +1,13 @@
-import { statusWort } from "./ausgabe.mjs";
+import { DEPLOY_ID, statusWort } from "./ausgabe.mjs";
 import { hermesZugang, renderZugang } from "./netz.mjs";
 import { abwarten, DEPLOY_TAKTE, ECHTE_UHR, minuten } from "./takt.mjs";
 
 const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
 const HTTP_ANGENOMMEN = 202;
-const DEPLOY_ID = /^dep-[a-z0-9]{1,60}$/;
 const LIVE = "live";
 const UMSCHALTEN = "update_in_progress";
-const ROTE_ENDZUSTAENDE = new Set([
+export const ROTE_ENDZUSTAENDE = new Set([
   "build_failed",
   "update_failed",
   "canceled",
@@ -174,7 +173,7 @@ async function deployVerfolgen(kontext, id) {
   return false;
 }
 
-async function produktionAbwarten(kontext, commit) {
+export async function produktionAbwarten(kontext, commit) {
   const { hermes, ausgabe, uhr, takte } = kontext;
   const start = uhr.jetzt();
   const grenzeMs = takte.healthz.schutzgrenzeMs;
