@@ -40,6 +40,9 @@ const ZEILEN_MUTANT = [ZEILE_DES_MUTANTEN, ZEILE_DES_MUTANTEN];
 const ZEILEN_BLOCK = [1, LETZTE_ZEILE_DES_BLOCKS];
 const MUTANT = `${DATEI}:2:10-2:21 MethodExpression → text`;
 const BLOCK = `${DATEI}:1:30-3:2 BlockStatement → {}`;
+const ZEILE_IM_ZWEITEN_TEIL = 5;
+const MUTANT_IM_ZWEITEN_TEIL = `${DATEI}:5:10-5:21 MethodExpression → text`;
+const ERSTER_TEIL = { von: 1, bis: ZEILE_IM_ZWEITEN_TEIL - 1 };
 const ZEITSTEMPEL = "2026-10-08T10:00:00.0000000Z";
 const ERSTE_JOB_ID = 800;
 const JOBS_JE_PAKET = 2;
@@ -502,6 +505,74 @@ test("ausmisten-melden: ein rotes Paket macht die Vereinigung rot", async (conte
     await melde(context, { zusatz }),
     `Mutant auf dem Branch nicht mehr getötet: ${ZWEITER_MUTANT}`,
   );
+});
+
+function zweiTeileEinerDatei(master, { branchMutanten, teile }) {
+  const zweiter = { [MUTANT_IM_ZWEITEN_TEIL]: "Killed" };
+  const teil = (art, mutanten) =>
+    alsText(
+      artefaktDaten(art, master, {
+        mutanten,
+        gate: {},
+        orte: { [MUTANT_IM_ZWEITEN_TEIL]: [ZEILE_IM_ZWEITEN_TEIL, ZEILE_IM_ZWEITEN_TEIL] },
+      }),
+    );
+  return {
+    plan: {
+      pakete: [
+        { mutanten: 2, dateien: [DATEI], teil: teile[0] },
+        { mutanten: 1, dateien: [DATEI], teil: teile[1] },
+      ],
+    },
+    weitereBasis: [teil("basis", zweiter)],
+    weitereBranch: [teil("branch", branchMutanten)],
+  };
+}
+
+const LUECKENLOS = [ERSTER_TEIL, { von: ZEILE_IM_ZWEITEN_TEIL, bis: null }];
+
+test("ausmisten-melden: zwei Teile derselben Datei ergeben zusammen grün", async (context) => {
+  const branchMutanten = { [MUTANT_IM_ZWEITEN_TEIL]: "Killed" };
+  const zusatz = (master) => zweiTeileEinerDatei(master, { branchMutanten, teile: LUECKENLOS });
+  const ergebnis = await melde(context, { zusatz });
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.match(ergebnis.gesetzt.description, /getötet Basis 3, Branch 3/);
+});
+
+test("ausmisten-melden: ein Verlust in einem Teil einer Datei macht das Ergebnis rot", async (context) => {
+  const branchMutanten = { [MUTANT_IM_ZWEITEN_TEIL]: "Survived" };
+  const zusatz = (master) => zweiTeileEinerDatei(master, { branchMutanten, teile: LUECKENLOS });
+  erwarteRot(
+    await melde(context, { zusatz }),
+    `Mutant auf dem Branch nicht mehr getötet: ${MUTANT_IM_ZWEITEN_TEIL}`,
+  );
+});
+
+test("ausmisten-melden: Teile einer Datei mit einer Lücke setzen failure", async (context) => {
+  const branchMutanten = { [MUTANT_IM_ZWEITEN_TEIL]: "Killed" };
+  const teile = [ERSTER_TEIL, { von: ZEILE_IM_ZWEITEN_TEIL + 1, bis: null }];
+  const zusatz = (master) => zweiTeileEinerDatei(master, { branchMutanten, teile });
+  erwarteRot(
+    await melde(context, { zusatz }),
+    "Plan: die Teile einer Datei schließen nicht lückenlos von Zeile 1 bis zum Dateiende aneinander an",
+  );
+});
+
+test("ausmisten-melden: Teile einer Datei, die sich überlappen, setzen failure", async (context) => {
+  const branchMutanten = { [MUTANT_IM_ZWEITEN_TEIL]: "Killed" };
+  const teile = [ERSTER_TEIL, { von: ZEILE_IM_ZWEITEN_TEIL - 1, bis: null }];
+  const zusatz = (master) => zweiTeileEinerDatei(master, { branchMutanten, teile });
+  erwarteRot(
+    await melde(context, { zusatz }),
+    "Plan: die Teile einer Datei schließen nicht lückenlos von Zeile 1 bis zum Dateiende aneinander an",
+  );
+});
+
+test("ausmisten-melden: eine Datei, die ganz und zugleich als Teil geplant ist, setzt failure", async (context) => {
+  const branchMutanten = { [MUTANT_IM_ZWEITEN_TEIL]: "Killed" };
+  const teile = [undefined, { von: 1, bis: null }];
+  const zusatz = (master) => zweiTeileEinerDatei(master, { branchMutanten, teile });
+  erwarteRot(await melde(context, { zusatz }), "Plan: eine Datei steht in mehreren Paketen");
 });
 
 test("ausmisten-melden: ein fehlendes Paket-Artefakt setzt failure", async (context) => {

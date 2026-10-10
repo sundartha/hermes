@@ -12,6 +12,8 @@ import { EXIT_GRUEN, laufe, messePaket, messeUndMelde } from "./ausmisten/messun
 const FRUEHERER_LAUF = 4700;
 const FRUEHERER_JOB = 900;
 const ZEITSTEMPEL = "2026-10-08T09:00:00.0000000Z";
+const ERSTER_TEIL = { von: 1, bis: 4 };
+const GANZ_ALS_TEIL = { von: 1, bis: null };
 
 function basisText(artefakte) {
   return readFileSync(join(artefakte, "basis-0", "basis-0.json"), "utf8");
@@ -146,4 +148,21 @@ test("ausmisten-zwischenspeicher: der Schlüssel ändert sich mit jeder Eingabe 
     assert.ok(!gesehen.has(neu), `${datei} ändert den Schlüssel nicht`);
     gesehen.add(neu);
   }
+});
+
+test("ausmisten-zwischenspeicher: jeder Teil einer Datei hat einen eigenen Schlüssel", (context) => {
+  const ordner = probeRepository(context, {
+    "src/a.js": "export const a = 1;\n",
+    "test/a.test.js": "export {};\n",
+    "stryker.config.json": "{}\n",
+  });
+  const eingaben = {
+    master: gitKopf(ordner),
+    dateien: ["src/a.js"],
+    alt: ["test/a.test.js"],
+    verzeichnis: ordner,
+  };
+  const teile = [undefined, ERSTER_TEIL, { von: ERSTER_TEIL.bis + 1, bis: null }, GANZ_ALS_TEIL];
+  const schluessel = teile.map((teil) => basisSchluessel({ ...eingaben, teil }));
+  assert.equal(new Set(schluessel).size, teile.length);
 });
