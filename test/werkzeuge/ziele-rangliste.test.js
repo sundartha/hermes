@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
   arbeitsordner,
+  ersatzGh,
   gelesen,
   githubAttrappe,
+  LAUF,
+  mitUrsprung,
   quelltext,
   starteZiele,
   testFuer,
@@ -93,4 +97,22 @@ test("ziele-rangliste: die Zielwahl folgt der Rangliste, nicht der Zahl der Befu
   const ziel = gelesen(await waehle(context, repo, await githubAttrappe(context)), "ziel/ziel.json");
   assert.deepEqual([ziel.ausgang, ziel.sorte, ziel.datei], ["weiter", "knip", "src/gross.js"]);
   assert.deepEqual(ziel.kandidaten.map(({ datei }) => datei), ["src/gross.js", "src/klein.js"]);
+});
+
+test("ziele-rangliste: ein Aufräum-PR einer Art, die nicht in tools/ziele/umbau-arten.json steht, bekommt kein Auto-Merge", async (context) => {
+  const repo = zieleRepo(context, { "src/frei.js": exporte(["frei"]) });
+  mitUrsprung(context, repo);
+  const github = await githubAttrappe(context);
+  const gh = ersatzGh(context);
+  const ziel = { ausgang: "weiter", grund: "", master: repo.sha(), sorte: "umbau", datei: "src/frei.js", zielbefunde: ["Probe"] };
+  const ordner = arbeitsordner(context, { "ziel/ziel.json": ziel, "ausgaben.txt": "" });
+  const lauf = await starteZiele(["pr", "--ordner", ordner], { cwd: repo.ordner, env: umgebung(github, { PATH: `${gh.pfad}:${process.env.PATH}`, GITHUB_OUTPUT: join(ordner, "ausgaben.txt") }) });
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const [pr] = github.zustand.angelegtePrs;
+  assert.equal(pr.head, `aufraeumen/umbau-${LAUF}`);
+  assert.deepEqual(gh.aufrufe(), []);
+  assert.deepEqual(github.zustand.anfragen.filter((anfrage) => !anfrage.startsWith("GET ")), ["POST /pulls"]);
+  const ergebnis = gelesen(ordner, "pr/pr.json");
+  assert.deepEqual([ergebnis.ausgang, ergebnis.pr, ergebnis.autoMerge], ["geaendert", pr.number, false]);
+  assert.match(ergebnis.grund, /umbau/);
 });

@@ -18,6 +18,7 @@ import { DATEI as ZIEL } from "./waehlen.mjs";
 
 export const PR_ORDNER = "pr";
 export const PR_DATEI = "pr.json";
+export const UMBAU_ARTEN = "tools/ziele/umbau-arten.json";
 const ANMELDUNG = '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f';
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
@@ -72,15 +73,23 @@ function mitToken(befehl, root, { token, name }) {
   if (lauf.status !== EXIT_GRUEN) throw new Error(`${name} ist mit Exit ${lauf.status} gescheitert: ${lauf.stderr.trim()}`);
 }
 
+export function erlaubteArten() {
+  const { arten } = JSON.parse(readFileSync(new URL("./umbau-arten.json", import.meta.url), "utf8"));
+  if (!Array.isArray(arten)) throw new Error(`${UMBAU_ARTEN} enthält keine Liste „arten“`);
+  return new Set(arten);
+}
+
 export async function oeffnePr({ ordner }, root, { token = nimmGithubToken(), github = githubZugang({ token }) } = {}) {
   const ziel = geprueftesZiel(ordner);
+  const autoMerge = erlaubteArten().has(ziel.sorte);
   const branch = branchFuer(ziel);
   mitToken(["git", "-c", "credential.helper=", "-c", `credential.helper=${ANMELDUNG}`, "push", "origin", `HEAD:refs/heads/${branch}`], root, { token, name: "git push" });
   const pr = await github.sende("POST", "/pulls", { title: prTitel(ziel.sorte, ziel.datei), head: branch, base: "master", body: prText(ziel) });
-  mitToken(["gh", "pr", "merge", String(pr.number), "--repo", github.repo, "--auto"], root, { token, name: "gh pr merge --auto" });
-  const ergebnis = { ...ergebnisVon(GEAENDERT, ""), pr: pr.number, adresse: pr.html_url ?? "", branch };
+  if (autoMerge) mitToken(["gh", "pr", "merge", String(pr.number), "--repo", github.repo, "--auto"], root, { token, name: "gh pr merge --auto" });
+  const grund = autoMerge ? "" : `PR #${pr.number} ohne Auto-Merge: Die Art ${ziel.sorte} steht nicht in ${UMBAU_ARTEN}`;
+  const ergebnis = { ...ergebnisVon(GEAENDERT, grund), pr: pr.number, adresse: pr.html_url ?? "", branch, autoMerge };
   schreibeJson(join(ordner, PR_ORDNER), PR_DATEI, ergebnis);
   setzeAusgaben({ ausgang: GEAENDERT, pr: pr.number });
-  console.log(`PR #${pr.number} aus ${branch} angelegt, Auto-Merge eingeschaltet.`);
+  console.log(`PR #${pr.number} aus ${branch} angelegt, ${autoMerge ? "Auto-Merge eingeschaltet" : `ohne Auto-Merge (${grund})`}.`);
   return EXIT_GRUEN;
 }
