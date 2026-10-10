@@ -66,10 +66,6 @@ const AUFTRAG = { id: "A1", art: "umbau", ziel: "Räume zahl auf", bereich: ZAHL
 
 const aufruf = (name, input) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: name, name, input }] } });
 const rueckgabe = (id, content) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content }] } });
-const pruefleiter = (zeilen) => [
-  aufruf("Edit", {}),
-  { type: "system", subtype: "hook_response", hook_event: "Stop", stderr: zeilen.join("\n") },
-];
 
 function lauf(context, drehbuch, dateien = {}) {
   const repo = probeRepository(context, { ...REPO, ...dateien });
@@ -110,15 +106,6 @@ test("eine Werkzeugschleife stoppt den Agenten, die zweite Runde bekommt die Feh
   assert.match(datei("prompt-bau.txt"), /Fehlerausgabe der vorigen Runde[\s\S]*Runde 1: Stillstand: Bash/);
   assert.match(datei("gh.log"), new RegExp(`"comment","${ISSUE}".*Entscheidung nötig.*Bereich erweitern`));
   assert.ok(datei("gh.log").includes(`"edit","${ISSUE}","--add-label","entscheidung"`));
-});
-
-test("dreimal dieselbe Prüfleiter-Meldung aus dem Auftrag trotz Änderung stoppt den Agenten, fremde rote Tests zählen nicht", (context) => {
-  const fremd = "✗ fremd (test/fremd.test.js:1:1)";
-  const zeilen = [...pruefleiter([fremd]), ...pruefleiter([fremd]), ...pruefleiter([fremd])];
-  const bau = [{ zeilen, schleife: pruefleiter(["✗ zählt (test/zahl.test.js:3:1)", fremd]) }];
-  const { grund, agenten } = lauf(context, { bau }).beleg("A1");
-  assert.match(grund, /^Stillstand: Die Prüfleiter meldete dreimal hintereinander dieselbe Fehlermeldung.*✗ zählt \(test\/zahl\.test\.js\)$/);
-  assert.deepEqual(agenten[0].fremdeBefunde, [fremd]);
 });
 
 test("„Auftrag passt nicht“ zählt nicht als rote Runde und führt mit dem Grund wörtlich zur Entscheidungsnotiz", (context) => {

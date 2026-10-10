@@ -92,18 +92,16 @@ export function setzeEin(kontext, prompt, start) {
   const sperre = limitSperre(kontext);
   const sitzungen = [];
   let vorgaenger = null;
-  let pruefleiter;
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
-    const sitzung = starteAgent({ ...kontext, pruefleiter, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
+    const sitzung = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
       return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung), ausstieg: ausstieg(sitzung) };
     }
     vorgaenger = { grund, antwort: sitzung.antwort };
-    pruefleiter = sitzung.pruefleiter;
   }
 }
 

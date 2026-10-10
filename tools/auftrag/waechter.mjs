@@ -2,16 +2,16 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
-import { Verlauf, auftragsdateien } from "./verlauf.mjs";
+import { Verlauf } from "./verlauf.mjs";
 
 const EXIT_OHNE_STATUS = 1;
 const MAX_FEHLERAUSGABE_ZEICHEN = 2000;
 const GNADENFRIST_MS = 10_000;
 const ABBRUCH_SIGNALE = ["SIGINT", "SIGTERM"];
 
-const { befehl, eingabe, auftrag, pruefleiter } = JSON.parse(readFileSync(0, "utf8"));
+const { befehl, eingabe } = JSON.parse(readFileSync(0, "utf8"));
 const [programm, ...argumente] = befehl;
-const verlauf = new Verlauf(auftragsdateien(auftrag), pruefleiter);
+const verlauf = new Verlauf();
 const kind = spawn(programm, argumente, { detached: true, stdio: ["pipe", "pipe", "pipe"] });
 let aktion = null;
 let fehlerausgabe = "";
