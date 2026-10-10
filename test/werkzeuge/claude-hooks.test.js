@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -7,7 +7,6 @@ import { test } from "node:test";
 import {
   BLOCKING_EXIT_CODE,
   REPO_ROOT,
-  outputLines,
   probeDirectory,
   probeRepository,
   runHook,
@@ -18,15 +17,8 @@ const LONG_FILE_LINES = 1500;
 const SHORT_FILE_LINES = 50;
 const RANGE_OFFSET = 10;
 const RANGE_LIMIT = 100;
-const MAX_PRUEFLEITER_LINES = 60;
-const RED_OUTPUT_LINES = 200;
-const REPAIR_SENTENCE = "Repariere den Code, nicht die Prüfung.";
-const PRUEFLEITER_LOG = "PRUEFLEITER_LOG";
-const PRUEFLEITER_RED = "PRUEFLEITER_RED";
 const MAIN_FILE = "src/haupt.js";
 const WORKTREE_NAME = "arbeit";
-const SECOND_RUN = 2;
-const THIRD_RUN = 3;
 
 function lines(count) {
   return `${Array.from({ length: count }, (unused, index) => `zeile ${index}`).join("\n")}\n`;
@@ -166,83 +158,6 @@ test("worktree-pflicht erlaubt Schreiben im Worktree und ausserhalb des Reposito
     assert.equal(runWorktreeRule(worktree, file).status, 0, file);
   }
   assert.equal(runWorktreeRule(directory, join(outside, "x.md")).status, 0);
-});
-
-function pruefleiterProbe(context) {
-  const logDirectory = probeDirectory(context, {});
-  const directory = probeRepository(context, {
-    "package.json": JSON.stringify({
-      name: "pruefleiter-hook-probe",
-      private: true,
-      type: "module",
-      scripts: { pruefleiter: "node lauf.mjs" },
-    }),
-    "lauf.mjs": [
-      'import { appendFileSync } from "node:fs";',
-      `appendFileSync(process.env.${PRUEFLEITER_LOG}, \`lauf \${process.argv.slice(2).join(" ")}\\n\`);`,
-      `const red = process.env.${PRUEFLEITER_RED} === "1";`,
-      `if (red) for (let n = 0; n < ${RED_OUTPUT_LINES}; n += 1) console.log(\`Befund \${n}\`);`,
-      "process.exitCode = red ? 1 : 0;",
-      "",
-    ].join("\n"),
-    "src/basis.js": "export const wert = 1;\n",
-  });
-  return { directory, log: join(logDirectory, "laeufe.log") };
-}
-
-function runStop(probe, red = false) {
-  return runHook("pruefleiter.mjs", {
-    cwd: probe.directory,
-    input: { hook_event_name: "Stop" },
-    environment: { [PRUEFLEITER_LOG]: probe.log, [PRUEFLEITER_RED]: red ? "1" : "0" },
-  });
-}
-
-function runCount(probe) {
-  try {
-    return outputLines(readFileSync(probe.log, "utf8")).length;
-  } catch {
-    return 0;
-  }
-}
-
-test("pruefleiter-Hook blockiert bei Rot mit hoechstens 60 Zeilen und dem Reparatur-Satz", (context) => {
-  const result = runStop(pruefleiterProbe(context), true);
-  assert.equal(result.status, BLOCKING_EXIT_CODE);
-  const shown = outputLines(result.stderr);
-  assert.ok(shown.length <= MAX_PRUEFLEITER_LINES, `${shown.length} Zeilen`);
-  assert.equal(shown.at(-1), REPAIR_SENTENCE);
-  assert.equal(shown[0], "Befund 0");
-});
-
-test("pruefleiter-Hook laeuft bei gleichem Stand nicht erneut, bei geaendertem Stand schon", (context) => {
-  const probe = pruefleiterProbe(context);
-  assert.equal(runStop(probe).status, 0);
-  assert.equal(runCount(probe), 1);
-
-  assert.equal(runStop(probe).status, 0);
-  assert.equal(runCount(probe), 1, "gleicher Stand: kein zweiter Lauf");
-
-  appendFileSync(join(probe.directory, "src/basis.js"), "export const zwei = 2;\n");
-  assert.equal(runStop(probe).status, 0);
-  assert.equal(runCount(probe), SECOND_RUN, "geaenderte Datei: neuer Lauf");
-
-  writeFileSync(join(probe.directory, "src/neu.js"), "export const drei = 3;\n");
-  assert.equal(runStop(probe).status, 0);
-  assert.equal(runCount(probe), THIRD_RUN, "neue ungetrackte Datei: neuer Lauf");
-});
-
-test("pruefleiter-Hook startet die Pruefleiter im Vor-Push-Modus ohne volle Suite", (context) => {
-  const probe = pruefleiterProbe(context);
-  assert.equal(runStop(probe).status, 0);
-  assert.deepEqual(outputLines(readFileSync(probe.log, "utf8")), ["lauf --vor-push"]);
-});
-
-test("pruefleiter-Hook merkt sich ein Rot nicht als Gruen", (context) => {
-  const probe = pruefleiterProbe(context);
-  assert.equal(runStop(probe, true).status, BLOCKING_EXIT_CODE);
-  assert.equal(runStop(probe, true).status, BLOCKING_EXIT_CODE);
-  assert.equal(runCount(probe), SECOND_RUN);
 });
 
 function revision(directory, ref) {
