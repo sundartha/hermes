@@ -51,7 +51,7 @@ In Teil 2 schreibt der Test-Agent zuerst den roten Test über den echten Eingang
 2. **Premortem** (unten), dann **Teil 2** (unten).
 
 ### 3d. Größere Änderung
-Nutze den Skill `pitch`. Fehlt unter `.claude/agents/` einer der Agenten `architektur`, `sicherheit` oder `angreifer`, endet der Weg nach Schritt 4 des Pitch-Skills: Du sagst dem Nutzer, dass diese Dokumente noch nicht entstehen können, setzt keinen anderen Agenten an ihre Stelle und setzt keinen Status auf „freigegeben“.
+Nutze den Skill `pitch`. Liefert einer der Agenten `architektur`, `sicherheit` oder `angreifer` kein Ergebnis, setzt du keinen anderen Agenten an seine Stelle, schreibst das Dokument nicht selbst und setzt keinen Status auf „freigegeben“; du sagst es dem Nutzer.
 
 ## Premortem (Fehler und einfache Änderung)
 Starte den Agenten `premortem` und gib ihm nur den Pfad der Phasendatei, keine Zusammenfassung des Gesprächs, damit seine Gründe unabhängig bleiben. Trag jeden seiner Gründe in die Premortem-Tabelle des Entwurfs ein und gib ihm genau einen Ausgang: einen zusätzlichen Test (ein Satz in `wasDarfNiePassieren`, den der Test-Agent prüft), ein Nicht-Ziel mit Begründung oder „hingenommen:“ mit Begründung. Ob ein Risiko hingenommen wird, entscheidet der Nutzer: Leg ihm alle Gründe, für die du „hingenommen“ vorschlägst, in einer nummerierten Runde vor, jeden mit deiner Empfehlung. Meldet der Agent „Keine Gründe gefunden, weil …“, steht dieser Satz unter der leeren Tabelle.
