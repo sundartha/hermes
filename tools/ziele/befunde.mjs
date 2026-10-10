@@ -2,7 +2,7 @@ import { issuesMitLabel, kommentare, kommentiere, stelleLabelSicher } from "./gi
 
 export const LABEL = "aufraeumen";
 export const BOT_ACTIONS = "github-actions[bot]";
-const LABEL_TEXT = "Befund des nächtlichen Aufräumens (tools/ziele.mjs)";
+export const LABEL_TEXT = "Befund des nächtlichen Aufräumens (tools/ziele.mjs)";
 export const WIEDER = "Wieder aufgetreten";
 const BEFUND_TITEL = /^Aufräumen: (AR-[a-z-]+) in `([\w./@+-]+)`$/;
 const SICHERE_DATEI = /^[\w./@+-]{1,300}$/;
