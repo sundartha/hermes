@@ -28,7 +28,7 @@ function inhalte(master, { pfade, verzeichnis }) {
   return pfade.map((pfad) => [pfad, git(["rev-parse", `${master}:${pfad}`], verzeichnis).trim()]);
 }
 
-export function basisSchluessel({ master, dateien, alt, verzeichnis }) {
+export function basisSchluessel({ master, dateien, alt, teil, verzeichnis }) {
   const werkzeug = git(["ls-tree", "-r", master, "--", ...WERKZEUG_PFADE], verzeichnis);
   return pruefsumme(
     JSON.stringify({
@@ -38,6 +38,7 @@ export function basisSchluessel({ master, dateien, alt, verzeichnis }) {
       werkzeug: pruefsumme(werkzeug),
       dateien: inhalte(master, { pfade: dateien, verzeichnis }),
       tests: inhalte(master, { pfade: alt, verzeichnis }),
+      teil,
     }),
   );
 }

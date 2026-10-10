@@ -261,18 +261,56 @@ export function leseArtefakt({ ordner, name, art, summe, erwartet }) {
   return pruefeArtefakt({ name, art, text, summe, erwartet });
 }
 
+function istTeil(teil) {
+  return (
+    istObjekt(teil) &&
+    Number.isSafeInteger(teil.von) &&
+    teil.von > 0 &&
+    (teil.bis === null || (Number.isSafeInteger(teil.bis) && teil.bis >= teil.von))
+  );
+}
+
 function paketGueltig(paket) {
   return (
     istObjekt(paket) &&
     istZahl(paket.mutanten) &&
     istSortierteListe(paket.dateien, QUELLDATEI) &&
-    paket.dateien.length > 0
+    paket.dateien.length > 0 &&
+    (paket.teil === undefined || (paket.dateien.length === 1 && istTeil(paket.teil)))
+  );
+}
+
+function dateienVon(paket) {
+  return Array.isArray(paket?.dateien) ? paket.dateien : [];
+}
+
+function teileJeDatei(pakete) {
+  const teile = new Map();
+  for (const paket of pakete.filter((eintrag) => eintrag?.teil !== undefined)) {
+    for (const datei of dateienVon(paket))
+      teile.set(datei, [...(teile.get(datei) ?? []), paket.teil]);
+  }
+  return teile;
+}
+
+function lueckenlos(teile) {
+  const sortiert = teile.filter(istTeil).toSorted((links, rechts) => links.von - rechts.von);
+  return (
+    sortiert.length === teile.length &&
+    sortiert[0].von === 1 &&
+    sortiert.at(-1).bis === null &&
+    sortiert.every((teil, nummer) => {
+      const vorher = sortiert[nummer - 1];
+      return nummer === 0 || (Number.isSafeInteger(vorher.bis) && teil.von === vorher.bis + 1);
+    })
   );
 }
 
 function planFehler(daten, erwartet) {
   const pakete = Array.isArray(daten.pakete) ? daten.pakete : [];
-  const alle = pakete.flatMap((paket) => (Array.isArray(paket?.dateien) ? paket.dateien : []));
+  const teile = teileJeDatei(pakete);
+  const ganze = pakete.filter((paket) => paket?.teil === undefined).flatMap(dateienVon);
+  const alle = [...ganze, ...teile.keys()];
   const pruefungen = [
     [daten.format === FORMAT && daten.art === PLAN_ART, "Format oder Art passt nicht"],
     [gleicheSha(daten.kopf, erwartet.kopf), "Kopf-SHA passt nicht"],
@@ -283,6 +321,10 @@ function planFehler(daten, erwartet) {
       "Paketliste ist ungültig",
     ],
     [new Set(alle).size === alle.length, "eine Datei steht in mehreren Paketen"],
+    [
+      [...teile.values()].every(lueckenlos),
+      "die Teile einer Datei schließen nicht lückenlos von Zeile 1 bis zum Dateiende aneinander an",
+    ],
     [
       daten.issue === null || (Number.isSafeInteger(daten.issue) && daten.issue > 0),
       "Issue-Nummer ist ungültig",
