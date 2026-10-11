@@ -7,11 +7,12 @@ import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
-import { brauchtRotenTest, reihenfolge } from "./format.mjs";
+import { brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
+import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 
@@ -203,9 +204,15 @@ export function lauf(phasendatei, root) {
     for (const befund of befunde) console.error(befund);
     return EXIT_ROT;
   }
-  for (const auftrag of reihenfolge(phase.auftraege).ordnung) {
-    const ergebnis = fuehreRundenAus({ phase, auftrag, root, phasendatei }, (runde) => new AuftragsLauf(runde).fuehreAus());
-    if (ergebnis !== GRUEN) return EXIT_ROT;
+  const plan = { phase, fertig: new Set() };
+  for (;;) {
+    const { ordnung } = reihenfolge(plan.phase.auftraege);
+    const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
+    if (auftrag === undefined) return EXIT_GRUEN;
+    const kontext = { phase: plan.phase, auftrag, root, phasendatei, plan };
+    const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde).fuehreAus());
+    if (ergebnis === GRUEN) plan.fertig.add(auftrag.id);
+    else if (ergebnis === NEU_GESCHNITTEN) plan.phase = ladePhase(phasendatei);
+    else return EXIT_ROT;
   }
-  return EXIT_GRUEN;
 }
