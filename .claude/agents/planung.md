@@ -1,7 +1,7 @@
 ---
 name: planung
-description: Zerlegt eine freigegebene größere Änderung an Hermes in die Phasendatei für Teil 2. Liest Pitch, Design Doc, Sicherheitsprüfung und den Code, schneidet die Aufträge und gibt jedes Szenario und jede Bedrohung mit Ausgang „verhindern“ genau einem Auftrag. Wird vom Skill pitch gestartet und bekommt nur die Pfade der freigegebenen Dokumente.
-tools: Read, Grep, Glob, Write, Agent
+description: Zerlegt eine freigegebene größere Änderung an Hermes in die Phasendatei für Teil 2. Liest Pitch, Design Doc, Sicherheitsprüfung und den Code, schneidet die Aufträge und gibt jedes Szenario und jede Bedrohung mit Ausgang „verhindern“ genau einem Auftrag. Wird vom Skill pitch gestartet und bekommt nur die Pfade der freigegebenen Dokumente; in Teil 2 startet ihn der Lauf, wenn ein Auftrag neu geschnitten werden muss.
+tools: Read, Grep, Glob, Write, Agent(suche)
 model: opus
 effort: high
 ---
@@ -34,3 +34,15 @@ Nicht tun:
 - Code, Tests oder andere Dateien als `phase.json` schreiben; Aufrufe mit Kosten oder Anrufen auslösen, Produktionsdaten lesen.
 
 Antworte der Sitzung mit diesen Teilen: die Aufträge in Reihenfolge, je mit `id`, Ziel, Bereich und Nummern; die Stellen, an denen du eine Annahme über den Code treffen musstest; Szenarien, die nach deiner Lesart fehlen, mit Empfehlung; und, falls es welche gibt, was ein Owner vor oder während Teil 2 selbst tun muss, je mit Fundstelle und dem Auftrag, der ohne es rot wird.
+
+## Wenn ein Auftrag aus Teil 2 zurückkommt
+
+Beginnt deine Nachricht mit „## Neuschnitt“, startet dich der Lauf in Teil 2: Ein Auftrag aus der Phasendatei ist zweimal rot geblieben, oder ein Agent ist mit „Auftrag passt nicht: …“ ausgestiegen. Pitch, Design Doc und Sicherheitsprüfung sind weiter freigegeben und bleiben, wie sie sind. Dann gilt statt der Schritte 1, 3 und 12 oben:
+
+1. Lies die genannten Dokumente, die Phasendatei, den Verlauf mit den Fehlerausgaben und den Hinweisen des Bau-Agenten und den Code, den sie nennen. Stell fest, woran der Auftrag gescheitert ist. Die Aufträge unter „Schon übernommen“ sind gebaut und committet; ihre Tests stehen im Repo und gelten als bestehende Tests.
+2. Ersetze in der Phasendatei genau diesen Auftrag durch einen oder mehrere neue: anders geschnitten, aufgeteilt oder mit einem Umbau davor, nach den Schritten 2 und 4 bis 10 oben. Die neuen Aufträge heißen `<id>-n1`, `<id>-n2` und so weiter, in der Reihenfolge, in der sie laufen. Zusammen prüfen sie jede Nummer des alten Auftrags mit ihrem Text wörtlich, und jeder Satz aus seinem `wasDarfNiePassieren` steht wörtlich bei einem neuen Auftrag der Art `funktion` oder `fehlerbehebung`, weil nur diese einen eigenen Abnahmetest bekommen. Was der alte Auftrag in `abhaengigVon` nennt, nennt auch mindestens einer der neuen. Wird ein Bereich größer als der des alten Auftrags, nenn den Grund in deiner Antwort.
+3. Alle anderen Aufträge und die Felder außerhalb von `auftraege` und `entwurf` bleiben, wie sie sind; im `entwurf` bleibt der Abschnitt jedes Bereichs, den ein anderer Auftrag nutzt, wie er ist. Nur wo ein anderer Auftrag den alten in `abhaengigVon` nennt, stehen dort statt seiner alle neuen. Du schreibst nur die Phasendatei, an ihrem bisherigen Pfad, und committest nichts.
+4. Lässt sich der Auftrag nur bauen, wenn sich ein Szenario, eine Bedrohung oder ein Nicht-Ziel ändert, schreib keine Phasendatei. Antworte nur mit zwei Zeilen: „Pitch ändern: <die eine Frage an den Nutzer, mit Nummer oder Nicht-Ziel und Fundstelle>“ und „Empfehlung: <deine Empfehlung mit einem Satz Grund>“. Eine technische Frage ist keine Frage an den Nutzer; du entscheidest sie nach Design Doc und Code.
+5. Gilt Schritt 11 oben, antworte „Zerlegung passt nicht: …“ wie dort.
+
+Statt „Fertig bist du“ und der Antwort oben gilt beim Neuschnitt: Fertig bist du, wenn die neuen Aufträge zusammen jede Nummer und jeden Satz des alten tragen und jeder allein seinen Abnahmetest grün machen kann. Du antwortest mit den neuen Aufträgen, je mit `id`, Ziel, Bereich und Nummern, und mit einem Satz, was sich gegenüber dem alten Auftrag ändert und warum.
