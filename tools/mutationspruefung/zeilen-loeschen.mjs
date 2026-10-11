@@ -14,7 +14,7 @@ const ZEILENENDE = "\n";
 const ANWEISUNGSENDE = ";";
 const DEKLARATION = /^(?:import|export|const|let|var|function|class|async function)\b/;
 const BLOCK_MUTATOR = "BlockStatement";
-const GELOESCHT = "Zeile gelöscht";
+export const GELOESCHT = "Zeile gelöscht";
 const UEBERLEBT = "Survived";
 const ERKANNT = "Killed";
 const ZEITABLAUF = "Timeout";
@@ -130,9 +130,10 @@ export function loeschprobe(verzeichnisAnlegen) {
     while (unentschieden(verlauf)) verlauf.push(beobachte());
     return entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf);
   };
-  const probe = (datei, zeile, auswahl) => {
+  const probe = (datei, auswahl, bisher) => {
     verzeichnis ??= gepruefterStand(verzeichnisAnlegen());
-    let ergebnis = eintrag(datei, zeile, UEBERLEBT);
+    const [zeile] = bisher.zeilen;
+    let ergebnis = bisher;
     for (const gruppe of auswahl) {
       ergebnis = vorzug(ergebnis, gruppenprobe(datei, zeile, gruppe));
       if (ergebnis.status !== UEBERLEBT) break;
@@ -143,8 +144,10 @@ export function loeschprobe(verzeichnisAnlegen) {
     pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) => {
       const uebrige = alle.filter((test) => !erste.includes(test));
       const auswahl = [...gruppen(erste), ...gruppen(uebrige)];
-      return zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => probe(datei, zeile, auswahl));
+      return zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => probe(datei, auswahl, eintrag(datei, zeile, UEBERLEBT)));
     },
+    nachfassen: ({ datei, eintraege, uebrige }) =>
+      eintraege.map((bisher) => probe(datei, gruppen(uebrige), bisher)),
     abbauen: () => {
       if (verzeichnis !== null) git(["worktree", "remove", "--force", verzeichnis]);
     },

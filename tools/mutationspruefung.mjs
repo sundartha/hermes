@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { chdir, cwd } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,8 @@ import { ESLint } from "eslint";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
-import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
+import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
@@ -55,8 +56,12 @@ const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
+const GANZ = { anteil: 1, von: 1 };
+const TEILANGABEN = 3;
+const BETRIEBSARTEN_HOECHSTENS = 1;
+const ERGEBNISDATEI = /\.json$/;
 const AUFRUF =
-  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand] [--gleichwertig <mutant>]";
+  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
 
 function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -218,12 +223,17 @@ async function mutantenproben(datei, zeilen, { erste, alle }) {
   return vereine(ergebnisse, [zweite]);
 }
 
-async function pruefeDatei(datei, zeilen, { nachZiel, loeschung }) {
+function testauswahl(datei, nachZiel) {
   const { direkt, alle } = erreichendeTests(datei, nachZiel);
-  if (alle.length === 0) {
+  return { erste: direkt.length > 0 ? direkt : alle, alle };
+}
+
+async function pruefeDatei(datei, zeilen, { nachZiel, loeschung, anteil }) {
+  const auswahl = testauswahl(datei, nachZiel);
+  if (auswahl.alle.length === 0) {
     return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} keine Testdatei erreicht die Datei`, status: "NoCoverage" }));
   }
-  const tests = { erste: direkt.length > 0 ? direkt : alle, alle };
+  const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
   if (loeschung === null) return ergebnisse;
   return [...ergebnisse, ...loeschung.pruefe({ datei, zeilen, ergebnisse, tests })];
@@ -267,23 +277,51 @@ async function ohneGleichenSyntaxbaum(zeilen, { von, bis }) {
   return zeilen;
 }
 
-async function mutiere({ von, bis, seite }) {
+async function bestandteile({ von, bis, seite }) {
   const diff = git([...DIFF_ALS_TEXT, von, ...(bis ? [bis] : []), "--", "src/"]);
   const geaendert = geaenderteZeilen(diff, seite);
-  const abgeschaltet = seite === "neu" ? [...geaendert].flatMap(([datei, bereiche]) => abschaltungen(datei, bereiche)) : [];
+  const einheiten = [...geaendert].map(([datei, bereiche]) => ({
+    datei,
+    bereiche,
+    abgeschaltet: seite === "neu" ? abschaltungen(datei, bereiche) : [],
+  }));
   const zeilen = await ohneGleichenSyntaxbaum(geaendert, { von, bis });
-  if (zeilen.size === 0) return abgeschaltet;
-  const zurueck = seite === "alt" ? alterStand(von) : null;
-  const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
+  return einheiten
+    .map((einheit) => (zeilen.has(einheit.datei) ? einheit : { ...einheit, bereiche: undefined }))
+    .filter(({ bereiche, abgeschaltet }) => bereiche !== undefined || abgeschaltet.length > 0);
+}
+
+async function imStand(pruefung, arbeit) {
+  const einheiten = await bestandteile(pruefung);
+  if (einheiten.every(({ bereiche }) => bereiche === undefined)) return arbeit(einheiten, null);
+  const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
-    const nachZiel = await importierer();
-    const ergebnisse = [...abgeschaltet];
-    for (const [datei, bereiche] of zeilen) ergebnisse.push(...(await pruefeDatei(datei, bereiche, { nachZiel, loeschung })));
-    return ergebnisse;
+    return await arbeit(einheiten, await importierer());
   } finally {
     zurueck?.();
+  }
+}
+
+async function messe(einheiten, { nachZiel, auswahl, seite }) {
+  const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
+  const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
+  const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
+  if (gemessen.length === 0) return ergebnisse;
+  const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
+  try {
+    for (const anteil of gemessen) {
+      ergebnisse.push(...(await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { nachZiel, loeschung, anteil })));
+    }
+    return ergebnisse;
+  } finally {
     loeschung?.abbauen();
   }
+}
+
+function mutiere(pruefung, auswahl = null) {
+  return imStand(pruefung, (einheiten, nachZiel) =>
+    messe(einheiten, { nachZiel, seite: pruefung.seite, auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
+  );
 }
 
 function hinzugefuegt(diff) {
@@ -335,9 +373,7 @@ function angenommen({ schluessel, status }, gleichwertige) {
   return gleichwertige.has(schluessel) && !ABGESCHALTET.has(status);
 }
 
-async function pruefe(pruefung, gleichwertige) {
-  const zugriffe = zustandszugriffe(pruefung);
-  const ergebnisse = await mutiere(pruefung);
+function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   const ueberlebend = ergebnisse.filter(ueberlebt);
   const ueberlebende = ueberlebend.filter((eintrag) => !angenommen(eintrag, gleichwertige));
   for (const { schluessel } of ueberlebend.filter((eintrag) => angenommen(eintrag, gleichwertige))) {
@@ -352,6 +388,127 @@ async function pruefe(pruefung, gleichwertige) {
   if (ergebnisse.length > 0) console.log(`${BESTAETIGUNG}: ${bilanz(ergebnisse)}.`);
   console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
   return ueberlebende.length + zugriffe.length;
+}
+
+async function pruefe(pruefung, gleichwertige) {
+  const zugriffe = zustandszugriffe(pruefung);
+  return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung), zugriffe });
+}
+
+async function planen(pruefungen) {
+  const einheiten = [];
+  for (const [pruefung, stand] of pruefungen.entries()) {
+    await imStand(stand, (bestand, nachZiel) => {
+      for (const { datei, bereiche } of bestand) {
+        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, nachZiel).erste.length);
+        einheiten.push(...Array.from({ length: von }, (_leer, index) => ({ pruefung, datei, bereiche, anteil: index + 1, von })));
+      }
+    });
+  }
+  const teile = aufteilen(einheiten);
+  return { teile, pruefsumme: pruefsumme(teile, git(["rev-parse", "HEAD"]).trim()) };
+}
+
+function zeigePlan({ teile }) {
+  if (teile.length === 0) console.log("Plan: keine geänderte Zeile unter src/ mit Mutanten oder Abschaltung.");
+  for (const [index, teil] of teile.entries()) console.log(`Teil ${index + 1} von ${teile.length}: ${teil.map(einheitName).join("; ")}`);
+}
+
+async function schreibePlan(pruefungen, ziel) {
+  const plan = await planen(pruefungen);
+  zeigePlan(plan);
+  writeFileSync(ziel, JSON.stringify({ anzahl: plan.teile.length, teile: matrix(plan.teile), pruefsumme: plan.pruefsumme }));
+  return EXIT_GRUEN;
+}
+
+function teilnummer({ teil, teile }, anzahl) {
+  const [nummer, erwartet] = [Number(teil), Number(teile)];
+  if (erwartet !== anzahl) throw new Error(`der Plan hat ${anzahl} Teile, aufgerufen mit --teile ${teile}`);
+  const gueltig = anzahl === 0 ? nummer === 0 : Number.isInteger(nummer) && nummer >= 1 && nummer <= anzahl;
+  if (!gueltig) throw new Error(`Teil ${teil} gibt es im Plan mit ${anzahl} Teilen nicht`);
+  return nummer;
+}
+
+async function messeTeil(pruefungen, optionen) {
+  const { teile, pruefsumme: summe } = await planen(pruefungen);
+  const nummer = teilnummer(optionen, teile.length);
+  const eigene = teile[nummer - 1] ?? [];
+  console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
+  const messungen = [];
+  for (const [index, stand] of pruefungen.entries()) {
+    const auswahl = eigene.filter(({ pruefung }) => pruefung === index);
+    if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl) });
+  }
+  const alle = messungen.flatMap(({ ergebnisse }) => ergebnisse);
+  const offen = alle.filter(ueberlebt).length;
+  console.log(`Teil ${nummer}: ${alle.length} Ergebnisse, ${offen} in diesen Testdateien nicht getötet; das Urteil fällt im Job Mutationsurteil.`);
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, messungen }));
+  return EXIT_GRUEN;
+}
+
+function teilberichte(ordner, { teile, pruefsumme: summe }) {
+  const berichte = readdirSync(ordner)
+    .filter((name) => ERGEBNISDATEI.test(name))
+    .map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")));
+  const fremd = berichte.filter((bericht) => bericht.pruefsumme !== summe);
+  if (fremd.length > 0) throw new Error(`${fremd.length} Teilergebnisse gehören zu einem anderen Plan`);
+  const gefunden = berichte.map(({ teil }) => teil).sort((links, rechts) => links - rechts);
+  if (JSON.stringify(gefunden) !== JSON.stringify(matrix(teile))) {
+    throw new Error(`erwartet die Teile ${matrix(teile).join(", ")}, gefunden ${gefunden.join(", ") || "keine"}`);
+  }
+  return berichte;
+}
+
+function vereineAnteile(berichte, pruefung) {
+  const nachSchluessel = new Map();
+  for (const { messungen } of berichte) {
+    for (const eintrag of messungen.filter((messung) => messung.pruefung === pruefung).flatMap(({ ergebnisse }) => ergebnisse)) {
+      nachSchluessel.set(eintrag.schluessel, staerker(nachSchluessel.get(eintrag.schluessel) ?? eintrag, eintrag));
+    }
+  }
+  return [...nachSchluessel.values()];
+}
+
+async function zweiteStufe(datei, ergebnisse, { nachZiel, loeschung }) {
+  const uebrig = uebrige(testauswahl(datei, nachZiel));
+  const offen = ergebnisse.filter((eintrag) => eintrag.schluessel.startsWith(`${datei}:`) && ueberlebt(eintrag));
+  if (uebrig.length === 0 || offen.length === 0) return ergebnisse;
+  const mutanten = offen.filter(({ art }) => art !== GELOESCHT && art !== ABSCHALTKOMMENTAR);
+  const vereint = mutanten.length === 0 ? ergebnisse : vereine(ergebnisse, [await durchgang(datei, mutanten.map(({ zeilen }) => zeilen), uebrig)]);
+  const geloescht = offen.filter(({ art }) => art === GELOESCHT);
+  if (loeschung === null || geloescht.length === 0) return vereint;
+  const nachgefasst = new Map(loeschung.nachfassen({ datei, eintraege: geloescht, uebrige: uebrig }).map((eintrag) => [eintrag.schluessel, eintrag]));
+  return vereint.map((eintrag) => nachgefasst.get(eintrag.schluessel) ?? eintrag);
+}
+
+function nachfassen(stand, dateien, ergebnisse) {
+  if (dateien.length === 0) return ergebnisse;
+  return imStand(stand, async (_bestand, nachZiel) => {
+    const loeschung = stand.seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
+    try {
+      let vereint = ergebnisse;
+      for (const datei of dateien) vereint = await zweiteStufe(datei, vereint, { nachZiel, loeschung });
+      return vereint;
+    } finally {
+      loeschung?.abbauen();
+    }
+  });
+}
+
+function geteilteDateien(teile, pruefung) {
+  const einheiten = teile.flat().filter((einheit) => einheit.pruefung === pruefung && einheit.anteil === 1 && einheit.von > 1);
+  return einheiten.map(({ datei }) => datei);
+}
+
+async function urteilen(pruefungen, { urteil, gleichwertige }) {
+  const plan = await planen(pruefungen);
+  const berichte = teilberichte(urteil, plan);
+  let ueberlebende = 0;
+  for (const [index, pruefung] of pruefungen.entries()) {
+    const ergebnisse = await nachfassen(pruefung, geteilteDateien(plan.teile, index), vereineAnteile(berichte, index));
+    ueberlebende += bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) });
+  }
+  return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
 function umbauCommits(basis) {
@@ -372,9 +529,16 @@ async function main() {
       basis: { type: "string" },
       "alter-stand": { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
+      plan: { type: "string" },
+      teil: { type: "string" },
+      teile: { type: "string" },
+      ergebnis: { type: "string" },
+      urteil: { type: "string" },
     },
   });
-  if (values.basis === undefined) {
+  const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
+  const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length;
+  if (values.basis === undefined || ![0, TEILANGABEN].includes(teilAufruf) || betriebsarten > BETRIEBSARTEN_HOECHSTENS) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
@@ -382,6 +546,9 @@ async function main() {
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
     : [{ von: values.basis, seite: "neu" }, ...umbauCommits(values.basis).map((commit) => ({ von: `${commit}^`, bis: commit, seite: "alt" }))];
+  if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan);
+  if (values.teil !== undefined) return messeTeil(pruefungen, values);
+  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige });
   let ueberlebende = 0;
   for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, gleichwertige);
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
