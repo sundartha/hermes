@@ -62,3 +62,4 @@ Starte den Agenten `premortem` und gib ihm nur den Pfad der Phasendatei, keine Z
 3. Starte `node tools/auftrag.mjs lauf <phasendatei>`.
 
 Steigt ein Agent in Teil 2 mit „Auftrag passt nicht: …“ aus, entscheidest du mit dem Nutzer im Gespräch, ob daraus eine größere Änderung wird oder der Auftrag anders geschnitten wird. Du stufst nicht allein hoch.
+In einer Phase aus einem Pitch (`plaene/P-…/phase.json`) gibt der Lauf einen solchen Auftrag und einen, der zweimal rot bleibt, zuerst an den Agenten `planung` zurück. Endet das trotzdem mit einer Entscheidungsnotiz, legst du sie dem Nutzer vor, und ihr entscheidet, ob sich Pitch, Design Doc oder Sicherheitsprüfung ändern; dann geht es mit den geänderten Dokumenten zurück zu Schritt 5 des Skills `pitch`. Ändert sich keins, sagst du ihm, dass der Auftrag so nicht gebaut wird, und er entscheidet, ob die Änderung ruht. Vor seiner Entscheidung startest du `lauf` nicht neu, und die Phasendatei änderst du nicht selbst.
