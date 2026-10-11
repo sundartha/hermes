@@ -6,6 +6,8 @@ const NAME = /^[\da-z-]+$/;
 const MIN_ZUEGE = 1;
 const MAX_ZUEGE = 50;
 const LEER = /^\s*$/;
+const MIT_WERTEN = new Set(["nie-sagen", "gegenueber-sagt"]);
+const GESPERRT = { consult_available: "unavailable", lookup_available: "unavailable" };
 
 function datei(pfad) {
   try {
@@ -21,11 +23,11 @@ function text(wert) {
 
 function pruefungFehler(pruefung) {
   if (!PRUEFARTEN.includes(pruefung?.art)) return `unbekannte Prüfart „${pruefung?.art}“`;
-  if (pruefung.art !== "nie-sagen") return null;
+  if (!MIT_WERTEN.has(pruefung.art)) return null;
   const werte = pruefung.werte;
   return Array.isArray(werte) && werte.length > 0 && werte.every(text)
     ? null
-    : "„nie-sagen“ ohne Werte";
+    : `„${pruefung.art}“ ohne Werte`;
 }
 
 function zuegeFehler(zuege) {
@@ -51,10 +53,11 @@ function fallFehler(fall) {
 export function ladeFaelle(festePfad, weitere) {
   const fest = datei(festePfad);
   const quellen = [fest, ...weitere.map(datei)];
+  const leer = [festePfad, ...weitere].filter((_, stelle) => !(quellen[stelle].faelle?.length > 0));
   const faelle = quellen.flatMap((quelle) =>
     (quelle.faelle ?? []).map((fall) => ({
       ...fall,
-      variablen: { ...fest.variablen, ...quelle.variablen },
+      variablen: { ...fest.variablen, ...quelle.variablen, ...GESPERRT },
     })),
   );
   const namen = faelle.map((fall) => fall.name);
@@ -63,7 +66,7 @@ export function ladeFaelle(festePfad, weitere) {
     ...faelle.flatMap(fallFehler),
     ...doppelt.map((name) => `Fall ${name} steht mehrfach`),
   ];
-  if (faelle.length === 0) fehler.push("keine Fälle");
+  fehler.push(...leer.map((pfad) => `${pfad} enthält keine Fälle`));
   if (fehler.length > 0) throw new Error(`die Fälle ungültig sind: ${fehler.join("; ")}`);
   return faelle;
 }

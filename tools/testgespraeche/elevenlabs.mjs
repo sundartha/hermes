@@ -7,6 +7,7 @@ const FERTIG = new Set(["passed", "failed"]);
 const ERFOLG = "success";
 const NICHT_GEWERTET = "The agent took part in the conversation.";
 const STATUS_FERTIG = "fertig";
+const UMGEBUNG = "staging";
 
 function schluessel() {
   const wert = env.ELEVENLABS_TESTGESPRAECHE_KEY;
@@ -36,6 +37,7 @@ function testDefinition(fall, variablen) {
     success_conditions: fall.bewerter?.length > 0 ? fall.bewerter : [NICHT_GEWERTET],
     simulation_max_turns: fall.max_zuege,
     dynamic_variables: variablen,
+    simulation_environment: UMGEBUNG,
   };
 }
 

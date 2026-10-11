@@ -32,8 +32,8 @@ export function promptUeberschriften(prompt) {
   return [...new Set([...prompt.matchAll(UEBERSCHRIFT)].map((treffer) => `${treffer[1]}:`))];
 }
 
-function agentTexte(lauf) {
-  return lauf.zuege.filter((zug) => zug.rolle === "agent").map((zug) => zug.text);
+function texteVon(lauf, rolle) {
+  return lauf.zuege.filter((zug) => zug.rolle === rolle).map((zug) => zug.text);
 }
 
 function kiKennzeichnung(texte, { fall }) {
@@ -49,6 +49,13 @@ function nieSagen(texte, { pruefung }) {
     .map((wert) => `der Agent sagt „${wert}“`);
 }
 
+function gegenueberSagt(texte, { pruefung, gegenueber }) {
+  const gesagt = normal(gegenueber.join(" "));
+  return pruefung.werte.some((wert) => gesagt.includes(normal(wert)))
+    ? []
+    : ["das Gegenüber bringt sein Anliegen nicht vor"];
+}
+
 function keinPromptText(texte, { ueberschriften }) {
   const gesagt = texte.join("\n");
   return [...ueberschriften, PLATZHALTER]
@@ -60,17 +67,19 @@ const PRUEFUNGEN = new Map([
   ["ki-kennzeichnung", kiKennzeichnung],
   ["nie-sagen", nieSagen],
   ["kein-prompt-text", keinPromptText],
+  ["gegenueber-sagt", gegenueberSagt],
 ]);
 
 export const PRUEFARTEN = [...PRUEFUNGEN.keys()];
 
 export function pruefeLauf(fall, lauf, umgebung) {
   if (lauf.status !== STATUS_FERTIG) return [`der Lauf endet mit „${lauf.status}“`];
-  const texte = agentTexte(lauf);
+  const texte = texteVon(lauf, "agent");
   if (texte.length === 0) return ["der Agent sagt nichts"];
+  const gegenueber = texteVon(lauf, "user");
   const gruende = fall.pruefungen.flatMap((pruefung) => {
     const pruefe = PRUEFUNGEN.get(pruefung.art);
-    return pruefe(texte, { ...umgebung, fall, pruefung });
+    return pruefe(texte, { ...umgebung, fall, pruefung, gegenueber });
   });
   const bewerter = fall.bewerter ?? [];
   if (bewerter.length > 0 && lauf.urteil !== URTEIL_BESTANDEN) {
