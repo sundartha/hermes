@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { testPrompt } from "./agenten.mjs";
 import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { frage } from "./einsatz.mjs";
-import { phasenBefunde } from "./format.mjs";
+import { UMBAU_AUSWEG, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
@@ -66,10 +66,10 @@ function vorschlag(antwort) {
   }
 }
 
-function umbauPhase(phase, auftrag, antwort) {
+export function umbauPhase(phase, auftrag, antwort) {
   const felder = vorschlag(antwort);
   const gewaehlt = Object.fromEntries(UMBAU_FELDER.map((feld) => [feld, felder[feld]]));
-  const umbau = { ...gewaehlt, id: `${auftrag.id}-umbau`, art: "umbau" };
+  const umbau = { ...gewaehlt, id: `${auftrag.id}-umbau`, art: "umbau", prueft: UMBAU_AUSWEG };
   return { ...phase, entwurf: { [umbau.bereich]: felder.entwurf }, auftraege: [umbau] };
 }
 
