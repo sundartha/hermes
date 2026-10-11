@@ -5,6 +5,7 @@ import { matches } from "../pruefungen-messen.mjs";
 
 export const ARTEN = ["funktion", "fehlerbehebung", "umbau"];
 export const FUNKTIONSKARTE = "FUNKTIONSKARTE.md";
+export const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
 const ABNAHMETEST = /^test\/.+\.test\.[cm]?js$/;
@@ -15,6 +16,8 @@ const MAX_BETREFF = 72;
 const CODEOWNERS = ".github/CODEOWNERS";
 const VERANKERT = "/";
 const LEERRAUM = /\s+/;
+const PHASE_AUS_PITCH = /^P-/i;
+const NUMMER = /^[SBT][1-9]\d*$/;
 
 export function ladePhase(pfad) {
   return JSON.parse(readFileSync(pfad, "utf8"));
@@ -146,6 +149,35 @@ function abhaengigkeitBefunde(auftrag, kontext) {
     .map((kennung) => `abhaengigVon nennt ${kennung}, das ist kein anderer Auftrag der Phase`);
 }
 
+function umbauNummernBefunde(auftrag) {
+  if (auftrag.prueft === UMBAU_AUSWEG && auftrag.szenarien === undefined) return [];
+  return [`prueft muss bei einem Umbau genau „${UMBAU_AUSWEG}“ sein, ohne szenarien`];
+}
+
+function szenarienBefunde(nummern, szenarien) {
+  if (szenarien === null || typeof szenarien !== "object" || Array.isArray(szenarien)) {
+    return ["szenarien muss je Nummer aus prueft den wörtlichen Szenariotext enthalten"];
+  }
+  const fehlend = nummern.filter((nummer) => textFehlt(szenarien[nummer]));
+  const fremd = Object.keys(szenarien).filter((nummer) => !nummern.includes(nummer));
+  return [
+    ...fehlend.map((nummer) => `szenarien["${nummer}"] fehlt; dort steht der Szenariotext wörtlich`),
+    ...fremd.map((nummer) => `szenarien nennt ${nummer}, das nicht in prueft steht`),
+  ];
+}
+
+function nummernBefunde(auftrag) {
+  if (auftrag.art === "umbau") return umbauNummernBefunde(auftrag);
+  const nummern = Array.isArray(auftrag.prueft) ? auftrag.prueft : [];
+  if (nummern.length === 0) {
+    return [`prueft muss die Nummern nennen, die der Auftrag prüft (etwa S1, B1, T1); „${UMBAU_AUSWEG}“ gilt nur für einen Umbau`];
+  }
+  const ungueltig = nummern.filter((nummer) => typeof nummer !== "string" || !NUMMER.test(nummer));
+  if (ungueltig.length > 0) return ungueltig.map((nummer) => `prueft nennt ${JSON.stringify(nummer)}, das ist keine Nummer wie S1, B1 oder T1`);
+  const doppelt = nummern.filter((nummer, stelle) => nummern.indexOf(nummer) !== stelle);
+  return [...doppelt.map((nummer) => `prueft nennt ${nummer} doppelt`), ...szenarienBefunde(nummern, auftrag.szenarien)];
+}
+
 function auftragBefunde(auftrag, kontext) {
   const befunde = [
     ...artBefunde(auftrag),
@@ -154,6 +186,7 @@ function auftragBefunde(auftrag, kontext) {
     ...abnahmeBefunde(auftrag, kontext),
     ...nieBefunde(auftrag),
     ...abhaengigkeitBefunde(auftrag, kontext),
+    ...(kontext.ausPitch ? nummernBefunde(auftrag) : []),
   ];
   return befunde.map((befund) => `${auftrag.id}: ${befund}`);
 }
@@ -204,6 +237,7 @@ export function phasenBefunde(phase, root) {
   befunde.push(...kennungBefunde(auftraege));
   const kontext = {
     root,
+    ausPitch: PHASE_AUS_PITCH.test(String(phase.phase)),
     entwurf: phase.entwurf,
     muster: geschuetzteMuster(root),
     kennungen: new Set(auftraege.map((auftrag) => auftrag.id)),
