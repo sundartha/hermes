@@ -69,12 +69,13 @@ Sind alle Fragen unter „Vor dem Bau zu klären“ beantwortet, setz den Status
    - die höchstens drei schwersten Angriffswege aus „Zur Freigabe“ in der Sicherheitsprüfung, mit der Frage, ob das seiner Einschätzung entspricht und ob ihm ein Angriffsweg fehlt;
    - alles, was hingenommen, weggelassen oder übertragen werden soll, aus Premortem, Design Doc und Sicherheitsprüfung;
    - strittige Punkte aus der Gegenprüfung;
+   - jeden Vorschlag unter „Zu entscheiden“ aus „Zur Freigabe“ in der Sicherheitsprüfung, der nicht schon als Punkt in dieser Liste steht, insbesondere neue Grenzen, damit der Nutzer ihn annimmt oder ablehnt, bevor der Planer startet;
    - was sich durch Premortem und Gegenprüfung geändert hat und welche Entscheidungen er mit „wie empfohlen“ übernommen hat.
    Zu „hinnehmen“ und „übertragen“ erklärst du die Einzelheiten nur im Chat; in den Dokumenten steht nur, was offen bleibt, weil das Repo öffentlich ist.
 
 Zu jedem Widerspruch passt du nach der Antwort alle betroffenen Dokumente an, bis sie dasselbe sagen; gibt der Nutzer frei, ohne dazu etwas zu sagen, gilt deine Empfehlung.
 
-Nimmt der Nutzer einen Vorschlag an, der ein Szenario, einen Begriff oder eine Entscheidung ändert, passt du Pitch, Design Doc und Sicherheitsprüfung an. Der Nutzer gibt mit einem Wort im Chat frei; dann setzt du den Status aller Dokumente auf „freigegeben“. Will er etwas ändern, änderst du es und passt die betroffenen Dokumente an.
+Nimmt der Nutzer einen Vorschlag an, der ein Szenario, einen Begriff oder eine Entscheidung ändert, passt du Pitch, Design Doc und Sicherheitsprüfung an. Zu jedem Vorschlag unter „Zu entscheiden“ in der Sicherheitsprüfung trägst du dort ein, ob er angenommen oder abgelehnt ist; gibt der Nutzer frei, ohne etwas dazu zu sagen, gilt deine Empfehlung. Der Nutzer gibt mit einem Wort im Chat frei; dann setzt du den Status aller Dokumente auf „freigegeben“. Will er etwas ändern, änderst du es und passt die betroffenen Dokumente an.
 
 ### 6. Zerlegung
 Nach der Freigabe, ohne Rückfrage:
