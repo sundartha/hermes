@@ -53,7 +53,10 @@ function fallFehler(fall) {
 export function ladeFaelle(festePfad, weitere) {
   const fest = datei(festePfad);
   const quellen = [fest, ...weitere.map(datei)];
-  const leer = [festePfad, ...weitere].filter((_, stelle) => !(quellen[stelle].faelle?.length > 0));
+  const pfade = [festePfad, ...weitere];
+  const leer = quellen.flatMap((quelle, stelle) =>
+    quelle.faelle?.length > 0 ? [] : [pfade[stelle]],
+  );
   const faelle = quellen.flatMap((quelle) =>
     (quelle.faelle ?? []).map((fall) => ({
       ...fall,
