@@ -8,6 +8,7 @@ import { frage } from "./einsatz.mjs";
 import { UMBAU_AUSWEG, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
+import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
@@ -120,7 +121,7 @@ class Runden {
         continue;
       }
       this.fehler.push(fehlerausgabe(ergebnis));
-      if (this.fehler.length === MAX_RUNDEN) return this.entscheidung(ergebnis);
+      if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
       verwerfe(ergebnis.basis, this.kontext.root);
     }
   }
@@ -180,12 +181,26 @@ class Runden {
     const { phase, auftrag } = this.kontext;
     const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
     const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}`;
-    return this.entscheidung(ergebnis, { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [zeile] });
+    const hinweise = hinweiseDesBaus(ergebnis.agenten);
+    return this.zurueckAnDiePlanung(ergebnis, { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
   }
 
-  entscheidung(ergebnis, gestoppt = this.gestoppt()) {
+  zurueckAnDiePlanung(ergebnis, gestoppt) {
+    if (!planbar(this.kontext)) return this.entscheidung(ergebnis, gestoppt);
+    verwerfe(ergebnis.basis, this.kontext.root);
+    const neuschnitt = schneideNeu(this.kontext, gestoppt);
+    return neuschnitt.neu ? NEU_GESCHNITTEN : this.entscheidung(ergebnis, neuschnitt.gestoppt);
+  }
+
+  notiz(gestoppt) {
+    if (gestoppt.notiz !== undefined) return { antwort: gestoppt.notiz, sitzungen: gestoppt.sitzungen };
     const { phase, auftrag, root } = this.kontext;
-    const notiz = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
+    return frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
+  }
+
+  entscheidung(ergebnis, gestoppt) {
+    const { phase, auftrag, root } = this.kontext;
+    const notiz = this.notiz(gestoppt);
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     const notizText = notiz.antwort.trim() || gestoppt.verlauf.join("\n\n");
     const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notizText, "", ...hinweise, ...(hinweise.length > 0 ? [""] : [])].join("\n");

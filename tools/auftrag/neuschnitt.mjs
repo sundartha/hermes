@@ -1,0 +1,300 @@
+import { existsSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { env, execPath } from "node:process";
+import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
+
+import { testPrompt } from "./agenten.mjs";
+import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
+import { setzeEin } from "./einsatz.mjs";
+import { brauchtRotenTest, ladePhase, phasenBefunde } from "./format.mjs";
+import { festhalten, git, kopf, vormerken } from "./git.mjs";
+import { kostenDesAuftrags } from "./kosten.mjs";
+import { fuehreAus } from "./pruefungen.mjs";
+
+export const NEU_GESCHNITTEN = "neu geschnitten";
+export const NEUSCHNITTE_JE_AUFTRAG = 1;
+export const PLANUNG_VERSUCHE = 2;
+const PLANER = "planung";
+const PHASENDATEI = "phase.json";
+const PFLICHT = ["pitch.md", "sicherheit.md"];
+const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
+const PITCH_PHASE = /^P-/i;
+const NEUSCHNITT_TEIL = /-n[1-9]\d*(?=-|$)/g;
+const NUMMER = /^[1-9]\d*$/;
+const PITCH_AENDERN = /^Pitch ändern:\s*(\S.*)$/m;
+const EMPFEHLUNG = /^Empfehlung:\s*(\S.*)$/m;
+const PASST_NICHT = /^Zerlegung passt nicht:\s*(\S.*)$/m;
+const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
+const ABDECKUNG = fileURLToPath(new URL("../abdeckung-pruefen.mjs", import.meta.url));
+const CODEBLOCK = "```";
+const NUL = "\0";
+const STATUS_SPALTEN = 3;
+
+function abschnitt(titel, zeilen) {
+  return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
+}
+
+function planOrt({ phase, phasendatei, root, plan }) {
+  if (plan === undefined || !PITCH_PHASE.test(phase.phase)) return null;
+  const datei = relative(root, resolve(root, phasendatei));
+  const ordner = dirname(datei);
+  const imRepo = !datei.startsWith("..") && !isAbsolute(datei);
+  const vollstaendig = basename(datei) === PHASENDATEI && PFLICHT.every((name) => existsSync(join(root, ordner, name)));
+  return imRepo && vollstaendig ? { datei, ordner } : null;
+}
+
+export function planbar(kontext) {
+  return planOrt(kontext) !== null;
+}
+
+function generation(kennung) {
+  return (kennung.match(NEUSCHNITT_TEIL) ?? []).length;
+}
+
+function istNachfolger(kennung, id) {
+  const vorne = `${kennung}-n`;
+  return typeof id === "string" && id.startsWith(vorne) && NUMMER.test(id.slice(vorne.length));
+}
+
+function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befunde }) {
+  const dokumente = DOKUMENTE.map((name) => join(ort.ordner, name)).filter((pfad) => existsSync(join(root, pfad)));
+  const fertig = [...plan.fertig];
+  const vorher = befunde.length > 0
+    ? [abschnitt("Befunde zu deinem vorigen Neuschnitt", [CODEBLOCK, ...befunde, CODEBLOCK, "", "Die Phasendatei steht wieder wie vor diesem Neuschnitt."])]
+    : [];
+  return [
+    abschnitt("Neuschnitt", [
+      gestoppt.kopf,
+      "",
+      `Phasendatei: ${ort.datei}`,
+      `Freigegebene Dokumente: ${dokumente.join(", ")}`,
+      `Schon übernommen: ${fertig.length > 0 ? fertig.join(", ") : "keiner"}`,
+      `Die neuen Aufträge heißen ${auftrag.id}-n1, ${auftrag.id}-n2 und so weiter.`,
+    ]),
+    testPrompt(phase, auftrag),
+    abschnitt("Verlauf", [CODEBLOCK, ...gestoppt.verlauf, ...(gestoppt.hinweise ?? []), CODEBLOCK]),
+    ...vorher,
+  ].join("\n");
+}
+
+function geaenderteDateien(root) {
+  const eintraege = git(["status", "--porcelain", "--untracked-files=all", "-z"], { cwd: root }).split(NUL);
+  return eintraege.filter(Boolean).map((eintrag) => eintrag.slice(STATUS_SPALTEN));
+}
+
+function zuruecksetzen(root, stand) {
+  git(["reset", "-q", "--hard", stand], { cwd: root });
+  git(["clean", "-q", "-fd"], { cwd: root });
+}
+
+function vorgaengerNachSchnitt(vorher, schnitt) {
+  return [...new Set((vorher ?? []).flatMap((id) => (id === schnitt.kennung ? schnitt.neue : [id])))].sort();
+}
+
+function unveraendertBefunde(alt, auftraege, schnitt) {
+  return alt.auftraege
+    .filter(({ id }) => id !== schnitt.kennung)
+    .flatMap((vorher) => {
+      const jetzt = auftraege.find(({ id }) => id === vorher.id);
+      if (jetzt === undefined) return [`${vorher.id} fehlt; ein Neuschnitt ersetzt nur ${schnitt.kennung}.`];
+      const soll = { ...vorher, abhaengigVon: vorgaengerNachSchnitt(vorher.abhaengigVon, schnitt) };
+      const ist = { ...jetzt, abhaengigVon: [...new Set(jetzt.abhaengigVon ?? [])].sort() };
+      return isDeepStrictEqual(soll, ist) ? [] : [`${vorher.id} hat sich geändert; ein Neuschnitt ersetzt nur ${schnitt.kennung}.`];
+    });
+}
+
+function saetze(nie) {
+  if (Array.isArray(nie)) return nie;
+  return nie && typeof nie === "object" ? Object.values(nie) : [];
+}
+
+function verbotBefunde(vorher, neue) {
+  const weiter = new Set(neue.filter(brauchtRotenTest).flatMap(({ wasDarfNiePassieren }) => saetze(wasDarfNiePassieren)));
+  return saetze(vorher.wasDarfNiePassieren)
+    .filter((satz) => !weiter.has(satz))
+    .map((satz) => `Kein neuer Auftrag mit eigenem Abnahmetest übernimmt aus ${vorher.id} wörtlich: ${satz}`);
+}
+
+function vorgaengerBefunde(vorher, neue) {
+  const genannt = new Set(neue.flatMap(({ abhaengigVon }) => abhaengigVon ?? []));
+  return (vorher.abhaengigVon ?? [])
+    .filter((id) => !genannt.has(id))
+    .map((id) => `${vorher.id} hing von ${id} ab; das muss auch ein neuer Auftrag in abhaengigVon nennen.`);
+}
+
+function entwurfBefunde(alt, neu, kennung) {
+  const bereiche = new Set(alt.auftraege.filter(({ id }) => id !== kennung).map(({ bereich }) => bereich));
+  return [...bereiche]
+    .filter((bereich) => !isDeepStrictEqual(alt.entwurf?.[bereich], neu.entwurf?.[bereich]))
+    .map((bereich) => `Der Entwurf für ${bereich} gehört auch anderen Aufträgen und bleibt, wie er ist.`);
+}
+
+function rahmen(phase) {
+  return { ...phase, auftraege: undefined, entwurf: undefined };
+}
+
+function schnittBefunde(alt, neu, vorher) {
+  const kennung = vorher.id;
+  const bekannt = new Set(alt.auftraege.map(({ id }) => id));
+  const neue = neu.auftraege.filter(({ id }) => !bekannt.has(id));
+  const schnitt = { kennung, neue: neue.map(({ id }) => id) };
+  return [
+    ...(neu.auftraege.some(({ id }) => id === kennung) ? [`${kennung} steht noch in der Phasendatei; der Neuschnitt ersetzt ihn.`] : []),
+    ...(neue.length === 0 ? [`Der Neuschnitt nennt keinen neuen Auftrag statt ${kennung}.`] : []),
+    ...neue.filter(({ id }) => !istNachfolger(kennung, id)).map(({ id }) => `${id}: neue Aufträge heißen ${kennung}-n1, ${kennung}-n2 und so weiter.`),
+    ...unveraendertBefunde(alt, neu.auftraege, schnitt),
+    ...verbotBefunde(vorher, neue),
+    ...vorgaengerBefunde(vorher, neue),
+    ...entwurfBefunde(alt, neu, kennung),
+    ...(isDeepStrictEqual(rahmen(alt), rahmen(neu)) ? [] : ["Außer auftraege und entwurf bleibt die Phasendatei, wie sie ist."]),
+  ];
+}
+
+function abdeckungBefunde(root, ordner) {
+  const lauf = fuehreAus("abdeckung", [execPath, ABDECKUNG, ordner], { cwd: root, env });
+  return lauf.exitCode === 0 ? [] : lauf.ausgabe.split("\n").filter((zeile) => zeile.trim() !== "");
+}
+
+function geschnittenePhase({ phase, auftrag, root }, ort) {
+  const fremd = geaenderteDateien(root).filter((pfad) => pfad !== ort.datei);
+  if (fremd.length > 0) return { befunde: [`Der Planer darf nur ${ort.datei} ändern, nicht ${fremd.join(", ")}.`] };
+  let neu;
+  try {
+    neu = ladePhase(join(root, ort.datei));
+  } catch (fehler) {
+    return { befunde: [`${ort.datei} ist nicht lesbar: ${fehler.message}`] };
+  }
+  const format = phasenBefunde(neu, root);
+  if (format.length > 0) return { befunde: format };
+  const befunde = [...schnittBefunde(phase, neu, auftrag), ...abdeckungBefunde(root, ort.ordner)];
+  return befunde.length > 0 ? { befunde } : { neu };
+}
+
+function nachfolger(neu, kennung) {
+  return neu.auftraege.filter(({ id }) => istNachfolger(kennung, id)).map(({ id, bereich }) => ({ id, bereich }));
+}
+
+function commitNachricht({ phase, auftrag }, gestoppt, neu) {
+  const neue = nachfolger(neu, auftrag.id).map(({ id }) => id);
+  return [
+    `Schneide den Auftrag ${auftrag.id} neu`,
+    "",
+    `Warum: ${gestoppt.kopf}`,
+    `Der Planer ersetzt ihn durch ${neue.join(", ")}; pruefe und die Abdeckungsprüfung sind grün.`,
+    "",
+    `Auftrag: ${phase.phase}/${auftrag.id}`,
+    ...(phase.paket ? [`Paket: ${phase.paket}`] : []),
+    "",
+  ].join("\n");
+}
+
+function uebernimm(kontext, ort, { gestoppt, neu }) {
+  vormerken([ort.datei], kontext.root);
+  const lauf = festhalten(commitNachricht(kontext, gestoppt, neu), kontext.root);
+  if (lauf.status === 0) return { neu };
+  return { befunde: [`git commit des Neuschnitts endete mit Exit ${lauf.status}: ${lauf.stderr.trim()}`] };
+}
+
+function ohneSchnitt(antwort) {
+  const frage = PITCH_AENDERN.exec(antwort)?.[1];
+  const empfehlung = EMPFEHLUNG.exec(antwort)?.[1];
+  if (frage !== undefined && empfehlung !== undefined) return { frage, empfehlung };
+  if (frage !== undefined) return { befunde: ["Zu „Pitch ändern: …“ fehlt die Zeile „Empfehlung: …“."] };
+  const passtNicht = PASST_NICHT.exec(antwort)?.[1];
+  return passtNicht === undefined ? null : { passtNicht };
+}
+
+function auswerten(kontext, ort, { lauf, gestoppt }) {
+  const antwort = ohneSchnitt(lauf.antwort ?? "");
+  if (antwort !== null) return antwort;
+  if (lauf.grund) return { befunde: [lauf.grund] };
+  if (lauf.exitCode !== 0) return { befunde: [`Der Planer endete mit Exit ${lauf.exitCode}.`] };
+  const geschnitten = geschnittenePhase(kontext, ort);
+  return geschnitten.neu ? uebernimm(kontext, ort, { gestoppt, neu: geschnitten.neu }) : geschnitten;
+}
+
+function eingriffBefunde(root, stand) {
+  return [
+    ...(kopf(root) === stand.kopf ? [] : ["Der Planer darf nicht committen; der Lauf setzt auf den Stand vor ihm zurück."]),
+    ...(fingerabdruck(root) === stand.belege ? [] : [`Der Planer hat ${BELEGE}/ verändert.`]),
+  ];
+}
+
+function planeNeu(kontext, ort, vorher) {
+  const { phase, auftrag, root } = kontext;
+  const stand = { kopf: kopf(root), belege: fingerabdruck(root) };
+  const start = { agent: PLANER, argumente: ["--settings", OHNE_HOOKS] };
+  const lauf = setzeEin({ rolle: PLANER, phase, auftrag, root }, neuschnittPrompt(kontext, ort, vorher), start);
+  let ergebnis = { befunde: ["Die Auswertung des Neuschnitts brach ab."] };
+  try {
+    const eingriff = eingriffBefunde(root, stand);
+    ergebnis = eingriff.length > 0 ? { befunde: eingriff } : auswerten(kontext, ort, { lauf, gestoppt: vorher.gestoppt });
+  } finally {
+    if (!ergebnis.neu) zuruecksetzen(root, stand.kopf);
+  }
+  return { ...ergebnis, sitzungen: lauf.sitzungen };
+}
+
+function pitchFrage({ phase, auftrag }, gestoppt, versuch) {
+  const anlass = `Der Planer kann den Auftrag ${auftrag.id} der Phase ${phase.phase} nur neu schneiden, wenn sich der Pitch ändert.`;
+  const notiz = `Pitch ändern: ${versuch.frage}\nEmpfehlung: ${versuch.empfehlung}`;
+  return { ...gestoppt, kopf: `${anlass}\n\n${gestoppt.kopf}`, notiz, sitzungen: versuch.sitzungen };
+}
+
+function versuchsZeilen(versuch, nummer) {
+  if (versuch.passtNicht !== undefined) return [`Neuschnitt ${nummer}: Zerlegung passt nicht: ${versuch.passtNicht}`];
+  return [`Neuschnitt ${nummer}: abgelehnt`, ...versuch.befunde];
+}
+
+function ohneErfolg(gestoppt, versuche) {
+  const satz = versuche.at(-1).passtNicht === undefined
+    ? "Der Planer hat den Auftrag nicht so neu geschnitten, dass pruefe und die Abdeckungsprüfung grün sind."
+    : "Der Planer meldet, dass sich der Auftrag mit den freigegebenen Dokumenten nicht neu schneiden lässt.";
+  return { ...gestoppt, kopf: `${gestoppt.kopf}\n\n${satz}`, verlauf: [...gestoppt.verlauf, ...versuche.flatMap((versuch, index) => versuchsZeilen(versuch, index + 1))] };
+}
+
+function grenzeErreicht(gestoppt) {
+  const satz = `Der Auftrag stammt schon aus einem Neuschnitt; höchstens ${NEUSCHNITTE_JE_AUFTRAG} Neuschnitt je Auftrag, danach entscheidet der Nutzer.`;
+  return { ...gestoppt, kopf: `${gestoppt.kopf}\n\n${satz}` };
+}
+
+function versuche(kontext, ort, gestoppt) {
+  const liste = [];
+  while (liste.length < PLANUNG_VERSUCHE) {
+    const versuch = planeNeu(kontext, ort, { gestoppt, befunde: liste.at(-1)?.befunde ?? [] });
+    liste.push(versuch);
+    if (versuch.neu || versuch.frage !== undefined || versuch.passtNicht !== undefined) break;
+  }
+  return liste;
+}
+
+function belege(kontext, gestoppt, liste) {
+  const { phase, auftrag, root } = kontext;
+  const agenten = liste.flatMap(({ sitzungen }) => sitzungen);
+  schreibeBeleg(root, {
+    phase: phase.phase,
+    auftrag: `${auftrag.id}-neuschnitt`,
+    ergebnis: liste.at(-1).neu ? GRUEN : ROT,
+    grund: gestoppt.kopf,
+    bereich: auftrag.bereich,
+    versuche: liste.map(({ frage, empfehlung, passtNicht, befunde, neu }) => ({ frage, empfehlung, passtNicht, befunde, neu: neu && nachfolger(neu, auftrag.id) })),
+    agenten,
+    kosten: kostenDesAuftrags(root, agenten),
+    zeit: new Date().toISOString(),
+  });
+}
+
+export function schneideNeu(kontext, gestoppt) {
+  const ort = planOrt(kontext);
+  if (generation(kontext.auftrag.id) >= NEUSCHNITTE_JE_AUFTRAG) return { gestoppt: grenzeErreicht(gestoppt) };
+  const liste = versuche(kontext, ort, gestoppt);
+  belege(kontext, gestoppt, liste);
+  const letzter = liste.at(-1);
+  if (letzter.neu) {
+    console.log(`Auftrag ${kontext.auftrag.id}: ${NEU_GESCHNITTEN}, weiter mit den Aufträgen des Neuschnitts.`);
+    return { neu: letzter.neu };
+  }
+  if (letzter.frage !== undefined) return { gestoppt: pitchFrage(kontext, gestoppt, letzter) };
+  return { gestoppt: ohneErfolg(gestoppt, liste) };
+}
