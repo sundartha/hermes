@@ -160,12 +160,6 @@ jobs:
           QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
 
-      - name: Mutationsprüfung
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' && steps.installskripte.outcome == 'success' && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: npm run test:mutation -- --basis "$PR_BASE_SHA"
-
       - name: Testwirkung
         if: ${{ !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
         env:
@@ -240,10 +234,147 @@ jobs:
           TEIL: ${{ matrix.teil }}
         run: echo "teil-$TEIL=$(jq .bestanden .pruefung/regression.json)" >> "$GITHUB_OUTPUT"
 
+  mutationsplan:
+    name: Mutationsplan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      messen: ${{ steps.plan.outputs.messen }}
+      teile: ${{ steps.plan.outputs.teile }}
+      anzahl: ${{ steps.plan.outputs.anzahl }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Gleicher Stand
+        id: gleich
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
+
+      - name: Mutationsplan
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GLEICH: ${{ steps.gleich.outputs.gleich }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
+            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json"
+            teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
+            anzahl=$(jq -e .anzahl "$RUNNER_TEMP/mutationsplan.json")
+            printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
+          else
+            echo "Mutationsprüfung nicht nötig: Ereignis $EVENT_NAME, gleicher Stand ${GLEICH:-ohne Angabe}"
+            printf 'messen=nein\nteile=[0]\nanzahl=0\n' >> "$GITHUB_OUTPUT"
+          fi
+
+  mutationspruefung:
+    name: Mutationsprüfung ${{ matrix.teil }}
+    needs: mutationsplan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: ${{ fromJSON(needs.mutationsplan.outputs.teile) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Mutationsprüfung
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
+        run: npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json"
+
+      - name: Teilergebnis hochladen
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-teil-${{ matrix.teil }}
+          path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  mutationsurteil:
+    name: Mutationsurteil
+    needs: [mutationsplan, mutationspruefung]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Teilergebnisse laden
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: mutation-teil-*
+          path: ${{ runner.temp }}/mutation
+          merge-multiple: true
+
+      - name: Mutationsurteil
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation"
+
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, tests]
+    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsurteil]
     runs-on: ubuntu-latest
     steps:
       - name: Bestandene Tests aller Teile
