@@ -5,6 +5,9 @@ import { join } from "node:path";
 const NUMSTAT_FELDER = 3;
 const BINAER = "-";
 const NUL = "\0";
+const AUFTRAG_ZEILE = "^Auftrag: ";
+const RUECKNAHME_ZEILE = "^This reverts commit ";
+const ZURUECKGENOMMEN = /^This reverts commit ([0-9a-f]{40})\.$/gm;
 
 export function git(args, { cwd, eingabe } = {}) {
   const lauf = spawnSync("git", args, { cwd, encoding: "utf8", input: eingabe });
@@ -52,6 +55,15 @@ export function vormerken(pfade, cwd) {
 
 export function festhalten(nachricht, cwd) {
   return spawnSync("git", ["commit", "-q", "-F", "-"], { cwd, encoding: "utf8", input: nachricht });
+}
+
+export function geltendeTrailer(cwd) {
+  const ruecknahmen = git(["log", `--grep=${RUECKNAHME_ZEILE}`, "--format=%B"], { cwd });
+  const zurueckgenommen = new Set([...ruecknahmen.matchAll(ZURUECKGENOMMEN)].map(([, alt]) => alt));
+  const ausgabe = git(["log", "-z", `--grep=${AUFTRAG_ZEILE}`, "--format=%H%n%(trailers:only,unfold)"], { cwd });
+  const commits = ausgabe.split(NUL).map((eintrag) => eintrag.split("\n"));
+  const geltend = commits.filter(([sha]) => sha !== "" && !zurueckgenommen.has(sha));
+  return geltend.map(([, ...trailer]) => new Set(trailer.filter(Boolean)));
 }
 
 export function weichZuruecksetzen(basis, cwd) {
