@@ -4,8 +4,9 @@ import { stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { pruefeBestueckung, pushFelder } from "./testgespraeche/bestueckung.mjs";
 import { bewerte, promptUeberschriften } from "./testgespraeche/bewertung.mjs";
-import { fuehreAus } from "./testgespraeche/elevenlabs.mjs";
+import { fuehreAus, holeAgent } from "./testgespraeche/elevenlabs.mjs";
 import { ladeFaelle, variablenVon } from "./testgespraeche/faelle.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -27,6 +28,7 @@ const OPTIONEN = {
   "frist-s": { type: "string", default: String(STANDARD_FRIST_S) },
   "takt-ms": { type: "string", default: String(STANDARD_TAKT_MS) },
   plan: { type: "boolean", default: false },
+  "push-felder": { type: "boolean", default: false },
 };
 
 function ganzzahl(wert, name) {
@@ -51,9 +53,12 @@ function agentAus(agent) {
   return agent;
 }
 
+function vorlage() {
+  return JSON.parse(readFileSync(VORLAGE, "utf8"));
+}
+
 function ueberschriften() {
-  const { agent } = JSON.parse(readFileSync(VORLAGE, "utf8"));
-  const { prompt } = agent.conversation_config.agent;
+  const { prompt } = vorlage().agent.conversation_config.agent;
   return promptUeberschriften(prompt.prompt);
 }
 
@@ -85,6 +90,10 @@ function plan(faelle, wiederholungen) {
 
 async function main() {
   const { values } = parseArgs({ options: OPTIONEN });
+  if (values["push-felder"]) {
+    stdout.write(`--felder=${pushFelder(vorlage()).join(",")}\n`);
+    return EXIT_GRUEN;
+  }
   const wiederholungen = wiederholungenAus(values.wiederholungen);
   const faelle = ladeFaelle(FESTE_FAELLE, values.fall);
   if (values.plan) {
@@ -92,6 +101,7 @@ async function main() {
     return EXIT_GRUEN;
   }
   const agent = agentAus(values.agent);
+  pruefeBestueckung(vorlage(), await holeAgent(agent));
   const laeufe = await fuehreAus({
     agent,
     faelle,

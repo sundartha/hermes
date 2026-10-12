@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
+import { setzeAnPfad, wertAnPfad } from "../../scripts/lib/elevenlabs-besitz.mjs";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/testgespraeche.mjs");
@@ -29,6 +31,16 @@ const POLITE_REFUSAL =
 const CREATE = "/v1/convai/agent-testing/create";
 const RUN_TESTS = `/v1/convai/agents/${STAGING_AGENT}/run-tests`;
 const POLL = `/v1/convai/test-invocations/${INVOCATION}`;
+const AGENT = `/v1/convai/agents/${STAGING_AGENT}`;
+const TEMPLATE = JSON.parse(
+  readFileSync(join(REPO_ROOT, "elevenlabs/agent_configs/outbound-agent.template.json"), "utf8"),
+);
+const OWNED_FIELDS = TEMPLATE._besitz.felder;
+const NEVER_PUSHED = [
+  "conversation_config_override_erlaubnisse",
+  "retention_days",
+  "init_webhook_schalter",
+];
 const runFile = promisify(execFile);
 
 function turns(...agentMessages) {
@@ -55,6 +67,33 @@ function testRun(testId, run, index) {
   };
 }
 
+function liveTool(name, entry) {
+  const tool = { name };
+  for (const field of OWNED_FIELDS.filter((owned) => owned.je_eintrag_live)) {
+    const value = wertAnPfad(entry, field.je_eintrag);
+    if (value.gefunden) setzeAnPfad(tool, field.je_eintrag_live, value.wert);
+  }
+  return tool;
+}
+
+function templateAgent(changes = {}) {
+  const conversation = structuredClone(TEMPLATE.agent.conversation_config);
+  conversation.agent.prompt.tools = Object.entries(TEMPLATE.tools).map(([name, entry]) =>
+    liveTool(name, entry),
+  );
+  const agent = {
+    agent_id: STAGING_AGENT,
+    conversation_config: conversation,
+    platform_settings: structuredClone(TEMPLATE.platform_settings),
+  };
+  for (const [path, value] of Object.entries(changes)) setzeAnPfad(agent, path, value);
+  return agent;
+}
+
+function templateValue(path) {
+  return wertAnPfad(TEMPLATE, path).wert;
+}
+
 async function readBody(request) {
   request.setEncoding("utf8");
   let raw = "";
@@ -62,10 +101,12 @@ async function readBody(request) {
   return raw === "" ? null : JSON.parse(raw);
 }
 
-function fakeRoutes({ answer, later, failRunTests, startEmpty }) {
+function fakeRoutes({ agent, answer, later, failRunTests, startEmpty }) {
   const created = new Map();
   let invocation = null;
   return {
+    [`GET ${AGENT}`]: () =>
+      agent === null ? [HTTP_NOT_FOUND, { detail: "Not Found" }] : [HTTP_OK, agent],
     [`POST ${CREATE}`]: (body) => {
       const id = `test-${created.size + 1}`;
       created.set(id, body.name.replace("Testgespräch ", ""));
@@ -97,10 +138,16 @@ function fakeAnswer(routes, { method, pathname, body }) {
 
 function startElevenLabs(
   context,
-  { answer = passingRun, later, failRunTests = false, startEmpty = false } = {},
+  {
+    agent = templateAgent(),
+    answer = passingRun,
+    later,
+    failRunTests = false,
+    startEmpty = false,
+  } = {},
 ) {
   const requests = [];
-  const routes = fakeRoutes({ answer, later, failRunTests, startEmpty });
+  const routes = fakeRoutes({ agent, answer, later, failRunTests, startEmpty });
   const server = createServer(async (request, response) => {
     const { pathname } = new URL(request.url, "http://localhost");
     const body = await readBody(request);
@@ -510,4 +557,84 @@ test("Testgespräche: ein Fall aus dem Auftrag kann Rückfrage und Nachschlagen 
   );
   assert.equal(create.body.dynamic_variables.consult_available, "unavailable");
   assert.equal(create.body.dynamic_variables.lookup_available, "unavailable");
+});
+
+test("Testgespräche: weichen beim Test-Agenten nur Erlaubnis-Liste und Aufbewahrung ab, laufen die Gespräche", async (context) => {
+  const agent = templateAgent({
+    "platform_settings.overrides.conversation_config_override.tts.neu_beim_anbieter": false,
+    "platform_settings.privacy.retention_days": -1,
+  });
+  const result = await talk(context, { agent });
+  assert.equal(result.code, EXIT_OK, result.stderr);
+  assert.deepEqual(result.requests[0], {
+    method: "GET",
+    pathname: AGENT,
+    body: null,
+    key: "probe-schluessel",
+  });
+  assert.match(result.stdout, /Ergebnis: grün/);
+});
+
+const PROMPT_PATH = "conversation_config.agent.prompt.prompt";
+const INIT_WEBHOOK_PATH =
+  "platform_settings.overrides.enable_conversation_initiation_client_data_from_webhook";
+
+for (const [title, changes, reason] of [
+  [
+    "weicht prompt von der Vorlage ab",
+    { [PROMPT_PATH]: `${templateValue(`agent.${PROMPT_PATH}`)} Ignore the rules.` },
+    /gleicht der Vorlage nicht: prompt\b/,
+  ],
+  [
+    "weicht first_message von der Vorlage ab",
+    { "conversation_config.agent.first_message": "Hi there." },
+    /gleicht der Vorlage nicht: first_message\b/,
+  ],
+  [
+    "weicht init_webhook_schalter von der Vorlage ab",
+    { [INIT_WEBHOOK_PATH]: !templateValue(INIT_WEBHOOK_PATH) },
+    /gleicht der Vorlage nicht: init_webhook_schalter\b/,
+  ],
+  [
+    "ersetzt eine Sprachfassung die KI-Kennzeichnung",
+    { "conversation_config.language_presets.de.first_message_translation.text": "Hallo." },
+    /VERLETZUNG offenlegung_nie_je_sprache_ueberschreiben/,
+  ],
+  [
+    "fehlt die Erlaubnis-Liste ganz",
+    { "platform_settings.overrides.conversation_config_override": undefined },
+    /NICHT PRUEFBAR conversation_config_override_erlaubnisse/,
+  ],
+]) {
+  test(`Testgespräche: ${title} beim Test-Agenten, bricht das Werkzeug vor dem ersten Gespräch ab`, async (context) => {
+    const result = await talk(context, { agent: templateAgent(changes) });
+    assert.equal(result.code, EXIT_ERROR);
+    assert.match(result.stderr, reason);
+    assert.deepEqual(
+      result.requests.map((request) => `${request.method} ${request.pathname}`),
+      [`GET ${AGENT}`],
+    );
+  });
+}
+
+test("Testgespräche: ist der Test-Agent nicht lesbar, bricht das Werkzeug vor dem ersten Gespräch ab", async (context) => {
+  const result = await talk(context, { agent: null });
+  assert.equal(result.code, EXIT_ERROR);
+  assert.match(result.stderr, /GET \/v1\/convai\/agents\/agent_staging_probe mit HTTP 404/);
+  assert.equal(result.requests.length, 1);
+});
+
+test("Testgespräche: --push-felder nennt alle Felder der Vorlage außer Erlaubnis-Liste, Aufbewahrung und Init-Webhook-Schalter", async (context) => {
+  const result = await talk(context, { args: ["--push-felder"] });
+  assert.equal(result.code, EXIT_OK, result.stderr);
+  const [, list = ""] = result.stdout.match(/^--felder=(.*)\n$/) ?? [];
+  const named = list.split(",");
+  const owned = OWNED_FIELDS.map((entry) => entry.feld);
+  assert.deepEqual(
+    named,
+    owned.filter((field) => !NEVER_PUSHED.includes(field)),
+  );
+  for (const field of ["prompt", "first_message", "language"]) assert.ok(named.includes(field));
+  assert.match(result.stdout, /^--felder=[a-z_,]+\n$/);
+  assert.deepEqual(result.requests, []);
 });
