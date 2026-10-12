@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -84,18 +84,22 @@ export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   ].join("\n");
 }
 
-function beobachte(befehl, { root, umgebung, eingabe }) {
-  const daten = JSON.stringify({ befehl, eingabe });
-  const lauf = spawnSync(execPath, [WAECHTER], { cwd: root, env: umgebung, input: daten, encoding: "utf8" });
+function auswertung({ stdout, status, stderr }) {
   try {
-    return JSON.parse(lauf.stdout);
+    return JSON.parse(stdout);
   } catch {
-    return { exitCode: lauf.status ?? EXIT_OHNE_STATUS, antwort: "", fehlerausgabe: lauf.stderr ?? "" };
+    return { exitCode: status ?? EXIT_OHNE_STATUS, antwort: "", fehlerausgabe: stderr ?? "" };
   }
 }
 
-export function starteAgent({ rolle, auftrag, root, fortsetzung }, prompt, start = {}) {
-  const agent = start.agent ?? agentFuer(rolle, auftrag.bereich);
+function agentName(rolle, auftrag, start) {
+  const bereich = auftrag?.bereich;
+  if ((start.agent ?? "") === "" && bereich === undefined) throw new Error("Ohne Bereich braucht der Start einen Agenten.");
+  return start.agent ?? agentFuer(rolle, bereich);
+}
+
+function vorbereitung({ rolle, auftrag, fortsetzung }, prompt, start) {
+  const agent = agentName(rolle, auftrag, start);
   const sitzung = fortsetzung ?? randomUUID();
   const befehl = [
     env.HERMES_CLAUDE ?? "claude",
@@ -109,7 +113,29 @@ export function starteAgent({ rolle, auftrag, root, fortsetzung }, prompt, start
     "acceptEdits",
     ...VERLAUF_AUSGABE,
   ];
-  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag.abnahme };
-  const lauf = beobachte(befehl, { root, umgebung, eingabe: prompt });
-  return { rolle, agent, sitzung, befehl: befehl.join(" "), ...lauf };
+  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme };
+  const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze: start.kontextGrenze, vollstaendig: start.vollstaendig });
+  return { kopf: { rolle, agent, sitzung, befehl: befehl.join(" ") }, umgebung, daten };
+}
+
+export function starteAgent(kontext, prompt, start = {}) {
+  const { kopf, umgebung, daten } = vorbereitung(kontext, prompt, start);
+  const lauf = spawnSync(execPath, [WAECHTER], { cwd: kontext.root, env: umgebung, input: daten, encoding: "utf8" });
+  return { ...kopf, ...auswertung(lauf) };
+}
+
+export function starteAgentParallel(kontext, prompt, start = {}) {
+  const { kopf, umgebung, daten } = vorbereitung(kontext, prompt, start);
+  const kind = spawn(execPath, [WAECHTER], { cwd: kontext.root, env: umgebung });
+  const ausgabe = { stdout: "", stderr: "" };
+  for (const kanal of ["stdout", "stderr"]) {
+    kind[kanal].setEncoding("utf8");
+    kind[kanal].on("data", (stueck) => {
+      ausgabe[kanal] += stueck;
+    });
+  }
+  kind.stdin.end(daten);
+  return new Promise((fertig) => {
+    kind.on("close", (status) => fertig({ ...kopf, ...auswertung({ ...ausgabe, status }) }));
+  });
 }

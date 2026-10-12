@@ -9,9 +9,9 @@ const MAX_FEHLERAUSGABE_ZEICHEN = 2000;
 const GNADENFRIST_MS = 10_000;
 const ABBRUCH_SIGNALE = ["SIGINT", "SIGTERM"];
 
-const { befehl, eingabe } = JSON.parse(readFileSync(0, "utf8"));
+const { befehl, eingabe, kontextGrenze, vollstaendig } = JSON.parse(readFileSync(0, "utf8"));
 const [programm, ...argumente] = befehl;
-const verlauf = new Verlauf();
+const verlauf = new Verlauf({ kontextGrenze });
 const kind = spawn(programm, argumente, { detached: true, stdio: ["pipe", "pipe", "pipe"] });
 let aktion = null;
 let fehlerausgabe = "";
@@ -56,5 +56,5 @@ createInterface({ input: kind.stdout }).on("line", (zeile) => {
 kind.on("close", (code) => {
   const exitCode = code ?? EXIT_OHNE_STATUS;
   if (exitCode !== 0) verlauf.pruefeLimit(fehlerausgabe);
-  process.stdout.write(JSON.stringify({ exitCode, aktion, fehlerausgabe, ...verlauf.zusammenfassung() }));
+  process.stdout.write(JSON.stringify({ exitCode, aktion, fehlerausgabe, ...verlauf.zusammenfassung({ vollstaendig }) }));
 });

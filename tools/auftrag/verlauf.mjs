@@ -25,13 +25,13 @@ function teile(nachricht) {
   return Array.isArray(nachricht?.content) ? nachricht.content : [];
 }
 
-function alsText(inhalt) {
+export function alsText(inhalt) {
   if (typeof inhalt === "string") return inhalt;
   if (!Array.isArray(inhalt)) return JSON.stringify(inhalt ?? null);
   return inhalt.map((teil) => (typeof teil?.text === "string" ? teil.text : JSON.stringify(teil))).join("\n");
 }
 
-function kontextGroesse(verbrauch = {}) {
+export function kontextGroesse(verbrauch = {}) {
   const felder = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
   return felder.reduce((summe, feld) => summe + (Number(verbrauch[feld]) || 0), 0);
 }
@@ -53,7 +53,9 @@ const BEHANDLER = new Map([
 ]);
 
 export class Verlauf {
-  constructor() {
+  constructor({ kontextGrenze = KONTEXT_GRENZE } = {}) {
+    this.kontextGrenze = kontextGrenze;
+    this.groessterKontext = 0;
     this.werkzeuge = new Map();
     this.aufrufe = new Map();
     this.letzterText = "";
@@ -74,8 +76,10 @@ export class Verlauf {
       if (teil.type === "text") this.letzterText = teil.text;
     }
     const kontext = kontextGroesse(nachricht?.usage);
-    if (eltern || kontext < KONTEXT_GRENZE) return null;
-    return { art: UEBERGABE, grund: `Übergabe: Der Kontext erreichte ${kontext} Token, die Grenze liegt bei ${KONTEXT_GRENZE}.` };
+    if (eltern) return null;
+    this.groessterKontext = Math.max(this.groessterKontext, kontext);
+    if (this.kontextGrenze === null || kontext < this.kontextGrenze) return null;
+    return { art: UEBERGABE, grund: `Übergabe: Der Kontext erreichte ${kontext} Token, die Grenze liegt bei ${this.kontextGrenze}.` };
   }
 
   merke({ id, name, input }) {
@@ -116,10 +120,9 @@ export class Verlauf {
     this.limit = { bis: this.limitBis ?? zeitpunkt(Number(LIMIT_ZEIT.exec(text)?.[1])) };
   }
 
-  zusammenfassung() {
-    return {
-      antwort: (this.ergebnis ?? this.letzterText).slice(-MAX_ANTWORT_ZEICHEN),
-      limit: this.limit,
-    };
+  zusammenfassung({ vollstaendig = false } = {}) {
+    const volleAntwort = this.ergebnis ?? this.letzterText;
+    const knapp = { antwort: volleAntwort.slice(-MAX_ANTWORT_ZEICHEN), limit: this.limit };
+    return vollstaendig ? { ...knapp, volleAntwort, groessterKontext: this.groessterKontext } : knapp;
   }
 }
