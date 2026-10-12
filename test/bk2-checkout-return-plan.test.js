@@ -428,3 +428,30 @@ test("(17) setup-checkout {plan:starter} bei stale Stripe-Customer (resource_mis
     await s.close();
   }
 });
+
+test("(18) return ohne session_id -> 400 mit Pflicht-Hinweis, nichts gebunden", async () => {
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, "plan=starter");
+    assert.equal(ret.status, 400);
+    assert.equal(JSON.parse(ret.body).error, "session_id ist Pflicht");
+    assert.equal("resultSessionId" in s.billingSpy, false);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(19) return ohne Plan mit fremder Karten-Session -> 403 Customer-Mismatch, Audit nur mit Tenant, keine Karte gespeichert", async () => {
+  const s = await setup();
+  try {
+    ops.setTenantStripe(s.store.load(), TENANT, { customerId: "cus_anderer" });
+    const ret = await billingReturn(s, `session_id=${SESSION}`);
+    assert.equal(ret.status, 403);
+    assert.equal(JSON.parse(ret.body).error, "Customer-Mismatch");
+    const details = (event) => s.auditCalls.filter((c) => c.event === event).map((c) => c.detail);
+    assert.deepEqual(details("self_service_card_mismatch"), [`tenant=${TENANT}`]);
+    assert.deepEqual(details("self_service_card_saved"), []);
+  } finally {
+    await s.close();
+  }
+});

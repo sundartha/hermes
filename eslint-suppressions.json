@@ -757,7 +757,7 @@
   },
   "src/self-service-routes.js": {
     "complexity": {
-      "count": 2
+      "count": 1
     },
     "id-length": {
       "count": 9
@@ -766,7 +766,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 16
+      "count": 13
     }
   },
   "src/sms-summary.js": {
