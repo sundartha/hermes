@@ -32,6 +32,7 @@ const CREATE = "/v1/convai/agent-testing/create";
 const RUN_TESTS = `/v1/convai/agents/${STAGING_AGENT}/run-tests`;
 const POLL = `/v1/convai/test-invocations/${INVOCATION}`;
 const AGENT = `/v1/convai/agents/${STAGING_AGENT}`;
+const TOOLS_PATH = "conversation_config.agent.prompt.tools";
 const OWNED_FIELDS = TEMPLATE._besitz.felder;
 const NEVER_PUSHED = [
   "conversation_config_override_erlaubnisse",
@@ -51,6 +52,31 @@ function passingRun() {
   return { status: "passed", result: "success", responses: turns(FIRST_SENTENCE, POLITE_REFUSAL) };
 }
 
+function rejectedRun(missing) {
+  const names = missing.map((name) => `'${name}'`).join(", ");
+  return {
+    status: "failed",
+    result: "failure",
+    responses: [],
+    rationale: {
+      messages: [`Missing required dynamic variables in tools: {${names}}`],
+      summary: "Missing dynamic variables",
+    },
+  };
+}
+
+function toolVariables(value, found = new Set()) {
+  if (Array.isArray(value)) {
+    for (const part of value) toolVariables(part, found);
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, part] of Object.entries(value)) {
+      if (key === "dynamic_variable" && part && !part.startsWith("system__")) found.add(part);
+      else toolVariables(part, found);
+    }
+  }
+  return found;
+}
+
 function testRun(testId, run, index) {
   return {
     test_run_id: `${testId}-run-${index}`,
@@ -58,7 +84,8 @@ function testRun(testId, run, index) {
     agent_id: STAGING_AGENT,
     test_id: testId,
     status: run.status,
-    condition_result: run.result === null ? null : { result: run.result },
+    condition_result:
+      run.result === null ? null : { result: run.result, rationale: run.rationale ?? null },
     agent_responses: run.responses,
     credits_used: 7,
   };
@@ -106,16 +133,22 @@ function fakeRoutes({ agent, answer, later, failRunTests, startEmpty }) {
       agent === null ? [HTTP_NOT_FOUND, { detail: "Not Found" }] : [HTTP_OK, agent],
     [`POST ${CREATE}`]: (body) => {
       const id = `test-${created.size + 1}`;
-      created.set(id, body.name.replace("Testgespräch ", ""));
+      created.set(id, {
+        name: body.name.replace("Testgespräch ", ""),
+        variables: body.dynamic_variables ?? {},
+      });
       return [HTTP_OK, { id }];
     },
     [`POST ${RUN_TESTS}`]: (body) => {
       if (failRunTests) return [HTTP_SERVER_ERROR, { detail: "kaputt" }];
-      const runs = body.tests.flatMap(({ test_id: testId }) =>
-        Array.from({ length: body.repeat_count }, (_, index) =>
-          testRun(testId, answer(created.get(testId), index), index),
-        ),
-      );
+      const needed = [...toolVariables(wertAnPfad(agent, TOOLS_PATH).wert ?? [])];
+      const runs = body.tests.flatMap(({ test_id: testId }) => {
+        const { name, variables } = created.get(testId);
+        const missing = needed.filter((variable) => !Object.hasOwn(variables, variable));
+        return Array.from({ length: body.repeat_count }, (_, index) =>
+          testRun(testId, missing.length > 0 ? rejectedRun(missing) : answer(name, index), index),
+        );
+      });
       invocation = { id: INVOCATION, test_runs: runs };
       return [HTTP_OK, startEmpty ? { id: INVOCATION, test_runs: [] } : invocation];
     },
@@ -160,8 +193,19 @@ function startElevenLabs(
   }));
 }
 
-async function talkWithCaseFile(context, faelle, fake = {}) {
-  const directory = probeDirectory(context, { "auftrag.json": JSON.stringify({ faelle }) });
+function priceCase(name) {
+  return {
+    name,
+    szenario: "Ask about the price.",
+    max_zuege: 3,
+    pruefungen: [{ art: "nie-sagen", werte: ["deposit"] }],
+  };
+}
+
+async function talkWithCaseFile(context, faelle, { variablen, ...fake } = {}) {
+  const directory = probeDirectory(context, {
+    "auftrag.json": JSON.stringify({ faelle, variablen }),
+  });
   return talk(context, {
     ...fake,
     args: ["--agent", STAGING_AGENT, "--fall", join(directory, "auftrag.json")],
@@ -532,21 +576,8 @@ test("Testgespräche: eine Falldatei ohne Fälle wird abgelehnt", async (context
 });
 
 test("Testgespräche: ein Fall aus dem Auftrag kann Rückfrage und Nachschlagen nicht freischalten", async (context) => {
-  const directory = probeDirectory(context, {
-    "auftrag.json": JSON.stringify({
-      faelle: [
-        {
-          name: "freigeschaltet",
-          szenario: "Ask about the price.",
-          max_zuege: 3,
-          pruefungen: [{ art: "nie-sagen", werte: ["deposit"] }],
-        },
-      ],
-      variablen: { consult_available: "available", lookup_available: "available" },
-    }),
-  });
-  const result = await talk(context, {
-    args: ["--agent", STAGING_AGENT, "--fall", join(directory, "auftrag.json")],
+  const result = await talkWithCaseFile(context, [priceCase("freigeschaltet")], {
+    variablen: { consult_available: "available", lookup_available: "available" },
   });
   assert.equal(result.code, EXIT_OK, result.stdout);
   const create = result.requests.find(
@@ -713,4 +744,49 @@ test("Testgespräche: weicht der Test-Agent ab, bricht auch ein Lauf mit --fall 
   const agent = templateAgent({ "conversation_config.agent.first_message": "Hi there." });
   const result = await talkWithCaseFile(context, [auftragsFall], { agent });
   assertStoppedBeforeTalking(result, /gleicht der Vorlage nicht: first_message\b/);
+});
+
+test("Testgespräche: braucht ein Werkzeug des Test-Agenten eine Variable, die kein Fall setzt, bricht das Werkzeug vor dem ersten Gespräch ab", async (context) => {
+  const agent = templateAgent({
+    [`${TOOLS_PATH}.0.api_schema`]: {
+      request_body_schema: {
+        properties: { kunde: { type: "string", dynamic_variable: "kunden_nummer" } },
+      },
+    },
+  });
+  const result = await talk(context, { agent });
+  assertStoppedBeforeTalking(result, /Variablen der Werkzeuge fehlen: .*kunden_nummer/);
+});
+
+test("Testgespräche: lehnt ElevenLabs einen Lauf ohne Gespräch ab, ist der Fall rot und nennt den Grund von ElevenLabs", async (context) => {
+  const result = await talk(context, {
+    answer: onlyIn("ki-kennzeichnung", 2, rejectedRun(["tenant_token"])),
+  });
+  assert.equal(result.code, EXIT_RED);
+  assert.match(
+    result.stdout,
+    /\| ki-kennzeichnung \| 4 von 5 \| der Agent sagt nichts \(ElevenLabs: Missing dynamic variables – Missing required dynamic variables in tools: \{'tenant_token'\}\) \|/,
+  );
+});
+
+test("Testgespräche: jeder Test bekommt einen tenant_token ohne Zugang, den kein Fall aus dem Auftrag ändern kann", async (context) => {
+  const result = await talkWithCaseFile(context, [priceCase("mit-token")], {
+    variablen: { tenant_token: "echter-token" },
+  });
+  assert.equal(result.code, EXIT_OK, result.stdout);
+  const tokens = result.requests
+    .filter((request) => request.pathname === CREATE)
+    .map((request) => request.body.dynamic_variables.tenant_token);
+  assert.deepEqual(tokens, Array(4).fill("testgespraech-ohne-zugang"));
+});
+
+test("Testgespräche: begründet ElevenLabs eine Ablehnung ohne Zusammenfassung, nennt der Fall nur die Begründung", async (context) => {
+  const rejected = rejectedRun(["tenant_token"]);
+  delete rejected.rationale.summary;
+  const result = await talk(context, { answer: onlyIn("umsteuern", 0, rejected) });
+  assert.equal(result.code, EXIT_RED);
+  assert.match(
+    result.stdout,
+    /\| umsteuern \| 4 von 5 \| der Agent sagt nichts \(ElevenLabs: Missing required dynamic variables in tools: \{'tenant_token'\}\) \|/,
+  );
 });

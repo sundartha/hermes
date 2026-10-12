@@ -7,7 +7,11 @@ const MIN_ZUEGE = 1;
 const MAX_ZUEGE = 50;
 const LEER = /^\s*$/;
 const MIT_WERTEN = new Set(["nie-sagen", "gegenueber-sagt"]);
-const GESPERRT = { consult_available: "unavailable", lookup_available: "unavailable" };
+const GESPERRT = {
+  consult_available: "unavailable",
+  lookup_available: "unavailable",
+  tenant_token: "testgespraech-ohne-zugang",
+};
 
 function datei(pfad) {
   try {
