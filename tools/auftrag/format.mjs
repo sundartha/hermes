@@ -75,7 +75,7 @@ function einzeilig(wert) {
   return !textFehlt(wert) && !wert.includes("\n");
 }
 
-function pfadIstSauber(pfad) {
+export function pfadIstSauber(pfad) {
   if (textFehlt(pfad) || isAbsolute(pfad) || pfad.includes("\\")) return false;
   const segmente = pfad.replace(/\/$/, "").split("/");
   return segmente.every((segment) => segment !== "" && segment !== "." && segment !== "..");
