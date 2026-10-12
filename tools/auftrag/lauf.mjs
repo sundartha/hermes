@@ -8,7 +8,7 @@ import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from ".
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, festhalten, geltendeTrailer, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, auftragsTrailer, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
@@ -198,7 +198,7 @@ class AuftragsLauf {
 }
 
 function gebauteAuftraege(phase, root) {
-  const commits = geltendeTrailer(root);
+  const commits = auftragsTrailer(root);
   const gebaut = ({ id, art }) =>
     commits.some((trailer) => trailer.has(`Auftrag: ${phase.phase}/${id}`) && trailer.has(`Art: ${art}`));
   return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));

@@ -57,7 +57,7 @@ export function festhalten(nachricht, cwd) {
   return spawnSync("git", ["commit", "-q", "-F", "-"], { cwd, encoding: "utf8", input: nachricht });
 }
 
-export function geltendeTrailer(cwd) {
+export function auftragsTrailer(cwd) {
   const ruecknahmen = git(["log", `--grep=${RUECKNAHME_ZEILE}`, "--format=%B"], { cwd });
   const zurueckgenommen = new Set([...ruecknahmen.matchAll(ZURUECKGENOMMEN)].map(([, alt]) => alt));
   const ausgabe = git(["log", "-z", `--grep=${AUFTRAG_ZEILE}`, "--format=%H%n%(trailers:only,unfold)"], { cwd });

@@ -293,6 +293,8 @@ test("ein schon gebauter Auftrag wird übersprungen, ein neu geschnittener oder 
     { name: "gebaut", nachricht: gebaut, danach: () => {}, uebersprungen: true },
     { name: "neu geschnitten", nachricht: "Schneide den Auftrag A1 neu\n\nWarum: x.\n\nAuftrag: probe/A1", danach: () => {}, uebersprungen: false },
     { name: "andere Art", nachricht: gebaut.replace("Art: umbau", "Art: funktion"), danach: () => {}, uebersprungen: false },
+    { name: "andere Phase", nachricht: gebaut.replace("probe/A1", "probe2/A1"), danach: () => {}, uebersprungen: false },
+    { name: "nicht im letzten Absatz", nachricht: "x\n\nAuftrag: probe/A1\nArt: umbau\n\nWarum: y.", danach: () => {}, uebersprungen: false },
     { name: "zurückgenommen", nachricht: gebaut, danach: zuruecknehmen, uebersprungen: false },
   ];
   for (const { name, nachricht, danach, uebersprungen } of faelle) {
