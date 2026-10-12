@@ -28,6 +28,7 @@ class AuftragsLauf {
     this.vorgeschichte = vorgeschichte;
     this.voraussetzung = null;
     this.ausstieg = null;
+    this.entscheidung = null;
     this.basis = kopf(root);
     this.basisBau = this.basis;
     this.testausgabe = "";
@@ -111,6 +112,18 @@ class AuftragsLauf {
     return true;
   }
 
+  festschreiben(name, nachricht) {
+    if (!this.festhalten(name, nachricht)) return false;
+    this.basis = kopf(this.kontext.root);
+    this.basisBau = this.basis;
+    return true;
+  }
+
+  entscheidungNoetig(entscheidung) {
+    this.entscheidung = entscheidung;
+    return this.scheitert(entscheidung.anlass);
+  }
+
   typpruefung() {
     if (hatSkript(this.kontext.root, TYPPRUEFUNG)) return this.gruen("typprüfung", ["npm", "--silent", "run", TYPPRUEFUNG]);
     this.hinweise.push(`Typprüfung: package.json hat kein Skript ${TYPPRUEFUNG}.`);
@@ -185,6 +198,7 @@ class AuftragsLauf {
       grund: this.grund,
       voraussetzung: this.voraussetzung,
       ausstieg: this.ausstieg,
+      entscheidung: this.entscheidung,
       commit: this.commit,
       agenten: this.agenten,
       pruefungen: this.pruefungen,

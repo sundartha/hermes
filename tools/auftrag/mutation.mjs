@@ -1,6 +1,10 @@
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+
 import { testPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, git } from "./git.mjs";
+import { beleg } from "./pruefungen.mjs";
 
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
@@ -8,6 +12,14 @@ const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const GLEICHWERTIG = "Gleichwertig: ";
 const BEGRUENDET = ", weil ";
 const MELDUNG = /^Gleichwertig: (.+?), weil (\S.*)$/gm;
+const ABLAGE = "auftrag-umbau";
+const EINSPIELEN = "umbau einspielen";
+const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
+const MELDEN = [
+  "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt eines Tests mit einer Zeile je Mutant:",
+  "Gleichwertig: <Mutant>, weil <ein Satz>",
+  "",
+];
 
 function treffer(text, muster) {
   return [...text.matchAll(muster)].map(([, wert]) => wert.trim());
@@ -49,9 +61,10 @@ function bauNachrunde(ueberlebende) {
   ].join("\n");
 }
 
-function testNachrunde({ phase, auftrag }, ueberlebende, stand) {
+function testNachrunde({ phase, auftrag }, ueberlebende, { stand, melden }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
-  return [testPrompt(phase, auftrag), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""].join("\n");
+  const zeilen = [testPrompt(phase, auftrag), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""];
+  return [...zeilen, ...(melden ? MELDEN : [])].join("\n");
 }
 
 function bauKorrigiert(lauf, ueberlebende) {
@@ -64,15 +77,15 @@ function bauKorrigiert(lauf, ueberlebende) {
   return lauf.bauSchritte().slice(1).every((schritt) => schritt());
 }
 
-function testErgaenzt(lauf, ueberlebende, stand) {
-  if (!lauf.agent("test", testNachrunde(lauf.kontext, ueberlebende, stand))) return false;
+function testErgaenzt(lauf, ueberlebende, vorgabe) {
+  if (!lauf.agent("test", testNachrunde(lauf.kontext, ueberlebende, vorgabe))) return false;
   return lauf.grenzen("test", lauf.basisBau);
 }
 
 function testNachgeholt(lauf, ueberlebende) {
   return (
     lauf.zwischenstand() &&
-    testErgaenzt(lauf, ueberlebende, "in den neuen Zeilen") &&
+    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false }) &&
     lauf.allesVormerken() &&
     lauf.gruen("abnahme", abnahmeBefehl(lauf.kontext.auftrag))
   );
@@ -90,26 +103,84 @@ function neueZeilen(lauf) {
   return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
 }
 
-function verwerfen(lauf, grund) {
-  git(["reset", "-q", "--hard", lauf.basisBau], { cwd: lauf.kontext.root });
-  git(["clean", "-q", "-fd"], { cwd: lauf.kontext.root });
-  lauf.hinweise.push(grund);
+function ablage({ root, phase, auftrag }) {
+  const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
+  return join(resolve(root, gemeinsam), ABLAGE, phase.phase, `${auftrag.id}.patch`);
 }
 
-function umbauNeu(lauf, ueberlebende, grund) {
-  if (!testErgaenzt(lauf, ueberlebende, "auf dem alten Stand")) return false;
-  if (aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return lauf.scheitert(grund);
-  const schritte = [() => lauf.vorherGruen(), () => lauf.zwischenstand(), ...lauf.bauSchritte()];
-  return [...schritte, () => alterStand(lauf, true)].every((schritt) => schritt());
+function zurueckstellen(lauf) {
+  const { root } = lauf.kontext;
+  const datei = ablage(lauf.kontext);
+  mkdirSync(dirname(datei), { recursive: true });
+  lauf.allesVormerken();
+  git(["diff", "--cached", "--binary", ...PATCH_FORMAT, `--output=${datei}`, lauf.basisBau], { cwd: root });
+  git(["reset", "-q", "--hard", lauf.basisBau], { cwd: root });
+  git(["clean", "-q", "-fd"], { cwd: root });
+  return { datei, inhalt: readFileSync(datei, "utf8") };
 }
 
-function alterStand(lauf, wiederholt = false) {
+function testsFesthalten(lauf, ueberlebende) {
+  const { phase, auftrag } = lauf.kontext;
+  lauf.allesVormerken();
+  const warum = `Warum: Auf dem alten Stand überleben ${ueberlebende.length} Mutanten des Umbaus ${auftrag.id} der Phase ${phase.phase}; diese Tests halten das Verhalten vor dem Umbau fest.`;
+  const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, ...(phase.paket ? [`Paket: ${phase.paket}`] : [])];
+  return lauf.festschreiben("tests alter Stand", [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...herkunft, ""].join("\n"));
+}
+
+function eingespielt(lauf, { datei, inhalt }) {
+  const befehl = ["git", "apply", "--index", datei];
+  if (readFileSync(datei, "utf8") === inhalt) return lauf.pruefung(EINSPIELEN, befehl).exitCode === 0;
+  lauf.pruefungen.push(beleg({ name: EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
+  return false;
+}
+
+function einspielen(lauf, patch) {
+  const passt = eingespielt(lauf, patch);
+  const schritte = lauf.bauSchritte();
+  return (passt ? schritte.slice(1) : schritte).every((schritt) => schritt());
+}
+
+function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
+  const { phase, auftrag } = lauf.kontext;
+  const grund = `Umbau zurückgestellt: auf dem alten Stand überleben ${ueberlebende.length} Mutanten, vorher ${vorher}.`;
+  const meldezeilen = [...gemeldet].filter(([mutant]) => ueberlebende.includes(mutant)).map(([mutant, begruendung]) => `${GLEICHWERTIG}${mutant}${BEGRUENDET}${begruendung}`);
+  const notiz = [
+    "Die letzte Runde mit dem Test-Agenten hat die Zahl der überlebenden Mutanten auf dem alten Stand nicht gesenkt.",
+    `Der Umbau ist nicht committet; er liegt als Patch in ${patch.datei}. Die Tests der bisherigen Runden stehen im Branch.`,
+    "",
+    "Überlebende Mutanten:",
+    liste(ueberlebende),
+    ...(meldezeilen.length > 0 ? ["", "Gleichwertig laut Test-Agent, braucht eine Freigabe:", ...meldezeilen] : []),
+  ].join("\n");
+  const kopfzeile = `Auftrag ${auftrag.id} der Phase ${phase.phase}: ${grund}`;
+  return lauf.entscheidungNoetig({ kopf: kopfzeile, anlass: grund, verlauf: [grund], notiz });
+}
+
+function testRunde(lauf, ueberlebende, gemeldet) {
+  if (!testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true })) return false;
+  for (const { mutant, grund } of meldungen(lauf.agenten.at(-1).antwort)) {
+    if (ueberlebende.includes(mutant)) gemeldet.set(mutant, grund);
+  }
+  if (aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return null;
+  return lauf.vorherGruen() && testsFesthalten(lauf, ueberlebende);
+}
+
+function alterStand(lauf) {
   if (lauf.kontext.auftrag.art !== "umbau") return true;
-  const stand = mutanten(lauf, "mutation alter Stand", ["--basis", lauf.basisBau, "--alter-stand"]);
-  if (stand.ende !== undefined) return stand.ende;
-  const grund = `Umbau verworfen: auf dem alten Stand überlebt ${stand.ueberlebende[0]}`;
-  verwerfen(lauf, grund);
-  return wiederholt ? lauf.scheitert(grund) : umbauNeu(lauf, stand.ueberlebende, grund);
+  const gemeldet = new Map();
+  let vorher = Infinity;
+  for (;;) {
+    const stand = mutanten(lauf, "mutation alter Stand", ["--basis", lauf.basisBau, "--alter-stand"]);
+    if (stand.ende !== undefined) return stand.ende;
+    const { ueberlebende } = stand;
+    const patch = zurueckstellen(lauf);
+    if (ueberlebende.length >= vorher) return entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch });
+    lauf.hinweise.push(`Umbau verworfen: auf dem alten Stand überlebt ${ueberlebende[0]}`);
+    vorher = ueberlebende.length;
+    const getestet = testRunde(lauf, ueberlebende, gemeldet);
+    if (getestet === null) return entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch });
+    if (!getestet || !einspielen(lauf, patch)) return false;
+  }
 }
 
 export function mutationsSchritte(lauf) {

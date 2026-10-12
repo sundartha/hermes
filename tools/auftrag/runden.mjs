@@ -114,6 +114,7 @@ class Runden {
       const runde = this.fehler.length + 1;
       const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte() });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
+      if (ergebnis.entscheidung) return this.entscheidung(ergebnis, ergebnis.entscheidung);
       if (ergebnis.ausstieg) return this.ausgestiegen(ergebnis);
       if (ergebnis.voraussetzung) {
         const vorlauf = this.voraussetzungFehlt(ergebnis);
