@@ -10,6 +10,7 @@ import {
   makeTelnyxSigner,
   nowSeconds,
   waitForStoreState,
+  waitForLog,
 } from "../helpers.js";
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
@@ -153,7 +154,7 @@ test("V6 Anrufpause: ohne, mit falschem oder zu kurzem Token 401 und der Wert bl
       }
     }
     assert.equal(await pauseLesen(srv), false);
-    assert.match(srv.stdout, /\[audit\] auth_failed .*path=\/intern\/anrufpause grund=deploy_token/);
+    await waitForLog(srv, /\[audit\] auth_failed .*path=\/intern\/anrufpause grund=deploy_token/);
     assert.doesNotMatch(srv.stdout, /anrufpause_gesetzt/);
   });
 });
@@ -179,7 +180,7 @@ test("V6 Anrufpause: ungueltiger Koerper 400 und der Wert bleibt", async () => {
       assert.equal(res.status, HTTP_BAD_REQUEST, `Koerper ${koerper}`);
     }
     assert.equal(await pauseLesen(srv), true);
-    assert.match(srv.stdout, /\[audit\] anrufpause_gesetzt ip=system an=true/);
+    await waitForLog(srv, /\[audit\] anrufpause_gesetzt ip=system an=true/);
   });
 });
 
@@ -266,7 +267,7 @@ test("V6 Anrufpause: REST nennt die Anrufpause statt OUTBOUND_FROZEN, Audit mit 
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.deepEqual(await res.json(), REST_PAUSENFEHLER);
     assert.equal(attrappe.starts(), 0);
-    assert.match(srv.stdout, /\[audit\] place_call_denied ip=\S+ to=\S+ grund=frozen quelle=anrufpause/);
+    await waitForLog(srv, /\[audit\] place_call_denied ip=\S+ to=\S+ grund=frozen quelle=anrufpause/);
     assert.doesNotMatch(srv.stdout, /OUTBOUND_FROZEN\)/);
     assert.equal(srv.stdout.includes(ZIEL.slice(1)), false, "keine volle Nummer im Log");
   });
@@ -286,7 +287,7 @@ test("V6 Anrufpause: scheitert das Schreiben, 503 und der alte Wert gilt weiter"
     assert.equal(res.status, HTTP_SERVICE_UNAVAILABLE);
     assert.equal(res.headers.get("cache-control"), "no-store");
     assert.deepEqual(await res.json(), { error: "persist_failed" });
-    assert.match(srv.stdout, /\[audit\] anrufpause_fehlgeschlagen ip=system an=false\n/);
+    await waitForLog(srv, /\[audit\] anrufpause_fehlgeschlagen ip=system an=false\n/);
     assert.doesNotMatch(srv.stdout, /anrufpause_gesetzt ip=system an=false/);
     assert.equal(await pauseLesen(srv), true, "der Wert im Speicher ist zurueckgesetzt");
     assert.equal(srv.readStore().anrufpause, true);
