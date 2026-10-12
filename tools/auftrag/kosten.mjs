@@ -19,7 +19,7 @@ export function transkriptVerzeichnis(root) {
   return join(homedir(), ".claude", "projects", root.replace(NICHT_ALPHANUMERISCH, "-"));
 }
 
-function transkripteDerSitzung(verzeichnis, sitzung) {
+export function transkripteDerSitzung(verzeichnis, sitzung) {
   const haupt = join(verzeichnis, `${sitzung}${TRANSKRIPT_ENDUNG}`);
   const unter = join(verzeichnis, sitzung);
   const weitere = existsSync(unter)
@@ -55,9 +55,13 @@ function addiere(summe, verbrauch) {
   return neu;
 }
 
+export function summeDerDateien(dateien) {
+  return dateien.flatMap(verbrauchJeAntwort).reduce(addiere, leer());
+}
+
 export function kostenDerSitzung(root, { rolle, sitzung }) {
   const dateien = transkripteDerSitzung(transkriptVerzeichnis(root), sitzung);
-  const summe = dateien.flatMap(verbrauchJeAntwort).reduce(addiere, leer());
+  const summe = summeDerDateien(dateien);
   return { rolle, sitzung, gemessen: dateien.length > 0, ...summe };
 }
 
