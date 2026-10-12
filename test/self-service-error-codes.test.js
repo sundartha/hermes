@@ -6,6 +6,7 @@ import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } f
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "web-09-web-secret-0123456789";
 const SUB = "sub-web09";
@@ -53,7 +54,7 @@ async function setup({ paymentEnabled = false, publicUrl = "https://agent.test" 
 test("private-number: ungueltiger Wert liefert 400 + stabilen Code invalid_private_number (ex WEB-09)", async () => {
   const srv = await setup();
   try {
-    const res = await fetch(`${srv.base}/api/self-service/private-number`, {
+    const res = await abrufMitFrist(`${srv.base}/api/self-service/private-number`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: srv.cookie },
       body: JSON.stringify({ privateNumber: "abc" }),
@@ -69,7 +70,7 @@ test("private-number: ungueltiger Wert liefert 400 + stabilen Code invalid_priva
 test("WEB-10 (SOLL, rot) - fehlende PUBLIC_URL liefert einen sprachneutralen Code, keinen deutschen Klartext", async () => {
   const srv = await setup({ paymentEnabled: true, publicUrl: "" });
   try {
-    const res = await fetch(`${srv.base}/api/self-service/billing/setup-checkout`, {
+    const res = await abrufMitFrist(`${srv.base}/api/self-service/billing/setup-checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: srv.cookie },
       body: JSON.stringify({}),

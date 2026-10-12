@@ -10,6 +10,7 @@ import { registerTenant } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { operatorAuthPassThrough } from "./operator-route-app.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const PAYMENT_DISABLED_MESSAGE = "payment disabled (PAYMENT_ENABLED)";
 const METERING_DISABLED_MESSAGE = "metering disabled (PAYMENT_ENABLED)";
@@ -72,15 +73,15 @@ async function startBillingApp() {
 test("PAYMENT_ENABLED aus: alle 3 routes/api-billing.js-Routen -> 404 mit exaktem Body", async () => {
   const app = await startBillingApp();
   try {
-    const flush = await fetch(`${app.base}/api/billing/flush-meters`, { method: "POST" });
+    const flush = await abrufMitFrist(`${app.base}/api/billing/flush-meters`, { method: "POST" });
     assert.equal(flush.status, 404);
     assert.deepEqual(await flush.json(), { error: METERING_DISABLED_MESSAGE });
 
-    const setup = await fetch(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
+    const setup = await abrufMitFrist(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
     assert.equal(setup.status, 404);
     assert.deepEqual(await setup.json(), { error: PAYMENT_DISABLED_MESSAGE });
 
-    const ret = await fetch(`${app.base}/api/billing/checkout-return?session_id=cs_1`);
+    const ret = await abrufMitFrist(`${app.base}/api/billing/checkout-return?session_id=cs_1`);
     assert.equal(ret.status, 404);
     assert.deepEqual(await ret.json(), { error: PAYMENT_DISABLED_MESSAGE });
   } finally {
@@ -130,7 +131,7 @@ test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem
   const base = `http://127.0.0.1:${server.address().port}`;
 
   const fetchWithCookie = (path, opts = {}) =>
-    fetch(`${base}${path}`, { ...opts, headers: { ...opts.headers, Cookie: cookie } });
+    abrufMitFrist(`${base}${path}`, { ...opts, headers: { ...opts.headers, Cookie: cookie } });
 
   try {
     const setup = await fetchWithCookie("/api/self-service/billing/setup-checkout", { method: "POST" });

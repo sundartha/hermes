@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 import express from "express";
 import {
   applyStripeWebhook,
@@ -175,7 +175,7 @@ function postSetupCheckout(ctx, plan, cookie) {
   return new Promise((resolve, reject) => {
     const url = new URL(`${ctx.base}/api/self-service/billing/setup-checkout`);
     const payload = JSON.stringify({ plan });
-    const req = http.request(
+    const req = anfrageMitFrist(
       {
         hostname: url.hostname,
         port: url.port,

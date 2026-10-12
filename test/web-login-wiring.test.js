@@ -7,6 +7,8 @@ import { guardedBoot } from "../src/boot-guard.js";
 import { wireWebLogin } from "../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../src/web-auth.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
+import { webLoginBasisKonfiguration } from "./gemeinsam/web-login-konfiguration.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 async function makePgliteRunner() {
   const db = new PGlite();
@@ -14,26 +16,7 @@ async function makePgliteRunner() {
   return { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
 }
 
-const baseConfig = {
-  storeBackend: "pg",
-  tenancy: { selfServiceEnabled: false, multiTenant: false },
-  auth: {
-    workosApiBase: "https://api.workos.test",
-    oidcClientId: "wl_client",
-    oidcClientSecret: "wl_secret",
-    sessionSecret: "s",
-    adminEmails: [],
-    loginRateLimitPerMin: 30,
-    sessionTtlSeconds: 3600,
-    loginCookieTtlSeconds: 600,
-    devLoginEnabled: false,
-  },
-  server: { publicUrl: "http://localhost", webDistDir: "" },
-  provisioning: { releaseGraceMs: 0 },
-  billing: { paymentEnabled: false },
-  safety: { csrfEnforce: true },
-  mail: { smtpHost: "" },
-};
+const baseConfig = webLoginBasisKonfiguration("https://api.workos.test");
 
 const fakeStore = {
   ensureTenant() {},
@@ -96,7 +79,7 @@ test("P13/Q1: wireWebLogin Happy-Path loggt '[boot] Web-Login aktiv', kein 'deak
 
   const srv = await listen(deps.app);
   try {
-    const res = await fetch(`${srv.url}/api/portal/state`);
+    const res = await abrufMitFrist(`${srv.url}/api/portal/state`);
     assert.equal(res.status, 401);
   } finally {
     await srv.close();
@@ -133,7 +116,7 @@ test("S2-15: devLoginEnabled -> POST /auth/dev-login mintet Session, 302-Redirec
   }
   const srv = await listen(deps.app);
   try {
-    const res = await fetch(`${srv.url}/auth/dev-login`, { method: "POST", redirect: "manual" });
+    const res = await abrufMitFrist(`${srv.url}/auth/dev-login`, { method: "POST", redirect: "manual" });
     assert.equal(res.status, 302);
     assert.match(res.headers.get("set-cookie") || "", new RegExp(`${SESSION_COOKIE_NAME}=`));
   } finally {
@@ -153,7 +136,7 @@ test("S2-16: selfServiceEnabled+multiTenant mountet /api/self-service/state (401
   }
   const srvOn = await listen(depsOn.app);
   try {
-    const res = await fetch(`${srvOn.url}/api/self-service/state`);
+    const res = await abrufMitFrist(`${srvOn.url}/api/self-service/state`);
     assert.equal(res.status, 401, "gemountet + webAuth fail-closed");
   } finally {
     await srvOn.close();
@@ -168,7 +151,7 @@ test("S2-16: selfServiceEnabled+multiTenant mountet /api/self-service/state (401
   }
   const srvOff = await listen(depsOff.app);
   try {
-    const res = await fetch(`${srvOff.url}/api/self-service/state`);
+    const res = await abrufMitFrist(`${srvOff.url}/api/self-service/state`);
     assert.equal(res.status, 404, "ohne Flags nicht gemountet");
   } finally {
     await srvOff.close();
@@ -189,7 +172,7 @@ test("Web-Login legt den Tenant mit country/defaultLanguage/timezone an (ex LANG
   }
   const srv = await listen(deps.app);
   try {
-    const res = await fetch(`${srv.url}/auth/dev-login`, { method: "POST", redirect: "manual" });
+    const res = await abrufMitFrist(`${srv.url}/auth/dev-login`, { method: "POST", redirect: "manual" });
     assert.equal(res.status, 302, "Dev-Login muss die Session mint-Kette durchlaufen");
   } finally {
     await srv.close();
