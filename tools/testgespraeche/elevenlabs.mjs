@@ -86,6 +86,10 @@ async function aufraeumen(namen) {
   );
 }
 
+export function holeAgent(agent) {
+  return api(`/v1/convai/agents/${encodeURIComponent(agent)}`);
+}
+
 export async function fuehreAus({ agent, faelle, variablenVon, wiederholungen, frist, takt }) {
   const namen = new Map();
   try {
