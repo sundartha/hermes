@@ -3,13 +3,26 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 
 import { testkostenZaehler } from "./testkosten.js";
 
 const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
-const PGLITE_PAKET = new URL("../node_modules/@electric-sql/pglite/package.json", import.meta.url);
+const PGLITE_NAME = "@electric-sql/pglite";
+const PGLITE_PAKET = paketDateiFinden(PGLITE_NAME);
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
+
+function paketDateiFinden(name) {
+  let ordner = path.dirname(fileURLToPath(import.meta.resolve(name)));
+  for (;;) {
+    const datei = path.join(ordner, "package.json");
+    if (fs.existsSync(datei) && JSON.parse(fs.readFileSync(datei, "utf8")).name === name) return datei;
+    const oben = path.dirname(ordner);
+    if (oben === ordner) throw new Error(`package.json von ${name} nicht gefunden`);
+    ordner = oben;
+  }
+}
 
 const offene = new Set();
 const datenbankStarts = testkostenZaehler("datenbankStarts");

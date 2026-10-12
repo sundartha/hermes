@@ -100,6 +100,43 @@ test("Vorlagen: unter aktivem Mutanten entsteht keine Datei", async () => {
   }
 });
 
+const ARBEITSKOPIE_DATEIEN = ["pglite-helfer.js", "testkosten.js"];
+const ARBEITSKOPIE_KIND = `import { vorlage } from "./pglite-helfer.js";
+await vorlage(process.argv[2], async () => {}, ["arbeitskopie"]);
+`;
+
+function arbeitskopieAnlegen() {
+  const wurzel = fileURLToPath(new URL("../node_modules/.cache/", import.meta.url));
+  fs.mkdirSync(wurzel, { recursive: true });
+  const ordner = fs.mkdtempSync(path.join(wurzel, "pglite-helfer-arbeitskopie-"));
+  const testOrdner = path.join(ordner, "test");
+  fs.mkdirSync(testOrdner);
+  for (const datei of ARBEITSKOPIE_DATEIEN) {
+    fs.copyFileSync(fileURLToPath(new URL(datei, import.meta.url)), path.join(testOrdner, datei));
+  }
+  fs.writeFileSync(path.join(testOrdner, "kind.js"), ARBEITSKOPIE_KIND);
+  return ordner;
+}
+
+test("Vorlagen: Arbeitskopie ohne eigenes node_modules nutzt dieselbe Vorlage", async () => {
+  const name = `probe-arbeitskopie-${process.pid}`;
+  const ordner = arbeitskopieAnlegen();
+  try {
+    await mitStrykerVariable(undefined, async () => {
+      const ergebnis = spawnSync(process.execPath, [path.join(ordner, "test", "kind.js"), name], {
+        timeout: KINDPROZESS_OBERGRENZE_MS,
+        encoding: "utf8",
+      });
+      assert.equal(ergebnis.status, 0, `Arbeitskopie endete rot:\n${ergebnis.stderr}`);
+      await vorlage(name, leerEinrichten, ["arbeitskopie"]);
+      assert.equal(vorlagenDateien(name).length, 1);
+    });
+  } finally {
+    fs.rmSync(ordner, { recursive: true, force: true });
+    vorlagenLoeschen(name);
+  }
+});
+
 function kindAusfuehren(fall) {
   const ergebnis = spawnSync(process.execPath, [KIND, fall], {
     timeout: KINDPROZESS_OBERGRENZE_MS,
