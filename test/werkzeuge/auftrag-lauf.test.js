@@ -285,6 +285,31 @@ test("ein Umbau ungeschützten Verhaltens wird verworfen; mit dem Test auf dem a
   }
 });
 
+test("ein schon gebauter Auftrag wird übersprungen, ein neu geschnittener oder zurückgenommener nicht", (context) => {
+  const gebaut = "Räume src auf\n\nWarum: gebaut.\n\nAuftrag: probe/A1\nArt: umbau";
+  const zuruecknehmen = (repo) =>
+    runIn(repo, "git", ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid", "revert", "--no-edit", "HEAD"]);
+  const faelle = [
+    { name: "gebaut", nachricht: gebaut, danach: () => {}, uebersprungen: true },
+    { name: "neu geschnitten", nachricht: "Schneide den Auftrag A1 neu\n\nWarum: x.\n\nAuftrag: probe/A1", danach: () => {}, uebersprungen: false },
+    { name: "andere Art", nachricht: gebaut.replace("Art: umbau", "Art: funktion"), danach: () => {}, uebersprungen: false },
+    { name: "zurückgenommen", nachricht: gebaut, danach: zuruecknehmen, uebersprungen: false },
+  ];
+  for (const { name, nachricht, danach, uebersprungen } of faelle) {
+    const vorbereiten = (repo) => {
+      writeFiles(repo, { "notiz.txt": name });
+      commitAll(repo, nachricht);
+      danach(repo);
+    };
+    const { werkzeug, lauf, basis, kopf } = starte(context, { auftrag: UMBAU, drehbuch: { bau: {} }, vorbereiten });
+    assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), !uebersprungen, `${name}: ${lauf.stdout}${lauf.stderr}`);
+    if (uebersprungen) {
+      assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+      assert.equal(kopf, basis, name);
+    }
+  }
+});
+
 test("bei einer Fehlerbehebung bekommt der Bau-Agent den Commit, den git bisect als Ursprung findet", (context) => {
   const vorbereiten = (repo) => {
     writeFiles(repo, { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" });
