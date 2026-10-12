@@ -2,16 +2,13 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { cruise } from "dependency-cruiser";
+import { dependentsGraph, testsReaching } from "./testgraph.mjs";
 
 const DEFAULT_BASE_REF = "upstream/master";
-const GRAPH_ROOTS = ["src", "test"];
-const CRUISE_OPTIONS = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const SELECTABLE_PREFIXES = ["src/", "test/"];
 const WEB_PREFIX = "apps/web/";
 const FULL_SUITE_GLOB = "test/**/*.test.js";
 const WEB_SUITE_GLOB = "apps/web/test/**/*.test.js";
-const TEST_FILE = /^test\/.+\.test\.js$/;
 const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const DELETED = "D";
 const BANK = "regression";
@@ -38,26 +35,6 @@ function changedFiles(baseRef) {
 
 function needsFullSuite({ status, path }) {
   return status === DELETED || !SELECTABLE_PREFIXES.some((prefix) => path.startsWith(prefix));
-}
-
-async function dependentsGraph() {
-  const { output } = await cruise(GRAPH_ROOTS, CRUISE_OPTIONS);
-  const edges = output.modules.flatMap(({ source, dependencies }) =>
-    dependencies.map(({ resolved }) => ({ source, resolved })),
-  );
-  return Map.groupBy(edges, (edge) => edge.resolved);
-}
-
-function testsReaching(start, dependents) {
-  const seen = new Set([start]);
-  const queue = [start];
-  while (queue.length > 0) {
-    const importers = dependents.get(queue.pop()) ?? [];
-    const unseen = importers.map((edge) => edge.source).filter((source) => !seen.has(source));
-    for (const source of unseen) seen.add(source);
-    queue.push(...unseen);
-  }
-  return [...seen].filter((file) => TEST_FILE.test(file));
 }
 
 async function affectedTestFiles(changes) {
