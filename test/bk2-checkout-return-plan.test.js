@@ -451,6 +451,9 @@ test("(19) return ohne Plan mit fremder Karten-Session -> 403 Customer-Mismatch,
     const details = (event) => s.auditCalls.filter((c) => c.event === event).map((c) => c.detail);
     assert.deepEqual(details("self_service_card_mismatch"), [`tenant=${TENANT}`]);
     assert.deepEqual(details("self_service_card_saved"), []);
+    const { tenants } = s.store.load();
+    const t = tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripePaymentMethodId ?? null, null, "keine Karte gebunden");
   } finally {
     await s.close();
   }
