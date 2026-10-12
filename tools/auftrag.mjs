@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
+import { messung } from "./auftrag/planung/messung.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
@@ -26,6 +27,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
   "        node tools/auftrag.mjs system",
   "        node tools/auftrag.mjs karte <datei> [--json]",
+  "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
 ].join("\n");
 const OPTIONEN = [
   "rolle",
@@ -65,6 +67,7 @@ const BEFEHLE = {
   },
   system: { argumente: 0, fuehreAus: () => system() },
   karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
+  messung: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
 };
 
 function gelesen() {
