@@ -91,8 +91,25 @@ function dateienJeTeil(ordner) {
   ]);
 }
 
-function ergebnisordner(repo) {
-  return join(repo, "..", `teile-${Date.now()}`);
+function ergebnisordner(context, repo) {
+  const ordner = join(repo, "..", `teile-${Date.now()}`);
+  context.after(() => rmSync(ordner, { recursive: true, force: true }));
+  return ordner;
+}
+
+function messeZweiTeile(repo, ordner) {
+  const { plan, laeufe } = messeTeile(repo, ordner);
+  assert.equal(plan.anzahl, 2);
+  for (const lauf of laeufe) assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  return laeufe;
+}
+
+function zweiDateienGemessen(context) {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, ZWEI_DATEIEN);
+  const ordner = ergebnisordner(context, repo);
+  messeTeile(repo, ordner);
+  return { repo, ordner };
 }
 
 test("die Teile messen zusammen genau dieselben Dateien und Mutanten wie der ganze Lauf, jede Datei in genau einem Teil", (context) => {
@@ -100,11 +117,8 @@ test("die Teile messen zusammen genau dieselben Dateien und Mutanten wie der gan
   writeFiles(repo, ZWEI_DATEIEN);
   const ganz = pruefe(repo);
   assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
-  const ordner = ergebnisordner(repo);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  const { plan, laeufe } = messeTeile(repo, ordner);
-  assert.equal(plan.anzahl, 2);
-  for (const lauf of laeufe) assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const ordner = ergebnisordner(context, repo);
+  messeZweiTeile(repo, ordner);
   const dateien = dateienJeTeil(ordner);
   assert.deepEqual(dateien.flat().sort(), ["src/wort.js", "src/zahl.js"]);
   assert.ok(dateien.every((teil) => teil.length === 1), JSON.stringify(dateien));
@@ -132,11 +146,8 @@ test("eine Datei mit vielen erreichenden Testdateien wird nach Testdateien getei
     "test/fuellung-000.test.js": testdatei("zahl.js", 'assert.equal(modul.einordnen(0), "null");'),
     "test/zahl.test.js": testdatei("zahl.js", 'assert.equal(modul.einordnen(10), "zehn");', 'assert.equal(modul.einordnen(1), "positiv");'),
   });
-  const ordner = ergebnisordner(repo);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  const { plan, laeufe } = messeTeile(repo, ordner);
-  assert.equal(plan.anzahl, 2);
-  for (const lauf of laeufe) assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const ordner = ergebnisordner(context, repo);
+  const laeufe = messeZweiTeile(repo, ordner);
   assert.ok(laeufe.some((lauf) => / [1-9]\d* in diesen Testdateien nicht getötet/.test(lauf.stdout)), laeufe.map((lauf) => lauf.stdout).join("\n"));
   const urteil = pruefe(repo, "--urteil", ordner);
   assert.equal(urteil.status, 0, urteil.stdout + urteil.stderr);
@@ -144,11 +155,7 @@ test("eine Datei mit vielen erreichenden Testdateien wird nach Testdateien getei
 });
 
 test("fehlt ein Teilergebnis oder gehört es zu einem anderen Stand, bricht das Urteil ab", (context) => {
-  const repo = probeRepository(context, BASIS);
-  writeFiles(repo, ZWEI_DATEIEN);
-  const ordner = ergebnisordner(repo);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  messeTeile(repo, ordner);
+  const { repo, ordner } = zweiDateienGemessen(context);
   rmSync(join(ordner, "mutation-teil-2.json"));
   const fehlt = pruefe(repo, "--urteil", ordner);
   assert.equal(fehlt.status, EXIT_ABBRUCH, fehlt.stdout + fehlt.stderr);
@@ -169,8 +176,7 @@ test("fehlt ein Teilergebnis oder gehört es zu einem anderen Stand, bricht das 
 
 test("ohne geänderte Zeile hat der Plan nur den leeren Teil 0; mit geänderten Zeilen bricht Teil 0 ab, ebenso eine falsche Teilezahl", (context) => {
   const repo = probeRepository(context, BASIS);
-  const ordner = ergebnisordner(repo);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
+  const ordner = ergebnisordner(context, repo);
   const leer = messeTeile(repo, ordner);
   assert.deepEqual([leer.plan.anzahl, leer.plan.teile], [0, [0]]);
   assert.equal(leer.laeufe[0].status, 0, leer.laeufe[0].stdout + leer.laeufe[0].stderr);
@@ -213,11 +219,7 @@ function sammelschritt(skript, ergebnisse) {
 }
 
 test("ein Mutationsteil oder das Urteil, das fehlt, abbricht, übersprungen wird oder rot ist, macht den Sammeljob CI rot", (context) => {
-  const repo = probeRepository(context, BASIS);
-  writeFiles(repo, ZWEI_DATEIEN);
-  const ordner = ergebnisordner(repo);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  messeTeile(repo, ordner);
+  const { repo, ordner } = zweiDateienGemessen(context);
   rmSync(join(ordner, "mutation-teil-1.json"));
   assert.equal(pruefe(repo, "--urteil", ordner).status, EXIT_ABBRUCH);
   const zeilen = readFileSync(WORKFLOW, "utf8").split("\n");
