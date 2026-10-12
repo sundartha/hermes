@@ -4,7 +4,7 @@ import { stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { pruefeBestueckung, pushFelder } from "./testgespraeche/bestueckung.mjs";
+import { pruefeBestueckung, pruefeVariablen, pushFelder } from "./testgespraeche/bestueckung.mjs";
 import { bewerte, promptUeberschriften } from "./testgespraeche/bewertung.mjs";
 import { fuehreAus, holeAgent } from "./testgespraeche/elevenlabs.mjs";
 import { ladeFaelle, variablenVon } from "./testgespraeche/faelle.mjs";
@@ -101,7 +101,9 @@ async function main() {
     return EXIT_GRUEN;
   }
   const agent = agentAus(values.agent);
-  pruefeBestueckung(vorlage(), await holeAgent(agent));
+  const live = await holeAgent(agent);
+  pruefeVariablen(live, faelle, variablenVon);
+  pruefeBestueckung(vorlage(), live);
   const laeufe = await fuehreAus({
     agent,
     faelle,

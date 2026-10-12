@@ -41,6 +41,10 @@ function testDefinition(fall, variablen) {
   };
 }
 
+function grundVon(begruendung) {
+  return [begruendung?.summary, ...(begruendung?.messages ?? [])].filter(Boolean).join(" – ");
+}
+
 function lauf(eintrag, namen) {
   const ergebnis = eintrag.condition_result?.result;
   return {
@@ -52,6 +56,7 @@ function lauf(eintrag, namen) {
       text: zug.message ?? "",
     })),
     credits: eintrag.credits_used ?? 0,
+    grund: grundVon(eintrag.condition_result?.rationale),
   };
 }
 

@@ -75,7 +75,9 @@ export const PRUEFARTEN = [...PRUEFUNGEN.keys()];
 export function pruefeLauf(fall, lauf, umgebung) {
   if (lauf.status !== STATUS_FERTIG) return [`der Lauf endet mit „${lauf.status}“`];
   const texte = texteVon(lauf, "agent");
-  if (texte.length === 0) return ["der Agent sagt nichts"];
+  if (texte.length === 0) {
+    return [lauf.grund ? `der Agent sagt nichts (ElevenLabs: ${lauf.grund})` : "der Agent sagt nichts"];
+  }
   const gegenueber = texteVon(lauf, "user");
   const gruende = fall.pruefungen.flatMap((pruefung) => {
     const pruefe = PRUEFUNGEN.get(pruefung.art);
