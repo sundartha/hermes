@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 
 import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
+import { karte } from "./auftrag/planung/karte.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
@@ -24,6 +25,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs pruefer ablegen --ablage <ordner> --repo <owner/name>",
   "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
   "        node tools/auftrag.mjs system",
+  "        node tools/auftrag.mjs karte <datei> [--json]",
 ].join("\n");
 const OPTIONEN = [
   "rolle",
@@ -62,13 +64,14 @@ const BEFEHLE = {
     fuehreAus: (keine, root, optionen) => reparatur(optionen, root),
   },
   system: { argumente: 0, fuehreAus: () => system() },
+  karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
 };
 
 function gelesen() {
   try {
     return parseArgs({
       allowPositionals: true,
-      options: Object.fromEntries(OPTIONEN.map((name) => [name, { type: "string" }])),
+      options: { ...Object.fromEntries(OPTIONEN.map((name) => [name, { type: "string" }])), json: { type: "boolean" } },
     });
   } catch {
     return { positionals: [], values: {} };
@@ -88,6 +91,7 @@ function aufruf() {
   if (!Object.hasOwn(BEFEHLE, name ?? "") || argumente.length !== befehl.argumente) return null;
   const pflicht = pflichtOptionen(befehl, argumente);
   const fehlend = pflicht === undefined || pflicht.some((option) => values[option] === undefined);
+  if (values.json !== undefined && befehl.json !== true) return null;
   if (fehlend || (values.rolle !== undefined && !ROLLEN.includes(values.rolle))) return null;
   return { befehl, argumente, optionen: values };
 }
