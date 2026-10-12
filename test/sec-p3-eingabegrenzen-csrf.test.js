@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -123,7 +123,7 @@ function request(method, url, { cookie, body, origin } = {}) {
       headers["Content-Type"] = "application/json";
       headers["Content-Length"] = Buffer.byteLength(payload);
     }
-    const req = http.request(
+    const req = anfrageMitFrist(
       {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port,

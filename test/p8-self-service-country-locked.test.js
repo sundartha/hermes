@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -53,7 +54,7 @@ async function setup() {
 }
 
 const postSettings = (base, cookie, body) =>
-  fetch(`${base}/api/self-service/settings`, {
+  abrufMitFrist(`${base}/api/self-service/settings`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify(body),

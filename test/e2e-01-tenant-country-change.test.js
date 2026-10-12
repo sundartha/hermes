@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
@@ -55,7 +56,7 @@ async function setup() {
 test("Land-Wechsel DE->US wird begruendet abgelehnt statt still verschluckt (ex E2E-01)", async () => {
   const srv = await setup();
   try {
-    const res = await fetch(`${srv.base}/api/self-service/settings`, {
+    const res = await abrufMitFrist(`${srv.base}/api/self-service/settings`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: srv.cookie },
       body: JSON.stringify({ country: "US" }),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -351,7 +351,7 @@ function request(method, url, { cookie } = {}) {
     const u = new URL(url);
     const headers = {};
     if (cookie) headers.Cookie = cookie;
-    const req = http.request(
+    const req = anfrageMitFrist(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
       (res) => {
         let b = "";
