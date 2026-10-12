@@ -10,5 +10,10 @@ export const CHECKOUT_RETURN = Object.freeze({
   SUB_FAILED: `${APP_PATH}?sub=failed`,
 });
 
+export function subscriptionReturnPath(result) {
+  const succeeded = result.ok || result.reason === "already_subscribed";
+  return succeeded ? CHECKOUT_RETURN.SUB_OK : CHECKOUT_RETURN.SUB_FAILED;
+}
+
 export const LOGIN_ALIAS_PATHS = Object.freeze(["/login", "/signin", "/sign-in"]);
 export const APP_ALIAS_PATHS = Object.freeze(["/dashboard", "/account", "/portal", "/admin"]);

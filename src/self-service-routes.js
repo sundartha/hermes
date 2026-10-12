@@ -35,7 +35,7 @@ import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { resolveNumberCountry } from "./geo/resolve.js";
 import { isKnownPlanSlug } from "./plans.js";
 import { tenantQuotaView } from "./billing/meter.js";
-import { CHECKOUT_RETURN } from "./portal-paths.js";
+import { CHECKOUT_RETURN, subscriptionReturnPath } from "./portal-paths.js";
 import {
   planAddNewsletterRecipient,
   newNewsletterTokens,
@@ -48,6 +48,8 @@ import {
 import { hashEmail } from "./util.js";
 
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
+const HTTP_BAD_REQUEST = 400;
+const HTTP_FORBIDDEN = 403;
 
 const NUMBER_SETUP_REASON = Object.freeze({
   PAYMENT_METHOD: "payment_method_unsuitable",
@@ -441,14 +443,14 @@ export function makeSelfServiceRoutes({
         const tenant = req.tenant.tenantId;
         const sessionId = req.query.session_id;
         if (!sessionId || typeof sessionId !== "string")
-          return res.status(400).json({ error: "session_id ist Pflicht" });
+          return res.status(HTTP_BAD_REQUEST).json({ error: "session_id ist Pflicht" });
 
         const carriedPlan = knownPlanSlug(req.query.plan);
         if (!carriedPlan) {
           const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
           if (!ok) {
             audit("self_service_card_mismatch", req, `tenant=${tenant}`);
-            return res.status(403).json({ error: "Customer-Mismatch" });
+            return res.status(HTTP_FORBIDDEN).json({ error: "Customer-Mismatch" });
           }
           await finishCardOnlyReturn({ store, provision, config, audit, req, tenant });
           return res.redirect(CHECKOUT_RETURN.CARD_OK);
@@ -459,7 +461,7 @@ export function makeSelfServiceRoutes({
         });
         if (result.reason === "customer_mismatch" || result.reason === "plan_mismatch") {
           audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(403).json({ error: "Customer-Mismatch" });
+          return res.status(HTTP_FORBIDDEN).json({ error: "Customer-Mismatch" });
         }
         if (result.reason === "subscription_conflict") {
           audit(
@@ -475,8 +477,8 @@ export function makeSelfServiceRoutes({
           `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ` +
             `${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
         );
-        const succeeded = result.ok || result.reason === "already_subscribed";
-        res.redirect(succeeded ? CHECKOUT_RETURN.SUB_OK : CHECKOUT_RETURN.SUB_FAILED);
+        const returnPath = subscriptionReturnPath(result);
+        res.redirect(returnPath);
       },
       (res) => res.redirect(CHECKOUT_RETURN.CARD_ERROR),
     ),
@@ -600,8 +602,6 @@ export function mountSelfServiceRoutes(deps) {
   guarded.use(makeSelfServiceRoutes(deps));
   return guarded;
 }
-
-const HTTP_BAD_REQUEST = 400;
 
 function rejectInvalidAgentName(audit) {
   return function agentNameLimitMiddleware(req, res, next) {
