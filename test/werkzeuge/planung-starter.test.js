@@ -23,9 +23,9 @@ while (anderer && anderer !== "-" && !existsSync(join(ort, "start-" + anderer)) 
 const gesehen = anderer && anderer !== "-" ? existsSync(join(ort, "start-" + anderer)) : true;
 const text = art === "umlaute" ? "äb".repeat(100000) : "a".repeat(1500) + "ENDE";
 const zeilen = [
+  { type: "result", result: (gesehen ? "gleichzeitig " : "nacheinander ") + text, is_error: false },
   { type: "assistant", message: { id: "m1", usage: { input_tokens: 150000 }, content: [{ type: "text", text: "zwischen" }] } },
   { type: "assistant", message: { id: "m2", usage: { input_tokens: 70000, cache_read_input_tokens: 5000 }, content: [{ type: "text", text: "x" }] } },
-  { type: "result", result: (gesehen ? "gleichzeitig " : "nacheinander ") + text, is_error: false },
 ];
 for (const zeile of zeilen) console.log(JSON.stringify(zeile));
 `;
