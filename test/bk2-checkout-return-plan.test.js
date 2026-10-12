@@ -429,31 +429,155 @@ test("(17) setup-checkout {plan:starter} bei stale Stripe-Customer (resource_mis
   }
 });
 
-test("(18) return ohne session_id -> 400 mit Pflicht-Hinweis, nichts gebunden", async () => {
+const auditDetail = (s, event) => s.auditCalls.filter((c) => c.event === event).map((c) => c.detail);
+
+test("(18) setup-checkout ohne oeffentliche URL -> 500 server_unconfigured VOR jedem Stripe-Call", async () => {
+  const s = await setup({ configPatch: { publicUrl: "" } });
+  try {
+    const res = await setupCheckout(s, "starter");
+    assert.equal(res.status, 500);
+    assert.equal(JSON.parse(res.body).error, "server_unconfigured");
+    assert.equal("subCheckoutParams" in s.billingSpy, false);
+    assert.equal("setupParams" in s.billingSpy, false);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(19) setup-checkout mit Plan -> Audit nennt Tenant, Plan und Modus, kein Heal-Audit", async () => {
   const s = await setup();
   try {
-    const ret = await billingReturn(s, "plan=starter");
+    await setupCheckout(s, "starter");
+    assert.deepEqual(auditDetail(s, "self_service_setup_checkout"), [
+      `tenant=${TENANT} plan=starter mode=subscription`,
+    ]);
+    assert.deepEqual(auditDetail(s, "stripe_customer_self_heal"), []);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(20) setup-checkout ohne Plan -> Audit nennt nur den Tenant", async () => {
+  const s = await setup();
+  try {
+    await setupCheckout(s);
+    assert.deepEqual(auditDetail(s, "self_service_setup_checkout"), [`tenant=${TENANT}`]);
+  } finally {
+    await s.close();
+  }
+});
+
+async function weistSessionIdAb(query) {
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, query);
     assert.equal(ret.status, 400);
     assert.equal(JSON.parse(ret.body).error, "session_id ist Pflicht");
     assert.equal("resultSessionId" in s.billingSpy, false);
   } finally {
     await s.close();
   }
-});
+}
 
-test("(19) return ohne Plan mit fremder Karten-Session -> 403 Customer-Mismatch, Audit nur mit Tenant, keine Karte gespeichert", async () => {
+test("(21) return ohne session_id -> 400 mit Pflicht-Hinweis, nichts gebunden", () =>
+  weistSessionIdAb("plan=starter"));
+
+test("(22) return mit doppelter session_id (Array statt Text) -> 400, Stripe wird nicht gefragt", () =>
+  weistSessionIdAb(`session_id=${SESSION}&session_id=cs_zweite&plan=starter`));
+
+test("(23) return ohne Plan mit fremder Karten-Session -> 403 Customer-Mismatch, Audit nur mit Tenant", async () => {
   const s = await setup();
   try {
     ops.setTenantStripe(s.store.load(), TENANT, { customerId: "cus_anderer" });
     const ret = await billingReturn(s, `session_id=${SESSION}`);
     assert.equal(ret.status, 403);
     assert.equal(JSON.parse(ret.body).error, "Customer-Mismatch");
-    const details = (event) => s.auditCalls.filter((c) => c.event === event).map((c) => c.detail);
-    assert.deepEqual(details("self_service_card_mismatch"), [`tenant=${TENANT}`]);
-    assert.deepEqual(details("self_service_card_saved"), []);
+    assert.deepEqual(auditDetail(s, "self_service_card_mismatch"), [`tenant=${TENANT}`]);
+    assert.deepEqual(auditDetail(s, "self_service_card_saved"), []);
     const { tenants } = s.store.load();
     const t = tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripePaymentMethodId ?? null, null, "keine Karte gebunden");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(24) return mit fremdem Customer -> Audit self_service_card_mismatch nennt Grund customer_mismatch", async () => {
+  const s = await setup({ checkoutOutcome: { customerId: "cus_fremd" } });
+  try {
+    await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    assert.deepEqual(auditDetail(s, "self_service_card_mismatch"), [
+      `tenant=${TENANT} reason=customer_mismatch`,
+    ]);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(25) return mit falschem Plan -> Audit self_service_card_mismatch nennt Grund plan_mismatch", async () => {
+  const s = await setup();
+  try {
+    await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    assert.deepEqual(auditDetail(s, "self_service_card_mismatch"), [
+      `tenant=${TENANT} reason=plan_mismatch`,
+    ]);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(26) return bei Cross-Plan-Race -> Audit self_service_subscription_conflict nennt Plan und verwaiste Subscription", async () => {
+  const s = await setup({
+    subscribed: true,
+    checkoutOutcome: { planSlug: "business", subscriptionId: "sub_business_real" },
+  });
+  try {
+    await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    assert.deepEqual(auditDetail(s, "self_service_subscription_conflict"), [
+      `tenant=${TENANT} plan=business orphanedSubscriptionId=sub_business_real`,
+    ]);
+    assert.deepEqual(auditDetail(s, "self_service_subscribe"), []);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(27) erfolgreiche Abo-Rueckkehr -> Audit self_service_subscribe nennt Plan, Ergebnis, Profil und Provisioning", async () => {
+  const s = await setup();
+  try {
+    await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    const [detail, ...rest] = auditDetail(s, "self_service_subscribe");
+    assert.equal(rest.length, 0);
+    assert.ok(detail.startsWith(`tenant=${TENANT} plan=starter outcome=ok `), detail);
+    assert.match(detail, / profile=\S+ provision=\S+$/);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(28) idempotente Abo-Rueckkehr -> Audit self_service_subscribe nennt Ergebnis already_subscribed", async () => {
+  const s = await setup({
+    subscribed: true,
+    cardOnFile: true,
+    checkoutOutcome: { subscriptionId: "sub_old" },
+  });
+  try {
+    await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    const [detail] = auditDetail(s, "self_service_subscribe");
+    assert.ok(detail.startsWith(`tenant=${TENANT} plan=starter outcome=already_subscribed `), detail);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(29) return mit leerer session_id -> 400 mit Pflicht-Hinweis, Stripe wird nicht gefragt", async () => {
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, "session_id=");
+    assert.equal(ret.status, 400);
+    assert.equal(JSON.parse(ret.body).error, "session_id ist Pflicht");
+    assert.equal("resultSessionId" in s.billingSpy, false);
+    assert.deepEqual(s.provisionSpy, []);
   } finally {
     await s.close();
   }

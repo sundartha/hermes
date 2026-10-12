@@ -424,7 +424,7 @@ test("Kompatibilitaetsvertrag U1: kanonische Form ist unabhaengig von der Schlue
 
 function committeteVertraege() {
   const git = (argumente) => execFileSync("git", argumente, { cwd: ROOT, encoding: "utf8" });
-  const commits = git(["log", "--format=%H", "--diff-filter=AM", "--", VERTRAG_RELATIV]).split("\n").filter(Boolean);
+  const commits = git(["log", "--format=%H", "--diff-filter=AM", "--", `:/${VERTRAG_RELATIV}`]).split("\n").filter(Boolean);
   return commits.map((commit) => ({ commit, vertrag: JSON.parse(git(["show", `${commit}:${VERTRAG_RELATIV}`])) }));
 }
 
