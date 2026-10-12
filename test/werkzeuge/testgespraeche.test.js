@@ -576,14 +576,17 @@ const PROMPT_PATH = "conversation_config.agent.prompt.prompt";
 const INIT_WEBHOOK_PATH =
   "platform_settings.overrides.enable_conversation_initiation_client_data_from_webhook";
 
-async function assertStopsBeforeTalking(context, changes, reason) {
-  const result = await talk(context, { agent: templateAgent(changes) });
+function assertStoppedBeforeTalking(result, reason) {
   assert.equal(result.code, EXIT_ERROR);
   assert.match(result.stderr, reason);
   assert.deepEqual(
     result.requests.map((request) => `${request.method} ${request.pathname}`),
     [`GET ${AGENT}`],
   );
+}
+
+async function assertStopsBeforeTalking(context, changes, reason) {
+  assertStoppedBeforeTalking(await talk(context, { agent: templateAgent(changes) }), reason);
 }
 
 test("Testgespräche: weicht prompt beim Test-Agenten ab, bricht das Werkzeug vor dem ersten Gespräch ab", async (context) => {
@@ -647,4 +650,67 @@ test("Testgespräche: --push-felder nennt alle Felder der Vorlage außer Erlaubn
   for (const field of ["prompt", "first_message", "language"]) assert.ok(named.includes(field));
   assert.match(result.stdout, /^--felder=[a-z_,]+\n$/);
   assert.deepEqual(result.requests, []);
+});
+
+const TOLERATED_FIELDS = ["conversation_config_override_erlaubnisse", "retention_days"];
+const DIFFERENT = "abweichend";
+
+function differentValue(agent, path) {
+  setzeAnPfad(agent, path, DIFFERENT);
+}
+
+function foreignName(agent, path) {
+  const collection = wertAnPfad(agent, path).wert;
+  if (Array.isArray(collection)) collection.push({ name: "fremd" });
+  else collection.fremd = {};
+}
+
+function differentEntries(agent, path, field) {
+  for (const entry of Object.values(wertAnPfad(agent, path).wert)) {
+    if (entry && typeof entry === "object") {
+      setzeAnPfad(entry, field.je_eintrag_live ?? field.je_eintrag, DIFFERENT);
+    }
+  }
+}
+
+function foreignVariable(agent, path) {
+  const text = wertAnPfad(agent, path).wert;
+  if (typeof text === "string") setzeAnPfad(agent, path, `${text} {{fremd}}`);
+}
+
+const MAKE_DIFFERENT = {
+  wert: differentValue,
+  namen: foreignName,
+  texte: differentEntries,
+  variablen: foreignVariable,
+};
+
+function everyFieldDifferent() {
+  const agent = templateAgent();
+  for (const field of OWNED_FIELDS) {
+    for (const path of field.live) MAKE_DIFFERENT[field.art](agent, path, field);
+  }
+  return agent;
+}
+
+test("Testgespräche: weicht jedes besessene Feld ab, nennt der Abbruch alle außer Erlaubnis-Liste und Aufbewahrung", async (context) => {
+  const result = await talk(context, { agent: everyFieldDifferent() });
+  assertStoppedBeforeTalking(result, /gleicht der Vorlage nicht: /);
+  const [, named = ""] = result.stderr.match(/gleicht der Vorlage nicht: ([a-z_, ]+)/) ?? [];
+  assert.deepEqual(
+    named.trim().split(", "),
+    OWNED_FIELDS.map((entry) => entry.feld).filter((field) => !TOLERATED_FIELDS.includes(field)),
+  );
+});
+
+test("Testgespräche: weicht der Test-Agent ab, bricht auch ein Lauf mit --fall vor dem ersten Gespräch ab", async (context) => {
+  const auftragsFall = {
+    name: "auftrags-fall",
+    szenario: "Ask about the price.",
+    max_zuege: 3,
+    pruefungen: [{ art: "nie-sagen", werte: ["deposit"] }],
+  };
+  const agent = templateAgent({ "conversation_config.agent.first_message": "Hi there." });
+  const result = await talkWithCaseFile(context, [auftragsFall], { agent });
+  assertStoppedBeforeTalking(result, /gleicht der Vorlage nicht: first_message\b/);
 });
