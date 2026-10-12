@@ -1,0 +1,220 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+import { TEST_FILE } from "../../testgraph.mjs";
+import { funktionenIn } from "../../ziele/funktionen.mjs";
+import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from "../format.mjs";
+
+export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
+const PFLICHT_ROLLEN = ["eingang", "wirkung"];
+const ANGABEN = ["weg", "aenderungen", "tests", "vorbild", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
+const NICHT_GEFUNDEN = "nicht gefunden";
+const WEITERE_AUSWEGE = { aenderungen: "keine Änderung", ownerEntscheidung: "keine", eingangImTest: "nicht erreichbar" };
+const AUSWEG = /^(nicht gefunden|keine Änderung|keine|nicht erreichbar), weil(.*)$/su;
+const ERREICHBAR = "erreichbar";
+const GRUND = /\p{L}{3,}/u;
+const MIT_AENDERUNG = /^[ST]/;
+const WENN = /^\s*Wenn\s/;
+const IN_BACKTICKS = /`([^`]+)`/g;
+const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
+
+function istObjekt(wert) {
+  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
+}
+
+function istText(wert) {
+  return typeof wert === "string" && wert.trim() !== "";
+}
+
+function istZeile(wert) {
+  return Number.isInteger(wert) && wert >= 1;
+}
+
+function quelle(kontext, datei) {
+  if (!kontext.quellen.has(datei)) kontext.quellen.set(datei, readFileSync(join(kontext.root, datei), "utf8"));
+  return kontext.quellen.get(datei);
+}
+
+function auswegBefund({ ort, feld }, wert, kontext) {
+  const treffer = AUSWEG.exec(wert);
+  if (treffer === null) return `${ort}: ${feld} ist weder eine Angabe noch „${NICHT_GEFUNDEN}, weil …“`;
+  const [, art, grund] = treffer;
+  if (art !== NICHT_GEFUNDEN && WEITERE_AUSWEGE[feld] !== art) return `${ort}: „${art}, weil …“ ist für ${feld} kein Ausweg`;
+  if (!GRUND.test(grund)) return `${ort}: ${feld} nennt „${art}, weil …“ ohne Grund`;
+  kontext.annahmen.push({ nummer: kontext.nummer, angabe: feld, text: wert.trim() });
+  return null;
+}
+
+function funktionBefund(ort, stelle, kontext) {
+  const { datei, funktion, von, bis } = stelle;
+  const gleichnamig = funktionenIn(datei, quelle(kontext, datei)).filter(({ name }) => name === funktion);
+  if (gleichnamig.length === 0) return `${ort}: Funktion ${funktion} fehlt in ${datei}`;
+  if (!istZeile(von) || !istZeile(bis) || von > bis) return `${ort}: Zeilen ${von}-${bis} sind keine Zeilen von-bis`;
+  if (gleichnamig.some((gefunden) => gefunden.von <= von && bis <= gefunden.bis)) return null;
+  const bereiche = gleichnamig.map((gefunden) => `${gefunden.von}-${gefunden.bis}`).join(", ");
+  return `${ort}: Zeilen ${von}-${bis} liegen nicht in der Funktion ${funktion} (${bereiche}) in ${datei}`;
+}
+
+function pfadBefund(ort, datei) {
+  if (!istText(datei)) return `${ort}: datei fehlt`;
+  return pfadIstSauber(datei) ? null : `${ort}: ${datei} muss ein relativer Pfad im Repo sein`;
+}
+
+function dateiBefund(ort, { datei, art = "Datei" }, kontext) {
+  const befund = pfadBefund(ort, datei);
+  if (befund !== null) return befund;
+  const pfad = join(kontext.root, datei);
+  if (!existsSync(pfad)) return `${ort}: ${art} ${datei} fehlt`;
+  return statSync(pfad).isFile() ? null : `${ort}: ${datei} ist keine Datei`;
+}
+
+function stelleBefund(ort, stelle, kontext) {
+  const befund = dateiBefund(ort, stelle, kontext);
+  if (befund !== null) return befund;
+  if (!istText(stelle.funktion)) return `${ort}: funktion fehlt`;
+  return funktionBefund(ort, stelle, kontext);
+}
+
+function neueDateiBefund(ort, datei, kontext) {
+  const befund = pfadBefund(ort, datei);
+  if (befund !== null) return befund;
+  return existsSync(join(kontext.root, datei)) ? `${ort}: Datei ${datei} gibt es schon` : null;
+}
+
+function neueStelleBefund(ort, stelle, kontext) {
+  if (stelle.neueZeilen < 1) return `${ort}: eine neue ${stelle.neu} braucht mindestens eine neue Zeile`;
+  if (stelle.neu === "datei") return neueDateiBefund(ort, stelle.datei, kontext);
+  const befund = dateiBefund(ort, stelle, kontext);
+  if (befund !== null) return befund;
+  if (!istText(stelle.funktion)) return `${ort}: funktion fehlt`;
+  const namen = funktionenIn(stelle.datei, quelle(kontext, stelle.datei)).map(({ name }) => name);
+  return namen.includes(stelle.funktion) ? `${ort}: Funktion ${stelle.funktion} gibt es schon in ${stelle.datei}` : null;
+}
+
+function wegEintragBefund(ort, eintrag, kontext) {
+  if (!istObjekt(eintrag) || !ROLLEN.includes(eintrag.rolle)) return `${ort}: rolle muss eine von ${ROLLEN.join(", ")} sein`;
+  if (eintrag.ausweg === undefined && istText(eintrag.datei) && istTestdatei(eintrag.datei)) return `${ort}: Stelle des Wegs liegt in der Testdatei ${eintrag.datei}`;
+  if (eintrag.ausweg === undefined) return stelleBefund(ort, eintrag, kontext);
+  if (typeof eintrag.ausweg !== "string") return `${ort}: ausweg ist kein Text`;
+  return auswegBefund({ ort, feld: `weg ${eintrag.rolle}` }, eintrag.ausweg, kontext);
+}
+
+function wegBefunde(ort, weg, kontext) {
+  const befunde = weg.map((eintrag, stelle) => wegEintragBefund(`${ort} weg[${stelle}]`, eintrag, kontext)).filter(Boolean);
+  const rollen = new Set(weg.map((eintrag) => eintrag?.rolle));
+  const fehlend = PFLICHT_ROLLEN.filter((rolle) => !rollen.has(rolle));
+  return [...befunde, ...fehlend.map((rolle) => `${ort}: Weg ohne Stelle mit Rolle ${rolle} und ohne Ausweg`)];
+}
+
+function aenderungBefund(ort, stelle, kontext) {
+  if (!istObjekt(stelle)) return `${ort}: Änderungsstelle ist kein Objekt`;
+  if (!Number.isInteger(stelle.neueZeilen) || stelle.neueZeilen < 0) return `${ort}: neueZeilen fehlt (grobe Schätzung neuer Zeilen)`;
+  if (stelle.neu === undefined) return stelleBefund(ort, stelle, kontext);
+  return ["datei", "funktion"].includes(stelle.neu) ? neueStelleBefund(ort, stelle, kontext) : `${ort}: neu muss „datei“ oder „funktion“ sein`;
+}
+
+function aenderungenBefunde(ort, aenderungen, kontext) {
+  const befunde = aenderungen.map((stelle, nr) => aenderungBefund(`${ort} aenderungen[${nr}]`, stelle, kontext)).filter(Boolean);
+  if (aenderungen.length === 0 && MIT_AENDERUNG.test(kontext.nummer)) befunde.push(`${ort}: ohne Änderungsstelle und ohne „keine Änderung, weil …“`);
+  const gemeldet = new Set(Array.isArray(kontext.angaben.codeowners) ? kontext.angaben.codeowners : []);
+  const geschuetzt = aenderungen.map((stelle) => stelle?.datei).filter((datei) => istText(datei) && istGeschuetzt(kontext.muster, datei));
+  const ungemeldet = [...new Set(geschuetzt)].filter((datei) => !gemeldet.has(datei));
+  return [...befunde, ...ungemeldet.map((datei) => `${ort}: Änderungsdatei ${datei} steht in CODEOWNERS, fehlt unter codeowners`)];
+}
+
+function testsBefunde(ort, tests, kontext) {
+  if (tests.length === 0) return [`${ort}: tests ist leer; ohne bestehenden Test „${NICHT_GEFUNDEN}, weil …“`];
+  return tests.map((test) => (TEST_FILE.test(test) ? dateiBefund(ort, { datei: test, art: "Test" }, kontext) : `${ort}: ${test} ist keine Testdatei test/….test.js`)).filter(Boolean);
+}
+
+function codeownersBefunde(ort, dateien, kontext) {
+  return dateien.filter((datei) => !pfadIstSauber(datei) || !istGeschuetzt(kontext.muster, datei)).map((datei) => `${ort}: codeowners nennt ${datei}, das nicht in CODEOWNERS steht`);
+}
+
+function widerspruchBefunde(ort, widersprueche) {
+  const ohneFundstellen = widersprueche.filter((eintrag) => !istText(eintrag?.designDoc) || !istText(eintrag?.code));
+  return ohneFundstellen.map(() => `${ort}: Widerspruch ohne beide Fundstellen (designDoc und code)`);
+}
+
+function fundstelleBefunde(ort, feld, wert) {
+  return istText(wert?.fundstelle) ? [] : [`${ort}: ${feld} braucht eine Fundstelle`];
+}
+
+const LISTEN = new Map([
+  ["weg", wegBefunde],
+  ["aenderungen", aenderungenBefunde],
+  ["tests", testsBefunde],
+  ["codeowners", codeownersBefunde],
+  ["widersprueche", widerspruchBefunde],
+]);
+
+function schemaBefunde(ort, schema) {
+  return typeof schema?.aenderung === "boolean" ? fundstelleBefunde(ort, "schema", schema) : [`${ort}: schema.aenderung muss ja (true) oder nein (false) sein`];
+}
+
+function textBefunde(ort, feld, kontext) {
+  const wert = kontext.angaben[feld];
+  if (feld === "vorbild" && !AUSWEG.test(wert)) return [dateiBefund(ort, { datei: wert }, kontext)].filter(Boolean);
+  if (feld === "eingangImTest" && wert === ERREICHBAR) return [];
+  return [auswegBefund({ ort, feld }, wert, kontext)].filter(Boolean);
+}
+
+function angabeBefunde(ort, feld, kontext) {
+  const wert = kontext.angaben[feld];
+  if (wert === undefined) return [`${ort}: Angabe ${feld} fehlt`];
+  if (istText(wert)) return textBefunde(ort, feld, kontext);
+  const liste = LISTEN.get(feld);
+  if (liste !== undefined) return Array.isArray(wert) ? liste(ort, wert, kontext) : [`${ort}: ${feld} muss eine Liste sein`];
+  if (!istObjekt(wert)) return [`${ort}: ${feld} hat keine gültige Angabe`];
+  if (feld === "schema") return schemaBefunde(ort, wert);
+  if (feld !== "ownerEntscheidung") return [`${ort}: ${feld} hat keine gültige Angabe`];
+  return istText(wert.text) ? fundstelleBefunde(ort, feld, wert) : [`${ort}: ownerEntscheidung braucht den Text der Entscheidung`];
+}
+
+function namenImWenn(text) {
+  const wenn = (text ?? "").split("\n").filter((zeile) => WENN.test(zeile));
+  return wenn.flatMap((zeile) => [...zeile.matchAll(IN_BACKTICKS)].map(([, name]) => name));
+}
+
+function wennBefunde(ort, kontext) {
+  const { weg } = kontext.angaben;
+  const eingaenge = Array.isArray(weg) ? weg.filter((eintrag) => eintrag?.rolle === "eingang" && eintrag.ausweg === undefined) : [];
+  const dateien = eingaenge.map(({ datei }) => datei).filter((datei) => istText(datei) && existsSync(join(kontext.root, datei)));
+  if (dateien.length === 0) return [];
+  const texte = dateien.map((datei) => quelle(kontext, datei));
+  const szenario = kontext.soll.get(kontext.nummer);
+  const fehlend = namenImWenn(szenario?.text).filter((name) => {
+    const gesucht = [name, ROUTE.exec(name)?.[1]].filter(Boolean);
+    return !texte.some((text) => gesucht.some((teil) => text.includes(teil)));
+  });
+  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")})`);
+}
+
+function nummerBefunde(nummer, angaben, kontext) {
+  if (!istObjekt(angaben)) return [`${nummer}: Angaben fehlen`];
+  const eigener = { ...kontext, nummer, angaben };
+  return [...ANGABEN.flatMap((feld) => angabeBefunde(nummer, feld, eigener)), ...wennBefunde(nummer, eigener)];
+}
+
+export function erkundungBefunde(bericht, { gruppe, soll, root }) {
+  const annahmen = [];
+  const nummern = bericht?.nummern;
+  if (!istObjekt(nummern)) return { befunde: ["nummern fehlt: je Nummer der Gruppe ein Objekt mit den Angaben"], annahmen };
+  const kontext = { root, soll, annahmen, muster: geschuetzteMuster(root), quellen: new Map() };
+  const befunde = gruppe.filter((nummer) => !Object.hasOwn(nummern, nummer)).map((nummer) => `${nummer}: Nummer der Gruppe fehlt im Bericht`);
+  for (const [nummer, angaben] of Object.entries(nummern)) {
+    if (gruppe.includes(nummer) && !soll.has(nummer)) befunde.push(`${nummer}: steht nicht in den Soll-Nummern`);
+    else if (gruppe.includes(nummer)) befunde.push(...nummerBefunde(nummer, angaben, kontext));
+    else befunde.push(`${nummer}: gehört nicht zur Gruppe ${gruppe.join(", ")}`);
+  }
+  return { befunde, annahmen };
+}
+
+export function aenderungsStellen(berichte) {
+  return berichte.flatMap((bericht) =>
+    Object.entries(bericht?.nummern ?? {}).flatMap(([nummer, angaben]) => {
+      const aenderungen = Array.isArray(angaben?.aenderungen) ? angaben.aenderungen : [];
+      return aenderungen.filter((stelle) => istText(stelle?.datei)).map((stelle) => ({ ...stelle, nummer }));
+    }),
+  );
+}
