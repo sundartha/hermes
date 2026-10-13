@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 import { makeAuditStore } from "../src/audit-store.js";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 test("auditStore.record schreibt eine Zeile (keine Secrets im detail)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   const audit = makeAuditStore({ withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) });
   await audit.record({

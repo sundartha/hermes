@@ -3,21 +3,21 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let makePgStore, PGlite, jsonStore, BOOTSTRAP, dataDir;
+let makePgStore, jsonStore, BOOTSTRAP, dataDir;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-pg-json-parity-"));
   process.env.DATA_DIR = dataDir;
   await import("../src/config.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   jsonStore = await import("../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

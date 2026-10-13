@@ -3,20 +3,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let makePgStore, PGlite, BOOTSTRAP, publicCall;
+let makePgStore, BOOTSTRAP, publicCall;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-detektor-pg-"));
   await import("../src/config.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
   ({ publicCall } = await import("../src/store/views.js"));
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (statement, parameter) => db.query(statement, parameter), exec: (sql) => db.exec(sql) }),
   };

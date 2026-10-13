@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { billThunk } from "../src/telephony/call-termination.js";
@@ -73,7 +73,7 @@ function buchungsachsen(store, callId) {
 const auflegeEreignis = (store, finishCall, callId) => billThunk(finishCall, store, callId);
 
 test("Positiv-Kontrolle: EIN Auflege-Ereignis bucht auf beiden Wegen genau einmal", async () => {
-  const store0 = await oeffneStore(new PGlite());
+  const store0 = await oeffneStore(neuePGliteInstanz());
   const { store, finishCall } = verdrahteFinishCall(store0);
   const call = seedeBeendetenCall(store);
 
@@ -87,7 +87,7 @@ test("Positiv-Kontrolle: EIN Auflege-Ereignis bucht auf beiden Wegen genau einma
 });
 
 test("(a) sequenziell: dasselbe Auflege-Ereignis zweimal nacheinander bucht nicht doppelt", async () => {
-  const store0 = await oeffneStore(new PGlite());
+  const store0 = await oeffneStore(neuePGliteInstanz());
   const { store, finishCall } = verdrahteFinishCall(store0);
   const call = seedeBeendetenCall(store);
   const einmal = { budgetCents: erwarteteBuchungCents(call), meterBelege: 1 };
@@ -99,7 +99,7 @@ test("(a) sequenziell: dasselbe Auflege-Ereignis zweimal nacheinander bucht nich
 });
 
 test("(b) nebenlaeufig: zwei gleichzeitige Auflege-Ereignisse buchen nicht doppelt", async () => {
-  const store0 = await oeffneStore(new PGlite());
+  const store0 = await oeffneStore(neuePGliteInstanz());
   const { store, finishCall } = verdrahteFinishCall(store0);
   const call = seedeBeendetenCall(store);
   const einmal = { budgetCents: erwarteteBuchungCents(call), meterBelege: 1 };
@@ -113,7 +113,7 @@ test("(b) nebenlaeufig: zwei gleichzeitige Auflege-Ereignisse buchen nicht doppe
 });
 
 test("(c) ueber Prozessgrenzen: nach einem Neustart bucht dasselbe Auflege-Ereignis nicht erneut", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const ersterProzess = verdrahteFinishCall(await oeffneStore(db));
   const call = seedeBeendetenCall(ersterProzess.store);
   const einmal = { budgetCents: erwarteteBuchungCents(call), meterBelege: 1 };

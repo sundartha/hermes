@@ -3,12 +3,12 @@ process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let PGlite, makePgStore, config, ops, subscribeMod, webhookMod, activationMod, backfillMod, planCapsMod;
+let makePgStore, config, ops, subscribeMod, webhookMod, activationMod, backfillMod, planCapsMod;
 let USAGE_EVENT_KIND, KYC_LEVEL, CATALOG_SLUGS;
 
 before(async () => {
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({ makePgStore } = await import("../src/store/pg.js"));
   ({ config } = await import("../src/config.js"));
   ops = await import("../src/store/state-ops.js");
@@ -24,7 +24,7 @@ before(async () => {
 });
 
 async function makeTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

@@ -12,6 +12,7 @@ import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
   JOIN_SCHLUESSEL_ANRUF_2,
 } from "./fixtures/elevenlabs-conversations.js";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const OTB_JOINT = JOIN_SCHLUESSEL_ANRUF_2.telnyxDetailRecord.sip_call_id;
 const SCL_JOINT_NICHT = JOIN_SCHLUESSEL_ANRUF_2.startAntwort.sip_call_id;
@@ -33,7 +34,7 @@ const WARTE_TAKT_MS = 10;
 
 const ZAHL_STATT_STRING = 42;
 
-let jsonStore, makePgStore, PGlite, BOOTSTRAP, dataDir;
+let jsonStore, makePgStore, BOOTSTRAP, dataDir;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-sipcallid-"));
@@ -41,7 +42,6 @@ before(async () => {
   await import("../src/config.js");
   jsonStore = await import("../src/store/json.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
@@ -275,7 +275,7 @@ test("der Schluessel ueberlebt das json-Backend und ist set-once", () => {
 });
 
 test("der Schluessel ueberlebt das pg-Backend (Spalte + Flush + rowToCall)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) =>
       fn({ query: (sql, params) => db.query(sql, params), exec: (sql) => db.exec(sql) }),

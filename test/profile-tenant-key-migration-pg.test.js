@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { applySchema, rekeyProfilesToTenant } from "../src/db/migrate.js";
 
 function connOf(db) {
@@ -8,7 +8,7 @@ function connOf(db) {
 }
 
 test("(e) rekeyProfilesToTenant hebt email-Keys auf tenantId, erhaelt Orphans, idempotent", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const conn = connOf(db);
   await applySchema(conn);
   await db.query(`INSERT INTO tenant (id, status) VALUES ('t_x', 'active')`);
@@ -22,7 +22,8 @@ test("(e) rekeyProfilesToTenant hebt email-Keys auf tenantId, erhaelt Orphans, i
     (r) => r.tenant_id,
   );
   assert.deepEqual(keys, ["orphan@mail", "t_x"], "x@mail -> t_x rekeyt; Orphan bleibt");
-  const tx = (await db.query(`SELECT data FROM profile WHERE tenant_id = 't_x'`)).rows[0].data;
+  const txResult = await db.query(`SELECT data FROM profile WHERE tenant_id = 't_x'`);
+  const tx = txResult.rows[0].data;
   assert.equal(tx.unrestricted, true, "Daten unter der tenantId erhalten");
 
   const before = (await db.query(`SELECT tenant_id, data FROM profile ORDER BY tenant_id`)).rows;
@@ -32,7 +33,7 @@ test("(e) rekeyProfilesToTenant hebt email-Keys auf tenantId, erhaelt Orphans, i
 });
 
 test("(e) Forward-compat Schema-Rename: email-PK Bestands-Tabelle -> tenant_id-PK", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const conn = connOf(db);
   await db.exec(
     `CREATE TABLE profile (email TEXT PRIMARY KEY, data JSONB NOT NULL);

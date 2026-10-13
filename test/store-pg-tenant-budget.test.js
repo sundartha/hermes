@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
@@ -147,7 +147,7 @@ test("outbound-p1d: countOutboundCallsSince mit to-Filter -> per-(Tenant,Ziel) i
 });
 
 async function setupUsageRls() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
@@ -188,7 +188,7 @@ test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RL
 });
 
 async function setupMeterRls() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

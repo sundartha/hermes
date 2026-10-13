@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { seedDefaults } from "../src/db/migrate.js";
 import { config } from "../src/config.js";
@@ -335,7 +335,7 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
 });
 
 test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await reopen(db);
   const second = await reopen(db);
   assert.equal(second.getCalendar(BOOTSTRAP_TENANT_ID).length, demoCalendar().length);

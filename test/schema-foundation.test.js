@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { applySchema } from "../src/db/migrate.js";
 
 async function freshDb() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   return db;
 }

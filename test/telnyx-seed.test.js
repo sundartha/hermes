@@ -5,7 +5,7 @@ import { findActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const TELNYX_NR = "+13125550100";
 
@@ -51,7 +51,7 @@ function pgStoreOn(db) {
 }
 
 test("pg: ueber die Fassade geseedete Telnyx-Nummer ueberlebt Re-Hydrierung, provider=telnyx", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const store1 = pgStoreOn(db);
   await store1.init();
   store1.seedBootstrapNumber(TELNYX_NR, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
@@ -72,7 +72,7 @@ test("pg: frischer Store ohne Seed -> keine Telnyx-Nummer (fail-closed)", async 
 });
 
 test("pg: Nummer mit Trennzeichen wird normalisiert geseedet (TD-2)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const store = pgStoreOn(db);
   await store.init();
   store.seedBootstrapNumber("+49 151-1234 567", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);

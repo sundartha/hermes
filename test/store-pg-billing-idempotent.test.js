@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makeDefaultState, createCall, markBilled } from "../src/store/state-ops.js";
 
@@ -46,7 +46,7 @@ test("markBilled fuer unbekannten Call: changed=false, kein Throw", () => {
 });
 
 test("billedAt round-trippt durch flush/hydrate (pg): ueberlebt den Restart", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const store = await reopen(db);
   const c = store.createCall(outboundCall());
   assert.equal(store.getCall(c.id).billedAt, null, "frischer Call ist ungebucht");

@@ -13,8 +13,9 @@ import {
   waitForLog,
 } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let beleg, ops, jsonStore, makePgStore, PGlite, config, NUMBER_STATUS, BOOTSTRAP, pfad;
+let beleg, ops, jsonStore, makePgStore, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;
 let jsonSeq = 0;
 
@@ -27,7 +28,6 @@ before(async () => {
   ops = await import("../src/store/state-ops.js");
   jsonStore = await import("../src/store/json.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({ NUMBER_STATUS, BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
@@ -345,7 +345,7 @@ test("IEX-A8-8: json-Wrapper speichert nur bei Aenderung und die Felder ueberleb
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
   };

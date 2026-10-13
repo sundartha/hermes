@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { PRICES, tokensOf } from "./_prices.js";
 
@@ -16,7 +16,7 @@ async function reopen(db) {
 }
 
 async function setup() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const store = await reopen(db);
   await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [OTHER]);
   await db.query(
@@ -117,7 +117,7 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
 });
 
 test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Hard-Delete zurueck", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   let failNextTenantInsert = false;
   const runner = {
     withClient: (fn) =>
@@ -148,16 +148,18 @@ test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Ha
   await store.save();
   failNextTenantInsert = false;
 
+  const callCount = await db.query(`SELECT count(*) AS n FROM call WHERE id=$1`, [c.id]);
   assert.equal(
-    Number((await db.query(`SELECT count(*) AS n FROM call WHERE id=$1`, [c.id])).rows[0].n),
+    Number(callCount.rows[0].n),
     1,
     "Call ueberlebt den fehlgeschlagenen Flush - Hard-Delete wurde mit zurueckgerollt",
   );
+  const segmentCount = await db.query(
+    `SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`,
+    [c.id],
+  );
   assert.equal(
-    Number(
-      (await db.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [c.id]))
-        .rows[0].n,
-    ),
+    Number(segmentCount.rows[0].n),
     1,
     "Transkript-Segment ueberlebt ebenfalls (keine Teil-Loeschung)",
   );

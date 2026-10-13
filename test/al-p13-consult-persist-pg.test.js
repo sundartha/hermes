@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const QUESTIONS = ["Wie heisst der Hund?", "Ab wann darf der Termin sein?"];
 const ANSWER = "Bello";
 
-let makePgStore, PGlite, BOOTSTRAP, CONSULT_STATUS, CONSULT_ANSWER;
+let makePgStore, BOOTSTRAP, CONSULT_STATUS, CONSULT_ANSWER;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p13-pg-"));
   await import("../src/config.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({
     BOOTSTRAP_TENANT_ID: BOOTSTRAP,
     CONSULT_STATUS,
@@ -22,7 +22,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

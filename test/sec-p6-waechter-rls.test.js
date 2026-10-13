@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { applySchema } from "../src/db/migrate.js";
 
 const RLS_AUSNAHMEN = Object.freeze({
@@ -38,7 +38,7 @@ async function rlsInventar(db) {
 const abgeschirmt = (eintrag) => eintrag.enabled && eintrag.forced && eintrag.policies > 0;
 
 async function schemaInventar() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await applySchema({ query: (text, parameter) => db.query(text, parameter), exec: (sql) => db.exec(sql) });
   return { db, inventar: await rlsInventar(db) };
 }

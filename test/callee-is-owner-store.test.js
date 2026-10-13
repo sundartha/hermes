@@ -5,11 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { seedState, seedCall } from "./helpers.js";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const TENANT = BOOTSTRAP_TENANT_ID;
 const JSON_INDENT = 2;
 
-let createCall, jsonStore, makePgStore, PGlite, jsonDataDir;
+let createCall, jsonStore, makePgStore, jsonDataDir;
 
 before(async () => {
   jsonDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-oc-p1-store-"));
@@ -18,7 +19,6 @@ before(async () => {
   ({ createCall } = await import("../src/store/state-ops.js"));
   jsonStore = await import("../src/store/json.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
 });
 
 const newCallInput = (over = {}) => ({
@@ -30,7 +30,7 @@ const newCallInput = (over = {}) => ({
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
   };

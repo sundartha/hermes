@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makeAccounts } from "../src/web-auth.js";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../src/billing/backfill-profiles.js";
@@ -19,7 +19,7 @@ async function openStore(runner) {
 }
 
 async function makeStoreAndAccounts() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = makeRunner(db);
   const store = await openStore(runner);
   return { db, store, accounts: makeAccounts(runner) };

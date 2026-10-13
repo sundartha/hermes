@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { tempDataDir } from "./helpers.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
@@ -303,7 +303,7 @@ const LEGACY_AT_E164 = "+436601234567";
 const LEGACY_DE_E164 = "+4915112340001";
 
 async function seedAndMigrate(numbers) {
-  const conn = new PGlite();
+  const conn = neuePGliteInstanz();
   await applySchema(conn);
   await conn.query(`INSERT INTO tenant (id, status) VALUES ($1, $2)`, [
     LEGACY_TENANT,
@@ -360,7 +360,7 @@ test("GAP-34 (SOLL, rot) - fehlendes Land wird aus der DID-Vorwahl abgeleitet, o
 });
 
 test("Geo-Backfill Regression (Review-Blocker R1 zu GAP-34) - Kauf-Land US ueberstimmt NICHT die Sprache eines deutschen Tenants", async () => {
-  const conn = new PGlite();
+  const conn = neuePGliteInstanz();
   await applySchema(conn);
   await conn.query(
     `INSERT INTO tenant (id, status, country, default_language) VALUES ($1, $2, $3, $4)`,
@@ -420,8 +420,9 @@ test("pg: settings.language ist via updateSettings umstellbar + ueberlebt Re-Hyd
 });
 
 test("pg: doppelter applySchema/init bleibt fehlerfrei (idempotente ADD COLUMN IF NOT EXISTS)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await reopen(db);
   const second = await reopen(db);
-  assert.equal(second.load().settings[BOOTSTRAP_TENANT_ID].language, null);
+  const { settings } = second.load();
+  assert.equal(settings[BOOTSTRAP_TENANT_ID].language, null);
 });
