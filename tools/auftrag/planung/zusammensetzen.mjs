@@ -1,0 +1,83 @@
+import { renameSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
+import { pid } from "node:process";
+
+import { phasenBefunde } from "../format.mjs";
+import { befundeImOrdner } from "./abdeckung.mjs";
+import { istText } from "./erkundung.mjs";
+import { nummernImOrdner } from "./nummern.mjs";
+import { schnittImOrdner } from "./schnitt.mjs";
+
+const PHASE = "phase.json";
+const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme", "erwarteterFehler"];
+const FEHLERFAELLE = /^Fehlerfälle:/;
+const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
+const JSON_EINRUECKUNG = 2;
+
+function liste(wert) {
+  return Array.isArray(wert) ? wert : [];
+}
+
+function auftragAusSchnitt(eintrag, soll) {
+  const auftrag = Object.fromEntries(FELDER.filter((feld) => eintrag[feld] !== undefined).map((feld) => [feld, eintrag[feld]]));
+  if (Array.isArray(eintrag.wasDarfNiePassieren)) auftrag.wasDarfNiePassieren = eintrag.wasDarfNiePassieren.map(({ satz }) => satz);
+  auftrag.prueft = eintrag.prueft;
+  if (Array.isArray(eintrag.prueft)) auftrag.szenarien = Object.fromEntries(eintrag.prueft.map((nummer) => [nummer, soll.get(nummer)?.text ?? ""]));
+  auftrag.abhaengigVon = liste(eintrag.abhaengigVon).map(({ id }) => id);
+  return auftrag;
+}
+
+function auftragsEintrag({ id, ziel }) {
+  return `${id}: ${ziel}`;
+}
+
+function auftraegeZeile(eigene) {
+  return `Aufträge: ${eigene.map(auftragsEintrag).join("; ")}`;
+}
+
+function reihenfolgeZeile(eigene) {
+  const gruende = eigene.flatMap(({ id, abhaengigVon }) => liste(abhaengigVon).map((vorgaenger) => `${id} nach ${vorgaenger.id}: ${vorgaenger.grund}`));
+  return `Reihenfolge: ${gruende.length > 0 ? gruende.join("; ") : "keine Vorgänger"}`;
+}
+
+function entwurfFuer(text, eigene) {
+  const zeilen = text.trimEnd().split("\n");
+  const fehlerfaelle = zeilen.findIndex((zeile) => FEHLERFAELLE.test(zeile));
+  const stelle = fehlerfaelle === -1 ? zeilen.length : fehlerfaelle;
+  return [...zeilen.slice(0, stelle), auftraegeZeile(eigene), ...zeilen.slice(stelle), reihenfolgeZeile(eigene)].join("\n");
+}
+
+function entwurfBefunde(bereiche, entwuerfe) {
+  const fehlend = bereiche.filter((bereich) => !istText(entwuerfe[bereich])).map((bereich) => `Entwurf für den Bereich ${bereich} fehlt`);
+  const doppelt = bereiche.filter((bereich) => BERECHNETE_ZEILE.test(entwuerfe[bereich] ?? "")).map((bereich) => `Entwurf für ${bereich} enthält schon eine Zeile „Aufträge:“ oder „Reihenfolge:“; die rechnet das Zusammensetzen aus der Schnittliste`);
+  const fremd = Object.keys(entwuerfe).filter((bereich) => !bereiche.includes(bereich)).map((bereich) => `Entwurf für ${bereich} gehört zu keinem Auftrag der Schnittliste`);
+  return [...fehlend, ...doppelt, ...fremd];
+}
+
+function namenBefunde(gemeinsameNamen, entwuerfe) {
+  return liste(gemeinsameNamen).flatMap(({ name, anbieter, nutzer }) =>
+    [anbieter, nutzer].filter((bereich) => !(entwuerfe[bereich] ?? "").includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
+  );
+}
+
+function schreibe(ordner, phase) {
+  const ziel = join(ordner, PHASE);
+  const zwischen = join(ordner, `.${PHASE}.${pid}.tmp`);
+  writeFileSync(zwischen, `${JSON.stringify(phase, null, JSON_EINRUECKUNG)}\n`);
+  renameSync(zwischen, ziel);
+}
+
+export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe, root }) {
+  const pruefung = await schnittImOrdner(ordner, { schnitt, berichte, root });
+  if (pruefung.befunde.length > 0) return { befunde: pruefung.befunde };
+  const { soll } = nummernImOrdner(ordner);
+  const auftraege = schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, soll));
+  const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereich))];
+  const vorab = [...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
+  if (vorab.length > 0) return { befunde: vorab };
+  const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich))]));
+  const phase = { phase: basename(resolve(ordner)), entwurf, auftraege };
+  const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
+  if (befunde.length === 0) schreibe(ordner, phase);
+  return { befunde, phase };
+}
