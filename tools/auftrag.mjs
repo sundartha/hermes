@@ -6,6 +6,7 @@ import { lauf } from "./auftrag/lauf.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
 import { messung } from "./auftrag/planung/messung.mjs";
 import { schnittBefehl } from "./auftrag/planung/schnitt.mjs";
+import { dateien, suche } from "./auftrag/planung/suche.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
@@ -30,6 +31,8 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
+  "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
+  "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
 ].join("\n");
 const OPTIONEN = [
   "rolle",
@@ -71,6 +74,8 @@ const BEFEHLE = {
   karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
   messung: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
   schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
+  suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
+  dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },
 };
 
 function gelesen() {
@@ -90,11 +95,15 @@ function pflichtOptionen(befehl, argumente) {
     : (befehl.optionen ?? []);
 }
 
+function passendeZahl(befehl, argumente) {
+  return befehl.mindestens === undefined ? argumente.length === befehl.argumente : argumente.length >= befehl.mindestens;
+}
+
 function aufruf() {
   const { positionals, values } = gelesen();
   const [name, ...argumente] = positionals;
   const befehl = BEFEHLE[name];
-  if (!Object.hasOwn(BEFEHLE, name ?? "") || argumente.length !== befehl.argumente) return null;
+  if (!Object.hasOwn(BEFEHLE, name ?? "") || !passendeZahl(befehl, argumente)) return null;
   const pflicht = pflichtOptionen(befehl, argumente);
   const fehlend = pflicht === undefined || pflicht.some((option) => values[option] === undefined);
   if (values.json !== undefined && befehl.json !== true) return null;
