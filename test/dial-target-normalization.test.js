@@ -7,15 +7,7 @@ import {
   E164,
   BOOTSTRAP_TENANT_ID,
 } from "../src/store/defaults.js";
-import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-
-const postCall = (url, to) =>
-  abrufMitFrist(`${url}/api/calls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, objective: "Test" }),
-  });
+import { startServer, seedState, OWNER_TEST_NUMBER, placeCall } from "./helpers.js";
 
 test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
   await t.test("erste bekannte Heimatland-Vorwahl gewinnt (Praezedenz der Kandidaten, GAP-25)", () => {
@@ -158,7 +150,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("privateNumber (DE) vor US-DID -> '01737...' passiert das Format-Gate (500)", async () => {
     const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
     try {
-      const res = await postCall(srv.localUrl, DE_TARGET_NATIONAL);
+      const res = await placeCall(srv, DE_TARGET_NATIONAL);
       assert.equal(res.status, 500, "normalisierte Nummer muss ALLE Gates passieren");
     } finally {
       await srv.stop();
@@ -171,7 +163,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
       ownerNumber: { e164: "+4915799990001", provider: "telnyx" },
     });
     try {
-      const res = await postCall(srv.localUrl, DE_TARGET_NATIONAL);
+      const res = await placeCall(srv, DE_TARGET_NATIONAL);
       assert.equal(res.status, 500, "DID-Land muss als Fallback greifen");
     } finally {
       await srv.stop();
@@ -181,7 +173,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("US-Heimatland kennt keine fuehrende 0 (NANP-DID, keine privateNumber) -> 400 statt raten", async () => {
     const srv = await startServer({ env: HTTP_ENV });
     try {
-      const res = await postCall(srv.localUrl, DE_TARGET_NATIONAL);
+      const res = await placeCall(srv, DE_TARGET_NATIONAL);
       assert.equal(res.status, 400, "eine fuehrende 0 ist im NANP-Heimatland keine gueltige Schreibweise");
       assert.match((await res.json()).error, /E\.164/);
     } finally {
@@ -192,8 +184,8 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("00-Praefix + Trunk-0-Wiederholungspruefung auf dem Ergebnis", async () => {
     const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
     try {
-      assert.equal((await postCall(srv.localUrl, `0049${DE_TARGET_NATIONAL.slice(1)}`)).status, 500);
-      const res = await postCall(srv.localUrl, `0049${DE_TARGET_NATIONAL}`);
+      assert.equal((await placeCall(srv, `0049${DE_TARGET_NATIONAL.slice(1)}`)).status, 500);
+      const res = await placeCall(srv, `0049${DE_TARGET_NATIONAL}`);
       assert.equal(res.status, 400, "materialisierter Trunk-0 muss abgewiesen werden");
       assert.match((await res.json()).error, /E\.164/);
     } finally {
@@ -204,7 +196,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("E.164-Eingabe bleibt byte-identisch behandelt (Bestand)", async () => {
     const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
     try {
-      assert.equal((await postCall(srv.localUrl, DE_TARGET_E164)).status, 500);
+      assert.equal((await placeCall(srv, DE_TARGET_E164)).status, 500);
     } finally {
       await srv.stop();
     }
@@ -225,7 +217,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("NANP-Tenant: 10-stellige Eingabe wird zu +1 und durchlaeuft ALLE Gates", async () => {
     const srv = await startServer({ seed: seedNanpTenant });
     try {
-      const res = await postCall(srv.localUrl, "2125550123");
+      const res = await placeCall(srv, "2125550123");
       assert.equal(res.status, 500, "normalisiertes +1-Ziel muss ALLE Gates passieren");
       const call = srv.readStore().calls.find((c) => c.direction === "outbound");
       assert.equal(call?.to, "+12125550123", "der persistierte Call traegt die normalisierte NANP-Nummer");
@@ -237,7 +229,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("NANP-Tenant: 9005550123 wird zu +1900... und dort von der Denylist gestoppt", async () => {
     const srv = await startServer({ seed: seedNanpTenant });
     try {
-      const res = await postCall(srv.localUrl, "9005550123");
+      const res = await placeCall(srv, "9005550123");
       assert.equal(res.status, 403);
       assert.match((await res.json()).error, /is blocked/);
     } finally {
@@ -261,7 +253,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
       });
       const srv = await startServer({ seed: seedEuTenant });
       try {
-        const res = await postCall(srv.localUrl, "8912345678");
+        const res = await placeCall(srv, "8912345678");
         assert.equal(res.status, 400, "kein NANP-Fremdanruf-Pfad ohne bestaetigtes Tenant-Herkunftsland");
         assert.match((await res.json()).error, /E\.164/);
         const call = srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === "+18912345678");
@@ -297,7 +289,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
       ownerNumber: { e164: FOREIGN_DE_DID, provider: "telnyx" },
     });
     try {
-      const res = await postCall(srv.localUrl, DE_NATIONAL_TARGET);
+      const res = await placeCall(srv, DE_NATIONAL_TARGET);
       assert.equal(res.status, 400, "SOLL: eine fuehrende 0 im NANP-Heimatland faellt am E.164-Gate");
 
       const call = srv
@@ -327,7 +319,7 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
   await t.test("'0049...' (ITU-Wahl) passiert alle Gates trotz NANP-Heimatland (500)", async () => {
     const srv = await startServer({ env: HTTP_ENV_ITU });
     try {
-      const res = await postCall(srv.localUrl, `0049${DE_TARGET_NATIONAL.slice(1)}`);
+      const res = await placeCall(srv, `0049${DE_TARGET_NATIONAL.slice(1)}`);
       assert.equal(res.status, 500, "die ITU-Wahl muss trotz NANP-Heimatland alle Gates passieren");
     } finally {
       await srv.stop();
@@ -337,7 +329,7 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
   await t.test("10-stellige, NANP-unplausible Eingabe bleibt 400 statt geraten (kein Fremdanruf-Pfad)", async () => {
     const srv = await startServer({ env: HTTP_ENV_ITU });
     try {
-      const res = await postCall(srv.localUrl, "0301234567");
+      const res = await placeCall(srv, "0301234567");
       assert.equal(res.status, 400, "eine NANP-unplausible 10-stellige Eingabe darf nicht materialisiert werden");
       assert.match((await res.json()).error, /E\.164/);
     } finally {
