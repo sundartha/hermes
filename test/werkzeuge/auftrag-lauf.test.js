@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -188,6 +188,53 @@ test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung
     assert.match(readFileSync(join(werkzeug, "prompt-bau-nachrunde.txt"), "utf8"), /src\/rechnen\.js:2:7/);
     assert.ok(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout.includes(nachricht), letzte);
   }
+});
+
+const PATCH = ".git/auftrag-umbau/probe/A1.patch";
+const NOETIG_GRUND = "eine Sieben sonst verdoppelt würde";
+const NOETIG = `Nötig: ${NEU_MUTANT}, weil ${NOETIG_GRUND}`;
+const PASST_NICHT = "Auftrag passt nicht: Die Zeile ist nötig, nur der Test fehlt.";
+
+function ehrlicheNachrunde(antwort) {
+  return { "bau-nachrunde-antwort": { "Nötig: <Mutant>": antwort, "": PASST_NICHT } };
+}
+
+function mitSieben(context, zusatz) {
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...zusatz };
+  return starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_MUTATION });
+}
+
+function pruefeGesichert({ repo, beleg }) {
+  assert.equal(beleg.patch, join(realpathSync(repo), PATCH));
+  assert.match(readFileSync(join(repo, PATCH), "utf8"), /^\+ {2}if \(zahl === 7\) return 0;$/m);
+}
+
+test("hält der Bau-Agent eine überlebende Zeile für nötig, ergänzt der Test-Agent den Test und der Auftrag wird grün", (context) => {
+  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST } };
+  const { repo, werkzeug, lauf, beleg } = mitSieben(context, { ...ehrlicheNachrunde(NOETIG), ...nachgeholt });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual([pruefung(beleg, "mutation"), pruefung(beleg, "mutation nach Test")], [EXIT_ROT, 0]);
+  assert.ok(readFileSync(join(werkzeug, "prompt-test-nachrunde.txt"), "utf8").includes(NOETIG_GRUND));
+  assert.equal(runIn(repo, "git", ["show", "HEAD:src/rechnen.js"]).stdout, MIT_SIEBEN["src/rechnen.js"]);
+  assert.doesNotMatch(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout, /^Gleichwertig: /m);
+});
+
+test("eine als nötig gemeldete Zeile gilt nie als gleichwertig; tötet kein Test den Mutanten, bleibt der Auftrag rot", (context) => {
+  const ergebnis = mitSieben(context, ehrlicheNachrunde(`${NOETIG}\n${GLEICHWERTIG_MIT_GRUND}`));
+  const { lauf, beleg } = ergebnis;
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(beleg.grund, `Mutant überlebt: ${NEU_MUTANT}`);
+  assert.equal(pruefung(beleg, "mutation nach Test"), EXIT_ROT);
+  const mutationen = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation"));
+  assert.ok(mutationen.every(({ befehl }) => !befehl.includes("--gleichwertig")), JSON.stringify(mutationen));
+  pruefeGesichert(ergebnis);
+});
+
+test("endet der Auftrag rot in der Mutationsprüfung, liegt der Bau als Patch am Ablageort und steht im Beleg", (context) => {
+  const ergebnis = mitSieben(context, { "bau-nachrunde-antwort": PASST_NICHT });
+  assert.equal(ergebnis.lauf.status, EXIT_ROT, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
+  assert.equal(pruefung(ergebnis.beleg, "mutation"), EXIT_ROT);
+  pruefeGesichert(ergebnis);
 });
 
 test("ein Umbau ungeschützten Verhaltens wird verworfen; mit dem Test auf dem alten Stand läuft er neu", (context) => {
