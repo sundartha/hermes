@@ -2,15 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { E164, hasTrunkZeroAfterCountryCode } from "../src/store/defaults.js";
 import { isTrunkZeroFormatError } from "../src/telephony/outbound-gates.js";
-import { startServer } from "./helpers.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-
-const postCall = (url, to) =>
-  abrufMitFrist(`${url}/api/calls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, objective: "Test" }),
-  });
+import { startServer, placeCall } from "./helpers.js";
 
 test("hasTrunkZeroAfterCountryCode (Praedikat)", async (t) => {
   await t.test("Trunk-0 nach +49/+33/+44 -> true", () => {
@@ -68,7 +60,7 @@ test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t)
   try {
     await t.test("Trunk-0 nach Laendervorwahl -> 400 (E.164), kein Originate", async () => {
       for (const to of TRUNK_ZERO) {
-        const res = await postCall(srv.localUrl, to);
+        const res = await placeCall(srv, to);
         assert.equal(res.status, 400, `${to} muss als Formatfehler 400 liefern (nicht 500)`);
         assert.match((await res.json()).error, /E\.164/, `${to} -> E.164-Meldung`);
       }
@@ -77,7 +69,7 @@ test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t)
     await t.test("korrekte Nummer ist kein False-Positive -> passiert (500)", async () => {
       for (const to of CLEAN) {
         assert.equal(
-          (await postCall(srv.localUrl, to)).status,
+          (await placeCall(srv, to)).status,
           500,
           `${to} darf NICHT vom Trunk-0-Reject getroffen werden`,
         );
@@ -93,7 +85,7 @@ test("POST /api/calls: denied UND trunk-0-foermig bleibt 403 denylist (C4-Bypass
     env: { ALLOWED_NUMBERS: "+4915112345678", ALLOWED_COUNTRY_CODES: "*" },
   });
   const blockedByDenylist = async (to) => {
-    const res = await postCall(srv.localUrl, to);
+    const res = await placeCall(srv, to);
     assert.equal(res.status, 403, `${to} muss am Denylist-Gate sperren (nicht 400)`);
     assert.match((await res.json()).error, /is blocked/, `${to} muss grund=denylist sein`);
   };

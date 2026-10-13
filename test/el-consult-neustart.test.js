@@ -85,25 +85,29 @@ const seedMitZweitemAnruf = () =>
     ],
   });
 
-function raiseConsult(srv, conversationId = CONVERSATION_ID) {
+function mitDauer(anfrage) {
   const started = Date.now();
-  return abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
-    body: JSON.stringify({ conversation_id: conversationId, question: QUESTION }),
-  }).then(
+  return anfrage().then(
     async (res) => ({ status: res.status, body: await res.json(), ms: Date.now() - started }),
     (err) => ({ status: null, fehler: String(err), ms: Date.now() - started }),
   );
 }
 
+function raiseConsult(srv, conversationId = CONVERSATION_ID) {
+  return mitDauer(() =>
+    abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
+      body: JSON.stringify({ conversation_id: conversationId, question: QUESTION }),
+    }),
+  );
+}
+
 function pollAfterOpenConsult(srv) {
-  const started = Date.now();
-  return abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}/consult?after=${EVENT_ID}`, {}, {
-    wartezeitMs: CONSULT_POLL_HOLD_MS,
-  }).then(
-    async (res) => ({ status: res.status, body: await res.json(), ms: Date.now() - started }),
-    (err) => ({ status: null, fehler: String(err), ms: Date.now() - started }),
+  return mitDauer(() =>
+    abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}/consult?after=${EVENT_ID}`, {}, {
+      wartezeitMs: CONSULT_POLL_HOLD_MS,
+    }),
   );
 }
 

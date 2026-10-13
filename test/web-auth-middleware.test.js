@@ -42,14 +42,13 @@ async function mount(deps, factory = webAuth) {
 
 function get(url, cookie) {
   return new Promise((resolve, reject) => {
-    const req = mitAntwortfrist(
+    mitAntwortfrist(
       http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
         let body = "";
         res.on("data", (d) => (body += d));
         res.on("end", () => resolve({ status: res.statusCode, body }));
       }),
-    );
-    req.on("error", reject);
+    ).on("error", reject);
   });
 }
 const sessionCookie = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
