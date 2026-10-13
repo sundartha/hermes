@@ -29,6 +29,7 @@ class AuftragsLauf {
     this.voraussetzung = null;
     this.ausstieg = null;
     this.entscheidung = null;
+    this.patch = null;
     this.basis = kopf(root);
     this.basisBau = this.basis;
     this.testausgabe = "";
@@ -124,6 +125,11 @@ class AuftragsLauf {
     return true;
   }
 
+  gesichert(patch) {
+    this.patch = patch;
+    return false;
+  }
+
   entscheidungNoetig(entscheidung) {
     this.entscheidung = entscheidung;
     return this.scheitert(entscheidung.anlass);
@@ -205,6 +211,7 @@ class AuftragsLauf {
       voraussetzung: this.voraussetzung,
       ausstieg: this.ausstieg,
       entscheidung: this.entscheidung,
+      patch: this.patch,
       commit: this.commit,
       agenten: this.agenten,
       pruefungen: this.pruefungen,

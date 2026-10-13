@@ -18,7 +18,9 @@ const prompt = readFileSync(0, "utf8");
 const rolle = process.env.HERMES_ROLLE + (prompt.includes("Überlebende Mutanten") ? "-nachrunde" : "");
 const drehbuch = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"));
 writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".txt"), prompt);
-console.log(JSON.stringify({ type: "result", result: drehbuch[rolle + "-antwort"] ?? "" }));
+const antwort = drehbuch[rolle + "-antwort"] ?? "";
+const angeboten = typeof antwort === "string" ? antwort : Object.entries(antwort).find(([angebot]) => prompt.includes(angebot))[1];
+console.log(JSON.stringify({ type: "result", result: angeboten }));
 for (const [pfad, inhalt] of Object.entries(drehbuch[rolle] ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);

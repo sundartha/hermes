@@ -12,6 +12,7 @@ const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const GLEICHWERTIG = "Gleichwertig: ";
 const BEGRUENDET = ", weil ";
 const MELDUNG = /^Gleichwertig: (.+?), weil (\S.*)$/gm;
+const NOETIG = /^Nötig: (.+?), weil (\S.*)$/gm;
 const ABLAGE = "auftrag-umbau";
 const EINSPIELEN = "umbau einspielen";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
@@ -25,8 +26,8 @@ function treffer(text, muster) {
   return [...text.matchAll(muster)].map(([, wert]) => wert.trim());
 }
 
-function meldungen(text) {
-  return [...text.matchAll(MELDUNG)].map(([, mutant, grund]) => ({ mutant: mutant.trim(), grund: grund.trim() }));
+function meldungen(text, muster = MELDUNG) {
+  return [...text.matchAll(muster)].map(([, mutant, grund]) => ({ mutant: mutant.trim(), grund: grund.trim() }));
 }
 
 function liste(mutanten) {
@@ -57,24 +58,27 @@ function bauNachrunde(ueberlebende) {
     "Streiche oder vereinfache den Code, den kein Test verlangt. Tests änderst du nicht.",
     "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt Streichen mit einer Zeile je Mutant:",
     "Gleichwertig: <Mutant>, weil <ein Satz>",
+    "Ist die Zeile nötig und fehlt nur ein Test, der sie verlangt, änderst du sie nicht und antwortest mit einer Zeile je Mutant:",
+    "Nötig: <Mutant>, weil <ein Satz>",
     "",
   ].join("\n");
 }
 
-function testNachrunde({ phase, auftrag }, ueberlebende, { stand, melden }) {
+function testNachrunde({ phase, auftrag }, ueberlebende, { stand, melden, noetig = [] }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
   const zeilen = [testPrompt(phase, auftrag), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""];
-  return [...zeilen, ...(melden ? MELDEN : [])].join("\n");
+  const begruendet = noetig.length > 0 ? ["Der Bau-Agent hält diese Zeilen für nötig:", liste(noetig.map(({ mutant, grund }) => `${mutant}, weil ${grund}`)), ""] : [];
+  return [...zeilen, ...begruendet, ...(melden ? MELDEN : [])].join("\n");
 }
 
 function bauKorrigiert(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
   if (!lauf.agent("bau", bauNachrunde(ueberlebende), sitzung)) return false;
-  const gemeldet = meldungen(lauf.agenten.at(-1).antwort);
-  for (const { mutant, grund } of gemeldet.filter((eintrag) => ueberlebende.includes(eintrag.mutant))) {
-    lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
-  }
-  return lauf.bauSchritte().slice(1).every((schritt) => schritt());
+  const { antwort } = lauf.agenten.at(-1);
+  const noetig = meldungen(antwort, NOETIG).filter(({ mutant }) => ueberlebende.includes(mutant));
+  const gleichwertig = meldungen(antwort).filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
+  for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
+  return lauf.bauSchritte().slice(1).every((schritt) => schritt()) && noetig;
 }
 
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
@@ -82,10 +86,10 @@ function testErgaenzt(lauf, ueberlebende, vorgabe) {
   return lauf.grenzen("test", lauf.basisBau);
 }
 
-function testNachgeholt(lauf, ueberlebende) {
+function testNachgeholt(lauf, ueberlebende, noetig) {
   return (
     lauf.zwischenstand() &&
-    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false }) &&
+    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false, noetig }) &&
     lauf.allesVormerken() &&
     lauf.gruen("abnahme", abnahmeBefehl(lauf.kontext.auftrag))
   );
@@ -95,10 +99,11 @@ function neueZeilen(lauf) {
   const pruefen = (name) => mutanten(lauf, name, ["--basis", lauf.basis]);
   let stand = pruefen("mutation");
   if (stand.ende !== undefined) return stand.ende;
-  if (!bauKorrigiert(lauf, stand.ueberlebende)) return false;
+  const noetig = bauKorrigiert(lauf, stand.ueberlebende);
+  if (!noetig) return false;
   stand = pruefen("mutation nach Bau");
   if (stand.ende !== undefined) return stand.ende;
-  if (!testNachgeholt(lauf, stand.ueberlebende)) return false;
+  if (!testNachgeholt(lauf, stand.ueberlebende, noetig)) return false;
   stand = pruefen("mutation nach Test");
   return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
 }
@@ -108,12 +113,22 @@ function ablage({ root, phase, auftrag }) {
   return join(resolve(root, gemeinsam), ABLAGE, phase.phase, `${auftrag.id}.patch`);
 }
 
-function zurueckstellen(lauf) {
-  const { root } = lauf.kontext;
+function sichern(lauf, basis) {
   const datei = ablage(lauf.kontext);
   mkdirSync(dirname(datei), { recursive: true });
   lauf.allesVormerken();
-  git(["diff", "--cached", "--binary", ...PATCH_FORMAT, `--output=${datei}`, lauf.basisBau], { cwd: root });
+  git(["diff", "--cached", "--binary", ...PATCH_FORMAT, `--output=${datei}`, basis], { cwd: lauf.kontext.root });
+  return datei;
+}
+
+function neueZeilenGesichert(lauf) {
+  const basis = lauf.basisBau;
+  return neueZeilen(lauf) || lauf.gesichert(sichern(lauf, basis));
+}
+
+function zurueckstellen(lauf) {
+  const { root } = lauf.kontext;
+  const datei = sichern(lauf, lauf.basisBau);
   git(["reset", "-q", "--hard", lauf.basisBau], { cwd: root });
   git(["clean", "-q", "-fd"], { cwd: root });
   return { datei, inhalt: readFileSync(datei, "utf8") };
@@ -184,7 +199,7 @@ function alterStand(lauf) {
 }
 
 export function mutationsSchritte(lauf) {
-  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilen(lauf)];
+  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf)];
   lauf.hinweise.push(`Mutationsprüfung: package.json hat kein Skript ${SKRIPT}.`);
   return [];
 }
