@@ -80,6 +80,11 @@ class AuftragsLauf {
     return this.gruen(`grenzen ${rolle}`, this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis));
   }
 
+  bauHatGeaendert() {
+    const geaendert = aenderungenSeit(this.basisBau, this.kontext.root).length > 0;
+    return geaendert || this.scheitert("Der Bau-Agent hat keine Datei geändert.");
+  }
+
   rotMitErwartetemFehler() {
     const ergebnis = this.pruefung("rot", this.eigenerBefehl("rot"));
     this.testausgabe = ergebnis.ausgabe;
@@ -176,6 +181,7 @@ class AuftragsLauf {
     return [
       () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
       () => this.grenzen("bau", this.basisBau),
+      () => this.bauHatGeaendert(),
       () => this.allesVormerken(),
       () => this.typpruefung(),
       () => this.gruen("lint", ["npm", "--silent", "run", "lint"]),

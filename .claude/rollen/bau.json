@@ -29,6 +29,9 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
+    "network": {
+      "allowLocalBinding": true
+    },
     "filesystem": {
       "denyWrite": [
         "../../.fortschritt"
