@@ -45,3 +45,9 @@ test("auftrag-umbau-ausweg: der Umbau aus „Voraussetzung fehlt“ ist in einer
 test("auftrag-umbau-ausweg: in Phasen ohne Pitch bleibt der Umbau gültig", (context) => {
   assert.deepEqual(umbauIn(context, "E-001-probe").befunde, []);
 });
+
+test("auftrag-umbau-ausweg: ein Vorschlag ohne bereich legt keinen Entwurfsabschnitt „undefined“ an", () => {
+  const phase = { phase: "P-001-probe", entwurf: {}, auftraege: [AUFTRAG] };
+  const neu = umbauPhase(phase, AUFTRAG, JSON.stringify({ ziel: "Lege text an", entwurf: "Text anlegen." }));
+  assert.deepEqual(Object.keys(neu.entwurf), []);
+});

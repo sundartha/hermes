@@ -18,6 +18,7 @@ const JSON_OBJEKT = /\{[\s\S]*\}/;
 const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme"];
 const CODEBLOCK = "```";
+const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
 
 function verwerfe(basis, root) {
   git(["reset", "-q", "--hard", basis], { cwd: root });
@@ -42,6 +43,7 @@ function planPrompt(phase, auftrag, satz) {
       "Mach aus der fehlenden Voraussetzung genau einen Umbau-Auftrag, der sie herstellt und das Verhalten nicht ändert.",
       `Antworte nur mit einem JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf.`,
       "ziel ist eine Zeile mit höchstens 72 Zeichen, abnahme ein bestehender Test, der vor und nach dem Umbau grün ist, entwurf der Entwurfsabschnitt für den Bereich in Klartext.",
+      "bereich, vorbild und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
     ]),
   ].join("\n");
 }
@@ -61,17 +63,24 @@ function notizPrompt(phase, auftrag, { anlass, verlauf }) {
 function vorschlag(antwort) {
   try {
     const wert = JSON.parse(JSON_OBJEKT.exec(antwort)?.[0] ?? "");
-    return wert !== null && typeof wert === "object" ? wert : {};
+    return wert !== null && typeof wert === "object" ? wert : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
 export function umbauPhase(phase, auftrag, antwort) {
   const felder = vorschlag(antwort);
+  if (felder === null) return null;
   const gewaehlt = Object.fromEntries(UMBAU_FELDER.map((feld) => [feld, felder[feld]]));
   const umbau = { ...gewaehlt, id: `${auftrag.id}-umbau`, art: "umbau", prueft: UMBAU_AUSWEG };
-  return { ...phase, entwurf: { [umbau.bereich]: felder.entwurf }, auftraege: [umbau] };
+  const entwurf = typeof umbau.bereich === "string" ? { [umbau.bereich]: felder.entwurf } : {};
+  return { ...phase, entwurf, auftraege: [umbau] };
+}
+
+function planBefunde(plan, neu, root) {
+  if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
+  return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
 }
 
 function veroeffentliche(issue, text, root) {
@@ -143,10 +152,10 @@ class Runden {
 
   planeUmbau(ergebnis) {
     const { phase, auftrag, root } = this.kontext;
-    const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, ergebnis.voraussetzung));
-    const neu = umbauPhase(phase, auftrag, plan.antwort);
-    const [umbau] = neu.auftraege;
-    const befunde = plan.exitCode === 0 ? phasenBefunde(neu, root) : [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
+    const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, ergebnis.voraussetzung), { vollstaendig: true });
+    const neu = umbauPhase(phase, auftrag, plan.volleAntwort ?? plan.antwort);
+    const umbau = neu?.auftraege[0];
+    const befunde = planBefunde(plan, neu, root);
     schreibeBeleg(root, {
       phase: phase.phase,
       auftrag: `${auftrag.id}-plan`,

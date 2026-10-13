@@ -4,6 +4,7 @@ import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { REPO_ROOT, isolatedEnvironment, passingTest, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
@@ -11,6 +12,7 @@ const EXIT_ROT = 1;
 const ISSUE = 54;
 const ZWEITE_RUNDE = 2;
 const PROBE = "probe@example.invalid";
+const CODEBLOCK = "```";
 
 const CLAUDE = `#!/usr/bin/env node
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -153,24 +155,50 @@ test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftr
   assert.equal(runIn(repo, "git", ["status", "--porcelain"]).stdout, "");
 });
 
-test("„Altfunktionen aufräumen“ baut erst einen Umbau, der eslint-suppressions.json kürzt, und startet dann den Auftrag neu", (context) => {
-  const umbau = { ziel: "Räume die Altfunktion alt auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
-  const plan = [{ antwort: JSON.stringify({ ...umbau, entwurf: "Die ungenutzte Variable alt fällt weg." }) }];
+const ALTFUNKTION_FEHLT = `Voraussetzung fehlt: Altfunktionen aufräumen: ${ZAHL}:alt`;
+const ALTFUNKTION_UMBAU = { ziel: "Räume die Altfunktion alt auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
+
+function raeumtAltfunktionAuf(context, planAntwort) {
   const bau = [
-    { antwort: `Voraussetzung fehlt: Altfunktionen aufräumen: ${ZAHL}:alt` },
+    { antwort: ALTFUNKTION_FEHLT },
     { dateien: { [ZAHL]: "export const ZAHL = 1;\n" } },
     { dateien: { [ZAHL]: "export const ZAHL = 2;\n" } },
   ];
-  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, plan }, MIT_ALTFUNKTION);
-  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, plan: [{ antwort: planAntwort }] }, MIT_ALTFUNKTION);
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr + JSON.stringify(beleg("A1-plan")?.befunde));
   const git = (...args) => runIn(repo, "git", args).stdout.trim();
-  assert.deepEqual(git("log", "--format=%s").split("\n"), [AUFTRAG.ziel, umbau.ziel, "Basis"]);
+  assert.deepEqual(git("log", "--format=%s").split("\n"), [AUFTRAG.ziel, ALTFUNKTION_UMBAU.ziel, "Basis"]);
   assert.match(beleg("A1-plan").grund, /^Voraussetzung fehlt: Altfunktionen aufräumen: src\/zahl\.js:alt$/);
   assert.deepEqual(git("show", "--name-only", "--format=", "HEAD~1").split("\n").sort(), ["eslint-suppressions.json", ZAHL]);
   const vorher = JSON.parse(git("show", "HEAD~2:eslint-suppressions.json"));
   const nachher = JSON.parse(git("show", "HEAD~1:eslint-suppressions.json"));
   assert.deepEqual([Object.keys(vorher), Object.keys(nachher)], [[ZAHL], []]);
   assert.equal(datei("anzahl-bau"), String(bau.length));
+  return beleg("A1-plan").umbau;
+}
+
+test("„Altfunktionen aufräumen“ baut erst einen Umbau, der eslint-suppressions.json kürzt, und startet dann den Auftrag neu", (context) => {
+  raeumtAltfunktionAuf(context, JSON.stringify({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }));
+});
+
+test("ein Umbau-Vorschlag, dessen JSON länger als 1000 Zeichen ist, wird aus der vollständigen Antwort gelesen", (context) => {
+  const entwurf = `Die ungenutzte Variable alt fällt weg. ${"Der Default { record: async () => {} } bleibt gleich. ".repeat(30)}`;
+  const vorschlag = JSON.stringify({ ...ALTFUNKTION_UMBAU, entwurf }, null, 2);
+  assert.ok(vorschlag.length > 1000);
+  const umbau = raeumtAltfunktionAuf(context, `${CODEBLOCK}json\n${vorschlag}\n${CODEBLOCK}`);
+  assert.deepEqual(umbau, { ...ALTFUNKTION_UMBAU, id: "A1-umbau", art: "umbau", prueft: UMBAU_AUSWEG });
+});
+
+test("liefert der Plan-Agent kein JSON-Objekt, geht der Auftrag mit genau diesem Grund zurück in die Entwurfsprüfung", (context) => {
+  const bau = [{ antwort: ALTFUNKTION_FEHLT }];
+  const { repo, ergebnis, beleg } = lauf(context, { bau, plan: [{ antwort: "Dafür sehe ich keinen sinnvollen Umbau." }] }, MIT_ALTFUNKTION);
+  assert.equal(ergebnis.status, EXIT_ROT);
+  const { befunde, umbau } = beleg("A1-plan");
+  assert.deepEqual([befunde.length, umbau], [1, undefined]);
+  assert.match(befunde[0], /JSON/);
+  const { ergebnis: urteil, grund } = beleg("A1");
+  assert.deepEqual([urteil, grund], ["entwurfsprüfung", `Zurück in die Entwurfsprüfung: Kein gültiger Umbau-Auftrag: ${befunde[0]}`]);
+  assert.equal(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim(), "Basis");
 });
 
 test("ein voller Kontext geht an einen frischen Agenten; nach der Limit-Meldung startet der nächste erst nach dem Zurücksetzen", (context) => {

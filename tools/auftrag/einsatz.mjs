@@ -105,7 +105,7 @@ export function setzeEin(kontext, prompt, start) {
   }
 }
 
-export function frage(kontext, prompt) {
+export function frage(kontext, prompt, { vollstaendig = false } = {}) {
   const definition = {
     [kontext.rolle]: {
       description: "Liest das Repo und antwortet mit Text; ändert nichts.",
@@ -115,5 +115,5 @@ export function frage(kontext, prompt) {
     },
   };
   const argumente = ["--agents", JSON.stringify(definition), "--settings", OHNE_HOOKS, "--tools", LESE_WERKZEUGE.join(",")];
-  return setzeEin(kontext, prompt, { agent: kontext.rolle, argumente });
+  return setzeEin(kontext, prompt, { agent: kontext.rolle, argumente, vollstaendig });
 }
