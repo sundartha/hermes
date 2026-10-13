@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env*)", "Read(data/**)", "Edit", "Write",
+      "Read(//**/.claude/settings.local.json)",
+      "Read(//**/.env)",
+      "Read(//**/.env[ --0-~]*)",
+      "Read(//**/.env.)",
+      "Read(//**/.env.[ -.0-DF-SU-df-su-~]*)",
+      "Read(//**/.env.e)",
+      "Read(//**/.env.e[ -.0-WY-wy-~]*)",
+      "Read(//**/.env.ex)",
+      "Read(//**/.env.ex[ -.0-@B-`b-~]*)",
+      "Read(//**/.env.exa)",
+      "Read(//**/.env.exa[ -.0-LN-ln-~]*)",
+      "Read(//**/.env.exam)",
+      "Read(//**/.env.exam[ -.0-OQ-oq-~]*)",
+      "Read(//**/.env.examp)",
+      "Read(//**/.env.examp[ -.0-KM-km-~]*)",
+      "Read(//**/.env.exampl)",
+      "Read(//**/.env.exampl[ -.0-DF-df-~]*)",
+      "Read(//**/.env.t)",
+      "Read(//**/.env.t[ -.0-DF-df-~]*)",
+      "Read(//**/.env.te)",
+      "Read(//**/.env.te[ -.0-RT-rt-~]*)",
+      "Read(//**/.env.tes)",
+      "Read(//**/.env.tes[ -.0-SU-su-~]*)",
+      "Read(//**/.env.example?*)",
+      "Bash(rm:*)", "Bash(mv:*)", "Bash(cp:*)", "Bash(touch:*)", "Bash(mkdir:*)", "Bash(rmdir:*)", "Bash(sed:*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyWrite": ["../.."]
+    }
+  }
+}
