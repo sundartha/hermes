@@ -25,6 +25,8 @@ const LEERRAUM = /\s+/g;
 const NICHT_ZEILENENDE = /[^\n]/g;
 const ZEILENENDE = "\n";
 const LANGER_NAME = 40;
+const REGEL_MIT_INNEREN_ZEILEN = "max-lines-per-function";
+const ZWISCHEN_ZWEI_ZEILEN = 0.5;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = "Aufruf: node tools/lint-neue-funktionen.mjs --basis <commit>";
@@ -69,11 +71,21 @@ function hunkAuswerten(hunk, alt, neu) {
   return { zeilen, loeschungen: [{ von: start, bis: anzahl === 0 ? start + 1 : start }] };
 }
 
+function zuwachs(hunk, alt, neu) {
+  const { start, anzahl } = hunk.neu;
+  const codeZeilen = (seite, bereich) => codeVon(seite, bereich).filter(Boolean).length;
+  return {
+    stelle: anzahl === 0 ? start + ZWISCHEN_ZWEI_ZEILEN : start,
+    zeilen: codeZeilen(neu, hunk.neu) - codeZeilen(alt, hunk.alt),
+  };
+}
+
 export function geaenderteStellen(hunkListe, alt, neu) {
   const ergebnisse = hunkListe.map((hunk) => hunkAuswerten(hunk, alt, neu));
   return {
     zeilen: new Set(ergebnisse.flatMap(({ zeilen }) => zeilen)),
     loeschungen: ergebnisse.flatMap(({ loeschungen }) => loeschungen),
+    zuwachs: hunkListe.map((hunk) => zuwachs(hunk, alt, neu)),
   };
 }
 
@@ -122,10 +134,20 @@ function geaenderteFunktionen(funktionen, stellen, zeilen) {
   return geaendert;
 }
 
+function istGewachsen({ loc }, stellen) {
+  const innen = stellen.zuwachs.filter(({ stelle }) => loc.start.line <= stelle && stelle <= loc.end.line);
+  return innen.reduce((summe, { zeilen }) => summe + zeilen, 0) > 0;
+}
+
+function funktionZaehlt(meldung, funktion, { geaendert, stellen }) {
+  if (geaendert.has(funktion)) return true;
+  return meldung.ruleId === REGEL_MIT_INNEREN_ZEILEN && istGewachsen(funktion, stellen);
+}
+
 function meldungZaehlt(meldung, { funktionen, geaendert, stellen }) {
   const stelle = { line: meldung.line, column: (meldung.column ?? 1) - 1 };
   const funktion = innersteFunktion(funktionen, stelle);
-  if (funktion !== undefined) return geaendert.has(funktion);
+  if (funktion !== undefined) return funktionZaehlt(meldung, funktion, { geaendert, stellen });
   return stellen.zeilen.has(meldung.line);
 }
 
