@@ -119,7 +119,7 @@ test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn n
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz"), datei("gh.log")], ["1", "", ""]);
   const prompt = datei("prompt-planung.txt");
   assert.match(prompt, /^\n## Neuschnitt\n\nAuftrag a1 der Phase P-001-probe ist nach 2 roten Runden gestoppt\./);
-  for (const teil of ["Runde 1: abnahme endete mit Exit 1.", "Runde 2: abnahme endete mit Exit 1.", "Hinweise des Bau-Agenten:\n> Ich finde keinen Weg im Bereich.", `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/sicherheit.md`, `Phasendatei: ${PHASENDATEI}`, '"id": "a1"']) {
+  for (const teil of ["Runde 1: Der Bau-Agent hat keine Datei geändert.", "Runde 2: Der Bau-Agent hat keine Datei geändert.", "Hinweise des Bau-Agenten:\n> Ich finde keinen Weg im Bereich.", `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/sicherheit.md`, `Phasendatei: ${PHASENDATEI}`, '"id": "a1"']) {
     assert.ok(prompt.includes(teil), teil);
   }
   assert.ok(datei("argumente-planung.txt").startsWith('["-p","--agent","planung","--settings","{\\"disableAllHooks\\":true}"'), datei("argumente-planung.txt"));
@@ -372,10 +372,10 @@ test("steigt der Bau-Agent nach einer roten Runde aus, sehen Planer und Notiz-Ag
   const { ergebnis, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz")], ["1", "1"]);
-  assert.ok(datei("prompt-planung.txt").includes("\n## Verlauf\n\n```\nRunde 1: abnahme endete mit Exit 1."), datei("prompt-planung.txt"));
+  assert.ok(datei("prompt-planung.txt").includes("\n## Verlauf\n\n```\nRunde 1: Der Bau-Agent hat keine Datei geändert."), datei("prompt-planung.txt"));
   const notiz = datei("prompt-notiz.txt");
   assert.ok(notiz.includes(`\nDer Agent ist ausgestiegen: ${ausstieg} Schreib eine Entscheidungsnotiz`), notiz);
-  assert.ok(notiz.includes("\n## Verlauf\n\n```\nRunde 1: abnahme endete mit Exit 1."), notiz);
+  assert.ok(notiz.includes("\n## Verlauf\n\n```\nRunde 1: Der Bau-Agent hat keine Datei geändert."), notiz);
   assert.ok(notiz.includes(`\n${ausstieg}\nNeuschnitt 1: Zerlegung passt nicht: Der Entwurf widerspricht dem Test.\n\`\`\`\n`), notiz);
 });
 
