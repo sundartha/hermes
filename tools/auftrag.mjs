@@ -5,6 +5,7 @@ import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
 import { messung } from "./auftrag/planung/messung.mjs";
+import { schnittBefehl } from "./auftrag/planung/schnitt.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
@@ -28,6 +29,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs system",
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
+  "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
 ].join("\n");
 const OPTIONEN = [
   "rolle",
@@ -68,6 +70,7 @@ const BEFEHLE = {
   system: { argumente: 0, fuehreAus: () => system() },
   karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
   messung: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
+  schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
 };
 
 function gelesen() {

@@ -12,17 +12,17 @@ const NICHT_GEFUNDEN = "nicht gefunden";
 const WEITERE_AUSWEGE = { aenderungen: "keine Änderung", ownerEntscheidung: "keine", eingangImTest: "nicht erreichbar" };
 const AUSWEG = /^(nicht gefunden|keine Änderung|keine|nicht erreichbar), weil(.*)$/su;
 const ERREICHBAR = "erreichbar";
-const GRUND = /\p{L}{3,}/u;
+export const GRUND = /\p{L}{3,}/u;
 const MIT_AENDERUNG = /^[ST]/;
 const WENN = /^\s*Wenn\s/;
 const IN_BACKTICKS = /`([^`]+)`/g;
 const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
 
-function istObjekt(wert) {
+export function istObjekt(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
 }
 
-function istText(wert) {
+export function istText(wert) {
   return typeof wert === "string" && wert.trim() !== "";
 }
 
