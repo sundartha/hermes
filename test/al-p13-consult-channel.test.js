@@ -363,7 +363,9 @@ test("AL-P13-17: allowConsult=false -> 404 (lesen) / 403 (schreiben) trotz eigen
   try {
     assert.equal((await abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult`)).status, 404);
     assert.equal((await postAnswer(srv, { event_id: "c0", answers: ["x"] })).status, 403);
-    assert.equal(store.state.calls[0].consults[0].status, defaults.CONSULT_STATUS.OPEN);
+    const [ownCall] = store.state.calls;
+    const [consult] = ownCall.consults;
+    assert.equal(consult.status, defaults.CONSULT_STATUS.OPEN);
   } finally {
     await srv.stop();
   }
@@ -371,7 +373,8 @@ test("AL-P13-17: allowConsult=false -> 404 (lesen) / 403 (schreiben) trotz eigen
 
 test("AL-P13-18: der Lesepfad liefert Ereignis/Kennung/Fragen - und NIE ein Transkript", async () => {
   const store = makeRouteStore();
-  store.state.calls[0].transcript = [{ role: "agent", text: "GEHEIMES TRANSKRIPT", at: "x" }];
+  const [seededCall] = store.state.calls;
+  seededCall.transcript = [{ role: "agent", text: "GEHEIMES TRANSKRIPT", at: "x" }];
   ops.emitConsult(store.state, CALL_ID, QUESTIONS);
   const srv = await mountCallRoutes(store);
   try {
