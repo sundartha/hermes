@@ -30,12 +30,12 @@ const ERGEBNIS_DES_BAUS = [
   "",
 ].join("\n");
 
-export function limitSperre({ root, phase }) {
+function limitSperre({ root, phase }) {
   const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
   return join(resolve(root, gemeinsam), LIMIT_SPERREN, phase.phase);
 }
 
-export function restDerSperre(sperre) {
+function restDerSperre(sperre) {
   const bis = existsSync(sperre) ? Number(readFileSync(sperre, "utf8")) : 0;
   return bis - Date.now();
 }
@@ -48,7 +48,7 @@ function warteAufFreigabe(sperre) {
   }
 }
 
-export function sperreWegenLimit(sperre, { bis }) {
+function sperreWegenLimit(sperre, { bis }) {
   const jetzt = Date.now();
   const gemeldet = bis > jetzt ? bis : jetzt + WARTEZEIT_OHNE_ANGABE_MINUTEN * MS_JE_MINUTE;
   const frei = Math.max(jetzt + restDerSperre(sperre), gemeldet);
@@ -127,3 +127,5 @@ export function frage(kontext, prompt, { vollstaendig = false } = {}) {
   const argumente = ["--agents", JSON.stringify(definition), "--settings", OHNE_HOOKS, "--tools", LESE_WERKZEUGE.join(",")];
   return setzeEin(kontext, prompt, { agent: kontext.rolle, argumente, vollstaendig });
 }
+
+export { limitSperre, restDerSperre, sperreWegenLimit };
