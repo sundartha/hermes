@@ -5,6 +5,7 @@ import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
 import { messung } from "./auftrag/planung/messung.mjs";
+import { plane } from "./auftrag/planung/plane.mjs";
 import { schnittBefehl } from "./auftrag/planung/schnitt.mjs";
 import { dateien, suche } from "./auftrag/planung/suche.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
@@ -31,6 +32,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
+  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
 ].join("\n");
@@ -74,6 +76,7 @@ const BEFEHLE = {
   karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
   messung: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
   schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
+  plane: { argumente: 1, fuehreAus: ([ordner], root) => plane(ordner, root) },
   suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
   dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },
 };

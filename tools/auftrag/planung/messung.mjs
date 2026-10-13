@@ -10,6 +10,9 @@ const HAUPTAGENT = "haupt";
 const EXIT_GRUEN = 0;
 const JSON_EINRUECKUNG = 2;
 const MS_JE_SEKUNDE = 1000;
+const QUOTE_WIRKT = 0.9;
+const QUOTE_WIRKT_NICHT = 0.1;
+const QUOTE_STELLEN = 1000;
 
 function saetze(datei) {
   return readFileSync(datei, "utf8")
@@ -72,6 +75,58 @@ export function messeProtokoll(datei) {
   if (!existsSync(datei)) throw new Error(`Protokoll fehlt: ${datei}`);
   const sitzung = basename(datei).replace(TRANSKRIPT_ENDUNG, "");
   return transkripteDerSitzung(dirname(datei), sitzung).map(messeDatei);
+}
+
+function istNachricht(satz) {
+  if (satz.type !== "user" || satz.isMeta === true) return false;
+  const inhalt = satz.message?.content;
+  return typeof inhalt === "string" || (Array.isArray(inhalt) && !inhalt.some((teil) => teil?.type === "tool_result"));
+}
+
+function zahl(wert) {
+  return Number(wert) || 0;
+}
+
+function urteil(quote) {
+  if (quote === null) return "nicht gemessen";
+  if (quote >= QUOTE_WIRKT) return "wirkt";
+  return quote < QUOTE_WIRKT_NICHT ? "wirkt nicht" : "teilweise";
+}
+
+function messeFortsetzung(vorher, nachher) {
+  const verbrauch = nachher.message?.usage ?? {};
+  const kontextVorher = kontextGroesse(vorher.message?.usage);
+  const cacheRead = zahl(verbrauch.cache_read_input_tokens);
+  const quote = kontextVorher > 0 ? Math.round((cacheRead / kontextVorher) * QUOTE_STELLEN) / QUOTE_STELLEN : null;
+  return {
+    pauseS: Math.round((Date.parse(nachher.timestamp) - Date.parse(vorher.timestamp)) / MS_JE_SEKUNDE),
+    kontextVorher,
+    cacheRead,
+    cacheWrite: zahl(verbrauch.cache_creation_input_tokens),
+    cacheWrite1h: zahl(verbrauch.cache_creation?.ephemeral_1h_input_tokens),
+    cacheWrite5m: zahl(verbrauch.cache_creation?.ephemeral_5m_input_tokens),
+    input: zahl(verbrauch.input_tokens),
+    quote,
+    urteil: urteil(quote),
+  };
+}
+
+export function fortsetzungen(datei) {
+  const ergebnis = [];
+  let nachrichten = 0;
+  let letzte = null;
+  let wartend = null;
+  for (const satz of saetze(datei)) {
+    if (istNachricht(satz)) {
+      nachrichten += 1;
+      wartend = nachrichten > 1 ? letzte : null;
+    } else if (satz.type === "assistant") {
+      if (wartend !== null) ergebnis.push(messeFortsetzung(wartend, satz));
+      wartend = null;
+      letzte = satz;
+    }
+  }
+  return ergebnis;
 }
 
 function zeile({ rolle, sitzung, dauerMs, schritte, groessterKontext, token, werkzeugZeichen }) {
