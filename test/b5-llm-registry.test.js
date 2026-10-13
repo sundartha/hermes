@@ -7,6 +7,7 @@ import { deepseekErrors } from "../src/llm/adapters/deepseek.js";
 import { LLM_PROVIDER } from "../src/llm/provider.js";
 import { MODEL_PRICE_RATE_FIELDS } from "../src/store/defaults.js";
 import { makeConfigOverrides, startServer, startServerExpectExit } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const { withConfig, withConfigOverrides } = makeConfigOverrides(config);
 
@@ -99,7 +100,7 @@ test("B5-R4: ein vertipptes LLM_PROVIDER verweigert den Boot mit genanntem Wert 
 test("B5-R5: Gegenprobe - mit gueltigem LLM_PROVIDER startet derselbe Dienst (sonst belegt R4 nur, dass nie etwas startet)", async () => {
   const srv = await startServer({ env: { LLM_PROVIDER: "anthropic" } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
   } finally {
     await srv.stop();
@@ -124,7 +125,7 @@ test("B5-R7: der Beweis der Phase - Anbieterwechsel ist eine reine Env-Operation
     },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.equal(
       /ohne Preis in modelPricesUsd/.test(srv.stdout),

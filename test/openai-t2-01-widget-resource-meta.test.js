@@ -19,6 +19,7 @@ import { makeDefaultState, registerTenant, settingsFor } from "../src/store/stat
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { widgetHtml } from "../src/ui/widget-catalog.js";
 import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const WIDGET_COUNT = 4;
 const WIDGET_TOOL_COUNT = 5;
@@ -60,7 +61,7 @@ async function httpWidgetLocale(baseUrl, token) {
 }
 
 async function httpResourceReadFromIp(baseUrl, token, { uri, forwardedFor }) {
-  const res = await fetch(`${baseUrl}/mcp`, {
+  const res = await abrufMitFrist(`${baseUrl}/mcp`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

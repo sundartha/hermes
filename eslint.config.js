@@ -247,6 +247,7 @@ const testRegelBloecke =
           rules: {
             "hermes-tests/keine-selbstpruefung": ["error", { bestand: SELBSTPRUEFUNG_BESTAND }],
             "hermes-tests/fester-importpfad": ["error", { bestand: FESTER_IMPORTPFAD_BESTAND }],
+            "hermes-tests/anfrage-mit-frist": "error",
           },
         },
       ];

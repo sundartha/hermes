@@ -12,6 +12,7 @@ import {
   normalizeIncomingTexml,
   EL_INBOUND_ACCESS_BOOT_ENV,
 } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TENANT_B = "B";
 const B_NUMBER = "+4915255555555";
@@ -36,7 +37,7 @@ function seedWithB(sprache = {}) {
 test("Inbound auf Tenant-B-Nummer -> Begruessung nennt B's ownerName", async () => {
   const srv = await startServer({ seed: seedWithB() });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAb", From: "+4915112345678", To: B_NUMBER }),
     });
@@ -50,7 +51,7 @@ test("Inbound auf Tenant-B-Nummer -> Begruessung nennt B's ownerName", async () 
 test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch)", async () => {
   const srv = await startServer({ seed: seedWithB() });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAo",
@@ -72,7 +73,7 @@ const EL_ENV = {
 };
 
 async function inbound(srv, { callSid }) {
-  const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
     headers: TELNYX_HEADERS,
     body: new URLSearchParams({ CallSid: callSid, From: "+4915112345678", To: B_NUMBER }),

@@ -9,6 +9,7 @@ import { makeDeployInfoRoutes, DEPLOY_INFO_PATH } from "../src/routes/api-deploy
 import { SECURITY_TXT_PATH, SECURITY_CONTACT } from "../src/app.js";
 import { configFingerprint } from "../src/config-fingerprint.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 const HTTP_OK = 200;
@@ -40,7 +41,7 @@ async function startDeployInfoApp() {
 test("P10b: deploy-info liefert genau {commit, configHash} hinter Admin-Sitzung", async () => {
   const app = await startDeployInfoApp();
   try {
-    const res = await fetch(`${app.base}${DEPLOY_INFO_PATH}`);
+    const res = await abrufMitFrist(`${app.base}${DEPLOY_INFO_PATH}`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
     assert.deepEqual(Object.keys(body).sort(), ["commit", "configHash"]);
@@ -58,7 +59,7 @@ test(
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
-      const res = await fetch(`${srv.externalUrl}${DEPLOY_INFO_PATH}`);
+      const res = await abrufMitFrist(`${srv.externalUrl}${DEPLOY_INFO_PATH}`);
       assert.equal(res.status, HTTP_NOT_FOUND);
       const raw = await res.text();
       assert.ok(!raw.includes("configHash"), "configHash darf ohne Admin-Sitzung nicht auftauchen");
@@ -71,7 +72,7 @@ test(
 test("P10b: /healthz bleibt 200 und gibt keinen configHash mehr preis", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
     assert.equal(body.ok, true);
@@ -85,7 +86,7 @@ test("P10b: /healthz bleibt 200 und gibt keinen configHash mehr preis", async ()
 test("P10b: security.txt liefert 200 text/plain mit Contact und Expires", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}${SECURITY_TXT_PATH}`);
+    const res = await abrufMitFrist(`${srv.localUrl}${SECURITY_TXT_PATH}`);
     assert.equal(res.status, HTTP_OK);
     const contentType = res.headers.get("content-type");
     assert.ok(contentType.startsWith("text/plain"));
@@ -117,7 +118,7 @@ test("P10b: security.txt-Kontakt ist die im Impressum veroeffentlichte Adresse",
 test("P10b: POST auf security.txt wird nicht bedient", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}${SECURITY_TXT_PATH}`, { method: "POST" });
+    const res = await abrufMitFrist(`${srv.localUrl}${SECURITY_TXT_PATH}`, { method: "POST" });
     assert.notEqual(res.status, HTTP_OK);
   } finally {
     await srv.stop();

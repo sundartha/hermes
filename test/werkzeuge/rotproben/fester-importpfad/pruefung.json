@@ -28,7 +28,8 @@
       "tools/eslint-rules/knoten.js",
       "tools/eslint-rules/tests.js",
       "tools/eslint-rules/keine-selbstpruefung.js",
-      "tools/eslint-rules/fester-importpfad.js"
+      "tools/eslint-rules/fester-importpfad.js",
+      "tools/eslint-rules/anfrage-mit-frist.js"
     ],
     "befehl": [
       "node",

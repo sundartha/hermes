@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { E164, hasTrunkZeroAfterCountryCode } from "../src/store/defaults.js";
 import { isTrunkZeroFormatError } from "../src/telephony/outbound-gates.js";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const postCall = (url, to) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const GATE_PROOF_ENV = Object.freeze({ FAKE_ORIGINATE: "true" });
 const TELNYX_OWNER_NUMBER = { e164: "+4915005559001", provider: "telnyx" };
@@ -53,7 +54,7 @@ const REQUEST_OBJECTIVE = "Termin vereinbaren (P5-Gate-Beweis)";
 async function placeCallFlagOn({ env = {}, seed, ownerNumber, identity, to = TO, status, grund }) {
   const srv = await startServer({ env: { ...GATE_PROOF_ENV, ...env }, seed, ownerNumber });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(identity ? { "X-Internal-Identity": identity } : {}) },
       body: JSON.stringify({ to, objective: REQUEST_OBJECTIVE }),

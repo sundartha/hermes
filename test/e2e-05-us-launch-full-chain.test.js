@@ -5,6 +5,7 @@ import { prodEnv } from "./prod-env.js";
 import { normalizePrivateNumber } from "../src/store/state-ops.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../src/geo/resolve.js";
 import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("Schritt 1a: Onboard country=US + passende US-Privatnummer darf nicht am +49-Gate scheitern (ex E2E-05)", async () => {
   assert.doesNotThrow(
@@ -21,7 +22,7 @@ test("Schritt 1a: Onboard country=US + passende US-Privatnummer darf nicht am +4
     }),
   });
   try {
-    const health = await fetch(`${srv.localUrl}/healthz`);
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(health.status, 200, "Server bootet unter Produktionswerten mit einem US-Tenant");
   } finally {
     await srv.stop();
@@ -51,7 +52,7 @@ test("Schritt 1b: Onboard country=US liefert language=en ueber den Weltdefault (
       }),
     });
     try {
-      const health = await fetch(`${srv.localUrl}/healthz`);
+      const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
       assert.equal(health.status, 200, "Server bootet unter Produktionswerten mit einem US/en-Tenant");
     } finally {
       await srv.stop();

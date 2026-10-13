@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const OWNER_NUMBER = "+15005550006";
@@ -32,7 +33,7 @@ function seedKyc(kycLevel) {
 }
 
 const placeCall = (srv, identity) =>
-  fetch(`${srv.localUrl}/api/calls`, {
+  abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

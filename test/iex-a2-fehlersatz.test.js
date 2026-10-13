@@ -26,6 +26,7 @@ import { DIRECTIVE, hangup, say } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { storeOpsFacade, waitUntil } from "./helpers.js";
 import { CONV_ID, INBOUND_FROM, INBOUND_TO, isoVor, seedInboundElCall, seedWartenderElCall } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const OWNER_NAME = "Jonas";
@@ -232,7 +233,7 @@ async function mitRoute(router, run) {
   });
   const basis = `http://127.0.0.1:${server.address().port}`;
   const post = async (pfad, felder = {}) => {
-    const res = await fetch(`${basis}${pfad}`, { method: "POST", body: new URLSearchParams(felder) });
+    const res = await abrufMitFrist(`${basis}${pfad}`, { method: "POST", body: new URLSearchParams(felder) });
     assert.equal(res.status, HTTP_OK);
     return res.text();
   };

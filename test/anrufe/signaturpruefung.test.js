@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { startServer, waitForLog, makeTelnyxSigner, nowSeconds } from "../helpers.js";
 import { config } from "../../src/config.js";
 import { inboundSignatureVerifier } from "../../src/telephony/registry.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_FORBIDDEN = 403;
 const ERWARTETE_SIGNATURZEILEN = 3;
@@ -32,7 +33,7 @@ const BOGUS_TS = "1720700000";
 const CALLER_E164 = "+4915112345678";
 
 const post = (srv, path, headers) =>
-  fetch(`${srv.localUrl}${path}`, {
+  abrufMitFrist(`${srv.localUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", ...headers },
     body: new URLSearchParams({ From: CALLER_E164 }).toString(),

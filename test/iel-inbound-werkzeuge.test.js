@@ -5,6 +5,7 @@ import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { tenantToolToken } from "../src/elevenlabs/tenant-tool-token.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { seedCall, seedState, startServer, waitForLog } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
@@ -67,7 +68,7 @@ async function mitWerkzeugServer(tenantTokenRequired, run) {
 }
 
 const werkzeugAufruf = (srv, pfad, body) =>
-  fetch(`${srv.localUrl}${pfad}`, {
+  abrufMitFrist(`${srv.localUrl}${pfad}`, {
     method: "POST",
     headers: { "content-type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
     body: JSON.stringify(body),

@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { SESSION_COOKIE_NAME, signValue } from "../../src/web-auth.js";
 import { anmelden, startHermesMitAnmeldung } from "./hermes-mit-anmeldung.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const STATE_PATH = "/api/self-service/state";
 const SETTINGS_PATH = "/api/self-service/settings";
@@ -28,7 +29,7 @@ function forgedCookies(cookie) {
 }
 
 function postSettings(hermes, cookie, patch) {
-  return fetch(`${hermes.url}${SETTINGS_PATH}`, {
+  return abrufMitFrist(`${hermes.url}${SETTINGS_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify(patch),
@@ -38,10 +39,10 @@ function postSettings(hermes, cookie, patch) {
 test("SG-23 Anfrage mit manipuliertem Sitzungs-Cookie wird abgelehnt", async (context) => {
   const hermes = await startHermesMitAnmeldung(context);
   const cookie = await anmelden(hermes);
-  const genuine = await fetch(`${hermes.url}${STATE_PATH}`, { headers: { Cookie: cookie } });
+  const genuine = await abrufMitFrist(`${hermes.url}${STATE_PATH}`, { headers: { Cookie: cookie } });
   assert.equal(genuine.status, HTTP_OK);
   for (const [variant, forged] of Object.entries(forgedCookies(cookie))) {
-    const response = await fetch(`${hermes.url}${STATE_PATH}`, { headers: { Cookie: forged } });
+    const response = await abrufMitFrist(`${hermes.url}${STATE_PATH}`, { headers: { Cookie: forged } });
     assert.equal(response.status, HTTP_UNAUTHORIZED, variant);
   }
 });

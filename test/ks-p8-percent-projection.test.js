@@ -5,6 +5,7 @@ import { makeReadRoutes } from "../src/routes/api-read.js";
 import { recordUsageEvent, makeDefaultState } from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const MS_PER_SECOND = 1000;
 const PERIOD_END_SEC = Date.UTC(2026, 6, 15) / MS_PER_SECOND;
@@ -84,7 +85,7 @@ test("K1: usage-Whitelist traegt genau calls/inputTokens/outputTokens/planUsageP
   const store = makeMockStore({ state: seedQuotaState() });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.deepEqual(
       Object.keys(body.usage).sort(),
       ["calls", "inputTokens", "outputTokens", "planUsagePercent"],
@@ -101,7 +102,7 @@ test("K2: kein Waehrungs-/Geldfeld in der gesamten /api/state-Antwort", async ()
   });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.deepEqual(moneyKeysIn(body), []);
   } finally {
     await srv.stop();
@@ -115,7 +116,7 @@ test("K3: Starter 30 min, 12 verbraucht -> 40 Prozent", async () => {
   });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.usage.planUsagePercent, 40);
   } finally {
     await srv.stop();
@@ -126,7 +127,7 @@ test("K4: kein Plan hinterlegt -> planUsagePercent null (nie 0)", async () => {
   const store = makeMockStore({ state: seedQuotaState() });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.usage.planUsagePercent, null);
   } finally {
     await srv.stop();
@@ -140,7 +141,7 @@ test("K5: erschoepft (30 von 30 Minuten) -> 100 Prozent", async () => {
   });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.usage.planUsagePercent, 100);
   } finally {
     await srv.stop();
@@ -154,7 +155,7 @@ test("K6: 29 von 30 Minuten -> 96 Prozent (floor, nie 100)", async () => {
   });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.usage.planUsagePercent, 96);
   } finally {
     await srv.stop();
@@ -168,7 +169,7 @@ test("K7: kein Perioden-Anker -> 100 Prozent (fail-closed, == Gate)", async () =
   });
   const srv = await mount(store);
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.usage.planUsagePercent, 100);
   } finally {
     await srv.stop();
@@ -190,8 +191,8 @@ test("K8: reine Leseprojektion - usageEvents byte-identisch, kein save()", async
   };
   const srv = await mount(store);
   try {
-    await fetch(`${srv.base}/api/state`);
-    await fetch(`${srv.base}/api/state`);
+    await abrufMitFrist(`${srv.base}/api/state`);
+    await abrufMitFrist(`${srv.base}/api/state`);
     assert.equal(JSON.stringify(state.usageEvents), before);
     assert.equal(saveCalls, 0);
   } finally {

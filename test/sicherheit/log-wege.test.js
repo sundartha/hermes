@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { BASE_ENV, startServer, waitForLog } from "../helpers.js";
 import { maskRestrictedText } from "../../src/restricted-data.js";
 import { hashEmail, maskNumber, maskNumbersInText } from "../../src/util.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const KIND = path.join("test", "helpers", "logwege-kind.mjs");
@@ -161,13 +162,13 @@ test("SG-13 jeder Logweg kommt maskiert an", async () => {
 test("SG-13 Server-Log enthält weder Nummer noch Token noch E-Mail im Klartext", async () => {
   const srv = await startServer();
   try {
-    const abgelehnt = await fetch(`${srv.localUrl}/api/calls`, {
+    const abgelehnt = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: PREMIUM_NUMMER, objective: "Termin" }),
     });
     assert.equal(abgelehnt.status, HTTP_FORBIDDEN);
-    await fetch(`${srv.localUrl}/api/calls/${SERVER_TOKEN}~${EMAIL}%E0%A4%A`);
+    await abrufMitFrist(`${srv.localUrl}/api/calls/${SERVER_TOKEN}~${EMAIL}%E0%A4%A`);
     await waitForLog(srv, /place_call_denied/);
     await waitForLog(srv, /URIError/);
     const log = srv.stdout;

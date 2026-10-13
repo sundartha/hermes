@@ -5,6 +5,7 @@ import http from "node:http";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 import { makeAccounts, adminOnly } from "../src/web-auth.js";
+import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 
 async function setup() {
   const db = new PGlite();
@@ -49,10 +50,12 @@ async function probe(tenant) {
   });
   const base = `http://127.0.0.1:${s.address().port}`;
   const status = await new Promise((res) =>
-    http.get(`${base}/p`, (r) => {
-      r.resume();
-      res(r.statusCode);
-    }),
+    mitAntwortfrist(
+      http.get(`${base}/p`, (r) => {
+        r.resume();
+        res(r.statusCode);
+      }),
+    ),
   );
   await new Promise((r) => s.close(r));
   return status;

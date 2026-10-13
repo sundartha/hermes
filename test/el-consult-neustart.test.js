@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
 import { CONSULT_POLL_HOLD_MS } from "../src/consult/delivery.js";
 import { CONSULT_STATUS } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
@@ -86,7 +87,7 @@ const seedMitZweitemAnruf = () =>
 
 function raiseConsult(srv, conversationId = CONVERSATION_ID) {
   const started = Date.now();
-  return fetch(`${srv.localUrl}${CONSULT_PATH}`, {
+  return abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
     body: JSON.stringify({ conversation_id: conversationId, question: QUESTION }),
@@ -98,21 +99,23 @@ function raiseConsult(srv, conversationId = CONVERSATION_ID) {
 
 function pollAfterOpenConsult(srv) {
   const started = Date.now();
-  return fetch(`${srv.localUrl}/api/calls/${CALL_ID}/consult?after=${EVENT_ID}`).then(
+  return abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}/consult?after=${EVENT_ID}`, {}, {
+    wartezeitMs: CONSULT_POLL_HOLD_MS,
+  }).then(
     async (res) => ({ status: res.status, body: await res.json(), ms: Date.now() - started }),
     (err) => ({ status: null, fehler: String(err), ms: Date.now() - started }),
   );
 }
 
 function pollNextConsult(srv, callId = CALL_ID) {
-  return fetch(`${srv.localUrl}/api/calls/${callId}/consult`).then(
+  return abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/consult`, {}, { wartezeitMs: CONSULT_POLL_HOLD_MS }).then(
     async (res) => ({ status: res.status, body: await res.json() }),
     (err) => ({ status: null, fehler: String(err) }),
   );
 }
 
 function sendAnswer(srv, eventId, callId = CALL_ID) {
-  return fetch(`${srv.localUrl}/api/calls/${callId}/consult/answer`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/consult/answer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ event_id: eventId, answers: [ANSWER_FACT] }),

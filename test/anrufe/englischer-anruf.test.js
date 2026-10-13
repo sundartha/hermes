@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -50,7 +51,7 @@ async function startCapturingMock() {
 test("Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch (ex PROMPT-03)", async () => {
   const srv = await startServer({ seed: seedState({ settings: { language: "en" } }) });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAprompt03",
@@ -76,7 +77,7 @@ test("EN-Call ist frei von hartcodiertem Deutsch: Greeting + Prompt-Geruest + to
     seed: seedState({ settings: { language: "en" } }),
   });
   try {
-    const incomingRes = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const incomingRes = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAprompt14",
@@ -90,7 +91,7 @@ test("EN-Call ist frei von hartcodiertem Deutsch: Greeting + Prompt-Geruest + to
     const call = stored.calls.find((anruf) => anruf.status === "active" && anruf.direction === "inbound");
     assert.ok(call, "Inbound-Call wurde nicht angelegt");
 
-    const turnRes = await fetch(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
+    const turnRes = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hello, who is this?" }),
     });

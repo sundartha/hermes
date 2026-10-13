@@ -5,6 +5,7 @@ import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { abrufMitFrist } from "./antwortfrist.mjs";
 
 const NUMMER_A = "+4915112345678";
 const NUMMER_B = "+4915187654321";
@@ -50,7 +51,7 @@ before(async () => {
 after(() => new Promise((r) => server.close(r)));
 
 const onboard = (body) =>
-  fetch(`${base}/api/onboard`, {
+  abrufMitFrist(`${base}/api/onboard`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

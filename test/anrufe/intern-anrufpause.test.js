@@ -10,6 +10,7 @@ import {
   anrufpauseLesenHandler,
   anrufpauseSetzenHandler,
 } from "../../src/routes/intern-anrufpause.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -242,14 +243,14 @@ test("Anrufpause: die echte App liest und setzt /intern/anrufpause mit Konfigura
   const authorization = `Bearer ${TOKEN}`;
   const lesen = async () =>
     (
-      await fetch(adresse, {
+      await abrufMitFrist(adresse, {
         headers: { authorization },
         signal: AbortSignal.timeout(ANTWORT_FRIST_MS),
       })
     ).json();
   assert.deepEqual(await lesen(), { an: false });
   const { ergebnis: gesetzt } = await mitMitschnitt(() =>
-    fetch(adresse, {
+    abrufMitFrist(adresse, {
       method: "POST",
       headers: { authorization, "content-type": "application/json" },
       body: JSON.stringify({ an: true }),

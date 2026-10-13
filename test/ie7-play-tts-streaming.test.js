@@ -17,6 +17,7 @@ import {
   turnLoopDeadlineMs,
 } from "../src/turn-budget.js";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const PUBLIC_URL = "https://agent.test";
 const TOKEN = "ie7-token";
@@ -215,7 +216,7 @@ test("Flag AN, langsamer Fake-Origin: /voice/incoming antwortet, bevor der Origi
     );
 
     const token = texml.match(/\/voice\/tts\/([A-Za-z0-9_-]+)/)[1];
-    const audio = await fetch(`${srv.localUrl}/voice/tts/${token}`);
+    const audio = await abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`, {}, { wartezeitMs: LANGSAMER_REST_MS });
     assert.equal(audio.status, HTTP_OK);
     assert.deepEqual(
       Buffer.from(await audio.arrayBuffer()),

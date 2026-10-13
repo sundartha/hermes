@@ -8,9 +8,10 @@ import {
   BOOTSTRAP_TENANT_ID,
 } from "../src/store/defaults.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const postCall = (url, to) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const MAX_DURATION_S = 1;
 const GRACE_MS = 200;
@@ -20,7 +21,7 @@ test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callbac
   });
   try {
     const post = (to) =>
-      fetch(`${srv.localUrl}/api/calls`, {
+      abrufMitFrist(`${srv.localUrl}/api/calls`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to, objective: "Test", max_duration_s: String(MAX_DURATION_S) }),

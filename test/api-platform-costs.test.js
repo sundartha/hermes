@@ -8,6 +8,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { platformTtsUsageView, makeDefaultState } from "../src/store/state-ops.js";
 import { countActiveNumbers } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS, emptyPlatformTtsUsage } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 
@@ -54,7 +55,7 @@ async function startPlatformCostsApp(state, config = PLATFORM_COSTS_CONFIG) {
   };
 }
 
-const fetchCosts = (app) => fetch(`${app.base}/api/billing/platform-costs`);
+const fetchCosts = (app) => abrufMitFrist(`${app.base}/api/billing/platform-costs`);
 
 function number(id, e164, tenantId, status) {
   return { id, e164, tenantId, provider: "telnyx", status, providerNumberId: null };
@@ -132,7 +133,7 @@ test(
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
-      const res = await fetch(`${srv.externalUrl}/api/billing/platform-costs`);
+      const res = await abrufMitFrist(`${srv.externalUrl}/api/billing/platform-costs`);
       assert.equal(res.status, 404);
     } finally {
       await srv.stop();

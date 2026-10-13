@@ -2,13 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { configFingerprint } from "../src/config-fingerprint.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const FAKE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 test("/healthz weist commit aus, configHash NICHT mehr (GAP-36, gehaertet in OpenAI-P10b)", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(typeof body.commit === "string" && body.commit.length > 0, "commit-Feld gesetzt");
@@ -27,7 +28,7 @@ test("/healthz-Antwort traegt genau {commit, ok} und keinen Rohwert, keinen 64-H
     },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     const raw = await res.text();
     const body = JSON.parse(raw);
     assert.deepEqual(Object.keys(body).sort(), ["commit", "ok"]);

@@ -6,6 +6,7 @@ import path from "node:path";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_OPEN_POLLS_PER_CALL } from "../src/consult/delivery.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
 
@@ -45,7 +46,7 @@ const ANSWERED_AGO_MS = 5000;
 const PARALLELE_AUFRUFE = 8;
 
 const post = (srv, body, headers = {}) =>
-  fetch(`${srv.localUrl}${CONSULT_PATH}`, {
+  abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),

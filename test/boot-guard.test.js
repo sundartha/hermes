@@ -11,6 +11,7 @@ import {
   BOOTSTRAP_HEAL,
 } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const superuserPool = () => ({
   connect: async () => ({
@@ -74,10 +75,10 @@ test("T-P0-05: Portal-Fault -> /healthz 200, /auth/login 404, Server lebt", asyn
   try {
     await new Promise((r) => srv.once("listening", r));
     const port = srv.address().port;
-    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    const health = await abrufMitFrist(`http://127.0.0.1:${port}/healthz`);
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { ok: true });
-    const login = await fetch(`http://127.0.0.1:${port}/auth/login`);
+    const login = await abrufMitFrist(`http://127.0.0.1:${port}/auth/login`);
     assert.equal(login.status, 404, "Web-Login darf nicht gemountet sein");
   } finally {
     srv.close();

@@ -10,6 +10,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 import { KOSTENPROFIL, KOSTENPROFILE } from "../src/billing/kostenarten.js";
 import { startInboundHarness, ownerNumberSeed } from "./helpers/inbound-router-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -66,7 +67,7 @@ function inboundSeed() {
 }
 
 async function postIncoming(harness, callSid) {
-  return fetch(`${harness.url}/voice/incoming`, {
+  return abrufMitFrist(`${harness.url}/voice/incoming`, {
     method: "POST",
     body: new URLSearchParams({
       CallSid: callSid,

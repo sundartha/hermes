@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { resolveProfileFrom, BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const MT = { MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
 
 const postCall = (url, to, identity) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startServer, seedState, seedCall } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const NOW = "2026-08-21T10:00:00.000Z";
@@ -27,7 +28,7 @@ function seedThreeQualifiedCalls(prefix) {
 }
 
 function poll(srv) {
-  return fetch(`${srv.localUrl}/api/inbox/poll`, { method: "POST" }).then((response) =>
+  return abrufMitFrist(`${srv.localUrl}/api/inbox/poll`, { method: "POST" }).then((response) =>
     response.json().then((body) => ({ status: response.status, body })),
   );
 }

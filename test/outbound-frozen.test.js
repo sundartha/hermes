@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog } from "./helpers.js";
 import { maskNumber } from "../src/util.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const post = (url, to = TO) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),

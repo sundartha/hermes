@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 
 import { ELEVENLABS_CONSULT_PATH } from "../../src/routes/webhooks-elevenlabs.js";
 import { seedCall, seedState, startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -48,7 +49,7 @@ after(async () => {
 });
 
 function askOwner(conversationId, token) {
-  return fetch(`${hermes.srv.localUrl}${ELEVENLABS_CONSULT_PATH}`, {
+  return abrufMitFrist(`${hermes.srv.localUrl}${ELEVENLABS_CONSULT_PATH}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

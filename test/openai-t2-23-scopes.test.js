@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, startIdp, mcpPost as post, readToolResult, waitForLog, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
 import { OAUTH_SCOPES, ENFORCED_OAUTH_SCOPES } from "../src/auth.js";
 import { TOOL_SECURITY_SCHEMES } from "../src/mcp-security-schemes.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -19,7 +20,7 @@ test("OpenAI-T2-23-A1: PRM traegt scopes_supported nur mit Authorization-Server"
   });
   try {
     for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
-      const res = await fetch(`${srv.localUrl}${path}`);
+      const res = await abrufMitFrist(`${srv.localUrl}${path}`);
       const doc = await res.json();
       assert.deepEqual(doc.scopes_supported, [...OAUTH_SCOPES], path);
     }
@@ -32,7 +33,7 @@ test("OpenAI-T2-23-A1: PRM traegt scopes_supported nur mit Authorization-Server"
 test("OpenAI-T2-23-A2: PRM ohne Authorization-Server hat kein scopes_supported-Feld", async () => {
   const srv = await startServer({ env: { MCP_AUTH: "token", MCP_AUTH_TOKEN: "geheim" } });
   try {
-    const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
+    const res = await abrufMitFrist(`${srv.localUrl}/.well-known/oauth-protected-resource`);
     const doc = await res.json();
     assert.deepEqual(doc.authorization_servers, []);
     assert.equal("scopes_supported" in doc, false);

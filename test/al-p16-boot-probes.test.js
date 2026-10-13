@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { capabilityProbeLines } from "../src/boot.js";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SENTINEL_KEY = "exa-al-p16-darf-nirgends-auftauchen";
 
@@ -154,7 +155,7 @@ test("AL-P16-7: die Sonden folgen der geparsten Konfiguration, NICHT der Rohumge
 test("AL-P16-8: der echte Boot druckt jede der sechs Sonden genau einmal (Aus-Zustand)", async () => {
   const srv = await startServer({});
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
     for (const label of [
@@ -176,7 +177,7 @@ test("AL-P16-8: der echte Boot druckt jede der sechs Sonden genau einmal (Aus-Zu
 test("AL-P16-9: Nachschlag an -> Boot-Log meldet den Schluessel als gesetzt, nie seinen Wert", async () => {
   const srv = await startServer({ env: { LOOKUP_ENABLED: "true", EXA_API_KEY: SENTINEL_KEY } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.match(
       srv.stdout,

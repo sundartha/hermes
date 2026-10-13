@@ -9,6 +9,7 @@ import {
   startServer,
 } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "./fixtures/elevenlabs-conversations.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
@@ -111,7 +112,7 @@ async function withElevenLabs(run) {
 }
 
 function placeCall(srv, identity) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Identity": identity },
     body: JSON.stringify({ to: TELNYX_TEST_PEER_NUMBER, objective: OBJECTIVE }),

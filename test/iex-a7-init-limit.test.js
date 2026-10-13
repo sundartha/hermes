@@ -17,6 +17,7 @@ import {
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { captureConsole, startServer, waitForStoreState } from "./helpers.js";
 import { elInboundInitSpawnEnv, initBindungsKoerper, spawnSeedWartenderElCall } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -109,7 +110,7 @@ function anfrageKopfzeilen({ token, ip }) {
 }
 
 async function initPost(baseUrl, { pfad = ELEVENLABS_INIT_PATH, token, ip, rohKoerper = LEERES_JSON }) {
-  const res = await fetch(`${baseUrl}${pfad}`, { method: "POST", headers: anfrageKopfzeilen({ token, ip }), body: rohKoerper });
+  const res = await abrufMitFrist(`${baseUrl}${pfad}`, { method: "POST", headers: anfrageKopfzeilen({ token, ip }), body: rohKoerper });
   return { status: res.status, text: await res.text(), retryAfter: res.headers.get("retry-after") };
 }
 
@@ -299,7 +300,7 @@ const spawnCall = (zustand) => zustand.calls.find((eintrag) => eintrag.id === SP
 const istGebunden = (zustand) => spawnCall(zustand)?.elevenlabsConversationId === CONV;
 
 async function getVonIp(baseUrl, ip) {
-  const res = await fetch(`${baseUrl}${ELEVENLABS_INIT_PATH}`, { headers: { "x-forwarded-for": ip } });
+  const res = await abrufMitFrist(`${baseUrl}${ELEVENLABS_INIT_PATH}`, { headers: { "x-forwarded-for": ip } });
   await res.text();
   return res.status;
 }

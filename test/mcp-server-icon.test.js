@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startServer, mcpPost, readToolResult, externalIp, BASE_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ICON_PATH = path.join(ROOT, "public", "brand", "hermes-icon.png");
@@ -95,7 +96,7 @@ test("T-T3-AC3: echter initialize-Request ueber POST /mcp (Live-Connector-Pfad) 
 test("T-T3-AC6a: GET /brand/hermes-icon.png liefert 200 + image/png", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/brand/hermes-icon.png`);
+    const res = await abrufMitFrist(`${srv.localUrl}/brand/hermes-icon.png`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("content-type"), "image/png");
   } finally {
@@ -109,12 +110,12 @@ test(
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "super-geheim-pw" } });
     try {
-      const res = await fetch(`${srv.externalUrl}/brand/hermes-icon.png`);
+      const res = await abrufMitFrist(`${srv.externalUrl}/brand/hermes-icon.png`);
       assert.equal(res.status, 200, "das Icon liegt oeffentlich unter public/, keine Ausnahme noetig");
       assert.equal(res.headers.get("content-type"), "image/png");
-      const favicon = await fetch(`${srv.externalUrl}/favicon.ico`);
+      const favicon = await abrufMitFrist(`${srv.externalUrl}/favicon.ico`);
       assert.equal(favicon.status, 200, "favicon.ico muss erreichbar sein");
-      const guarded = await fetch(`${srv.externalUrl}/api/state`);
+      const guarded = await abrufMitFrist(`${srv.externalUrl}/api/state`);
       assert.equal(guarded.status, 403, "andere Routen bleiben scharf (internalOnly)");
     } finally {
       await srv.stop();

@@ -1,6 +1,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer as startServerImpl, waitForStoreState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -24,7 +25,7 @@ const DOMESTIC_TO = "+4915112345678";
 
 async function placeCappedCall() {
   const srv = await startServer({ env: { FAKE_ORIGINATE: "true" } });
-  const res = await fetch(`${srv.localUrl}/api/calls`, {
+  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

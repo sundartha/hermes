@@ -9,6 +9,7 @@ import {
   TELNYX_TEST_OWNER_NUMBER,
   normalizeIncomingTexml,
 } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
 const HTTP_OK = 200;
@@ -24,7 +25,7 @@ const ALTE_ASSISTANT_SCHALTER_AN = Object.freeze({
 test("IE6-S1-1: POST /v1/chat/completions ist entfernt - 404 unabhaengig von Env, kein Pflichtbefund", async () => {
   const srv = await startServer({ env: { ...ALTE_ASSISTANT_SCHALTER_AN } });
   try {
-    const res = await fetch(`${srv.localUrl}/v1/chat/completions`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { Authorization: "Bearer shim_alt", "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -96,7 +97,7 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
 test("IE6-S1-4: POST /voice/call-control existiert nicht mehr (404)", async () => {
   const srv = await startServer({});
   try {
-    const res = await fetch(`${srv.localUrl}/voice/call-control?callId=x`, { method: "POST" });
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/call-control?callId=x`, { method: "POST" });
     assert.equal(res.status, HTTP_NOT_FOUND);
   } finally {
     await srv.stop();

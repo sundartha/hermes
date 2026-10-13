@@ -6,6 +6,7 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { DEFAULT_COUNTRY, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 setWorldDefaultLanguageEnabled(true);
 
@@ -53,7 +54,7 @@ async function startOnboardApp({ state = makeDefaultState(), config = onboardCon
 }
 
 const postJson = (app, body) =>
-  fetch(`${app.base}/api/onboard`, {
+  abrufMitFrist(`${app.base}/api/onboard`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

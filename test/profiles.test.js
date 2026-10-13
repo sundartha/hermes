@@ -16,6 +16,7 @@ import { hashEmail } from "../src/util.js";
 import { maskNumber } from "../src/util.js";
 import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const TENANT_CALL_TO = "+4915123123123";
@@ -25,7 +26,7 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
 async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
-  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
     body: JSON.stringify(args),
@@ -36,7 +37,7 @@ async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
 const HTTP_SERVER_ERROR = 500;
 
 const postCall = (url, to, identity) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -81,7 +82,7 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
     await ctx.test(
       "localhost: Body-Felder (requestedBy/email) gelten NICHT als Identitaet -> requestedBy=owner",
       async () => {
-        const res = await fetch(`${srv.localUrl}/api/calls`, {
+        const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

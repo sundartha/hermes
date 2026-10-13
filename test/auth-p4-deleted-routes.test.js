@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const postJson = (url, body) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -81,7 +82,7 @@ test("AUTH-P4-3: POST /api/calendar ist entfernt - kein Termin landet im Store",
 test("AUTH-P4-4: GET /api/profiles ist entfernt", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/api/profiles`);
+    const res = await abrufMitFrist(`${srv.localUrl}/api/profiles`);
     assertRouteEntfernt(res);
   } finally {
     await srv.stop();
@@ -111,7 +112,7 @@ test("AUTH-P4-6: DELETE /api/profiles/:tenantId ist entfernt - vorhandenes Profi
     seed: seedState({ profiles: { t_p4_bestand: { unrestricted: false } } }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/profiles/t_p4_bestand`, { method: "DELETE" });
+    const res = await abrufMitFrist(`${srv.localUrl}/api/profiles/t_p4_bestand`, { method: "DELETE" });
     assertRouteEntfernt(res);
     assert.equal(
       "t_p4_bestand" in srv.readStore().profiles,
@@ -126,7 +127,7 @@ test("AUTH-P4-6: DELETE /api/profiles/:tenantId ist entfernt - vorhandenes Profi
 test("AUTH-P4-7: der Server bootet nach dem Umzug von validIdentity (kein SyntaxError beim Laden von api-onboard.js)", async () => {
   const srv = await startServer();
   try {
-    const health = await fetch(`${srv.localUrl}/healthz`);
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(health.status, 200);
   } finally {
     await srv.stop();

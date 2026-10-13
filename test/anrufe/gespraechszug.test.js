@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const CAP_VORLAUF_MS = "20000";
@@ -57,7 +58,7 @@ function startAktiverAnruf({ id, env = {}, maxDurationS, transcript }) {
 }
 
 async function zug(srv, id, speechResult) {
-  const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
     method: "POST",
     body: new URLSearchParams({ SpeechResult: speechResult }),
   });
@@ -204,7 +205,7 @@ test("G3/G26 Runde 2: Rausch-Turn dann echte Dauerstille - der R4-Deadlock-Schut
     env: { ANTHROPIC_BASE_URL: mock.url, MAX_EMPTY_TURNS: "2" },
   });
   try {
-    const openRes = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
+    const openRes = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest" }),
     });

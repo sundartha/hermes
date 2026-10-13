@@ -4,6 +4,7 @@ import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 import { resolvePeriodStartIso, periodStartFromEnd } from "../src/billing/period.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 
@@ -78,7 +79,7 @@ const PAY_ENV = {
 const PAY_OFF_ENV = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 
 function placeCall(srv, identity, body = {}) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -165,7 +166,7 @@ test("Inbound nicht minuten-gegated: erschoepfte Minuten -> normale Begruessung 
   const seed = seedQuota({ subscription: STARTER_SUB, usageEvents: [voiceMinuteEvent(A, STARTER_MIN)] });
   const srv = await startServer({ env: PAY_ENV, seed });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915199999999", To: NUM_A }),
     });

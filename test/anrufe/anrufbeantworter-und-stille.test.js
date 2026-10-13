@@ -4,6 +4,7 @@ import { ANSWERED_BY, classifyAnsweredBy } from "../../src/telephony/answered-by
 import { noSpeechEscalation } from "../../src/no-speech-escalation.js";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "../_outbound-harness.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -75,7 +76,7 @@ async function fetchOutbound(env, answeredBy) {
   try {
     const body = new URLSearchParams({ CallSid: CALL_SID });
     if (answeredBy !== undefined) body.set("AnsweredBy", answeredBy);
-    const res = await fetch(`${srv.localUrl}/voice/outbound?callId=${CALL_ID}`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${CALL_ID}`, {
       method: "POST",
       body,
     });

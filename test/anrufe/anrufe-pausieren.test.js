@@ -14,6 +14,7 @@ import {
 } from "../helpers.js";
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -56,7 +57,7 @@ async function starteTelnyxAttrappe() {
 }
 
 function pauseAnfrage(srv, { methode = "GET", token = DEPLOY_TOKEN, koerper } = {}) {
-  return fetch(`${srv.localUrl}${PAUSE_PFAD}`, {
+  return abrufMitFrist(`${srv.localUrl}${PAUSE_PFAD}`, {
     method: methode,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -82,7 +83,7 @@ async function pauseSetzen(srv, an) {
 }
 
 async function bestaetigungsCode(srv) {
-  const bestaetigung = await fetch(`${srv.localUrl}/api/call-confirmations`, {
+  const bestaetigung = await abrufMitFrist(`${srv.localUrl}/api/call-confirmations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(AUFTRAG),
@@ -200,7 +201,7 @@ test("V6 Anrufpause: die Pause uebersteht einen Neustart mit demselben Datenordn
 function auflegenMelden(srv, signer, callId) {
   const zeitstempel = String(nowSeconds());
   const rumpf = new URLSearchParams({ CallSid: "tnx_v6_laufend", CallStatus: "completed" }).toString();
-  return fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  return abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     body: rumpf,
     headers: {
@@ -234,7 +235,7 @@ test("V6 Anrufpause: ein laufender Anruf bleibt unberuehrt und sein Auflegen wir
       },
     });
     const laufend = () =>
-      fetch(`${srv.localUrl}${LAUFEND_PFAD}`, { headers: { Authorization: `Bearer ${DEPLOY_TOKEN}` } }).then(
+      abrufMitFrist(`${srv.localUrl}${LAUFEND_PFAD}`, { headers: { Authorization: `Bearer ${DEPLOY_TOKEN}` } }).then(
         (antwort) => antwort.json(),
       );
     assert.deepEqual(await laufend(), { laufend: 1 });
@@ -259,7 +260,7 @@ test("V6 Anrufpause: REST nennt die Anrufpause statt OUTBOUND_FROZEN, Audit mit 
   await mitTelnyx(async ({ attrappe, starte }) => {
     const srv = await starte();
     await pauseSetzen(srv, true);
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...AUFTRAG, confirmation_code: await bestaetigungsCode(srv) }),

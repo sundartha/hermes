@@ -5,6 +5,7 @@ import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 function throwingSaveStore(state) {
   return {
@@ -61,7 +62,7 @@ test("T-P1-05: Onboard-Save-Failure -> 503, Request resolved (kein unhandledReje
     const timer = setTimeout(() => ac.abort(), 4000);
     let res;
     try {
-      res = await fetch(`${base}/api/onboard`, {
+      res = await abrufMitFrist(`${base}/api/onboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: "t-persist-fail" }),

@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { testkostenZaehler } from "./testkosten.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -661,7 +662,7 @@ export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
 });
 
 export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),
@@ -674,7 +675,7 @@ export function postTelnyxIncoming(
 ) {
   const body = { From: from, To: to };
   if (callSid) body.CallSid = callSid;
-  return fetch(`${srv.localUrl}/voice/incoming`, {
+  return abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
     headers: TELNYX_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams(body),
@@ -769,7 +770,7 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
 }
 
 export function mcpPost(url, token, body = { jsonrpc: "2.0", id: 1, method: "initialize" }) {
-  return fetch(url, {
+  return abrufMitFrist(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",

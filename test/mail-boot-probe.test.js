@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { probeMailBoot } from "../src/mail-boot-probe.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { startServer, waitForLog } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 function fakeLogger() {
   const logLines = [];
@@ -257,7 +258,7 @@ test("Pflichttest 6c: err.message (kann Nutzer/Adresse/Anbieterdetails tragen) l
 test("Boot-Integration: nichts konfiguriert (Auslieferungszustand) -> Sonden-Zeile, Boot laeuft durch", async () => {
   const srv = await startServer({});
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
     const hits = srv.stdout.match(
@@ -280,7 +281,7 @@ test("Boot-Integration: nur SMTP konfiguriert, Server nicht erreichbar -> Fehlsc
     },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
 

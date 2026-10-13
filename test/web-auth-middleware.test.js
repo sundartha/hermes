@@ -4,6 +4,7 @@ import http from "node:http";
 import express from "express";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, signValue } from "../src/web-auth.js";
 import { WEB_SITZUNGS_GEHEIMNIS } from "./gemeinsam/erfundene-geheimnisse.js";
+import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = WEB_SITZUNGS_GEHEIMNIS;
 const FUTURE = new Date(Date.now() + 3600_000).toISOString();
@@ -41,11 +42,13 @@ async function mount(deps, factory = webAuth) {
 
 function get(url, cookie) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
-      let body = "";
-      res.on("data", (d) => (body += d));
-      res.on("end", () => resolve({ status: res.statusCode, body }));
-    });
+    const req = mitAntwortfrist(
+      http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () => resolve({ status: res.statusCode, body }));
+      }),
+    );
     req.on("error", reject);
   });
 }

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -40,7 +41,7 @@ const SHORT_CONSULT_ENV = Object.freeze({
 });
 
 const post = (srv, body, headers = {}) =>
-  fetch(`${srv.localUrl}${CONSULT_PATH}`, {
+  abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
@@ -71,7 +72,7 @@ function seedOwnAndForeign(extra = {}) {
 }
 
 async function logBarrier(srv) {
-  const res = await fetch(`${srv.localUrl}/voice/status`, { method: "POST" });
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/status`, { method: "POST" });
   assert.equal(
     res.status,
     HTTP_FORBIDDEN,

@@ -14,6 +14,7 @@ import {
 import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../src/boot-guard.js";
 import { sweepTraegerFuerProfil } from "../src/billing/sweep-kostenbeleg.js";
 import { startServer, EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const ENV_PFLICHTTYPEN = ["sip-trunking", "call-control"];
@@ -130,7 +131,7 @@ test("IE3-5 (abgeleiteter Riegel): jedes Profil mit telnyx_call_records liefert 
 test("IE3-6 (Verdrahtung, Spawn): ELEVENLABS_INBOUND_ENABLED=true mit vollstaendigem Zugang (IEL-B1) bootet sauber - kein el_inbound_carrier_uncollected", async () => {
   const srv = await startServer({ env: { ELEVENLABS_INBOUND_ENABLED: "true", ...EL_INBOUND_ACCESS_BOOT_ENV } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
     assert.doesNotMatch(srv.stdout, /el_inbound_carrier_uncollected/);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
@@ -142,7 +143,7 @@ test("IE3-6 (Verdrahtung, Spawn): ELEVENLABS_INBOUND_ENABLED=true mit vollstaend
 test("IE3-8 (Regression, Default-Konfiguration): Schalter aus -> die Registry ist der einzige Unterschied, kein neuer Boot-Befund", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
     assert.doesNotMatch(srv.stdout, /el_inbound_carrier_uncollected/);
   } finally {

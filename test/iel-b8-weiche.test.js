@@ -55,6 +55,7 @@ import {
   waitUntil,
 } from "./helpers.js";
 import { CONV_ID, INBOUND_FROM, INBOUND_TO, isoVor, seedInboundElCall, seedWartenderElCall, starteAnbieterAttrappe } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -204,7 +205,7 @@ async function mitBeinRoute(state, run) {
   });
   const url = `http://127.0.0.1:${server.address().port}`;
   const postBein = async (callId, status) => {
-    const res = await fetch(`${url}/voice/el-bein?callId=${callId}`, { method: "POST", body: new URLSearchParams({ CallStatus: status }) });
+    const res = await abrufMitFrist(`${url}/voice/el-bein?callId=${callId}`, { method: "POST", body: new URLSearchParams({ CallStatus: status }) });
     return { status: res.status, text: await res.text() };
   };
   try {
@@ -270,7 +271,7 @@ async function incomingText(srv, options = {}) {
 }
 
 function initAnfrage(srv, token) {
-  return fetch(`${srv.localUrl}${ELEVENLABS_INIT_PATH}`, {
+  return abrufMitFrist(`${srv.localUrl}${ELEVENLABS_INIT_PATH}`, {
     method: "POST",
     headers: { "content-type": "application/json", [INIT_TOKEN_HEADER]: INIT_TOKEN },
     body: JSON.stringify({
@@ -283,7 +284,7 @@ function initAnfrage(srv, token) {
 }
 
 function postVoice(srv, { pfad, body = {} }) {
-  return fetch(`${srv.localUrl}${pfad}`, { method: "POST", body: new URLSearchParams(body) });
+  return abrufMitFrist(`${srv.localUrl}${pfad}`, { method: "POST", body: new URLSearchParams(body) });
 }
 
 const rueckfallPfad = (callId, quelle) => (quelle === undefined ? `/voice/el-rueckfall?callId=${callId}` : `${elRueckfallUrl({ callId, quelle })}`);
@@ -394,11 +395,11 @@ test("IEL-B8-15: beide Routen liegen hinter der Ed25519-Signaturpruefung - unsig
     await waitForLog(srv, /\[voice-signature\] .*path=\/voice\/el-bein/);
 
     const rueckfall = signierterUmschlag(signer, { CallSid: CALL_SID });
-    const signiertRueckfall = await fetch(`${srv.localUrl}/voice/el-rueckfall?callId=x&quelle=frist`, { method: "POST", ...rueckfall });
+    const signiertRueckfall = await abrufMitFrist(`${srv.localUrl}/voice/el-rueckfall?callId=x&quelle=frist`, { method: "POST", ...rueckfall });
     assert.equal(signiertRueckfall.status, HTTP_OK);
     assert.equal(await signiertRueckfall.text(), HANGUP_XML);
     const bein = signierterUmschlag(signer, { CallStatus: "answered" });
-    const signiertBein = await fetch(`${srv.localUrl}/voice/el-bein?callId=x`, { method: "POST", ...bein });
+    const signiertBein = await abrufMitFrist(`${srv.localUrl}/voice/el-bein?callId=x`, { method: "POST", ...bein });
     assert.equal(signiertBein.status, HTTP_OK);
   });
 });

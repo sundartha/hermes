@@ -17,6 +17,7 @@ import {
   mcpCorsOrigin,
 } from "../src/middleware.js";
 import { angekuendigterOriginFindings, kanonischeAudience } from "../src/boot-guard.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -26,7 +27,7 @@ const HTTP_NO_CONTENT = 204;
 
 function mcpPostMitOrigin(url, { origin, token, body } = {}) {
   const originHeader = origin === undefined ? {} : { Origin: origin };
-  return fetch(url, {
+  return abrufMitFrist(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -248,7 +249,7 @@ describe("E5-H: Herkunftswache am laufenden Server", () => {
   });
 
   it("H07c: zwei zusammengefasste Origin-Header ('a, b') -> 403", async () => {
-    const res = await fetch(`${srv.localUrl}/mcp`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -281,14 +282,14 @@ describe("E5-H (Methoden, Pfad, Forensik, Formel-Pin)", () => {
   });
 
   it("H08: GET/DELETE fremder Origin -> 403 (nicht 405); GET ohne Origin -> weiter 405", async () => {
-    const getFremd = await fetch(`${srv.localUrl}/mcp`, {
+    const getFremd = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "GET",
       headers: { Origin: "https://evil.example" },
     });
     assert.equal(getFremd.status, HTTP_FORBIDDEN);
-    const getOhne = await fetch(`${srv.localUrl}/mcp`, { method: "GET" });
+    const getOhne = await abrufMitFrist(`${srv.localUrl}/mcp`, { method: "GET" });
     assert.equal(getOhne.status, HTTP_METHOD_NOT_ALLOWED);
-    const deleteFremd = await fetch(`${srv.localUrl}/mcp`, {
+    const deleteFremd = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "DELETE",
       headers: { Origin: "https://evil.example" },
     });
@@ -296,17 +297,17 @@ describe("E5-H (Methoden, Pfad, Forensik, Formel-Pin)", () => {
   });
 
   it("H09: OPTIONS fremder Origin -> 403 (Vertragsaenderung); ohne Origin -> 200", async () => {
-    const optFremd = await fetch(`${srv.localUrl}/mcp`, {
+    const optFremd = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "OPTIONS",
       headers: { Origin: "https://evil.example" },
     });
     assert.equal(optFremd.status, HTTP_FORBIDDEN);
-    const optOhne = await fetch(`${srv.localUrl}/mcp`, { method: "OPTIONS" });
+    const optOhne = await abrufMitFrist(`${srv.localUrl}/mcp`, { method: "OPTIONS" });
     assert.equal(optOhne.status, HTTP_OK);
   });
 
   it("H10: POST /mcp/foo fremder Origin -> 403 (nicht 404)", async () => {
-    const res = await fetch(`${srv.localUrl}/mcp/foo`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/mcp/foo`, {
       method: "POST",
       headers: { Origin: "https://evil.example", "content-type": "application/json" },
       body: "{}",
@@ -335,15 +336,15 @@ describe("E5-H (Methoden, Pfad, Forensik, Formel-Pin)", () => {
   });
 
   it("H12: Pfadbindung - Routen ausserhalb /mcp bleiben mit fremdem Origin unberuehrt", async () => {
-    const health = await fetch(`${srv.localUrl}/healthz`, { headers: { Origin: "https://evil.example" } });
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`, { headers: { Origin: "https://evil.example" } });
     assert.equal(health.status, HTTP_OK);
 
-    const plans = await fetch(`${srv.localUrl}/api/plans`, { headers: { Origin: "https://evil.example" } });
+    const plans = await abrufMitFrist(`${srv.localUrl}/api/plans`, { headers: { Origin: "https://evil.example" } });
     assert.equal(plans.status, HTTP_OK);
   });
 
   it("H13: Formel-Pin - PRM.resource === kanonische Audience", async () => {
-    const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
+    const res = await abrufMitFrist(`${srv.localUrl}/.well-known/oauth-protected-resource`);
     const doc = await res.json();
     assert.equal(doc.resource, kanonischeAudience("https://agent.test"));
     assert.equal(doc.resource, MCP_AUDIENCE);
@@ -445,7 +446,7 @@ test("E5-B05: Happy-Path-Schraegstrich - PUBLIC_URL/OAUTH_AUDIENCE mit/ohne Slas
     env: { PUBLIC_URL: "https://agent.test/", OAUTH_AUDIENCE: "" },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
   } finally {
     await srv.stop();
@@ -482,7 +483,7 @@ describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => 
   });
 
   it("T2-06-H01: fremder Origin (chatgpt.com) - OPTIONS/POST/GET bleiben 403, keine CORS-Header, kein Vary:Origin", async () => {
-    const optRes = await fetch(`${srv.localUrl}/mcp`, {
+    const optRes = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "OPTIONS",
       headers: { Origin: "https://chatgpt.com", "Access-Control-Request-Method": "POST" },
     });
@@ -497,7 +498,7 @@ describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => 
     assert.equal(postRes.status, HTTP_FORBIDDEN);
     assert.deepEqual(acHeaders(postRes), []);
 
-    const getRes = await fetch(`${srv.localUrl}/mcp`, {
+    const getRes = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "GET",
       headers: { Origin: "https://chatgpt.com" },
     });
@@ -506,7 +507,7 @@ describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => 
   });
 
   it("T2-06-H02: OPTIONS ohne Origin -> Auto-OPTIONS unveraendert, kein CORS; POST ohne Origin/Token -> 401 ohne CORS", async () => {
-    const optRes = await fetch(`${srv.localUrl}/mcp`, { method: "OPTIONS" });
+    const optRes = await abrufMitFrist(`${srv.localUrl}/mcp`, { method: "OPTIONS" });
     assert.equal(optRes.status, HTTP_OK);
     assert.equal(optRes.headers.get("allow"), AUTO_OPTIONS_ALLOW_BASELINE);
     assert.deepEqual(acHeaders(optRes), []);
@@ -551,7 +552,7 @@ describe("T2-06-B1: MCP_ALLOWED_ORIGINS=https://chatgpt.com - Preflight, 401, 20
   });
 
   it("T2-06-H04: Preflight fuer gelisteten Origin -> 204 mit dem vollen Header-Satz, leerer Body", async () => {
-    const res = await fetch(`${srv.localUrl}/mcp`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "OPTIONS",
       headers: {
         Origin: "https://chatgpt.com",
@@ -592,7 +593,7 @@ describe("T2-06-B1: MCP_ALLOWED_ORIGINS=https://chatgpt.com - Preflight, 401, 20
       id: 1,
       method: "tools/list",
     });
-    const withOrigin = await fetch(`${srv.localUrl}/mcp`, {
+    const withOrigin = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -633,7 +634,7 @@ describe("T2-06-B2: MCP_ALLOWED_ORIGINS=https://chatgpt.com - fremde/aehnliche O
   });
 
   it("T2-06-H07: fremder Origin (evil.example) - OPTIONS und POST bleiben 403, keine CORS-Header", async () => {
-    const optRes = await fetch(`${srv.localUrl}/mcp`, {
+    const optRes = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "OPTIONS",
       headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" },
     });
@@ -662,7 +663,7 @@ describe("T2-06-B2: MCP_ALLOWED_ORIGINS=https://chatgpt.com - fremde/aehnliche O
       assert.notEqual(postRes.status, HTTP_FORBIDDEN, origin);
       assert.deepEqual(acHeaders(postRes), [], origin);
 
-      const preflight = await fetch(`${srv.localUrl}/mcp`, {
+      const preflight = await abrufMitFrist(`${srv.localUrl}/mcp`, {
         method: "OPTIONS",
         headers: { Origin: origin, "Access-Control-Request-Method": "POST" },
       });
@@ -680,7 +681,7 @@ describe("T2-06-B2: MCP_ALLOWED_ORIGINS=https://chatgpt.com - fremde/aehnliche O
   });
 
   it("T2-06-H10: OPTIONS /mcp/foo mit gelistetem Origin - nicht 204, keine CORS-Header", async () => {
-    const res = await fetch(`${srv.localUrl}/mcp/foo`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/mcp/foo`, {
       method: "OPTIONS",
       headers: { Origin: "https://chatgpt.com", "Access-Control-Request-Method": "POST" },
     });
@@ -689,7 +690,7 @@ describe("T2-06-B2: MCP_ALLOWED_ORIGINS=https://chatgpt.com - fremde/aehnliche O
   });
 
   it("T2-06-H11: GET /mcp mit gelistetem Origin bleibt 405, darf aber CORS-Header tragen", async () => {
-    const res = await fetch(`${srv.localUrl}/mcp`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "GET",
       headers: { Origin: "https://chatgpt.com" },
     });
@@ -743,7 +744,7 @@ describe("T2-06-C: Auth-Modi und Notventil", () => {
       assert.equal(res.status, HTTP_UNAUTHORIZED);
       assert.deepEqual(acHeaders(res), []);
 
-      const preflight = await fetch(`${srv.localUrl}/mcp`, {
+      const preflight = await abrufMitFrist(`${srv.localUrl}/mcp`, {
         method: "OPTIONS",
         headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" },
       });

@@ -13,6 +13,8 @@ import {
   SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { GERMAN_STOPWORDS } from "./helpers.js";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import { abrufMitFrist, mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -56,18 +58,20 @@ function cookieValue(setCookie, name) {
 
 function rawGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, { headers }, (res) => {
-      let body = "";
-      res.on("data", (d) => (body += d));
-      res.on("end", () =>
-        resolve({
-          status: res.statusCode,
-          headers: res.headers,
-          setCookie: res.headers["set-cookie"] || [],
-          body,
-        }),
-      );
-    });
+    const req = mitAntwortfrist(
+      http.get(url, { headers }, (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            setCookie: res.headers["set-cookie"] || [],
+            body,
+          }),
+        );
+      }),
+    );
     req.on("error", reject);
   });
 }
@@ -75,7 +79,7 @@ function rawGet(url, headers = {}) {
 function rawPost(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const req = http.request(
+    const req = anfrageMitFrist(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: "POST", headers },
       (res) => {
         let body = "";
@@ -1026,7 +1030,7 @@ test("T-P2b-04: Dev-Login schreibt KEINE Identitaet (kein Body-Spoofing), mintet
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    const res = await fetch(`${base}/auth/dev-login`, {
+    const res = await abrufMitFrist(`${base}/auth/dev-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sub: "dev-1", email: "dev@x.de", firstName: "X", lastName: "Y" }),
@@ -1089,7 +1093,7 @@ test("T-tpb-02: Dev-Login bindet den sub ebenfalls (bindSub ist UNCONDITIONAL, a
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    const res = await fetch(`${base}/auth/dev-login`, {
+    const res = await abrufMitFrist(`${base}/auth/dev-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sub: "dev-1", email: "dev@x.de" }),
@@ -1191,7 +1195,7 @@ test("Login-Fehlerpfad: authorizeUrl wirft -> 500 und login_failed innerhalb der
   });
   const srv = await mountRouter(deps);
   try {
-    const antwort = await fetch(`${srv.base}/auth/login`, {
+    const antwort = await abrufMitFrist(`${srv.base}/auth/login`, {
       redirect: "manual",
       signal: AbortSignal.timeout(FRIST_MS),
     }).catch((fehler) => assert.fail(`keine Antwort innerhalb von ${FRIST_MS} ms: ${fehler.name}`));

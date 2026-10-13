@@ -4,6 +4,7 @@ import { bootstrapTenant, makeDefaultState, findTenant } from "../src/store/stat
 import { hasActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const E164 = "+15005550006";
 
@@ -85,7 +86,7 @@ test("Boot-Gate: aktive Nummer eines BELIEBIGEN Tenants (nicht Bootstrap) -> Boo
   };
   const srv = await startServer({ seed, ownerNumber: null });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "beliebiger Tenant mit aktiver Nummer -> Boot gruen");
   } finally {
     await srv.stop();

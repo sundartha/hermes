@@ -11,6 +11,7 @@ import {
   assertReauthChallenge,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT_A = "t_a",
   TENANT_B = "t_b";
@@ -64,7 +65,7 @@ function seedTwoTenants({ calls = [] } = {}) {
 }
 
 async function getAs(srv, idpSub, pfad) {
-  const res = await fetch(`${srv.localUrl}${pfad}`, {
+  const res = await abrufMitFrist(`${srv.localUrl}${pfad}`, {
     headers: idpSub ? { "X-Internal-Identity": idpSub } : {},
   });
   const body = res.status === HTTP_OK ? await res.json() : await res.json().catch(() => null);
@@ -141,7 +142,7 @@ test("E4-15: POST /api/calls/:id/consult/answer auf einen fremden Call -> 404, k
   const srv = await startServer({ seed: seedTwoTenants() });
   try {
     const before = srv.readStore().calls.find((call) => call.id === "call_b");
-    const res = await fetch(`${srv.localUrl}/api/calls/call_b/consult/answer`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls/call_b/consult/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Identity": SUB_A },
       body: JSON.stringify({ event_id: "evt_1", answers: ["x"] }),
@@ -158,7 +159,7 @@ test("E4-16: POST /api/calls/:id/cancel auf einen fremden Call -> 404, Status bl
   const active = seedCall({ id: "call_b_active", tenantId: TENANT_B, status: "active" });
   const srv = await startServer({ seed: seedTwoTenants({ calls: [active] }) });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls/call_b_active/cancel`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls/call_b_active/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Identity": SUB_A },
     });
@@ -243,7 +244,7 @@ const ALLOWLIST_A = { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_ID
 async function placeCallAndRead({ env = {}, identity = null, to }) {
   const srv = await startServer({ env: { ...CALL_ENV, ...env }, seed: seedTwoTenants() });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

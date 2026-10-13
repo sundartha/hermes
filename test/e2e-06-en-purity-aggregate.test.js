@@ -15,6 +15,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { signValue, makeWebAuthRoutes } from "../src/web-auth.js";
 import express from "express";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT_EN = "t_e2e06_en";
 
@@ -126,7 +127,7 @@ test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-T
   const server = await new Promise((r) => app.listen(0, "127.0.0.1", function () { r(this); }));
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
-    const csrfRes = await fetch(`${base}/auth/callback?code=x&state=attacker`, {
+    const csrfRes = await abrufMitFrist(`${base}/auth/callback?code=x&state=attacker`, {
       headers: { Cookie: `oauth_state=${encodeURIComponent(signValue("real", "e2e06-secret-0123456789"))}` },
     });
     leaksOf("authCsrfError", await csrfRes.text(), leaks);

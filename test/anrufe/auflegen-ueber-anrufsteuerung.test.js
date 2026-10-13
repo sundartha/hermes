@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer, seedState, seedCall, waitForStoreState, waitUntil } from "../helpers.js";
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const WARTEZEIT_MS = 4000;
@@ -87,7 +88,7 @@ test("T7: cancel_call legt einen Call-Control-Anruf genau einmal ueber die Anruf
     maxDurationS: LANGE_HOECHSTDAUER_S,
   });
   await mitTelnyxAttrappe([anruf], async (srv, anfragen) => {
-    const antwort = await fetch(`${srv.localUrl}/api/calls/live_cc/cancel`, { method: "POST" });
+    const antwort = await abrufMitFrist(`${srv.localUrl}/api/calls/live_cc/cancel`, { method: "POST" });
     assert.equal(antwort.status, HTTP_OK);
     assert.deepEqual(await antwort.json(), { status: "cancelled" });
     legtNurUeberAnrufsteuerungAuf(anfragen, "cc_live");

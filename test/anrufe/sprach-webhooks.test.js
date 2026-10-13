@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const BEKANNTE_STATUSFAELLE = 5;
 const ERWARTETE_LOGZEILEN = 3;
@@ -27,7 +28,7 @@ async function statusEvent(srv, callId) {
 }
 
 const postStatus = (srv, callId, fields) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     body: new URLSearchParams(fields),
   });
@@ -183,7 +184,7 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
 });
 
 const postForm = (srv, path) =>
-  fetch(`${srv.localUrl}${path}`, { method: "POST", body: new URLSearchParams({}) });
+  abrufMitFrist(`${srv.localUrl}${path}`, { method: "POST", body: new URLSearchParams({}) });
 
 test("/voice/turn + /voice/outbound: unbekannter/inaktiver Call -> Hangup MIT Logzeile, PII-frei", async () => {
   const srv = await startServer({

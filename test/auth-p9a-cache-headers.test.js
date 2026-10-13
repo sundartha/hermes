@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -34,23 +35,23 @@ after(async () => {
 });
 
 test("AUTH-P9A-1 - /_astro/<hash>.js traegt immutable + max-age fuer ein Jahr", async () => {
-  const res = await fetch(`${srv.localUrl}/_astro/chunk.AbC12345.js`);
+  const res = await abrufMitFrist(`${srv.localUrl}/_astro/chunk.AbC12345.js`);
   assert.equal(res.status, HTTP_OK);
   assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
 });
 
 test("AUTH-P9A-2 - HTML traegt no-cache (App-Shell und Marketing-Index)", async () => {
-  const app = await fetch(`${srv.localUrl}/app/`);
+  const app = await abrufMitFrist(`${srv.localUrl}/app/`);
   assert.equal(app.status, HTTP_OK);
   assert.equal(app.headers.get("cache-control"), "no-cache");
 
-  const marketing = await fetch(`${srv.localUrl}/`);
+  const marketing = await abrufMitFrist(`${srv.localUrl}/`);
   assert.equal(marketing.status, HTTP_OK);
   assert.equal(marketing.headers.get("cache-control"), "no-cache");
 });
 
 test("AUTH-P9A-3 - Gegenprobe: eine Datei NEBEN /_astro/ bekommt NICHT immutable", async () => {
-  const res = await fetch(`${srv.localUrl}/assets/hero.js`);
+  const res = await abrufMitFrist(`${srv.localUrl}/assets/hero.js`);
   assert.equal(res.status, HTTP_OK);
   const cc = res.headers.get("cache-control");
   assert.doesNotMatch(cc, /immutable/, "nicht fingerprintet - immutable waere im Browser nicht mehr einholbar");
@@ -58,14 +59,14 @@ test("AUTH-P9A-3 - Gegenprobe: eine Datei NEBEN /_astro/ bekommt NICHT immutable
 });
 
 test("AUTH-P9A-4 - exakter Praefix: /_astrophysik/... bekommt NICHT immutable", async () => {
-  const res = await fetch(`${srv.localUrl}/_astrophysik/hinweis.js`);
+  const res = await abrufMitFrist(`${srv.localUrl}/_astrophysik/hinweis.js`);
   assert.equal(res.status, HTTP_OK);
   const cc = res.headers.get("cache-control");
   assert.doesNotMatch(cc, /immutable/, "Praefix wird exakt gematcht, nicht 'enthaelt _astro'");
 });
 
 test("AUTH-P9A-5 - /api/plans traegt weiterhin no-store (middleware.js unberuehrt)", async () => {
-  const res = await fetch(`${srv.localUrl}/api/plans`);
+  const res = await abrufMitFrist(`${srv.localUrl}/api/plans`);
   assert.equal(res.status, HTTP_OK);
   assert.equal(res.headers.get("cache-control"), "no-store");
 });

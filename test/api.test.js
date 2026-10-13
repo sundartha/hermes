@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const postJson = (url, body) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -22,7 +23,7 @@ test("Body-Size-Limit 100kb", async (t) => {
     });
 
     await t.test("kleiner Body unveraendert 2xx", async () => {
-      const res = await fetch(`${srv.localUrl}/voice/turn?callId=missing`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=missing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ SpeechResult: "" }),
@@ -31,7 +32,7 @@ test("Body-Size-Limit 100kb", async (t) => {
     });
 
     await t.test("urlencoded mit 200kb-Body -> 413", async () => {
-      const res = await fetch(`${srv.localUrl}/voice/turn?callId=missing`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=missing`, {
         method: "POST",
         body: new URLSearchParams({ SpeechResult: "x".repeat(200 * 1024) }),
       });
@@ -119,7 +120,7 @@ test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (
   });
   try {
     await t.test("200 mit erwarteten Feldern, Calls ohne streamToken", async () => {
-      const res = await fetch(`${srv.localUrl}/api/tenant-data/export`);
+      const res = await abrufMitFrist(`${srv.localUrl}/api/tenant-data/export`);
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.tenantId, BOOTSTRAP_TENANT_ID);

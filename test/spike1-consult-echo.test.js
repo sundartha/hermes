@@ -6,6 +6,7 @@ import {
   DEFAULT_WAIT_SECONDS,
   MAX_WAIT_SECONDS,
 } from "../scripts/spike1-consult-echo.mjs";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SMALL_WAIT_SECONDS = 0.1;
 const SMALL_WAIT_MS = 100;
@@ -16,7 +17,7 @@ test("spike1-consult-echo: antwortet nicht frueher als die eingestellte Wartezei
   const server = await startServer();
   try {
     const startedAt = Date.now();
-    const res = await fetch(`${server.url}/?wait_seconds=${SMALL_WAIT_SECONDS}`);
+    const res = await abrufMitFrist(`${server.url}/?wait_seconds=${SMALL_WAIT_SECONDS}`);
     const elapsedMs = Date.now() - startedAt;
     await res.json();
     assert.ok(
@@ -31,7 +32,7 @@ test("spike1-consult-echo: antwortet nicht frueher als die eingestellte Wartezei
 test("spike1-consult-echo: antwortet ueberhaupt und in der erwarteten Form", async () => {
   const server = await startServer();
   try {
-    const res = await fetch(`${server.url}/?wait_seconds=${SMALL_WAIT_SECONDS}`);
+    const res = await abrufMitFrist(`${server.url}/?wait_seconds=${SMALL_WAIT_SECONDS}`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
     assert.equal(body.ok, true);
@@ -47,7 +48,7 @@ test("spike1-consult-echo: antwortet ueberhaupt und in der erwarteten Form", asy
 test("spike1-consult-echo: JSON-Body-Feld wait_seconds wird ebenfalls gelesen (Body schlaegt Query)", async () => {
   const server = await startServer();
   try {
-    const res = await fetch(`${server.url}/?wait_seconds=${MAX_WAIT_SECONDS}`, {
+    const res = await abrufMitFrist(`${server.url}/?wait_seconds=${MAX_WAIT_SECONDS}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ wait_seconds: SMALL_WAIT_SECONDS }),

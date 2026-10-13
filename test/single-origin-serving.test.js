@@ -1,10 +1,11 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startServer, externalIp, ROOT } from "./helpers.js";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 
@@ -23,7 +24,7 @@ after(() => fs.rmSync(WEB_DIST, { recursive: true, force: true }));
 function rawGet(url) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const req = http.request(
+    const req = anfrageMitFrist(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: "GET" },
       (res) => {
         res.resume();
@@ -43,10 +44,10 @@ test(
       env: { WEB_DIST_DIR: WEB_DIST, DASHBOARD_PASSWORD: "test-geheim" },
     });
     try {
-      const marketing = await fetch(`${srv.externalUrl}/`);
+      const marketing = await abrufMitFrist(`${srv.externalUrl}/`);
       assert.equal(marketing.status, 200, "Marketing-Landing ohne Auth erreichbar");
       assert.match(await marketing.text(), /Marketing-Fixture/);
-      const api = await fetch(`${srv.externalUrl}/api/state`);
+      const api = await abrufMitFrist(`${srv.externalUrl}/api/state`);
       assert.equal(api.status, 403, "API-Route weiter hinter internalOnly");
     } finally {
       await srv.stop();
@@ -81,13 +82,13 @@ test("WEB_DIST_DIR: /tenant.html?sub=ok -> 302 /app?sub=ok (Query erhalten)", as
 test("WEB_DIST_DIR: /app + Deep-Links liefern die App-Shell (SPA-Fallback)", async () => {
   const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
   try {
-    const app = await fetch(`${srv.localUrl}/app`);
+    const app = await abrufMitFrist(`${srv.localUrl}/app`);
     assert.equal(app.status, 200, "App-Shell unter /app erreichbar");
     assert.match(await app.text(), /App-Fixture/);
-    const deep = await fetch(`${srv.localUrl}/app/dashboard`);
+    const deep = await abrufMitFrist(`${srv.localUrl}/app/dashboard`);
     assert.equal(deep.status, 200, "Deep-Link liefert App-Shell (Client-Routing)");
     assert.match(await deep.text(), /App-Fixture/);
-    const foo = await fetch(`${srv.localUrl}/app/foo`);
+    const foo = await abrufMitFrist(`${srv.localUrl}/app/foo`);
     assert.equal(foo.status, 200);
     const fooBody = await foo.text();
     assert.match(fooBody, /App-Fixture/);
@@ -101,7 +102,7 @@ test("WEB_DIST_DIR relativ: /app-Deep-Link liefert die App-Shell (sendFile absol
   const relDist = path.relative(ROOT, WEB_DIST);
   const srv = await startServer({ env: { WEB_DIST_DIR: relDist } });
   try {
-    const deep = await fetch(`${srv.localUrl}/app/foo`);
+    const deep = await abrufMitFrist(`${srv.localUrl}/app/foo`);
     assert.equal(deep.status, 200, "Deep-Link unter relativem WEB_DIST_DIR -> 200 (war 500)");
     assert.match(await deep.text(), /App-Fixture/);
   } finally {

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import http from "node:http";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 process.env.CONSULT_ENABLED = "true";
 process.env.ASSISTANT_CONTEXT_ENABLED = "true";
@@ -141,7 +142,7 @@ async function startRoute({ store, auditFor }) {
 }
 
 function post(url, body) {
-  return fetch(`${url}/webhooks/elevenlabs/consult`, {
+  return abrufMitFrist(`${url}/webhooks/elevenlabs/consult`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-hermes-tool-token": TOOL_TOKEN },
     body: JSON.stringify(body),

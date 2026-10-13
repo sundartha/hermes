@@ -4,6 +4,7 @@ import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { makeDefaultState, settingsFor, updateSettings } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CASES = [
   ["de", INBOUND_NOTICES.de],
@@ -15,7 +16,7 @@ for (const [language, notice] of CASES) {
   test(`Inbound-Pflichtsatz: erster gesprochener Satz traegt KI- + Transkriptionshinweis (${language}) (ex GAP-14 a)`, async () => {
     const srv = await startServer({ seed: seedState({ settings: { language } }) });
     try {
-      const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
         method: "POST",
         body: new URLSearchParams({
           CallSid: "CAgap14",
@@ -39,7 +40,7 @@ test("Inbound-Pflichtsatz: kein Doppelsatz, wenn das Greeting ihn bereits traegt
     seed: seedState({ settings: { language: "de", greeting: DEFAULT_GREETING } }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAgap14dup",

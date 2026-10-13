@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 
@@ -16,7 +17,7 @@ const FLAG_ON = { ASSISTANT_CONTEXT_ENABLED: "true", ALLOWED_NUMBERS: TO };
 const FLAG_OFF = { ALLOWED_NUMBERS: TO };
 
 function placeCall(srv, body = {}) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren", ...body }),

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { tempDataDir, seedState } from "./helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT = "T";
 const VALID_TO = "+491711234567";
@@ -151,7 +152,7 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
     const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
   });
   try {
-    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/calls`, {
+    const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: VALID_TO, objective: OBJECTIVE }),

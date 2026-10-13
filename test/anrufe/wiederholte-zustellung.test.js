@@ -13,6 +13,7 @@ import {
   TURN_LOOP_BY_COST_PROFILE,
   legRunsOurTurnLoop,
 } from "../../src/telephony/leg-turn-loop.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const GATHER_UND_REDIRECT_VORKOMMEN = 2;
@@ -25,7 +26,7 @@ function deliverIncoming(srv, signer, callSid) {
     From: "+4915112345678",
     To: "+15005550006",
   }).toString();
-  return fetch(`${srv.localUrl}/voice/incoming`, {
+  return abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
     body: rumpf,
     headers: {

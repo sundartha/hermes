@@ -4,6 +4,7 @@ import { providerFromHeaders } from "../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, DEFAULT_PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TELNYX_NR = "+13125550100";
 const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
@@ -67,7 +68,7 @@ test("createCall mit explizitem tenantId -> Call dem Tenant zugeordnet (P3)", ()
 test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx", async () => {
   const srv = await startServer({ ownerNumber: { e164: TELNYX_NR, provider: PROVIDER.TELNYX } });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       headers: TELNYX_HEADERS,
       body: new URLSearchParams({ CallSid: "tx1", From: "+4915112345678", To: TELNYX_NR }),
@@ -91,7 +92,7 @@ test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx
 test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechModel)", async () => {
   const srv = await startServer({ ownerNumber: { e164: TELNYX_NR, provider: PROVIDER.TELNYX } });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "dp1", From: "+4915112345678", To: TELNYX_NR }),
     });

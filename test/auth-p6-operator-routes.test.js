@@ -8,6 +8,7 @@ import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState, registerTenant, tenantActiveSubscriber, platformTtsUsageView } from "../src/store/state-ops.js";
 import { TENANT_STATUS, KYC_LEVEL } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "auth-p6-web-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
@@ -164,7 +165,7 @@ async function setup() {
 function request(app, route, sessionId) {
   const headers = { "Content-Type": "application/json" };
   if (sessionId) headers.Cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;
-  return fetch(`${app.base}${route.path}`, {
+  return abrufMitFrist(`${app.base}${route.path}`, {
     method: route.method,
     headers,
     ...(route.method === "GET" ? {} : { body: JSON.stringify(route.body || {}) }),

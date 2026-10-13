@@ -8,6 +8,7 @@ import { CATALOG_SLUGS, PLAN_CATALOG } from "../src/plans.js";
 import { NOT_PLACED } from "../src/telephony/failure-reason.js";
 import { startServer, startServerExpectExit, makeStripeStub } from "./helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const STARTER_PRICE = "price_starter";
 const BUSINESS_PRICE = "price_business";
@@ -233,7 +234,7 @@ test("GP-P6: P6-4 Katalog-Slug ohne Price-Id bei PAYMENT_ENABLED=true -> Boot-Re
 test("GP-P6: P6-5 ohne aktiven Geldpfad sind leere Price-Ids folgenlos - der Dienst startet", async () => {
   const srv = await startServer({});
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
   } finally {
     await srv.stop();

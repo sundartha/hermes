@@ -1,0 +1,9 @@
+{
+  "titel": "Test schickt fetch an einen lokalen Server ohne Antwortfrist",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "export const antwort = await fetch(\"http://127.0.0.1:3999/healthz\");"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}

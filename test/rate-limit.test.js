@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 const LIMIT = 3;
@@ -11,7 +12,7 @@ test("Rate-Limiting", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, as
     await t.test("Request N+1 von Nicht-localhost-IP -> 429 mit JSON-Error", async () => {
       const statuses = [];
       for (let i = 0; i < LIMIT + 1; i++) {
-        const res = await fetch(`${srv.externalUrl}/healthz`);
+        const res = await abrufMitFrist(`${srv.externalUrl}/healthz`);
         statuses.push(res.status);
         if (res.status === 429) {
           const body = await res.json();
@@ -23,14 +24,14 @@ test("Rate-Limiting", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, as
 
     await t.test("localhost-Socket ist ausgenommen", async () => {
       for (let i = 0; i < LIMIT + 2; i++) {
-        const res = await fetch(`${srv.localUrl}/healthz`);
+        const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
         assert.equal(res.status, 200);
       }
     });
 
     await t.test("/voice/* ist ausgenommen (Twilio-Webhooks)", async () => {
       for (let i = 0; i < LIMIT + 2; i++) {
-        const res = await fetch(`${srv.externalUrl}/voice/turn?callId=missing`, {
+        const res = await abrufMitFrist(`${srv.externalUrl}/voice/turn?callId=missing`, {
           method: "POST",
           body: new URLSearchParams({ SpeechResult: "" }),
         });
@@ -47,7 +48,7 @@ test("Rate-Limiting: Loopback-Socket mit X-Forwarded-For ist NICHT ausgenommen (
   try {
     const statuses = [];
     for (let i = 0; i < LIMIT + 1; i++) {
-      const res = await fetch(`${srv.localUrl}/healthz`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/healthz`, {
         headers: { "X-Forwarded-For": "203.0.113.50" },
       });
       statuses.push(res.status);

@@ -8,6 +8,7 @@ import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
 import { makeCallRoutes } from "../src/routes/api-calls.js";
 import { terminateAndBillCall, billThunk } from "../src/telephony/call-termination.js";
 import { GATE_TEXTS } from "../src/i18n/gate-texts.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
@@ -59,14 +60,18 @@ function briefingEnv(llmPort) {
 }
 
 function postDe(baseUrl, to, identity) {
-  return fetch(`${baseUrl}/api/calls`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(identity ? { "X-Internal-Identity": identity } : {}),
+  return abrufMitFrist(
+    `${baseUrl}/api/calls`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(identity ? { "X-Internal-Identity": identity } : {}),
+      },
+      body: JSON.stringify({ to, objective: OBJECTIVE }),
     },
-    body: JSON.stringify({ to, objective: OBJECTIVE }),
-  });
+    { wartezeitMs: LLM_MOCK_DELAY_MS },
+  );
 }
 
 test("T1: N parallele place_call eines Mandanten am Stundenlimit -> hoechstens L werden gewaehlt", async () => {
@@ -297,7 +302,7 @@ async function startTestApp({ store, config, voiceControl }) {
 }
 
 function postLocal(baseUrl, to, tenant) {
-  return fetch(`${baseUrl}/api/calls`, {
+  return abrufMitFrist(`${baseUrl}/api/calls`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
