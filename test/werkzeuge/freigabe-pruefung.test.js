@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -35,6 +35,8 @@ const RIGHT_SUM = 2;
 const WRONG_SUM = 3;
 const JSON_INDENT = 2;
 const HTTP_OK = 200;
+const AUFRUFER = [".githooks", ".github/workflows"];
+const AUFGERUFENES_SKRIPT = /\bscripts\/[\w./-]+\.(?:c?m?js|sh)\b/g;
 
 function json(value) {
   return `${JSON.stringify(value, null, JSON_INDENT)}\n`;
@@ -224,6 +226,35 @@ test("eine geänderte bestehende Prüfung wartet auf eine Freigabe auf dem aktue
   const approved = await check(context, { ...scenario, approval: "aktuell" });
   assert.equal(approved.status, EXIT_OK, approved.stdout);
   assert.match(approved.stdout, /Freigegeben von Antonio20045/);
+});
+
+function vonHookUndCiAufgerufeneSkripte() {
+  const texte = AUFRUFER.flatMap((ordner) =>
+    readdirSync(join(REPO_ROOT, ordner)).map((datei) =>
+      readFileSync(join(REPO_ROOT, ordner, datei), "utf8"),
+    ),
+  );
+  return [...new Set(texte.flatMap((text) => text.match(AUFGERUFENES_SKRIPT) ?? []))].sort();
+}
+
+test("ein Prüfskript unter scripts/, das Hook oder CI aufrufen, wartet mit den echten CODEOWNERS auf eine Freigabe", async (context) => {
+  const skripte = vonHookUndCiAufgerufeneSkripte();
+  assert.ok(skripte.includes("scripts/check-staged-suppressions.js"), skripte.join(", "));
+  const mitInhalt = (inhalt) => Object.fromEntries(skripte.map((pfad) => [pfad, inhalt]));
+  const result = await check(context, {
+    basisFiles: {
+      ".github/CODEOWNERS": readFileSync(join(REPO_ROOT, ".github/CODEOWNERS"), "utf8"),
+      ...mitInhalt("export const streng = true;\n"),
+    },
+    changes: mitInhalt("export const streng = false;\n"),
+  });
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  assert.deepEqual(labelsSet(result), ["art:pruefung"]);
+  const freigabe = result.stdout
+    .split("\n")
+    .find((zeile) => zeile.includes("Bestehende Prüfungsdateien"));
+  for (const pfad of skripte)
+    assert.ok(freigabe?.includes(pfad), `${pfad} fehlt in: ${result.stdout}`);
 });
 
 test("eine neu angelegte Prüfung braucht keine Freigabe", async (context) => {

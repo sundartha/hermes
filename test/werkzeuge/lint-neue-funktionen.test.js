@@ -14,6 +14,7 @@ const REGELN = {
   "no-magic-numbers": ["error", { ignore: [0, 1, -1] }],
   "hermes/keine-kommentare": "error",
   "hermes/namen-ohne-begruendung": "warn",
+  "max-lines-per-function": ["error", { max: 6 }],
 };
 const ALTER_KOMMENTAR = "  // die Antwort";
 
@@ -102,6 +103,28 @@ test("lint-neue-funktionen: ein neuer Rückruf in einer alten Funktion zählt di
   const lauf = nachher(basisRepo(context, vorher), zeilen);
   assert.equal(lauf.status, EXIT_FINDING, lauf.output);
   assert.match(lauf.output, /src\/rechnen\.js:2 no-magic-numbers: No magic number: 42/);
+});
+
+const AUSSEN = ["export function aussen(liste) {", "  return liste.map((eintrag) => {", "    return eintrag;", "  });", "}"];
+const INNEN_LAENGER = "    const kopie = eintrag;\n    const zweite = kopie;\n    return zweite;";
+
+test("lint-neue-funktionen: wächst eine äußere Funktion durch Zeilen einer inneren über die Grenze, ist das rot", (context) => {
+  const konstanten = ["eins", "zwei", "drei", "vier", "fuenf"].map((name) => `  const ${name} = wert;`);
+  const bestand = ["export function bestand(wert) {", ...konstanten, "  return wert;", "}"];
+  const laenger = ersetzt(AUSSEN, "    return eintrag;", INNEN_LAENGER);
+  const lauf = nachher(basisRepo(context, [...bestand, ...AUSSEN]), [...bestand, ...laenger]);
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.match(lauf.output, /src\/rechnen\.js:9 max-lines-per-function: .*'aussen'/);
+  assert.doesNotMatch(lauf.output, /'bestand'/);
+});
+
+test("lint-neue-funktionen: eine äußere Funktion über der Grenze bleibt grün, solange die innere nicht länger wird", (context) => {
+  const lang = ersetzt(AUSSEN, "    return eintrag;", INNEN_LAENGER).flatMap((zeile) => zeile.split("\n"));
+  const gleichLang = nachher(basisRepo(context, lang), ersetzt(lang, "    const zweite = kopie;", "    const zweite = kopie + 1;"));
+  assert.equal(gleichLang.status, EXIT_OK, gleichLang.output);
+  const laenger = nachher(basisRepo(context, lang), ersetzt(lang, "    return zweite;", "    const dritte = zweite;\n    return dritte;"));
+  assert.equal(laenger.status, EXIT_FINDING, laenger.output);
+  assert.match(laenger.output, /max-lines-per-function: .*'aussen'/);
 });
 
 test("lint-neue-funktionen: ein Begründungsname in neuem Code ist rot, ein langer Name nur ein Hinweis", (context) => {

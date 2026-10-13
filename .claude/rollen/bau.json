@@ -23,6 +23,7 @@
       "Edit(test/werkzeuge/**)",
       "Edit(test/werkzeuge/werkzeugtexte.json)",
       "Edit(test/gemeinsam/erfundene-geheimnisse.js)",
+      "Edit(scripts/check-staged-suppressions.js)",
       "Edit(test/**)"
     ]
   },
