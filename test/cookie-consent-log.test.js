@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 import {
   COOKIE_CONSENT_PATH,
@@ -12,6 +11,7 @@ import {
   siteFromOrigin,
 } from "../src/cookie-consent-log.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const CONSENT_ID = "3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f";
 const VALID = Object.freeze({ id: CONSENT_ID, version: 1, statistics: true, marketing: false });
@@ -58,7 +58,7 @@ test("siteFromOrigin: nur der Host eines http(s)-Origins, sonst null", () => {
 });
 
 async function freshLog() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const query = (text, params) => db.query(text, params);
   await applySchema({ query, exec: (sql) => db.exec(sql) });
   const log = makeCookieConsentLog({ withClient: (fn) => fn({ query }) });

@@ -7,6 +7,7 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_OPEN_POLLS_PER_CALL } from "../src/consult/delivery.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
 const HTTP_NOT_FOUND = 404;
 
@@ -81,12 +82,11 @@ const outboundSeed = () =>
     ],
   });
 
-let makePgStore, PGlite, jsonStore, maxConsultsPerCall, dataDir;
+let makePgStore, jsonStore, maxConsultsPerCall, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-consult-"));
   process.env.DATA_DIR = dataDir;
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   jsonStore = await import("../src/store/json.js");
   ({ MAX_IN_CALL_CONSULTS_PER_CALL: maxConsultsPerCall } = await import(
     "../src/consult/in-call.js"
@@ -94,7 +94,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (sql, params) => db.query(sql, params), exec: (sql) => db.exec(sql) }),
   };

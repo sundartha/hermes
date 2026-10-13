@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 
+import { abfragenZaehlendeHuelle, abwartenBisNichtsMehrLaeuft } from "./gemeinsam/pglite-instanz.js";
 import { testkostenZaehler } from "./testkosten.js";
 
 const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
@@ -62,43 +63,13 @@ export async function vorlage(name, einrichten, schluesselTeile) {
 
 const LEERE_VORLAGE = await vorlage("leer", async () => {}, []);
 
-function eineRundeDerEreignisschleife() {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-}
-
-function abfragenZaehlendeHuelle(pg, laufend) {
-  const mitzaehlen = (versprechen) => {
-    laufend.add(versprechen);
-    const austragen = () => laufend.delete(versprechen);
-    versprechen.then(austragen, austragen);
-    return versprechen;
-  };
-  const gezaehlt = {
-    query: (text, params) => mitzaehlen(pg.query(text, params)),
-    exec: (sql) => mitzaehlen(pg.exec(sql)),
-  };
-  return new Proxy(pg, {
-    get(ziel, name) {
-      if (Object.hasOwn(gezaehlt, name)) return gezaehlt[name];
-      const wert = Reflect.get(ziel, name, ziel);
-      return typeof wert === "function" ? wert.bind(ziel) : wert;
-    },
-  });
-}
-
 async function flushesAbwartenOhneFehlerFolge(storeHolen) {
   const store = storeHolen?.();
   if (store) await Promise.allSettled([store.drainFlushes()]);
 }
 
 async function schliessenSobaldNichtsMehrLaeuft(eintrag) {
-  do {
-    await flushesAbwartenOhneFehlerFolge(eintrag.storeHolen);
-    await Promise.allSettled([...eintrag.laufend]);
-    await eineRundeDerEreignisschleife();
-  } while (eintrag.laufend.size > 0);
+  await abwartenBisNichtsMehrLaeuft(eintrag.laufend, () => flushesAbwartenOhneFehlerFolge(eintrag.storeHolen));
   await eintrag.pg.close();
   eintrag.freigeben();
 }

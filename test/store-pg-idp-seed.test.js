@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { config } from "../src/config.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import * as ops from "../src/store/state-ops.js";
@@ -29,7 +29,7 @@ async function dbIdpSubject(db) {
 }
 
 test("AM6 pg: init() bindet OWNER_IDP_SUBJECT, persistiert + resolveTenant trifft Bootstrap", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await withOwnerIdpSubject(OWNER_SUB, async () => {
     const store = makePgStore(runnerFor(db));
     await store.init();
@@ -48,7 +48,7 @@ test("AM6 pg: init() bindet OWNER_IDP_SUBJECT, persistiert + resolveTenant triff
 });
 
 test("AM6 pg: leeres OWNER_IDP_SUBJECT -> kein idp_subject-Seed (byte-identisch)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await withOwnerIdpSubject("", async () => {
     const store = makePgStore(runnerFor(db));
     await store.init();

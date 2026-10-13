@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let ops, jsonStore, makePgStore, PGlite, BOOTSTRAP, publicCall, KOSTENPROFIL;
+let ops, jsonStore, makePgStore, BOOTSTRAP, publicCall, KOSTENPROFIL;
 let BRIDGE_STATE, bridgeStateOf;
 let dataDir;
 let jsonSeq = 0;
@@ -16,7 +17,6 @@ before(async () => {
   ops = await import("../src/store/state-ops.js");
   jsonStore = await import("../src/store/json.js");
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
   ({ publicCall } = await import("../src/store/views.js"));
   ({ KOSTENPROFIL } = await import("../src/billing/kostenarten.js"));
@@ -44,7 +44,7 @@ function neuerElInboundCall(state) {
 }
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
   };

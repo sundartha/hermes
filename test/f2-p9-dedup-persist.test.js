@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { makePgStore } from "../src/store/pg.js";
 import { planSummarySms } from "../src/sms-summary.js";
 import { publicCall } from "../src/store/views.js";
@@ -20,7 +20,7 @@ async function reopen(db) {
 }
 
 test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt den Restart", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const store = await reopen(db);
   const c = store.createCall({
     direction: "inbound",

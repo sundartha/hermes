@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import {
   makeDefaultState,
   registerTenant,
@@ -140,20 +140,22 @@ async function reopen(db) {
 }
 
 test("pglite: recordUsageEvent(SMS) persistiert -> dailySmsCount sieht ihn nach Re-Hydrierung (Cap restart-fest)", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
   const store = makePgStore(runner);
   await store.init();
+  const { tenants: tenantsBefore } = store.load();
   store.recordUsageEvent({
-    tenantId: store.load().tenants[0].id,
+    tenantId: tenantsBefore[0].id,
     kind: USAGE_EVENT_KIND.SMS,
     quantity: 1,
     costCents: 7,
   });
   await store.save();
-  const ownerId = store.load().tenants[0].id;
+  const { tenants: tenantsAfter } = store.load();
+  const ownerId = tenantsAfter[0].id;
 
   const reopened = await reopen(db);
   assert.equal(reopened.dailySmsCount(ownerId, FAR_PAST), 1, "SMS-Beleg ueberlebt den Restart");

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -12,7 +12,7 @@ import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 const SECRET = "portal-route-secret-0123456789";
 
 async function setup() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const q = (t, p) => db.query(t, p);
   await applySchema({ query: q, exec: (s) => db.exec(s) });
   await q(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);

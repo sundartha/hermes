@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { assertNoBypassRls, createPortalRunner } from "../src/portal-pool.js";
 
 function stubClient(rows) {
@@ -125,7 +125,7 @@ test("S1-13b: withClient released den Work-Client auch wenn fn wirft (finally-Ga
 });
 
 test("assertNoBypassRls: PGlite NOLOGIN NOBYPASSRLS app_user -> kein Fehler", async () => {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await db.exec(`CREATE ROLE app_user NOLOGIN NOBYPASSRLS;`);
   await db.query(`SET ROLE app_user`);
   try {

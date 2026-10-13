@@ -100,7 +100,7 @@ test("Vorlagen: unter aktivem Mutanten entsteht keine Datei", async () => {
   }
 });
 
-const ARBEITSKOPIE_DATEIEN = ["pglite-helfer.js", "testkosten.js"];
+const ARBEITSKOPIE_DATEIEN = ["pglite-helfer.js", "gemeinsam/pglite-instanz.js", "testkosten.js"];
 const ARBEITSKOPIE_KIND = `import { vorlage } from "./pglite-helfer.js";
 await vorlage(process.argv[2], async () => {}, ["arbeitskopie"]);
 `;
@@ -112,7 +112,9 @@ function arbeitskopieAnlegen() {
   const testOrdner = path.join(ordner, "test");
   fs.mkdirSync(testOrdner);
   for (const datei of ARBEITSKOPIE_DATEIEN) {
-    fs.copyFileSync(fileURLToPath(new URL(datei, import.meta.url)), path.join(testOrdner, datei));
+    const ziel = path.join(testOrdner, datei);
+    fs.mkdirSync(path.dirname(ziel), { recursive: true });
+    fs.copyFileSync(fileURLToPath(new URL(datei, import.meta.url)), ziel);
   }
   fs.writeFileSync(path.join(testOrdner, "kind.js"), ARBEITSKOPIE_KIND);
   return ordner;

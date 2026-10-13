@@ -4,21 +4,21 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tempDataDir } from "./helpers.js";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 
-let makePgStore, PGlite, jsonStore, views, config, BOOTSTRAP, dataDir;
+let makePgStore, jsonStore, views, config, BOOTSTRAP, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p1-store-"));
   process.env.DATA_DIR = dataDir;
   ({ config } = await import("../src/config.js"));
   ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ PGlite } = await import("@electric-sql/pglite"));
   jsonStore = await import("../src/store/json.js");
   views = await import("../src/store/views.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
 async function makePgTestStore() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

@@ -2,13 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import http from "node:http";
-import { PGlite } from "@electric-sql/pglite";
+import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
 import { applySchema } from "../src/db/migrate.js";
 import { makeAccounts, adminOnly } from "../src/web-auth.js";
 import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 
 async function setup() {
-  const db = new PGlite();
+  const db = neuePGliteInstanz();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (s) => db.exec(s) });
   const accounts = makeAccounts({ withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) });
   return { db, accounts };
