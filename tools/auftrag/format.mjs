@@ -191,7 +191,7 @@ function auftragBefunde(auftrag, kontext) {
   return befunde.map((befund) => `${auftrag.id}: ${befund}`);
 }
 
-function kennungBefunde(auftraege) {
+export function kennungBefunde(auftraege) {
   const gesehen = new Set();
   const befunde = [];
   for (const { id } of auftraege) {

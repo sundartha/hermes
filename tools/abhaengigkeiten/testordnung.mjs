@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const BEREICHE_DATEI = "tools/bereiche.json";
 const TEST_ORDNER = "test/";
@@ -18,9 +19,10 @@ const TICKET_PAAR =
   /(?:^|[-_.])(?:gap|sg|web|did|pay|fmt|orig|e2e|lang|prov|phase|stufe|runde|welle|sprint|spike|fix|paket|task|ticket|aufgabe)[-_.]?\d{1,3}(?=[-_.]|$)/;
 const ENDUNG = /\.(?:test\.)?(?:js|mjs|cjs|json|jsonl|xml|md)$/;
 
-function bereiche() {
-  if (!existsSync(BEREICHE_DATEI)) return [];
-  return JSON.parse(readFileSync(BEREICHE_DATEI, "utf8")).map(({ bereich }) => bereich);
+export function bereiche(root = ".") {
+  const pfad = join(root, BEREICHE_DATEI);
+  if (!existsSync(pfad)) return [];
+  return JSON.parse(readFileSync(pfad, "utf8")).map(({ bereich }) => bereich);
 }
 
 function tokens(pfadteil) {
@@ -34,7 +36,7 @@ function istTicketName(pfadteil) {
   return einzeln || TICKET_PAAR.test(teile.join(TOKEN_VERBINDER));
 }
 
-function liegtGeordnet(pfad, erlaubt) {
+export function liegtGeordnet(pfad, erlaubt) {
   const teile = pfad.slice(TEST_ORDNER.length).split(PFAD_TRENNER);
   const [bereich] = teile;
   const imBereich = teile.length >= BEREICH_UND_DATEI && erlaubt.includes(bereich);
