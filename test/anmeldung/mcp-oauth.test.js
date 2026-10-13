@@ -9,6 +9,7 @@ import {
   MCP_AUDIENCE as AUDIENCE,
   externalIp,
 } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -29,7 +30,7 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
   });
   try {
     await ctx.test("Well-known: 200 JSON ohne Auth-Prompt", async () => {
-      const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
+      const res = await abrufMitFrist(`${srv.localUrl}/.well-known/oauth-protected-resource`);
       assert.equal(res.status, HTTP_OK);
       assert.ok(!res.headers.get("www-authenticate"));
       const doc = await res.json();
@@ -38,7 +39,7 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
     });
 
     await ctx.test("Well-known pfadbezogen (/mcp) ebenfalls 200", async () => {
-      const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource/mcp`);
+      const res = await abrufMitFrist(`${srv.localUrl}/.well-known/oauth-protected-resource/mcp`);
       assert.equal(res.status, HTTP_OK);
     });
 

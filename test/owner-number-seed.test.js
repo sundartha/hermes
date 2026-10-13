@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, OWNER_TEST_NUMBER } from "./helpers.js";
 import { PROVIDER, DEFAULT_PROVIDER, resolveSeedProvider } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SEED_E164 = "+491701234567";
 
@@ -29,9 +30,9 @@ test("resolveSeedProvider: Muell -> null (fail-closed)", () => {
 test("AC1: kein Store-Seed + gueltige OWNER_NUMBER_SEED -> Boot OK, /healthz 200, Owner-Nummer aktiv", async () => {
   const srv = await startServer({ ownerNumber: null, env: { OWNER_NUMBER_SEED: SEED_E164 } });
   try {
-    const health = await fetch(`${srv.localUrl}/healthz`);
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(health.status, 200, "gueltiger Env-Seed -> Dienst bootet (kein Boot-Refusal)");
-    const state = await (await fetch(`${srv.localUrl}/api/state`)).json();
+    const state = await (await abrufMitFrist(`${srv.localUrl}/api/state`)).json();
     assert.equal(state.agent.number, SEED_E164, "geseedete Owner-Nummer ist die aktive Nummer");
     assert.ok(!srv.stdout.includes(SEED_E164), "AC7: Owner-Nummer nie im Boot-Log (kein PII-Leak)");
   } finally {
@@ -45,7 +46,7 @@ test("AC4: OWNER_NUMBER_PROVIDER=telnyx + gueltige Nummer -> Boot OK", async () 
     env: { OWNER_NUMBER_SEED: SEED_E164, OWNER_NUMBER_PROVIDER: "telnyx" },
   });
   try {
-    const state = await (await fetch(`${srv.localUrl}/api/state`)).json();
+    const state = await (await abrufMitFrist(`${srv.localUrl}/api/state`)).json();
     assert.equal(state.agent.number, SEED_E164, "telnyx ist ein gueltiger Provider -> geseedet");
   } finally {
     await srv.stop();
@@ -85,7 +86,7 @@ test("AC2: leere OWNER_NUMBER_SEED + kein Store-Seed -> Boot-Refusal (fail-close
 test("AC6: aktive Store-Owner-Nummer gewinnt -> Env-Seed ist No-Op (kein Doppel-Seed)", async () => {
   const srv = await startServer({ env: { OWNER_NUMBER_SEED: SEED_E164 } });
   try {
-    const state = await (await fetch(`${srv.localUrl}/api/state`)).json();
+    const state = await (await abrufMitFrist(`${srv.localUrl}/api/state`)).json();
     assert.equal(
       state.agent.number,
       OWNER_TEST_NUMBER.e164,

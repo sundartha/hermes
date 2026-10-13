@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const WERKZEUG_GEHEIMNIS = "spur-am-server-geheimnis";
 const ANRUF = "call_spur_am_server";
@@ -35,7 +36,7 @@ const laufenderAnruf = () =>
 test("eine nie zugestellte Rueckfrage endet am echten Server mit not_delivered und hinterlaesst die Abbruch-Spur im Audit", async () => {
   const srv = await startServer({ env: RUECKFRAGE_MIT_KURZER_STAFFEL, seed: laufenderAnruf() });
   try {
-    const antwort = await fetch(`${srv.localUrl}/webhooks/elevenlabs/consult`, {
+    const antwort = await abrufMitFrist(`${srv.localUrl}/webhooks/elevenlabs/consult`, {
       method: "POST",
       headers: { "x-hermes-tool-token": WERKZEUG_GEHEIMNIS, "Content-Type": "application/json" },
       body: JSON.stringify({ conversation_id: GESPRAECH, question: "Passt Donnerstag?" }),

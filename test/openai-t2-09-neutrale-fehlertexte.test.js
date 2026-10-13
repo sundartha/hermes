@@ -11,6 +11,7 @@ import { startServer, startIdp, mcpPost, toolCall, readToolResult, ROOT, BASE_EN
 import { makeDefaultState, settingsFor } from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -63,7 +64,7 @@ test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (all
 
 const TEST_CONFIRMATION_SECRET = "t2-09-test-secret-mindestens-32-zeichen-lang";
 async function confirmedPlaceCallArgs(localUrl, args, tenantHeader = null) {
-  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -93,7 +94,7 @@ test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutra
     assert.doesNotMatch(text, /OUTBOUND_FROZEN/, "kein Env-Name im Tool-Text");
     assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
 
-    const apiRes = await fetch(`${srv.localUrl}/api/calls`, {
+    const apiRes = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: "+4915112345678", objective: "Termin vereinbaren" }),
@@ -188,7 +189,7 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
     );
     assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
 
-    const apiRes = await fetch(`${srv.localUrl}/api/calls`, {
+    const apiRes = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Internal-Identity": T4_SUB },
       body: JSON.stringify({ to: T4_TARGET, objective: "Termin vereinbaren" }),
@@ -210,7 +211,7 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
 test("S1 (REST): ein reiner 400-Formfehler (fehlendes Pflichtfeld) traegt KEIN reason-Feld", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: "+4915112345678" }),

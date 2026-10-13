@@ -7,6 +7,7 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const OWNER_NAME = "Maria";
 
@@ -54,7 +55,7 @@ async function startOnboardApp({ state = makeDefaultState(), config = onboardCon
 }
 
 const postJson = (app, path, body) =>
-  fetch(`${app.base}${path}`, {
+  abrufMitFrist(`${app.base}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -184,7 +185,7 @@ test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Mari
 
   const srv = await startServer({ seed: onboardApp.state });
   try {
-    const inbound = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const inbound = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAm", From: "+4915112345678", To: ACTIVE_E164 }),
     });

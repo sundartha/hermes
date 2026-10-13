@@ -7,6 +7,7 @@ import express from "express";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { OWNER_TEST_NUMBER, makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -55,7 +56,7 @@ after(async () => {
 });
 
 function sendTelnyx({ signer, timestamp }) {
-  return fetch(`${hermes.srv.localUrl}/voice/incoming`, {
+  return abrufMitFrist(`${hermes.srv.localUrl}/voice/incoming`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -68,7 +69,7 @@ function sendTelnyx({ signer, timestamp }) {
 
 function sendStripe({ secret, timestamp }) {
   const mac = crypto.createHmac("sha256", secret).update(`${timestamp}.${STRIPE_EVENT}`).digest("hex");
-  return fetch(`http://127.0.0.1:${hermes.stripe.address().port}${STRIPE_PATH}`, {
+  return abrufMitFrist(`http://127.0.0.1:${hermes.stripe.address().port}${STRIPE_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "stripe-signature": `t=${timestamp},v1=${mac}` },
     body: STRIPE_EVENT,

@@ -6,6 +6,7 @@ import { requirePublicUrl, ERROR_SERVER_UNCONFIGURED } from "../../src/billing/p
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -78,7 +79,7 @@ test("requirePublicUrl: publicUrl leer -> 500 + Code server_unconfigured, kein K
 test("setup-checkout ohne oeffentliche Basis-URL -> 500 mit sprachneutralem Code, kein Env-Name (api-billing)", async () => {
   const app = await startBillingApp("");
   try {
-    const res = await fetch(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
+    const res = await abrufMitFrist(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
     assert.equal(res.status, HTTP_SERVER_ERROR);
     const json = await res.json();
     assert.equal(json.error, ERROR_SERVER_UNCONFIGURED);
@@ -93,7 +94,7 @@ test("setup-checkout ohne oeffentliche Basis-URL -> 500 mit sprachneutralem Code
 test("setup-checkout mit gesetzter Basis-URL -> Guard laesst durch (glueckliche Pfad)", async () => {
   const app = await startBillingApp("https://agent.test");
   try {
-    const res = await fetch(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
+    const res = await abrufMitFrist(`${app.base}/api/billing/setup-checkout`, { method: "POST" });
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.equal(app.tenantResolverCalls(), 1);
   } finally {
@@ -142,9 +143,9 @@ const PAY_ENV = (stripeUrl) => ({
 });
 
 const postAs = (srv, idpSub, path) =>
-  fetch(`${srv.localUrl}${path}`, { method: "POST", headers: { "X-Internal-Identity": idpSub } });
+  abrufMitFrist(`${srv.localUrl}${path}`, { method: "POST", headers: { "X-Internal-Identity": idpSub } });
 const getAs = (srv, idpSub, path) =>
-  fetch(`${srv.localUrl}${path}`, { headers: { "X-Internal-Identity": idpSub } });
+  abrufMitFrist(`${srv.localUrl}${path}`, { headers: { "X-Internal-Identity": idpSub } });
 const ownerTenant = (srv) => srv.readStore().tenants.find((tenant) => tenant.id === BOOTSTRAP_TENANT_ID);
 
 test("Flag aus (PAYMENT_ENABLED default false): beide Routen 404 (byte-identisch)", async () => {

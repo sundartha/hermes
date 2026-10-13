@@ -9,6 +9,7 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { makeStubStore, fakeConfig } from "./cost-truing-harness.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const UNSUPPORTED_PROVIDER = "twilio";
 
@@ -47,7 +48,7 @@ async function startSweepApp(state) {
 const SWEEP_RESPONSE_TIMEOUT_MS = 15000;
 
 const sweep = (app) =>
-  fetch(`${app.base}/api/billing/cost-truing/sweep`, {
+  abrufMitFrist(`${app.base}/api/billing/cost-truing/sweep`, {
     method: "POST",
     signal: AbortSignal.timeout(SWEEP_RESPONSE_TIMEOUT_MS),
   });
@@ -140,7 +141,7 @@ test(
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
-      const res = await fetch(`${srv.externalUrl}/api/billing/cost-truing/sweep`, {
+      const res = await abrufMitFrist(`${srv.externalUrl}/api/billing/cost-truing/sweep`, {
         method: "POST",
       });
       assert.equal(res.status, 404);

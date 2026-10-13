@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startIdp, seedState, externalIp, waitForLog } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -30,7 +31,7 @@ function seedTwoTenants() {
 }
 
 function mcpPostFrom(url, { token, body, forwardedFor } = {}) {
-  return fetch(url, {
+  return abrufMitFrist(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -43,7 +44,7 @@ function mcpPostFrom(url, { token, body, forwardedFor } = {}) {
 }
 
 function mcpPostMitOriginFrom(url, { origin, token, forwardedFor } = {}) {
-  return fetch(url, {
+  return abrufMitFrist(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -211,7 +212,7 @@ test("MRL-g: Body-Parser laufen HINTER mcpAuth auf POST /mcp", async () => {
     });
     assert.equal(mitGueltigemToken.status, HTTP_PAYLOAD_TOO_LARGE, "hinter mcpAuth gilt derselbe BODY_LIMIT");
 
-    const kaputtesJson = await fetch(`${srv.localUrl}/mcp`, {
+    const kaputtesJson = await abrufMitFrist(`${srv.localUrl}/mcp`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Forwarded-For": ip },
       body: "{kaputt",
@@ -232,15 +233,15 @@ test("MRL-h: /healthz bleibt vom /mcp-Zaehler unberuehrt; der globale IP-Limiter
     for (let i = 0; i < FENSTER_LIMIT; i++) {
       await mcpPostFrom(`${srv.localUrl}/mcp`, { token: tokenA, body: initBody, forwardedFor: ipX });
     }
-    const healthzX = await fetch(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipX } });
+    const healthzX = await abrufMitFrist(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipX } });
     assert.equal(healthzX.status, HTTP_OK, "/mcp-POSTs derselben IP zaehlen NICHT im globalen Limiter");
 
     const ipY = "203.0.113.19";
     for (let i = 0; i < FENSTER_LIMIT; i++) {
-      const res = await fetch(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipY } });
+      const res = await abrufMitFrist(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipY } });
       assert.equal(res.status, HTTP_OK, `/healthz Versuch ${i + 1}`);
     }
-    const blocked = await fetch(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipY } });
+    const blocked = await abrufMitFrist(`${srv.localUrl}/healthz`, { headers: { "X-Forwarded-For": ipY } });
     assert.equal(blocked.status, HTTP_TOO_MANY, "der globale IP-Limiter fuer andere Routen ist unveraendert");
   } finally {
     await srv.stop();

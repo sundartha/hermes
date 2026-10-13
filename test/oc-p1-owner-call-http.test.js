@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
@@ -27,7 +28,7 @@ const BASE_CALL_ENV = {
 };
 
 const postCall = (url, body) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objective: "Test", ...body }),
@@ -108,7 +109,7 @@ test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIR
     assert.equal(placed.status, HTTP_OK);
     const { callId } = await placed.json();
 
-    const stateRes = await fetch(`${srv.localUrl}/api/state`);
+    const stateRes = await abrufMitFrist(`${srv.localUrl}/api/state`);
     assert.equal(stateRes.status, HTTP_OK);
     const stateJson = await stateRes.json();
 

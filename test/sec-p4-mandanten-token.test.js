@@ -9,6 +9,7 @@ import {
   tenantToolToken,
   tenantTokenVerdict,
 } from "../src/elevenlabs/tenant-tool-token.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -117,7 +118,7 @@ async function withP4Server({ env = {} } = {}, run) {
 }
 
 const werkzeugAufruf = (srv, pfad, body) =>
-  fetch(`${srv.localUrl}${pfad}`, {
+  abrufMitFrist(`${srv.localUrl}${pfad}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
     body: JSON.stringify(body),
@@ -138,7 +139,7 @@ const consultBody = (conversationId, tenantToken) => ({
 const antwortVon = async (res) => ({ status: res.status, body: await res.json() });
 
 async function logSchranke(srv) {
-  const res = await fetch(`${srv.localUrl}/voice/status`, { method: "POST" });
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/status`, { method: "POST" });
   assert.equal(res.status, HTTP_FORBIDDEN, "Log-Schranke: /voice/status ohne Signatur = 403");
   await waitForLog(srv, /\[voice-signature\][^\n]*provider=unknown/);
 }

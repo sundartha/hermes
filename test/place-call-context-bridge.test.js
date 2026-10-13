@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { mcpPost, startServer, toolCall } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 function captureSchemas() {
   const schemas = new Map();
@@ -139,7 +140,7 @@ const E2E_ENV = Object.freeze({
 });
 
 async function confirmationCodeFor(localUrl, body) {
-  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { makeAccounts, SESSION_COOKIE_NAME } from "../../src/web-auth.js";
 import { tenantIdForSubject } from "../../src/store/defaults.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SIGNIERWERT = "negativtest";
 const PUBLIC_URL = "https://hermes-negativtest.invalid";
@@ -69,7 +70,7 @@ export async function startHermesMitAnmeldung(context) {
 }
 
 export async function anmelden(hermes) {
-  const response = await fetch(`${hermes.url}/auth/dev-login`, {
+  const response = await abrufMitFrist(`${hermes.url}/auth/dev-login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(KUNDE),

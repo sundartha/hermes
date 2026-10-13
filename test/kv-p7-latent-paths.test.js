@@ -13,6 +13,7 @@ import {
   PLATFORM_TTS_COST_CENTER_ID,
 } from "../src/store/state-ops.js";
 import { startServer, ROOT } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CFG = { ttsCharacterQuota: 1000, ttsCharacterQuotaWarnPercent: 75, ttsQuotaCycleAnchorDay: 3 };
 const NOW_ISO = "2026-08-15T10:00:00.000Z";
@@ -87,7 +88,7 @@ test("KV-P7-14: ttsQuotaCoverageBannerLine nennt die Quote und den UNTERGRENZE-V
 test("KV-P7-15: Standardkonfiguration (alle Flags aus) -> kein neuer Befund, /healthz 200, Kontingent-Zeile im Banner", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /die von diesem Pfad selbst synthetisierten Zeichen/);
     assert.match(

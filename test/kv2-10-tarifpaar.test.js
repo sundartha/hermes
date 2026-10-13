@@ -18,6 +18,7 @@ import { EL_STICHPROBE, STICHPROBEN_ENDE_MS, eigenCentQuelleJeAnruf, elVollkoste
 import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
 import { makeStubStore, fakeConfig, fakeSpies } from "./cost-truing-harness.js";
 import { startServer, seedState, BASE_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const KURS_MICRO = 920_000;
@@ -219,7 +220,7 @@ test("KV2-10 (d2): gedeckter Tarif (Minutensatz 20) -> KEINE Mail, KEINE SMS, nu
 test("KV2-10 (e): der Boot meldet das Tarifpaar - [boot] Tarifpaar: im Spawn-stdout, /healthz 200", async () => {
   const srv = await startServer({ seed: seedState({ calls: [] }) });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
     assert.match(srv.stdout, /\[boot\] Tarifpaar: /);
     assert.match(srv.stdout, /befund=tarifpaar_zu_wenig_proben/, "ohne Eigen-Achsen-Quelle ist der Zustand sichtbar-wartend, nie scheinbar-messend");

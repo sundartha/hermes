@@ -23,6 +23,7 @@ import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { waitUntil, withFetch } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "./fixtures/elevenlabs-conversations.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const CONV_ID = "conv_1";
@@ -314,7 +315,7 @@ async function postCancel(deps, callId) {
     const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
   });
   try {
-    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/calls/${callId}/cancel`, {
+    const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls/${callId}/cancel`, {
       method: "POST",
     });
     return { status: res.status, body: await res.json() };

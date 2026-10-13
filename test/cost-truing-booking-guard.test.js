@@ -6,6 +6,7 @@ import {
   UNASSIGNABLE_COST_RECORD_TYPES,
 } from "../src/telephony/adapters/telnyx/voice.js";
 import { startServer, startServerExpectExit, outboundCallsSeed } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ASSIGNABLE = ASSIGNABLE_COST_RECORD_TYPES;
 const UNASSIGNABLE = UNASSIGNABLE_COST_RECORD_TYPES;
@@ -109,7 +110,7 @@ test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet", async () => {
     env: { COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
   } finally {
     await srv.stop();
@@ -129,7 +130,7 @@ test("(n3) nie zuordenbarer Typ in der Pflicht-Menge -> Boot-Refusal, nennt den 
 test("(n4) die VOLLE Menge der zuordenbaren Typen als Pflicht-Menge -> Server startet", async () => {
   const srv = await startServer({ env: { COST_TRUING_REQUIRED_RECORD_TYPES: ASSIGNABLE.join(",") } });
   try {
-    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    assert.equal((await abrufMitFrist(`${srv.localUrl}/healthz`)).status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
   } finally {
     await srv.stop();
@@ -142,7 +143,7 @@ test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, 
     seed: outboundCallsSeed(5, 1, "call_p_"),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const matches = srv.stdout.match(/Deckungsquote 20% liegt unter/g);
     assert.equal(matches ? matches.length : 0, 1, `erwartet genau eine WARN-Zeile, Output:\n${srv.stdout}`);
@@ -158,7 +159,7 @@ test("(p2) 5 von 5 bewiesen (100%) -> keine Deckungs-WARN", async () => {
     seed: outboundCallsSeed(5, 5, "call_p_"),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Deckungsquote/);
   } finally {

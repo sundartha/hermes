@@ -23,6 +23,7 @@ import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   ERROR_ENVELOPES,
 } from "./fixtures/elevenlabs-conversations.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
@@ -203,7 +204,7 @@ async function withElevenLabs(options, run) {
 }
 
 function placeCall(srv, identity, auftrag = {}) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

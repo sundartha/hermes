@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { WEBSOCKET_BEISPIEL_SCHLUESSEL } from "./gemeinsam/erfundene-geheimnisse.js";
 import {
   startServer,
@@ -12,6 +11,8 @@ import {
   waitForLog,
   TELNYX_TEST_OWNER_NUMBER,
 } from "./helpers.js";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_SWITCHING_PROTOCOLS = 101;
@@ -34,7 +35,7 @@ function normalizeTexml(xml) {
 
 function requestWebSocketUpgrade(srv, pfad) {
   return new Promise((resolve, reject) => {
-    const req = http.request({
+    const req = anfrageMitFrist({
       host: "localhost",
       port: srv.port,
       path: pfad,
@@ -61,7 +62,7 @@ function requestWebSocketUpgrade(srv, pfad) {
 test("IE6-S2-1: Boot mit alten Realtime-Schaltern laeuft sauber (wirkungslos, nicht abgelehnt)", async () => {
   const srv = await startServer({ env: ALTE_REALTIME_SCHALTER_AN });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
     assert.doesNotMatch(srv.stdout, /openai_realtime|realtime_carrier_uncollected|realtime_no_midcall_budget/);
@@ -109,8 +110,8 @@ test("IE6-S2-3: Outbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ei
   try {
     const bodyAlt = new URLSearchParams({ CallSid: "CAtest" });
     const bodyClean = new URLSearchParams({ CallSid: "CAtest" });
-    const resAlt = await fetch(`${srvAlt.localUrl}/voice/outbound?callId=${id}`, { method: "POST", body: bodyAlt });
-    const resClean = await fetch(`${srvClean.localUrl}/voice/outbound?callId=${id}`, {
+    const resAlt = await abrufMitFrist(`${srvAlt.localUrl}/voice/outbound?callId=${id}`, { method: "POST", body: bodyAlt });
+    const resClean = await abrufMitFrist(`${srvClean.localUrl}/voice/outbound?callId=${id}`, {
       method: "POST",
       body: bodyClean,
     });

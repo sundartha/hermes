@@ -12,6 +12,7 @@ import {
   startServer,
   waitForLog,
 } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 let beleg, ops, jsonStore, makePgStore, PGlite, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;
@@ -652,7 +653,7 @@ test("IEX-A8-19: Spawn E2E - Dienst laeuft waehrend des GET, Ergebniszeile und B
       seed,
     });
     await warteBis(() => fakeEl.empfangen.anzahl > 0, E2E_TIMEOUT_MS);
-    const health = await fetch(`${srv.localUrl}/healthz`);
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(health.status, HTTP_OK, "Dienst antwortet, waehrend der Anbieter-GET haengt");
     assert.equal(srv.stdout.includes("sweep fertig"), false);
 

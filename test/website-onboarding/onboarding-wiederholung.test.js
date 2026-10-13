@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, startIdp } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
 const KYC_STUFE_KARTE = "card";
@@ -27,7 +28,7 @@ test("DID-07 (Mechanismus gruen, Regressions-Pin): proxied ohne Admin-Sitzung ->
     seed: seedState({ tenants: [subscriberTenant("t_did07", "sub-did07")] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/onboard/retry`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/onboard/retry`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-For": "1.2.3.4" },
       body: JSON.stringify({ tenantId: "t_did07" }),

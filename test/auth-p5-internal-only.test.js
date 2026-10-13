@@ -14,6 +14,7 @@ import {
   captureConsole,
   assertGateAbsent,
 } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "auth-p5-web-secret-0123456789";
 const SESSION_TTL_MS = 3600_000;
@@ -60,7 +61,7 @@ test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab 
   try {
     for (const { methode, pfad, body } of ROUTEN) {
       await testContext.test(`${methode} ${pfad}`, async () => {
-        const res = await fetch(`${srv.localUrl}${pfad}`, {
+        const res = await abrufMitFrist(`${srv.localUrl}${pfad}`, {
           method: methode,
           headers: {
             "X-Forwarded-For": "203.0.113.9",
@@ -94,16 +95,16 @@ test("AUTH-P5-2: der In-Process-MCP-Pfad ueber Loopback (ohne XFF) bleibt unvera
     seed: seedState({ calls: [seedCall({ id: "call_p5", status: "active" })] }),
   });
   try {
-    const stateRes = await fetch(`${srv.localUrl}/api/state`);
+    const stateRes = await abrufMitFrist(`${srv.localUrl}/api/state`);
     assert.equal(stateRes.status, HTTP_OK);
     const state = await stateRes.json();
     assert.equal(state.agent.owner, "Jonas Beispiel");
     assert.equal(state.calls.length, 1);
 
-    const callRes = await fetch(`${srv.localUrl}/api/calls/call_p5`);
+    const callRes = await abrufMitFrist(`${srv.localUrl}/api/calls/call_p5`);
     assert.equal(callRes.status, HTTP_OK);
 
-    const exportRes = await fetch(`${srv.localUrl}/api/tenant-data/export`);
+    const exportRes = await abrufMitFrist(`${srv.localUrl}/api/tenant-data/export`);
     assert.equal(exportRes.status, HTTP_OK);
     const exported = await exportRes.json();
     assert.equal(exported.tenantId, BOOTSTRAP_TENANT_ID);
@@ -124,7 +125,7 @@ test("AUTH-P5-3 (W9): der Audit-Eintrag von internalOnly traegt NIE den Query-St
     seed: seedState({ calls: [seedCall({ id: "call_p5", status: "active" })] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/state?session_id=XYZ&code=ABC`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/state?session_id=XYZ&code=ABC`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
     assert.equal(res.status, HTTP_FORBIDDEN);
@@ -146,7 +147,7 @@ test("AUTH-P5-4 (W9): webAuth ohne Sitzungs-Cookie -> 401 grund=no_session, kein
   try {
     let res;
     const lines = await captureConsole(async () => {
-      res = await fetch(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
+      res = await abrufMitFrist(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
     });
     assert.equal(res.status, HTTP_UNAUTHORIZED);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));
@@ -181,7 +182,7 @@ test("AUTH-P5-5: webAuth mit gueltiger Sitzung, aber gesperrtem Tenant (closed) 
     const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue("sess_p5", SECRET))}`;
     let res;
     const lines = await captureConsole(async () => {
-      res = await fetch(`${srv.base}/api/probe`, { headers: { Cookie: cookie } });
+      res = await abrufMitFrist(`${srv.base}/api/probe`, { headers: { Cookie: cookie } });
     });
     assert.equal(res.status, HTTP_FORBIDDEN);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));
@@ -199,7 +200,7 @@ test("AUTH-P5-6 (W9): adminOnly ohne Admin-Rechte -> 403 grund=not_admin, kein Q
   try {
     let res;
     const lines = await captureConsole(async () => {
-      res = await fetch(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
+      res = await abrufMitFrist(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
     });
     assert.equal(res.status, HTTP_FORBIDDEN);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));

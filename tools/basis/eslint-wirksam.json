@@ -9571,6 +9571,9 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2
+      ],
       "hermes-tests/fester-importpfad": [
         2,
         {

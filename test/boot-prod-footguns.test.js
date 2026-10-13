@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const PROD_SAFE = { RENDER_EXTERNAL_URL: "https://agent.onrender.com", DASHBOARD_PASSWORD: "prod-geheim", SKIP_TWILIO_SIGNATURE_CHECK: "false" };
 
@@ -36,7 +37,7 @@ test("T-P0-5-13: Hosting + http-OAUTH_ISSUER_URL -> Boot verweigert (exit 1), ne
 test("T-P0-5-14: Saubere Basis-Config (kein RENDER_EXTERNAL_URL) -> bootet, /healthz 200", async () => {
   const srv = await startServer({ env: { DASHBOARD_PASSWORD: "prod-geheim", SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "saubere Basis-Config darf keinen ungewollten Boot-Refusal ausloesen");
   } finally {
     await srv.stop();

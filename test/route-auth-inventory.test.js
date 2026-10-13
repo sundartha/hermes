@@ -13,6 +13,7 @@ import {
   routeKey,
 } from "../src/route-policy.js";
 import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -255,10 +256,12 @@ test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration u
     server.close();
   });
   const adresse = `http://127.0.0.1:${server.address().port}${ANRUFE_LAUFEND_PATH}`;
-  const ohneToken = await withSilencedConsole(() => fetch(adresse));
+  const ohneToken = await withSilencedConsole(() => abrufMitFrist(adresse));
   assert.equal(ohneToken.status, HTTP_UNAUTHORIZED);
   assert.deepEqual(await ohneToken.json(), { error: "unauthorized" });
-  const mitToken = await fetch(adresse, { headers: { authorization: `Bearer ${DEPLOY_TOKEN}` } });
+  const mitToken = await abrufMitFrist(adresse, {
+    headers: { authorization: `Bearer ${DEPLOY_TOKEN}` },
+  });
   assert.equal(mitToken.status, HTTP_OK);
   assert.deepEqual(await mitToken.json(), { laufend: 0 });
 });

@@ -2,6 +2,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { costConfigBannerLines, UNSET_LABEL } from "../src/boot.js";
 import { startServer as startServerImpl, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const offeneServer = new Set();
 
@@ -119,7 +120,7 @@ async function startAllSevenSetServer() {
       TELNYX_API_KEY: "kv-m0-telnyx-key-darf-nirgends-auftauchen",
     },
   });
-  const res = await fetch(`${srv.localUrl}/healthz`);
+  const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
   assert.equal(res.status, 200);
   return srv;
 }
@@ -127,7 +128,7 @@ async function startAllSevenSetServer() {
 test("KV-M0-4: der echte Boot druckt alle drei Zeilen genau einmal (BASE_ENV-Defaults, Muster AL-P16-8)", async () => {
   const srv = await startServer({ env: { SMS_COST_CENTS: "0" } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     for (const label of ["Zahlungsabwicklung", "Cost-Truing-Typen", "Modelle"]) {
       const hits = srv.stdout.match(new RegExp(`${label}: `, "g"));

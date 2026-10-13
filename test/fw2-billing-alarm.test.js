@@ -6,6 +6,7 @@ import { noteLlmBillingOutage } from "../src/llm-billing-outage.js";
 import { markBillingBlocked } from "../src/llm/billing-latch.js";
 import { makeConfigOverrides, startServer, seedState, seedCall } from "./helpers.js";
 import { LOCALES } from "../src/i18n/locales.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 const TEST_DEEPSEEK_KEY = "sk-fw2-alarm-dummy";
@@ -155,7 +156,7 @@ test("FW2-A5: Mock antwortet 402 -> unveraendert turnErrorSpeech + Hangup, UND d
     }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo" }),
     });
@@ -182,7 +183,7 @@ test("FW2-A6: Mock antwortet 500 -> llmDegradedSpeech, Log OHNE ALARM_LLM_BILLIN
     }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo" }),
     });

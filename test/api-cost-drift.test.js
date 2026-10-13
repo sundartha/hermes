@@ -8,6 +8,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../src/store/defaults.js";
 import { TARIFF_DRIFT_FINDING } from "../src/billing/cost-calibration.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 const MS_PER_MINUTE = 60 * 1000;
@@ -44,7 +45,7 @@ async function startCostDriftApp(state) {
   };
 }
 
-const fetchDrift = (app) => fetch(`${app.base}/api/billing/cost-drift`);
+const fetchDrift = (app) => abrufMitFrist(`${app.base}/api/billing/cost-drift`);
 
 function truedOutboundCall(state, { to, actualCostMicroCents, minutesAgo }) {
   const call = createCall(state, {
@@ -136,7 +137,7 @@ test(
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
-      const res = await fetch(`${srv.externalUrl}/api/billing/cost-drift`);
+      const res = await abrufMitFrist(`${srv.externalUrl}/api/billing/cost-drift`);
       assert.equal(res.status, 404);
     } finally {
       await srv.stop();

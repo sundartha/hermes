@@ -7,6 +7,7 @@ import { makeBillingRoutes } from "../src/routes/api-billing.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { PROVIDER, COST_TRUING_SOURCE } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "kv2-6-route-web-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
@@ -88,7 +89,7 @@ async function setup() {
 function request(app, sessionId) {
   const headers = {};
   if (sessionId) headers.Cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;
-  return fetch(`${app.base}${ROUTE_PATH}`, { headers });
+  return abrufMitFrist(`${app.base}${ROUTE_PATH}`, { headers });
 }
 
 test("GET /api/billing/kosten-deckung: ohne Sitzung -> kein 200 (401, webAuthGateMiddleware)", async () => {

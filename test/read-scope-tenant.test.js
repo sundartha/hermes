@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SUB_OWNER = "sub-owner",
   SUB_B = "sub-b";
@@ -77,7 +78,9 @@ function seedTwoTenants() {
 }
 
 const getJsonAs = async (srv, idpSub, path) => {
-  const res = await fetch(`${srv.localUrl}${path}`, { headers: { "X-Internal-Identity": idpSub } });
+  const res = await abrufMitFrist(`${srv.localUrl}${path}`, {
+    headers: { "X-Internal-Identity": idpSub },
+  });
   return { status: res.status, body: res.status === HTTP_OK ? await res.json() : null };
 };
 const ids = (list) => list.map((item) => item.id);

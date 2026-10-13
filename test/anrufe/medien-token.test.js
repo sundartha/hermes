@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer, seedState, seedCall } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TOKEN_LAENGE = 32;
 
@@ -15,7 +16,7 @@ test("streamToken erscheint in keiner API-Antwort (Regel 4)", async () => {
   });
   try {
     for (const path of ["/api/state", `/api/calls/${CALL_ID}`]) {
-      const res = await fetch(`${srv.localUrl}${path}`);
+      const res = await abrufMitFrist(`${srv.localUrl}${path}`);
       assert.equal(res.status, HTTP_OK);
       const body = JSON.stringify(await res.json());
       assert.ok(!body.includes(TOKEN), `${path} leakt den Token-Wert`);

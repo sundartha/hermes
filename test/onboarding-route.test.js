@@ -7,9 +7,10 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { OWNER_TEST_NUMBER } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const postJson = (app, path, body) =>
-  fetch(`${app.base}${path}`, {
+  abrufMitFrist(`${app.base}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

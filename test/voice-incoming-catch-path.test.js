@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { LOCALES } from "../src/i18n/locales.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TELNYX_NR = "+13125550100";
 const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
@@ -27,7 +28,7 @@ function seedBrokenGreetingFr() {
 test("/voice/incoming: kaputtes Greeting nach Call-Erzeugung -> catch rendert Say(turnErrorSpeech)+Hangup statt Gruss/Gather", async () => {
   const srv = await startServer({ seed: seedBrokenGreetingFr() });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       headers: TELNYX_HEADERS,
       body: new URLSearchParams({ CallSid: "CAcatch1", From: "+4915112345678", To: TELNYX_NR }),

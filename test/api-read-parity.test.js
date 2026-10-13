@@ -10,6 +10,7 @@ import {
 } from "../src/routes/api-read.js";
 import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -111,7 +112,7 @@ function assertNoStreamToken(body, where) {
 test("GET /api/state (Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/state`);
+    const res = await abrufMitFrist(`${srv.base}/api/state`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
 
@@ -142,7 +143,7 @@ test("GET /api/state (Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", async () =>
 test("GET /api/state (fremder Tenant): R3.2 Owner-PII geblockt + scoped + fail-closed-Nummer", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/state`, { headers: { "x-test-tenant": FOREIGN } });
+    const res = await abrufMitFrist(`${srv.base}/api/state`, { headers: { "x-test-tenant": FOREIGN } });
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
 
@@ -160,7 +161,7 @@ test("GET /api/state (fremder Tenant): R3.2 Owner-PII geblockt + scoped + fail-c
 test("GET /api/state (Owner-Tenant): Owner-PII sichtbar + aktive Owner-Nummer", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/state`, {
+    const res = await abrufMitFrist(`${srv.base}/api/state`, {
       headers: { "x-test-tenant": BOOTSTRAP_TENANT_ID },
     });
     assert.equal(res.status, HTTP_OK);
@@ -178,7 +179,7 @@ test("GET /api/state (Owner-Tenant): Owner-PII sichtbar + aktive Owner-Nummer", 
 test("GET /api/state: Slices kappen auf STATE_*-Grenzen", async () => {
   const srv = await mount(makeMockStore({ listSize: STATE_ACTION_ITEMS + SLICE_OVERFLOW }), makeConfig());
   try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
+    const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.equal(body.actionItems.length, STATE_ACTION_ITEMS);
     assert.equal(body.notifications.length, STATE_NOTIFICATIONS);
     assert.ok(body.calls.length <= STATE_CALLS);
@@ -191,7 +192,7 @@ test("GET /api/state: Slices kappen auf STATE_*-Grenzen", async () => {
 test("GET /api/calls/:id: vorhandener Call durch publicCall (R3.1)", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/calls/call_owner`);
+    const res = await abrufMitFrist(`${srv.base}/api/calls/call_owner`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
     assert.equal(body.id, "call_owner");
@@ -205,7 +206,7 @@ test("GET /api/calls/:id: vorhandener Call durch publicCall (R3.1)", async () =>
 test("GET /api/calls/:id: fehlender Call -> 404", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/calls/does_not_exist`);
+    const res = await abrufMitFrist(`${srv.base}/api/calls/does_not_exist`);
     assert.equal(res.status, HTTP_NOT_FOUND);
     assert.deepEqual(await res.json(), { error: "not found" });
   } finally {
@@ -216,7 +217,7 @@ test("GET /api/calls/:id: fehlender Call -> 404", async () => {
 test("GET /api/calls/:id: fremder Call -> 404 (kein Existenz-Leck, NICHT 403)", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/calls/call_foreign`, {
+    const res = await abrufMitFrist(`${srv.base}/api/calls/call_foreign`, {
       headers: { "x-test-tenant": BOOTSTRAP_TENANT_ID },
     });
     assert.equal(res.status, HTTP_NOT_FOUND);
@@ -229,7 +230,7 @@ test("GET /api/calls/:id: fremder Call -> 404 (kein Existenz-Leck, NICHT 403)", 
 test("GET /api/calls/:id: fremder Call ohne Tenant-Header -> 404", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/calls/call_foreign`);
+    const res = await abrufMitFrist(`${srv.base}/api/calls/call_foreign`);
     assert.equal(res.status, HTTP_NOT_FOUND);
     assert.deepEqual(await res.json(), { error: "not found" });
   } finally {
@@ -240,7 +241,7 @@ test("GET /api/calls/:id: fremder Call ohne Tenant-Header -> 404", async () => {
 test("GET /api/tenant-data/export: Owner-Export, Calls gestrippt (R3.1) + audit", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/tenant-data/export`);
+    const res = await abrufMitFrist(`${srv.base}/api/tenant-data/export`);
     assert.equal(res.status, HTTP_OK);
     const body = await res.json();
     assert.ok(body.calls.some((call) => call.id === "call_owner"));
@@ -257,7 +258,7 @@ test("GET /api/tenant-data/export: Owner-Export, Calls gestrippt (R3.1) + audit"
 test("GET /api/tenant-data/export: requireTenant REJECT -> 403, kein Export, kein audit", async () => {
   const srv = await mount(makeMockStore(), makeConfig());
   try {
-    const res = await fetch(`${srv.base}/api/tenant-data/export`, {
+    const res = await abrufMitFrist(`${srv.base}/api/tenant-data/export`, {
       headers: { "x-test-reject": "1" },
     });
     assert.equal(res.status, HTTP_FORBIDDEN);

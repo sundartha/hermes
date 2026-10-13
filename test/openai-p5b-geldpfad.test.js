@@ -20,6 +20,7 @@ import {
   ROOT,
   BASE_ENV,
 } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CALL_ID = "call_p5b";
 const HTTP_OK = 200;
@@ -143,7 +144,7 @@ test("P5b (O-13 Teil 2, Fall B, HTTP): der echte Serverprozess kuerzt failure_re
     }),
   });
   try {
-    const apiRes = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}`);
+    const apiRes = await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}`);
     const apiBody = await apiRes.json();
     assert.equal(apiBody.failureReason, rohesToken, "/api/calls/:id traegt das volle Token weiter");
 

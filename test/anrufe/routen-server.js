@@ -1,4 +1,5 @@
 import express from "express";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 export async function mitRoutenServer(router, aufruf) {
   const app = express();
@@ -15,7 +16,7 @@ export async function mitRoutenServer(router, aufruf) {
 }
 
 export function postJson(url, body = {}) {
-  return fetch(url, {
+  return abrufMitFrist(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

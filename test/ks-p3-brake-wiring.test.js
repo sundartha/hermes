@@ -6,6 +6,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const US_TARGET = "+15551234567";
 const DE_OWN_DID = "+4930111222333";
@@ -105,7 +106,7 @@ test("KS-P3: /voice/incoming persistiert eine guthaben-abgeleitete maxDurationS 
     }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAksp3",

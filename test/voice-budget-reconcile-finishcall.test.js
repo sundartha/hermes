@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
 const ENDED_AT = "2026-01-01T00:05:00.000Z";
@@ -13,7 +14,7 @@ const DOMESTIC_TO = "+4915112345678";
 const INTL_TO = "+12025550123";
 
 const postStatus = (srv, callId, fields) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     body: new URLSearchParams(fields),
   });

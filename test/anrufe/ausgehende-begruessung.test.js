@@ -7,6 +7,7 @@ import {
   assertDisclosureInGather,
 } from "../_outbound-harness.js";
 import { starteAttrappe } from "./attrappen-server.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
@@ -91,13 +92,13 @@ test("Flag AN: /voice/outbound (Telnyx) rendert <Play> statt <Say>; Token liefer
       assert.match(origin.requests[0].url, /output_format=/, "output_format ist Query-Parameter");
 
       const token = body.match(/\/voice\/tts\/([A-Za-z0-9_-]+)/)[1];
-      const first = await fetch(`${srv.localUrl}/voice/tts/${token}`);
+      const first = await abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
       assert.equal(first.status, HTTP_OK);
       assert.equal(first.headers.get("content-type"), "audio/mpeg");
       const gotBytes = Buffer.from(await first.arrayBuffer());
       assert.deepEqual(gotBytes, FAKE_MP3_BYTES);
 
-      const second = await fetch(`${srv.localUrl}/voice/tts/${token}`);
+      const second = await abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
       assert.equal(
         second.status,
         HTTP_NOT_FOUND,

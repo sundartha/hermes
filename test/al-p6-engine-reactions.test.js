@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { localeFor } from "../src/i18n/locales.js";
 import { startServer, seedState, seedCall } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TOKENS_OVER_TENANT_CAP = 40_000_000;
 
@@ -38,12 +39,12 @@ async function startAnthropicMock(payload) {
 }
 
 async function runTurn(srv, id) {
-  const opening = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
+  const opening = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
     method: "POST",
     body: new URLSearchParams({ CallSid: "CAtest" }),
   });
   assert.equal(opening.status, 200);
-  const turn = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+  const turn = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
     method: "POST",
     body: new URLSearchParams({ SpeechResult: "Ja, Donnerstag passt gut" }),
   });

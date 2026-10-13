@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { after, before, test } from "node:test";
 
 import { startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const PHONE = "+4915112345678";
 const SUBSCRIBER_DIGITS = "15112345678";
@@ -33,7 +34,7 @@ async function logLinesSince(offset) {
 
 test("SG-13 Server-Log enthält keine volle Telefonnummer aus einer kaputt kodierten Adresse", async () => {
   const offset = hermes.srv.stdout.length;
-  await fetch(`${hermes.srv.localUrl}/api/calls/${PHONE}${BROKEN_ESCAPE}`);
+  await abrufMitFrist(`${hermes.srv.localUrl}/api/calls/${PHONE}${BROKEN_ESCAPE}`);
 
   const log = await logLinesSince(offset);
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_SERVER_ERROR = 500;
 const PHONE = "+4915112345678";
@@ -24,7 +25,7 @@ after(async () => {
 });
 
 test("SG-13 Fehlerantwort enthält weder Schlüssel noch volle Telefonnummer", async () => {
-  const res = await fetch(`${hermes.srv.localUrl}/api/calls/${PHONE}${BROKEN_ESCAPE}`);
+  const res = await abrufMitFrist(`${hermes.srv.localUrl}/api/calls/${PHONE}${BROKEN_ESCAPE}`);
   const body = await res.text();
 
   for (const secret of [SUBSCRIBER_DIGITS, ...Object.values(SECRETS)]) {

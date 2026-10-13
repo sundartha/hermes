@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer, DOMESTIC_TEST_NUMBER, waitForLog } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_INTERNAL_ERROR = 500;
@@ -8,7 +9,7 @@ const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
 
 const post = (url, to) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),
@@ -95,7 +96,7 @@ test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async
       "zweite Reserve reisst den Cap, solange #1 haelt",
     );
 
-    const st = await fetch(`${srv.localUrl}/voice/status?callId=${callId1}`, {
+    const st = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId1}`, {
       method: "POST",
       body: new URLSearchParams({ CallStatus: "completed" }),
     });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const A = "tenant-gap10-a",
   SUB_A = "sub-gap10-a",
@@ -39,7 +40,7 @@ function seedTenants(calls = []) {
 const FLAG_ON = { MULTI_TENANT: "true", MAX_CALLS_PER_HOUR: "6" };
 
 function placeCall(srv, identity) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

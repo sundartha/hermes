@@ -30,6 +30,7 @@ import {
   PROVISIONING_JOB_STATUS,
   PROVIDER,
 } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ORDERED_E164 = "+4915799990001";
 const PROVIDER_NUMBER_ID = "num_ext_1";
@@ -164,7 +165,7 @@ async function startRetryApp({ store, orchestrator, config: cfg }) {
 }
 
 const retry = (app, tenantId) =>
-  fetch(`${app.base}/api/onboard/retry`, {
+  abrufMitFrist(`${app.base}/api/onboard/retry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tenantId }),

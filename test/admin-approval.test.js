@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import {
@@ -13,6 +12,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 
 const SECRET = "admin-test-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
@@ -59,7 +59,7 @@ function request(method, url, sessionId) {
     const headers = sessionId
       ? { Cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}` }
       : {};
-    const req = http.request(
+    const req = anfrageMitFrist(
       { hostname: u.hostname, port: u.port, path: u.pathname, method, headers },
       (res) => {
         let body = "";

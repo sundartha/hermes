@@ -18,6 +18,7 @@ import {
   recordCallEstimatedCostCents,
   stampBudgetPeriod,
 } from "../src/store/state-ops.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const INBOUND_CENTS = 7;
 const DOMESTIC_CENTS = 20;
@@ -135,7 +136,7 @@ const ENDED_AT = "2026-01-01T00:05:00.000Z";
 const SPAWN_TARIFF_ENV = { VOICE_TARIFF_INBOUND_CENTS: String(INBOUND_CENTS) };
 
 const postStatus = (srv, callId, fields) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     body: new URLSearchParams(fields),
   });

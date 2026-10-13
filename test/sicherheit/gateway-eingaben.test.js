@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import { E164_FORMAT_ERROR } from "../../src/telephony/outbound-gates.js";
 import { seedCall, seedState, startServer, waitForLog } from "../helpers.js";
 import { maskNumber } from "../../src/util.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const STORED_CALL_ID = "call_kundendaten";
 const KUNDENDATEN_MARKER = "Kundengeheimnis-4711";
@@ -33,7 +34,7 @@ before(async () => {
 after(() => hermes.stop());
 
 function placeCallTo(to) {
-  return fetch(`${hermes.localUrl}/api/calls`, {
+  return abrufMitFrist(`${hermes.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Termin vereinbaren" }),
@@ -55,11 +56,11 @@ test("SG-14 Wahlziel mit Sonderzeichen wird abgelehnt statt weitergereicht", asy
 
 test("SG-16 Staging-Adresse ohne Anmeldung liefert keine Kundendaten", async () => {
   assert.ok(hermes.externalUrl, "der Test braucht eine Netzwerkadresse ausser localhost");
-  const fromInside = await fetch(`${hermes.localUrl}/api/calls/${STORED_CALL_ID}`);
+  const fromInside = await abrufMitFrist(`${hermes.localUrl}/api/calls/${STORED_CALL_ID}`);
   assert.equal(fromInside.status, HTTP_OK);
   assert.match(await fromInside.text(), new RegExp(KUNDENDATEN_MARKER));
   for (const path of CUSTOMER_DATA_PATHS) {
-    const fromOutside = await fetch(`${hermes.externalUrl}${path}`);
+    const fromOutside = await abrufMitFrist(`${hermes.externalUrl}${path}`);
     assert.equal(fromOutside.status, HTTP_FORBIDDEN, path);
     assert.doesNotMatch(await fromOutside.text(), new RegExp(KUNDENDATEN_MARKER), path);
   }

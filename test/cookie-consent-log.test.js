@@ -11,6 +11,7 @@ import {
   parseConsentRecord,
   siteFromOrigin,
 } from "../src/cookie-consent-log.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CONSENT_ID = "3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f";
 const VALID = Object.freeze({ id: CONSENT_ID, version: 1, statistics: true, marketing: false });
@@ -130,7 +131,7 @@ function recordingLog() {
 }
 
 const beacon = (url, { body = JSON.stringify(VALID), origin = SITE_ORIGIN } = {}) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "content-type": "text/plain;charset=UTF-8", ...(origin ? { origin } : {}) },
     body,

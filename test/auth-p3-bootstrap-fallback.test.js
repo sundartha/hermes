@@ -15,6 +15,7 @@ import {
   readToolResult,
   assertGateAbsent,
 } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 function makeStore(map = {}) {
   const calls = [];
@@ -137,7 +138,7 @@ test("AUTH-P3-10: GET /api/tenant-data/export, MULTI_TENANT=true, externer Aufru
     seed: seedState({ calls: [seedCall()] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/tenant-data/export`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/tenant-data/export`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
     assert.equal(res.status, 403);
@@ -159,7 +160,7 @@ test("AUTH-P3-11: GET /api/tenant-data/export, MULTI_TENANT=false, externer Aufr
     seed: seedState({ calls: [seedCall()] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/tenant-data/export`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/tenant-data/export`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
     assert.equal(res.status, 403);
@@ -175,7 +176,7 @@ test("AUTH-P3-12: POST /api/calls/:id/consult/answer, MULTI_TENANT=true, externe
     seed: seedState({ calls: [seedCall({ id: "call_ap312", status: "active" })] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls/call_ap312/consult/answer`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls/call_ap312/consult/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-For": "203.0.113.9" },
       body: JSON.stringify({ event_id: "evt_1", answers: ["x"] }),
@@ -196,7 +197,7 @@ test("AUTH-P3-13: POST /api/calls, MULTI_TENANT=false, externer Aufrufer (XFF) -
     seed: seedState({}),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-For": "203.0.113.9" },
       body: JSON.stringify({ to: "+4915712345678", objective: "Test" }),
@@ -215,13 +216,13 @@ test("AUTH-P3-14: In-Process-Pfad lebt - Loopback ohne XFF sieht weiter Owner-Da
     seed: seedState({ calls: [seedCall()] }),
   });
   try {
-    const stateRes = await fetch(`${srv.localUrl}/api/state`);
+    const stateRes = await abrufMitFrist(`${srv.localUrl}/api/state`);
     assert.equal(stateRes.status, 200);
     const state = await stateRes.json();
     assert.equal(state.agent.owner, "Jonas Beispiel");
     assert.equal(state.calls.length, 1);
 
-    const exportRes = await fetch(`${srv.localUrl}/api/tenant-data/export`);
+    const exportRes = await abrufMitFrist(`${srv.localUrl}/api/tenant-data/export`);
     assert.equal(exportRes.status, 200);
     const exported = await exportRes.json();
     assert.equal(exported.tenantId, BOOTSTRAP_TENANT_ID);
@@ -250,7 +251,7 @@ test("AUTH-P3-16: GET /api/state MIT XFF -> 403 (die in P3 bewusst offen gelasse
     seed: seedState({ calls: [seedCall()] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/state`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/state`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
     assert.equal(res.status, 403);

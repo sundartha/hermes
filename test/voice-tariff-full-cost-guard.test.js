@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { voiceTariffFloorFindings, VOICE_TARIFF_FLOOR_FINDING } from "../src/boot-guard.js";
 import { startServer, seedState, outboundCallsSeed } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("U1: belowFloor && thinCoverage (6<10, 20<80) -> genau ein Befund, fatal:false, BELOW_FULL_COST", () => {
   const findings = voiceTariffFloorFindings({
@@ -77,7 +78,7 @@ test("(p) Tarif 6 < Schwelle 10, Deckung 20% < 80% -> genau EINE WARN-Zeile mit 
     seed: outboundCallsSeed(10, 2, "call_q_"),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const warn = srv.stdout.match(/Vollkostenschwelle VOICE_TARIFF_FULL_COST_FLOOR_CENTS=10/g);
     assert.equal(warn ? warn.length : 0, 1, `erwartet genau eine WARN-Zeile, Output:\n${srv.stdout}`);
@@ -95,7 +96,7 @@ test("(q1) KV2-10: Tarif 6 < Schwelle 10, Deckung 90% >= 80% -> GENAU EINE WARN 
     seed: outboundCallsSeed(10, 9, "call_q_"),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const warn = srv.stdout.match(/Vollkostenschwelle VOICE_TARIFF_FULL_COST_FLOOR_CENTS=10/g);
     assert.equal(warn ? warn.length : 0, 1, `erwartet genau eine WARN-Zeile, Output:\n${srv.stdout}`);
@@ -113,7 +114,7 @@ test("(q2) Tarif 20 >= Schwelle 10, Deckung 20% < 80% -> keine Meldung (Guard fe
     seed: outboundCallsSeed(10, 2, "call_q_"),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Vollkostenschwelle/);
   } finally {
@@ -127,7 +128,7 @@ test("(r) Tarif 6 < Schwelle 10, leerer Spiegel (Nenner 0 -> 0% Deckung) -> eine
     seed: seedState({ calls: [] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.match(srv.stdout, /Abgleich-Deckung 0%/);
   } finally {

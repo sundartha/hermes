@@ -4,6 +4,7 @@ import express from "express";
 import { makeReadRoutes } from "../src/routes/api-read.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const PLATFORM_CAP_EUR_TEXT = "7.79";
 
@@ -54,7 +55,7 @@ async function mount(store = makeMockStore()) {
 test("GET /api/state usage: planUsagePercent ersetzt alle Geldfelder ersatzlos, kein Plattform-Leck", async () => {
   const srv = await mount();
   try {
-    const res = await fetch(`${srv.base}/api/state`);
+    const res = await abrufMitFrist(`${srv.base}/api/state`);
     assert.equal(res.status, 200);
     const body = await res.json();
 
@@ -91,8 +92,8 @@ test("GET /api/state usage: reine Leseprojektion - Bucket bleibt byte-identisch,
   const srv = await mount(store);
   try {
     const before = JSON.stringify(bucket);
-    await fetch(`${srv.base}/api/state`);
-    await fetch(`${srv.base}/api/state`);
+    await abrufMitFrist(`${srv.base}/api/state`);
+    await abrufMitFrist(`${srv.base}/api/state`);
     assert.equal(
       JSON.stringify(bucket),
       before,

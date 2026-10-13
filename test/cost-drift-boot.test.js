@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("P5-B3: BASE_ENV (leerer Alarmkanal) -> Server startet, genau eine PLATFORM_ALERT_SMS_TO-WARN, kein Boot-Refusal", async () => {
   const srv = await startServer({});
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const matches = srv.stdout.match(/PLATFORM_ALERT_SMS_TO ist leer/g);
     assert.equal(matches ? matches.length : 0, 1, `erwartet genau eine WARN-Zeile, Output:\n${srv.stdout}`);
@@ -19,7 +20,7 @@ test("P5-B4: PLATFORM_ALERT_SMS_TO gesetzt -> keine Alarmkanal-WARN, die Nummer 
   const NUMBER = "+491234567890";
   const srv = await startServer({ env: { PLATFORM_ALERT_SMS_TO: NUMBER } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /PLATFORM_ALERT_SMS_TO ist leer/);
     assert.doesNotMatch(

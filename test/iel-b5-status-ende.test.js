@@ -40,6 +40,7 @@ import {
   seedInboundElCall,
   starteAnbieterAttrappe,
 } from "./_iel-inbound-harness.js";
+import { abrufMitFrist, fristSignal } from "./gemeinsam/antwortfrist.mjs";
 
 const echterFetch = globalThis.fetch;
 
@@ -214,8 +215,9 @@ async function baueBank(state) {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ CallStatus: status }).toString(),
+        signal: fristSignal(),
       }),
-    postCancel: async (callId) => (await echterFetch(`${server.url}/api/calls/${callId}/cancel`, { method: "POST" })).json(),
+    postCancel: async (callId) => (await echterFetch(`${server.url}/api/calls/${callId}/cancel`, { method: "POST", signal: fristSignal() })).json(),
     feuereGeldWache: async () => {
       budgetTimers.pop()();
       await new Promise((resolve) => setImmediate(resolve));
@@ -652,7 +654,7 @@ async function mitServer({ env, seed }, run) {
 
 const spawnCall = (stand) => stand.calls.find((eintrag) => eintrag.id === SPAWN_CALL_ID);
 const postSpawnStatus = (srv, status) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${SPAWN_CALL_ID}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${SPAWN_CALL_ID}`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ CallStatus: status }).toString(),
@@ -725,7 +727,7 @@ test("IEL-B5-20: Verdrahtung cancel_call (app.js) - Traeger auflegen, Ergebnis h
     const getsNachBoot = attrappe.gets().length;
     attrappe.setzeAntwort(CONVERSATION_DONE_WITH_ANALYSIS);
 
-    const res = await fetch(`${srv.localUrl}/api/calls/${SPAWN_CALL_ID}/cancel`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls/${SPAWN_CALL_ID}/cancel`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",

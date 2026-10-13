@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readBody, readJsonBody } from "../scripts/convo-bench/http-fake-helpers.mjs";
 import { startExaFake } from "../scripts/convo-bench/exa-fake.mjs";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 async function withEchoServer(handler) {
   const server = http.createServer(handler);
@@ -22,7 +23,7 @@ test("AL-D3-N1: readBody liefert den rohen Request-Body als String", async () =>
     res.end();
   });
   try {
-    await fetch(srv.url, { method: "POST", body: "hallo welt" });
+    await abrufMitFrist(srv.url, { method: "POST", body: "hallo welt" });
     assert.equal(captured, "hallo welt");
   } finally {
     await srv.close();
@@ -37,7 +38,7 @@ test("AL-D3-N2: readJsonBody parst gueltiges JSON", async () => {
     res.end();
   });
   try {
-    await fetch(srv.url, {
+    await abrufMitFrist(srv.url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ foo: "bar" }),
@@ -56,8 +57,8 @@ test("AL-D3-N3: readJsonBody faellt bei leerem oder kaputtem Body auf {} zurueck
     res.end();
   });
   try {
-    await fetch(srv.url, { method: "POST", body: "" });
-    await fetch(srv.url, { method: "POST", body: "{nicht json" });
+    await abrufMitFrist(srv.url, { method: "POST", body: "" });
+    await abrufMitFrist(srv.url, { method: "POST", body: "{nicht json" });
     assert.deepEqual(captured, [{}, {}]);
   } finally {
     await srv.close();
@@ -67,7 +68,7 @@ test("AL-D3-N3: readJsonBody faellt bei leerem oder kaputtem Body auf {} zurueck
 test("AL-D3-N5: exa-fake liest Such-Requests weiterhin ueber die geteilte Funktion", async () => {
   const fake = await startExaFake({ facts: [{ title: "Treffer", highlight: "Auszug" }] });
   try {
-    const res = await fetch(`${fake.url}/search`, {
+    const res = await abrufMitFrist(`${fake.url}/search`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ query: "wetter morgen" }),

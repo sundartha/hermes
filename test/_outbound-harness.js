@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
@@ -34,7 +35,7 @@ async function startOutboundServer({ provider = "telnyx", call = {}, seed = {}, 
 }
 
 async function fetchOutbound(srv, id) {
-  const res = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
     method: "POST",
     body: new URLSearchParams({ CallSid: CALL_SID }),
   });
@@ -73,14 +74,14 @@ export async function runOutboundThenTurn({
     }),
   });
   try {
-    const outRes = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
+    const outRes = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: CALL_SID }),
     });
     assert.equal(outRes.status, 200);
     const outboundBody = await outRes.text();
 
-    const turnRes = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const turnRes = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: speechResult }),
     });

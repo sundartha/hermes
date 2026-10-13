@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -40,15 +41,19 @@ const LOOKUP_ON_ENV = Object.freeze({
   MULTI_TENANT: "true",
 });
 
-const post = (srv, body, headers = {}) =>
-  fetch(`${srv.localUrl}${LOOKUP_PATH}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
+const post = (srv, body, { headers = {}, wartezeit } = {}) =>
+  abrufMitFrist(
+    `${srv.localUrl}${LOOKUP_PATH}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    },
+    wartezeit,
+  );
 
 const withToken = (srv, body, token = TOOL_TOKEN) =>
-  post(srv, body, { [TOOL_TOKEN_HEADER]: token });
+  post(srv, body, { headers: { [TOOL_TOKEN_HEADER]: token } });
 
 const callOf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const lookupLogOf = (call) => (Array.isArray(call.lookupLog) ? call.lookupLog : []);
@@ -126,7 +131,7 @@ async function withLookupServer({ env = {}, seed = seedOwnAndForeign() } = {}, r
 }
 
 async function logBarrier(srv) {
-  const res = await fetch(`${srv.localUrl}/voice/status`, { method: "POST" });
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/status`, { method: "POST" });
   assert.equal(res.status, HTTP_FORBIDDEN, "Log-Schranke: /voice/status ohne Signatur = 403");
   await waitForLog(srv, /\[voice-signature\][^\n]*provider=unknown/);
 }
@@ -153,7 +158,7 @@ test("EL-LOOKUP L1: fehlender/gefaelschter Token -> 403, kein Suchdienst-Aufruf,
         seed: seedOwnAndForeign(),
       });
       try {
-        const res = await fetch(`${leer.localUrl}${LOOKUP_PATH}`, {
+        const res = await abrufMitFrist(`${leer.localUrl}${LOOKUP_PATH}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: "" },
           body: JSON.stringify(body),
@@ -346,7 +351,14 @@ test("EL-LOOKUP L8 (Gutfall): Fakten als Antwort, Protokoll B5 am Datensatz, Geb
 test("EL-LOOKUP L9 (B2, zu langsam): Suchdienst antwortet nach der Frist -> no_results mit Weiterred-Text, Gebuehr trotzdem gebucht", async () => {
   await withLookupServer({}, async ({ srv, exa }) => {
     exa.delay(EXA_DELAY_BEYOND_TIMEOUT_MS);
-    const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY });
+    const res = await post(
+      srv,
+      { conversation_id: OWN_CONVERSATION_ID, query: QUERY },
+      {
+        headers: { [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
+        wartezeit: { wartezeitMs: EXA_DELAY_BEYOND_TIMEOUT_MS },
+      },
+    );
     assert.equal(res.status, HTTP_OK);
     const antwort = await res.json();
     assert.equal(antwort.status, "no_results");

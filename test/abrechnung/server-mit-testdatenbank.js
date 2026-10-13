@@ -4,6 +4,7 @@ import pg from "pg";
 import { BASE_ENV, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const BETREIBER_MAIL = "betreiber@kv2.invalid";
 export const LOGIN_SUB = "kv2-betreiber";
@@ -153,7 +154,7 @@ async function hermesAufbauen({ alarmPostfach }) {
   const basis = `http://127.0.0.1:${server.address().port}`;
 
   function anfrage(pfad, optionen = {}) {
-    return fetch(`${basis}${pfad}`, { ...optionen, signal: AbortSignal.timeout(ANFRAGE_FRIST_MS) });
+    return abrufMitFrist(`${basis}${pfad}`, { ...optionen, signal: AbortSignal.timeout(ANFRAGE_FRIST_MS) });
   }
 
   async function anmelden() {

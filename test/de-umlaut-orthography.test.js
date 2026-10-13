@@ -4,6 +4,7 @@ import { LOCALES } from "../src/i18n/locales.js";
 import { startServer } from "./helpers.js";
 import { SPOKEN_TRANSLITERATION_STEMS as TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 import { greetingTemplatesFor } from "../src/i18n/greeting-catalog.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const OWNER_NAME = "Jonas Beispiel";
 const OWNER_VORNAME = "Jonas";
@@ -54,7 +55,7 @@ test("P1-U3: Abgrenzung - der LLM-Prompt bleibt transliteriert (nicht mitfixen)"
 test("P1-U4: S8 - Unerreichbar-Hangup spricht Umlaute und geht als UTF-8 byte-korrekt raus", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest", From: CALLER_FROM, To: UNROUTED_TO }),
     });

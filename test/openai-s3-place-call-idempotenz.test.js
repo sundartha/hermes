@@ -11,6 +11,7 @@ import {
   releaseOutboundReserveCents,
   reservationFor,
 } from "../src/store/state-ops.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TARGET_A = "+4915112340001";
 const TARGET_B = "+4915112340002";
@@ -25,7 +26,7 @@ const OBJECTIVE = "Termin vereinbaren";
 const WURF_MARKER = "e3-idempotenz-defekt";
 
 const post = (url, to) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: OBJECTIVE }),
@@ -240,7 +241,7 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
     const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
   });
   try {
-    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/calls`, {
+    const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: VALID_TO, objective: OBJECTIVE }),

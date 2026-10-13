@@ -1,3 +1,4 @@
+import anfrageMitFrist from "./anfrage-mit-frist.js";
 import festerImportpfad from "./fester-importpfad.js";
 import keineSelbstpruefung from "./keine-selbstpruefung.js";
 
@@ -6,5 +7,6 @@ export default {
   rules: {
     "keine-selbstpruefung": keineSelbstpruefung,
     "fester-importpfad": festerImportpfad,
+    "anfrage-mit-frist": anfrageMitFrist,
   },
 };

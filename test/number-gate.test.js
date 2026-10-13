@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { EMERGENCY_SHORT_CODES } from "../src/telephony/number-denylist.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const ALLOWED = "+4915112345678";
 const postCall = (url, to) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: "Test" }),

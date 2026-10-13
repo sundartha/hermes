@@ -3,6 +3,7 @@ import http from "node:http";
 import test from "node:test";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { makeGracefulShutdown } from "../src/boot.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const LLM_DELAY_MS = 800;
 const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
@@ -77,7 +78,7 @@ test("SIGTERM mid-flight: /voice/turn laeuft fertig (200 TwiML), Transkript pers
     }),
   });
   try {
-    const turnPromise = fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const turnPromise = abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo, worum geht es?" }),
     });
@@ -124,7 +125,7 @@ test("SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen
     }),
   });
   try {
-    const turnPromise = fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const turnPromise = abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo, worum geht es?" }),
     }).catch(() => null);

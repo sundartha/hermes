@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import express from "express";
 import { makeWebAuthRoutes, verifyValue, SESSION_COOKIE_NAME } from "../src/web-auth.js";
 import { productionFootguns } from "../src/config.js";
+import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -38,7 +38,7 @@ function rawPost(url, form) {
     : {};
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const req = http.request(
+    const req = anfrageMitFrist(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: "POST", headers },
       (res) => {
         let body = "";

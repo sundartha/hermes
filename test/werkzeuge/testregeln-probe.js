@@ -10,9 +10,10 @@ const TESTREGELN_URL = pathToFileURL(join(REPO_ROOT, "tools/eslint-rules/tests.j
 
 export function befundZeilen({ verzeichnis, datei, regel, bestand }, zeilen) {
   const linter = new Linter({ cwd: verzeichnis });
+  const optionen = bestand === undefined ? [] : [{ bestand }];
   const konfiguration = {
     plugins: { [TESTREGELN_PLUGIN]: testRegeln },
-    rules: { [regel]: ["error", { bestand }] },
+    rules: { [regel]: ["error", ...optionen] },
   };
   const meldungen = linter.verify(zeilen.join("\n"), konfiguration, {
     filename: join(verzeichnis, datei),

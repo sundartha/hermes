@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HINT_PATTERN = /\[Sicherheit\] MCP_AUTH ist nicht 'oauth'/;
 const MARKER = "T203-BOOT-MARKER-xyz";
@@ -34,7 +35,7 @@ test("T2-03-B3: Kein Produktionsbegriff ausserhalb RENDER_EXTERNAL_URL -> bootet
     env: { RENDER_EXTERNAL_URL: "", NODE_ENV: "production", MCP_AUTH: "token", MCP_AUTH_TOKEN: "t" },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK, "kein zweiter Produktionsbegriff darf den Boot stoeren");
     assert.doesNotMatch(srv.stdout, HINT_PATTERN, `Output:\n${srv.stdout}`);
   } finally {

@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import express from "express";
 
 import { LOGIN_ROUTE, SESSION_COOKIE_NAME, makeWebAuthRoutes } from "../../src/web-auth.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
@@ -56,7 +57,7 @@ after(() => {
 
 function visit(path, cookies = "") {
   const url = `http://127.0.0.1:${login.server.address().port}${path}`;
-  return fetch(url, { redirect: "manual", headers: { cookie: cookies } });
+  return abrufMitFrist(url, { redirect: "manual", headers: { cookie: cookies } });
 }
 
 const cookiePairs = (res) => res.headers.getSetCookie().map((cookie) => cookie.split(";")[0]);

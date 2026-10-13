@@ -1,0 +1,10 @@
+{
+  "titel": "Test schickt http.request ohne mitAntwortfrist",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import http from \"node:http\";",
+      "export const anfrage = http.request({ port: 3999, path: \"/healthz\" }, (antwort) => antwort.resume());"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}

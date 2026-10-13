@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerRateOutOfBand, PROVIDER_RATE_FINDING } from "../src/boot-guard.js";
 import { startServer, startServerExpectExit } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("F1-01: 920 (Zehnerpotenz-Vertipper) -> genau ein Befund, code+fatal", () => {
   const findings = providerRateOutOfBand(920);
@@ -34,7 +35,7 @@ test("F2-01: PROVIDER_TO_BUCKET_RATE_MICRO=920 -> Boot-Refusal (LCT P4: der Kurs
 test("F2-02: Gegenprobe PROVIDER_TO_BUCKET_RATE_MICRO=920000 -> keine WARN-Zeile", async () => {
   const srv = await startServer({ env: { PROVIDER_TO_BUCKET_RATE_MICRO: "920000" } });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /PROVIDER_TO_BUCKET_RATE_MICRO=920000 liegt ausserhalb/);
   } finally {

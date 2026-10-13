@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { makeInboxRoutes, INBOX_MAX_ENTRIES } from "../../src/routes/api-inbox.js";
 import { startServer, seedState, seedCall } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -90,7 +91,7 @@ function seedThreeCalls() {
 }
 
 function poll(srv, { headers = {}, body } = {}) {
-  return fetch(`${srv.localUrl}/api/inbox/poll`, {
+  return abrufMitFrist(`${srv.localUrl}/api/inbox/poll`, {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body ?? {}),
@@ -157,7 +158,7 @@ async function assertPollDoesNotSave(pollResult) {
   const store = makeMockStore(pollResult);
   const srv = await mount(store, makeAllowTenant());
   try {
-    const res = await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    const res = await abrufMitFrist(`${srv.base}/api/inbox/poll`, { method: "POST" });
     assert.equal(res.status, HTTP_OK);
     assert.equal(store.saves.length, 0);
   } finally {
@@ -181,7 +182,7 @@ test("INBOX-P2 A3: Audit-Form ist ausschliesslich Zaehler", async () => {
   const store = makeMockStore({ entries: [{ call_id: "call_x" }], remaining: 2, marked: 1 });
   const srv = await mount(store, makeAllowTenant());
   try {
-    await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    await abrufMitFrist(`${srv.base}/api/inbox/poll`, { method: "POST" });
     assert.equal(srv.audits.length, 1);
     const [action, , detail] = srv.audits[0];
     assert.equal(action, "inbox_poll");
@@ -196,7 +197,7 @@ test("INBOX-P2 A4: requireTenant-Ablehnung -> 403, takeInboxEntries wird NIE ger
   const store = makeMockStore({ entries: [], remaining: 0, marked: 0 });
   const srv = await mount(store, makeRejectTenant());
   try {
-    const res = await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    const res = await abrufMitFrist(`${srv.base}/api/inbox/poll`, { method: "POST" });
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.equal(store.pollCalls.length, 0);
   } finally {
@@ -208,13 +209,13 @@ test("INBOX-P2 A5: include_seen wird fail-closed durchgereicht", async () => {
   const store = makeMockStore({ entries: [], remaining: 0, marked: 0 });
   const srv = await mount(store, makeAllowTenant());
   try {
-    await fetch(`${srv.base}/api/inbox/poll`, {
+    await abrufMitFrist(`${srv.base}/api/inbox/poll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ include_seen: true }),
     });
-    await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
-    await fetch(`${srv.base}/api/inbox/poll`, {
+    await abrufMitFrist(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    await abrufMitFrist(`${srv.base}/api/inbox/poll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ include_seen: "true" }),

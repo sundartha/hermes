@@ -7,6 +7,7 @@ import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makePortalStore } from "../src/store/portal.js";
+import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SECRET = "portal-route-secret-0123456789";
 
@@ -55,11 +56,13 @@ async function setup() {
 
 function get(url, cookie) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
-      let body = "";
-      res.on("data", (d) => (body += d));
-      res.on("end", () => resolve({ status: res.statusCode, body }));
-    });
+    const req = mitAntwortfrist(
+      http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () => resolve({ status: res.statusCode, body }));
+      }),
+    );
     req.on("error", reject);
   });
 }

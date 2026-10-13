@@ -5,6 +5,7 @@ import express from "express";
 import { errorHandler } from "../../src/middleware.js";
 import { telnyxNumberProvisioning } from "../../src/telephony/adapters/telnyx/numbers.js";
 import { audit } from "../../src/util.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const NUTZLAST = process.env.LOGWEG_NUTZLAST;
 const zeile = (weg) => `[weg:${weg}] ${NUTZLAST}`;
@@ -57,7 +58,7 @@ async function expressWege() {
   await once(server, "listening");
   const basis = `http://127.0.0.1:${server.address().port}`;
   for (const pfad of ["/vor-antwort", "/nach-antwort", "/async-nach-antwort"]) {
-    await fetch(`${basis}${pfad}`).then((antwort) => antwort.text()).catch(() => "");
+    await abrufMitFrist(`${basis}${pfad}`).then((antwort) => antwort.text()).catch(() => "");
   }
   server.closeAllConnections();
   server.close();

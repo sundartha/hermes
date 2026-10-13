@@ -44,6 +44,7 @@ import {
   seedWartenderElCall,
   spawnSeedWartenderElCall,
 } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -149,7 +150,7 @@ const initBody = ({ bindung, conversationId = CONV_A, agentId = AGENT_ID, extra 
 async function initAnfrage(url, { token = INIT_TOKEN, body }) {
   const headers = { "content-type": "application/json" };
   if (token !== null) headers[INIT_TOKEN_HEADER] = token;
-  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  const res = await abrufMitFrist(url, { method: "POST", headers, body: JSON.stringify(body) });
   return { status: res.status, text: await res.text() };
 }
 

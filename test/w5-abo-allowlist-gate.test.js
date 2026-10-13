@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const DENY_EMERGENCY = "112";
@@ -39,7 +40,7 @@ function seed({ kycLevel, status = "active", calls = [], profiles = { [A]: { max
 }
 
 const placeCall = (srv, identity, to = TO) =>
-  fetch(`${srv.localUrl}/api/calls`, {
+  abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

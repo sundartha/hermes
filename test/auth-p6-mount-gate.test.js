@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp, assertGateAbsent } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 
@@ -14,7 +15,7 @@ const OPERATOR_ROUTES = [
 ];
 
 async function fetchRoute(baseUrl, route, extraHeaders = {}) {
-  return fetch(`${baseUrl}${route.path}`, {
+  return abrufMitFrist(`${baseUrl}${route.path}`, {
     method: route.method,
     headers: { "Content-Type": "application/json", ...extraHeaders },
     ...(route.method === "GET" ? {} : { body: JSON.stringify({}) }),
@@ -29,7 +30,7 @@ test("AUTH-P6-5: ohne Admin-Sitzungs-Infra (json/kein SESSION_SECRET) sind die s
       assert.equal(res.status, 404, `${route.method} ${route.path}: Route existiert nicht (W6)`);
       assertGateAbsent(res);
     }
-    const health = await fetch(`${srv.localUrl}/healthz`);
+    const health = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(health.status, 200);
   } finally {
     await srv.stop();

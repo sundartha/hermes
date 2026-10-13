@@ -1,0 +1,10 @@
+{
+  "titel": "Test schickt get aus einem benannten Import ohne mitAntwortfrist",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { get } from \"node:https\";",
+      "export const anfrage = get(\"https://127.0.0.1:3999/healthz\", (antwort) => antwort.resume());"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}

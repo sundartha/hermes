@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
 
@@ -14,13 +15,13 @@ test("Flags an, aber json-Backend (kein Web-Login): Self-Service-Routen sind 404
   });
   try {
     await testlauf.test("GET /api/self-service/state -> 404", async () => {
-      const res = await fetch(`${srv.localUrl}/api/self-service/state`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/api/self-service/state`, {
         headers: asTenant("sub-b"),
       });
       assert.equal(res.status, HTTP_NOT_FOUND);
     });
     await testlauf.test("POST /api/self-service/settings -> 404", async () => {
-      const res = await fetch(`${srv.localUrl}/api/self-service/settings`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/api/self-service/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...asTenant("sub-b") },
         body: JSON.stringify({ agentName: "X" }),
@@ -28,7 +29,7 @@ test("Flags an, aber json-Backend (kein Web-Login): Self-Service-Routen sind 404
       assert.equal(res.status, HTTP_NOT_FOUND);
     });
     await testlauf.test("POST /api/self-service/settings {agentStyle} -> 404", async () => {
-      const res = await fetch(`${srv.localUrl}/api/self-service/settings`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/api/self-service/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...asTenant("sub-b") },
         body: JSON.stringify({ agentStyle: "warm-persoenlich" }),
@@ -36,7 +37,7 @@ test("Flags an, aber json-Backend (kein Web-Login): Self-Service-Routen sind 404
       assert.equal(res.status, HTTP_NOT_FOUND);
     });
     await testlauf.test("POST /api/self-service/billing/setup-checkout -> 404", async () => {
-      const res = await fetch(`${srv.localUrl}/api/self-service/billing/setup-checkout`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/api/self-service/billing/setup-checkout`, {
         method: "POST",
         headers: asTenant("sub-b"),
       });

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
@@ -19,7 +20,7 @@ const seed = seedState({
 });
 
 const postCall = (url, body) =>
-  fetch(`${url}/api/calls`, {
+  abrufMitFrist(`${url}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objective: "Test", ...body }),

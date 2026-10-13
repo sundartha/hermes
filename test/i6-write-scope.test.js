@@ -2,18 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";
 const SUB_UNKNOWN = "sub-unbekannt";
 
 const postJson = (url, body, headers = {}) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-const getJson = (url, headers = {}) => fetch(url, { headers });
+const getJson = (url, headers = {}) => abrufMitFrist(url, { headers });
 const asTenant = (sub) => ({ "X-Internal-Identity": sub });
 const tenantB = () => ({ id: TENANT_B, status: "active", idpSubject: SUB_B });
 

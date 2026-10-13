@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp, seedState, seedCall, waitForLog } from "./helpers.js";
 import { maskNumber } from "../src/util.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 const postJson = (url, body) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -75,7 +76,7 @@ test("Audit-Zeilen fuer fehlgeschlagene Auth-Versuche", async (t) => {
       "abgelehnter externer Zugriff -> genau eine Audit-Zeile",
       { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
       async () => {
-        const res = await fetch(`${srv.externalUrl}/api/state`);
+        const res = await abrufMitFrist(`${srv.externalUrl}/api/state`);
         assert.equal(res.status, 403);
         await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/api\/state grund=not_local/);
         assert.equal(
@@ -86,7 +87,7 @@ test("Audit-Zeilen fuer fehlgeschlagene Auth-Versuche", async (t) => {
     );
 
     await t.test("MCP-Fehlversuch -> genau eine Zeile", async () => {
-      const res = await fetch(`${srv.localUrl}/mcp`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/mcp`, {
         method: "POST",
         headers: { Authorization: "Bearer falsches-token" },
       });

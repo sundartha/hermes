@@ -6,6 +6,7 @@ import {
   CONVERSATION_FAILED_UNVERIFIED_ORIGINATION,
   ERROR_ENVELOPES,
 } from "../fixtures/elevenlabs-conversations.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const WARTEZEIT_MS = 8000;
@@ -67,7 +68,7 @@ test("/voice/status mit failed: der Grund steht am Anruf, bevor Ende und Buchung
     seed: seedState({ calls: [seedCall({ id: "status_failed", provider: "telnyx" })] }),
   });
   try {
-    const antwort = await fetch(`${srv.localUrl}/voice/status?callId=status_failed`, {
+    const antwort = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=status_failed`, {
       method: "POST",
       body: new URLSearchParams({ CallStatus: "failed", SipHangupCause: "603" }),
     });

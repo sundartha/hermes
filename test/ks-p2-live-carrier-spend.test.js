@@ -12,6 +12,7 @@ import {
   activeCallsFor,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TARIFF_CENTS_PER_MIN = 50;
 const INBOUND_TARIFF_CENTS_PER_MIN = 20;
@@ -228,7 +229,7 @@ test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage u
     },
   });
   try {
-    const turn = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+    const turn = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Ja, Donnerstag passt gut" }),
     });

@@ -5,6 +5,7 @@ import { maskNumber } from "../src/util.js";
 import { makeDefaultState, setProfile, resolveProfile } from "../src/store/state-ops.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TEST_CONFIRMATION_SECRET = "profile-tenant-key-test-secret-mind-32-zeichen";
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
@@ -18,7 +19,7 @@ const oauthEnv = (idp, extra = {}) => ({
 });
 
 async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
-  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
     body: JSON.stringify(args),

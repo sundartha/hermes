@@ -17,6 +17,7 @@ import {
 } from "../src/call-confirmation.js";
 import { makeCallConfirmationRoutes } from "../src/routes/api-call-confirmations.js";
 import { CALL_CONFIRMATION_SECRET_FINDING, callConfirmationSecretFindings } from "../src/boot-guard.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TOO_SHORT_SECRET_LENGTH = CONFIRMATION_SECRET_MIN_LENGTH - 1;
 const WINDOWS_AFTER_EXPIRY = 2;
@@ -226,7 +227,7 @@ async function mountConfirmationRoutes({ now, secret = ROUTE_SECRET, languageEna
 }
 
 async function postConfirmation(base, body, tenantHeader = "route-test-tenant") {
-  const res = await fetch(`${base}/api/call-confirmations`, {
+  const res = await abrufMitFrist(`${base}/api/call-confirmations`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
     body: JSON.stringify(body),

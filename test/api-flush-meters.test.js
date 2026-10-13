@@ -9,6 +9,7 @@ import { seedState } from "./helpers.js";
 import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 async function startFakeStripe() {
   const meterPosts = [];
@@ -74,7 +75,7 @@ async function startBillingApp({
   };
 }
 
-const flushMeters = (app) => fetch(`${app.base}/api/billing/flush-meters`, { method: "POST" });
+const flushMeters = (app) => abrufMitFrist(`${app.base}/api/billing/flush-meters`, { method: "POST" });
 
 test("ohne PAYMENT_ENABLED: POST /api/billing/flush-meters -> 404 (fail-closed)", async () => {
   const app = await startBillingApp({ paymentEnabled: false, state: seedState() });

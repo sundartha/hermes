@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog, startIdp } from "../helpers.js";
 import { LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "../../src/portal-paths.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FOUND = 302;
@@ -23,7 +24,7 @@ function keineBasicChallenge(res, wo) {
 test("AUTH-P7-1: /api/state ohne Sitzung -> 403, nicht 401, nicht 200 (der Datenleck-Fall)", async () => {
   const srv = await startServer({ env: GATE_DETEKTOR });
   try {
-    const res = await fetch(`${srv.localUrl}/api/state`, { headers: EXTERN });
+    const res = await abrufMitFrist(`${srv.localUrl}/api/state`, { headers: EXTERN });
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.notEqual(res.status, HTTP_UNAUTHORIZED, "kein Gate mehr");
     assert.notEqual(res.status, HTTP_OK, "200 waere der Datenleck-Fall - sofortiger Rollback");
@@ -39,11 +40,11 @@ test("AUTH-P7-2: unbekannter Pfad -> 404, in beiden Raeumen, die frueher das Gat
   const srv = await startServer({ env: GATE_DETEKTOR });
   try {
     for (const pfad of ["/diese-route-gibt-es-nicht-12345", "/api/gibt-es-nicht-12345"]) {
-      const res = await fetch(`${srv.localUrl}${pfad}`, { headers: EXTERN });
+      const res = await abrufMitFrist(`${srv.localUrl}${pfad}`, { headers: EXTERN });
       assert.equal(res.status, HTTP_NOT_FOUND, pfad);
       keineBasicChallenge(res, `GET ${pfad}`);
     }
-    const geloescht = await fetch(`${srv.localUrl}/api/settings`, {
+    const geloescht = await abrufMitFrist(`${srv.localUrl}/api/settings`, {
       method: "POST",
       headers: { ...EXTERN, "Content-Type": "application/json" },
       body: "{}",
@@ -71,14 +72,14 @@ test("AUTH-P7-3: die sieben Umleitungen", async () => {
       ERWARTUNG.map(([von]) => von),
     );
     for (const [von, ziel] of ERWARTUNG) {
-      const res = await fetch(`${srv.localUrl}${von}`, { redirect: "manual" });
+      const res = await abrufMitFrist(`${srv.localUrl}${von}`, { redirect: "manual" });
       assert.equal(res.status, HTTP_FOUND, von);
       assert.equal(res.headers.get("location"), ziel, von);
       keineBasicChallenge(res, `GET ${von}`);
     }
-    const post = await fetch(`${srv.localUrl}/login`, { method: "POST", redirect: "manual" });
+    const post = await abrufMitFrist(`${srv.localUrl}/login`, { method: "POST", redirect: "manual" });
     assert.equal(post.status, HTTP_NOT_FOUND, "POST /login bleibt 404 (GET-only)");
-    const admin = await fetch(`${srv.localUrl}/api/admin/tenants`, {
+    const admin = await abrufMitFrist(`${srv.localUrl}/api/admin/tenants`, {
       redirect: "manual",
       headers: EXTERN,
     });
@@ -94,20 +95,20 @@ test("AUTH-P7-4: keine Antwort traegt eine Basic-Challenge - und die MCP-Bearer-
     env: { ...GATE_DETEKTOR, MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer },
   });
   try {
-    const oeffentlich = await fetch(`${srv.localUrl}/healthz`);
+    const oeffentlich = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.doesNotMatch(oeffentlich.headers.get("www-authenticate") ?? "", /^Basic/i, "GET /healthz");
 
-    const intern = await fetch(`${srv.localUrl}/api/state`, { headers: EXTERN });
+    const intern = await abrufMitFrist(`${srv.localUrl}/api/state`, { headers: EXTERN });
     assert.equal(intern.status, HTTP_FORBIDDEN);
     assert.doesNotMatch(intern.headers.get("www-authenticate") ?? "", /^Basic/i, "GET /api/state");
 
-    const fehlt = await fetch(`${srv.localUrl}/diese-route-gibt-es-nicht-12345`);
+    const fehlt = await abrufMitFrist(`${srv.localUrl}/diese-route-gibt-es-nicht-12345`);
     assert.doesNotMatch(fehlt.headers.get("www-authenticate") ?? "", /^Basic/i, "GET /fehlt");
 
-    const umleitung = await fetch(`${srv.localUrl}/login`, { redirect: "manual" });
+    const umleitung = await abrufMitFrist(`${srv.localUrl}/login`, { redirect: "manual" });
     assert.doesNotMatch(umleitung.headers.get("www-authenticate") ?? "", /^Basic/i, "GET /login");
 
-    const mcp = await fetch(`${srv.localUrl}/mcp`, { method: "POST" });
+    const mcp = await abrufMitFrist(`${srv.localUrl}/mcp`, { method: "POST" });
     assert.equal(mcp.status, HTTP_UNAUTHORIZED);
     assert.doesNotMatch(mcp.headers.get("www-authenticate") ?? "", /^Basic/i, "POST /mcp");
     assert.match(mcp.headers.get("www-authenticate") ?? "", /^Bearer /, "POST /mcp Bearer-Challenge");
@@ -120,7 +121,7 @@ test("AUTH-P7-4: keine Antwort traegt eine Basic-Challenge - und die MCP-Bearer-
 test("AUTH-P7-5: Pre-Mortem-Gegenprobe - der In-Process-MCP-Pfad lebt (echter Loopback, kein X-Forwarded-For)", async () => {
   const srv = await startServer({ env: GATE_DETEKTOR });
   try {
-    const res = await fetch(`${srv.localUrl}/api/state`);
+    const res = await abrufMitFrist(`${srv.localUrl}/api/state`);
     assert.equal(res.status, HTTP_OK, "das gesetzte DASHBOARD_PASSWORD bewirkt nichts");
     const state = await res.json();
     assert.ok(Array.isArray(state.calls), "internalOnly sperrt den echten Loopback nicht aus");
@@ -132,7 +133,7 @@ test("AUTH-P7-5: Pre-Mortem-Gegenprobe - der In-Process-MCP-Pfad lebt (echter Lo
 test("AUTH-P7-7: das Legacy-Checkout-Paar traegt internalOnly", async () => {
   const srv = await startServer({ env: GATE_DETEKTOR });
   try {
-    const setup = await fetch(`${srv.localUrl}/api/billing/setup-checkout`, {
+    const setup = await abrufMitFrist(`${srv.localUrl}/api/billing/setup-checkout`, {
       method: "POST",
       headers: { ...EXTERN, "Content-Type": "application/json" },
       body: "{}",
@@ -144,7 +145,7 @@ test("AUTH-P7-7: das Legacy-Checkout-Paar traegt internalOnly", async () => {
       /\[audit\] auth_failed ip=\S+ path=\/api\/billing\/setup-checkout grund=not_local/,
     );
 
-    const ret = await fetch(`${srv.localUrl}/api/billing/checkout-return?session_id=cs_1`, {
+    const ret = await abrufMitFrist(`${srv.localUrl}/api/billing/checkout-return?session_id=cs_1`, {
       headers: EXTERN,
     });
     assert.equal(ret.status, HTTP_FORBIDDEN, "extern: GET /api/billing/checkout-return");
@@ -152,7 +153,7 @@ test("AUTH-P7-7: das Legacy-Checkout-Paar traegt internalOnly", async () => {
     assert.doesNotMatch(srv.stdout, /session_id/, "keine session_id in der Audit-Zeile");
     assert.doesNotMatch(srv.stdout, /cs_1/, "kein cs_1 in der Audit-Zeile");
 
-    const setupLocal = await fetch(`${srv.localUrl}/api/billing/setup-checkout`, {
+    const setupLocal = await abrufMitFrist(`${srv.localUrl}/api/billing/setup-checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
@@ -160,7 +161,7 @@ test("AUTH-P7-7: das Legacy-Checkout-Paar traegt internalOnly", async () => {
     assert.equal(setupLocal.status, HTTP_NOT_FOUND);
     assert.match((await setupLocal.json()).error, /PAYMENT_ENABLED/);
 
-    const retLocal = await fetch(`${srv.localUrl}/api/billing/checkout-return?session_id=cs_1`);
+    const retLocal = await abrufMitFrist(`${srv.localUrl}/api/billing/checkout-return?session_id=cs_1`);
     assert.equal(retLocal.status, HTTP_NOT_FOUND);
     assert.match((await retLocal.json()).error, /PAYMENT_ENABLED/);
   } finally {

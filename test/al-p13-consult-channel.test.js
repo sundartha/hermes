@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import express from "express";
 import { startServer, seedState, seedCall, BASE_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT = "tenant_owner";
 const FOREIGN_TENANT = "tenant_fremd";
@@ -248,7 +249,7 @@ async function mountCallRoutes(store, { holdMs = 60, tickMs = 5 } = {}) {
 }
 
 const postAnswer = (srv, body, headers = {}) =>
-  fetch(`${srv.base}/api/calls/${CALL_ID}/consult/answer`, {
+  abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult/answer`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
@@ -335,7 +336,7 @@ test("AL-P13-15: fremder Call -> 404 beim Lesen UND beim Schreiben", async () =>
   ops.emitConsult(store.state, CALL_ID, ["A"]);
   const srv = await mountCallRoutes(store);
   try {
-    const read = await fetch(`${srv.base}/api/calls/${CALL_ID}/consult`);
+    const read = await abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult`);
     assert.equal(read.status, 404);
     assert.equal((await postAnswer(srv, { event_id: "c0", answers: ["x"] })).status, 404);
   } finally {
@@ -360,7 +361,7 @@ test("AL-P13-17: allowConsult=false -> 404 (lesen) / 403 (schreiben) trotz eigen
   ops.emitConsult(store.state, CALL_ID, ["A"]);
   const srv = await mountCallRoutes(store);
   try {
-    assert.equal((await fetch(`${srv.base}/api/calls/${CALL_ID}/consult`)).status, 404);
+    assert.equal((await abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult`)).status, 404);
     assert.equal((await postAnswer(srv, { event_id: "c0", answers: ["x"] })).status, 403);
     assert.equal(store.state.calls[0].consults[0].status, defaults.CONSULT_STATUS.OPEN);
   } finally {
@@ -374,7 +375,7 @@ test("AL-P13-18: der Lesepfad liefert Ereignis/Kennung/Fragen - und NIE ein Tran
   ops.emitConsult(store.state, CALL_ID, QUESTIONS);
   const srv = await mountCallRoutes(store);
   try {
-    const res = await fetch(`${srv.base}/api/calls/${CALL_ID}/consult`);
+    const res = await abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult`);
     const body = await res.json();
     assert.equal(res.status, 200);
     assert.deepEqual(body, { event: "consult", eventId: "c0", questions: QUESTIONS });
@@ -399,7 +400,7 @@ test("AL-P13-47: der echte GET-Poll setzt askDeliveredAt am Consult-Datensatz", 
   const srv = await mountCallRoutes(store);
   try {
     assert.equal(firstConsultOf(store).askDeliveredAt, undefined, "vor dem Poll unberuehrt");
-    const pollResponse = await fetch(`${srv.base}/api/calls/${CALL_ID}/consult`);
+    const pollResponse = await abrufMitFrist(`${srv.base}/api/calls/${CALL_ID}/consult`);
     assert.equal(pollResponse.status, HTTP_OK);
     assert.ok(firstConsultOf(store).askDeliveredAt, "der echte Poll hat die Zustellung markiert");
   } finally {
@@ -689,15 +690,15 @@ test("AL-P13-34: Kanal aus -> Consult-Routen 404, Bestands-Routen unberuehrt", a
     seed: seedState({ calls: [seedCall({ id: CALL_ID })] }),
   });
   try {
-    const poll = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}/consult`);
+    const poll = await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}/consult`);
     assert.equal(poll.status, 404, "CONSULT_ENABLED=false (BASE_ENV) -> kein Kanal");
-    const answer = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}/consult/answer`, {
+    const answer = await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}/consult/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event_id: "c0", answers: ["x"] }),
     });
     assert.equal(answer.status, 403, "Faehigkeit fehlt -> Schreibpfad 403 (Write-403)");
-    const read = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}`);
+    const read = await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}`);
     assert.equal(read.status, 200, "die Bestands-Route lebt unveraendert");
     assert.equal((await read.json()).consults ?? null, null, "kein Consult-Datensatz entstanden");
   } finally {

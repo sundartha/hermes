@@ -8,6 +8,7 @@ import {
   TELNYX_TEST_SIGNATURE_HEADERS,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const UNKNOWN_TO = "+49999999999";
 
@@ -52,7 +53,7 @@ function geoSeed(extraSettings = {}) {
 test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: UNKNOWN_TO }),
     });
@@ -70,7 +71,7 @@ test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record
 test("Charakterisierung LANG-16 - Inbound-Ablehnung fuer unbekannte Zielnummer ist fest Deutsch", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       headers: { "Accept-Language": "en-US" },
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: UNKNOWN_TO }),
@@ -88,7 +89,7 @@ test("Charakterisierung LANG-16 - Inbound-Ablehnung fuer unbekannte Zielnummer i
 test("fehlende To -> fail-closed Hangup + Audit, kein Call-Record", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678" }),
     });
@@ -104,7 +105,7 @@ test("fehlende To -> fail-closed Hangup + Audit, kein Call-Record", async () => 
 test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAtest",
@@ -123,7 +124,7 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
 });
 
 async function postIncoming(srv, to) {
-  const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+  const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
     headers: TELNYX_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: to }),
@@ -186,7 +187,7 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
 test("Anti-Spoof: gespoofte To ohne gueltige Signatur -> 403, kein Routing/Call-Record", async () => {
   const srv = await startServer({ env: { SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: UNKNOWN_TO }),
     });

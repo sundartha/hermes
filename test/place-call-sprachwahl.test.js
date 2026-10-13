@@ -8,6 +8,7 @@ import { LOCALES, disclosurePrefixFor } from "../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -81,7 +82,7 @@ async function withElevenLabs(run) {
 }
 
 function placeCall(srv, { to = TELNYX_TEST_PEER_NUMBER, language } = {}) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: OBJECTIVE, ...(language === undefined ? {} : { language }) }),

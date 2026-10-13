@@ -1,19 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const SEED_FROM = "+15005550006";
 const SEED_TO = "+4915112345678";
 
 const postSpeakEvent = (srv, callId, body) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 
 const postLifecycle = (srv, callId, fields) =>
-  fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
     method: "POST",
     body: new URLSearchParams(fields),
   });

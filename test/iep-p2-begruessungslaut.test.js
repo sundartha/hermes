@@ -8,6 +8,7 @@ import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js
 import { config } from "../src/config.js";
 import { BASE_ENV, ROOT, startServer } from "./helpers.js";
 import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -161,7 +162,7 @@ test("IEP-P2c-A6: die Schranken beissen - vier verfaelschte Fassungen fallen an 
 test("IEP-P2c-A7: der bestehende public-Mount liefert das Asset ohne jede Auth aus", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}${EL_BEGRUESSUNGSLAUT_PFAD}`);
+    const res = await abrufMitFrist(`${srv.localUrl}${EL_BEGRUESSUNGSLAUT_PFAD}`);
     assert.equal(res.status, HTTP_OK);
     assert.equal(res.headers.get("content-type"), "audio/wav");
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(dateiBytes()));

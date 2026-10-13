@@ -4,6 +4,7 @@ import express from "express";
 import { startInboundHarness } from "./helpers/inbound-router-harness.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { voiceAttrs } from "../src/telephony/adapters/telnyx/render.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint des Calls", async () => {
   for (const lang of ["fr", "en"]) {
@@ -22,7 +23,7 @@ test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint de
       },
     });
     try {
-      const res = await fetch(`${url}/voice/incoming`, {
+      const res = await abrufMitFrist(`${url}/voice/incoming`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ From: "+491700000000", To: "+4930000000", CallSid: "CAgap24" }),
@@ -117,7 +118,7 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
       const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
     });
     try {
-      await fetch(`http://127.0.0.1:${server.address().port}/api/calls`, {
+      await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ to, objective: "Test" }),

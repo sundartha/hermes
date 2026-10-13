@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import { planProfileFor } from "../../src/plans.js";
 import { KYC_LEVEL } from "../../src/store/defaults.js";
 import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -58,7 +59,7 @@ function callsTo(target) {
 }
 
 function customerCalls(target) {
-  return fetch(`${hermes.srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${hermes.srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Identity": CUSTOMER_SUBJECT },
     body: JSON.stringify({ to: target, objective: "Rueckruf vereinbaren" }),

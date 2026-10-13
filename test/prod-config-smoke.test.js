@@ -11,6 +11,7 @@ import {
   divergentGateKeys,
   prodEnv,
 } from "./prod-env.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TARGET_DOMESTIC = "+4915112345678";
 const TARGET_INTERNATIONAL = "+12025550143";
@@ -55,7 +56,7 @@ test("Produktionskonfiguration (GAP-33) Meta: die ungemessenen Achsen sind wider
 test("Produktionskonfiguration (GAP-33): der Server bootet unter den ausgelieferten Live-Werten", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "Boot unter ausgelieferten Werten muss /healthz bedienen");
   } finally {
     await srv.stop();
@@ -104,7 +105,7 @@ test("Produktionskonfiguration (GAP-33): der Blueprint render.yaml ist startfaeh
     );
   }
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "Boot unter den Blueprint-Werten muss /healthz bedienen");
   } finally {
     await srv.stop();

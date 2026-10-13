@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, OWNER_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CALL_ID = "call_e2e03";
 const DE_VOICE = /voice="Polly\.Vicki-Neural"/;
@@ -36,7 +37,7 @@ function midCallSeed() {
 }
 
 const emptyTurn = (srv) =>
-  fetch(`${srv.localUrl}/voice/turn?callId=${CALL_ID}`, {
+  abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${CALL_ID}`, {
     method: "POST",
     body: new URLSearchParams({ SpeechResult: "" }),
   });
@@ -65,7 +66,7 @@ test("E2E-03 - Sprachumstellung waehrend des Anrufs laesst den laufenden Turn au
 test("E2E-03 - erst der NAECHSTE Anruf traegt die neue Sprache (en)", async () => {
   const srv = await startServer({ seed: midCallSeed() });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAe2e03next",

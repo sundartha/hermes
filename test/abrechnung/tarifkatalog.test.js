@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findPlan } from "../../src/plans.js";
 import { startServer, externalIp } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
 const HTTP_OK = 200;
@@ -25,7 +26,7 @@ test("S3: findPlan(unbekannt/leer/undefined) -> null (Null-Zweig)", () => {
 test("GET /api/plans liefert den Spec-Katalog (oeffentlich, ohne Login)", async () => {
   const srv = await startServer();
   try {
-    const res = await fetch(`${srv.localUrl}/api/plans`);
+    const res = await abrufMitFrist(`${srv.localUrl}/api/plans`);
     assert.equal(res.status, HTTP_OK);
     const plans = await res.json();
     assert.ok(Array.isArray(plans), "Antwort ist kein Array");
@@ -51,13 +52,13 @@ test(
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "s3cret" } });
     try {
       await kontext.test("extern ohne Creds: /api/plans -> 200", async () => {
-        const res = await fetch(`${srv.externalUrl}/api/plans`);
+        const res = await abrufMitFrist(`${srv.externalUrl}/api/plans`);
         assert.equal(res.status, HTTP_OK);
         assert.equal((await res.json()).length, KATALOG_SLUGS.length);
       });
 
       await kontext.test("extern ohne Creds: /api/state -> 403 (Kontrast, internalOnly)", async () => {
-        const res = await fetch(`${srv.externalUrl}/api/state`);
+        const res = await abrufMitFrist(`${srv.externalUrl}/api/state`);
         assert.equal(res.status, HTTP_FORBIDDEN);
       });
     } finally {

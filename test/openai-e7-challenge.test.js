@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { startServer, ROOT } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const TOKEN = "e7-token-abc";
@@ -25,7 +26,7 @@ async function mitServer(env, pruefung) {
 
 test("E7-T1: gesetzter Token liefert 200, byte-exakten Klartext, kein WWW-Authenticate", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     assert.equal(res.status, HTTP_OK);
     assert.equal(await res.text(), TOKEN);
     assert.ok(res.headers.get("content-type").startsWith(CONTENT_TYPE_TEXT_PLAIN));
@@ -35,7 +36,7 @@ test("E7-T1: gesetzter Token liefert 200, byte-exakten Klartext, kein WWW-Authen
 
 test("E7-T2: Koerperform ist reiner Klartext, kein JSON/Liste (O-4)", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     const text = await res.text();
     assert.throws(() => JSON.parse(text));
     assert.ok(!text.includes("{") && !text.includes("[") && !text.includes('"'));
@@ -44,7 +45,7 @@ test("E7-T2: Koerperform ist reiner Klartext, kein JSON/Liste (O-4)", async () =
 
 test("E7-T3: ungesetzter Token -> 404, Body verraet nicht das Wort openai", async () => {
   await mitServer({}, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     assert.equal(res.status, HTTP_NOT_FOUND);
     const text = await res.text();
     assert.ok(!text.includes("openai"));
@@ -53,14 +54,14 @@ test("E7-T3: ungesetzter Token -> 404, Body verraet nicht das Wort openai", asyn
 
 test("E7-T4: nur Whitespace als Token -> 404 (belegt .trim() am Config-Rand)", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: "   " }, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     assert.equal(res.status, HTTP_NOT_FOUND);
   });
 });
 
 test("E7-T5: Token mit umgebendem Whitespace/Zeilenumbruch wird getrimmt", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: ` ${TOKEN}\n` }, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     assert.equal(res.status, HTTP_OK);
     assert.equal(await res.text(), TOKEN);
   });
@@ -68,7 +69,7 @@ test("E7-T5: Token mit umgebendem Whitespace/Zeilenumbruch wird getrimmt", async
 
 test("E7-T6: POST bei gesetztem Token -> 404, Token nicht im Body (B2: kein openai-Grep)", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
-    const res = await fetch(srv.localUrl + CHALLENGE_PATH, { method: "POST" });
+    const res = await abrufMitFrist(srv.localUrl + CHALLENGE_PATH, { method: "POST" });
     assert.equal(res.status, HTTP_NOT_FOUND);
     const text = await res.text();
     assert.ok(!text.includes(TOKEN));
@@ -77,7 +78,7 @@ test("E7-T6: POST bei gesetztem Token -> 404, Token nicht im Body (B2: kein open
 
 test("E7-T7: der Token wird nie geloggt (Regel 4)", async () => {
   await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
-    await fetch(srv.localUrl + CHALLENGE_PATH);
+    await abrufMitFrist(srv.localUrl + CHALLENGE_PATH);
     assert.ok(!srv.stdout.includes(TOKEN));
   });
 });

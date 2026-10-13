@@ -7,6 +7,7 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState, tenantActiveSubscriber } from "../src/store/state-ops.js";
 import { KYC_LEVEL, NUMBER_STATUS } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 function subscriberTenant(id, idpSubject) {
   return { id, status: "active", idpSubject, ownerName: `${id} Tester`, kycLevel: KYC_LEVEL.CARD };
@@ -60,7 +61,7 @@ async function startRetryApp({ state, provisioning }) {
 }
 
 const retryInProcess = (app, body) =>
-  fetch(`${app.base}/api/onboard/retry`, {
+  abrufMitFrist(`${app.base}/api/onboard/retry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -129,7 +130,7 @@ const env = (idp) => ({
 });
 
 const retry = (srv, body, headers = {}) =>
-  fetch(`${srv.localUrl}/api/onboard/retry`, {
+  abrufMitFrist(`${srv.localUrl}/api/onboard/retry`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),

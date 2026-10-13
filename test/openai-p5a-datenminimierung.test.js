@@ -5,6 +5,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { startServer, seedState, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 2, method: "tools/list" };
@@ -82,7 +83,7 @@ test("P5a (O-13 Teil 1, in-process): get_agent_status wirft agent.voiceEngine/ag
 test("P5a (O-13 Teil 1, HTTP /mcp): der echte Serverprozess liefert agent.voiceEngine/model an /api/state, aber nicht mehr im Tool-Output", async () => {
   const srv = await startServer({ seed: seedState({}) });
   try {
-    const stateRes = await fetch(`${srv.localUrl}/api/state`);
+    const stateRes = await abrufMitFrist(`${srv.localUrl}/api/state`);
     const state = await stateRes.json();
     assert.ok(
       Object.hasOwn(state.agent, "voiceEngine") && Object.hasOwn(state.agent, "model"),

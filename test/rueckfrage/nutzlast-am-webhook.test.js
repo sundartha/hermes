@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
@@ -28,7 +29,7 @@ const CONSULT_ON_ENV = Object.freeze({
 });
 
 const postRaw = (srv, rawBody) =>
-  fetch(`${srv.localUrl}${CONSULT_PATH}`, {
+  abrufMitFrist(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
     body: rawBody,

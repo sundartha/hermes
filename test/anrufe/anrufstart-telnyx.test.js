@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { startServer, placeCall } from "../helpers.js";
 import { starteAttrappe } from "./attrappen-server.js";
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_FORBIDDEN = 403;
@@ -37,7 +38,7 @@ const TELNYX_ENV = (mockUrl) => ({
 const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
 
 const postJson = (url, body) =>
-  fetch(url, {
+  abrufMitFrist(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -113,7 +114,7 @@ test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), k
     ownerNumber: { e164: TELNYX_NR, provider: "telnyx" },
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/calls`, {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: TARGET, objective: "Testziel" }),

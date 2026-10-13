@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -27,7 +28,7 @@ function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
 }
 
 function placeCall(srv) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
@@ -39,7 +40,7 @@ const outboundCall = (srv) =>
   srv.readStore().calls.find((call) => call.direction === "outbound" && call.to === TO);
 
 function placeCallWithLanguageWish(srv, language) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren", language }),
@@ -62,7 +63,7 @@ test("LANG-15 (Mechanismus, gruen) - ein Sprachwunsch wird NIE still ignoriert: 
 test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprache aus derselben Nummer ab", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
   try {
-    const inboundRes = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const inboundRes = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAlang26",

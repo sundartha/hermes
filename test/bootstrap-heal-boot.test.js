@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, seedCall, seedState } from "./helpers.js";
 import { healBootstrapStore } from "../src/boot.js";
 import { BOOTSTRAP_HEAL } from "../src/boot-guard.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const BOOTSTRAP_ENV = Object.freeze({
   BOOTSTRAP_E164: "+15005550006",
@@ -16,7 +17,7 @@ const JSON_SEED_E164 = "+491701234567";
 test("leerer Store + gesetzte Deploy-Parameter: der Boot heilt sich selbst (kein preDeploy noetig)", async () => {
   const srv = await startServer({ ownerNumber: null, env: BOOTSTRAP_ENV });
   try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "nach der Heilung muss der Dienst normal laufen");
     assert.match(srv.stdout, /\[bootstrap-heal\] Leerer Store .* geheilt/);
     assert.match(srv.stdout, /\[audit\] bootstrap_store_geheilt/);
@@ -33,7 +34,7 @@ test("die Heilung laeuft genau einmal: ein zweiter Boot auf derselben Ablage sch
 
   const second = await startServer({ dataDir, env: BOOTSTRAP_ENV });
   try {
-    const res = await fetch(`${second.localUrl}/healthz`);
+    const res = await abrufMitFrist(`${second.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(second.stdout, /\[bootstrap-heal\]/, "zweiter Boot darf nichts mehr tun");
   } finally {
@@ -85,7 +86,7 @@ test("OWNER_NUMBER_SEED gewinnt gegen die Heilung (kein Doppel-Seed)", async () 
     env: { ...BOOTSTRAP_ENV, OWNER_NUMBER_SEED: JSON_SEED_E164, OWNER_NUMBER_PROVIDER: "telnyx" },
   });
   try {
-    const state = await (await fetch(`${srv.localUrl}/api/state`)).json();
+    const state = await (await abrufMitFrist(`${srv.localUrl}/api/state`)).json();
     assert.equal(state.agent.number, JSON_SEED_E164, "der json-Seed war schneller");
     assert.doesNotMatch(srv.stdout, /\[bootstrap-heal\]/, "die Heilung darf gar nicht erst laufen");
   } finally {

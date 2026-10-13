@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
 import { FAILURE_REASON_TEXTS } from "../src/i18n/failure-reason-texts.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const TELNYX_PROVIDER_STATUS = 403;
@@ -33,7 +34,7 @@ const telnyxEnv = (voiceMockUrl) => ({
 });
 
 function placeCall(srv) {
-  return fetch(`${srv.localUrl}/api/calls`, {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
@@ -61,7 +62,7 @@ test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwo
     assert.equal(outboundCalls.length, 1, "der Anruf ist trotz Ablehnung persistiert");
     const callId = outboundCalls[0].id;
 
-    const callRes = await fetch(`${srv.localUrl}/api/calls/${callId}`);
+    const callRes = await abrufMitFrist(`${srv.localUrl}/api/calls/${callId}`);
     const call = await callRes.json();
     assert.equal(call.status, "failed");
     assert.equal(
@@ -70,7 +71,7 @@ test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwo
       "die Start-Ablehnung MUSS einen Grund tragen - auch auf dem TeXML-Weg",
     );
 
-    const stateRes = await fetch(`${srv.localUrl}/api/state`);
+    const stateRes = await abrufMitFrist(`${srv.localUrl}/api/state`);
     const state = await stateRes.json();
     const notification = state.notifications.find((item) => item.callId === callId);
     assert.ok(notification, "es muss eine Benachrichtigung zu diesem Anruf geben");
