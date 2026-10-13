@@ -11,8 +11,6 @@
     "test/chatgpt-egress.test.js|6d95f4b4989105c9",
     "test/cost-calibration.test.js|bde00a20623b1abb",
     "test/cost-calibration.test.js|e7583afca2deed33",
-    "test/e2e-06-en-purity-aggregate.test.js|17b4f31a57e891dc",
-    "test/e2e-06-en-purity-aggregate.test.js|d57573c950abe1ab",
     "test/fx-single-source.test.js|15a2ed6a1ca0a4e2",
     "test/gap-10-hour-limit-per-tenant.test.js|cbf1f614e585ef4d",
     "test/kv-p1-cost-ledger-map.test.js|5779b7202684f827",

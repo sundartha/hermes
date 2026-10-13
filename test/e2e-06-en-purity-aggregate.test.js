@@ -1,14 +1,11 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import {
   tempDataDir,
   seedState,
   seedCall,
   startServer,
   postTelnyxIncoming,
-  ROOT,
   GERMAN_STOPWORDS,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -16,6 +13,7 @@ import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { signValue, makeWebAuthRoutes } from "../src/web-auth.js";
 import express from "express";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { gateRejectionTexts, mcpErrorTexts } from "./gemeinsam/ausgelieferte-ablehnungen.js";
 
 const TENANT_EN = "t_e2e06_en";
 
@@ -99,18 +97,8 @@ test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-T
   leaksOf("summarySms", sms[0] || "", leaks);
   leaksOf("notificationTitle", notify[0] || "", leaks);
 
-  const gatesSrc = fs.readFileSync(path.join(ROOT, "src/telephony/outbound-gates.js"), "utf8");
-  leaksOf("gateRejectionLiterals", gatesSrc.match(/message:\s*`[^`]+`|message:\s*"[^"]+"/g)?.join(" ") || "", leaks);
-
-  const QUOTED = String.raw`"(?:\\.|[^"\\])*"`;
-  const deliveredTextOf = (src) =>
-    src
-      .replace(/^[ \t]*\/\/.*$/gm, "")
-      .replace(new RegExp(String.raw`description:\s*${QUOTED}`, "g"), "")
-      .replace(new RegExp(String.raw`\.describe\(\s*${QUOTED}`, "g"), "")
-      .replace(new RegExp(String.raw`(tool\(\s*${QUOTED},\s*)${QUOTED}`, "g"), "$1");
-  const mcpSrc = fs.readFileSync(path.join(ROOT, "src/mcp-tools.js"), "utf8");
-  leaksOf("mcpErrorLiterals", deliveredTextOf(mcpSrc), leaks);
+  leaksOf("gateRejectionLiterals", (await gateRejectionTexts()).join(" "), leaks);
+  leaksOf("mcpErrorLiterals", (await mcpErrorTexts()).join(" "), leaks);
 
   const app = express();
   app.use(

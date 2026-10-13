@@ -100,7 +100,8 @@ test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechMod
     const body = await res.text();
     assert.match(body, /transcriptionEngine="Deepgram"/, "Rueckfall rendert TeXML (Telnyx)");
     assert.ok(!body.includes("speechModel"), "kein Twilio-TwiML-Attribut");
-    assert.equal(srv.readStore().calls[0].provider, PROVIDER.TELNYX);
+    const [call] = srv.readStore().calls;
+    assert.equal(call.provider, PROVIDER.TELNYX);
   } finally {
     await srv.stop();
   }
