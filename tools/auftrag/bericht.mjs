@@ -34,9 +34,9 @@ export function notizAuszug(antwort, sitzung) {
   return kurz.gekuerzt ? `${kurz.text} … [gekürzt; ${ort}]` : `${kurz.text}\n\n(Volle Antwort: Sitzung ${sitzung})`;
 }
 
-export function hinweiseFuerNotiz(agenten, volleAntwort) {
+export function hinweiseFuerNotiz(agenten, entnimmVolleAntwort) {
   const bau = agenten.findLast(({ rolle }) => rolle === "bau");
-  const auszug = bau ? notizAuszug(volleAntwort(bau), bau.sitzung) : "";
+  const auszug = bau ? notizAuszug(entnimmVolleAntwort(bau), bau.sitzung) : "";
   if (auszug === "") return [];
   return [HINWEISE_DES_BAUS, ...auszug.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
 }

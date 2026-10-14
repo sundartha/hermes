@@ -4,7 +4,7 @@ import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
 import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
-import { frage, volleAntwort } from "./einsatz.mjs";
+import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
 import { UMBAU_AUSWEG, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -209,13 +209,13 @@ class Runden {
     if (gestoppt.notiz !== undefined) return { text: gestoppt.notiz, sitzungen: gestoppt.sitzungen };
     const { phase, auftrag, root } = this.kontext;
     const lauf = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
-    return { text: notizAuszug(volleAntwort(lauf), lauf.sitzung), sitzungen: lauf.sitzungen };
+    return { text: notizAuszug(entnimmVolleAntwort(lauf), lauf.sitzung), sitzungen: lauf.sitzungen };
   }
 
   entscheidung(ergebnis, gestoppt) {
     const { phase, auftrag, root } = this.kontext;
     const notiz = this.notiz(gestoppt);
-    const hinweise = hinweiseFuerNotiz(ergebnis.agenten, volleAntwort);
+    const hinweise = hinweiseFuerNotiz(ergebnis.agenten, entnimmVolleAntwort);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");
     const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notizText, "", ...hinweise, ...(hinweise.length > 0 ? [""] : [])].join("\n");
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);

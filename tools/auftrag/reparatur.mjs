@@ -4,7 +4,7 @@ import { env } from "node:process";
 
 import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { GRUEN as BELEG_GRUEN, ROT, belegVerzeichnis, notizAuszug, schreibeBeleg } from "./bericht.mjs";
-import { frage, setzeEin, volleAntwort } from "./einsatz.mjs";
+import { entnimmVolleAntwort, frage, setzeEin } from "./einsatz.mjs";
 import { REPRODUKTION, fuehreReproduktionAus } from "./nachstellen.mjs";
 import { leseDatei } from "./pruefer-befehle.mjs";
 import {
@@ -179,7 +179,7 @@ function entscheidungNoetig({ root, blocker }, runde, zeilen) {
     "",
     kopf,
     "",
-    notizAuszug(volleAntwort(notiz), notiz.sitzung) || zeilen.join("\n"),
+    notizAuszug(entnimmVolleAntwort(notiz), notiz.sitzung) || zeilen.join("\n"),
     "",
   ].join("\n");
   const veroeffentlicht = veroeffentliche(phase.issue, text, root);
