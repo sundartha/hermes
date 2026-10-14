@@ -10,8 +10,9 @@ import { cruise } from "dependency-cruiser";
 import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
-import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
+import { bestaetige, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
+import { ABGESCHALTET, staerker, ueberlebt, vereine } from "./mutationspruefung/nacheinander.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
@@ -29,9 +30,6 @@ const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "-
 const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
-const UEBERLEBT = "Survived";
-const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
-const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
 const ZUSTANDSBEREICH = [".", ":(exclude)tools/mutationspruefung.mjs", ":(exclude)tools/mutationspruefung/"];
@@ -148,10 +146,6 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
   }
 }
 
-function ueberlebt({ status }) {
-  return UEBERLEBEND.has(status);
-}
-
 function ersetze(ergebnisse, neu, betroffen) {
   const nachSchluessel = new Map(neu.map((eintrag) => [eintrag.schluessel, eintrag]));
   return ergebnisse.map((eintrag) => (betroffen.includes(eintrag) && nachSchluessel.get(eintrag.schluessel)) || eintrag);
@@ -173,20 +167,6 @@ async function gruppenlauf(lauf) {
   const nachlauf = ({ zeilen, tests }) =>
     stryker({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
   return bestaetige(await ersterLauf(lauf), nachlauf, lauf.tests);
-}
-
-function staerker(eintrag, anderer) {
-  if (anderer === undefined) return eintrag;
-  if (!ueberlebt(eintrag)) return bestaetigt(eintrag) || ueberlebt(anderer) ? eintrag : anderer;
-  return ueberlebt(anderer) && eintrag.status === UEBERLEBT ? eintrag : anderer;
-}
-
-function vereine(ergebnisse, laeufe) {
-  const nachSchluessel = new Map();
-  for (const eintrag of laeufe.flat()) {
-    nachSchluessel.set(eintrag.schluessel, staerker(nachSchluessel.get(eintrag.schluessel) ?? eintrag, eintrag));
-  }
-  return ergebnisse.map((eintrag) => staerker(eintrag, nachSchluessel.get(eintrag.schluessel)));
 }
 
 function wellen(testgruppen) {
