@@ -1,7 +1,11 @@
 {
   "Denylist": {
     "module": ["src/telephony/number-denylist.js"],
-    "tests": ["test/ks-p7-high-cost-denylist.test.js", "test/number-gate.test.js"]
+    "tests": [
+      "test/gw0-gates-elevenlabs.test.js",
+      "test/ks-p7-high-cost-denylist.test.js",
+      "test/number-gate.test.js"
+    ]
   },
   "Allowlist": {
     "module": ["src/telephony/outbound-gates.js", "src/callee-is-owner.js"],
@@ -12,6 +16,7 @@
       "test/deny-diagnosability.test.js",
       "test/e164-trunk-zero-reject.test.js",
       "test/gap-35-metrics-country.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/iep-p6-owner-ton.test.js",
       "test/ks-p3-brake-wiring.test.js",
       "test/ks-p3-reserve-decoupled.test.js",
@@ -41,6 +46,7 @@
       "test/deny-diagnosability.test.js",
       "test/e164-trunk-zero-reject.test.js",
       "test/gap-35-metrics-country.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/ks-p3-brake-wiring.test.js",
       "test/ks-p3-reserve-decoupled.test.js",
       "test/ks-p4-snapshot-gate-axis.test.js",
@@ -69,6 +75,7 @@
       "test/deny-diagnosability.test.js",
       "test/e164-trunk-zero-reject.test.js",
       "test/gap-35-metrics-country.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/ks-p3-brake-wiring.test.js",
       "test/ks-p3-reserve-decoupled.test.js",
       "test/ks-p4-snapshot-gate-axis.test.js",
@@ -103,6 +110,7 @@
       "test/e164-trunk-zero-reject.test.js",
       "test/gap-35-metrics-country.test.js",
       "test/gq-p1-agent-turn-abort.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/ie2-geld-wache.test.js",
       "test/ks-p2-live-carrier-spend.test.js",
       "test/ks-p3-brake-wiring.test.js",
@@ -134,6 +142,7 @@
       "test/deny-diagnosability.test.js",
       "test/e164-trunk-zero-reject.test.js",
       "test/gap-35-metrics-country.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/iel-b8-weiche.test.js",
       "test/ks-p3-brake-wiring.test.js",
       "test/ks-p3-emergency-brake.test.js",
@@ -177,6 +186,7 @@
       "test/f1-i18n-locale.test.js",
       "test/g1-identity-binding.test.js",
       "test/g2-opening-turn.test.js",
+      "test/gw0-gates-elevenlabs.test.js",
       "test/iep-p6-owner-ton.test.js",
       "test/p11-agent-language-contract.test.js",
       "test/persona-style.test.js",
