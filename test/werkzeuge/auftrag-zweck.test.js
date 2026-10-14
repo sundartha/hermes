@@ -181,3 +181,20 @@ test("ein roter Prüfleiter nennt seinen Zweck auf stderr, stdout behält nur di
   assert.match(lauf.stdout, /src\/basis\.js:1/);
   assert.doesNotMatch(lauf.stdout, /Wozu: /);
 });
+
+const UEBERLEBT_IMMER = 'if (!process.argv.includes("--alter-stand")) process.exitCode = 1;\nconsole.log(process.exitCode ? "Verstoß: Mutant überlebt: src/text.js:2:10 MethodExpression → text" : "grün: keiner überlebt");\n';
+const MIT_MUTATION = {
+  "mutation.mjs": UEBERLEBT_IMMER,
+  "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs","lint"'),
+};
+const STREICHEN = /^Streich.*$/m;
+
+test("die Bau-Nachrunde nennt den Zweck der Mutation und erst Nötig, dann Streichen nur unter der Bedingung gleicher Ergebnisse", (context) => {
+  const { werkzeug } = starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: MIT_MUTATION });
+  const prompt = readFileSync(join(werkzeug, "prompt-bau-nachrunde.txt"), "utf8");
+  assert.ok(prompt.includes(`\nWozu: ${ZWECK.mutation.wozu}\n`), prompt);
+  const streichen = STREICHEN.exec(prompt);
+  assert.ok(streichen?.[0].includes("jede Eingabe, auch Fehlerfall und leerer Wert"), prompt);
+  const noetig = prompt.indexOf("\nNötig: <Mutant>");
+  assert.ok(noetig !== -1 && noetig < streichen.index, prompt);
+});
