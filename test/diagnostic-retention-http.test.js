@@ -4,7 +4,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
-const OWN = "+491737252163";
+const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
 
 const seed = seedState({

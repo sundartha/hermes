@@ -21,13 +21,13 @@ import {
 
 const TENANT = BOOTSTRAP_TENANT_ID;
 const FREMDER_TENANT = "t_fremd";
-const EIGENE_NUMMER = "+491737252163";
+const EIGENE_NUMMER = "+491713920012";
 const FREMDE_NUMMER = "+491729999001";
 const OWNER_NAME = "Jonas Beispiel";
 const OWNER_VORNAME = "Jonas";
 const SPRACHEN = Object.freeze(["de", "en", "fr"]);
 const DE = LOCALES.de;
-const EIGENE_NUMMER_ALS_ZAHL = 491737252163;
+const EIGENE_NUMMER_ALS_ZAHL = 491713920012;
 const KEIN_STRING = 42;
 const HTTP_OK = 200;
 const NOW_TOKEN = "<HEUTE>";
@@ -49,10 +49,10 @@ test("IEP-P6-01: Schalter an, Tenant gepinnt, exakter Treffer -> true (strikt Bo
 
 test("IEP-P6-02: jeder Beinahe-Treffer der Nummer -> false", () => {
   const daneben = [
-    "+491737252164",
-    "00491737252163",
-    "491737252163",
-    "01737252163",
+    "+491713920013",
+    "00491713920012",
+    "491713920012",
+    "01713920012",
     `${EIGENE_NUMMER} `,
     FREMDE_NUMMER,
     "unbekannt",
@@ -69,8 +69,8 @@ test("IEP-P6-03: from/ownNumber fehlend oder kein String -> false", () => {
 });
 
 test("IEP-P6-04: bereits normalisierte Eingabe - Leerzeichen/Bindestriche treffen ueber normNum", () => {
-  assert.strictEqual(granted({ from: normNum("+49 173 725-2163") }), true);
-  assert.strictEqual(granted({ from: "+49 173 725-2163" }), false);
+  assert.strictEqual(granted({ from: normNum("+49 171 392-0012") }), true);
+  assert.strictEqual(granted({ from: "+49 171 392-0012" }), false);
 });
 
 test("IEP-P6-05: Schalter aus/fehlend/als String -> false (kein Truthiness-Vergleich)", () => {
@@ -100,7 +100,7 @@ test("IEP-P6-10: die Erkennung schaltet die Diagnose-Aufbewahrung NICHT frei", (
 });
 
 test("IEP-P6-11: Geldpfad-Gegenprobe - das gespeicherte call.from bleibt ROH", () => {
-  const roh = "+49 173 725-2163";
+  const roh = "+49 171 392-0012";
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, inboundInput({ from: roh }));
   assert.strictEqual(call.from, roh);
@@ -394,8 +394,8 @@ test("IEP-P6-70: Schalter an + Tenant gepinnt - nur die exakte eigene Nummer set
   try {
     const faelle = [
       ["CAowner1", EIGENE_NUMMER, true],
-      ["CAowner2", "+49 173 725-2163", true],
-      ["CAfremd1", "+491737252164", false],
+      ["CAowner2", "+49 171 392-0012", true],
+      ["CAfremd1", "+491713920013", false],
       ["CAfremd2", "anonymous", false],
       ["CAfremd3", "", false],
     ];

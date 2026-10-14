@@ -45,7 +45,7 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
   process.env.METRICS_ENABLED = "false";
   const { makeCallRoutes } = await import("../src/routes/api-calls.js");
 
-  for (const to of ["+12025550123", "+491737252163", "01737252163", "011441234567", "2125550123"]) {
+  for (const to of ["+12025550123", "+491713920012", "01713920012", "011441234567", "2125550123"]) {
     const originateCalls = [];
     const voiceControl = () => ({
       originateCall: async (params) => {

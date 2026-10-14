@@ -6,13 +6,13 @@ import { startServer, placeCall } from "./helpers.js";
 
 test("hasTrunkZeroAfterCountryCode (Praedikat)", async (t) => {
   await t.test("Trunk-0 nach +49/+33/+44 -> true", () => {
-    for (const n of ["+4901737252163", "+3301737252163", "+4401737252163", "+490"]) {
+    for (const n of ["+4901713920012", "+3301713920012", "+4401713920012", "+490"]) {
       assert.equal(hasTrunkZeroAfterCountryCode(n), true, `${n} ist Trunk-0-foermig`);
     }
   });
 
   await t.test("korrekte E.164 ohne Trunk-0 -> false", () => {
-    for (const n of ["+491737252163", "+33123456789", "+447700900123"]) {
+    for (const n of ["+491713920012", "+33123456789", "+447700900123"]) {
       assert.equal(hasTrunkZeroAfterCountryCode(n), false, `${n} ist korrekt`);
     }
   });
@@ -44,11 +44,11 @@ test("OUT-16 (Mechanismus, gruen) - der Pre-Check isTrunkZeroFormatError ist fue
   for (const n of ["+10202555123", "+12025550123", "+19005550123"]) {
     assert.equal(isTrunkZeroFormatError(n), false, `${n} darf den Pre-Check nie ausloesen`);
   }
-  assert.equal(isTrunkZeroFormatError("+4901737252163"), true, "Kontrast: +49 mit Trunk-0 loest aus");
+  assert.equal(isTrunkZeroFormatError("+4901713920012"), true, "Kontrast: +49 mit Trunk-0 loest aus");
 });
 
-const TRUNK_ZERO = ["+4901737252163", "+3301737252163", "+4401737252163"];
-const CLEAN = ["+491737252163", "+33123456789", "+447700900123"];
+const TRUNK_ZERO = ["+4901713920012", "+3301713920012", "+4401713920012"];
+const CLEAN = ["+491713920012", "+33123456789", "+447700900123"];
 
 test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t) => {
   const srv = await startServer({

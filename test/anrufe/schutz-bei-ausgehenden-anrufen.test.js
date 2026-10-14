@@ -151,7 +151,7 @@ test("GW0-ANRUFPAUSE: waehrend der Anrufpause erreicht kein Anruf den ElevenLabs
   });
 });
 
-const EIGENE_NUMMER = "+491737252163";
+const EIGENE_NUMMER = "+491713920012";
 const AUFTRAGGEBER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const eigeneNummerSeed = () =>
   seedState({
