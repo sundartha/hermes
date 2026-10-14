@@ -321,15 +321,18 @@ class Planung {
     return this.schnittAnnahmen ?? this.erkunderAnnahmen();
   }
 
-  prueferNachricht(schluessel) {
-    return nachricht("Prüfung", [
-      abschnitt("Schnittliste", json(this.schnitt)),
+  pruefGrundlage(schluessel) {
+    return [
       abschnitt("Nummern", nummernText(this.soll, [...this.soll.keys()])),
       abschnitt("Erkundungsberichte", json(this.berichte)),
       abschnitt("Annahmen", punkte(this.alleAnnahmen().map(annahmeText))),
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Zeilen deiner Prüfliste", punkte(schluessel)),
-    ]);
+    ];
+  }
+
+  prueferNachricht(schluessel) {
+    return nachricht("Prüfung", [abschnitt("Schnittliste", json(this.schnitt)), ...this.pruefGrundlage(schluessel)]);
   }
 
   prueflisteDer(antwort, schluessel) {
