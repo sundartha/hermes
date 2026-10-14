@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 import { git } from "./git.mjs";
+import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 export const REMOTE = "upstream";
 const NAMENSRAUM = "sperren/";
@@ -60,7 +61,7 @@ export async function erwerben(auftrag, warten) {
   for (;;) {
     const { blockiert, fehlend } = lage(auftrag);
     for (const fremd of blockiert) {
-      console.log(`Phase ${auftrag.phase.phase} wartet auf Phase ${fremd.phase} (Sperre ${fremd.schluessel}).`);
+      console.log([`Phase ${auftrag.phase.phase} wartet auf Phase ${fremd.phase} (Sperre ${fremd.schluessel}).`, ...zweckBlock(MELDUNG.SPERRE)].join("\n"));
     }
     const neu = fehlend.map((k) => ({ schluessel: k, alt: "", neu: commit }));
     const versuch = blockiert.length > 0 || neu.length === 0 ? null : schiebe(auftrag.cwd, neu);

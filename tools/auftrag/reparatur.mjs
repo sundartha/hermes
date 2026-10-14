@@ -16,6 +16,7 @@ import {
   reproduzierbareBlocker,
 } from "./pruefer-schema.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
+import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 const ERWARTUNG = KATEGORIEN[0];
 const GRUEN = KATEGORIEN.at(-1);
@@ -44,6 +45,7 @@ function entwurfText(befund) {
     `Beleg: ${befund.beleg}`,
     `Vorgeschlagene Reparatur: ${befund.reparatur}`,
     `Der Reproduktionstest ${REPRODUKTION} scheitert heute an einer Erwartung und muss danach grün sein.`,
+    ...zweckBlock(MELDUNG.REPARATUR),
   ].join("\n");
 }
 
@@ -133,6 +135,8 @@ function notizAuftrag(phase, auftrag, zeilen) {
     CODEBLOCK,
     ...zeilen,
     CODEBLOCK,
+    "",
+    ...zweckBlock(MELDUNG.REPARATUR),
     "",
     "## Deine Aufgabe",
     "",

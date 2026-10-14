@@ -21,6 +21,7 @@ import {
   phasenBranch,
   sichereDiff,
 } from "./worktrees.mjs";
+import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MAX_NEUSTARTS = 2;
@@ -104,7 +105,7 @@ class Phasenlauf {
     const diff = sichereDiff(eintrag.pfad, eintrag.basis);
     this.schreibe(kennung, { ergebnis: ROT, grund: eintrag.beleg.grund ?? grund, diff });
     entferneAuftrag(this.ort, kennung);
-    console.log(`Auftrag ${kennung}: verworfen, ${grund} Der Diff steht im Beleg.`);
+    console.log([`Auftrag ${kennung}: verworfen, ${grund} Der Diff steht im Beleg.`, ...zweckBlock(MELDUNG.UEBERNAHME)].join("\n"));
   }
 
   protokolliere(kennung, schritte) {
@@ -125,7 +126,8 @@ class Phasenlauf {
   }
 
   pruefe(name, befehl) {
-    return beleg(fuehreAus(name, befehl, { cwd: this.ort.integration, env }));
+    const ergebnis = fuehreAus(name, befehl, { cwd: this.ort.integration, env });
+    return beleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
   }
 
   uebernimmEinen(kennung) {

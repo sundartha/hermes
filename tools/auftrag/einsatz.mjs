@@ -5,6 +5,7 @@ import { pid } from "node:process";
 import { starteAgent } from "./agenten.mjs";
 import { git } from "./git.mjs";
 import { UEBERGABE } from "./verlauf.mjs";
+import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 const MS_JE_MINUTE = 60_000;
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
@@ -74,6 +75,7 @@ function uebergabe(vorgaenger) {
     "## Übergabe",
     "",
     `Ein früherer Agent hat an diesem Auftrag gearbeitet. Das Skript hat ihn beendet. Grund: ${vorgaenger.grund}`,
+    ...(vorgaenger.kontextGrenze ? zweckBlock(MELDUNG.UEBERGABE) : []),
     "Seine Änderungen liegen unverändert im Arbeitsbaum; `git status` und `git diff` zeigen sie. Seine letzte Nachricht:",
     "",
     vorgaenger.antwort,
@@ -129,7 +131,7 @@ export function setzeEin(kontext, prompt, start = {}) {
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
       return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung), ausstieg: ausstieg(sitzung) };
     }
-    vorgaenger = { grund, antwort: sitzung.antwort };
+    vorgaenger = { grund, antwort: sitzung.antwort, kontextGrenze: !sitzung.limit };
   }
 }
 

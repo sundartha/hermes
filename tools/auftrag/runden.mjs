@@ -10,6 +10,7 @@ import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
+import { MELDUNG, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
@@ -19,6 +20,8 @@ const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme"];
 const CODEBLOCK = "```";
 const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
+const AUSWEG_SCHLUSS =
+  "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ liest das Skript nur beim Bau-Agenten.";
 
 function verwerfe(basis, root) {
   git(["reset", "-q", "--hard", basis], { cwd: root });
@@ -29,10 +32,18 @@ function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
 }
 
-function fehlerausgabe({ runde, grund, pruefungen, agenten }) {
+function fehlerausgabe({ runde, grund, pruefungen, agenten, roteIds = [] }) {
+  const gezeigt = new Set();
+  const bloecke = (ids) => {
+    const neu = ids.filter((id) => !gezeigt.has(id));
+    for (const id of neu) gezeigt.add(id);
+    return neu.flatMap(zweckBlock);
+  };
   const rot = pruefungen.filter(({ exitCode }) => exitCode !== 0);
-  const zeilen = rot.flatMap(({ name, zeilen: belegzeilen }) => [`${name}:`, ...belegzeilen]);
-  return [`Runde ${runde}: ${grund}`, ...zeilen, ...hinweiseDesBaus(agenten)].join("\n");
+  const zeilen = rot.flatMap(({ name, zeilen: belegzeilen, zweck }) => [`${name}:`, ...belegzeilen, ...bloecke(zweck ?? zweckIds({ name, zeilen: belegzeilen }))]);
+  const ohneSchritt = bloecke(roteIds);
+  const schluss = [...gezeigt].some(hatAusweg) ? [AUSWEG_SCHLUSS] : [];
+  return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...hinweiseDesBaus(agenten)].join("\n");
 }
 
 function planPrompt(phase, auftrag, satz) {
@@ -48,9 +59,10 @@ function planPrompt(phase, auftrag, satz) {
   ].join("\n");
 }
 
-function notizPrompt(phase, auftrag, { anlass, verlauf }) {
+function notizPrompt(phase, auftrag, { anlass, verlauf, zweck = [] }) {
   return [
     testPrompt(phase, auftrag),
+    ...(zweck.length > 0 ? [abschnitt("Wozu der Stopp da ist", zweck)] : []),
     abschnitt("Verlauf", [CODEBLOCK, ...verlauf, CODEBLOCK]),
     abschnitt("Deine Aufgabe", [
       `${anlass} Schreib eine Entscheidungsnotiz für Menschen, die keinen Code lesen.`,
@@ -155,7 +167,7 @@ class Runden {
     }
     const plan = this.planeUmbau(ergebnis);
     if (plan.befunde.length > 0) {
-      return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`);
+      return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`, zweckBlock(MELDUNG.UMBAU_PLAN));
     }
     return new Runden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
   }
@@ -186,13 +198,13 @@ class Runden {
   gestoppt() {
     const { phase, auftrag } = this.kontext;
     const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
-    return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler };
+    return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler, zweck: zweckBlock(MELDUNG.STOPP) };
   }
 
-  zurueckInDenEntwurf(ergebnis, grund) {
+  zurueckInDenEntwurf(ergebnis, grund, zweck = []) {
     const text = `Zurück in die Entwurfsprüfung: ${grund}`;
-    schreibeBeleg(this.kontext.root, { ...ergebnis, ergebnis: ENTWURFSPRUEFUNG, grund: text });
-    console.log(`Auftrag ${ergebnis.auftrag}: ${ENTWURFSPRUEFUNG} (${text})`);
+    schreibeBeleg(this.kontext.root, { ...ergebnis, ergebnis: ENTWURFSPRUEFUNG, grund: text, ...(zweck.length > 0 ? { zweck } : {}) });
+    console.log([`Auftrag ${ergebnis.auftrag}: ${ENTWURFSPRUEFUNG} (${text})`, ...zweck].join("\n"));
     return ENTWURFSPRUEFUNG;
   }
 
