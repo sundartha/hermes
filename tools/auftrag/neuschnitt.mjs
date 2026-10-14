@@ -73,6 +73,7 @@ function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befun
       `Die neuen Aufträge heißen ${auftrag.id}-n1, ${auftrag.id}-n2 und so weiter.`,
     ]),
     testPrompt(phase, auftrag),
+    ...(gestoppt.zweck ? [abschnitt("Wozu der Stopp da ist", gestoppt.zweck)] : []),
     abschnitt("Verlauf", [CODEBLOCK, ...gestoppt.verlauf, ...(gestoppt.hinweise ?? []), CODEBLOCK]),
     ...vorher,
   ].join("\n");

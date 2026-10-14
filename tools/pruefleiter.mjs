@@ -4,6 +4,8 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
 const MAX_LINT_FINDINGS = 20;
@@ -136,4 +138,9 @@ function main() {
   return affectedStatus === 0 ? toolStatus : affectedStatus;
 }
 
-process.exitCode = main();
+function mitZweck(status) {
+  if (status !== 0) console.error(zweckBlock(MELDUNG.PRUEFLEITER).join("\n"));
+  return status;
+}
+
+process.exitCode = mitZweck(main());

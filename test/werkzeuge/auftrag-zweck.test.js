@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { GRUEN, ROT } from "../../tools/auftrag/bericht.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, grenzBefunde } from "../../tools/auftrag/pruefungen.mjs";
+import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { GRUND, MELDUNG, PRUEFUNG, zweckBlock, zweckIds } from "../../tools/auftrag/zweck.mjs";
-import { REPO_ROOT, probeRepository, runIn } from "./probe-repo.js";
+import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, probeRepository, runIn } from "./probe-repo.js";
 
 const ZWECK = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/zweck.json"), "utf8"));
 const FELDER = ["liste", "wozu", "behebung", "nichtAngenommen", "ausweg"];
@@ -81,4 +84,100 @@ test("jede Verstoßart der Grenzprüfung, auch eine nicht mehr passende Phasenda
   assert.ok(ids.every((liste) => liste.length === 1 && liste[0] !== "grenzen" && zweckBlock(liste[0]).length > 0), JSON.stringify({ meldungen, ids }));
   assert.equal(new Set(ids.flat()).size, meldungen.length, JSON.stringify(ids));
   assert.deepEqual(ids.at(-1), ["grenzen/phasendatei"]);
+});
+
+function ersteRundeRot(context, name) {
+  const root = probeRepository(context, { "a.txt": "a\n" });
+  const vorgeschichten = [];
+  const runde = ({ vorgeschichte }) => {
+    vorgeschichten.push(vorgeschichte);
+    if (vorgeschichten.length > 1) return { ergebnis: GRUEN };
+    return { ergebnis: ROT, runde: 1, grund: `${name} endete mit Exit 1.`, basis: "HEAD", agenten: [], pruefungen: [{ name, exitCode: 1, zeilen: ["Befund"] }] };
+  };
+  const kontext = { phase: { phase: "probe" }, auftrag: { id: "A1" }, root };
+  return () => ({ ergebnis: fuehreRundenAus(kontext, runde), vorgeschichte: vorgeschichten.at(-1) });
+}
+
+test("eine rote Prüfung ohne Eintrag in zweck.json bricht die Fehlerausgabe laut ab, statt den Zweck wegzulassen", (context) => {
+  const bekannt = ersteRundeRot(context, PRUEFUNG.LINT)();
+  assert.equal(bekannt.ergebnis, GRUEN);
+  assert.ok(bekannt.vorgeschichte.includes(`Befund\nWozu: ${ZWECK.lint.wozu}\n`), bekannt.vorgeschichte);
+  assert.throws(ersteRundeRot(context, "neue prüfung"), /Kein Zweck-Text für die Prüfung neue prüfung/);
+});
+
+const LINT_ROT = {
+  "lint.mjs": 'console.log("src/text.js\\n  2:14  error  Name zu kurz  id-length");\nprocess.exitCode = 1;\n',
+  "package.json": BASIS["package.json"].replace('"lint":"node -e 0"', '"lint":"node lint.mjs"'),
+};
+const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
+const AUSWEG_SCHLUSS = "Hältst du eine dieser Prüfungen hier für falsch";
+
+function roterLauf(context, { auftrag, drehbuch, dateien }) {
+  const { werkzeug, lauf } = starte(context, { auftrag, drehbuch, dateien });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  return (name) => readFileSync(join(werkzeug, name), "utf8");
+}
+
+function zweiteRunde(context, lauf) {
+  return roterLauf(context, lauf)("prompt-bau.txt");
+}
+
+test("scheitert Runde 1 an lint, bekommt Runde 2 nach den Belegzeilen Zweck und Ausweg der Prüfung", (context) => {
+  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: LINT_ROT });
+  const teile = ["Fehlerausgabe der vorigen Runde", "\nlint:\n", "Name zu kurz", `\nWozu: ${ZWECK.lint.wozu}\n`, `\nAusweg: ${ZWECK.lint.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
+  const stellen = teile.map((teil) => prompt.indexOf(teil));
+  assert.ok(stellen.every((stelle, index) => stelle > (stellen[index - 1] ?? -1)), prompt);
+  assert.match(prompt, /wörtlich an den Planer oder an Antonio/);
+});
+
+test("nach zwei roten Runden nennt der Prompt des Notiz-Agenten den Zweck des Stopps", (context) => {
+  const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: LINT_ROT })("prompt-notiz.txt");
+  assert.ok(notiz.includes(`\nWozu: ${ZWECK.stopp.wozu}\nEchte Behebung: ${ZWECK.stopp.behebung}\n`), notiz);
+});
+
+test("ändert der Bau-Agent nichts, bekommt Runde 2 den Zweck von keine änderung, obwohl kein Prüfschritt rot ist", (context) => {
+  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: {} } });
+  const stellen = [`\nWozu: ${ZWECK["keine änderung"].wozu}\n`, `\nAusweg: ${ZWECK["keine änderung"].ausweg}\n`, `\n${AUSWEG_SCHLUSS}`].map((teil) => prompt.indexOf(teil));
+  assert.ok(stellen.every((stelle, index) => stelle > (stellen[index - 1] ?? -1)), prompt);
+});
+
+test("ein Bau außerhalb des Bereichs und an einer geschützten Datei bekommt genau die Blöcke dieser beiden Grenzen", (context) => {
+  const auftrag = { ...UMBAU, bereich: "src/text.js", erwarteteDateien: ["src/text.js"] };
+  const bau = { "src/app.js": "export const NEU = 1;\n", "src/geschuetzt.js": "export const WERT = 2;\n" };
+  const prompt = zweiteRunde(context, { auftrag, drehbuch: { bau } });
+  const ids = ["grenzen/bereich", "grenzen/geschützt", "grenzen/zeilen", "grenzen/test-im-bau", "grenzen/produkt-im-test", "grenzen/fremder-test", "grenzen"];
+  const gezeigt = ids.map((id) => prompt.includes(`Wozu: ${ZWECK[id].wozu}`));
+  assert.deepEqual(gezeigt, [true, true, false, false, false, false, false], prompt);
+});
+
+test("macht der Bau die Phasendatei ungültig, bleibt Runde 1 eine belegte rote Runde und Runde 2 bekommt den Block der Phasendatei", (context) => {
+  const bau = { ".github/CODEOWNERS": "/src/geschuetzt.js @probe\n/src/ @probe\n" };
+  const { werkzeug, lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch: { bau } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /Abbruch/);
+  assert.match(beleg.runden[0], /^Runde 1: grenzen bau endete mit Exit 1\./);
+  const prompt = readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8");
+  assert.ok(prompt.includes(`\nWozu: ${ZWECK["grenzen/phasendatei"].wozu}\n`), prompt);
+});
+
+test("fällt der Zeilen-Verstoß aus den gekürzten Belegzeilen, bekommt Runde 2 trotzdem den Block der Zeilengrenze", (context) => {
+  const auftrag = { ...UMBAU, bereich: "src/text.js", erwarteteDateien: ["src/text.js"] };
+  const viele = Array.from({ length: 21 }, (_, nummer) => [`src/fremd-${nummer}.js`, "export const WERT = 1;\n".repeat(nummer === 0 ? ZU_VIELE_ZEILEN : 1)]);
+  const prompt = zweiteRunde(context, { auftrag, drehbuch: { bau: Object.fromEntries(viele) } });
+  assert.doesNotMatch(prompt, /Verstoß: \d+ neue Zeilen Produktcode/);
+  const gezeigt = ["grenzen/zeilen", "grenzen/bereich"].map((id) => prompt.includes(`Wozu: ${ZWECK[id].wozu}`));
+  assert.deepEqual(gezeigt, [true, true], prompt);
+});
+
+test("ein roter Prüfleiter nennt seinen Zweck auf stderr, stdout behält nur die Befunde", (context) => {
+  const repo = probeRepository(context, {
+    "package.json": JSON.stringify({ type: "module", scripts: { lint: `node ${JSON.stringify(ESLINT_BIN)} .` } }),
+    "eslint.config.js": 'export default [{ rules: { "no-debugger": "error" } }];\n',
+    "src/basis.js": "debugger;\n",
+  });
+  const lauf = runIn(repo, process.execPath, [PRUEFLEITER_TOOL, "--basis", "HEAD"]);
+  assert.notEqual(lauf.status, 0);
+  assert.equal(lauf.stderr, `${zweckBlock(MELDUNG.PRUEFLEITER).join("\n")}\n`);
+  assert.match(lauf.stdout, /src\/basis\.js:1/);
+  assert.doesNotMatch(lauf.stdout, /Wozu: /);
 });
