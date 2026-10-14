@@ -12,6 +12,7 @@ const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
 const ZITAT = "> ";
 const MAX_NOTIZ_ZEICHEN = 20_000;
 const LEERRAUM = /\s\S*$/;
+const ERSTE_ZUSATZNUMMER = 2;
 
 export function hinweiseDesBaus(agenten = []) {
   const antwort = (agenten.findLast(({ rolle }) => rolle === "bau")?.antwort ?? "").trim();
@@ -71,11 +72,18 @@ function fruehereRunde(pfad, { runde }) {
   }
 }
 
+function freierRundenPfad(root, { phase, auftrag }, runde) {
+  const name = `${auftrag}.runde-${runde}`;
+  let pfad = belegPfad(root, phase, name);
+  for (let nummer = ERSTE_ZUSATZNUMMER; existsSync(pfad); nummer += 1) pfad = belegPfad(root, phase, `${name}.${nummer}`);
+  return pfad;
+}
+
 export function schreibeBeleg(root, beleg) {
   mkdirSync(belegVerzeichnis(root, beleg.phase), { recursive: true });
   const pfad = belegPfad(root, beleg.phase, beleg.auftrag);
   const runde = fruehereRunde(pfad, beleg);
-  if (runde !== null) renameSync(pfad, belegPfad(root, beleg.phase, `${beleg.auftrag}.runde-${runde}`));
+  if (runde !== null) renameSync(pfad, freierRundenPfad(root, beleg, runde));
   writeFileSync(pfad, `${JSON.stringify(beleg, null, JSON_EINRUECKUNG)}\n`);
   return pfad;
 }

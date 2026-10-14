@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -263,4 +263,18 @@ test("jede rote Runde behält ihren Beleg; der letzte steht weiter unter dem Nam
   assert.equal(letzte.runde, ZWEITE_RUNDE);
   assert.match(letzte.entscheidung.text, /Bereich erweitern/);
   assert.equal(beleg("A1.runde-2"), null);
+});
+
+test("ein neuer Lauf desselben Auftrags überschreibt keinen Beleg eines früheren Laufs", (context) => {
+  const frueher = (runde) => JSON.stringify({ phase: "probe", auftrag: "A1", runde, grund: `früherer Lauf, Runde ${runde}` });
+  const vorher = { ".fortschritt/probe/A1.runde-1.json": frueher(1), ".fortschritt/probe/A1.json": frueher(ZWEITE_RUNDE) };
+  const schleife = [aufruf("Bash", { command: "npm test" }), rueckgabe("Bash", "1 rot")];
+  const { repo, beleg } = lauf(context, { bau: [{ schleife }], notiz: [{ antwort: "1. Bereich erweitern" }] }, vorher);
+  assert.equal(beleg("A1.runde-1").grund, "früherer Lauf, Runde 1");
+  assert.equal(beleg("A1.runde-2").grund, "früherer Lauf, Runde 2");
+  const namen = readdirSync(join(repo, ".fortschritt/probe")).filter((name) => name.startsWith("A1.runde-1."));
+  const neu = namen.map((name) => JSON.parse(readFileSync(join(repo, ".fortschritt/probe", name), "utf8"))).filter(({ grund }) => /^Stillstand: Bash/.test(grund));
+  assert.equal(neu.length, 1, namen.join(", "));
+  assert.equal(beleg("A1").runde, ZWEITE_RUNDE);
+  assert.match(beleg("A1").entscheidung.text, /Bereich erweitern/);
 });
