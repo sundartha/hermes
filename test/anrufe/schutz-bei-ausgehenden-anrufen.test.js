@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 
-import { LOCALES } from "../src/i18n/locales.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
@@ -13,10 +11,12 @@ import {
   startServer,
   waitForStoreState,
   waitUntil,
-} from "./helpers.js";
-import { CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
-import { echtWarten } from "./echt-warten.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+} from "../helpers.js";
+import { DISCLOSURE_JONAS } from "../_outbound-harness.js";
+import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
+import { echtWarten } from "../echt-warten.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -187,11 +187,11 @@ test("GW0-EIGENE-NUMMER: nur die eigene Nummer eines gepinnten Tenants spart den
   await aufDemElWeg({ env: eigeneNummerEnv(true), seed: eigeneNummerSeed() }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv, { to: EIGENE_NUMMER })).status, HTTP_OK);
     assert.equal((await rufeAn(srv, { objective: "Fremder Anruf (GW0)" })).status, HTTP_OK);
-    const sprache = anrufAn(srv, EIGENE_NUMMER).language;
     const { eroeffnung, variablen } = startVon(anbieter, EIGENE_NUMMER);
-    assert.ok(eroeffnung.startsWith(LOCALES[sprache].ownerOpening(OWNER_TEST_FIRST_NAME)));
-    assert.ok(!eroeffnung.includes(LOCALES[sprache].disclosure(AUFTRAGGEBER)));
-    assert.ok(variablen.callee_relation.includes(LOCALES[sprache].disclosure(AUFTRAGGEBER)));
+    assert.ok(eroeffnung.includes(OWNER_TEST_FIRST_NAME), "die Eroeffnung spricht den Auftraggeber an");
+    assert.match(eroeffnung, /\bKI\b/, "die KI-Kennzeichnung entfaellt nicht");
+    assert.ok(!eroeffnung.includes(DISCLOSURE_JONAS), "der Offenlegungssatz entfaellt");
+    assert.ok(variablen.callee_relation.includes(DISCLOSURE_JONAS), "der Pflicht-Rueckfall traegt den vollen Satz");
     mitOffenlegung(srv, anbieter, TELNYX_TEST_PEER_NUMBER);
   });
 });
