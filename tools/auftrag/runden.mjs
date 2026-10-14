@@ -139,6 +139,9 @@ class Runden {
   voraussetzungFehlt(ergebnis) {
     const { zaehler, root } = this.kontext;
     verwerfe(ergebnis.basis, root);
+    if (this.kontext.auftrag.art === "umbau") {
+      return this.zurueckInDenEntwurf(ergebnis, `Umbau meldet fehlende Voraussetzung: ${ergebnis.voraussetzung}`);
+    }
     zaehler.voraussetzungen += 1;
     if (zaehler.voraussetzungen > 1) {
       return this.zurueckInDenEntwurf(ergebnis, `Voraussetzung fehlt zum zweiten Mal: ${ergebnis.voraussetzung}`);

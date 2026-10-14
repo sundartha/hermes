@@ -18,17 +18,24 @@ const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 const VOLLE_ANTWORTEN = new Map();
-const ERGEBNIS_DES_BAUS = [
+const UMBAU = "umbau";
+const VORAUSSETZUNG_FEHLT = [
   "",
   "## Wenn eine Voraussetzung fehlt",
   "",
   "Geht der Auftrag nur, wenn vorher etwas außerhalb seines Bereichs geändert wird, hörst du auf und antwortest als Letztes mit genau einer Zeile:",
   "Voraussetzung fehlt: <ein Satz, was vorher passieren muss>",
   "",
+];
+const ALTFUNKTIONEN_ABGEBEN = [
   "Muss der Auftrag eine Funktion ändern, die noch Einträge in `eslint-suppressions.json` hat, änderst du sie nicht selbst. Du hörst auf und antwortest als Letztes mit genau einer Zeile, die alle betroffenen Funktionen nennt:",
   "Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …",
   "",
-].join("\n");
+];
+const ALTFUNKTIONEN_AUFRAEUMEN = [
+  "Du räumst die Funktionen deines Umbaus auf, auch wenn sie Einträge in `eslint-suppressions.json` haben; die Zahl der Einträge darf für keine Regel und Datei steigen, und die Pin-Prüfung (`scripts/check-staged-suppressions.js`) bleibt unverändert.",
+  "",
+];
 
 function limitSperre({ root, phase }) {
   const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
@@ -80,6 +87,10 @@ function grundDerSitzung({ limit, aktion }, { auftrag, sperre }) {
   return grund;
 }
 
+function ergebnisDesBaus({ art }) {
+  return [...VORAUSSETZUNG_FEHLT, ...(art === UMBAU ? ALTFUNKTIONEN_AUFRAEUMEN : ALTFUNKTIONEN_ABGEBEN)].join("\n");
+}
+
 function voraussetzung({ rolle, antwort = "" }) {
   return rolle === BAU ? (VORAUSSETZUNG.exec(antwort)?.[1] ?? null) : null;
 }
@@ -98,7 +109,7 @@ function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start) {
 }
 
 export function setzeEin(kontext, prompt, start = {}) {
-  const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ERGEBNIS_DES_BAUS}` : prompt;
+  const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ergebnisDesBaus(kontext.auftrag)}` : prompt;
   const sperre = limitSperre(kontext);
   const sitzungen = [];
   let vorgaenger = null;

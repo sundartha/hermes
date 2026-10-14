@@ -65,13 +65,16 @@ const MIT_ALTFUNKTION = {
   }),
 };
 const AUFTRAG = { id: "A1", art: "umbau", ziel: "Räume zahl auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
+const ZAHL_ZWEI = "test/zahl-zwei.test.js";
+const FUNKTION = { ...AUFTRAG, art: "funktion", erwarteteDateien: [ZAHL, ZAHL_ZWEI], abnahme: ZAHL_ZWEI, erwarteterFehler: "1 !== 2", wasDarfNiePassieren: [] };
+const ROTER_TEST = [{ dateien: { [ZAHL_ZWEI]: 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { ZAHL } from "../src/zahl.js";\ntest("zwei", () => assert.equal(ZAHL, 2));\n' } }];
 
 const aufruf = (name, input) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: name, name, input }] } });
 const rueckgabe = (id, content) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content }] } });
 
-function lauf(context, drehbuch, dateien = {}) {
+function lauf(context, { auftrag = AUFTRAG, ...drehbuch }, dateien = {}) {
   const repo = probeRepository(context, { ...REPO, ...dateien });
-  const phase = { phase: "probe", issue: ISSUE, entwurf: { [AUFTRAG.bereich]: "Entwurf." }, auftraege: [AUFTRAG] };
+  const phase = { phase: "probe", issue: ISSUE, entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag] };
   const werkzeug = probeDirectory(context, {
     "claude.mjs": CLAUDE,
     "gh.mjs": GH,
@@ -144,7 +147,7 @@ test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftr
     { dateien: { "src/text.js": "export const TEXT = 1;\n" } },
     { antwort: "Voraussetzung fehlt: Es fehlt noch mehr." },
   ];
-  const { repo, ergebnis, beleg } = lauf(context, { bau, plan });
+  const { repo, ergebnis, beleg } = lauf(context, { bau, plan, test: ROTER_TEST, auftrag: FUNKTION });
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.equal(beleg("A1-plan").grund, "Voraussetzung fehlt: Es braucht zuerst src/text.js.");
   assert.equal(beleg("A1-umbau").ergebnis, "grün");
@@ -164,7 +167,7 @@ function raeumtAltfunktionAuf(context, planAntwort) {
     { dateien: { [ZAHL]: "export const ZAHL = 1;\n" } },
     { dateien: { [ZAHL]: "export const ZAHL = 2;\n" } },
   ];
-  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, plan: [{ antwort: planAntwort }] }, MIT_ALTFUNKTION);
+  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, plan: [{ antwort: planAntwort }], test: ROTER_TEST, auftrag: FUNKTION }, MIT_ALTFUNKTION);
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr + JSON.stringify(beleg("A1-plan")?.befunde));
   const git = (...args) => runIn(repo, "git", args).stdout.trim();
   assert.deepEqual(git("log", "--format=%s").split("\n"), [AUFTRAG.ziel, ALTFUNKTION_UMBAU.ziel, "Basis"]);
@@ -191,7 +194,8 @@ test("ein Umbau-Vorschlag, dessen JSON länger als 1000 Zeichen ist, wird aus de
 
 test("liefert der Plan-Agent kein JSON-Objekt, geht der Auftrag mit genau diesem Grund zurück in die Entwurfsprüfung", (context) => {
   const bau = [{ antwort: ALTFUNKTION_FEHLT }];
-  const { repo, ergebnis, beleg } = lauf(context, { bau, plan: [{ antwort: "Dafür sehe ich keinen sinnvollen Umbau." }] }, MIT_ALTFUNKTION);
+  const drehbuch = { bau, plan: [{ antwort: "Dafür sehe ich keinen sinnvollen Umbau." }], test: ROTER_TEST, auftrag: FUNKTION };
+  const { repo, ergebnis, beleg } = lauf(context, drehbuch, MIT_ALTFUNKTION);
   assert.equal(ergebnis.status, EXIT_ROT);
   const { befunde, umbau } = beleg("A1-plan");
   assert.deepEqual([befunde.length, umbau], [1, undefined]);
@@ -199,6 +203,33 @@ test("liefert der Plan-Agent kein JSON-Objekt, geht der Auftrag mit genau diesem
   const { ergebnis: urteil, grund } = beleg("A1");
   assert.deepEqual([urteil, grund], ["entwurfsprüfung", `Zurück in die Entwurfsprüfung: Kein gültiger Umbau-Auftrag: ${befunde[0]}`]);
   assert.equal(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim(), "Basis");
+});
+
+test("der Bau-Agent eines Umbaus bekommt den Aufräumsatz statt des Absatzes zu Altfunktionen, ein anderer Auftrag den Absatz unverändert", (context) => {
+  const abgeben = [
+    "Muss der Auftrag eine Funktion ändern, die noch Einträge in `eslint-suppressions.json` hat, änderst du sie nicht selbst. Du hörst auf und antwortest als Letztes mit genau einer Zeile, die alle betroffenen Funktionen nennt:",
+    "Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …",
+  ].join("\n");
+  const ausserhalb = "Voraussetzung fehlt: <ein Satz, was vorher passieren muss>";
+  const aufraeumen = /Du räumst die Funktionen deines Umbaus auf, auch wenn sie Einträge in `eslint-suppressions\.json` haben; die Zahl der Einträge darf für keine Regel und Datei steigen, und die Pin-Prüfung \(`scripts\/check-staged-suppressions\.js`\) bleibt unverändert\./;
+  const bau = [{ antwort: "Voraussetzung fehlt: Es braucht zuerst src/text.js." }];
+  const umbau = lauf(context, { bau }).datei("prompt-bau.txt");
+  assert.ok(umbau.includes(ausserhalb), umbau);
+  assert.match(umbau, aufraeumen);
+  assert.ok(!umbau.includes("Altfunktionen aufräumen:"), umbau);
+  const anderer = lauf(context, { bau, test: ROTER_TEST, auftrag: FUNKTION }).datei("prompt-bau.txt");
+  assert.ok(anderer.includes(`${ausserhalb}\n\n${abgeben}\n`), anderer);
+  assert.doesNotMatch(anderer, aufraeumen);
+});
+
+test("meldet ein Umbau „Voraussetzung fehlt“, schiebt das Werkzeug keinen Umbau ein und geht sofort zurück in die Entwurfsprüfung", (context) => {
+  const { repo, ergebnis, beleg, datei } = lauf(context, { bau: [{ dateien: { [ZAHL]: "kaputt\n" }, antwort: ALTFUNKTION_FEHLT }] }, MIT_ALTFUNKTION);
+  assert.equal(ergebnis.status, EXIT_ROT);
+  assert.deepEqual([beleg("A1-plan"), beleg("A1-umbau"), datei("anzahl-plan"), datei("anzahl-bau")], [null, null, "", "1"]);
+  const { ergebnis: urteil, grund } = beleg("A1");
+  assert.deepEqual([urteil, grund], ["entwurfsprüfung", `Zurück in die Entwurfsprüfung: Umbau meldet fehlende Voraussetzung: ${ALTFUNKTION_FEHLT.replace("Voraussetzung fehlt: ", "")}`]);
+  assert.equal(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim(), "Basis");
+  assert.equal(runIn(repo, "git", ["status", "--porcelain"]).stdout, "");
 });
 
 test("ein voller Kontext geht an einen frischen Agenten; nach der Limit-Meldung startet der nächste erst nach dem Zurücksetzen", (context) => {
