@@ -33,6 +33,7 @@ const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.u
 const BERICHT_OPTION = /^--test-reporter/;
 const SANDBOX = /^sandbox-/;
 const KEIN_PROZESS = "ESRCH";
+const NUR_NOCH_ZOMBIES = "EPERM";
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
 
@@ -52,11 +53,15 @@ function eintrag({ fileName, location, mutatorName, replacement, status }) {
   };
 }
 
+function nichtsMehrZuBeenden({ code }) {
+  return code === KEIN_PROZESS || (code === NUR_NOCH_ZOMBIES && process.platform === "darwin");
+}
+
 function beendeGruppe(pid) {
   try {
     process.kill(-pid, "SIGKILL");
   } catch (fehler) {
-    if (fehler.code !== KEIN_PROZESS) throw fehler;
+    if (!nichtsMehrZuBeenden(fehler)) throw fehler;
   }
 }
 

@@ -202,7 +202,11 @@ function pruefsummeDer(artefakte, name) {
 
 async function messeKette(stand, paket) {
   const basis = await messePaket(stand, { art: "basis", paket });
-  if (basis.status !== EXIT_GRUEN) return { basis };
+  assert.equal(
+    basis.status,
+    EXIT_GRUEN,
+    `Basis-Messung für Paket ${paket} nicht grün:\n${basis.ausgabe}`,
+  );
   stand.vorBranch?.(stand.artefakte);
   const zusatz = { BASIS_PRUEFSUMME: pruefsummeDer(stand.artefakte, `basis-${paket}`) };
   return { basis, zweig: await messePaket(stand, { art: "branch", paket, zusatz }) };
