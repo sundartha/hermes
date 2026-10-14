@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
 
@@ -34,13 +34,19 @@ export function kettensumme(kette, wurzel) {
 }
 
 async function kettenstand(wurzel) {
+  if (!existsSync(join(wurzel, KETTENANFANG))) return null;
   const kette = await vorlagenkette(wurzel);
   return { kette, summe: kettensumme(kette, wurzel) };
 }
 
 export async function vorlageEinstellen(datei, wurzel = cwd()) {
   if (!jeWurzel.has(wurzel)) jeWurzel.set(wurzel, kettenstand(wurzel));
-  const { kette, summe } = await jeWurzel.get(wurzel);
+  const stand = await jeWurzel.get(wurzel);
+  if (stand === null) {
+    delete env[VORLAGE_UNABHAENGIG];
+    return `Vorlage: ohne ${KETTENANFANG}, ohne Cache`;
+  }
+  const { kette, summe } = stand;
   if (kette.includes(datei)) {
     delete env[VORLAGE_UNABHAENGIG];
     return `Vorlage: abhängig von ${datei}, ohne Cache`;
