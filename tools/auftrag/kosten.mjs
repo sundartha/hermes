@@ -1,9 +1,13 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { env } from "node:process";
 
 const TRANSKRIPT_ENDUNG = ".jsonl";
 const NICHT_ALPHANUMERISCH = /[^A-Za-z0-9]/g;
+const STANDARD_KONFIGURATION = ".claude";
+const HEIMAT = "~";
+const UNTER_HEIMAT = /^~[/\\]/;
 const ZAEHLER = {
   cacheRead: "cache_read_input_tokens",
   cacheWrite: "cache_creation_input_tokens",
@@ -15,8 +19,17 @@ function leer() {
   return { turns: 0, cacheRead: 0, cacheWrite: 0, input: 0, output: 0, gesamt: 0 };
 }
 
+function konfigurationsVerzeichnis() {
+  const angabe = (env.CLAUDE_CONFIG_DIR ?? "").trim();
+  if (angabe === "") return join(homedir(), STANDARD_KONFIGURATION);
+  if (angabe === HEIMAT) return homedir();
+  if (UNTER_HEIMAT.test(angabe)) return join(homedir(), angabe.slice(HEIMAT.length + 1));
+  return resolve(angabe);
+}
+
 export function transkriptVerzeichnis(root) {
-  return join(homedir(), ".claude", "projects", root.replace(NICHT_ALPHANUMERISCH, "-"));
+  const echt = existsSync(root) ? realpathSync(root) : root;
+  return join(konfigurationsVerzeichnis(), "projects", echt.replace(NICHT_ALPHANUMERISCH, "-"));
 }
 
 export function transkripteDerSitzung(verzeichnis, sitzung) {
