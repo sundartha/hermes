@@ -17,6 +17,7 @@ const LESE_MODELL = "opus";
 const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+const VOLLE_ANTWORTEN = new Map();
 const ERGEBNIS_DES_BAUS = [
   "",
   "## Wenn eine Voraussetzung fehlt",
@@ -87,7 +88,16 @@ function ausstieg({ rolle, antwort = "" }) {
   return MIT_AUSSTIEG.has(rolle) ? (AUSSTIEG.exec(antwort)?.[1] ?? null) : null;
 }
 
-export function setzeEin(kontext, prompt, start) {
+export function volleAntwort({ sitzung, antwort = "" }) {
+  return VOLLE_ANTWORTEN.get(sitzung) ?? antwort;
+}
+
+function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start) {
+  if (typeof voll === "string") VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
+  return start.vollstaendig ? { ...sitzung, volleAntwort: voll, groessterKontext } : sitzung;
+}
+
+export function setzeEin(kontext, prompt, start = {}) {
   const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ERGEBNIS_DES_BAUS}` : prompt;
   const sperre = limitSperre(kontext);
   const sitzungen = [];
@@ -95,7 +105,7 @@ export function setzeEin(kontext, prompt, start) {
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
-    const sitzung = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
+    const sitzung = gemerkt(starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true }), start);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {

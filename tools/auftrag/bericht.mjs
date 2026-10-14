@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const BELEGE = ".fortschritt";
@@ -10,11 +10,34 @@ const MIO = 1_000_000;
 const NACHKOMMA = 1;
 const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
 const ZITAT = "> ";
+const MAX_NOTIZ_ZEICHEN = 20_000;
+const LEERRAUM = /\s\S*$/;
 
 export function hinweiseDesBaus(agenten = []) {
   const antwort = (agenten.findLast(({ rolle }) => rolle === "bau")?.antwort ?? "").trim();
   if (antwort === "") return [];
   return [HINWEISE_DES_BAUS, ...antwort.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+}
+
+function gekuerzt(text) {
+  if (text.length <= MAX_NOTIZ_ZEICHEN) return { text, gekuerzt: false };
+  const vorne = text.slice(0, MAX_NOTIZ_ZEICHEN + 1);
+  const ende = LEERRAUM.exec(vorne)?.index ?? MAX_NOTIZ_ZEICHEN;
+  return { text: vorne.slice(0, ende).trimEnd(), gekuerzt: true };
+}
+
+export function notizAuszug(antwort, sitzung) {
+  const kurz = gekuerzt(antwort.trim());
+  if (kurz.text === "") return "";
+  const ort = `die volle Antwort steht in Sitzung ${sitzung}`;
+  return kurz.gekuerzt ? `${kurz.text} … [gekürzt; ${ort}]` : `${kurz.text}\n\n(Volle Antwort: Sitzung ${sitzung})`;
+}
+
+export function hinweiseFuerNotiz(agenten, volleAntwort) {
+  const bau = agenten.findLast(({ rolle }) => rolle === "bau");
+  const auszug = bau ? notizAuszug(volleAntwort(bau), bau.sitzung) : "";
+  if (auszug === "") return [];
+  return [HINWEISE_DES_BAUS, ...auszug.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
 }
 
 export function belegVerzeichnis(root, phase) {
@@ -38,9 +61,21 @@ export function fingerabdruck(root) {
   return hash.digest("hex");
 }
 
+function fruehereRunde(pfad, { runde }) {
+  if (runde === undefined || !existsSync(pfad)) return null;
+  try {
+    const vorher = JSON.parse(readFileSync(pfad, "utf8")).runde;
+    return Number.isInteger(vorher) && vorher !== runde ? vorher : null;
+  } catch {
+    return null;
+  }
+}
+
 export function schreibeBeleg(root, beleg) {
   mkdirSync(belegVerzeichnis(root, beleg.phase), { recursive: true });
   const pfad = belegPfad(root, beleg.phase, beleg.auftrag);
+  const runde = fruehereRunde(pfad, beleg);
+  if (runde !== null) renameSync(pfad, belegPfad(root, beleg.phase, `${beleg.auftrag}.runde-${runde}`));
   writeFileSync(pfad, `${JSON.stringify(beleg, null, JSON_EINRUECKUNG)}\n`);
   return pfad;
 }

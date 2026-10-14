@@ -215,3 +215,52 @@ test("ein voller Kontext geht an einen frischen Agenten; nach der Limit-Meldung 
   assert.ok(starts.at(-1) >= freigabe, `${starts.at(-1)} < ${freigabe}`);
   assert.equal(weiter.exitCode, 0);
 });
+
+const LANGE_NOTIZ = [
+  "1. Den fehlenden Test zuerst schreiben lassen.",
+  ...Array.from({ length: 40 }, (_, nummer) => `Begründung ${nummer + 1}: Die Lücke betrifft ein geschütztes Kosten-Gate und muss belegt werden.`),
+  "2. Den Teil herausnehmen.",
+  "Empfehlung: Option 1.",
+].join("\n");
+const LANGE_BAU_ANTWORT = ["Erst habe ich fremd.js gelesen.", ...Array.from({ length: 30 }, (_, nummer) => `Schritt ${nummer + 1}: geprüft, fremd.js wird gebraucht.`), "Ohne fremd.js geht es nicht."].join("\n");
+
+test("eine lange Notiz und lange Hinweise stehen vollständig in der Entscheidung, mit der Sitzung der vollen Antwort", (context) => {
+  assert.ok(LANGE_NOTIZ.length > 1000 && LANGE_BAU_ANTWORT.length > 1000);
+  const fremd = { "fremd.js": "x\n" };
+  const bau = [{ dateien: fremd, antwort: "Ich brauche fremd.js." }, { dateien: fremd, antwort: LANGE_BAU_ANTWORT }];
+  const { beleg, datei } = lauf(context, { bau, notiz: [{ antwort: LANGE_NOTIZ }] });
+  const { entscheidung, agenten } = beleg("A1");
+  assert.ok(entscheidung.text.includes(`\n${LANGE_NOTIZ}\n`), entscheidung.text);
+  const zitiert = LANGE_BAU_ANTWORT.split("\n").map((zeile) => `> ${zeile}`).join("\n");
+  assert.ok(entscheidung.text.includes(`Hinweise des Bau-Agenten:\n${zitiert}\n`), entscheidung.text);
+  for (const { sitzung } of [entscheidung.agenten.at(-1), agenten.findLast(({ rolle }) => rolle === "bau")]) {
+    assert.ok(entscheidung.text.includes(sitzung), `${sitzung} fehlt in der Notiz`);
+  }
+  assert.ok(datei("gh.log").includes("1. Den fehlenden Test zuerst schreiben lassen."));
+});
+
+test("eine Notiz über der Grenze ist am Ende an einer Wortgrenze gekürzt und als gekürzt gekennzeichnet", (context) => {
+  const riesig = `1. Anfang der Notiz.\n${"Wort ".repeat(30_000)}Schluss.`;
+  const schleife = [aufruf("Bash", { command: "npm test" }), rueckgabe("Bash", "1 rot")];
+  const { beleg } = lauf(context, { bau: [{ schleife }], notiz: [{ antwort: riesig }] });
+  const { entscheidung } = beleg("A1");
+  const sitzung = entscheidung.agenten.at(-1).sitzung;
+  const absatz = entscheidung.text.slice(entscheidung.text.indexOf("1. Anfang der Notiz."));
+  assert.match(absatz, new RegExp(`^1\\. Anfang der Notiz\\.\\n(Wort )+… \\[gekürzt; die volle Antwort steht in Sitzung ${sitzung}\\]`));
+  assert.ok(!entscheidung.text.includes("Schluss."));
+  assert.ok(entscheidung.text.length < 65_536, String(entscheidung.text.length));
+});
+
+test("jede rote Runde behält ihren Beleg; der letzte steht weiter unter dem Namen des Auftrags", (context) => {
+  const schleife = [aufruf("Bash", { command: "npm test" }), rueckgabe("Bash", "1 rot")];
+  const { beleg } = lauf(context, { bau: [{ schleife }], notiz: [{ antwort: "1. Bereich erweitern" }] });
+  const erste = beleg("A1.runde-1");
+  assert.ok(erste, "A1.runde-1.json fehlt");
+  assert.equal(erste.runde, 1);
+  assert.match(erste.grund, /^Stillstand: Bash/);
+  assert.equal(erste.entscheidung, null);
+  const letzte = beleg("A1");
+  assert.equal(letzte.runde, ZWEITE_RUNDE);
+  assert.match(letzte.entscheidung.text, /Bereich erweitern/);
+  assert.equal(beleg("A1.runde-2"), null);
+});

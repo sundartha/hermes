@@ -55,6 +55,10 @@ export function beleg({ name, befehl, exitCode, ausgabe }) {
   return { name, befehl, exitCode, zeilen: entscheidendeZeilen(ausgabe) };
 }
 
+export function vollerBeleg(ergebnis) {
+  return { ...beleg(ergebnis), zeilen: nichtLeer(ergebnis.ausgabe).slice(0, MAX_BELEGZEILEN) };
+}
+
 export function gekuerzteTestausgabe(ausgabe) {
   return nichtLeer(ausgabe).slice(0, MAX_TESTAUSGABE_ZEILEN).join("\n");
 }

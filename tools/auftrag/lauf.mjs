@@ -8,17 +8,19 @@ import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from ".
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, auftragsTrailer, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, auftragsTrailer, festhalten, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
-import { beleg, fuehreAus } from "./pruefungen.mjs";
+import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
+const NUL = "\0";
 
 class AuftragsLauf {
   constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
@@ -47,14 +49,14 @@ class AuftragsLauf {
     return false;
   }
 
-  pruefung(name, befehl) {
+  pruefung(name, befehl, belegen = beleg) {
     const ergebnis = fuehreAus(name, befehl, { cwd: this.kontext.root, env });
-    this.pruefungen.push(beleg(ergebnis));
+    this.pruefungen.push(belegen(ergebnis));
     return ergebnis;
   }
 
-  gruen(name, befehl) {
-    const { exitCode } = this.pruefung(name, befehl);
+  gruen(name, befehl, belegen) {
+    const { exitCode } = this.pruefung(name, befehl, belegen);
     return exitCode === 0 || this.scheitert(`${name} endete mit Exit ${exitCode}.`);
   }
 
@@ -141,6 +143,13 @@ class AuftragsLauf {
     return true;
   }
 
+  pinPruefung() {
+    const { root } = this.kontext;
+    if (!existsSync(join(root, PIN_PRUEFUNG))) return true;
+    const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs"], { cwd: root });
+    return this.gruen("pin-prüfung", [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
+  }
+
   unterdrueckungenKuerzen() {
     const { auftrag, root } = this.kontext;
     if (auftrag.art !== "umbau" || !existsSync(join(root, UNTERDRUECKUNGEN))) return true;
@@ -191,6 +200,7 @@ class AuftragsLauf {
       () => this.allesVormerken(),
       () => this.typpruefung(),
       () => this.gruen("lint", ["npm", "--silent", "run", "lint"]),
+      () => this.pinPruefung(),
       () => this.gruen("abnahme", abnahmeBefehl(auftrag)),
       () => this.gruen("betroffene tests", ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];

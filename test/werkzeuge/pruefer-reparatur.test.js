@@ -155,3 +155,15 @@ test("eine Reparatur ohne Wirkung endet mit einer Entscheidungsnotiz im PR statt
     1,
   );
 });
+
+test("eine lange Notiz der Reparatur steht vollständig im PR, mit der Sitzung der vollen Antwort", async (context) => {
+  const notiz = ["1. Den Befund prüfen lassen.", ...Array.from({ length: 40 }, (_, nummer) => `Beobachtung ${nummer + 1}: die Reproduktion bleibt rot, weil der Befund woanders liegt.`)].join("\n");
+  assert.ok(notiz.length > 1000);
+  const { lauf, lies } = reparaturLauf(context, { notiz: { antwort: notiz } });
+  assert.equal((await lauf).status, EXIT_ROT);
+  const [ersterAufruf] = lies("gh.log").split("\n");
+  const kommentar = JSON.parse(ersterAufruf).at(-1);
+  assert.ok(kommentar.includes(`\n${notiz}\n`), kommentar);
+  const sitzung = /^notiz .*--session-id (\S+)/m.exec(lies("starts.log"))[1];
+  assert.ok(kommentar.includes(sitzung), kommentar);
+});
