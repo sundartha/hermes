@@ -5,7 +5,7 @@ import { testPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, git } from "./git.mjs";
 import { beleg } from "./pruefungen.mjs";
-import { GRUND, PRUEFUNG } from "./zweck.mjs";
+import { GRUND, PRUEFUNG, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
@@ -51,22 +51,24 @@ function bauNachrunde(ueberlebende) {
   return [
     "## Überlebende Mutanten",
     "",
+    ...zweckBlock(PRUEFUNG.MUTATION),
+    "",
     "Diese Mutanten in deinen neuen Zeilen überleben, kein Test verlangt die Zeilen:",
     "",
     liste(ueberlebende),
     "",
-    "Streiche oder vereinfache den Code, den kein Test verlangt. Tests änderst du nicht.",
-    "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt Streichen mit einer Zeile je Mutant:",
-    "Gleichwertig: <Mutant>, weil <ein Satz>",
     "Ist die Zeile nötig und fehlt nur ein Test, der sie verlangt, änderst du sie nicht und antwortest mit einer Zeile je Mutant:",
     "Nötig: <Mutant>, weil <ein Satz>",
+    "Streichen oder vereinfachen darfst du eine Zeile nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher. Tests änderst du nicht.",
+    "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt Streichen mit einer Zeile je Mutant:",
+    "Gleichwertig: <Mutant>, weil <ein Satz>",
     "",
   ].join("\n");
 }
 
-function testNachrunde({ phase, auftrag, root }, ueberlebende, { stand, melden, noetig = [] }) {
+function testNachrunde({ phase, auftrag, root }, ueberlebende, { stand, melden, noetig = [], zweck }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
-  const zeilen = [testPrompt(phase, auftrag, root), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""];
+  const zeilen = [testPrompt(phase, auftrag, root), "## Überlebende Mutanten", "", ...zweckBlock(zweck), "", aufgabe, "", liste(ueberlebende), ""];
   const begruendet = noetig.length > 0 ? ["Der Bau-Agent hält diese Zeilen für nötig:", liste(noetig.map(({ mutant, grund }) => `${mutant}, weil ${grund}`)), ""] : [];
   return [...zeilen, ...begruendet, ...(melden ? MELDEN : [])].join("\n");
 }
@@ -89,7 +91,7 @@ function testErgaenzt(lauf, ueberlebende, vorgabe) {
 function testNachgeholt(lauf, ueberlebende, noetig) {
   return (
     lauf.zwischenstand() &&
-    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false, noetig }) &&
+    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false, noetig, zweck: PRUEFUNG.MUTATION }) &&
     lauf.allesVormerken() &&
     lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag))
   );
@@ -163,6 +165,8 @@ function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
     "Die letzte Runde mit dem Test-Agenten hat die Zahl der überlebenden Mutanten auf dem alten Stand nicht gesenkt.",
     `Der Umbau ist nicht committet; er liegt als Patch in ${patch.datei}. Die Tests der bisherigen Runden stehen im Branch.`,
     "",
+    ...zweckBlock(PRUEFUNG.MUTATION_ALTER_STAND),
+    "",
     "Überlebende Mutanten:",
     liste(ueberlebende),
     ...(meldezeilen.length > 0 ? ["", "Gleichwertig laut Test-Agent, braucht eine Freigabe:", ...meldezeilen] : []),
@@ -172,7 +176,7 @@ function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
 }
 
 function testRunde(lauf, ueberlebende, gemeldet) {
-  if (!testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true })) return false;
+  if (!testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND })) return false;
   for (const { mutant, grund } of meldungen(lauf.agenten.at(-1).antwort)) {
     if (ueberlebende.includes(mutant)) gemeldet.set(mutant, grund);
   }
