@@ -356,10 +356,99 @@ test("plane: eine unvollständige Prüfliste geht genau einmal an den Prüfer zu
 
 test("plane: ein Prüferbefund ohne Antwort des Planers endet mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
   const befund = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a3": "a3 braucht den Status aus a2" } };
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [befund], "planer|## Befunde": [alsJson({ schnitt: schnittliste(), antworten: [] })] });
+  const ohneAntwort = alsJson({ schnitt: schnittliste(), antworten: [] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [befund], "planer|## Befunde": [ohneAntwort, ohneAntwort] });
   exit(lauf, EXIT_BEFUNDE);
   assert.equal(existsSync(phaseDatei(lauf)), false);
   assert.ok(planungsBericht(lauf).befunde.offen.includes("allein-gruen:a3: Befund des Prüfers ohne Antwort des Planers"));
+});
+
+const A2_BEFUND = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1" } };
+const A2_KORRIGIERT = { ziel: "Ziel a2 mit dem Code aus a1" };
+const A2_ANTWORT = [{ schluessel: "allein-gruen:a2", antwort: "korrigiert: a2 liest den Code aus a1" }];
+
+const ZUSATZ_TESTS = { a14: "rueckruf", a15: "ansage", a16: "sperre", a17: "notiz", a18: "zeitfenster", a19: "sprache", a20: "warteschlange", a21: "weiterleitung", a22: "mailbox", a23: "rueckfrage" };
+
+function zusatz(id, prueft) {
+  return auftrag(id, HINWEIS, { prueft, abnahme: `test/anrufe/hinweis-${ZUSATZ_TESTS[id]}.test.js`, abhaengigVon: [] });
+}
+
+function korrektur({ a2 = {}, a3 = {}, dazu = [] } = {}) {
+  const schnitt = schnittliste();
+  const geaendert = { a2, a3 };
+  return { ...schnitt, auftraege: [...schnitt.auftraege.map((eintrag) => ({ ...eintrag, ...geaendert[eintrag.id] })), ...dazu] };
+}
+
+function antwortMit(schnitt, antworten = A2_ANTWORT) {
+  return alsJson({ schnitt, antworten });
+}
+
+const OHNE_NUMMER = korrektur({ a2: A2_KORRIGIERT, dazu: [zusatz("a14", [])] });
+const MIT_NUMMER = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"])] });
+
+test("plane: ein Skriptbefund nach der Korrektur geht an den Planer zurück und die Planung endet grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(MIT_NUMMER)] });
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(existsSync(phaseDatei(lauf)), true);
+  const [, ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
+  assert.ok(ruecksendung.eingabe.includes("a14"), ruecksendung.eingabe);
+  const { korrigiert } = planungsBericht(lauf).befunde;
+  assert.equal(korrigiert.filter(({ schluessel }) => schluessel === "allein-gruen:a2").length, 1);
+});
+
+test("plane: ein Skriptbefund, der nach der Korrektur wiederkehrt, endet mit Exit 4 und planung/schnitt.json", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(OHNE_NUMMER)] });
+  exit(lauf, EXIT_BEFUNDE);
+  assert.match(planungsBericht(lauf).grund, /wiederkehrend/u);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung", "schnitt.json")), true);
+  assert.equal(existsSync(phaseDatei(lauf)), false);
+});
+
+test("plane: endet die Korrektur mit Exit 4, stehen die Befunde des Prüfers mit der letzten Antwort des Planers je einmal unter offen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const zurueck = `trifft nicht zu, weil a3 den Status selbst setzt (${ROUTE}:5)`;
+  const drei = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1", "nie-saetze:a3": "a3 nennt keinen Nie-Satz", "gegenfrage:alle": "S5 fehlt im Plan" } };
+  const antworten = [...A2_ANTWORT, { schluessel: "nie-saetze:a3", antwort: zurueck }];
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [drei], "planer|## Befunde": [antwortMit(OHNE_NUMMER, antworten), antwortMit(OHNE_NUMMER, antworten)] });
+  exit(lauf, EXIT_BEFUNDE);
+  const { offen, korrigiert, zurueckgewiesen } = planungsBericht(lauf).befunde;
+  const erwartet = [
+    `allein-gruen:a2: a2 braucht den Code aus a1 (Fundstelle: ${FUNDSTELLE}) | korrigiert: a2 liest den Code aus a1`,
+    `nie-saetze:a3: a3 nennt keinen Nie-Satz (Fundstelle: ${FUNDSTELLE}) | ${zurueck}`,
+    `gegenfrage:alle: S5 fehlt im Plan (Fundstelle: ${FUNDSTELLE})`,
+  ];
+  for (const zeile of erwartet) assert.equal(offen.filter((eintrag) => eintrag === zeile).length, 1, `${zeile} nicht genau einmal in\n${offen.join("\n")}`);
+  assert.ok(offen.includes("gegenfrage:alle: Befund des Prüfers ohne Antwort des Planers"), offen.join("\n"));
+  assert.deepEqual([korrigiert, zurueckgewiesen], [[], []]);
+});
+
+test("plane: eine Korrektur ohne weniger Befunde endet mit Exit 4",{ timeout: LAUF_FRIST_MS }, (context) => {
+  const anderer = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", [])] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(anderer)] });
+  exit(lauf, EXIT_BEFUNDE);
+  assert.match(planungsBericht(lauf).grund, /sank nicht/u);
+});
+
+test("plane: nach drei Rücksendungen endet die Schleife mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
+  const ohneNummern = (...kennungen) => alsJson({ schnitt: korrektur({ dazu: kennungen.map((id) => zusatz(id, [])) }) });
+  const lauf = plane(context, {
+    "planer|## Zuschnitt": [ohneNummern("a14", "a15", "a16", "a17")],
+    "planer|## Befunde": [ohneNummern("a18", "a19", "a20"), ohneNummern("a21", "a22"), ohneNummern("a23")],
+  });
+  exit(lauf, EXIT_BEFUNDE);
+  assert.match(planungsBericht(lauf).grund, /nach 3 Rücksendungen$/u);
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 3);
+});
+
+test("plane: Antwortbefund und Skriptbefund derselben Korrektur gehen zusammen zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  const zweiOhne = korrektur({ dazu: [zusatz("a14", []), zusatz("a15", [])] });
+  const doppelt = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", ["B1"])] });
+  const sauber = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", ["B1"])] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(zweiOhne, []), antwortMit(doppelt), antwortMit(sauber)] });
+  exit(lauf, EXIT_GRUEN);
+  const [, erste, zweite] = aufrufe(lauf, "planer", "## Befunde");
+  for (const teil of ["allein-gruen:a2: Befund des Prüfers ohne Antwort des Planers", "a14: funktion ohne Nummer", "a15: funktion ohne Nummer"]) assert.ok(erste.eingabe.includes(teil), `${teil} fehlt in\n${erste.eingabe}`);
+  assert.ok(zweite.eingabe.includes("B1 steht mehrfach"), zweite.eingabe);
+  assert.equal(zweite.eingabe.includes("ohne Antwort des Planers"), false);
 });
 
 test("plane: ein Entwurf ohne gemeinsamen Namen geht einmal an seinen Schreiber zurück", { timeout: LAUF_FRIST_MS }, (context) => {

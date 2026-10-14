@@ -17,6 +17,7 @@ import {
   zerlegungBefunde,
 } from "./antworten.mjs";
 import { erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
+import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
@@ -79,6 +80,15 @@ function schreibeJson(datei, wert) {
   renameSync(zwischen, datei);
 }
 
+function prueferZeile({ schluessel, befund, fundstelle }) {
+  return `${schluessel}: ${befund} (Fundstelle: ${fundstelle})`;
+}
+
+function offenerPrueferBefund(befund, antworten) {
+  const antwort = antworten.find((eintrag) => eintrag?.schluessel === befund.schluessel)?.antwort;
+  return istText(antwort) ? `${prueferZeile(befund)} | ${antwort}` : prueferZeile(befund);
+}
+
 function nummernText(soll, nummern) {
   return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
 }
@@ -127,17 +137,17 @@ class Planung {
     return { befunde };
   }
 
-  async planerStufe(text, verarbeite) {
+  async planerStufe(text, verarbeite, art) {
+    const schleife = new Fortschritt(art);
     let naechste = text;
-    let zurueckgegeben = false;
     for (;;) {
       const antwort = await this.einzeln(this.planer, naechste);
       const ergebnis = antwort.art === "json" ? await verarbeite(antwort.wert) : this.ausstieg(antwort);
       if (ergebnis.weiter !== undefined) naechste = ergebnis.weiter;
       else if (liste(ergebnis.befunde).length === 0) return ergebnis.wert;
-      else if (zurueckgegeben) throw new Ende(EXIT_BEFUNDE, "Befunde des Planers blieben nach der Rücksendung offen", ergebnis.befunde);
       else {
-        zurueckgegeben = true;
+        const ende = schleife.endeNachRunde(ergebnis.befunde, ergebnis.schnitt, this.soll);
+        if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, ergebnis.befunde);
         naechste = this.team.ruecksenden(this.planer, ergebnis.befunde);
       }
     }
@@ -157,7 +167,7 @@ class Planung {
     this.gliederung = await this.planerStufe(this.gliederungsNachricht(), (wert) => {
       const befunde = gliederungBefunde(wert, this.soll, this.designText);
       return befunde.length > 0 ? { befunde } : { wert };
-    });
+    }, "gliederung");
     this.lege("gliederung.json", this.gliederung);
   }
 
@@ -297,14 +307,14 @@ class Planung {
     this.schnitt = schnitt;
     const ergebnis = await schnittImOrdner(this.ordner, { schnitt, berichte: this.berichte, root: this.root });
     this.schnittAnnahmen = ergebnis.annahmen;
-    return ergebnis.befunde.length > 0 ? { befunde: ergebnis.befunde } : { wert: schnitt };
+    return ergebnis.befunde.length > 0 ? { befunde: ergebnis.befunde, schnitt } : { wert: schnitt };
   }
 
   async schneide() {
     await this.planerStufe(await this.zuschnittNachricht(), (wert) => {
       if (Array.isArray(wert.nachfragen)) return this.nachfragen(wert.nachfragen);
       return this.pruefeSchnitt(wert.schnitt);
-    });
+    }, "zuschnitt");
   }
 
   alleAnnahmen() {
@@ -351,21 +361,34 @@ class Planung {
     }
   }
 
-  async beantworte(befunde, wert) {
+  async beantworte(befunde, wert, vorher) {
     if (!istObjekt(wert.schnitt)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
-    const offen = antwortenBefunde(befunde, wert.antworten, { alt: this.schnitt, neu: wert.schnitt });
-    if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde des Prüfers ohne gültige Antwort des Planers", offen);
+    const offen = antwortenBefunde(befunde, wert.antworten, { alt: vorher, neu: wert.schnitt });
+    const skript = liste((await this.pruefeSchnitt(wert.schnitt)).befunde);
+    if (offen.length > 0 || skript.length > 0) return { befunde: [...offen, ...skript], schnitt: wert.schnitt };
     this.verbucheAntworten(befunde, wert.antworten);
-    const ergebnis = await this.pruefeSchnitt(wert.schnitt);
-    if (liste(ergebnis.befunde).length > 0) throw new Ende(EXIT_BEFUNDE, "die korrigierte Schnittliste hat Befunde", ergebnis.befunde);
-    return ergebnis;
+    return { wert: wert.schnitt };
+  }
+
+  async korrigiere(befunde, vorher) {
+    let letzte = [];
+    const verarbeite = (wert) => {
+      letzte = liste(wert.antworten);
+      return this.beantworte(befunde, wert, vorher);
+    };
+    try {
+      return await this.planerStufe(this.team.ruecksenden(this.planer, befunde.map(prueferZeile)), verarbeite, "korrektur");
+    } catch (fehler) {
+      if (fehler instanceof Ende) fehler.befunde.push(...befunde.map((befund) => offenerPrueferBefund(befund, letzte)));
+      throw fehler;
+    }
   }
 
   async pruefe() {
     const befunde = await this.pruefliste();
     if (befunde.length === 0) return;
-    const text = this.team.ruecksenden(this.planer, befunde.map(({ schluessel, befund, fundstelle }) => `${schluessel}: ${befund} (Fundstelle: ${fundstelle})`));
-    await this.planerStufe(text, (wert) => this.beantworte(befunde, wert));
+    const vorher = this.schnitt;
+    await this.korrigiere(befunde, vorher);
   }
 
   entwurfNachricht(bereich, namen) {
