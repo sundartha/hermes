@@ -189,6 +189,7 @@ function antworten(ueberschrieben = {}) {
     "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern)],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })],
     "pruefer-planung|## Prüfung": [GRUEN_PRUEFLISTE],
+    "pruefer-planung|## Nachprüfung": [GRUEN_PRUEFLISTE],
     [`entwurf|## Entwurf|${ROUTE}`]: [ENTWURF_ROUTE],
     [`entwurf|## Entwurf|${HINWEIS}`]: [ENTWURF_HINWEIS],
     ...ueberschrieben,
@@ -449,6 +450,69 @@ test("plane: Antwortbefund und Skriptbefund derselben Korrektur gehen zusammen z
   for (const teil of ["allein-gruen:a2: Befund des Prüfers ohne Antwort des Planers", "a14: funktion ohne Nummer", "a15: funktion ohne Nummer"]) assert.ok(erste.eingabe.includes(teil), `${teil} fehlt in\n${erste.eingabe}`);
   assert.ok(zweite.eingabe.includes("B1 steht mehrfach"), zweite.eingabe);
   assert.equal(zweite.eingabe.includes("ohne Antwort des Planers"), false);
+});
+
+function prueflisteZeilen({ eingabe }) {
+  const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
+  return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
+}
+
+function zeilenDes(id) {
+  return ["nie-saetze", "allein-gruen", "nicht-zusammengelegt"].map((regel) => `${regel}:${id}`);
+}
+
+test("plane: nach der Korrektur prüft ein frischer Prüfer genau die Nachprüf-Schlüssel", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(MIT_NUMMER)] });
+  exit(lauf, EXIT_GRUEN);
+  const [pruefung] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  const [nachpruefung, ...weitere] = aufrufe(lauf, "pruefer-planung", "## Nachprüfung");
+  assert.equal(weitere.length, 0);
+  assert.equal(nachpruefung.resume, false);
+  assert.notEqual(nachpruefung.sitzung, pruefung.sitzung);
+  assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "weg:S2", "weg:S3", "weg:S6", "weg:S4", "weg:S5", "weg:B1", "weg:T1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
+  assert.ok(nachpruefung.eingabe.includes("allein-gruen:a2: a2 braucht den Code aus a1 | korrigiert: a2 liest den Code aus a1"));
+  assert.equal(planungsBericht(lauf).nachpruefungen[0].sitzung, nachpruefung.sitzung);
+});
+
+test("plane: ein zurückgewiesener Befund, den die Nachprüfung bestätigt, endet mit Exit 4 und beiden Texten im Bericht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const antwort = `trifft nicht zu, weil a2 den Code selbst erzeugt (${ROUTE}:5)`;
+  const bestaetigt = "a2 liest den Code aus a1, den a2 nicht erzeugt";
+  const lauf = plane(context, {
+    "pruefer-planung|## Prüfung": [A2_BEFUND],
+    "planer|## Befunde": [antwortMit(schnittliste(), [{ schluessel: "allein-gruen:a2", antwort }])],
+    "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": bestaetigt } }],
+  });
+  exit(lauf, EXIT_BEFUNDE);
+  const { grund, befunde } = planungsBericht(lauf);
+  assert.match(grund, /wiederkehrend/u);
+  assert.deepEqual(befunde.zurueckgewiesen, [{ schluessel: "allein-gruen:a2", befund: "a2 braucht den Code aus a1", antwort }]);
+  assert.deepEqual(befunde.offen, [`allein-gruen:a2: ${bestaetigt} (Fundstelle: ${FUNDSTELLE})`]);
+  assert.equal(existsSync(phaseDatei(lauf)), false);
+});
+
+test("plane: ein neuer Befund der Nachprüfung geht an den Planer zurück und endet nach der zweiten Nachprüfung grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const zwei = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1", "nie-saetze:a3": "a3 nennt keinen Nie-Satz" } };
+  const ersteAntworten = [...A2_ANTWORT, { schluessel: "nie-saetze:a3", antwort: "korrigiert: a3 gibt S5 an a14 ab" }];
+  const a14Korrigiert = { ...MIT_NUMMER, auftraege: MIT_NUMMER.auftraege.map((eintrag) => (eintrag.id === "a14" ? { ...eintrag, ziel: "Ziel a14 ohne Anruf" } : eintrag)) };
+  const lauf = plane(context, {
+    "pruefer-planung|## Prüfung": [zwei],
+    "planer|## Befunde": [antwortMit(MIT_NUMMER, ersteAntworten), antwortMit(a14Korrigiert, [{ schluessel: "allein-gruen:a14", antwort: "korrigiert: a14 ruft nicht an" }])],
+    "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a14": "a14 braucht einen Anruf aus a3" } }, GRUEN_PRUEFLISTE],
+  });
+  exit(lauf, EXIT_GRUEN);
+  const beleg = planungsBericht(lauf);
+  const [erste, zweite] = aufrufe(lauf, "pruefer-planung", "## Nachprüfung");
+  assert.deepEqual(beleg.nachpruefungen.map(({ runde, sitzung, befunde }) => [runde, sitzung, befunde]), [[1, erste.sitzung, 1], [2, zweite.sitzung, 0]]);
+  assert.notEqual(erste.sitzung, zweite.sitzung);
+  const pruefung = beleg.schleifen.find(({ art }) => art === "pruefung");
+  assert.deepEqual(pruefung.runden.map(({ zahl }) => zahl), [2, 1]);
+  assert.equal(existsSync(phaseDatei(lauf)), true);
+});
+
+test("plane: ein Nachprüfer, der eine Datei ändert, bricht mit Exit 1 ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(MIT_NUMMER)], "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, schreibe: ROUTE }] });
+  exit(lauf, EXIT_ABBRUCH);
+  assert.equal(planungsBericht(lauf).grund, `pruefer-planung haben ${ROUTE} geändert`);
 });
 
 test("plane: ein Entwurf ohne gemeinsamen Namen geht einmal an seinen Schreiber zurück", { timeout: LAUF_FRIST_MS }, (context) => {

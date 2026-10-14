@@ -10,6 +10,7 @@ import {
   gliederungBefunde,
   istZurueckgewiesen,
   merkeStellen,
+  nachpruefSchluessel,
   neueStellen,
   prueferBefunde,
   prueflisteBefunde,
@@ -106,6 +107,8 @@ class Planung {
     this.schnitt = null;
     this.schnittAnnahmen = null;
     this.befunde = { offen: [], korrigiert: [], zurueckgewiesen: [] };
+    this.schleifen = [];
+    this.nachpruefungen = [];
   }
 
   beginne(soll, andererAusgang) {
@@ -137,8 +140,14 @@ class Planung {
     return { befunde };
   }
 
-  async planerStufe(text, verarbeite, art) {
+  schleife(art) {
     const schleife = new Fortschritt(art);
+    this.schleifen.push(schleife);
+    return schleife;
+  }
+
+  async planerStufe(text, verarbeite, art) {
+    const schleife = this.schleife(art);
     let naechste = text;
     for (;;) {
       const antwort = await this.einzeln(this.planer, naechste);
@@ -347,21 +356,47 @@ class Planung {
     return this.prueflisteDer(await this.einzeln(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
+  async pruefeMitFrischemPruefer(text, schluessel, { datei, grund }) {
+    const pruefer = this.team.teilnehmer("pruefer-planung");
+    const ergebnis = await this.prueferLauf(pruefer, text, schluessel);
+    if (ergebnis.befunde.length > 0) throw new Ende(EXIT_BEFUNDE, grund, ergebnis.befunde);
+    this.lege(datei, ergebnis.pruefliste);
+    return { pruefer, befunde: prueferBefunde(ergebnis.pruefliste) };
+  }
+
   async pruefliste() {
     const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
-    const pruefer = this.team.teilnehmer("pruefer-planung");
-    const ergebnis = await this.prueferLauf(pruefer, this.prueferNachricht(schluessel), schluessel);
-    if (ergebnis.befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Prüfliste blieb nach der Rücksendung unvollständig", ergebnis.befunde);
-    this.lege("pruefliste.json", ergebnis.pruefliste);
-    return prueferBefunde(ergebnis.pruefliste);
+    const { befunde } = await this.pruefeMitFrischemPruefer(this.prueferNachricht(schluessel), schluessel, { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
+    return befunde;
+  }
+
+  nachpruefNachricht({ schluessel, geaendert, neu, entfernt }, { nachher, antworten }) {
+    const zeilen = antworten.map(({ schluessel: eigener, befund, antwort }) => `${eigener}: ${befund} | ${antwort}`);
+    return nachricht("Nachprüfung", [
+      abschnitt("Schnittliste", json(nachher)),
+      abschnitt("Geänderte Aufträge", punkte([`geändert: ${geaendert.join(", ") || "keiner"}`, `neu: ${neu.join(", ") || "keiner"}`, `entfernt: ${entfernt.join(", ") || "keiner"}`])),
+      abschnitt("Befunde der vorigen Prüfung und Antworten des Planers", punkte(zeilen)),
+      ...this.pruefGrundlage(schluessel),
+    ]);
+  }
+
+  async nachpruefung({ befunde, vorher, nachher, antworten }) {
+    const auswahl = nachpruefSchluessel({ vorher, nachher, befunde, soll: this.soll, annahmen: this.erkunderAnnahmen() });
+    const runde = this.nachpruefungen.length + 1;
+    const grund = "die Prüfliste der Nachprüfung blieb nach der Rücksendung unvollständig";
+    const { pruefer, befunde: neue } = await this.pruefeMitFrischemPruefer(this.nachpruefNachricht(auswahl, { nachher, antworten }), auswahl.schluessel, { datei: `nachpruefung-${runde}.json`, grund });
+    this.nachpruefungen.push({ runde, sitzung: pruefer.sitzung, schluessel: auswahl.schluessel, befunde: neue.length, entfallen: auswahl.entfallen });
+    return neue;
   }
 
   verbucheAntworten(befunde, antworten) {
-    for (const { schluessel, befund } of befunde) {
+    return befunde.map(({ schluessel, befund }) => {
       const { antwort } = antworten.find((eintrag) => eintrag.schluessel === schluessel);
       const ziel = istZurueckgewiesen(antwort) ? this.befunde.zurueckgewiesen : this.befunde.korrigiert;
-      ziel.push({ schluessel, befund, antwort });
-    }
+      const eintrag = { schluessel, befund, antwort };
+      ziel.push(eintrag);
+      return eintrag;
+    });
   }
 
   async beantworte(befunde, wert, vorher) {
@@ -369,8 +404,7 @@ class Planung {
     const offen = antwortenBefunde(befunde, wert.antworten, { alt: vorher, neu: wert.schnitt });
     const skript = liste((await this.pruefeSchnitt(wert.schnitt)).befunde);
     if (offen.length > 0 || skript.length > 0) return { befunde: [...offen, ...skript], schnitt: wert.schnitt };
-    this.verbucheAntworten(befunde, wert.antworten);
-    return { wert: wert.schnitt };
+    return { wert: { schnitt: wert.schnitt, antworten: this.verbucheAntworten(befunde, wert.antworten) } };
   }
 
   async korrigiere(befunde, vorher) {
@@ -388,10 +422,17 @@ class Planung {
   }
 
   async pruefe() {
-    const befunde = await this.pruefliste();
-    if (befunde.length === 0) return;
-    const vorher = this.schnitt;
-    await this.korrigiere(befunde, vorher);
+    let befunde = await this.pruefliste();
+    let schnitt = this.schnitt;
+    const schleife = this.schleife("pruefung");
+    while (befunde.length > 0) {
+      const ende = schleife.endeNachRunde(befunde, schnitt, this.soll);
+      if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, befunde.map(prueferZeile));
+      const vorher = schnitt;
+      const korrektur = await this.korrigiere(befunde, vorher);
+      schnitt = korrektur.schnitt;
+      befunde = await this.nachpruefung({ befunde, vorher, nachher: schnitt, antworten: korrektur.antworten });
+    }
   }
 
   entwurfNachricht(bereich, namen) {
@@ -464,7 +505,15 @@ function ausgang(fehler) {
 }
 
 function berichte(planung, ergebnis) {
-  const lauf = { ...ergebnis, beginn: planung.beginn, schnitt: planung.schnitt, annahmen: planung.alleAnnahmen(), befunde: { ...planung.befunde, offen: ergebnis.offen } };
+  const lauf = {
+    ...ergebnis,
+    beginn: planung.beginn,
+    schnitt: planung.schnitt,
+    annahmen: planung.alleAnnahmen(),
+    befunde: { ...planung.befunde, offen: ergebnis.offen },
+    schleifen: planung.schleifen.map((schleife) => schleife.bericht()),
+    nachpruefungen: planung.nachpruefungen,
+  };
   const bericht = planBericht(lauf, { root: planung.root, team: planung.team });
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
   for (const befund of ergebnis.offen) console.error(befund);

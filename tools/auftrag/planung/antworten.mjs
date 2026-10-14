@@ -18,6 +18,9 @@ const TRIFFT_NICHT_ZU = /^trifft nicht zu, weil(.*)$/su;
 const KORRIGIERT = /^korrigiert:\s*\S/u;
 const MIT_AUFTRAG = new Set(["durchstich", "umbau", "nie-saetze", "bereichsgrund", "allein-gruen", "nicht-zusammengelegt", "falsche-angabe"]);
 const B_NUMMER = /^B/;
+const WEG = "weg";
+const OHNE_AUFTRAEGE = {};
+const SCHNITT_LISTEN = ["annahmen", "ownerAufgaben", "fehlendeSzenarien", "gemeinsameNamen"];
 const GRUNDLAGE = /^Grundlage:/;
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
@@ -112,6 +115,10 @@ export function prueflisteSoll(schnitt, soll, annahmen) {
   ];
 }
 
+export function planweiteSchluessel(soll) {
+  return prueflisteSoll(OHNE_AUFTRAEGE, soll, []).filter((schluessel) => schluessel.split(":")[0] !== WEG);
+}
+
 function zeilenBefunde(zeile, soll, kontext) {
   if (!istObjekt(zeile)) return ["eine Zeile der Prüfliste ist kein Objekt"];
   const ort = istText(zeile.schluessel) ? zeile.schluessel : "ohne schluessel";
@@ -142,11 +149,18 @@ function auftragDes(schluessel) {
   return MIT_AUFTRAG.has(regel) ? id : null;
 }
 
+function auftragIn(schnitt, id) {
+  return nachKennung(schnitt).get(id);
+}
+
+function auftragGeaendert(id, alt, neu) {
+  return alsText(auftragIn(alt, id)) !== alsText(auftragIn(neu, id));
+}
+
 function geaendert(schluessel, alt, neu) {
   const id = auftragDes(schluessel);
-  if (id === null) return JSON.stringify(alt) !== JSON.stringify(neu);
-  const finde = (schnitt) => liste(schnitt?.auftraege).find((auftrag) => auftrag?.id === id);
-  return JSON.stringify(finde(alt)) !== JSON.stringify(finde(neu));
+  if (id === null) return alsText(alt) !== alsText(neu);
+  return auftragGeaendert(id, alt, neu);
 }
 
 function antwortBefund(schluessel, antwort, schnitte) {
@@ -169,6 +183,53 @@ export function antwortenBefunde(befunde, antworten, { alt, neu }) {
   });
   const fremd = antworten.filter((antwort) => !schluessel.includes(antwort?.schluessel));
   return [...ergebnis, ...fremd.map((antwort) => `${antwort?.schluessel}: Antwort ohne Befund des Prüfers`)];
+}
+
+function nachKennung(schnitt) {
+  return new Map(liste(schnitt?.auftraege).map((auftrag) => [auftrag?.id, auftrag]));
+}
+
+function alsText(wert) {
+  return JSON.stringify(wert);
+}
+
+function schnittGeaendert(vorher, nachher, anders) {
+  if (anders.size > 0) return true;
+  if (alsText([...nachKennung(vorher).keys()]) !== alsText([...nachKennung(nachher).keys()])) return true;
+  return SCHNITT_LISTEN.some((feld) => alsText(vorher?.[feld]) !== alsText(nachher?.[feld]));
+}
+
+function zusammengelegtMit(entfernte, auftraege) {
+  const dateien = new Set(entfernte.flatMap((auftrag) => liste(auftrag?.erwarteteDateien)));
+  return auftraege.filter((auftrag) => liste(auftrag?.erwarteteDateien).some((datei) => dateien.has(datei))).map(({ id }) => `nicht-zusammengelegt:${id}`);
+}
+
+function nummernDerAenderung(kennungen, alt, neu) {
+  return kennungen.flatMap((id) => [alt.get(id), neu.get(id)]).flatMap((auftrag) => liste(auftrag?.prueft)).map((nummer) => `${WEG}:${nummer}`);
+}
+
+export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen }) {
+  const alle = prueflisteSoll(nachher, soll, annahmen);
+  const alt = nachKennung(vorher);
+  const neu = nachKennung(nachher);
+  const geaenderte = [...neu.keys()].filter((id) => alt.has(id) && auftragGeaendert(id, vorher, nachher));
+  const dazu = [...neu.keys()].filter((id) => !alt.has(id));
+  const entfernt = [...alt.keys()].filter((id) => !neu.has(id));
+  const anders = new Set([...geaenderte, ...dazu, ...entfernt]);
+  const beruehrt = liste(nachher.auftraege).filter((auftrag) => liste(auftrag?.abhaengigVon).some((abhaengig) => anders.has(abhaengig?.id))).map(({ id }) => id);
+  const zupruefen = new Set([...anders, ...beruehrt]);
+  const nachAenderung = schnittGeaendert(vorher, nachher, anders) ? planweiteSchluessel(soll) : [];
+  const zusammengelegt = zusammengelegtMit(entfernt.map((id) => alt.get(id)), liste(nachher.auftraege));
+  const befundSchluessel = befunde.map(({ schluessel }) => schluessel);
+  const wege = nummernDerAenderung([...zupruefen], alt, neu);
+  const gewaehlt = new Set([...nachAenderung, ...zusammengelegt, ...wege, ...befundSchluessel]);
+  return {
+    schluessel: alle.filter((schluessel) => zupruefen.has(auftragDes(schluessel)) || gewaehlt.has(schluessel)),
+    entfallen: befundSchluessel.filter((schluessel) => !alle.includes(schluessel)),
+    geaendert: geaenderte,
+    neu: dazu,
+    entfernt,
+  };
 }
 
 export function istZurueckgewiesen(antwort) {
