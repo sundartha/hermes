@@ -1,0 +1,254 @@
+{
+  "grenzen/zeilen": {
+    "liste": "A1",
+    "wozu": "Ein Auftrag bleibt so klein, dass Abnahmetest und KI-Prüfer ihn ganz erfassen; in einem übergroßen Auftrag geht ein Fehler unbemerkt durch.",
+    "behebung": "Den Auftrag teilen lassen.",
+    "nichtAngenommen": "Denselben Code dichter schreiben oder Fehlerbehandlung weglassen, um unter die Grenze zu kommen.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: braucht etwa <n> neue Zeilen, weil <Grund>“."
+  },
+  "grenzen/geschützt": {
+    "liste": "A2",
+    "wozu": "Ein Agent darf die Regeln und Basislinien, nach denen seine Arbeit bewertet wird, nicht im selben Auftrag ändern; sonst stellt er sich sein Grün selbst aus.",
+    "behebung": "Die geschützte Datei unverändert lassen; die Änderung dort entscheidet Antonio.",
+    "nichtAngenommen": "Die geschützte Regel im eigenen Bereich nachbauen oder umgehen.",
+    "ausweg": "Als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: <Datei> muss vorher <Änderung>“, als Test-Agent „Auftrag passt nicht: <Grund>“."
+  },
+  "grenzen/test-im-bau": {
+    "liste": "A3",
+    "wozu": "Wer baut, ändert keine Tests; sonst könnte er den Abnahmetest abschwächen und Grün bekommen, obwohl das bestellte Verhalten fehlt.",
+    "behebung": "Nur Produktcode ändern; einen falschen Test meldet man, man passt ihn nicht an.",
+    "nichtAngenommen": "Im Produktcode eine Sonderbehandlung genau für die Eingabe des Tests.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“; hält ein alter Test das alte Verhalten fest, „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+  },
+  "grenzen/produkt-im-test": {
+    "liste": "A3",
+    "wozu": "Wer testet, baut nicht; sonst prüft niemand unabhängig, ob das bestellte Verhalten da ist.",
+    "behebung": "Nur den eigenen Test schreiben; den Produktcode baut der Bau-Agent.",
+    "nichtAngenommen": "Das verlangte Verhalten im Test selbst herstellen, statt es vom Produktcode zu verlangen.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "grenzen/fremder-test": {
+    "liste": "A3",
+    "wozu": "Der Test-Agent ändert nur seinen Abnahmetest und die erwarteten Testdateien; fremde Tests halten fest, was bisher funktioniert.",
+    "behebung": "Nur in den eigenen Testdateien ändern.",
+    "nichtAngenommen": "Einen fremden Test so anpassen, dass er zum neuen Verhalten passt.",
+    "ausweg": "Hält ein alter Test das alte Verhalten fest, eine eigene letzte Zeile „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+  },
+  "grenzen/bereich": {
+    "liste": "A4",
+    "wozu": "Außerhalb des Bereichs deckt weder Entwurf noch Abnahmetest eine Änderung ab, und parallele Aufträge können sich gegenseitig überschreiben.",
+    "behebung": "Nur im Bereich ändern; was außerhalb nötig ist, wird ein eigener Auftrag davor.",
+    "nichtAngenommen": "Die Logik von außerhalb im Bereich ein zweites Mal schreiben.",
+    "ausweg": "Eine eigene letzte Zeile „Voraussetzung fehlt: <Datei> muss vorher <Änderung>“."
+  },
+  "grenzen/phasendatei": {
+    "liste": "A2–A4",
+    "wozu": "Die Grenzprüfung misst die Arbeit am Auftrag aus der Phasendatei; passt die Phasendatei nicht mehr zum Auftrag, etwa weil sich Bereich, Schutzliste oder Auftrag geändert haben, lässt sich die Arbeit nicht mehr gegen den Auftrag prüfen.",
+    "behebung": "Die Phasendatei und die Dateien, auf die sie sich stützt, etwa die Schutzliste in CODEOWNERS, nicht ändern; das entscheidet die Planung.",
+    "nichtAngenommen": "Phasendatei oder Schutzliste so ändern, dass die eigene Änderung erlaubt erscheint.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "grenzen": {
+    "liste": "A1–A4",
+    "wozu": "Die Grenzprüfung hält jeden Agenten in seiner Rolle, in seinem Bereich, unter der Zeilengrenze und weg von geschützten Dateien; sonst prüft niemand unabhängig, was er geändert hat.",
+    "behebung": "Die gemeldete Grenze einhalten; die Ausgabe der Prüfung nennt die Stelle.",
+    "nichtAngenommen": "Die Änderung in einer Form machen, die die Grenzprüfung nicht erkennt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“; als Bau-Agent bei einer nötigen Änderung außerhalb des Bereichs „Voraussetzung fehlt: <Datei> muss vorher <Änderung>“."
+  },
+  "rot": {
+    "liste": "A5",
+    "wozu": "Der Abnahmetest muss genau am fehlenden Verhalten scheitern; scheitert er an etwas anderem, prüft er das Neue nicht.",
+    "behebung": "Den Test am erwarteten Wert aus dem „Dann“ des Szenarios scheitern lassen.",
+    "nichtAngenommen": "Eine Prüfung, die den vorgegebenen Fehlertext unabhängig vom Verhalten ausgibt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: erwarteterFehler passt nicht zum Szenario, weil <Grund>“."
+  },
+  "abnahme vorher": {
+    "liste": "A6",
+    "wozu": "Nur ein vorher grüner Test belegt, dass ein Umbau das Verhalten nicht ändert.",
+    "behebung": "In der Planung einen Verhaltenstest wählen, der vor dem Umbau besteht.",
+    "nichtAngenommen": "entfällt, kein Agent beeinflusst diese Prüfung.",
+    "ausweg": "entfällt, kein Agent läuft vor dieser Prüfung; der Auftrag geht an die Planung."
+  },
+  "keine änderung": {
+    "liste": "A7",
+    "wozu": "Ein Auftrag ohne Änderung würde als gebaut gespeichert und von jedem späteren Lauf übersprungen.",
+    "behebung": "Den Auftrag wirklich umsetzen.",
+    "nichtAngenommen": "Eine wirkungslose Änderung, etwa nur an Formatierung, Kommentar oder Funktionskarte.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: schon erledigt, weil <Fundstelle>“."
+  },
+  "belege": {
+    "liste": "A8",
+    "wozu": ".fortschritt/ hält fest, was das Skript geprüft hat; wer dort schreibt, könnte sich ein Bestanden selbst eintragen.",
+    "behebung": ".fortschritt/ nicht anfassen; das Skript schreibt die Belege selbst.",
+    "nichtAngenommen": "entfällt, kein ruhigstellender Weg bekannt.",
+    "ausweg": "entfällt."
+  },
+  "stillstand": {
+    "liste": "A9",
+    "wozu": "Dreimal derselbe Versuch mit demselben Ergebnis bringt den Auftrag nicht weiter und kostet nur.",
+    "behebung": "Nach einem gleichen Fehlschlag einen anderen Weg wählen.",
+    "nichtAngenommen": "Denselben Versuch leicht abgewandelt wiederholen.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <woran es hängt>“."
+  },
+  "agent exit": {
+    "liste": "A9",
+    "wozu": "Ein abgebrochener Agent hat nicht fertig gearbeitet; sein Stand gilt nicht als fertig.",
+    "behebung": "Die Ursache des Abbruchs aus dem Verlauf beheben.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "typprüfung": {
+    "liste": "ohne Nummer",
+    "wozu": "Typfehler fielen sonst erst zur Laufzeit auf.",
+    "behebung": "Den Typfehler an der Stelle beheben.",
+    "nichtAngenommen": "Typen aufweichen, bis die Prüfung schweigt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "lint": {
+    "liste": "A10",
+    "wozu": "Die Regeln fangen fehlerträchtige Muster, bevor sie in den Hauptstand kommen; den Grund der einzelnen Regel nennt ihre Meldung.",
+    "behebung": "Den Verstoß an der Stelle beheben.",
+    "nichtAngenommen": "Dasselbe Muster in einer Form schreiben, die die Regel nicht erkennt.",
+    "ausweg": "Nur als Bau-Agent, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt, eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“; sonst „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“."
+  },
+  "pin-prüfung": {
+    "liste": "A11",
+    "wozu": "Geduldete Altverstöße in eslint-suppressions.json dürfen neue Verstöße nicht verdecken; die Altlast soll schrumpfen.",
+    "behebung": "Die neuen Verstöße beheben; fehlt das Skript scripts/check-staged-suppressions.js selbst, es weder anlegen noch ersetzen.",
+    "nichtAngenommen": "Die Prüfung beim Commit umgehen oder die neuen Verstöße in einer Form verbergen, die die Prüfung nicht mehr zählt.",
+    "ausweg": "Nur als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …“; fehlt das Skript selbst, „Auftrag passt nicht: scripts/check-staged-suppressions.js fehlt“."
+  },
+  "abnahme": {
+    "liste": "A12",
+    "wozu": "Ein Auftrag ohne das bestellte Verhalten darf nicht als erledigt gelten.",
+    "behebung": "Das Verhalten für alle Eingaben des Szenarios bauen.",
+    "nichtAngenommen": "Eine Sonderbehandlung nur für die Eingabe aus dem Test.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“."
+  },
+  "betroffene tests": {
+    "liste": "A13",
+    "wozu": "Die Änderung darf nicht an anderer Stelle brechen, was bisher funktionierte.",
+    "behebung": "Den Bruch im Produktcode vermeiden.",
+    "nichtAngenommen": "Eine Weiche, die für den alten Test das alte und sonst das neue Verhalten liefert.",
+    "ausweg": "Ist die Änderung des Verhaltens gewollt, eine eigene letzte Zeile „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+  },
+  "mutation": {
+    "liste": "A14",
+    "wozu": "Jede neue Zeile muss von einem Test verlangt werden; sonst bemerkt niemand, wenn sie später bricht.",
+    "behebung": "Ist die Zeile nötig und fehlt nur der Test, antwortet der Bau-Agent je Mutant mit einer eigenen Zeile „Nötig: <Mutant>, weil <Satz>“; streichen nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher.",
+    "nichtAngenommen": "Eine nötige Absicherung streichen oder einen Mutanten, der Verhalten ändert, als gleichwertig melden.",
+    "ausweg": "In der Nachrunde antwortet der Bau-Agent je wirkungslosem Mutanten mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <bei welcher Eingabe sich nichts ändert und warum keine andere Eingabe etwas ändert>“; der Test-Agent mit einer letzten Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "mutation alter Stand": {
+    "liste": "A15",
+    "wozu": "Vor einem Umbau müssen Tests das bisherige Ergebnis festhalten, sonst ändert der Umbau unbemerkt, was Kunden erleben.",
+    "behebung": "Tests ergänzen, die das Ergebnis festhalten.",
+    "nichtAngenommen": "Tests, die nur die Schreibweise des Codes festnageln.",
+    "ausweg": "Ändert ein Mutant kein beobachtbares Verhalten, antwortet der Test-Agent je Mutant mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <Satz>“; die Meldung geht zur Freigabe an Antonio."
+  },
+  "mutation abbruch": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein abgebrochener Mutationslauf hat nichts gemessen.",
+    "behebung": "Die Ursache aus der Ausgabe beheben.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "umbau einspielen": {
+    "liste": "ohne Nummer",
+    "wozu": "Nach den Tests für den alten Stand muss genau der gesicherte Umbau zurückkommen.",
+    "behebung": "entfällt, das Skript spielt den Umbau ein.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "entfällt."
+  },
+  "unterdrückungen kürzen": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Umbau, der Altverstöße beseitigt, streicht ihre Einträge, damit sie nicht wiederkommen dürfen.",
+    "behebung": "Die Ursache aus der Ausgabe beheben.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "commit": {
+    "liste": "ohne Nummer",
+    "wozu": "Der Commit-Hook prüft dieselben Regeln wie der Pflicht-Check; ein abgelehnter Commit heißt, ein Befund ist noch da.",
+    "behebung": "Den Befund aus der Hook-Ausgabe beheben.",
+    "nichtAngenommen": "Die Prüfungen beim Commit umgehen, statt den Befund zu beheben.",
+    "ausweg": "Eine eigene letzte Zeile „Voraussetzung fehlt: <was vorher passieren muss>“ (nur Bau-Agent) oder „Auftrag passt nicht: <Grund>“."
+  },
+  "stopp": {
+    "liste": "A16",
+    "wozu": "Nach zwei roten Runden hängt der Auftrag; weitere Runden kosteten nur, und Antonio erführe es nicht.",
+    "behebung": "Der Planer schneidet neu, oder Antonio entscheidet.",
+    "nichtAngenommen": "In Runde 2 die rote Prüfung um jeden Preis grün machen.",
+    "ausweg": "Für den Planer eine eigene Zeile „Zerlegung passt nicht: <Grund>“ oder „Pitch ändern: <Frage>“ mit einer Zeile „Empfehlung: <Vorschlag>“; für den Notiz-Agenten entfällt er."
+  },
+  "umbau-plan": {
+    "liste": "A18",
+    "wozu": "Ein unvollständiger Umbau-Auftrag schickte die Agenten an Arbeit, die nicht gelingen kann.",
+    "behebung": "Ein gültiger Umbau-Auftrag mit einem Test, der vorher grün ist.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "entfällt."
+  },
+  "übernahme": {
+    "liste": "A19",
+    "wozu": "Zwei einzeln grüne Aufträge können zusammen den Phasen-Branch brechen.",
+    "behebung": "Den Auftrag auf dem neuen Stand neu bauen.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "entfällt."
+  },
+  "sperre": {
+    "liste": "A20",
+    "wozu": "Zwei Phasen im selben Bereich machten sich gegenseitig Fertiges kaputt.",
+    "behebung": "Warten, bis die andere Phase fertig ist.",
+    "nichtAngenommen": "entfällt.",
+    "ausweg": "entfällt."
+  },
+  "reparatur": {
+    "liste": "A21",
+    "wozu": "Ein bestätigter BLOCKER ist ein vorgeführter Fehler; behoben ist er erst, wenn das Verhalten für alle Eingaben stimmt.",
+    "behebung": "Die Ursache beheben, sodass die Reproduktion besteht.",
+    "nichtAngenommen": "Eine Sonderbehandlung für die Eingabe der Reproduktion.",
+    "ausweg": "entfällt: Die Reparatur liest heute keine Ausstiegszeile (kommt mit ZW1b)."
+  },
+  "prüfleiter": {
+    "liste": "A22",
+    "wozu": "Stilverstöße und gebrochene Tests kämen sonst in hochgeladene Stände und in den Hauptstand.",
+    "behebung": "Die Befunde beheben.",
+    "nichtAngenommen": "Die Prüfung umgehen, statt die Befunde zu beheben.",
+    "ausweg": "Vor dem Push nicht pushen; ist schon gepusht, den Befund beheben statt weiter zu pushen. Hältst du eine Regel hier für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
+  },
+  "uebergabe": {
+    "liste": "A23",
+    "wozu": "Lange Sitzungen werden teuer, und die Sorgfalt lässt nach; ein frischer Agent mit dem Stand im Arbeitsbaum arbeitet günstiger und genauer.",
+    "behebung": "Den Stand mit git status und git diff lesen und fertig machen.",
+    "nichtAngenommen": "entfällt, der Agent beeinflusst die Grenze nicht.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: für einen Agenten zu groß, weil <Grund>“."
+  },
+  "phasendatei": {
+    "liste": "P1",
+    "wozu": "Ohne Entwurf, gültigen Abnahmetest oder Szenarionummern baut niemand, was der Pitch verlangt.",
+    "behebung": "Den fehlenden Teil wirklich liefern.",
+    "nichtAngenommen": "Pflichtfelder mit Sätzen füllen, die auf jeden Auftrag passen, oder neues Verhalten als Umbau ausgeben.",
+    "ausweg": "Eine eigene Zeile „Zerlegung passt nicht: <Grund>“."
+  },
+  "neuschnitt": {
+    "liste": "P2",
+    "wozu": "Beim Neuschnitt darf keine Anforderung still wegfallen.",
+    "behebung": "Teile so schneiden, dass jeder allein besteht und alle Sätze wörtlich übernommen sind.",
+    "nichtAngenommen": "Sätze in einen Auftrag legen, dessen Test sie nicht prüft.",
+    "ausweg": "Eine eigene Zeile „Zerlegung passt nicht: <Grund>“ oder „Pitch ändern: <Frage>“ mit einer Zeile „Empfehlung: <Vorschlag>“."
+  },
+  "abdeckung": {
+    "liste": "P3",
+    "wozu": "Ein Szenario oder eine Bedrohung darf beim Zerlegen nicht verloren gehen.",
+    "behebung": "Das Szenario dem Auftrag geben, dessen Test ohne sein „Dann“ scheitert.",
+    "nichtAngenommen": "Nummern nur auf dem Papier zuordnen.",
+    "ausweg": "Eine eigene Zeile „Zerlegung passt nicht: <Grund>“."
+  },
+  "schnitt": {
+    "liste": "P4",
+    "wozu": "Der Planer soll seine Aufteilung nicht selbst gegen die Regeln schätzen.",
+    "behebung": "Die Datei in den richtigen Auftrag oder seine Kette aufnehmen. Nur wenn die Erkundung nachweislich falsch ist, sie vollständig widerlegen: im Feld eingang „nicht erreicht, weil <Grund mit Fundstelle>“ samt Eintrag in annahmen, oder ein Eintrag in falscheAngaben mit Fundstelle.",
+    "nichtAngenommen": "Auswege mit einem Grund füllen, der zu jedem Auftrag passt.",
+    "ausweg": "Eine eigene Zeile „Zerlegung passt nicht: <Grund>“; sie hält die Planung an, der Grund geht an Antonio."
+  }
+}
