@@ -20,6 +20,9 @@ const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
+const PIN_HAKEN = ".githooks/pre-commit";
+export const PIN_FEHLT =
+  "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit es aufruft. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
 
 class AuftragsLauf {
@@ -145,7 +148,11 @@ class AuftragsLauf {
 
   pinPruefung() {
     const { root } = this.kontext;
-    if (!existsSync(join(root, PIN_PRUEFUNG))) return true;
+    if (!existsSync(join(root, PIN_PRUEFUNG))) {
+      if (!existsSync(join(root, PIN_HAKEN))) return true;
+      this.pruefungen.push(beleg({ name: "pin-prüfung", befehl: [execPath, PIN_PRUEFUNG], exitCode: 1, ausgabe: PIN_FEHLT }));
+      return this.scheitert("pin-prüfung endete mit Exit 1.");
+    }
     const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs"], { cwd: root });
     return this.gruen("pin-prüfung", [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
