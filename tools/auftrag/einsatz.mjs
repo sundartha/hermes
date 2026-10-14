@@ -18,6 +18,7 @@ const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 const VOLLE_ANTWORTEN = new Map();
+let auftragDerAntworten = null;
 const UMBAU = "umbau";
 const VORAUSSETZUNG_FEHLT = [
   "",
@@ -99,12 +100,18 @@ function ausstieg({ rolle, antwort = "" }) {
   return MIT_AUSSTIEG.has(rolle) ? (AUSSTIEG.exec(antwort)?.[1] ?? null) : null;
 }
 
-export function volleAntwort({ sitzung, antwort = "" }) {
-  return VOLLE_ANTWORTEN.get(sitzung) ?? antwort;
+export function entnimmVolleAntwort({ sitzung, antwort = "" }) {
+  const voll = VOLLE_ANTWORTEN.get(sitzung) ?? antwort;
+  VOLLE_ANTWORTEN.delete(sitzung);
+  return voll;
 }
 
-function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start) {
-  if (typeof voll === "string") VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
+function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start, auftrag) {
+  if (typeof voll === "string") {
+    if (auftrag !== auftragDerAntworten) VOLLE_ANTWORTEN.clear();
+    auftragDerAntworten = auftrag;
+    VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
+  }
   return start.vollstaendig ? { ...sitzung, volleAntwort: voll, groessterKontext } : sitzung;
 }
 
@@ -116,7 +123,7 @@ export function setzeEin(kontext, prompt, start = {}) {
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
-    const sitzung = gemerkt(starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true }), start);
+    const sitzung = gemerkt(starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true }), start, `${kontext.phase.phase}/${kontext.auftrag.id}`);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
