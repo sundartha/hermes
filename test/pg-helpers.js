@@ -7,18 +7,18 @@ import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
 const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
 const WURZEL = fileURLToPath(new URL("..", import.meta.url));
-const KETTENANFANG = "src/db/migrate.js";
+const KETTENANFANG = new URL("../src/db/migrate.js", import.meta.url);
 const RELATIVER_IMPORT = /\b(?:from|import)\s*["'](\.\.?\/[^"']+)["']/g;
 
 export function vorlagenKette() {
-  const kette = new Set([KETTENANFANG]);
-  for (const datei of kette) {
-    const inhalt = fs.readFileSync(path.join(WURZEL, datei), "utf8");
+  const kette = new Set([KETTENANFANG.href]);
+  for (const adresse of kette) {
+    const inhalt = fs.readFileSync(new URL(adresse), "utf8");
     for (const [, ziel] of inhalt.matchAll(RELATIVER_IMPORT)) {
-      kette.add(path.posix.join(path.posix.dirname(datei), ziel));
+      kette.add(new URL(ziel, adresse).href);
     }
   }
-  return [...kette].sort();
+  return [...kette].map((adresse) => path.relative(WURZEL, fileURLToPath(adresse))).sort();
 }
 
 let schemaVorlage = null;
