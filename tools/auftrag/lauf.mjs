@@ -20,6 +20,9 @@ const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
+const PIN_HAKEN = ".githooks/pre-commit";
+export const PIN_FEHLT =
+  "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
 
 class AuftragsLauf {
@@ -49,15 +52,21 @@ class AuftragsLauf {
     return false;
   }
 
-  pruefung(name, befehl, belegen = beleg) {
-    const ergebnis = fuehreAus(name, befehl, { cwd: this.kontext.root, env });
+  belegt(ergebnis, belegen = beleg) {
     this.pruefungen.push(belegen(ergebnis));
     return ergebnis;
   }
 
-  gruen(name, befehl, belegen) {
-    const { exitCode } = this.pruefung(name, befehl, belegen);
+  pruefung(name, befehl, belegen) {
+    return this.belegt(fuehreAus(name, befehl, { cwd: this.kontext.root, env }), belegen);
+  }
+
+  gruenOderScheitert({ name, exitCode }) {
     return exitCode === 0 || this.scheitert(`${name} endete mit Exit ${exitCode}.`);
+  }
+
+  gruen(name, befehl, belegen) {
+    return this.gruenOderScheitert(this.pruefung(name, befehl, belegen));
   }
 
   eigenerBefehl(befehl, ...argumente) {
@@ -145,7 +154,10 @@ class AuftragsLauf {
 
   pinPruefung() {
     const { root } = this.kontext;
-    if (!existsSync(join(root, PIN_PRUEFUNG))) return true;
+    if (!existsSync(join(root, PIN_PRUEFUNG))) {
+      if (!existsSync(join(root, PIN_HAKEN))) return true;
+      return this.gruenOderScheitert(this.belegt({ name: "pin-prüfung", befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
+    }
     const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs"], { cwd: root });
     return this.gruen("pin-prüfung", [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
