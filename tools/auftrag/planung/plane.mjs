@@ -328,11 +328,16 @@ class Planung {
     return { pruefliste, befunde: prueflisteBefunde(pruefliste, schluessel, this.kontext()) };
   }
 
+  async prueferLauf(pruefer, text, schluessel) {
+    const ergebnis = this.prueflisteDer(await this.einzeln(pruefer, text), schluessel);
+    if (ergebnis.befunde.length === 0) return ergebnis;
+    return this.prueflisteDer(await this.einzeln(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
+  }
+
   async pruefliste() {
     const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
     const pruefer = this.team.teilnehmer("pruefer-planung");
-    let ergebnis = this.prueflisteDer(await this.einzeln(pruefer, this.prueferNachricht(schluessel)), schluessel);
-    if (ergebnis.befunde.length > 0) ergebnis = this.prueflisteDer(await this.einzeln(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
+    const ergebnis = await this.prueferLauf(pruefer, this.prueferNachricht(schluessel), schluessel);
     if (ergebnis.befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Prüfliste blieb nach der Rücksendung unvollständig", ergebnis.befunde);
     this.lege("pruefliste.json", ergebnis.pruefliste);
     return prueferBefunde(ergebnis.pruefliste);
