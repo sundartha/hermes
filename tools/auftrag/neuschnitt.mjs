@@ -238,7 +238,7 @@ function planeNeu(kontext, ort, vorher) {
 
 function pitchFrage({ phase, auftrag }, gestoppt, versuch) {
   const anlass = `Der Planer kann den Auftrag ${auftrag.id} der Phase ${phase.phase} nur neu schneiden, wenn sich der Pitch ändert.`;
-  const notiz = `Pitch ändern: ${versuch.frage}\nEmpfehlung: ${versuch.empfehlung}`;
+  const notiz = `Pitch ändern: ${versuch.frage}\nEmpfehlung: ${versuch.empfehlung}\n\n(Volle Antwort des Planers: Sitzung ${versuch.sitzungen.at(-1).sitzung})`;
   return { ...gestoppt, kopf: `${anlass}\n\n${gestoppt.kopf}`, notiz, sitzungen: versuch.sitzungen };
 }
 

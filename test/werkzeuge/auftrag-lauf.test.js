@@ -293,3 +293,37 @@ test("bei einer Fehlerbehebung bekommt der Bau-Agent den Commit, den git bisect 
   assert.match(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8"), /eingeführt hat[\s\S]+ Runde anders/);
   assert.match(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout, /^Ursache: [\s\S]+^Eingeführt mit: \w+ Runde anders$/m);
 });
+
+const PIN_MELDUNG = "Befunde bewegt: 0 -> 1  id-length: Identifier name '_' is too short (< 2).";
+const ERSATZ_PIN_PRUEFUNG = `import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
+const dateien = process.argv.slice(2);
+appendFileSync("pin-aufrufe.txt", JSON.stringify(dateien) + "\\n");
+const zuViel = dateien.filter((datei) => execFileSync("git", ["show", ":" + datei], { encoding: "utf8" }).includes("const _"));
+for (const datei of zuViel) console.error("[check-staged-suppressions] Commit abgebrochen:\\n  " + datei + "\\n     " + ${JSON.stringify(PIN_MELDUNG)} + "\\n[a]\\n[b]\\n[c]\\n[d]\\n[e]");
+process.exitCode = zuViel.length > 0 ? 1 : 0;
+`;
+const MIT_PIN_PRUEFUNG = { ...MIT_MUTATION, "scripts/check-staged-suppressions.js": ERSATZ_PIN_PRUEFUNG, ".gitignore": `${BASIS[".gitignore"]}pin-aufrufe.txt\n` };
+const MIT_UNTERSTRICH = { "src/rechnen.js": "export function verdopple(zahl) {\n  const _ = 2;\n  return zahl * _;\n}\n" };
+
+test("die Pin-Prüfung läuft direkt nach lint; ihr Befund geht vor jeder Mutationsprüfung in die nächste Runde", (context) => {
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_UNTERSTRICH };
+  const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_PIN_PRUEFUNG });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  const namen = beleg.pruefungen.map(({ name }) => name);
+  assert.equal(namen[namen.indexOf("lint") + 1], "pin-prüfung", namen.join(", "));
+  assert.equal(pruefung(beleg, "pin-prüfung"), EXIT_ROT);
+  assert.ok(!namen.some((name) => name.startsWith("mutation")), namen.join(", "));
+  assert.equal(beleg.grund, `pin-prüfung endete mit Exit ${EXIT_ROT}.`);
+  assert.ok(readFileSync(join(repo, "pin-aufrufe.txt"), "utf8").includes('"src/rechnen.js"'));
+  const zweiteRunde = readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8");
+  assert.ok(zweiteRunde.includes("src/rechnen.js") && zweiteRunde.includes(PIN_MELDUNG), zweiteRunde);
+});
+
+test("ist die Pin-Prüfung grün, geht der Auftrag weiter durch die Mutationsprüfung", (context) => {
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" } };
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_PIN_PRUEFUNG });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const namen = beleg.pruefungen.map(({ name }) => name);
+  assert.ok(namen.indexOf("pin-prüfung") === namen.indexOf("lint") + 1 && namen.indexOf("pin-prüfung") < namen.indexOf("mutation"), namen.join(", "));
+});
