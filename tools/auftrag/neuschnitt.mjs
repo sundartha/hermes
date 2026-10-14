@@ -11,6 +11,7 @@ import { brauchtRotenTest, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, git, kopf, vormerken } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
+import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 
 export const NEU_GESCHNITTEN = "neu geschnitten";
 export const NEUSCHNITTE_JE_AUFTRAG = 1;
@@ -57,7 +58,13 @@ function istNachfolger(kennung, id) {
   return typeof id === "string" && id.startsWith(vorne) && NUMMER.test(id.slice(vorne.length));
 }
 
-function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befunde }) {
+function zweckAbschnitt(gestoppt, arten) {
+  const bloecke = [gestoppt.zweck ?? [], ...arten.map(zweckBlock)].filter((block) => block.length > 0);
+  if (bloecke.length === 0) return [];
+  return [abschnitt("Wozu die Prüfungen da sind", bloecke.flatMap((block, index) => (index === 0 ? block : ["", ...block])))];
+}
+
+function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befunde, arten = [] }) {
   const dokumente = DOKUMENTE.map((name) => join(ort.ordner, name)).filter((pfad) => existsSync(join(root, pfad)));
   const fertig = [...plan.fertig];
   const vorher = befunde.length > 0
@@ -73,7 +80,7 @@ function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befun
       `Die neuen Aufträge heißen ${auftrag.id}-n1, ${auftrag.id}-n2 und so weiter.`,
     ]),
     testPrompt(phase, auftrag),
-    ...(gestoppt.zweck ? [abschnitt("Wozu der Stopp da ist", gestoppt.zweck)] : []),
+    ...zweckAbschnitt(gestoppt, arten),
     abschnitt("Verlauf", [CODEBLOCK, ...gestoppt.verlauf, ...(gestoppt.hinweise ?? []), CODEBLOCK]),
     ...vorher,
   ].join("\n");
@@ -154,22 +161,24 @@ function schnittBefunde(alt, neu, vorher) {
 
 function abdeckungBefunde(root, ordner) {
   const lauf = fuehreAus("abdeckung", [execPath, ABDECKUNG, ordner], { cwd: root, env });
-  return lauf.exitCode === 0 ? [] : lauf.ausgabe.split("\n").filter((zeile) => zeile.trim() !== "");
+  return lauf.exitCode === 0 ? [] : ohneZweck(lauf.ausgabe.split("\n")).filter((zeile) => zeile.trim() !== "");
 }
 
 function geschnittenePhase({ phase, auftrag, root }, ort) {
   const fremd = geaenderteDateien(root).filter((pfad) => pfad !== ort.datei);
-  if (fremd.length > 0) return { befunde: [`Der Planer darf nur ${ort.datei} ändern, nicht ${fremd.join(", ")}.`] };
+  if (fremd.length > 0) return { befunde: [`Der Planer darf nur ${ort.datei} ändern, nicht ${fremd.join(", ")}.`], arten: [MELDUNG.NEUSCHNITT] };
   let neu;
   try {
     neu = ladePhase(join(root, ort.datei));
   } catch (fehler) {
-    return { befunde: [`${ort.datei} ist nicht lesbar: ${fehler.message}`] };
+    return { befunde: [`${ort.datei} ist nicht lesbar: ${fehler.message}`], arten: [MELDUNG.PHASENDATEI] };
   }
   const format = phasenBefunde(neu, root);
-  if (format.length > 0) return { befunde: format };
-  const befunde = [...schnittBefunde(phase, neu, auftrag), ...abdeckungBefunde(root, ort.ordner)];
-  return befunde.length > 0 ? { befunde } : { neu };
+  if (format.length > 0) return { befunde: format, arten: [MELDUNG.PHASENDATEI] };
+  const schnitt = schnittBefunde(phase, neu, auftrag);
+  const abdeckung = abdeckungBefunde(root, ort.ordner);
+  const arten = [[MELDUNG.NEUSCHNITT, schnitt], [MELDUNG.ABDECKUNG, abdeckung]].filter(([, liste]) => liste.length > 0).map(([art]) => art);
+  return arten.length > 0 ? { befunde: [...schnitt, ...abdeckung], arten } : { neu };
 }
 
 function nachfolger(neu, kennung) {
@@ -263,7 +272,8 @@ function grenzeErreicht(gestoppt) {
 function versuche(kontext, ort, gestoppt) {
   const liste = [];
   while (liste.length < PLANUNG_VERSUCHE) {
-    const versuch = planeNeu(kontext, ort, { gestoppt, befunde: liste.at(-1)?.befunde ?? [] });
+    const vorher = liste.at(-1);
+    const versuch = planeNeu(kontext, ort, { gestoppt, befunde: vorher?.befunde ?? [], arten: vorher?.arten ?? [] });
     liste.push(versuch);
     if (versuch.neu || versuch.frage !== undefined || versuch.passtNicht !== undefined) break;
   }

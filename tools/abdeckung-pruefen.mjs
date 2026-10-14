@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { befundeImOrdner } from "./auftrag/planung/abdeckung.mjs";
 import { PITCH, SICHERHEIT } from "./auftrag/planung/nummern.mjs";
+import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
@@ -35,6 +36,7 @@ function pruefe(argumente) {
   for (const befund of befunde) console.error(befund);
   if (befunde.length > 0) {
     console.log(`rot: ${befunde.length} Befunde in ${ordner}.`);
+    console.log(zweckBlock(MELDUNG.ABDECKUNG).join("\n"));
     return EXIT_ROT;
   }
   console.log(`grün: ${anzahl} Nummern in ${ordner} gehören je genau einem Auftrag.`);

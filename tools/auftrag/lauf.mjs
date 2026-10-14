@@ -15,7 +15,7 @@ import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
-import { GRUND, PRUEFUNG, zweckBeleg } from "./zweck.mjs";
+import { GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -261,9 +261,10 @@ function gebauteAuftraege(phase, root) {
 
 export function lauf(phasendatei, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
+  const zweck = befunde.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
   if (!istSauber(root)) befunde.push("Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand.");
   if (befunde.length > 0) {
-    for (const befund of befunde) console.error(befund);
+    for (const befund of [...befunde, ...zweck]) console.error(befund);
     return EXIT_ROT;
   }
   const plan = { phase, fertig: gebauteAuftraege(phase, root) };
