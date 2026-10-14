@@ -14,16 +14,14 @@ import {
 } from "../helpers.js";
 import { DISCLOSURE_JONAS } from "../_outbound-harness.js";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
-const KONVERSATION = CONVERSATION_IN_PROGRESS.conversation_id;
 const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
-const KONVERSATION_PFAD = `/v1/convai/conversations/${KONVERSATION}`;
+const KONVERSATION_PFAD = "/v1/convai/conversations/";
 const AUFTRAG = "Tisch fuer zwei reservieren (GW0)";
 
 const EL_WEG = Object.freeze({
@@ -36,14 +34,15 @@ const EL_WEG = Object.freeze({
 
 async function starteAnbieter() {
   const anfragen = [];
+  const naechsteKonversation = () => `conv_gw0_${anfragen.length}`;
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (stueck) => (roh += stueck));
     req.on("end", () => {
       anfragen.push({ methode: req.method, pfad: req.url, body: JSON.parse(roh || "{}") });
       const antwort = req.url.startsWith(START_PFAD)
-        ? { success: true, conversation_id: KONVERSATION, sip_call_id: "sip_gw0" }
-        : CONVERSATION_IN_PROGRESS;
+        ? { success: true, conversation_id: naechsteKonversation(), sip_call_id: "sip_gw0" }
+        : { ...CONVERSATION_IN_PROGRESS, conversation_id: req.url.slice(KONVERSATION_PFAD.length) };
       res.writeHead(HTTP_OK, { "content-type": "application/json" });
       res.end(JSON.stringify(antwort));
     });
@@ -52,7 +51,10 @@ async function starteAnbieter() {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     starts: () => anfragen.filter((a) => a.methode === "POST" && a.pfad.startsWith(START_PFAD)),
-    beendet: () => anfragen.some((a) => a.methode === "DELETE" && a.pfad === KONVERSATION_PFAD),
+    beendet: (konversation) =>
+      anfragen.some(
+        (a) => a.methode === "DELETE" && (konversation ? a.pfad === KONVERSATION_PFAD + konversation : true),
+      ),
     schliessen: () => new Promise((fertig) => server.close(fertig)),
   };
 }
@@ -236,43 +238,41 @@ const WACHE_ENV = Object.freeze({
   BUDGET_WATCHDOG_INTERVAL_MS: "200",
 });
 
+async function endeDesAuftragsAnrufs(srv) {
+  const store = await waitForStoreState(srv, (s) => auftragsAnruf(s)?.status !== "active", 6000);
+  return auftragsAnruf(store);
+}
+
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
   await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - 210) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
-    const store = await waitForStoreState(srv, (s) => auftragsAnruf(s)?.status !== "active", 5000);
-    assert.equal(auftragsAnruf(store).failureReason, "budget-exhausted");
-    await waitUntil(anbieter.beendet, { timeoutMs: 3000 });
+    assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "budget-exhausted");
+    await waitUntil(() => anbieter.beendet(), { timeoutMs: 3000 });
   });
 });
 
-test("GW0-KOSTENDECKE im Gespraech Kontrolle: unter der Decke laeuft der EL-Anruf weiter", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - 230) }, async ({ srv, anbieter }) => {
-    assert.equal((await rufeAn(srv)).status, HTTP_OK);
-    await echtWarten(1500);
-    assert.equal(auftragsAnruf(srv.readStore()).status, "active");
-    assert.equal(anbieter.beendet(), false);
+test("GW0-KOSTENDECKE im Gespraech Kontrolle: unter der Decke beendet die Geld-Wache den EL-Anruf nicht", async () => {
+  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - 230) }, async ({ srv }) => {
+    assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
+    assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "max-duration-cap");
   });
 });
 
-test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer, auch unter dem Anbieterdeckel", async () => {
+const LANGER_AUFTRAG = "Laengerer Anruf (GW0)";
+const LANGES_ZIEL = "+4915112340003";
+
+test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterdeckel, ein laengerer laeuft weiter", async () => {
   await aufDemElWeg({}, async ({ srv, anbieter }) => {
-    const res = await rufeAn(srv, { max_duration_s: 2 });
-    assert.equal(res.status, HTTP_OK);
+    const lang = await rufeAn(srv, { to: LANGES_ZIEL, objective: LANGER_AUFTRAG, max_duration_s: 30 });
+    assert.equal(lang.status, HTTP_OK);
+    assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
     assert.equal(auftragsAnruf(srv.readStore()).status, "active");
-    const store = await waitForStoreState(srv, (s) => auftragsAnruf(s)?.status !== "active", 6000);
-    const anruf = auftragsAnruf(store);
+    const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
-    await waitUntil(anbieter.beendet, { timeoutMs: 3000 });
-  });
-});
-
-test("GW0-MAXDAUER Kontrolle: ein EL-Anruf mit laengerer Max-Dauer laeuft weiter", async () => {
-  await aufDemElWeg({}, async ({ srv, anbieter }) => {
-    const res = await rufeAn(srv, { max_duration_s: 30 });
-    assert.equal(res.status, HTTP_OK);
-    await echtWarten(3000);
-    assert.equal(auftragsAnruf(srv.readStore()).status, "active");
-    assert.equal(anbieter.beendet(), false);
+    await waitUntil(() => anbieter.beendet(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
+    const langerAnruf = anrufAn(srv, LANGES_ZIEL);
+    assert.equal(langerAnruf.status, "active");
+    assert.equal(anbieter.beendet(langerAnruf.elevenlabsConversationId), false);
   });
 });
