@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema, backfillAccountEmailCase } from "../src/db/migrate.js";
 import { makeAccounts, makeSessions, newestAccountIfUnanimousEmail } from "../src/web-auth.js";
 
 async function setup() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
   return { db, accounts: makeAccounts(runner), sessions: makeSessions(runner) };
@@ -228,7 +228,7 @@ test("Review-Blocker Runde 1 (behaviorAsIntended): Rueckgabe-tenantId nach Repea
 });
 
 test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber pg_advisory_xact_lock VOR dem Dedup-SELECT", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   const calls = [];
   const runner = {
@@ -283,7 +283,7 @@ test("Review-Blocker Runde 2 (G26): reine Whitespace-Email wird wie eine fehlend
 });
 
 test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestandszeilen idempotent (Migrations-Backfill)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   await db.query(`INSERT INTO tenant (id, status) VALUES ('t_legacy', 'suspended')`);
   await db.query(

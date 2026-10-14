@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const CTX = {
   summary: "Stammkunde will Freitag vormittag",
@@ -23,7 +23,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

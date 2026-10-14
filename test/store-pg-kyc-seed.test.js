@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import * as ops from "../src/store/state-ops.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
@@ -16,7 +16,7 @@ async function dbKycLevel(db) {
 }
 
 test("pg: init() heilt den Owner auf id_verified, persistiert + idempotent re-hydriert", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const store = makePgStore(runnerFor(db));
   await store.init();
   assert.equal(store.kycReached(BOOTSTRAP_TENANT_ID, KYC_LEVEL.CARD), true, "Owner passiert KYC");
@@ -33,7 +33,7 @@ test("pg: init() heilt den Owner auf id_verified, persistiert + idempotent re-hy
 });
 
 test("pg: explizit gesetztes kyc_level (card) wird vom Boot-Seed NICHT ueberschrieben", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const store = makePgStore(runnerFor(db));
   await store.init();
   store.setKycLevel(BOOTSTRAP_TENANT_ID, KYC_LEVEL.CARD);

@@ -4,7 +4,7 @@ import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { applySchema } from "../src/db/migrate.js";
 import * as ops from "../src/store/state-ops.js";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const TENANT = "user_312k_cancel";
 const UNTOUCHED = "user_312k_cancel_untouched";
@@ -62,7 +62,7 @@ test("312k-P1 pg: Tenant ohne gesetztes Flag -> NULL in der DB, tenantSubscripti
 });
 
 test("312k-P1 Migration: doppelter applySchema bleibt fehlerfrei, stripe_cancel_at_period_end existiert danach (Idempotenz)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
   await applySchema(conn);
   await applySchema(conn);

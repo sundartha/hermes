@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { makePortalStore } from "../src/store/portal.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -10,7 +10,7 @@ const TENANT_A = "tenant_a",
   TENANT_B = "tenant_b";
 
 async function setup() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const exec = (sql) => db.exec(sql);
   const query = (t, p) => db.query(t, p);
   await applySchema({ query, exec });

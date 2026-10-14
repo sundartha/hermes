@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema } from "../src/db/migrate.js";
 import { makePgStore } from "../src/store/pg.js";
 import { NUMBER_STATUS, PROVIDER, PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
@@ -188,7 +188,7 @@ test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen
 });
 
 test("P8: Schema-Idempotenz mit Trigger - applySchema zweimal auf frischer PGlite wirft nicht", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = { query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) };
   await applySchema(conn);
   await applySchema(conn);

@@ -7,7 +7,7 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_OPEN_POLLS_PER_CALL } from "../src/consult/delivery.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const HTTP_NOT_FOUND = 404;
 
@@ -94,7 +94,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (sql, params) => db.query(sql, params), exec: (sql) => db.exec(sql) }),
   };

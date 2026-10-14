@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makePortalStore } from "../src/store/portal.js";
@@ -8,7 +8,7 @@ import { makePortalStore } from "../src/store/portal.js";
 const SECRET_TOKEN = "super-secret-per-call-bearer-do-not-leak";
 
 test("portalStore.listCalls: ai_assistant_token NIE in der Projektion, obwohl in der Zeile gesetzt", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const q = (t, p) => db.query(t, p);
   await applySchema({ query: q, exec: (s) => db.exec(s) });
   await q(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { demoCalendar } from "../src/store/defaults.js";
@@ -149,7 +149,7 @@ test("Gegenprobe: ohne RLS-Rolle (Superuser) waeren beide Tenants sichtbar", asy
 });
 
 test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   await db.exec(
     `CREATE ROLE ${OWNER_ROLE} NOLOGIN NOBYPASSRLS;
@@ -170,7 +170,7 @@ test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed
 });
 
 test("Ohne GUC blockt die FORCE-RLS-WITH-CHECK das Owner-Seeding", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   await db.exec(
     `CREATE ROLE ${OWNER_ROLE} NOLOGIN NOBYPASSRLS;

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tempDataDir } from "./helpers.js";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 let makePgStore, jsonStore, views, config, BOOTSTRAP, dataDir;
 before(async () => {
@@ -18,7 +18,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema, rekeyProfilesToTenant } from "../src/db/migrate.js";
 
 function connOf(db) {
@@ -8,7 +8,7 @@ function connOf(db) {
 }
 
 test("(e) rekeyProfilesToTenant hebt email-Keys auf tenantId, erhaelt Orphans, idempotent", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = connOf(db);
   await applySchema(conn);
   await db.query(`INSERT INTO tenant (id, status) VALUES ('t_x', 'active')`);
@@ -33,7 +33,7 @@ test("(e) rekeyProfilesToTenant hebt email-Keys auf tenantId, erhaelt Orphans, i
 });
 
 test("(e) Forward-compat Schema-Rename: email-PK Bestands-Tabelle -> tenant_id-PK", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = connOf(db);
   await db.exec(
     `CREATE TABLE profile (email TEXT PRIMARY KEY, data JSONB NOT NULL);
