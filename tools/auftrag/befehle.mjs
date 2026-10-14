@@ -7,7 +7,7 @@ import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit } from "./git.mjs";
-import { fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
+import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
 
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
@@ -86,7 +86,10 @@ export function rot(phasendatei, kennung, root) {
 
 export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
-  if (befunde.length > 0) return meldeBefunde(befunde);
+  if (befunde.length > 0) {
+    console.log(`${VERSTOSS}${PHASE_PASST_NICHT}`);
+    return meldeBefunde(befunde);
+  }
   const aenderungen = aenderungenSeit(basis, root);
   const kontext = { auftrag, rolle, muster: geschuetzteMuster(root) };
   const { verstoesse, hinweise, produktzeilen } = grenzBefunde(kontext, aenderungen);

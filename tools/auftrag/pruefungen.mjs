@@ -20,6 +20,16 @@ const ENTSCHEIDEND = [
   /^(grün|rot|Verstoß|Hinweis|Abweichung)[: ]/,
 ];
 const TITELZEILE = /^\s*(✗ |not ok\b|ok\b|# Subtest:)/;
+export const VERSTOSS = "Verstoß: ";
+export const GESCHUETZT = "geschützte Datei geändert";
+export const AUSSERHALB = "außerhalb des Bereichs";
+export const ZU_VIELE_ZEILEN = "neue Zeilen Produktcode";
+export const PHASE_PASST_NICHT = "die Phasendatei passt nicht mehr zu diesem Auftrag";
+export const ROLLE = {
+  PRODUKT_IM_TEST: "Der Test-Agent hat Produktcode geändert",
+  FREMDER_TEST: "Der Test-Agent hat einen fremden Test geändert",
+  TEST_IM_BAU: "Der Bau-Agent hat einen Test geändert",
+};
 
 export function fuehreAus(name, befehl, { cwd, env, zeitlimit, eingabe }) {
   const [programm, ...args] = befehl;
@@ -77,22 +87,22 @@ export function rotUrteil({ exitCode, ausgabe, fehlermeldungen = [] }, erwartete
 }
 
 function testVerstoss(auftrag, pfad) {
-  if (!istTestdatei(pfad)) return `Der Test-Agent hat Produktcode geändert: ${pfad}`;
+  if (!istTestdatei(pfad)) return `${ROLLE.PRODUKT_IM_TEST}: ${pfad}`;
   const eigene = [auftrag.abnahme, ...auftrag.erwarteteDateien];
-  return eigene.includes(pfad) ? null : `Der Test-Agent hat einen fremden Test geändert: ${pfad}`;
+  return eigene.includes(pfad) ? null : `${ROLLE.FREMDER_TEST}: ${pfad}`;
 }
 
 function rollenVerstoss(auftrag, rolle, pfad) {
   if (rolle === "test") return testVerstoss(auftrag, pfad);
-  return istTestdatei(pfad) ? `Der Bau-Agent hat einen Test geändert: ${pfad}` : null;
+  return istTestdatei(pfad) ? `${ROLLE.TEST_IM_BAU}: ${pfad}` : null;
 }
 
 function dateiVerstoesse({ auftrag, rolle, muster }, pfad) {
-  if (istGeschuetzt(muster, pfad)) return [`Verstoß: geschützte Datei geändert: ${pfad}`];
+  if (istGeschuetzt(muster, pfad)) return [`${VERSTOSS}${GESCHUETZT}: ${pfad}`];
   const verstoss = rollenVerstoss(auftrag, rolle, pfad);
-  if (verstoss) return [`Verstoß: ${verstoss}`];
+  if (verstoss) return [`${VERSTOSS}${verstoss}`];
   if (rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad)) {
-    return [`Verstoß: außerhalb des Bereichs ${auftrag.bereich}: ${pfad}`];
+    return [`${VERSTOSS}${AUSSERHALB} ${auftrag.bereich}: ${pfad}`];
   }
   return [];
 }
@@ -113,7 +123,7 @@ export function grenzBefunde(kontext, aenderungen) {
   const produktzeilen = produkt.reduce((summe, { zeilen }) => summe + zeilen, 0);
   if (produktzeilen > MAX_PRODUKTZEILEN) {
     verstoesse.push(
-      `Verstoß: ${produktzeilen} neue Zeilen Produktcode, erlaubt sind ${MAX_PRODUKTZEILEN}.`,
+      `${VERSTOSS}${produktzeilen} ${ZU_VIELE_ZEILEN}, erlaubt sind ${MAX_PRODUKTZEILEN}.`,
     );
   }
   const hinweise =
