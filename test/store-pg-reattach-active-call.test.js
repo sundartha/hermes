@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 
 async function sharedDb() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (s) => db.exec(s) }),
   };

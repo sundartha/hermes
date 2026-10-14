@@ -11,7 +11,7 @@ import {
   siteFromOrigin,
 } from "../src/cookie-consent-log.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const CONSENT_ID = "3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f";
 const VALID = Object.freeze({ id: CONSENT_ID, version: 1, statistics: true, marketing: false });
@@ -58,7 +58,7 @@ test("siteFromOrigin: nur der Host eines http(s)-Origins, sonst null", () => {
 });
 
 async function freshLog() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const query = (text, params) => db.query(text, params);
   await applySchema({ query, exec: (sql) => db.exec(sql) });
   const log = makeCookieConsentLog({ withClient: (fn) => fn({ query }) });

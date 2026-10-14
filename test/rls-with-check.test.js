@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { applySchema } from "../src/db/migrate.js";
 
 const APP_ROLE = "app_user";
@@ -9,7 +9,7 @@ const TENANT_B = "tenant_b";
 const RLS_ERROR = /row-level security|policy/i;
 
 async function setup() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
   await applySchema(conn);
 
@@ -106,7 +106,7 @@ test("WITH CHECK: UPDATE eigener Zeile ohne tenant_id-Aenderung passiert RLS", a
 });
 
 test("Schema-Idempotenz: applySchema zweimal aufrufen wirft keinen Fehler", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
   await applySchema(conn);
   await applySchema(conn);

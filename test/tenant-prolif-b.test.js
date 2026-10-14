@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makeAccounts } from "../src/web-auth.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
@@ -16,7 +16,7 @@ const SUB_2 = "u2";
 const TENANT_1 = tenantIdForSubject(SUB_1);
 
 test("tenant-prolif-b: init() hydriert subIndex aus account -> gemergter sub2 loest kanonisch auf", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const boot = makePgStore(runnerFor(db));
   await boot.init();
   const accounts = makeAccounts(runnerFor(db));
@@ -34,7 +34,7 @@ test("tenant-prolif-b: init() hydriert subIndex aus account -> gemergter sub2 lo
 });
 
 test("tenant-prolif-b: Nach-Boot-Login bindet gemergten sub ohne Neustart (kein Race)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const store = makePgStore(runnerFor(db));
   await store.init();
   const accounts = makeAccounts(runnerFor(db));
@@ -52,7 +52,7 @@ test("tenant-prolif-b: Nach-Boot-Login bindet gemergten sub ohne Neustart (kein 
 });
 
 test("tenant-prolif-b: Onboard-Guard-Bedingung - resolveTenant(gemergt) != tenantIdForSubject", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const boot = makePgStore(runnerFor(db));
   await boot.init();
   const accounts = makeAccounts(runnerFor(db));
@@ -70,7 +70,7 @@ test("tenant-prolif-b: Onboard-Guard-Bedingung - resolveTenant(gemergt) != tenan
 });
 
 test("checkSubAlreadyMerged: gemergter Zweit-sub -> 409 + Fehlertext (blockt den Zweit-Tenant-Kauf)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const boot = makePgStore(runnerFor(db));
   await boot.init();
   const accounts = makeAccounts(runnerFor(db));
@@ -87,7 +87,7 @@ test("checkSubAlreadyMerged: gemergter Zweit-sub -> 409 + Fehlertext (blockt den
 });
 
 test("checkSubAlreadyMerged: Primaer-sub (canonical === tenantId) -> null (kein falscher 409)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const boot = makePgStore(runnerFor(db));
   await boot.init();
   const accounts = makeAccounts(runnerFor(db));

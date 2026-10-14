@@ -2,10 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applySchema } from "../src/db/migrate.js";
 import { makeAuditStore } from "../src/audit-store.js";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 test("auditStore.record schreibt eine Zeile (keine Secrets im detail)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   const audit = makeAuditStore({ withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) });
   await audit.record({

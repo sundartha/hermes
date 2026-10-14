@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const SEEN_AT = "2026-08-21T09:00:00.000Z";
 
@@ -26,7 +26,7 @@ before(async () => {
 });
 
 async function makePgTestStore() {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
   };

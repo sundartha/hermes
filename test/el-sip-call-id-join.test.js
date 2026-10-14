@@ -12,7 +12,7 @@ import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
   JOIN_SCHLUESSEL_ANRUF_2,
 } from "./fixtures/elevenlabs-conversations.js";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 const OTB_JOINT = JOIN_SCHLUESSEL_ANRUF_2.telnyxDetailRecord.sip_call_id;
 const SCL_JOINT_NICHT = JOIN_SCHLUESSEL_ANRUF_2.startAntwort.sip_call_id;
@@ -275,7 +275,7 @@ test("der Schluessel ueberlebt das json-Backend und ist set-once", () => {
 });
 
 test("der Schluessel ueberlebt das pg-Backend (Spalte + Flush + rowToCall)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) =>
       fn({ query: (sql, params) => db.query(sql, params), exec: (sql) => db.exec(sql) }),

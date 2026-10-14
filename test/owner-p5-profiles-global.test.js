@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
 import { makePgTestStore } from "./pg-helpers.js";
@@ -44,7 +44,7 @@ test("P5: profile traegt die Policy profile_global (nicht tenant_isolation)", as
 });
 
 test("P5: Migration owner-keyed profile bleibt nach Schema-Migrate erreichbar", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
   await db.exec(
     `CREATE TABLE tenant (id TEXT PRIMARY KEY);

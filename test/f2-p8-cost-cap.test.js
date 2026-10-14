@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neuePGliteInstanz } from "./gemeinsam/pglite-instanz.js";
+import { neuePglite } from "./pglite-helfer.js";
 import {
   makeDefaultState,
   registerTenant,
@@ -140,7 +140,7 @@ async function reopen(db) {
 }
 
 test("pglite: recordUsageEvent(SMS) persistiert -> dailySmsCount sieht ihn nach Re-Hydrierung (Cap restart-fest)", async () => {
-  const db = neuePGliteInstanz();
+  const db = await neuePglite();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
