@@ -332,10 +332,8 @@ test("ist die Pin-Pr체fung gr체n, geht der Auftrag weiter durch die Mutationspr�
 test("fehlt das Pin-Skript, obwohl ein pre-commit-Hook da ist, scheitert die Pin-Pr체fung laut, und die zweite Runde bekommt die Meldung", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" } };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ".githooks/pre-commit": "#!/bin/sh\nexit 0\n" } });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  const namen = beleg.pruefungen.map(({ name }) => name);
-  assert.equal(namen[namen.indexOf("lint") + 1], "pin-pr체fung", namen.join(", "));
-  assert.equal(pruefung(beleg, "pin-pr체fung"), EXIT_ROT);
-  assert.equal(beleg.grund, `pin-pr체fung endete mit Exit ${EXIT_ROT}.`);
+  const nachLint = beleg.pruefungen[beleg.pruefungen.findIndex(({ name }) => name === "lint") + 1];
+  const ergebnis = { status: lauf.status, nachLint: nachLint?.name, exitCode: nachLint?.exitCode, grund: beleg.grund };
+  assert.deepEqual(ergebnis, { status: EXIT_ROT, nachLint: "pin-pr체fung", exitCode: EXIT_ROT, grund: `pin-pr체fung endete mit Exit ${EXIT_ROT}.` }, lauf.stdout + lauf.stderr);
   assert.ok(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8").includes(PIN_FEHLT));
 });
