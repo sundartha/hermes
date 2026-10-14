@@ -8,6 +8,7 @@ import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit } from "./git.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
+import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
@@ -65,6 +66,7 @@ export function pruefe(phasendatei, root) {
   if (befunde.length > 0) {
     meldeBefunde(befunde);
     console.log(`rot: ${befunde.length} Befunde in ${phasendatei}.`);
+    console.log(zweckBlock(MELDUNG.PHASENDATEI).join("\n"));
     return EXIT_ROT;
   }
   console.log(`grün: ${phase.auftraege.length} Aufträge in ${phasendatei} sind vollständig.`);

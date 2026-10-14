@@ -7,6 +7,7 @@ import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { gleicherText, nummernImOrdner } from "./nummern.mjs";
+import { MELDUNG, zweckBlock } from "../zweck.mjs";
 
 export const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
 const LISTEN_OBEN = ["annahmen", "fehlendeSzenarien", "ownerAufgaben", "gemeinsameNamen"];
@@ -492,6 +493,7 @@ export async function schnittBefehl(ordner, root) {
   for (const zeile of [...ergebnis.hinweise, ...ergebnis.annahmen.map(annahmeText)]) console.log(zeile);
   if (befunde.length > 0) {
     console.log(`rot: ${befunde.length} Befunde in ${join(planung, SCHNITT)}.`);
+    console.log(zweckBlock(MELDUNG.SCHNITT).join("\n"));
     return EXIT_BEFUNDE;
   }
   console.log(`grün: die Schnittliste ${join(planung, SCHNITT)} erfüllt alle Regeln.`);

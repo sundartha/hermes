@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN, ROT } from "../../tools/auftrag/bericht.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, grenzBefunde } from "../../tools/auftrag/pruefungen.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
-import { GRUND, MELDUNG, PRUEFUNG, zweckBlock, zweckIds } from "../../tools/auftrag/zweck.mjs";
+import { GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBlock, zweckIds } from "../../tools/auftrag/zweck.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, probeRepository, runIn } from "./probe-repo.js";
+import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const ZWECK = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/zweck.json"), "utf8"));
 const FELDER = ["liste", "wozu", "behebung", "nichtAngenommen", "ausweg"];
@@ -24,6 +25,7 @@ const AUSSTIEGE = [
   "Empfehlung:",
 ];
 const ZU_VIELE_ZEILEN = 401;
+const AUSFUEHRBAR = 0o755;
 
 function alleGrenzVerstoesse() {
   const auftrag = { bereich: "src/bereich.js", abnahme: "test/a.test.js", erwarteteDateien: [] };
@@ -197,4 +199,98 @@ test("die Bau-Nachrunde nennt den Zweck der Mutation und erst Nötig, dann Strei
   assert.ok(streichen?.[0].includes("jede Eingabe, auch Fehlerfall und leerer Wert"), prompt);
   const noetig = prompt.indexOf("\nNötig: <Mutant>");
   assert.ok(noetig !== -1 && noetig < streichen.index, prompt);
+});
+
+test("abdeckung-pruefen nennt bei Befunden den Zweck auf stdout, stderr bleibt die Befundliste, der Neuschnitt filtert den Block heraus", (context) => {
+  const ordner = "P-001-probe";
+  const wurzel = probeDirectory(context, { [`${ordner}/pitch.md`]: "# P-001\n", [`${ordner}/sicherheit.md`]: "# P-001\n", [`${ordner}/phase.json`]: "{" });
+  const lauf = runIn(wurzel, process.execPath, [join(REPO_ROOT, "tools/abdeckung-pruefen.mjs"), ordner]);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
+  assert.match(lauf.stderr, /^phase\.json ist nicht lesbar: [^\n]+\n$/);
+  const block = zweckBlock(MELDUNG.ABDECKUNG);
+  assert.ok(lauf.stdout.includes(`rot: 1 Befunde in ${ordner}.\n${block.join("\n")}\n`), lauf.stdout);
+  const ausgabe = `${lauf.stdout}\n${lauf.stderr}`.split("\n").filter((zeile) => zeile.trim() !== "");
+  assert.deepEqual(ohneZweck(ausgabe), [`rot: 1 Befunde in ${ordner}.`, lauf.stderr.trim()]);
+});
+
+const EXIT_SCHNITT_BEFUNDE = 4;
+
+test("die Schnittprüfung nennt bei Befunden den Zweck nach der roten Zeile, die Befunde bleiben auf stderr", (context) => {
+  const ordner = "P-001-probe";
+  const wurzel = probeRepository(context, {
+    "tools/bereiche.json": readFileSync(join(REPO_ROOT, "tools/bereiche.json"), "utf8"),
+    [`${ordner}/pitch.md`]: "# P-001\n\n## Szenario S1: Anruf\nWenn x\nDann y\n",
+    [`${ordner}/sicherheit.md`]: "# P-001\n\n## 2. Angriffswege\n\nkeine Angriffswege gefunden\n",
+  });
+  mkdirSync(join(wurzel, ordner, "planung"));
+  writeFileSync(join(wurzel, ordner, "planung/schnitt.json"), JSON.stringify({ annahmen: [], fehlendeSzenarien: [], ownerAufgaben: [], gemeinsameNamen: [], auftraege: [] }));
+  const lauf = runIn(wurzel, process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "schnitt", ordner]);
+  assert.equal(lauf.status, EXIT_SCHNITT_BEFUNDE, lauf.stderr + lauf.stdout);
+  const block = zweckBlock(MELDUNG.SCHNITT).join("\n");
+  assert.ok(lauf.stdout.endsWith(`${block}\n`), lauf.stdout);
+  assert.match(lauf.stdout.slice(0, -(block.length + 1)), /(?:^|\n)rot: \d+ Befunde in [^\n]+\n$/);
+  assert.doesNotMatch(lauf.stderr, /Wozu: /);
+});
+
+const PLAN = "plaene/P-001-probe";
+const PLAN_PHASE = `${PLAN}/phase.json`;
+const S1 = "Gegeben die Zahl 2\nWenn ein Agent `verdopple` mit 2 aufruft\nDann ist die Antwort `4`";
+const OHNE_WEG = `#!/usr/bin/env node
+import { appendFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+appendFileSync(join(process.env.ERSATZ_ORT, "prompt-" + process.env.HERMES_ROLLE + ".txt"), readFileSync(0, "utf8") + "\\n");
+console.log(JSON.stringify({ type: "result", is_error: false, result: "Ich finde keinen Weg." }));
+`;
+const NUR_UMBAU = {
+  phase: "P-001-probe",
+  entwurf: { "src/text.js": "Entwurf." },
+  auftraege: [{ ...UMBAU, id: "a1", bereich: "src/text.js", prueft: "keiner, weil Umbau: bestehende Tests bleiben unverändert grün" }],
+};
+
+function abschnittAus(text, titel) {
+  const anfang = text.indexOf(`\n## ${titel}\n`);
+  assert.notEqual(anfang, -1, text);
+  const ende = text.indexOf("\n## ", anfang + 1);
+  return text.slice(anfang, ende === -1 ? undefined : ende);
+}
+
+test("scheitert ein Neuschnitt an Schnitt und Abdeckung, nennt der nächste Prompt beide Zwecke je einmal und die Befunde ohne Zweck-Zeilen", (context) => {
+  const repo = probeRepository(context, {
+    ...BASIS,
+    [`${PLAN}/pitch.md`]: `# P-001 Probe\n\n## Anforderungen\n\n### Regel R1: Zahlen werden verdoppelt.\n\n#### Szenario S1: Verdoppeln\n${S1}\n`,
+    [`${PLAN}/sicherheit.md`]: "# P-001 Probe\n\n## 2. Angriffswege\nKeine Angriffswege gefunden, weil nichts Neues erreichbar ist.\n",
+    [PLAN_PHASE]: `${JSON.stringify(NUR_UMBAU, null, 2)}\n`,
+  });
+  const werkzeug = probeDirectory(context, { "claude.mjs": OHNE_WEG });
+  chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
+  const umgebung = { ...isolatedEnvironment(), HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_ORT: werkzeug };
+  const lauf = spawnSync(process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", PLAN_PHASE], { cwd: repo, encoding: "utf8", env: umgebung });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  const zweiter = readFileSync(join(werkzeug, "prompt-planung.txt"), "utf8").split("\n## Neuschnitt\n").at(-1);
+  const zweck = abschnittAus(zweiter, "Wozu die Prüfungen da sind");
+  for (const id of [MELDUNG.NEUSCHNITT, MELDUNG.ABDECKUNG]) {
+    assert.equal(zweck.split(zweckBlock(id).join("\n")).length - 1, 1, `${id}\n${zweiter}`);
+  }
+  const befunde = abschnittAus(zweiter, "Befunde zu deinem vorigen Neuschnitt");
+  assert.match(befunde, /S1 gehört keinem Auftrag/);
+  assert.doesNotMatch(befunde, /^Wozu: /m);
+});
+
+const UNGUELTIG = { "phase.json": "{" };
+
+test("pruefe nennt bei einer ungültigen Phasendatei nach der roten Zeile den Zweck der Phasendatei", (context) => {
+  const repo = probeRepository(context, UNGUELTIG);
+  const lauf = runIn(repo, process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "pruefe", "phase.json"]);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
+  const block = zweckBlock(MELDUNG.PHASENDATEI).join("\n");
+  assert.ok(lauf.stdout.endsWith(`\n${block}\n`), lauf.stdout);
+  assert.match(lauf.stdout.slice(0, -(block.length + 1)), /^rot: \d+ Befunde in phase\.json\.\n$/);
+});
+
+test("lauf endet bei einer ungültigen Phasendatei auf stderr mit dem Zweck der Phasendatei", (context) => {
+  const repo = probeRepository(context, UNGUELTIG);
+  const lauf = runIn(repo, process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", "phase.json"]);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
+  const block = `${zweckBlock(MELDUNG.PHASENDATEI).join("\n")}\n`;
+  assert.ok(lauf.stderr.endsWith(block) && lauf.stderr.length > block.length, lauf.stderr);
 });
