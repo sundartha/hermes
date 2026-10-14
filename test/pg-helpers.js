@@ -1,16 +1,31 @@
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { makePgStore, BOOTSTRAP_TENANT_ID, anrufpauseSetzen } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
 import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
 const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
-const MIGRATE_DATEI = new URL("../src/db/migrate.js", import.meta.url);
+const WURZEL = fileURLToPath(new URL("..", import.meta.url));
+const KETTENANFANG = "src/db/migrate.js";
+const RELATIVER_IMPORT = /\b(?:from|import)\s*["'](\.\.?\/[^"']+)["']/g;
+
+export function vorlagenKette() {
+  const kette = new Set([KETTENANFANG]);
+  for (const datei of kette) {
+    const inhalt = fs.readFileSync(path.join(WURZEL, datei), "utf8");
+    for (const [, ziel] of inhalt.matchAll(RELATIVER_IMPORT)) {
+      kette.add(path.posix.join(path.posix.dirname(datei), ziel));
+    }
+  }
+  return [...kette].sort();
+}
 
 let schemaVorlage = null;
 function schemaVorlageHolen() {
   schemaVorlage ??= vorlage("schema", applySchema, [
     fs.readFileSync(SCHEMA_DATEI, "utf8"),
-    fs.readFileSync(MIGRATE_DATEI, "utf8"),
+    ...vorlagenKette().map((datei) => fs.readFileSync(path.join(WURZEL, datei), "utf8")),
   ]);
   return schemaVorlage;
 }

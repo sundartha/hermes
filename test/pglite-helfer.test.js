@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { neuePglite, vorlage } from "./pglite-helfer.js";
+import { aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
+import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "../tools/mutationspruefung/vorlage.mjs";
 
 const KINDPROZESS_OBERGRENZE_MS = 20_000;
 const KIND = fileURLToPath(new URL("./pglite-helfer-kind.js", import.meta.url));
@@ -88,13 +89,64 @@ test("Vorlagen: verschiedene Schluesselteile ergeben verschiedene Dateien, gleic
   }
 });
 
-test("Vorlagen: unter aktivem Mutanten entsteht keine Datei", async () => {
+function kettensummeSetzen(wert) {
+  if (wert === undefined) delete process.env[VORLAGE_UNABHAENGIG];
+  else process.env[VORLAGE_UNABHAENGIG] = wert;
+}
+
+async function mitKettensumme(wert, lauf) {
+  const alt = process.env[VORLAGE_UNABHAENGIG];
+  kettensummeSetzen(wert);
+  try {
+    await lauf();
+  } finally {
+    kettensummeSetzen(alt);
+  }
+}
+
+async function mitVorlageDesWerkzeugs(geprueft, lauf) {
+  await mitKettensumme("geerbt", async () => {
+    await vorlageEinstellen(geprueft);
+    await mitStrykerVariable("1", lauf);
+  });
+}
+
+test("Vorlagen: unter aktivem Mutanten entsteht keine Datei, außer das Werkzeug meldet die Vorlage als unabhängig", async () => {
   const name = `probe-mutant-${process.pid}`;
   try {
-    await mitStrykerVariable("1", async () => {
+    await mitVorlageDesWerkzeugs("src/db/migrate.js", async () => {
       await vorlage(name, leerEinrichten, ["eins"]);
     });
     assert.deepEqual(vorlagenDateien(name), []);
+    await mitVorlageDesWerkzeugs("src/store/pg.js", async () => {
+      await vorlage(name, leerEinrichten, ["eins"]);
+    });
+    assert.equal(vorlagenDateien(name).length, 1);
+  } finally {
+    vorlagenLoeschen(name);
+  }
+});
+
+function tabelleAnlegen(tabelle) {
+  return (db) => db.exec(`CREATE TABLE ${tabelle} (wert int)`);
+}
+
+async function tabellen(abbild) {
+  const db = await aufraeumenVormerken()(abbild);
+  const { rows } = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1");
+  return rows.map(({ tablename }) => tablename);
+}
+
+test("Vorlagen: unter aktivem Mutanten baut eine geänderte Vorlagenkette die Vorlage neu, statt die alte aus dem Cache zu laden", async () => {
+  const name = `probe-kette-${process.pid}`;
+  try {
+    await mitStrykerVariable("1", async () => {
+      await mitKettensumme("kette-alt", () => vorlage(name, tabelleAnlegen("aus_alter_kette"), ["eins"]));
+      await mitKettensumme("kette-neu", async () => {
+        const abbild = await vorlage(name, tabelleAnlegen("aus_neuer_kette"), ["eins"]);
+        assert.deepEqual(await tabellen(abbild), ["aus_neuer_kette"]);
+      });
+    });
   } finally {
     vorlagenLoeschen(name);
   }
