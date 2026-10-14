@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, symlinkSync } from "node:fs";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const PROBE = [
@@ -104,4 +104,56 @@ test("karte bricht ab, wenn die Datei fehlt oder ESLint kein Ergebnis liefert", 
   const ohneErgebnis = karte(kaputt, "src/probe.js");
   assert.equal(ohneErgebnis.status, 1);
   assert.match(ohneErgebnis.stderr, /Abbruch: ESLint lieferte kein Ergebnis für src\/probe\.js/);
+});
+
+function melder(ordner) {
+  const marke = join(ordner, "ausgefuehrt.txt");
+  const konfiguration = `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marke)}, "ja");\nexport default [];\n`;
+  return { marke, konfiguration };
+}
+
+test("karte führt keine ESLint-Konfiguration aus dem Ordner der angegebenen Datei im Repo aus", (context) => {
+  const ordner = probe(context);
+  const { marke, konfiguration } = melder(probeDirectory(context, {}));
+  writeFiles(ordner, { "fremd/eslint.config.js": konfiguration, "fremd/x.js": "export const a = 1;\n" });
+  const lauf = karte(ordner, "fremd/x.js");
+  assert.equal(existsSync(marke), false, "karte hat Code aus einer fremden eslint.config.js ausgeführt");
+  assert.equal(lauf.status, 0, lauf.stderr);
+});
+
+test("karte führt keine ESLint-Konfiguration aus einem Ordner außerhalb des Repos aus", (context) => {
+  const ordner = probe(context);
+  const fremd = probeDirectory(context, { "x.js": "export const a = 1;\n" });
+  const { marke, konfiguration } = melder(fremd);
+  writeFiles(fremd, { "eslint.config.js": konfiguration });
+  const lauf = karte(ordner, join(fremd, "x.js"));
+  assert.equal(existsSync(marke), false, "karte hat Code aus einer fremden eslint.config.js ausgeführt");
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /Abbruch: .*x\.js liegt nicht im Repo/);
+});
+
+test("karte lehnt Pfade ab, die über .., einen Symlink oder einen absoluten Pfad aus dem Repo führen", (context) => {
+  const ordner = probe(context);
+  const fremd = probeDirectory(context, { "x.js": "export const a = 1;\n" });
+  symlinkSync(fremd, join(ordner, "verweis"));
+  for (const datei of [join(relative(ordner, fremd), "x.js"), "verweis/x.js", join(fremd, "x.js"), "src/../src/probe.js"]) {
+    const lauf = karte(ordner, datei);
+    assert.equal(lauf.status, 1, datei);
+    assert.equal(lauf.stdout, "", datei);
+    assert.match(lauf.stderr, /liegt nicht im Repo/, datei);
+  }
+});
+
+test("karte lehnt Dateien ab, die Git ignoriert, und nimmt neue, noch nicht versionierte Dateien an", (context) => {
+  const ordner = probe(context);
+  writeFiles(ordner, { ".git/info/exclude": "lokal/\n", "lokal/x.js": "export const a = 1;\n", "pakete/node_modules/x.js": "export const a = 1;\n", "src/neu.js": "export const neu = () => 1;\n" });
+  for (const datei of ["pakete/node_modules/x.js", "lokal/x.js"]) {
+    const lauf = karte(ordner, datei);
+    assert.equal(lauf.status, 1, datei);
+    assert.equal(lauf.stdout, "", datei);
+    assert.match(lauf.stderr, /die Git ignoriert/, datei);
+  }
+  const neu = karte(ordner, "src/neu.js");
+  assert.equal(neu.status, 0, neu.stderr);
+  assert.equal(neu.stdout, "src/neu.js\nneu\t1-1\t1 Zeilen\tkeine Befunde\n");
 });
