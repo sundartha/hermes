@@ -511,3 +511,15 @@ test("eine gelöschte Zeile, deren Fehlen nur einen Prozess übrig lässt, bleib
   const gestartet = readFileSync(protokoll, "utf8").trim().split(" ").map(Number);
   assert.ok(gestartet.length > 1 && !gestartet.some(lebt), gestartet.join(" "));
 });
+
+const GROSS = '  if (zahl > 100) return "gross";';
+const GRUPPENLAUF = /^src\/zahl\.js: (\d+) Mutanten gegen \d+ Testdateien in \d+ s$/gm;
+
+test("bei zwei Gruppen prüft die zweite nur die Zeilen, die die erste nicht bestätigt getötet hat", (context) => {
+  const repo = probeRepository(context, { ...BASIS, ...begleiter(testdatei([0, "null"], [1, "positiv"])) });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL, GROSS) });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  const mutanten = [...lauf.stdout.matchAll(GRUPPENLAUF)].map(([, anzahl]) => Number(anzahl));
+  assert.equal(mutanten.length, 2, lauf.stdout + lauf.stderr);
+  assert.ok(mutanten[1] < mutanten[0], lauf.stdout);
+});

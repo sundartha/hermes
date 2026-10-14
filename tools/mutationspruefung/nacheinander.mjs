@@ -21,3 +21,14 @@ export function vereine(ergebnisse, laeufe) {
   }
   return ergebnisse.map((eintrag) => staerker(eintrag, nachSchluessel.get(eintrag.schluessel)));
 }
+
+export async function nacheinander(testgruppen, zeilen, gruppenlauf) {
+  let ergebnisse = null;
+  for (const tests of testgruppen) {
+    const offen = ergebnisse === null ? zeilen : ergebnisse.filter((eintrag) => !bestaetigt(eintrag)).map((eintrag) => eintrag.zeilen);
+    if (offen.length === 0) break;
+    const lauf = await gruppenlauf(offen, tests);
+    ergebnisse = ergebnisse === null ? lauf : vereine(ergebnisse, [lauf]);
+  }
+  return ergebnisse;
+}

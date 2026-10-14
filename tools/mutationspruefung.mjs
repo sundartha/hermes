@@ -12,7 +12,7 @@ import { ESLint } from "eslint";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { bestaetige, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
-import { ABGESCHALTET, staerker, ueberlebt, vereine } from "./mutationspruefung/nacheinander.mjs";
+import { ABGESCHALTET, nacheinander, staerker, ueberlebt, vereine } from "./mutationspruefung/nacheinander.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
@@ -42,7 +42,6 @@ const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
 const BESTAETIGUNG = "Bestätigung";
 const GLEICHZEITIG = KONFIGURATION.concurrency;
-const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
 const GLEICHWERTIG = /^Gleichwertig: (.+?), weil \S.*$/gm;
@@ -169,29 +168,8 @@ async function gruppenlauf(lauf) {
   return bestaetige(await ersterLauf(lauf), nachlauf, lauf.tests);
 }
 
-function wellen(testgruppen) {
-  return Array.from({ length: Math.ceil(testgruppen.length / GLEICHZEITIG) }, (_leer, welle) =>
-    testgruppen.slice(welle * GLEICHZEITIG, (welle + 1) * GLEICHZEITIG),
-  );
-}
-
-async function welle(datei, zeilen, testgruppen) {
-  const concurrency = Math.max(1, Math.floor(GLEICHZEITIG / testgruppen.length));
-  const laeufe = await Promise.allSettled(testgruppen.map((tests) => gruppenlauf({ datei, zeilen, tests, concurrency })));
-  const fehlschlag = laeufe.find(({ status }) => status === ABGELEHNT);
-  if (fehlschlag) throw fehlschlag.reason;
-  return laeufe.map(({ value }) => value);
-}
-
-async function durchgang(datei, zeilen, tests) {
-  let ergebnisse = null;
-  for (const testgruppen of wellen(gruppen(tests))) {
-    const offen = ergebnisse === null ? zeilen : ergebnisse.filter(ueberlebt).map((eintrag) => eintrag.zeilen);
-    if (offen.length === 0) break;
-    const laeufe = await welle(datei, offen, testgruppen);
-    ergebnisse = vereine(ergebnisse ?? laeufe[0], laeufe);
-  }
-  return ergebnisse;
+function durchgang(datei, zeilen, tests) {
+  return nacheinander(gruppen(tests), zeilen, (offen, gruppe) => gruppenlauf({ datei, zeilen: offen, tests: gruppe, concurrency: GLEICHZEITIG }));
 }
 
 async function mutantenproben(datei, zeilen, { erste, alle }) {
