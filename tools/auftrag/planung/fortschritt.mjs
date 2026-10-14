@@ -7,14 +7,14 @@ const PLATZHALTER = "#";
 const OHNE_REGEL = "Text";
 const SCHLUESSEL_TRENNER = ":";
 const NUMMERN_TRENNER = "+";
-const REGEX_ZEICHEN = /[.*+?^${}()|[\]\\]/g;
+const WORT = /[\w-]+/gu;
 
 function liste(wert) {
   return Array.isArray(wert) ? wert : [];
 }
 
-function alsWort(kennung) {
-  return new RegExp(`(?<![\\w-])${String(kennung).replace(REGEX_ZEICHEN, "\\$&")}(?![\\w-])`, "u");
+function woerterDes(text) {
+  return new Set(text.match(WORT) ?? []);
 }
 
 function regelDes(befund) {
@@ -40,8 +40,9 @@ function inhaltDes(auftrag) {
 export function befundSchluessel(befund, schnitt, soll) {
   const text = textDes(befund);
   const regel = regelDes(befund);
-  const auftraege = liste(schnitt?.auftraege).filter((auftrag) => auftrag?.id !== undefined && alsWort(auftrag.id).test(text));
-  const nummern = [...(soll?.keys() ?? [])].filter((nummer) => alsWort(nummer).test(text)).toSorted();
+  const woerter = woerterDes(text);
+  const auftraege = liste(schnitt?.auftraege).filter((auftrag) => auftrag?.id !== undefined && woerter.has(String(auftrag.id)));
+  const nummern = [...(soll?.keys() ?? [])].filter((nummer) => woerter.has(String(nummer))).toSorted();
   if (auftraege.length > 0) {
     const kennungen = auftraege.map(({ id }) => id).toSorted();
     const inhalte = auftraege.map(inhaltDes).toSorted();
