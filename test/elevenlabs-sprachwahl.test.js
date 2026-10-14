@@ -184,7 +184,7 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
   }
 });
 
-const ZIEL_DE = "+491737252163";
+const ZIEL_DE = "+491713920012";
 const ZIEL_NANP = "+18643028341";
 
 test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie belegt - sonst gilt die Auftraggeber-Kette unveraendert", async () => {

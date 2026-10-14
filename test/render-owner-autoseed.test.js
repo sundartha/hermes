@@ -6,7 +6,7 @@ import { findActiveNumber } from "../src/store/views.js";
 
 test("seedet eine aktive Owner-Nummer mit Provider auf leerem Store", () => {
   const s = makeDefaultState();
-  seedBootstrapNumberFromConfig(s, "+491737252163", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
+  seedBootstrapNumberFromConfig(s, "+491713920012", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   const n = findActiveNumber(s, BOOTSTRAP_TENANT_ID);
   assert.ok(n, "aktive Owner-Nummer vorhanden");
   assert.equal(n.provider, PROVIDER.TELNYX);
@@ -15,14 +15,14 @@ test("seedet eine aktive Owner-Nummer mit Provider auf leerem Store", () => {
 
 test("ist idempotent (zweiter Lauf, gleiche e164)", () => {
   const s = makeDefaultState();
-  seedBootstrapNumberFromConfig(s, "+491737252163", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
-  seedBootstrapNumberFromConfig(s, "+491737252163", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
+  seedBootstrapNumberFromConfig(s, "+491713920012", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
+  seedBootstrapNumberFromConfig(s, "+491713920012", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   assert.equal(s.numbers.filter((x) => x.tenantId === BOOTSTRAP_TENANT_ID).length, 1);
 });
 
 test("ungueltiger Provider -> kein Seed (fail-closed)", () => {
   const s = makeDefaultState();
-  seedBootstrapNumberFromConfig(s, "+491737252163", BOOTSTRAP_TENANT_ID, "garbage");
+  seedBootstrapNumberFromConfig(s, "+491713920012", BOOTSTRAP_TENANT_ID, "garbage");
   assert.ok(!findActiveNumber(s, BOOTSTRAP_TENANT_ID));
 });
 

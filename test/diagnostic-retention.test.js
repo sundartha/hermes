@@ -13,7 +13,7 @@ import {
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 
-const OWN = "+491737252163";
+const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
 const daysAgo = (d) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
 const AT = "2026-01-01T00:00:00Z";

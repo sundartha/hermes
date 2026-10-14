@@ -24,7 +24,7 @@ before(async () => {
 const newCallInput = (over = {}) => ({
   direction: "outbound",
   from: "+4930111222333",
-  to: "+491737252163",
+  to: "+491713920012",
   tenantId: TENANT,
   ...over,
 });
@@ -110,7 +110,7 @@ test("OC-P1-56: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false"
 });
 
 const newInboundCallInput = (over = {}) =>
-  newCallInput({ direction: "inbound", from: "+491737252163", to: "+4930111222333", ...over });
+  newCallInput({ direction: "inbound", from: "+491713920012", to: "+4930111222333", ...over });
 
 test("IEP-P6-40: json createCall({callerIsOwner:true}) -> true; ohne Parameter false (Boolean, nie undefined)", () => {
   const state = seedState({});

@@ -11,15 +11,15 @@ import { startServer, seedState, OWNER_TEST_NUMBER, placeCall } from "./helpers.
 
 test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
   await t.test("erste bekannte Heimatland-Vorwahl gewinnt (Praezedenz der Kandidaten, GAP-25)", () => {
-    assert.equal(homeCountryCode(["+491737252163"]), "+49");
-    assert.equal(homeCountryCode(["+33612345678", "+491737252163"]), "+33");
-    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], "US"), "+1");
+    assert.equal(homeCountryCode(["+491713920012"]), "+49");
+    assert.equal(homeCountryCode(["+33612345678", "+491713920012"]), "+33");
+    assert.equal(homeCountryCode(["+15005550006", "+491713920012"], "US"), "+1");
   });
 
   await t.test("NANP-Kandidat OHNE bestaetigtes Tenant-Herkunftsland wird uebersprungen (Review-Fix Runde 2)", () => {
-    assert.equal(homeCountryCode(["+15005550006", "+491737252163"]), "+49");
-    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], "DE"), "+49");
-    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], null), "+49");
+    assert.equal(homeCountryCode(["+15005550006", "+491713920012"]), "+49");
+    assert.equal(homeCountryCode(["+15005550006", "+491713920012"], "DE"), "+49");
+    assert.equal(homeCountryCode(["+15005550006", "+491713920012"], null), "+49");
   });
 
   await t.test("kein bekanntes Wahl-Heimatland -> null (fail-closed)", () => {
@@ -33,22 +33,22 @@ test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
 
 test("normalizeDialTarget (Telefon-Konvention)", async (t) => {
   await t.test("fuehrende 0 + Heimatland -> Vorwahl ersetzt die 0", () => {
-    assert.equal(normalizeDialTarget("01737252163", "+49"), "+491737252163");
+    assert.equal(normalizeDialTarget("01713920012", "+49"), "+491713920012");
     assert.equal(normalizeDialTarget("0612345678", "+33"), "+33612345678");
   });
 
   await t.test("fuehrende 0 OHNE Heimatland -> unveraendert (E164-Gate lehnt ab)", () => {
-    assert.equal(normalizeDialTarget("01737252163", null), "01737252163");
+    assert.equal(normalizeDialTarget("01713920012", null), "01713920012");
   });
 
   await t.test("00 -> + (unabhaengig vom Heimatland, Ausland geht immer)", () => {
-    assert.equal(normalizeDialTarget("00491737252163", null), "+491737252163");
+    assert.equal(normalizeDialTarget("00491713920012", null), "+491713920012");
     assert.equal(normalizeDialTarget("0041791234567", "+49"), "+41791234567");
   });
 
   await t.test("+ und nicht-praefixte Eingaben unveraendert", () => {
-    assert.equal(normalizeDialTarget("+491737252163", "+49"), "+491737252163");
-    assert.equal(normalizeDialTarget("491737252163", "+49"), "491737252163");
+    assert.equal(normalizeDialTarget("+491713920012", "+49"), "+491713920012");
+    assert.equal(normalizeDialTarget("491713920012", "+49"), "491713920012");
   });
 
   await t.test("Raender: Nicht-String -> '', Kurz-Eingaben bleiben E164-ungueltig", () => {
@@ -95,7 +95,7 @@ test("NANP-Heimatland: 011/1+10/10 Ziffern werden korrekt aufgeloest", () => {
   assert.equal(normalizeDialTarget("14155550123", "+1"), "+14155550123", "1 + 10 Ziffern = nationale Schreibweise");
   assert.equal(normalizeDialTarget("2125550123", "+1"), "+12125550123", "10 Ziffern = blanke Teilnehmernummer");
   assert.equal(normalizeDialTarget("1-415-555-0123", "+1"), "+14155550123", "Trennzeichen werden entfernt");
-  assert.equal(normalizeDialTarget("01737252163", "+1"), "01737252163", "unbekannte Form bleibt unveraendert");
+  assert.equal(normalizeDialTarget("01713920012", "+1"), "01713920012", "unbekannte Form bleibt unveraendert");
 });
 
 test("NANP-Heimatland: NPA/NXX-Plausibilitaet wird geprueft statt geraten (Review-Fix Runde 1)", () => {
@@ -121,14 +121,14 @@ test("UK-Ortsnetze 0113-0118 bleiben byte-identisch (K3-Regressionsschutz)", () 
 });
 
 test("DE/FR-Wahlpfad byte-identisch (Bestandskunden unberuehrt)", () => {
-  assert.equal(normalizeDialTarget("01737252163", "+49"), "+491737252163");
+  assert.equal(normalizeDialTarget("01713920012", "+49"), "+491713920012");
   assert.equal(normalizeDialTarget("0612345678", "+33"), "+33612345678");
   assert.equal(normalizeDialTarget("0049151234567", "+49"), "+49151234567");
   assert.equal(normalizeDialTarget("011441234567", "+49"), "011441234567", "GAP-25: neu unveraendert");
 });
 
-const DE_TARGET_E164 = "+491737252163";
-const DE_TARGET_NATIONAL = "01737252163";
+const DE_TARGET_E164 = "+491713920012";
+const DE_TARGET_NATIONAL = "01713920012";
 const HTTP_ENV = {
   ALLOWED_NUMBERS: DE_TARGET_E164,
   ALLOWED_COUNTRY_CODES: "+49",
@@ -268,7 +268,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
 test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stilles DE-Ziel (OUT-05b/GAP-25)", async (t) => {
   const US_PRIVATE_NUMBER = "+15005550006";
   const FOREIGN_DE_DID = "+491701234567";
-  const DE_NATIONAL_TARGET = "01737252163";
+  const DE_NATIONAL_TARGET = "01713920012";
   const seed = seedState({
     tenants: [
       {
@@ -294,7 +294,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
 
       const call = srv
         .readStore()
-        .calls.find((c) => c.direction === "outbound" && c.tenantId === BOOTSTRAP_TENANT_ID && c.to === "+491737252163");
+        .calls.find((c) => c.direction === "outbound" && c.tenantId === BOOTSTRAP_TENANT_ID && c.to === "+491713920012");
       assert.equal(
         call,
         undefined,

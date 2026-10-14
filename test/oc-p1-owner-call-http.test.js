@@ -4,7 +4,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
-const OWN = "+491737252163";
+const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
 const OTHER_TENANT = "t_fremd";
 const HTTP_OK = 200;
@@ -58,7 +58,7 @@ test("OC-P1-60: Schalter an, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwn
 test("OC-P1-60b: nationale Schreibweise der eigenen Nummer -> calleeIsOwner true (Beleg: Praedikat liest ctx.to)", async () => {
   const { call } = await callAndReadFlag({
     env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
-    to: "01737252163",
+    to: "01713920012",
   });
   assert.strictEqual(call.calleeIsOwner, true);
 });

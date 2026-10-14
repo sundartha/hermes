@@ -5,7 +5,7 @@ import { createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { seedState } from "./helpers.js";
 
-const OWN = "+491737252163";
+const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
 const TENANT = BOOTSTRAP_TENANT_ID;
 const OTHER = "t_fremd";
@@ -37,19 +37,19 @@ test("OC-P1-06: beide fehlen (null) -> false", () => {
 });
 
 test("OC-P1-07: gleiche Ziffern ohne '+' -> false (kein Praefix-Match)", () => {
-  assert.strictEqual(calleeIsOwner({ to: "491737252163", ownNumber: OWN }), false);
+  assert.strictEqual(calleeIsOwner({ to: "491713920012", ownNumber: OWN }), false);
 });
 
 test("OC-P1-08: nationale Schreibweise gegen E.164 -> false", () => {
-  assert.strictEqual(calleeIsOwner({ to: "01737252163", ownNumber: OWN }), false);
+  assert.strictEqual(calleeIsOwner({ to: "01713920012", ownNumber: OWN }), false);
 });
 
 test("OC-P1-09: gleiche letzten acht Ziffern, anderer Laendercode -> false", () => {
-  assert.strictEqual(calleeIsOwner({ to: "+441737252163", ownNumber: OWN }), false);
+  assert.strictEqual(calleeIsOwner({ to: "+441713920012", ownNumber: OWN }), false);
 });
 
 test("OC-P1-10: ein Zeichen Unterschied -> false", () => {
-  assert.strictEqual(calleeIsOwner({ to: "+491737252164", ownNumber: OWN }), false);
+  assert.strictEqual(calleeIsOwner({ to: "+491713920013", ownNumber: OWN }), false);
 });
 
 test("OC-P1-11: Leerzeichen am Rand -> false (kein Trim im Praedikat)", () => {
@@ -58,12 +58,12 @@ test("OC-P1-11: Leerzeichen am Rand -> false (kein Trim im Praedikat)", () => {
 });
 
 test("OC-P1-12: to ist kein String (Zahl/Objekt) -> false", () => {
-  assert.strictEqual(calleeIsOwner({ to: 491737252163, ownNumber: OWN }), false);
+  assert.strictEqual(calleeIsOwner({ to: 491713920012, ownNumber: OWN }), false);
   assert.strictEqual(calleeIsOwner({ to: {}, ownNumber: OWN }), false);
 });
 
 test("OC-P1-13: ownNumber ist kein String (Zahl) -> false", () => {
-  assert.strictEqual(calleeIsOwner({ to: OWN, ownNumber: 491737252163 }), false);
+  assert.strictEqual(calleeIsOwner({ to: OWN, ownNumber: 491713920012 }), false);
 });
 
 test("OC-P1-20: enabled true, Tenant in Liste, Ziel eigene Nummer -> true (strikt Boolean)", () => {
