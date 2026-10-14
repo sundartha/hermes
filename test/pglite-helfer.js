@@ -13,6 +13,7 @@ const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
 const PGLITE_NAME = "@electric-sql/pglite";
 const PGLITE_PAKET = paketDateiFinden(PGLITE_NAME);
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
+const VORLAGE_UNABHAENGIG = "HERMES_VORLAGE_UNABHAENGIG";
 
 function paketDateiFinden(name) {
   let ordner = path.dirname(fileURLToPath(import.meta.resolve(name)));
@@ -50,7 +51,13 @@ async function abbildBauen(einrichten) {
 }
 
 export async function vorlage(name, einrichten, schluesselTeile) {
+  const kettensumme = process.env[VORLAGE_UNABHAENGIG];
+  if (kettensumme !== undefined) return ausDemCache(name, einrichten, [...schluesselTeile, kettensumme]);
   if (process.env[STRYKER_VARIABLE] !== undefined) return abbildBauen(einrichten);
+  return ausDemCache(name, einrichten, schluesselTeile);
+}
+
+async function ausDemCache(name, einrichten, schluesselTeile) {
   const ziel = path.join(VORLAGEN_ORDNER, `${name}-${pruefwert(schluesselTeile)}.tar`);
   if (fs.existsSync(ziel)) return new Blob([fs.readFileSync(ziel)]);
   const abbild = await abbildBauen(einrichten);

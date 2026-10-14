@@ -13,6 +13,7 @@ import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
+import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
 
@@ -127,6 +128,7 @@ function mutant({ fileName, location, mutatorName, replacement, status, killedBy
 }
 
 async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
+  console.log(await vorlageEinstellen(datei));
   const tempDirName = arbeitsverzeichnis("mutation-");
   const beginn = Date.now();
   try {
