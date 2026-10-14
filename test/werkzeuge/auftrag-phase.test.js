@@ -132,14 +132,16 @@ test("ein Auftrag, der nach „Voraussetzung fehlt“ einen Umbau-Commit mitbrin
   const probe = aufbau(context, {
     "85-V1": {
       plan: [{ antwort: JSON.stringify(umbau) }],
+      test: [{ dateien: { "test/d.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { WERT } from "../src/d.js";\ntest("zwei", () => assert.equal(WERT, 2));\n' } }],
       bau: [
         { antwort: "Voraussetzung fehlt: Es braucht zuerst src/e.js." },
-        { dateien: { "src/e.js": "export const E = 1;\n" } },
+        { dateien: { "src/e.js": "export const E = 2;\n" } },
         { dateien: { "src/d.js": 'export { E as WERT } from "./e.js";\n' } },
       ],
     },
   });
-  const { code, ausgabe } = await ende(phase(probe, ["v", ISSUE.umbau, auftrag("V1", "src/d.js")]));
+  const funktion = { ...auftrag("V1", "src/d.js", ["src/d.js", "test/d.test.js"]), art: "funktion", abnahme: "test/d.test.js", erwarteterFehler: "1 !== 2", wasDarfNiePassieren: [] };
+  const { code, ausgabe } = await ende(phase(probe, ["v", ISSUE.umbau, funktion]));
   assert.equal(code, 0, ausgabe);
   assert.deepEqual(liste(probe.remote, ["log", "--format=%s", "master..phase/85-v"]), ["Baue V1", "Lege e an"]);
 });
