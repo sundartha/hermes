@@ -73,6 +73,18 @@ test("Vorlage: für den Speicher wird die Kettensumme gesetzt und mit Cache geme
   });
 });
 
+test("Vorlage: ohne migrate.js wird eine geerbte Freigabe gelöscht und ohne Cache gemeldet", async () => {
+  const wurzel = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ohne-vorlage-")));
+  try {
+    await mitGeerbterVariable(async () => {
+      assert.equal(await vorlageEinstellen(STORE, wurzel), "Vorlage: ohne src/db/migrate.js, ohne Cache");
+      assert.equal(process.env[VORLAGE_UNABHAENGIG], undefined);
+    });
+  } finally {
+    fs.rmSync(wurzel, { recursive: true, force: true });
+  }
+});
+
 test("Kettensumme: ändert sich mit jeder Datei der Kette und mit schema.sql, nicht mit dem Speicher", async () => {
   const wurzel = attrappe();
   try {
