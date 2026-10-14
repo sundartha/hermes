@@ -7,7 +7,9 @@ import {
   fundstelleBefund,
   gliederungBefunde,
   merkeStellen,
+  nachpruefSchluessel,
   neueStellen,
+  planweiteSchluessel,
   prueflisteBefunde,
   prueflisteSoll,
 } from "../../tools/auftrag/planung/antworten.mjs";
@@ -208,4 +210,72 @@ test("entwurf: fehlender Name, falsche Ränder und berechnete Zeilen sind Befund
     "gemeinsamer Name bestaetigt fehlt wörtlich",
   ]);
   assert.deepEqual(entwurfBefunde(undefined, []), ["entwurf fehlt: der Abschnitt als Text"]);
+});
+
+const NACHPRUEF_SOLL = new Map([["S1", {}], ["S2", {}], ["B1", {}]]);
+
+function zeilenDes(...kennungen) {
+  return kennungen.flatMap((id) => [`nie-saetze:${id}`, `allein-gruen:${id}`, `nicht-zusammengelegt:${id}`]);
+}
+
+function befundZu(schluessel) {
+  return { schluessel, ergebnis: "befund", befund: "trifft nicht", fundstelle: "src/a.js:1" };
+}
+
+const VOR_DER_KORREKTUR = {
+  annahmen: [],
+  auftraege: [
+    auftrag("a1", { prueft: ["S1"], erwarteteDateien: ["src/a.js"] }),
+    auftrag("a2", { prueft: ["S2"], erwarteteDateien: ["src/b.js"], abhaengigVon: [{ id: "a1", grund: "liest a1" }] }),
+    auftrag("a3", { prueft: ["B1"], erwarteteDateien: ["src/c.js"], abhaengigVon: [{ id: "a2", grund: "liest a2" }] }),
+    auftrag("a4", { prueft: [], erwarteteDateien: ["src/d.js"] }),
+  ],
+};
+
+test("nachprüfung: die Nachprüfung prüft genau die geänderten, neuen und berührten Aufträge und die Befundschlüssel", () => {
+  const [a1, a2, a3, a4] = VOR_DER_KORREKTUR.auftraege;
+  const nachher = { ...VOR_DER_KORREKTUR, auftraege: [{ ...a1, ziel: "anders" }, a2, a3, a4, auftrag("a5", { prueft: [], erwarteteDateien: ["src/e.js"] })] };
+  const ergebnis = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher, befunde: [befundZu("weg:S2")], soll: NACHPRUEF_SOLL, annahmen: [] });
+  assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "weg:S1", "weg:S2", "b-nummer:B1", ...zeilenDes("a1", "a2", "a5"), "gegenfrage:alle"]);
+  assert.deepEqual([ergebnis.geaendert, ergebnis.neu, ergebnis.entfernt, ergebnis.entfallen], [["a1"], ["a5"], [], []]);
+});
+
+test("nachprüfung: ohne Änderung prüft die Nachprüfung nur die zurückgewiesenen Befunde", () => {
+  const gleich = structuredClone(VOR_DER_KORREKTUR);
+  const ergebnis = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher: gleich, befunde: [befundZu("allein-gruen:a2"), befundZu("weg:S1")], soll: NACHPRUEF_SOLL, annahmen: [] });
+  assert.deepEqual(ergebnis.schluessel, ["weg:S1", "allein-gruen:a2"]);
+});
+
+test("nachprüfung: eine geänderte Reihenfolge oder Annahme prüft die Zeilen nach jeder Änderung", () => {
+  const umgestellt = { ...VOR_DER_KORREKTUR, auftraege: VOR_DER_KORREKTUR.auftraege.toReversed() };
+  const mitAnnahme = { ...VOR_DER_KORREKTUR, annahmen: [{ text: "neu" }] };
+  for (const nachher of [umgestellt, mitAnnahme]) {
+    assert.deepEqual(nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher, befunde: [], soll: NACHPRUEF_SOLL, annahmen: [] }).schluessel, planweiteSchluessel(NACHPRUEF_SOLL));
+  }
+});
+
+test("nachprüfung: die Zeilen nach jeder Änderung stammen aus der ersten Prüfliste und stehen in der Nachprüfung jeder Änderung", () => {
+  const planweit = planweiteSchluessel(NACHPRUEF_SOLL);
+  const nachher = { ...VOR_DER_KORREKTUR, auftraege: VOR_DER_KORREKTUR.auftraege.slice(1) };
+  const { schluessel } = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher, befunde: [], soll: NACHPRUEF_SOLL, annahmen: [] });
+  assert.ok(planweit.length > 0);
+  for (const zeile of planweit) {
+    assert.ok(prueflisteSoll(nachher, NACHPRUEF_SOLL, []).includes(zeile), zeile);
+    assert.ok(schluessel.includes(zeile), zeile);
+  }
+});
+
+test("nachprüfung: ein entfernter Auftrag bringt seinen Befund unter entfallen und die Aufträge mit seinen Dateien in die Nachprüfung", () => {
+  const umbau = auftrag("a0", { art: "umbau", prueft: "keine", erwarteteDateien: ["src/a.js", "test/a.test.js"] });
+  const vorher = { ...VOR_DER_KORREKTUR, auftraege: [umbau, ...VOR_DER_KORREKTUR.auftraege] };
+  const ergebnis = nachpruefSchluessel({ vorher, nachher: VOR_DER_KORREKTUR, befunde: [befundZu("umbau:a0")], soll: NACHPRUEF_SOLL, annahmen: [] });
+  assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "b-nummer:B1", "nicht-zusammengelegt:a1", "gegenfrage:alle"]);
+  assert.deepEqual([ergebnis.entfernt, ergebnis.entfallen], [["a0"], ["umbau:a0"]]);
+});
+
+test("nachprüfung: ein entfernter Auftrag bringt den Weg jeder Nummer, die er geprüft hat, in die Nachprüfung", () => {
+  const ohneA3 = { ...VOR_DER_KORREKTUR, auftraege: VOR_DER_KORREKTUR.auftraege.filter(({ id }) => id !== "a3") };
+  const ergebnis = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher: ohneA3, befunde: [], soll: NACHPRUEF_SOLL, annahmen: [] });
+  assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "weg:B1", "b-nummer:B1", "gegenfrage:alle"]);
+  assert.deepEqual(ergebnis.entfernt, ["a3"]);
 });
