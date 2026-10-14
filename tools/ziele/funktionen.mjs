@@ -1,11 +1,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { eslintBefehl, fuehreAus } from "./werkzeuge.mjs";
 
 export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+const KONFIGURATION = "eslint.config.js";
 const FUNKTIONSARTEN = ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"];
 const FEHLER = 2;
 const ladeModul = createRequire(import.meta.url);
@@ -15,7 +16,7 @@ export function ungefilterteMeldungen(root, dateien) {
   try {
     const leer = join(ordner, UNTERDRUECKUNGEN);
     writeFileSync(leer, "{}");
-    const lauf = fuehreAus(eslintBefehl(["--format", "json", "--suppressions-location", leer, ...dateien]), root);
+    const lauf = fuehreAus(eslintBefehl(["--config", resolve(root, KONFIGURATION), "--format", "json", "--suppressions-location", leer, ...dateien]), root);
     return JSON.parse(lauf.stdout || "[]");
   } finally {
     rmSync(ordner, { recursive: true, force: true });
