@@ -1,8 +1,3 @@
-import { after } from "node:test";
-import { PGlite } from "@electric-sql/pglite";
-
-const offeneInstanzen = new Set();
-
 function eineRundeDerEreignisschleife() {
   return new Promise((resolve) => {
     setImmediate(resolve);
@@ -36,20 +31,3 @@ export async function abwartenBisNichtsMehrLaeuft(laufend, vorJederRunde) {
     await eineRundeDerEreignisschleife();
   } while (laufend.size > 0);
 }
-
-async function schliessen({ pg, laufend }) {
-  await abwartenBisNichtsMehrLaeuft(laufend);
-  if (!pg.closed) await pg.close();
-}
-
-export function neuePGliteInstanz(optionen) {
-  const eintrag = { pg: new PGlite(optionen), laufend: new Set() };
-  offeneInstanzen.add(eintrag);
-  return abfragenZaehlendeHuelle(eintrag.pg, eintrag.laufend);
-}
-
-after(async () => {
-  const alle = [...offeneInstanzen];
-  offeneInstanzen.clear();
-  await Promise.all(alle.map(schliessen));
-});
