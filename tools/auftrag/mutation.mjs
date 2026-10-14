@@ -5,6 +5,7 @@ import { testPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, git } from "./git.mjs";
 import { beleg } from "./pruefungen.mjs";
+import { GRUND, PRUEFUNG } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
@@ -14,7 +15,6 @@ const BEGRUENDET = ", weil ";
 const MELDUNG = /^Gleichwertig: (.+?), weil (\S.*)$/gm;
 const NOETIG = /^Nötig: (.+?), weil (\S.*)$/gm;
 const ABLAGE = "auftrag-umbau";
-const EINSPIELEN = "umbau einspielen";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
   "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt eines Tests mit einer Zeile je Mutant:",
@@ -43,7 +43,7 @@ function mutanten(lauf, name, argumente) {
   const befehl = ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
   const { exitCode, ausgabe } = lauf.pruefung(name, befehl);
   if (exitCode === 0) return { ende: true };
-  if (exitCode !== EXIT_UEBERLEBT) return { ende: lauf.scheitert(`${name} ist mit Exit ${exitCode} abgebrochen.`) };
+  if (exitCode !== EXIT_UEBERLEBT) return { ende: lauf.scheitert(`${name} ist mit Exit ${exitCode} abgebrochen.`, GRUND.MUTATION_ABBRUCH) };
   return { ueberlebende: treffer(ausgabe, UEBERLEBT) };
 }
 
@@ -91,20 +91,20 @@ function testNachgeholt(lauf, ueberlebende, noetig) {
     lauf.zwischenstand() &&
     testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false, noetig }) &&
     lauf.allesVormerken() &&
-    lauf.gruen("abnahme", abnahmeBefehl(lauf.kontext.auftrag))
+    lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag))
   );
 }
 
 function neueZeilen(lauf) {
   const pruefen = (name) => mutanten(lauf, name, ["--basis", lauf.basis]);
-  let stand = pruefen("mutation");
+  let stand = pruefen(PRUEFUNG.MUTATION);
   if (stand.ende !== undefined) return stand.ende;
   const noetig = bauKorrigiert(lauf, stand.ueberlebende);
   if (!noetig) return false;
-  stand = pruefen("mutation nach Bau");
+  stand = pruefen(PRUEFUNG.MUTATION_NACH_BAU);
   if (stand.ende !== undefined) return stand.ende;
   if (!testNachgeholt(lauf, stand.ueberlebende, noetig)) return false;
-  stand = pruefen("mutation nach Test");
+  stand = pruefen(PRUEFUNG.MUTATION_NACH_TEST);
   return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
 }
 
@@ -139,13 +139,13 @@ function testsFesthalten(lauf, ueberlebende) {
   lauf.allesVormerken();
   const warum = `Warum: Auf dem alten Stand überleben ${ueberlebende.length} Mutanten des Umbaus ${auftrag.id} der Phase ${phase.phase}; diese Tests halten das Verhalten vor dem Umbau fest.`;
   const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, ...(phase.paket ? [`Paket: ${phase.paket}`] : [])];
-  return lauf.festschreiben("tests alter Stand", [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...herkunft, ""].join("\n"));
+  return lauf.festschreiben(PRUEFUNG.TESTS_ALTER_STAND, [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...herkunft, ""].join("\n"));
 }
 
 function eingespielt(lauf, { datei, inhalt }) {
   const befehl = ["git", "apply", "--index", datei];
-  if (readFileSync(datei, "utf8") === inhalt) return lauf.pruefung(EINSPIELEN, befehl).exitCode === 0;
-  lauf.pruefungen.push(beleg({ name: EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
+  if (readFileSync(datei, "utf8") === inhalt) return lauf.pruefung(PRUEFUNG.UMBAU_EINSPIELEN, befehl).exitCode === 0;
+  lauf.pruefungen.push(beleg({ name: PRUEFUNG.UMBAU_EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
   return false;
 }
 
@@ -185,7 +185,7 @@ function alterStand(lauf) {
   const gemeldet = new Map();
   let vorher = Infinity;
   for (;;) {
-    const stand = mutanten(lauf, "mutation alter Stand", ["--basis", lauf.basisBau, "--alter-stand"]);
+    const stand = mutanten(lauf, PRUEFUNG.MUTATION_ALTER_STAND, ["--basis", lauf.basisBau, "--alter-stand"]);
     if (stand.ende !== undefined) return stand.ende;
     const { ueberlebende } = stand;
     const patch = zurueckstellen(lauf);

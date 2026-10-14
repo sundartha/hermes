@@ -15,6 +15,7 @@ import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
+import { GRUND, PRUEFUNG, zweckBeleg } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -24,6 +25,7 @@ const PIN_HAKEN = ".githooks/pre-commit";
 export const PIN_FEHLT =
   "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
+const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
 
 class AuftragsLauf {
   constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
@@ -44,11 +46,13 @@ class AuftragsLauf {
     this.zusaetze = [];
     this.berichtszeilen = [];
     this.grund = null;
+    this.roteIds = [];
     this.commit = null;
   }
 
-  scheitert(grund) {
+  scheitert(grund, id) {
     this.grund = grund;
+    if (id !== undefined) this.roteIds.push(id);
     return false;
   }
 
@@ -78,35 +82,35 @@ class AuftragsLauf {
     const ergebnis = setzeEin({ rolle, ...this.kontext, fortsetzung }, `${prompt}${this.vorgeschichte}`);
     this.agenten.push(...ergebnis.sitzungen);
     if (fingerabdruck(this.kontext.root) !== vorher) {
-      return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`);
+      return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`, GRUND.BELEGE);
     }
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
     this.ausstieg = ergebnis.ausstieg;
     if (this.ausstieg) return this.scheitert(`Auftrag passt nicht: ${this.ausstieg}`);
-    if (ergebnis.grund) return this.scheitert(ergebnis.grund);
-    return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`);
+    if (ergebnis.grund) return this.scheitert(ergebnis.grund, GRUND.STILLSTAND);
+    return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`, GRUND.AGENT_EXIT);
   }
 
   grenzen(rolle, basis) {
-    return this.gruen(`grenzen ${rolle}`, this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis));
+    return this.gruen(GRENZ_PRUEFUNG[rolle], this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis), zweckBeleg);
   }
 
   bauHatGeaendert() {
     const geaendert = aenderungenSeit(this.basisBau, this.kontext.root).length > 0;
-    return geaendert || this.scheitert("Der Bau-Agent hat keine Datei geändert.");
+    return geaendert || this.scheitert("Der Bau-Agent hat keine Datei geändert.", GRUND.KEINE_AENDERUNG);
   }
 
   rotMitErwartetemFehler() {
-    const ergebnis = this.pruefung("rot", this.eigenerBefehl("rot"));
+    const ergebnis = this.pruefung(PRUEFUNG.ROT, this.eigenerBefehl("rot"));
     this.testausgabe = ergebnis.ausgabe;
-    return ergebnis.exitCode === 0 || this.scheitert("Der Abnahmetest ist nicht mit dem erwarteten Fehler rot.");
+    return ergebnis.exitCode === 0 || this.scheitert("Der Abnahmetest ist nicht mit dem erwarteten Fehler rot.", PRUEFUNG.ROT);
   }
 
   vorherGruen() {
-    const ergebnis = this.pruefung("abnahme vorher", abnahmeBefehl(this.kontext.auftrag));
+    const ergebnis = this.pruefung(PRUEFUNG.ABNAHME_VORHER, abnahmeBefehl(this.kontext.auftrag));
     this.testausgabe = ergebnis.ausgabe;
-    return ergebnis.exitCode === 0 || this.scheitert("Der Verhaltenstest ist schon vor dem Umbau rot.");
+    return ergebnis.exitCode === 0 || this.scheitert("Der Verhaltenstest ist schon vor dem Umbau rot.", PRUEFUNG.ABNAHME_VORHER);
   }
 
   allesVormerken() {
@@ -124,7 +128,7 @@ class AuftragsLauf {
 
   zwischenstand() {
     this.allesVormerken();
-    if (!this.festhalten("zwischenstand", `Zwischenstand: Abnahmetest für ${this.kontext.auftrag.id}\n`)) return false;
+    if (!this.festhalten(PRUEFUNG.ZWISCHENSTAND, `Zwischenstand: Abnahmetest für ${this.kontext.auftrag.id}\n`)) return false;
     this.basisBau = kopf(this.kontext.root);
     return true;
   }
@@ -147,7 +151,7 @@ class AuftragsLauf {
   }
 
   typpruefung() {
-    if (hatSkript(this.kontext.root, TYPPRUEFUNG)) return this.gruen("typprüfung", ["npm", "--silent", "run", TYPPRUEFUNG]);
+    if (hatSkript(this.kontext.root, TYPPRUEFUNG)) return this.gruen(PRUEFUNG.TYPPRUEFUNG, ["npm", "--silent", "run", TYPPRUEFUNG]);
     this.hinweise.push(`Typprüfung: package.json hat kein Skript ${TYPPRUEFUNG}.`);
     return true;
   }
@@ -156,16 +160,16 @@ class AuftragsLauf {
     const { root } = this.kontext;
     if (!existsSync(join(root, PIN_PRUEFUNG))) {
       if (!existsSync(join(root, PIN_HAKEN))) return true;
-      return this.gruenOderScheitert(this.belegt({ name: "pin-prüfung", befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
+      return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
     }
     const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs"], { cwd: root });
-    return this.gruen("pin-prüfung", [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
+    return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
   unterdrueckungenKuerzen() {
     const { auftrag, root } = this.kontext;
     if (auftrag.art !== "umbau" || !existsSync(join(root, UNTERDRUECKUNGEN))) return true;
-    if (!this.gruen("unterdrückungen kürzen", ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"])) return false;
+    if (!this.gruen(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"])) return false;
     vormerken([UNTERDRUECKUNGEN], root);
     return true;
   }
@@ -184,7 +188,7 @@ class AuftragsLauf {
 
   abschliessen() {
     weichZuruecksetzen(this.basis, this.kontext.root);
-    if (!this.festhalten("commit", this.commitNachricht())) return false;
+    if (!this.festhalten(PRUEFUNG.COMMIT, this.commitNachricht())) return false;
     this.commit = kopf(this.kontext.root);
     return true;
   }
@@ -212,10 +216,10 @@ class AuftragsLauf {
       () => this.bauHatGeaendert(),
       () => this.allesVormerken(),
       () => this.typpruefung(),
-      () => this.gruen("lint", ["npm", "--silent", "run", "lint"]),
+      () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
       () => this.pinPruefung(),
-      () => this.gruen("abnahme", abnahmeBefehl(auftrag)),
-      () => this.gruen("betroffene tests", ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
+      () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
+      () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
   }
 
@@ -231,6 +235,7 @@ class AuftragsLauf {
       basis: this.basis,
       ergebnis: gruen ? GRUEN : ROT,
       grund: this.grund,
+      roteIds: this.roteIds,
       voraussetzung: this.voraussetzung,
       ausstieg: this.ausstieg,
       entscheidung: this.entscheidung,
