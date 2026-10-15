@@ -343,9 +343,9 @@ test("zusammensetzen: Befunde der Phasenprüfung verhindern die Phase, und eine 
   const alt = Buffer.from('{"alt":true}\n');
   writeFileSync(phaseDatei(ordner), alt);
   const schnitt = schnittliste();
-  schnitt.auftraege[1].vorbild = "src/gibt-es-nicht.js";
+  schnitt.auftraege[1].ziel = "Bestätige den Anruf\nund speichere den Status";
   const ergebnis = await zusammen(ordner, { schnitt });
-  assert.ok(ergebnis.befunde.some((befund) => befund.startsWith("a1:") && befund.includes("vorbild")), ergebnis.befunde.join(" | "));
+  assert.ok(ergebnis.befunde.some((befund) => befund.startsWith("a1:") && befund.includes("ziel muss eine Zeile")), ergebnis.befunde.join(" | "));
   assert.deepEqual(readFileSync(phaseDatei(ordner)), alt);
   assert.deepEqual(dateienIn(ordner), ["design.md", "phase.json", "pitch.md", "sicherheit.md"]);
 });
@@ -398,7 +398,7 @@ test("zusammensetzen: null in gemeinsameNamen und in wasDarfNiePassieren ergibt 
 test("zusammensetzen: ein Erkundungsbericht mit Befund ergibt einen Befund mit „Regel Erkundung“ und keine Phase", async (context) => {
   const ordner = ordnerMitDokumenten(context);
   const bericht = berichtVon("S1");
-  bericht.nummern.S1.vorbild = "src/gibt-es-nicht.js";
+  bericht.nummern.S1.tests = ["test/gibt-es-nicht.test.js"];
   const ergebnis = await zusammen(ordner, { bericht: berichte({ S1: bericht }) });
   rot(ordner, ergebnis, "Regel Erkundung");
 });

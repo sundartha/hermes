@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { bauPrompt, testPrompt } from "./agenten.mjs";
+import { bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
@@ -234,7 +234,7 @@ class AuftragsLauf {
     if (auftrag.art === TESTUMBAU) return [...testumbauSchritte(this), () => this.abschliessen()];
     const vorBau = brauchtRotenTest(auftrag)
       ? [
-          () => this.agent("test", testPrompt(this.kontext.phase, auftrag, this.kontext.root)),
+          () => this.agent("test", testAgentPrompt(this.kontext)),
           () => this.grenzen("test", this.basis),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.rotMitErwartetemFehler(),
