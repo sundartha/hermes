@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .ts-Datei unter src",
+  "dateien": {
+    "src/probe/probe.ts": ["export const neu = 1;"]
+  },
+  "erwartet": "src/probe/probe.ts: TypeScript-Datei vor S71g"
+}

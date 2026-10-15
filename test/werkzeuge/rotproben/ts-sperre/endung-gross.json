@@ -1,0 +1,7 @@
+{
+  "titel": "Endung in Großbuchstaben",
+  "dateien": {
+    "src/probe/probe.MTS": ["export const neu = 1;"]
+  },
+  "erwartet": "src/probe/probe.MTS: TypeScript-Datei vor S71g"
+}

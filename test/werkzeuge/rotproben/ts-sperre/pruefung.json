@@ -1,0 +1,17 @@
+{
+  "titel": "TypeScript-Sperre bis S71g und fester Bestand",
+  "pfade": ["tools/ts-sperre.mjs", "tools/basis/ts-bestand.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/ts-sperre.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "ausnahmen": {
+    "bezeichnung": "TypeScript-Dateien im festen Bestand",
+    "datei": "tools/basis/ts-bestand.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": ["tools/basis/ts-bestand.json"],
+    "befehl": ["node", "{wurzel}/tools/ts-sperre.mjs", "--basis", "HEAD~1"]
+  }
+}

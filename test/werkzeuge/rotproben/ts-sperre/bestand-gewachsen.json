@@ -1,0 +1,8 @@
+{
+  "titel": "Neue Datei zusätzlich in den Bestand eingetragen",
+  "dateien": {
+    "apps/web/c.ts": ["export const neu = 1;"],
+    "tools/basis/ts-bestand.json": ["[\"apps/web/c.ts\"]"]
+  },
+  "erwartet": "apps/web/c.ts ist neu im Bestand"
+}
