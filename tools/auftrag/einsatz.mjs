@@ -98,6 +98,10 @@ export function entnimmVolleAntwort({ sitzung, antwort = "" }) {
   return voll;
 }
 
+export function legeVolleAntwortAb(sitzung, voll) {
+  VOLLE_ANTWORTEN.set(sitzung, voll);
+}
+
 function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start, auftrag) {
   if (typeof voll === "string") {
     if (auftrag !== auftragDerAntworten) VOLLE_ANTWORTEN.clear();

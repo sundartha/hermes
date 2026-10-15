@@ -9,13 +9,14 @@ import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from ".
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { TESTUMBAU, brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
-import { setzeEin } from "./einsatz.mjs";
+import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { entnimmVolleAntwort, legeVolleAntwortAb, setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
+import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
@@ -30,13 +31,30 @@ export const PIN_FEHLT =
   "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
+const ZITAT = "> ";
+const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
+const ZWECK_ZEILE = "„Zweck <ID>:“";
+
+function nachfrage(ids) {
+  return [
+    "## Zweck-Absatz fehlt",
+    "",
+    `Deine letzte Antwort enthält keinen Absatz mit der eigenen Zeile ${ZWECK_ZEILE} für: ${ids.join(", ")}. Die Zeile beginnt am Zeilenanfang mit „Zweck“, ohne Markdown davor. Schreib den Absatz jetzt in eigenen Worten, wie in deinen Anweisungen beschrieben. Ändere dabei keine Datei.`,
+    "Kannst du den Zweck nicht benennen, antworte als Letztes mit der eigenen Zeile „Auftrag passt nicht: Zweck der Prüfung <ID> unklar: <was dir fehlt>“.",
+    "",
+  ].join("\n");
+}
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
+  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte, vorigeRunden = [] }) {
     this.kontext = { phase, auftrag, root };
     this.phasendatei = phasendatei;
     this.runde = runde;
     this.vorgeschichte = vorgeschichte;
+    this.vorigeRunden = vorigeRunden;
+    this.gemeldet = pflichtDer(vorigeRunden);
+    this.zweck = { bau: {}, test: {} };
+    this.berichtet = 0;
     this.voraussetzung = null;
     this.ausstieg = null;
     this.alterTest = null;
@@ -46,6 +64,8 @@ class AuftragsLauf {
     this.basisBau = this.basis;
     this.testausgabe = "";
     this.agenten = [];
+    this.nachfragen = [];
+    this.vorigeBerichtet = false;
     this.pruefungen = [];
     this.hinweise = [];
     this.zusaetze = [];
@@ -87,16 +107,53 @@ class AuftragsLauf {
   }
 
   setzeAgentEinUndUebernimmAusgang(rolle, prompt, fortsetzung) {
-    const vorher = fingerabdruck(this.kontext.root);
-    const ergebnis = setzeEin({ rolle, ...this.kontext, fortsetzung }, `${prompt}${this.vorgeschichte}`);
-    this.agenten.push(...ergebnis.sitzungen);
-    return this.uebernimmAusgang(ergebnis, vorher) ? ergebnis.ausgang : null;
+    const vorher = arbeitsstand(this.kontext.root);
+    const weg = this.eingesetzt(rolle, prompt, { fortsetzung });
+    return weg !== null && this.begruendet(rolle, vorher) ? weg : null;
   }
 
-  uebernimmAusgang(ergebnis, vorher) {
+  meldet(id, rolle) {
+    this.gemeldet.push({ id, rolle });
+  }
+
+  fehlendeAbsaetze(rolle) {
+    const ids = this.gemeldet.filter((eintrag) => eintrag.rolle === rolle).map(({ id }) => id);
+    const absaetze = this.zweck[rolle];
+    return [...new Set(ids)].filter((id) => !absaetze[id]?.trim());
+  }
+
+  begruendet(rolle, vorher) {
+    const nachher = arbeitsstand(this.kontext.root);
+    if (nachher === vorher) return true;
+    if (this.fehlendeAbsaetze(rolle).length > 0 && !this.nachgefragt(rolle, nachher)) return false;
+    this.gemeldet = this.gemeldet.filter((eintrag) => eintrag.rolle !== rolle);
+    return true;
+  }
+
+  nachgefragt(rolle, nachher) {
+    const arbeit = this.agenten.findLast((eintrag) => eintrag.rolle === rolle);
+    const voll = entnimmVolleAntwort(arbeit);
+    const weg = this.eingesetzt(rolle, nachfrage(this.fehlendeAbsaetze(rolle)), { fortsetzung: arbeit.sitzung, sitzungen: this.nachfragen });
+    entnimmVolleAntwort({ sitzung: arbeit.sitzung });
+    legeVolleAntwortAb(arbeit.sitzung, voll);
+    if (weg === null) return false;
+    if (arbeitsstand(this.kontext.root) !== nachher) return this.scheitert("Die Nachfrage zum Zweck hat Dateien geändert.", GRUND.ZWECK_ABSATZ);
+    const offen = this.fehlendeAbsaetze(rolle);
+    return offen.length === 0 || this.scheitert(`Begründung fehlt: Zweck ${offen.join(", ")}`, GRUND.ZWECK_ABSATZ);
+  }
+
+  eingesetzt(rolle, prompt, { fortsetzung, sitzungen = this.agenten }) {
+    const vorher = fingerabdruck(this.kontext.root);
+    const ergebnis = setzeEin({ rolle, ...this.kontext, fortsetzung }, `${prompt}${this.vorgeschichte}`);
+    sitzungen.push(...ergebnis.sitzungen);
+    return this.uebernimmAusgang(rolle, ergebnis, vorher) ? ergebnis.ausgang : null;
+  }
+
+  uebernimmAusgang(rolle, ergebnis, vorher) {
     if (fingerabdruck(this.kontext.root) !== vorher) {
       return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`, GRUND.BELEGE);
     }
+    Object.assign(this.zweck[rolle], ergebnis.ausgang.zweck);
     if (ergebnis.alterTest) return this.pruefeUndBelegeAltenTest(ergebnis.alterTest);
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
@@ -219,7 +276,21 @@ class AuftragsLauf {
     const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
     const hinweise = hinweiseDesBaus(this.agenten);
     const abschnitt = hinweise.length > 0 ? [...hinweise, ""] : [];
-    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...abschnitt, ...herkunft, ...paket, ""].join("\n");
+    const begruendung = this.uebernimmBegruendung(Object.keys(this.zweck));
+    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...begruendung, ...abschnitt, ...herkunft, ...paket, ""].join("\n");
+  }
+
+  uebernimmBegruendung(rollen) {
+    const vorige = rollen.includes("bau") && !this.vorigeBerichtet ? this.vorigeRunden : [];
+    this.vorigeBerichtet ||= vorige.length > 0;
+    const rot = roterAbschnitt([...vorige, roteRunde({ runde: this.runde, pruefungen: this.pruefungen.slice(this.berichtet), agenten: this.agenten })]);
+    const absaetze = rollen.flatMap((rolle) => {
+      const zeilen = Object.entries(this.zweck[rolle]).flatMap(([id, text]) => `Zweck ${id}: ${text}`.split("\n").map((zeile) => `${ZITAT}${zeile}`));
+      this.zweck[rolle] = {};
+      return zeilen.length > 0 ? [`Zweck der Prüfungen, Begründung des ${BEGRUENDUNG_DES[rolle]}:`, ...zeilen, ""] : [];
+    });
+    this.berichtet = this.pruefungen.length;
+    return [...rot, ...absaetze];
   }
 
   abschliessen() {
@@ -280,9 +351,10 @@ class AuftragsLauf {
       patch: this.patch,
       commit: this.commit,
       agenten: this.agenten,
+      nachfragen: this.nachfragen,
       pruefungen: this.pruefungen,
       hinweise: this.hinweise,
-      kosten: kostenDesAuftrags(root, this.agenten),
+      kosten: kostenDesAuftrags(root, [...this.agenten, ...this.nachfragen]),
       zeit: new Date().toISOString(),
     };
     druckeBeleg(ergebnis, schreibeBeleg(root, ergebnis));

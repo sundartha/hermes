@@ -15,6 +15,8 @@ const AUSWEGE = [
 ];
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
+const ZWECK_KOPF = /^Zweck ([^:\s][^:]*):(.*)$/;
+const ABSATZ_ENDE = /^(?:Auftrag passt nicht|Voraussetzung fehlt|Alter Test hält altes Verhalten fest|Gleichwertig|Nötig):/;
 
 function nurPlatzhalter(text) {
   return !INHALT.test(text.replace(PLATZHALTER, ""));
@@ -60,6 +62,23 @@ function meldungen(zeilen) {
   return { gleichwertig: gefunden.Gleichwertig, noetig: gefunden.Nötig };
 }
 
+function zweckAbsaetze(zeilen) {
+  const absaetze = new Map();
+  let offen = null;
+  for (const zeile of zeilen) {
+    const kopf = ZWECK_KOPF.exec(zeile);
+    if (kopf !== null) {
+      offen = [kopf[2].trim()].filter(Boolean);
+      absaetze.set(kopf[1].trim(), offen);
+    } else if (offen !== null && (ABSATZ_ENDE.test(zeile) || (zeile.trim() === "" && offen.length > 0))) {
+      offen = null;
+    } else if (offen !== null && zeile.trim() !== "") {
+      offen.push(zeile);
+    }
+  }
+  return Object.fromEntries([...absaetze].map(([id, text]) => [id, text.join("\n")]));
+}
+
 export function zweckUnklar(ausstieg) {
   return ZWECK_UNKLAR.exec(ausstieg ?? "")?.[1] ?? null;
 }
@@ -69,7 +88,7 @@ export function ausgang(text, rolle) {
   const letzter = zeilen.map((zeile) => auswegDer(zeile, rolle)).findLast((weg) => weg !== null);
   const leer = { [AUSSTIEG]: null, voraussetzung: null, [ALTER_TEST]: null };
   const weg = letzter === undefined ? {} : letzter.art === ALTER_TEST ? alterTest(letzter, rolle) : { [letzter.art]: letzter.grund };
-  return { ...leer, ...weg, zeile: letzter?.zeile ?? null, ...meldungen(zeilen) };
+  return { ...leer, ...weg, zeile: letzter?.zeile ?? null, ...meldungen(zeilen), zweck: zweckAbsaetze(zeilen) };
 }
 
 export function auswegBei(ids) {

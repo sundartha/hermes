@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -56,6 +57,14 @@ function neueDateien(cwd) {
 
 export function aenderungenSeit(basis, cwd) {
   return [...verfolgteAenderungen(basis, cwd), ...neueDateien(cwd)];
+}
+
+export function arbeitsstand(cwd) {
+  const hash = createHash("sha256").update(git(["diff", "HEAD", "--binary", "--no-color", "--no-ext-diff"], { cwd }));
+  for (const pfad of git(["ls-files", "--others", "--exclude-standard", "-z"], { cwd }).split(NUL).filter(Boolean)) {
+    hash.update(`${NUL}${pfad}${NUL}`).update(readFileSync(join(cwd, pfad)));
+  }
+  return hash.digest("hex");
 }
 
 export function vormerken(pfade, cwd) {

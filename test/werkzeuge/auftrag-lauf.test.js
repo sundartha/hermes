@@ -12,6 +12,10 @@ const GELOESCHTE_ZEILEN = 360;
 const NEUE_ZEILEN = 50;
 const ANTWORTEN_JE_SITZUNG = 2;
 const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
+const ABSATZ_ROT = "Zweck rot: Drehbuchtext des Ersatz-Agenten.";
+const ABSATZ_MUTATION = "Zweck mutation: Drehbuchtext des Ersatz-Agenten.";
+const ABSATZ_ALTER_STAND = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten.";
+const ABSATZ_PIN = "Zweck pin-prüfung: Drehbuchtext des Ersatz-Agenten.";
 
 const ROTER_TEST = [
   'import assert from "node:assert/strict";',
@@ -76,7 +80,7 @@ test("die Commit-Nachricht zeigt die letzte Antwort des Bau-Agenten eingerückt,
 });
 
 test("ein roter Test mit falschem Fehlertext stoppt den Auftrag vor dem Bau-Agenten", (context) => {
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: {} };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, "test-antwort": ABSATZ_ROT, bau: {} };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("3 !== 4"), drehbuch });
   assert.equal(lauf.status, EXIT_ROT);
   assert.equal(beleg.ergebnis, "rot");
@@ -177,7 +181,7 @@ function pruefung(beleg, name) {
 test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung, sonst ergänzt der Test-Agent", (context) => {
   const faelle = [
     { zusatz: { "bau-nachrunde-antwort": GLEICHWERTIG_MIT_GRUND }, letzte: "mutation nach Bau", nachricht: GLEICHWERTIG_MIT_GRUND },
-    { zusatz: { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST } }, letzte: "mutation nach Test", nachricht: "Art: funktion" },
+    { zusatz: { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION }, letzte: "mutation nach Test", nachricht: "Art: funktion" },
   ];
   for (const { zusatz, letzte, nachricht } of faelle) {
     const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...zusatz };
@@ -211,7 +215,7 @@ function pruefeGesichert({ repo, beleg }) {
 }
 
 test("hält der Bau-Agent eine überlebende Zeile für nötig, ergänzt der Test-Agent den Test und der Auftrag wird grün", (context) => {
-  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST } };
+  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
   const { repo, werkzeug, lauf, beleg } = mitSieben(context, { ...ehrlicheNachrunde(NOETIG), ...nachgeholt });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual([pruefung(beleg, "mutation"), pruefung(beleg, "mutation nach Test")], [EXIT_ROT, 0]);
@@ -221,7 +225,7 @@ test("hält der Bau-Agent eine überlebende Zeile für nötig, ergänzt der Test
 });
 
 test("eine als nötig gemeldete Zeile gilt nie als gleichwertig; tötet kein Test den Mutanten, bleibt der Auftrag rot", (context) => {
-  const ergebnis = mitSieben(context, ehrlicheNachrunde(`${NOETIG}\n${GLEICHWERTIG_MIT_GRUND}`));
+  const ergebnis = mitSieben(context, { ...ehrlicheNachrunde(`${NOETIG}\n${GLEICHWERTIG_MIT_GRUND}`), "bau-antwort": ABSATZ_MUTATION, "test-antwort": ABSATZ_MUTATION });
   const { lauf, beleg } = ergebnis;
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.equal(beleg.grund, `Mutant überlebt: ${NEU_MUTANT}`);
@@ -242,7 +246,7 @@ test("ein Umbau ungeschützten Verhaltens wird verworfen; mit dem Test auf dem a
   const umbau = { "src/text.js": "export function gross(text) {\n  return text.toLocaleUpperCase();\n}\n" };
   const leerTest = { "test/text.test.js": `${BASIS["test/text.test.js"]}test("leer", () => assert.equal(gross(""), ""));\n` };
   for (const [nachrunde, status] of [[{}, EXIT_ROT], [leerTest, 0]]) {
-    const drehbuch = { bau: umbau, "test-nachrunde": nachrunde };
+    const drehbuch = { bau: umbau, "test-nachrunde": nachrunde, "test-nachrunde-antwort": ABSATZ_ALTER_STAND };
     const { repo, werkzeug, lauf, beleg, basis } = starte(context, { auftrag: UMBAU, drehbuch, dateien: MIT_MUTATION });
     assert.equal(lauf.status, status, lauf.stdout + lauf.stderr);
     assert.ok(beleg.hinweise.includes(`Umbau verworfen: auf dem alten Stand überlebt ${ALT_MUTANT}`));
@@ -308,7 +312,7 @@ const MIT_PIN_PRUEFUNG = { ...MIT_MUTATION, "scripts/check-staged-suppressions.j
 const MIT_UNTERSTRICH = { "src/rechnen.js": "export function verdopple(zahl) {\n  const _ = 2;\n  return zahl * _;\n}\n" };
 
 test("die Pin-Prüfung läuft direkt nach lint; ihr Befund geht vor jeder Mutationsprüfung in die nächste Runde", (context) => {
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_UNTERSTRICH };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_UNTERSTRICH, "bau-antwort": ABSATZ_PIN };
   const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_PIN_PRUEFUNG });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   const namen = beleg.pruefungen.map(({ name }) => name);
@@ -336,7 +340,7 @@ function scheitertAnPinPruefung(lauf, beleg) {
 }
 
 test("fehlt das Pin-Skript, obwohl ein pre-commit-Hook da ist, scheitert die Pin-Prüfung laut, und die zweite Runde bekommt die Meldung", (context) => {
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" } };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" }, "bau-antwort": ABSATZ_PIN };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ".githooks/pre-commit": "#!/bin/sh\nexit 0\n" } });
   scheitertAnPinPruefung(lauf, beleg);
   assert.ok(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8").includes(PIN_FEHLT));

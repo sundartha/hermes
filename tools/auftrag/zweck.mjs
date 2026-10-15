@@ -35,6 +35,7 @@ export const GRUND = {
   KEINE_AENDERUNG: "keine änderung",
   MUTATION_ABBRUCH: "mutation abbruch",
   ENTFERNT_OHNE_GRUND: "entfernt ohne grund",
+  ZWECK_ABSATZ: "zweck-absatz",
 };
 
 export const MELDUNG = {
@@ -111,6 +112,59 @@ export function zweckBeleg(ergebnis) {
   const belegt = beleg(ergebnis);
   if (ergebnis.exitCode === 0) return belegt;
   return { ...belegt, zweck: zweckIds({ name: ergebnis.name, zeilen: ergebnis.ausgabe.split("\n") }) };
+}
+
+const BAU = "bau";
+const TEST = "test";
+const LETZTER_AGENT = "letzter agent";
+const ZUSTAENDIG = new Map([
+  [PRUEFUNG.GRENZEN_BAU, BAU],
+  [PRUEFUNG.TYPPRUEFUNG, BAU],
+  [PRUEFUNG.LINT, BAU],
+  [PRUEFUNG.PIN, BAU],
+  [PRUEFUNG.ABNAHME, BAU],
+  [PRUEFUNG.BETROFFENE_TESTS, BAU],
+  [PRUEFUNG.MUTATION, BAU],
+  [PRUEFUNG.MUTATION_NACH_BAU, BAU],
+  [PRUEFUNG.COMMIT, BAU],
+  [GRUND.KEINE_AENDERUNG, BAU],
+  [PRUEFUNG.GRENZEN_TEST, TEST],
+  [PRUEFUNG.GEAENDERTE_FAELLE, TEST],
+  [PRUEFUNG.ROT, TEST],
+  [PRUEFUNG.MUTATION_NACH_TEST, TEST],
+  [PRUEFUNG.MUTATION_ALTER_STAND, TEST],
+  [PRUEFUNG.ZWISCHENSTAND, TEST],
+  [PRUEFUNG.TESTS_ALTER_STAND, TEST],
+  [GRUND.BELEGE, LETZTER_AGENT],
+  [GRUND.STILLSTAND, LETZTER_AGENT],
+]);
+const AGENT_NAMEN = new Map([
+  [BAU, "dem Bau-Agenten"],
+  [TEST, "dem Test-Agenten"],
+]);
+
+export function zustaendig(schritt, letzteRolle) {
+  const rolle = ZUSTAENDIG.get(schritt) ?? null;
+  return rolle === LETZTER_AGENT ? (letzteRolle ?? null) : rolle;
+}
+
+const ABSATZ =
+  "Begründung: Änderst du daraufhin Dateien, beginnt in deiner letzten Antwort je Prüfung, die dir hier zugeordnet ist, ein Absatz mit der eigenen Zeile „Zweck <ID>:“, wie in deinen Anweisungen beschrieben.";
+
+export function absatzVerlangt(ids) {
+  return `${ABSATZ} Dir zugeordnet: ${ids.join(", ")}.`;
+}
+
+export function absatzZuordnung(pflicht) {
+  const teile = [...AGENT_NAMEN].flatMap(([rolle, name]) => {
+    const ids = [...new Set(pflicht.filter((eintrag) => eintrag.rolle === rolle).map(({ id }) => id))];
+    return ids.length > 0 ? [`${name}: ${ids.join(", ")}`] : [];
+  });
+  return teile.length > 0 ? [`${ABSATZ} Zugeordnet sind ${teile.join("; ")}.`] : [];
+}
+
+export function kenntZweck(id) {
+  return Object.hasOwn(TEXTE, id);
 }
 
 const BLOCKZEILEN = new Set(Object.keys(TEXTE).flatMap(zweckBlock));

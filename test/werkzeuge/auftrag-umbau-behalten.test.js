@@ -108,9 +108,10 @@ const PHASE = {
 };
 
 const BAU = { dateien: { "src/text.js": NEU } };
+const ABSATZ = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten.";
 
 function testEintrag(...namen) {
-  return { dateien: { "test/text.test.js": textTest(...namen) } };
+  return { dateien: { "test/text.test.js": textTest(...namen) }, antwort: ABSATZ };
 }
 
 function gitAusgabe(repo, ...argumente) {
@@ -228,7 +229,7 @@ function pruefeEntscheidung(ergebnis, ueberlebende) {
 test("auftrag-umbau-behalten: senkt eine Runde die Zahl nicht, verlangt der Auftrag eine Entscheidung und lässt den alten Stand stehen", (context) => {
   const drehbuch = {
     bau: [BAU, BAU, BAU, BAU],
-    test: [testEintrag("leer"), { ...testEintrag("leer", "nichts"), antwort: GLEICHWERTIG }],
+    test: [testEintrag("leer"), { ...testEintrag("leer", "nichts"), antwort: `${ABSATZ}\n\n${GLEICHWERTIG}` }],
     notiz: [{ antwort: "Notiz des Ersatzes." }],
   };
   const lauf = starte(context, drehbuch);
@@ -248,7 +249,7 @@ test("auftrag-umbau-behalten: ändert der Test-Agent nichts, verlangt der Auftra
 });
 
 test("auftrag-umbau-behalten: passt der gesicherte Umbau nicht mehr auf den Stand, baut der Bau-Agent ihn neu", (context) => {
-  const kaputt = { dateien: { ...testEintrag("leer", "umlaut").dateien, [PATCH]: "kein gültiger Patch\n" } };
+  const kaputt = { ...testEintrag("leer", "umlaut"), dateien: { ...testEintrag("leer", "umlaut").dateien, [PATCH]: "kein gültiger Patch\n" } };
   const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { bau: [BAU, BAU], test: [kaputt] });
   assert.equal(lauf.status, 0, ausgabe);
   pruefeGesichert(werkzeug, 0);
