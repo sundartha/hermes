@@ -25,6 +25,7 @@ import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from
 import { DOKUMENTE, schnittImOrdner } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
+import { verdichteBerichte } from "./verdichtung.mjs";
 import { setzePhaseZusammen } from "./zusammensetzen.mjs";
 
 const EXIT_GRUEN = 0;
@@ -91,6 +92,11 @@ function prueferZeile({ schluessel, befund, fundstelle }) {
 function offenerPrueferBefund(befund, antworten) {
   const antwort = antworten.find((eintrag) => eintrag?.schluessel === befund.schluessel)?.antwort;
   return istText(antwort) ? `${prueferZeile(befund)} | ${antwort}` : prueferZeile(befund);
+}
+
+function nachfrageAntwort({ frage, nummern }, { bericht, befunde }, stelle) {
+  const teile = [`Frage: ${frage}`, `Nummern: ${nummern.join(", ")}`, verdichteBerichte([bericht]), `Befunde:\n${punkte(befunde)}`];
+  return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
 }
 
 function nummernText(soll, nummern) {
@@ -265,7 +271,7 @@ class Planung {
   }
 
   async zuschnittNachricht() {
-    return nachricht("Zuschnitt", [abschnitt("Erkundungsberichte", json(this.berichte)), ...(await this.lagebild()), abschnitt(VORLAGE, dateiText(this.root, VORLAGE))]);
+    return nachricht("Zuschnitt", [abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte)), ...(await this.lagebild()), abschnitt(VORLAGE, dateiText(this.root, VORLAGE))]);
   }
 
   nachfrageBefunde(nachfragen) {
@@ -308,9 +314,9 @@ class Planung {
     const ergebnisse = await this.team.gruppe(laeufe);
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
     this.legeBerichte();
-    const antworten = offen.map((eintrag, stelle) => ({ ...eintrag, bericht: ergebnisse[stelle].bericht, befunde: ergebnisse[stelle].befunde }));
+    const antworten = offen.map((eintrag, stelle) => nachfrageAntwort(eintrag, ergebnisse[stelle], stelle));
     const ende = enden.length > 0 ? [abschnitt("Ende der Nachfragen", `Nachfragen zu ${[...new Set(enden)].join(", ")} enden; schneide mit einer Annahme.`)] : [];
-    return { weiter: nachricht("Zuschnitt", [abschnitt("Antworten auf deine Nachfragen", json(antworten)), ...ende, ...(await this.lagebild())]) };
+    return { weiter: nachricht("Zuschnitt", [...antworten, ...ende, ...(await this.lagebild())]) };
   }
 
   async pruefeSchnitt(schnitt) {

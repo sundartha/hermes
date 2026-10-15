@@ -495,6 +495,24 @@ test("plane: eine teilliste vor der ersten Schnittliste ist ein Befund", { timeo
   assert.ok(ruecksendung.eingabe.includes("Regel Teilliste: teilliste gibt es erst nach einer Schnittliste"), ruecksendung.eingabe);
 });
 
+test("plane: der Planer liest verdichtete Berichte, Prüfer und Entwurf-Schreiber den Volltext", { timeout: LAUF_FRIST_MS }, (context) => {
+  const nachfrage = alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo liegt der Hinweis?" }] });
+  const lauf = plane(context, { "planer|## Zuschnitt": [nachfrage, alsJson({ schnitt: schnittliste() })], "erkunder|## Nachfrage|S4": [bericht(["S4"])] });
+  exit(lauf, EXIT_GRUEN);
+  const [zuschnitt, nachNachfrage] = aufrufe(lauf, "planer", "## Zuschnitt");
+  assert.ok(zuschnitt.eingabe.includes("### Erkundungsberichte (verdichtet)"), zuschnitt.eingabe);
+  assert.ok(zuschnitt.eingabe.includes(`weg: eingang ${ROUTE} hinterlege 2–4 · wirkung ${ROUTE} speichereStatus 10–14`), zuschnitt.eingabe);
+  assert.ok(nachNachfrage.eingabe.includes("Frage: Wo liegt der Hinweis?"), nachNachfrage.eingabe);
+  assert.ok(nachNachfrage.eingabe.includes(`weg: eingang ${HINWEIS} nimmAnruf 1–4 · wirkung ${HINWEIS} setzeHinweis 6–9`), nachNachfrage.eingabe);
+  for (const planer of [zuschnitt, nachNachfrage]) assert.equal(planer.eingabe.includes('"nummern": {'), false);
+  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  for (const { nummern: [erste] } of GRUPPEN) {
+    const pruefer = pruefungen.find((eintrag) => prueflisteZeilen(eintrag).includes(`weg:${erste}`));
+    assert.ok(pruefer.eingabe.includes(`"${erste}": {`), `Volltext zu ${erste} fehlt beim Prüfer`);
+  }
+  for (const entwurf of aufrufe(lauf, "entwurf", "## Entwurf")) assert.ok(entwurf.eingabe.includes('"nummern": {'), entwurf.eingabe);
+});
+
 function prueflisteZeilen({ eingabe }) {
   const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
   return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
