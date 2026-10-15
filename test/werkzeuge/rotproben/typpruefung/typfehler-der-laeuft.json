@@ -1,0 +1,10 @@
+{
+  "titel": "Typfehler, den Node per Type-Stripping trotzdem ausführt (S3)",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "const SEKUNDEN: number = \"dreissig\";",
+      "console.log(typeof SEKUNDEN);"
+    ]
+  },
+  "erwartet": "TS2322"
+}

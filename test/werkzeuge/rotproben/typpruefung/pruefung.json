@@ -1,0 +1,14 @@
+{
+  "titel": "Typprüfung (tsc --noEmit)",
+  "pfade": ["tsconfig.json"],
+  "probe": {
+    "mitnehmen": ["package.json", "tsconfig.json"],
+    "befehl": [
+      "node",
+      "{wurzel}/node_modules/typescript/bin/tsc",
+      "--noEmit",
+      "-p",
+      "tsconfig.json"
+    ]
+  }
+}

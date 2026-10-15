@@ -120,9 +120,9 @@
   },
   "typprüfung": {
     "liste": "ohne Nummer",
-    "wozu": "Typfehler fielen sonst erst zur Laufzeit auf.",
-    "behebung": "Den Typfehler an der Stelle beheben.",
-    "nichtAngenommen": "Typen aufweichen, bis die Prüfung schweigt.",
+    "wozu": "Jeder Wert hat einen geprüften Typ; ein falscher Aufruf fällt beim Übersetzen auf, nicht beim Kunden. Die Typabdeckung macht auch any sichtbar, das aus einer untypisierten Quelle hereinkommt, etwa aus einem Import aus einer .js-Datei.",
+    "behebung": "Den Typfehler an der Stelle beheben; einen Wert vom Typ any vor der Nutzung prüfen oder seine Quelle zuerst typisieren.",
+    "nichtAngenommen": "Typen aufweichen, bis die Prüfung schweigt, oder einen Wert durch eine Umwandlung „typisieren“.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
   },
   "lint": {

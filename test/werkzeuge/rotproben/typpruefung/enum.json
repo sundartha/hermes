@@ -1,0 +1,7 @@
+{
+  "titel": "enum, das Type-Stripping nicht entfernen kann (S6)",
+  "dateien": {
+    "src/probe/probe.ts": ["export enum Richtung {", "  Ein,", "  Aus,", "}"]
+  },
+  "erwartet": "TS1294"
+}

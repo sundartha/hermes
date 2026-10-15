@@ -1,0 +1,15 @@
+{
+  "titel": "any aus einem JavaScript-Import über eine Zwischenvariable (S7)",
+  "vorher": {
+    "src/probe/alt.js": ["export function roh(wert) {", "  return wert;", "}"]
+  },
+  "dateien": {
+    "src/probe/probe.ts": [
+      "import { roh } from \"./alt.js\";",
+      "",
+      "const wert = roh(1);",
+      "export const weiter: number = wert;"
+    ]
+  },
+  "erwartet": "src/probe/probe.ts:3:7 wert"
+}

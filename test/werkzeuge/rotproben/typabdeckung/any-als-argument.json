@@ -1,0 +1,12 @@
+{
+  "titel": "any aus JSON.parse direkt als Argument",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "function nimmt(zahl: number): number {",
+      "  return zahl;",
+      "}",
+      "export const genommen = nimmt(JSON.parse(\"2\"));"
+    ]
+  },
+  "erwartet": "src/probe/probe.ts:4:31 JSON.parse(\"2\")"
+}

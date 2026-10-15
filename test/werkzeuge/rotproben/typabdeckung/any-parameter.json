@@ -1,0 +1,11 @@
+{
+  "titel": "Parameter vom Typ any (S7)",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function verdoppelt(wert: any): number {",
+      "  return wert * 2;",
+      "}"
+    ]
+  },
+  "erwartet": "src/probe/probe.ts:1:28 wert"
+}

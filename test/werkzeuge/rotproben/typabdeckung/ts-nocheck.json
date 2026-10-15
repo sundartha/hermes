@@ -1,0 +1,7 @@
+{
+  "titel": "Datei mit @ts-nocheck",
+  "dateien": {
+    "src/probe/probe.ts": ["// @ts-nocheck", "export const text: number = \"x\";"]
+  },
+  "erwartet": "src/probe/probe.ts:1:1 @ts-nocheck"
+}
