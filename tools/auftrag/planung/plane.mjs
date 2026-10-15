@@ -261,19 +261,11 @@ class Planung {
     return ergebnis.befunde.length === 0 ? this.wegPruefung(wer, ergebnis, nummern) : ergebnis;
   }
 
-  ersteWegNachricht(nummern, bericht) {
+  wegNachricht(nummern, bericht, nachKorrektur) {
     return nachricht("Wegprüfung", [
       abschnitt("Nummern", nummernText(this.soll, nummern)),
-      ...this.designTeile(nummern),
-      abschnitt("Erkundungsbericht", json(bericht)),
-      abschnitt("Zeilen deiner Prüfliste", punkte(nummern.map((nummer) => `${WEG}${nummer}`))),
-    ]);
-  }
-
-  wegNachrichtNachKorrektur(nummern, bericht) {
-    return nachricht("Wegprüfung", [
-      abschnitt("Nummern", nummernText(this.soll, nummern)),
-      abschnitt("Korrigierter Erkundungsbericht", json(bericht)),
+      ...(nachKorrektur ? [] : this.designTeile(nummern)),
+      abschnitt(nachKorrektur ? "Korrigierter Erkundungsbericht" : "Erkundungsbericht", json(bericht)),
       abschnitt("Zeilen deiner Prüfliste", punkte(nummern.map((nummer) => `${WEG}${nummer}`))),
     ]);
   }
@@ -306,14 +298,14 @@ class Planung {
   async wegPruefung(wer, ergebnis, nummern) {
     const weg = { pruefer: this.team.teilnehmer("pruefer-planung"), schleife: this.schleife("weg"), nummern };
     let sauber = ergebnis;
-    let text = this.ersteWegNachricht(nummern, sauber.bericht);
+    let text = this.wegNachricht(nummern, sauber.bericht, false);
     for (let runden = 1; ; runden += 1) {
       const runde = await this.wegRunde(weg, text);
       if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
       const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
       if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
       sauber = neu;
-      text = this.wegNachrichtNachKorrektur(nummern, sauber.bericht);
+      text = this.wegNachricht(nummern, sauber.bericht, true);
     }
   }
 
