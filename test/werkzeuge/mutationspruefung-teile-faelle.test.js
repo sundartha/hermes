@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
+import { commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
-const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
-const EXIT_ROT = 1;
 const BEFUND = /^(?:Verstoß|rot|grün|Bestätigung): .+$/gm;
 const AKTIVER_MUTANT = ["__STRY", "KER_ACTIVE_MUT", "ANT__"].join("");
 
@@ -39,19 +37,13 @@ const BASIS = {
   "test/zahl.test.js": testdatei('assert.equal(einordnen(-1), "negativ");', 'assert.equal(einordnen(1), "positiv");'),
 };
 
-function werkzeug(repo, basis, ...argumente) {
-  return runIn(repo, process.execPath, [WERKZEUG, "--basis", basis, ...argumente]);
-}
-
 function befunde(lauf) {
   const zeilen = [...lauf.stdout.matchAll(BEFUND)].map(([zeile]) => zeile);
   return zeilen.sort();
 }
 
 function aufgeteilt(context, repo, { basis, zwischen = () => {} }) {
-  const ordner = join(repo, "..", `teile-${Date.now()}`);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  mkdirSync(ordner, { recursive: true });
+  const ordner = probeDirectory(context, {});
   const planDatei = join(ordner, "plan.txt");
   const planLauf = werkzeug(repo, basis, "--plan", planDatei);
   assert.equal(planLauf.status, 0, planLauf.stdout + planLauf.stderr);
@@ -112,8 +104,7 @@ function indirekterTest(marke) {
 }
 
 test("was nur eine indirekt erreichende Testdatei tötet, misst bei Anteilen erst das Urteil, und zwar wie im ganzen Lauf", (context) => {
-  const marke = join(tmpdir(), `mutationspruefung-indirekt-${process.pid}-${Date.now()}.txt`);
-  context.after(() => rmSync(marke, { force: true }));
+  const marke = join(probeDirectory(context, {}), "mutationspruefung-indirekt.txt");
   const repo = probeRepository(context, {
     ...BASIS,
     ...fuellung(),
