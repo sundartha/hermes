@@ -24,6 +24,7 @@ import { nummernImOrdner } from "./nummern.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, schnittImOrdner } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
+import { setzeTeillisteEin } from "./teilliste.mjs";
 import { setzePhaseZusammen } from "./zusammensetzen.mjs";
 
 const EXIT_GRUEN = 0;
@@ -41,6 +42,8 @@ const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
+const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
+const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 
 class Ende extends Error {
   constructor(exit, grund, befunde = []) {
@@ -319,10 +322,18 @@ class Planung {
     return ergebnis.befunde.length > 0 ? { befunde: ergebnis.befunde, schnitt } : { wert: schnitt };
   }
 
+  schnittAusAntwort(wert) {
+    if (wert.teilliste === undefined) return { schnitt: wert.schnitt, befunde: [] };
+    if (wert.schnitt !== undefined) return { befunde: [TEILLISTE_ZUGLEICH] };
+    if (!istObjekt(this.schnitt)) return { befunde: [TEILLISTE_ZU_FRUEH] };
+    return setzeTeillisteEin(this.schnitt, wert.teilliste);
+  }
+
   async schneide() {
     await this.planerStufe(await this.zuschnittNachricht(), (wert) => {
       if (Array.isArray(wert.nachfragen)) return this.nachfragen(wert.nachfragen);
-      return this.pruefeSchnitt(wert.schnitt);
+      const { schnitt, befunde } = this.schnittAusAntwort(wert);
+      return befunde.length > 0 ? { befunde, schnitt: this.schnitt } : this.pruefeSchnitt(schnitt);
     }, "zuschnitt");
   }
 
@@ -400,11 +411,13 @@ class Planung {
   }
 
   async beantworte(befunde, wert, vorher) {
-    if (!istObjekt(wert.schnitt)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
-    const offen = antwortenBefunde(befunde, wert.antworten, { alt: vorher, neu: wert.schnitt });
-    const skript = liste((await this.pruefeSchnitt(wert.schnitt)).befunde);
-    if (offen.length > 0 || skript.length > 0) return { befunde: [...offen, ...skript], schnitt: wert.schnitt };
-    return { wert: { schnitt: wert.schnitt, antworten: this.verbucheAntworten(befunde, wert.antworten) } };
+    const { schnitt, befunde: einsatz } = this.schnittAusAntwort(wert);
+    if (einsatz.length > 0) return { befunde: einsatz, schnitt: this.schnitt };
+    if (!istObjekt(schnitt)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
+    const offen = antwortenBefunde(befunde, wert.antworten, { alt: vorher, neu: schnitt });
+    const skript = liste((await this.pruefeSchnitt(schnitt)).befunde);
+    if (offen.length > 0 || skript.length > 0) return { befunde: [...offen, ...skript], schnitt };
+    return { wert: { schnitt, antworten: this.verbucheAntworten(befunde, wert.antworten) } };
   }
 
   async korrigiere(befunde, vorher) {
