@@ -35,3 +35,7 @@ jobs:
 
       - name: ESLint-Konfiguration, Unterordner und only prüfen
         run: node tools/eslint-konfig-pruefen.mjs
+
+      - name: TypeScript-Konfiguration prüfen
+        if: ${{ !cancelled() }}
+        run: node tools/tsconfig-pruefen.mjs
