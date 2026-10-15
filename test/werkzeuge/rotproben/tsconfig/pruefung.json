@@ -1,0 +1,12 @@
+{
+  "titel": "TypeScript-Konfiguration gegen die Kopie",
+  "pfade": ["tsconfig.json", "tools/tsconfig-pruefen.mjs", "tools/basis/tsconfig-wirksam.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/tsconfig-pruefen.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "mitnehmen": ["tsconfig.json", "tools/basis/tsconfig-wirksam.json"],
+    "befehl": ["node", "{wurzel}/tools/tsconfig-pruefen.mjs"]
+  }
+}
