@@ -1,0 +1,83 @@
+name: Systemstand nachmessen
+
+on:
+  workflow_run:
+    workflows:
+      - Abhängigkeiten
+      - Audit täglich
+      - Aufräumen
+      - Auswertung
+      - CI
+      - Prüfungen prüfen
+      - Soll und Rot-Proben
+      - staging
+      - Statische Prüfung
+      - Wochenbericht
+    types: [completed]
+    branches: [master]
+
+permissions: {}
+
+env:
+  STAGING_URL: https://hermes-staging-erpv.onrender.com
+
+concurrency:
+  group: systemstand-nachmessen-${{ github.event.workflow_run.event }}
+  cancel-in-progress: false
+
+jobs:
+  systemstand:
+    name: Systemstand nachgemessen
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Systemstand auf master prüfen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/systemstand.mjs --pruefen
+
+  schritt-issues:
+    name: Schritt-Issues nachgemessen
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: systemstand-schritt-issues
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Schritt-Issues aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/systemstand.mjs --issues
