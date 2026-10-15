@@ -192,7 +192,7 @@ function antworten(ueberschrieben = {}) {
     "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern)],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })],
     "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN }, () => GRUEN_PRUEFLISTE),
-    "pruefer-planung|## Prüfung": [GRUEN_PRUEFLISTE],
+    "pruefer-planung|## Prüfung": jePruefer(GRUEN_PRUEFLISTE),
     "pruefer-planung|## Nachprüfung": [GRUEN_PRUEFLISTE],
     [`entwurf|## Entwurf|${ROUTE}`]: [ENTWURF_ROUTE],
     [`entwurf|## Entwurf|${HINWEIS}`]: [ENTWURF_HINWEIS],
@@ -252,7 +252,7 @@ test("plane: feste Antworten aller Rollen ergeben Exit 0 und eine phase.json, di
   exit(lauf, EXIT_GRUEN);
   assert.equal(werkzeug(lauf, AUFTRAG, "pruefe", phaseDatei(lauf)).status, EXIT_GRUEN);
   assert.equal(werkzeug(lauf, join(REPO_ROOT, "tools/abdeckung-pruefen.mjs"), join(lauf.wurzel, ORDNER)).status, EXIT_GRUEN);
-  assert.deepEqual(readdirSync(join(lauf.wurzel, ORDNER, "planung")).toSorted(), ["entwuerfe.json", "erkundung-g1.json", "erkundung-g2.json", "erkundung-g3.json", "gliederung.json", "pruefliste.json", "schnitt.json", "wegpruefung-S1-1.json", "wegpruefung-S2-1.json", "wegpruefung-S4-1.json"]);
+  assert.deepEqual(readdirSync(join(lauf.wurzel, ORDNER, "planung")).toSorted(), ["entwuerfe.json", "erkundung-g1.json", "erkundung-g2.json", "erkundung-g3.json", "gliederung.json", "pruefliste-aufteilung.json", "pruefliste.json", "schnitt.json", "wegpruefung-S1-1.json", "wegpruefung-S2-1.json", "wegpruefung-S4-1.json"]);
   assert.deepEqual(planungsBericht(lauf).auftraege.map(({ id }) => id), ["a0", "a1", "a2", "a3"]);
 });
 
@@ -352,7 +352,7 @@ test("plane: der Zuschnitt setzt die Sitzung des Planers mit --resume fort, der 
 });
 
 test("plane: eine unvollständige Prüfliste geht genau einmal an den Prüfer zurück", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [{ ...GRUEN_PRUEFLISTE, weglassen: ["gegenfrage:alle"] }], "pruefer-planung|## Befunde": [GRUEN_PRUEFLISTE] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer({ ...GRUEN_PRUEFLISTE, weglassen: ["gegenfrage:alle"] }), "pruefer-planung|## Befunde": [GRUEN_PRUEFLISTE] });
   exit(lauf, EXIT_GRUEN);
   const rueckgaben = aufrufe(lauf, "pruefer-planung", "## Befunde");
   assert.equal(rueckgaben.length, 1);
@@ -362,7 +362,7 @@ test("plane: eine unvollständige Prüfliste geht genau einmal an den Prüfer zu
 test("plane: ein Prüferbefund ohne Antwort des Planers endet mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
   const befund = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a3": "a3 braucht den Status aus a2" } };
   const ohneAntwort = alsJson({ schnitt: schnittliste(), antworten: [] });
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [befund], "planer|## Befunde": [ohneAntwort, ohneAntwort] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(befund), "planer|## Befunde": [ohneAntwort, ohneAntwort] });
   exit(lauf, EXIT_BEFUNDE);
   assert.equal(existsSync(phaseDatei(lauf)), false);
   assert.ok(planungsBericht(lauf).befunde.offen.includes("allein-gruen:a3: Befund des Prüfers ohne Antwort des Planers"));
@@ -392,7 +392,7 @@ const OHNE_NUMMER = korrektur({ a2: A2_KORRIGIERT, dazu: [zusatz("a14", [])] });
 const MIT_NUMMER = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"])] });
 
 test("plane: ein Skriptbefund nach der Korrektur geht an den Planer zurück und die Planung endet grün", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(MIT_NUMMER)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(MIT_NUMMER)] });
   exit(lauf, EXIT_GRUEN);
   assert.equal(existsSync(phaseDatei(lauf)), true);
   const [, ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
@@ -402,7 +402,7 @@ test("plane: ein Skriptbefund nach der Korrektur geht an den Planer zurück und 
 });
 
 test("plane: ein Skriptbefund, der nach der Korrektur wiederkehrt, endet mit Exit 4 und planung/schnitt.json", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(OHNE_NUMMER)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(OHNE_NUMMER)] });
   exit(lauf, EXIT_BEFUNDE);
   assert.match(planungsBericht(lauf).grund, /wiederkehrend/u);
   assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung", "schnitt.json")), true);
@@ -413,7 +413,7 @@ test("plane: endet die Korrektur mit Exit 4, stehen die Befunde des Prüfers mit
   const zurueck = `trifft nicht zu, weil a3 den Status selbst setzt (${ROUTE}:5)`;
   const drei = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1", "nie-saetze:a3": "a3 nennt keinen Nie-Satz", "gegenfrage:alle": "S5 fehlt im Plan" } };
   const antworten = [...A2_ANTWORT, { schluessel: "nie-saetze:a3", antwort: zurueck }];
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [drei], "planer|## Befunde": [antwortMit(OHNE_NUMMER, antworten), antwortMit(OHNE_NUMMER, antworten)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(drei), "planer|## Befunde": [antwortMit(OHNE_NUMMER, antworten), antwortMit(OHNE_NUMMER, antworten)] });
   exit(lauf, EXIT_BEFUNDE);
   const { offen, korrigiert, zurueckgewiesen } = planungsBericht(lauf).befunde;
   const erwartet = [
@@ -428,7 +428,7 @@ test("plane: endet die Korrektur mit Exit 4, stehen die Befunde des Prüfers mit
 
 test("plane: eine Korrektur ohne weniger Befunde endet mit Exit 4",{ timeout: LAUF_FRIST_MS }, (context) => {
   const anderer = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", [])] });
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(anderer)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(anderer)] });
   exit(lauf, EXIT_BEFUNDE);
   assert.match(planungsBericht(lauf).grund, /sank nicht/u);
 });
@@ -448,7 +448,7 @@ test("plane: Antwortbefund und Skriptbefund derselben Korrektur gehen zusammen z
   const zweiOhne = korrektur({ dazu: [zusatz("a14", []), zusatz("a15", [])] });
   const doppelt = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", ["B1"])] });
   const sauber = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", ["B1"])] });
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(zweiOhne, []), antwortMit(doppelt), antwortMit(sauber)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(zweiOhne, []), antwortMit(doppelt), antwortMit(sauber)] });
   exit(lauf, EXIT_GRUEN);
   const [, erste, zweite] = aufrufe(lauf, "planer", "## Befunde");
   for (const teil of ["allein-gruen:a2: Befund des Prüfers ohne Antwort des Planers", "a14: funktion ohne Nummer", "a15: funktion ohne Nummer"]) assert.ok(erste.eingabe.includes(teil), `${teil} fehlt in\n${erste.eingabe}`);
@@ -673,6 +673,36 @@ test("plane: ein Wegbefund in einer unvollständigen Wegprüfliste steht unter O
   assert.ok(offen.includes(wegbefund), JSON.stringify(offen));
 });
 
+function gruppenPruefung(lauf, nummer) {
+  return aufrufe(lauf, "pruefer-planung", "## Prüfung").find(({ eingabe }) => eingabe.includes("### Erkundungsbericht deiner Gruppe") && eingabe.includes(`#### ${nummer} (`));
+}
+
+function abgelegt({ wurzel }, name) {
+  return JSON.parse(readFileSync(join(wurzel, ORDNER, "planung", name), "utf8"));
+}
+
+test("plane: die Gruppenprüfer und der übergreifende Prüfer laufen gleichzeitig und ihre Befunde gehen in einer Rücksendung an den Planer", { timeout: LAUF_FRIST_MS }, (context) => {
+  const langsam = { ...GRUEN_PRUEFLISTE, warte: WARTEN_MS, befunde: { "nie-saetze:a1": "a1 nennt keinen Nie-Satz", "allein-gruen:a2": "a2 braucht den Code aus a1" } };
+  const teilliste = { auftraege: [auftragAus(schnittliste(), "a1", { ziel: "Ziel a1 mit Nie-Satz" }), auftragAus(schnittliste(), "a2", A2_KORRIGIERT)] };
+  const antworten = [{ schluessel: "nie-saetze:a1", antwort: "korrigiert: a1 nennt den Nie-Satz" }, ...A2_ANTWORT];
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(langsam), "planer|## Befunde": [alsJson({ teilliste, antworten })] });
+  exit(lauf, EXIT_GRUEN);
+  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  assert.equal(pruefungen.length, GRUPPEN.length + UEBERGREIFENDER_PRUEFER);
+  const spaetesterStart = Math.max(...pruefungen.map(({ start }) => start));
+  const fruehestesEnde = Math.min(...pruefungen.map(({ ende }) => ende));
+  assert.ok(spaetesterStart < fruehestesEnde, `Prüfer laufen nicht gleichzeitig: ${spaetesterStart} ≥ ${fruehestesEnde}`);
+  const [ruecksendung, ...weitere] = aufrufe(lauf, "planer", "## Befunde");
+  assert.equal(weitere.length, 0);
+  for (const schluessel of ["nie-saetze:a1", "allein-gruen:a2"]) assert.ok(ruecksendung.eingabe.includes(`${schluessel}: `), ruecksendung.eingabe);
+  const zeilen = pruefungen.flatMap(prueflisteZeilen);
+  assert.deepEqual(zeilen.toSorted(), abgelegt(lauf, "pruefliste.json").map(({ schluessel }) => schluessel).toSorted());
+  assert.deepEqual(abgelegt(lauf, "pruefliste-aufteilung.json").map(({ gruppe }) => gruppe), [...GRUPPEN.keys(), null]);
+  const uebergreifend = pruefungen.find((eintrag) => prueflisteZeilen(eintrag).includes("gegenfrage:alle"));
+  for (const teil of ["### Erkundungsberichte (verdichtet)", "### Dateikarte", `weg: eingang ${ROUTE} hinterlege 2–4`]) assert.ok(uebergreifend.eingabe.includes(teil), teil);
+  assert.equal(uebergreifend.eingabe.includes('"nummern": {'), false);
+});
+
 function prueflisteZeilen({ eingabe }) {
   const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
   return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
@@ -683,13 +713,13 @@ function zeilenDes(id) {
 }
 
 test("plane: nach der Korrektur prüft ein frischer Prüfer genau die Nachprüf-Schlüssel", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(MIT_NUMMER)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(MIT_NUMMER)] });
   exit(lauf, EXIT_GRUEN);
-  const [pruefung] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
   const [nachpruefung, ...weitere] = aufrufe(lauf, "pruefer-planung", "## Nachprüfung");
   assert.equal(weitere.length, 0);
   assert.equal(nachpruefung.resume, false);
-  assert.notEqual(nachpruefung.sitzung, pruefung.sitzung);
+  assert.equal(pruefungen.some(({ sitzung }) => sitzung === nachpruefung.sitzung), false);
   assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "weg:S2", "weg:S3", "weg:S6", "weg:S4", "weg:S5", "weg:B1", "weg:T1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
   assert.ok(nachpruefung.eingabe.includes("allein-gruen:a2: a2 braucht den Code aus a1 | korrigiert: a2 liest den Code aus a1"));
   assert.equal(planungsBericht(lauf).nachpruefungen[0].sitzung, nachpruefung.sitzung);
@@ -699,7 +729,7 @@ test("plane: ein zurückgewiesener Befund, den die Nachprüfung bestätigt, ende
   const antwort = `trifft nicht zu, weil a2 den Code selbst erzeugt (${ROUTE}:5)`;
   const bestaetigt = "a2 liest den Code aus a1, den a2 nicht erzeugt";
   const lauf = plane(context, {
-    "pruefer-planung|## Prüfung": [A2_BEFUND],
+    "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND),
     "planer|## Befunde": [antwortMit(schnittliste(), [{ schluessel: "allein-gruen:a2", antwort }])],
     "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": bestaetigt } }],
   });
@@ -716,7 +746,7 @@ test("plane: ein neuer Befund der Nachprüfung geht an den Planer zurück und en
   const ersteAntworten = [...A2_ANTWORT, { schluessel: "nie-saetze:a3", antwort: "korrigiert: a3 gibt S5 an a14 ab" }];
   const a14Korrigiert = { ...MIT_NUMMER, auftraege: MIT_NUMMER.auftraege.map((eintrag) => (eintrag.id === "a14" ? { ...eintrag, ziel: "Ziel a14 ohne Anruf" } : eintrag)) };
   const lauf = plane(context, {
-    "pruefer-planung|## Prüfung": [zwei],
+    "pruefer-planung|## Prüfung": jePruefer(zwei),
     "planer|## Befunde": [antwortMit(MIT_NUMMER, ersteAntworten), antwortMit(a14Korrigiert, [{ schluessel: "allein-gruen:a14", antwort: "korrigiert: a14 ruft nicht an" }])],
     "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a14": "a14 braucht einen Anruf aus a3" } }, GRUEN_PRUEFLISTE],
   });
@@ -731,7 +761,7 @@ test("plane: ein neuer Befund der Nachprüfung geht an den Planer zurück und en
 });
 
 test("plane: ein Nachprüfer, der eine Datei ändert, bricht mit Exit 1 ab", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": [A2_BEFUND], "planer|## Befunde": [antwortMit(MIT_NUMMER)], "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, schreibe: ROUTE }] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(MIT_NUMMER)], "pruefer-planung|## Nachprüfung": [{ ...GRUEN_PRUEFLISTE, schreibe: ROUTE }] });
   exit(lauf, EXIT_ABBRUCH);
   assert.equal(planungsBericht(lauf).grund, `pruefer-planung haben ${ROUTE} geändert`);
 });
@@ -817,7 +847,7 @@ test("plane: planung.json enthält Ausweg, falsche Angabe, zurückgewiesenen Bef
   const lauf = plane(context, {
     "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern, { S5: { vorbild: ausweg } })],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }) })],
-    "pruefer-planung|## Prüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": prueferText } }],
+    "pruefer-planung|## Prüfung": jePruefer({ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": prueferText } }),
     "planer|## Befunde": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }), antworten: [{ schluessel: "allein-gruen:a2", antwort }] })],
   });
   exit(lauf, EXIT_GRUEN);
@@ -826,9 +856,8 @@ test("plane: planung.json enthält Ausweg, falsche Angabe, zurückgewiesenen Bef
   assert.ok(beleg.annahmen.some((annahme) => annahme.includes(`Widerspruch zur Erkundung S1 ${ROUTE}: ${falsch.grund}`)));
   assert.deepEqual(beleg.befunde.zurueckgewiesen, [{ schluessel: "allein-gruen:a2", befund: prueferText, antwort }]);
   assert.deepEqual(beleg.arten, { funktionen: 3, umbauten: 0, altfunktionUmbauten: 1, altfunktionUmbautenJeDatei: { [HINWEIS]: 1 } });
-  const [pruefung] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
-  assert.ok(pruefung.eingabe.includes("- falsche-angabe:a1:S1:src/routes/api-onboard.js"));
-  assert.ok(pruefung.eingabe.includes("- ausweg:S5:vorbild"));
+  assert.ok(gruppenPruefung(lauf, "S1").eingabe.includes("- falsche-angabe:a1:S1:src/routes/api-onboard.js"));
+  assert.ok(gruppenPruefung(lauf, "S5").eingabe.includes("- ausweg:S5:vorbild"));
 });
 
 test("plane: die Fortsetzungen nennen Quote und Urteil aus einem festen Protokoll", (context) => {
