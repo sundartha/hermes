@@ -8,8 +8,13 @@ function liste(wert) {
   return Array.isArray(wert) ? wert : [];
 }
 
+const ERLAUBT = [...KENNUNGSLISTEN, ...LISTEN];
+
 function formBefunde(teilliste) {
-  return KENNUNGSLISTEN.filter((feld) => teilliste[feld] !== undefined && !Array.isArray(teilliste[feld])).map((feld) => `${feld} ist keine Liste`);
+  return [
+    ...Object.keys(teilliste).filter((feld) => !ERLAUBT.includes(feld)).map((feld) => `unbekannter Schlüssel ${feld}; erlaubt sind ${ERLAUBT.join(", ")}`),
+    ...KENNUNGSLISTEN.filter((feld) => teilliste[feld] !== undefined && !Array.isArray(teilliste[feld])).map((feld) => `${feld} ist keine Liste`),
+  ];
 }
 
 function doppelte(werte) {

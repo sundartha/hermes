@@ -90,3 +90,18 @@ test("teilliste: ein Auftrag der alten Schnittliste ohne id ist ein Befund und �
     ], alte);
   }
 });
+
+test("teilliste: ein unbekannter Schl체ssel ist ein Befund mit seinem Namen und 채ndert nichts", () => {
+  const erlaubt = "erlaubt sind auftraege, entfernt, reihenfolge, annahmen, fehlendeSzenarien, ownerAufgaben, gemeinsameNamen";
+  pruefeBefundeOhneAenderung([
+    [{ entfernen: ["a3"] }, `Regel Teilliste: unbekannter Schl체ssel entfernen; ${erlaubt}`],
+    [{ auftraege: [auftrag("a2", ["S2", "S5"])], annahme: ["Annahme neu"] }, `Regel Teilliste: unbekannter Schl체ssel annahme; ${erlaubt}`],
+    [{ schnitt: SCHNITT }, `Regel Teilliste: unbekannter Schl체ssel schnitt; ${erlaubt}`],
+  ]);
+  const zwei = setzeTeillisteEin(SCHNITT, { reihenfolgen: ["a1"], entfernen: ["a3"] });
+  assert.deepEqual(zwei.befunde, [`Regel Teilliste: unbekannter Schl체ssel reihenfolgen; ${erlaubt}`, `Regel Teilliste: unbekannter Schl체ssel entfernen; ${erlaubt}`]);
+  assert.equal(zwei.schnitt, SCHNITT);
+  const mitForm = setzeTeillisteEin(SCHNITT, { zusatz: [], auftraege: "a1" });
+  assert.deepEqual(mitForm.befunde, [`Regel Teilliste: unbekannter Schl체ssel zusatz; ${erlaubt}`, "Regel Teilliste: auftraege ist keine Liste"]);
+  assert.equal(mitForm.schnitt, SCHNITT);
+});
