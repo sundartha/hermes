@@ -21,6 +21,7 @@ import { berichtsGeruest, erkundungBefunde, istObjekt, istText, namenImWenn } fr
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
+import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, schnittImOrdner } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
@@ -53,6 +54,11 @@ class Ende extends Error {
     this.exit = exit;
     this.befunde = befunde;
   }
+}
+
+function zusammengefuegt(schluessel, ergebnisse) {
+  const zeilen = new Map(ergebnisse.flatMap(({ pruefliste }) => pruefliste).map((zeile) => [zeile.schluessel, zeile]));
+  return schluessel.map((eintrag) => zeilen.get(eintrag));
 }
 
 function liste(wert) {
@@ -344,8 +350,12 @@ class Planung {
     return [...berichte, ...new Set(this.wegOffen.map(({ zeile }) => zeile))];
   }
 
+  sauberBerichte() {
+    return this.pruefungDerBerichte().filter(({ befunde }) => befunde.length === 0).map(({ bericht }) => bericht);
+  }
+
   async karten() {
-    const sauber = this.pruefungDerBerichte().filter(({ befunde }) => befunde.length === 0).map(({ bericht }) => bericht);
+    const sauber = this.sauberBerichte();
     return { funktionsliste: funktionsListe(this.root, sauber), dateikarte: await dateiKarte(this.root, sauber) };
   }
 
@@ -438,18 +448,27 @@ class Planung {
     return this.schnittAnnahmen ?? this.erkunderAnnahmen();
   }
 
-  pruefGrundlage(schluessel) {
+  pruefGrundlage(schluessel, { nummern = [...this.soll.keys()], berichte = [abschnitt("Erkundungsberichte", json(this.berichte))] } = {}) {
     return [
-      abschnitt("Nummern", nummernText(this.soll, [...this.soll.keys()])),
-      abschnitt("Erkundungsberichte", json(this.berichte)),
+      abschnitt("Nummern", nummernText(this.soll, nummern)),
+      ...berichte,
       abschnitt("Annahmen", punkte(this.alleAnnahmen().map(annahmeText))),
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Zeilen deiner Prüfliste", punkte(schluessel)),
     ];
   }
 
-  prueferNachricht(schluessel) {
-    return nachricht("Prüfung", [abschnitt("Schnittliste", json(this.schnitt)), ...this.pruefGrundlage(schluessel)]);
+  async prueferSicht(teil) {
+    if (teil.gruppe === null) {
+      const dateikarte = await dateiKarte(this.root, this.sauberBerichte());
+      return { berichte: [abschnitt("Dateikarte", json(dateikarte)), abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte))] };
+    }
+    const { nummern } = this.gliederung.gruppen[teil.gruppe];
+    return { nummern, berichte: [abschnitt("Erkundungsbericht deiner Gruppe", json(this.berichte[teil.gruppe]))] };
+  }
+
+  async prueferNachricht(schluessel, teil) {
+    return nachricht("Prüfung", [abschnitt("Schnittliste", json(this.schnitt)), ...this.pruefGrundlage(schluessel, await this.prueferSicht(teil))]);
   }
 
   prueflisteDer(antwort, schluessel) {
@@ -464,17 +483,34 @@ class Planung {
     return this.prueflisteDer(await frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
-  async pruefeMitFrischemPruefer(text, schluessel, { datei, grund }) {
+  nimmPrueflisteAn(befunde, liefere, { datei, grund }) {
+    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, grund, befunde);
+    const pruefliste = liefere();
+    this.lege(datei, pruefliste);
+    return prueferBefunde(pruefliste);
+  }
+
+  async pruefeMitFrischemPruefer(text, schluessel, ablage) {
     const pruefer = this.team.teilnehmer("pruefer-planung");
-    const ergebnis = await this.prueferLauf(pruefer, text, { schluessel });
-    if (ergebnis.befunde.length > 0) throw new Ende(EXIT_BEFUNDE, grund, ergebnis.befunde);
-    this.lege(datei, ergebnis.pruefliste);
-    return { pruefer, befunde: prueferBefunde(ergebnis.pruefliste) };
+    const { befunde, pruefliste } = await this.prueferLauf(pruefer, text, { schluessel });
+    return { pruefer, befunde: this.nimmPrueflisteAn(befunde, () => pruefliste, ablage) };
+  }
+
+  async prueferTeil(teil) {
+    const pruefer = this.team.teilnehmer("pruefer-planung");
+    const text = await this.prueferNachricht(teil.schluessel, teil);
+    const frage = (wer, inhalt) => this.team.frage(wer, inhalt);
+    return { rolle: pruefer.rolle, lauf: async () => ({ teil, pruefer, ...(await this.prueferLauf(pruefer, text, { schluessel: teil.schluessel, frage })) }) };
   }
 
   async pruefliste() {
     const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
-    const { befunde } = await this.pruefeMitFrischemPruefer(this.prueferNachricht(schluessel), schluessel, { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
+    const laeufe = [];
+    for (const teil of teilePruefliste(schluessel, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
+    const ergebnisse = await this.team.gruppe(laeufe);
+    const unvollstaendig = ergebnisse.flatMap(({ befunde }) => befunde);
+    const befunde = this.nimmPrueflisteAn(unvollstaendig, () => zusammengefuegt(schluessel, ergebnisse), { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
+    this.lege("pruefliste-aufteilung.json", ergebnisse.map(({ teil, pruefer }) => ({ gruppe: teil.gruppe, sitzung: pruefer.sitzung, schluessel: teil.schluessel })));
     return befunde;
   }
 
