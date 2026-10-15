@@ -199,7 +199,7 @@ class AuftragsLauf {
       ? [
           () => this.agent("test", testPrompt(this.kontext.phase, auftrag, this.kontext.root)),
           () => this.grenzen("test", this.basis),
-          () => this.gruen("geänderte fälle", [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
+          () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
           () => bisektion(this),

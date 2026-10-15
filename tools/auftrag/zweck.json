@@ -55,6 +55,13 @@
     "nichtAngenommen": "Die Änderung in einer Form machen, die die Grenzprüfung nicht erkennt.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“; als Bau-Agent bei einer nötigen Änderung außerhalb des Bereichs „Voraussetzung fehlt: <Datei> muss vorher <Änderung>“."
   },
+  "geänderte fälle": {
+    "liste": "ohne Nummer",
+    "wozu": "Der Test-Agent ändert einen bestehenden Test nur als Verhaltensschritt: Jeder geänderte Fall ist gegen den unveränderten Produktcode rot, jeder unveränderte bleibt grün. Ein Fall, der grün bleibt, ist ein Umbau, und den prüft in dieser Rolle niemand.",
+    "behebung": "Nur die Fälle ändern, die das neue Verhalten verlangen und deshalb heute rot sind; die übrigen Fälle und die Zeilen außerhalb von Testfällen unverändert lassen.",
+    "nichtAngenommen": "Einen umgebauten Fall mit einer zusätzlichen Prüfung künstlich rot machen oder einen unveränderten Fall so anpassen, dass er wieder grün ist.",
+    "ausweg": "Muss ein bestehender Test vorher umgebaut werden, eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Testname> muss vorher umgebaut werden, weil <Grund>“."
+  },
   "rot": {
     "liste": "A5",
     "wozu": "Der Abnahmetest muss genau am fehlenden Verhalten scheitern; scheitert er an etwas anderem, prüft er das Neue nicht.",
