@@ -132,6 +132,35 @@ test("scheitert Runde 1 an lint, bekommt Runde 2 nach den Belegzeilen Zweck und 
   assert.match(prompt, /wörtlich an den Planer oder an Antonio/);
 });
 
+const NUR_UMGEBAUT = {
+  auftrag: {
+    ...UMBAU,
+    art: "funktion",
+    bereich: "src/rechnen.js",
+    erwarteteDateien: ["src/rechnen.js", "test/text.test.js", "test/rechnen.test.js"],
+    abnahme: "test/rechnen.test.js",
+    erwarteterFehler: "2 !== 4",
+    wasDarfNiePassieren: { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" },
+  },
+  drehbuch: {
+    test: {
+      "test/text.test.js": BASIS["test/text.test.js"].replace('"A"));', '"A", "gross"));'),
+      "test/rechnen.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { verdopple } from "../src/rechnen.js";\ntest("verdoppelt", () => assert.equal(verdopple(2), 4));\n',
+    },
+  },
+};
+
+test("baut der Test-Agent einen geplanten Test nur um, bekommt seine Runde 2 nach den Belegzeilen den Zweck der geänderten Fälle", (context) => {
+  const { werkzeug, lauf } = starte(context, NUR_UMGEBAUT);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /Kein Zweck-Text/);
+  const prompt = readFileSync(join(werkzeug, "prompt-test.txt"), "utf8");
+  const eintrag = ZWECK[PRUEFUNG.GEAENDERTE_FAELLE];
+  const teile = ["Fehlerausgabe der vorigen Runde", "\ngeänderte fälle:\n", "„gross“ ist gegen den unveränderten Produktcode grün", `\nWozu: ${eintrag?.wozu}\n`, `\nAusweg: ${eintrag?.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
+  const stellen = teile.map((teil) => prompt.indexOf(teil));
+  assert.ok(stellen.every((stelle, index) => stelle > (stellen[index - 1] ?? -1)), prompt);
+});
+
 test("nach zwei roten Runden nennt der Prompt des Notiz-Agenten den Zweck des Stopps", (context) => {
   const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: LINT_ROT })("prompt-notiz.txt");
   assert.ok(notiz.includes(`\nWozu: ${ZWECK.stopp.wozu}\nEchte Behebung: ${ZWECK.stopp.behebung}\n`), notiz);

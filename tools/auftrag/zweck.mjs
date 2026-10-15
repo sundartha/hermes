@@ -7,6 +7,7 @@ const TEXTE = JSON.parse(readFileSync(new URL("zweck.json", import.meta.url), "u
 export const PRUEFUNG = {
   GRENZEN_BAU: "grenzen bau",
   GRENZEN_TEST: "grenzen test",
+  GEAENDERTE_FAELLE: "geänderte fälle",
   ROT: "rot",
   ABNAHME_VORHER: "abnahme vorher",
   TYPPRUEFUNG: "typprüfung",
