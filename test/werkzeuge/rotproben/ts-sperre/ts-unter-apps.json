@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .ts-Datei in einem anderen Ordner",
+  "dateien": {
+    "apps/web/c.ts": ["export const neu = 1;"]
+  },
+  "erwartet": "apps/web/c.ts: TypeScript-Datei vor S71g"
+}

@@ -51,6 +51,7 @@ export const MELDUNG = {
   NEUSCHNITT: "neuschnitt",
   ABDECKUNG: "abdeckung",
   SCHNITT: "schnitt",
+  TS_SPERRE: "ts-sperre",
 };
 
 export const ALTER_TEST = "alter test";
