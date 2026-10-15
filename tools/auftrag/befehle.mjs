@@ -1,6 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "node:process";
+
+import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit } from "./git.mjs";
@@ -18,6 +21,21 @@ export function hatSkript(root, name) {
 
 export function abnahmeBefehl(auftrag) {
   return ["npm", "--silent", "test", "--", auftrag.abnahme];
+}
+
+export function abnahmeLauf(abnahme, { cwd, env: umgebung }) {
+  const ordner = mkdtempSync(join(tmpdir(), "abnahme-fehler-"));
+  const fehlerDatei = join(ordner, "fehler.json");
+  try {
+    const lauf = fuehreAus("abnahme", abnahmeBefehl({ abnahme }), {
+      cwd,
+      env: { ...umgebung, [FAILURE_FILE_VARIABLE]: fehlerDatei },
+    });
+    const fehlermeldungen = existsSync(fehlerDatei) ? JSON.parse(readFileSync(fehlerDatei, "utf8")) : [];
+    return { ...lauf, fehlermeldungen };
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
 }
 
 export function gueltigePhase(phasendatei, root) {
@@ -59,7 +77,7 @@ export function rot(phasendatei, kennung, root) {
   if (typeof auftrag.erwarteterFehler !== "string") {
     return meldeBefunde([`Auftrag ${kennung} ist ein Umbau und hat keinen roten Test.`]);
   }
-  const lauf = fuehreAus("abnahme", abnahmeBefehl(auftrag), { cwd: root, env });
+  const lauf = abnahmeLauf(auftrag.abnahme, { cwd: root, env });
   console.log(gekuerzteTestausgabe(lauf.ausgabe));
   const urteil = rotUrteil(lauf, auftrag.erwarteterFehler);
   console.log(urteil.zeile);

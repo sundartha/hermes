@@ -3,8 +3,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { argv, cwd, env } from "node:process";
 
-import { abnahmeBefehl } from "./befehle.mjs";
-import { fuehreAus, rotUrteil } from "./pruefungen.mjs";
+import { abnahmeLauf } from "./befehle.mjs";
+import { rotUrteil } from "./pruefungen.mjs";
 
 const GUT = 0;
 const SCHLECHT = 1;
@@ -16,7 +16,7 @@ const verfolgt = spawnSync("git", ["ls-files", "--error-unmatch", abnahme], { en
 mkdirSync(dirname(abnahme), { recursive: true });
 writeFileSync(abnahme, readFileSync(kopie));
 try {
-  const lauf = fuehreAus("abnahme", abnahmeBefehl({ abnahme }), { cwd: cwd(), env });
+  const lauf = abnahmeLauf(abnahme, { cwd: cwd(), env });
   if (lauf.exitCode === 0) process.exitCode = GUT;
   else process.exitCode = rotUrteil(lauf, erwarteterFehler).rot ? SCHLECHT : NICHT_AUSFUEHRBAR;
 } finally {

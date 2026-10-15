@@ -21,6 +21,8 @@ const SECOND_RUN_VARIABLE = "TESTS_ZWEITER_LAUF";
 const SECOND_RUN_ON = "ja";
 const SECOND_RUN_PROTOCOL = "regression-zweiter-lauf";
 const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
+export const FAILURE_FILE_VARIABLE = "TESTFEHLER_DATEI";
+const FAILURE_FIELDS = ["error", "expected", "actual"];
 
 const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.js$/;
 const EMPTY_PLAN_LINE = "1..0";
@@ -125,7 +127,12 @@ function testFilesFrom(argv) {
 
 function runNodeTest(
   mode,
-  { extraArgs, files, protocolName = mode, environment = environmentWithout([SECOND_RUN_VARIABLE]) },
+  {
+    extraArgs,
+    files,
+    protocolName = mode,
+    environment = environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE]),
+  },
 ) {
   mkdirSync(PROTOCOL_DIR, { recursive: true });
   const protocolPath = join(PROTOCOL_DIR, `${protocolName}.log`);
@@ -186,6 +193,15 @@ function detailOf(fields) {
   return `${messageOf(fields.error)}${comparison}`.slice(0, MAX_DETAIL_LENGTH);
 }
 
+function fullTextOf(field) {
+  const inline = YAML_BLOCK_MARKERS.has(field.inline) ? [] : [field.inline];
+  return [...inline, ...field.block].join("\n");
+}
+
+function fullMessageOf(fields) {
+  return FAILURE_FIELDS.filter((key) => fields[key]).map((key) => fullTextOf(fields[key])).join("\n");
+}
+
 function locationOf(fields) {
   const match = LOCATION.exec(scalarOf(fields.location) ?? "");
   if (!match) return "ohne Fundstelle";
@@ -224,6 +240,7 @@ function resultsIn(tapText) {
         failed: directive === null && status !== PASSED_STATUS,
         location: locationOf(fields),
         detail: detailOf(fields),
+        message: fullMessageOf(fields),
         type: scalarOf(fields.type),
         failureType: scalarOf(fields.failureType),
       },
@@ -284,6 +301,12 @@ function writeResult(mode, tapText, recovered) {
   if (counts) writeFileSync(resultPath, JSON.stringify({ bestanden: counts.pass + recovered }));
 }
 
+function writeFailureMessages(tapText) {
+  const target = process.env[FAILURE_FILE_VARIABLE];
+  if (!target) return;
+  writeFileSync(target, JSON.stringify(failuresIn(tapText).map(({ message }) => message)));
+}
+
 function environmentWithout(names) {
   return Object.fromEntries(Object.entries(process.env).filter(([name]) => !names.includes(name)));
 }
@@ -303,7 +326,7 @@ async function settle(mode, run) {
           extraArgs: [],
           files: [redFile],
           protocolName: `${SECOND_RUN_PROTOCOL}-${number}`,
-          environment: environmentWithout([SECOND_RUN_VARIABLE, COST_FILE_VARIABLE]),
+          environment: environmentWithout([SECOND_RUN_VARIABLE, COST_FILE_VARIABLE, FAILURE_FILE_VARIABLE]),
         }),
     });
   } catch (error) {
@@ -329,6 +352,7 @@ async function main() {
   const files = testFilesFrom(process.argv);
   const run = await runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files });
   printReport(mode, run, Date.now() - startedAt);
+  writeFailureMessages(run.tapText);
   const settled = await settle(mode, run);
   writeResult(mode, run.tapText, settled.wiederGruen);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
