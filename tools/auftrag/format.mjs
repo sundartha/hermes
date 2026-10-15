@@ -136,12 +136,6 @@ function bereichBefunde(auftrag, kontext) {
   return [...befunde, ...fremd.map((pfad) => `erwartete Datei ${pfad} liegt nicht im Bereich`)];
 }
 
-function vorbildBefunde(auftrag, kontext) {
-  if (!pfadIstSauber(auftrag.vorbild)) return ["vorbild muss ein relativer Pfad sein"];
-  if (existsSync(join(kontext.root, auftrag.vorbild))) return [];
-  return [`vorbild ${auftrag.vorbild} existiert nicht`];
-}
-
 function abnahmeBefunde(auftrag, kontext) {
   if (!ABNAHMETEST.test(auftrag.abnahme ?? "") || !pfadIstSauber(auftrag.abnahme)) {
     return ["abnahme muss eine Testdatei test/….test.js sein"];
@@ -212,7 +206,6 @@ function auftragBefunde(auftrag, kontext) {
     ...artBefunde(auftrag),
     ...bereichBefunde(auftrag, kontext),
     ...testbereichBefunde(auftrag),
-    ...vorbildBefunde(auftrag, kontext),
     ...abnahmeBefunde(auftrag, kontext),
     ...nieBefunde(auftrag),
     ...abhaengigkeitBefunde(auftrag, kontext),

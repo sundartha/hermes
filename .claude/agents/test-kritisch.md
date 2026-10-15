@@ -6,7 +6,7 @@ effort: high
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 ---
 
-Du bist der Test-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag und den Entwurfsabschnitt seines Bereichs.
+Du bist der Test-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs und die Musterdatei für Tests. Halte dich an den Stil der Musterdatei. Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster. Das gilt für die Zeilen, die du schreibst oder ohnehin änderst; anderen Code der Datei baust du dafür nicht um.
 
 Deine Aufgabe:
 

@@ -6,9 +6,11 @@ import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
+import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
 const KRITISCH_SUFFIX = "-kritisch";
+const ENTFALLENES_FELD = "vorbild";
 const JSON_EINRUECKUNG = 2;
 const EXIT_OHNE_STATUS = 1;
 const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
@@ -56,7 +58,8 @@ function block(inhalt, sprache = "") {
 }
 
 function auftragAbschnitt(auftrag) {
-  return abschnitt("Auftrag", block(JSON.stringify(auftrag, null, JSON_EINRUECKUNG), "json"));
+  const gezeigt = Object.fromEntries(Object.entries(auftrag).filter(([feld]) => feld !== ENTFALLENES_FELD));
+  return abschnitt("Auftrag", block(JSON.stringify(gezeigt, null, JSON_EINRUECKUNG), "json"));
 }
 
 function entwurfAbschnitt(phase, auftrag) {
@@ -98,7 +101,7 @@ function testumbauAbschnitt(auftrag) {
 }
 
 export function testumbauPrompt(phase, auftrag, root = cwd()) {
-  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), dateiAbschnitt("Vorbild", root, auftrag.vorbild), testumbauAbschnitt(auftrag)].join("\n");
+  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme)), testumbauAbschnitt(auftrag)].join("\n");
 }
 
 function dateiAbschnitt(titel, root, pfad) {
@@ -107,13 +110,22 @@ function dateiAbschnitt(titel, root, pfad) {
   return abschnitt(`${titel}: ${pfad}`, block(readFileSync(datei, "utf8")));
 }
 
+function musterAbschnitt(root, pfad, muster) {
+  if (muster === null) return abschnitt("Muster", `Für ${pfad} gibt es kein Muster.`);
+  return [dateiAbschnitt(`Muster (${muster.art})`, root, muster.datei), MUSTER_REGEL, ""].join("\n");
+}
+
+export function testAgentPrompt({ phase, auftrag, root }) {
+  return [testPrompt(phase, auftrag, root), musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme))].join("\n");
+}
+
 export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   const titel = auftrag.erwarteterFehler ? "Ausgabe des roten Tests" : "Ausgabe des Abnahmetests";
   return [
     auftragAbschnitt(auftrag),
     entwurfAbschnitt(phase, auftrag),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
-    dateiAbschnitt("Vorbild", root, auftrag.vorbild),
+    musterAbschnitt(root, auftrag.bereich, musterFuer(auftrag.bereich)),
     dateiAbschnitt("Funktionskarte", root, funktionskartePfad(auftrag.bereich)),
   ].join("\n");
 }

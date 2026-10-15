@@ -1,0 +1,15 @@
+{
+  "regel": "Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster.",
+  "bau": [
+    { "art": "Route", "praefix": "src/routes/", "datei": "src/routes/intern-anrufpause.js" },
+    { "art": "Telefonie", "praefix": "src/telephony/", "datei": "src/telephony/outage-detection.js" },
+    { "art": "Abrechnung", "praefix": "src/billing/", "datei": "src/billing/kostenarten.js" },
+    { "art": "ElevenLabs", "praefix": "src/elevenlabs/", "datei": "src/elevenlabs/b1-doppelankaendigung.js" },
+    { "art": "Modul", "praefix": "src/", "datei": "src/tool-follow-up.js" },
+    { "art": "Skript", "praefix": "scripts/", "datei": "scripts/check-elevenlabs-drift.mjs" }
+  ],
+  "test": [
+    { "art": "Verhaltenstest", "praefix": "test/", "datei": "test/anrufe/doppelankuendigung.test.js" },
+    { "art": "Sicherheitstest", "praefix": "test/sicherheit/", "datei": "test/sicherheit/anbieter-signaturen.test.js" }
+  ]
+}
