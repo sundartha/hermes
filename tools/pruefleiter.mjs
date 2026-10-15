@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -25,6 +25,12 @@ const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const PRODUCT_PREFIXES = ["src/", "test/"];
 const TOOL_TEST_PREFIX = "test/werkzeuge/";
 const FIRST_ARGUMENT = 2;
+const PART_PATTERN = /^([1-9]\d*)\/([1-9]\d*)$/;
+const PART_REPORT_PREFIX = "werkzeugteil-";
+const PART_REPORT_SUFFIX = ".jsonl";
+const FILE_REPORTER = fileURLToPath(new URL("./testlaufzeit-reporter.mjs", import.meta.url));
+const JOB_SUCCESS = "success";
+const EXCLUSIVE_MODES = ["vor-push", "ohne-werkzeugtests", "werkzeugteil", "teile-pruefen"];
 
 function npmRun(script, args, stdio) {
   const result = spawnSync("npm", ["run", "--silent", script, "--", ...args], {
@@ -102,8 +108,22 @@ function needsToolTests(baseRef) {
   return changes === null || changes.some((change) => !isProductChange(change));
 }
 
-function toolTests() {
-  const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`];
+function partReportPath({ index }) {
+  return join(PROTOCOL_DIR, `${PART_REPORT_PREFIX}${index}${PART_REPORT_SUFFIX}`);
+}
+
+function partFlags(part) {
+  if (part === undefined) return [];
+  return [
+    `--test-shard=${part.index}/${part.total}`,
+    "--test-reporter-destination=stdout",
+    `--test-reporter=${FILE_REPORTER}`,
+    `--test-reporter-destination=${partReportPath(part)}`,
+  ];
+}
+
+function toolTests(part) {
+  const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`, ...partFlags(part)];
   const result = spawnSync(process.execPath, [RUNNER, TOOL_BANK, TOOL_TEST_GLOB, ...flags], {
     stdio: "inherit",
   });
@@ -112,7 +132,14 @@ function toolTests() {
 
 function parseOptions() {
   const { values } = parseArgs({
-    options: { basis: { type: "string" }, "vor-push": { type: "boolean", default: false } },
+    options: {
+      basis: { type: "string" },
+      "vor-push": { type: "boolean", default: false },
+      "ohne-werkzeugtests": { type: "boolean", default: false },
+      werkzeugteil: { type: "string" },
+      "teile-pruefen": { type: "string" },
+      jobs: { type: "string" },
+    },
   });
   return values;
 }
@@ -122,23 +149,135 @@ function affectedTestArgs({ basis, "vor-push": beforePush }) {
   return beforePush ? [SKIP_FULL_SUITE_FLAG] : [];
 }
 
-async function main() {
-  const options = parseOptions();
-  if (options.basis === "") {
-    console.error("Basis fehlt: --basis ist leer.");
-    return EXIT_USAGE;
-  }
-  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
-  const args = affectedTestArgs(options);
+function parsePart(text) {
+  const match = PART_PATTERN.exec(text);
+  if (!match) return null;
+  const [index, total] = [Number(match[1]), Number(match[2])];
+  return index <= total ? { index, total } : null;
+}
+
+function runsToolTests(options) {
+  const wanted = options["vor-push"] || options.basis !== undefined;
+  return wanted && !options["ohne-werkzeugtests"];
+}
+
+function fullRun(options) {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
-  const affectedStatus = affectedTests(args);
-  const runsToolTests = options["vor-push"] || options.basis !== undefined;
-  if (!runsToolTests || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+  const affectedStatus = affectedTests(affectedTestArgs(options));
+  if (!runsToolTests(options) || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
     return affectedStatus;
   }
   const toolStatus = toolTests();
   return affectedStatus === 0 ? toolStatus : affectedStatus;
+}
+
+function partRun(options, part) {
+  if (!needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+    console.log(
+      `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
+    );
+    return 0;
+  }
+  return toolTests(part);
+}
+
+function failedJobs(text) {
+  const jobs = Object.entries(JSON.parse(text));
+  if (jobs.length === 0) return ["--jobs nennt keinen Teil."];
+  return jobs
+    .filter(([, { result }]) => result !== JOB_SUCCESS)
+    .map(([name, { result }]) => `Teil ${name}: ${result}`);
+}
+
+function reportedFiles(directory) {
+  if (!existsSync(directory)) return [];
+  const reports = readdirSync(directory).filter(
+    (name) => name.startsWith(PART_REPORT_PREFIX) && name.endsWith(PART_REPORT_SUFFIX),
+  );
+  return reports.flatMap((report) =>
+    readFileSync(join(directory, report), "utf8")
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => ({ report, file: JSON.parse(line).datei })),
+  );
+}
+
+function coverageFindings(expected, reported) {
+  const runs = new Map(expected.map((file) => [file, []]));
+  const unknown = reported.filter(({ file }) => !runs.has(file));
+  for (const { report, file } of reported) runs.get(file)?.push(report);
+  return [
+    ...unknown.map(
+      ({ report, file }) =>
+        `${file}: in ${report} gelaufen, gehört aber nicht zu ${TOOL_TEST_GLOB}`,
+    ),
+    ...[...runs]
+      .filter(([, reports]) => reports.length !== 1)
+      .map(
+        ([file, reports]) => `${file}: in ${reports.length} Teilen gelaufen statt in genau einem`,
+      ),
+  ];
+}
+
+function expectedToolTestFiles(toolTestsNeeded) {
+  if (!toolTestsNeeded) return [];
+  return globSync(TOOL_TEST_GLOB).sort();
+}
+
+function emptyGlobFindings(toolTestsNeeded, expected) {
+  if (expected.length > 0 || !toolTestsNeeded) return [];
+  return [`${TOOL_TEST_GLOB} findet keine Werkzeug-Testdatei.`];
+}
+
+function checkParts(options) {
+  const toolTestsNeeded = needsToolTests(options.basis ?? DEFAULT_BASE_REF);
+  const expected = expectedToolTestFiles(toolTestsNeeded);
+  const findings = [
+    ...emptyGlobFindings(toolTestsNeeded, expected),
+    ...failedJobs(options.jobs),
+    ...coverageFindings(expected, reportedFiles(options["teile-pruefen"])),
+  ];
+  if (findings.length === 0) {
+    console.log(
+      `Prüfleiter-Teile: alle erfolgreich, ${expected.length} Werkzeug-Testdateien je genau einmal gelaufen.`,
+    );
+    return 0;
+  }
+  console.log(`Prüfleiter-Teile: ${findings.length} Befunde`);
+  for (const finding of findings) console.log(finding);
+  return EXIT_FAILURE;
+}
+
+function usageError(options) {
+  if (options.basis === "") return "Basis fehlt: --basis ist leer.";
+  const modes = EXCLUSIVE_MODES.filter(
+    (mode) => options[mode] !== undefined && options[mode] !== false,
+  );
+  if (modes.length > 1)
+    return `Nur eine dieser Optionen auf einmal: ${modes.map((mode) => `--${mode}`).join(", ")}.`;
+  if (options.werkzeugteil !== undefined && parsePart(options.werkzeugteil) === null) {
+    return `--werkzeugteil erwartet Teil/Teile wie 2/4 mit 1 ≤ Teil ≤ Teile, nicht „${options.werkzeugteil}“.`;
+  }
+  if (options["teile-pruefen"] === "")
+    return "--teile-pruefen braucht den Ordner mit den Berichten der Teile.";
+  if ((options["teile-pruefen"] === undefined) !== (options.jobs === undefined)) {
+    return "--teile-pruefen und --jobs gehören zusammen (Ergebnisse aller Teile als JSON aus needs).";
+  }
+  return null;
+}
+
+async function main() {
+  const options = parseOptions();
+  const error = usageError(options);
+  if (error !== null) {
+    console.error(error);
+    return EXIT_USAGE;
+  }
+  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
+  if (options["teile-pruefen"] !== undefined) return checkParts(options);
+  if (options.werkzeugteil !== undefined) return partRun(options, parsePart(options.werkzeugteil));
+  return fullRun(options);
 }
 
 function mitZweck(status) {
