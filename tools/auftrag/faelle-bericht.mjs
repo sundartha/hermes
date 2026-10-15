@@ -7,6 +7,7 @@ export default async function* faelleBericht(quelle) {
     const blatt = daten.details?.type !== "suite" && tiefeDavor <= daten.nesting;
     tiefeDavor = daten.nesting;
     if (!blatt) continue;
-    yield `${JSON.stringify({ name: daten.name, zeile: daten.line, rot: art === "test:fail" })}\n`;
+    const fall = JSON.stringify({ name: daten.name, zeile: daten.line, rot: art === "test:fail" });
+    yield `${fall}\n`;
   }
 }
