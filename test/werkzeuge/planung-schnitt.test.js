@@ -223,7 +223,7 @@ test("Form: fehlende annahmen sind rot", (context) => {
 test("Form: eine unbekannte art ist rot", (context) => {
   const b = basis(context);
   eigener(b, "a2").art = "zauberei";
-  erwarte(lauf(b), REGEL.form, "a2: art muss eine von funktion, fehlerbehebung, umbau sein");
+  erwarte(lauf(b), REGEL.form, "a2: art muss eine von funktion, fehlerbehebung, umbau, testumbau sein");
 });
 
 test("Form: eine doppelte id ist rot", (context) => {

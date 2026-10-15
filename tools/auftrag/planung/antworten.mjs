@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { pfadIstSauber } from "../format.mjs";
+import { istUmbau, pfadIstSauber } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, istObjekt, istText } from "./erkundung.mjs";
 
@@ -104,7 +104,7 @@ export function prueflisteSoll(schnitt, soll, annahmen) {
     ...new Set([
       "durchstich:a1",
       ...nummern.map((nummer) => `weg:${nummer}`),
-      ...auftraege.filter(({ art }) => art === "umbau").map(({ id }) => `umbau:${id}`),
+      ...auftraege.filter(istUmbau).map(({ id }) => `umbau:${id}`),
       ...nummern.filter((nummer) => B_NUMMER.test(nummer)).map((nummer) => `b-nummer:${nummer}`),
       ...auftraege.flatMap(({ id }) => [`nie-saetze:${id}`, `allein-gruen:${id}`, `nicht-zusammengelegt:${id}`]),
       ...auftraege.filter(({ bereichsgrund }) => istText(bereichsgrund)).map(({ id }) => `bereichsgrund:${id}`),

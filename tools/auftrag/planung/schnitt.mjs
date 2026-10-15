@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, kennungBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -59,7 +59,7 @@ function mitRegel(regel, befunde) {
 }
 
 function nummernVon(auftrag) {
-  return auftrag.art === "umbau" ? [] : liste(auftrag.prueft);
+  return istUmbau(auftrag) ? [] : liste(auftrag.prueft);
 }
 
 function vorgaengerIds(auftrag) {
@@ -144,7 +144,7 @@ export function formBefunde(schnitt) {
 }
 
 function umbauNummerBefunde(auftrag, soll) {
-  if (auftrag.art === "umbau") return auftrag.prueft === UMBAU_AUSWEG ? [] : [`${auftrag.id}: ein Umbau prüft keine Nummer; prueft ist genau „${UMBAU_AUSWEG}“`];
+  if (istUmbau(auftrag)) return auftrag.prueft === UMBAU_AUSWEG ? [] : [`${auftrag.id}: ein Umbau prüft keine Nummer; prueft ist genau „${UMBAU_AUSWEG}“`];
   const nummern = liste(auftrag.prueft);
   const fremd = nummern.filter((nummer) => !soll.has(nummer)).map((nummer) => `${auftrag.id}: ${nummer} ist keine Soll-Nummer`);
   return nummern.length === 0 ? [`${auftrag.id}: ${auftrag.art} ohne Nummer in prueft`] : fremd;
@@ -221,7 +221,7 @@ function durchstichBefunde(kontext) {
   if (durchstich === undefined) return mitRegel(REGEL.durchstich, [`es gibt keinen Auftrag ${DURCHSTICH} (Durchstich)`]);
   const befunde = durchstich.art === "funktion" ? [] : [`${DURCHSTICH} ist ${durchstich.art}, der Durchstich ist eine funktion`];
   if (durchstich.eingang !== ERREICHT) befunde.push(`${DURCHSTICH} führt durch den echten Eingang; eingang muss „${ERREICHT}“ sein`);
-  const fremd = kette(durchstich, kontext.nachId).filter(({ art }) => art !== "umbau");
+  const fremd = kette(durchstich, kontext.nachId).filter((auftrag) => !istUmbau(auftrag));
   befunde.push(...fremd.map(({ id }) => `${DURCHSTICH} hängt von ${id} ab, das ist kein Umbau`), ...dateienAusserhalb(durchstich, kontext));
   return mitRegel(REGEL.durchstich, befunde);
 }

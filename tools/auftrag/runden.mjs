@@ -6,7 +6,7 @@ import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { auswegBei, zweckUnklar } from "./ausgang.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
-import { UMBAU_AUSWEG, istTestdatei, phasenBefunde } from "./format.mjs";
+import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
@@ -67,6 +67,7 @@ function planPrompt(phase, auftrag, satz) {
       `Antworte nur mit einem JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf.`,
       "ziel ist eine Zeile mit höchstens 72 Zeichen, abnahme ein bestehender Test, der vor und nach dem Umbau grün ist, entwurf der Entwurfsabschnitt für den Bereich in Klartext.",
       "bereich, vorbild und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
+      `Fehlt nur eine Änderung an bestehenden Tests oder Testhilfen, liegt bereich unter test/ und erwarteteDateien nennt nur Testdateien; das Skript legt daraus einen ${TESTUMBAU} an, den der Test-Agent ausführt, ohne Produktcode zu ändern.`,
     ]),
   ].join("\n");
 }
@@ -97,21 +98,15 @@ export function umbauPhase(phase, auftrag, antwort) {
   const felder = vorschlag(antwort);
   if (felder === null) return null;
   const gewaehlt = Object.fromEntries(UMBAU_FELDER.map((feld) => [feld, felder[feld]]));
-  const umbau = { ...gewaehlt, id: `${auftrag.id}-umbau`, art: "umbau", prueft: UMBAU_AUSWEG };
+  const art = istTestbereich(gewaehlt.bereich) ? TESTUMBAU : "umbau";
+  const umbau = { ...gewaehlt, id: `${auftrag.id}-umbau`, art, prueft: UMBAU_AUSWEG };
   const entwurf = typeof umbau.bereich === "string" ? { [umbau.bereich]: felder.entwurf } : {};
   return { ...phase, entwurf, auftraege: [umbau] };
 }
 
-function testumbauBefunde({ bereich }) {
-  if (typeof bereich !== "string" || !istTestdatei(bereich)) return [];
-  return [
-    `Der Bereich ${bereich} umfasst nur Tests. Ein reiner Testumbau ist ein eigener Schritt, der noch nicht gebaut ist: Umbauten führt der Bau-Agent aus, und der ändert keine Tests. Geplante Teständerungen gehören in die erwarteteDateien des Auftrags selbst.`,
-  ];
-}
-
 function planBefunde(plan, neu, root) {
   if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
-  return neu === null ? [KEIN_VORSCHLAG] : [...testumbauBefunde(neu.auftraege[0]), ...phasenBefunde(neu, root)];
+  return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
 }
 
 function veroeffentliche(issue, text, root) {
@@ -173,7 +168,7 @@ class Runden {
   voraussetzungFehlt(ergebnis) {
     const { zaehler, root } = this.kontext;
     verwerfe(ergebnis.basis, root);
-    if (this.kontext.auftrag.art === "umbau") {
+    if (istUmbau(this.kontext.auftrag)) {
       return this.zurueckInDenEntwurf(ergebnis, `Umbau meldet fehlende Voraussetzung: ${ergebnis.voraussetzung}`);
     }
     zaehler.voraussetzungen += 1;

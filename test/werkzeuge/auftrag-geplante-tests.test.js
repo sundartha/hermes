@@ -255,13 +255,9 @@ function planBeleg(context, umbau) {
   return JSON.parse(readFileSync(join(repo, ".fortschritt/probe/A1-plan.json"), "utf8"));
 }
 
-test("geplante Tests: ein Umbau, dessen Bereich nur Tests umfasst, wird mit Grund abgelehnt, ein gemischter angenommen", (context) => {
+test("geplante Tests: ein Umbau, dessen Bereich nur Tests umfasst, wird als testumbau angelegt, ein gemischter als umbau", (context) => {
   const nurTests = planBeleg(context, { bereich: "test/", erwarteteDateien: ["test/text.test.js"], vorbild: "test/text.test.js" });
-  assert.equal(nurTests.ergebnis, "rot");
-  assert.ok(
-    nurTests.befunde.some((befund) => /umfasst nur Tests/.test(befund) && /eigener Schritt/.test(befund) && /erwarteteDateien des Auftrags/.test(befund)),
-    JSON.stringify(nurTests.befunde),
-  );
+  assert.deepEqual([nurTests.ergebnis, nurTests.befunde, nurTests.umbau.art], ["grün", [], "testumbau"]);
   const gemischt = planBeleg(context, { bereich: "src/", erwarteteDateien: ["src/text.js", "test/text.test.js"] });
-  assert.deepEqual([gemischt.ergebnis, gemischt.befunde], ["grün", []]);
+  assert.deepEqual([gemischt.ergebnis, gemischt.befunde, gemischt.umbau.art], ["grün", [], "umbau"]);
 });
