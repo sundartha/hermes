@@ -1,8 +1,9 @@
-import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { nimmEigeneSperreFuerTests, nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
 import { gruppenlauf } from "../tools/testgruppe.mjs";
 import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
@@ -15,6 +16,7 @@ const MODES = [MODE_REGRESSION, MODE_GATES, MODE_ABNAHME];
 
 const TEST_GLOB = "test/**/*.test.js";
 const FIRST_FILE_ARGUMENT = 3;
+const PATTERN_CHARACTERS = /[*?[{]/;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
 const PROTOCOL_DIR = ".pruefung";
 const SECOND_RUN_VARIABLE = "TESTS_ZWEITER_LAUF";
@@ -46,6 +48,7 @@ const MAX_SHOWN_FAILURES = Math.floor((MAX_OUTPUT_LINES - FRAME_LINES) / LINES_P
 const MAX_DETAIL_LENGTH = 200;
 const MS_PER_SECOND = 1000;
 const COUNT_FORMAT = new Intl.NumberFormat("de-DE");
+const REAL_CLOCK = Object.freeze({ now: () => Date.now() });
 
 const REASON_LINE = /\|\s*ROT WEIL:([^|]*)\|\s*FIX:([\s\S]*)$/;
 
@@ -125,13 +128,17 @@ function testFilesFrom(argv) {
   return files.length > 0 ? files : [TEST_GLOB];
 }
 
+function isPatternOrDirectory(file) {
+  return PATTERN_CHARACTERS.test(file) || statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
+}
+
 function runNodeTest(
   mode,
   {
     extraArgs,
     files,
     protocolName = mode,
-    environment = environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE]),
+    environment,
   },
 ) {
   mkdirSync(PROTOCOL_DIR, { recursive: true });
@@ -307,11 +314,11 @@ function writeFailureMessages(tapText) {
   writeFileSync(target, JSON.stringify(failuresIn(tapText).map(({ message }) => message)));
 }
 
-function environmentWithout(names) {
-  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !names.includes(name)));
+function environmentWithout(names, environment = process.env) {
+  return Object.fromEntries(Object.entries(environment).filter(([name]) => !names.includes(name)));
 }
 
-async function settle(mode, run) {
+async function settle(mode, run, testEnvironment) {
   const wanted = mode === MODE_REGRESSION && process.env[SECOND_RUN_VARIABLE] === SECOND_RUN_ON;
   if (!wanted || run.code === 0) return { code: run.code, wiederGruen: 0 };
   try {
@@ -326,7 +333,7 @@ async function settle(mode, run) {
           extraArgs: [],
           files: [redFile],
           protocolName: `${SECOND_RUN_PROTOCOL}-${number}`,
-          environment: environmentWithout([SECOND_RUN_VARIABLE, COST_FILE_VARIABLE, FAILURE_FILE_VARIABLE]),
+          environment: environmentWithout([COST_FILE_VARIABLE], testEnvironment),
         }),
     });
   } catch (error) {
@@ -340,6 +347,13 @@ function printAbnahmeScore(tapText) {
   console.log(line ?? "# Abnahme-Bahn abgebrochen - keine belastbare Zahl");
 }
 
+export async function measuredAfterLocks(takeLocks, runTests, clock = REAL_CLOCK) {
+  const environment = await takeLocks();
+  const startedAt = clock.now();
+  const run = await runTests(environment);
+  return { run, environment, elapsedMs: clock.now() - startedAt };
+}
+
 async function main() {
   const mode = process.argv[2];
   if (!MODES.includes(mode)) {
@@ -348,12 +362,17 @@ async function main() {
     );
     process.exit(1);
   }
-  const startedAt = Date.now();
   const files = testFilesFrom(process.argv);
-  const run = await runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files });
-  printReport(mode, run, Date.now() - startedAt);
+  const { run, environment: testEnvironment, elapsedMs } = await measuredAfterLocks(
+    async () => {
+      if (files.some(isPatternOrDirectory)) await nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster oder Ordner)`);
+      return nimmEigeneSperreFuerTests(environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE]));
+    },
+    (environment) => runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files, environment }),
+  );
+  printReport(mode, run, elapsedMs);
   writeFailureMessages(run.tapText);
-  const settled = await settle(mode, run);
+  const settled = await settle(mode, run, testEnvironment);
   writeResult(mode, run.tapText, settled.wiederGruen);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
   process.exit(settled.code);

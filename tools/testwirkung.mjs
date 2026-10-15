@@ -7,6 +7,7 @@ import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaen
 import { git, inBasis } from "./testwirkung/git.mjs";
 import { katalogtests } from "./testwirkung/katalog.mjs";
 import { UNTER_ATTRAPPE, testlauf } from "./testwirkung/testlauf.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { pruefeWeitergabe } from "./testwirkung/weitergabe.mjs";
 
 const WIEDERHOLUNGEN = 5;
@@ -203,6 +204,7 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
+  await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
   const { tests, ohneNamen } = neueTests(values.basis);
   const katalog = katalogtests(values.basis);
   const geaendert = new Set(geaenderteTestdateien(values.basis));

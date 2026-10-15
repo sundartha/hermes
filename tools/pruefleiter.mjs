@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -23,6 +24,7 @@ const DELETED = "D";
 const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const PRODUCT_PREFIXES = ["src/", "test/"];
 const TOOL_TEST_PREFIX = "test/werkzeuge/";
+const FIRST_ARGUMENT = 2;
 
 function npmRun(script, args, stdio) {
   const result = spawnSync("npm", ["run", "--silent", script, "--", ...args], {
@@ -120,12 +122,13 @@ function affectedTestArgs({ basis, "vor-push": beforePush }) {
   return beforePush ? [SKIP_FULL_SUITE_FLAG] : [];
 }
 
-function main() {
+async function main() {
   const options = parseOptions();
   if (options.basis === "") {
     console.error("Basis fehlt: --basis ist leer.");
     return EXIT_USAGE;
   }
+  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
   const args = affectedTestArgs(options);
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
@@ -143,4 +146,4 @@ function mitZweck(status) {
   return status;
 }
 
-process.exitCode = mitZweck(main());
+process.exitCode = mitZweck(await main());
