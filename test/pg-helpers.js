@@ -6,12 +6,12 @@ import { applySchema } from "../src/db/migrate.js";
 import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
 const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
+const MIGRATE_DATEI = new URL("../src/db/migrate.js", import.meta.url);
 const WURZEL = fileURLToPath(new URL("..", import.meta.url));
-const KETTENANFANG = new URL("../src/db/migrate.js", import.meta.url);
 const RELATIVER_IMPORT = /\b(?:from|import)\s*["'](\.\.?\/[^"']+)["']/g;
 
 export function vorlagenKette() {
-  const kette = new Set([KETTENANFANG.href]);
+  const kette = new Set([MIGRATE_DATEI.href]);
   for (const adresse of kette) {
     const inhalt = fs.readFileSync(new URL(adresse), "utf8");
     for (const [, ziel] of inhalt.matchAll(RELATIVER_IMPORT)) {
@@ -25,7 +25,7 @@ let schemaVorlage = null;
 function schemaVorlageHolen() {
   schemaVorlage ??= vorlage("schema", applySchema, [
     fs.readFileSync(SCHEMA_DATEI, "utf8"),
-    ...vorlagenKette().map((datei) => fs.readFileSync(path.join(WURZEL, datei), "utf8")),
+    fs.readFileSync(MIGRATE_DATEI, "utf8"),
   ]);
   return schemaVorlage;
 }
