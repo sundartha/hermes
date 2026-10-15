@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pruefleiter:
-    name: Prüfleiter
+  vorpruefung:
+    name: Prüfleiter Lint und betroffene Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,7 +38,79 @@ jobs:
           set -euo pipefail
           jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
 
-      - name: Prüfleiter
+      - name: Lint und betroffene Tests
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA"
+        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --ohne-werkzeugtests
+
+  werkzeugtests:
+    name: Prüfleiter Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm ci --ignore-scripts --prefix apps/web
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Werkzeugtests
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ strategy.job-total }}
+        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE"
+
+      - name: Bericht des Teils hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: werkzeugteil-${{ matrix.teil }}
+          path: .pruefung/werkzeugteil-${{ matrix.teil }}.jsonl
+          if-no-files-found: ignore
+
+  pruefleiter:
+    name: Prüfleiter
+    if: always()
+    needs: [vorpruefung, werkzeugtests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Berichte der Teile laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: werkzeugteil-*
+          path: ${{ runner.temp }}/werkzeugteile
+          merge-multiple: true
+
+      - name: Alle Teile erfolgreich und vollständig
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          JOBS: ${{ toJSON(needs) }}
+        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS"
