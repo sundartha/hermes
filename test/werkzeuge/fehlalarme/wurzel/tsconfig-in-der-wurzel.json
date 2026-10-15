@@ -1,0 +1,7 @@
+{
+  "titel": "tsconfig.json im Wurzelordner, wo tsc sie sucht",
+  "dateien": {
+    "tsconfig.json": ["{", "  \"compilerOptions\": { \"strict\": true, \"noEmit\": true }", "}"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}

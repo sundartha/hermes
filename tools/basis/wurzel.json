@@ -43,6 +43,7 @@
     "src|wurzel-eintrag",
     "stryker.config.json|wurzel-eintrag",
     "test|wurzel-eintrag",
-    "tools|wurzel-eintrag"
+    "tools|wurzel-eintrag",
+    "tsconfig.json|wurzel-eintrag"
   ]
 }
