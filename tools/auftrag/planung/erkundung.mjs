@@ -7,7 +7,7 @@ import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from ".
 
 export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
 const PFLICHT_ROLLEN = ["eingang", "wirkung"];
-const ANGABEN = ["weg", "aenderungen", "tests", "vorbild", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
+export const ANGABEN = ["weg", "aenderungen", "tests", "vorbild", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
 const NICHT_GEFUNDEN = "nicht gefunden";
 const WEITERE_AUSWEGE = { aenderungen: "keine Änderung", ownerEntscheidung: "keine", eingangImTest: "nicht erreichbar" };
 const AUSWEG = /^(nicht gefunden|keine Änderung|keine|nicht erreichbar), weil(.*)$/su;
