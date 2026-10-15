@@ -452,6 +452,49 @@ test("plane: Antwortbefund und Skriptbefund derselben Korrektur gehen zusammen z
   assert.equal(zweite.eingabe.includes("ohne Antwort des Planers"), false);
 });
 
+const UEBERGREIFENDER_PRUEFER = 1;
+
+function jePruefer(eintrag) {
+  return Array.from({ length: GRUPPEN.length + UEBERGREIFENDER_PRUEFER }, () => eintrag);
+}
+
+function auftragAus(schnitt, id, geaendert = {}) {
+  return { ...schnitt.auftraege.find((eintrag) => eintrag.id === id), ...geaendert };
+}
+
+function geplanteListe({ wurzel }) {
+  return JSON.parse(readFileSync(join(wurzel, ORDNER, "planung", "schnitt.json"), "utf8"));
+}
+
+test("plane: eine Änderung mit neuem Auftrag ohne Nummer geht als Skriptbefund zurück und endet nach der Korrektur grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const ohneNummer = alsJson({ teilliste: { auftraege: [auftragAus(schnittliste(), "a2", A2_KORRIGIERT), zusatz("a14", [])] }, antworten: A2_ANTWORT });
+  const mitNummer = alsJson({ teilliste: { auftraege: [auftragAus(schnittliste(), "a3", { prueft: ["S4", "B1"] }), zusatz("a14", ["S5"])] }, antworten: A2_ANTWORT });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [ohneNummer, mitNummer] });
+  exit(lauf, EXIT_GRUEN);
+  const [, ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
+  assert.ok(ruecksendung.eingabe.includes("a14: funktion ohne Nummer"), ruecksendung.eingabe);
+  assert.deepEqual(geplanteListe(lauf), MIT_NUMMER);
+  const { korrigiert } = planungsBericht(lauf).befunde;
+  assert.equal(korrigiert.filter(({ schluessel }) => schluessel === "allein-gruen:a2").length, 1);
+  assert.equal(existsSync(phaseDatei(lauf)), true);
+});
+
+test("plane: schnitt und teilliste zugleich sind ein Befund", { timeout: LAUF_FRIST_MS }, (context) => {
+  const beides = alsJson({ schnitt: schnittliste(), teilliste: { auftraege: [zusatz("a14", ["S5"])] } });
+  const lauf = plane(context, { "planer|## Zuschnitt": [beides], "planer|## Befunde": [alsJson({ schnitt: schnittliste() })] });
+  exit(lauf, EXIT_GRUEN);
+  const [ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
+  assert.ok(ruecksendung.eingabe.includes("Regel Teilliste: schnitt und teilliste zugleich; schick eines"), ruecksendung.eingabe);
+  assert.deepEqual(geplanteListe(lauf), schnittliste());
+});
+
+test("plane: eine teilliste vor der ersten Schnittliste ist ein Befund", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "planer|## Zuschnitt": [alsJson({ teilliste: { auftraege: [zusatz("a14", ["S5"])] } })], "planer|## Befunde": [alsJson({ schnitt: schnittliste() })] });
+  exit(lauf, EXIT_GRUEN);
+  const [ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
+  assert.ok(ruecksendung.eingabe.includes("Regel Teilliste: teilliste gibt es erst nach einer Schnittliste"), ruecksendung.eingabe);
+});
+
 function prueflisteZeilen({ eingabe }) {
   const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
   return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
