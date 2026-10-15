@@ -11,7 +11,8 @@ import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
-import { MELDUNG, PRUEFUNG, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
+import { idsDer, pflichtDer, roteRunde } from "./rote-pruefungen.mjs";
+import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
@@ -41,7 +42,8 @@ function zweckIdsDer({ name, zeilen, zweck }) {
   return zweck ?? zweckIds({ name, zeilen });
 }
 
-function fehlerausgabe({ runde, grund, pruefungen, agenten, roteIds = [] }) {
+function fehlerausgabe(ergebnis) {
+  const { runde, grund, pruefungen, agenten, roteIds = [] } = ergebnis;
   const gezeigt = new Set();
   const bloecke = (ids) => {
     const neu = ids.filter((id) => !gezeigt.has(id));
@@ -51,11 +53,8 @@ function fehlerausgabe({ runde, grund, pruefungen, agenten, roteIds = [] }) {
   const zeilen = rotePruefungen(pruefungen).flatMap((pruefung) => [`${pruefung.name}:`, ...pruefung.zeilen, ...bloecke(zweckIdsDer(pruefung))]);
   const ohneSchritt = bloecke(roteIds);
   const schluss = [...gezeigt].some(hatAusweg) ? [AUSWEG_SCHLUSS] : [];
-  return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...hinweiseDesBaus(agenten)].join("\n");
-}
-
-function roteIdsDer({ pruefungen, roteIds = [] }) {
-  return [...new Set([...rotePruefungen(pruefungen).flatMap(zweckIdsDer), ...roteIds])];
+  const absatz = absatzZuordnung(pflichtDer([roteRunde(ergebnis)]));
+  return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...absatz, ...hinweiseDesBaus(agenten)].join("\n");
 }
 
 function planPrompt(phase, auftrag, satz) {
@@ -131,7 +130,7 @@ class Runden {
     this.kontext = kontext;
     this.starteRunde = starteRunde;
     this.fehler = [];
-    this.zuletztRot = [];
+    this.roteRunden = [];
   }
 
   vorgeschichte() {
@@ -148,7 +147,7 @@ class Runden {
   fuehreAus() {
     for (;;) {
       const runde = this.fehler.length + 1;
-      const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte() });
+      const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte(), vorigeRunden: this.roteRunden });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
       if (ergebnis.entscheidung) return this.entscheidung(ergebnis, ergebnis.entscheidung);
       if (ergebnis.alterTest) return this.legeAltenTestAntonioVor(ergebnis);
@@ -159,10 +158,15 @@ class Runden {
         continue;
       }
       this.fehler.push(fehlerausgabe(ergebnis));
-      this.zuletztRot = roteIdsDer(ergebnis);
+      this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
       if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
       verwerfe(ergebnis.basis, this.kontext.root);
     }
+  }
+
+  zuletztRot() {
+    const letzte = this.roteRunden.at(-1);
+    return letzte === undefined ? [] : idsDer(letzte);
   }
 
   voraussetzungFehlt(ergebnis) {
@@ -223,7 +227,7 @@ class Runden {
     const { phase, auftrag } = this.kontext;
     const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
     const unklar = zweckUnklar(ergebnis.ausstieg);
-    const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}\n${auswegBei(unklar === null ? this.zuletztRot : [unklar])}`;
+    const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}\n${auswegBei(unklar === null ? this.zuletztRot() : [unklar])}`;
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     const gestoppt = { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise };
     if (unklar !== null) return this.entscheidung(ergebnis, gestoppt);

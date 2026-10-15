@@ -13,6 +13,7 @@ const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const MUTATION = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
 const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
+const ABSATZ_PRODUKT_IM_TEST = "Zweck grenzen/produkt-im-test: Drehbuchtext des Ersatz-Agenten.";
 
 function auftrag(felder) {
   return {
@@ -173,7 +174,7 @@ test("Testumbau-Lauf: ein entfernter Fall braucht eine Zeile Entfernt mit Grund,
 });
 
 test("Testumbau-Lauf: ändert der Test-Agent Produktcode oder macht er den Abnahmetest rot, committet das Skript nichts", (context) => {
-  const produkt = testumbauLauf(context, { test: { "src/text.js": `${BASIS["src/text.js"]}export const X = 1;\n` } });
+  const produkt = testumbauLauf(context, { test: { "src/text.js": `${BASIS["src/text.js"]}export const X = 1;\n` }, "test-antwort": ABSATZ_PRODUKT_IM_TEST });
   assert.equal(produkt.lauf.status, EXIT_ROT);
   assert.equal(produkt.kopf, produkt.basis);
   assert.deepEqual([produkt.beleg.grund, produkt.beleg.pruefungen.map(({ name }) => name)], ["grenzen test endete mit Exit 1.", ["abnahme vorher", "grenzen test"]]);

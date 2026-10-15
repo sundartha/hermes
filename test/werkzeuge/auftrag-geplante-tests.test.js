@@ -25,6 +25,7 @@ const NEU = 'test("neu", () => {});\n';
 const AUSFUEHRBAR = 0o755;
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
+const ABSATZ_GEAENDERTE_FAELLE = "Zweck geänderte fälle: Drehbuchtext des Ersatz-Agenten.";
 
 function aendern(repo, pfad) {
   return { tool_name: "Edit", tool_input: { file_path: pfad, old_string: ALT, new_string: NEU }, cwd: repo };
@@ -234,7 +235,7 @@ const ROTER_TEST = [
 
 test("geänderte Fälle: lauf stoppt einen Test-Agenten, der einen geplanten Test nur umbaut, vor dem Bau-Agenten", (context) => {
   const umgebaut = BASIS["test/text.test.js"].replace('"A"));', '"A", "gross"));');
-  const drehbuch = { test: { "test/text.test.js": umgebaut, "test/rechnen.test.js": ROTER_TEST } };
+  const drehbuch = { test: { "test/text.test.js": umgebaut, "test/rechnen.test.js": ROTER_TEST }, "test-antwort": ABSATZ_GEAENDERTE_FAELLE };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("test/rechnen.test.js"), drehbuch });
   assert.equal(lauf.status, EXIT_ROT);
   const pruefung = beleg.pruefungen.find(({ name }) => name === "geänderte fälle");

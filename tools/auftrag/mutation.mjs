@@ -5,7 +5,7 @@ import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, git } from "./git.mjs";
 import { beleg } from "./pruefungen.mjs";
-import { GRUND, PRUEFUNG, zweckBlock } from "./zweck.mjs";
+import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
@@ -46,6 +46,7 @@ function bauNachrunde(ueberlebende) {
     "## Überlebende Mutanten",
     "",
     ...zweckBlock(PRUEFUNG.MUTATION),
+    absatzVerlangt([PRUEFUNG.MUTATION]),
     "",
     "Diese Mutanten in deinen neuen Zeilen überleben, kein Test verlangt die Zeilen:",
     "",
@@ -63,13 +64,14 @@ function bauNachrunde(ueberlebende) {
 function testNachrunde(kontext, ueberlebende, { stand, melden, noetig = [], zweck }) {
   const { auftrag } = kontext;
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
-  const zeilen = [testAgentPrompt(kontext), "## Überlebende Mutanten", "", ...zweckBlock(zweck), "", aufgabe, "", liste(ueberlebende), ""];
+  const zeilen = [testAgentPrompt(kontext), "## Überlebende Mutanten", "", ...zweckBlock(zweck), absatzVerlangt([zweck]), "", aufgabe, "", liste(ueberlebende), ""];
   const begruendet = noetig.length > 0 ? ["Der Bau-Agent hält diese Zeilen für nötig:", liste(noetig.map(({ mutant, grund }) => `${mutant}, weil ${grund}`)), ""] : [];
   return [...zeilen, ...begruendet, ...(melden ? MELDEN : [])].join("\n");
 }
 
 function bauKorrigiert(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
+  lauf.meldet(PRUEFUNG.MUTATION, "bau");
   const weg = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende), sitzung);
   if (weg === null) return false;
   const noetig = weg.noetig.filter(({ mutant }) => ueberlebende.includes(mutant));
@@ -79,6 +81,7 @@ function bauKorrigiert(lauf, ueberlebende) {
 }
 
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
+  lauf.meldet(vorgabe.zweck, "test");
   const weg = lauf.setzeAgentEinUndUebernimmAusgang(
     "test",
     testNachrunde(lauf.kontext, ueberlebende, vorgabe),
@@ -139,7 +142,8 @@ function testsFesthalten(lauf, ueberlebende) {
   lauf.allesVormerken();
   const warum = `Warum: Auf dem alten Stand überleben ${ueberlebende.length} Mutanten des Umbaus ${auftrag.id} der Phase ${phase.phase}; diese Tests halten das Verhalten vor dem Umbau fest.`;
   const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, ...(phase.paket ? [`Paket: ${phase.paket}`] : [])];
-  return lauf.festschreiben(PRUEFUNG.TESTS_ALTER_STAND, [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...herkunft, ""].join("\n"));
+  const begruendung = lauf.uebernimmBegruendung(["test"]);
+  return lauf.festschreiben(PRUEFUNG.TESTS_ALTER_STAND, [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...begruendung, ...herkunft, ""].join("\n"));
 }
 
 function eingespielt(lauf, { datei, inhalt }) {

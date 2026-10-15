@@ -285,5 +285,12 @@
     "behebung": "Die Datei in den richtigen Auftrag oder seine Kette aufnehmen. Nur wenn die Erkundung nachweislich falsch ist, sie vollständig widerlegen: im Feld eingang „nicht erreicht, weil <Grund mit Fundstelle>“ samt Eintrag in annahmen, oder ein Eintrag in falscheAngaben mit Fundstelle.",
     "nichtAngenommen": "Auswege mit einem Grund füllen, der zu jedem Auftrag passt.",
     "ausweg": "Eine eigene Zeile „Zerlegung passt nicht: <Grund>“; sie hält die Planung an, der Grund geht an Antonio."
+  },
+  "zweck-absatz": {
+    "liste": "ohne Nummer",
+    "wozu": "Wer nach einer Meldung Dateien ändert, soll den Zweck der Prüfung verstanden haben, bevor er ihn behebt. Der Absatz in eigenen Worten kommt in die Commit-Nachricht, und der KI-Prüfer vergleicht ihn mit dem Diff; so fällt auf, wenn nur die Meldung ruhiggestellt wurde.",
+    "behebung": "In der letzten Antwort je zugeordneter Prüfung einen Absatz mit der eigenen Zeile „Zweck <ID>:“ schreiben: wovor die Prüfung schützt, warum der eigene Befund ein solcher Fall ist und warum die Änderung die Ursache beseitigt.",
+    "nichtAngenommen": "Den Zweck-Text der Meldung abschreiben oder einen Absatz schreiben, der eine andere Änderung beschreibt als den Diff. Das Skript prüft nur, ob der Absatz da ist; den Inhalt prüft der KI-Prüfer.",
+    "ausweg": "Kannst du den Zweck nicht benennen, ändere nichts und antworte als Letztes mit der eigenen Zeile „Auftrag passt nicht: Zweck der Prüfung <ID> unklar: <was dir fehlt>“; sie geht direkt an Antonio."
   }
 }
