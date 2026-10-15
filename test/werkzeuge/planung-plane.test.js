@@ -513,6 +513,18 @@ test("plane: der Planer liest verdichtete Berichte, Prüfer und Entwurf-Schreibe
   for (const entwurf of aufrufe(lauf, "entwurf", "## Entwurf")) assert.ok(entwurf.eingabe.includes('"nummern": {'), entwurf.eingabe);
 });
 
+test("plane: der Erkunder bekommt das Gerüst und die Namen aus dem Wenn", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context);
+  exit(lauf, EXIT_GRUEN);
+  const erkundung = aufrufe(lauf, "erkunder", "## Erkundung").find(({ eingabe }) => eingabe.includes("#### S1 ("));
+  const [, geruest] = erkundung.eingabe.split("### Gerüst deines Berichts");
+  for (const nummer of GRUPPEN[0].nummern) assert.ok(geruest.includes(`"${nummer}": {`), geruest);
+  assert.ok(geruest.includes('"vorbild": "<AUSFUELLEN>"'), geruest);
+  const [, namen] = erkundung.eingabe.split("### Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen");
+  assert.ok(namen.includes("- S1: `POST /api/self-service/private-number`\n"), namen);
+  assert.ok(namen.includes("- T2: `POST /api/self-service/private-number`\n"), namen);
+});
+
 function prueflisteZeilen({ eingabe }) {
   const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
   return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
