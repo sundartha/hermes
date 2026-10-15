@@ -63,9 +63,10 @@ export function gekuerzteTestausgabe(ausgabe) {
   return nichtLeer(ausgabe).slice(0, MAX_TESTAUSGABE_ZEILEN).join("\n");
 }
 
-export function rotUrteil({ exitCode, ausgabe }, erwarteterFehler) {
+export function rotUrteil({ exitCode, ausgabe, fehlermeldungen = [] }, erwarteterFehler) {
   if (exitCode === 0) return { rot: false, zeile: "rot: nein, der Abnahmetest ist grün." };
-  const meldungen = ausgabe.split("\n").filter((zeile) => !TITELZEILE.test(zeile));
+  const zeilen = ausgabe.split("\n").filter((zeile) => !TITELZEILE.test(zeile));
+  const meldungen = [...zeilen, ...fehlermeldungen];
   if (meldungen.some((zeile) => zeile.includes(erwarteterFehler))) {
     return { rot: true, zeile: `rot: ja, mit dem erwarteten Fehler „${erwarteterFehler}“.` };
   }
