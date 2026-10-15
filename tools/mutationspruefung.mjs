@@ -15,6 +15,7 @@ import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
+import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
@@ -64,7 +65,7 @@ const TEILANGABEN = 3;
 const BETRIEBSARTEN_HOECHSTENS = 1;
 const ERGEBNISDATEI = /\.json$/;
 const AUFRUF =
-  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
+  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
 
 function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -527,11 +528,19 @@ function gemeldet(basis) {
     .flatMap((nachricht) => [...nachricht.matchAll(GLEICHWERTIG)].map(([, schluessel]) => schluessel.trim()));
 }
 
+function aufrufGueltig(values) {
+  const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
+  const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length + Number(values.testumbau);
+  const doppelt = values.testumbau && (values["alter-stand"] || values.gleichwertig.length > 0);
+  return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && betriebsarten <= BETRIEBSARTEN_HOECHSTENS && !doppelt;
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
       basis: { type: "string" },
       "alter-stand": { type: "boolean", default: false },
+      testumbau: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
       plan: { type: "string" },
       teil: { type: "string" },
@@ -540,14 +549,13 @@ async function main() {
       urteil: { type: "string" },
     },
   });
-  const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
-  const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length;
-  if (values.basis === undefined || ![0, TEILANGABEN].includes(teilAufruf) || betriebsarten > BETRIEBSARTEN_HOECHSTENS) {
+  if (!aufrufGueltig(values)) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
   await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis}`);
   kindprozesseInEigenemTempOrdner();
+  if (values.testumbau) return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]

@@ -12,6 +12,7 @@ const UMBAU_ARTEN = new Set(["umbau", TESTUMBAU]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
 const ABNAHMETEST = /^test\/.+\.test\.[cm]?js$/;
 const TESTDATEI = /(^|\/)test\/|\.test\.[cm]?js$/;
+const AUSFUEHRBARER_TEST = /\.test\.[cm]?js$/;
 const TYPDATEI_ENDUNG = ".d.ts";
 const JS_ENDUNG = /\.[cm]?js$/;
 const MAX_BETREFF = 72;
@@ -31,6 +32,10 @@ export function brauchtRotenTest(auftrag) {
 
 export function istTestdatei(pfad) {
   return TESTDATEI.test(pfad);
+}
+
+export function istAusfuehrbarerTest(pfad) {
+  return AUSFUEHRBARER_TEST.test(pfad);
 }
 
 export function istUmbau(auftrag) {

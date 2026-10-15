@@ -6,7 +6,7 @@ import { env } from "node:process";
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
-import { aenderungenSeit } from "./git.mjs";
+import { aenderungenSeit, gibtEsIn } from "./git.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
@@ -93,7 +93,7 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
     return meldeBefunde(befunde);
   }
   const aenderungen = aenderungenSeit(basis, root);
-  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root) };
+  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root) };
   const { verstoesse, hinweise, produktzeilen } = grenzBefunde(kontext, aenderungen);
   for (const zeile of [...verstoesse, ...hinweise]) console.log(zeile);
   const urteil = verstoesse.length === 0 ? "grün" : "rot";

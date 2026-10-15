@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { faelle } from "./auftrag/faelle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
+import { testumbauFaelle } from "./auftrag/testumbau.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
 import { messung } from "./auftrag/planung/messung.mjs";
 import { plane } from "./auftrag/planung/plane.mjs";
@@ -22,6 +23,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs faelle --basis <commit>",
+  "        node tools/auftrag.mjs testumbau --basis <commit>",
   "        node tools/auftrag.mjs phase <phasendatei>",
   "        node tools/auftrag.mjs aufraeumen",
   "        node tools/auftrag.mjs pruefer artefakt --head <sha>",
@@ -65,6 +67,7 @@ const BEFEHLE = {
       grenzen(phasendatei, kennung, { rolle, basis, root }),
   },
   faelle: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => faelle({ basis, root }) },
+  testumbau: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => testumbauFaelle({ basis, root }) },
   pruefer: {
     argumente: 1,
     optionen: ([art]) => PRUEFER_OPTIONEN.get(art),

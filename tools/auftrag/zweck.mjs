@@ -8,6 +8,8 @@ export const PRUEFUNG = {
   GRENZEN_BAU: "grenzen bau",
   GRENZEN_TEST: "grenzen test",
   GEAENDERTE_FAELLE: "geänderte fälle",
+  TESTUMBAU_FAELLE: "testumbau fälle",
+  MUTATION_TESTUMBAU: "mutation testumbau",
   ROT: "rot",
   ABNAHME_VORHER: "abnahme vorher",
   TYPPRUEFUNG: "typprüfung",
@@ -32,6 +34,7 @@ export const GRUND = {
   AGENT_EXIT: "agent exit",
   KEINE_AENDERUNG: "keine änderung",
   MUTATION_ABBRUCH: "mutation abbruch",
+  ENTFERNT_OHNE_GRUND: "entfernt ohne grund",
 };
 
 export const MELDUNG = {
@@ -65,6 +68,7 @@ const GRENZ_ARTEN = [
   [ROLLE.TEST_IM_BAU, "grenzen/test-im-bau"],
   [ROLLE.PRODUKT_IM_TEST, "grenzen/produkt-im-test"],
   [ROLLE.FREMDER_TEST, "grenzen/fremder-test"],
+  [ROLLE.TESTHILFE_IM_VERHALTEN, "grenzen/testhilfe"],
   [PHASE_PASST_NICHT, "grenzen/phasendatei"],
 ];
 const OHNE_AUSWEG = "entfällt";

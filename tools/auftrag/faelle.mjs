@@ -8,10 +8,10 @@ import { fileURLToPath } from "node:url";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 
 import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
+import { istAusfuehrbarerTest } from "./format.mjs";
 import { NUL, git } from "./git.mjs";
 
 const BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
-const AUSFUEHRBAR = /\.test\.[cm]?js$/;
 const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 const FALL_ENDE = /^\}\)/;
 const EINZUG = /^[ \t]*/;
@@ -19,7 +19,7 @@ const UMBAU = "Das ist ein Strukturumbau, und ein Umbau ist ein eigener Schritt.
 
 function geaenderteTestdateien(basis, root) {
   const pfade = git(["diff", "--name-only", "--no-renames", "--diff-filter=M", "-z", basis], { cwd: root }).split(NUL);
-  return pfade.filter((pfad) => AUSFUEHRBAR.test(pfad));
+  return pfade.filter(istAusfuehrbarerTest);
 }
 
 function hunks(basis, root, pfad) {
@@ -28,7 +28,7 @@ function hunks(basis, root, pfad) {
   return treffer.map(([, start, anzahl]) => ({ start: Number(start), anzahl: anzahl === undefined ? 1 : Number(anzahl) }));
 }
 
-function laufe(root, pfad) {
+export function laufe(root, pfad) {
   const ordner = mkdtempSync(join(tmpdir(), "faelle-"));
   const ziel = join(ordner, "faelle.jsonl");
   try {

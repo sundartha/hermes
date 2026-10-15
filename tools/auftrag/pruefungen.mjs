@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import { gehoertZumBereich, istGeschuetzt, istTestdatei } from "./format.mjs";
+import { TESTUMBAU, gehoertZumBereich, istAusfuehrbarerTest, istGeschuetzt, istTestdatei } from "./format.mjs";
 
 export const MAX_PRODUKTZEILEN = 400;
 export const MAX_TESTAUSGABE_ZEILEN = 60;
@@ -29,6 +29,7 @@ export const ROLLE = {
   PRODUKT_IM_TEST: "Der Test-Agent hat Produktcode geändert",
   FREMDER_TEST: "Der Test-Agent hat einen fremden Test geändert",
   TEST_IM_BAU: "Der Bau-Agent hat einen Test geändert",
+  TESTHILFE_IM_VERHALTEN: "Der Test-Agent hat eine bestehende Testhilfe geändert",
 };
 
 export function fuehreAus(name, befehl, { cwd, env, zeitlimit, eingabe }) {
@@ -86,20 +87,22 @@ export function rotUrteil({ exitCode, ausgabe, fehlermeldungen = [] }, erwartete
   };
 }
 
-function testVerstoss(auftrag, pfad) {
+function testVerstoss({ auftrag, bestand }, pfad) {
   if (!istTestdatei(pfad)) return `${ROLLE.PRODUKT_IM_TEST}: ${pfad}`;
-  const eigene = [auftrag.abnahme, ...auftrag.erwarteteDateien];
-  return eigene.includes(pfad) ? null : `${ROLLE.FREMDER_TEST}: ${pfad}`;
+  const eigene = auftrag.art === TESTUMBAU ? auftrag.erwarteteDateien : [auftrag.abnahme, ...auftrag.erwarteteDateien];
+  if (!eigene.includes(pfad)) return `${ROLLE.FREMDER_TEST}: ${pfad}`;
+  const hilfe = !istAusfuehrbarerTest(pfad) && bestand(pfad);
+  return hilfe && auftrag.art !== TESTUMBAU ? `${ROLLE.TESTHILFE_IM_VERHALTEN}: ${pfad}; Testhilfen ändert nur ein ${TESTUMBAU}` : null;
 }
 
-function rollenVerstoss(auftrag, rolle, pfad) {
-  if (rolle === "test") return testVerstoss(auftrag, pfad);
+function rollenVerstoss({ auftrag, rolle, bestand }, pfad) {
+  if (rolle === "test") return testVerstoss({ auftrag, bestand }, pfad);
   return istTestdatei(pfad) ? `${ROLLE.TEST_IM_BAU}: ${pfad}` : null;
 }
 
-function dateiVerstoesse({ auftrag, rolle, muster }, pfad) {
+function dateiVerstoesse({ auftrag, rolle, muster, bestand = () => true }, pfad) {
   if (istGeschuetzt(muster, pfad)) return [`${VERSTOSS}${GESCHUETZT}: ${pfad}`];
-  const verstoss = rollenVerstoss(auftrag, rolle, pfad);
+  const verstoss = rollenVerstoss({ auftrag, rolle, bestand }, pfad);
   if (verstoss) return [`${VERSTOSS}${verstoss}`];
   if (rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad)) {
     return [`${VERSTOSS}${AUSSERHALB} ${auftrag.bereich}: ${pfad}`];

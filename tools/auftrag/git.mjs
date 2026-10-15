@@ -17,6 +17,10 @@ export function git(args, { cwd, eingabe } = {}) {
   return lauf.stdout;
 }
 
+export function gibtEsIn(commit, pfad, cwd) {
+  return spawnSync("git", ["cat-file", "-e", `${commit}:${pfad}`], { cwd }).status === 0;
+}
+
 export function istSauber(cwd) {
   return git(["status", "--porcelain", "--untracked-files=all"], { cwd }).trim() === "";
 }
