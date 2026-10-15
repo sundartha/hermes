@@ -24,9 +24,19 @@
     "scripts/stt-wer.mjs",
     "scripts/telnyx-call-latency.mjs",
     "test/i18n-catalog-run.mjs",
+    "tools/hermes-ctl.mjs",
+    "tools/hermes-ctl/wirt.mjs",
+    "tools/hermes-ctl/pg-wirt.mjs",
     "test/**/*.test.js"
   ],
-  "project": ["*.{js,mjs}", "src/**/*.js", "scripts/**/*.{js,mjs}", "test/**/*.js"],
+  "project": [
+    "*.{js,mjs}",
+    "src/**/*.js",
+    "scripts/**/*.{js,mjs}",
+    "test/**/*.js",
+    "tools/hermes-ctl.mjs",
+    "tools/hermes-ctl/**/*.mjs"
+  ],
   "ignore": [
     "coverage/**",
     "data/**",
