@@ -43,6 +43,7 @@ const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
+const WEG = "weg:";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 
@@ -89,6 +90,15 @@ function prueferZeile({ schluessel, befund, fundstelle }) {
   return `${schluessel}: ${befund} (Fundstelle: ${fundstelle})`;
 }
 
+function wegBefundZeile({ schluessel, befund, fundstelle }) {
+  return `Weg ${schluessel.slice(WEG.length)}: ${befund} (Fundstelle: ${fundstelle})`;
+}
+
+function gruppenWegZeile(nummern, text) {
+  const eigene = nummern.filter((nummer) => text.startsWith(`${WEG}${nummer}:`));
+  return { nummern: eigene.length > 0 ? eigene : nummern, zeile: `Weg ${nummern.join(", ")}: ${text}` };
+}
+
 function offenerPrueferBefund(befund, antworten) {
   const antwort = antworten.find((eintrag) => eintrag?.schluessel === befund.schluessel)?.antwort;
   return istText(antwort) ? `${prueferZeile(befund)} | ${antwort}` : prueferZeile(befund);
@@ -118,6 +128,9 @@ class Planung {
     this.befunde = { offen: [], korrigiert: [], zurueckgewiesen: [] };
     this.schleifen = [];
     this.nachpruefungen = [];
+    this.wegpruefungen = [];
+    this.wegZaehler = new Map();
+    this.wegOffen = [];
   }
 
   beginne(soll, andererAusgang) {
@@ -198,14 +211,17 @@ class Planung {
     return [...gefunden.values()].join("\n\n") || "keine";
   }
 
-  erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [] }) {
+  designTeile(nummern) {
     const gruppen = this.gruppenVon(nummern);
     const ueberschriften = [...new Set(gruppen.flatMap((gruppe) => gruppe.ueberschriften))];
+    return [abschnitt("Eingang laut Design Doc", punkte(gruppen.map((gruppe) => gruppe.eingang))), abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften))];
+  }
+
+  erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [] }) {
     return nachricht(ueberschrift, [
       ...kopf,
       abschnitt("Deine Nummern", nummernText(this.soll, nummern)),
-      abschnitt("Eingang laut Design Doc", punkte(gruppen.map((gruppe) => gruppe.eingang))),
-      abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften)),
+      ...this.designTeile(nummern),
       abschnitt("Fragen des Planers", punkte(fragen)),
       abschnitt("Gerüst deines Berichts", json(berichtsGeruest(nummern))),
       abschnitt("Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen", punkte(nummern.map((nummer) => this.namenZeile(nummer)))),
@@ -227,11 +243,72 @@ class Planung {
     return { bericht, ...erkundungBefunde(bericht, { gruppe: nummern, soll: this.soll, root: this.root }) };
   }
 
-  async erkunde(wer, text, nummern) {
+  async berichtVon(wer, text, nummern) {
     const erste = this.pruefeBericht(await this.team.frage(wer, text), nummern);
     if (erste.befunde.length === 0) return erste;
     const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, erste.befunde));
     return this.pruefeBericht(zweite, nummern);
+  }
+
+  async erkunde(wer, text, nummern) {
+    const ergebnis = await this.berichtVon(wer, text, nummern);
+    return ergebnis.befunde.length === 0 ? this.wegPruefung(wer, ergebnis, nummern) : ergebnis;
+  }
+
+  ersteWegNachricht(nummern, bericht) {
+    return nachricht("Wegprüfung", [
+      abschnitt("Nummern", nummernText(this.soll, nummern)),
+      ...this.designTeile(nummern),
+      abschnitt("Erkundungsbericht", json(bericht)),
+      abschnitt("Zeilen deiner Prüfliste", punkte(nummern.map((nummer) => `${WEG}${nummer}`))),
+    ]);
+  }
+
+  wegNachrichtNachKorrektur(nummern, bericht) {
+    return nachricht("Wegprüfung", [
+      abschnitt("Nummern", nummernText(this.soll, nummern)),
+      abschnitt("Korrigierter Erkundungsbericht", json(bericht)),
+      abschnitt("Zeilen deiner Prüfliste", punkte(nummern.map((nummer) => `${WEG}${nummer}`))),
+    ]);
+  }
+
+  naechsteWegDatei(erste) {
+    const zahl = (this.wegZaehler.get(erste) ?? 0) + 1;
+    this.wegZaehler.set(erste, zahl);
+    return `wegpruefung-${erste}-${zahl}.json`;
+  }
+
+  async wegRunde(weg, text) {
+    const schluessel = weg.nummern.map((nummer) => `${WEG}${nummer}`);
+    const lauf = await this.prueferLauf(weg.pruefer, text, { schluessel, frage: (wer, inhalt) => this.team.frage(wer, inhalt) });
+    this.lege(this.naechsteWegDatei(weg.nummern[0]), lauf);
+    const befunde = prueferBefunde(liste(lauf.pruefliste).filter(istObjekt));
+    const offen = befunde.map((befund) => ({ nummern: [befund.schluessel.slice(WEG.length)], zeile: wegBefundZeile(befund) }));
+    if (lauf.befunde.length > 0) return { befunde: [], offen: [...lauf.befunde.map((befund) => gruppenWegZeile(weg.nummern, befund)), ...offen] };
+    return { befunde, offen, ende: befunde.length > 0 && weg.schleife.endeNachRunde(befunde, null, this.soll) !== null };
+  }
+
+  verbucheWegpruefung({ pruefer, nummern, runden }, sauber, offen) {
+    this.wegpruefungen.push({ nummern, sitzung: pruefer.sitzung, runden, offen: offen.map(({ zeile }) => zeile) });
+    return { ...sauber, weg: { nummern, offen } };
+  }
+
+  uebernimmWeg({ weg }) {
+    this.wegOffen = [...this.wegOffen.filter((eintrag) => !eintrag.nummern.some((nummer) => weg.nummern.includes(nummer))), ...weg.offen];
+  }
+
+  async wegPruefung(wer, ergebnis, nummern) {
+    const weg = { pruefer: this.team.teilnehmer("pruefer-planung"), schleife: this.schleife("weg"), nummern };
+    let sauber = ergebnis;
+    let text = this.ersteWegNachricht(nummern, sauber.bericht);
+    for (let runden = 1; ; runden += 1) {
+      const runde = await this.wegRunde(weg, text);
+      if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
+      const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
+      if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
+      sauber = neu;
+      text = this.wegNachrichtNachKorrektur(nummern, sauber.bericht);
+    }
   }
 
   erkunderLauf(text, nummern) {
@@ -243,7 +320,10 @@ class Planung {
     const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkunderLauf(this.erkunderNachricht("Erkundung", gruppe), gruppe.nummern));
     const ergebnisse = await this.team.gruppe(laeufe);
     this.berichte = ergebnisse.map(({ bericht }) => bericht);
-    for (const { bericht, befunde } of ergebnisse) if (befunde.length === 0) merkeStellen(this.gesehen, bericht);
+    for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
+      merkeStellen(this.gesehen, ergebnis.bericht);
+      this.uebernimmWeg(ergebnis);
+    }
     this.legeBerichte();
   }
 
@@ -260,7 +340,8 @@ class Planung {
   }
 
   offenePunkte() {
-    return this.pruefungDerBerichte().flatMap(({ bericht, befunde }) => befunde.map((befund) => `Bericht ${bericht.gruppe.join(", ")}: ${befund}`));
+    const berichte = this.pruefungDerBerichte().flatMap(({ bericht, befunde }) => befunde.map((befund) => `Bericht ${bericht.gruppe.join(", ")}: ${befund}`));
+    return [...berichte, ...new Set(this.wegOffen.map(({ zeile }) => zeile))];
   }
 
   async karten() {
@@ -299,11 +380,13 @@ class Planung {
     });
   }
 
-  verbucheNachfrage({ nummern }, { bericht, befunde }) {
+  verbucheNachfrage({ nummern }, ergebnis) {
+    const { bericht, befunde } = ergebnis;
     const neu = befunde.length === 0 ? neueStellen(this.gesehen, bericht, nummern) : [];
     if (befunde.length === 0) {
       merkeStellen(this.gesehen, bericht);
       this.ersetze(bericht, nummern);
+      this.uebernimmWeg(ergebnis);
     }
     const ohneNeues = nummern.filter((nummer) => !neu.some((stelle) => stelle.startsWith(`${nummer}\0`)));
     for (const nummer of ohneNeues) this.ausgeschoepft.add(nummer);
@@ -375,15 +458,15 @@ class Planung {
     return { pruefliste, befunde: prueflisteBefunde(pruefliste, schluessel, this.kontext()) };
   }
 
-  async prueferLauf(pruefer, text, schluessel) {
-    const ergebnis = this.prueflisteDer(await this.einzeln(pruefer, text), schluessel);
+  async prueferLauf(pruefer, text, { schluessel, frage = (wer, inhalt) => this.einzeln(wer, inhalt) }) {
+    const ergebnis = this.prueflisteDer(await frage(pruefer, text), schluessel);
     if (ergebnis.befunde.length === 0) return ergebnis;
-    return this.prueflisteDer(await this.einzeln(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
+    return this.prueflisteDer(await frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
   async pruefeMitFrischemPruefer(text, schluessel, { datei, grund }) {
     const pruefer = this.team.teilnehmer("pruefer-planung");
-    const ergebnis = await this.prueferLauf(pruefer, text, schluessel);
+    const ergebnis = await this.prueferLauf(pruefer, text, { schluessel });
     if (ergebnis.befunde.length > 0) throw new Ende(EXIT_BEFUNDE, grund, ergebnis.befunde);
     this.lege(datei, ergebnis.pruefliste);
     return { pruefer, befunde: prueferBefunde(ergebnis.pruefliste) };
@@ -540,6 +623,7 @@ function berichte(planung, ergebnis) {
     befunde: { ...planung.befunde, offen: ergebnis.offen },
     schleifen: planung.schleifen.map((schleife) => schleife.bericht()),
     nachpruefungen: planung.nachpruefungen,
+    wegpruefungen: planung.wegpruefungen,
   };
   const bericht = planBericht(lauf, { root: planung.root, team: planung.team });
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
