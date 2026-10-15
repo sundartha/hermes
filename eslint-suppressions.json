@@ -1081,9 +1081,6 @@
     }
   },
   "test/312k-p3-self-service-cancel.test.js": {
-    "no-negated-condition": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -1134,7 +1131,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 28
+      "count": 24
     }
   },
   "test/al-p14-in-call-consult.test.js": {
@@ -1304,11 +1301,6 @@
       "count": 1
     }
   },
-  "test/e2e-06-en-purity-aggregate.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/f1-geo-onboard.test.js": {
     "no-restricted-syntax": {
       "count": 6
@@ -1316,7 +1308,7 @@
   },
   "test/f1-geo-store.test.js": {
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     }
   },
   "test/f1-provisioning-geo.test.js": {
@@ -1332,15 +1324,7 @@
       "count": 1
     }
   },
-  "test/f2-p8-cost-cap.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/f2-self-service-private-number.test.js": {
-    "no-negated-condition": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1511,11 +1495,6 @@
       "count": 1
     }
   },
-  "test/profile-tenant-key-migration-pg.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/prov01-boot-reconcile.test.js": {
     "max-params": {
       "count": 2
@@ -1527,11 +1506,6 @@
   "test/prov01-capture-idempotent.test.js": {
     "no-param-reassign": {
       "count": 2
-    }
-  },
-  "test/provider-threading.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "test/provisioning-enqueue-order.test.js": {
@@ -1560,17 +1534,11 @@
     }
   },
   "test/self-service-newsletter-consent.test.js": {
-    "no-negated-condition": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
   },
   "test/self-service-newsletter-recipients.test.js": {
-    "no-negated-condition": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 5
     }
@@ -1602,7 +1570,7 @@
   },
   "test/tenant-erasure-pg.test.js": {
     "no-restricted-syntax": {
-      "count": 11
+      "count": 7
     }
   },
   "test/tenant-settings-calendar-map.test.js": {
@@ -1640,7 +1608,7 @@
   },
   "test/web-auth-pg.test.js": {
     "no-restricted-syntax": {
-      "count": 19
+      "count": 17
     }
   },
   "test/web-auth.test.js": {
