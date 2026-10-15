@@ -8,7 +8,7 @@ import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
-import { brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
+import { TESTUMBAU, brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, auftragsTrailer, festhalten, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -18,6 +18,7 @@ import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
+import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
@@ -231,6 +232,7 @@ class AuftragsLauf {
 
   schritte() {
     const { auftrag } = this.kontext;
+    if (auftrag.art === TESTUMBAU) return [...testumbauSchritte(this), () => this.abschliessen()];
     const vorBau = brauchtRotenTest(auftrag)
       ? [
           () => this.agent("test", testPrompt(this.kontext.phase, auftrag, this.kontext.root)),

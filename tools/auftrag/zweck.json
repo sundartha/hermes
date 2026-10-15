@@ -34,6 +34,13 @@
     "nichtAngenommen": "Einen fremden Test so anpassen, dass er zum neuen Verhalten passt.",
     "ausweg": "Hält ein alter Test das alte Verhalten fest, eine eigene letzte Zeile „Auftrag passt nicht: <Testdatei>:<Testname> hält das alte Verhalten fest – <Grund>“."
   },
+  "grenzen/testhilfe": {
+    "liste": "ohne Nummer",
+    "wozu": "Eine bestehende Testhilfe oder Fixture gilt für viele Tests; ihre Änderung prüft die Fallprüfung des Verhaltensschritts nicht, weil sie nur Testdateien mit .test. im Namen ausführt.",
+    "behebung": "Die Testhilfe unverändert lassen und das neue Verhalten in den Testdateien des Auftrags prüfen; eine neue Hilfsdatei anlegen, wenn eine gebraucht wird.",
+    "nichtAngenommen": "Die Änderung der Testhilfe in eine Testdatei mit .test. im Namen verschieben, damit die Grenzprüfung sie nicht als Hilfe erkennt.",
+    "ausweg": "Muss die Testhilfe vorher umgebaut werden, eine eigene letzte Zeile „Auftrag passt nicht: <Datei> muss vorher in einem testumbau umgebaut werden, weil <Grund>“."
+  },
   "grenzen/bereich": {
     "liste": "A4",
     "wozu": "Außerhalb des Bereichs deckt weder Entwurf noch Abnahmetest eine Änderung ab, und parallele Aufträge können sich gegenseitig überschreiben.",
@@ -61,6 +68,13 @@
     "behebung": "Nur die Fälle ändern, die das neue Verhalten verlangen und deshalb heute rot sind; die übrigen Fälle und die Zeilen außerhalb von Testfällen unverändert lassen.",
     "nichtAngenommen": "Einen umgebauten Fall mit einer zusätzlichen Prüfung künstlich rot machen oder einen unveränderten Fall so anpassen, dass er wieder grün ist.",
     "ausweg": "Muss ein bestehender Test vorher umgebaut werden, eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Testname> muss vorher umgebaut werden, weil <Grund>“."
+  },
+  "testumbau fälle": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Testumbau ändert nur die Struktur der Tests: Jeder betroffene Test ist vor und nach dem Umbau gegen den unveränderten Produktcode grün, jeder seiner Fälle.",
+    "behebung": "Den Umbau so ändern, dass jeder betroffene Fall wieder grün ist, ohne seine Erwartung zu ändern.",
+    "nichtAngenommen": "Einen roten Fall löschen, überspringen oder seine Erwartung an das heutige Ergebnis anpassen.",
+    "ausweg": "Verlangt der Umbau eine andere Erwartung, ist er kein Testumbau: eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Testname> braucht eine neue Erwartung, weil <Grund>“."
   },
   "rot": {
     "liste": "A5",
@@ -153,12 +167,26 @@
     "nichtAngenommen": "Tests, die nur die Schreibweise des Codes festnageln.",
     "ausweg": "Ändert ein Mutant kein beobachtbares Verhalten, antwortet der Test-Agent je Mutant mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <Satz>“; die Meldung geht zur Freigabe an Antonio."
   },
+  "mutation testumbau": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Testumbau darf nicht weniger prüfen als vorher: Jeder Mutant der Quelldateien, die die betroffenen Tests importieren, den sie vorher getötet haben, muss nachher weiter getötet werden.",
+    "behebung": "Die Prüfung, die den genannten Mutanten vorher getötet hat, im Umbau erhalten oder an der neuen Stelle wieder aufnehmen.",
+    "nichtAngenommen": "Den Mutanten als gleichwertig melden; vorher getötet heißt, er ändert beobachtbares Verhalten.",
+    "ausweg": "Ist die Prüfung nur durch neues Verhalten zu erhalten, eine eigene letzte Zeile „Auftrag passt nicht: <Mutant> lässt sich ohne neue Erwartung nicht weiter töten, weil <Grund>“."
+  },
   "mutation abbruch": {
     "liste": "ohne Nummer",
     "wozu": "Ein abgebrochener Mutationslauf hat nichts gemessen.",
     "behebung": "Die Ursache aus der Ausgabe beheben.",
     "nichtAngenommen": "entfällt.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
+  "entfernt ohne grund": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Testumbau, der Fälle entfernt, nennt jeden mit Grund; die Zeilen kommen in die Commit-Nachricht, damit Prüfer und Antonio sehen, was wegfällt.",
+    "behebung": "Für jeden entfernten Fall eine Zeile „Entfernt: <Datei>: <Fallname>, weil <ein Satz>“ in die Antwort schreiben, Datei und Name wie vor dem Umbau.",
+    "nichtAngenommen": "Einen Fall nur umbenennen, damit er nicht als entfernt zählt, und dabei weniger prüfen.",
+    "ausweg": "entfällt: Die Zeile ist selbst der Weg; fehlt ein Grund, gehört der Fall nicht entfernt."
   },
   "umbau einspielen": {
     "liste": "ohne Nummer",

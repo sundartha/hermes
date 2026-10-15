@@ -28,7 +28,7 @@ const ZU_VIELE_ZEILEN = 401;
 const AUSFUEHRBAR = 0o755;
 
 function alleGrenzVerstoesse() {
-  const auftrag = { bereich: "src/bereich.js", abnahme: "test/a.test.js", erwarteteDateien: [] };
+  const auftrag = { bereich: "src/bereich.js", abnahme: "test/a.test.js", erwarteteDateien: ["test/hilfe.js"] };
   const muster = ["/src/geschuetzt.js"];
   const bau = grenzBefunde({ auftrag, rolle: "bau", muster }, [
     { pfad: "src/geschuetzt.js", zeilen: 1 },
@@ -38,6 +38,7 @@ function alleGrenzVerstoesse() {
   const test = grenzBefunde({ auftrag, rolle: "test", muster }, [
     { pfad: "src/bereich.js", zeilen: 1 },
     { pfad: "test/fremd.test.js", zeilen: 1 },
+    { pfad: "test/hilfe.js", zeilen: 1 },
   ]);
   return [...bau.verstoesse, ...test.verstoesse];
 }

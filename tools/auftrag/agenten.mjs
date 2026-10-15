@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { funktionskartePfad, istTestdatei } from "./format.mjs";
+import { TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
 const KRITISCH_SUFFIX = "-kritisch";
@@ -83,6 +83,22 @@ function geplanteTestsAbschnitt(auftrag, root) {
 
 export function testPrompt(phase, auftrag, root = cwd()) {
   return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
+}
+
+function testumbauAbschnitt(auftrag) {
+  return abschnitt("Testumbau", [
+    `Dieser Auftrag hat die Art ${TESTUMBAU}: Du baust bestehende Tests um, ohne zu ändern, was sie prüfen. Du schreibst keinen neuen roten Test und änderst keinen Produktcode.`,
+    `Du änderst nur diese Dateien: ${geplanteTests(auftrag).join(", ")}. Testhilfen ohne .test. im Namen und Fixtures darfst du nur in einem solchen Schritt ändern.`,
+    "Jede Testdatei, die deine Änderung berührt oder die eine geänderte Testhilfe nutzt, ist vor und nach deiner Änderung gegen den unveränderten Produktcode grün, jeder ihrer Fälle.",
+    "Das Skript misst danach die Mutanten der Quelldateien, die diese Tests direkt oder über Testhilfen importieren: Jeder Mutant, den sie vorher getötet haben, muss nachher weiter getötet werden.",
+    "Fällt ein Fall weg (gelöscht, umbenannt oder in eine andere Datei verschoben), antwortest du als Letztes mit einer Zeile je Fall, Datei und Name wie vorher:",
+    "Entfernt: <Datei>: <Fallname>, weil <ein Satz>",
+    "Braucht der Umbau neues Verhalten oder eine Änderung am Produktcode, gehört er nicht in diesen Schritt; dann steigst du mit der Zeile „Auftrag passt nicht: <Grund>“ aus.",
+  ].join("\n"));
+}
+
+export function testumbauPrompt(phase, auftrag, root = cwd()) {
+  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), dateiAbschnitt("Vorbild", root, auftrag.vorbild), testumbauAbschnitt(auftrag)].join("\n");
 }
 
 function dateiAbschnitt(titel, root, pfad) {
