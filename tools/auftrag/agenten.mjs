@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { env, execPath } from "node:process";
+import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { funktionskartePfad, istTestdatei } from "./format.mjs";
@@ -63,8 +63,26 @@ function entwurfAbschnitt(phase, auftrag) {
   return abschnitt(`Entwurf für ${auftrag.bereich}`, phase.entwurf[auftrag.bereich]);
 }
 
-export function testPrompt(phase, auftrag) {
-  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag)].join("\n");
+function geplanteTests(auftrag) {
+  return (auftrag?.erwarteteDateien ?? []).filter(istTestdatei);
+}
+
+function geplanteTestsAbschnitt(auftrag, root) {
+  const bestehende = geplanteTests(auftrag).filter((pfad) => existsSync(join(root, pfad)));
+  if (bestehende.length === 0) return [];
+  return [
+    abschnitt("Geplante bestehende Testdateien", [
+      ...bestehende.map((pfad) => `- ${pfad}`),
+      "",
+      "In diesen Testdateien passt du genau die Fälle an, deren Erwartung das neue Verhalten ändert.",
+      "Jeder geänderte oder neue Fall ist gegen den unveränderten Produktcode rot, unveränderte Fälle bleiben grün.",
+      "Reiner Umbau von Tests gehört nicht in diesen Schritt. An alle anderen bestehenden Testdateien hängst du nur an.",
+    ].join("\n")),
+  ];
+}
+
+export function testPrompt(phase, auftrag, root = cwd()) {
+  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
 }
 
 function dateiAbschnitt(titel, root, pfad) {
@@ -113,7 +131,7 @@ function vorbereitung({ rolle, auftrag, fortsetzung }, prompt, start) {
     "acceptEdits",
     ...VERLAUF_AUSGABE,
   ];
-  const erwartet = JSON.stringify((auftrag?.erwarteteDateien ?? []).filter(istTestdatei));
+  const erwartet = JSON.stringify(geplanteTests(auftrag));
   const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme, HERMES_ERWARTET: erwartet };
   const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze: start.kontextGrenze, vollstaendig: start.vollstaendig });
   return { kopf: { rolle, agent, sitzung, befehl: befehl.join(" ") }, umgebung, daten };

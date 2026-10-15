@@ -64,9 +64,9 @@ function bauNachrunde(ueberlebende) {
   ].join("\n");
 }
 
-function testNachrunde({ phase, auftrag }, ueberlebende, { stand, melden, noetig = [] }) {
+function testNachrunde({ phase, auftrag, root }, ueberlebende, { stand, melden, noetig = [] }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
-  const zeilen = [testPrompt(phase, auftrag), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""];
+  const zeilen = [testPrompt(phase, auftrag, root), "## Überlebende Mutanten", "", aufgabe, "", liste(ueberlebende), ""];
   const begruendet = noetig.length > 0 ? ["Der Bau-Agent hält diese Zeilen für nötig:", liste(noetig.map(({ mutant, grund }) => `${mutant}, weil ${grund}`)), ""] : [];
   return [...zeilen, ...begruendet, ...(melden ? MELDEN : [])].join("\n");
 }
