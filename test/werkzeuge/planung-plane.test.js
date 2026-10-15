@@ -526,7 +526,7 @@ test("plane: der Erkunder bekommt das Gerüst und die Namen aus dem Wenn", { tim
   const erkundung = aufrufe(lauf, "erkunder", "## Erkundung").find(({ eingabe }) => eingabe.includes("#### S1 ("));
   const [, geruest] = erkundung.eingabe.split("### Gerüst deines Berichts");
   for (const nummer of GRUPPEN[0].nummern) assert.ok(geruest.includes(`"${nummer}": {`), geruest);
-  assert.ok(geruest.includes('"vorbild": "<AUSFUELLEN>"'), geruest);
+  assert.ok(geruest.includes('"eingangImTest": "<AUSFUELLEN>"'), geruest);
   const [, namen] = erkundung.eingabe.split("### Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen");
   assert.ok(namen.includes("- S1: `POST /api/self-service/private-number`\n"), namen);
   assert.ok(namen.includes("- T2: `POST /api/self-service/private-number`\n"), namen);
@@ -876,13 +876,13 @@ test("plane: „Pitch ändern“ geht einmal an den Planer zurück und endet dan
 });
 
 test("plane: planung.json enthält Ausweg, falsche Angabe, zurückgewiesenen Befund mit beiden Texten und Altfunktion-Umbau je Datei", { timeout: LAUF_FRIST_MS }, (context) => {
-  const ausweg = "nicht gefunden, weil keine Datei den Stil vorgibt";
+  const ausweg = "nicht gefunden, weil kein Test diesen Weg prüft";
   const falsch = { nummer: "S1", datei: ROUTE, grund: "die Route speichert nichts selbst", fundstelle: `${ROUTE}:10` };
   const altfunktionen = [{ datei: HINWEIS, funktion: "setzeHinweis", von: 6, bis: 9 }];
   const prueferText = "a2 braucht den Code aus a1";
   const antwort = `trifft nicht zu, weil a2 nur die Bestätigung prüft (${ROUTE}:5)`;
   const lauf = plane(context, {
-    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern, { S5: { vorbild: ausweg } })],
+    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern, { S5: { tests: ausweg } })],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }) })],
     "pruefer-planung|## Prüfung": jePruefer({ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": prueferText } }),
     "planer|## Befunde": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }), antworten: [{ schluessel: "allein-gruen:a2", antwort }] })],
@@ -894,7 +894,7 @@ test("plane: planung.json enthält Ausweg, falsche Angabe, zurückgewiesenen Bef
   assert.deepEqual(beleg.befunde.zurueckgewiesen, [{ schluessel: "allein-gruen:a2", befund: prueferText, antwort }]);
   assert.deepEqual(beleg.arten, { funktionen: 3, umbauten: 0, altfunktionUmbauten: 1, altfunktionUmbautenJeDatei: { [HINWEIS]: 1 } });
   assert.ok(gruppenPruefung(lauf, "S1").eingabe.includes("- falsche-angabe:a1:S1:src/routes/api-onboard.js"));
-  assert.ok(gruppenPruefung(lauf, "S5").eingabe.includes("- ausweg:S5:vorbild"));
+  assert.ok(gruppenPruefung(lauf, "S5").eingabe.includes("- ausweg:S5:tests"));
 });
 
 test("plane: die Fortsetzungen nennen Quote und Urteil aus einem festen Protokoll", (context) => {

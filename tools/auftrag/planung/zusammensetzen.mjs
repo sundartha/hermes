@@ -9,7 +9,7 @@ import { nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
 const PHASE = "phase.json";
-const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme", "erwarteterFehler"];
+const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "abnahme", "erwarteterFehler"];
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
 const JSON_EINRUECKUNG = 2;

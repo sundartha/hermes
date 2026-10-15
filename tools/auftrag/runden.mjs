@@ -18,7 +18,7 @@ const MAX_RUNDEN = 2;
 const LABEL = "entscheidung";
 const JSON_OBJEKT = /\{[\s\S]*\}/;
 const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
-const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme"];
+const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "abnahme"];
 const CODEBLOCK = "```";
 const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
 const AUSWEG_SCHLUSS =
@@ -66,7 +66,7 @@ function planPrompt(phase, auftrag, satz) {
       "Mach aus der fehlenden Voraussetzung genau einen Umbau-Auftrag, der sie herstellt und das Verhalten nicht ändert.",
       `Antworte nur mit einem JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf.`,
       "ziel ist eine Zeile mit höchstens 72 Zeichen, abnahme ein bestehender Test, der vor und nach dem Umbau grün ist, entwurf der Entwurfsabschnitt für den Bereich in Klartext.",
-      "bereich, vorbild und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
+      "bereich und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
       `Fehlt nur eine Änderung an bestehenden Tests oder Testhilfen, liegt bereich unter test/ und erwarteteDateien nennt nur Testdateien; das Skript legt daraus einen ${TESTUMBAU} an, den der Test-Agent ausführt, ohne Produktcode zu ändern.`,
     ]),
   ].join("\n");

@@ -159,7 +159,7 @@ test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftr
 });
 
 const ALTFUNKTION_FEHLT = `Voraussetzung fehlt: Altfunktionen aufräumen: ${ZAHL}:alt`;
-const ALTFUNKTION_UMBAU = { ziel: "Räume die Altfunktion alt auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
+const ALTFUNKTION_UMBAU = { ziel: "Räume die Altfunktion alt auf", bereich: ZAHL, erwarteteDateien: [ZAHL], abnahme: "test/zahl.test.js" };
 
 function raeumtAltfunktionAuf(context, planAntwort) {
   const bau = [

@@ -44,7 +44,6 @@ function angaben(ueberschrieben = {}) {
     weg: [EINGANGS_STELLE, WIRKUNGS_STELLE],
     aenderungen: [AENDERUNG],
     tests: ["test/vorhanden.test.js"],
-    vorbild: "src/logik.js",
     schema: { aenderung: false, fundstelle: "src/logik.js Zeile 1" },
     codeowners: [],
     ownerEntscheidung: { fundstelle: ".github/CODEOWNERS", text: "keine geschützte Datei betroffen" },
@@ -76,7 +75,6 @@ test("ein vollständiger Bericht hat keine Befunde und keine Annahmen", (context
 test("alle Auswege „nicht gefunden, weil …“ sind grün und stehen in den Annahmen", (context) => {
   const { befunde, annahmen } = einzeln(context, {
     tests: "nicht gefunden, weil es keinen Test gibt",
-    vorbild: "nicht gefunden, weil es nichts Ähnliches gibt",
     weg: [EINGANGS_STELLE, { rolle: "wirkung", ausweg: "nicht gefunden, weil die Wirkung außerhalb liegt" }],
     aenderungen: "keine Änderung, weil nur gelesen wird",
     eingangImTest: "nicht erreichbar, weil der Eingang nur im Betrieb läuft",
@@ -87,7 +85,6 @@ test("alle Auswege „nicht gefunden, weil …“ sind grün und stehen in den A
     { nummer: "S1", angabe: "weg wirkung", text: "nicht gefunden, weil die Wirkung außerhalb liegt" },
     { nummer: "S1", angabe: "aenderungen", text: "keine Änderung, weil nur gelesen wird" },
     { nummer: "S1", angabe: "tests", text: "nicht gefunden, weil es keinen Test gibt" },
-    { nummer: "S1", angabe: "vorbild", text: "nicht gefunden, weil es nichts Ähnliches gibt" },
     { nummer: "S1", angabe: "ownerEntscheidung", text: "keine, weil keine geschützte Datei betroffen ist" },
     { nummer: "S1", angabe: "eingangImTest", text: "nicht erreichbar, weil der Eingang nur im Betrieb läuft" },
   ]);
@@ -165,14 +162,14 @@ test("eine B-Nummer darf ohne Änderungsstelle bleiben", (context) => {
 });
 
 test("eine fehlende Angabe ist ein Befund, auch wenn nur das Feld fehlt", (context) => {
-  const { vorbild, ...ohneVorbild } = angaben();
-  assert.equal(vorbild, "src/logik.js");
-  const { befunde } = lauf(context, { S1: ohneVorbild });
-  assert.deepEqual(befunde, ["S1: Angabe vorbild fehlt"]);
+  const { schema, ...ohneSchema } = angaben();
+  assert.equal(schema.aenderung, false);
+  const { befunde } = lauf(context, { S1: ohneSchema });
+  assert.deepEqual(befunde, ["S1: Angabe schema fehlt"]);
 });
 
 test("ein leeres Feld ist kein Ausweg", (context) => {
-  const { befunde, annahmen } = einzeln(context, { vorbild: "  " });
+  const { befunde, annahmen } = einzeln(context, { eingangImTest: "  " });
   assert.equal(befunde.length, 1);
   assert.deepEqual(annahmen, []);
 });
@@ -246,10 +243,9 @@ test("ein fehlender Test bleibt ein Befund mit seinem Namen", (context) => {
   genau(einzeln(context, { tests: ["test/fehlt.test.js"] }).befunde, "Test test/fehlt.test.js fehlt");
 });
 
-test("ein Vorbild als Punkt, Ordner oder fehlende Datei ist ein Befund", (context) => {
-  genau(einzeln(context, { vorbild: "." }).befunde, "muss ein relativer Pfad im Repo sein");
-  genau(einzeln(context, { vorbild: "src" }).befunde, "src ist keine Datei");
-  genau(einzeln(context, { vorbild: "src/fehlt.js" }).befunde, "Datei src/fehlt.js fehlt");
+test("ein Vorbild ist keine Angabe mehr, auch ein altes Vorbild auf eine fehlende Datei ergibt keinen Befund", (context) => {
+  const { befunde, annahmen } = einzeln(context, { vorbild: "src/fehlt.js" });
+  assert.deepEqual([befunde, annahmen], [[], []]);
 });
 
 test("unsaubere Pfade in einer Weg-Stelle sind ein Befund", (context) => {
@@ -397,7 +393,7 @@ test("das Gerüst nennt jede Nummer und jede Pflichtangabe", (context) => {
     assert.equal(eintrag.aenderungen[0].neueZeilen, PLATZHALTER);
   }
   const { befunde } = lauf(context, geruest.nummern, { gruppe: ["S1", "T1"] });
-  for (const teil of ["S1: vorbild enthält noch den Platzhalter <AUSFUELLEN>", "T1: weg[1].funktion enthält noch den Platzhalter <AUSFUELLEN>", "T1: schema.fundstelle enthält noch den Platzhalter <AUSFUELLEN>"]) assert.ok(befunde.includes(teil), `${teil} fehlt in\n${befunde.join("\n")}`);
+  for (const teil of ["S1: tests[0] enthält noch den Platzhalter <AUSFUELLEN>", "T1: weg[1].funktion enthält noch den Platzhalter <AUSFUELLEN>", "T1: schema.fundstelle enthält noch den Platzhalter <AUSFUELLEN>"]) assert.ok(befunde.includes(teil), `${teil} fehlt in\n${befunde.join("\n")}`);
 });
 
 test("ein stehen gebliebener Platzhalter ist ein Befund", (context) => {

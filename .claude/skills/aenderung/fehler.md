@@ -15,7 +15,6 @@ Ablage: `plaene/F-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste f
       "ziel": "<was nach dem Fix richtig ist, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem der Fix liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
-      "vorbild": "<bestehende Datei, deren Stil der Fix übernimmt>",
       "abnahme": "test/<name>.test.js",
       "erwarteterFehler": "<Meldung, mit der der Abnahmetest heute aus dem gemeldeten Grund rot wird, eine Zeile>",
       "wasDarfNiePassieren": ["<das Verhalten, das gleich bleiben muss, als prüfbarer Satz>"]
