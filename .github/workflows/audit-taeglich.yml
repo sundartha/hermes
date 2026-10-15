@@ -2,7 +2,7 @@ name: Audit täglich
 
 on:
   schedule:
-    - cron: "17 4 * * *"
+    - cron: "22 5 * * *"
   push:
     branches: [master]
   workflow_dispatch:

@@ -2,8 +2,8 @@ name: Wochenbericht
 
 on:
   schedule:
-    - cron: "23 5 * * 1"
-    - cron: "23 5 * * 0,2-6"
+    - cron: "28 6 * * 1"
+    - cron: "28 6 * * 0,2-6"
   push:
     branches: [master]
     paths:
@@ -81,13 +81,13 @@ jobs:
           node-version: 22
 
       - name: Entscheidungen auswerten und geplante Läufe prüfen
-        if: github.event_name == 'schedule' && github.event.schedule != '23 5 * * 1'
+        if: github.event_name == 'schedule' && github.event.schedule != '28 6 * * 1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/wochenbericht.mjs --auswerten --alarme
 
       - name: Wochenbericht anlegen
-        if: github.event_name != 'schedule' || github.event.schedule == '23 5 * * 1'
+        if: github.event_name != 'schedule' || github.event.schedule == '28 6 * * 1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/wochenbericht.mjs --auswerten --alarme --bericht
