@@ -61,7 +61,6 @@ export function reparaturPhase(befund, { pr }) {
     ziel: `Behebe ${befund.id || "BLOCKER"} in ${befund.datei}`.slice(0, MAX_ZIEL),
     bereich: befund.datei,
     erwarteteDateien: [befund.datei],
-    vorbild: befund.datei,
     abnahme: REPRODUKTION,
     erwarteterFehler: "ERR_ASSERTION",
     wasDarfNiePassieren: [],

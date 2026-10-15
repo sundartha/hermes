@@ -15,7 +15,6 @@ Ablage: `plaene/P-<Nummer>-<kurzname>/phase.json`, im selben Ordner wie Pitch, D
       "ziel": "<was sich ändert, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
-      "vorbild": "<bestehende Datei, deren Stil die Änderung übernimmt>",
       "abnahme": "test/<bereich aus tools/bereiche.json>/<name>.test.js",
       "erwarteterFehler": "<kurzes Stück einer Zeile, mit der der Abnahmetest heute rot wird>",
       "wasDarfNiePassieren": ["<prüfbarer Satz, der in keinem Szenario steht>"],
@@ -31,7 +30,6 @@ Ablage: `plaene/P-<Nummer>-<kurzname>/phase.json`, im selben Ordner wie Pitch, D
       "ziel": "<was sich am Aufbau ändert, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>"],
-      "vorbild": "<bestehende Datei, deren Stil die Änderung übernimmt>",
       "abnahme": "<bestehender Test, der die Stelle prüft und grün bleibt>",
       "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
       "abhaengigVon": []

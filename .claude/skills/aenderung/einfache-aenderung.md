@@ -15,7 +15,6 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste f
       "ziel": "<was sich ändert, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
-      "vorbild": "<bestehende Datei, deren Stil die Änderung übernimmt>",
       "abnahme": "test/<name>.test.js",
       "erwarteterFehler": "<nur bei funktion: Meldung, mit der der Abnahmetest heute rot wird, eine Zeile>",
       "wasDarfNiePassieren": ["<das Verhalten, das gleich bleiben muss, als prüfbarer Satz>"]

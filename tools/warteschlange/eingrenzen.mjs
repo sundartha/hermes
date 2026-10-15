@@ -120,7 +120,6 @@ function phaseFuer({ pr, datei, herkunft }, issue) {
         erwarteteDateien: herkunft.dateien.filter(
           (pfad) => imBereich(bereich, pfad) || istTestdatei(pfad),
         ),
-        vorbild: datei,
         abnahme: datei,
         erwarteterFehler: "ERR_ASSERTION",
         wasDarfNiePassieren: NIE,

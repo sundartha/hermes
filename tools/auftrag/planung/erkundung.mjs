@@ -7,7 +7,7 @@ import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from ".
 
 export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
 const PFLICHT_ROLLEN = ["eingang", "wirkung"];
-export const ANGABEN = ["weg", "aenderungen", "tests", "vorbild", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
+export const ANGABEN = ["weg", "aenderungen", "tests", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
 const NICHT_GEFUNDEN = "nicht gefunden";
 const WEITERE_AUSWEGE = { aenderungen: "keine Änderung", ownerEntscheidung: "keine", eingangImTest: "nicht erreichbar" };
 const AUSWEG = /^(nicht gefunden|keine Änderung|keine|nicht erreichbar), weil(.*)$/su;
@@ -155,7 +155,6 @@ function schemaBefunde(ort, schema) {
 
 function textBefunde(ort, feld, kontext) {
   const wert = kontext.angaben[feld];
-  if (feld === "vorbild" && !AUSWEG.test(wert)) return [dateiBefund(ort, { datei: wert }, kontext)].filter(Boolean);
   if (feld === "eingangImTest" && wert === ERREICHBAR) return [];
   return [auswegBefund({ ort, feld }, wert, kontext)].filter(Boolean);
 }
@@ -232,7 +231,6 @@ function geruestAngaben() {
     weg: [geruestStelle("eingang"), geruestStelle("wirkung")],
     aenderungen: [{ datei: PLATZHALTER, funktion: PLATZHALTER, von: PLATZHALTER, bis: PLATZHALTER, neueZeilen: PLATZHALTER }],
     tests: [PLATZHALTER],
-    vorbild: PLATZHALTER,
     schema: { aenderung: PLATZHALTER, fundstelle: PLATZHALTER },
     codeowners: [PLATZHALTER],
     ownerEntscheidung: PLATZHALTER,
