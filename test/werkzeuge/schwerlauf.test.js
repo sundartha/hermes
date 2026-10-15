@@ -7,16 +7,25 @@ import { test } from "node:test";
 import { once } from "node:events";
 import { pathToFileURL } from "node:url";
 
-import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
+import {
+  PRE_PUSH_HOOK,
+  REPO_ROOT,
+  isolatedEnvironment,
+  passingTest,
+  probeDirectory,
+  probeRepository,
+} from "./probe-repo.js";
 import { echtWarten } from "../echt-warten.js";
 
 const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
 const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
 const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
 const FRIST = { timeout: 30_000 };
-const ARBEIT_MS = 2000;
 const PRUEFABSTAND_MS = 100;
 const PRUEFUNGEN_BIS_AUFGABE = 50;
+const WARTEZEIT_AUF_SPERRE_MS = 3_600_000;
+const LAUFZEIT_NACH_FREIGABE_MS = 2000;
+const INNERE_FRIST_MS = 10_000;
 const PERL = "/usr/bin/perl";
 const NUR_EIGENTUEMER = 0o600;
 const RECHTE_BITS = 0o777;
@@ -28,8 +37,8 @@ function umgebung(context) {
   return env;
 }
 
-function starte(args, { env, cwd = REPO_ROOT }) {
-  const kind = spawn(process.execPath, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+function starte(args, { env, cwd = REPO_ROOT, stdin = "ignore" }) {
+  const kind = spawn(process.execPath, args, { cwd, env, stdio: [stdin, "pipe", "pipe"] });
   const lauf = { kind, stdout: "", stderr: "", ende: once(kind, "exit") };
   kind.stdout.setEncoding("utf8").on("data", (teil) => (lauf.stdout += teil));
   kind.stderr.setEncoding("utf8").on("data", (teil) => (lauf.stderr += teil));
@@ -63,18 +72,43 @@ setInterval(() => {}, 1000);`;
 }
 
 function arbeit(name) {
-  return `const beginn = Date.now(); setTimeout(() => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })), ${ARBEIT_MS});`;
+  return `const beginn = Date.now(); console.log("begonnen"); process.stdin.resume().on("end", () => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })));`;
+}
+
+function starteArbeit(context, name, env) {
+  const lauf = starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit(name)], { env, stdin: "pipe" });
+  lauf.begonnen = zeile(lauf.kind.stdout, /^begonnen$/).then(() => "begonnen");
+  lauf.wartend = zeile(lauf.kind.stderr, WARTET).then(() => "wartet");
+  context.after(() => {
+    lauf.kind.stdin.destroy();
+    lauf.kind.kill("SIGKILL");
+  });
+  return lauf;
+}
+
+function zeitenVon(lauf) {
+  const zeilen = lauf.stdout.trim().split("\n");
+  return JSON.parse(zeilen.at(-1));
+}
+
+async function nacheinander(laeufe) {
+  const erster = await Promise.race(laeufe.map((lauf) => lauf.begonnen.then(() => lauf)));
+  const zweiter = laeufe.find((lauf) => lauf !== erster);
+  const zuerst = await Promise.race([zweiter.wartend, zweiter.begonnen, zweiter.ende.then(() => "geendet")]);
+  assert.equal(zuerst, "wartet", zweiter.stdout + zweiter.stderr);
+  erster.kind.stdin.end();
+  await zweiter.begonnen;
+  zweiter.kind.stdin.end();
+  await Promise.all(laeufe.map(({ ende }) => ende));
+  assert.ok(zeitenVon(erster).ende <= zeitenVon(zweiter).beginn, JSON.stringify([erster, zweiter].map(zeitenVon)));
+  return { erster, zweiter };
 }
 
 test("zwei gleichzeitig gestartete schwere Läufe laufen nacheinander, der wartende nennt Halter und Beginn", FRIST, async (context) => {
   const env = umgebung(context);
-  const laeufe = ["A", "B"].map((name) => starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit(name)], { env }));
-  await Promise.all(laeufe.map(({ ende }) => ende));
+  const laeufe = ["A", "B"].map((name) => starteArbeit(context, name, env));
+  const { erster, zweiter } = await nacheinander(laeufe);
 
-  const zeiten = laeufe.map(({ stdout }) => JSON.parse(stdout)).sort((a, b) => a.beginn - b.beginn);
-  const erster = laeufe.find(({ stdout }) => JSON.parse(stdout).name === zeiten[0].name);
-  const zweiter = laeufe.find((lauf) => lauf !== erster);
-  assert.ok(zeiten[0].ende <= zeiten[1].beginn, JSON.stringify(zeiten));
   assert.equal(erster.stderr, "");
   assert.match(zweiter.stderr, WARTET);
   assert.match(zweiter.stderr, new RegExp(`gehalten von PID ${erster.kind.pid}, .*seit \\d{4}-\\d\\d-\\d\\dT`));
@@ -136,13 +170,12 @@ test("der Schlüssel eines beendeten Halters öffnet die Sperre nicht mehr", FRI
   gehalten.kind.kill("SIGKILL");
   await gehalten.ende;
   const laeufe = [
-    starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit("alt")], { env: { ...env, SCHWERLAUF_HALTER: schluessel } }),
-    starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit("neu")], { env }),
+    starteArbeit(context, "alt", { ...env, SCHWERLAUF_HALTER: schluessel }),
+    starteArbeit(context, "neu", env),
   ];
-  await Promise.all(laeufe.map(({ ende }) => ende));
+  await nacheinander(laeufe);
 
-  const zeiten = laeufe.map(({ stdout }) => JSON.parse(stdout)).sort((a, b) => a.beginn - b.beginn);
-  assert.ok(zeiten[0].ende <= zeiten[1].beginn, JSON.stringify(zeiten));
+  assert.deepEqual(laeufe.map(({ kind }) => kind.exitCode), [0, 0]);
 });
 
 test("ein fremder Halter-Schlüssel öffnet die Sperre nicht", FRIST, async (context) => {
@@ -262,4 +295,108 @@ test("die Halterdatei kann nur der eigene Nutzer lesen und schreiben", FRIST, as
   await halter(context, env);
 
   assert.equal(statSync(`${env.SCHWERLAUF_SPERRDATEI}.json`).mode & RECHTE_BITS, NUR_EIGENTUEMER);
+});
+
+async function wartetAufSperre(context, [skript, ...args], dateien = {}) {
+  const env = umgebung(context);
+  await halter(context, env);
+  const lauf = starte([join(REPO_ROOT, skript), ...args], { env, cwd: probeDirectory(context, dateien) });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await wartet(lauf);
+
+  assert.equal(lauf.kind.exitCode, null);
+  assert.match(lauf.stderr, /gehalten von PID \d+, Halter im Test, /);
+}
+
+test("der Prüfleiter vor dem Push wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["tools/pruefleiter.mjs", "--vor-push"]));
+
+test("die Mutationsprüfung wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["tools/mutationspruefung.mjs", "--basis", "HEAD"]));
+
+test("die Testwirkung wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["tools/testwirkung.mjs", "--basis", "HEAD"]));
+
+test("tests-ausmisten lokal wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["tools/tests-ausmisten.mjs", "lokal", "--bereich", "probe", "--master", "HEAD"]));
+
+test("ein Testlauf über alle Testdateien wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["test/testbaenke-run.mjs", "regression"]));
+
+test("ein Testlauf über ein Dateimuster wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["test/testbaenke-run.mjs", "regression", "test/werkzeuge/**/*.test.js"]));
+
+test("ein Testlauf über einen Ordner wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
+  wartetAufSperre(context, ["test/testbaenke-run.mjs", "regression", "test"], { "test/probe.test.js": passingTest("ordner") }));
+
+test("ein Testlauf mit einzelnen Testdateien wartet nicht auf die Sperre", FRIST, async (context) => {
+  const env = umgebung(context);
+  await halter(context, env);
+  const probe = probeDirectory(context, { "test/probe.test.js": passingTest("einzeln") });
+  const lauf = starte([join(REPO_ROOT, "test/testbaenke-run.mjs"), "regression", "test/probe.test.js"], { env, cwd: probe });
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, 0, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, WARTET);
+});
+
+test("ein schwerer Lauf, den ein Test startet, wartet nicht auf einen echten schweren Lauf", FRIST, async (context) => {
+  const env = umgebung(context);
+  await halter(context, env);
+  const innen = [
+    'import assert from "node:assert/strict";',
+    'import { spawnSync } from "node:child_process";',
+    'import { test } from "node:test";',
+    'test("startet einen schweren Lauf", () => {',
+    `  const lauf = spawnSync(${JSON.stringify(process.execPath)}, [${JSON.stringify(SCHWERLAUF)}, "--", ${JSON.stringify(process.execPath)}, "-e", "console.log('lief')"], { encoding: "utf8", timeout: ${INNERE_FRIST_MS} });`,
+    '  assert.equal(lauf.stdout, "lief\\n", lauf.stderr);',
+    "});",
+    "",
+  ].join("\n");
+  const probe = probeDirectory(context, { "test/innen.test.js": innen });
+  const lauf = starte([join(REPO_ROOT, "test/testbaenke-run.mjs"), "regression", "test/innen.test.js"], { env, cwd: probe });
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, 0, lauf.stdout + lauf.stderr);
+});
+
+test("die Laufzeit eines wartenden Testlaufs zählt die Wartezeit auf die Sperre nicht mit", async () => {
+  const { measuredAfterLocks } = await import("../testbaenke-run.mjs");
+  let jetzt = 0;
+  const uhr = { now: () => jetzt };
+  const { elapsedMs } = await measuredAfterLocks(
+    async () => {
+      jetzt += WARTEZEIT_AUF_SPERRE_MS;
+      return {};
+    },
+    async () => {
+      jetzt += LAUFZEIT_NACH_FREIGABE_MS;
+      return { code: 0 };
+    },
+    uhr,
+  );
+
+  assert.equal(elapsedMs, LAUFZEIT_NACH_FREIGABE_MS);
+});
+
+test("der Pre-Push-Hook gibt keine umgelenkte Sperrdatei an den Prüfleiter weiter", FRIST, async (context) => {
+  const probe = probeRepository(context, {
+    "package.json": JSON.stringify({
+      name: "pre-push-sperre",
+      private: true,
+      scripts: { pruefleiter: "node zeige.mjs" },
+    }),
+    "zeige.mjs": "console.log(JSON.stringify([process.env.SCHWERLAUF_SPERRDATEI ?? null]));\n",
+  });
+  const hook = spawn("sh", [PRE_PUSH_HOOK], {
+    cwd: probe,
+    env: { ...umgebung(context), GIT_DIR: join(probe, ".git") },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  let ausgabe = "";
+  hook.stdout.setEncoding("utf8").on("data", (teil) => (ausgabe += teil));
+  const [code] = await once(hook, "exit");
+
+  assert.equal(code, 0, ausgabe);
+  assert.equal(JSON.parse(ausgabe)[0], null);
 });

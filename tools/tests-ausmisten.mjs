@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
 
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
+
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = [
@@ -23,6 +25,8 @@ const PFLICHT = {
 async function befehle() {
   return import("./tests-ausmisten/befehle.mjs");
 }
+
+const MESSENDE_BEFEHLE = new Set(["basis", "branch", "lokal"]);
 
 const BEFEHLE = new Map(
   Object.entries({
@@ -71,6 +75,7 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ROT;
   }
+  if (MESSENDE_BEFEHLE.has(name)) await nimmSperreAuchFuerKindprozesse(`tests-ausmisten ${name}`);
   const ausgang = await BEFEHLE.get(name)(values);
   return typeof ausgang === "number" ? ausgang : EXIT_GRUEN;
 }

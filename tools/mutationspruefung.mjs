@@ -10,6 +10,7 @@ import { cruise } from "dependency-cruiser";
 import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
@@ -544,6 +545,7 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
+  await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis}`);
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
