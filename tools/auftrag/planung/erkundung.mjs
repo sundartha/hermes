@@ -17,6 +17,7 @@ const MIT_AENDERUNG = /^[ST]/;
 const WENN = /^\s*Wenn\s/;
 const IN_BACKTICKS = /`([^`]+)`/g;
 const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
+export const PLATZHALTER = "<AUSFUELLEN>";
 
 export function istObjekt(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -171,7 +172,7 @@ function angabeBefunde(ort, feld, kontext) {
   return istText(wert.text) ? fundstelleBefunde(ort, feld, wert) : [`${ort}: ownerEntscheidung braucht den Text der Entscheidung`];
 }
 
-function namenImWenn(text) {
+export function namenImWenn(text) {
   const wenn = (text ?? "").split("\n").filter((zeile) => WENN.test(zeile));
   return wenn.flatMap((zeile) => [...zeile.matchAll(IN_BACKTICKS)].map(([, name]) => name));
 }
@@ -207,7 +208,41 @@ export function erkundungBefunde(bericht, { gruppe, soll, root }) {
     else if (gruppe.includes(nummer)) befunde.push(...nummerBefunde(nummer, angaben, kontext));
     else befunde.push(`${nummer}: gehört nicht zur Gruppe ${gruppe.join(", ")}`);
   }
+  for (const nummer of gruppe.filter((eigene) => Object.hasOwn(nummern, eigene))) befunde.push(...platzhalterBefunde(nummer, nummern[nummer]));
   return { befunde, annahmen };
+}
+
+function platzhalterFelder(wert, feld) {
+  if (typeof wert === "string") return wert.includes(PLATZHALTER) ? [feld] : [];
+  if (Array.isArray(wert)) return wert.flatMap((eintrag, stelle) => platzhalterFelder(eintrag, `${feld}[${stelle}]`));
+  return istObjekt(wert) ? Object.entries(wert).flatMap(([name, inhalt]) => platzhalterFelder(inhalt, `${feld}.${name}`)) : [];
+}
+
+function platzhalterBefunde(nummer, angaben) {
+  const felder = istObjekt(angaben) ? Object.entries(angaben).flatMap(([feld, wert]) => platzhalterFelder(wert, feld)) : [];
+  return felder.map((feld) => `${nummer}: ${feld} enthält noch den Platzhalter ${PLATZHALTER}`);
+}
+
+function geruestStelle(rolle) {
+  return { rolle, datei: PLATZHALTER, funktion: PLATZHALTER, von: PLATZHALTER, bis: PLATZHALTER };
+}
+
+function geruestAngaben() {
+  return {
+    weg: [geruestStelle("eingang"), geruestStelle("wirkung")],
+    aenderungen: [{ datei: PLATZHALTER, funktion: PLATZHALTER, von: PLATZHALTER, bis: PLATZHALTER, neueZeilen: PLATZHALTER }],
+    tests: [PLATZHALTER],
+    vorbild: PLATZHALTER,
+    schema: { aenderung: PLATZHALTER, fundstelle: PLATZHALTER },
+    codeowners: [PLATZHALTER],
+    ownerEntscheidung: PLATZHALTER,
+    eingangImTest: PLATZHALTER,
+    widersprueche: [PLATZHALTER],
+  };
+}
+
+export function berichtsGeruest(nummern) {
+  return { nummern: Object.fromEntries(nummern.map((nummer) => [nummer, geruestAngaben()])), hinweise: [] };
 }
 
 export function aenderungsStellen(berichte) {

@@ -17,7 +17,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
+import { berichtsGeruest, erkundungBefunde, istObjekt, istText, namenImWenn } from "./erkundung.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
@@ -207,8 +207,16 @@ class Planung {
       abschnitt("Eingang laut Design Doc", punkte(gruppen.map((gruppe) => gruppe.eingang))),
       abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften)),
       abschnitt("Fragen des Planers", punkte(fragen)),
+      abschnitt("Gerüst deines Berichts", json(berichtsGeruest(nummern))),
+      abschnitt("Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen", punkte(nummern.map((nummer) => this.namenZeile(nummer)))),
       ...ERKUNDER_KONTEXT.map((pfad) => abschnitt(pfad, dateiText(this.root, pfad))),
     ]);
+  }
+
+  namenZeile(nummer) {
+    const szenario = this.soll.get(nummer);
+    const namen = namenImWenn(szenario?.text).map((name) => `\`${name}\``);
+    return `${nummer}: ${namen.join(", ") || "keine"}`;
   }
 
   pruefeBericht(antwort, nummern) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { erkundungBefunde } from "../../tools/auftrag/planung/erkundung.mjs";
+import { ANGABEN, PLATZHALTER, berichtsGeruest, erkundungBefunde } from "../../tools/auftrag/planung/erkundung.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const EINGANG = [
@@ -385,4 +385,23 @@ test("weg, schema, codeowners und widersprueche als Ausweg sind grün und stehen
     { nummer: "S1", angabe: "codeowners", text: "nicht gefunden, weil es keine Datei gibt" },
     { nummer: "S1", angabe: "widersprueche", text: "nicht gefunden, weil nichts widerspricht" },
   ]);
+});
+
+test("das Gerüst nennt jede Nummer und jede Pflichtangabe", (context) => {
+  const geruest = berichtsGeruest(["S1", "T1"]);
+  assert.deepEqual(Object.keys(geruest.nummern), ["S1", "T1"]);
+  assert.deepEqual(geruest.hinweise, []);
+  for (const eintrag of Object.values(geruest.nummern)) {
+    assert.deepEqual(Object.keys(eintrag).toSorted(), ANGABEN.toSorted());
+    assert.deepEqual(eintrag.weg.map(({ rolle }) => rolle), ["eingang", "wirkung"]);
+    assert.equal(eintrag.aenderungen[0].neueZeilen, PLATZHALTER);
+  }
+  const { befunde } = lauf(context, geruest.nummern, { gruppe: ["S1", "T1"] });
+  for (const teil of ["S1: vorbild enthält noch den Platzhalter <AUSFUELLEN>", "T1: weg[1].funktion enthält noch den Platzhalter <AUSFUELLEN>", "T1: schema.fundstelle enthält noch den Platzhalter <AUSFUELLEN>"]) assert.ok(befunde.includes(teil), `${teil} fehlt in\n${befunde.join("\n")}`);
+});
+
+test("ein stehen gebliebener Platzhalter ist ein Befund", (context) => {
+  genau(einzeln(context, { vorbild: `nicht gefunden, weil ${PLATZHALTER}` }).befunde, "S1: vorbild enthält noch den Platzhalter <AUSFUELLEN>");
+  const widerspruch = { designDoc: "design.md, ## Lösung", code: `src/eingang.js:${PLATZHALTER}`, text: "Das Design Doc nennt PUT" };
+  genau(einzeln(context, { widersprueche: [widerspruch] }).befunde, "S1: widersprueche[0].code enthält noch den Platzhalter <AUSFUELLEN>");
 });
