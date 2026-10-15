@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { testPrompt } from "./agenten.mjs";
 import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
-import { UMBAU_AUSWEG, phasenBefunde } from "./format.mjs";
+import { UMBAU_AUSWEG, istTestdatei, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
@@ -78,9 +78,16 @@ export function umbauPhase(phase, auftrag, antwort) {
   return { ...phase, entwurf, auftraege: [umbau] };
 }
 
+function testumbauBefunde({ bereich }) {
+  if (typeof bereich !== "string" || !istTestdatei(bereich)) return [];
+  return [
+    `Der Bereich ${bereich} umfasst nur Tests. Ein reiner Testumbau ist ein eigener Schritt, der noch nicht gebaut ist: Umbauten führt der Bau-Agent aus, und der ändert keine Tests. Geplante Teständerungen gehören in die erwarteteDateien des Auftrags selbst.`,
+  ];
+}
+
 function planBefunde(plan, neu, root) {
   if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
-  return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
+  return neu === null ? [KEIN_VORSCHLAG] : [...testumbauBefunde(neu.auftraege[0]), ...phasenBefunde(neu, root)];
 }
 
 function veroeffentliche(issue, text, root) {

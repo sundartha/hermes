@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { funktionskartePfad } from "./format.mjs";
+import { funktionskartePfad, istTestdatei } from "./format.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
 const KRITISCH_SUFFIX = "-kritisch";
@@ -113,7 +113,8 @@ function vorbereitung({ rolle, auftrag, fortsetzung }, prompt, start) {
     "acceptEdits",
     ...VERLAUF_AUSGABE,
   ];
-  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme };
+  const erwartet = JSON.stringify((auftrag?.erwarteteDateien ?? []).filter(istTestdatei));
+  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme, HERMES_ERWARTET: erwartet };
   const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze: start.kontextGrenze, vollstaendig: start.vollstaendig });
   return { kopf: { rolle, agent, sitzung, befehl: befehl.join(" ") }, umgebung, daten };
 }

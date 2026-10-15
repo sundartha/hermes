@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute } from "node:path";
+import { env } from "node:process";
 
 import { block } from "./lib.mjs";
 import { TESTDATEI, rolle, schreibziel } from "./rolle.mjs";
@@ -24,6 +26,19 @@ function haengtNurAn(absolut, input) {
   return typeof nachher === "string" && nachher.startsWith(vorher);
 }
 
+function geplanteTests() {
+  try {
+    const liste = JSON.parse(env.HERMES_ERWARTET ?? "");
+    return Array.isArray(liste) ? liste : [];
+  } catch {
+    return [];
+  }
+}
+
+function istGeplant(relativ) {
+  return !relativ.startsWith("../") && !isAbsolute(relativ) && geplanteTests().includes(relativ);
+}
+
 function main() {
   const ziel = schreibziel();
   if (ziel === null) return;
@@ -36,10 +51,12 @@ function main() {
     ]);
   }
   if (name === "test" && !istTest) block([`Test-Agenten ändern keinen Produktcode: ${ziel.relativ}`]);
-  if (name === "test" && existsSync(ziel.absolut) && !haengtNurAn(ziel.absolut, ziel.input)) {
+  const geschuetzt = name === "test" && existsSync(ziel.absolut) && !istGeplant(ziel.relativ);
+  if (geschuetzt && !haengtNurAn(ziel.absolut, ziel.input)) {
     block([
       `An bestehende Testdateien wird nur angehängt: ${ziel.relativ}`,
       "Der bisherige Inhalt bleibt unverändert am Anfang stehen.",
+      "Bestehende Zeilen ändert der Test-Agent nur in den Testdateien, die der Auftrag in erwarteteDateien nennt.",
     ]);
   }
 }

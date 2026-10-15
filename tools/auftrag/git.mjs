@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 const NUMSTAT_FELDER = 3;
 const BINAER = "-";
-const NUL = "\0";
+export const NUL = "\0";
 const AUFTRAG_ZEILE = "^Auftrag: ";
 const RUECKNAHME_ZEILE = "^This reverts commit ";
 const ZURUECKGENOMMEN = /^This reverts commit ([0-9a-f]{40})\.$/gm;
