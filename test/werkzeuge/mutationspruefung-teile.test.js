@@ -5,11 +5,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
+import { REPO_ROOT, commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
-const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const WORKFLOW = join(REPO_ROOT, ".github/workflows/ci.yml");
-const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const URTEIL = /^(?:grün|rot): .+$/gm;
@@ -56,24 +55,22 @@ const ZWEI_DATEIEN = {
 };
 
 function pruefe(repo, ...argumente) {
-  return runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD", ...argumente]);
+  return werkzeug(repo, "HEAD", ...argumente);
 }
 
 function treffer(ausgabe, muster) {
   return [...ausgabe.matchAll(muster)].map(([gefunden, gruppe]) => gruppe ?? gefunden).sort();
 }
 
-function plane(repo) {
-  const ziel = join(repo, "..", `plan-${Date.now()}.json`);
+function plane(context, repo) {
+  const ziel = join(probeDirectory(context, {}), "plan.json");
   const lauf = pruefe(repo, "--plan", ziel);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  const plan = JSON.parse(readFileSync(ziel, "utf8"));
-  rmSync(ziel);
-  return plan;
+  return JSON.parse(readFileSync(ziel, "utf8"));
 }
 
-function messeTeile(repo, ordner) {
-  const plan = plane(repo);
+function messeTeile(context, repo, ordner) {
+  const plan = plane(context, repo);
   mkdirSync(ordner, { recursive: true });
   const laeufe = plan.teile.map((teil) =>
     pruefe(repo, "--teil", String(teil), "--teile", String(plan.anzahl), "--ergebnis", join(ordner, `mutation-teil-${teil}.json`)),
@@ -91,14 +88,12 @@ function dateienJeTeil(ordner) {
   ]);
 }
 
-function ergebnisordner(context, repo) {
-  const ordner = join(repo, "..", `teile-${Date.now()}`);
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  return ordner;
+function ergebnisordner(context) {
+  return probeDirectory(context, {});
 }
 
-function messeZweiTeile(repo, ordner) {
-  const { plan, laeufe } = messeTeile(repo, ordner);
+function messeZweiTeile(context, repo, ordner) {
+  const { plan, laeufe } = messeTeile(context, repo, ordner);
   assert.equal(plan.anzahl, 2);
   for (const lauf of laeufe) assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   return laeufe;
@@ -107,8 +102,8 @@ function messeZweiTeile(repo, ordner) {
 function zweiDateienGemessen(context) {
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, ZWEI_DATEIEN);
-  const ordner = ergebnisordner(context, repo);
-  messeTeile(repo, ordner);
+  const ordner = ergebnisordner(context);
+  messeTeile(context, repo, ordner);
   return { repo, ordner };
 }
 
@@ -117,8 +112,8 @@ test("die Teile messen zusammen genau dieselben Dateien und Mutanten wie der gan
   writeFiles(repo, ZWEI_DATEIEN);
   const ganz = pruefe(repo);
   assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
-  const ordner = ergebnisordner(context, repo);
-  messeZweiTeile(repo, ordner);
+  const ordner = ergebnisordner(context);
+  messeZweiTeile(context, repo, ordner);
   const dateien = dateienJeTeil(ordner);
   assert.deepEqual(dateien.flat().sort(), ["src/wort.js", "src/zahl.js"]);
   assert.ok(dateien.every((teil) => teil.length === 1), JSON.stringify(dateien));
@@ -146,8 +141,8 @@ test("eine Datei mit vielen erreichenden Testdateien wird nach Testdateien getei
     "test/fuellung-000.test.js": testdatei("zahl.js", 'assert.equal(modul.einordnen(0), "null");'),
     "test/zahl.test.js": testdatei("zahl.js", 'assert.equal(modul.einordnen(10), "zehn");', 'assert.equal(modul.einordnen(1), "positiv");'),
   });
-  const ordner = ergebnisordner(context, repo);
-  const laeufe = messeZweiTeile(repo, ordner);
+  const ordner = ergebnisordner(context);
+  const laeufe = messeZweiTeile(context, repo, ordner);
   assert.ok(laeufe.some((lauf) => / [1-9]\d* in diesen Testdateien nicht getötet/.test(lauf.stdout)), laeufe.map((lauf) => lauf.stdout).join("\n"));
   const urteil = pruefe(repo, "--urteil", ordner);
   assert.equal(urteil.status, 0, urteil.stdout + urteil.stderr);
@@ -160,24 +155,24 @@ test("fehlt ein Teilergebnis oder gehört es zu einem anderen Stand, bricht das 
   const fehlt = pruefe(repo, "--urteil", ordner);
   assert.equal(fehlt.status, EXIT_ABBRUCH, fehlt.stdout + fehlt.stderr);
   assert.match(fehlt.stderr, /erwartet die Teile 1, 2, gefunden 1/);
-  messeTeile(repo, ordner);
+  messeTeile(context, repo, ordner);
   writeFiles(repo, { "src/zahl.js": quelle(NULL, NEGATIV) });
   const anderer = pruefe(repo, "--urteil", ordner);
   assert.equal(anderer.status, EXIT_ABBRUCH, anderer.stdout + anderer.stderr);
   assert.match(anderer.stderr, /gehören zu einem anderen Plan/);
   writeFiles(repo, ZWEI_DATEIEN);
-  messeTeile(repo, ordner);
+  messeTeile(context, repo, ordner);
   writeFiles(repo, { "notiz.txt": "anderer Commit\n" });
   commitAll(repo, "Notiere etwas");
-  const andererCommit = runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1", "--urteil", ordner]);
+  const andererCommit = werkzeug(repo, "HEAD~1", "--urteil", ordner);
   assert.equal(andererCommit.status, EXIT_ABBRUCH, andererCommit.stdout + andererCommit.stderr);
   assert.match(andererCommit.stderr, /gehören zu einem anderen Plan/);
 });
 
 test("ohne geänderte Zeile hat der Plan nur den leeren Teil 0; mit geänderten Zeilen bricht Teil 0 ab, ebenso eine falsche Teilezahl", (context) => {
   const repo = probeRepository(context, BASIS);
-  const ordner = ergebnisordner(context, repo);
-  const leer = messeTeile(repo, ordner);
+  const ordner = ergebnisordner(context);
+  const leer = messeTeile(context, repo, ordner);
   assert.deepEqual([leer.plan.anzahl, leer.plan.teile], [0, [0]]);
   assert.equal(leer.laeufe[0].status, 0, leer.laeufe[0].stdout + leer.laeufe[0].stderr);
   const urteil = pruefe(repo, "--urteil", ordner);
