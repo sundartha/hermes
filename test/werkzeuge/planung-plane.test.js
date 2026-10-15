@@ -541,11 +541,16 @@ function offenePunkte({ eingabe }) {
   return offen.split("\n### ")[0];
 }
 
-test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrigierte Bericht erreicht den Planer, und weg bleibt in der Endprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
-  const hinweis = "S7 endet in speichereStatus";
+function wegfehlerLaufMitKorrektur(context, hinweis) {
   const korrigiert = alsJson({ nummern: Object.fromEntries(GRUPPEN[0].nummern.map((nummer) => [nummer, angaben(nummer)])), hinweise: [hinweis] });
   const lauf = plane(context, { "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, GRUEN_PRUEFLISTE], "erkunder|## Befunde": [korrigiert] });
   exit(lauf, EXIT_GRUEN);
+  return lauf;
+}
+
+test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrigierte Bericht erreicht den Planer, und weg bleibt in der Endprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const hinweis = "S7 endet in speichereStatus";
+  const lauf = wegfehlerLaufMitKorrektur(context, hinweis);
   const [rueckgabe, ...weitere] = aufrufe(lauf, "erkunder", "## Befunde");
   assert.equal(weitere.length, 0);
   assert.ok(rueckgabe.eingabe.includes(`weg:S7: der Weg endet nicht in speichereStatus (Fundstelle: ${FUNDSTELLE})`), rueckgabe.eingabe);
@@ -557,6 +562,16 @@ test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrig
   assert.equal(offenePunkte(zuschnitt).includes("Weg S7"), false);
   const zeilen = aufrufe(lauf, "pruefer-planung", "## Prüfung").flatMap(prueflisteZeilen);
   for (const nummer of GRUPPEN.flatMap((gruppe) => gruppe.nummern)) assert.ok(zeilen.includes(`weg:${nummer}`), `weg:${nummer} fehlt in der Endprüfung`);
+});
+
+test("plane: die erste Wegprüfung bekommt Design Doc und Erkundungsbericht, die nach einer Korrektur nur den korrigierten Bericht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = wegfehlerLaufMitKorrektur(context, "S7 endet in speichereStatus");
+  const [erste, zweite] = wegpruefungen(lauf, "S1").map(({ eingabe }) => eingabe);
+  const design = ["### Eingang laut Design Doc", "### Abschnitte des Design Docs"];
+  for (const teil of [...design, "### Erkundungsbericht\n", "### Zeilen deiner Prüfliste"]) assert.ok(erste.includes(teil), teil);
+  assert.equal(erste.includes("### Korrigierter Erkundungsbericht"), false, erste);
+  for (const teil of ["### Korrigierter Erkundungsbericht\n", "### Zeilen deiner Prüfliste"]) assert.ok(zweite.includes(teil), teil);
+  for (const teil of [...design, "### Erkundungsbericht\n"]) assert.equal(zweite.includes(teil), false, teil);
 });
 
 test("plane: ein Wegfehler, der bleibt, steht unter Offene Punkte und in planung.json", { timeout: LAUF_FRIST_MS }, (context) => {
