@@ -1,0 +1,7 @@
+{
+  "titel": "Untergrenze gegenüber der Basis gesenkt",
+  "dateien": {
+    "tools/basis/typabdeckung.json": ["{ \"mindestens\": 99 }"]
+  },
+  "erwartet": "mindestens ist von 100 auf 99 gesunken"
+}

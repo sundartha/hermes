@@ -1,0 +1,12 @@
+{
+  "titel": "Typabdeckung und ihre Untergrenze",
+  "pfade": ["tools/typabdeckung.mjs", "tools/basis/typabdeckung.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/typabdeckung.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "mitnehmen": ["package.json", "tsconfig.json", "tools/basis/typabdeckung.json"],
+    "befehl": ["node", "{wurzel}/tools/typabdeckung.mjs", "--basis", "HEAD~1"]
+  }
+}
