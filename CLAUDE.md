@@ -1,7 +1,6 @@
 # Hermes
 
 Autonomer Telefon-KI-Agent: Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, MCP-Server.
-Node.js (ESM), Express, kein Build-Step, kein TypeScript.
 Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth.
 Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
 
