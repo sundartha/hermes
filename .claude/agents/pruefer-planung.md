@@ -12,7 +12,7 @@ Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsber
 
 - `durchstich:a1`: `a1` führt vom echten Eingang bis zur sichtbaren Wirkung.
 - `weg:<Nummer>`: Der gemeldete Weg führt wirklich vom Eingang zur Wirkung dieser Nummer, und die Stellen passen zu ihr.
-- `umbau:<id>`: Der Umbau enthält kein neues Verhalten.
+- `umbau:<id>`: Der Umbau oder Testumbau enthält kein neues Verhalten; ein `testumbau` ändert außerdem nur Testdateien, und seine `abnahme` läuft über die umgebauten Dateien.
 - `b-nummer:<B-Nummer>`: Die Nummer steht beim Auftrag, dessen Änderung sie berühren kann.
 - `nie-saetze:<id>`: Jeder Satz in `wasDarfNiePassieren` ist eine feste Regel aus den Dokumenten und passt zu diesem Auftrag.
 - `bereichsgrund:<id>`: Der Grund verwirft Teilen und Umbau davor zu Recht.

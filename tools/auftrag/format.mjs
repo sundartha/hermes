@@ -3,10 +3,12 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 
 import { matches } from "../pruefungen-messen.mjs";
 
-export const ARTEN = ["funktion", "fehlerbehebung", "umbau"];
+export const ARTEN = ["funktion", "fehlerbehebung", "umbau", "testumbau"];
+export const TESTUMBAU = "testumbau";
 export const FUNKTIONSKARTE = "FUNKTIONSKARTE.md";
 export const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
+const UMBAU_ARTEN = new Set(["umbau", TESTUMBAU]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
 const ABNAHMETEST = /^test\/.+\.test\.[cm]?js$/;
 const TESTDATEI = /(^|\/)test\/|\.test\.[cm]?js$/;
@@ -29,6 +31,14 @@ export function brauchtRotenTest(auftrag) {
 
 export function istTestdatei(pfad) {
   return TESTDATEI.test(pfad);
+}
+
+export function istUmbau(auftrag) {
+  return UMBAU_ARTEN.has(auftrag.art);
+}
+
+export function istTestbereich(bereich) {
+  return typeof bereich === "string" && istTestdatei(bereich);
 }
 
 export function imBereich(bereich, pfad) {
@@ -88,6 +98,20 @@ function artBefunde(auftrag) {
     befunde.push(`ziel muss eine Zeile mit höchstens ${MAX_BETREFF} Zeichen sein`);
   }
   return befunde;
+}
+
+function testbereichBefunde(auftrag) {
+  const nurTests = istTestbereich(auftrag.bereich);
+  if (auftrag.art === "umbau" && nurTests) {
+    return [`bereich ${auftrag.bereich} umfasst nur Tests; ein reiner Testumbau hat art ${TESTUMBAU} und läuft beim Test-Agenten, weil der Bau-Agent keine Tests ändert`];
+  }
+  if (auftrag.art !== TESTUMBAU) return [];
+  const erwartet = Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : [];
+  const produkt = erwartet.filter((pfad) => !istTestdatei(pfad));
+  return [
+    ...(nurTests ? [] : [`ein ${TESTUMBAU} braucht einen bereich, der nur Tests umfasst, nicht ${auftrag.bereich}`]),
+    ...produkt.map((pfad) => `ein ${TESTUMBAU} ändert keinen Produktcode; erwartete Datei ${pfad} ist keine Testdatei`),
+  ];
 }
 
 function bereichBefunde(auftrag, kontext) {
@@ -167,7 +191,7 @@ function szenarienBefunde(nummern, szenarien) {
 }
 
 function nummernBefunde(auftrag) {
-  if (auftrag.art === "umbau") return umbauNummernBefunde(auftrag);
+  if (istUmbau(auftrag)) return umbauNummernBefunde(auftrag);
   const nummern = Array.isArray(auftrag.prueft) ? auftrag.prueft : [];
   if (nummern.length === 0) {
     return [`prueft muss die Nummern nennen, die der Auftrag prüft (etwa S1, B1, T1); „${UMBAU_AUSWEG}“ gilt nur für einen Umbau`];
@@ -182,6 +206,7 @@ function auftragBefunde(auftrag, kontext) {
   const befunde = [
     ...artBefunde(auftrag),
     ...bereichBefunde(auftrag, kontext),
+    ...testbereichBefunde(auftrag),
     ...vorbildBefunde(auftrag, kontext),
     ...abnahmeBefunde(auftrag, kontext),
     ...nieBefunde(auftrag),
