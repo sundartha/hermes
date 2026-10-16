@@ -10,12 +10,13 @@ const MIO = 1_000_000;
 const NACHKOMMA = 1;
 const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
 const ZITAT = "> ";
+const ZEILENENDE = /\r\n|[\n\r\u2028\u2029]/;
 const MAX_NOTIZ_ZEICHEN = 20_000;
 const LEERRAUM = /\s\S*$/;
 const ERSTE_ZUSATZNUMMER = 2;
 
 function zitierteHinweise(text) {
-  return [HINWEISE_DES_BAUS, ...text.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+  return [HINWEISE_DES_BAUS, ...text.split(ZEILENENDE).map((zeile) => `${ZITAT}${zeile}`)];
 }
 
 export function hinweiseDesBaus(agenten = []) {
