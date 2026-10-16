@@ -24,6 +24,7 @@ const GIT_GRUEN = 0;
 const GIT_OHNE_TREFFER = 1;
 export const ANTWORT_OHNE_JSON = "Antwort ohne JSON-Block";
 const OHNE = "ohne";
+const FEHLERZEILEN = 5;
 const ZERLEGUNG = /^Zerlegung passt nicht:.*$/m;
 const PITCH_AENDERN = /^Pitch ändern:.*$/m;
 const JSON_BLOCK = /```json[^\S\n]*\n([\s\S]*?)\n[^\S\n]*```/g;
@@ -203,6 +204,14 @@ export function befundNachricht(befunde) {
   return ["## Befunde", "", ...befunde.map((befund) => `- ${befund}`), ""].join("\n");
 }
 
+function meldeAbsturz(wer, lauf) {
+  if (lauf.exitCode === 0) return;
+  const zeilen = (lauf.fehlerausgabe ?? "").trim().split("\n");
+  const auszug = zeilen.slice(-FEHLERZEILEN).join("\n");
+  const meldung = `${wer.rolle} ist abgestürzt (Exit ${lauf.exitCode})`;
+  throw new Abbruch(auszug === "" ? meldung : `${meldung}:\n${auszug}`);
+}
+
 class Teilnehmer {
   constructor(rolle) {
     this.rolle = rolle;
@@ -255,9 +264,11 @@ export class Team {
   async frage(wer, nachricht) {
     const lauf = await this.sende(wer, nachricht);
     if (lauf.aktion?.art === STILLSTAND) return { art: STILLSTAND, text: lauf.aktion.grund };
+    meldeAbsturz(wer, lauf);
     const antwort = liesAntwort(lauf.volleAntwort ?? "");
     if (antwort.art !== OHNE) return antwort;
     const zweite = await this.sende(wer, this.ruecksenden(wer, [ANTWORT_OHNE_JSON]));
+    meldeAbsturz(wer, zweite);
     const gelesen = liesAntwort(zweite.volleAntwort ?? "");
     if (gelesen.art === OHNE) throw new Abbruch(`${wer.rolle} hat zweimal ohne JSON-Block geantwortet`);
     return gelesen;
