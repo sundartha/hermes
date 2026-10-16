@@ -101,7 +101,7 @@ test("Vorbau: hält der alte Test echtes altes Verhalten fest, geht die Meldung 
   assert.equal(beleg("A1-umbau"), null);
   const { text } = beleg("A1").entscheidung;
   assert.match(text, /Label verhalten-geaendert am Issue mit test\/versand\.test\.js:versendet den Code/);
-  assert.match(text, /Kein testumbau vorweg: Der Plan-Agent lieferte kein lesbares JSON-Objekt\./);
+  assert.match(text, /Kein testumbau vorweg: Der Plan-Agent sieht echtes Verhalten: Der Test hält genau den Versand ohne Gates fest\./);
   assert.equal(log.includes(UMBAU.ziel), false);
 });
 
