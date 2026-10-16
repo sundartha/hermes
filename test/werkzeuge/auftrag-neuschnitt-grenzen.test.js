@@ -6,7 +6,7 @@ import { probeDirectory } from "./probe-repo.js";
 import { ersterVersuch, EXIT_ROT, funktion, lauf, NEUSCHNITT, OHNE_FIX, ORDNER, phase, PHASENDATEI, PITCH, REPO, SCHNITT, SICHERHEIT, TEST } from "./neuschnitt-probe.js";
 
 test("ein Neuschnitt, den der Planer selbst committet, wird abgelehnt und auf den Stand vor ihm zurückgesetzt", (context) => {
-  const { befunde, git } = ersterVersuch(context, { planung: [{ ...NEUSCHNITT, commit: true }], planer: [{ ...SCHNITT, dateien: NEUSCHNITT.dateien, commit: true }] });
+  const { befunde, git } = ersterVersuch(context, { planer: [{ ...SCHNITT, dateien: NEUSCHNITT.dateien, commit: true }] });
   assert.deepEqual(befunde, ["Der Planer darf nicht committen; der Lauf setzt auf den Stand vor ihm zurück."]);
   assert.equal(git("show", `HEAD:${PHASENDATEI}`), REPO[PHASENDATEI]);
   assert.equal(git("log", "--format=%s", "-1"), "Basis\n");
@@ -14,7 +14,7 @@ test("ein Neuschnitt, den der Planer selbst committet, wird abgelehnt und auf de
 
 test("ein Planer, der Belege unter .fortschritt ändert, wird abgelehnt", (context) => {
   const beleg = { ".fortschritt/P-001-probe/a1.json": "{}" };
-  const { befunde } = ersterVersuch(context, { planung: [{ dateien: { ...NEUSCHNITT.dateien, ...beleg } }], planer: [{ ...SCHNITT, dateien: beleg }] });
+  const { befunde } = ersterVersuch(context, { planer: [{ ...SCHNITT, dateien: beleg }] });
   assert.deepEqual(befunde, ["Der Planer hat .fortschritt/ verändert."]);
 });
 
@@ -32,6 +32,6 @@ test("ohne vollständigen Plan aus einem Pitch im Repo oder nach einem Neuschnit
     const { ergebnis, datei } = lauf(context, { test: [TEST], bau: [OHNE_FIX], notiz: [{ antwort: "1. Plan prüfen" }] }, { dateien, phasendatei });
     const fall = JSON.stringify({ dateien, phasendatei });
     assert.equal(ergebnis.status, EXIT_ROT, fall + ergebnis.stdout + ergebnis.stderr);
-    assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz")], ["", "1"], fall);
+    assert.deepEqual(["planer", "erkunder", "pruefer-planung", "entwurf", "notiz"].map((rolle) => datei(`anzahl-${rolle}`)), ["", "", "", "", "1"], fall);
   }
 });

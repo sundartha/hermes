@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,6 @@ import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
-import { setzeEin } from "./einsatz.mjs";
 import { brauchtRotenTest, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, git, kopf, vormerken } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -16,7 +16,6 @@ import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 export const NEU_GESCHNITTEN = "neu geschnitten";
 export const NEUSCHNITTE_JE_AUFTRAG = 1;
 export const PLANUNG_VERSUCHE = 2;
-const PLANER = "planung";
 const PHASENDATEI = "phase.json";
 const PFLICHT = ["pitch.md", "sicherheit.md"];
 const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
@@ -26,8 +25,15 @@ const NUMMER = /^[1-9]\d*$/;
 const PITCH_AENDERN = /^Pitch ändern:\s*(\S.*)$/m;
 const EMPFEHLUNG = /^Empfehlung:\s*(\S.*)$/m;
 const PASST_NICHT = /^Zerlegung passt nicht:\s*(\S.*)$/m;
-const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const ABDECKUNG = fileURLToPath(new URL("../abdeckung-pruefen.mjs", import.meta.url));
+const NEUSCHNITT_START = fileURLToPath(new URL("./planung/neuschnitt-start.mjs", import.meta.url));
+const ABLAGE = "auftrag-neuschnitt";
+const EINGABE = "eingabe.json";
+const ERGEBNIS = "ergebnis.json";
+const ERSTER_VERSUCH = 1;
+const ZWEITER_VERSUCH = 2;
+const EXIT_TEAM_BEFUNDE = 4;
+const PHASE_MIT_BEFUNDEN = "die Phase mit dem neuen Schnitt hat Befunde";
 const CODEBLOCK = "```";
 const NUL = "\0";
 const STATUS_SPALTEN = 3;
@@ -231,11 +237,55 @@ function eingriffBefunde(root, stand) {
   ];
 }
 
+function ablageDes({ phase, auftrag, root }) {
+  const gemeinsam = resolve(root, git(["rev-parse", "--git-common-dir"], { cwd: root }).trim());
+  return join(gemeinsam, ABLAGE, phase.phase, auftrag.id);
+}
+
+function teamEingabe(kontext, ort, vorher) {
+  const { root, auftrag, plan } = kontext;
+  const { gestoppt } = vorher;
+  return {
+    root,
+    ordner: ort.ordner,
+    datei: ort.datei,
+    auftragId: auftrag.id,
+    fertig: [...plan.fertig],
+    anlass: gestoppt.kopf,
+    kopf: neuschnittPrompt(kontext, ort, vorher),
+    verlauf: gestoppt.verlauf,
+    hinweise: gestoppt.hinweise ?? [],
+  };
+}
+
+function teamErgebnis(versuch, status) {
+  try {
+    return JSON.parse(readFileSync(join(versuch, ERGEBNIS), "utf8"));
+  } catch {
+    return { exitCode: status ?? 1, grund: `Der Neuschnitt des Teams endete ohne Ergebnis (Exit ${status}).`, sitzungen: [] };
+  }
+}
+
+function planeMitTeam(kontext, ort, vorher) {
+  const ablage = ablageDes(kontext);
+  const nummer = vorher.befunde.length === 0 ? ERSTER_VERSUCH : ZWEITER_VERSUCH;
+  if (nummer === ERSTER_VERSUCH) rmSync(ablage, { recursive: true, force: true });
+  const versuch = join(ablage, `versuch-${nummer}`);
+  mkdirSync(versuch, { recursive: true });
+  writeFileSync(join(versuch, EINGABE), JSON.stringify(teamEingabe(kontext, ort, vorher)));
+  const kind = spawnSync(execPath, [NEUSCHNITT_START, versuch], { cwd: kontext.root, env, stdio: ["ignore", "inherit", "inherit"] });
+  return teamErgebnis(versuch, kind.status);
+}
+
+function teamArten(lauf) {
+  if (lauf.exitCode !== EXIT_TEAM_BEFUNDE) return [];
+  return lauf.planung?.grund === PHASE_MIT_BEFUNDEN ? [MELDUNG.NEUSCHNITT, MELDUNG.PHASENDATEI, MELDUNG.ABDECKUNG] : [MELDUNG.NEUSCHNITT];
+}
+
 function planeNeu(kontext, ort, vorher) {
-  const { phase, auftrag, root } = kontext;
+  const { root } = kontext;
   const stand = { kopf: kopf(root), belege: fingerabdruck(root) };
-  const start = { agent: PLANER, argumente: ["--settings", OHNE_HOOKS] };
-  const lauf = setzeEin({ rolle: PLANER, phase, auftrag, root }, neuschnittPrompt(kontext, ort, vorher), start);
+  const lauf = planeMitTeam(kontext, ort, vorher);
   let ergebnis = { befunde: ["Die Auswertung des Neuschnitts brach ab."] };
   try {
     const eingriff = eingriffBefunde(root, stand);
@@ -243,7 +293,8 @@ function planeNeu(kontext, ort, vorher) {
   } finally {
     if (!ergebnis.neu) zuruecksetzen(root, stand.kopf);
   }
-  return { ...ergebnis, sitzungen: lauf.sitzungen };
+  const arten = ergebnis.befunde && ergebnis.arten === undefined ? { arten: teamArten(lauf) } : {};
+  return { ...ergebnis, ...arten, planung: lauf.planung, sitzungen: lauf.sitzungen ?? [] };
 }
 
 function pitchFrage({ phase, auftrag }, gestoppt, versuch) {
@@ -289,7 +340,7 @@ function belege(kontext, gestoppt, liste) {
     ergebnis: liste.at(-1).neu ? GRUEN : ROT,
     grund: gestoppt.kopf,
     bereich: auftrag.bereich,
-    versuche: liste.map(({ frage, empfehlung, passtNicht, befunde, neu }) => ({ frage, empfehlung, passtNicht, befunde, neu: neu && nachfolger(neu, auftrag.id) })),
+    versuche: liste.map(({ frage, empfehlung, passtNicht, befunde, neu, planung }) => ({ frage, empfehlung, passtNicht, befunde, neu: neu && nachfolger(neu, auftrag.id), planung })),
     agenten,
     kosten: kostenDesAuftrags(root, agenten),
     zeit: new Date().toISOString(),
