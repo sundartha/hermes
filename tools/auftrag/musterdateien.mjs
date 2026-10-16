@@ -16,7 +16,3 @@ export function musterFuer(bereich) {
 export function testMusterFuer(abnahme) {
   return laengstesPraefix(MUSTER.test, abnahme);
 }
-
-export function alleMuster() {
-  return [...MUSTER.bau, ...MUSTER.test];
-}
