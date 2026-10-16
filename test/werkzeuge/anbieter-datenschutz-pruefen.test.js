@@ -76,7 +76,7 @@ test("eine unbekannte Option oder eine fehlende Wurzel ist ein ungueltiger Aufru
 });
 
 test("ein Anzeigename, der nur als Teil eines laengeren Wortes vorkommt, zaehlt nicht als genannt", (context) => {
-  for (const wort of ["Exakte Angaben", "Examen", "Exabyte", "Exa2", "Exaäquator", "NetExa", "CaféExa"]) {
+  for (const wort of ["Exakte Angaben", "Examen", "Exabyte", "Exa2", "Exaäquator", "NetExa", "CaféExa", "Exa\u0308quator", "Cafe\u0301Exa"]) {
     const meldung = einzigeMeldung(context, {
       adapter: [`${SPRACHMODELL_ORDNER}/anthropic.js`, `${SUCH_ORDNER}/exa-search.js`],
       anbieterImText: ["Anthropic", wort],
