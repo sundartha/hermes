@@ -69,15 +69,19 @@ function testNachrunde(kontext, ueberlebende, { stand, melden, noetig = [], zwec
   return [...zeilen, ...begruendet, ...(melden ? MELDEN : [])].join("\n");
 }
 
-function bauKorrigiert(lauf, ueberlebende) {
+function bauNachrundeGemeldet(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
   lauf.meldet(PRUEFUNG.MUTATION, "bau");
   const weg = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende), sitzung);
-  if (weg === null) return false;
+  if (weg === null) return null;
   const noetig = weg.noetig.filter(({ mutant }) => ueberlebende.includes(mutant));
   const gleichwertig = weg.gleichwertig.filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
   for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
-  return lauf.bauSchritte().slice(1).every((schritt) => schritt()) && noetig;
+  return noetig;
+}
+
+function bauSchritteOhneAgentWiederholt(lauf) {
+  return lauf.bauSchritte().slice(1).every((schritt) => schritt());
 }
 
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
@@ -102,8 +106,8 @@ function neueZeilen(lauf) {
   const pruefen = (name) => mutanten(lauf, name, ["--basis", lauf.basis]);
   let stand = pruefen(PRUEFUNG.MUTATION);
   if (stand.ende !== undefined) return stand.ende;
-  const noetig = bauKorrigiert(lauf, stand.ueberlebende);
-  if (!noetig) return false;
+  const noetig = bauNachrundeGemeldet(lauf, stand.ueberlebende);
+  if (noetig === null || !bauSchritteOhneAgentWiederholt(lauf)) return false;
   stand = pruefen(PRUEFUNG.MUTATION_NACH_BAU);
   if (stand.ende !== undefined) return stand.ende;
   if (!testNachgeholt(lauf, stand.ueberlebende, noetig)) return false;
