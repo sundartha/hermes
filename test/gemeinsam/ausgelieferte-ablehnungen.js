@@ -37,7 +37,7 @@ const GATE_CASES = Object.freeze([
   { grund: "abo", status: HTTP_FORBIDDEN, tenant: { status: "suspended" } },
   { grund: "billing_hold", status: HTTP_FORBIDDEN, tenant: { billingHold: "paused" } },
   { grund: "denylist", status: HTTP_FORBIDDEN, to: "+870123456789" },
-  { grund: "format", status: HTTP_BAD_REQUEST, to: "+4901737123456" },
+  { grund: "format", status: HTTP_BAD_REQUEST, to: "+4901737123456", ohneGrund: true },
   {
     grund: "land",
     status: HTTP_FORBIDDEN,
@@ -156,7 +156,7 @@ async function gateRejection(srv, fall, index) {
   }
   const { status, body } = await placeCallAs(srv, tenantId, fall.to ?? TARGET);
   assert.equal(status, fall.status, `${fall.grund}: Status der Ablehnung`);
-  assert.equal(body.reason ?? fall.grund, fall.grund, `${fall.grund}: Grund der Ablehnung`);
+  assert.equal(body.reason, fall.ohneGrund ? undefined : fall.grund, `${fall.grund}: Grund der Ablehnung`);
   assert.match(body.error, /\S/, `${fall.grund}: Text fehlt`);
   return body.error;
 }
