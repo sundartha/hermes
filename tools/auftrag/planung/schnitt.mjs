@@ -221,18 +221,24 @@ function dateienAusserhalb(auftrag, kontext) {
   return [...befunde, ...new Set(texte), ...ohneEigeneDatei(auftrag, stellen)];
 }
 
+function durchstichVon({ durchstich, vorhandene }) {
+  return durchstich ?? (vorhandene === undefined ? DURCHSTICH : null);
+}
+
 function durchstichBefunde(kontext) {
-  const durchstich = kontext.nachId.get(DURCHSTICH);
-  if (durchstich === undefined) return mitRegel(REGEL.durchstich, [`es gibt keinen Auftrag ${DURCHSTICH} (Durchstich)`]);
-  const befunde = durchstich.art === "funktion" ? [] : [`${DURCHSTICH} ist ${durchstich.art}, der Durchstich ist eine funktion`];
-  if (durchstich.eingang !== ERREICHT) befunde.push(`${DURCHSTICH} führt durch den echten Eingang; eingang muss „${ERREICHT}“ sein`);
+  const kennung = kontext.durchstich;
+  if (kennung === null) return [];
+  const durchstich = kontext.nachId.get(kennung);
+  if (durchstich === undefined) return mitRegel(REGEL.durchstich, [`es gibt keinen Auftrag ${kennung} (Durchstich)`]);
+  const befunde = durchstich.art === "funktion" ? [] : [`${kennung} ist ${durchstich.art}, der Durchstich ist eine funktion`];
+  if (durchstich.eingang !== ERREICHT) befunde.push(`${kennung} führt durch den echten Eingang; eingang muss „${ERREICHT}“ sein`);
   const fremd = kette(durchstich, kontext.nachId).filter((auftrag) => !istUmbau(auftrag));
-  befunde.push(...fremd.map(({ id }) => `${DURCHSTICH} hängt von ${id} ab, das ist kein Umbau`), ...dateienAusserhalb(durchstich, kontext));
+  befunde.push(...fremd.map(({ id }) => `${kennung} hängt von ${id} ab, das ist kein Umbau`), ...dateienAusserhalb(durchstich, kontext));
   return mitRegel(REGEL.durchstich, befunde);
 }
 
 function aenderungsBefunde(auftraege, kontext) {
-  const uebrige = auftraege.filter(({ id }) => id !== DURCHSTICH);
+  const uebrige = auftraege.filter(({ id }) => id !== kontext.durchstich);
   return mitRegel(REGEL.aenderungen, uebrige.flatMap((auftrag) => dateienAusserhalb(auftrag, kontext)));
 }
 
@@ -450,6 +456,7 @@ export function schnittBefunde(schnitt, eingaben) {
     ...eingaben,
     schnitt,
     vorhandene,
+    durchstich: durchstichVon(eingaben),
     nachId: new Map([...vorhandene.map(imSchnittFormat), ...auftraege].map((auftrag) => [auftrag.id, auftrag])),
     besitzer: besitzerJeNummer(auftraege),
     stellen: aenderungsStellen(eingaben.berichte),
