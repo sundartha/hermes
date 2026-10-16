@@ -13,6 +13,8 @@ const DATENSCHUTZ_DATEI = "apps/web/src/data/legal/privacy.de.json";
 const ADAPTER_ORDNER = Object.freeze(["src/llm/adapters/", "src/research/adapters/"]);
 const ADAPTER_ENDUNG = ".js";
 const TEXT_TRENNER = "\n";
+const WORT_ZEICHEN_AM_ENDE = /[\p{L}\p{N}]$/u;
+const WORT_ZEICHEN_AM_ANFANG = /^[\p{L}\p{N}]/u;
 
 const ANBIETER_ANZEIGENAMEN = new Map([
   ["anthropic.js", "Anthropic"],
@@ -31,6 +33,17 @@ function datenschutzText(dokument) {
   return teile.join(TEXT_TRENNER);
 }
 
+function kommtAlsWortVor(text, name) {
+  let stelle = text.indexOf(name);
+  while (stelle !== -1) {
+    const davor = text.slice(0, stelle);
+    const danach = text.slice(stelle + name.length);
+    if (!WORT_ZEICHEN_AM_ENDE.test(davor) && !WORT_ZEICHEN_AM_ANFANG.test(danach)) return true;
+    stelle = text.indexOf(name, stelle + 1);
+  }
+  return false;
+}
+
 function adapterImOrdner(wurzel, ordner) {
   const ort = new URL(ordner, wurzel);
   if (!existsSync(ort)) return { fehlt: true, dateien: [] };
@@ -44,7 +57,7 @@ function adapterImOrdner(wurzel, ordner) {
 function befundZumAdapter(text, { pfad, name }) {
   const anzeigename = ANBIETER_ANZEIGENAMEN.get(name);
   if (anzeigename === undefined) return `${pfad}:${BEFUND_ZEILE} ${OHNE_ANZEIGENAMEN}`;
-  if (text.includes(anzeigename)) return null;
+  if (kommtAlsWortVor(text, anzeigename)) return null;
   return `${pfad}:${BEFUND_ZEILE} Anbieter ${anzeigename} fehlt in ${DATENSCHUTZ_DATEI}`;
 }
 
