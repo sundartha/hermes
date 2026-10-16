@@ -153,7 +153,7 @@ function loeseHalterVomEventLoop(kind) {
   kind.unref();
 }
 
-export async function sperreNehmenUndHalterEintragen(datei, anlass, aufruferBeendet = aufruferVon(process.ppid)) {
+export async function sperreNehmenUndHalterEintragen(datei, anlass, { aufruferBeendet = aufruferVon(process.ppid) } = {}) {
   const kind = perl(HALTEN, datei);
   const { gewartet, ms } = await bisFrei(kind, datei, aufruferBeendet);
   let schluessel;
