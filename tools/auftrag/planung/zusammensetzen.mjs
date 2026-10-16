@@ -19,7 +19,7 @@ function liste(wert) {
   return Array.isArray(wert) ? wert : [];
 }
 
-function auftragAusSchnitt(eintrag, soll) {
+export function auftragAusSchnitt(eintrag, soll) {
   const auftrag = Object.fromEntries(FELDER.filter((feld) => eintrag[feld] !== undefined).map((feld) => [feld, eintrag[feld]]));
   if (Array.isArray(eintrag.wasDarfNiePassieren)) auftrag.wasDarfNiePassieren = eintrag.wasDarfNiePassieren.map(({ satz }) => satz);
   auftrag.prueft = eintrag.prueft;
@@ -41,7 +41,7 @@ function reihenfolgeZeile(eigene) {
   return `Reihenfolge: ${gruende.length > 0 ? gruende.join("; ") : "keine Vorgänger"}`;
 }
 
-function entwurfFuer(text, eigene) {
+export function entwurfFuer(text, eigene) {
   const zeilen = text.trimEnd().split("\n");
   const fehlerfaelle = zeilen.findIndex((zeile) => FEHLERFAELLE.test(zeile));
   const stelle = fehlerfaelle === -1 ? zeilen.length : fehlerfaelle;
