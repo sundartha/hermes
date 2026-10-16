@@ -10,6 +10,9 @@ export const PAKET = "20";
 const ROTPROBE = fileURLToPath(new URL("../rotprobe.mjs", import.meta.url));
 const ZEILENENDE = "\n";
 const PR_NUMMER = /^\d+$/;
+const TESTDATEI = /\.test\.js$/;
+const UNGESCHUETZTE_TESTS = "test/werkzeuge/";
+const DATEINAMENTRENNER = "\0";
 
 export const FAELLE = [
   {
@@ -33,7 +36,7 @@ export const FAELLE = [
   },
   {
     fall: "umgeschriebener-test",
-    datei: "test/plans-find-plan.test.js",
+    ordner: "test",
     anker: 'assert.equal(findPlan("nope"), null);',
     ersatz: 'assert.equal(findPlan("gibt-es-nicht"), null);',
     workflow: "Testschutz",
@@ -77,8 +80,16 @@ function geaendert({ datei, anker, ersatz, anhang }, text) {
   return text.replace(anker, () => ersatz);
 }
 
-function vorlageFuer({ datei }) {
-  return datei;
+function vorlageFuer({ datei, ordner, anker }) {
+  if (datei !== undefined) return datei;
+  const kandidaten = git(["ls-files", "-z", "--", ordner])
+    .split(DATEINAMENTRENNER)
+    .filter((pfad) => TESTDATEI.test(pfad) && !pfad.startsWith(UNGESCHUETZTE_TESTS));
+  const vorlage = kandidaten.find((pfad) => existsSync(pfad) && readFileSync(pfad, "utf8").includes(anker));
+  if (vorlage === undefined) {
+    throw new NichtErzeugbar(`nicht erzeugbar: keine Testdatei unter ${ordner}/ enthält ${anker}`);
+  }
+  return vorlage;
 }
 
 function patchFuer(fall) {

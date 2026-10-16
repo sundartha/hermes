@@ -419,3 +419,47 @@ test("Rot-Proben: der volle Lauf legt vier Proben an, prüft den Push, wertet au
   assert.equal(gitIn(arbeit, ["branch", "--show-current"]), "arbeit");
   assert.equal(gitIn(arbeit, ["status", "--porcelain"]), "");
 });
+
+const VORLAGE_ANKER = 'assert.equal(findPlan("nope"), null);';
+const VORLAGE_TEST = `test("Plan", () => {\n  ${VORLAGE_ANKER}\n});\n`;
+const OHNE_VORLAGE = Object.fromEntries(Object.entries(ANKERDATEIEN).filter(([datei]) => !datei.startsWith("test/")));
+
+async function umgeschriebenerTestPatch(context, dateien) {
+  const arbeit = probeRepository(context, { ...OHNE_VORLAGE, ...dateien });
+  const ordner = join(probeDirectory(context, {}), "patches");
+  const lauf = await werkzeug(["--nur-patches", ordner], { cwd: arbeit });
+  const patch = join(ordner, "umgeschriebener-test.patch");
+  return { arbeit, lauf, patch };
+}
+
+const VORLAGE_NEUER_PFAD = "test/abrechnung/tarifkatalog.test.js";
+const VORLAGE_FRUEH = "test/abrechnung/frueher.test.js";
+const VORLAGE_SPAET = "test/zzz/spaeter.test.js";
+const VORLAGE_UNGESCHUETZT = "test/werkzeuge/anker.test.js";
+
+async function pruefeVorlage(context, dateien, erwartet) {
+  const { arbeit, lauf, patch } = await umgeschriebenerTestPatch(context, dateien);
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.match(readFileSync(patch, "utf8"), new RegExp(`^\\+\\+\\+ b/${erwartet}$`, "m"));
+  assert.equal(runIn(arbeit, "git", ["apply", "--check", patch]).status, EXIT_OK);
+  assert.equal(gitIn(arbeit, ["status", "--porcelain"]), "");
+}
+
+test("Rot-Proben: umgeschriebener-test nimmt die Vorlage unter ihrem neuen Pfad", (context) =>
+  pruefeVorlage(context, { [VORLAGE_NEUER_PFAD]: VORLAGE_TEST }, VORLAGE_NEUER_PFAD));
+
+test("Rot-Proben: umgeschriebener-test nimmt bei mehreren Treffern die nach Pfad erste", (context) =>
+  pruefeVorlage(context, { [VORLAGE_SPAET]: VORLAGE_TEST, [VORLAGE_FRUEH]: VORLAGE_TEST }, VORLAGE_FRUEH));
+
+test("Rot-Proben: umgeschriebener-test nimmt nicht den Treffer unter test/werkzeuge, den der Testschutz nicht schützt", (context) =>
+  pruefeVorlage(context, { [VORLAGE_UNGESCHUETZT]: VORLAGE_TEST, [VORLAGE_SPAET]: VORLAGE_TEST }, VORLAGE_SPAET));
+
+test("Rot-Proben: umgeschriebener-test meldet laut, wenn keine geschützte Testdatei die Vorlagenzeile enthält", async (context) => {
+  const dateien = { [VORLAGE_UNGESCHUETZT]: VORLAGE_TEST, "test/abrechnung/anderes.test.js": "// nichts\n" };
+  const { arbeit, lauf } = await umgeschriebenerTestPatch(context, dateien);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stderr, /^umgeschriebener-test: nicht erzeugbar: keine Testdatei unter test\/ enthält assert\.equal\(findPlan\("nope"\), null\);$/m);
+  assert.match(lauf.stdout, /^- umgeschriebener-test: nicht erzeugbar: keine Testdatei/m);
+  assert.match(lauf.stdout, /^- lint-fehler: .*lint-fehler\.patch$/m);
+  assert.equal(gitIn(arbeit, ["status", "--porcelain"]), "");
+});
