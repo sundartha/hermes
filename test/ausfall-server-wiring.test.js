@@ -9,6 +9,9 @@ const KURZER_TAKT_MS = 50;
 const WARTEFRIST = { timeout: 30_000 };
 const AUSGABE_FRIST_MS = 15_000;
 const TAG_MS = 86_400_000;
+const AUSFALL_SEIT_MS = 60_000;
+const EINRICHTUNGSGEBUEHR_CENT = "500";
+const PREISSONDE_OHNE_SPERRFRIST_MS = "1";
 const HTTP_ANI_ABGELEHNT = 503;
 const ANI_ABLEHNUNG = /Absendernummer der Plattform ist beim Anbieter nicht mehr verfuegbar/;
 const PLATTFORM_ANI = "+13125550111";
@@ -83,7 +86,7 @@ function warteAufAusgabe(srv, zeile) {
 
 function standMitErholtemAusfall() {
   const stand = seedState();
-  const vorhin = new Date(Date.now() - 60_000).toISOString();
+  const vorhin = new Date(Date.now() - AUSFALL_SEIT_MS).toISOString();
   stand.outageAlerts = [
     { code: AUSFALL_EIMER, firstSeenAt: vorhin, lastSeenAt: vorhin, closedAt: null },
   ];
@@ -105,8 +108,8 @@ const stripeEnv = (stripeUrl) => ({
   STRIPE_SECRET_KEY: "sk_test_x",
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   STRIPE_API_BASE: stripeUrl,
-  NUMBER_SETUP_FEE_CENTS: "500",
-  PRICE_DRIFT_MIN_INTERVAL_MS: "1",
+  NUMBER_SETUP_FEE_CENTS: EINRICHTUNGSGEBUEHR_CENT,
+  PRICE_DRIFT_MIN_INTERVAL_MS: PREISSONDE_OHNE_SPERRFRIST_MS,
   ...PLAN_PRICE_BOOT_ENV,
 });
 
