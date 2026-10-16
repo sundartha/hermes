@@ -1025,6 +1025,7 @@ test("Befehl schnitt: ein pitch.md ohne Szenario ergibt Exit 4 und Abdeckung nic
 });
 
 const DATEI_C = "src/nummern/zaehler.js";
+const AENDERUNG_IN_DATEI_C = { datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 };
 
 function vorhanden(kennung, ueberschrieben = {}) {
   const datei = `src/alt/${kennung}.js`;
@@ -1073,14 +1074,14 @@ test("Vorhandene: eine Annahme zu einem vorhandenen Auftrag ist grün", (context
 test("Vorhandene: eine Änderungsdatei aus der Kette über vorhandene Aufträge ist grün", (context) => {
   const b = mitVorhandenen(basis(context), vorhanden("a5", { abhaengigVon: ["a6"] }), vorhanden("a6", { erwarteteDateien: [DATEI_C] }));
   haengtAn(eigener(b, "a2"), "a5");
-  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  angabenVon(b, "S2").aenderungen.push(AENDERUNG_IN_DATEI_C);
   gruen(lauf(b));
 });
 
 test("Vorhandene: eine Änderungsdatei, die kein vorhandener Auftrag der Kette nennt, ist rot", (context) => {
   const b = mitVorhandenen(basis(context), vorhanden("a5"), vorhanden("a6", { erwarteteDateien: [DATEI_C] }));
   haengtAn(eigener(b, "a2"), "a5");
-  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  angabenVon(b, "S2").aenderungen.push(AENDERUNG_IN_DATEI_C);
   erwarte(lauf(b), REGEL.aenderungen, `a2: Änderungsdatei ${DATEI_C} von S2 steht weder bei a2 noch in seiner abhaengigVon-Kette`);
 });
 
@@ -1110,7 +1111,7 @@ test("Durchstich: mit durchstich gilt die Regel für diese Kennung", (context) =
 test("Durchstich: mit durchstich steht eine fremde Änderungsdatei des Durchstichs nur unter der Regel Durchstich", (context) => {
   const b = mitVorhandenen(basis(context), vorhanden("a5"));
   b.eingaben.durchstich = "a2";
-  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  angabenVon(b, "S2").aenderungen.push(AENDERUNG_IN_DATEI_C);
   erwarte(lauf(b), REGEL.durchstich, `a2: Änderungsdatei ${DATEI_C} von S2 steht weder bei a2 noch in seiner abhaengigVon-Kette`);
 });
 
