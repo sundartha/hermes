@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import {
   makeDefaultState,
@@ -10,6 +9,12 @@ import {
   budgetExceeded,
   reserveExceedsBudget,
   tryReserveOutboundBudget,
+  createCall,
+  recordCallEstimatedCostCents,
+  NO_CHARGE_ANCHORS,
+  liveBudgetExceeded,
+  releaseOutboundReserveCents,
+  claimPlatformSpendWarning,
 } from "../src/store/state-ops.js";
 import { isBookableCents, USAGE_CORRUPT_REASON, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeMetering } from "../src/billing/metering.js";
@@ -21,6 +26,13 @@ const TENANT_A = "tenant_a";
 const CAP_CENTS = PRICES.platformSpendCapCents;
 const UNBOOKABLE = [NaN, Infinity, -Infinity, -1, -0.5, 0.5, "5", null, undefined];
 const BOOKABLE = [0, 1, 250];
+const STORED_USAGE_TOKENS = 1_000_000;
+const FILLER_TOKENS = 10;
+const FINITE_TOKENS_WITH_INFINITE_COST = 1e308;
+const WARN_THRESHOLD_PERCENT = 80;
+const LIFETIME_BUCKET_CENTS = 100;
+const FRACTIONAL_PERIOD_BASELINE_CENTS = 99.5;
+const FRACTIONAL_CENTS_ABOVE_CAP = CAP_CENTS + 0.5;
 
 async function captureErr(fn) {
   const logs = [];
@@ -149,26 +161,84 @@ test("G26-Regressionstest: fraktionaler Tenant-Bucket (0.5) sperrt budgetExceede
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
-test("(d) pg-Hydrierung heilt cost_eur='NaN' fail-closed zu costCents=0, grund=usage_korrupt", async () => {
+async function hydrateWithCorruptCostEur(costEur) {
   const { store, db } = await makePgTestStore();
-  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(1_000_000, 0), PRICES);
+  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(STORED_USAGE_TOKENS, 0), PRICES);
   await store.save();
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
-  await db.query(`UPDATE usage SET cost_eur = 'NaN' WHERE tenant_id = $1`, [BOOTSTRAP_TENANT_ID]);
-
+  await db.query(`UPDATE usage SET cost_eur = $2 WHERE tenant_id = $1`, [BOOTSTRAP_TENANT_ID, costEur]);
   let reopened;
   const out = await captureErr(async () => {
     reopened = await reopen(db);
   });
+  return { reopened, out };
+}
+
+test("(d) pg-Hydrierung heilt cost_eur='NaN' fail-closed zu costCents=0, grund=usage_korrupt", async () => {
+  const { reopened, out } = await hydrateWithCorruptCostEur("NaN");
 
   assert.equal(reopened.usageOf(BOOTSTRAP_TENANT_ID).costCents, 0, "korrupter Bestand heilt zu 0");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
-test("geteilte Quelle: das alte !(x>=0)-Idiom ist aus state-ops.js/pg.js verschwunden", () => {
-  const idiom = /!\(\s*[A-Za-z_$][\w$]*\s*>=\s*0\s*\)/;
-  const stateOps = readFileSync(new URL("../src/store/state-ops.js", import.meta.url), "utf8");
-  const pg = readFileSync(new URL("../src/store/pg.js", import.meta.url), "utf8");
-  assert.equal(idiom.test(stateOps), false, "state-ops.js darf das Inline-Idiom nicht mehr enthalten");
-  assert.equal(idiom.test(pg), false, "pg.js darf das Inline-Idiom nicht enthalten");
+test("(e) Bruch-, Unendlich- und negative Werte verwirft jede Buchungskante, nicht nur NaN", () => {
+  const numbers = UNBOOKABLE.filter((val) => typeof val === "number" && !Number.isNaN(val));
+  for (const val of numbers) {
+    for (const sorte of ["uncached", "cacheWrite", "cacheRead", "output"]) {
+      const turnState = makeDefaultState();
+      const before = { ...usageFor(turnState, TENANT_A) };
+      const tokens = tokensWithCache({ uncached: FILLER_TOKENS, output: FILLER_TOKENS, [sorte]: val });
+      trackUsage(turnState, TENANT_A, tokens, PRICES);
+      assert.deepEqual(usageFor(turnState, TENANT_A), before, `${String(val)} in ${sorte} muss den ganzen Turn verwerfen`);
+    }
+    const callState = makeDefaultState();
+    const call = createCall(callState, { direction: "outbound", from: "+15005550006", to: "+4930123456", tenantId: TENANT_A });
+    const { changed } = recordCallEstimatedCostCents(callState, call.id, { costCents: val, chargeAnchors: NO_CHARGE_ANCHORS });
+    assert.equal(changed, false, `recordCallEstimatedCostCents(${String(val)}) muss ablehnen`);
+    assert.equal(call.estimatedCostCents, null, `geschaetzte Kosten bleiben leer bei ${String(val)}`);
+  }
+  const infiniteCostState = makeDefaultState();
+  const before = { ...usageFor(infiniteCostState, TENANT_A) };
+  trackUsage(infiniteCostState, TENANT_A, tokensOf(FINITE_TOKENS_WITH_INFINITE_COST, 0), PRICES);
+  assert.deepEqual(usageFor(infiniteCostState, TENANT_A), before, "unendliche Kosten aus endlichen Tokens verwerfen den Turn");
+});
+
+test("(f) pg-Hydrierung heilt cost_eur='Infinity' fail-closed zu costCents=0, grund=usage_korrupt", async () => {
+  const { reopened, out } = await hydrateWithCorruptCostEur("Infinity");
+
+  assert.equal(reopened.usageOf(BOOTSTRAP_TENANT_ID).costCents, 0, "unendlicher Bestand heilt zu 0");
+  assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
+});
+
+test("(g) Bruch-, Unendlich- und negative Werte sperren auch Live-Kosten, Perioden- und Monatsachse, Reserve-Freigabe und Plattform-Warnung", async () => {
+  const monthCfg = { ...PRICES, budgetMonthEnabled: true };
+  const warnCfg = { ...PRICES, platformSpendWarnPercent: WARN_THRESHOLD_PERCENT };
+  const reached = makeDefaultState();
+  reached.reservations[TENANT_A] = CAP_CENTS;
+  assert.notEqual(claimPlatformSpendWarning(reached, warnCfg), null, "Positiv-Kontrolle: volle Reserve warnt");
+  for (const val of UNBOOKABLE.filter((candidate) => typeof candidate === "number")) {
+    const live = makeDefaultState();
+    assert.equal(liveBudgetExceeded(live, TENANT_A, val, PRICES), true, `Live-Kosten ${String(val)} sperren`);
+    assert.equal(releaseOutboundReserveCents(live, TENANT_A, val), false, `Freigabe ${String(val)} wird verworfen`);
+    usageFor(live, TENANT_A).costCents = val;
+    assert.equal(budgetExceeded(live, TENANT_A, monthCfg), true, `Lebenszeit-Bucket ${String(val)} sperrt die Monatsachse`);
+    const platform = makeDefaultState();
+    platform.reservations[TENANT_A] = val;
+    assert.equal(claimPlatformSpendWarning(platform, warnCfg), null, `Reserve ${String(val)} loest keine Warnung aus`);
+  }
+  const aboveCap = makeDefaultState();
+  aboveCap.reservations[TENANT_A] = FRACTIONAL_CENTS_ABOVE_CAP;
+  assert.equal(claimPlatformSpendWarning(aboveCap, warnCfg), null, "Bruchwert oberhalb der Warnschwelle loest keine Warnung aus");
+  const period = makeDefaultState();
+  Object.assign(usageFor(period, TENANT_A), {
+    costCents: LIFETIME_BUCKET_CENTS,
+    budgetPeriodKey: "p1",
+    budgetPeriodBaselineCents: FRACTIONAL_PERIOD_BASELINE_CENTS,
+  });
+  let periodDenied;
+  const out = await captureErr(() => {
+    periodDenied = budgetExceeded(period, TENANT_A, PRICES);
+  });
+  assert.equal(periodDenied, true, "gebrochene Periodenachse (0.5) sperrt trotz ganzzahligem Lebenszeit-Bucket");
+  assert.match(out, /feld=gateCents wert=0\.5/, "die Meldung nennt die kaputte Achse");
 });
