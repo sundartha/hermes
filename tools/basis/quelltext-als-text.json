@@ -1,7 +1,5 @@
 {
   "befunde": [
-    "test/ausfall-server-wiring.test.js|96a6de405e454acc",
-    "test/ausfall-server-wiring.test.js|a74b477685bc019b",
     "test/call-termination-order.test.js|0f1743f325f77cbb",
     "test/call-termination-order.test.js|2dcd380abf83f0fb",
     "test/call-termination-order.test.js|67300c26ea1020d1",
