@@ -159,6 +159,10 @@ const KATALOG = new Map([
     "Rot: beim Umschalten war Produktion frisch geweckt oder nicht wach; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
   ],
   ["abgebrochen", "Deploy abgebrochen: HTTP {http}"],
+  [
+    "deploy_unauffindbar",
+    "Rot: Render hat den Deploy angenommen, er ist bis zur Frist nicht auffindbar und lässt sich ohne Deploy-ID nicht abbrechen; er kann unbeobachtet live gehen, Produktion sofort prüfen",
+  ],
   ["deploy_gescheitert", "Rot: der Deploy endet mit {status}"],
   ["live", "Produktion fährt jetzt {commit}"],
   ["ausliefern_vorher", "Automatisches Ausliefern bei Render vor dem Rollback: {ausliefern}"],

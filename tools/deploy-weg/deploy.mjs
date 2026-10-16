@@ -90,10 +90,10 @@ function wachhaltend({ hermes }, versuch) {
   };
 }
 
-async function neuenDeploySuchen(kontext, { commit, vorher }) {
+async function neuenDeploySuchen(kontext, { commit, vorher, start }) {
   const { render, ausgabe, uhr, takte } = kontext;
   const ergebnis = await abwarten(
-    { uhr, ...takte.status },
+    { uhr, ...takte.status, start },
     wachhaltend(kontext, async () => {
       const { status, daten } = await render.liste();
       if (status !== HTTP_OK) return undefined;
@@ -103,15 +103,16 @@ async function neuenDeploySuchen(kontext, { commit, vorher }) {
   );
   if (!ergebnis.schutzgrenze) return ergebnis.wert;
   schutzgrenzeMelden(ausgabe, { schritt: "deploy_suche", ergebnis });
+  ausgabe.melde("deploy_unauffindbar");
   return null;
 }
 
-async function deployAusloesen(kontext, { commit, vorher }) {
+async function deployAusloesen(kontext, { commit, vorher, start }) {
   const { render, ausgabe } = kontext;
   const { status, daten } = await render.ausloesen(commit);
   ausgabe.melde("deploy_ausgeloest", { http: status });
   if (status === HTTP_ANGELEGT && DEPLOY_ID.test(daten?.id ?? "")) return daten.id;
-  if (status === HTTP_ANGENOMMEN) return neuenDeploySuchen(kontext, { commit, vorher });
+  if (status === HTTP_ANGENOMMEN) return neuenDeploySuchen(kontext, { commit, vorher, start });
   ausgabe.melde("abbruch", { schritt: "ausloesen" });
   return null;
 }
@@ -153,9 +154,8 @@ function statusBeobachter(kontext, { id, start }) {
   });
 }
 
-async function deployVerfolgen(kontext, id) {
+async function deployVerfolgen(kontext, { id, start }) {
   const { ausgabe, uhr, takte } = kontext;
-  const start = uhr.jetzt();
   const beobachter = statusBeobachter(kontext, { id, start });
   const ergebnis = await abwarten({ uhr, ...takte.status, start }, beobachter);
   if (ergebnis.schutzgrenze) {
@@ -216,8 +216,9 @@ export async function deploy({
   };
   const vorher = await vorDemDeploy(kontext, { commit, produktion });
   if (vorher === null) return false;
-  const id = await deployAusloesen(kontext, { commit, vorher });
+  const start = uhr.jetzt();
+  const id = await deployAusloesen(kontext, { commit, vorher, start });
   if (id === null) return false;
-  if (!(await deployVerfolgen(kontext, id))) return false;
+  if (!(await deployVerfolgen(kontext, { id, start }))) return false;
   return produktionAbwarten(kontext, commit);
 }

@@ -180,7 +180,8 @@ function gezeigteListe(welt) {
 function deployListe(welt) {
   if (welt.deployListe !== null) {
     const liste = gezeigteListe(welt).map((deploy) => ({ cursor: deploy.id, deploy }));
-    return [welt.listeStatus, liste];
+    const { listeStatus } = welt;
+    return [Array.isArray(listeStatus) ? naechster(listeStatus) : listeStatus, liste];
   }
   const alte = welt.alteDeploys.map(deployEintrag);
   const sichtbar = welt.merker.has(ANGELEGT) && naechster(welt.neuInListe);
