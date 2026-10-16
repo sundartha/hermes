@@ -225,7 +225,7 @@ class Runden {
     if (plan.befunde.length > 0) {
       return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`, zweckBlock(MELDUNG.UMBAU_PLAN));
     }
-    return new Runden({ ...this.kontext, ...plan.kontext, aufraeumen: ergebnis.voraussetzung.startsWith("Altfunktionen aufräumen:") }, this.starteRunde).fuehreAus();
+    return new this.constructor({ ...this.kontext, ...plan.kontext, aufraeumen: ergebnis.voraussetzung.startsWith("Altfunktionen aufräumen:") }, this.starteRunde).fuehreAus();
   }
 
   vorbauUmbauen(ergebnis) {
@@ -239,7 +239,7 @@ class Runden {
     const abgelehnt = vorbauBefund(plan, alterTest.datei);
     if (abgelehnt !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${abgelehnt}. Der Plan steht im Beleg ${auftrag.id}-plan.`);
     const umbau = plan.kontext.auftrag;
-    const vorlauf = new Runden({ ...this.kontext, ...plan.kontext, vorbau: true }, this.starteRunde).fuehreAus();
+    const vorlauf = new VorbauRunden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
     if (vorlauf !== GRUEN) return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} vorweg ist gescheitert (${vorlauf}); sein Beleg heißt ${umbau.id}.`);
     if (nenntAltenTest(alterTest, testTitel(readFileSync(join(root, alterTest.datei), "utf8"))) === null) {
       return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} hat den Fall ${alterTest.test} entfernt oder umbenannt; er ist verworfen.`);
@@ -332,10 +332,6 @@ class Runden {
 
   entscheidung(ergebnis, gestoppt) {
     const { phase, auftrag, root } = this.kontext;
-    if (this.kontext.vorbau) {
-      schreibeBeleg(root, { ...ergebnis, runden: this.fehler, grund: gestoppt.anlass });
-      return ROT;
-    }
     const notiz = this.notiz(gestoppt);
     const hinweise = hinweiseFuerNotiz(ergebnis.agenten, entnimmVolleAntwort);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");
@@ -343,6 +339,13 @@ class Runden {
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);
     schreibeBeleg(root, { ...ergebnis, runden: this.fehler, entscheidung: { text, agenten: notiz.sitzungen, ...veroeffentlicht } });
     console.log(`Auftrag ${auftrag.id}: Entscheidung nötig. ${veroeffentlicht.hinweis}`);
+    return ROT;
+  }
+}
+
+class VorbauRunden extends Runden {
+  entscheidung(ergebnis, gestoppt) {
+    schreibeBeleg(this.kontext.root, { ...ergebnis, runden: this.fehler, grund: gestoppt.anlass });
     return ROT;
   }
 }
