@@ -6,12 +6,13 @@ import {
   githubFehler,
   grund,
   gueltigerCommit,
+  HTTP_OK,
   prKopf,
+  ungueltigesEreignis,
 } from "./herkunft.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
 import { AUFWACHEN_TAKTE, ECHTE_UHR } from "./takt.mjs";
 
-const HTTP_OK = 200;
 const LAUF = "workflow_run";
 const HAND = "workflow_dispatch";
 const ABGLEICH_GESCHEITERT = "abgleich-gescheitert";
@@ -25,14 +26,12 @@ async function abdruckVergleichen(argumente) {
 
 function herkunftBestimmen({ ereignis, einstellungen, github }) {
   const nutzlast = ereignis.nutzlast;
-  if (nutzlast === null || typeof nutzlast !== "object") {
-    return { commit: null, gruende: [grund("rot_ereignis")], hand: false };
-  }
+  if (nutzlast === null || typeof nutzlast !== "object") return ungueltigesEreignis();
   if (ereignis.name === LAUF) {
     return ausStagingLauf(nutzlast.workflow_run ?? null, github.repository);
   }
   if (ereignis.name === HAND) return ausHandStart({ nutzlast, einstellungen, github });
-  return { commit: null, gruende: [grund("rot_ereignis")], hand: false };
+  return ungueltigesEreignis();
 }
 
 async function vergleich(github, { basis, kopf }) {

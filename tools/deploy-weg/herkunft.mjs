@@ -1,7 +1,7 @@
 import { APPROVERS } from "../akteure.mjs";
 import { COMMIT_MUSTER, statusWort } from "./ausgabe.mjs";
 
-const HTTP_OK = 200;
+export const HTTP_OK = 200;
 const MASTER = "master";
 const MASTER_REF = "refs/heads/master";
 const GITHUB_ACTIONS_APP = 15368;
@@ -11,6 +11,10 @@ const ERFOLG = "success";
 
 export function grund(schluessel, werte = {}) {
   return Object.freeze({ schluessel, werte });
+}
+
+export function ungueltigesEreignis() {
+  return { commit: null, gruende: [grund("rot_ereignis")], hand: false };
 }
 
 export function githubFehler(schritt, http) {
@@ -32,9 +36,7 @@ function imEigenenRepo(lauf, repository) {
 }
 
 export function ausStagingLauf(lauf, repository) {
-  if (lauf === null || typeof lauf !== "object") {
-    return { commit: null, gruende: [grund("rot_ereignis")], hand: false };
-  }
+  if (lauf === null || typeof lauf !== "object") return ungueltigesEreignis();
   const gruende = [];
   if (lauf.conclusion !== ERFOLG) {
     gruende.push(grund("rot_staging_nicht_gruen", { status: statusWort(lauf.conclusion) }));
