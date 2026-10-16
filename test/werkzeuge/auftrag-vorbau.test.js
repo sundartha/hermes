@@ -4,7 +4,7 @@ import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { zusicherungenJeFall } from "../../tools/auftrag/testtitel.mjs";
+import { zusicherungenGleich } from "../../tools/auftrag/testtitel.mjs";
 
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
@@ -142,13 +142,170 @@ test("Vorbau: schwächt der testumbau eine Zusicherung des alten Tests ab, wird 
   assert.equal(log.includes(UMBAU.ziel), false);
 });
 
-test("Zusicherungen je Fall: Vorbau und Einrückung zählen nicht, gestrichene, geänderte, verschobene Zusicherungen und neue Fälle schon", () => {
+test("Zusicherungen je Fall: Einrückung zählt nicht, gestrichene, geänderte, verschobene Zusicherungen, neue Fälle und ein Vorbau, den eine Zusicherung direkt prüft, schon", () => {
   const alt = `${KOPF}const KUNDE = {};\ntest("a", () => {\n  assert.equal(versende(KUNDE), true);\n});\ntest("b", (t) => t.assert.ok(KUNDE));\n`;
-  const gleich = (neu) => JSON.stringify(zusicherungenJeFall(alt)) === JSON.stringify(zusicherungenJeFall(neu));
-  assert.equal(gleich(alt.replace("const KUNDE = {}", "const KUNDE = { gates: true }").replace("  assert", "    assert")), true);
+  const gleich = (neu) => zusicherungenGleich(alt, neu);
+  assert.equal(gleich(alt.replace("  assert", "    assert")), true);
+  assert.equal(gleich(alt.replace("const KUNDE = {}", "const KUNDE = { gates: true }")), false);
   assert.equal(gleich(alt.replace("assert.equal(versende(KUNDE), true);", "")), false);
   assert.equal(gleich(alt.replace("assert.equal(versende(KUNDE), true)", "assert.ok(versende(KUNDE))")), false);
   assert.equal(gleich(alt.replace('test("b", (t) => t.assert.ok(KUNDE))', 'test("b", () => {});\ntest("c", (t) => t.assert.ok(KUNDE))')), false);
   assert.equal(gleich(`${alt}test("d", () => {});\n`), false);
-  assert.equal(zusicherungenJeFall("kaputt("), null);
+  assert.equal(zusicherungenGleich("kaputt(", "kaputt("), false);
+});
+
+test("Zusicherungen je Fall: ein gestrichenes await vor einer Zusicherung und eine abgeschaltete expect-Zusicherung zählen als Änderung", () => {
+  const alt = `${KOPF}test("a", async () => {\n  await assert.rejects(versende({}));\n  expect(versende({})).toBe(true);\n});\n`;
+  const gleich = (neu) => zusicherungenGleich(alt, neu);
+  assert.deepEqual(
+    [gleich(alt.replace("  await", "    await")), gleich(alt.replace("await assert", "assert")), gleich(alt.replace("  expect", "  if (false) expect"))],
+    [true, false, false],
+  );
+});
+
+test("Zusicherungen je Fall: ein abgeschalteter Fall, eine Zusicherung hinter Steuerung oder Sprung, eine Attrappe für assert, eine gestrichene Prüfhilfe, eine geänderte Hilfe und ein Vorbau im Fall, den eine Zusicherung direkt prüft, zählen als Änderung, eine neue Hilfe nicht", () => {
+  const alt = `${KOPF}function kunde() {\n  return {};\n}\nfunction pruefe(geprueft) {\n  assert.ok(geprueft);\n}\ntest("a", (t) => {\n  const testkunde = {};\n  pruefe(testkunde);\n  assert.equal(versende(testkunde), true);\n  t.assert.ok(testkunde);\n});\n`;
+  const gleich = (neu) => zusicherungenGleich(alt, neu);
+  const ZUSICHERUNG = "assert.equal(versende(testkunde), true);";
+  const VORBAU = "const testkunde = {};";
+  const FALL = /test\("a"[^]*\n\}\);\n/;
+  const faelle = [
+    ['test("a", (t) => {', 'test.skip("a", (t) => {', false],
+    ['test("a", (t) => {', 'test.todo("a", (t) => {', false],
+    ['test("a", (t) => {', 'test("a", { skip: true }, (t) => {', false],
+    [FALL, "if (process.env.NIE) {\n$&}\n", false],
+    [FALL, 'describe("Hülle", { skip: true }, () => {\n$&});\n', false],
+    [ZUSICHERUNG, `try { ${ZUSICHERUNG} } catch {}`, false],
+    [ZUSICHERUNG, `if (false) ${ZUSICHERUNG}`, false],
+    [ZUSICHERUNG, `t.skip(); ${ZUSICHERUNG}`, false],
+    [ZUSICHERUNG, `(() => { ${ZUSICHERUNG} });`, false],
+    [ZUSICHERUNG, `[].forEach(() => { ${ZUSICHERUNG} });`, false],
+    [ZUSICHERUNG, `return; ${ZUSICHERUNG}`, false],
+    [ZUSICHERUNG, `aus: { break aus; ${ZUSICHERUNG} }`, false],
+    [VORBAU, "const testkunde = { gates: true };", false],
+    ["return {};", "return { gates: true };", false],
+    ['"node:assert/strict"', '"node:assert"', false],
+    ["  assert.ok(geprueft);", "  return;\n  assert.ok(geprueft);", false],
+    ["  assert.ok(geprueft);", '  throw new Error("aus");\n  assert.ok(geprueft);', false],
+    [VORBAU, `const assert = { equal() {} };\n  ${VORBAU}`, false],
+    [VORBAU, `assert.equal = () => {};\n  ${VORBAU}`, false],
+    [VORBAU, `Object.assign(assert, { equal() {} });\n  ${VORBAU}`, false],
+    [VORBAU, `const pruefe = () => {};\n  ${VORBAU}`, false],
+    [VORBAU, `const nachgiebig = assert;\n  nachgiebig.equal = () => {};\n  ${VORBAU}`, false],
+    [VORBAU, `class assert {\n    static equal() {}\n  }\n  ${VORBAU}`, false],
+    ["  pruefe(testkunde);\n", "", false],
+    ['test("a", (t) => {', 'test("a", (t = { assert: { ok() {} } }) => {', false],
+    ["function kunde() {", "function kundin() {\n  return { gates: true };\n}\nfunction kunde() {", true],
+    ['import { test } from "node:test";', 'import { test } from "node:test";\nimport { join } from "node:path";', true],
+  ];
+  assert.deepEqual(
+    faelle.map(([vorher, nachher]) => gleich(alt.replace(vorher, nachher))),
+    faelle.map(([, , erwartet]) => erwartet),
+  );
+});
+
+test("Oberste Ebene: neue Hilfen, fremde Importe und ergänzte Werte zählen nicht, jede andere Änderung außerhalb der Fälle schon", () => {
+  const alt = `${KOPF}const FAELLE = [1, 2, 3];\nconst KUNDE = { gates: false, adresse: { land: "DE" } };\nfunction kunde() {\n  return KUNDE;\n}\ntest("a", () => assert.equal(versende(kunde()), FAELLE.length > 0));\n`;
+  const ECHTER_UMBAU = '$&import { join } from "node:path";\nfunction ordner() {\n  return join("a");\n}\n';
+  const faelle = [
+    ["const FAELLE = [1, 2, 3];", "const FAELLE = [1, 2, 3, 4];", false],
+    ['adresse: { land: "DE" } }', 'adresse: { land: "DE", ort: "Bonn" }, tarif: "pro" }', true],
+    ['import { versende } from "../src/versand.js";\n', ECHTER_UMBAU, true],
+    ["function kunde() {", 'const LAND = "DE";\nfunction kunde() {', true],
+    ["const FAELLE = [1, 2, 3];", "const FAELLE = [1];", false],
+    ["gates: false", "gates: true", false],
+    ["const KUNDE = {", "const KUNDE = { ...FAELLE,", false],
+    ["const KUNDE = {", "const KUNDE = { seit: Date.now(),", false],
+    ["function kunde() {", "const SEIT = Date.now();\nfunction kunde() {", false],
+    ["return KUNDE;", "return { ...KUNDE, gates: true };", false],
+    ['import { test } from "node:test";', 'import { skip as test } from "node:test";', false],
+    ["function kunde() {", "process.exit(0);\nfunction kunde() {", false],
+    ["function kunde() {", "const nachgiebig = assert;\nnachgiebig.equal = () => {};\nfunction kunde() {", false],
+  ];
+  assert.deepEqual(
+    faelle.map(([vorher, nachher]) => zusicherungenGleich(alt, alt.replace(vorher, nachher))),
+    faelle.map(([, , erwartet]) => erwartet),
+  );
+  const mitArray = alt.replace("FAELLE.length > 0", "Array.isArray(FAELLE)");
+  const verdeckt = ["const Array = { isArray: () => true };", "function Array() {}", 'import { isArray as Array } from "./liste.js";'];
+  assert.deepEqual(
+    verdeckt.map((neu) => zusicherungenGleich(mitArray, mitArray.replace("function kunde() {", `${neu}\nfunction kunde() {`))),
+    [false, false, false],
+  );
+});
+
+test("Umwege und fremde Objekte: ein neuer Weg zu Modulobjekten, eine neue Veränderung eines fremden oder lokalen Objekts zählt als Änderung, ein ergänzter Wert des lokalen Objekts nicht", () => {
+  const VORBAU = "const testkunde = {};";
+  const FALL = `test("a", () => {\n  ${VORBAU}\n  assert.equal(versende(testkunde), true);\n});\n`;
+  const mitVorbau = (zeile, kopf = KOPF) => `${kopf}${FALL.replace(VORBAU, `${VORBAU}\n  ${zeile}`)}`;
+  const ATTRAPPE = 'createRequire(import.meta.url)("node:assert/strict").equal = () => {};';
+  const faelle = [
+    [`${KOPF}${FALL.replace("{};", "{ gates: true };")}`, true],
+    [mitVorbau("testkunde.gates = true;"), false],
+    [mitVorbau(ATTRAPPE, `${KOPF}import { createRequire } from "node:module";\n`), false],
+    [mitVorbau(ATTRAPPE), false],
+    [mitVorbau('import("node:assert").then((geladen) => {\n    geladen.default.equal = () => {};\n  });'), false],
+    [mitVorbau('process.getBuiltinModule("node:assert/strict").equal = () => {};'), false],
+    [mitVorbau("Object.assign(assert, { equal() {} });"), false],
+    [mitVorbau("versende.vorbei = true;"), false],
+    [mitVorbau('({}).constructor.constructor("return 1")();'), false],
+    [mitVorbau("", `${KOPF}import { runInThisContext } from "node:vm";\n`), false],
+  ];
+  assert.deepEqual(
+    faelle.map(([neu]) => zusicherungenGleich(`${KOPF}${FALL}`, neu)),
+    faelle.map(([, erwartet]) => erwartet),
+  );
+});
+
+test("Rumpf eines Falls: ein ergänzter Wert einer bestehenden Belegung zählt nicht, eine Attrappe per t.mock, Steuerung um eine Zusicherung und ein gestrichener Hilfsaufruf schon", () => {
+  const PRUEFHILFE = "function pruefe(ergebnis) {\n  assert.ok(ergebnis);\n}\n";
+  const PRUEFUNG = "  assert.equal(versand.versende(kunde), true);\n";
+  const fall = (rumpf) => `${KOPF.replace("{ versende }", "versand")}${PRUEFHILFE}test("versendet den Code", (t) => {\n  const kunde = { gates: false };\n${rumpf}});\n`;
+  const alt = fall(`  pruefe(versand.versende(kunde));\n${PRUEFUNG}`);
+  const umbauten = new Map([
+    ["ergänzter Wert", [alt.replace("gates: false }", 'gates: false, land: "DE" }'), true]],
+    ["Attrappe", [alt.replace("  pruefe", '  t.mock.method(versand, "versende", () => true);\n  pruefe'), false]],
+    ["if (false)", [alt.replace(PRUEFUNG, `  if (false) {\n  ${PRUEFUNG}  }\n`), false]],
+    ["try", [alt.replace(PRUEFUNG, `  try {\n  ${PRUEFUNG}  } catch {}\n`), false]],
+    ["ohne pruefe", [alt.replace("  pruefe(versand.versende(kunde));\n", ""), false]],
+  ]);
+  for (const [name, [neu, erwartet]] of umbauten) assert.equal(zusicherungenGleich(alt, neu), erwartet, name);
+});
+
+test("Erwartungswerte: eine ergänzte Belegung, die eine Zusicherung als Erwartung trägt, direkt, per Spread oder über eine Fall-Tabelle, zählt als Änderung, eine ergänzte Eingabe nicht", () => {
+  const BELEGUNGEN = 'const EINGABE = { name: "Ada" };\nconst ERWARTET = { name: "Ada" };\nconst BASIS = { tarif: "basis" };\nconst MIT_TARIF = { ...BASIS };\nconst FAELLE = [["Ada", "basis"]];\n';
+  const FALL = 'test("liefert den Kunden", () => {\n  const erwartet = [1];\n  assert.deepEqual(kunde(EINGABE), ERWARTET);\n  assert.deepEqual(versende(EINGABE), { ...MIT_TARIF, liste: erwartet });\n});\n';
+  const TABELLE = "for (const [name, tarif] of FAELLE) test(`Tarif von ${name}`, () => assert.equal(kunde({ name }).tarif, tarif));\n";
+  const alt = `${KOPF.replace("{ versende }", "{ kunde, versende }")}${BELEGUNGEN}${FALL}${TABELLE}`;
+  const umbauten = new Map([
+    ["Eingabe", ['EINGABE = { name: "Ada" }', 'EINGABE = { name: "Ada", land: "DE" }', true]],
+    ["Erwartung", ['ERWARTET = { name: "Ada" }', 'ERWARTET = { name: "Ada", tarif: "pro" }', false]],
+    ["Erwartung im Fall", ["erwartet = [1]", "erwartet = [1, 2]", false]],
+    ["Spread", ['BASIS = { tarif: "basis" }', 'BASIS = { tarif: "basis", rabatt: 1 }', false]],
+    ["Fall-Tabelle", ['FAELLE = [["Ada", "basis"]]', 'FAELLE = [["Ada", "basis"], ["Bob", "pro"]]', false]],
+  ]);
+  for (const [name, [vorher, nachher, erwartet]] of umbauten) assert.equal(zusicherungenGleich(alt, alt.replace(vorher, nachher)), erwartet, name);
+});
+
+test("Testoptionen: eine Konstante, die als Option eines Falls dient, und ein neuer Schlüssel wie skip zählen als Änderung, ein ergänzter Kunde nicht", () => {
+  const FALL = "() => assert.equal(versende(KUNDE), true)";
+  const datei = (vorbau, optionen) => `${KOPF}${vorbau}const KUNDE = {};\ntest("a", ${optionen}, ${FALL});\n`;
+  const OPTIONEN = "const OPTIONEN = { timeout: 1000 };\n";
+  const MIT_SKIP = "const OPTIONEN = { timeout: 1000, skip: true };\n";
+  const MIT_NAME = 'const OPTIONEN = { timeout: 1000, name: "x" };\n';
+  const HILFE = "function optionen() {\n  return OPTIONEN;\n}\n";
+  const BASIS = (wert) => `const BASIS = ${wert};\nconst OPTIONEN = { ...BASIS };\n`;
+  const faelle = [
+    [datei(OPTIONEN, "OPTIONEN"), datei(OPTIONEN, "OPTIONEN").replace("const KUNDE = {}", "const KUNDE = { gates: true }"), true],
+    [datei(OPTIONEN, "OPTIONEN"), datei(MIT_SKIP, "OPTIONEN"), false],
+    [datei(OPTIONEN, "OPTIONEN"), datei(MIT_NAME, "OPTIONEN"), false],
+    [datei(OPTIONEN, "OPTIONEN"), datei(OPTIONEN, "{ ...OPTIONEN, skip: true }"), false],
+    [datei(BASIS("{ timeout: 1000 }"), "OPTIONEN"), datei(BASIS('{ timeout: 1000, name: "x" }'), "OPTIONEN"), false],
+    [datei(OPTIONEN + HILFE, "optionen()"), datei(MIT_NAME + HILFE, "optionen()"), false],
+    [datei("", "{}"), datei("", "{}").replace("const KUNDE = {}", "const KUNDE = { skip: true }"), false],
+  ];
+  assert.deepEqual(
+    faelle.map(([alt, neu]) => zusicherungenGleich(alt, neu)),
+    faelle.map(([, , erwartet]) => erwartet),
+  );
 });
