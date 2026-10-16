@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
+import { ABSICHT, TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
@@ -62,6 +62,10 @@ function auftragAbschnitt(auftrag) {
   return abschnitt("Auftrag", block(JSON.stringify(gezeigt, null, JSON_EINRUECKUNG), "json"));
 }
 
+function absichtAbschnitt(phase) {
+  return typeof phase.absicht === "string" ? [abschnitt(ABSICHT, phase.absicht)] : [];
+}
+
 function entwurfAbschnitt(phase, auftrag) {
   return abschnitt(`Entwurf für ${auftrag.bereich}`, phase.entwurf[auftrag.bereich]);
 }
@@ -85,7 +89,7 @@ function geplanteTestsAbschnitt(auftrag, root) {
 }
 
 export function testPrompt(phase, auftrag, root = cwd()) {
-  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
+  return [...absichtAbschnitt(phase), auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
 }
 
 function testumbauAbschnitt(auftrag) {
@@ -101,7 +105,13 @@ function testumbauAbschnitt(auftrag) {
 }
 
 export function testumbauPrompt(phase, auftrag, root = cwd()) {
-  return [auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme)), testumbauAbschnitt(auftrag)].join("\n");
+  return [
+    ...absichtAbschnitt(phase),
+    auftragAbschnitt(auftrag),
+    entwurfAbschnitt(phase, auftrag),
+    musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme)),
+    testumbauAbschnitt(auftrag),
+  ].join("\n");
 }
 
 function dateiAbschnitt(titel, root, pfad) {
@@ -122,6 +132,7 @@ export function testAgentPrompt({ phase, auftrag, root }) {
 export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   const titel = auftrag.erwarteterFehler ? "Ausgabe des roten Tests" : "Ausgabe des Abnahmetests";
   return [
+    ...absichtAbschnitt(phase),
     auftragAbschnitt(auftrag),
     entwurfAbschnitt(phase, auftrag),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
