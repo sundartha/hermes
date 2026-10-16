@@ -106,6 +106,8 @@ export function widgetVersion(widgetId) {
   return numbers.length ? Math.max(...numbers) : null;
 }
 
+export const widgetPins = () => structuredClone(WIDGET_VERSIONS);
+
 export const hasWidget = (widgetId) =>
   Object.prototype.hasOwnProperty.call(WIDGET_BASE_HTML, widgetId) && widgetVersion(widgetId) !== null;
 export const widgetHtml = (widgetId) => WIDGET_BASE_HTML[widgetId];
