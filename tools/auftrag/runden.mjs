@@ -1,10 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
-import { auswegBei, zweckUnklar } from "./ausgang.mjs";
+import { auswegBei, nenntAltenTest, zweckUnklar } from "./ausgang.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
 import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
@@ -12,6 +12,7 @@ import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
+import { testTitel } from "./testtitel.mjs";
 import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
@@ -123,6 +124,12 @@ function planBefunde(plan, neu, root) {
   return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
 }
 
+function ohneTestumbau(auftrag, alterTest, zaehler) {
+  if (istUmbau(auftrag)) return "der Auftrag ist selbst ein Umbau";
+  if (!alterTest.rot) return `die Testdatei ${alterTest.datei} ist mit der Änderung nicht rot`;
+  return zaehler.vorbauten > 0 ? `der eine ${TESTUMBAU} dieses Auftrags ist schon gelaufen` : null;
+}
+
 function vorbauBefund(plan, datei) {
   if (plan.befunde.length > 0) return plan.befunde.join("; ");
   const { art, abnahme } = plan.kontext.auftrag;
@@ -214,15 +221,19 @@ class Runden {
   vorbauUmbauen(ergebnis) {
     const { auftrag, zaehler, root } = this.kontext;
     const { alterTest } = ergebnis;
-    if (istUmbau(auftrag) || !alterTest.rot || zaehler.vorbauten > 0) return this.legeAltenTestAntonioVor(ergebnis);
+    const ohne = ohneTestumbau(auftrag, alterTest, zaehler);
+    if (ohne !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${ohne}.`);
     zaehler.vorbauten += 1;
     verwerfe(ergebnis.basis, root);
     const plan = this.planeUmbau(vorbauAnlass(alterTest));
     const abgelehnt = vorbauBefund(plan, alterTest.datei);
     if (abgelehnt !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${abgelehnt}. Der Plan steht im Beleg ${auftrag.id}-plan.`);
     const umbau = plan.kontext.auftrag;
-    const vorlauf = new Runden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
+    const vorlauf = new Runden({ ...this.kontext, ...plan.kontext, vorbau: true }, this.starteRunde).fuehreAus();
     if (vorlauf !== GRUEN) return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} vorweg ist gescheitert (${vorlauf}); sein Beleg heißt ${umbau.id}.`);
+    if (nenntAltenTest(alterTest, testTitel(readFileSync(join(root, alterTest.datei), "utf8"))) === null) {
+      return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} hat den Fall ${alterTest.test} entfernt oder umbenannt; er ist verworfen.`);
+    }
     return GRUEN;
   }
 
@@ -274,7 +285,7 @@ class Runden {
     return this.zurueckAnDiePlanung(ergebnis, gestoppt);
   }
 
-  legeAltenTestAntonioVor(ergebnis, vorbau = null) {
+  legeAltenTestAntonioVor(ergebnis, vorbau) {
     verwerfe(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
     const { zeile, datei, test, rot } = ergebnis.alterTest;
@@ -286,7 +297,7 @@ class Runden {
       "",
       `Die Testdatei ${datei} ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}. Den Testnamen gibt es in der Datei; ob genau dieser Fall rot ist, prüft das Skript nicht.`,
       `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`,
-      ...(vorbau === null ? [] : [vorbau]),
+      vorbau,
     ].join("\n");
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     return this.entscheidung(ergebnis, { kopf, anlass: `Der Bau-Agent meldet: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
@@ -308,6 +319,10 @@ class Runden {
 
   entscheidung(ergebnis, gestoppt) {
     const { phase, auftrag, root } = this.kontext;
+    if (this.kontext.vorbau) {
+      schreibeBeleg(root, { ...ergebnis, runden: this.fehler, grund: gestoppt.anlass });
+      return ROT;
+    }
     const notiz = this.notiz(gestoppt);
     const hinweise = hinweiseFuerNotiz(ergebnis.agenten, entnimmVolleAntwort);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");
