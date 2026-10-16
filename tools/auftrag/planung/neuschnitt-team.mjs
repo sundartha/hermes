@@ -62,8 +62,12 @@ class NeuschnittPlanung extends Planung {
     this.vorhandene = phase.auftraege.filter((auftrag) => auftrag !== this.alt);
   }
 
+  eigeneNummern() {
+    return liste(this.alt.prueft);
+  }
+
   beginne(soll) {
-    const eigene = istUmbau(this.alt) ? [] : liste(this.alt.prueft);
+    const eigene = this.eigeneNummern();
     this.soll = new Map([...soll].filter(([nummer]) => eigene.includes(nummer)));
     this.team = new NeuschnittTeam(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
@@ -96,28 +100,11 @@ class NeuschnittPlanung extends Planung {
     return berichte.filter(({ gruppe }) => liste(gruppe).some((nummer) => this.soll.has(nummer)));
   }
 
-  produktDateien(auftraege) {
-    const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
-    return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(this.root, datei)));
-  }
 
-  ersatzbericht(dateien) {
-    const aenderungen = dateien.map((datei) => ({ datei, von: 1, bis: readFileSync(join(this.root, datei), "utf8").split("\n").length }));
-    return { gruppe: [], nummern: { [this.alt.id]: { aenderungen } } };
-  }
 
-  async ersatzKarten(auftraege) {
-    const dateien = this.produktDateien(auftraege);
-    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter((datei) => QUELLTEXT.test(datei)))]);
-    return { funktionsliste, dateikarte: await dateiKarte(this.root, [this.ersatzbericht(dateien)]) };
-  }
-
-  karten() {
-    return istUmbau(this.alt) ? this.ersatzKarten([this.alt]) : super.karten();
-  }
 
   erkundungsbericht() {
-    return istUmbau(this.alt) ? this.ersatzbericht(this.produktDateien([this.alt])) : this.berichte;
+    return this.berichte;
   }
 
   ausstieg(antwort) {
@@ -167,11 +154,8 @@ class NeuschnittPlanung extends Planung {
     await this.planerStufe(await this.planerNachricht(), (wert) => this.nimmSchnitt(wert));
   }
 
-  async skriptPruefung(schnitt, eingaben) {
-    if (!istUmbau(this.alt)) return schnittPruefung(schnitt, eingaben);
-    const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
-    this.umbauKarten = await this.ersatzKarten([this.alt, ...umbauten]);
-    return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...this.umbauKarten });
+  skriptPruefung(schnitt, eingaben) {
+    return schnittPruefung(schnitt, eingaben);
   }
 
   durchstich(schnitt) {
@@ -197,16 +181,18 @@ class NeuschnittPlanung extends Planung {
     return schluessel.map((zeile) => (zeile === DURCHSTICH_ZEILE ? `durchstich:${durchstich}` : zeile));
   }
 
-  neuschnittAbschnitte() {
+  neuschnittKopf() {
     const { auftragId, anlass, datei } = this.eingabe;
     const regeln = [
       `Die Schnittliste enthält nur die neuen Aufträge, die ${auftragId} ersetzen. Alle anderen Aufträge stehen in der Phasendatei und bleiben, wie sie sind.`,
       "Bei gegenfrage:alle zählt ein Satz als abgedeckt, wenn er bei einem Auftrag der Phasendatei oder der Schnittliste steht.",
       `Eine Zeile durchstich: mit der Kennung eines Auftrags prüfst du für diesen Auftrag wie ${DURCHSTICH_ZEILE}.`,
     ];
-    const kopf = abschnitt("Neuschnitt", [anlass, regeln.join(" "), `Phasendatei ${datei}:`, json(this.phase)].join("\n\n"));
-    if (!istUmbau(this.alt)) return [kopf];
-    return [kopf, abschnitt("Funktionsliste", json(this.umbauKarten.funktionsliste)), abschnitt("Dateikarte", json(this.umbauKarten.dateikarte))];
+    return abschnitt("Neuschnitt", [anlass, regeln.join(" "), `Phasendatei ${datei}:`, json(this.phase)].join("\n\n"));
+  }
+
+  neuschnittAbschnitte() {
+    return [this.neuschnittKopf()];
   }
 
   async prueferNachricht(schluessel, teil) {
@@ -321,9 +307,51 @@ class NeuschnittPlanung extends Planung {
   }
 }
 
+class UmbauNeuschnittPlanung extends NeuschnittPlanung {
+  eigeneNummern() {
+    return [];
+  }
+
+  produktDateien(auftraege) {
+    const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
+    return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(this.root, datei)));
+  }
+
+  ersatzbericht(dateien) {
+    const aenderungen = dateien.map((datei) => ({ datei, von: 1, bis: readFileSync(join(this.root, datei), "utf8").split("\n").length }));
+    return { gruppe: [], nummern: { [this.alt.id]: { aenderungen } } };
+  }
+
+  async ersatzKarten(auftraege) {
+    const dateien = this.produktDateien(auftraege);
+    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter((datei) => QUELLTEXT.test(datei)))]);
+    return { funktionsliste, dateikarte: await dateiKarte(this.root, [this.ersatzbericht(dateien)]) };
+  }
+
+  karten() {
+    return this.ersatzKarten([this.alt]);
+  }
+
+  erkundungsbericht() {
+    return this.ersatzbericht(this.produktDateien([this.alt]));
+  }
+
+  async skriptPruefung(schnitt, eingaben) {
+    const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
+    this.umbauKarten = await this.ersatzKarten([this.alt, ...umbauten]);
+    return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...this.umbauKarten });
+  }
+
+  neuschnittAbschnitte() {
+    return [this.neuschnittKopf(), abschnitt("Funktionsliste", json(this.umbauKarten.funktionsliste)), abschnitt("Dateikarte", json(this.umbauKarten.dateikarte))];
+  }
+}
+
 export async function neuschnitt(ablage, eingabe, phase) {
   const ordner = resolve(eingabe.root, eingabe.ordner);
-  const planung = new NeuschnittPlanung(eingabe.root, ordner, { ablage, eingabe, phase });
+  const alt = phase.auftraege.find(({ id }) => id === eingabe.auftragId);
+  const Art = istUmbau(alt) ? UmbauNeuschnittPlanung : NeuschnittPlanung;
+  const planung = new Art(eingabe.root, ordner, { ablage, eingabe, phase });
   const { soll } = nummernImOrdner(ordner);
   planung.beginn = Date.now();
   planung.beginne(soll);
