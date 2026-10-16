@@ -4,14 +4,14 @@ import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
 import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
-import { zweckUnklar } from "./ausgang.mjs";
+import { auswegBei, zweckUnklar } from "./ausgang.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
 import { UMBAU_AUSWEG, istTestdatei, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
-import { MELDUNG, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
+import { MELDUNG, PRUEFUNG, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
@@ -33,6 +33,14 @@ function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
 }
 
+function rotePruefungen(pruefungen) {
+  return pruefungen.filter(({ exitCode }) => exitCode !== 0);
+}
+
+function zweckIdsDer({ name, zeilen, zweck }) {
+  return zweck ?? zweckIds({ name, zeilen });
+}
+
 function fehlerausgabe({ runde, grund, pruefungen, agenten, roteIds = [] }) {
   const gezeigt = new Set();
   const bloecke = (ids) => {
@@ -40,11 +48,14 @@ function fehlerausgabe({ runde, grund, pruefungen, agenten, roteIds = [] }) {
     for (const id of neu) gezeigt.add(id);
     return neu.flatMap(zweckBlock);
   };
-  const rot = pruefungen.filter(({ exitCode }) => exitCode !== 0);
-  const zeilen = rot.flatMap(({ name, zeilen: belegzeilen, zweck }) => [`${name}:`, ...belegzeilen, ...bloecke(zweck ?? zweckIds({ name, zeilen: belegzeilen }))]);
+  const zeilen = rotePruefungen(pruefungen).flatMap((pruefung) => [`${pruefung.name}:`, ...pruefung.zeilen, ...bloecke(zweckIdsDer(pruefung))]);
   const ohneSchritt = bloecke(roteIds);
   const schluss = [...gezeigt].some(hatAusweg) ? [AUSWEG_SCHLUSS] : [];
   return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...hinweiseDesBaus(agenten)].join("\n");
+}
+
+function roteIdsDer({ pruefungen, roteIds = [] }) {
+  return [...new Set([...rotePruefungen(pruefungen).flatMap(zweckIdsDer), ...roteIds])];
 }
 
 function planPrompt(phase, auftrag, satz) {
@@ -125,6 +136,7 @@ class Runden {
     this.kontext = kontext;
     this.starteRunde = starteRunde;
     this.fehler = [];
+    this.zuletztRot = [];
   }
 
   vorgeschichte() {
@@ -152,6 +164,7 @@ class Runden {
         continue;
       }
       this.fehler.push(fehlerausgabe(ergebnis));
+      this.zuletztRot = roteIdsDer(ergebnis);
       if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
       verwerfe(ergebnis.basis, this.kontext.root);
     }
@@ -214,10 +227,11 @@ class Runden {
     verwerfe(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
     const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
-    const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}`;
+    const unklar = zweckUnklar(ergebnis.ausstieg);
+    const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}\n${auswegBei(unklar === null ? this.zuletztRot : [unklar])}`;
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     const gestoppt = { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise };
-    if (zweckUnklar(ergebnis.ausstieg) !== null) return this.entscheidung(ergebnis, gestoppt);
+    if (unklar !== null) return this.entscheidung(ergebnis, gestoppt);
     return this.zurueckAnDiePlanung(ergebnis, gestoppt);
   }
 
@@ -229,6 +243,7 @@ class Runden {
       `Der Bau-Agent hat den Auftrag ${auftrag.id} der Phase ${phase.phase} angehalten: Ein alter Test hält das Verhalten fest, das der Auftrag ändert.`,
       "",
       zeile,
+      auswegBei([PRUEFUNG.BETROFFENE_TESTS]),
       "",
       `Der genannte Test ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}.`,
       `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg.`,

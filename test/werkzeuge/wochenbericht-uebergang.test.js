@@ -81,6 +81,8 @@ function antwortenFuerAnreize(url) {
     return [
       { commit: { message: "Baue um\n\nWarum: x\n\nGleichwertig: a.js:3 > zu >=, weil die Grenze nie erreicht wird\nGleichwertig: a.js:9 + zu -, weil null addiert wird\nPaket: AN1" } },
       { commit: { message: "Ändere b\n\nWarum: y\n\nGleichwertig: ohne Begründung\nPaket: AN1" } },
+      { commit: { message: "Schneide den Auftrag a1 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: x\nAusweg bei Prüfung: lint\n\nAuftrag: P-001/a1" } },
+      { commit: { message: "Schneide den Auftrag a2 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: y\nAusweg bei Prüfung: lint, typprüfung\n\nAuftrag: P-001/a2" } },
     ];
   }
   if (url.pathname.endsWith("/issues/comments")) {
@@ -88,6 +90,8 @@ function antwortenFuerAnreize(url) {
       { created_at: IN_DER_WOCHE, body: "## Entscheidung nötig\n\nAuftrag passt nicht: Der Abnahmetest prüft das Gegenteil des Ziels." },
       { created_at: VOR_DER_WOCHE, body: "Auftrag passt nicht: alt" },
       { created_at: IN_DER_WOCHE, body: "Voraussetzung fehlt: Altfunktionen aufräumen: src/a.js:rechne" },
+      { created_at: IN_DER_WOCHE, body: "## Entscheidung nötig\n\nAlter Test hält altes Verhalten fest: test/a.test.js:alt – neu\nAusweg bei Prüfung: betroffene tests" },
+      { created_at: VOR_DER_WOCHE, body: "Ausweg bei Prüfung: lint" },
     ];
   }
   if (url.pathname.endsWith("/issues/11/events")) return [{ event: "closed", commit_id: "a".repeat(40) }];
@@ -108,6 +112,8 @@ test("Wochenbericht: zählt angenommene Gleichwertig-Meldungen, Ausstiege „Auf
   assert.deepEqual(await incentiveSection(JETZT), [
     "- Angenommene Gleichwertig-Meldungen in Commits auf master: 2",
     "- Ausstiege „Auftrag passt nicht“ in Kommentaren: 1",
+    "- Ausstiege je Prüfung: lint 2, betroffene tests 1, typprüfung 1",
+    "- Alter Test hält altes Verhalten fest: 1",
     "- Geschlossene Prüfer-Issues: 1 mit einer Änderung, 1 ohne Änderung",
     "",
   ]);

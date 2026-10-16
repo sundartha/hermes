@@ -3,11 +3,25 @@ import { WEEK_MS } from "./zeit.mjs";
 
 const EQUIVALENT_LINE = /^Gleichwertig: .+, weil .+$/gm;
 const EXIT_LINE = /^Auftrag passt nicht: \S/m;
+const EXIT_BY_CHECK = /^Ausweg bei Prüfung: (\S.*)$/gm;
+const OLD_TEST_LINE = /^Alter Test hält altes Verhalten fest: \S/m;
+const CHECK_SEPARATOR = ", ";
 const REVIEW_LABEL = "pruefer";
 const CLOSED = "closed";
 
 function equivalentCount(commits) {
   return commits.reduce((sum, { commit }) => sum + (commit.message.match(EQUIVALENT_LINE) ?? []).length, 0);
+}
+
+function exitsByCheck(texts) {
+  const counts = new Map();
+  for (const text of texts) {
+    for (const [, ids] of text.matchAll(EXIT_BY_CHECK)) {
+      for (const id of ids.split(CHECK_SEPARATOR)) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  const sorted = [...counts].sort(([first, many], [second, more]) => more - many || first.localeCompare(second));
+  return sorted.length > 0 ? sorted.map(([id, count]) => `${id} ${count}`).join(", ") : "0";
 }
 
 function inWeek(timestamp, start) {
@@ -28,13 +42,18 @@ export async function incentiveSection(now) {
     repoPages(`/issues/comments?since=${since}`),
     repoPages(`/issues?labels=${REVIEW_LABEL}&state=${CLOSED}&since=${since}`),
   ]);
-  const exits = comments.filter(({ body, created_at: created }) => inWeek(created, start) && EXIT_LINE.test(body ?? ""));
+  const weekComments = comments.filter(({ created_at: created }) => inWeek(created, start)).map(({ body }) => body ?? "");
+  const exits = weekComments.filter((body) => EXIT_LINE.test(body));
+  const oldTests = weekComments.filter((body) => OLD_TEST_LINE.test(body));
+  const byCheck = exitsByCheck([...commits.map(({ commit }) => commit.message), ...weekComments]);
   const closed = reviewIssues.filter(({ pull_request: pull, closed_at: closedAt }) => pull === undefined && inWeek(closedAt, start));
   let withChange = 0;
   for (const issue of closed) if (await closedByChange(issue)) withChange += 1;
   return [
     `- Angenommene Gleichwertig-Meldungen in Commits auf master: ${equivalentCount(commits)}`,
     `- Ausstiege „Auftrag passt nicht“ in Kommentaren: ${exits.length}`,
+    `- Ausstiege je Prüfung: ${byCheck}`,
+    `- Alter Test hält altes Verhalten fest: ${oldTests.length}`,
     `- Geschlossene Prüfer-Issues: ${withChange} mit einer Änderung, ${closed.length - withChange} ohne Änderung`,
     "",
   ];
