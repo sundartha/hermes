@@ -231,3 +231,19 @@ test("fehlt die Funktion returnMessageText ganz, meldet das Skript genau das", (
   assert.match(result.stdout, /KARTE_GESPEICHERT: die Shell hat keine Funktion returnMessageText\(\)/);
   assert.doesNotMatch(result.stdout, /laesst sich nicht eindeutig lesen/);
 });
+
+test("ein auskommentierter Funktionskopf vor der echten Funktion verschiebt deren Ende nicht", (kontext) => {
+  const kopf = "    function returnMessageText(card, sub) {";
+  const alterKopf = "    // alt: function returnMessageText(card, sub) {";
+  const shell = verschachtelteShell([], [VERGLEICH_NACH_DER_FUNKTION]).replace(kopf, `${alterKopf}\n${kopf}`);
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+  assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
+  assert.match(result.stdout, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/);
+});
+
+test("zwei Funktionen returnMessageText machen die Shell unlesbar", (kontext) => {
+  const einmal = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: `${einmal}\n${einmal}` });
+  assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
+  assert.match(result.stdout, /Rumpf von returnMessageText\(\) laesst sich nicht eindeutig lesen/);
+});
