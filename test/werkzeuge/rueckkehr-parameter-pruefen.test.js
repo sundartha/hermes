@@ -121,3 +121,12 @@ test("ein falscher Aufruf oder eine fehlende Datei endet mit Exit 2", (kontext) 
   assert.equal(result.status, EXIT_USAGE);
   assert.match(result.stderr, /Datei fehlt/);
 });
+
+test("ein Zweig fuer einen laengeren Bezeichner zaehlt nicht als Zweig fuer den Parameter", (kontext) => {
+  for (const fremderName of ["xcard", "discard", "_card", "$card"]) {
+    const fremderZweig = `    if (${fremderName} === RETURN_OK) return "Karte gespeichert";`;
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shellSource([fremderZweig, SUB_BRANCH]) });
+    assert.equal(result.status, EXIT_FINDING, `${fremderName}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /KARTE_GESPEICHERT: kein Zweig "card === RETURN_OK"/, fremderName);
+  }
+});
