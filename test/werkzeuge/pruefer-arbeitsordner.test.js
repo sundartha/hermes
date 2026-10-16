@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { baueArbeitsordner, entferne } from "../../tools/auftrag/pruefer-arbeitsordner.mjs";
 import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
-import { prueferBefehl } from "../../tools/auftrag/pruefer-lauf.mjs";
+import { prueferBefehl, zuegeFuer } from "../../tools/auftrag/pruefer-lauf.mjs";
 import { roteRunde, roterAbschnitt } from "../../tools/auftrag/rote-pruefungen.mjs";
 import { zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { ohneGitVariablen, probeRepo } from "./pruefer/hilfen.mjs";
@@ -17,6 +17,7 @@ const KOPF = "Setze die Zahl\n\nWarum: Auftrag a1.\n";
 const HERKUNFT = "Auftrag: probe/a1\nArt: umbau\n";
 const ROTER_ABSCHNITT = roterAbschnitt([roteRunde({ runde: 1, pruefungen: [{ name: "lint", exitCode: 1, zeilen: [BELEGZEILE] }] })]).join("\n");
 const KEINE_ANGABE = "keine Angabe; der Commit stammt nicht aus dem Auftragsweg";
+const PR_PATCH = "pr/gesamt.patch";
 
 function ergebnisseFuer(context, nachricht) {
   const repo = probeRepo(context);
@@ -61,4 +62,39 @@ test("der Prüfer fragt, ob die Ursache behoben oder nur der Melder ruhiggestell
   ]) {
     assert.ok(anweisung.includes(teil), teil);
   }
+});
+
+function zweiCommitsMitListe(context) {
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, "Setze die Zahl\n");
+  repo.committe({ "src/name.js": "export const NAME = \"a\";\n" }, "Ergänze den Namen\n");
+  const { commits } = zuPruefendeCommits({ basis, head: repo.git(["rev-parse", "HEAD"]), branch: "fix/zahl", root: repo.ordner });
+  const liste = commits.map((commit, index) => ({ ...commit, letzter: index === commits.length - 1 }));
+  const ordnerFuer = (commit) => {
+    const ergebnis = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: "", ciLauf: "", basis, commits: liste });
+    context.after(() => entferne(ergebnis.ordner));
+    return ergebnis;
+  };
+  return { liste, ordnerFuer };
+}
+
+test("der Prüfer sieht alle Commits des PR mit Betreff und Dateien und seine Stelle darin", (context) => {
+  const { liste: [erster, zweiter], ordnerFuer } = zweiCommitsMitListe(context);
+  const { ordner, patches } = ordnerFuer(erster);
+  const text = readFileSync(join(ordner, "auftrag.md"), "utf8");
+  assert.ok(text.includes("Dieser Commit ist Nummer 1 von 2. Auftrag und Bereich prüfst du hier nicht"), text);
+  assert.ok(text.includes(`1. ${erster.sha} "Setze die Zahl" ← dieser Commit\n    Dateien: "src/zahl.js"\n`), text);
+  assert.ok(text.includes(`2. ${zweiter.sha} "Ergänze den Namen"\n    Dateien: "src/name.js"\n`), text);
+  assert.ok(!existsSync(join(ordner, PR_PATCH)) && !patches.includes(PR_PATCH), patches.join(", "));
+});
+
+test("am letzten Commit liegt der ganze PR als Diff gegen die Basis, muss gelesen werden und bekommt Züge", (context) => {
+  const { liste: [erster, zweiter], ordnerFuer } = zweiCommitsMitListe(context);
+  const { ordner, patches } = ordnerFuer(zweiter);
+  assert.ok(patches.includes(PR_PATCH), patches.join(", "));
+  const gesamt = readFileSync(join(ordner, PR_PATCH), "utf8");
+  assert.ok(gesamt.includes("+export const ZAHL = 2;") && gesamt.includes('+export const NAME = "a";'), gesamt);
+  assert.ok(readFileSync(join(ordner, "auftrag.md"), "utf8").includes("Nummer 2 von 2. Er ist der letzte"));
+  assert.equal(zuegeFuer(zweiter) - zuegeFuer({ ...zweiter, letzter: false }), zuegeFuer(erster) - zuegeFuer({ ...erster, dateien: [] }));
 });
