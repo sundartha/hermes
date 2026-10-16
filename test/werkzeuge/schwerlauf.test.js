@@ -2,25 +2,13 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { once } from "node:events";
-import { pathToFileURL } from "node:url";
 
-import {
-  PRE_PUSH_HOOK,
-  REPO_ROOT,
-  isolatedEnvironment,
-  passingTest,
-  probeDirectory,
-  probeRepository,
-} from "./probe-repo.js";
+import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository } from "./probe-repo.js";
+import { FRIST, SCHWERLAUF, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 import { echtWarten } from "../echt-warten.js";
 
-const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
-const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
-const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
-const FRIST = { timeout: 30_000 };
 const PRUEFABSTAND_MS = 100;
 const PRUEFUNGEN_BIS_AUFGABE = 50;
 const WARTEZEIT_AUF_SPERRE_MS = 3_600_000;
@@ -30,66 +18,6 @@ const PERL = "/usr/bin/perl";
 const NUR_EIGENTUEMER = 0o600;
 const RECHTE_BITS = 0o777;
 const ANDERES_NACHSEHEN = 'use Fcntl qw(:flock); open(my $f, ">>", $ARGV[0]) or die; flock($f, LOCK_SH) or die; $| = 1; print "schaut\\n"; 1 while sysread(STDIN, my $rest, 4096);';
-
-function umgebung(context) {
-  const env = { ...isolatedEnvironment(), SCHWERLAUF_SPERRDATEI: join(probeDirectory(context, {}), "sperre") };
-  delete env.SCHWERLAUF_HALTER;
-  return env;
-}
-
-function starte(args, { env, cwd = REPO_ROOT, stdin = "ignore" }) {
-  const kind = spawn(process.execPath, args, { cwd, env, stdio: [stdin, "pipe", "pipe"] });
-  const lauf = { kind, stdout: "", stderr: "", ende: once(kind, "exit") };
-  kind.stdout.setEncoding("utf8").on("data", (teil) => (lauf.stdout += teil));
-  kind.stderr.setEncoding("utf8").on("data", (teil) => (lauf.stderr += teil));
-  return lauf;
-}
-
-function zeile(strom, muster) {
-  return new Promise((gefunden) => {
-    createInterface({ input: strom }).on("line", (text) => {
-      if (muster.test(text)) gefunden(text);
-    });
-  });
-}
-
-async function wartet(lauf) {
-  const geendet = lauf.ende.then(([code]) => {
-    throw new Error(`Lauf endete mit Exit ${code}, ohne auf die Sperre zu warten: ${lauf.stderr}`);
-  });
-  await Promise.race([zeile(lauf.kind.stderr, WARTET), geendet]);
-}
-
-async function halter(context, env) {
-  const skript = `import { nimmSperreAuchFuerKindprozesse } from ${JSON.stringify(SPERRE)};
-await nimmSperreAuchFuerKindprozesse("Halter im Test");
-console.log("gehalten");
-setInterval(() => {}, 1000);`;
-  const lauf = starte(["--input-type=module", "-e", skript], { env });
-  context.after(() => lauf.kind.kill("SIGKILL"));
-  await zeile(lauf.kind.stdout, /^gehalten$/);
-  return lauf;
-}
-
-function arbeit(name) {
-  return `const beginn = Date.now(); console.log("begonnen"); process.stdin.resume().on("end", () => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })));`;
-}
-
-function starteArbeit(context, name, env) {
-  const lauf = starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit(name)], { env, stdin: "pipe" });
-  lauf.begonnen = zeile(lauf.kind.stdout, /^begonnen$/).then(() => "begonnen");
-  lauf.wartend = zeile(lauf.kind.stderr, WARTET).then(() => "wartet");
-  context.after(() => {
-    lauf.kind.stdin.destroy();
-    lauf.kind.kill("SIGKILL");
-  });
-  return lauf;
-}
-
-function zeitenVon(lauf) {
-  const zeilen = lauf.stdout.trim().split("\n");
-  return JSON.parse(zeilen.at(-1));
-}
 
 async function nacheinander(laeufe) {
   const erster = await Promise.race(laeufe.map((lauf) => lauf.begonnen.then(() => lauf)));
@@ -142,11 +70,7 @@ test("--stand meldet frei, während ein anderes Nachsehen auf die Sperre schaut"
 
 test("stirbt der Halter, wird die Sperre ohne Eingriff frei und der nächste Lauf startet", FRIST, async (context) => {
   const env = umgebung(context);
-  const gehalten = await halter(context, env);
-  gehalten.kind.kill("SIGKILL");
-  await gehalten.ende;
-  const naechster = starte([SCHWERLAUF, "--", process.execPath, "-e", "console.log('lief')"], { env });
-  await naechster.ende;
+  const naechster = await naechsterLaufNachTodVon(await halter(context, env), env);
 
   assert.equal(naechster.kind.exitCode, 0, naechster.stderr);
   assert.equal(naechster.stdout, "lief\n");
@@ -233,7 +157,7 @@ test("ist der Aufrufer beendet, wenn die Sperre frei wird, nimmt der wartende La
   const datei = join(probeDirectory(context, {}), "sperre");
   const aufruferBeendet = () => true;
 
-  await assert.rejects(sperreNehmenUndHalterEintragen(datei, "Aufrufer beendet", aufruferBeendet), /der Aufrufer ist beendet/);
+  await assert.rejects(sperreNehmenUndHalterEintragen(datei, "Aufrufer beendet", { aufruferBeendet }), /der Aufrufer ist beendet/);
   assert.equal(existsSync(`${datei}.json`), false);
 });
 
