@@ -1,7 +1,5 @@
 {
   "befunde": [
-    "test/kv-p1-cost-ledger-map.test.js|5779b7202684f827",
-    "test/kv-p1-cost-ledger-map.test.js|dba46c3f8a3a7f50",
     "test/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944"
   ]
 }
