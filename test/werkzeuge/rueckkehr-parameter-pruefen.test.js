@@ -123,7 +123,7 @@ test("ein falscher Aufruf oder eine fehlende Datei endet mit Exit 2", (kontext) 
 });
 
 test("ein Zweig fuer einen laengeren Bezeichner zaehlt nicht als Zweig fuer den Parameter", (kontext) => {
-  for (const fremderName of ["xcard", "discard", "_card", "$card", "äcard", "𝒞card", "a\u200dcard", "a\u200ccard"]) {
+  for (const fremderName of ["xcard", "discard", "_card", "$card", "äcard", "𝒞card", "a\u200dcard", "a\u200ccard", String.raw`\u0061card`, String.raw`\u{61}card`]) {
     const fremderZweig = `    if (${fremderName} === RETURN_OK) return "Karte gespeichert";`;
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shellSource([fremderZweig, SUB_BRANCH]) });
     assert.equal(result.status, EXIT_FINDING, `${fremderName}: ${result.stdout}${result.stderr}`);
@@ -209,7 +209,7 @@ test("Code im Funktionsrumpf, den die Pruefung nicht eindeutig liest, macht den 
 });
 
 test("ein Zweig, dessen Vergleichswert in einem laengeren Bezeichner endet, zaehlt nicht als Zweig", (kontext) => {
-  for (const fremderWert of ["RETURN_OKä", "RETURN_OK𝒞", "RETURN_OK1", "RETURN_OK$", "RETURN_OK\u200c", "RETURN_OK\u200d"]) {
+  for (const fremderWert of ["RETURN_OKä", "RETURN_OK𝒞", "RETURN_OK1", "RETURN_OK$", "RETURN_OK\u200c", "RETURN_OK\u200d", String.raw`RETURN_OK\u0041`, String.raw`RETURN_OK\u{41}`]) {
     const fremderZweig = `    if (card === ${fremderWert}) return "Karte gespeichert";`;
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shellSource([fremderZweig, SUB_BRANCH]) });
     assert.equal(result.status, EXIT_FINDING, `${fremderWert}: ${result.stdout}${result.stderr}`);
