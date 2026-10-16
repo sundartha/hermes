@@ -4,6 +4,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSy
 import { dirname, join } from "node:path";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
+import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
+import { auftragAusSchnitt, entwurfFuer } from "../../tools/auftrag/planung/zusammensetzen.mjs";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository } from "./probe-repo.js";
 
 const SKILL = join(REPO_ROOT, ".claude/skills/pitch");
@@ -170,8 +172,12 @@ export function schnittliste({ umbau = {}, erster = {}, ...oben } = {}) {
   };
 }
 
-export const ENTWURF_ROUTE = alsJson({ entwurf: "Grundlage: design.md, Lösung\nStatus `bestaetigt` setzen.\nFehlerfälle: SMS-Fehler: Status bleibt" });
-export const ENTWURF_HINWEIS = alsJson({ entwurf: "Grundlage: design.md, Lösung\nliest bestaetigt\nFehlerfälle: keine" });
+export const ENTWURF_TEXT = {
+  [ROUTE]: "Grundlage: design.md, Lösung\nStatus `bestaetigt` setzen.\nFehlerfälle: SMS-Fehler: Status bleibt",
+  [HINWEIS]: "Grundlage: design.md, Lösung\nliest bestaetigt\nFehlerfälle: keine",
+};
+export const ENTWURF_ROUTE = alsJson({ entwurf: ENTWURF_TEXT[ROUTE] });
+export const ENTWURF_HINWEIS = alsJson({ entwurf: ENTWURF_TEXT[HINWEIS] });
 export const GRUEN_PRUEFLISTE = { pruefliste: true, fundstelle: FUNDSTELLE };
 const NACHFRAGEN_JE_FALL = 1;
 export const WEGPRUEFUNGEN = GRUPPEN.length + NACHFRAGEN_JE_FALL;
@@ -193,12 +199,20 @@ export function planOrdner(context) {
   return wurzel;
 }
 
+export function phaseFuer(wurzel) {
+  const { soll } = nummernImOrdner(join(wurzel, ORDNER));
+  const eintraege = schnittliste().auftraege.filter(({ id }) => id !== UMBAU.id).map((eintrag) => ({ ...eintrag, abhaengigVon: eintrag.abhaengigVon.filter(({ id }) => id !== UMBAU.id) }));
+  const entwurf = Object.fromEntries(Object.entries(ENTWURF_TEXT).map(([bereich, text]) => [bereich, entwurfFuer(text, eintraege.filter((eintrag) => eintrag.bereich === bereich))]));
+  return { phase: KENNUNG, entwurf, auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll)) };
+}
+
 export function plane(context, { werkzeug, grund, ueberschrieben, argumente }) {
   const wurzel = planOrdner(context);
+  const aufruf = typeof argumente === "function" ? argumente(wurzel) : argumente;
   const ersatz = probeDirectory(context, { "antworten.json": JSON.stringify(antworten(grund, ueberschrieben)) });
   writeFileSync(join(ersatz, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(ersatz, "claude.mjs"), AUSFUEHRBAR);
-  const lauf = spawnSync(process.execPath, [werkzeug, ...argumente], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs") }, timeout: LAUF_FRIST_MS });
+  const lauf = spawnSync(process.execPath, [werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs") }, timeout: LAUF_FRIST_MS });
   return { ...lauf, wurzel, ersatz };
 }
 
