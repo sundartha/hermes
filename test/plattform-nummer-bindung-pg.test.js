@@ -194,3 +194,82 @@ test("P8: Schema-Idempotenz mit Trigger - applySchema zweimal auf frischer PGlit
   await applySchema(conn);
   assert.ok(true, "zweiter applySchema-Aufruf mit der neuen Trigger-DDL wirft nicht");
 });
+
+test("P9: Bindungstabelle ist global lesbar - RLS ENABLE+FORCE, nur die globale Policy, auch nach einer alten tenant_isolation-Policy", async () => {
+  const db = await neuePglite();
+  const conn = { query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) };
+  await applySchema(conn);
+  await db.exec(`CREATE POLICY tenant_isolation ON platform_number_use USING (false)`);
+  await applySchema(conn);
+  const [table] = (
+    await db.query(
+      `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'platform_number_use'`,
+    )
+  ).rows;
+  assert.deepEqual(table, { relrowsecurity: true, relforcerowsecurity: true });
+  const policies = (
+    await db.query(
+      `SELECT policyname, cmd, qual, with_check FROM pg_policies WHERE tablename = 'platform_number_use'`,
+    )
+  ).rows;
+  assert.deepEqual(policies, [
+    { policyname: "platform_number_use_global", cmd: "ALL", qual: "true", with_check: "true" },
+  ]);
+});
+
+test("P10: Teilindex - nach Unbind und Rebind stehen die freigegebene und die neue Bindung beide in der Datenbank", async () => {
+  const { store, db } = await makePgTestStore();
+  const key = { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI };
+  const bind = () => ops.bindPlatformNumber(store.load(), { ...key, provider: PROVIDER.TELNYX, tenantId: null });
+  bind();
+  await store.save();
+  ops.unbindPlatformNumber(store.load(), key);
+  await store.save();
+  bind();
+  await store.save();
+
+  const { rows } = await db.query(`SELECT released_at IS NULL AS open FROM platform_number_use WHERE e164=$1`, [ANI]);
+  assert.deepEqual(rows.map((row) => row.open).sort(), [false, true], "eine freigegebene und eine offene Bindung");
+});
+
+test("P11: Sperren (suspended) einer gebundenen Nummer wirft ebenfalls, die Zeile bleibt aktiv", async () => {
+  const { store, db } = await makePgTestStore();
+  const state = store.load();
+  const number = { id: "n11", tenantId: "t11", e164: CUSTOMER_DID, provider: PROVIDER.TELNYX };
+  ops.registerTenant(state, number.tenantId);
+  state.numbers.push({ ...number, providerNumberId: "ext_n11", status: NUMBER_STATUS.ACTIVE });
+  ops.bindPlatformNumber(state, { e164: number.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: number.provider, tenantId: null });
+  await store.save();
+
+  const err = await db.query(`UPDATE number SET status='suspended' WHERE id=$1`, [number.id]).catch((e) => e);
+  assert.equal(err.code, "P0001", "der Trigger wirft");
+  const { rows } = await db.query(`SELECT status FROM number WHERE id=$1`, [number.id]);
+  assert.deepEqual(rows, [{ status: NUMBER_STATUS.ACTIVE }]);
+});
+
+test("P12: Teilindex je Rolle - dieselbe Nummer als Absender-ANI und SMS-Absender ergibt zwei offene Bindungen", async () => {
+  const { store, db } = await makePgTestStore();
+  const purposes = Object.values(PLATFORM_NUMBER_PURPOSE);
+  const state = store.load();
+  for (const purpose of purposes) {
+    ops.bindPlatformNumber(state, { e164: ANI, purpose, provider: PROVIDER.TELNYX, tenantId: null, note: purpose });
+  }
+  await store.save();
+
+  const open = await db.query(`SELECT purpose FROM platform_number_use WHERE released_at IS NULL AND e164=$1`, [ANI]);
+  assert.deepEqual(open.rows.map((row) => row.purpose).sort(), [...purposes].sort());
+});
+
+test("P13: eine gesperrte, gebundene Nummer laesst sich wieder aktivieren - nur Freigabe und Sperre sind gesperrt", async () => {
+  const { store, db } = await makePgTestStore();
+  const state = store.load();
+  const suspended = { id: "n13", tenantId: "t13", e164: CUSTOMER_DID, status: NUMBER_STATUS.SUSPENDED };
+  ops.registerTenant(state, suspended.tenantId);
+  state.numbers.push({ ...suspended, provider: PROVIDER.TELNYX, providerNumberId: "ext_n13" });
+  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, provider: PROVIDER.TELNYX, tenantId: null });
+  await store.save();
+
+  await db.query(`UPDATE number SET status=$2 WHERE id=$1`, [suspended.id, NUMBER_STATUS.ACTIVE]);
+  const after = await db.query(`SELECT status FROM number WHERE id=$1`, [suspended.id]);
+  assert.equal(after.rows[0].status, NUMBER_STATUS.ACTIVE);
+});
