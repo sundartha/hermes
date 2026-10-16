@@ -70,7 +70,9 @@ const IDENTIFIER_CHAR = /[\w$]/;
 function containsWholeName(text, part) {
   let index = text.indexOf(part);
   while (index !== -1) {
-    if (!IDENTIFIER_CHAR.test(text.charAt(index + part.length))) return true;
+    const before = text.charAt(index - 1);
+    const after = text.charAt(index + part.length);
+    if (!IDENTIFIER_CHAR.test(before) && !IDENTIFIER_CHAR.test(after)) return true;
     index = text.indexOf(part, index + 1);
   }
   return false;
