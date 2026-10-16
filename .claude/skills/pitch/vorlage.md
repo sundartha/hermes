@@ -3,6 +3,9 @@
 Status: Entwurf
 Design Doc: <ja | nein>, weil <Grund aus diesem Fall>
 
+## Absicht
+<2 bis 4 Sätze, höchstens 1000 Zeichen: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie man im Zweifel wählt. Jeder Agent, der für diesen Pitch arbeitet, bekommt diesen Abschnitt wörtlich.>
+
 ## Problem
 <Eine konkrete Situation, in der man heute sieht, was die Änderung ändert: wer, wann, was passiert. Nicht, warum die Änderung gut ist.>
 (oder bei Änderungen ohne äußere Wirkung: Heute: <bisheriger Aufbau in einem Satz>)
