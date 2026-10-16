@@ -295,11 +295,13 @@ class NeuschnittPlanung extends Planung {
     const { beginn, schnitt, nachpruefungen, wegpruefungen } = this;
     const schleifen = this.schleifen.map((schleife) => schleife.bericht());
     const lauf = { exit, grund, beginn, schnitt, nachpruefungen, wegpruefungen, schleifen, annahmen: this.alleAnnahmen(), befunde: { ...this.befunde, offen } };
-    const bericht = planBericht(lauf, { root: this.root, team: this.team });
+    return planBericht(lauf, { root: this.root, team: this.team });
+  }
+
+  legeBericht(bericht) {
     const pfad = join(this.ablage, PLANBERICHT);
     schreibeJson(pfad, bericht);
     druckePlanBericht(bericht, pfad);
-    return bericht;
   }
 
   async ende() {
@@ -313,7 +315,9 @@ class NeuschnittPlanung extends Planung {
 
   async ergebnis() {
     const ende = await this.ende();
-    return { ...this.ergebnisFuer(ende), planung: this.bericht(ende) };
+    const bericht = this.bericht(ende);
+    this.legeBericht(bericht);
+    return { ...this.ergebnisFuer(ende), planung: bericht };
   }
 }
 
