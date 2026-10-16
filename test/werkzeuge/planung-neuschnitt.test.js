@@ -64,6 +64,15 @@ function umbauSchnitt(umbau) {
   return alsJson({ schnitt: neuerSchnitt({ auftraege: [umbau] }), aenderung: AENDERUNG });
 }
 
+const ZURUECKGEWIESEN = `trifft nicht zu, weil a2-n1 nur die Bestätigung prüft (${ROUTE}:5)`;
+const PRUEFERBEFUND = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2-n1": "a2-n1 braucht den Code aus a1" } };
+const KORREKTUR = alsJson({ schnitt: neuerSchnitt(), antworten: [{ schluessel: "allein-gruen:a2-n1", antwort: ZURUECKGEWIESEN }], aenderung: "a2 wird mit Begründung neu geschnitten." });
+
+function prueflisteDer(aufruf) {
+  const [, zeilen] = aufruf.eingabe.split("### Zeilen deiner Prüfliste");
+  return zeilen.split("\n").filter((zeile) => zeile.startsWith("- "));
+}
+
 function planerAntwort(text) {
   return { "planer|": [text] };
 }
@@ -137,6 +146,9 @@ for (const art of ["umbau", "testumbau"]) {
     assert.deepEqual(aufrufe(lauf, "erkunder"), []);
     const [, bericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
     assert.ok(bericht.includes(`"datei": "${HINWEIS}"`), bericht);
+    const [pruefer] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+    const neuschnittTeil = pruefer.eingabe.slice(pruefer.eingabe.indexOf("### Neuschnitt"), pruefer.eingabe.indexOf("### Schnittliste"));
+    assert.ok(neuschnittTeil.includes("### Funktionsliste") && neuschnittTeil.includes(`"datei": "${HINWEIS}"`), neuschnittTeil);
   });
 }
 
@@ -205,4 +217,61 @@ test("Neuschnitt: ein Skriptbefund endet ohne zweite Planer-Nachricht mit Exit 4
   assert.equal(aufrufe(lauf, "planer").length, 1);
   assert.deepEqual(JSON.parse(readFileSync(join(lauf.ablage, "schnitt.json"), "utf8")), schnitt);
   assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
+});
+
+test("Neuschnitt: der Prüfer sieht Anlass und Phasendatei und prüft die neuen Aufträge ohne durchstich:a1", (context) => {
+  const lauf = neuschnitt(context);
+  exit(lauf, 0);
+  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  assert.equal(pruefungen.length, 1);
+  assert.ok(pruefungen[0].eingabe.startsWith(`## Prüfung\n\n### Neuschnitt\n\n${ANLASS}\n\nDie Schnittliste enthält nur die neuen Aufträge, die a2 ersetzen.`), pruefungen[0].eingabe);
+  assert.ok(pruefungen[0].eingabe.includes(`Phasendatei ${DATEI}:`), pruefungen[0].eingabe);
+  const zeilen = prueflisteDer(pruefungen[0]);
+  assert.ok(zeilen.includes("- allein-gruen:a2-n1"), zeilen.join("\n"));
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("- durchstich:")), []);
+});
+
+test("Neuschnitt: ein Prüferbefund geht genau einmal an den Planer, danach prüft ein frischer Prüfer die ganze Liste", (context) => {
+  const lauf = neuschnitt(context, { ueberschrieben: { "pruefer-planung|## Prüfung": [PRUEFERBEFUND, GRUEN_PRUEFLISTE], "planer|## Befunde": [KORREKTUR] } });
+  exit(lauf, 0);
+  assert.equal(lauf.ergebnis.antwort, "a2 wird mit Begründung neu geschnitten.");
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
+  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  assert.equal(pruefungen.length, 2);
+  assert.notEqual(pruefungen[0].sitzung, pruefungen[1].sitzung);
+  assert.equal(pruefungen[1].resume, false);
+  assert.deepEqual(prueflisteDer(pruefungen[1]), prueflisteDer(pruefungen[0]));
+});
+
+test("Neuschnitt: ein Befund des frischen Prüfers nach der Korrektur endet mit Exit 4", (context) => {
+  const lauf = neuschnitt(context, { ueberschrieben: { "pruefer-planung|## Prüfung": [PRUEFERBEFUND, PRUEFERBEFUND], "planer|## Befunde": [KORREKTUR] } });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /allein-gruen:a2-n1: a2-n1 braucht den Code aus a1/);
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
+});
+
+test("Neuschnitt: Pitch ändern in der Korrekturrunde endet mit Exit 3 und beiden Zeilen der Antwort", (context) => {
+  const lauf = neuschnitt(context, { ueberschrieben: { "pruefer-planung|## Prüfung": [PRUEFERBEFUND], "planer|## Befunde": [PITCH_AENDERN] } });
+  exit(lauf, 3);
+  assert.equal(lauf.ergebnis.antwort, PITCH_AENDERN);
+});
+
+function durchstichLauf(context, auftraege) {
+  const nummern = ["S1", "S7", "T2"];
+  const ueberschrieben = { "erkunder|## Nachfrage": [bericht(nummern)], ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege }), aenderung: AENDERUNG })) };
+  return neuschnitt(context, { eingabe: { auftragId: "a1", fertig: [] }, ueberschrieben });
+}
+
+test("Neuschnitt: beim Neuschnitt von a1 gilt die Regel Durchstich für den ersten neuen Auftrag der Art funktion", (context) => {
+  const erster = auftrag("a1-n1", ROUTE, { prueft: ["S1", "S7", "T2"], abnahme: "test/nummern/eigene-nummer-hinterlegung.test.js", abhaengigVon: [] });
+  const lauf = durchstichLauf(context, [erster]);
+  exit(lauf, 0);
+  const zeilen = prueflisteDer(aufrufe(lauf, "pruefer-planung", "## Prüfung")[0]);
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("- durchstich:")), ["- durchstich:a1-n1"]);
+});
+
+test("Neuschnitt: ein Umbau als Durchstich beim Neuschnitt von a1 ist ein Befund", (context) => {
+  const lauf = durchstichLauf(context, [{ ...UMBAU, id: "a1-n1" }]);
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /a1-n1 ist umbau, der Durchstich ist eine funktion/);
 });

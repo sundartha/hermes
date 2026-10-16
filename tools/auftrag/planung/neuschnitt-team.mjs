@@ -6,7 +6,8 @@ import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
-import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nummernText } from "./plane.mjs";
+import { prueflisteSoll } from "./antworten.mjs";
+import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nachricht, nummernText, prueferZeile } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
 
@@ -20,6 +21,12 @@ const ERSTE_PLANUNG = "planung";
 const GLIEDERUNG = "gliederung.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
 const ERKUNDUNG_OFFEN = "die Erkundung für den Neuschnitt blieb offen";
+const DURCHSTICH = "a1";
+const DURCHSTICH_ZEILE = `durchstich:${DURCHSTICH}`;
+const PRUEFUNG_UNVOLLSTAENDIG = "die Prüfliste blieb nach der Rücksendung unvollständig";
+const ERSTE_PRUEFLISTE = "pruefliste.json";
+const PRUEFLISTE_NACH_KORREKTUR = "pruefliste-korrektur.json";
+const PRUEFUNG_OFFEN = "der frische Prüfer hat nach der Korrektur Befunde";
 
 function leseJson(pfad) {
   return JSON.parse(readFileSync(pfad, "utf8"));
@@ -163,19 +170,70 @@ class NeuschnittPlanung extends Planung {
     return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...this.umbauKarten });
   }
 
+  durchstich(schnitt) {
+    if (this.alt.id !== DURCHSTICH) return undefined;
+    const neue = liste(schnitt.auftraege).filter(istObjekt);
+    return (neue.find(({ art }) => art === "funktion") ?? neue[0])?.id;
+  }
+
   async pruefeSchnitt(schnitt) {
     if (!istObjekt(schnitt)) return super.pruefeSchnitt(schnitt);
     this.schnitt = schnitt;
     this.lege("schnitt.json", schnitt);
-    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene };
+    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt) };
     const { befunde, annahmen } = await this.skriptPruefung(schnitt, eingaben);
     this.schnittAnnahmen = annahmen;
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
   }
 
+  prueflisteSchluessel() {
+    const durchstich = this.durchstich(this.schnitt);
+    const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
+    if (durchstich === undefined) return schluessel.filter((zeile) => zeile !== DURCHSTICH_ZEILE);
+    return schluessel.map((zeile) => (zeile === DURCHSTICH_ZEILE ? `durchstich:${durchstich}` : zeile));
+  }
+
+  neuschnittAbschnitte() {
+    const { auftragId, anlass, datei } = this.eingabe;
+    const regeln = [
+      `Die Schnittliste enthält nur die neuen Aufträge, die ${auftragId} ersetzen. Alle anderen Aufträge stehen in der Phasendatei und bleiben, wie sie sind.`,
+      "Bei gegenfrage:alle zählt ein Satz als abgedeckt, wenn er bei einem Auftrag der Phasendatei oder der Schnittliste steht.",
+      `Eine Zeile durchstich: mit der Kennung eines Auftrags prüfst du für diesen Auftrag wie ${DURCHSTICH_ZEILE}.`,
+    ];
+    const kopf = abschnitt("Neuschnitt", [anlass, regeln.join(" "), `Phasendatei ${datei}:`, json(this.phase)].join("\n\n"));
+    if (!istUmbau(this.alt)) return [kopf];
+    return [kopf, abschnitt("Funktionsliste", json(this.umbauKarten.funktionsliste)), abschnitt("Dateikarte", json(this.umbauKarten.dateikarte))];
+  }
+
+  async prueferNachricht(schluessel, teil) {
+    const grundlage = this.pruefGrundlage(schluessel, await this.prueferSicht(teil));
+    return nachricht("Prüfung", [...this.neuschnittAbschnitte(), abschnitt("Schnittliste", json(this.schnitt)), ...grundlage]);
+  }
+
+  async pruefliste(datei) {
+    const schluessel = this.prueflisteSchluessel();
+    const text = await this.prueferNachricht(schluessel, { gruppe: null, schluessel });
+    const { befunde } = await this.pruefeMitFrischemPruefer(text, schluessel, { datei, grund: PRUEFUNG_UNVOLLSTAENDIG });
+    return befunde;
+  }
+
+  beantworte(befunde, wert, vorher) {
+    this.merkeAenderung(wert);
+    return super.beantworte(befunde, wert, vorher);
+  }
+
+  async pruefe() {
+    const befunde = await this.pruefliste(ERSTE_PRUEFLISTE);
+    if (befunde.length === 0) return;
+    await this.korrigiere(befunde, this.schnitt);
+    const danach = await this.pruefliste(PRUEFLISTE_NACH_KORREKTUR);
+    if (danach.length > 0) throw new Ende(EXIT_BEFUNDE, PRUEFUNG_OFFEN, danach.map(prueferZeile));
+  }
+
   async laufe() {
     await this.erkundeNummern();
     await this.schneide();
+    await this.pruefe();
   }
 
   sitzungen() {
