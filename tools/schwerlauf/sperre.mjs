@@ -11,7 +11,7 @@ import { neuerTempOrdner } from "../temp-ordner.mjs";
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
 export const PLAETZE_VARIABLE = "SCHWERLAUF_PLAETZE";
 export const HALTER_VARIABLE = "SCHWERLAUF_HALTER";
-export const STANDARD_PLAETZE = 1;
+export const STANDARD_PLAETZE = 2;
 const ANZAHL = /^[1-9]\d*$/;
 const STANDARD_ORDNER = "/tmp";
 const FREI = /^frei (\d+)$/;

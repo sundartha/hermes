@@ -170,14 +170,17 @@ test("ist die Zahl der Plätze keine positive ganze Zahl, startet der schwere La
   assert.equal(lauf.stdout, "");
 });
 
-test("ohne SCHWERLAUF_PLAETZE hat die Sperre einen Platz: ein zweiter Lauf wartet, bis der erste fertig ist", FRIST, async (context) => {
+test("ohne SCHWERLAUF_PLAETZE hat die Sperre zwei Plätze: zwei Läufe laufen gleichzeitig, ein dritter wartet, bis einer fertig ist", FRIST, async (context) => {
   const env = umgebung(context);
   delete env.SCHWERLAUF_PLAETZE;
-  const erster = await halter(context, env);
-  const zweiter = starteArbeit(context, "zweiter", { env });
+  const [erster, zweiter] = ["A", "B"].map((name) => starteArbeit(context, name, { env }));
 
-  assert.equal(await erstesEreignis(zweiter), "wartet");
-  assert.match(await stand(env), new RegExp(`, 1 Platz\\nPlatz 1: belegt von PID ${erster.kind.pid}, `));
-  erster.kind.kill("SIGKILL");
-  await zweiter.begonnen;
+  assert.deepEqual(await Promise.all([erster, zweiter].map(erstesEreignis)), ["begonnen", "begonnen"]);
+  const dritter = starteArbeit(context, "C", { env });
+  assert.equal(await erstesEreignis(dritter), "wartet");
+  assert.match(await stand(env), /, 2 Plätze\n/);
+  await beenden(erster);
+  await dritter.begonnen;
+  await beenden(zweiter, dritter);
+  assert.ok(zeitenVon(erster).ende <= zeitenVon(dritter).beginn);
 });
