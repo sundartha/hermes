@@ -77,14 +77,19 @@ function geaendert({ datei, anker, ersatz, anhang }, text) {
   return text.replace(anker, () => ersatz);
 }
 
+function vorlageFuer({ datei }) {
+  return datei;
+}
+
 function patchFuer(fall) {
-  if (!existsSync(fall.datei)) throw new NichtErzeugbar(`nicht erzeugbar: ${fall.datei} fehlt`);
-  writeFileSync(fall.datei, geaendert(fall, readFileSync(fall.datei, "utf8")));
+  const datei = vorlageFuer(fall);
+  if (!existsSync(datei)) throw new NichtErzeugbar(`nicht erzeugbar: ${datei} fehlt`);
+  writeFileSync(datei, geaendert({ ...fall, datei }, readFileSync(datei, "utf8")));
   try {
     const prefixe = ["--src-prefix=a/", "--dst-prefix=b/"];
-    return git(["diff", "--no-color", "--no-ext-diff", ...prefixe, "--", fall.datei]);
+    return git(["diff", "--no-color", "--no-ext-diff", ...prefixe, "--", datei]);
   } finally {
-    git(["checkout", "--", fall.datei]);
+    git(["checkout", "--", datei]);
   }
 }
 
