@@ -137,6 +137,7 @@ test("Neuschnitt: Zerlegung passt nicht endet ohne Prüfung der Fundstellen mit 
   exit(lauf, 3);
   assert.equal(lauf.ergebnis.antwort, PASST_NICHT);
   assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
+  assert.deepEqual(aufrufe(lauf, "pruefer-planung", "## Prüfung"), []);
 });
 
 test("Neuschnitt: Nachfragen des Planers enden mit Exit 4 und gehen an keinen Erkunder", (context) => {
@@ -273,6 +274,18 @@ test("Neuschnitt: ein Prüferbefund geht genau einmal an den Planer, danach prü
   assert.notEqual(pruefungen[0].sitzung, pruefungen[1].sitzung);
   assert.equal(pruefungen[1].resume, false);
   assert.deepEqual(prueflisteDer(pruefungen[1]), prueflisteDer(pruefungen[0]));
+});
+
+test("Neuschnitt: der frische Prüfer sieht nach der Korrektur die korrigierte Schnittliste", (context) => {
+  const [ersatz] = neuerSchnitt().auftraege;
+  const korrigiert = { ...ersatz, ziel: "Prüfe die Bestätigung erst nach dem Speichern des Codes" };
+  const korrektur = alsJson({ schnitt: neuerSchnitt({ auftraege: [korrigiert] }), antworten: [{ schluessel: "allein-gruen:a2-n1", antwort: "korrigiert: das Ziel nennt jetzt die Reihenfolge" }], aenderung: AENDERUNG });
+  const lauf = neuschnitt(context, { ueberschrieben: { "pruefer-planung|## Prüfung": [PRUEFERBEFUND, GRUEN_PRUEFLISTE], "planer|## Befunde": [korrektur] } });
+  exit(lauf, 0);
+  const [erste, zweite] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  assert.ok(erste.eingabe.includes(ersatz.ziel));
+  assert.ok(zweite.eingabe.includes(korrigiert.ziel));
+  assert.ok(!zweite.eingabe.includes(ersatz.ziel));
 });
 
 test("Neuschnitt: ein Befund des frischen Prüfers nach der Korrektur endet mit Exit 4", (context) => {
