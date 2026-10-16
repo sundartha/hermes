@@ -40,6 +40,11 @@ const NACHFRAGE = "## Zweck-Absatz fehlt";
 const ABSATZ_LINT = "Zweck lint: Drehbuchtext des Ersatz-Agenten zu lint.";
 const BEGRUENDUNG_BAU = "\nZweck der Prüfungen, Begründung des Bau-Agenten:\n";
 const ROTE_LINT_RUNDE = "\nRote Prüfungen laut Skript:\n| Runde 1: lint, Exit 1, Zweck-ID lint\n";
+const NUR_ARBEITSSITZUNG = 1;
+const ARBEITSSITZUNG_UND_NACHRUNDE = 2;
+const LINT_ROT_IN_JEDER_RUNDE = 9;
+const LINT_ROT_NUR_IN_RUNDE_1 = 1;
+const SAETZE_UEBER_DER_KUERZUNGSGRENZE = 40;
 
 function nachricht({ repo }) {
   return runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout;
@@ -60,7 +65,7 @@ test("begründet der Bau-Agent nach roter Lint-Runde, stehen rote Prüfung und A
   assert.ok(text.includes(ROTE_LINT_RUNDE) && text.includes("\n|     2:14  error  Name zu kurz  id-length\n"), text);
   assert.ok(text.includes(`\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> ${ABSATZ_LINT}\n\n`), text);
   assert.ok(readFileSync(join(lauf.werkzeug, "prompt-bau.txt"), "utf8").includes("Zugeordnet sind dem Bau-Agenten: lint."));
-  assert.equal(bauSitzungen(lauf).length, 1);
+  assert.equal(bauSitzungen(lauf).length, NUR_ARBEITSSITZUNG);
 });
 
 test("fehlt der Absatz, fragt das Skript in derselben Sitzung einmal nach, und mit der Antwort wird der Auftrag grün", (context) => {
@@ -74,8 +79,8 @@ test("fehlt der Absatz, fragt das Skript in derselben Sitzung einmal nach, und m
 });
 
 test("stoppt der Auftrag nach einer Nachfrage, nennt die Entscheidungsnotiz die Antwort der Arbeitssitzung als Hinweis", (context) => {
-  const immerRot = { ...LINT_EINMAL_ROT, "package.json": BASIS["package.json"].replace('"lint":"node -e 0"', '"lint":"node lint-rot.mjs lint 9"') };
-  const langerSchluss = "Weitere Erklärung der Arbeitssitzung. ".repeat(40);
+  const immerRot = { ...LINT_EINMAL_ROT, "package.json": BASIS["package.json"].replace('"lint":"node -e 0"', `"lint":"node lint-rot.mjs lint ${LINT_ROT_IN_JEDER_RUNDE}"`) };
+  const langerSchluss = "Weitere Erklärung der Arbeitssitzung. ".repeat(SAETZE_UEBER_DER_KUERZUNGSGRENZE);
   const antwort = { [NACHFRAGE]: ABSATZ_LINT, [VORIGE_RUNDE]: `Arbeitshinweis der zweiten Runde.\n${langerSchluss}`, "": "Arbeitshinweis der ersten Runde." };
   const lauf = starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT, "bau-antwort": antwort }, dateien: immerRot });
   assert.equal(lauf.lauf.status, EXIT_ROT, lauf.lauf.stdout + lauf.lauf.stderr);
@@ -101,7 +106,7 @@ test("ein grüner Auftrag ohne Befund hat keinen der beiden Abschnitte und keine
   const lauf = starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT, "bau-antwort": "Erledigt." } });
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
   assert.doesNotMatch(nachricht(lauf), /Rote Prüfungen laut Skript|Zweck der Prüfungen/);
-  assert.equal(bauSitzungen(lauf).length, 1);
+  assert.equal(bauSitzungen(lauf).length, NUR_ARBEITSSITZUNG);
 });
 
 test("in der Mutationsnachrunde braucht nur eine Dateiänderung einen Absatz; Nötig ohne Änderung braucht keinen", (context) => {
@@ -113,7 +118,7 @@ test("in der Mutationsnachrunde braucht nur eine Dateiänderung einen Absatz; N�
     const drehbuch = { bau: GEAENDERT, "bau-nachrunde": nachrunde, "bau-nachrunde-antwort": antwort };
     const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_EINMAL_ROT });
     assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
-    assert.equal(bauSitzungen(lauf).length, 2, antwort);
+    assert.equal(bauSitzungen(lauf).length, ARBEITSSITZUNG_UND_NACHRUNDE, antwort);
     const text = nachricht(lauf);
     assert.ok(text.includes("\n| Runde 1: mutation, Exit 1, Zweck-ID mutation\n"), text);
     assert.equal(text.includes(`\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> ${antwort}\n`), absatz, text);
@@ -158,7 +163,7 @@ test("im Umbau steht die Begründung des Test-Agenten im Commit seiner Tests, ni
 });
 
 test("nach einer roten Runde steht im Umbau die rote Runde des Bau-Agenten mit seinem Absatz im Umbau-Commit, nicht im Test-Commit", (context) => {
-  const dateien = { ...ALTER_STAND_EINMAL_ROT, ...LINT_EINMAL_ROT, "package.json": ALTER_STAND_EINMAL_ROT["package.json"].replace('"lint":"node -e 0"', '"lint":"node lint-rot.mjs lint 1"') };
+  const dateien = { ...ALTER_STAND_EINMAL_ROT, ...LINT_EINMAL_ROT, "package.json": ALTER_STAND_EINMAL_ROT["package.json"].replace('"lint":"node -e 0"', `"lint":"node lint-rot.mjs lint ${LINT_ROT_NUR_IN_RUNDE_1}"`) };
   const absatz = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten zum alten Stand.";
   const drehbuch = {
     bau: GEAENDERT,
