@@ -12,7 +12,7 @@ const WEB_SOURCE_DIR = "apps/web/src";
 const RETURN_CONSTANT = /const (RETURN_\w+) = "([^"]+)";/g;
 const RETURN_PARAM_PREFIX = /^RETURN_PARAM_/;
 const RETURN_FUNCTION_HEAD = /function returnMessageText\(([^)]*)\)\s*\{/;
-const CODE_TOKEN = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|[{}]/g;
+const CODE_TOKEN = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|[{}/]/g;
 const RETURN_CALL = /returnMessageText\(((?:\s*params\.get\(\w+\)\s*,?)+)\)/;
 const QUERY_READ = /params\.get\((\w+)\)/g;
 const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
@@ -64,6 +64,7 @@ function readShell(file) {
 function functionBody(source, bodyStart) {
   let depth = 1;
   for (const token of source.slice(bodyStart).matchAll(CODE_TOKEN)) {
+    if (token[0] === "/") return undefined;
     if (token[0] === "{") depth += 1;
     if (token[0] === "}") depth -= 1;
     if (depth === 0) return source.slice(bodyStart, bodyStart + token.index);
@@ -91,7 +92,7 @@ function containsWholeName(text, part) {
 }
 
 function branchProblem(shell, paramConst, valueConst) {
-  if (!shell.branch) return "die Shell hat keine Funktion returnMessageText()";
+  if (!shell.branch) return "die Shell hat keine eindeutig lesbare Funktion returnMessageText()";
   if (!shell.passed.has(paramConst)) return `die Shell gibt ${paramConst} nicht an returnMessageText weiter`;
   const arg = shell.branch.args[shell.passed.get(paramConst)];
   if (containsWholeName(shell.branch.body, `${arg} === ${valueConst}`)) return undefined;
