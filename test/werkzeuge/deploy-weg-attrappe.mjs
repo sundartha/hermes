@@ -213,7 +213,8 @@ function renderRouten(welt) {
       () => {
         welt.merker.add(ANGELEGT);
         const angelegt = welt.ausloesenStatus === HTTP_ANGELEGT;
-        return [welt.ausloesenStatus, angelegt ? deployEintrag(DEPLOY_ID).deploy : null];
+        const koerper = angelegt ? deployEintrag(DEPLOY_ID).deploy : null;
+        return [welt.ausloesenStatus, welt.ausloesenAntwort ?? koerper];
       },
     ],
     ["GET", /^\/deploys\?limit=20$/, () => deployListe(welt)],

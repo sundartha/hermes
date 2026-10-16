@@ -112,7 +112,9 @@ async function deployAusloesen(kontext, { commit, vorher, start }) {
   const { status, daten } = await render.ausloesen(commit);
   ausgabe.melde("deploy_ausgeloest", { http: status });
   if (status === HTTP_ANGELEGT && DEPLOY_ID.test(daten?.id ?? "")) return daten.id;
-  if (status === HTTP_ANGENOMMEN) return neuenDeploySuchen(kontext, { commit, vorher, start });
+  if (status === HTTP_ANGELEGT || status === HTTP_ANGENOMMEN) {
+    return neuenDeploySuchen(kontext, { commit, vorher, start });
+  }
   ausgabe.melde("abbruch", { schritt: "ausloesen" });
   return null;
 }
