@@ -43,7 +43,7 @@ const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
-export const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
+const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
@@ -56,7 +56,7 @@ export class Ende extends Error {
   }
 }
 
-export function zusammengefuegt(schluessel, ergebnisse) {
+function zusammengefuegt(schluessel, ergebnisse) {
   const zeilen = new Map(ergebnisse.flatMap(({ pruefliste }) => pruefliste).map((zeile) => [zeile.schluessel, zeile]));
   return schluessel.map((eintrag) => zeilen.get(eintrag));
 }
@@ -77,7 +77,7 @@ export function nachricht(ueberschrift, teile) {
   return [`## ${ueberschrift}`, "", ...teile].join("\n");
 }
 
-export function punkte(eintraege, leer = "keine") {
+function punkte(eintraege, leer = "keine") {
   return eintraege.length === 0 ? leer : eintraege.map((eintrag) => `- ${eintrag}`).join("\n");
 }
 
