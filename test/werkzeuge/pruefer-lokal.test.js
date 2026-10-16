@@ -26,6 +26,7 @@ const EXIT_AUFRUF = 2;
 const EXIT_NICHT_GELAUFEN = 3;
 const AUSFUEHRBAR = 0o755;
 const ERSATZ = fileURLToPath(new URL("pruefer/ersatz-pruefer.mjs", import.meta.url));
+const PROBE_GIT = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
 function mitBefunden(schweren) {
   const aufnahme = aufzeichnung("gueltig");
@@ -39,12 +40,13 @@ function ohneBefunde() {
   return mitBefunden([]);
 }
 
-function paketBranch(context) {
+function paketBranch(context, { letzterLeer }) {
   const repo = probeRepo(context);
   repo.git(["branch", "-M", "master"]);
   repo.git(["checkout", "-q", "-b", "paket/EF5-probe"]);
   repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, NACHRICHT);
   repo.committe({ "src/name.js": "export const NAME = 'b';\n" }, NACHRICHT);
+  if (letzterLeer) repo.git([...PROBE_GIT, "commit", "-q", "--allow-empty", "-m", NACHRICHT]);
   return repo;
 }
 
@@ -70,8 +72,8 @@ function diffZaehler(context, aufnahme) {
   return { programm, protokoll: () => null, laengen };
 }
 
-async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issueLesbar = true, unterordner = "", ersatz: eigenerErsatz }) {
-  const repo = paketBranch(context);
+async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issueLesbar = true, unterordner = "", ersatz: eigenerErsatz, letzterLeer = false }) {
+  const repo = paketBranch(context, { letzterLeer });
   const ersatz = eigenerErsatz ?? ersatzPruefer(context, { aufnahme });
   const routen = issueLesbar
     ? [[`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket EF5", body: "Ziel" }]]
@@ -124,6 +126,13 @@ test("lokal prüft jeden Commit seit master mit dem Befehl der CI, endet bei ein
   ]);
   assert.match(ausgabe, /kein Merge-Signal/);
   assert.doesNotMatch(ausgabe, /success/);
+});
+
+test("lokal prüft auch einen leeren letzten Commit am ganzen PR, damit Auftrag und Bereich geprüft werden", async (context) => {
+  const { status, ausgabe, ergebnis, protokoll } = await starte(context, { aufnahme: ohneBefunde(), letzterLeer: true });
+  assert.equal(status, 0, ausgabe);
+  assert.equal(ergebnis.commits.at(-1).grund, "");
+  assert.ok(protokoll.dateien.includes("pr/gesamt.patch"), protokoll.dateien.join(", "));
 });
 
 test("lokal aus einem Unterordner gibt dem Prüfer dieselben Diffs wie aus der Wurzel", async (context) => {

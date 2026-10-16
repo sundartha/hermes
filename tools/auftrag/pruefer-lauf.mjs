@@ -276,7 +276,7 @@ export function nichtGelaufen(commit, grund) {
 }
 
 export async function pruefeCommit(commit, kontext) {
-  if (commit.dateien.length === 0) {
+  if (commit.dateien.length === 0 && !commit.letzter) {
     return eintrag(commit, {
       zustand: GEPRUEFT,
       grund: "keine Änderung",
