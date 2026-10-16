@@ -93,11 +93,11 @@ function messeKette(stand, { nummer, pruefsumme }) {
   return branch.exit === EXIT_GRUEN;
 }
 
-function urteil(stand, { pruefsumme, erwartet, summen }) {
+function urteil(stand, { pruefsumme, erwartet, summen, rot }) {
   const plan = lesePlan({ ordner: stand.ordner, summe: pruefsumme, erwartet });
   if (plan.fehler) return { gruen: false, verstoesse: plan.fehler };
   const teile = { [BASIS]: [], [BRANCH]: [] };
-  const fehler = [];
+  const fehler = [...rot];
   plan.daten.pakete.forEach((_paket, nummer) => {
     for (const art of [BASIS, BRANCH]) {
       const name = paketName(art, nummer);
@@ -119,17 +119,19 @@ function urteil(stand, { pruefsumme, erwartet, summen }) {
 
 function messePakete(stand, { pakete, pruefsumme }) {
   const summen = [];
+  const rot = [];
   for (const nummer of pakete) {
     const gruen = messeKette(stand, { nummer, pruefsumme });
     const basis = ausgabenAus(join(stand.ordner, `${paketName(BASIS, nummer)}.txt`));
     summen.push(basis.pruefsumme ?? "");
+    if (!gruen) rot.push(`Paket ${nummer}: ein Messschritt endete rot`);
     if (!gruen && stand.alle) console.log(`Lokal: rot in Paket ${nummer}; weiter wegen --alle.`);
     if (!gruen && !stand.alle) {
       console.log(`Lokal: rot in Paket ${nummer}; die übrigen Pakete werden nicht gemessen.`);
       return undefined;
     }
   }
-  return summen;
+  return { summen, rot };
 }
 
 async function messe(stand, { master, kopf, bereich }) {
@@ -144,9 +146,9 @@ async function messe(stand, { master, kopf, bereich }) {
   });
   if (planen.exit !== EXIT_GRUEN) return EXIT_ROT;
   const { pruefsumme } = planen.werte;
-  const summen = messePakete(stand, { pakete: JSON.parse(planen.werte.pakete), pruefsumme });
-  if (summen === undefined) return EXIT_ROT;
-  const ergebnis = urteil(stand, { pruefsumme, erwartet: { kopf, master, bereich }, summen });
+  const gemessen = messePakete(stand, { pakete: JSON.parse(planen.werte.pakete), pruefsumme });
+  if (gemessen === undefined) return EXIT_ROT;
+  const ergebnis = urteil(stand, { pruefsumme, erwartet: { kopf, master, bereich }, ...gemessen });
   if (ergebnis.freigabe) {
     for (const punkt of ergebnis.punkte) console.log(`Freigabe nötig: ${punkt}`);
     console.log("Lokal: grün bis auf die Freigabe durch Antonio im PR (Exit 3)");
