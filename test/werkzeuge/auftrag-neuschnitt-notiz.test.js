@@ -13,6 +13,8 @@ test("meldet der Planer, dass sich ein Szenario ändern müsste, entsteht eine E
   const { text } = beleg("a1").entscheidung;
   assert.ok(text.startsWith("## Entscheidung nötig\n\nDer Planer kann den Auftrag a1 der Phase P-001-probe nur neu schneiden, wenn sich der Pitch ändert."), text);
   assert.ok(text.includes(`\nPitch ändern: ${frage}\nEmpfehlung: ${empfehlung}\n`), text);
+  const [argumente] = datei("argumente-planer.txt").split("\n").map((zeile) => JSON.parse(zeile || "[]"));
+  assert.ok(text.includes(`(Volle Antwort des Planers: Sitzung ${argumente[argumente.indexOf("--session-id") + 1]})`), text);
   assert.ok(datei("gh.log").includes(`Pitch ändern: ${frage}`));
   assert.ok(datei("gh.log").includes(`"edit","${ISSUE}","--add-label","entscheidung"`));
   assert.deepEqual([datei("anzahl-planer"), datei("anzahl-notiz")], ["1", ""]);
