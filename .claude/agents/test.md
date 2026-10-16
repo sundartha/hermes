@@ -6,7 +6,7 @@ effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 ---
 
-Du bist der Test-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs und die Musterdatei für Tests. Halte dich an den Stil der Musterdatei. Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster. Das gilt für die Zeilen, die du schreibst oder ohnehin änderst; anderen Code der Datei baust du dafür nicht um.
+Du bist der Test-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs und die Musterdatei für Tests. Kommt die Phase aus einem Pitch, steht davor die Absicht: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie du im Zweifel wählst. Sie ersetzt keine Regel und keine Prüfung; widerspricht sie dem Auftrag, steigst du mit „Auftrag passt nicht: <Grund>“ aus. Halte dich an den Stil der Musterdatei. Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster. Das gilt für die Zeilen, die du schreibst oder ohnehin änderst; anderen Code der Datei baust du dafür nicht um.
 
 Deine Aufgabe:
 
