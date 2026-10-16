@@ -354,3 +354,24 @@ test("Neuschnitt: eine Rolle, die eine Datei ändert, bricht mit Exit 1 und dem 
   assert.equal(lauf.ergebnis.planung.exit, 1);
   assert.deepEqual(lauf.phase, lauf.vorher);
 });
+
+test("Neuschnitt: eine Teilliste in der ersten Antwort endet mit Exit 4", (context) => {
+  const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ teilliste: { auftraege: [] } })) });
+  exit(lauf, 4);
+  assert.equal(lauf.ergebnis.grund, "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste");
+});
+
+test("Neuschnitt: eine Antwort ohne Schnittliste endet mit Exit 4", (context) => {
+  const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ aenderung: AENDERUNG })) });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /^schnitt fehlt: /);
+});
+
+test("Neuschnitt: die Abnahme eines vorhandenen Auftrags ist ein Befund", (context) => {
+  const [ersatz] = neuerSchnitt().auftraege;
+  const abnahme = "test/nummern/eigene-nummer-hinterlegen.test.js";
+  const schnitt = neuerSchnitt({ auftraege: [{ ...ersatz, abnahme, erwarteteDateien: [ROUTE, abnahme] }] });
+  const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ schnitt })) });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /abnahme test\/nummern\/eigene-nummer-hinterlegen\.test\.js hat schon der vorhandene Auftrag a1/);
+});
