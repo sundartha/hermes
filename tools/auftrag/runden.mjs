@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
-import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
+import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { auswegBei, zweckUnklar } from "./ausgang.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
 import { UMBAU_AUSWEG, istTestdatei, phasenBefunde } from "./format.mjs";
@@ -22,7 +22,7 @@ const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "vorbild", "abnahme
 const CODEBLOCK = "```";
 const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
 const AUSWEG_SCHLUSS =
-  "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ liest das Skript nur beim Bau-Agenten.";
+  "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ und „Alter Test hält altes Verhalten fest“ liest das Skript nur beim Bau-Agenten.";
 
 function verwerfe(basis, root) {
   git(["reset", "-q", "--hard", basis], { cwd: root });
@@ -245,8 +245,8 @@ class Runden {
       zeile,
       auswegBei([PRUEFUNG.BETROFFENE_TESTS]),
       "",
-      `Der genannte Test ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}.`,
-      `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg.`,
+      `Die Testdatei ${datei} ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}. Den Testnamen gibt es in der Datei; ob genau dieser Fall rot ist, prüft das Skript nicht.`,
+      `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`,
     ].join("\n");
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     return this.entscheidung(ergebnis, { kopf, anlass: `Der Bau-Agent meldet: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
