@@ -78,18 +78,32 @@ class AuftragsLauf {
   }
 
   agent(rolle, prompt, fortsetzung) {
+    return this.setzeAgentEinUndUebernimmAusgang(rolle, prompt, fortsetzung) !== null;
+  }
+
+  setzeAgentEinUndUebernimmAusgang(rolle, prompt, fortsetzung) {
     const vorher = fingerabdruck(this.kontext.root);
     const ergebnis = setzeEin({ rolle, ...this.kontext, fortsetzung }, `${prompt}${this.vorgeschichte}`);
     this.agenten.push(...ergebnis.sitzungen);
+    return this.uebernimmAusgang(ergebnis, vorher) ? ergebnis.ausgang : null;
+  }
+
+  uebernimmAusgang(ergebnis, vorher) {
     if (fingerabdruck(this.kontext.root) !== vorher) {
       return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`, GRUND.BELEGE);
     }
+    if (ergebnis.alterTest) return this.alterTestAlsAusstieg(ergebnis.alterTest);
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
     this.ausstieg = ergebnis.ausstieg;
     if (this.ausstieg) return this.scheitert(`Auftrag passt nicht: ${this.ausstieg}`);
     if (ergebnis.grund) return this.scheitert(ergebnis.grund, GRUND.STILLSTAND);
     return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`, GRUND.AGENT_EXIT);
+  }
+
+  alterTestAlsAusstieg(alterTest) {
+    this.ausstieg = alterTest.zeile;
+    return this.scheitert(`Auftrag passt nicht: ${alterTest.zeile}`);
   }
 
   grenzen(rolle, basis) {
