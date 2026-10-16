@@ -29,9 +29,17 @@ function geaenderteSkripte(basis) {
   return liste.split("\0").filter((datei) => VERGLEICHBAR.test(datei));
 }
 
+function aufrufeJetzt(datei) {
+  return testaufrufe(datei, readFileSync(datei, "utf8"));
+}
+
+function aufrufeVorherNachher(basis, datei) {
+  const vorher = inBasis(basis, datei);
+  return { aufBasis: vorher !== undefined, alt: testaufrufe(datei, vorher ?? ""), neu: aufrufeJetzt(datei) };
+}
+
 function neuIn(basis, datei) {
-  const vorher = testaufrufe(datei, inBasis(basis, datei) ?? "");
-  const nachher = testaufrufe(datei, readFileSync(datei, "utf8"));
+  const { alt: vorher, neu: nachher } = aufrufeVorherNachher(basis, datei);
   const alteNamen = new Set(vorher.map(({ name }) => name));
   const alteTexte = new Set(vorher.map(({ text }) => text));
   const benannt = new Map();
@@ -53,7 +61,7 @@ function neueTests(basis) {
 
 function alleTestsIn(dateien) {
   return dateien.flatMap((datei) =>
-    testaufrufe(datei, readFileSync(datei, "utf8"))
+    aufrufeJetzt(datei)
       .filter(({ name }) => name !== undefined)
       .map(({ name, vorfahren }) => ({ datei, name, vorfahren })),
   );
@@ -82,10 +90,11 @@ function mitHilfsdatei(vergleich) {
 }
 
 function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
-  const aufrufmuster = (datei, quelltext) => testaufrufe(datei, quelltext).flatMap(({ muster }) => muster);
+  const aufrufmuster = (aufrufe) => aufrufe.flatMap(({ muster }) => muster);
   const geaenderte = geaenderteDateien
-    .filter((datei) => inBasis(basis, datei) !== undefined)
-    .map((datei) => ({ datei, alt: aufrufmuster(datei, inBasis(basis, datei)), neu: aufrufmuster(datei, readFileSync(datei, "utf8")) }));
+    .map((datei) => ({ datei, ...aufrufeVorherNachher(basis, datei) }))
+    .filter(({ aufBasis }) => aufBasis)
+    .map(({ datei, alt, neu }) => ({ datei, alt: aufrufmuster(alt), neu: aufrufmuster(neu) }));
   const katalogtests = mitHilfsdatei(vergleich)
     ? katalog.map((test) => ({ datei: test.datei, alt: namensmuster([test]), neu: namensmuster([test]) }))
     : [];
@@ -95,9 +104,7 @@ function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
 function katalogeintraege(basis, katalog) {
   const jeDatei = new Map();
   const aufrufeIn = (datei) => {
-    if (!jeDatei.has(datei)) {
-      jeDatei.set(datei, { alt: testaufrufe(datei, inBasis(basis, datei) ?? ""), neu: testaufrufe(datei, readFileSync(datei, "utf8")) });
-    }
+    if (!jeDatei.has(datei)) jeDatei.set(datei, aufrufeVorherNachher(basis, datei));
     return jeDatei.get(datei);
   };
   return katalog.map(({ datei, name }) => {
