@@ -9,6 +9,9 @@ on:
     paths:
       - tools/wochenbericht.mjs
       - tools/wochenbericht/**
+      - tools/akteure.mjs
+      - tools/freigabe-strenger.mjs
+      - tools/pruefungen-messen.mjs
       - .github/workflows/wochenbericht.yml
       - .github/budget.json
   pull_request:
@@ -16,6 +19,9 @@ on:
     paths:
       - tools/wochenbericht.mjs
       - tools/wochenbericht/**
+      - tools/akteure.mjs
+      - tools/freigabe-strenger.mjs
+      - tools/pruefungen-messen.mjs
       - .github/workflows/wochenbericht.yml
       - .github/budget.json
   workflow_dispatch:
