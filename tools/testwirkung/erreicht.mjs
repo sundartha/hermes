@@ -14,9 +14,20 @@ const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
 const ABDECKUNG = "NODE_V8_COVERAGE";
 const ABDECKUNGSORDNER = "testwirkung-abdeckung-";
 const TESTORDNER = "test/";
+const FELDER_JE_UMZUG = 3;
 
 function namen(args) {
   return git(args).split("\0").filter(Boolean);
+}
+
+function nachTestUmgezogen(basis) {
+  const eintraege = namen(["diff", "--name-status", "-z", "-M", "--diff-filter=R", basis]);
+  const umgezogen = new Set();
+  for (let stelle = 0; stelle < eintraege.length; stelle += FELDER_JE_UMZUG) {
+    const [, quelle, ziel] = eintraege.slice(stelle, stelle + FELDER_JE_UMZUG);
+    if (ziel.startsWith(TESTORDNER)) umgezogen.add(quelle);
+  }
+  return umgezogen;
 }
 
 function neuerCodeIn(verzeichnis, basis) {
@@ -24,7 +35,8 @@ function neuerCodeIn(verzeichnis, basis) {
     ...namen(["diff", "--name-only", "-z", "--no-renames", basis]),
     ...namen(["ls-files", "--others", "--exclude-standard", "-z"]),
   ];
-  for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER))) {
+  const umgezogen = nachTestUmgezogen(basis);
+  for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !umgezogen.has(pfad))) {
     const ziel = join(verzeichnis, datei);
     rmSync(ziel, { force: true });
     if (!existsSync(datei)) continue;
