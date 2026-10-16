@@ -208,10 +208,10 @@ function ausPlanung(context, ausweg, roteRunden = []) {
   return { ergebnis, starts, beleg };
 }
 
-test("ein alter Test und ein unklarer Zweck gehen auch bei einer Phase aus einem Pitch direkt an Antonio, ein anderer Ausstieg zum Planer", (context) => {
+test("ein unklarer Zweck geht auch bei einer Phase aus einem Pitch direkt an Antonio, ein alter Test erst an den Plan-Agenten für einen Testumbau, ein anderer Ausstieg zum Planer", (context) => {
   const alterTest = { zeile: ALTER_TEST_ZEILE, datei: "test/rechnen.test.js", test: "verdopple lässt die Zahl", grund: "Das Ziel verlangt das Verdoppeln.", rot: true };
   const faelle = [
-    [{ alterTest }, "notiz\n"],
+    [{ alterTest }, "plan\nnotiz\n"],
     [{ ausstieg: "Zweck der Prüfung lint unklar: Die Regel verbietet hier den einzigen Namen der Fachsprache." }, "notiz\n"],
     [{ ausstieg: GRUND }, "planung\n"],
   ];
