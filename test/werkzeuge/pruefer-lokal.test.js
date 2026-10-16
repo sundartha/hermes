@@ -95,7 +95,9 @@ async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issu
   const [status] = await once(kind, "close");
   const datei = join(aus, "ergebnis.json");
   const ergebnis = existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null;
-  return { status, ausgabe, ergebnis, repo, anfragen: github.anfragen, protokoll: ersatz.protokoll() };
+  const hinweisDatei = join(ablage, "sicherheitshinweise.json");
+  const hinweise = existsSync(hinweisDatei) ? JSON.parse(readFileSync(hinweisDatei, "utf8")).hinweise : null;
+  return { status, ausgabe, ergebnis, hinweise, repo, anfragen: github.anfragen, protokoll: ersatz.protokoll() };
 }
 
 test("lokal prüft jeden Commit seit master mit dem Befehl der CI, endet bei BLOCKER oder SOLLTE mit 1 und schreibt nichts nach GitHub", async (context) => {
@@ -166,6 +168,21 @@ test("lokal mit der Basis auf HEAD findet keine Commits und endet mit 2 statt mi
 test("lokal endet auch mit nur einem SOLLTE mit 1, weil SOLLTE vor dem Approve behoben wird", async (context) => {
   const { status, ausgabe } = await starte(context, { aufnahme: mitBefunden(["SOLLTE"]) });
   assert.equal(status, EXIT_BEFUNDE, ausgabe);
+});
+
+test("lokal legt einen Sicherheits-BLOCKER mit Beleg in die Ablage, damit die Sitzung ihn beheben kann", async (context) => {
+  const { status, ausgabe, ergebnis, hinweise, repo } = await starte(context, { aufnahme: aufzeichnung("sicherheit") });
+  assert.equal(status, EXIT_BEFUNDE, ausgabe);
+  assert.equal(JSON.stringify(ergebnis).includes("GEHEIM"), false);
+  assert.deepEqual(
+    ergebnis.commits.map(({ befunde }) => befunde[0]),
+    [{ sicherheit: true, schwere: "BLOCKER" }, { sicherheit: true, schwere: "BLOCKER" }],
+  );
+  const commits = [repo.git(["rev-parse", "HEAD~1"]), repo.git(["rev-parse", "HEAD"])];
+  assert.deepEqual(
+    hinweise.map(({ sha, befund }) => [sha, befund.schwere, befund.id, befund.beleg]),
+    commits.map((sha) => [sha, "BLOCKER", "SG-3", "GEHEIMER-BELEG-91c2"]),
+  );
 });
 
 test("lokal endet ohne BLOCKER und SOLLTE mit 0", async (context) => {
