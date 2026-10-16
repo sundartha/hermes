@@ -1023,3 +1023,62 @@ test("Befehl schnitt: ein pitch.md ohne Szenario ergibt Exit 4 und Abdeckung nic
   assert.equal(lauf4.status, 4, lauf4.stderr + lauf4.stdout);
   assert.ok(lauf4.stderr.includes("Regel Nummern: Abdeckung nicht bestimmbar"), lauf4.stderr);
 });
+
+const DATEI_C = "src/nummern/zaehler.js";
+
+function vorhanden(kennung, ueberschrieben = {}) {
+  const datei = `src/alt/${kennung}.js`;
+  return { id: kennung, art: "funktion", ziel: "Der Kunde kommt weiter", bereich: datei, erwarteteDateien: [datei], abnahme: `test/anrufe/alt-${kennung}.test.js`, prueft: ["S9"], abhaengigVon: [], ...ueberschrieben };
+}
+
+function mitVorhandenen(b, ...vorhandene) {
+  return { ...b, eingaben: { ...b.eingaben, vorhandene } };
+}
+
+test("Vorhandene: ein abhaengigVon auf einen vorhandenen Auftrag der Phase ist grün", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  haengtAn(eigener(b, "a2"), "a5");
+  gruen(lauf(b));
+});
+
+test("Vorhandene: ohne vorhandene ist ein abhaengigVon auf eine fremde Kennung rot", (context) => {
+  const b = basis(context);
+  haengtAn(eigener(b, "a2"), "a5");
+  erwarte(lauf(b), REGEL.form, 'a2: abhaengigVon nennt "a5", das ist kein anderer Auftrag');
+});
+
+test("Vorhandene: ein neuer Auftrag mit der Kennung eines vorhandenen ist rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a2"));
+  erwarte(lauf(b), REGEL.form, "a2: die Kennung hat schon ein vorhandener Auftrag der Phase");
+});
+
+test("Vorhandene: ein abhaengigVon auf eine Kennung, die weder neu noch vorhanden ist, ist rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  haengtAn(eigener(b, "a2"), "a9");
+  erwarte(lauf(b), REGEL.form, 'a2: abhaengigVon nennt "a9", das ist kein anderer Auftrag');
+});
+
+test("Vorhandene: eine Annahme zu einem vorhandenen Auftrag ist grün", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  b.schnitt.annahmen = [{ auftrag: "a5", text: "a5 bleibt, weil er schon gebaut ist" }];
+  gruen(lauf(b));
+});
+
+test("Vorhandene: eine Änderungsdatei aus der Kette über vorhandene Aufträge ist grün", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5", { abhaengigVon: ["a6"] }), vorhanden("a6", { erwarteteDateien: [DATEI_C] }));
+  haengtAn(eigener(b, "a2"), "a5");
+  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  gruen(lauf(b));
+});
+
+test("Vorhandene: eine Änderungsdatei, die kein vorhandener Auftrag der Kette nennt, ist rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"), vorhanden("a6", { erwarteteDateien: [DATEI_C] }));
+  haengtAn(eigener(b, "a2"), "a5");
+  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  erwarte(lauf(b), REGEL.aenderungen, `a2: Änderungsdatei ${DATEI_C} von S2 steht weder bei a2 noch in seiner abhaengigVon-Kette`);
+});
+
+test("Vorhandene: eine abnahme, die ein vorhandener Auftrag schon hat, ist rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5", { abnahme: TEST_B }));
+  erwarte(lauf(b), REGEL.abnahme, `a2: abnahme ${TEST_B} hat schon der vorhandene Auftrag a5`);
+});
