@@ -34,8 +34,9 @@ function stand(context, { pr, inDerWarteschlange }) {
   return { repo, basis, kopf, ref };
 }
 
-async function vergleiche(context, { pr = NEU, inDerWarteschlange = NEU, schluss = "success" }) {
-  const { repo, basis, kopf, ref } = stand(context, { pr, inDerWarteschlange });
+async function vergleiche(context, { pr = NEU, inDerWarteschlange = NEU, schluss = "success", basisVon }) {
+  const { repo, basis: vorne, kopf, ref } = stand(context, { pr, inDerWarteschlange });
+  const basis = basisVon === undefined ? vorne : basisVon(repo);
   const github = await scheinGithub(
     context,
     new Map([
@@ -141,4 +142,14 @@ test("ein Fehler der GitHub-API ist rot statt still gleich", async (context) => 
   });
   assert.equal(lauf.status, EXIT_FEHLER);
   assert.match(lauf.stderr, /HTTP 404/);
+});
+
+test("bei zwei gestapelten Einträgen ist nur der vordere Eintrag als Basis gleich, master als Basis nie", async (context) => {
+  const vordererEintrag = await vergleiche(context, {});
+  assert.equal(vordererEintrag.ausgabe.gleich, "true", vordererEintrag.stdout);
+  const masterUnterBeiden = (repo) => repo.git(["rev-parse", "HEAD~2"]);
+  const lauf = await vergleiche(context, { basisVon: masterUnterBeiden });
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.equal(lauf.ausgabe.gleich, "false");
+  assert.match(lauf.stdout, /^Gleicher Stand: nein \(die Patch-ID in der Warteschlange weicht vom PR-Kopf ab\)$/m);
 });
