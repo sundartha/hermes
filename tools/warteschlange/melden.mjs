@@ -4,6 +4,7 @@ import { ciLauf, prNummerAus } from "./gleicher-stand.mjs";
 const MASTER_ROT = "master-rot";
 const BESITZER = ["Antonio20045", "jonas986"];
 const RUECKNAHME_PRAEFIX = "revert/";
+const WARTESCHLANGEN_LAEUFE = "/actions/workflows/ci.yml/runs?event=merge_group&per_page=100";
 const ERFOLG = "success";
 const KURZ = 7;
 const EXIT_OK = 0;
@@ -39,8 +40,26 @@ export async function meldeMasterRot(github, { lauf, grund }) {
   });
 }
 
+async function neuGebaut(github, lauf, nummer) {
+  if (nummer === null) return false;
+  try {
+    const { workflow_runs: laeufe = [] } = await github.hole(WARTESCHLANGEN_LAEUFE);
+    return laeufe.some(
+      (spaeter) =>
+        spaeter.id > lauf.id && spaeter.event === "merge_group" && prNummerAus(spaeter.head_branch) === nummer,
+    );
+  } catch (fehler) {
+    console.log(`Neuere Warteschlangen-Läufe nicht lesbar, es wird gemeldet: ${fehler.message}`);
+    return false;
+  }
+}
+
 async function meldeHerausgefallen(github, lauf) {
   const nummer = prNummerAus(lauf.head_branch);
+  if (await neuGebaut(github, lauf, nummer)) {
+    console.log(`#${nummer} wurde in der Warteschlange neu gebaut, der neuere Lauf entscheidet.`);
+    return;
+  }
   const titel = `Aus der Warteschlange gefallen: #${nummer ?? "?"}`;
   const offen = await offeneIssues(github, "");
   const beleg = `Lauf ${lauf.html_url} endete ${lauf.conclusion ?? "ohne Ergebnis"} auf ${lauf.head_sha}.`;

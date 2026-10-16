@@ -24,11 +24,12 @@ const KURZ = 7;
 const EXIT_OK = 0;
 const VORLAGE = /```json\n([\s\S]*?)\n```/;
 
-async function starte(context, { args, ereignis, offen = [], stand = kaputterMerge(context) }) {
+async function starte(context, { args, ereignis, offen = [], laeufe = [], stand = kaputterMerge(context) }) {
   const github = await githubAttrappe(
     context,
     new Map([
       CI_ROUTE,
+      ...(laeufe === null ? [] : [[`GET ${API_PFAD}/actions/workflows/ci.yml/runs`, { workflow_runs: laeufe }]]),
       [`GET ${API_PFAD}/commits/${stand.zweiter}/pulls`, [stand.pull]],
       [`GET ${API_PFAD}/commits/${stand.erster}/pulls`, [stand.pull]],
       [`GET ${API_PFAD}/issues`, offen],
@@ -152,5 +153,38 @@ test("grüne Läufe und rote Läufe anderer PRs werden nicht gemeldet", async (c
     const lauf = await starte(context, { args: ["melden"], ereignis });
     assert.equal(lauf.status, EXIT_OK, lauf.stderr);
     assert.deepEqual(lauf.schreibend, [], JSON.stringify(ereignis));
+  }
+});
+
+const EIGENER_LAUF = 77;
+const WARTESCHLANGE_PR_12 = "gh-readonly-queue/master/pr-12-abcdef0";
+
+function warteschlangenLauf(id, nummer) {
+  return { id, event: "merge_group", head_branch: `gh-readonly-queue/master/pr-${nummer}-${id}abcdef` };
+}
+
+test("ein Eintrag, der hinter einem roten vorderen Eintrag neu gebaut wurde, meldet nichts", async (context) => {
+  for (const conclusion of ["cancelled", "failure"]) {
+    const lauf = await starte(context, {
+      args: ["melden"],
+      ereignis: { event: "merge_group", head_branch: WARTESCHLANGE_PR_12, conclusion, id: EIGENER_LAUF },
+      laeufe: [warteschlangenLauf(EIGENER_LAUF + 1, 12), warteschlangenLauf(EIGENER_LAUF, 12)],
+    });
+    assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+    assert.deepEqual(lauf.schreibend, [], conclusion);
+  }
+});
+
+test("ein wirklich roter Eintrag meldet weiter, auch wenn andere PRs neu gebaut wurden oder die Läufe nicht lesbar sind", async (context) => {
+  const faelle = [[warteschlangenLauf(EIGENER_LAUF + 1, 13), warteschlangenLauf(EIGENER_LAUF - 1, 12)], null];
+  for (const laeufe of faelle) {
+    const lauf = await starte(context, {
+      args: ["melden"],
+      ereignis: { event: "merge_group", head_branch: WARTESCHLANGE_PR_12, conclusion: "failure", id: EIGENER_LAUF },
+      laeufe,
+    });
+    assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+    const [{ rumpf }] = lauf.schreibend;
+    assert.equal(rumpf.title, "Aus der Warteschlange gefallen: #12", JSON.stringify(laeufe));
   }
 });
