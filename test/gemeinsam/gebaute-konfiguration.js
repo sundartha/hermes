@@ -22,5 +22,8 @@ export function gebauteKonfiguration(ueberschreiben, felder) {
     env: kindUmgebung(ueberschreiben),
     encoding: "utf8",
   });
-  return JSON.parse(ausgabe);
+  const gebaut = JSON.parse(ausgabe);
+  const ohneWert = felder.filter((feld) => !Object.hasOwn(gebaut, feld));
+  if (ohneWert.length > 0) throw new Error(`gebaute Konfiguration ohne Wert für: ${ohneWert.join(", ")}`);
+  return gebaut;
 }
