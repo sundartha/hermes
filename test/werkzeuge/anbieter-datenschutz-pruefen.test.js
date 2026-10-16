@@ -74,3 +74,25 @@ test("eine unbekannte Option oder eine fehlende Wurzel ist ein ungueltiger Aufru
   assert.equal(pruefe(["--pfad", "x"]).status, ERGEBNIS_UNGUELTIGER_AUFRUF);
   assert.equal(pruefe(["--wurzel", join(ordner, "fehlt")]).status, ERGEBNIS_UNGUELTIGER_AUFRUF);
 });
+
+test("ein Anzeigename, der nur als Teil eines laengeren Wortes vorkommt, zaehlt nicht als genannt", (context) => {
+  for (const wort of ["Exakte Angaben", "Examen", "Exabyte", "Exa2", "Exaäquator", "NetExa", "CaféExa"]) {
+    const meldung = einzigeMeldung(context, {
+      adapter: [`${SPRACHMODELL_ORDNER}/anthropic.js`, `${SUCH_ORDNER}/exa-search.js`],
+      anbieterImText: ["Anthropic", wort],
+    });
+    assert.ok(meldung.startsWith(`${SUCH_ORDNER}/exa-search.js:1 `), `${wort}: ${meldung}`);
+    assert.ok(meldung.includes("Exa"), `${wort}: ${meldung}`);
+  }
+});
+
+test("ein Anzeigename als eigenes Wort zaehlt als genannt, auch neben Satzzeichen", (context) => {
+  for (const wort of ["Exa", "(Exa)", "Exa-Suche", "„Exa“", "Exa,", "Exakte Angaben und Exa"]) {
+    const wurzel = miniWurzel(context, {
+      adapter: [`${SPRACHMODELL_ORDNER}/anthropic.js`, `${SUCH_ORDNER}/exa-search.js`],
+      anbieterImText: ["Anthropic", wort],
+    });
+    const ergebnis = pruefe(["--wurzel", wurzel]);
+    assert.equal(ergebnis.status, ERGEBNIS_OHNE_LUECKE, `${wort}: ${ergebnis.stdout}${ergebnis.stderr}`);
+  }
+});
