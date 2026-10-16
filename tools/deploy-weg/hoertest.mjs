@@ -5,6 +5,7 @@ import { githubZugang } from "./netz.mjs";
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
+const SEITE = 100;
 const OHNE_NAMEN = "(der Abgleich hat keine Namen gemeldet)";
 
 function issueText({ commit, teile, laufUrl }) {
@@ -33,11 +34,26 @@ function eigenesIssue(eintrag) {
   );
 }
 
-async function vorhandenesIssue(github) {
-  const filter = new URLSearchParams({ state: "open", creator: AUTOMATION_LOGIN, per_page: "100" });
+async function offeneIssues(github, seite) {
+  const filter = new URLSearchParams({
+    state: "open",
+    creator: AUTOMATION_LOGIN,
+    per_page: String(SEITE),
+    page: String(seite),
+  });
   const { status, daten } = await github.lesen("/issues?" + filter.toString());
   if (status !== HTTP_OK || !Array.isArray(daten)) throw new Abbruch("issue_suche", status);
-  const eigene = daten.filter(eigenesIssue).sort((links, rechts) => links.number - rechts.number);
+  return daten;
+}
+
+async function vorhandenesIssue(github) {
+  const eigene = [];
+  for (let seite = 1; ; seite += 1) {
+    const issues = await offeneIssues(github, seite);
+    eigene.push(...issues.filter(eigenesIssue));
+    if (issues.length < SEITE) break;
+  }
+  eigene.sort((links, rechts) => links.number - rechts.number);
   return eigene[0] ?? null;
 }
 
