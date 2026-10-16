@@ -17,6 +17,7 @@ import {
 
 const GEAENDERT = { geaendert: true, teile: ["anrufstart.de.eigentuemer", "prompts/de.js:SYSTEM"] };
 const [GRUENER_STAGING_LAUF] = weltAnlegen().stagingLaeufe;
+const ERGEBNIS_HAND_DEPLOY = { ok: true, deploy: true, hoertest: false, commit: COMMIT_C };
 
 function keinDeploy(lauf) {
   assert.equal(lauf.ergebnis.deploy, false);
@@ -84,6 +85,15 @@ test("Hand-Start grün: Antonio20045 bestätigt bei geändertem Gespräch den H�
   assert.equal(lauf.ergebnis.hoertest, false);
   assert.match(lauf.text, /Hörtest gilt als bestätigt/);
   assert.equal(lauf.ergebnis.commit, COMMIT_C);
+});
+
+test("Hand-Start grün: jonas986 bestätigt bei geändertem Gespräch den Hörtest, deploy ja", async (kontext) => {
+  const ereignis = handEreignis({ login: "jonas986" });
+  const mehr = { GITHUB_ACTOR: "jonas986", GITHUB_REF: "refs/heads/master" };
+  const lauf = await entscheidenMit(kontext, { ereignis, abdruck: abdruckAttrappe(GEAENDERT), mehr });
+  const { ok, deploy, hoertest, commit } = lauf.ergebnis;
+  assert.deepEqual({ ok, deploy, hoertest, commit }, ERGEBNIS_HAND_DEPLOY);
+  assert.match(lauf.text, /Hörtest gilt als bestätigt/);
 });
 
 test("Gespräch geändert: Hörtest statt Deploy, die Teile stehen in den Ausgaben", async (kontext) => {
