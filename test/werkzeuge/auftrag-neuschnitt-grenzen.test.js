@@ -3,17 +3,18 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { ersterVersuch, EXIT_ROT, funktion, lauf, NEUSCHNITT, OHNE_FIX, ORDNER, phase, PHASENDATEI, PITCH, REPO, SICHERHEIT, TEST } from "./neuschnitt-probe.js";
+import { ersterVersuch, EXIT_ROT, funktion, lauf, NEUSCHNITT, OHNE_FIX, ORDNER, phase, PHASENDATEI, PITCH, REPO, SCHNITT, SICHERHEIT, TEST } from "./neuschnitt-probe.js";
 
 test("ein Neuschnitt, den der Planer selbst committet, wird abgelehnt und auf den Stand vor ihm zurückgesetzt", (context) => {
-  const { befunde, git } = ersterVersuch(context, [{ ...NEUSCHNITT, commit: true }]);
+  const { befunde, git } = ersterVersuch(context, { planung: [{ ...NEUSCHNITT, commit: true }], planer: [{ ...SCHNITT, dateien: NEUSCHNITT.dateien, commit: true }] });
   assert.deepEqual(befunde, ["Der Planer darf nicht committen; der Lauf setzt auf den Stand vor ihm zurück."]);
   assert.equal(git("show", `HEAD:${PHASENDATEI}`), REPO[PHASENDATEI]);
   assert.equal(git("log", "--format=%s", "-1"), "Basis\n");
 });
 
 test("ein Planer, der Belege unter .fortschritt ändert, wird abgelehnt", (context) => {
-  const { befunde } = ersterVersuch(context, [{ dateien: { ...NEUSCHNITT.dateien, ".fortschritt/P-001-probe/a1.json": "{}" } }]);
+  const beleg = { ".fortschritt/P-001-probe/a1.json": "{}" };
+  const { befunde } = ersterVersuch(context, { planung: [{ dateien: { ...NEUSCHNITT.dateien, ...beleg } }], planer: [{ ...SCHNITT, dateien: beleg }] });
   assert.deepEqual(befunde, ["Der Planer hat .fortschritt/ verändert."]);
 });
 

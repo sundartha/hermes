@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -9,7 +9,9 @@ import { PHASE_PASST_NICHT, VERSTOSS, grenzBefunde } from "../../tools/auftrag/p
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBlock, zweckIds } from "../../tools/auftrag/zweck.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { ersatzUmgebung, teamRepository } from "./neuschnitt-probe.js";
+import { alsJson } from "./planung-probe.js";
+import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const ZWECK = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/zweck.json"), "utf8"));
 const FELDER = ["liste", "wozu", "behebung", "nichtAngenommen", "ausweg"];
@@ -25,7 +27,6 @@ const AUSSTIEGE = [
   "Empfehlung:",
 ];
 const ZU_VIELE_ZEILEN = 401;
-const AUSFUEHRBAR = 0o755;
 
 function alleGrenzVerstoesse() {
   const auftrag = { bereich: "src/bereich.js", abnahme: "test/a.test.js", erwarteteDateien: ["test/hilfe.js"] };
@@ -265,17 +266,19 @@ test("die Schnittprüfung nennt bei Befunden den Zweck nach der roten Zeile, die
 const PLAN = "plaene/P-001-probe";
 const PLAN_PHASE = `${PLAN}/phase.json`;
 const S1 = "Gegeben die Zahl 2\nWenn ein Agent `verdopple` mit 2 aufruft\nDann ist die Antwort `4`";
-const OHNE_WEG = `#!/usr/bin/env node
-import { appendFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-appendFileSync(join(process.env.ERSATZ_ORT, "prompt-" + process.env.HERMES_ROLLE + ".txt"), readFileSync(0, "utf8") + "\\n");
-console.log(JSON.stringify({ type: "result", is_error: false, result: "Ich finde keinen Weg." }));
-`;
+const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
+const KEIN_WEG = { antwort: "Ich finde keinen Weg." };
 const NUR_UMBAU = {
   phase: "P-001-probe",
   entwurf: { "src/text.js": "Entwurf." },
-  auftraege: [{ ...UMBAU, id: "a1", bereich: "src/text.js", prueft: "keiner, weil Umbau: bestehende Tests bleiben unverändert grün" }],
+  auftraege: [{ ...UMBAU, id: "a2", bereich: "src/text.js", prueft: UMBAU_AUSWEG }],
 };
+const OHNE_ABDECKUNG = alsJson({
+  schnitt: { annahmen: [], fehlendeSzenarien: [], ownerAufgaben: [], gemeinsameNamen: [], auftraege: [{ ...NUR_UMBAU.auftraege[0], id: "a2-n1", abhaengigVon: [] }] },
+  aenderung: "a2 wird als kleinerer Umbau neu geschnitten.",
+});
+const TEXT_ENTWURF = alsJson({ entwurf: "Grundlage: pitch.md, Anforderungen\ngross bleibt, wie es ist.\nFehlerfälle: keine" });
+const TEAM_OHNE_ABDECKUNG = { test: [KEIN_WEG], bau: [KEIN_WEG], notiz: [KEIN_WEG], planer: [{ antwort: OHNE_ABDECKUNG }], "pruefer-planung": [{ pruefliste: true }], entwurf: [{ antwort: TEXT_ENTWURF }] };
 
 function abschnittAus(text, titel) {
   const anfang = text.indexOf(`\n## ${titel}\n`);
@@ -285,15 +288,13 @@ function abschnittAus(text, titel) {
 }
 
 test("scheitert ein Neuschnitt an Schnitt und Abdeckung, nennt der nächste Prompt beide Zwecke je einmal und die Befunde ohne Zweck-Zeilen", (context) => {
-  const repo = probeRepository(context, {
+  const repo = teamRepository(context, {
     ...BASIS,
     [`${PLAN}/pitch.md`]: `# P-001 Probe\n\n## Anforderungen\n\n### Regel R1: Zahlen werden verdoppelt.\n\n#### Szenario S1: Verdoppeln\n${S1}\n`,
     [`${PLAN}/sicherheit.md`]: "# P-001 Probe\n\n## 2. Angriffswege\nKeine Angriffswege gefunden, weil nichts Neues erreichbar ist.\n",
     [PLAN_PHASE]: `${JSON.stringify(NUR_UMBAU, null, 2)}\n`,
   });
-  const werkzeug = probeDirectory(context, { "claude.mjs": OHNE_WEG });
-  chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
-  const umgebung = { ...isolatedEnvironment(), HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_ORT: werkzeug };
+  const { werkzeug, env: umgebung } = ersatzUmgebung(context, TEAM_OHNE_ABDECKUNG);
   const lauf = spawnSync(process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", PLAN_PHASE], { cwd: repo, encoding: "utf8", env: umgebung });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   const zweiter = readFileSync(join(werkzeug, "prompt-planung.txt"), "utf8").split("\n## Neuschnitt\n").at(-1);

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BEHALTEN, ersterVersuch, EXIT_ROT, GESTOPPT, ISSUE, KEIN_NEUER, lauf, NEUSCHNITT, ohne, OHNE_EMPFEHLUNG, OHNE_FIX, ORDNER, phase, PHASENDATEI, prompts, TEST, umbau } from "./neuschnitt-probe.js";
+import { BEHALTEN, ersterVersuch, EXIT_ROT, GESTOPPT, ISSUE, KEIN_NEUER, lauf, NEUSCHNITT, ohne, OHNE_EMPFEHLUNG, OHNE_FIX, ORDNER, phase, PHASENDATEI, prompts, SCHNITT, TEST, umbau } from "./neuschnitt-probe.js";
 
 test("meldet der Planer, dass sich ein Szenario ändern müsste, entsteht eine Entscheidungsnotiz mit genau dieser Frage", (context) => {
   const frage = "Soll S1 auch für negative Zahlen gelten? (pitch.md, Szenario S1)";
   const empfehlung = "Nein, weil das Nicht-Ziel sonst wegfällt.";
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [{ antwort: `Pitch ändern: ${frage}\nEmpfehlung: ${empfehlung}` }] };
+  const planer = { antwort: `Pitch ändern: ${frage}\nEmpfehlung: ${empfehlung}` };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [planer], planer: [planer] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   const { text } = beleg("a1").entscheidung;
@@ -18,7 +19,7 @@ test("meldet der Planer, dass sich ein Szenario ändern müsste, entsteht eine E
 });
 
 test("bleibt ein Auftrag aus einem Neuschnitt wieder zweimal rot, startet der Planer nicht noch einmal und es entsteht eine Entscheidungsnotiz", (context) => {
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [NEUSCHNITT], notiz: [{ antwort: "1. Szenario prüfen" }] };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [NEUSCHNITT], planer: [SCHNITT], notiz: [{ antwort: "1. Szenario prüfen" }] };
   const { ergebnis, beleg, git, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-bau"), datei("anzahl-notiz")], ["1", "4", "1"]);
@@ -28,7 +29,8 @@ test("bleibt ein Auftrag aus einem Neuschnitt wieder zweimal rot, startet der Pl
 });
 
 test("antwortet der Planer „Zerlegung passt nicht“, schreibt der Notiz-Agent die Entscheidungsnotiz mit diesem Grund", (context) => {
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [{ antwort: "Zerlegung passt nicht: Design Doc und Code widersprechen sich." }], notiz: [{ antwort: "1. Design Doc prüfen" }] };
+  const planer = { antwort: "Zerlegung passt nicht: Design Doc und Code widersprechen sich." };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [planer], planer: [planer], notiz: [{ antwort: "1. Design Doc prüfen" }] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz")], ["1", "1"]);
@@ -37,16 +39,18 @@ test("antwortet der Planer „Zerlegung passt nicht“, schreibt der Notiz-Agent
 });
 
 test("eine Frage an den Nutzer ohne Empfehlung zählt als abgelehnter Neuschnitt", (context) => {
-  const { befunde, datei } = ersterVersuch(context, [{ antwort: "Pitch ändern: Soll S1 wegfallen?" }]);
+  const planer = { antwort: "Pitch ändern: Soll S1 wegfallen?" };
+  const { befunde, datei } = ersterVersuch(context, { planung: [planer], planer: [planer] });
   assert.deepEqual(befunde, ["Zu „Pitch ändern: …“ fehlt die Zeile „Empfehlung: …“."]);
   assert.equal(datei("anzahl-planung"), "2");
 });
 
 test("Pitch- und Zerlegungszeilen zählen nur am Zeilenanfang und ein Umbau ohne Verbote und Vorgänger bekommt die Befunde wörtlich im nächsten Prompt und in der Notiz", (context) => {
   const mittendrin = { antwort: "Vorschlag: Pitch ändern: Soll S1 wegfallen?\nNotiz: Zerlegung passt nicht: Der Entwurf fehlt.\nEmpfehlung: Nein." };
+  const mitJson = { antwort: `${mittendrin.antwort}\n\n\`\`\`json\n{"aenderung": "keine"}\n\`\`\`` };
   const halb = { antwort: "Pitch ändern: Soll S1 wegfallen?\nMeine Empfehlung: Nein." };
   const dateien = { [PHASENDATEI]: phase([ohne(umbau("a1"), "wasDarfNiePassieren", "abhaengigVon")]) };
-  const { versuche, datei } = ersterVersuch(context, [mittendrin, halb], { dateien });
+  const { versuche, datei } = ersterVersuch(context, { planung: [mittendrin, halb], planer: [mitJson, halb] }, { dateien });
   const ohneAbdeckung = [BEHALTEN, KEIN_NEUER, `rot: 1 Befunde in ${ORDNER}.`, "S1 gehört keinem Auftrag"];
   assert.deepEqual(versuche, [{ befunde: ohneAbdeckung }, { befunde: [OHNE_EMPFEHLUNG] }]);
   const [erster, zweiter] = prompts(datei("prompt-planung.txt"));
@@ -60,7 +64,8 @@ test("Pitch- und Zerlegungszeilen zählen nur am Zeilenanfang und ein Umbau ohne
 });
 
 test("eine Frage an den Nutzer ohne Leerzeichen nach den Doppelpunkten wird trotzdem zur Entscheidungsnotiz", (context) => {
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [{ antwort: "Pitch ändern:Soll S1 wegfallen?\nEmpfehlung:Nein." }] };
+  const planer = { antwort: "Pitch ändern:Soll S1 wegfallen?\nEmpfehlung:Nein." };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planung: [planer], planer: [planer] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.ok(beleg("a1").entscheidung.text.includes("\nPitch ändern: Soll S1 wegfallen?\nEmpfehlung: Nein.\n"), beleg("a1").entscheidung.text);
@@ -70,7 +75,8 @@ test("eine Frage an den Nutzer ohne Leerzeichen nach den Doppelpunkten wird trot
 test("steigt der Bau-Agent nach einer roten Runde aus, sehen Planer und Notiz-Agent beide Runden und der Notiz-Agent den Anlass", (context) => {
   const grund = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
   const ausstieg = `Auftrag passt nicht: ${grund}`;
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX, { antwort: ausstieg }], planung: [{ antwort: "Zerlegung passt nicht:Der Entwurf widerspricht dem Test." }], notiz: [{ antwort: "1. Entwurf prüfen" }] };
+  const planer = { antwort: "Zerlegung passt nicht:Der Entwurf widerspricht dem Test." };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX, { antwort: ausstieg }], planung: [planer], planer: [planer], notiz: [{ antwort: "1. Entwurf prüfen" }] };
   const { ergebnis, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz")], ["1", "1"]);
