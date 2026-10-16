@@ -111,9 +111,9 @@ function verdichtet([kennung, eintraege]) {
   return { kennung, anzahl: eintraege.length, erstes: zeiten[0], letztes: zeiten.at(-1), nummern };
 }
 
-export function wiederkehrende(liste, seit) {
+export function wiederkehrende(liste) {
   const jeKennung = [...Map.groupBy(liste, ({ kennung }) => kennung)].map(verdichtet);
-  const wieder = jeKennung.filter(({ anzahl, letztes }) => anzahl > 1 && letztes > seit);
+  const wieder = jeKennung.filter(({ anzahl }) => anzahl > 1);
   return wieder.sort((links, rechts) => rechts.anzahl - links.anzahl || links.erstes - rechts.erstes);
 }
 
@@ -143,8 +143,7 @@ export async function zaehle({ github, root, jetzt }) {
   const basis = { master, start: new Date(jetzt).toISOString() };
   const letzter = await letzterBearbeitenderLauf(github, { workflow: WORKFLOW, schritt: ARBEITSSCHRITT });
   if (letzter?.head_sha === master) return { ...ergebnisVon(SAUBER, `master unverändert seit ${letzter.html_url ?? letzter.id}`), ...basis };
-  const seit = Date.parse(letzter?.run_started_at ?? "") || 0;
-  const liste = wiederkehrende(await vorkommen(github), seit);
+  const liste = wiederkehrende(await vorkommen(github));
   if (liste.length === 0) return { ...ergebnisVon(SAUBER, "kein wiederkehrender Befund"), ...basis };
   const systemIssues = (await issuesMitLabel(github, SYSTEM_LABEL)).filter(istVomBot);
   return { ...ausPlan(planeIssues(liste, systemIssues, jetzt)), ...basis };
