@@ -8,6 +8,8 @@ import { probeRepository } from "./probe-repo.js";
 import { arbeitsordner, botIssue, eigenerLauf, ersatzClaude, gelesen, git, githubAttrappe, starteZiele, umgebung } from "./ziele/hilfen.mjs";
 
 const TAG_MS = 86_400_000;
+const WOCHE_MS = 7 * TAG_MS;
+const AGENT_LAUFZEIT_MS = 12 * 60_000;
 const LAUF_NUMMER = 8;
 const VORSCHLAG = { mechanismus: "lint-regel", dateien: ["eslint.config.js"], rotprobe: "Eine doppelte Funktion in src/x.js wird rot.", begruendung: "Ein Typ trägt hier nicht." };
 const LETZTER_LAUF = eigenerLauf(LAUF_NUMMER, scheinSha("9"), { schritt: "Zählen" });
@@ -130,6 +132,24 @@ test("ziele-auswertung: gibt es ein system-Issue jünger als sieben Tage, starte
   const lauf = await auswertung(context, { issues: [vorherVorkommen(ERSTES, "src/a.js"), neuesVorkommen(ZWEITES, "src/b.js"), frisch] }, { schritte: ["zaehlen"] });
   assert.deepEqual([lauf.zaehlung.ausgang, lauf.zaehlung.grund], ["sauber", "höchstens ein system-Issue je Woche"]);
   assert.match(lauf.ausgaben, /^agent=nein$/m);
+});
+
+test("ziele-auswertung: ein Vorlauf, der wegen der Wochensperre kein Issue schrieb, verwirft den Kandidaten nicht", async (context) => {
+  const issueDerVorwoche = Date.parse("2026-09-23T04:25:00Z");
+  const zeitpunkt = (ms) => new Date(issueDerVorwoche + ms).toISOString();
+  const vorwoche = issue(SYSTEM_NUMMER, "System: G9", { labels: [{ name: "system" }], created_at: zeitpunkt(0) });
+  const gesperrterLauf = { ...LETZTER_LAUF, run_started_at: zeitpunkt(WOCHE_MS - AGENT_LAUFZEIT_MS) };
+  const zwischen = [issue(ERSTES, "Prüfer: G5 in `src/a.js`", { created_at: zeitpunkt(TAG_MS) }), issue(ZWEITES, "Prüfer: G5 in `src/b.js`", { created_at: zeitpunkt(2 * TAG_MS) })];
+  const anfang = { issues: [...zwischen, vorwoche], laeufe: { "auswertung.yml": [gesperrterLauf] } };
+  const lauf = await auswertung(context, anfang, { schritte: ["zaehlen"] });
+  assert.deepEqual([lauf.zaehlung.ausgang, lauf.zaehlung.kandidat?.kennung], ["weiter", "G5"]);
+});
+
+test("ziele-auswertung: der zweite Wiederkehrer eines Vorlaufs, der nur für den ersten ein system-Issue schrieb, wird danach Kandidat", async (context) => {
+  const geschrieben = new Date(Date.parse(LETZTER_LAUF.run_started_at) + AGENT_LAUFZEIT_MS).toISOString();
+  const erster = issue(SYSTEM_NUMMER, "System: G9", { labels: [{ name: "system" }], created_at: geschrieben });
+  const lauf = await auswertung(context, { issues: [vorherVorkommen(ERSTES, "src/a.js"), vorherVorkommen(ZWEITES, "src/b.js"), erster] }, { schritte: ["zaehlen"] });
+  assert.deepEqual([lauf.zaehlung.ausgang, lauf.zaehlung.kandidat?.kennung], ["weiter", "G5"]);
 });
 
 test("ziele-auswertung: Issues von Menschen und Titel ohne gültige ID zählen nicht", async (context) => {
