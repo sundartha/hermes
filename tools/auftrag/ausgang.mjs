@@ -1,3 +1,5 @@
+import { zeilenDes } from "./zeilen.mjs";
+
 const ZAUN = "```";
 const PLATZHALTER = /<[^<>\n]*>/g;
 const INHALT = /[\p{L}\p{N}]/u;
@@ -25,7 +27,7 @@ function nurPlatzhalter(text) {
 export function antwortZeilen(text) {
   const ausserhalb = [];
   let imBlock = false;
-  for (const zeile of String(text ?? "").split("\n")) {
+  for (const zeile of zeilenDes(String(text ?? ""))) {
     const zaun = zeile.startsWith(ZAUN);
     if (!imBlock && !zaun) ausserhalb.push(zeile.trimEnd());
     if (zaun) imBlock = !imBlock;
