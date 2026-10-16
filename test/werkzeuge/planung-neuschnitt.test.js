@@ -332,3 +332,25 @@ test("Neuschnitt: Befunde der neuen Phase enden mit Exit 4, die Phasendatei blei
     assert.deepEqual(lauf.phase, lauf.vorher);
   }
 });
+
+test("Neuschnitt: der Bericht liegt in der Ablage und gleicht ergebnis.json, der Planer steht in sitzungen zuletzt", (context) => {
+  const lauf = neuschnitt(context);
+  exit(lauf, 0);
+  const bericht = JSON.parse(readFileSync(join(lauf.ablage, "planung.json"), "utf8"));
+  assert.deepEqual(lauf.ergebnis.planung, bericht);
+  assert.equal(bericht.exit, 0);
+  assert.ok(lauf.stdout.includes(`Bericht: ${join(lauf.ablage, "planung.json")}`), lauf.stdout);
+  const { sitzungen } = lauf.ergebnis;
+  const rollen = sitzungen.map(({ rolle }) => rolle);
+  assert.deepEqual(rollen.toSorted(), ["erkunder", "planer", "pruefer-planung", "pruefer-planung"]);
+  assert.deepEqual(sitzungen.at(-1), { rolle: "planer", sitzung: aufrufe(lauf, "planer")[0].sitzung });
+});
+
+test("Neuschnitt: eine Rolle, die eine Datei ändert, bricht mit Exit 1 und dem Abbruchtext des Teams ab", (context) => {
+  const schnitt = { text: alsJson({ schnitt: neuerSchnitt(), aenderung: AENDERUNG }), schreibe: "src/geaendert.txt" };
+  const lauf = neuschnitt(context, { ueberschrieben: { "planer|": [schnitt] } });
+  exit(lauf, 1);
+  assert.equal(lauf.ergebnis.grund, "planer haben src/geaendert.txt geändert");
+  assert.equal(lauf.ergebnis.planung.exit, 1);
+  assert.deepEqual(lauf.phase, lauf.vorher);
+});
