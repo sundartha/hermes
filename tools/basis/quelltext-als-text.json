@@ -13,8 +13,6 @@
     "test/kv-p1-cost-ledger-map.test.js|5779b7202684f827",
     "test/kv-p1-cost-ledger-map.test.js|dba46c3f8a3a7f50",
     "test/kv-p7-latent-paths.test.js|47f10843b9438b6b",
-    "test/mcp-audio-text-only.test.js|55425f1b1d86220a",
-    "test/mcp-audio-text-only.test.js|d9b357a1d5063737",
     "test/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944",
     "test/mcp-kompatibilitaetsvertrag.test.js|9f46e10753eb78bf",
     "test/openai-t2-01-widget-resource-meta.test.js|49d54f86d7e72343",
