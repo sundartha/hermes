@@ -175,7 +175,7 @@ class Runden {
     if (plan.befunde.length > 0) {
       return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`, zweckBlock(MELDUNG.UMBAU_PLAN));
     }
-    return new Runden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
+    return new Runden({ ...this.kontext, ...plan.kontext, aufraeumen: ergebnis.voraussetzung.startsWith("Altfunktionen aufräumen:") }, this.starteRunde).fuehreAus();
   }
 
   planeUmbau(ergebnis) {
