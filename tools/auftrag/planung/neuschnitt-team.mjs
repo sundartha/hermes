@@ -1,11 +1,13 @@
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
-import { istUmbau } from "../format.mjs";
+import { istTestdatei, istUmbau } from "../format.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
-import { istObjekt } from "./erkundung.mjs";
+import { istObjekt, istText } from "./erkundung.mjs";
+import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nummernText } from "./plane.mjs";
-import { DOKUMENTE, schnittPruefung } from "./schnitt.mjs";
+import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
 
 export const VERLAUF = "\n## Verlauf\n";
@@ -13,6 +15,7 @@ const NACHFRAGEN = "Nachfragen gibt es beim Neuschnitt nicht";
 const SKRIPTBEFUNDE = "die Skriptprüfung hat den neuen Schnitt abgelehnt";
 const FUER_DEN_OWNER = "der neue Schnitt braucht den Owner";
 const FUER_OWNER_FELDER = ["ownerAufgaben", "fehlendeSzenarien"];
+const QUELLTEXT = /\.[cm]?js$/;
 
 class NeuschnittTeam extends Team {
   volleAntworten = new Map();
@@ -47,6 +50,30 @@ class NeuschnittPlanung extends Planung {
     this.planer = this.team.teilnehmer("planer");
   }
 
+  produktDateien(auftraege) {
+    const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
+    return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(this.root, datei)));
+  }
+
+  ersatzbericht(dateien) {
+    const aenderungen = dateien.map((datei) => ({ datei, von: 1, bis: readFileSync(join(this.root, datei), "utf8").split("\n").length }));
+    return { gruppe: [], nummern: { [this.alt.id]: { aenderungen } } };
+  }
+
+  async ersatzKarten(auftraege) {
+    const dateien = this.produktDateien(auftraege);
+    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter((datei) => QUELLTEXT.test(datei)))]);
+    return { funktionsliste, dateikarte: await dateiKarte(this.root, [this.ersatzbericht(dateien)]) };
+  }
+
+  karten() {
+    return istUmbau(this.alt) ? this.ersatzKarten([this.alt]) : super.karten();
+  }
+
+  erkundungsbericht() {
+    return istUmbau(this.alt) ? this.ersatzbericht(this.produktDateien([this.alt])) : this.berichte;
+  }
+
   ausstieg(antwort) {
     if (antwort.art !== STILLSTAND) throw new Ende(EXIT_PASST_NICHT, this.team.volleAntwort(this.planer));
     return super.ausstieg(antwort);
@@ -68,7 +95,7 @@ class NeuschnittPlanung extends Planung {
       abschnitt("Dokumente", dokumente.join("\n\n")),
       abschnitt("Phasendatei", `${datei}\n\n${json(this.phase)}`),
       abschnitt("Nummern", nummernText(this.soll, [...this.soll.keys()])),
-      abschnitt("Erkundungsbericht", json(this.berichte)),
+      abschnitt("Erkundungsbericht", json(this.erkundungsbericht())),
       ...(await this.lagebild()),
       abschnitt(VORLAGE, dateiText(this.root, VORLAGE)),
       kopf.slice(stelle),
@@ -93,12 +120,19 @@ class NeuschnittPlanung extends Planung {
     await this.planerStufe(await this.planerNachricht(), (wert) => this.nimmSchnitt(wert));
   }
 
+  async skriptPruefung(schnitt, eingaben) {
+    if (!istUmbau(this.alt)) return schnittPruefung(schnitt, eingaben);
+    const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
+    this.umbauKarten = await this.ersatzKarten([this.alt, ...umbauten]);
+    return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...this.umbauKarten });
+  }
+
   async pruefeSchnitt(schnitt) {
     if (!istObjekt(schnitt)) return super.pruefeSchnitt(schnitt);
     this.schnitt = schnitt;
     this.lege("schnitt.json", schnitt);
     const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene };
-    const { befunde, annahmen } = await schnittPruefung(schnitt, eingaben);
+    const { befunde, annahmen } = await this.skriptPruefung(schnitt, eingaben);
     this.schnittAnnahmen = annahmen;
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
   }
