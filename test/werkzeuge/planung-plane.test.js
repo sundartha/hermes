@@ -24,6 +24,8 @@ const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
 const EXIT_PASST_NICHT = 3;
 const EXIT_BEFUNDE = 4;
+const ABSTURZ_EXIT = 3;
+const ABSTURZ_FEHLER = "Error: spawn claude ENOENT";
 const LAUF_FRIST_MS = 240_000;
 const WARTEN_MS = 1500;
 const AUSFUEHRBAR = 0o755;
@@ -102,6 +104,7 @@ if (art.schreibe) writeFileSync(join(process.cwd(), art.schreibe), "geändert\\n
 appendFileSync(join(ort, "protokoll.jsonl"), JSON.stringify({ agent, sitzung: resume ?? wert("--session-id"), resume: resume !== undefined, ueberschrift, eingabe, start, ende: Date.now() }) + "\\n");
 const melde = (zeile) => process.stdout.write(JSON.stringify(zeile) + "\\n");
 if (eintrag === undefined) { process.stderr.write("keine weitere Antwort für " + schluessel); process.exit(1); }
+if (art.absturz) { process.stderr.write(art.absturz.fehler); process.exit(art.absturz.exit); }
 if (art.limit) {
   melde({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: Math.ceil(Date.now() / 1000) + 1 } });
   melde({ type: "result", is_error: true, result: "limit reached" });
@@ -795,6 +798,25 @@ test("plane: eine Antwort ohne JSON-Block zweimal endet mit Exit 1", { timeout: 
   exit(lauf, EXIT_ABBRUCH);
   assert.ok(aufrufe(lauf, "planer", "## Befunde")[0].eingabe.includes("Antwort ohne JSON-Block"));
   assert.equal(planungsBericht(lauf).exit, EXIT_ABBRUCH);
+  assert.equal(planungsBericht(lauf).grund, "planer hat zweimal ohne JSON-Block geantwortet");
+});
+
+test("plane: ein abgestürzter Agent endet mit Exit 1 und der Meldung Absturz, ohne Rücksendung an ihn", { timeout: LAUF_FRIST_MS }, (context) => {
+  const absturz = { absturz: { exit: ABSTURZ_EXIT, fehler: `erste Zeile\n${ABSTURZ_FEHLER}\n` } };
+  const lauf = plane(context, { "planer|## Gliederung": [absturz], "planer|## Befunde": [alsJson({ gruppen: GRUPPEN })] });
+  exit(lauf, EXIT_ABBRUCH);
+  const grund = planungsBericht(lauf).grund;
+  assert.ok(grund.startsWith(`planer ist abgestürzt (Exit ${ABSTURZ_EXIT})`), grund);
+  assert.ok(grund.includes(ABSTURZ_FEHLER), grund);
+  assert.equal(aufrufe(lauf, "planer", "## Gliederung").length, 1);
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 0);
+});
+
+test("plane: stürzt der Agent erst nach der Rücksendung ab, meldet die Planung den Absturz statt zweimal ohne JSON-Block", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { "planer|## Gliederung": ["Ich gliedere gleich."], "planer|## Befunde": [{ absturz: { exit: ABSTURZ_EXIT, fehler: ABSTURZ_FEHLER } }] });
+  exit(lauf, EXIT_ABBRUCH);
+  assert.equal(planungsBericht(lauf).grund, `planer ist abgestürzt (Exit ${ABSTURZ_EXIT}):\n${ABSTURZ_FEHLER}`);
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
 });
 
 test("plane: ein Nutzungslimit setzt dieselbe Sitzung mit derselben Nachricht fort", { timeout: LAUF_FRIST_MS }, (context) => {
