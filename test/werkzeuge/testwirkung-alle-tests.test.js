@@ -67,3 +67,41 @@ test("ein neuer wirksamer Test neben unveränderten wirksamen Tests derselben Da
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Tests geänderter Testdateien: 2 in 5 Läufen wiederholt, 0 wackeln, 0 nicht gelaufen\.$/m);
 });
+
+const ALT_KOPF = ['import { addiere } from "../src/rechnen.js";'];
+const ALT_FALL = ["addiert null", "assert.equal(addiere(0, 5), 5);"];
+
+function pruefeMitUnveraendertem(context, block) {
+  const vorher = { ...RECHNEN, "test/rechnen.test.js": testdatei(ALT_KOPF, ALT_FALL) + block };
+  const nachher = { "test/rechnen.test.js": testdatei(ALT_KOPF, ALT_FALL, WIRKSAM) + block };
+  return pruefeZwischen(context, vorher, nachher);
+}
+
+test("ein unveränderter Test, der in keinem Lauf ein Ergebnis liefert, macht die Testwirkung rot, wenn seine Datei geändert wird", (context) => {
+  const nieRegistriert = [
+    "if (process.env.NIE_GESETZT_TESTWIRKUNG !== undefined) {",
+    '  test("läuft nie", () => {',
+    "    assert.equal(addiere(1, 2), 3);",
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+  const lauf = pruefeMitUnveraendertem(context, nieRegistriert);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test nicht gelaufen: test\/rechnen\.test\.js › läuft nie \(Lauf B1, B2, B3, B4, B5\)$/m);
+  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 3 in 5 Läufen wiederholt, 0 wackeln, 1 nicht gelaufen\.$/m);
+});
+
+test("ein unveränderter Test mit todo statt skip bleibt in einer geänderten Datei ohne Ergebnis und macht die Testwirkung rot", (context) => {
+  const vorgemerkt = ['test("vorgemerkt", { todo: true }, () => {', "  assert.equal(addiere(2, 3), 5);", "});", ""].join("\n");
+  const lauf = pruefeMitUnveraendertem(context, vorgemerkt);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test nicht gelaufen: test\/rechnen\.test\.js › vorgemerkt \(Lauf B1, B2, B3, B4, B5\)$/m);
+});
+
+test("ein unveränderter, übersprungener Test in einer geänderten Datei zählt nicht als nicht gelaufen", (context) => {
+  const uebersprungen = ['test("übersprungen", { skip: "bewusst" }, () => {', "  assert.equal(addiere(1, 2), 3);", "});", ""].join("\n");
+  const lauf = pruefeMitUnveraendertem(context, uebersprungen);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 3 in 5 Läufen wiederholt, 0 wackeln, 0 nicht gelaufen\.$/m);
+});
