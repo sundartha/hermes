@@ -205,10 +205,6 @@ export function prompts(text) {
 
 export const UMBAU_ZWEI = { dateien: { "src/text.js": "export function gross(eingabe) {\n  return eingabe.toUpperCase();\n}\n" }, antwort: "Fertig." };
 
-export const BEHALTEN = "a1 steht noch in der Phasendatei; der Neuschnitt ersetzt ihn.";
-
-export const KEIN_NEUER = "Der Neuschnitt nennt keinen neuen Auftrag statt a1.";
-
 export const OHNE_EMPFEHLUNG = "Zu „Pitch ändern: …“ fehlt die Zeile „Empfehlung: …“.";
 
 export const GESTOPPT = "Auftrag a1 der Phase P-001-probe ist nach 2 roten Runden gestoppt.";

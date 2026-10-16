@@ -215,7 +215,7 @@ test("ein unklarer Zweck geht auch bei einer Phase aus einem Pitch direkt an Ant
   const faelle = [
     [{ alterTest }, "plan\nnotiz\n"],
     [{ ausstieg: "Zweck der Prüfung lint unklar: Die Regel verbietet hier den einzigen Namen der Fachsprache." }, "notiz\n"],
-    [{ ausstieg: GRUND }, "planung\n"],
+    [{ ausstieg: GRUND }, "planer\n"],
   ];
   for (const [ausweg, erster] of faelle) {
     const { ergebnis, starts } = ausPlanung(context, ausweg);

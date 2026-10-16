@@ -297,7 +297,7 @@ test("scheitert ein Neuschnitt an Schnitt und Abdeckung, nennt der nächste Prom
   const { werkzeug, env: umgebung } = ersatzUmgebung(context, TEAM_OHNE_ABDECKUNG);
   const lauf = spawnSync(process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", PLAN_PHASE], { cwd: repo, encoding: "utf8", env: umgebung });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  const zweiter = readFileSync(join(werkzeug, "prompt-planung.txt"), "utf8").split("\n## Neuschnitt\n").at(-1);
+  const zweiter = readFileSync(join(werkzeug, "prompt-planer.txt"), "utf8").split("\n## Neuschnitt\n").at(-1);
   const zweck = abschnittAus(zweiter, "Wozu die Prüfungen da sind");
   for (const id of [MELDUNG.NEUSCHNITT, MELDUNG.ABDECKUNG]) {
     assert.equal(zweck.split(zweckBlock(id).join("\n")).length - 1, 1, `${id}\n${zweiter}`);
