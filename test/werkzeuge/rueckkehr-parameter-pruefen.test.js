@@ -123,7 +123,7 @@ test("ein falscher Aufruf oder eine fehlende Datei endet mit Exit 2", (kontext) 
 });
 
 test("ein Zweig fuer einen laengeren Bezeichner zaehlt nicht als Zweig fuer den Parameter", (kontext) => {
-  for (const fremderName of ["xcard", "discard", "_card", "$card"]) {
+  for (const fremderName of ["xcard", "discard", "_card", "$card", "äcard", "𝒞card", "a\u200dcard", "a\u200ccard"]) {
     const fremderZweig = `    if (${fremderName} === RETURN_OK) return "Karte gespeichert";`;
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shellSource([fremderZweig, SUB_BRANCH]) });
     assert.equal(result.status, EXIT_FINDING, `${fremderName}: ${result.stdout}${result.stderr}`);
@@ -187,5 +187,14 @@ test("ein Regex-Literal oder eine Division im Funktionsrumpf macht den Rumpf unl
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
     assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /keine eindeutig lesbare Funktion returnMessageText\(\)/, zeile);
+  }
+});
+
+test("ein Zweig, dessen Vergleichswert in einem laengeren Bezeichner endet, zaehlt nicht als Zweig", (kontext) => {
+  for (const fremderWert of ["RETURN_OKä", "RETURN_OK𝒞", "RETURN_OK1", "RETURN_OK$", "RETURN_OK\u200c", "RETURN_OK\u200d"]) {
+    const fremderZweig = `    if (card === ${fremderWert}) return "Karte gespeichert";`;
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shellSource([fremderZweig, SUB_BRANCH]) });
+    assert.equal(result.status, EXIT_FINDING, `${fremderWert}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /KARTE_GESPEICHERT: kein Zweig "card === RETURN_OK"/, fremderWert);
   }
 });
