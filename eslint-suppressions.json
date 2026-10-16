@@ -1231,11 +1231,6 @@
       "count": 1
     }
   },
-  "test/call-termination-order.test.js": {
-    "max-params": {
-      "count": 1
-    }
-  },
   "test/cap-failure-reason.test.js": {
     "no-param-reassign": {
       "count": 3
