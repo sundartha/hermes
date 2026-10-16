@@ -1,15 +1,17 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { istTestdatei, istUmbau } from "../format.mjs";
+import { istTestdatei, istUmbau, phasenBefunde } from "../format.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
+import { befundeImOrdner } from "./abdeckung.mjs";
 import { prueflisteSoll } from "./antworten.mjs";
-import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nachricht, nummernText, prueferZeile } from "./plane.mjs";
+import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
+import { auftragAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
 
 export const VERLAUF = "\n## Verlauf\n";
 const NACHFRAGEN = "Nachfragen gibt es beim Neuschnitt nicht";
@@ -26,6 +28,8 @@ const DURCHSTICH_ZEILE = `durchstich:${DURCHSTICH}`;
 const PRUEFUNG_UNVOLLSTAENDIG = "die Prüfliste blieb nach der Rücksendung unvollständig";
 const ERSTE_PRUEFLISTE = "pruefliste.json";
 const PRUEFLISTE_NACH_KORREKTUR = "pruefliste-korrektur.json";
+const ENTWURF_OFFEN = "Befunde zu Entwürfen blieben nach der Rücksendung offen";
+const PHASE_MIT_BEFUNDEN = "die Phase mit dem neuen Schnitt hat Befunde";
 const PRUEFUNG_OFFEN = "der frische Prüfer hat nach der Korrektur Befunde";
 
 function leseJson(pfad) {
@@ -230,10 +234,48 @@ class NeuschnittPlanung extends Planung {
     if (danach.length > 0) throw new Ende(EXIT_BEFUNDE, PRUEFUNG_OFFEN, danach.map(prueferZeile));
   }
 
+  eigeneBereiche() {
+    const fremde = new Set(this.vorhandene.map(({ bereich }) => bereich));
+    const bereiche = new Set(this.schnitt.auftraege.map(({ bereich }) => bereich));
+    return [...bereiche].filter((bereich) => !fremde.has(bereich));
+  }
+
+  entwurfLauf(bereich) {
+    const namen = this.namenDes(bereich);
+    const schreiber = this.team.teilnehmer("entwurf");
+    return { rolle: schreiber.rolle, lauf: () => this.schreibeEntwurf(schreiber, this.entwurfNachricht(bereich, namen), namen) };
+  }
+
+  async entwerfe() {
+    const bereiche = this.eigeneBereiche();
+    const ergebnisse = await this.team.gruppe(bereiche.map((bereich) => this.entwurfLauf(bereich)));
+    const offen = bereiche.flatMap((bereich, stelle) => ergebnisse[stelle].befunde.map((befund) => `Entwurf ${bereich}: ${befund}`));
+    if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, ENTWURF_OFFEN, offen);
+    const eigene = (bereich) => this.schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich);
+    return Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, entwurfFuer(ergebnisse[stelle].entwurf, eigene(bereich))]));
+  }
+
+  ohneAlten(auftrag, neue) {
+    const vorher = liste(auftrag.abhaengigVon);
+    if (!vorher.includes(this.alt.id)) return auftrag;
+    return { ...auftrag, abhaengigVon: vorher.flatMap((id) => (id === this.alt.id ? neue : [id])) };
+  }
+
+  setzeEin(entwuerfe) {
+    const neue = this.schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, this.soll));
+    const kennungen = neue.map(({ id }) => id);
+    const auftraege = this.phase.auftraege.flatMap((auftrag) => (auftrag === this.alt ? neue : [this.ohneAlten(auftrag, kennungen)]));
+    const phase = { ...this.phase, entwurf: { ...this.phase.entwurf, ...entwuerfe }, auftraege };
+    const befunde = [...phasenBefunde(phase, this.root), ...befundeImOrdner(this.ordner, phase).befunde];
+    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, PHASE_MIT_BEFUNDEN, befunde);
+    schreibeJson(join(this.root, this.eingabe.datei), phase);
+  }
+
   async laufe() {
     await this.erkundeNummern();
     await this.schneide();
     await this.pruefe();
+    this.setzeEin(await this.entwerfe());
   }
 
   sitzungen() {
