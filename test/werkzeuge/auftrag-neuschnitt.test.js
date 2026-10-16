@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { AUSFUEHRBAR, ersterVersuch, EXIT_ROT, funktion, GESTOPPT, lauf, MIT_FIX, NEUSCHNITT, ohne, OHNE_FIX, ORDNER, phase, PHASENDATEI, REPO, S1, TEST, umbau, UMBAU_FERTIG, UMBAU_ZWEI, VERBOT } from "./neuschnitt-probe.js";
+import { AUSFUEHRBAR, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, NEUSCHNITT, ohne, OHNE_FIX, ORDNER, phase, PHASENDATEI, REPO, S1, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI, VERBOT } from "./neuschnitt-probe.js";
 
 test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn neu und der Lauf wird ohne Entscheidungsnotiz grün", (context) => {
-  const drehbuch = { test: [TEST], bau: [OHNE_FIX, OHNE_FIX, MIT_FIX], planung: [NEUSCHNITT] };
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX, OHNE_FIX, MIT_FIX], planung: [NEUSCHNITT], planer: [SCHNITT] };
   const { ergebnis, beleg, git, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.deepEqual([datei("anzahl-planung"), datei("anzahl-notiz"), datei("gh.log")], ["1", "", ""]);
@@ -28,7 +28,7 @@ test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn n
 
 test("nach „Auftrag passt nicht“ bekommt der Planer den Grund wörtlich und der Lauf geht mit dem Neuschnitt weiter", (context) => {
   const grund = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
-  const drehbuch = { test: [TEST], bau: [{ antwort: `Ich höre auf.\nAuftrag passt nicht: ${grund}` }, MIT_FIX], planung: [NEUSCHNITT] };
+  const drehbuch = { test: [TEST], bau: [{ antwort: `Ich höre auf.\nAuftrag passt nicht: ${grund}` }, MIT_FIX], planung: [NEUSCHNITT], planer: [SCHNITT] };
   const { ergebnis, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   const prompt = datei("prompt-planung.txt");
@@ -40,6 +40,8 @@ test("nach „Auftrag passt nicht“ bekommt der Planer den Grund wörtlich und 
 test("ein Neuschnitt nach zwei fertigen Aufträgen mit zwei Nachfolgern, neuen Vorgängern eines späteren Auftrags und eigenem Entwurf wird mit Paket in der Commit-Nachricht übernommen", (context) => {
   const rahmen = { paket: "V4" };
   const vorher = [ohne(umbau("a0"), "abhaengigVon"), umbau("a0b"), funktion("a1", { abhaengigVon: ["a0"] }), umbau("a2", { abhaengigVon: ["a0", "a1"] })];
+  const grund = "a1-n1 braucht den Umbau";
+  const zweiNachfolger = schneide([neuUmbau("a1-n2", { abnahme: TEXT_BESTAND, abhaengigVon: [{ id: "a1-n1", grund }] }), neu("a1-n1", { abhaengigVon: [{ id: "a0", grund }] })]);
   const nachher = [
     vorher[0],
     vorher[1],
@@ -48,7 +50,7 @@ test("ein Neuschnitt nach zwei fertigen Aufträgen mit zwei Nachfolgern, neuen V
     umbau("a2", { abhaengigVon: ["a1-n2", "a1-n1", "a0"] }),
   ];
   const geschnitten = phase(nachher, { ...rahmen, entwurf: { "src/rechnen.js": "Entwurf nach dem Neuschnitt.", "src/text.js": "Entwurf Text." } });
-  const drehbuch = { test: [TEST], bau: [UMBAU_FERTIG, UMBAU_ZWEI, OHNE_FIX], planung: [{ dateien: { [PHASENDATEI]: geschnitten } }], notiz: [{ antwort: "1. Szenario prüfen" }] };
+  const drehbuch = { test: [TEST], bau: [UMBAU_FERTIG, UMBAU_ZWEI, OHNE_FIX], planung: [{ dateien: { [PHASENDATEI]: geschnitten } }], planer: [zweiNachfolger], erkunder: [MIT_TEXT], notiz: [{ antwort: "1. Szenario prüfen" }] };
   const { ergebnis, beleg, git, datei } = lauf(context, drehbuch, { dateien: { [PHASENDATEI]: phase(vorher, rahmen) } });
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
   assert.ok(ergebnis.stdout.includes("Auftrag a1: neu geschnitten, weiter mit den Aufträgen des Neuschnitts.\n"), ergebnis.stdout);
@@ -72,7 +74,7 @@ test("ein Neuschnitt nach zwei fertigen Aufträgen mit zwei Nachfolgern, neuen V
 test("ein Planer, der im Stillstand abgebrochen wird oder mit einem Fehler endet, liefert genau diesen Grund als Befund", (context) => {
   const lesen = { type: "assistant", message: { content: [{ type: "tool_use", id: "w1", name: "Read", input: { file_path: "x" } }] } };
   const antwort = { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "w1", content: "gleich" }] } };
-  const { versuche } = ersterVersuch(context, [{ zeilen: [lesen, antwort, antwort, antwort] }, { exit: 3 }]);
+  const { versuche } = ersterVersuch(context, { planung: [{ zeilen: [lesen, antwort, antwort, antwort] }, { exit: 3 }], planer: [{ zeilen: [lesen, antwort, antwort, antwort] }, { exit: 3 }] });
   assert.deepEqual(versuche, [
     { befunde: ['Stillstand: Read lief dreimal mit derselben Eingabe und lieferte dasselbe Ergebnis: {"file_path":"x"}'] },
     { befunde: ["Der Planer endete mit Exit 3."] },
@@ -81,7 +83,7 @@ test("ein Planer, der im Stillstand abgebrochen wird oder mit einem Fehler endet
 
 test("ein Neuschnitt mit unlesbarer Phasendatei oder roter Abdeckungsprüfung wird mit genau diesen Befunden abgelehnt", (context) => {
   const anders = phase([funktion("a1-n1", { prueft: ["B1"], szenarien: { B1: S1 } })]);
-  const { versuche } = ersterVersuch(context, [{ dateien: { [PHASENDATEI]: "{" } }, { dateien: { [PHASENDATEI]: anders } }]);
+  const { versuche } = ersterVersuch(context, { planung: [{ dateien: { [PHASENDATEI]: "{" } }, { dateien: { [PHASENDATEI]: anders } }], planer: [{ dateien: { [PHASENDATEI]: "{" } }, schneide([neu("a1-n1", { prueft: ["B1"] })])] });
   const [unlesbar, abdeckung] = versuche;
   assert.equal(unlesbar.befunde.length, 1, unlesbar.befunde.join("\n"));
   assert.ok(unlesbar.befunde[0].startsWith(`${PHASENDATEI} ist nicht lesbar: `), unlesbar.befunde[0]);
@@ -92,7 +94,7 @@ test("scheitert der Commit des Neuschnitts, wird er mit der Fehlerausgabe abgele
   const haken = probeDirectory(context, { "commit-msg": '#!/bin/sh\ncase "$(head -n 1 "$1")" in\n  Schneide*) echo "Neuschnitt abgelehnt" >&2; exit 1 ;;\nesac\n' });
   chmodSync(join(haken, "commit-msg"), AUSFUEHRBAR);
   const umgebung = { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: haken };
-  const { versuche, git } = ersterVersuch(context, [NEUSCHNITT], { umgebung });
+  const { versuche, git } = ersterVersuch(context, { planung: [NEUSCHNITT], planer: [SCHNITT] }, { umgebung });
   assert.deepEqual(versuche.map(({ befunde }) => befunde), [["git commit des Neuschnitts endete mit Exit 1: Neuschnitt abgelehnt"], ["git commit des Neuschnitts endete mit Exit 1: Neuschnitt abgelehnt"]]);
   assert.equal(git("show", `HEAD:${PHASENDATEI}`), REPO[PHASENDATEI]);
   assert.equal(git("status", "--porcelain"), "");

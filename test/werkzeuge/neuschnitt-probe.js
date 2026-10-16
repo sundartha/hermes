@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { alsJson } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, runIn } from "./probe-repo.js";
 
 export const AUSFUEHRBAR = 0o755;
@@ -35,15 +36,19 @@ const nummer = existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
 writeFileSync(zaehler, String(nummer + 1));
 const liste = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"))[rolle] ?? [{}];
 const einsatz = liste[Math.min(nummer, liste.length - 1)];
-appendFileSync(join(ort, "prompt-" + rolle + ".txt"), readFileSync(0, "utf8") + "\\n");
+const eingabe = readFileSync(0, "utf8");
+appendFileSync(join(ort, "prompt-" + rolle + ".txt"), eingabe + "\\n");
 appendFileSync(join(ort, "argumente-" + rolle + ".txt"), JSON.stringify(process.argv.slice(2)) + "\\n");
 for (const [pfad, inhalt] of Object.entries(einsatz.dateien ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
 }
 if (einsatz.commit) execFileSync("git", ["commit", "-qam", "Planer"]);
+const zeilen = (eingabe.split("### Zeilen deiner Prüfliste")[1] ?? "").split("\\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
+const pruefliste = zeilen.map((schluessel) => ({ schluessel, ergebnis: "erfüllt", fundstelle: "src/rechnen.js:1", ...(einsatz.befunde?.[schluessel] ? { ergebnis: "befund", befund: einsatz.befunde[schluessel] } : {}) }));
+const antwort = einsatz.pruefliste ? "Geprüft.\\n\\n\`\`\`json\\n" + JSON.stringify({ pruefliste }) + "\\n\`\`\`" : einsatz.antwort ?? "fertig";
 for (const zeile of einsatz.zeilen ?? []) process.stdout.write(JSON.stringify(zeile) + "\\n");
-process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: einsatz.antwort ?? "fertig" }) + "\\n");
+process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: antwort }) + "\\n");
 process.exitCode = einsatz.exit ?? 0;
 `;
 
@@ -98,8 +103,6 @@ export const REPO = {
   [TEXT_TEST]: gruenerTest("text.js", "gross", 'assert.equal(gross("a"), "A")'),
   [TEXT_BESTAND]: gruenerTest("text.js", "gross", 'assert.equal(gross(""), "")'),
   [RECHNEN_BESTAND]: gruenerTest("rechnen.js", "verdopple", "assert.equal(verdopple(0), 0)"),
-  "tools/bereiche.json": JSON.stringify(BEREICHE),
-  "eslint.config.js": 'export default [{ rules: { "no-var": "error" } }];\n',
   [`${ORDNER}/pitch.md`]: PITCH,
   [`${ORDNER}/sicherheit.md`]: SICHERHEIT,
   [PHASENDATEI]: phase([funktion("a1")]),
@@ -111,11 +114,41 @@ export const MIT_FIX = { dateien: { "src/rechnen.js": "export function verdopple
 export const UMBAU_FERTIG = { dateien: { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" }, antwort: "Fertig." };
 export const NEUSCHNITT = { dateien: { [PHASENDATEI]: phase([funktion("a1-n1", { ziel: "Verdopple Zahlen in rechnen.js" })]) }, antwort: "a1-n1: Verdopple Zahlen in rechnen.js" };
 
+const STELLE = { datei: "src/rechnen.js", funktion: "verdopple", von: 1, bis: 3 };
+const SCHEMA = { schema: { aenderung: false, fundstelle: "src/rechnen.js Zeile 1" }, codeowners: [], ownerEntscheidung: "keine, weil keine geschützte Datei betroffen ist" };
+const NIE = [{ satz: VERBOT, quelle: "pitch.md", abschnitt: "## Nicht-Ziele" }];
+export const ENTWURF_RECHNEN = "Grundlage: pitch.md, Szenario S1\nverdopple gibt das Doppelte zurück.\nFehlerfälle: keine";
+
+function erkundung(weitere = []) {
+  const weg = { weg: [{ rolle: "eingang", ...STELLE }, { rolle: "wirkung", ...STELLE }], aenderungen: [{ ...STELLE, neueZeilen: 1 }, ...weitere], tests: [RECHNEN_BESTAND], vorbild: "src/rechnen.js" };
+  return { antwort: alsJson({ nummern: { S1: { ...weg, ...SCHEMA, eingangImTest: "erreichbar", widersprueche: [] } }, hinweise: [] }) };
+}
+
+export const MIT_TEXT = erkundung([{ datei: "src/text.js", funktion: "gross", von: 1, bis: 3, neueZeilen: 0 }]);
+
+const TEAM = { erkunder: [erkundung()], "pruefer-planung": [{ pruefliste: true }], entwurf: [{ antwort: alsJson({ entwurf: ENTWURF_RECHNEN }) }] };
+
+export function neu(id, aenderung = {}) {
+  const { szenarien, ...rest } = funktion(id);
+  if (szenarien === undefined) throw new Error(`${id}: funktion liefert keine szenarien`);
+  return { ...rest, wasDarfNiePassieren: NIE, eingang: "erreicht", ...aenderung };
+}
+
+export function neuUmbau(id, aenderung = {}) {
+  return umbau(id, { wasDarfNiePassieren: NIE, ...aenderung });
+}
+
+export function schneide(auftraege, aenderung = "a1 wird neu geschnitten.") {
+  return { antwort: alsJson({ schnitt: { annahmen: [], fehlendeSzenarien: [], ownerAufgaben: [], gemeinsameNamen: [], auftraege }, aenderung }) };
+}
+
+export const SCHNITT = schneide([neu("a1-n1", { ziel: "Verdopple Zahlen in rechnen.js" })], "a1-n1: Verdopple Zahlen in rechnen.js");
+
 const ERSATZ = { HERMES_CLAUDE: "claude.mjs", HERMES_GH: "gh.mjs", ERSATZ_DREHBUCH: "drehbuch.json", ERSATZ_GH: "gh.log" };
 const IDENTITAET = { GIT_AUTHOR_NAME: "Probe", GIT_AUTHOR_EMAIL: PROBE, GIT_COMMITTER_NAME: "Probe", GIT_COMMITTER_EMAIL: PROBE };
 
 export function teamRepository(context, dateien) {
-  const repo = probeDirectory(context, dateien);
+  const repo = probeDirectory(context, { "eslint.config.js": 'export default [{ rules: { "no-var": "error" } }];\n', "tools/bereiche.json": JSON.stringify(BEREICHE), ...dateien });
   for (const pfad of TEAM_DATEIEN) {
     mkdirSync(dirname(join(repo, pfad)), { recursive: true });
     copyFileSync(join(REPO_ROOT, pfad), join(repo, pfad));
@@ -125,13 +158,18 @@ export function teamRepository(context, dateien) {
   return repo;
 }
 
-export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATEI, umgebung = {} } = {}) {
-  const repo = teamRepository(context, Object.fromEntries(Object.entries({ ...REPO, ...dateien }).filter(([, inhalt]) => inhalt !== undefined)));
+export function ersatzUmgebung(context, drehbuch) {
   const werkzeug = probeDirectory(context, { "claude.mjs": CLAUDE, "gh.mjs": GH, "drehbuch.json": JSON.stringify(drehbuch) });
   chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
   chmodSync(join(werkzeug, "gh.mjs"), AUSFUEHRBAR);
   const ersatz = Object.entries(ERSATZ).map(([name, datei]) => [name, join(werkzeug, datei)]);
-  const env = { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...IDENTITAET, ...umgebung, HOME: werkzeug };
+  return { werkzeug, env: { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...IDENTITAET, HOME: werkzeug } };
+}
+
+export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATEI, umgebung = {} } = {}) {
+  const repo = teamRepository(context, Object.fromEntries(Object.entries({ ...REPO, ...dateien }).filter(([, inhalt]) => inhalt !== undefined)));
+  const { werkzeug, env: ersatz } = ersatzUmgebung(context, { ...TEAM, ...drehbuch });
+  const env = { ...ersatz, ...umgebung, HOME: werkzeug };
   const ergebnis = spawnSync(process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", phasendatei], { cwd: repo, encoding: "utf8", env });
   const lies = (pfad) => (existsSync(pfad) ? readFileSync(pfad, "utf8") : "");
   const beleg = (name) => JSON.parse(lies(join(repo, ".fortschritt/P-001-probe", `${name}.json`)) || "null");
@@ -145,8 +183,8 @@ export function umbau(id, aenderung = {}) {
   return { ...rest, art: "umbau", bereich: "src/text.js", erwarteteDateien: ["src/text.js"], abnahme: TEXT_TEST, prueft: UMBAU_AUSWEG, ...aenderung };
 }
 
-export function ersterVersuch(context, planung, { dateien, bau = [OHNE_FIX], umgebung } = {}) {
-  const drehbuch = { test: [TEST], bau, planung, notiz: [{ antwort: "1. Pitch prüfen" }] };
+export function ersterVersuch(context, rollen, { dateien, bau = [OHNE_FIX], umgebung } = {}) {
+  const drehbuch = { test: [TEST], bau, ...rollen, notiz: [{ antwort: "1. Pitch prüfen" }] };
   const ergebnis = lauf(context, drehbuch, { dateien, umgebung });
   assert.equal(ergebnis.ergebnis.status, EXIT_ROT);
   const { versuche } = ergebnis.beleg("a1-neuschnitt");

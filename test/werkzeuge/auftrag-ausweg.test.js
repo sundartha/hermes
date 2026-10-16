@@ -8,7 +8,8 @@ import { ausgang, nenntAltenTest } from "../../tools/auftrag/ausgang.mjs";
 import { ROT } from "../../tools/auftrag/bericht.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { teamRepository } from "./neuschnitt-probe.js";
+import { probeDirectory, runIn } from "./probe-repo.js";
 
 const GRUND = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
 const AUSSTIEG = `Auftrag passt nicht: ${GRUND}`;
@@ -194,12 +195,13 @@ function setzeUmgebung(context, werte) {
 }
 
 function ausPlanung(context, ausweg, roteRunden = []) {
-  const root = probeRepository(context, { [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: "{}\n" });
+  const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
+  const phase = { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] };
+  const root = teamRepository(context, { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl;\n}\n", "test/rechnen.test.js": "", [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: `${JSON.stringify(phase)}\n` });
   const werkzeug = probeDirectory(context, { "claude.mjs": NOTIZ_ERSATZ });
   chmodSync(join(werkzeug, "claude.mjs"), 0o755);
   setzeUmgebung(context, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
-  const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
-  const kontext = { phase: { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] }, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
+  const kontext = { phase, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
   const offen = [...roteRunden];
   const runde = () => ({ ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...(offen.shift() ?? ausweg) });
   const ergebnis = fuehreRundenAus(kontext, runde);
