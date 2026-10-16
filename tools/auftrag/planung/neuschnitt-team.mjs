@@ -8,6 +8,7 @@ import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { prueflisteSoll } from "./antworten.mjs";
+import { druckePlanBericht, planBericht } from "./planbericht.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
@@ -30,6 +31,7 @@ const ERSTE_PRUEFLISTE = "pruefliste.json";
 const PRUEFLISTE_NACH_KORREKTUR = "pruefliste-korrektur.json";
 const ENTWURF_OFFEN = "Befunde zu Entwürfen blieben nach der Rücksendung offen";
 const PHASE_MIT_BEFUNDEN = "die Phase mit dem neuen Schnitt hat Befunde";
+const PLANBERICHT = "planung.json";
 const PRUEFUNG_OFFEN = "der frische Prüfer hat nach der Korrektur Befunde";
 
 function leseJson(pfad) {
@@ -291,13 +293,29 @@ class NeuschnittPlanung extends Planung {
     return ergebnis;
   }
 
-  async ergebnis() {
+  bericht({ exit, grund, offen }) {
+    const { beginn, schnitt, nachpruefungen, wegpruefungen } = this;
+    const schleifen = this.schleifen.map((schleife) => schleife.bericht());
+    const lauf = { exit, grund, beginn, schnitt, nachpruefungen, wegpruefungen, schleifen, annahmen: this.alleAnnahmen(), befunde: { ...this.befunde, offen } };
+    const bericht = planBericht(lauf, { root: this.root, team: this.team });
+    const pfad = join(this.ablage, PLANBERICHT);
+    schreibeJson(pfad, bericht);
+    druckePlanBericht(bericht, pfad);
+    return bericht;
+  }
+
+  async ende() {
     try {
       await this.laufe();
-      return this.ergebnisFuer({ exit: EXIT_GRUEN, offen: [] });
+      return { exit: EXIT_GRUEN, grund: `grün: ${this.eingabe.datei} geschrieben`, offen: [] };
     } catch (fehler) {
-      return this.ergebnisFuer(ausgang(fehler));
+      return ausgang(fehler);
     }
+  }
+
+  async ergebnis() {
+    const ende = await this.ende();
+    return { ...this.ergebnisFuer(ende), planung: this.bericht(ende) };
   }
 }
 
