@@ -45,6 +45,7 @@ jobs:
 
   werkzeugtests:
     name: Prüfleiter Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
+    if: ${{ github.run_attempt == 0 }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
