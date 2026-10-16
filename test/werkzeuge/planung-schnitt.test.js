@@ -1082,3 +1082,34 @@ test("Vorhandene: eine abnahme, die ein vorhandener Auftrag schon hat, ist rot",
   const b = mitVorhandenen(basis(context), vorhanden("a5", { abnahme: TEST_B }));
   erwarte(lauf(b), REGEL.abnahme, `a2: abnahme ${TEST_B} hat schon der vorhandene Auftrag a5`);
 });
+
+function ohneA1({ schnitt, eingaben }) {
+  const soll = new Map([...eingaben.soll].filter(([nummer]) => nummer !== "S1"));
+  const berichte = eingaben.berichte.filter(({ gruppe }) => !gruppe.includes("S1"));
+  return { schnitt: { ...schnitt, auftraege: schnitt.auftraege.filter(({ id }) => id !== "a1") }, eingaben: { ...eingaben, soll, berichte } };
+}
+
+test("Durchstich: mit vorhandenen und ohne durchstich gilt die Regel Durchstich nicht, auch wenn a1 schon neu geschnitten ist", (context) => {
+  const b = mitVorhandenen(ohneA1(basis(context)), vorhanden("a1-n1"));
+  gruen(lauf(b));
+});
+
+test("Durchstich: mit durchstich gilt die Regel für diese Kennung", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  b.eingaben.durchstich = "a2";
+  haengtAn(eigener(b, "a2"), "a1");
+  erwarte(lauf(b), REGEL.durchstich, "a2 hängt von a1 ab, das ist kein Umbau");
+});
+
+test("Durchstich: mit durchstich steht eine fremde Änderungsdatei des Durchstichs nur unter der Regel Durchstich", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  b.eingaben.durchstich = "a2";
+  angabenVon(b, "S2").aenderungen.push({ datei: DATEI_C, funktion: "zaehle", von: 1, bis: 2, neueZeilen: 1 });
+  erwarte(lauf(b), REGEL.durchstich, `a2: Änderungsdatei ${DATEI_C} von S2 steht weder bei a2 noch in seiner abhaengigVon-Kette`);
+});
+
+test("Durchstich: mit durchstich und einer unbekannten Kennung fehlt der Durchstich", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5"));
+  b.eingaben.durchstich = "a2-n1";
+  erwarte(lauf(b), REGEL.durchstich, "es gibt keinen Auftrag a2-n1 (Durchstich)");
+});
