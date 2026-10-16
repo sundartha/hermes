@@ -78,6 +78,31 @@ test("fehlt der Shell ein Rueckkehr-Zweig, meldet das Skript genau diesen Fall",
   assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT/);
 });
 
+test("ein dritter Rueckkehr-Parameter, den die Shell liest, aber nicht an returnMessageText gibt, wird gemeldet", (kontext) => {
+  const shell = shellSource([CARD_BRANCH, SUB_BRANCH]).replace(
+    "  const params",
+    '  const RETURN_PARAM_SETUP = "setup";\n  const params',
+  );
+  const result = runInMiniRoot(kontext, {
+    "src/portal-paths.js": PORTAL_PATHS.replace("});", '  EINRICHTUNG_GESPEICHERT: "/app?setup=ok",\n});'),
+    [SHELL_FILE]: shell.replace("  returnMessageText(", "  params.get(RETURN_PARAM_SETUP);\n  returnMessageText("),
+  });
+  assert.equal(result.status, EXIT_FINDING, result.stderr);
+  assert.match(result.stdout, /EINRICHTUNG_GESPEICHERT: die Shell gibt RETURN_PARAM_SETUP nicht an returnMessageText weiter/);
+  assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT|ABO_GESCHEITERT/);
+});
+
+test("vertauscht die Shell die Argumente von returnMessageText, wird jeder Fall gemeldet", (kontext) => {
+  const shell = shellSource([CARD_BRANCH, SUB_BRANCH]).replace(
+    "returnMessageText(params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB))",
+    "returnMessageText(params.get(RETURN_PARAM_SUB), params.get(RETURN_PARAM_CARD))",
+  );
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+  assert.equal(result.status, EXIT_FINDING, result.stderr);
+  assert.match(result.stdout, /KARTE_GESPEICHERT: kein Zweig "sub === RETURN_OK"/);
+  assert.match(result.stdout, /ABO_GESCHEITERT: kein Zweig "card === RETURN_FAILED"/);
+});
+
 test("ein Datumsformat mit de-DE in einem .astro-Skript ist ein Befund mit Datei und Zeile", (kontext) => {
   const page = ["---", "---", "<p></p>", "<script>", '  new Date().toLocaleDateString("de-DE");', "</script>"];
   const result = runInMiniRoot(kontext, {
