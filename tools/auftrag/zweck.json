@@ -214,7 +214,7 @@
     "wozu": "Ein bestätigter BLOCKER ist ein vorgeführter Fehler; behoben ist er erst, wenn das Verhalten für alle Eingaben stimmt.",
     "behebung": "Die Ursache beheben, sodass die Reproduktion besteht.",
     "nichtAngenommen": "Eine Sonderbehandlung für die Eingabe der Reproduktion.",
-    "ausweg": "entfällt: Die Reparatur liest heute keine Ausstiegszeile (kommt mit ZW1b)."
+    "ausweg": "Hältst du den Befund für falsch oder die Reparatur im Bereich für unmöglich, beende deine Antwort mit einer eigenen Zeile „Auftrag passt nicht: <Grund in einem Satz>“. Die Reparatur hält dann an, misst nicht weiter und schreibt die Zeile wörtlich in die Entscheidungsnotiz am PR; Antonio entscheidet."
   },
   "prüfleiter": {
     "liste": "A22",

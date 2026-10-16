@@ -167,3 +167,22 @@ test("eine lange Notiz der Reparatur steht vollständig im PR, mit der Sitzung d
   const sitzung = /^notiz .*--session-id (\S+)/m.exec(lies("starts.log"))[1];
   assert.ok(kommentar.includes(sitzung), kommentar);
 });
+
+test("hält der Reparatur-Agent mit einem Ausweg an, misst die Reparatur nicht weiter und die Notiz nennt die Zeile wörtlich", async (context) => {
+  const ausweg = "Auftrag passt nicht: Der Befund verlangt eine Änderung außerhalb von src/zahl.js.";
+  const altesFenster = 1000;
+  const erklaerungenUeberAltemFenster = 30;
+  const antwort = [ausweg, ...Array.from({ length: erklaerungenUeberAltemFenster }, (_, nummer) => `Erklärung ${nummer + 1}: die Reproduktion prüft eine fremde Datei.`)].join("\n");
+  assert.ok(antwort.length - ausweg.length > altesFenster, antwort);
+  const { lauf, lies } = reparaturLauf(context, {
+    bau: { dateien: { "src/zahl.js": "export const ZAHL = 2;\n" }, antwort },
+    notiz: { antwort: "1. Den Befund prüfen lassen (Empfehlung)" },
+  });
+  const { status, stdout } = await lauf;
+  assert.equal(status, EXIT_ROT, stdout);
+  assert.doesNotMatch(stdout, /Reparatur wirkt/);
+  const [ersterAufruf] = lies("gh.log").split("\n");
+  const kommentar = JSON.parse(ersterAufruf).at(-1);
+  assert.ok(kommentar.includes(`\n${ausweg}\nAusweg bei Prüfung: reparatur\n`), kommentar);
+  assert.ok(kommentar.includes(`Hinweise des Bau-Agenten:\n> ${ausweg}\n`), kommentar);
+});

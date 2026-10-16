@@ -4,6 +4,8 @@ const INHALT = /[\p{L}\p{N}]/u;
 const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+?) – (\S.*)$/;
 const MELDUNG = /^(Gleichwertig|Nötig): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
+const AUSWEG_BEI = "Ausweg bei Prüfung: ";
+const OHNE_ROTE_PRUEFUNG = "keine";
 const ALTER_TEST = "alterTest";
 const AUSWEGE = [
   { art: AUSSTIEG, anfang: /^Auftrag passt nicht:\s*(\S.*)$/, rollen: ["bau", "test"] },
@@ -60,5 +62,9 @@ export function ausgang(text, rolle) {
   const letzter = zeilen.map((zeile) => auswegDer(zeile, rolle)).findLast((weg) => weg !== null);
   const leer = { [AUSSTIEG]: null, voraussetzung: null, [ALTER_TEST]: null };
   const weg = letzter === undefined ? {} : letzter.art === ALTER_TEST ? alterTest(letzter) : { [letzter.art]: letzter.grund };
-  return { ...leer, ...weg, ...meldungen(zeilen) };
+  return { ...leer, ...weg, zeile: letzter?.zeile ?? null, ...meldungen(zeilen) };
+}
+
+export function auswegBei(ids) {
+  return `${AUSWEG_BEI}${ids.length > 0 ? ids.join(", ") : OHNE_ROTE_PRUEFUNG}`;
 }
