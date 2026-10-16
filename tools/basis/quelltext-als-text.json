@@ -8,8 +8,6 @@
     "test/kv-p1-cost-ledger-map.test.js|5779b7202684f827",
     "test/kv-p1-cost-ledger-map.test.js|dba46c3f8a3a7f50",
     "test/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944",
-    "test/mcp-kompatibilitaetsvertrag.test.js|9f46e10753eb78bf",
-    "test/openai-t2-02-widget-uris.test.js|9f8bb3cd2e398cf7",
     "test/reattach-active-call.test.js|0f1743f325f77cbb"
   ]
 }
