@@ -172,7 +172,17 @@ test("ein Zweig hinter einem inneren Block einer Funktion in Spalte 0 zaehlt als
 });
 
 test("Klammern in Zeichenketten und Kommentaren verschieben das Funktionsende nicht", (kontext) => {
-  const stoerer = ['return "{";', "return '{';", "return `{`;", String.raw`return "\"{";`, "// {", "/* { */"];
+  const stoerer = [
+    'return "{";',
+    "return '{';",
+    "return `{`;",
+    String.raw`return "\"{";`,
+    "return `$ {`;",
+    "return `\\`{`;",
+    "return `\\${`;",
+    "// {",
+    "/* { */",
+  ];
   for (const zeile of stoerer) {
     const shell = verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]);
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
@@ -181,12 +191,20 @@ test("Klammern in Zeichenketten und Kommentaren verschieben das Funktionsende ni
   }
 });
 
-test("ein Regex-Literal oder eine Division im Funktionsrumpf macht den Rumpf unlesbar und wird gemeldet", (kontext) => {
-  for (const zeile of ['if (/\\{/.test(card)) return "";', "return card / 2;"]) {
+test("Code im Funktionsrumpf, den die Pruefung nicht eindeutig liest, macht den Rumpf unlesbar und wird gemeldet", (kontext) => {
+  const unklar = [
+    'if (/\\{/.test(card)) return "";',
+    "return card / 2;",
+    "return `${`{`}`;",
+    "return `${card}`;",
+    'return "{;',
+    "return '{;",
+  ];
+  for (const zeile of unklar) {
     const shell = verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]);
     const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
     assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
-    assert.match(result.stdout, /keine eindeutig lesbare Funktion returnMessageText\(\)/, zeile);
+    assert.match(result.stdout, /Rumpf von returnMessageText\(\) laesst sich nicht eindeutig lesen/, zeile);
   }
 });
 
@@ -197,4 +215,19 @@ test("ein Zweig, dessen Vergleichswert in einem laengeren Bezeichner endet, zaeh
     assert.equal(result.status, EXIT_FINDING, `${fremderWert}: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /KARTE_GESPEICHERT: kein Zweig "card === RETURN_OK"/, fremderWert);
   }
+});
+
+test("fehlt die Funktion returnMessageText ganz, meldet das Skript genau das", (kontext) => {
+  const shell = [
+    "<script>",
+    '  const RETURN_PARAM_CARD = "card";',
+    '  const RETURN_PARAM_SUB = "sub";',
+    '  const RETURN_OK = "ok";',
+    '  const RETURN_FAILED = "failed";',
+    "</script>",
+  ].join("\n");
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+  assert.equal(result.status, EXIT_FINDING, result.stderr);
+  assert.match(result.stdout, /KARTE_GESPEICHERT: die Shell hat keine Funktion returnMessageText\(\)/);
+  assert.doesNotMatch(result.stdout, /laesst sich nicht eindeutig lesen/);
 });
