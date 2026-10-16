@@ -617,5 +617,5 @@ async function hauptprogramm() {
 }
 
 hauptprogramm().catch((fehler) =>
-  beende(EXIT_BEFUND, [`openai-doku-pruefen abgebrochen: ${fehler.message}`]),
+  beende(EXIT_AUFRUF, [`openai-doku-pruefen abgebrochen: ${fehler.message}`]),
 );
