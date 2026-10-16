@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT } from "./helpers.js";
 import { WIDGET_CALL, widgetHtml, widgetVersion } from "../src/ui/widget-catalog.js";
+import { widgetPins } from "../src/ui/registry.js";
 import {
   legacySnapshot,
   oauthSnapshot,
@@ -126,7 +127,7 @@ test("Kompatibilitaetsvertrag D1: Gesamtstand aller Profile ist pfad-konsistent 
   assert.fail(vertragsMeldung(klassifiziere(VERTRAG, ist), schreibeIstStand("gesamt", ist)));
 });
 
-const WIDGET_PINS = JSON.parse(fs.readFileSync(path.join(ROOT, "src/ui/widget-versions.json"), "utf8"));
+const WIDGET_PINS = widgetPins();
 const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
 function pinFuerUri(uri) {

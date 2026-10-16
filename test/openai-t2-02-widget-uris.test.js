@@ -1,8 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
@@ -12,13 +10,12 @@ import {
   widgetHtml,
   widgetVersion,
 } from "../src/ui/widget-catalog.js";
+import { widgetPins } from "../src/ui/registry.js";
 
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 
-const PINS_PATH = fileURLToPath(new URL("../src/ui/widget-versions.json", import.meta.url));
-
 function loadPins() {
-  return JSON.parse(readFileSync(PINS_PATH, "utf8"));
+  return widgetPins();
 }
 
 function sha256Of(html) {
