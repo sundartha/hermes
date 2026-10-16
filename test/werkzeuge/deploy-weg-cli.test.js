@@ -130,3 +130,27 @@ test("CLI deploy ohne --frisch-geweckt oder mit einem anderen Wert als ja/nein m
   }
   assert.deepEqual(attrappe.anfragen, []);
 });
+
+const SCHWEBENDE_ABLEHNUNG = [
+  "const echt = globalThis.fetch;",
+  "let einmal = true;",
+  "globalThis.fetch = (...argumente) => {",
+  "  if (einmal) Promise.reject(new Error(\"schwebend\"));",
+  "  einmal = false;",
+  "  return echt(...argumente);",
+  "};",
+].join("\n");
+
+test("CLI deploy rot: eine unbehandelte Ablehnung während des Laufs endet mit Exit 1 und einer Meldung, auch wenn der Deploy gelingt", async (kontext) => {
+  const welt = weltAnlegen({ produktion: [COMMIT_P, COMMIT_C], deployStatus: ["live"] });
+  const attrappe = await attrappeStarten(kontext, welt);
+  const vorab = join(temporaerOrdner(kontext), "ablehnung.mjs");
+  writeFileSync(vorab, SCHWEBENDE_ABLEHNUNG);
+  const umgebung = umgebungFuer(attrappe.basis, { NODE_OPTIONS: "--import " + vorab });
+  const lauf = await werkzeugStarten(DEPLOY_ARGUMENTE, umgebung);
+  assert.equal(anfragenAn(attrappe, "POST", AUSLOESEN).length, 1);
+  assert.equal(lauf.status, EXIT_ROT, lauf.ausgabe);
+  assert.match(lauf.ausgabe, /Abbruch: unerwarteter Fehler im Werkzeug/);
+  assert.match(lauf.ausgabe, /Ergebnis: nein/);
+  assert.ok(!lauf.ausgabe.includes("schwebend"));
+});

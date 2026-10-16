@@ -166,20 +166,25 @@ async function ausfuehren(ausgabe) {
   return eintrag.ausfuehren({ einstellungen, werte, ausgabe });
 }
 
+const ausgabe = ausgabeAnlegen();
+const ablehnung = { gesehen: false };
+
 async function hauptprogramm() {
-  const ausgabe = ausgabeAnlegen();
   let ok = false;
   try {
     ok = (await ausfuehren(ausgabe)) === true;
   } catch (fehler) {
     fehlerMelden(ausgabe, fehler);
   }
+  ok = ok && !ablehnung.gesehen;
   ausgabe.melde("ergebnis", { ok });
   return ok ? EXIT_OK : EXIT_ROT;
 }
 
-process.on("unhandledRejection", () => {
+process.on("unhandledRejection", (grund) => {
+  ablehnung.gesehen = true;
   process.exitCode = EXIT_ROT;
+  fehlerMelden(ausgabe, grund);
 });
 
 hauptprogramm().then(
