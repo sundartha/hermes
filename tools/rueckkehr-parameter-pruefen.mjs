@@ -80,8 +80,8 @@ function passedParams(source) {
   return new Map(reads.map(([, paramConst], position) => [paramConst, position]));
 }
 
-const IDENTIFIER_CHAR_AT_END = /[\p{ID_Continue}$\u200c\u200d]$/u;
-const IDENTIFIER_CHAR_AT_START = /^[\p{ID_Continue}$\u200c\u200d]/u;
+const IDENTIFIER_CHAR_AT_END = /(?:[\p{ID_Continue}$\u200c\u200d]|\\u\{[0-9a-fA-F]+\})$/u;
+const IDENTIFIER_CHAR_AT_START = /^(?:[\p{ID_Continue}$\u200c\u200d]|\\)/u;
 
 function containsWholeName(text, part) {
   let index = text.indexOf(part);
