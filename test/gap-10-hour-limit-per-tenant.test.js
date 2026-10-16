@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
@@ -101,14 +100,26 @@ test("zwei Identitaeten desselben Tenants teilen sich EIN Stundenlimit", async (
   }
 });
 
-test("Quelltext: jeder countOutboundCallsSince-Aufruf in outbound-gates.js traegt einen Filter", () => {
-  const source = fs.readFileSync(new URL("../src/telephony/outbound-gates.js", import.meta.url), "utf8");
-  const callLines = source.split("\n").filter((l) => l.includes("countOutboundCallsSince("));
-  assert.ok(callLines.length > 0, "der Zaehler muss ueberhaupt aufgerufen werden");
-  for (const line of callLines)
-    assert.match(
-      line,
-      /countOutboundCallsSince\(.*\{/,
-      `ungefilterter Aufruf gefunden: ${line.trim()} - das waere eine Plattform-Achse`,
+test("Ziel-Limit gilt PRO Tenant - Tenant B erreicht die Nummer, an der Tenant A sein Ziel-Limit ausgeschoepft hat", async () => {
+  const zielLimit = 2;
+  const frueheAnrufeVonA = Array.from({ length: zielLimit }, (_, i) =>
+    seedCall({ id: `c_gap10_ziel_${i}`, tenantId: A, to: TO, status: "completed", requestedBy: SUB_A }),
+  );
+  const srv = await startServer({
+    env: { ...FLAG_ON, PER_TARGET_CALL_CAP: String(zielLimit) },
+    seed: seedTenants(frueheAnrufeVonA),
+  });
+  try {
+    const resA = await placeCall(srv, SUB_A);
+    assert.equal(resA.status, 429, "Vorbedingung: Tenant A steht an dieser Nummer am Ziel-Limit");
+    assert.equal((await resA.json()).reason, "ziel_limit", "Vorbedingung: die Sperre von A kommt vom Ziel-Limit");
+    const resB = await placeCall(srv, SUB_B);
+    assert.equal(
+      resB.status,
+      500,
+      `Tenant B muss das Ziel-Limit passieren (Offline-Originate), A's Anrufe zaehlen nicht fuer B - hier: ${resB.status}`,
     );
+  } finally {
+    await srv.stop();
+  }
 });
