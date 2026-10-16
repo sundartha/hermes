@@ -1,11 +1,12 @@
-import { renameSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { pid } from "node:process";
 
 import { phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
+import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import { istText } from "./erkundung.mjs";
-import { nummernImOrdner } from "./nummern.mjs";
+import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
 const PHASE = "phase.json";
@@ -70,13 +71,16 @@ function schreibe(ordner, phase) {
 export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe, root }) {
   const pruefung = await schnittImOrdner(ordner, { schnitt, berichte, root });
   if (pruefung.befunde.length > 0) return { befunde: pruefung.befunde };
+  const pitch = readFileSync(join(ordner, PITCH), "utf8");
+  const absichtFehlt = pitchAbsichtBefunde(pitch);
+  if (absichtFehlt.length > 0) return { befunde: absichtFehlt };
   const { soll } = nummernImOrdner(ordner);
   const auftraege = schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, soll));
   const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereich))];
   const vorab = [...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };
   const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich))]));
-  const phase = { phase: basename(resolve(ordner)), entwurf, auftraege };
+  const phase = { phase: basename(resolve(ordner)), absicht: absichtAusPitch(pitch), entwurf, auftraege };
   const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
   if (befunde.length === 0) schreibe(ordner, phase);
   return { befunde, phase };
