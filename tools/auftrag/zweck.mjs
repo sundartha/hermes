@@ -48,7 +48,9 @@ export const MELDUNG = {
   SCHNITT: "schnitt",
 };
 
-const HINWEIS_SCHRITTE = new Set(["bisect", "entscheidung kommentar", "entscheidung label", "merge-tree", "cherry-pick"]);
+export const ALTER_TEST = "alter test";
+
+const HINWEIS_SCHRITTE = new Set([ALTER_TEST, "bisect", "entscheidung kommentar", "entscheidung label", "merge-tree", "cherry-pick"]);
 const GRENZEN = new Set([PRUEFUNG.GRENZEN_BAU, PRUEFUNG.GRENZEN_TEST]);
 const ZUSAMMENGEFASST = new Map([
   [PRUEFUNG.MUTATION_NACH_BAU, PRUEFUNG.MUTATION],

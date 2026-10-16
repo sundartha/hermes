@@ -17,3 +17,5 @@ Deine Aufgabe:
 5. `node --test` rufst du nie direkt auf. Für breite Suchen nimmst du den Agenten `suche`.
 
 Hältst du den Abnahmetest für falsch, den Auftrag für unmöglich oder widersprüchlich, oder braucht die Änderung mehr als 400 neue Zeilen, änderst du nichts weiter und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`. Das zählt nicht als rote Runde.
+
+Bricht ein bestehender Test, weil der Auftrag das Verhalten absichtlich ändert, änderst du den Test nicht und baust keine Weiche für ihn. Du antwortest als Letztes mit genau einer Zeile: `Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>`. Das zählt nicht als rote Runde; das Skript verwirft deine Änderung, und Antonio entscheidet.
