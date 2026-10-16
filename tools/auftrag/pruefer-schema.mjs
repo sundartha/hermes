@@ -21,6 +21,7 @@ const LEERZEICHEN = 0x20;
 const ENTF = 0x7f;
 const REPRODUKTION_TEXT =
   "Vollständiger node:test-Test (Inhalt der Datei test/pruefer-reproduktion.test.js), der auf diesem Commit an einer Erwartung scheitert; leer bei SOLLTE und HINWEIS.";
+const REPARATUR_TEXT = "Die Reparatur in einem Satz, ohne Code.";
 
 const text = { type: "string" };
 
@@ -43,7 +44,7 @@ export const ANTWORT_SCHEMA = {
           zeile: { type: "integer", minimum: 0 },
           beleg: text,
           reproduktion: { type: "string", description: REPRODUKTION_TEXT },
-          reparatur: text,
+          reparatur: { type: "string", description: REPARATUR_TEXT },
           sicherheit: { type: "boolean" },
         },
       },

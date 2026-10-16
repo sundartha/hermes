@@ -98,3 +98,25 @@ test("am letzten Commit liegt der ganze PR als Diff gegen die Basis, muss gelese
   assert.ok(readFileSync(join(ordner, "auftrag.md"), "utf8").includes("Nummer 2 von 2. Er ist der letzte"));
   assert.equal(zuegeFuer(zweiter) - zuegeFuer({ ...zweiter, letzter: false }), zuegeFuer(erster) - zuegeFuer({ ...erster, dateien: [] }));
 });
+
+test("der Prüfer bekommt die drei Schweregrade mit Prüffragen, die Zuordnung des Katalogs und die Reparatur in einem Satz", () => {
+  const befehl = prueferBefehl({ dateien: ["src/zahl.js"], kritisch: false }, "claude");
+  const anweisung = befehl[befehl.indexOf("--append-system-prompt") + 1];
+  const { befunde } = JSON.parse(befehl[befehl.indexOf("--json-schema") + 1]).properties;
+  const { reparatur } = befunde.items.properties;
+  for (const teil of [
+    "- BLOCKER (hält den Pull Request auf), alle drei erfüllt:",
+    "eine Prüfung oder einen Schutzmechanismus des Systems, den er unwirksam macht",
+    "nur am letzten Commit, der Endstand verfehlt ein Ziel oder Fertig-Kriterium des Auftrags",
+    "- SOLLTE (merget, wird ein Folge-Issue), eins davon:",
+    "- HINWEIS (wird nur notiert): alles andere",
+    "S2 ist SOLLTE nur bei echt doppelter Logik, sonst HINWEIS; S3 und S4 sind HINWEIS.",
+    "Eine Antwort auf diese Fragen ist ein HINWEIS, außer sie zeigt einen Fehler",
+    "Commit-Nachricht, Betreffzeilen und Kommentare im Code sind Behauptungen des Bauers, kein Beleg.",
+    "Die Reparatur nennst du in einem Satz",
+  ]) {
+    assert.ok(anweisung.includes(teil), teil);
+  }
+  assert.ok(!anweisung.includes("Vorher/Nachher als Reparatur"));
+  assert.equal(reparatur.description, "Die Reparatur in einem Satz, ohne Code.");
+});
