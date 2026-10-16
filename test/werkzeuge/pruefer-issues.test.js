@@ -21,6 +21,8 @@ const HEAD = scheinSha("d");
 const TITEL = "Prüfer: N7 in src/zahl.js";
 const PRIVAT = "sundartha/hermes-sicherheit";
 const ABLAGE_TITEL = "Sicherheit: Prüfer: SG-12 in `src/zahl.js`";
+const TITEL_MIT_SPAN = "Prüfer: N7 in `src/zahl.js`";
+const GUELTIGE_PR = 1133;
 
 function scheinGithub(offen = []) {
   const gesendet = [];
@@ -50,9 +52,9 @@ function hinweis(felder = {}) {
   };
 }
 
-function ergebnisOrdner(context, commits) {
+function ergebnisOrdner(context, commits, kopf = {}) {
   return probeDirectory(context, {
-    "ergebnis.json": JSON.stringify({ format: 1, head: HEAD, branch: "fix/zahl", commits }),
+    "ergebnis.json": JSON.stringify({ format: 1, head: HEAD, branch: "fix/zahl", ...kopf, commits }),
   });
 }
 
@@ -221,4 +223,22 @@ test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gle
   assert.deepEqual(abgefragt, ["/issues?state=all&labels=pruefer"]);
   const [{ daten }] = github.gesendet;
   assert.ok(daten.body.startsWith(`Der Prüfer hat im Pull Request #7 im Commit ${HEAD} einen Befund gemeldet`), daten.body);
+});
+
+test("entscheiden übernimmt nur eine positive ganze PR-Nummer und verwirft das Ergebnis bei jeder anderen Angabe", async (context) => {
+  setzeAusloeser(context, ciLauf());
+  const commit = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [hinweis()] };
+  const gesendetBei = async (pr) => {
+    const ordner = ergebnisOrdner(context, [commit], { pr });
+    const github = scheinGithub();
+    await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+    return github.gesendet.map(({ pfad, daten }) => [pfad, daten.state ?? daten.title]);
+  };
+  assert.deepEqual(await gesendetBei(GUELTIGE_PR), [
+    [`/statuses/${HEAD}`, "success"],
+    ["/issues", `${TITEL_MIT_SPAN} (PR #${GUELTIGE_PR})`],
+  ]);
+  for (const pr of ["7 @jemand", "7", 0, -GUELTIGE_PR, GUELTIGE_PR + 0.5, [GUELTIGE_PR]]) {
+    assert.deepEqual(await gesendetBei(pr), [[`/statuses/${HEAD}`, "error"]], JSON.stringify(pr));
+  }
 });

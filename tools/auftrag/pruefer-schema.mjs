@@ -149,13 +149,19 @@ function alsJson(inhalt) {
   }
 }
 
+function istPrNummer(wert) {
+  return wert === null || (Number.isInteger(wert) && wert > 0);
+}
+
 export function ergebnisAus(inhalt) {
   const wert = alsJson(inhalt);
   if (!istObjekt(wert) || wert.format !== FORMAT || typeof wert.branch !== "string") return null;
   if (!COMMIT_SHA.test(wert.head ?? "") || !Array.isArray(wert.commits)) return null;
+  const pr = wert.pr ?? null;
+  if (!istPrNummer(pr)) return null;
   const commits = wert.commits.map(commitAus);
   if (commits.includes(null)) return null;
-  return { ...wert, probeBranch: wert.probeBranch === true, commits };
+  return { ...wert, pr, probeBranch: wert.probeBranch === true, commits };
 }
 
 export function schluesselVon(sha, index) {
