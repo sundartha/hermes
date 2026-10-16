@@ -265,6 +265,7 @@ export function phasenBefunde(phase, root) {
   if (typeof phase.phase !== "string" || !KENNUNG.test(phase.phase)) {
     befunde.push("phase muss eine Kennung aus Buchstaben, Ziffern und Bindestrichen sein");
   }
+  if (Object.hasOwn(phase, "absicht")) befunde.push(...absichtBefunde(phase.absicht));
   const auftraege = Array.isArray(phase.auftraege) ? phase.auftraege : [];
   if (auftraege.length === 0) return [...befunde, "auftraege muss mindestens einen Auftrag enthalten"];
   befunde.push(...kennungBefunde(auftraege));

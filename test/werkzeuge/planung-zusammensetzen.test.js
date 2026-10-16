@@ -402,3 +402,26 @@ test("zusammensetzen: ein Erkundungsbericht mit Befund ergibt einen Befund mit �
   const ergebnis = await zusammen(ordner, { bericht: berichte({ S1: bericht }) });
   rot(ordner, ergebnis, "Regel Erkundung");
 });
+
+function absichtImPitch(ordner) {
+  const zeilen = dokument(ordner, "pitch.md");
+  const start = zeilen.indexOf("## Absicht");
+  const ende = zeilen.findIndex((zeile, nr) => nr > start && zeile.startsWith("## "));
+  return zeilen.slice(start + 1, ende).join("\n").trim();
+}
+
+test("zusammensetzen: die Absicht aus pitch.md steht wörtlich und einmal für alle Aufträge in phase.json", async (context) => {
+  const ordner = ordnerMitDokumenten(context);
+  assert.deepEqual((await zusammen(ordner)).befunde, []);
+  const phase = JSON.parse(readFileSync(phaseDatei(ordner), "utf8"));
+  assert.ok(absichtImPitch(ordner).length > 0);
+  assert.equal(phase.absicht, absichtImPitch(ordner));
+  assert.deepEqual(Object.keys(phase), ["phase", "absicht", "entwurf", "auftraege"]);
+});
+
+test("zusammensetzen: ein Pitch ohne Abschnitt „Absicht“ ergibt einen Befund und keine Phase", async (context) => {
+  const ordner = ordnerMitDokumenten(context);
+  const ohne = readFileSync(join(ordner, "pitch.md"), "utf8").replace(/^## Absicht\n[^#]*/m, "");
+  writeFileSync(join(ordner, "pitch.md"), ohne);
+  rot(ordner, await zusammen(ordner), "pitch.md hat keinen Abschnitt „## Absicht“");
+});
