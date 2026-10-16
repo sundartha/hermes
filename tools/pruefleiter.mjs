@@ -156,6 +156,10 @@ function parsePart(text) {
   return index <= total ? { index, total } : null;
 }
 
+function selectedBaseRef({ basis }) {
+  return basis ?? DEFAULT_BASE_REF;
+}
+
 function runsToolTests(options) {
   const wanted = options["vor-push"] || options.basis !== undefined;
   return wanted && !options["ohne-werkzeugtests"];
@@ -165,7 +169,7 @@ function fullRun(options) {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
   const affectedStatus = affectedTests(affectedTestArgs(options));
-  if (!runsToolTests(options) || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+  if (!runsToolTests(options) || !needsToolTests(selectedBaseRef(options))) {
     return affectedStatus;
   }
   const toolStatus = toolTests();
@@ -173,7 +177,7 @@ function fullRun(options) {
 }
 
 function partRun(options, part) {
-  if (!needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+  if (!needsToolTests(selectedBaseRef(options))) {
     console.log(
       `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
     );
@@ -231,7 +235,7 @@ function emptyGlobFindings(toolTestsNeeded, expected) {
 }
 
 function checkParts(options) {
-  const toolTestsNeeded = needsToolTests(options.basis ?? DEFAULT_BASE_REF);
+  const toolTestsNeeded = needsToolTests(selectedBaseRef(options));
   const expected = expectedToolTestFiles(toolTestsNeeded);
   const findings = [
     ...emptyGlobFindings(toolTestsNeeded, expected),
