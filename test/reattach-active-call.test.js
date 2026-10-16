@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import express from "express";
+import { makeVoiceRoutes } from "../src/routes/voice.js";
+import { webhookEvents } from "../src/telephony/registry.js";
 import { reattachActiveCall } from "../src/telephony/reattach.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { seedCall, waitUntil } from "./helpers.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_DURATION_S = 180;
 const SECONDS_60 = 60;
 const SECONDS_400 = 400;
@@ -208,21 +210,95 @@ test("reattachActiveCall RACE-1: nach Abschluss wird der In-Flight-Eintrag gerae
   );
 });
 
-test("voice.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn (keine direkte store.attachActiveCall-Umgehung)", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src", "routes", "voice.js"), "utf8");
+const ZURUECKGEHOLT = "zurueckgeholt";
 
-  const statusHandler = src.slice(src.indexOf('router.post("/voice/status"'), src.indexOf('router.post("/voice/status"') + 1500);
-  assert.match(
-    statusHandler,
-    /await lifecycle\.reattachActiveCall\(/,
-    "/voice/status muss ueber reattachActiveCall() re-attachen (Restzeit-Klassifikation+Timer-Rearm)",
-  );
-  assert.doesNotMatch(
-    statusHandler,
-    /store\.attachActiveCall\(/,
-    "/voice/status darf store.attachActiveCall NICHT mehr direkt umgehen (F12-S1-1)",
-  );
+function zurueckgeholterCall(callId) {
+  return seedCall({
+    id: callId,
+    provider: "telnyx",
+    transcript: [{ role: "caller", text: "Ja, guten Tag, hier ist die Praxis am Markt." }],
+  });
+}
 
-  const turnHandler = src.slice(src.indexOf('router.post("/voice/turn"'), src.indexOf('router.post("/voice/turn"') + 1500);
-  assert.match(turnHandler, /await lifecycle\.reattachActiveCall\(/, "/voice/turn bleibt auf reattachActiveCall()");
+async function webhookRoutenMitSpion(spion) {
+  const leererStore = {
+    getCall: () => null,
+    attachActiveCall: async (callId) => {
+      spion.direktAngehaengt.push(callId);
+      return null;
+    },
+    recordWebhookAnchors: () => {},
+    countNoSpeechTurn: () => 1,
+  };
+  const merkeCall = (call) => {
+    if (call?.id) spion.weitergearbeitet.push(call.id);
+    return [];
+  };
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(
+    makeVoiceRoutes({
+      store: leererStore,
+      config: withConfigNamespaces({ skipTwilioSignatureCheck: true }),
+      audit: () => {},
+      voiceRender: { render: () => "<Response/>", turnDirectives: merkeCall, sayInCallVoice: merkeCall, followupTurnDirectives: merkeCall },
+      directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
+      ttsStore: { takeOnce: async () => null },
+      lifecycle: {
+        reattachActiveCall: async (callId) => {
+          spion.wiederaufnahmen.push(callId);
+          return { call: callId.startsWith(ZURUECKGEHOLT) ? zurueckgeholterCall(callId) : null, logUnknown: false };
+        },
+      },
+      finishCall: () => {},
+      webhookEvents,
+      providerFromHeaders: () => null,
+      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
+      terminateAndBillCall: async ({ callId }) => {
+        spion.beendet.push(callId);
+      },
+      billThunk: () => () => {},
+      startInboundNachlauf: () => {},
+    }),
+  );
+  const server = await new Promise((resolve) => {
+    const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
+  });
+  return {
+    post: (pfad, felder = {}) =>
+      abrufMitFrist(`http://127.0.0.1:${server.address().port}${pfad}`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(felder).toString(),
+      }),
+    close: () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  };
+}
+
+test("Webhooks fuer einen Call, den dieser Prozess nicht kennt, holen ihn ueber lifecycle.reattachActiveCall zurueck und arbeiten mit ihm weiter, nie direkt ueber store.attachActiveCall", async () => {
+  const spion = { wiederaufnahmen: [], direktAngehaengt: [], weitergearbeitet: [], beendet: [] };
+  const routen = await webhookRoutenMitSpion(spion);
+  const aufrufe = [
+    ["/voice/status", `${ZURUECKGEHOLT}_status`, { CallStatus: "completed" }],
+    ["/voice/turn", `${ZURUECKGEHOLT}_turn`, {}],
+    ["/voice/outbound", "unbekannt_outbound", {}],
+  ];
+  try {
+    for (const [pfad, callId, felder] of aufrufe) {
+      const antwort = await routen.post(`${pfad}?callId=${callId}`, felder);
+      assert.equal(antwort.status, 200, `${pfad} antwortet dem Carrier`);
+      await antwort.text();
+    }
+    await waitUntil(() => spion.beendet.length > 0);
+    assert.deepEqual(spion.wiederaufnahmen, aufrufe.map(([, callId]) => callId), "jede Route nimmt genau einmal wieder auf");
+    assert.deepEqual(spion.beendet, [`${ZURUECKGEHOLT}_status`], "/voice/status beendet den zurueckgeholten Call");
+    assert.deepEqual(spion.weitergearbeitet, [`${ZURUECKGEHOLT}_turn`], "/voice/turn spricht mit dem zurueckgeholten Call weiter, statt aufzulegen");
+    assert.deepEqual(spion.direktAngehaengt, [], "keine Route umgeht die Restzeit-Pruefung ueber store.attachActiveCall");
+  } finally {
+    await routen.close();
+  }
 });
