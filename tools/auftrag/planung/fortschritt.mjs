@@ -1,3 +1,5 @@
+import { liste } from "./erkundung.mjs";
+
 export const RUECKSENDUNGEN = 3;
 
 const SKRIPT_REGEL = /^Regel ([^:]+):/u;
@@ -8,10 +10,6 @@ const OHNE_REGEL = "Text";
 const SCHLUESSEL_TRENNER = ":";
 const NUMMERN_TRENNER = "+";
 const WORT = /[\w-]+/gu;
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 function woerterDes(text) {
   return new Set(text.match(WORT) ?? []);
