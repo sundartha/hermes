@@ -8,11 +8,18 @@ const KOPFZEILE = /^\| (Runde \d+: .+), Zweck-ID (.+)$/;
 const AUFTRAGS_TRAILER = /^Auftrag: \S+\/\S+$/m;
 const ID_TRENNER = ", ";
 
+export function rotePruefungen(pruefungen) {
+  return pruefungen.filter(({ exitCode }) => exitCode !== 0);
+}
+
+export function zweckIdsDer({ name, zeilen, zweck }) {
+  return zweck ?? zweckIds({ name, zeilen });
+}
+
 export function roteRunde({ runde, grund, pruefungen, roteIds = [], agenten = [] }) {
   const letzteRolle = agenten.at(-1)?.rolle;
-  const schritte = pruefungen
-    .filter(({ exitCode }) => exitCode !== 0)
-    .map(({ name, exitCode, zeilen = [], zweck }) => ({ name, exitCode, zeilen, ids: zweck ?? zweckIds({ name, zeilen }), rolle: zustaendig(name, letzteRolle) }))
+  const schritte = rotePruefungen(pruefungen)
+    .map(({ name, exitCode, zeilen = [], zweck }) => ({ name, exitCode, zeilen, ids: zweckIdsDer({ name, zeilen, zweck }), rolle: zustaendig(name, letzteRolle) }))
     .filter(({ ids }) => ids.length > 0);
   const gezeigt = new Set(schritte.flatMap(({ ids }) => ids));
   const ohneSchritt = [...new Set(roteIds)].filter((id) => !gezeigt.has(id)).map((id) => ({ id, rolle: zustaendig(id, letzteRolle) }));
