@@ -60,13 +60,11 @@ class NeuschnittPlanung extends Planung {
     this.phase = phase;
     this.alt = phase.auftraege.find(({ id }) => id === eingabe.auftragId);
     this.vorhandene = phase.auftraege.filter((auftrag) => auftrag !== this.alt);
-    this.aenderung = undefined;
   }
 
-  beginne(soll, andererAusgang) {
+  beginne(soll) {
     const eigene = istUmbau(this.alt) ? [] : liste(this.alt.prueft);
     this.soll = new Map([...soll].filter(([nummer]) => eigene.includes(nummer)));
-    this.andererAusgang = andererAusgang;
     this.team = new NeuschnittTeam(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
     const gliederung = join(this.ordner, ERSTE_PLANUNG, GLIEDERUNG);
@@ -322,8 +320,8 @@ class NeuschnittPlanung extends Planung {
 export async function neuschnitt(ablage, eingabe, phase) {
   const ordner = resolve(eingabe.root, eingabe.ordner);
   const planung = new NeuschnittPlanung(eingabe.root, ordner, { ablage, eingabe, phase });
-  const { soll, andererAusgang } = nummernImOrdner(ordner);
+  const { soll } = nummernImOrdner(ordner);
   planung.beginn = Date.now();
-  planung.beginne(soll, andererAusgang);
+  planung.beginne(soll);
   return planung.ergebnis();
 }
