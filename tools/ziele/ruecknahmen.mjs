@@ -19,17 +19,13 @@ function eintraege(root) {
 function original(sha, root) {
   try {
     return commitNachricht(sha, root);
-  } catch {
-    return "";
+  } catch (fehler) {
+    throw new Error(`zurückgenommener Commit ${sha} nicht lesbar: ${fehler.message}`, { cause: fehler });
   }
 }
 
 function ersteDatei(sha, root) {
-  try {
-    return geaenderteDateien(sha, root)[0] ?? "";
-  } catch {
-    return "";
-  }
+  return geaenderteDateien(sha, root)[0] ?? "";
 }
 
 export function ruecknahmen(root) {
