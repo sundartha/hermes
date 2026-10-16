@@ -4,6 +4,8 @@ import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { zusicherungenJeFall } from "../../tools/auftrag/testtitel.mjs";
+
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
@@ -129,4 +131,24 @@ test("Vorbau: scheitert der testumbau, bekommt Antonio genau eine Notiz zum alte
   assert.match(beleg("A1").entscheidung.text, /Der testumbau A1-umbau vorweg ist gescheitert \(rot\); sein Beleg heißt A1-umbau\./);
   assert.equal(gh.filter(([befehl]) => befehl === "issue").length, 2);
   assert.equal(log.includes(UMBAU.ziel), false);
+});
+
+test("Vorbau: schwächt der testumbau eine Zusicherung des alten Tests ab, wird er verworfen und Antonio entscheidet", (context) => {
+  const schwach = { dateien: { [ALT]: `${KOPF}const KUNDE = { gates: true };\ntest("versendet den Code", () => assert.ok(typeof versende(KUNDE) === "boolean"));\n` } };
+  const { ergebnis, beleg, log } = lauf(context, { bau: BAU, test: [ROTER_TEST, schwach], plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  assert.equal(ergebnis.status, EXIT_ROT);
+  assert.equal(beleg("A1-umbau").ergebnis, "grün");
+  assert.match(beleg("A1").entscheidung.text, /ändert Fälle oder Zusicherungen in test\/versand\.test\.js; er ist verworfen\./);
+  assert.equal(log.includes(UMBAU.ziel), false);
+});
+
+test("Zusicherungen je Fall: Vorbau und Einrückung zählen nicht, gestrichene, geänderte, verschobene Zusicherungen und neue Fälle schon", () => {
+  const alt = `${KOPF}const KUNDE = {};\ntest("a", () => {\n  assert.equal(versende(KUNDE), true);\n});\ntest("b", (t) => t.assert.ok(KUNDE));\n`;
+  const gleich = (neu) => JSON.stringify(zusicherungenJeFall(alt)) === JSON.stringify(zusicherungenJeFall(neu));
+  assert.equal(gleich(alt.replace("const KUNDE = {}", "const KUNDE = { gates: true }").replace("  assert", "    assert")), true);
+  assert.equal(gleich(alt.replace("assert.equal(versende(KUNDE), true);", "")), false);
+  assert.equal(gleich(alt.replace("assert.equal(versende(KUNDE), true)", "assert.ok(versende(KUNDE))")), false);
+  assert.equal(gleich(alt.replace('test("b", (t) => t.assert.ok(KUNDE))', 'test("b", () => {});\ntest("c", (t) => t.assert.ok(KUNDE))')), false);
+  assert.equal(gleich(`${alt}test("d", () => {});\n`), false);
+  assert.equal(zusicherungenJeFall("kaputt("), null);
 });

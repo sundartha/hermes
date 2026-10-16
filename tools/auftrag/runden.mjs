@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
+import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
@@ -12,7 +13,7 @@ import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
-import { testTitel } from "./testtitel.mjs";
+import { testTitel, zusicherungenJeFall } from "./testtitel.mjs";
 import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
@@ -130,6 +131,11 @@ function ohneTestumbau(auftrag, alterTest, zaehler) {
   return zaehler.vorbauten > 0 ? `der eine ${TESTUMBAU} dieses Auftrags ist schon gelaufen` : null;
 }
 
+function zusicherungenGleich(vorher, nachher) {
+  const alt = zusicherungenJeFall(vorher);
+  return alt !== null && isDeepStrictEqual(alt, zusicherungenJeFall(nachher));
+}
+
 function vorbauBefund(plan, datei) {
   if (plan.befunde.length > 0) return plan.befunde.join("; ");
   const { art, abnahme } = plan.kontext.auftrag;
@@ -233,6 +239,9 @@ class Runden {
     if (vorlauf !== GRUEN) return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} vorweg ist gescheitert (${vorlauf}); sein Beleg heißt ${umbau.id}.`);
     if (nenntAltenTest(alterTest, testTitel(readFileSync(join(root, alterTest.datei), "utf8"))) === null) {
       return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} hat den Fall ${alterTest.test} entfernt oder umbenannt; er ist verworfen.`);
+    }
+    if (!zusicherungenGleich(git(["show", `${ergebnis.basis}:${alterTest.datei}`], { cwd: root }), readFileSync(join(root, alterTest.datei), "utf8"))) {
+      return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} ändert Fälle oder Zusicherungen in ${alterTest.datei}; er ist verworfen.`);
     }
     return GRUEN;
   }
