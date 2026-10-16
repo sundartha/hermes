@@ -87,6 +87,11 @@ function titelVon({ datei, test }) {
   return `Wackelig: ${datei} › ${test}`;
 }
 
+async function wackeligeIssuesLesen(github) {
+  const alle = await github.alle(`/issues?labels=${LABEL}&state=all`, (liste) => liste);
+  return alle.filter((issue) => !issue.pull_request);
+}
+
 async function halteFest(github, { eintrag, lauf, issues }) {
   const titel = titelVon(eintrag);
   const vorhanden = issues.find((issue) => issue.title === titel);
@@ -121,8 +126,7 @@ export async function wackeligeIssues({ ordner }, root, github = githubZugang())
     console.log("Keine wackeligen Tests in diesem Lauf.");
     return EXIT_OK;
   }
-  const alle = await github.alle(`/issues?labels=${LABEL}&state=all`, (liste) => liste);
-  const issues = alle.filter((issue) => !issue.pull_request);
+  const issues = await wackeligeIssuesLesen(github);
   for (const eintrag of eintraege) await halteFest(github, { eintrag, lauf, issues });
   return EXIT_OK;
 }
