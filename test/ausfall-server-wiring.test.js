@@ -62,7 +62,7 @@ async function mitServer(optionen, ablauf) {
 
 function warteAufAusgabe(srv, zeile) {
   const frist = AbortSignal.timeout(AUSGABE_FRIST_MS);
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const aufhoeren = () => {
       frist.removeEventListener("abort", abbrechen);
       srv.child.stdout.off("data", pruefen);
@@ -70,18 +70,25 @@ function warteAufAusgabe(srv, zeile) {
     };
     const abbrechen = () => {
       aufhoeren();
-      reject(new Error(`keine Ausgabe "${zeile}" binnen ${AUSGABE_FRIST_MS} ms:\n${srv.stdout}`));
+      resolve(false);
     };
     const pruefen = () => {
       if (!srv.stdout.includes(zeile)) return;
       aufhoeren();
-      resolve();
+      resolve(true);
     };
     frist.addEventListener("abort", abbrechen);
     srv.child.stdout.on("data", pruefen);
     srv.child.stderr.on("data", pruefen);
     pruefen();
   });
+}
+
+async function erwarteAusgabe(srv, zeile) {
+  assert.ok(
+    await warteAufAusgabe(srv, zeile),
+    `keine Ausgabe "${zeile}" binnen ${AUSGABE_FRIST_MS} ms:\n${srv.stdout}`,
+  );
 }
 
 function standMitErholtemAusfall() {
@@ -128,7 +135,7 @@ test(
             "[provision-retry-sweep] geprueft=",
             "[price-drift] anlass=sweep",
           ])
-            await warteAufAusgabe(srv, zeile);
+            await erwarteAusgabe(srv, zeile);
         },
       ),
     ),
@@ -140,7 +147,7 @@ test(
   () =>
     mitAttrappe([["/v1/prices/", ABWEICHENDER_PREIS]], (stripe) =>
       mitServer({ env: stripeEnv(stripe.url) }, async (srv) => {
-        await warteAufAusgabe(srv, "[price-drift] anlass=boot");
+        await erwarteAusgabe(srv, "[price-drift] anlass=boot");
         assert.match(srv.stdout, PREIS_ABWEICHUNG_BEIM_START, srv.stdout);
         for (const preis of Object.values(PLAN_PRICE_BOOT_ENV))
           assert.ok(
