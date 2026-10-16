@@ -1,7 +1,10 @@
 import { spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { env } from "node:process";
 import { setTimeout as warten } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+
+import { entferneTempOrdner, neuerTempOrdner, raeumeTempOrdnerWeg } from "./temp-ordner.mjs";
 
 export const TESTGRUPPE = fileURLToPath(import.meta.url);
 export const EXIT_PROZESS_UEBRIG = 3;
@@ -78,7 +81,11 @@ function waechter(abbrechen) {
   const halter = new Map(
     ABBRUCHSIGNALE.map((signal) => [
       signal,
-      () => abbrechen(() => process.kill(process.pid, signal)),
+      () =>
+        abbrechen(() => {
+          raeumeTempOrdnerWeg();
+          process.kill(process.pid, signal);
+        }),
     ]),
   );
   for (const [signal, funktion] of halter) process.on(signal, funktion);
@@ -93,7 +100,9 @@ function waechter(abbrechen) {
 }
 
 export function gruppenlauf(argumente, optionen) {
-  const kind = spawn(process.execPath, argumente, { ...optionen, detached: true });
+  const tempOrdner = neuerTempOrdner();
+  const umgebung = { ...(optionen.env ?? env), TMPDIR: tempOrdner };
+  const kind = spawn(process.execPath, argumente, { ...optionen, env: umgebung, detached: true });
   const gruppe = kind.pid;
   const zustand = { abgebrochen: false };
   const geschlossen = new Promise((fertig) => kind.on("close", fertig));
@@ -114,6 +123,7 @@ export function gruppenlauf(argumente, optionen) {
     melde(uebrig);
     await beende(gruppe);
     await geschlossen;
+    entferneTempOrdner(tempOrdner);
     aufhoeren();
     return { code: uebrig.length > 0 && code === EXIT_GRUEN ? EXIT_PROZESS_UEBRIG : code, signal };
   });
