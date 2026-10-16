@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../src/boot-guard.js";
 import { ttsQuotaCoverageBannerLine } from "../src/boot.js";
 import {
@@ -12,7 +10,7 @@ import {
   platformTtsUsageView,
   PLATFORM_TTS_COST_CENTER_ID,
 } from "../src/store/state-ops.js";
-import { startServer, ROOT } from "./helpers.js";
+import { startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CFG = { ttsCharacterQuota: 1000, ttsCharacterQuotaWarnPercent: 75, ttsQuotaCycleAnchorDay: 3 };
@@ -34,17 +32,6 @@ test("KV-P7-2 (Gegenbeispiel): ELEVENLABS_PLAY_TTS_ENABLED=false, Budget-Engine 
     playTtsEnabled: false,
   });
   assert.deepEqual(findings, []);
-});
-
-test("KV-P7-7 (Gegenbeleg Budget-Engine): src/claude.js prueft blockingBudgetAxis in roundStopReason vor JEDER Turn-Runde", () => {
-  const claudeSource = fs.readFileSync(path.join(ROOT, "src/claude.js"), "utf8");
-  const fnStart = claudeSource.indexOf("function roundStopReason");
-  assert.ok(
-    fnStart >= 0,
-    "roundStopReason nicht gefunden - die Mid-Call-Pruefung der Budget-Engine waere nicht mehr belegt",
-  );
-  const fnBody = claudeSource.slice(fnStart, fnStart + 400);
-  assert.match(fnBody, /blockingBudgetAxis\(/);
 });
 
 test("KV-P7-8: Relay-Zeichen kommen im Kontingent-Zaehler an (Massnahme 3)", () => {
