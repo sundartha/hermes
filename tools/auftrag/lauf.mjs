@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -30,10 +30,18 @@ const PIN_HAKEN = ".githooks/pre-commit";
 export const PIN_FEHLT =
   "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
+const NICHT_GEKUERZT =
+  "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
 const ZITAT = "> ";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
+
+function eintraege(text) {
+  return Object.values(JSON.parse(text))
+    .flatMap((regeln) => Object.values(regeln))
+    .reduce((summe, { count }) => summe + count, 0);
+}
 
 function nachfrage(ids) {
   return [
@@ -260,10 +268,20 @@ class AuftragsLauf {
     return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
+  gekuerzt(pfad) {
+    const vorher = git(["show", `${this.basis}:${UNTERDRUECKUNGEN}`], { cwd: this.kontext.root });
+    return eintraege(readFileSync(pfad, "utf8")) < eintraege(vorher);
+  }
+
   unterdrueckungenKuerzen() {
     const { auftrag, root } = this.kontext;
-    if (auftrag.art !== "umbau" || !existsSync(join(root, UNTERDRUECKUNGEN))) return true;
-    if (!this.gruen(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"])) return false;
+    const pfad = join(root, UNTERDRUECKUNGEN);
+    if (auftrag.art !== "umbau" || !existsSync(pfad)) return true;
+    const befehl = ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"];
+    if (!this.gruen(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl)) return false;
+    if (this.aufraeumen && !this.gekuerzt(pfad)) {
+      return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl, exitCode: EXIT_ROT, ausgabe: NICHT_GEKUERZT }));
+    }
     vormerken([UNTERDRUECKUNGEN], root);
     return true;
   }
