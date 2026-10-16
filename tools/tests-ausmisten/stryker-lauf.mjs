@@ -3,6 +3,8 @@ import { argv, exit } from "node:process";
 
 import { Stryker } from "@stryker-mutator/core";
 
+import { kindprozesseInEigenemTempOrdner } from "../temp-ordner.mjs";
+
 const OHNE_TESTS = /No tests were executed/;
 const [, , optionenDatei, ergebnisDatei] = argv;
 
@@ -20,5 +22,6 @@ async function lauf() {
   }
 }
 
+kindprozesseInEigenemTempOrdner();
 writeFileSync(ergebnisDatei, JSON.stringify(await lauf()));
 exit(0);

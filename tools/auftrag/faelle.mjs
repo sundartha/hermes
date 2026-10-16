@@ -35,7 +35,7 @@ function laufe(root, pfad) {
     const argumente = ["--test", `--test-reporter=${BERICHT}`, `--test-reporter-destination=${ziel}`];
     const lauf = spawnSync(execPath, [...argumente, ...patternFlagsFor("regression"), pfad], {
       cwd: root,
-      env: { ...env, NODE_ENV: "test" },
+      env: { ...env, NODE_ENV: "test", TMPDIR: ordner },
       encoding: "utf8",
     });
     const zeilen = existsSync(ziel) ? readFileSync(ziel, "utf8").split("\n").filter(Boolean) : [];
