@@ -49,12 +49,21 @@ function fehlerausgabe(ergebnis) {
   return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...absatz, ...hinweiseDesBaus(agenten)].join("\n");
 }
 
-function planPrompt(phase, auftrag, satz) {
+function voraussetzungsAnlass(satz) {
+  return {
+    titel: "Voraussetzung fehlt",
+    zeilen: [`Der Bau-Agent hat aufgehört: ${satz}`],
+    aufgabe: "Mach aus der fehlenden Voraussetzung genau einen Umbau-Auftrag, der sie herstellt und das Verhalten nicht ändert.",
+    grund: `Voraussetzung fehlt: ${satz}`,
+  };
+}
+
+function planPrompt(phase, auftrag, anlass) {
   return [
     testPrompt(phase, auftrag),
-    abschnitt("Voraussetzung fehlt", [`Der Bau-Agent hat aufgehört: ${satz}`]),
+    abschnitt(anlass.titel, anlass.zeilen),
     abschnitt("Deine Aufgabe", [
-      "Mach aus der fehlenden Voraussetzung genau einen Umbau-Auftrag, der sie herstellt und das Verhalten nicht ändert.",
+      anlass.aufgabe,
       `Antworte nur mit einem JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf.`,
       "ziel ist eine Zeile mit höchstens 72 Zeichen, abnahme ein bestehender Test, der vor und nach dem Umbau grün ist, entwurf der Entwurfsabschnitt für den Bereich in Klartext.",
       "bereich und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
@@ -171,16 +180,16 @@ class Runden {
     if (zaehler.voraussetzungen > 1) {
       return this.zurueckInDenEntwurf(ergebnis, `Voraussetzung fehlt zum zweiten Mal: ${ergebnis.voraussetzung}`);
     }
-    const plan = this.planeUmbau(ergebnis);
+    const plan = this.planeUmbau(voraussetzungsAnlass(ergebnis.voraussetzung));
     if (plan.befunde.length > 0) {
       return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`, zweckBlock(MELDUNG.UMBAU_PLAN));
     }
     return new Runden({ ...this.kontext, ...plan.kontext, aufraeumen: ergebnis.voraussetzung.startsWith("Altfunktionen aufräumen:") }, this.starteRunde).fuehreAus();
   }
 
-  planeUmbau(ergebnis) {
+  planeUmbau(anlass) {
     const { phase, auftrag, root } = this.kontext;
-    const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, ergebnis.voraussetzung), { vollstaendig: true });
+    const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, anlass), { vollstaendig: true });
     const neu = umbauPhase(phase, auftrag, plan.volleAntwort ?? plan.antwort);
     const umbau = neu?.auftraege[0];
     const befunde = planBefunde(plan, neu, root);
@@ -188,7 +197,7 @@ class Runden {
       phase: phase.phase,
       auftrag: `${auftrag.id}-plan`,
       ergebnis: befunde.length === 0 ? GRUEN : ROT,
-      grund: `Voraussetzung fehlt: ${ergebnis.voraussetzung}`,
+      grund: anlass.grund,
       befunde,
       umbau,
       agenten: plan.sitzungen,
