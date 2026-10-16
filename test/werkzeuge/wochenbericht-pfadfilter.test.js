@@ -121,14 +121,14 @@ function workflowWith(trigger, paths) {
   return ["name: Probe", "on:", ...blocks, "  workflow_dispatch:", "jobs: {}"];
 }
 
-for (const { name, paths, expected } of FILTER_CASES) {
-  test(`wochenbericht-pfadfilter: ${name}`, () => {
+test("wochenbericht-pfadfilter: der Leser der Pfadlisten meldet genau die Module ohne Eintrag", () => {
+  for (const { name, paths, expected } of FILTER_CASES) {
     for (const trigger of TRIGGERS) {
       const filters = pathFilters(workflowWith(trigger, paths), trigger);
-      assert.deepEqual(unlisted(filters, FILES), expected, trigger);
+      assert.deepEqual(unlisted(filters, FILES), expected, `${name} (${trigger})`);
     }
-  });
-}
+  }
+});
 
 test("wochenbericht-pfadfilter: Pfade unter dem anderen Auslöser zählen nicht", () => {
   const lines = workflowWith("push", ["tools/a.mjs"]);
