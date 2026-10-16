@@ -206,3 +206,19 @@ test("ablegen ohne gültige Ablage-Datei scheitert und legt nichts an", async (c
   assert.notEqual(mitBlocker.lauf.status, 0);
   assert.deepEqual(mitBlocker.neu, []);
 });
+
+test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gleichem Titel verhindert ein neues", async () => {
+  const geschlossen = "Prüfer: N7 in `src/zahl.js` (PR #7)";
+  const abgefragt = [];
+  const github = scheinGithub([geschlossen]);
+  const alle = github.alle;
+  github.alle = (pfad, liste) => abgefragt.push(pfad) && alle(pfad, liste);
+  const issues = [
+    { titel: geschlossen, sha: HEAD, pr: 7, befund: hinweis(), grund: "" },
+    { titel: "Prüfer: G5 in `src/text.js` (PR #7)", sha: HEAD, pr: 7, befund: hinweis({ id: "G5" }), grund: "" },
+  ];
+  assert.deepEqual(await legeIssuesAn(issues, github), { neu: 1, vorhanden: 1 });
+  assert.deepEqual(abgefragt, ["/issues?state=all&labels=pruefer"]);
+  const [{ daten }] = github.gesendet;
+  assert.ok(daten.body.startsWith(`Der Prüfer hat im Pull Request #7 im Commit ${HEAD} einen Befund gemeldet`), daten.body);
+});

@@ -1,6 +1,7 @@
 export const BLOCKER = "BLOCKER";
 export const SOLLTE = "SOLLTE";
-export const SCHWEREN = [BLOCKER, SOLLTE, "HINWEIS"];
+export const HINWEIS = "HINWEIS";
+export const SCHWEREN = [BLOCKER, SOLLTE, HINWEIS];
 export const GEPRUEFT = "geprueft";
 export const NICHT_GELAUFEN = "nicht_gelaufen";
 export const UNVOLLSTAENDIG = "unvollstaendig";

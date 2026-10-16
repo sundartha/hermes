@@ -100,7 +100,7 @@ async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issu
   return { status, ausgabe, ergebnis, hinweise, repo, anfragen: github.anfragen, protokoll: ersatz.protokoll() };
 }
 
-test("lokal prüft jeden Commit seit master mit dem Befehl der CI, endet bei BLOCKER oder SOLLTE mit 1 und schreibt nichts nach GitHub", async (context) => {
+test("lokal prüft jeden Commit seit master mit dem Befehl der CI, endet bei einem BLOCKER mit 1 und schreibt nichts nach GitHub", async (context) => {
   const { status, ausgabe, ergebnis, repo, anfragen, protokoll } = await starte(context, {
     aufnahme: aufzeichnung("gueltig"),
   });
@@ -165,9 +165,9 @@ test("lokal mit der Basis auf HEAD findet keine Commits und endet mit 2 statt mi
   assert.deepEqual(anfragen, []);
 });
 
-test("lokal endet auch mit nur einem SOLLTE mit 1, weil SOLLTE vor dem Approve behoben wird", async (context) => {
-  const { status, ausgabe } = await starte(context, { aufnahme: mitBefunden(["SOLLTE"]) });
-  assert.equal(status, EXIT_BEFUNDE, ausgabe);
+test("lokal endet mit nur SOLLTE und HINWEIS mit 0, weil nur ein BLOCKER den PR aufhält", async (context) => {
+  const { status, ausgabe } = await starte(context, { aufnahme: mitBefunden(["SOLLTE", "HINWEIS"]) });
+  assert.equal(status, 0, ausgabe);
 });
 
 test("lokal legt einen Sicherheits-BLOCKER mit Beleg in die Ablage, damit die Sitzung ihn beheben kann", async (context) => {
