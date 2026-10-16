@@ -7,6 +7,8 @@ export const ARTEN = ["funktion", "fehlerbehebung", "umbau", "testumbau"];
 export const TESTUMBAU = "testumbau";
 export const FUNKTIONSKARTE = "FUNKTIONSKARTE.md";
 export const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
+export const ABSICHT = "Absicht";
+export const ABSICHT_HOECHSTENS = 1000;
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
 const UMBAU_ARTEN = new Set(["umbau", TESTUMBAU]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
@@ -24,6 +26,14 @@ const NUMMER = /^[SBT][1-9]\d*$/;
 
 export function ladePhase(pfad) {
   return JSON.parse(readFileSync(pfad, "utf8"));
+}
+
+export function absichtBefunde(absicht) {
+  if (typeof absicht !== "string" || absicht.trim() === "") {
+    return [`${ABSICHT} ist leer; sie sagt in 2 bis 4 Sätzen, wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie im Zweifel zu wählen ist`];
+  }
+  if (absicht.length > ABSICHT_HOECHSTENS) return [`${ABSICHT} hat ${absicht.length} Zeichen, höchstens ${ABSICHT_HOECHSTENS} (2 bis 4 Sätze)`];
+  return [];
 }
 
 export function brauchtRotenTest(auftrag) {

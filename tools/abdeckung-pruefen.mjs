@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { befundeImOrdner } from "./auftrag/planung/abdeckung.mjs";
+import { phasenAbsichtBefunde } from "./auftrag/planung/absicht.mjs";
 import { PITCH, SICHERHEIT } from "./auftrag/planung/nummern.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 
@@ -32,7 +33,9 @@ function pruefe(argumente) {
     return EXIT_AUFRUF;
   }
   const geladen = ladePhase(ordner);
-  const { anzahl, befunde } = geladen.phase ? befundeImOrdner(ordner, geladen.phase) : { anzahl: 0, befunde: geladen.befunde };
+  const { phase } = geladen;
+  const { anzahl, befunde } = phase ? befundeImOrdner(ordner, phase) : { anzahl: 0, befunde: geladen.befunde };
+  if (phase) befunde.unshift(...phasenAbsichtBefunde(readFileSync(join(ordner, PITCH), "utf8"), phase));
   for (const befund of befunde) console.error(befund);
   if (befunde.length > 0) {
     console.log(`rot: ${befunde.length} Befunde in ${ordner}.`);

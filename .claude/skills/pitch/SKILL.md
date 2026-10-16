@@ -19,7 +19,7 @@ Kopiere diese Liste in deine Antwort und hake sie ab:
 - [ ] 6. Zerlegen lassen und Abdeckung prüfen
 
 ### 1. Datei anlegen
-Kopiere `vorlage.md` nach `plaene/P-<nächste freie Nummer>-<kurzname>/pitch.md`. Verwende genau diese Struktur; jeder Abschnitt bleibt stehen. `beispiel.md` zeigt einen fertigen Pitch.
+Kopiere `vorlage.md` nach `plaene/P-<nächste freie Nummer>-<kurzname>/pitch.md`. Verwende genau diese Struktur; jeder Abschnitt bleibt stehen. `beispiel.md` zeigt einen fertigen Pitch. Die „Absicht“ schreibst du mit dem Nutzer; ohne sie ist `node tools/abdeckung-pruefen.mjs` rot, und das Zusammensetzen der Phasendatei verweigert sich.
 
 ### 2. Mit dem Nutzer klären
 Rede mit dem Nutzer wie mit einem Software-Engineer: mit Fachbegriffen, Werkzeug- und Routennamen und den technischen Abwägungen, ohne zu vereinfachen.

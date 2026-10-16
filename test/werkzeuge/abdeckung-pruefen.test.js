@@ -247,3 +247,41 @@ test("abdeckung-pruefen: eine unlesbare Phasendatei ist rot, ein falscher Aufruf
   assert.equal(fehlt.status, EXIT_AUFRUF);
   assert.match(fehlt.stderr, /^Im Ordner plaene\/P-999-gibt-es-nicht fehlt: pitch\.md, sicherheit\.md, phase\.json$/m);
 });
+
+const ABSICHT = "Ein Kunde soll seine eigene Nummer nur mit Code bestätigen können. Im Zweifel bleibt der Hinweis an.";
+
+function mitAbsicht(absicht) {
+  return PITCH.replace("## Anforderungen", `## Absicht\n${absicht}\n\n## Anforderungen`);
+}
+
+function phaseMitAbsicht(absicht = ABSICHT) {
+  return { phase: ORDNER, absicht, auftraege: vollstaendig() };
+}
+
+test("abdeckung-pruefen: hat die Phase eine Absicht, ist ein Pitch ohne Abschnitt „Absicht“ oder mit leerer Absicht rot, eine alte Phase ohne Feld nicht", (context) => {
+  const ohne = pruefe(context, { phase: phaseMitAbsicht() });
+  assert.equal(ohne.status, EXIT_ROT);
+  assert.match(ohne.stderr, /^pitch\.md hat keinen Abschnitt „## Absicht“$/m);
+  const leer = pruefe(context, { pitchtext: mitAbsicht(""), phase: phaseMitAbsicht() });
+  assert.equal(leer.status, EXIT_ROT);
+  assert.match(leer.stderr, /^pitch\.md: Absicht ist leer; sie sagt in 2 bis 4 Sätzen, wofür/m);
+  assert.equal(pruefe(context, { pitchtext: mitAbsicht(ABSICHT), phase: phaseMitAbsicht() }).status, EXIT_GRUEN);
+  assert.equal(pruefe(context).status, EXIT_GRUEN);
+});
+
+test("abdeckung-pruefen: eine Absicht über 1000 Zeichen ist rot, genau 1000 Zeichen sind grün", (context) => {
+  const ZEICHEN_HOECHSTENS = 1000;
+  const zuLangeAbsicht = "a".repeat(ZEICHEN_HOECHSTENS + 1);
+  const zuLang = pruefe(context, { pitchtext: mitAbsicht(zuLangeAbsicht), phase: phaseMitAbsicht(zuLangeAbsicht) });
+  assert.equal(zuLang.status, EXIT_ROT);
+  assert.match(zuLang.stderr, /^pitch\.md: Absicht hat 1001 Zeichen, höchstens 1000 \(2 bis 4 Sätze\)$/m);
+  const genauGrenze = "a".repeat(ZEICHEN_HOECHSTENS);
+  const genau = pruefe(context, { pitchtext: mitAbsicht(genauGrenze), phase: phaseMitAbsicht(genauGrenze) });
+  assert.equal(genau.status, EXIT_GRUEN, genau.stderr);
+});
+
+test("abdeckung-pruefen: weicht die Absicht der Phase vom Pitch ab, auch nur gekürzt, ist sie rot", (context) => {
+  const gekuerzt = pruefe(context, { pitchtext: mitAbsicht(ABSICHT), phase: phaseMitAbsicht(ABSICHT.split(". ")[0]) });
+  assert.equal(gekuerzt.status, EXIT_ROT);
+  assert.match(gekuerzt.stderr, /^phase\.json: absicht weicht vom Abschnitt „## Absicht“ in pitch\.md ab/m);
+});

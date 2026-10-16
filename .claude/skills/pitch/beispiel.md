@@ -3,6 +3,9 @@
 Status: fertig
 Design Doc: ja, weil offen ist, wo der Bestätigungsstatus liegt und wie die Freischaltliste wegfällt, ohne dass heute freigeschaltete Kunden plötzlich den Hinweis für Fremde hören.
 
+## Absicht
+Ein Kunde soll seine eigenen Anrufe ohne den Hinweis für Fremde bekommen, aber nur, wenn feststeht, dass die Nummer wirklich ihm gehört. Nicht gewollt ist eine Abkürzung, die den Hinweis schon bei einer bloß eingetragenen Nummer weglässt oder die Bestätigung nur in der Oberfläche prüft. Im Zweifel bleibt der Hinweis an, denn ein überflüssiger Hinweis kostet Sekunden, ein fehlender kann einen Fremden täuschen.
+
 ## Problem
 Eine Malermeisterin lässt Hermes tagsüber Termine mit ihren Kunden vereinbaren und sich abends auf ihrem eigenen Handy anrufen, um die Ergebnisse zu hören. Jeder dieser Anrufe beginnt mit dem langen Hinweis, der für fremde Angerufene gedacht ist, weil Hermes nicht weiß, ob die hinterlegte Nummer wirklich ihr gehört. Die Ausnahme vom Hinweis ist heute nur für einzeln freigeschaltete Konten an, denn jeder angemeldete Kunde kann eine fremde Nummer als seine eigene eintragen.
 
