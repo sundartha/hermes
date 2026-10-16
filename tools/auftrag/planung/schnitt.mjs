@@ -130,14 +130,19 @@ function auftragFormBefunde(auftraege, kennungen) {
   });
 }
 
-export function formBefunde(schnitt) {
+function vorhandeneKennungBefunde(auftraege, vorhandene) {
+  const belegt = new Set(vorhandene.map(({ id }) => id));
+  return auftraege.filter(({ id }) => belegt.has(id)).map(({ id }) => `${id}: die Kennung hat schon ein vorhandener Auftrag der Phase`);
+}
+
+export function formBefunde(schnitt, vorhandene = []) {
   if (!istObjekt(schnitt)) return mitRegel(REGEL.form, ["die Schnittliste ist kein Objekt"]);
   const befunde = LISTEN_OBEN.filter((feld) => !Array.isArray(schnitt[feld])).map((feld) => `${feld} muss eine Liste sein`);
   const auftraege = liste(schnitt.auftraege);
   if (auftraege.length === 0) return mitRegel(REGEL.form, [...befunde, "auftraege muss mindestens einen Auftrag enthalten"]);
   if (!auftraege.every(istObjekt)) return mitRegel(REGEL.form, [...befunde, "jeder Auftrag ist ein Objekt"]);
-  const kennungen = new Set(auftraege.map(({ id }) => id));
-  befunde.push(...kennungBefunde(auftraege), ...auftragFormBefunde(auftraege, kennungen), ...annahmeBefunde(liste(schnitt.annahmen), kennungen));
+  const kennungen = new Set([...auftraege, ...vorhandene].map(({ id }) => id));
+  befunde.push(...kennungBefunde(auftraege), ...vorhandeneKennungBefunde(auftraege, vorhandene), ...auftragFormBefunde(auftraege, kennungen), ...annahmeBefunde(liste(schnitt.annahmen), kennungen));
   if (befunde.length > 0) return mitRegel(REGEL.form, befunde);
   const { zyklus } = reihenfolge(auftraege.map((auftrag) => ({ id: auftrag.id, abhaengigVon: vorgaengerIds(auftrag) })));
   return zyklus ? mitRegel(REGEL.form, [`abhaengigVon bildet einen Kreis: ${zyklus.join(" -> ")}`]) : [];
@@ -345,11 +350,16 @@ function ortBefunde(abnahme, erlaubt) {
   return liegtGeordnet(abnahme, erlaubt) && !mitPlanKennung(abnahme) ? [] : [`abnahme ${abnahme} enthält eine Kennung wie p001, a1, s3 im Namen`];
 }
 
-function abnahmeBefunde(auftraege, { root }) {
+function schonVorhanden({ id, abnahme }, vorhandene) {
+  return vorhandene.filter((vorhanden) => vorhanden.abnahme === abnahme).map((vorhanden) => `${id}: abnahme ${abnahme} hat schon der vorhandene Auftrag ${vorhanden.id}`);
+}
+
+function abnahmeBefunde(auftraege, { root, vorhandene }) {
   const erlaubt = bereiche(root);
   const befunde = auftraege.flatMap((auftrag) => {
     const { id, abnahme } = auftrag;
-    const doppelt = auftraege.filter((anderer) => anderer.abnahme === abnahme).length > 1 ? [`${id}: abnahme ${abnahme} hat auch ein anderer Auftrag`] : [];
+    const mehrfach = auftraege.filter((anderer) => anderer.abnahme === abnahme).length > 1 ? [`${id}: abnahme ${abnahme} hat auch ein anderer Auftrag`] : [];
+    const doppelt = [...mehrfach, ...schonVorhanden(auftrag, vorhandene)];
     if (!brauchtRotenTest(auftrag)) return doppelt;
     const ort = ortBefunde(abnahme, erlaubt).map((befund) => `${id}: ${befund}`);
     if (ort.length > 0) return [...doppelt, ...ort];
@@ -427,14 +437,20 @@ function annahmenDesSchnitts(auftraege, schnitt) {
   return [...liste(schnitt.annahmen), ...bereichsgruende, ...eingaenge, ...falsche];
 }
 
+function imSchnittFormat(vorhanden) {
+  return { ...vorhanden, abhaengigVon: liste(vorhanden.abhaengigVon).map((id) => ({ id })) };
+}
+
 export function schnittBefunde(schnitt, eingaben) {
-  const form = formBefunde(schnitt);
+  const vorhandene = liste(eingaben.vorhandene);
+  const form = formBefunde(schnitt, vorhandene);
   if (form.length > 0) return { befunde: form, hinweise: [], annahmen: [] };
   const { auftraege } = schnitt;
   const kontext = {
     ...eingaben,
     schnitt,
-    nachId: new Map(auftraege.map((auftrag) => [auftrag.id, auftrag])),
+    vorhandene,
+    nachId: new Map([...vorhandene.map(imSchnittFormat), ...auftraege].map((auftrag) => [auftrag.id, auftrag])),
     besitzer: besitzerJeNummer(auftraege),
     stellen: aenderungsStellen(eingaben.berichte),
     muster: geschuetzteMuster(eingaben.root),
