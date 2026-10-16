@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ORDNER, phase, PHASENDATEI, RECHNEN_BESTAND, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
+import { AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ohneTeam, ORDNER, phase, PHASENDATEI, RECHNEN_BESTAND, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
 
 test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn neu und der Lauf wird ohne Entscheidungsnotiz grün", (context) => {
   const drehbuch = { test: [TEST], bau: [OHNE_FIX, OHNE_FIX, MIT_FIX], planer: [SCHNITT] };
@@ -85,6 +85,11 @@ test("ein Planer, der im Stillstand abgebrochen wird oder mit einem Fehler endet
     { befunde: ['planer: Stillstand: Read lief dreimal mit derselben Eingabe und lieferte dasselbe Ergebnis: {"file_path":"x"}'] },
     { befunde: ["planer ist abgestürzt (Exit 3)"] },
   ]);
+});
+
+test("endet der Kindlauf mit einem Fehlercode ohne Grund, wird der Neuschnitt mit genau diesem Exit abgelehnt", (context) => {
+  const FEHLERCODE = 4;
+  ohneTeam(context, [{ kind: { ergebnis: { exitCode: FEHLERCODE, sitzungen: [] } }, erwartet: [`Der Planer endete mit Exit ${FEHLERCODE}.`] }]);
 });
 
 test("ein Neuschnitt mit unlesbarer Phasendatei oder roter Abdeckungsprüfung wird mit genau diesen Befunden abgelehnt", (context) => {

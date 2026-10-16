@@ -273,7 +273,7 @@ function planeMitTeam(kontext, ort, vorher) {
   const versuch = join(ablage, `versuch-${nummer}`);
   mkdirSync(versuch, { recursive: true });
   writeFileSync(join(versuch, EINGABE), JSON.stringify(teamEingabe(kontext, ort, vorher)));
-  const kind = spawnSync(execPath, [NEUSCHNITT_START, versuch], { cwd: kontext.root, env, stdio: ["ignore", "inherit", "inherit"] });
+  const kind = spawnSync(execPath, [env.HERMES_NEUSCHNITT_START ?? NEUSCHNITT_START, versuch], { cwd: kontext.root, env, stdio: ["ignore", "inherit", "inherit"] });
   return teamErgebnis(versuch, kind.status);
 }
 
