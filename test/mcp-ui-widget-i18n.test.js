@@ -1,9 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import vm from "node:vm";
-import { fileURLToPath } from "node:url";
 import {
   DEFAULT_LOCALE,
   WIDGET_DICT,
@@ -30,26 +27,31 @@ import { registerTools } from "../src/mcp-tools.js";
 import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const WIDGET_DIR = path.join(ROOT, "src", "ui", "widgets");
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 const LOCALES = Object.keys(WIDGET_DICT);
 
 function extractFailureReasonLabels(html) {
   const match = /var FAILURE_REASON_LABELS = (\{[\s\S]*?\n\s*\});/.exec(html);
-  assert.ok(match, "FAILURE_REASON_LABELS-Objekt-Literal nicht in call.html gefunden");
+  if (match === null) throw new Error("FAILURE_REASON_LABELS-Objekt-Literal nicht in call.html gefunden");
   return new Function(`return ${match[1]};`)();
 }
 
-const CALL_HTML_SOURCE = fs.readFileSync(path.join(WIDGET_DIR, "call.html"), "utf8");
+async function servedWidgets() {
+  return Promise.all(
+    registeredResources(DEFAULT_LOCALE).map(async ({ name, readCallback }) => ({
+      file: name,
+      html: (await readCallback()).contents[0].text,
+    })),
+  );
+}
+
+const SERVED_WIDGETS = await servedWidgets();
+const CALL_HTML_SOURCE = SERVED_WIDGETS.find(({ file }) => file === WIDGET_CALL).html;
 const FAILURE_REASON_LABEL_VALUES = Object.values(extractFailureReasonLabels(CALL_HTML_SOURCE));
 const DYNAMIC_KEYS = [...FAILURE_REASON_LABEL_VALUES, "Yes", "No", "Unclear"];
 
 function widgetSources() {
-  return fs
-    .readdirSync(WIDGET_DIR)
-    .filter((f) => f.endsWith(".html"))
-    .map((f) => ({ file: f, html: fs.readFileSync(path.join(WIDGET_DIR, f), "utf8") }));
+  return SERVED_WIDGETS;
 }
 
 test("T-i18n-parity: alle Sprachtabellen tragen identische Key-Saetze", () => {
@@ -180,7 +182,7 @@ test("widgetHtml() ignoriert ein zusaetzliches Sprachargument - EINE Fassung, ke
   }
 });
 
-function registeredAgentStatusResource(language) {
+function registeredResources(language) {
   const captured = [];
   const fakeServer = {
     registerTool() {},
@@ -190,7 +192,11 @@ function registeredAgentStatusResource(language) {
     },
   };
   registerTools(fakeServer, { uiHost: { enabled: true }, language });
-  return captured.find((entry) => entry.name === WIDGET_AGENT_STATUS);
+  return captured;
+}
+
+function registeredAgentStatusResource(language) {
+  return registeredResources(language).find((entry) => entry.name === WIDGET_AGENT_STATUS);
 }
 
 test("tenant.country=FR aendert die servergerenderte Widget-Resource NICHT mehr (ex UI-18, T2-02 umgebaut)", async () => {
