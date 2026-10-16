@@ -21,6 +21,11 @@ export function repositoryName() {
   return { owner, name, full: `${owner}/${name}` };
 }
 
+function httpFehler({ status }, aufruf = "") {
+  const fehler = new Error(`Die GitHub-API antwortet${aufruf} mit HTTP ${status}.`);
+  return Object.assign(fehler, { status });
+}
+
 export async function graphql(query, number) {
   const { owner, name } = repositoryName();
   const response = await fetch(env.GITHUB_GRAPHQL_URL || GITHUB_GRAPHQL, {
@@ -28,7 +33,7 @@ export async function graphql(query, number) {
     headers: githubHeaders(),
     body: JSON.stringify({ query, variables: { owner, name, number } }),
   });
-  if (!response.ok) throw new Error(`Die GitHub-API antwortet mit HTTP ${response.status}.`);
+  if (!response.ok) throw httpFehler(response);
   const { data, errors } = await response.json();
   if (errors?.length) {
     throw new Error(`Die GitHub-API meldet: ${errors.map(({ message }) => message).join("; ")}`);
@@ -41,9 +46,7 @@ export async function rest(method, path) {
     method,
     headers: githubHeaders(),
   });
-  if (!response.ok) {
-    throw new Error(`Die GitHub-API antwortet auf ${method} ${path} mit HTTP ${response.status}.`);
-  }
+  if (!response.ok) throw httpFehler(response, ` auf ${method} ${path}`);
   return response;
 }
 
