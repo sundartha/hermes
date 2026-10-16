@@ -40,22 +40,21 @@ function addPrefixEntry(list, entry) {
   }
 }
 
-let geladenerStand;
-
-function buildBlockList() {
+function loadEgressRanges() {
   const list = new BlockList();
+  let stand;
   try {
     const raw = readFileSync(RANGES_PATH, "utf8");
     const data = JSON.parse(raw);
     const prefixes = Array.isArray(data?.prefixes) ? data.prefixes : [];
-    geladenerStand = Object.freeze({ fetchedAt: data._fetchedAt, prefixes: Object.freeze([...prefixes]) });
+    stand = Object.freeze({ fetchedAt: data._fetchedAt, prefixes: Object.freeze([...prefixes]) });
     for (const entry of prefixes) addPrefixEntry(list, entry);
   } catch {
   }
-  return list;
+  return { list, stand };
 }
 
-const chatgptEgressList = buildBlockList();
+const { list: chatgptEgressList, stand: geladenerStand } = loadEgressRanges();
 
 export const chatgptEgressStand = () => geladenerStand;
 
