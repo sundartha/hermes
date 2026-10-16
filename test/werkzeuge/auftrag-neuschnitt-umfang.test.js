@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ersterVersuch, funktion, ISSUE, lauf, nummerierteNamen, OHNE_FIX, ORDNER, phase, PHASENDATEI, TEST, umbau, UMBAU_FERTIG } from "./neuschnitt-probe.js";
+import { ABNAHME, ersterVersuch, funktion, ISSUE, lauf, nummerierteNamen, OHNE_FIX, ORDNER, phase, PHASENDATEI, TEST, TEXT_TEST, umbau, UMBAU_FERTIG } from "./neuschnitt-probe.js";
 
 test("ein Neuschnitt darf andere Aufträge, ihren Entwurf, Vorgänger und den Rahmen der Phasendatei nicht ändern", (context) => {
   const vorher = JSON.parse(phase([umbau("a0"), funktion("a1", { abhaengigVon: ["a0"] }), umbau("a2", { abhaengigVon: ["a1"] })]));
@@ -26,7 +26,7 @@ test("ein Neuschnitt mit Nachfolgern, die nicht genau Kennung-n und eine Zahl he
   const falscheNamen = phase([funktion("a1-n01"), umbau("a1-n1x"), umbau("b1-n5")]);
   const falscheArt = phase([funktion("a1-n1", { art: "falsch" })]);
   const { versuche } = ersterVersuch(context, [{ dateien: { [PHASENDATEI]: falscheNamen } }, { dateien: { [PHASENDATEI]: falscheArt } }]);
-  assert.deepEqual(versuche, [{ befunde: nummerierteNamen("a1-n01", "a1-n1x", "b1-n5") }, { befunde: ["a1-n1: art muss eine von funktion, fehlerbehebung, umbau, testumbau sein", "a1-n1: ein Umbau braucht einen bestehenden Verhaltenstest, test/rechnen.test.js fehlt"] }]);
+  assert.deepEqual(versuche, [{ befunde: nummerierteNamen("a1-n01", "a1-n1x", "b1-n5") }, { befunde: ["a1-n1: art muss eine von funktion, fehlerbehebung, umbau, testumbau sein", `a1-n1: ein Umbau braucht einen bestehenden Verhaltenstest, ${ABNAHME} fehlt`] }]);
 });
 
 test("ein Neuschnitt, der einen anderen Auftrag weglässt oder mehrere andere Dateien anlegt, wird abgelehnt", (context) => {
@@ -42,7 +42,7 @@ test("ein Neuschnitt, der einen anderen Auftrag weglässt oder mehrere andere Da
 
 test("ein Neuschnitt mit einem umbau, dessen Bereich nur Tests umfasst, wird abgelehnt wie im Umbau-Weg; als testumbau wird er angenommen", (context) => {
   const entwurf = { "src/rechnen.js": "Entwurf.", "src/text.js": "Entwurf Text.", "test/": "Entwurf Tests." };
-  const schnitt = (art) => phase([umbau("a1-n1", { art, bereich: "test/", erwarteteDateien: ["test/text.test.js"], wasDarfNiePassieren: [] }), funktion("a1-n2", { abhaengigVon: ["a1-n1"] })], { entwurf });
+  const schnitt = (art) => phase([umbau("a1-n1", { art, bereich: "test/", erwarteteDateien: [TEXT_TEST], wasDarfNiePassieren: [] }), funktion("a1-n2", { abhaengigVon: ["a1-n1"] })], { entwurf });
   const abgelehnt = ersterVersuch(context, [{ dateien: { [PHASENDATEI]: schnitt("umbau") } }]);
   assert.deepEqual(abgelehnt.befunde, ["a1-n1: bereich test/ umfasst nur Tests; ein reiner Testumbau hat art testumbau und läuft beim Test-Agenten, weil der Bau-Agent keine Tests ändert"]);
   const angenommen = lauf(context, { test: [TEST], bau: [OHNE_FIX], planung: [{ dateien: { [PHASENDATEI]: schnitt("testumbau") } }], notiz: [{ antwort: "1. Pitch prüfen" }] });
