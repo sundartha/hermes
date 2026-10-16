@@ -206,6 +206,8 @@ test("GW0-EIGENE-NUMMER ohne Pin: die eigene Nummer eines nicht gepinnten Tenant
 });
 
 const KOSTENDECKE_CENT = 1000;
+const RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT = 210;
+const RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT = 230;
 const TARIF_CENT = "20";
 const LAUFENDER_ANRUF_MS = (9 * 60 + 5) * 1000;
 
@@ -244,7 +246,7 @@ async function endeDesAuftragsAnrufs(srv) {
 }
 
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - 210) }, async ({ srv, anbieter }) => {
+  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
     assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendet(), { timeoutMs: 3000 });
@@ -252,7 +254,7 @@ test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-An
 });
 
 test("GW0-KOSTENDECKE im Gespraech Kontrolle: unter der Decke beendet die Geld-Wache den EL-Anruf nicht", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - 230) }, async ({ srv }) => {
+  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv }) => {
     assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
     assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "max-duration-cap");
   });
