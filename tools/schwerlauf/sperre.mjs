@@ -1,10 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { constants, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir, userInfo } from "node:os";
+import { constants, readFileSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import process, { cwd, env, pid } from "node:process";
 import { createInterface } from "node:readline";
+
+import { neuerTempOrdner } from "../temp-ordner.mjs";
 
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
 export const HALTER_VARIABLE = "SCHWERLAUF_HALTER";
@@ -178,8 +180,7 @@ export async function nimmSperreAuchFuerKindprozesse(anlass) {
 }
 
 export async function nimmEigeneSperreFuerTests(umgebung) {
-  const ordner = mkdtempSync(join(tmpdir(), "schwerlauf-testlauf-"));
-  process.on("exit", () => rmSync(ordner, { recursive: true, force: true }));
+  const ordner = neuerTempOrdner("schwerlauf-testlauf-");
   const datei = join(ordner, "sperre");
   const schluessel = await sperreNehmenUndHalterEintragen(datei, "Testlauf");
   return { ...umgebung, [SPERRDATEI_VARIABLE]: datei, [HALTER_VARIABLE]: schluessel };
