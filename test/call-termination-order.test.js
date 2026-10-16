@@ -162,6 +162,12 @@ const AKTIV_STATUS_ABGEHEND = "aktiv_status_abgehend";
 const AKTIV_ABBRUCH = "aktiv_abbruch";
 const TRAEGER_SID = "CA_abbruch";
 const ABRECHNUNG_SCHEITERT = "abrechnung-attrappe-scheitert";
+const AUFLEGEN_DAUERT_MS = 5;
+const HOECHSTDAUER_S = 60;
+const KEINE_RESERVE_CENT = 0;
+const CARRIER_ABLEHNUNG_STATUS = 403;
+const HTTP_OK = 200;
+const HTTP_BAD_GATEWAY = 502;
 const MANDANT = seedCall().tenantId;
 let store;
 let makeCallRoutes;
@@ -214,11 +220,11 @@ function endpfadBank() {
     originateCall: async ({ url }) => {
       ablauf.push("waehlen");
       gewaehlt.push(new URL(url).searchParams.get("callId"));
-      store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: 60 });
-      throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: 403 });
+      store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: HOECHSTDAUER_S });
+      throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: CARRIER_ABLEHNUNG_STATUS });
     },
     endCall: async (sid) => {
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, AUFLEGEN_DAUERT_MS));
       ablauf.push(`auflegen:${sid}`);
     },
     endCallViaCallControl: async () => {},
@@ -263,8 +269,8 @@ function endpfadBank() {
               fromNumber: "+4930123456",
               outboundProvider: "telnyx",
               numberRecord: null,
-              reserveCents: 0,
-              maxDur: 60,
+              reserveCents: KEINE_RESERVE_CENT,
+              maxDur: HOECHSTDAUER_S,
             });
             return null;
           },
@@ -328,7 +334,7 @@ test("Status-Callback beendet den Call und rechnet genau einmal ueber das Gatewa
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams(felder).toString(),
       });
-      assert.equal(antwort.status, 200);
+      assert.equal(antwort.status, HTTP_OK);
       await antwort.text();
     }
     await waitUntil(() => bank.abrechnungen.length >= meldungen.length && bank.fehlerLog().split("Settlement").length > meldungen.length);
@@ -352,7 +358,7 @@ test("Fehlschlag beim Waehlen (place_call) beendet den Call als failed und rechn
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: "+4915199990000", objective: "Termin vereinbaren" }),
     });
-    assert.equal(antwort.status, 502, "die Ablehnung des Carriers wird als 502 gemeldet");
+    assert.equal(antwort.status, HTTP_BAD_GATEWAY, "die Ablehnung des Carriers wird als 502 gemeldet");
     await antwort.json();
     await waitUntil(() => bank.abrechnungen.length > 0 && /Settlement/.test(bank.fehlerLog()));
     const [callId] = bank.gewaehlt;
