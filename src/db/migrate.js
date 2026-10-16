@@ -8,26 +8,29 @@ import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
 
+export function schemaDdl() {
+  return fs.readFileSync(SCHEMA_FILE, "utf8");
+}
+
 export async function applySchema(db) {
-  const ddl = fs.readFileSync(SCHEMA_FILE, "utf8");
-  await db.exec(ddl);
+  await db.exec(schemaDdl());
 }
 
 function periodStartSecFromEnd(endSec) {
   return Math.floor(periodStartFromEnd(endSec).getTime() / MS_PER_SECOND);
 }
 
-export async function backfillPeriodStart(db) {
+async function backfillPeriodStart(db) {
   const rows = (
     await db.query(
       `SELECT id, stripe_current_period_end AS end_sec FROM tenant
         WHERE stripe_current_period_start IS NULL AND stripe_current_period_end IS NOT NULL`,
     )
   ).rows;
-  for (const r of rows) {
+  for (const zeile of rows) {
     await db.query(`UPDATE tenant SET stripe_current_period_start = $1 WHERE id = $2`, [
-      periodStartSecFromEnd(Number(r.end_sec)),
-      r.id,
+      periodStartSecFromEnd(Number(zeile.end_sec)),
+      zeile.id,
     ]);
   }
 }
@@ -81,7 +84,7 @@ async function healNumberGeoForTenant(db, tenantId) {
   return written;
 }
 
-export async function backfillNumberGeo(db, restoreTenantId) {
+async function backfillNumberGeo(db, restoreTenantId) {
   const { rows } = await db.query(`SELECT id FROM tenant`);
   let written = 0;
   for (const { id } of rows) {
