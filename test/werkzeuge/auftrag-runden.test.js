@@ -309,3 +309,36 @@ test("ein neuer Lauf desselben Auftrags überschreibt keinen Beleg eines früher
   assert.equal(beleg("A1").runde, ZWEITE_RUNDE);
   assert.match(beleg("A1").entscheidung.text, /Bereich erweitern/);
 });
+
+const ALT_BLEIBT = { dateien: { [ZAHL]: "const alt = 2;\nexport const ZAHL = 1;\n" } };
+const UNTERDRUECKUNGEN_AM_ANFANG = JSON.parse(MIT_ALTFUNKTION["eslint-suppressions.json"]);
+
+test("ein Aufräum-Umbau, der die Altfunktion stehen lässt, wird nicht als grüner Umbau festgehalten", (context) => {
+  const plan = [{ antwort: JSON.stringify({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }) }];
+  const drehbuch = { bau: [{ antwort: ALTFUNKTION_FEHLT }, ALT_BLEIBT], plan, notiz: [{ antwort: "1. Umbau wiederholen" }], test: ROTER_TEST, auftrag: FUNKTION };
+  const { repo, ergebnis, beleg } = lauf(context, drehbuch, MIT_ALTFUNKTION);
+  const git = (...args) => runIn(repo, "git", args).stdout.trim();
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.notEqual(beleg("A1-umbau")?.ergebnis, "grün");
+  assert.equal(git("log", "--format=%s"), "Basis");
+  assert.deepEqual(JSON.parse(git("show", "HEAD:eslint-suppressions.json")), UNTERDRUECKUNGEN_AM_ANFANG);
+});
+
+test("ein geplanter Umbau, der keine Altfunktion aufräumen soll, bleibt grün, auch wenn eslint-suppressions.json gleich bleibt", (context) => {
+  const { repo, ergebnis, beleg } = lauf(context, { bau: [ALT_BLEIBT] }, MIT_ALTFUNKTION);
+  const git = (...args) => runIn(repo, "git", args).stdout.trim();
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(beleg("A1").ergebnis, "grün");
+  assert.deepEqual(git("log", "--format=%s").split("\n"), [AUFTRAG.ziel, "Basis"]);
+  assert.deepEqual(JSON.parse(git("show", "HEAD:eslint-suppressions.json")), UNTERDRUECKUNGEN_AM_ANFANG);
+});
+
+test("ein Umbau aus einer anderen fehlenden Voraussetzung bleibt grün, auch wenn eslint-suppressions.json gleich bleibt", (context) => {
+  const vorbereiten = { ...ALTFUNKTION_UMBAU, ziel: "Bereite zahl vor" };
+  const bau = [{ antwort: `Voraussetzung fehlt: Erst muss alt in ${ZAHL} den Wert 2 haben.` }, ALT_BLEIBT, { dateien: { [ZAHL]: "const alt = 2;\nexport const ZAHL = 2;\n" } }];
+  const plan = [{ antwort: JSON.stringify({ ...vorbereiten, entwurf: "alt bekommt den Wert 2." }) }];
+  const { repo, ergebnis, beleg } = lauf(context, { bau, plan, test: ROTER_TEST, auftrag: FUNKTION }, MIT_ALTFUNKTION);
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(beleg("A1-umbau").ergebnis, "grün");
+  assert.deepEqual(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim().split("\n"), [FUNKTION.ziel, vorbereiten.ziel, "Basis"]);
+});
