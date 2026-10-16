@@ -2,18 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
+import { VORLAGEN_ORDNER, aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
 import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "../tools/mutationspruefung/vorlage.mjs";
 
 const KINDPROZESS_OBERGRENZE_MS = 20_000;
 const KIND = fileURLToPath(new URL("./pglite-helfer-kind.js", import.meta.url));
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
-const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
 
 const TABELLE_ZAEHLEN =
   "SELECT count(*)::int AS anzahl FROM pg_tables WHERE tablename = 'isolationsprobe'";
