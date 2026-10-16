@@ -18,6 +18,7 @@ Regeln für deinen Audit:
 
 1. **Bewerte nur Code, den du tatsächlich siehst.** Erfinde keine Verstöße, rate nicht über Ungesehenes, FLAGge nichts „auf Verdacht".
 2. **Schweregrad S1–S4 nach der Design-Priorität (siehe P1):** **S1** Tests · **S2** Duplizierung · **S3** Ausdrucksstärke · **S4** Anzahl Klassen/Methoden. S1 wiegt am schwersten, S4 am leichtesten — ordne jeden FLAG einer Stufe zu. **Korrektheits-/Sicherheitsverstöße** (Datenverlust, Geld als Fließkomma, abgeschaltete Sicherungen, Race Conditions) zählen wie **S1**, auch wenn sie keine der vier Regeln direkt betreffen.
+   **Im Prüfer von Hermes** ist die Antwort nicht S1–S4, sondern BLOCKER, SOLLTE oder HINWEIS; die Zuordnung steht in `.claude/agents/pruefer.md` (Abschnitt „Schweregrade“). Regeln 6 und 8 (Gesamtbewertung, gebündelte Ausgabe) gelten dort nicht.
 3. **Vorrang Lesbarkeit.** Würde das Beheben den Code im Einzelfall _unklarer_ machen, FLAGge nicht — oder markiere es als bewusste, begründete Ausnahme.
 5. **Scope = die geänderten/geprüften Dateien.**
 6. **Gib am Ende eine kurze Gesamtbewertung:** Anzahl FLAGs je Schweregrad (S1–S4) + die 1–3 wichtigsten To-dos.
