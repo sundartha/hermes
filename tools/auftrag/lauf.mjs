@@ -9,7 +9,7 @@ import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from ".
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { TESTUMBAU, brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, auftragsTrailer, festhalten, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -114,8 +114,7 @@ class AuftragsLauf {
   genannterAlterTest(alterTest) {
     const { root, auftrag } = this.kontext;
     const { datei } = alterTest;
-    const vorhanden = git(["ls-tree", "--name-only", this.basis, "--", datei], { cwd: root }).trim() === datei;
-    if (!vorhanden || datei === auftrag.abnahme) return null;
+    if (!gibtEsIn(this.basis, datei, root) || datei === auftrag.abnahme) return null;
     return nenntAltenTest(alterTest, testTitel(git(["show", `${this.basis}:${datei}`], { cwd: root })));
   }
 

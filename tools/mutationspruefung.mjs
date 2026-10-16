@@ -10,6 +10,7 @@ import { cruise } from "dependency-cruiser";
 import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
+import { legeWorktreeAn } from "./auftrag/git.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
@@ -246,11 +247,11 @@ async function pruefeDatei(datei, zeilen, { nachZiel, loeschung, anteil }) {
 
 function alterStand(commit) {
   const verzeichnis = arbeitsverzeichnis("alter-stand-");
-  git(["worktree", "add", "--detach", "-q", verzeichnis, commit]);
+  const entferne = legeWorktreeAn(commit, verzeichnis);
   chdir(verzeichnis);
   return () => {
     chdir(WURZEL);
-    git(["worktree", "remove", "--force", verzeichnis]);
+    entferne();
   };
 }
 

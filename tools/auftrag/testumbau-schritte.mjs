@@ -17,7 +17,7 @@ function umbauAntwort(lauf) {
   return entnimmVolleAntwort(lauf.agenten.at(-1));
 }
 
-function begruendet(lauf, ausgabe, antwort) {
+function pruefeUndVermerkeEntfernteFaelle(lauf, ausgabe, antwort) {
   const entfernt = ausgabe.split("\n").filter((zeile) => zeile.startsWith(ENTFERNT)).map((zeile) => zeile.slice(ENTFERNT.length));
   const gruende = new Map([...antwort.matchAll(BEGRUENDET)].map(([, fall, grund]) => [fall.trim(), grund.trim()]));
   const ohneGrund = entfernt.filter((fall) => !gruende.has(fall));
@@ -30,7 +30,7 @@ function begruendet(lauf, ausgabe, antwort) {
 
 function faelleGruen(lauf, antwort) {
   const ergebnis = lauf.pruefung(PRUEFUNG.TESTUMBAU_FAELLE, [execPath, EINSTIEG, "testumbau", "--basis", lauf.basis]);
-  return lauf.gruenOderScheitert(ergebnis) && begruendet(lauf, ergebnis.ausgabe, antwort);
+  return lauf.gruenOderScheitert(ergebnis) && pruefeUndVermerkeEntfernteFaelle(lauf, ergebnis.ausgabe, antwort);
 }
 
 function mutationNichtSchlechter(lauf) {
@@ -42,15 +42,12 @@ function mutationNichtSchlechter(lauf) {
 }
 
 export function testumbauSchritte(lauf) {
-  let antwort = null;
   return [
     () => lauf.vorherGruen(),
     () => {
-      antwort = umbauAntwort(lauf);
-      return antwort !== null;
+      const antwort = umbauAntwort(lauf);
+      return antwort !== null && lauf.grenzen("test", lauf.basis) && faelleGruen(lauf, antwort);
     },
-    () => lauf.grenzen("test", lauf.basis),
-    () => faelleGruen(lauf, antwort),
     () => lauf.allesVormerken(),
     () => lauf.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
     () => lauf.pinPruefung(),
