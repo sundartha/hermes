@@ -144,7 +144,7 @@ export function formBefunde(schnitt, vorhandene = []) {
   const kennungen = new Set([...auftraege, ...vorhandene].map(({ id }) => id));
   befunde.push(...kennungBefunde(auftraege), ...vorhandeneKennungBefunde(auftraege, vorhandene), ...auftragFormBefunde(auftraege, kennungen), ...annahmeBefunde(liste(schnitt.annahmen), kennungen));
   if (befunde.length > 0) return mitRegel(REGEL.form, befunde);
-  const { zyklus } = reihenfolge(auftraege.map((auftrag) => ({ id: auftrag.id, abhaengigVon: vorgaengerIds(auftrag) })));
+  const { zyklus } = reihenfolge([...vorhandene.map(imSchnittFormat), ...auftraege].map((auftrag) => ({ id: auftrag.id, abhaengigVon: vorgaengerIds(auftrag) })));
   return zyklus ? mitRegel(REGEL.form, [`abhaengigVon bildet einen Kreis: ${zyklus.join(" -> ")}`]) : [];
 }
 

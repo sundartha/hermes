@@ -1047,6 +1047,12 @@ test("Vorhandene: ohne vorhandene ist ein abhaengigVon auf eine fremde Kennung r
   erwarte(lauf(b), REGEL.form, 'a2: abhaengigVon nennt "a5", das ist kein anderer Auftrag');
 });
 
+test("Vorhandene: ein Kreis über einen vorhandenen Auftrag ist rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5", { abhaengigVon: ["a2"] }));
+  haengtAn(eigener(b, "a2"), "a5");
+  erwarte(lauf(b), REGEL.form, "abhaengigVon bildet einen Kreis: a5 -> a2 -> a5");
+});
+
 test("Vorhandene: ein neuer Auftrag mit der Kennung eines vorhandenen ist rot", (context) => {
   const b = mitVorhandenen(basis(context), vorhanden("a2"));
   erwarte(lauf(b), REGEL.form, "a2: die Kennung hat schon ein vorhandener Auftrag der Phase");
