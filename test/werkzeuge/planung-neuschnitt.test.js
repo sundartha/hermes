@@ -13,6 +13,7 @@ const NUMMERN = ["S2", "S3", "S6", "T1"];
 const ANLASS = "Der Abnahmetest von a2 wurde nach dem Bau nicht grün.";
 const VERLAUF_ZEILEN = ["test: a2 rot wie erwartet", "bau: a2 nach drei Versuchen gescheitert"];
 const KOPF = ["", "## Neuschnitt", "", ANLASS, "", "## Verlauf", "", ...VERLAUF_ZEILEN].join("\n");
+const PLANER_NACHRICHTEN_IM_NEUSCHNITT = 1;
 const STELLE_VERLAUF = KOPF.indexOf("\n## Verlauf\n");
 const PLANER_ABSCHNITTE = ["Dokumente", "Phasendatei", "Nummern", "Erkundungsbericht", "Berichte der ersten Planung", "Annahmen der Erkunder", "Offene Punkte", "Funktionsliste", "Dateikarte", ".claude/skills/pitch/phase-vorlage.md"];
 const AENDERUNG = "a2 wird in einen Auftrag mit eigener Abnahme geschnitten.";
@@ -135,14 +136,14 @@ test("Neuschnitt: Zerlegung passt nicht endet ohne Prüfung der Fundstellen mit 
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(PASST_NICHT) });
   exit(lauf, 3);
   assert.equal(lauf.ergebnis.antwort, PASST_NICHT);
-  assert.equal(aufrufe(lauf, "planer").length, 1);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
 });
 
 test("Neuschnitt: Nachfragen des Planers enden mit Exit 4 und gehen an keinen Erkunder", (context) => {
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ nachfragen: [{ nummern: ["S2"], frage: "Wo steht der Code?" }] })) });
   exit(lauf, 4);
   assert.equal(lauf.ergebnis.grund, "Nachfragen gibt es beim Neuschnitt nicht");
-  assert.equal(aufrufe(lauf, "planer").length, 1);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
   assert.deepEqual(aufrufe(lauf, "erkunder", "## Nachfrage").filter(({ eingabe }) => eingabe.includes("Wo steht der Code?")), []);
 });
 
@@ -245,7 +246,7 @@ test("Neuschnitt: ein Skriptbefund endet ohne zweite Planer-Nachricht mit Exit 4
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ schnitt })) });
   exit(lauf, 4);
   assert.match(lauf.ergebnis.grund, /abhaengigVon.*a9|a9.*abhaengigVon/);
-  assert.equal(aufrufe(lauf, "planer").length, 1);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
   assert.deepEqual(JSON.parse(readFileSync(join(lauf.ablage, "schnitt.json"), "utf8")), schnitt);
   assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
 });
@@ -344,9 +345,14 @@ test("Neuschnitt: ein neuer Bereich bekommt einen Entwurf", (context) => {
 });
 
 test("Neuschnitt: Befunde der neuen Phase enden mit Exit 4, die Phasendatei bleibt unverändert", (context) => {
-  for (const aendere of [(phase) => ({ ...phase, phase: "P-002-andere" }), (phase) => ({ ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === "a1" ? { ...eintrag, art: "unbekannt" } : eintrag)) })]) {
+  const faelle = [
+    [(phase) => ({ ...phase, phase: "P-002-andere" }), /phase muss P-001-eigene-nummer heißen wie der Ordner, nicht "P-002-andere"/],
+    [(phase) => ({ ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === "a1" ? { ...eintrag, art: "unbekannt" } : eintrag)) }), /art muss eine von /],
+  ];
+  for (const [aendere, befund] of faelle) {
     const lauf = neuschnitt(context, { aendere });
     exit(lauf, 4);
+    assert.match(lauf.ergebnis.grund, befund);
     assert.deepEqual(lauf.phase, lauf.vorher);
   }
 });
@@ -377,12 +383,14 @@ test("Neuschnitt: eine Teilliste in der ersten Antwort endet mit Exit 4", (conte
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ teilliste: { auftraege: [] } })) });
   exit(lauf, 4);
   assert.equal(lauf.ergebnis.grund, "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste");
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
 });
 
 test("Neuschnitt: eine Antwort ohne Schnittliste endet mit Exit 4", (context) => {
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ aenderung: AENDERUNG })) });
   exit(lauf, 4);
   assert.match(lauf.ergebnis.grund, /^schnitt fehlt: /);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
 });
 
 test("Neuschnitt: die Abnahme eines vorhandenen Auftrags ist ein Befund", (context) => {
@@ -392,4 +400,5 @@ test("Neuschnitt: die Abnahme eines vorhandenen Auftrags ist ein Befund", (conte
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ schnitt })) });
   exit(lauf, 4);
   assert.match(lauf.ergebnis.grund, /abnahme test\/nummern\/eigene-nummer-hinterlegen\.test\.js hat schon der vorhandene Auftrag a1/);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
 });
