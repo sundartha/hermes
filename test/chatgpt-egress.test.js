@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import { isChatGptEgressIp } from "../src/ui/chatgpt-egress.js";
+import { chatgptEgressStand, isChatGptEgressIp } from "../src/ui/registry.js";
 
-const RANGES = JSON.parse(
-  fs.readFileSync(new URL("../src/ui/chatgpt-egress-ranges.json", import.meta.url), "utf8"),
-);
+const RANGES = chatgptEgressStand();
 
 const [firstPrefix, secondPrefix] = RANGES.prefixes;
 const firstIp = firstPrefix.ipv4Prefix.split("/")[0];
@@ -66,8 +63,8 @@ const EGRESS_LISTE_MAX_ALTER_TAGE = 180;
 const MS_JE_TAG = 86_400_000;
 
 test("Egress-Liste ist nicht aelter als die Alarm-Schwelle (_fetchedAt)", () => {
-  const fetchedAt = new Date(`${RANGES._fetchedAt}T00:00:00Z`);
-  assert.ok(!Number.isNaN(fetchedAt.getTime()), `_fetchedAt unlesbar: ${RANGES._fetchedAt}`);
+  const fetchedAt = new Date(`${RANGES.fetchedAt}T00:00:00Z`);
+  assert.ok(!Number.isNaN(fetchedAt.getTime()), `_fetchedAt unlesbar: ${RANGES.fetchedAt}`);
   const alterTage = (Date.now() - fetchedAt.getTime()) / MS_JE_TAG;
   assert.ok(
     alterTage <= EGRESS_LISTE_MAX_ALTER_TAGE,

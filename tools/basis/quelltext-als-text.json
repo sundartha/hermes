@@ -6,7 +6,6 @@
     "test/call-termination-order.test.js|2dcd380abf83f0fb",
     "test/call-termination-order.test.js|67300c26ea1020d1",
     "test/call-termination-order.test.js|96a6de405e454acc",
-    "test/chatgpt-egress.test.js|6d95f4b4989105c9",
     "test/gap-10-hour-limit-per-tenant.test.js|cbf1f614e585ef4d",
     "test/kv-p1-cost-ledger-map.test.js|5779b7202684f827",
     "test/kv-p1-cost-ledger-map.test.js|dba46c3f8a3a7f50",

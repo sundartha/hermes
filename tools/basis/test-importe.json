@@ -2641,17 +2641,6 @@
   },
   {
     "type": "dependency",
-    "from": "test/chatgpt-egress.test.js",
-    "to": "src/ui/chatgpt-egress.js",
-    "unresolvedTo": "../src/ui/chatgpt-egress.js",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "tests-nur-ueber-eingaenge"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "test/check-setup-script.test.js",
     "to": "src/store/defaults.js",
     "unresolvedTo": "../src/store/defaults.js",
