@@ -11,7 +11,7 @@ import { neuerTempOrdner } from "../temp-ordner.mjs";
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
 export const PLAETZE_VARIABLE = "SCHWERLAUF_PLAETZE";
 export const HALTER_VARIABLE = "SCHWERLAUF_HALTER";
-export const STANDARD_PLAETZE = 2;
+export const STANDARD_PLAETZE = 1;
 const ANZAHL = /^[1-9]\d*$/;
 const STANDARD_ORDNER = "/tmp";
 const FREI = /^frei (\d+)$/;
@@ -280,7 +280,7 @@ function standZeilen(datei, anzahl, zustaende) {
   );
   const allein = haupt === BELEGT ? `Allein: belegt von ${halterZeile(datei, ALLEIN)}` : "Allein: frei";
   const warten = wartende(datei).map((wartend) => `Wartet: ${beschreibe(wartend)}${wartend.allein ? ", allein" : ""}`);
-  return [`Sperre für schwere Läufe: ${datei}, ${anzahl} Plätze`, ...platzZeilen, allein, ...(warten.length > 0 ? warten : ["Wartet: niemand"])];
+  return [`Sperre für schwere Läufe: ${datei}, ${anzahl === 1 ? "1 Platz" : `${anzahl} Plätze`}`, ...platzZeilen, allein, ...(warten.length > 0 ? warten : ["Wartet: niemand"])];
 }
 
 export function stand() {

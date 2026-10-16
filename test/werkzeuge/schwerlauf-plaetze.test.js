@@ -169,3 +169,15 @@ test("ist die Zahl der Plätze keine positive ganze Zahl, startet der schwere La
   assert.match(lauf.stderr, /Sperre für schwere Läufe nicht erhalten: SCHWERLAUF_PLAETZE=0 /);
   assert.equal(lauf.stdout, "");
 });
+
+test("ohne SCHWERLAUF_PLAETZE hat die Sperre einen Platz: ein zweiter Lauf wartet, bis der erste fertig ist", FRIST, async (context) => {
+  const env = umgebung(context);
+  delete env.SCHWERLAUF_PLAETZE;
+  const erster = await halter(context, env);
+  const zweiter = starteArbeit(context, "zweiter", { env });
+
+  assert.equal(await erstesEreignis(zweiter), "wartet");
+  assert.match(await stand(env), new RegExp(`, 1 Platz\\nPlatz 1: belegt von PID ${erster.kind.pid}, `));
+  erster.kind.kill("SIGKILL");
+  await zweiter.begonnen;
+});
