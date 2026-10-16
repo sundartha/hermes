@@ -25,6 +25,7 @@ import {
   einstellungenFuer,
   HTTP_ANGENOMMEN,
   HTTP_KONFLIKT,
+  HTTP_OK,
   KURZE_DEPLOY_TAKTE,
   KURZE_TAKTE,
   NEUERER,
@@ -36,6 +37,7 @@ import {
 } from "./deploy-weg-attrappe.mjs";
 
 const MINUTE_MS = 60000;
+const HTTP_SERVERFEHLER = 500;
 const SEKUNDE_MS = 1000;
 const ANRUFE_TAKT_S = 60;
 const ANRUFE_GRENZE_MIN = 35;
@@ -366,4 +368,29 @@ test("deploy über 202: Deploy suchen hält Produktion wach, nach jeder Runde oh
   assert.equal(suche.length, DREI_SUCHRUNDEN);
   assert.ok(suche.slice(0, -1).every((stelle) => PROD_HEALTHZ.test(pfade[stelle + 1])));
   assert.match(pfade[suche.at(-1) + 1], STATUS_ABFRAGE);
+});
+
+test("deploy rot über 202: der angenommene Deploy taucht bis zur Frist nicht auf, der Lauf warnt vor einem unbeobachteten Deploy", async (kontext) => {
+  const welten = [
+    { ausloesenStatus: HTTP_ANGENOMMEN, neuInListe: [false] },
+    { ausloesenStatus: HTTP_ANGENOMMEN, deployListe: [], listeStatus: [HTTP_OK, HTTP_SERVERFEHLER] },
+  ];
+  for (const welt of welten) {
+    const lauf = await deployMit(kontext, { welt });
+    assert.equal(lauf.ok, false);
+    assert.match(lauf.text, /Rot: Render hat den Deploy angenommen, er ist bis zur Frist nicht auffindbar/);
+    assert.equal(lauf.uhr.jetzt() - deployPost(lauf).zeit, KURZE_TAKTE.schutzgrenzeMs);
+    assert.deepEqual(anfragenAn(lauf.attrappe, "GET", /\/deploys\/dep-/), []);
+  }
+});
+
+test("deploy rot über 202: Suchen und Verfolgen teilen sich eine Frist ab dem Auslösen, danach wird abgebrochen", async (kontext) => {
+  const neuInListe = [false, false, false, true];
+  const welt = { ausloesenStatus: HTTP_ANGENOMMEN, neuInListe, deployStatus: ["build_in_progress"] };
+  const lauf = await deployMit(kontext, { welt });
+  assert.equal(lauf.ok, false);
+  const [abbruch] = anfragenAn(lauf.attrappe, "POST", ABBRECHEN);
+  assert.equal(abbruch.pfad, DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel");
+  assert.equal(abbruch.zeit - deployPost(lauf).zeit, KURZE_TAKTE.schutzgrenzeMs);
+  assert.match(lauf.text, /Schutzgrenze im Schritt deploy_status erreicht/);
 });
