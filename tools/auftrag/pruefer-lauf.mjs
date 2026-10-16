@@ -45,7 +45,7 @@ const TOKEN_FELDER = [
 const LESE_WERKZEUGE = "Read,Grep,Glob";
 
 export function zuegeFuer(commit) {
-  return GRUNDZUEGE + ZUEGE_JE_DATEI * commit.dateien.length;
+  return GRUNDZUEGE + ZUEGE_JE_DATEI * (commit.dateien.length + (commit.letzter ? 1 : 0));
 }
 
 export function effortFuer(commit) {
@@ -87,7 +87,7 @@ export function prueferBefehl(commit, programm) {
 
 function auftragFuerPruefer(commit, patches) {
   return [
-    `Prüfe den Commit ${commit.sha}. Alle Eingaben liegen im Arbeitsordner: auftrag.md, ergebnisse.md, refs/, diff/ und dateien/.`,
+    `Prüfe den Commit ${commit.sha}. Alle Eingaben liegen im Arbeitsordner: auftrag.md, ergebnisse.md, refs/, diff/, dateien/${commit.letzter ? " und pr/" : ""}.`,
     `Öffne jede dieser Dateien mit Read: ${patches.join(", ")}.`,
     "Antworte mit dem JSON nach dem vorgegebenen Schema.",
     "",

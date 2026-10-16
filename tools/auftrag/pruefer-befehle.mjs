@@ -211,12 +211,17 @@ function nimmToken() {
   return token;
 }
 
+function mitLetztem(commits) {
+  return commits.map((commit, index) => ({ ...commit, letzter: index === commits.length - 1 }));
+}
+
 async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
-  const offen = (fertig) =>
-    auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
+  const alle = mitLetztem(auswahl.commits);
+  const offen = (fertig) => alle.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
   const schreibe = (fertig) =>
     schreibeErgebnis(optionen.aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
-  const { ergebnisse: commits, ablage } = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
+  const mitPr = { ...kontext, basis: kopf.basis, commits: alle };
+  const { ergebnisse: commits, ablage } = await pruefeAlle(alle, frueher, { kontext: mitPr, schreibe });
   legeAblageBereit(optionen, ablage);
   meldeSumme({ ...kopf, commits });
   return commits;

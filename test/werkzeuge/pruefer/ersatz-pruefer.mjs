@@ -44,7 +44,7 @@ export function spiele({ aufzeichnung, protokoll, liestDiffs }) {
     }),
   );
   const { zeilen, exitCode = 0 } = JSON.parse(readFileSync(aufzeichnung, "utf8"));
-  const patches = liestDiffs ? dateien.filter((name) => name.startsWith("diff/")) : [];
+  const patches = liestDiffs ? dateien.filter((name) => name.startsWith("diff/") || name.startsWith("pr/")) : [];
   patches.forEach((name, index) => {
     zeige(leseAufruf(`lesen-${index}`, join(ordner, name)));
     zeige(leseAntwort(`lesen-${index}`));
