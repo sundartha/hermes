@@ -21,6 +21,11 @@ export function gibtEsIn(commit, pfad, cwd) {
   return spawnSync("git", ["cat-file", "-e", `${commit}:${pfad}`], { cwd }).status === 0;
 }
 
+export function legeWorktreeAn(commit, ordner, cwd) {
+  git(["worktree", "add", "--detach", "-q", ordner, commit], { cwd });
+  return () => git(["worktree", "remove", "--force", ordner], { cwd });
+}
+
 export function istSauber(cwd) {
   return git(["status", "--porcelain", "--untracked-files=all"], { cwd }).trim() === "";
 }

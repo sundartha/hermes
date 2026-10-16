@@ -8,7 +8,7 @@ import { TEST_FILE, dependentsGraph, testsReaching } from "../testgraph.mjs";
 import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
 import { laufe } from "./faelle.mjs";
 import { istTestdatei } from "./format.mjs";
-import { NUL, git } from "./git.mjs";
+import { NUL, git, legeWorktreeAn } from "./git.mjs";
 
 export const ENTFERNT = "Entfernt: ";
 const KEIN_TREFFER = 1;
@@ -41,12 +41,12 @@ export async function betroffeneTests(geaendert, wurzel) {
 
 export async function imAltenStand(basis, root, arbeit) {
   const ordner = mkdtempSync(join(tmpdir(), "testumbau-"));
-  git(["worktree", "add", "--detach", "-q", "-f", ordner, basis], { cwd: root });
+  const entferne = legeWorktreeAn(basis, ordner, root);
   try {
     if (existsSync(join(root, MODULE))) symlinkSync(join(root, MODULE), join(ordner, MODULE));
     return await arbeit(ordner);
   } finally {
-    git(["worktree", "remove", "--force", ordner], { cwd: root });
+    entferne();
     rmSync(ordner, { recursive: true, force: true });
   }
 }
