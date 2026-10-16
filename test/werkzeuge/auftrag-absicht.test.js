@@ -31,6 +31,7 @@ const ABSICHT = [
 const PITCH = ["# P-001 Probe", "", "Status: Entwurf", "", "## Absicht", ABSICHT, "", "### Kein Abschnittsende", "", "## Problem", "Heute: x", ""].join("\n");
 const ABNAHME = "test/abnahme.test.js";
 const GEPLANT = "test/geplant.test.js";
+const GEZEIGTER_PROMPTANFANG = 200;
 
 function prompts(context, phase) {
   const root = probeDirectory(context, { [BEREICH]: "export const x = 1;\n", [GEPLANT]: 'test("alt", () => {});\n' });
@@ -48,7 +49,7 @@ test("Absicht: die Absicht aus dem Pitch steht wörtlich als erster eigener Absc
   const absicht = absichtAusPitch(PITCH);
   assert.equal(absicht, `${ABSICHT}\n\n### Kein Abschnittsende`);
   for (const [rolle, text] of Object.entries(prompts(context, { absicht, entwurf: { [BEREICH]: "Entwurf." } }))) {
-    assert.ok(text.startsWith(`## Absicht\n\n${absicht}\n\n## Auftrag\n`), `${rolle}: ${text.slice(0, 200)}`);
+    assert.ok(text.startsWith(`## Absicht\n\n${absicht}\n\n## Auftrag\n`), `${rolle}: ${text.slice(0, GEZEIGTER_PROMPTANFANG)}`);
     assert.equal(text.split("\n").filter((zeile) => zeile === "## Absicht").length, 1, rolle);
   }
 });
