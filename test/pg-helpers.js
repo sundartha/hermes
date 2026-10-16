@@ -1,17 +1,10 @@
-import fs from "node:fs";
 import { makePgStore, BOOTSTRAP_TENANT_ID, anrufpauseSetzen } from "../src/store/pg.js";
-import { applySchema } from "../src/db/migrate.js";
+import { applySchema, schemaDdl } from "../src/db/migrate.js";
 import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
-
-const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
-const MIGRATE_DATEI = new URL("../src/db/migrate.js", import.meta.url);
 
 let schemaVorlage = null;
 function schemaVorlageHolen() {
-  schemaVorlage ??= vorlage("schema", applySchema, [
-    fs.readFileSync(SCHEMA_DATEI, "utf8"),
-    fs.readFileSync(MIGRATE_DATEI, "utf8"),
-  ]);
+  schemaVorlage ??= vorlage("schema", applySchema, [schemaDdl(), String(applySchema)]);
   return schemaVorlage;
 }
 
