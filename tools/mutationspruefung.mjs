@@ -36,6 +36,7 @@ const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const UEBERLEBT = "Survived";
 const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
+const KEINE_TESTDATEI = "keine Testdatei erreicht die Datei";
 const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
@@ -237,7 +238,7 @@ function testauswahl(datei, nachZiel) {
 async function pruefeDatei(datei, zeilen, { nachZiel, loeschung, anteil }) {
   const auswahl = testauswahl(datei, nachZiel);
   if (auswahl.alle.length === 0) {
-    return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} keine Testdatei erreicht die Datei`, status: "NoCoverage" }));
+    return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} ${KEINE_TESTDATEI}`, status: "NoCoverage", art: KEINE_TESTDATEI }));
   }
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
@@ -375,8 +376,8 @@ function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
   return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
 }
 
-function angenommen({ schluessel, status }, gleichwertige) {
-  return gleichwertige.has(schluessel) && !ABGESCHALTET.has(status);
+function angenommen({ schluessel, status, art }, gleichwertige) {
+  return gleichwertige.has(schluessel) && !ABGESCHALTET.has(status) && art !== KEINE_TESTDATEI;
 }
 
 function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
