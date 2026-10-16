@@ -223,6 +223,10 @@ function endpfadBank() {
     },
     endCallViaCallControl: async () => {},
   });
+  const gatewayMitAuflegeprotokoll = (args) => {
+    if (args.hangUp) ablauf.push(`auflegen-angefordert:${args.callId}`);
+    return terminateAndBillCall(args);
+  };
   const app = express();
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
@@ -237,7 +241,7 @@ function endpfadBank() {
       webhookEvents,
       providerFromHeaders: () => null,
       inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
-      terminateAndBillCall,
+      terminateAndBillCall: gatewayMitAuflegeprotokoll,
       billThunk,
       startInboundNachlauf: () => {},
     }),
