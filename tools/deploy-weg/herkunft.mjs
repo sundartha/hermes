@@ -1,4 +1,4 @@
-import { APPROVERS } from "../wochenbericht/entscheidungen.mjs";
+import { APPROVERS } from "../akteure.mjs";
 import { COMMIT_MUSTER, statusWort } from "./ausgabe.mjs";
 
 const HTTP_OK = 200;

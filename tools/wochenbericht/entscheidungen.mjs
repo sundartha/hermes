@@ -1,8 +1,7 @@
+import { APPROVERS, AUTOMATION_LOGIN } from "../akteure.mjs";
 import { repo, repoPages } from "./github.mjs";
 import { DAY_MS, germanDate } from "./zeit.mjs";
 
-export const APPROVERS = ["Antonio20045", "jonas986"];
-export const AUTOMATION_LOGIN = "github-actions[bot]";
 const OPEN_LABEL = "entscheidung";
 const DONE_LABEL = "entschieden";
 const NOTE_HEADING = "Entscheidung nötig";
