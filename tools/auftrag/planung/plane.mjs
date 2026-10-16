@@ -29,26 +29,26 @@ import { setzeTeillisteEin } from "./teilliste.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { setzePhaseZusammen } from "./zusammensetzen.mjs";
 
-const EXIT_GRUEN = 0;
-const EXIT_ABBRUCH = 1;
-const EXIT_AUFRUF = 2;
-const EXIT_PASST_NICHT = 3;
-const EXIT_BEFUNDE = 4;
+export const EXIT_GRUEN = 0;
+export const EXIT_ABBRUCH = 1;
+export const EXIT_AUFRUF = 2;
+export const EXIT_PASST_NICHT = 3;
+export const EXIT_BEFUNDE = 4;
 const PLANUNG = "planung";
 const PHASE = "phase.json";
 const DESIGN = "design.md";
-const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
+export const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
 const VORLAGE_ENTWURF = "## Entwurf je Bereich";
 const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"];
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
-const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
+export const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 
-class Ende extends Error {
+export class Ende extends Error {
   constructor(exit, grund, befunde = []) {
     super(grund);
     this.exit = exit;
@@ -56,43 +56,43 @@ class Ende extends Error {
   }
 }
 
-function zusammengefuegt(schluessel, ergebnisse) {
+export function zusammengefuegt(schluessel, ergebnisse) {
   const zeilen = new Map(ergebnisse.flatMap(({ pruefliste }) => pruefliste).map((zeile) => [zeile.schluessel, zeile]));
   return schluessel.map((eintrag) => zeilen.get(eintrag));
 }
 
-function liste(wert) {
+export function liste(wert) {
   return Array.isArray(wert) ? wert : [];
 }
 
-function json(wert) {
+export function json(wert) {
   return `\`\`\`json\n${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n\`\`\``;
 }
 
-function abschnitt(titel, inhalt) {
+export function abschnitt(titel, inhalt) {
   return `### ${titel}\n\n${String(inhalt).trimEnd()}\n`;
 }
 
-function nachricht(ueberschrift, teile) {
+export function nachricht(ueberschrift, teile) {
   return [`## ${ueberschrift}`, "", ...teile].join("\n");
 }
 
-function punkte(eintraege, leer = "keine") {
+export function punkte(eintraege, leer = "keine") {
   return eintraege.length === 0 ? leer : eintraege.map((eintrag) => `- ${eintrag}`).join("\n");
 }
 
-function dateiText(root, pfad) {
+export function dateiText(root, pfad) {
   const datei = join(root, pfad);
   return existsSync(datei) ? readFileSync(datei, "utf8") : `${pfad} gibt es nicht.`;
 }
 
-function schreibeJson(datei, wert) {
+export function schreibeJson(datei, wert) {
   const zwischen = `${datei}.${pid}.tmp`;
   writeFileSync(zwischen, `${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n`);
   renameSync(zwischen, datei);
 }
 
-function prueferZeile({ schluessel, befund, fundstelle }) {
+export function prueferZeile({ schluessel, befund, fundstelle }) {
   return `${schluessel}: ${befund} (Fundstelle: ${fundstelle})`;
 }
 
@@ -115,11 +115,11 @@ function nachfrageAntwort({ frage, nummern }, { bericht, befunde }, stelle) {
   return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
 }
 
-function nummernText(soll, nummern) {
+export function nummernText(soll, nummern) {
   return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
 }
 
-class Planung {
+export class Planung {
   constructor(root, ordner) {
     this.root = root;
     this.ordner = ordner;
@@ -636,7 +636,7 @@ function aufrufFehler(ordner) {
   return existsSync(join(ordner, PLANUNG)) ? `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts` : null;
 }
 
-function ausgang(fehler) {
+export function ausgang(fehler) {
   if (fehler instanceof Ende) return { exit: fehler.exit, grund: fehler.message, offen: fehler.befunde };
   if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, grund: fehler.message, offen: [] };
   throw fehler;
