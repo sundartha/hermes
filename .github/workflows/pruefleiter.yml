@@ -76,7 +76,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
-        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE"
+        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/5"
 
       - name: Bericht des Teils hochladen
         if: always()
