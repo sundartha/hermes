@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { REPO_ROOT, isolatedEnvironment, outputLines, probeDirectory } from "./probe-repo.js";
 
 const PRUEFSKRIPT = join(REPO_ROOT, "tools/openai-doku-pruefen.mjs");
@@ -19,6 +20,8 @@ const INTERNE_KENNUNG = "T2-99";
 const KENNUNG_KOMMENTAR = "OW-7";
 const KENNUNG_BEGRUENDUNG = "H-12";
 const SAUBERE_ZUSAMMENFASSUNG = /: 0 Befunde in \d+ Faellen$/;
+const NETZ_AUSFALL = "Netz nicht erreichbar";
+const NETZ_AUSFALL_VORLAUF = "netzausfall.mjs";
 
 function pruefe(argumente) {
   return spawnSync(process.execPath, [PRUEFSKRIPT, ...argumente], {
@@ -97,4 +100,23 @@ test("interne Kennungen in Kommentar und Begruendung des Vertrags brechen die Pr
     `vertrag Texte: interne Kennung: ${KENNUNG_KOMMENTAR}`,
     `vertrag Texte: interne Kennung: ${KENNUNG_BEGRUENDUNG}`,
   ]);
+});
+
+test("faellt das Netz aus, endet die Pruefung mit Exit 2 statt mit Exit 1 und nennt den Abbruch", (context) => {
+  const verzeichnis = probeDirectory(context, {
+    [NETZ_AUSFALL_VORLAUF]: `globalThis.fetch = () => Promise.reject(new Error("${NETZ_AUSFALL}"));`,
+  });
+  const vorlauf = pathToFileURL(join(verzeichnis, NETZ_AUSFALL_VORLAUF)).href;
+  const lauf = spawnSync(process.execPath, ["--import", vorlauf, PRUEFSKRIPT], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    env: isolatedEnvironment(),
+    timeout: SKRIPT_FRIST_MS,
+  });
+  const zeilen = outputLines(lauf.stdout);
+  assert.equal(lauf.status, EXIT_AUFRUF, lauf.stdout + lauf.stderr);
+  assert.ok(
+    zeilen.some((zeile) => zeile.includes("abgebrochen") && zeile.includes(NETZ_AUSFALL)),
+    lauf.stdout,
+  );
 });
