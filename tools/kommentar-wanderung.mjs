@@ -129,7 +129,7 @@ function textAufZeilen(sourceCode, zeilen) {
   const gefunden = alleKnoten(sourceCode).filter((node) => istTextAufZeilen(node, zeilen));
   return gefunden
     .toSorted((links, rechts) => links.range[0] - rechts.range[0])
-    .map((node) => ({ zeile: node.loc.start.line, text: node.value?.cooked ?? node.value }));
+    .map((node) => ({ zeile: node.loc.start.line, text: node.type === "TemplateElement" ? (node.value.cooked ?? node.value.raw) : node.value }));
 }
 
 async function jsZiele(werkzeug, datei) {

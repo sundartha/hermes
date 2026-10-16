@@ -52,6 +52,22 @@ test("kommentar-wanderung: ein Kommentarsatz, der in eine Zeichenkette wandert, 
   assert.match(lauf.output, /taucht in src\/abruf\.js:2 wieder auf/);
 });
 
+test("kommentar-wanderung: ein Kommentarsatz, der in ein String.raw mit ungültiger Escape-Folge wandert, ist rot", (context) => {
+  const lauf = nachher(basisRepo(context), {
+    "src/abruf.js": quelle([CODE, `export const HINWEIS = String.raw\`C:\\users ${SATZ}\`;`]),
+  });
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.match(lauf.output, /taucht in src\/abruf\.js:2 wieder auf/);
+});
+
+test("kommentar-wanderung: ein String.raw mit ungültiger Escape-Folge ohne gewanderten Kommentar ist grün", (context) => {
+  const lauf = nachher(basisRepo(context), {
+    "src/pfad.js": quelle(["export const PFAD = String.raw`C:\\users\\daten`;"]),
+  });
+  assert.equal(lauf.status, EXIT_OK, lauf.output);
+  assert.match(lauf.output, /0 entfernte Kommentare, 0 wieder aufgetaucht/);
+});
+
 test("kommentar-wanderung: ein YAML-Kommentar, der nach Markdown wandert, ist rot", (context) => {
   const lauf = nachher(basisRepo(context), {
     ".github/workflows/probe.yml": quelle(["name: Probe", "on: push"]),
