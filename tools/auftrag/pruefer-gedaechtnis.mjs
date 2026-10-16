@@ -103,9 +103,13 @@ function vertrauteLaeufe(github, nummer) {
   };
 }
 
+export function bekanntesErgebnis(frueher, commit) {
+  return commit.letzter ? undefined : frueher.get(commit.patchId);
+}
+
 function uebernimm(gesammelt, ergebnis) {
   for (const commit of ergebnis.commits) {
-    const tauglich = commit.zustand === GEPRUEFT && commit.patchId !== "";
+    const tauglich = commit.zustand === GEPRUEFT && commit.patchId !== "" && !commit.letzter;
     if (tauglich && !gesammelt.has(commit.patchId)) gesammelt.set(commit.patchId, commit);
   }
 }
