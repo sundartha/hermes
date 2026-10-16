@@ -73,6 +73,23 @@ test("eine neue Zeile ohne Test ist grün, wenn ein Commit des Auftragswegs ihre
   assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), []);
 });
 
+test("eine neue Datei, die keine Testdatei erreicht, bleibt rot, auch wenn ein Commit des Auftragswegs sie mit Grund gleichwertig meldet", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/neu.js": quelle(NEGATIV) });
+  commitAll(repo, "Ordne neu ein\n\nWarum: Probe.");
+  const rot = pruefe(repo, "--basis", "HEAD~1");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const ungetestet = schluessel(rot.stdout, UEBERLEBT);
+  assert.ok(ungetestet.length > 0 && ungetestet.every((stelle) => stelle.endsWith("keine Testdatei erreicht die Datei")), rot.stdout);
+  const meldungen = ungetestet.map((stelle) => `Gleichwertig: ${stelle}${GRUND}`).join("\n");
+  writeFiles(repo, { "notiz.txt": "zweiter Commit\n" });
+  commitAll(repo, `Melde neu\n\nWarum: Probe.\n\n${meldungen}\n${AUFTRAGSWEG}`);
+  const gemeldet = pruefe(repo, "--basis", "HEAD~2");
+  assert.equal(gemeldet.status, EXIT_ROT, gemeldet.stdout + gemeldet.stderr);
+  assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), ungetestet);
+  assert.deepEqual(schluessel(gemeldet.stdout, ANGENOMMEN), []);
+});
+
 test("eine Zeile, aus der nur ein Kommentar verschwindet, braucht keinen Test; eine Code-Änderung dort bleibt rot", (context) => {
   const repo = probeRepository(context, { ...BASIS, "src/zahl.js": quelle(NEGATIV, `${NULL} // ohne Test`) });
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
