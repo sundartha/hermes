@@ -13,8 +13,8 @@ const DATENSCHUTZ_DATEI = "apps/web/src/data/legal/privacy.de.json";
 const ADAPTER_ORDNER = Object.freeze(["src/llm/adapters/", "src/research/adapters/"]);
 const ADAPTER_ENDUNG = ".js";
 const TEXT_TRENNER = "\n";
-const WORT_ZEICHEN_AM_ENDE = /[\p{L}\p{N}]$/u;
-const WORT_ZEICHEN_AM_ANFANG = /^[\p{L}\p{N}]/u;
+const WORT_ZEICHEN_AM_ENDE = /[\p{L}\p{M}\p{N}]$/u;
+const WORT_ZEICHEN_AM_ANFANG = /^[\p{L}\p{M}\p{N}]/u;
 
 const ANBIETER_ANZEIGENAMEN = new Map([
   ["anthropic.js", "Anthropic"],
