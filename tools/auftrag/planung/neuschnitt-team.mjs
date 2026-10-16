@@ -53,12 +53,12 @@ class NeuschnittTeam extends Team {
 }
 
 class NeuschnittPlanung extends Planung {
-  constructor(root, ordner, { ablage, eingabe, phase }) {
+  constructor(root, ordner, { ablage, eingabe, phase, alt }) {
     super(root, ordner);
     this.ablage = ablage;
     this.eingabe = eingabe;
     this.phase = phase;
-    this.alt = phase.auftraege.find(({ id }) => id === eingabe.auftragId);
+    this.alt = alt;
     this.vorhandene = phase.auftraege.filter((auftrag) => auftrag !== this.alt);
   }
 
@@ -284,7 +284,7 @@ class NeuschnittPlanung extends Planung {
     return planBericht(lauf, { root: this.root, team: this.team });
   }
 
-  legeBericht(bericht) {
+  schreibeUndDruckePlanBericht(bericht) {
     const pfad = join(this.ablage, PLANBERICHT);
     schreibeJson(pfad, bericht);
     druckePlanBericht(bericht, pfad);
@@ -302,7 +302,7 @@ class NeuschnittPlanung extends Planung {
   async ergebnis() {
     const ende = await this.ende();
     const bericht = this.bericht(ende);
-    this.legeBericht(bericht);
+    this.schreibeUndDruckePlanBericht(bericht);
     return { ...this.ergebnisFuer(ende), planung: bericht };
   }
 }
@@ -351,7 +351,7 @@ export async function neuschnitt(ablage, eingabe, phase) {
   const ordner = resolve(eingabe.root, eingabe.ordner);
   const alt = phase.auftraege.find(({ id }) => id === eingabe.auftragId);
   const Art = istUmbau(alt) ? UmbauNeuschnittPlanung : NeuschnittPlanung;
-  const planung = new Art(eingabe.root, ordner, { ablage, eingabe, phase });
+  const planung = new Art(eingabe.root, ordner, { ablage, eingabe, phase, alt });
   const { soll } = nummernImOrdner(ordner);
   planung.beginn = Date.now();
   planung.beginne(soll);
