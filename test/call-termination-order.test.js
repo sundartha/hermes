@@ -333,6 +333,11 @@ test("Status-Callback beendet den Call und rechnet genau einmal ueber das Gatewa
       assert.equal(store.getCall(callId).status, "completed");
     }
     assert.equal(bank.abrechnungen.length, meldungen.length, "keine weitere Abrechnung");
+    assert.deepEqual(
+      [...bank.ablauf].sort(),
+      [`abrechnen:${AKTIV_STATUS}`, `abrechnen:${AKTIV_STATUS_ABGEHEND}`],
+      "der Status-Callback legt nicht selbst auf",
+    );
   });
 });
 
@@ -345,9 +350,9 @@ test("Fehlschlag beim Waehlen (place_call) beendet den Call als failed und rechn
     });
     assert.equal(antwort.status, 502, "die Ablehnung des Carriers wird als 502 gemeldet");
     await antwort.json();
-    assert.deepEqual(bank.ablauf.slice(0, 1), ["waehlen"]);
     await waitUntil(() => bank.abrechnungen.length > 0 && /Settlement/.test(bank.fehlerLog()));
     const [callId] = bank.gewaehlt;
+    assert.deepEqual(bank.ablauf, ["waehlen", `abrechnen:${callId}`], "der Waehlfehler legt nicht selbst auf");
     pruefeEineAbrechnungUeberDasGateway(bank, callId);
     assert.equal(bank.abrechnungen.length, 1, "der gleichzeitige Anruf wird nicht abgerechnet");
     assert.equal(store.getCall(callId).status, "failed");
