@@ -28,3 +28,8 @@ test("undefined entfernt eine Variable aus der Testbasis, sodass der Standardwer
   const gebaut = gebauteKonfiguration({ MAX_CALLS_PER_HOUR: undefined }, [STUNDENLIMIT]);
   assert.deepEqual(gebaut, { [STUNDENLIMIT]: STUNDENLIMIT_STANDARD });
 });
+
+test("ein verlangtes Feld ohne Wert in der gebauten Konfiguration bricht ab, statt still zu fehlen", () => {
+  const OHNE_WERT = `${STUNDENLIMIT}.gibtEsNicht`;
+  assert.throws(() => gebauteKonfiguration({}, [OHNE_WERT, STUNDENLIMIT]), (fehler) => fehler.message.includes(OHNE_WERT));
+});
