@@ -4,14 +4,13 @@ import { dirname, join, resolve } from "node:path";
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, git } from "./git.mjs";
+import { gleichwertigGemeldet, gleichwertigZeile } from "./gleichwertig.mjs";
 import { beleg } from "./pruefungen.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
-const GLEICHWERTIG = "Gleichwertig: ";
-const BEGRUENDET = ", weil ";
 const ABLAGE = "auftrag-umbau";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
@@ -29,7 +28,7 @@ function liste(mutanten) {
 }
 
 function gleichwertige(lauf) {
-  return lauf.berichtszeilen.filter((zeile) => zeile.startsWith(GLEICHWERTIG)).map((zeile) => zeile.slice(GLEICHWERTIG.length, zeile.indexOf(BEGRUENDET)));
+  return gleichwertigGemeldet(lauf.berichtszeilen.join("\n"));
 }
 
 function mutanten(lauf, name, argumente) {
@@ -76,7 +75,7 @@ function bauNachrundeGemeldet(lauf, ueberlebende) {
   if (weg === null) return null;
   const noetig = weg.noetig.filter(({ mutant }) => ueberlebende.includes(mutant));
   const gleichwertig = weg.gleichwertig.filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
-  for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
+  for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(gleichwertigZeile(mutant, grund));
   return noetig;
 }
 
@@ -166,7 +165,7 @@ function spieleUmbauEinOderBaueNeu(lauf, patch) {
 function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
   const { phase, auftrag } = lauf.kontext;
   const grund = `Umbau zurückgestellt: auf dem alten Stand überleben ${ueberlebende.length} Mutanten, vorher ${vorher}.`;
-  const meldezeilen = [...gemeldet].filter(([mutant]) => ueberlebende.includes(mutant)).map(([mutant, begruendung]) => `${GLEICHWERTIG}${mutant}${BEGRUENDET}${begruendung}`);
+  const meldezeilen = [...gemeldet].filter(([mutant]) => ueberlebende.includes(mutant)).map(([mutant, begruendung]) => gleichwertigZeile(mutant, begruendung));
   const notiz = [
     "Die letzte Runde mit dem Test-Agenten hat die Zahl der überlebenden Mutanten auf dem alten Stand nicht gesenkt.",
     `Der Umbau ist nicht committet; er liegt als Patch in ${patch.datei}. Die Tests der bisherigen Runden stehen im Branch.`,

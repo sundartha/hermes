@@ -11,6 +11,7 @@ import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { legeWorktreeAn } from "./auftrag/git.mjs";
+import { gleichwertigGemeldet } from "./auftrag/gleichwertig.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
@@ -53,7 +54,6 @@ const GLEICHZEITIG = KONFIGURATION.concurrency;
 const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
-const GLEICHWERTIG = /^Gleichwertig: (.+?), weil \S.*$/gm;
 const AUFTRAGSWEG = /^Auftrag: [^\s/]+\/\S+$/m;
 const GLEICHWERTIG_ANGENOMMEN = "Hinweis: als gleichwertig angenommen";
 const KURZ = 7;
@@ -381,11 +381,10 @@ function angenommen({ schluessel, status, art }, gleichwertige) {
 }
 
 function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
-  const ueberlebend = ergebnisse.filter(ueberlebt);
-  const ueberlebende = ueberlebend.filter((eintrag) => !angenommen(eintrag, gleichwertige));
-  for (const { schluessel } of ueberlebend.filter((eintrag) => angenommen(eintrag, gleichwertige))) {
-    console.log(`${GLEICHWERTIG_ANGENOMMEN}: ${schluessel}`);
-  }
+  const angenommene = [];
+  const ueberlebende = [];
+  for (const eintrag of ergebnisse.filter(ueberlebt)) (angenommen(eintrag, gleichwertige) ? angenommene : ueberlebende).push(eintrag);
+  for (const { schluessel } of angenommene) console.log(`${GLEICHWERTIG_ANGENOMMEN}: ${schluessel}`);
   for (const { schluessel } of ueberlebende.filter(({ status }) => ABGESCHALTET.has(status))) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
@@ -527,7 +526,7 @@ function gemeldet(basis) {
   const nachrichten = git(["log", "-z", "--format=%B", `${basis}..HEAD`]).split("\0");
   return nachrichten
     .filter((nachricht) => AUFTRAGSWEG.test(nachricht))
-    .flatMap((nachricht) => [...nachricht.matchAll(GLEICHWERTIG)].map(([, schluessel]) => schluessel.trim()));
+    .flatMap((nachricht) => gleichwertigGemeldet(nachricht));
 }
 
 function aufrufGueltig(values) {
