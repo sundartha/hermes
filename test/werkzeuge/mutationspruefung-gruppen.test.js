@@ -1,0 +1,53 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { GRUPPE, gruppen } from "../../tools/mutationspruefung/gruppen.mjs";
+import { aufrufzeileRot, BASIS, begleiter, BESCHREIBUNG, beschreibungstest, EXIT_ROT, laufgroessen, NEGATIV, NULL, protokolltest, pruefe, quelle, spaltenweise, testdatei, testdateien, VIELE_TESTDATEIEN } from "./mutationspruefung-hilfen.js";
+import { probeRepository, writeFiles } from "./probe-repo.js";
+
+test("die Testdateien gehen reihum in so wenige Gruppen, dass keine mehr als GRUPPE Dateien hat", () => {
+  for (const anzahl of [0, 1, GRUPPE, GRUPPE + 1, VIELE_TESTDATEIEN]) {
+    const dateien = testdateien(anzahl);
+    const verteilt = gruppen(dateien);
+    assert.equal(verteilt.length, Math.ceil(anzahl / GRUPPE));
+    assert.ok(verteilt.every((gruppe) => gruppe.length > 0 && gruppe.length <= GRUPPE));
+    assert.deepEqual(spaltenweise(verteilt), dateien);
+  }
+});
+
+test("tötet nur eine Testdatei der zweiten Gruppe einen Mutanten, wird er erkannt", (context) => {
+  const repo = probeRepository(context, { ...BASIS, ...begleiter(testdatei([1, "positiv"])) });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.match(rot.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:3:/m);
+  writeFiles(repo, begleiter(testdatei([1, "positiv"]), testdatei([0, "null"])));
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+  const groessen = laufgroessen(gruen.stdout);
+  assert.equal(groessen.reduce((summe, anzahl) => summe + anzahl, 0), GRUPPE + 1);
+  assert.ok(groessen.length > 1 && groessen.every((anzahl) => anzahl <= GRUPPE), gruen.stdout);
+});
+
+test("ein Mutant, den der direkte Test übersieht, geht nur an die übrigen erreichenden Testdateien", (context) => {
+  const repo = probeRepository(context, {
+    ...BASIS,
+    "src/beschreibung.js": BESCHREIBUNG,
+    "test/beschreibung.test.js": beschreibungstest(1, "POSITIV"),
+  });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(laufgroessen(rot.stdout), [1, 1]);
+  writeFiles(repo, { "test/beschreibung.test.js": beschreibungstest(0, "NULL") });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("die Löschprobe fragt Gruppe um Gruppe, bis eine die gelöschte Zeile verlangt", (context) => {
+  const ohneProtokoll = protokolltest('assert.equal(zahl.einordnen(-1), "negativ");');
+  const repo = aufrufzeileRot(context, begleiter(ohneProtokoll));
+  writeFiles(repo, begleiter(ohneProtokoll, protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);")));
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
