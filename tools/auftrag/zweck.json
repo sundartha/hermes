@@ -18,7 +18,7 @@
     "wozu": "Wer baut, ändert keine Tests; sonst könnte er den Abnahmetest abschwächen und Grün bekommen, obwohl das bestellte Verhalten fehlt.",
     "behebung": "Nur Produktcode ändern; einen falschen Test meldet man, man passt ihn nicht an.",
     "nichtAngenommen": "Im Produktcode eine Sonderbehandlung genau für die Eingabe des Tests.",
-    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“; hält ein alter Test das alte Verhalten fest, „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“; hält ein alter Test das alte Verhalten fest, die Zeile zum alten Test, wie sie der Ausweg der Prüfung „betroffene tests“ beschreibt."
   },
   "grenzen/produkt-im-test": {
     "liste": "A3",
@@ -32,7 +32,7 @@
     "wozu": "Der Test-Agent ändert nur seinen Abnahmetest und die erwarteten Testdateien; fremde Tests halten fest, was bisher funktioniert.",
     "behebung": "Nur in den eigenen Testdateien ändern.",
     "nichtAngenommen": "Einen fremden Test so anpassen, dass er zum neuen Verhalten passt.",
-    "ausweg": "Hält ein alter Test das alte Verhalten fest, eine eigene letzte Zeile „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+    "ausweg": "Hält ein alter Test das alte Verhalten fest, eine eigene letzte Zeile „Auftrag passt nicht: <Testdatei>:<Testname> hält das alte Verhalten fest – <Grund>“."
   },
   "grenzen/bereich": {
     "liste": "A4",
@@ -137,7 +137,7 @@
     "wozu": "Die Änderung darf nicht an anderer Stelle brechen, was bisher funktionierte.",
     "behebung": "Den Bruch im Produktcode vermeiden.",
     "nichtAngenommen": "Eine Weiche, die für den alten Test das alte und sonst das neue Verhalten liefert.",
-    "ausweg": "Ist die Änderung des Verhaltens gewollt, eine eigene letzte Zeile „Auftrag passt nicht: alter Test <Datei>:<Testname> hält altes Verhalten fest, weil <Grund>“."
+    "ausweg": "Ändert der Auftrag das Verhalten absichtlich und hält ein alter Test das alte Verhalten fest, beende deine Antwort mit der eigenen Zeile „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“. Das Skript führt die Testdatei des genannten Tests auf deiner Änderung aus, verwirft die Änderung und legt Zeile, Ergebnis und Diff Antonio als Entscheidungsnotiz vor; den Test änderst du nicht."
   },
   "mutation": {
     "liste": "A14",

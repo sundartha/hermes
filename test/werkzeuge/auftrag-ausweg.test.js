@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { env } from "node:process";
 import { test } from "node:test";
 
 import { ausgang } from "../../tools/auftrag/ausgang.mjs";
+import { ROT } from "../../tools/auftrag/bericht.mjs";
+import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { runIn } from "./probe-repo.js";
+import { probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const GRUND = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
 const AUSSTIEG = `Auftrag passt nicht: ${GRUND}`;
@@ -70,13 +75,144 @@ test("eine Gleichwertig-Zeile vor mehr als 1000 Zeichen Text wird in der Mutatio
   assert.ok(nachricht.includes(`\n${meldung}\n`), nachricht);
 });
 
+function alterTestMit(...titel) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { verdopple } from "../src/rechnen.js";',
+    ...titel.map((name) => `test(${JSON.stringify(name)}, () => assert.equal(verdopple(2), 2));`),
+    "",
+  ].join("\n");
+}
+const ALTER_TEST = alterTestMit("verdopple lässt die Zahl");
 const VERDOPPELT = { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" };
+const ALTER_TEST_ZEILE = "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple lässt die Zahl – Das Ziel verlangt das Verdoppeln.";
+
+test("hält ein alter Test das alte Verhalten fest, verwirft das Skript den Bau und legt Zeile, Testergebnis und Diff Antonio vor", (context) => {
+  const drehbuch = { bau: VERDOPPELT, "bau-antwort": `${ALTER_TEST_ZEILE}\n${LANGER_SCHLUSS}`, "notiz-antwort": "1. Verhalten freigeben" };
+  const { lauf, beleg, basis, kopf, repo } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": ALTER_TEST } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual([kopf, beleg.runden, beleg.ausstieg, runIn(repo, "git", ["status", "--porcelain"]).stdout], [basis, [], null, ""]);
+  assert.deepEqual([beleg.alterTest.datei, beleg.alterTest.test, beleg.alterTest.rot], ["test/rechnen.test.js", "verdopple lässt die Zahl", true]);
+  assert.match(beleg.alterTest.diff, /^\+ {2}return zahl \* 2;$/m);
+  for (const teil of [`\n${ALTER_TEST_ZEILE}\n`, "rot: ja", "verhalten-geaendert", "test/rechnen.test.js:verdopple lässt die Zahl"]) {
+    assert.ok(beleg.entscheidung.text.includes(teil), teil);
+  }
+});
+
+test("ändert der Bau-Agent einen Test und meldet ihn als alten Test, führt das Skript den geänderten Test nicht aus", (context) => {
+  const spur = join(probeDirectory(context, {}), "ausgefuehrt");
+  const geaendert = `${ALTER_TEST}import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(spur)}, "");\n`;
+  const drehbuch = { bau: { ...VERDOPPELT, "test/rechnen.test.js": geaendert }, "bau-antwort": ALTER_TEST_ZEILE, "notiz-antwort": "1. Klären" };
+  const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": ALTER_TEST } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual([existsSync(spur), beleg.alterTest], [false, null]);
+  assert.ok(JSON.stringify(beleg).includes("Der Bau-Agent hat einen Test geändert: test/rechnen.test.js"));
+});
 
 test("nennt die Zeile zum alten Test eine Datei, die es vorher nicht gab, gilt sie als „Auftrag passt nicht“", (context) => {
   const zeile = "Alter Test hält altes Verhalten fest: test/gibt-es-nicht.test.js:alt – Der Auftrag ändert das Verhalten.";
   const drehbuch = { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
   const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.deepEqual([beleg.ausstieg, beleg.runden], [zeile, []]);
+  assert.deepEqual([beleg.ausstieg, beleg.alterTest, beleg.runden], [zeile, null, []]);
   assert.ok(beleg.entscheidung.text.includes(`\nAuftrag passt nicht: ${zeile}\n`), beleg.entscheidung.text);
+});
+
+test("nennt die Zeile zum alten Test den eigenen Abnahmetest oder einen Testnamen, den die Datei nicht enthält, gilt sie als „Auftrag passt nicht“", (context) => {
+  const zeilen = [
+    "Alter Test hält altes Verhalten fest: test/text.test.js:gross – Der Abnahmetest hält das alte Verhalten fest.",
+    "Alter Test hält altes Verhalten fest: test/rechnen.test.js:gibt es nicht – Der Auftrag ändert das Verhalten.",
+    "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple – Der Auftrag ändert das Verhalten.",
+    "Alter Test hält altes Verhalten fest: test/rechnen.test.js:assert – Der Auftrag ändert das Verhalten.",
+  ];
+  for (const zeile of zeilen) {
+    const drehbuch = { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
+    const { beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": ALTER_TEST } });
+    assert.deepEqual([beleg.ausstieg, beleg.alterTest], [zeile, null], zeile);
+  }
+});
+
+test("nennt die Zeile zum alten Test eine Gruppe oder einen auskommentierten Test, gilt sie als „Auftrag passt nicht“", (context) => {
+  const mitGruppe = alterTestMit("verdopple lässt die Zahl")
+    .replace("test(", 'describe("rechnen", () => {\n  test(')
+    .replace(/\n$/, '\n});\n// test("alter Fall", () => assert.equal(verdopple(1), 1));\n/* test("ganz alter Fall", () => {}); */\n');
+  for (const name of ["rechnen", "alter Fall", "ganz alter Fall"]) {
+    const zeile = `Alter Test hält altes Verhalten fest: test/rechnen.test.js:${name} – Der Auftrag ändert das Verhalten.`;
+    const drehbuch = { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
+    const { beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": mitGruppe } });
+    assert.deepEqual([beleg.ausstieg, beleg.alterTest], [zeile, null], name);
+  }
+  const zeile = ALTER_TEST_ZEILE;
+  const { beleg } = starte(context, { auftrag: UMBAU, drehbuch: { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Freigeben" }, dateien: { "test/rechnen.test.js": mitGruppe } });
+  assert.equal(beleg.alterTest?.test, "verdopple lässt die Zahl");
+});
+
+test("Testnamen liest das Skript nur aus echten Aufrufen von test und it, nicht aus Texten, die wie Kommentare oder Aufrufe aussehen", (context) => {
+  const kopf = alterTestMit().trimEnd();
+  const faelle = [
+    ["verdopple lässt die Zahl", `${kopf}\nconst muster = "src/*.js";\ntest("verdopple lässt die Zahl", () => assert.equal(verdopple(2), 2));\n/* Ende */\n`, true],
+    ["verdopple // halbiere", `${kopf}\ntest(\`verdopple // halbiere\`, () => assert.equal(verdopple(2), 2));\nconst ende = "x";\n`, true],
+    ["nur ein Text", `${kopf}\nconst aufruf = "test('nur ein Text')";\ntest("verdopple lässt die Zahl", () => assert.equal(verdopple(2), 2));\n`, false],
+  ];
+  for (const [name, quelle, erkannt] of faelle) {
+    const zeile = `Alter Test hält altes Verhalten fest: test/rechnen.test.js:${name} – Der Auftrag ändert das Verhalten.`;
+    const drehbuch = { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
+    const { beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": quelle } });
+    assert.deepEqual([beleg.ausstieg, beleg.alterTest?.test ?? null], erkannt ? [null, name] : [zeile, null], name);
+  }
+});
+
+test("ein Testname mit Bindestrich wird ganz erkannt, passt die Zeile auf zwei Tests, gilt sie als „Auftrag passt nicht“", (context) => {
+  const name = "verdopple - bei zwei";
+  const zeile = `Alter Test hält altes Verhalten fest: test/rechnen.test.js:${name} – Das Ziel verlangt das Verdoppeln.`;
+  const drehbuch = { bau: VERDOPPELT, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
+  const eindeutig = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": alterTestMit(name) } }).beleg;
+  assert.deepEqual([eindeutig.ausstieg, eindeutig.alterTest?.test, eindeutig.alterTest?.rot], [null, name, true]);
+  assert.ok(eindeutig.entscheidung.text.includes(`test/rechnen.test.js:${name}`), eindeutig.entscheidung.text);
+  const mehrdeutig = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "test/rechnen.test.js": alterTestMit("verdopple", name) } }).beleg;
+  assert.deepEqual([mehrdeutig.ausstieg, mehrdeutig.alterTest], [zeile, null]);
+});
+
+const NOTIZ_ERSATZ = `#!/usr/bin/env node
+import { appendFileSync, readFileSync } from "node:fs";
+readFileSync(0, "utf8");
+appendFileSync(process.env.ERSATZ_STARTS, process.env.HERMES_ROLLE + "\\n");
+process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "1. Entscheiden" }) + "\\n");
+`;
+const PLAN = "plaene/P-001-probe";
+
+function ausPlanung(context, ausweg) {
+  const root = probeRepository(context, { [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: "{}\n" });
+  const werkzeug = probeDirectory(context, { "claude.mjs": NOTIZ_ERSATZ });
+  chmodSync(join(werkzeug, "claude.mjs"), 0o755);
+  const vorher = { HERMES_CLAUDE: env.HERMES_CLAUDE, ERSATZ_STARTS: env.ERSATZ_STARTS };
+  Object.assign(env, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
+  context.after(() => {
+    for (const [name, wert] of Object.entries(vorher)) {
+      if (wert === undefined) delete env[name];
+      else env[name] = wert;
+    }
+  });
+  const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
+  const kontext = { phase: { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] }, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
+  const runde = () => ({ ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...ausweg });
+  const ergebnis = fuehreRundenAus(kontext, runde);
+  const starts = existsSync(join(werkzeug, "starts.txt")) ? readFileSync(join(werkzeug, "starts.txt"), "utf8") : "";
+  const beleg = JSON.parse(readFileSync(join(root, ".fortschritt/P-001-probe/a1.json"), "utf8"));
+  return { ergebnis, starts, beleg };
+}
+
+test("ein alter Test und ein unklarer Zweck gehen auch bei einer Phase aus einem Pitch direkt an Antonio, ein anderer Ausstieg zum Planer", (context) => {
+  const alterTest = { zeile: ALTER_TEST_ZEILE, datei: "test/rechnen.test.js", test: "verdopple lässt die Zahl", grund: "Das Ziel verlangt das Verdoppeln.", rot: true };
+  const faelle = [
+    [{ alterTest }, "notiz\n"],
+    [{ ausstieg: "Zweck der Prüfung lint unklar: Die Regel verbietet hier den einzigen Namen der Fachsprache." }, "notiz\n"],
+    [{ ausstieg: GRUND }, "planung\n"],
+  ];
+  for (const [ausweg, erster] of faelle) {
+    const { ergebnis, starts } = ausPlanung(context, ausweg);
+    assert.equal(ergebnis, ROT);
+    assert.ok(starts.startsWith(erster), JSON.stringify({ ausweg, starts }));
+  }
 });

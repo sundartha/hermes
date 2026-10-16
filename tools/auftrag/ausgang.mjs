@@ -1,7 +1,7 @@
 const ZAUN = "```";
 const PLATZHALTER = /<[^<>\n]*>/g;
 const INHALT = /[\p{L}\p{N}]/u;
-const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+?) – (\S.*)$/;
+const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+)$/;
 const MELDUNG = /^(Gleichwertig|Nötig): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
 const AUSWEG_BEI = "Ausweg bei Prüfung: ";
@@ -13,6 +13,7 @@ const AUSWEGE = [
   { art: ALTER_TEST, anfang: /^Alter Test hält altes Verhalten fest:\s*(\S.*)$/, rollen: ["bau"] },
 ];
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
+const TRENNER = / [–-] /g;
 
 function nurPlatzhalter(text) {
   return !INHALT.test(text.replace(PLATZHALTER, ""));
@@ -38,10 +39,9 @@ function auswegDer(zeile, rolle) {
 }
 
 function alterTest({ grund, zeile }) {
-  const form = ALTER_TEST_FORM.exec(grund);
-  if (form === null) return { [AUSSTIEG]: zeile };
-  const [, datei, name, begruendung] = form;
-  return { [ALTER_TEST]: { datei, test: name.trim(), grund: begruendung, zeile } };
+  const [, datei, rest] = ALTER_TEST_FORM.exec(grund) ?? [];
+  if (rest === undefined || lesarten(rest).length === 0) return { [AUSSTIEG]: zeile };
+  return { [ALTER_TEST]: { datei, rest, zeile } };
 }
 
 function meldungen(zeilen) {
@@ -67,4 +67,13 @@ export function ausgang(text, rolle) {
 
 export function auswegBei(ids) {
   return `${AUSWEG_BEI}${ids.length > 0 ? ids.join(", ") : OHNE_ROTE_PRUEFUNG}`;
+}
+
+function lesarten(rest) {
+  return [...rest.matchAll(TRENNER)].map(({ index, 0: trenner }) => ({ test: rest.slice(0, index).trim(), grund: rest.slice(index + trenner.length) }));
+}
+
+export function nenntAltenTest(alterTest, titel) {
+  const treffer = lesarten(alterTest.rest).filter(({ test }) => titel.includes(test));
+  return treffer.length === 1 ? { ...alterTest, ...treffer[0] } : null;
 }

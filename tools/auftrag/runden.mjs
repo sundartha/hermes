@@ -4,6 +4,7 @@ import { env } from "node:process";
 
 import { testPrompt } from "./agenten.mjs";
 import { GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
+import { zweckUnklar } from "./ausgang.mjs";
 import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
 import { UMBAU_AUSWEG, istTestdatei, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
@@ -143,6 +144,7 @@ class Runden {
       const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte() });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
       if (ergebnis.entscheidung) return this.entscheidung(ergebnis, ergebnis.entscheidung);
+      if (ergebnis.alterTest) return this.legeAltenTestAntonioVor(ergebnis);
       if (ergebnis.ausstieg) return this.ausgestiegen(ergebnis);
       if (ergebnis.voraussetzung) {
         const vorlauf = this.voraussetzungFehlt(ergebnis);
@@ -214,7 +216,25 @@ class Runden {
     const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
     const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}`;
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
-    return this.zurueckAnDiePlanung(ergebnis, { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
+    const gestoppt = { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise };
+    if (zweckUnklar(ergebnis.ausstieg) !== null) return this.entscheidung(ergebnis, gestoppt);
+    return this.zurueckAnDiePlanung(ergebnis, gestoppt);
+  }
+
+  legeAltenTestAntonioVor(ergebnis) {
+    verwerfe(ergebnis.basis, this.kontext.root);
+    const { phase, auftrag } = this.kontext;
+    const { zeile, datei, test, rot } = ergebnis.alterTest;
+    const kopf = [
+      `Der Bau-Agent hat den Auftrag ${auftrag.id} der Phase ${phase.phase} angehalten: Ein alter Test hält das Verhalten fest, das der Auftrag ändert.`,
+      "",
+      zeile,
+      "",
+      `Der genannte Test ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}.`,
+      `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg.`,
+    ].join("\n");
+    const hinweise = hinweiseDesBaus(ergebnis.agenten);
+    return this.entscheidung(ergebnis, { kopf, anlass: `Der Bau-Agent meldet: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
   }
 
   zurueckAnDiePlanung(ergebnis, gestoppt) {

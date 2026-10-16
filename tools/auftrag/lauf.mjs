@@ -4,18 +4,21 @@ import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { bauPrompt, testPrompt } from "./agenten.mjs";
+import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, auftragsTrailer, festhalten, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
+import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
-import { GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { testTitel } from "./testtitel.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -35,6 +38,7 @@ class AuftragsLauf {
     this.vorgeschichte = vorgeschichte;
     this.voraussetzung = null;
     this.ausstieg = null;
+    this.alterTest = null;
     this.entscheidung = null;
     this.patch = null;
     this.basis = kopf(root);
@@ -92,7 +96,7 @@ class AuftragsLauf {
     if (fingerabdruck(this.kontext.root) !== vorher) {
       return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`, GRUND.BELEGE);
     }
-    if (ergebnis.alterTest) return this.alterTestAlsAusstieg(ergebnis.alterTest);
+    if (ergebnis.alterTest) return this.pruefeUndBelegeAltenTest(ergebnis.alterTest);
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
     this.ausstieg = ergebnis.ausstieg;
@@ -104,6 +108,24 @@ class AuftragsLauf {
   alterTestAlsAusstieg(alterTest) {
     this.ausstieg = alterTest.zeile;
     return this.scheitert(`Auftrag passt nicht: ${alterTest.zeile}`);
+  }
+
+  genannterAlterTest(alterTest) {
+    const { root, auftrag } = this.kontext;
+    const { datei } = alterTest;
+    const vorhanden = git(["ls-tree", "--name-only", this.basis, "--", datei], { cwd: root }).trim() === datei;
+    if (!vorhanden || datei === auftrag.abnahme) return null;
+    return nenntAltenTest(alterTest, testTitel(git(["show", `${this.basis}:${datei}`], { cwd: root })));
+  }
+
+  pruefeUndBelegeAltenTest(alterTest) {
+    const { root } = this.kontext;
+    const genannt = this.genannterAlterTest(alterTest);
+    if (genannt === null) return this.alterTestAlsAusstieg(alterTest);
+    if (!this.grenzen("bau", this.basisBau)) return false;
+    const lauf = this.pruefung(ALTER_TEST, ["npm", "--silent", "test", "--", genannt.datei]);
+    this.alterTest = { ...genannt, rot: lauf.exitCode !== 0, diff: sichereDiff(root, this.basisBau) };
+    return this.scheitert(genannt.zeile);
   }
 
   grenzen(rolle, basis) {
@@ -252,6 +274,7 @@ class AuftragsLauf {
       roteIds: this.roteIds,
       voraussetzung: this.voraussetzung,
       ausstieg: this.ausstieg,
+      alterTest: this.alterTest,
       entscheidung: this.entscheidung,
       patch: this.patch,
       commit: this.commit,
