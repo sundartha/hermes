@@ -151,21 +151,31 @@ async function gueltigerLauf(full, angaben) {
   return { adresse, gemessen: lauf.head_sha };
 }
 
-async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
+function verlangeVorfahr(gemessen, basis) {
   verlange(
     gitGelingt(["merge-base", "--is-ancestor", gemessen, basis]),
     `der gemessene Stand ${gemessen} ist kein Vorfahr der Basis`,
   );
+}
+
+function verlangeErlaubtePfade(basis) {
   const verstoesse = pfadVerstoesse({ von: basis, bis: "HEAD" });
   verlange(verstoesse.length === 0, verstoesse.join(" "));
+}
+
+async function verlangeMessmenge(basis, bereich) {
   const graph = await graphImStand(basis);
   const alt = { rev: basis, graph };
   const geaendert = testaenderungen(basis, "HEAD");
   const menge = messmenge({ bereich, bereiche: leseBereiche(), geaendert, alt });
   const unmessbar = mengenVerstoesse({ geaendert, alt, menge });
   verlange(unmessbar.length === 0, unmessbar.join(" "));
+  return menge;
+}
+
+function seitMessungGeaendert(gemessen, basis, menge) {
   const beobachtet = [...MESSGRUNDLAGE, ...menge.dateien, ...menge.beobachtet];
-  const seither = git([
+  const geaendert = git([
     "diff",
     "--name-only",
     "--no-renames",
@@ -174,8 +184,19 @@ async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
     "--",
     ...beobachtet,
   ]);
-  const liste = seither.split("\n").filter(Boolean);
+  return geaendert.split("\n").filter(Boolean);
+}
+
+function verlangeUnveraendertSeitMessung(gemessen, basis, menge) {
+  const liste = seitMessungGeaendert(gemessen, basis, menge);
   verlange(liste.length === 0, `seit der Messung geändert: ${liste.join(", ")}`);
+}
+
+async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
+  verlangeVorfahr(gemessen, basis);
+  verlangeErlaubtePfade(basis);
+  const menge = await verlangeMessmenge(basis, bereich);
+  verlangeUnveraendertSeitMessung(gemessen, basis, menge);
 }
 
 export async function ausmistenFrei({ basis, pullRequest, stellen }) {
