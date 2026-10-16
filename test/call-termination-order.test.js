@@ -162,7 +162,6 @@ const AKTIV_STATUS_ABGEHEND = "aktiv_status_abgehend";
 const AKTIV_ABBRUCH = "aktiv_abbruch";
 const TRAEGER_SID = "CA_abbruch";
 const ABRECHNUNG_SCHEITERT = "abrechnung-attrappe-scheitert";
-const AUFLEGEN_DAUERT_MS = 5;
 const HOECHSTDAUER_S = 60;
 const KEINE_RESERVE_CENT = 0;
 const CARRIER_ABLEHNUNG_STATUS = 403;
@@ -224,7 +223,7 @@ function endpfadBank() {
       throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: CARRIER_ABLEHNUNG_STATUS });
     },
     endCall: async (sid) => {
-      await new Promise((resolve) => setTimeout(resolve, AUFLEGEN_DAUERT_MS));
+      await new Promise((resolve) => setImmediate(resolve));
       ablauf.push(`auflegen:${sid}`);
     },
     endCallViaCallControl: async () => {},
