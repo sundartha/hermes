@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { zitiert } from "./zeilen.mjs";
+
 export const BELEGE = ".fortschritt";
 export const GRUEN = "grün";
 export const ROT = "rot";
@@ -9,14 +11,12 @@ const JSON_EINRUECKUNG = 2;
 const MIO = 1_000_000;
 const NACHKOMMA = 1;
 const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
-const ZITAT = "> ";
-const ZEILENENDE = /\r\n|[\n\r\u2028\u2029]/;
 const MAX_NOTIZ_ZEICHEN = 20_000;
 const LEERRAUM = /\s\S*$/;
 const ERSTE_ZUSATZNUMMER = 2;
 
 function zitierteHinweise(text) {
-  return [HINWEISE_DES_BAUS, ...text.split(ZEILENENDE).map((zeile) => `${ZITAT}${zeile}`)];
+  return [HINWEISE_DES_BAUS, ...zitiert(text)];
 }
 
 export function hinweiseDesBaus(agenten = []) {
