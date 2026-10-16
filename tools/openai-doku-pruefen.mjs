@@ -20,15 +20,18 @@ import { REVIEWER_SEED_CALLS } from "../scripts/lib/reviewer-demo-seed.mjs";
 const REPO_WURZEL = fileURLToPath(new URL("..", import.meta.url));
 const OPTION_P10A = "doku-p10a";
 const OPTION_REVIEWER = "doku-reviewer";
+const OPTION_VERTRAG = "vertrag";
 const STANDARD_DOKUS = {
   [OPTION_P10A]: join(REPO_WURZEL, "docs", "OPENAI-TOOL-INVENTORY.md"),
   [OPTION_REVIEWER]: join(REPO_WURZEL, "docs", "OPENAI-REVIEWER-ACCESS.md"),
+  [OPTION_VERTRAG]: join(REPO_WURZEL, "docs", "mcp-vertrag.json"),
 };
 const AUFRUF_OPTIONEN = {
   [OPTION_P10A]: { type: "string" },
   [OPTION_REVIEWER]: { type: "string" },
+  [OPTION_VERTRAG]: { type: "string" },
 };
-const NUTZUNG = `Nutzung: node tools/openai-doku-pruefen.mjs [--${OPTION_P10A} PFAD] [--${OPTION_REVIEWER} PFAD]`;
+const NUTZUNG = `Nutzung: node tools/openai-doku-pruefen.mjs [--${OPTION_P10A} PFAD] [--${OPTION_REVIEWER} PFAD] [--${OPTION_VERTRAG} PFAD]`;
 const EXIT_SAUBER = 0;
 const EXIT_BEFUND = 1;
 const EXIT_AUFRUF = 2;
@@ -363,6 +366,11 @@ function fallHygiene({ reviewer }) {
   ];
 }
 
+function fallVertragstexte({ vertrag }) {
+  const texte = [vertrag._kommentar ?? [], ...vertrag.aenderungen.map((eintrag) => eintrag.begruendung)].flat();
+  return interneKennungen(texte.join("\n")).map((kennung) => `interne Kennung: ${kennung}`);
+}
+
 function fallZitate({ reviewer }) {
   const zeilen = reviewer.split("\n");
   const zitate = zeilen.flatMap((zeile, index) => (zeile.startsWith(ZITAT_ANFANG) ? [index] : []));
@@ -471,6 +479,7 @@ const FAELLE = [
   ["reviewer Beispieldaten", fallBeispieldaten],
   ["reviewer EN/DE", fallZweisprachig],
   ["reviewer Werkzeugnamen", fallWerkzeugnamen],
+  ["vertrag Texte", fallVertragstexte],
 ];
 
 function fallBefunde([name, pruefung], kontext) {
@@ -490,6 +499,7 @@ function ladeDokus() {
     return {
       p10a: readFileSync(pfade[OPTION_P10A], "utf8"),
       reviewer: readFileSync(pfade[OPTION_REVIEWER], "utf8"),
+      vertrag: JSON.parse(readFileSync(pfade[OPTION_VERTRAG], "utf8")),
     };
   } catch (fehler) {
     return { fehler: [`Aufruf falsch: ${fehler.message}`, NUTZUNG] };

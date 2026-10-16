@@ -16,6 +16,8 @@ const ERFUNDENES_WERKZEUG = "erfundenes_werkzeug";
 const ERFUNDENE_ZEILE_A = `${ERFUNDENES_WERKZEUG}|Erfundenes Werkzeug|always|true|false|false|true`;
 const TABELLE_A_ANFANG = "TABLE-A-BEGIN";
 const INTERNE_KENNUNG = "T2-99";
+const KENNUNG_KOMMENTAR = "OW-7";
+const KENNUNG_BEGRUENDUNG = "H-12";
 const SAUBERE_ZUSAMMENFASSUNG = /: 0 Befunde in \d+ Faellen$/;
 
 function pruefe(argumente) {
@@ -75,4 +77,24 @@ test("fehlt ein Dokument, endet die Pruefung mit Exit 2 und nennt den Pfad", (co
 test("eine unbekannte Option endet mit Exit 2", () => {
   const lauf = pruefe(["--unbekannte-option"]);
   assert.equal(lauf.status, EXIT_AUFRUF, lauf.stdout + lauf.stderr);
+});
+
+function vertragMitKennungen(context) {
+  const vertrag = {
+    _kommentar: [`Siehe ${KENNUNG_KOMMENTAR}.`],
+    aenderungen: [{ begruendung: `Nach ${KENNUNG_BEGRUENDUNG}.` }],
+  };
+  const datei = join(probeDirectory(context, {}), "vertrag-mit-kennungen.json");
+  writeFileSync(datei, JSON.stringify(vertrag));
+  return datei;
+}
+
+test("interne Kennungen in Kommentar und Begruendung des Vertrags brechen die Pruefung ab", (context) => {
+  const lauf = pruefe(["--vertrag", vertragMitKennungen(context)]);
+  const vertragsZeilen = outputLines(lauf.stdout).filter((zeile) => zeile.startsWith("vertrag Texte: "));
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stdout + lauf.stderr);
+  assert.deepEqual(vertragsZeilen, [
+    `vertrag Texte: interne Kennung: ${KENNUNG_KOMMENTAR}`,
+    `vertrag Texte: interne Kennung: ${KENNUNG_BEGRUENDUNG}`,
+  ]);
 });
