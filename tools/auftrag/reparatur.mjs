@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { env } from "node:process";
 
 import { bauPrompt, testPrompt } from "./agenten.mjs";
-import { GRUEN as BELEG_GRUEN, ROT, belegVerzeichnis, notizAuszug, schreibeBeleg } from "./bericht.mjs";
+import { auswegBei } from "./ausgang.mjs";
+import { GRUEN as BELEG_GRUEN, ROT, belegVerzeichnis, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { entnimmVolleAntwort, frage, setzeEin } from "./einsatz.mjs";
 import { REPRODUKTION, fuehreReproduktionAus } from "./nachstellen.mjs";
 import { leseDatei } from "./pruefer-befehle.mjs";
@@ -27,6 +28,9 @@ const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const LABEL = "entscheidung";
 const CODEBLOCK = "```";
+const OHNE_WIRKUNG = "hat keine Wirkung gezeigt";
+const MIT_AUSWEG = "hat der Reparatur-Agent mit einem Ausweg angehalten";
+
 function zielDer(vorher) {
   return [...vorher].find(([, kategorie]) => kategorie === ERWARTUNG)?.[0] ?? null;
 }
@@ -127,7 +131,7 @@ function beobachtung(blocker, vorher, nachher) {
   );
 }
 
-function notizAuftrag(phase, auftrag, zeilen) {
+function notizAuftrag(phase, auftrag, { zeilen, anlass }) {
   return [
     testPrompt(phase, auftrag),
     "## Beobachtung nach der Reparatur",
@@ -140,7 +144,7 @@ function notizAuftrag(phase, auftrag, zeilen) {
     "",
     "## Deine Aufgabe",
     "",
-    "Die Reparatur hat keine Wirkung gezeigt. Schreib für Menschen, die keinen Code lesen, eine Entscheidungsnotiz in drei Teilen,",
+    `Die Reparatur ${anlass}. Schreib für Menschen, die keinen Code lesen, eine Entscheidungsnotiz in drei Teilen,`,
     "in Klartext ohne Code: was versucht wurde, was beobachtet wurde, zwei bis drei nummerierte Optionen mit deiner Empfehlung.",
     "Antworte nur mit der Notiz.",
   ].join("\n");
@@ -171,20 +175,23 @@ function veroeffentliche(pr, text, root) {
   };
 }
 
-function entscheidungNoetig({ root, blocker }, runde, zeilen) {
+function legeVor({ root, blocker }, runde, { zeilen, anlass, kopf, titel }) {
   const { phase, auftrag, sitzung } = runde;
   const notiz = frage(
     { rolle: "notiz", phase, auftrag, root },
-    notizAuftrag(phase, auftrag, zeilen),
+    notizAuftrag(phase, auftrag, { zeilen, anlass }),
   );
-  const kopf = `Die Reparatur von ${auftrag.ziel} hat keine Wirkung gezeigt.`;
+  const hinweise = hinweiseFuerNotiz(sitzung.sitzungen, entnimmVolleAntwort);
   const text = [
     "## Entscheidung nötig",
     "",
-    kopf,
+    `Die Reparatur von ${auftrag.ziel} ${anlass}.`,
+    ...kopf,
     "",
     notizAuszug(entnimmVolleAntwort(notiz), notiz.sitzung) || zeilen.join("\n"),
     "",
+    ...hinweise,
+    ...(hinweise.length > 0 ? [""] : []),
   ].join("\n");
   const veroeffentlicht = veroeffentliche(phase.issue, text, root);
   const agenten = [...sitzung.sitzungen, ...notiz.sitzungen];
@@ -196,8 +203,16 @@ function entscheidungNoetig({ root, blocker }, runde, zeilen) {
     blocker: blocker.length,
     entscheidung: { text, agenten, ...veroeffentlicht },
   });
-  console.log(`Reparatur ohne Wirkung: Entscheidung nötig. ${veroeffentlicht.hinweis}`);
+  console.log(`${titel}: Entscheidung nötig. ${veroeffentlicht.hinweis}`);
   return EXIT_ROT;
+}
+
+function entscheidungOhneWirkung(kontext, runde, zeilen) {
+  return legeVor(kontext, runde, { zeilen, anlass: OHNE_WIRKUNG, kopf: [], titel: "Reparatur ohne Wirkung" });
+}
+
+function entscheidungNachAusweg(kontext, runde, zeile) {
+  return legeVor(kontext, runde, { zeilen: [zeile], anlass: MIT_AUSWEG, kopf: ["", zeile, auswegBei([MELDUNG.REPARATUR])], titel: "Reparatur mit Ausweg" });
 }
 
 export async function reparatur(optionen, root) {
@@ -217,14 +232,12 @@ export async function reparatur(optionen, root) {
   for (let ziel = zielDer(vorher.kategorien); ziel !== null; ziel = zielDer(vorher.kategorien)) {
     const befund = blocker.find(({ schluessel }) => schluessel === ziel);
     const runde = repariere(kontext, befund, vorher.ausgaben.get(ziel));
+    const ausweg = runde.sitzung.ausgang.zeile;
+    if (ausweg !== null) return entscheidungNachAusweg(kontext, runde, ausweg);
     const nachher = await messe(root, blocker);
     schreibeReproduktion(root, befund);
     if (!weitereRunde(vorher.kategorien, nachher.kategorien)) {
-      return entscheidungNoetig(
-        kontext,
-        runde,
-        beobachtung(blocker, vorher.kategorien, nachher.kategorien),
-      );
+      return entscheidungOhneWirkung(kontext, runde, beobachtung(blocker, vorher.kategorien, nachher.kategorien));
     }
     schreibeBeleg(root, {
       phase: runde.phase.phase,
