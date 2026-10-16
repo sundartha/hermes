@@ -4,9 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { APPROVERS, AUTOMATION_LOGIN } from "./akteure.mjs";
 import {
-  APPROVERS,
-  AUTOMATION_LOGIN,
   decisionSection,
   evaluateDue,
   markPresented,

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import { APPROVERS } from "./entscheidungen.mjs";
+import { APPROVERS } from "../akteure.mjs";
 import { repo, repoPages, searchIssues } from "./github.mjs";
 import { WEEK_MS, daysBetween, germanDate } from "./zeit.mjs";
 
