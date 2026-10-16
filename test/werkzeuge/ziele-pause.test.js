@@ -123,6 +123,17 @@ test("ziele-pause: eine Rücknahme mit zusätzlichem Absatz zählt wie bei der C
   assert.deepEqual(ruecknahmen(repo.ordner).map(({ sorte, original: sha }) => [sorte, sha]), [["knip", original]]);
 });
 
+test("ziele-pause: eine Rücknahme, deren zurückgenommener Commit fehlt, bricht die Wahl ab statt die Sorte freizugeben", async (context) => {
+  const repo = zieleRepo(context, { "src/main.js": quelltext(["console.log(1);"]) });
+  const fehlend = "0123456789abcdef0123456789abcdef01234567";
+  repo.committe({ "src/main.js": quelltext(["console.log(2);"]) }, `Revert "Lege a an"\n\nThis reverts commit ${fehlend}.`);
+  const github = await githubAttrappe(context, { issues: [], laeufe: { "ci.yml": [ciLauf()] } });
+  const ordner = arbeitsordner(context, { "ziel/vorpruefung.json": { ausgang: "weiter" } });
+  const lauf = await starteZiele(["waehlen", "--ordner", ordner], { cwd: repo.ordner, env: umgebung(github) });
+  assert.notEqual(lauf.status, 0);
+  assert.match(lauf.stderr, new RegExp(`Abbruch: zurückgenommener Commit ${fehlend} nicht lesbar`));
+});
+
 test("ziele-pause: ein Revert ohne Standardform oder ohne Sorte zählt nicht", async (context) => {
   const repo = zieleRepo(context, { "src/main.js": quelltext(["console.log(1);"]) });
   const ohneSorte = committe(repo, { "src/a.js": quelltext(["export const a = 1;"]) }, "Lege a an\n\nWarum: Probe.\n\nPaket: 30");
