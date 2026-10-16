@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { env } from "node:process";
 import { test } from "node:test";
 
-import { ausgang } from "../../tools/auftrag/ausgang.mjs";
+import { ausgang, nenntAltenTest } from "../../tools/auftrag/ausgang.mjs";
 import { ROT } from "../../tools/auftrag/bericht.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
@@ -231,4 +231,50 @@ test("die Entscheidungsnotiz nennt die Prüfung, an der ausgestiegen wurde: die 
     const { beleg } = ausPlanung(context, ausweg, roteRunden);
     assert.ok(beleg.entscheidung.text.includes(`\nAusweg bei Prüfung: ${pruefung}\n`), beleg.entscheidung.text);
   }
+});
+
+test("eine Gleichwertig-Zeile mit Platzhalter als Grund zählt nicht, eine Zeile zum alten Test vom Test-Agenten gilt als „Auftrag passt nicht“", () => {
+  assert.deepEqual(ausgang(`Gleichwertig: ${MUTANT}, weil <ein Satz>`, "bau").gleichwertig, []);
+  const mitBindestrich = "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple lässt die Zahl - Das Ziel verlangt das Verdoppeln.";
+  assert.deepEqual([ausgang(mitBindestrich, "bau").ausstieg, ausgang(mitBindestrich, "bau").alterTest?.datei], [null, "test/rechnen.test.js"]);
+  assert.deepEqual([ausgang(ALTER_TEST_ZEILE, "test").ausstieg, ausgang(ALTER_TEST_ZEILE, "test").alterTest], [ALTER_TEST_ZEILE, null]);
+});
+
+test("eine Zeile zum alten Test ohne Testnamen gilt als „Auftrag passt nicht“, mit Platzhalter als Begründung zählt sie nicht, und die gewählte Zeile kommt wörtlich zurück", () => {
+  const ohneTestnamen = "Alter Test hält altes Verhalten fest: test/rechnen.test.js:  – Der Auftrag ändert das Verhalten.";
+  assert.deepEqual([ausgang(ohneTestnamen, "bau").ausstieg, ausgang(ohneTestnamen, "bau").alterTest], [ohneTestnamen, null]);
+  const mitPlatzhalter = [AUSSTIEG, "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple lässt die Zahl – <Grund>"].join("\n");
+  assert.deepEqual([ausgang(mitPlatzhalter, "bau").ausstieg, ausgang(mitPlatzhalter, "bau").alterTest], [GRUND, null]);
+  const mitLeerraum = `Auftrag passt nicht:   ${GRUND}`;
+  const faelle = [
+    [mitLeerraum, "bau", mitLeerraum],
+    [mitPlatzhalter, "bau", AUSSTIEG],
+    [ALTER_TEST_ZEILE, "test", ALTER_TEST_ZEILE],
+    ["Voraussetzung fehlt: Erst src/a.js aufräumen.", "bau", "Voraussetzung fehlt: Erst src/a.js aufräumen."],
+    ["Nur eine Erklärung.", "bau", null],
+  ];
+  assert.deepEqual(faelle.map(([antwort, rolle]) => ausgang(antwort, rolle).zeile), faelle.map(([, , zeile]) => zeile));
+});
+
+test("eine Zeile zum alten Test mit Platzhalter als Begründung zählt nicht, auch wenn Datei oder Testname nicht der Form folgen", () => {
+  const ohneTestnamen = "Alter Test hält altes Verhalten fest: test/rechnen.test.js – <Grund>";
+  const fremderPfad = "Alter Test hält altes Verhalten fest: src/rechnen.js:verdopple – <Grund>";
+  for (const platzhalterZeile of [ohneTestnamen, fremderPfad]) {
+    const weg = ausgang([AUSSTIEG, platzhalterZeile].join("\n"), "bau");
+    assert.deepEqual([weg.ausstieg, weg.alterTest, weg.zeile], [GRUND, null, AUSSTIEG], platzhalterZeile);
+  }
+});
+
+test("hat die Lesart, deren Testname in der Datei steht, nur einen Platzhalter als Begründung, nennt die Zeile keinen alten Test", () => {
+  const zeile = "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple - Fall – <Grund>";
+  const { alterTest } = ausgang(zeile, "bau");
+  assert.deepEqual([alterTest?.datei, nenntAltenTest(alterTest, ["verdopple - Fall"])], ["test/rechnen.test.js", null]);
+});
+
+test("meldet der Bau-Agent in der Mutationsnachrunde einen alten Test, endet der Auftrag ohne Commit als Entscheidung", (context) => {
+  const drehbuch = { bau: GEAENDERT, "bau-nachrunde-antwort": ALTER_TEST_ZEILE, "notiz-antwort": "1. Freigeben" };
+  const { lauf, beleg, basis, kopf } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { ...MIT_MUTATION, "test/rechnen.test.js": ALTER_TEST } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual([kopf, beleg.alterTest?.rot, beleg.runden], [basis, false, []]);
+  assert.ok(beleg.entscheidung.text.includes(`\n${ALTER_TEST_ZEILE}\nAusweg bei Prüfung: betroffene tests\n`), beleg.entscheidung.text);
 });

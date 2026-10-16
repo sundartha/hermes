@@ -4,13 +4,14 @@ const INHALT = /[\p{L}\p{N}]/u;
 const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+)$/;
 const MELDUNG = /^(Gleichwertig|Nötig): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
+const BAU = "bau";
 const AUSWEG_BEI = "Ausweg bei Prüfung: ";
 const OHNE_ROTE_PRUEFUNG = "keine";
 const ALTER_TEST = "alterTest";
 const AUSWEGE = [
   { art: AUSSTIEG, anfang: /^Auftrag passt nicht:\s*(\S.*)$/, rollen: ["bau", "test"] },
   { art: "voraussetzung", anfang: /^Voraussetzung fehlt:\s*(\S.*)$/, rollen: ["bau"] },
-  { art: ALTER_TEST, anfang: /^Alter Test hält altes Verhalten fest:\s*(\S.*)$/, rollen: ["bau"] },
+  { art: ALTER_TEST, anfang: /^Alter Test hält altes Verhalten fest:\s*(\S.*)$/, rollen: ["bau", "test"] },
 ];
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
@@ -33,14 +34,20 @@ export function antwortZeilen(text) {
 function auswegDer(zeile, rolle) {
   for (const { art, anfang, rollen } of AUSWEGE) {
     const grund = anfang.exec(zeile)?.[1];
-    if (grund !== undefined && rollen.includes(rolle) && !nurPlatzhalter(grund)) return { art, grund, zeile };
+    if (grund !== undefined && rollen.includes(rolle) && !nurPlatzhalter(begruendungDer(art, grund))) return { art, grund, zeile };
   }
   return null;
 }
 
-function alterTest({ grund, zeile }) {
+function begruendungDer(art, grund) {
+  if (art !== ALTER_TEST) return grund;
+  const rest = ALTER_TEST_FORM.exec(grund)?.[2] ?? grund;
+  return lesarten(rest)[0]?.grund ?? grund;
+}
+
+function alterTest({ grund, zeile }, rolle) {
   const [, datei, rest] = ALTER_TEST_FORM.exec(grund) ?? [];
-  if (rest === undefined || lesarten(rest).length === 0) return { [AUSSTIEG]: zeile };
+  if (rest === undefined || rolle !== BAU || gueltigeLesarten(rest).length === 0) return { [AUSSTIEG]: zeile };
   return { [ALTER_TEST]: { datei, rest, zeile } };
 }
 
@@ -61,7 +68,7 @@ export function ausgang(text, rolle) {
   const zeilen = antwortZeilen(text);
   const letzter = zeilen.map((zeile) => auswegDer(zeile, rolle)).findLast((weg) => weg !== null);
   const leer = { [AUSSTIEG]: null, voraussetzung: null, [ALTER_TEST]: null };
-  const weg = letzter === undefined ? {} : letzter.art === ALTER_TEST ? alterTest(letzter) : { [letzter.art]: letzter.grund };
+  const weg = letzter === undefined ? {} : letzter.art === ALTER_TEST ? alterTest(letzter, rolle) : { [letzter.art]: letzter.grund };
   return { ...leer, ...weg, zeile: letzter?.zeile ?? null, ...meldungen(zeilen) };
 }
 
@@ -73,7 +80,11 @@ function lesarten(rest) {
   return [...rest.matchAll(TRENNER)].map(({ index, 0: trenner }) => ({ test: rest.slice(0, index).trim(), grund: rest.slice(index + trenner.length) }));
 }
 
+function gueltigeLesarten(rest) {
+  return lesarten(rest).filter(({ test, grund }) => !nurPlatzhalter(test) && !nurPlatzhalter(grund));
+}
+
 export function nenntAltenTest(alterTest, titel) {
-  const treffer = lesarten(alterTest.rest).filter(({ test }) => titel.includes(test));
+  const treffer = gueltigeLesarten(alterTest.rest).filter(({ test }) => titel.includes(test));
   return treffer.length === 1 ? { ...alterTest, ...treffer[0] } : null;
 }
