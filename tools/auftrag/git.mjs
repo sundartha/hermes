@@ -47,12 +47,15 @@ function verfolgteAenderungen(basis, cwd) {
     .map(([hinzu, , pfad]) => ({ pfad, zeilen: zeilenzahl(hinzu) }));
 }
 
+function zeilenImText(inhalt) {
+  const zeilen = inhalt.split("\n");
+  if (zeilen.at(-1) === "") zeilen.pop();
+  return zeilen.length;
+}
+
 function neueDateien(cwd) {
   const pfade = git(["ls-files", "--others", "--exclude-standard", "-z"], { cwd }).split(NUL);
-  return pfade.filter(Boolean).map((pfad) => {
-    const inhalt = readFileSync(join(cwd, pfad), "utf8");
-    return { pfad, zeilen: inhalt === "" ? 0 : inhalt.split("\n").length };
-  });
+  return pfade.filter(Boolean).map((pfad) => ({ pfad, zeilen: zeilenImText(readFileSync(join(cwd, pfad), "utf8")) }));
 }
 
 export function aenderungenSeit(basis, cwd) {
