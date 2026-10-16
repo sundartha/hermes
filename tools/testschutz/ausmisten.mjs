@@ -34,12 +34,26 @@ const LAUF_NUMMER = /^(\d+)(?:\/attempts\/\d+)?$/;
 const ELTERN_EINES_MERGES = 3;
 const OBJEKTART_COMMIT = "commit";
 const BRANCH_FORM = "ausmisten/<Bereich mit Quellen>";
-const OHNE_RECHT = /HTTP 403/;
-const RECHTE_HINWEIS =
-  "Dem Token fehlen Leserechte; der Job Testschutz braucht actions: read und statuses: read.";
+const HTTP_VERBOTEN = 403;
+const RECHT_LAEUFE = "actions: read";
+const RECHT_STATUS = "statuses: read";
+const RECHT_PULL_REQUESTS = "pull-requests: read";
 
 function verlange(bedingung, grund) {
   if (!bedingung) throw new Error(grund);
+}
+
+async function leseMitRecht(recht, pfad) {
+  try {
+    return await getJson(pfad);
+  } catch (fehler) {
+    throw Object.assign(fehler, { recht });
+  }
+}
+
+function rechteHinweis({ status, recht }) {
+  if (status !== HTTP_VERBOTEN || recht === undefined) return "";
+  return ` Für diesen Aufruf braucht der Token des Jobs Testschutz ${recht}.`;
 }
 
 function patchKennung(von, bis) {
@@ -88,7 +102,10 @@ function prAngaben(pr, basis) {
 }
 
 async function laufNummer(full, kopf) {
-  const { statuses } = await getJson(`/repos/${full}/commits/${kopf}/status?per_page=100`);
+  const { statuses } = await leseMitRecht(
+    RECHT_STATUS,
+    `/repos/${full}/commits/${kopf}/status?per_page=100`,
+  );
   const status = (statuses ?? []).find(({ context }) => context === KONTEXT);
   verlange(status !== undefined, `kein Status „${KONTEXT}“ auf ${kopf}`);
   verlange(status.state === ERFOLG, `der Status „${KONTEXT}“ ist ${status.state}`);
@@ -103,12 +120,15 @@ async function laufNummer(full, kopf) {
 
 async function gueltigerLauf(full, angaben) {
   const { nummer, adresse } = await laufNummer(full, angaben.kopf);
-  const lauf = await getJson(`/repos/${full}/actions/runs/${nummer}`);
+  const lauf = await leseMitRecht(RECHT_LAEUFE, `/repos/${full}/actions/runs/${nummer}`);
   verlange(
     lauf.id === nummer && pfadUndEreignis(lauf, MESSUNG),
     "der Lauf ist kein workflow_run-Lauf von tests-ausmisten.yml",
   );
-  const { id } = await getJson(`/repos/${full}/actions/workflows/${MESSUNG.datei}`);
+  const { id } = await leseMitRecht(
+    RECHT_LAEUFE,
+    `/repos/${full}/actions/workflows/${MESSUNG.datei}`,
+  );
   verlange(
     Number.isInteger(id) && lauf.workflow_id === id,
     "die Workflow-Nummer des Laufs gehört nicht zu tests-ausmisten.yml",
@@ -161,7 +181,7 @@ async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
 export async function ausmistenFrei({ basis, pullRequest, stellen }) {
   try {
     const { full } = repositoryName();
-    const pr = await getJson(`/repos/${full}/pulls/${pullRequest}`);
+    const pr = await leseMitRecht(RECHT_PULL_REQUESTS, `/repos/${full}/pulls/${pullRequest}`);
     const branch = String(pr.head?.ref ?? "").toLowerCase();
     if (!branch.startsWith(BRANCH_PRAEFIX)) return false;
     const angaben = prAngaben(pr, basis);
@@ -172,8 +192,9 @@ export async function ausmistenFrei({ basis, pullRequest, stellen }) {
     );
     return true;
   } catch (fehler) {
-    const hinweis = OHNE_RECHT.test(fehler.message) ? ` ${RECHTE_HINWEIS}` : "";
-    console.error(`Testschutz: die Ausnahme „${KONTEXT}“ gilt nicht: ${fehler.message}.${hinweis}`);
+    console.error(
+      `Testschutz: die Ausnahme „${KONTEXT}“ gilt nicht: ${fehler.message}.${rechteHinweis(fehler)}`,
+    );
     return false;
   }
 }

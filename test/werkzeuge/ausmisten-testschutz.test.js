@@ -34,6 +34,7 @@ const GELOESCHT = "test/post/doppelt.test.js: die ganze Testdatei ist gelöscht"
 const ANDERE_SHA = "0123456789abcdef0123456789abcdef01234567";
 const BESTAND = "tools/basis/selbstpruefung.json";
 const KURZE_SHA = 7;
+const RECHTE = ["actions: read", "statuses: read", "pull-requests: read"];
 const ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const MIT_QUELLE = 'import "../../src/post/eingang.js";\n';
 const MIT_QUELLE_CJS = 'require("../../src/post/eingang.js");\n';
@@ -136,6 +137,20 @@ function erwarteGesperrt(ergebnis, grund) {
   assert.equal(ergebnis.status, EXIT_GESPERRT, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /die Ausnahme „Tests ausmisten“ gilt nicht/);
   assert.ok(ergebnis.ausgabe.includes(grund), ergebnis.ausgabe);
+}
+
+function erwarteNurRecht(ergebnis, recht) {
+  erwarteGesperrt(ergebnis, "mit HTTP 403.");
+  assert.ok(
+    ergebnis.ausgabe.includes(`Für diesen Aufruf braucht der Token des Jobs Testschutz ${recht}.`),
+    ergebnis.ausgabe,
+  );
+  const fremde = RECHTE.filter((andere) => andere !== recht);
+  assert.deepEqual(
+    fremde.filter((fremd) => ergebnis.ausgabe.includes(fremd)),
+    [],
+    ergebnis.ausgabe,
+  );
 }
 
 test("ausmisten-testschutz: ein gültiger Messlauf gibt das Löschen einer Testdatei frei", async (context) => {
@@ -520,15 +535,26 @@ test("ausmisten-testschutz: ein Zeitglieder-Bestand mit neuer Datei gibt nichts 
 
 test("ausmisten-testschutz: fehlende Leserechte auf den Status geben nichts frei und sagen warum", async (context) => {
   const ergebnis = await pruefe(context, { status: VERBOTEN });
-  erwarteGesperrt(
-    ergebnis,
-    "Dem Token fehlen Leserechte; der Job Testschutz braucht actions: read und statuses: read.",
-  );
+  erwarteNurRecht(ergebnis, "statuses: read");
   assert.ok(ergebnis.ausgabe.includes(GELOESCHT), ergebnis.ausgabe);
 });
 
 test("ausmisten-testschutz: fehlende Leserechte auf den Lauf geben nichts frei", async (context) => {
-  erwarteGesperrt(await pruefe(context, { laufAntwort: VERBOTEN }), "HTTP 403");
+  erwarteNurRecht(await pruefe(context, { laufAntwort: VERBOTEN }), "actions: read");
+});
+
+test("ausmisten-testschutz: fehlende Leserechte auf den Workflow nennen nur actions: read", async (context) => {
+  erwarteNurRecht(await pruefe(context, { workflow: VERBOTEN }), "actions: read");
+});
+
+test("ausmisten-testschutz: ein Branchname mit „HTTP 403“ löst keinen Rechte-Hinweis aus", async (context) => {
+  const ergebnis = await pruefe(context, { prBranch: "ausmisten/HTTP 403" });
+  erwarteGesperrt(ergebnis, "ausmisten/HTTP 403 heißt nicht genau");
+  assert.deepEqual(
+    RECHTE.filter((recht) => ergebnis.ausgabe.includes(recht)),
+    [],
+    ergebnis.ausgabe,
+  );
 });
 
 test("ausmisten-testschutz: ein gelöschter Test, der nur tools/ prüft, gibt nichts frei", async (context) => {
@@ -611,6 +637,7 @@ test("ausmisten-testschutz: ein Fehler beim Abruf des PRs ergibt „gilt nicht�
   const ergebnis = await pruefe(context, { prAntwort: VERBOTEN });
   assert.equal(ergebnis.status, EXIT_GESPERRT, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /die Ausnahme „Tests ausmisten“ gilt nicht: .*HTTP 403/);
+  erwarteNurRecht(ergebnis, "pull-requests: read");
 });
 
 test("ausmisten-testschutz: ein MCP-Methodenname wie tools/call in einer Hilfe sperrt nichts", async (context) => {
