@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
+import { ENTWURF_HINWEIS, ENTWURF_ROUTE, ENTWURF_TEXT, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const START = join(REPO_ROOT, "tools/auftrag/planung/neuschnitt-start.mjs");
@@ -39,21 +39,24 @@ function grundAntworten() {
   };
 }
 
-function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien = {} } = {}) {
+function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien = {}, aendere = (phase) => phase } = {}) {
   const ablage = probeDirectory(context, {});
+  let vorher = null;
   const argumente = (wurzel) => {
     for (const [pfad, inhalt] of Object.entries(dateien)) {
       mkdirSync(dirname(join(wurzel, pfad)), { recursive: true });
       writeFileSync(join(wurzel, pfad), inhalt);
     }
-    writeFileSync(join(wurzel, DATEI), `${JSON.stringify(phaseFuer(wurzel, umbau), null, 2)}\n`);
+    vorher = aendere(phaseFuer(wurzel, umbau));
+    writeFileSync(join(wurzel, DATEI), `${JSON.stringify(vorher, null, 2)}\n`);
     const daten = { root: wurzel, ordner: ORDNER, datei: DATEI, auftragId: GESCHEITERT, fertig: ["a1"], anlass: ANLASS, kopf: KOPF, verlauf: VERLAUF_ZEILEN, hinweise: [], ...eingabe };
     writeFileSync(join(ablage, "eingabe.json"), JSON.stringify(daten));
     return [ablage];
   };
   const lauf = plane(context, { werkzeug: START, grund: grundAntworten(), ueberschrieben, argumente });
   const datei = join(ablage, "ergebnis.json");
-  return { ...lauf, ablage, ergebnis: existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null };
+  const phase = JSON.parse(readFileSync(join(lauf.wurzel, DATEI), "utf8"));
+  return { ...lauf, ablage, vorher, phase, ergebnis: existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null };
 }
 
 const [UMBAU] = schnittliste().auftraege;
@@ -138,19 +141,29 @@ test("Neuschnitt: ein fehlendes Szenario endet mit Exit 4 und steht im Grund", (
   assert.equal(lauf.ergebnis.grund, 'fehlendeSzenarien: "Ein Kunde ohne Nummer"');
 });
 
-for (const art of ["umbau", "testumbau"]) {
-  test(`Neuschnitt: ein ${art} endet ohne Erkunder grün, der Planer sieht den Ersatzbericht mit der Datei des alten Auftrags`, (context) => {
-    const lauf = neuschnitt(context, { umbau: { art }, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt({ ...NEUER_UMBAU, art })) });
-    exit(lauf, 0);
-    assert.equal(lauf.ergebnis.antwort, AENDERUNG);
-    assert.deepEqual(aufrufe(lauf, "erkunder"), []);
-    const [, bericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
-    assert.ok(bericht.includes(`"datei": "${HINWEIS}"`), bericht);
-    const [pruefer] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
-    const neuschnittTeil = pruefer.eingabe.slice(pruefer.eingabe.indexOf("### Neuschnitt"), pruefer.eingabe.indexOf("### Schnittliste"));
-    assert.ok(neuschnittTeil.includes("### Funktionsliste") && neuschnittTeil.includes(`"datei": "${HINWEIS}"`), neuschnittTeil);
-  });
-}
+test("Neuschnitt: ein Umbau endet ohne Erkunder grün, Planer und Prüfer sehen die Datei des alten Auftrags", (context) => {
+  const lauf = neuschnitt(context, { umbau: {}, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(NEUER_UMBAU)) });
+  exit(lauf, 0);
+  assert.equal(lauf.ergebnis.antwort, AENDERUNG);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  const [, ersatzbericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
+  assert.ok(ersatzbericht.includes(`"datei": "${HINWEIS}"`), ersatzbericht);
+  const [pruefer] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  const neuschnittTeil = pruefer.eingabe.slice(pruefer.eingabe.indexOf("### Neuschnitt"), pruefer.eingabe.indexOf("### Schnittliste"));
+  assert.ok(neuschnittTeil.includes("### Funktionsliste") && neuschnittTeil.includes(`"datei": "${HINWEIS}"`), neuschnittTeil);
+  const { auftraege } = lauf.phase;
+  assert.deepEqual(auftraege.map(({ id }) => id), ["a0-n1", "a1", "a2", "a3"]);
+  assert.deepEqual(auftraege[3].abhaengigVon, ["a2", "a0-n1"]);
+});
+
+test("Neuschnitt: ein Testumbau endet ohne Erkunder grün mit einem neuen Umbau", (context) => {
+  const testumbau = { art: "testumbau", bereich: "test/anrufe/", erwarteteDateien: [UMBAU.abnahme] };
+  const lauf = neuschnitt(context, { umbau: testumbau, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(NEUER_UMBAU)) });
+  exit(lauf, 0);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  const [ersatz] = lauf.phase.auftraege;
+  assert.deepEqual([ersatz.id, ersatz.art], ["a0-n1", "umbau"]);
+});
 
 test("Neuschnitt: ein neuer Umbau, der eine andere vorhandene Datei nennt, endet grün", (context) => {
   const umbau = { ...NEUER_UMBAU, bereich: ROUTE, erwarteteDateien: [ROUTE, ROUTEN_TEST], abnahme: ROUTEN_TEST };
@@ -274,4 +287,48 @@ test("Neuschnitt: ein Umbau als Durchstich beim Neuschnitt von a1 ist ein Befund
   const lauf = durchstichLauf(context, [{ ...UMBAU, id: "a1-n1" }]);
   exit(lauf, 4);
   assert.match(lauf.ergebnis.grund, /a1-n1 ist umbau, der Durchstich ist eine funktion/);
+});
+
+test("Neuschnitt: der neue Auftrag ersetzt den alten an seiner Stelle und in fremden abhaengigVon, ein geteilter Bereich bleibt ohne Entwurf-Schreiber", (context) => {
+  const lauf = neuschnitt(context);
+  exit(lauf, 0);
+  assert.equal(lauf.ergebnis.grund, undefined);
+  const [, ersatz, folgender] = lauf.phase.auftraege;
+  const [, alt, frueher] = lauf.vorher.auftraege;
+  assert.deepEqual(lauf.phase.auftraege.map(({ id }) => id), ["a1", "a2-n1", "a3"]);
+  assert.deepEqual(folgender, { ...frueher, abhaengigVon: ["a2-n1"] });
+  assert.deepEqual(ersatz.szenarien, alt.szenarien);
+  assert.deepEqual(lauf.phase.entwurf, lauf.vorher.entwurf);
+  assert.deepEqual(aufrufe(lauf, "entwurf"), []);
+  assert.equal(existsSync(join(lauf.wurzel, ".fortschritt")), false);
+});
+
+test("Neuschnitt: ein Bereich, den bisher nur der alte Auftrag nutzte, bekommt einen neuen Entwurf", (context) => {
+  const ersatz = auftrag("a3-n1", HINWEIS, { prueft: GRUPPEN[2].nummern, abnahme: "test/anrufe/hinweis-neu.test.js", abhaengigVon: [{ id: "a2", grund: "liest den Status bestaetigt" }] });
+  const ueberschrieben = { "erkunder|## Nachfrage": [bericht(GRUPPEN[2].nummern)], ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege: [ersatz] }) })), "entwurf|## Entwurf": [ENTWURF_HINWEIS] };
+  const lauf = neuschnitt(context, { eingabe: { auftragId: "a3" }, ueberschrieben });
+  exit(lauf, 0);
+  assert.equal(aufrufe(lauf, "entwurf").length, 1);
+  assert.match(lauf.phase.entwurf[HINWEIS], /^Aufträge: a3-n1: Ziel a3-n1$/m);
+  assert.equal(lauf.phase.entwurf[ROUTE], lauf.vorher.entwurf[ROUTE]);
+});
+
+test("Neuschnitt: ein neuer Bereich bekommt einen Entwurf", (context) => {
+  const bereich = "src/routes/";
+  const ersatz = auftrag("a2-n1", bereich, { prueft: NUMMERN, abnahme: "test/nummern/eigene-nummer-bestaetigung.test.js", abhaengigVon: [{ id: "a1", grund: "braucht den gespeicherten Code" }], erwarteteDateien: [ROUTE, "src/routes/api-confirm.js", "test/nummern/eigene-nummer-bestaetigung.test.js"] });
+  const lauf = neuschnitt(context, { ueberschrieben: { ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege: [ersatz] }) })), "entwurf|## Entwurf": [ENTWURF_ROUTE] } });
+  exit(lauf, 0);
+  const entwurf = lauf.phase.entwurf[bereich];
+  const [ersteZeile] = ENTWURF_TEXT[ROUTE].split("\n");
+  assert.ok(entwurf.startsWith(ersteZeile), entwurf);
+  const [schreiber] = aufrufe(lauf, "entwurf");
+  assert.ok(schreiber.eingabe.includes(`### Bereich\n\n${bereich}\n`), schreiber.eingabe);
+});
+
+test("Neuschnitt: Befunde der neuen Phase enden mit Exit 4, die Phasendatei bleibt unverändert", (context) => {
+  for (const aendere of [(phase) => ({ ...phase, phase: "P-002-andere" }), (phase) => ({ ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === "a1" ? { ...eintrag, art: "unbekannt" } : eintrag)) })]) {
+    const lauf = neuschnitt(context, { aendere });
+    exit(lauf, 4);
+    assert.deepEqual(lauf.phase, lauf.vorher);
+  }
 });
