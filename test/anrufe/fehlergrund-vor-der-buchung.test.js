@@ -12,7 +12,7 @@ const HTTP_OK = 200;
 const WARTEZEIT_MS = 8000;
 const SCHNELLER_ABRUF_MS = "100";
 const LANGE_HOECHSTDAUER_S = 3600;
-const GRUNDLOSER_BESTANDSTEXT = /\(Status: failed\)$/;
+const GRUND_IM_TEXT = /, Grund: \S[^)]*\)$/;
 
 const anrufIm = (stand, id) => stand.calls.find((anruf) => anruf.id === id);
 const benachrichtigungIm = (stand, id) =>
@@ -26,10 +26,7 @@ async function beendeterAnrufMitBenachrichtigung(srv, id) {
 function grundStandSchonInDerBenachrichtigung({ anruf, benachrichtigung }, erwarteterGrund) {
   assert.equal(anruf.status, "failed");
   assert.equal(anruf.failureReason, erwarteterGrund);
-  assert.ok(
-    !GRUNDLOSER_BESTANDSTEXT.test(benachrichtigung.body),
-    `die Benachrichtigung entstand ohne den Grund: ${benachrichtigung.body}`,
-  );
+  assert.match(benachrichtigung.body, GRUND_IM_TEXT, `die Benachrichtigung entstand ohne den Grund: ${benachrichtigung.body}`);
 }
 
 const aktiverElAnruf = (id) => {
