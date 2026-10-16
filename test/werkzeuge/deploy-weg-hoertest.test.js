@@ -7,6 +7,7 @@ import {
   attrappeStarten,
   COMMIT_C,
   einstellungenFuer,
+  HTTP_OK,
   REPO,
   sammler,
   weltAnlegen,
@@ -14,10 +15,13 @@ import {
 
 const TEILE = ["anrufstart.de.eigentuemer", "stimmen"];
 const VORHANDENES_ISSUE = 12;
+const NEUERES_ISSUE = 20;
+const ERSTE_FREMDE_NUMMER = 1000;
 const MENSCHEN_ISSUE = 5;
 const NEUES_ISSUE = 99;
 const HTTP_FEHLER = 500;
 const BOT = "github-actions[bot]";
+const SEITE = 100;
 
 async function hoertestMit(kontext, welt = {}) {
   const attrappe = await attrappeStarten(kontext, weltAnlegen(welt));
@@ -25,6 +29,31 @@ async function hoertestMit(kontext, welt = {}) {
   const { zeilen, ausgabe } = sammler();
   const ok = await hoertest({ einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe });
   return { ok, text: zeilen.join("\n"), attrappe };
+}
+
+function volleSeite() {
+  return Array.from({ length: SEITE }, (_leer, index) => ({
+    number: ERSTE_FREMDE_NUMMER + index,
+    title: "Wochenbericht KW " + index,
+    user: { login: BOT },
+  }));
+}
+
+function seitenNummer(pfad) {
+  return Number(new URLSearchParams(pfad.split("?")[1]).get("page") ?? "1");
+}
+
+async function mitSeiten(kontext, seiten) {
+  const attrappe = await attrappeStarten(kontext, weltAnlegen());
+  const letzte = () => attrappe.anfragen.at(-1);
+  const aktuell = () => seiten[seitenNummer(letzte().pfad) - 1] ?? [HTTP_OK, []];
+  Object.defineProperties(attrappe.welt, {
+    issuesStatus: { get: () => aktuell()[0] },
+    issues: { get: () => aktuell()[1] },
+  });
+  const einstellungen = einstellungenFuer("hoertest", attrappe.basis);
+  const rahmen = { einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe: sammler().ausgabe };
+  return { attrappe, rahmen };
 }
 
 function erwarteterText(basis) {
@@ -81,5 +110,60 @@ test("Hörtest-Issue: scheitert die Suche, wird nichts geschrieben", async (kont
   const einstellungen = einstellungenFuer("hoertest", attrappe.basis);
   const rahmen = { einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe: sammler().ausgabe };
   await assert.rejects(hoertest(rahmen), { name: "Abbruch", schritt: "issue_suche" });
+  assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
+});
+
+test("Hörtest-Issue: liegt das offene Issue des Bots auf Seite 2, wird es ersetzt statt ein zweites anzulegen", async (kontext) => {
+  const issue = { number: VORHANDENES_ISSUE, title: HOERTEST_TITEL, user: { login: BOT } };
+  const { attrappe, rahmen } = await mitSeiten(kontext, [
+    [HTTP_OK, volleSeite()],
+    [HTTP_OK, [issue]],
+  ]);
+  assert.equal(await hoertest(rahmen), true);
+  assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
+  const aenderungen = anfragenAn(attrappe, "PATCH", /\/issues\//);
+  assert.deepEqual(
+    aenderungen.map(({ pfad }) => pfad),
+    ["/gh/repos/" + REPO + "/issues/" + VORHANDENES_ISSUE],
+  );
+});
+
+test("Hörtest-Issue: ist Seite 2 nicht lesbar, wird abgebrochen und nichts geschrieben", async (kontext) => {
+  const unlesbar = [
+    [HTTP_FEHLER, []],
+    [HTTP_OK, {}],
+  ];
+  for (const seiteZwei of unlesbar) {
+    const { attrappe, rahmen } = await mitSeiten(kontext, [[HTTP_OK, volleSeite()], seiteZwei]);
+    await assert.rejects(hoertest(rahmen), { name: "Abbruch", schritt: "issue_suche" });
+    assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
+    assert.deepEqual(anfragenAn(attrappe, "PATCH", /\/issues\//), []);
+  }
+});
+
+test("Hörtest-Issue: ist es auf keiner Seite, wird nach dem Lesen aller Seiten eines angelegt", async (kontext) => {
+  const { attrappe, rahmen } = await mitSeiten(kontext, [
+    [HTTP_OK, volleSeite()],
+    [HTTP_OK, []],
+  ]);
+  assert.equal(await hoertest(rahmen), true);
+  const gelesen = anfragenAn(attrappe, "GET", /\/issues\?/);
+  assert.deepEqual(gelesen.map(({ pfad }) => seitenNummer(pfad)), [1, 2]);
+  assert.equal(anfragenAn(attrappe, "POST", /\/issues$/).length, 1);
+});
+
+test("Hörtest-Issue: stehen mehrere Issues des Bots auf verschiedenen Seiten, wird das mit der kleinsten Nummer ersetzt", async (kontext) => {
+  const neueres = { number: NEUERES_ISSUE, title: HOERTEST_TITEL, user: { login: BOT } };
+  const aelteres = { number: VORHANDENES_ISSUE, title: HOERTEST_TITEL, user: { login: BOT } };
+  const { attrappe, rahmen } = await mitSeiten(kontext, [
+    [HTTP_OK, [neueres, ...volleSeite().slice(1)]],
+    [HTTP_OK, [aelteres]],
+  ]);
+  assert.equal(await hoertest(rahmen), true);
+  const aenderungen = anfragenAn(attrappe, "PATCH", /\/issues\//);
+  assert.deepEqual(
+    aenderungen.map(({ pfad }) => pfad),
+    ["/gh/repos/" + REPO + "/issues/" + VORHANDENES_ISSUE],
+  );
   assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
 });
