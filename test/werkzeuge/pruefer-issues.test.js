@@ -24,12 +24,16 @@ const ABLAGE_TITEL = "Sicherheit: Prüfer: SG-12 in `src/zahl.js`";
 const TITEL_MIT_SPAN = "Prüfer: N7 in `src/zahl.js`";
 const GUELTIGE_PR = 1133;
 
-function scheinGithub(offen = []) {
+function mitStatus(offen, geschlossen) {
+  return [...offen.map((title) => ({ title, state: "open" })), ...geschlossen.map((title) => ({ title, state: "closed" }))];
+}
+
+function scheinGithub(offen = [], geschlossen = []) {
   const gesendet = [];
   return {
     gesendet,
     hole: workflowAbfrage,
-    alle: async (pfad, liste) => liste(offen.map((title) => ({ title }))),
+    alle: async (pfad, liste) => liste(mitStatus(offen, geschlossen)),
     sende: async (methode, pfad, daten) => {
       gesendet.push({ methode, pfad, daten });
       if (pfad === "/issues") offen.push(daten.title);
@@ -161,11 +165,11 @@ test("eine Katalog-ID nach Muster und die Datei als Code-Span stehen in Titel un
   assert.ok(text.includes("- Katalog-ID: SG-07\n- Stelle: `src/zahl.js`, Zeile 1"), text);
 });
 
-async function ablegenGegen(context, ablage, offen) {
+async function ablegenGegen(context, ablage, { offen = [], geschlossen = [] } = {}) {
   const server = await scheinServer(
     context,
     new Map([
-      [`GET /repos/${PRIVAT}/issues`, offen.map((title) => ({ title }))],
+      [`GET /repos/${PRIVAT}/issues`, mitStatus(offen, geschlossen)],
       [`POST /repos/${PRIVAT}/issues`, {}],
     ]),
   );
@@ -180,7 +184,7 @@ test("ablegen legt Sicherheitshinweise nur im privaten Repo als Issue an, jeden 
   const ablage = probeDirectory(context, {
     "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund }] }),
   });
-  const erster = await ablegenGegen(context, ablage, []);
+  const erster = await ablegenGegen(context, ablage);
   assert.equal(erster.lauf.status, 0, erster.lauf.stderr);
   assert.deepEqual(
     erster.neu.map(({ pfad, rumpf }) => [pfad, rumpf.title, rumpf.labels]),
@@ -190,21 +194,31 @@ test("ablegen legt Sicherheitshinweise nur im privaten Repo als Issue an, jeden 
   assert.match(rumpf.body, /GEHEIMER-BELEG/);
   assert.match(rumpf.body, /Schwere: SOLLTE \(Sicherheitsbezug, nicht öffentlich\)/);
   assert.ok(erster.pfade.every((pfad) => pfad.startsWith(`/repos/${PRIVAT}/`)));
-  const zweiter = await ablegenGegen(context, ablage, [ABLAGE_TITEL]);
+  const zweiter = await ablegenGegen(context, ablage, { offen: [ABLAGE_TITEL] });
   assert.equal(zweiter.lauf.status, 0, zweiter.lauf.stderr);
   assert.deepEqual(zweiter.neu, []);
 });
 
+test("ablegen gleicht nur mit offenen Sicherheits-Issues ab; ein geschlossenes hält keinen neuen Hinweis auf", async (context) => {
+  const befund = hinweis({ id: "SG-12", sicherheit: true });
+  const ablage = probeDirectory(context, {
+    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund }] }),
+  });
+  const { lauf, neu } = await ablegenGegen(context, ablage, { geschlossen: [ABLAGE_TITEL] });
+  assert.equal(lauf.status, 0, lauf.stderr);
+  assert.deepEqual(neu.map(({ rumpf }) => rumpf.title), [ABLAGE_TITEL]);
+});
+
 test("ablegen ohne gültige Ablage-Datei scheitert und legt nichts an", async (context) => {
   const leer = probeDirectory(context, {});
-  const ohneDatei = await ablegenGegen(context, leer, []);
+  const ohneDatei = await ablegenGegen(context, leer);
   assert.notEqual(ohneDatei.lauf.status, 0);
   assert.deepEqual(ohneDatei.neu, []);
   const blocker = hinweis({ schwere: "BLOCKER", sicherheit: true });
   const falsch = probeDirectory(context, {
     "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund: blocker }] }),
   });
-  const mitBlocker = await ablegenGegen(context, falsch, []);
+  const mitBlocker = await ablegenGegen(context, falsch);
   assert.notEqual(mitBlocker.lauf.status, 0);
   assert.deepEqual(mitBlocker.neu, []);
 });
@@ -212,7 +226,7 @@ test("ablegen ohne gültige Ablage-Datei scheitert und legt nichts an", async (c
 test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gleichem Titel verhindert ein neues", async () => {
   const geschlossen = "Prüfer: N7 in `src/zahl.js` (PR #7)";
   const abgefragt = [];
-  const github = scheinGithub([geschlossen]);
+  const github = scheinGithub([], [geschlossen]);
   const alle = github.alle;
   github.alle = (pfad, liste) => abgefragt.push(pfad) && alle(pfad, liste);
   const issues = [
