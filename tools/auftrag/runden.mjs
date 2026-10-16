@@ -11,8 +11,8 @@ import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
-import { idsDer, pflichtDer, roteRunde } from "./rote-pruefungen.mjs";
-import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock, zweckIds } from "./zweck.mjs";
+import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
+import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
@@ -32,14 +32,6 @@ function verwerfe(basis, root) {
 
 function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
-}
-
-function rotePruefungen(pruefungen) {
-  return pruefungen.filter(({ exitCode }) => exitCode !== 0);
-}
-
-function zweckIdsDer({ name, zeilen, zweck }) {
-  return zweck ?? zweckIds({ name, zeilen });
 }
 
 function fehlerausgabe(ergebnis) {
