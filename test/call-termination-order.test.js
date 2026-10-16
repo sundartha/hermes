@@ -1,9 +1,9 @@
-import { test } from "node:test";
+import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { terminateAndBillCall, billThunk } from "../src/telephony/call-termination.js";
+import express from "express";
+import { terminateAndBillCall, billThunk, hangUpAction } from "../src/telephony/call-termination.js";
+import { seedCall, seedState, tempDataDir, waitUntil } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("hangUp wird VOLLSTAENDIG abgewartet, BEVOR bill (Buchung/Summary/SMS) angestossen wird", async () => {
   const order = [];
@@ -157,60 +157,209 @@ test("billThunk liest den Call bei JEDEM Aufruf des Thunks frisch (nicht einmali
   );
 });
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
-const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
-const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
-const voiceSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "voice.js"), "utf8");
+const AKTIV_STATUS = "aktiv_status";
+const AKTIV_STATUS_ABGEHEND = "aktiv_status_abgehend";
+const AKTIV_ABBRUCH = "aktiv_abbruch";
+const TRAEGER_SID = "CA_abbruch";
+const ABRECHNUNG_SCHEITERT = "abrechnung-attrappe-scheitert";
+const MANDANT = seedCall().tenantId;
+let store;
+let makeCallRoutes;
+let makeVoiceRoutes;
+let webhookEvents;
+let withConfigNamespaces;
 
-function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
-  const start = src.indexOf(startMarker, fromIndex);
-  assert.notEqual(start, -1, `Marker nicht gefunden: ${startMarker}`);
-  const end = src.indexOf(endMarker, start + startMarker.length);
-  assert.notEqual(end, -1, `End-Marker nicht gefunden: ${endMarker}`);
-  return src.slice(start, end);
+before(async () => {
+  const ohneNebenkanaele = ["PRECALL_BRIEFING", "ASSISTANT_CONTEXT", "IN_CALL_CONSULT", "CONSULT", "METRICS"];
+  for (const kanal of ohneNebenkanaele) process.env[`${kanal}_ENABLED`] = "false";
+  process.env.DATA_DIR = tempDataDir(
+    seedState({
+      calls: [
+        seedCall({ id: AKTIV_STATUS, twilioSid: "CA_status", provider: "telnyx" }),
+        seedCall({ id: AKTIV_STATUS_ABGEHEND, twilioSid: "CA_status_abgehend", provider: "telnyx" }),
+        seedCall({ id: AKTIV_ABBRUCH, twilioSid: TRAEGER_SID, provider: "telnyx" }),
+      ],
+    }),
+  );
+  ({ withConfigNamespaces } = await import("./config-namespaces-helper.js"));
+  store = await import("../src/store.js");
+  ({ makeCallRoutes } = await import("../src/routes/api-calls.js"));
+  ({ makeVoiceRoutes } = await import("../src/routes/voice.js"));
+  ({ webhookEvents } = await import("../src/telephony/registry.js"));
+});
+
+const OHNE_SPRACHAUSGABE = Object.freeze({
+  ttsStore: { takeOnce: async () => null },
+  directiveSynth: { synthesizeDirectiveAudio: async (_call, anweisungen) => anweisungen },
+  voiceRender: { followupTurnDirectives: () => [], render: () => "", sayInCallVoice: () => null, turnDirectives: () => [] },
+});
+
+function endpfadBank() {
+  const ablauf = [];
+  const abrechnungen = [];
+  const gewaehlt = [];
+  const finishCall = (call) => {
+    abrechnungen.push({ call, status: call?.status, gelesen: store.getCall(call?.id) });
+    ablauf.push(`abrechnen:${call?.id}`);
+    return Promise.reject(new Error(ABRECHNUNG_SCHEITERT));
+  };
+  const config = withConfigNamespaces({
+    multiTenant: false,
+    elevenLabsOutbound: { enabled: false },
+    skipTwilioSignatureCheck: true,
+    allowedCountryCodes: ["+49"],
+    publicUrl: "http://127.0.0.1:1",
+  });
+  const voiceControl = () => ({
+    originateCall: async ({ url }) => {
+      ablauf.push("waehlen");
+      gewaehlt.push(new URL(url).searchParams.get("callId"));
+      store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: 60 });
+      throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: 403 });
+    },
+    endCall: async (sid) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      ablauf.push(`auflegen:${sid}`);
+    },
+    endCallViaCallControl: async () => {},
+  });
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  app.use(
+    makeVoiceRoutes({
+      store,
+      config,
+      audit: () => {},
+      ...OHNE_SPRACHAUSGABE,
+      lifecycle: { reattachActiveCall: async () => ({ call: null }) },
+      finishCall,
+      webhookEvents,
+      providerFromHeaders: () => null,
+      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
+      terminateAndBillCall,
+      billThunk,
+      startInboundNachlauf: () => {},
+    }),
+  );
+  app.use(
+    makeCallRoutes({
+      store,
+      config,
+      audit: () => {},
+      outboundGates: [
+        {
+          name: "fester-kontext",
+          run: (ctx) => {
+            Object.assign(ctx, {
+              requestedBy: "owner",
+              tenantId: MANDANT,
+              mandate: null,
+              context: null,
+              fromNumber: "+4930123456",
+              outboundProvider: "telnyx",
+              numberRecord: null,
+              reserveCents: 0,
+              maxDur: 60,
+            });
+            return null;
+          },
+        },
+      ],
+      callQuotaDenial: () => null,
+      voiceControl,
+      terminateAndBillCall,
+      hangUpAction,
+      billThunk,
+      finishCall,
+      arm: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
+      tenant: { requestTenant: () => MANDANT, requireTenant: () => MANDANT, tenantOwnsCall: () => true },
+      consultDelivery: { waitForEvent: async () => ({}) },
+      internalIdentity: () => null,
+      OWNER_ID: "owner",
+    }),
+  );
+  return { app, ablauf, abrechnungen, gewaehlt };
 }
 
-test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) statt dem alten manuellen Paar", () => {
-  const block = sliceBetween(
-    voiceSrc,
-    'router.post("/voice/status", async (req, res) => {',
-    '\n  return router;',
-  );
-  assert.match(block, /terminateAndBillCall\(\{/);
-  assert.match(block, /hangUp:\s*null/);
-  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
-  assert.doesNotMatch(
-    block,
-    /^\s*finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
-    "der alte bare finishCall-Aufruf ausserhalb des Gateways darf nicht mehr da sein",
-  );
-});
+async function mitEndpfadBank(run) {
+  const bank = endpfadBank();
+  const server = await new Promise((resolve) => {
+    const srv = bank.app.listen(0, "127.0.0.1", () => resolve(srv));
+  });
+  const fehlerZeilen = [];
+  const originalError = console.error;
+  console.error = (...teile) => fehlerZeilen.push(teile.map(String).join(" "));
+  try {
+    await run({ ...bank, url: `http://127.0.0.1:${server.address().port}`, fehlerLog: () => fehlerZeilen.join("\n") });
+  } finally {
+    console.error = originalError;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
 
-test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C5-Luecke)", () => {
-  const routeBlock = sliceBetween(
-    apiCallsSrc,
-    'router.post("/api/calls", internalOnly, async (req, res) => {',
-    'router.post("/api/calls/:id/cancel"',
-  );
-  const catchBlock = sliceBetween(routeBlock, "} catch (err) {", "res.status(providerStatus");
-  assert.match(catchBlock, /terminateAndBillCall\(\{/);
-  assert.match(catchBlock, /hangUp:\s*null/);
-  assert.match(catchBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
-  assert.doesNotMatch(
-    catchBlock,
-    /await releaseReserve\(call\)/,
-    "manuelles releaseReserve darf nicht mehr da sein (Duplikat, S2 - finishCall macht das idempotent selbst)",
-  );
-});
-
-test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk (alle 4 Pfade EINE Quelle)", () => {
+function pruefeEineAbrechnungUeberDasGateway({ abrechnungen, fehlerLog }, callId) {
+  const eigene = abrechnungen.filter((eintrag) => eintrag.call?.id === callId);
+  assert.equal(eigene.length, 1, `genau eine Abrechnung fuer ${callId} - abgerechnet: ${abrechnungen.map((e) => e.call?.id)}`);
+  const [{ call, status, gelesen }] = eigene;
+  assert.equal(call, gelesen, "abgerechnet wird der Call aus dem Store");
+  assert.notEqual(status, "active", "das Ende ist geschrieben, bevor abgerechnet wird");
   assert.match(
-    serverSrc,
-    /import \{ terminateAndBillCall, hangUpAction, billThunk \} from "\.\/telephony\/call-termination\.js";/,
+    fehlerLog(),
+    new RegExp(`Settlement fehlgeschlagen \\(call=${callId}\\): ${ABRECHNUNG_SCHEITERT}`),
+    "ein Fehler der Abrechnung wird vom gemeinsamen Gateway gefangen und mit der Call-ID gemeldet",
   );
-  const cappedBlock = sliceBetween(lifecycleSrc, "async function terminateActiveCall(", "\n  }\n");
-  assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
-  const cancelBlock = sliceBetween(apiCallsSrc, 'router.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
-  assert.match(cancelBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
+}
+
+test("Status-Callback beendet den Call und rechnet genau einmal ueber das Gateway ab, mit CallSid wie mit callId", async () => {
+  await mitEndpfadBank(async (bank) => {
+    const meldungen = [
+      ["", { CallSid: "CA_status", CallStatus: "completed" }],
+      [`?callId=${AKTIV_STATUS_ABGEHEND}`, { CallStatus: "completed" }],
+    ];
+    for (const [abfrage, felder] of meldungen) {
+      const antwort = await abrufMitFrist(`${bank.url}/voice/status${abfrage}`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(felder).toString(),
+      });
+      assert.equal(antwort.status, 200);
+      await antwort.text();
+    }
+    await waitUntil(() => bank.abrechnungen.length >= meldungen.length && bank.fehlerLog().split("Settlement").length > meldungen.length);
+    for (const callId of [AKTIV_STATUS, AKTIV_STATUS_ABGEHEND]) {
+      pruefeEineAbrechnungUeberDasGateway(bank, callId);
+      assert.equal(store.getCall(callId).status, "completed");
+    }
+    assert.equal(bank.abrechnungen.length, meldungen.length, "keine weitere Abrechnung");
+  });
+});
+
+test("Fehlschlag beim Waehlen (place_call) beendet den Call als failed und rechnet genau einmal ueber das Gateway ab", async () => {
+  await mitEndpfadBank(async (bank) => {
+    const antwort = await abrufMitFrist(`${bank.url}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "+4915199990000", objective: "Termin vereinbaren" }),
+    });
+    assert.equal(antwort.status, 502, "die Ablehnung des Carriers wird als 502 gemeldet");
+    await antwort.json();
+    assert.deepEqual(bank.ablauf.slice(0, 1), ["waehlen"]);
+    await waitUntil(() => bank.abrechnungen.length > 0 && /Settlement/.test(bank.fehlerLog()));
+    const [callId] = bank.gewaehlt;
+    pruefeEineAbrechnungUeberDasGateway(bank, callId);
+    assert.equal(bank.abrechnungen.length, 1, "der gleichzeitige Anruf wird nicht abgerechnet");
+    assert.equal(store.getCall(callId).status, "failed");
+  });
+});
+
+test("cancel_call legt zuerst vollstaendig auf und rechnet danach genau einmal ueber das Gateway ab", async () => {
+  await mitEndpfadBank(async (bank) => {
+    const antwort = await abrufMitFrist(`${bank.url}/api/calls/${AKTIV_ABBRUCH}/cancel`, { method: "POST" });
+    assert.deepEqual(await antwort.json(), { status: "cancelled" });
+    await waitUntil(() => bank.abrechnungen.length > 0 && /Settlement/.test(bank.fehlerLog()));
+    assert.deepEqual(bank.ablauf, [`auflegen:${TRAEGER_SID}`, `abrechnen:${AKTIV_ABBRUCH}`]);
+    pruefeEineAbrechnungUeberDasGateway(bank, AKTIV_ABBRUCH);
+  });
 });
