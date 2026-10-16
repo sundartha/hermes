@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -17,6 +17,8 @@ import {
 import { scheinGitleaks, verlinkeLintWerkzeuge, vorpruefDateien } from "./ausmisten/vorpruefen.mjs";
 
 const WERKZEUG = "tools/tests-ausmisten.mjs";
+const NUR_LESEN = 0o555;
+const LESEN_SCHREIBEN = 0o755;
 
 function lokalesRepo(context, weg, { dateien = {}, neu = {} } = {}) {
   const protokoll = join(probeDirectory(context, {}), "aufrufe.txt");
@@ -59,6 +61,19 @@ test("ausmisten-lokal: ein Branch ohne Verlust ist lokal grün", async (context)
   const ergebnis = await lokal(context, lokalesRepo(context, [DOPPELT]));
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /Lokal: grün/);
+});
+
+test("ausmisten-lokal: mit --alle bleibt ein abgebrochener Branch-Schritt rot, auch wenn ein altes Artefakt im Ordner liegt", async (context) => {
+  const repo = lokalesRepo(context, [DOPPELT]);
+  const erster = await lokal(context, repo);
+  assert.equal(erster.status, EXIT_GRUEN, erster.ausgabe);
+  const altesArtefakt = join(erster.aus, "branch-0");
+  chmodSync(altesArtefakt, NUR_LESEN);
+  const zweiter = await lokal(context, repo, ["--alle", "--aus", erster.aus]).finally(() =>
+    chmodSync(altesArtefakt, LESEN_SCHREIBEN),
+  );
+  assert.match(zweiter.ausgabe, /Lokal: rot in Paket 0; weiter wegen --alle\./);
+  assert.equal(zweiter.status, EXIT_ROT, zweiter.ausgabe);
 });
 
 test("ausmisten-lokal: ein verlorener Mutant macht die lokale Messung früh rot und nennt ihn", async (context) => {
