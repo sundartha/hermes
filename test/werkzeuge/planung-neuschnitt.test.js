@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane } from "./planung-probe.js";
+import { GRUEN_PRUEFLISTE, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const START = join(REPO_ROOT, "tools/auftrag/planung/neuschnitt-start.mjs");
@@ -37,10 +37,11 @@ function grundAntworten() {
   };
 }
 
-function neuschnitt(context, { ueberschrieben = {}, eingabe = {} } = {}) {
+function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien = {} } = {}) {
   const ablage = probeDirectory(context, {});
   const argumente = (wurzel) => {
-    writeFileSync(join(wurzel, DATEI), `${JSON.stringify(phaseFuer(wurzel), null, 2)}\n`);
+    for (const [pfad, inhalt] of Object.entries(dateien)) writeFileSync(join(wurzel, pfad), inhalt);
+    writeFileSync(join(wurzel, DATEI), `${JSON.stringify(phaseFuer(wurzel, umbau), null, 2)}\n`);
     const daten = { root: wurzel, ordner: ORDNER, datei: DATEI, auftragId: GESCHEITERT, fertig: ["a1"], anlass: ANLASS, kopf: KOPF, verlauf: VERLAUF_ZEILEN, hinweise: [], ...eingabe };
     writeFileSync(join(ablage, "eingabe.json"), JSON.stringify(daten));
     return [ablage];
@@ -48,6 +49,14 @@ function neuschnitt(context, { ueberschrieben = {}, eingabe = {} } = {}) {
   const lauf = plane(context, { werkzeug: START, grund: grundAntworten(), ueberschrieben, argumente });
   const datei = join(ablage, "ergebnis.json");
   return { ...lauf, ablage, ergebnis: existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null };
+}
+
+const [UMBAU] = schnittliste().auftraege;
+const NEUER_UMBAU = { ...UMBAU, id: "a0-n1", ziel: "Zieh die Prüfung kleiner heraus" };
+const ROUTEN_TEST = "test/routen.test.js";
+
+function umbauSchnitt(umbau) {
+  return alsJson({ schnitt: neuerSchnitt({ auftraege: [umbau] }), aenderung: AENDERUNG });
 }
 
 function planerAntwort(text) {
@@ -113,4 +122,30 @@ test("Neuschnitt: ein fehlendes Szenario endet mit Exit 4 und steht im Grund", (
   const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ schnitt: neuerSchnitt({ fehlendeSzenarien: ["Ein Kunde ohne Nummer"] }) })) });
   exit(lauf, 4);
   assert.equal(lauf.ergebnis.grund, 'fehlendeSzenarien: "Ein Kunde ohne Nummer"');
+});
+
+for (const art of ["umbau", "testumbau"]) {
+  test(`Neuschnitt: ein ${art} endet ohne Erkunder grün, der Planer sieht den Ersatzbericht mit der Datei des alten Auftrags`, (context) => {
+    const lauf = neuschnitt(context, { umbau: { art }, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt({ ...NEUER_UMBAU, art })) });
+    exit(lauf, 0);
+    assert.equal(lauf.ergebnis.antwort, AENDERUNG);
+    assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+    const [, bericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
+    assert.ok(bericht.includes(`"datei": "${HINWEIS}"`), bericht);
+  });
+}
+
+test("Neuschnitt: ein neuer Umbau, der eine andere vorhandene Datei nennt, endet grün", (context) => {
+  const umbau = { ...NEUER_UMBAU, bereich: ROUTE, erwarteteDateien: [ROUTE, ROUTEN_TEST], abnahme: ROUTEN_TEST };
+  const dateien = { [ROUTEN_TEST]: `import { registriere } from "../${ROUTE}";\n\nregistriere(null);\n` };
+  const lauf = neuschnitt(context, { umbau: {}, dateien, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(umbau)) });
+  exit(lauf, 0);
+});
+
+test("Neuschnitt: eine Datei ohne Quelltext in erwarteteDateien des alten Umbaus stört nicht", (context) => {
+  const umbau = { erwarteteDateien: [...UMBAU.erwarteteDateien, "CLAUDE.md"] };
+  const lauf = neuschnitt(context, { umbau, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(NEUER_UMBAU)) });
+  exit(lauf, 0);
+  const [, bericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
+  assert.ok(bericht.includes('"datei": "CLAUDE.md"'), bericht);
 });

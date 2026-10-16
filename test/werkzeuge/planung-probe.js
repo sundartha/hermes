@@ -199,9 +199,14 @@ export function planOrdner(context) {
   return wurzel;
 }
 
-export function phaseFuer(wurzel) {
+function ohneUmbau(auftraege) {
+  return auftraege.filter(({ id }) => id !== UMBAU.id).map((eintrag) => ({ ...eintrag, abhaengigVon: eintrag.abhaengigVon.filter(({ id }) => id !== UMBAU.id) }));
+}
+
+export function phaseFuer(wurzel, umbau) {
   const { soll } = nummernImOrdner(join(wurzel, ORDNER));
-  const eintraege = schnittliste().auftraege.filter(({ id }) => id !== UMBAU.id).map((eintrag) => ({ ...eintrag, abhaengigVon: eintrag.abhaengigVon.filter(({ id }) => id !== UMBAU.id) }));
+  const { auftraege } = schnittliste({ umbau });
+  const eintraege = umbau === undefined ? ohneUmbau(auftraege) : auftraege;
   const entwurf = Object.fromEntries(Object.entries(ENTWURF_TEXT).map(([bereich, text]) => [bereich, entwurfFuer(text, eintraege.filter((eintrag) => eintrag.bereich === bereich))]));
   return { phase: KENNUNG, entwurf, auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll)) };
 }
