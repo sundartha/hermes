@@ -180,3 +180,12 @@ test("Klammern in Zeichenketten und Kommentaren verschieben das Funktionsende ni
     assert.match(result.stdout, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/, zeile);
   }
 });
+
+test("ein Regex-Literal oder eine Division im Funktionsrumpf macht den Rumpf unlesbar und wird gemeldet", (kontext) => {
+  for (const zeile of ['if (/\\{/.test(card)) return "";', "return card / 2;"]) {
+    const shell = verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]);
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+    assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /keine eindeutig lesbare Funktion returnMessageText\(\)/, zeile);
+  }
+});
