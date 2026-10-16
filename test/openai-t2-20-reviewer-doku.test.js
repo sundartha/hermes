@@ -9,6 +9,8 @@ const PRUEFSKRIPT = join(REPO_ROOT, "tools/openai-doku-pruefen.mjs");
 const DOKU_REVIEWER = join(REPO_ROOT, "docs/OPENAI-REVIEWER-ACCESS.md");
 const EXIT_BEFUND = 1;
 const SKRIPT_FRIST_MS = 150_000;
+const EN_ZEILE_MIT_GEAENDERTER_ABHOLZEIT = 3;
+const DE_ZEILE_MIT_FEHLENDEM_ACTION_ITEM = 7;
 
 test("weichen die Beispieldaten der Reviewer-Doku vom Seed ab, nennt die Pruefung Sprache und Zeile", (context) => {
   const reviewer = join(probeDirectory(context, {}), "reviewer-beispiele.md");
@@ -25,7 +27,11 @@ test("weichen die Beispieldaten der Reviewer-Doku vom Seed ab, nennt die Pruefun
   });
   const zeilen = outputLines(lauf.stdout);
   assert.equal(lauf.status, EXIT_BEFUND, lauf.stdout + lauf.stderr);
-  for (const [sprache, zeile] of [["en", 3], ["de", 7]]) {
+  const erwarteteBefunde = [
+    ["en", EN_ZEILE_MIT_GEAENDERTER_ABHOLZEIT],
+    ["de", DE_ZEILE_MIT_FEHLENDEM_ACTION_ITEM],
+  ];
+  for (const [sprache, zeile] of erwarteteBefunde) {
     assert.ok(
       zeilen.some((befund) =>
         befund.startsWith(`reviewer Beispieldaten: ${sprache}: Beispieldaten weichen in Zeile ${zeile} ab`),
