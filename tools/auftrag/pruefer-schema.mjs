@@ -134,6 +134,7 @@ function commitAus(wert) {
     grund: istText(wert.grund) ? wert.grund : "",
     uebernommen: wert.uebernommen === true,
     kritisch: wert.kritisch === true,
+    letzter: wert.letzter === true,
     befunde,
   };
 }

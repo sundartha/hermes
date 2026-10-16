@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { entpacke, fruehereErgebnisse } from "../../tools/auftrag/pruefer-gedaechtnis.mjs";
+import * as gedaechtnis from "../../tools/auftrag/pruefer-gedaechtnis.mjs";
 import { githubZugang } from "../../tools/auftrag/pruefer-github.mjs";
 import { WORKFLOW_NUMMERN, prueferLauf, scheinSha } from "./pruefer/hilfen.mjs";
 import { zipMitEinerDatei } from "./pruefer/zip.mjs";
@@ -67,12 +67,12 @@ async function frage(laeufe, extraArtefakte = []) {
     api: API,
     repo: "sundartha/hermes",
   });
-  return { frueher: await fruehereErgebnisse({ github, pr: PR }), abgerufen };
+  return { frueher: await gedaechtnis.fruehereErgebnisse({ github, pr: PR }), abgerufen };
 }
 
 test("ein Zip-Archiv mit einer Datei wird entpackt", () => {
   assert.equal(
-    entpacke(zipMitEinerDatei("ergebnis.json", "inhalt")).get("ergebnis.json").toString("utf8"),
+    gedaechtnis.entpacke(zipMitEinerDatei("ergebnis.json", "inhalt")).get("ergebnis.json").toString("utf8"),
     "inhalt",
   );
 });
@@ -156,4 +156,16 @@ test("ohne Artefakt dieses PRs fragt das Gedächtnis keinen Lauf ab", async () =
   const { frueher, abgerufen } = await frage([]);
   assert.equal(frueher.size, 0);
   assert.deepEqual(abgerufen, [ARTEFAKT_ABFRAGE]);
+});
+
+test("das Ergebnis eines letzten Commits hängt am damaligen Endstand und wird nie übernommen", async () => {
+  const { frueher } = await frage([
+    {
+      lauf: prueferLauf({ id: LAUF.passend }),
+      inhalt: zip([commit(GEPRUEFT, "geprueft"), { ...commit(ZWEITER, "geprueft"), letzter: true }]),
+    },
+  ]);
+  assert.deepEqual([...frueher.keys()], [GEPRUEFT]);
+  assert.equal(gedaechtnis.bekanntesErgebnis(frueher, { patchId: GEPRUEFT, letzter: false }).patchId, GEPRUEFT);
+  assert.equal(gedaechtnis.bekanntesErgebnis(frueher, { patchId: GEPRUEFT, letzter: true }), undefined);
 });

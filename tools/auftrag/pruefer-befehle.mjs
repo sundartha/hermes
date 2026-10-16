@@ -12,7 +12,7 @@ import { env } from "node:process";
 
 import { stelleNach } from "./nachstellen.mjs";
 import { gitAusgabe, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
-import { artefaktName, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
+import { artefaktName, bekanntesErgebnis, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
 import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
 import { issueTitel, legeIssuesAn } from "./pruefer-issues.mjs";
@@ -133,17 +133,18 @@ async function artefakt(optionen, root, { github = githubZugang() } = {}) {
 }
 
 function uebernommen(commit, bekannt) {
-  return { ...bekannt, sha: commit.sha, kritisch: commit.kritisch, uebernommen: true };
+  const { sha, kritisch, letzter } = commit;
+  return { ...bekannt, sha, kritisch, letzter, uebernommen: true };
 }
 
 function vorlaeufig(commit, frueher) {
-  const bekannt = frueher.get(commit.patchId);
+  const bekannt = bekanntesErgebnis(frueher, commit);
   return bekannt ? uebernommen(commit, bekannt) : nichtGelaufen(commit, OFFEN_GRUND);
 }
 
 async function einerVon(commit, { frueher, abbruch, kontext }) {
   if (commit.merge) return nichtGelaufen(commit, MERGE_GRUND);
-  const bekannt = frueher.get(commit.patchId);
+  const bekannt = bekanntesErgebnis(frueher, commit);
   if (bekannt) return uebernommen(commit, bekannt);
   if (abbruch) return nichtGelaufen(commit, abbruch);
   return pruefeCommit(commit, kontext);

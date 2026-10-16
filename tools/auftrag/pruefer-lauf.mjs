@@ -243,8 +243,8 @@ export function werteAus(lauf, { ordner, patches, token, blockerAblegen = false 
 }
 
 function eintrag(commit, auswertung) {
-  const { sha, patchId, kritisch } = commit;
-  return { sha, patchId, kritisch, uebernommen: false, ...auswertung };
+  const { sha, patchId, kritisch, letzter = false } = commit;
+  return { sha, patchId, kritisch, letzter, uebernommen: false, ...auswertung };
 }
 
 async function rufeAuf(commit, kontext) {
