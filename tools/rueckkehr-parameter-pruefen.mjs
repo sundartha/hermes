@@ -78,14 +78,15 @@ function passedParams(source) {
   return new Map(reads.map(([, paramConst], position) => [paramConst, position]));
 }
 
-const IDENTIFIER_CHAR = /[\w$]/;
+const IDENTIFIER_CHAR_AT_END = /[\p{ID_Continue}$\u200c\u200d]$/u;
+const IDENTIFIER_CHAR_AT_START = /^[\p{ID_Continue}$\u200c\u200d]/u;
 
 function containsWholeName(text, part) {
   let index = text.indexOf(part);
   while (index !== -1) {
-    const before = text.charAt(index - 1);
-    const after = text.charAt(index + part.length);
-    if (!IDENTIFIER_CHAR.test(before) && !IDENTIFIER_CHAR.test(after)) return true;
+    const before = text.slice(0, index);
+    const after = text.slice(index + part.length);
+    if (!IDENTIFIER_CHAR_AT_END.test(before) && !IDENTIFIER_CHAR_AT_START.test(after)) return true;
     index = text.indexOf(part, index + 1);
   }
   return false;
