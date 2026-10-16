@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { istUmbau, pfadIstSauber } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
-import { GRUND, istObjekt, istText } from "./erkundung.mjs";
+import { GRUND, istObjekt, istText, liste } from "./erkundung.mjs";
 
 const FUNDSTELLEN = /\(Fundstellen:\s*(.+)\)\s*$/;
 const FUNDSTELLEN_TRENNER = ";";
@@ -24,10 +24,6 @@ const SCHNITT_LISTEN = ["annahmen", "ownerAufgaben", "fehlendeSzenarien", "gemei
 const GRUNDLAGE = /^Grundlage:/;
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 function dokumentStelleBefund(fundstelle, [, name, ueberschrift], dokumente) {
   const text = dokumente[name];

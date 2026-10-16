@@ -17,7 +17,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { berichtsGeruest, erkundungBefunde, istObjekt, istText, namenImWenn } from "./erkundung.mjs";
+import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn } from "./erkundung.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
@@ -61,9 +61,7 @@ function zusammengefuegt(schluessel, ergebnisse) {
   return schluessel.map((eintrag) => zeilen.get(eintrag));
 }
 
-export function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
+export { liste };
 
 export function json(wert) {
   return `\`\`\`json\n${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n\`\`\``;

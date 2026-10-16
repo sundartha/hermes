@@ -1,12 +1,8 @@
-import { istObjekt, istText } from "./erkundung.mjs";
+import { istObjekt, istText, liste } from "./erkundung.mjs";
 
 const REGEL = "Regel Teilliste: ";
 const LISTEN = ["annahmen", "fehlendeSzenarien", "ownerAufgaben", "gemeinsameNamen"];
 const KENNUNGSLISTEN = ["auftraege", "entfernt", "reihenfolge"];
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 const ERLAUBT = [...KENNUNGSLISTEN, ...LISTEN];
 

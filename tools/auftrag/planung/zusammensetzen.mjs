@@ -5,7 +5,7 @@ import { pid } from "node:process";
 import { phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
-import { istText } from "./erkundung.mjs";
+import { istText, liste } from "./erkundung.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
@@ -14,10 +14,6 @@ const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "abnahme", "
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
 const JSON_EINRUECKUNG = 2;
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 export function auftragAusSchnitt(eintrag, soll) {
   const auftrag = Object.fromEntries(FELDER.filter((feld) => eintrag[feld] !== undefined).map((feld) => [feld, eintrag[feld]]));

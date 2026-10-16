@@ -1,11 +1,9 @@
+import { liste } from "./erkundung.mjs";
+
 const TRENNER = ":";
 const NUMMER_AN = new Map([["weg", 0], ["b-nummer", 0], ["ausweg", 0], ["falsche-angabe", 1]]);
 const JE_AUFTRAG = new Set(["nie-saetze", "bereichsgrund", "allein-gruen"]);
 const KETTE = "allein-gruen";
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 class Gruppen {
   constructor(schnitt, gruppen) {

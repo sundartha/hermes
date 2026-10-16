@@ -5,6 +5,7 @@ import { pid } from "node:process";
 import { BELEGE } from "../bericht.mjs";
 import { reihenfolge } from "../format.mjs";
 import { transkriptVerzeichnis, transkripteDerSitzung } from "../kosten.mjs";
+import { liste } from "./erkundung.mjs";
 import { fortsetzungen, messeDatei } from "./messung.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
@@ -14,10 +15,6 @@ const NICHT_GEMESSEN = "nicht gemessen";
 const KEINE_SCHNITTLISTE = "keine Schnittliste";
 const PLANER = "planer";
 const FUNKTIONEN = new Set(["funktion", "fehlerbehebung"]);
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 function sekunden(ms) {
   return Math.round(ms / MS_JE_SEKUNDE);

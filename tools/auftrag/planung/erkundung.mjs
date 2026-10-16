@@ -27,6 +27,10 @@ export function istText(wert) {
   return typeof wert === "string" && wert.trim() !== "";
 }
 
+export function liste(wert) {
+  return Array.isArray(wert) ? wert : [];
+}
+
 function istZeile(wert) {
   return Number.isInteger(wert) && wert >= 1;
 }
@@ -163,8 +167,8 @@ function angabeBefunde(ort, feld, kontext) {
   const wert = kontext.angaben[feld];
   if (wert === undefined) return [`${ort}: Angabe ${feld} fehlt`];
   if (istText(wert)) return textBefunde(ort, feld, kontext);
-  const liste = LISTEN.get(feld);
-  if (liste !== undefined) return Array.isArray(wert) ? liste(ort, wert, kontext) : [`${ort}: ${feld} muss eine Liste sein`];
+  const listenBefunde = LISTEN.get(feld);
+  if (listenBefunde !== undefined) return Array.isArray(wert) ? listenBefunde(ort, wert, kontext) : [`${ort}: ${feld} muss eine Liste sein`];
   if (!istObjekt(wert)) return [`${ort}: ${feld} hat keine gültige Angabe`];
   if (feld === "schema") return schemaBefunde(ort, wert);
   if (feld !== "ownerEntscheidung") return [`${ort}: ${feld} hat keine gültige Angabe`];
