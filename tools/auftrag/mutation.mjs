@@ -12,8 +12,6 @@ const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const GLEICHWERTIG = "Gleichwertig: ";
 const BEGRUENDET = ", weil ";
-const MELDUNG = /^Gleichwertig: (.+?), weil (\S.*)$/gm;
-const NOETIG = /^Nötig: (.+?), weil (\S.*)$/gm;
 const ABLAGE = "auftrag-umbau";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
@@ -24,10 +22,6 @@ const MELDEN = [
 
 function treffer(text, muster) {
   return [...text.matchAll(muster)].map(([, wert]) => wert.trim());
-}
-
-function meldungen(text, muster = MELDUNG) {
-  return [...text.matchAll(muster)].map(([, mutant, grund]) => ({ mutant: mutant.trim(), grund: grund.trim() }));
 }
 
 function liste(mutanten) {
@@ -75,17 +69,20 @@ function testNachrunde({ phase, auftrag, root }, ueberlebende, { stand, melden, 
 
 function bauKorrigiert(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
-  if (!lauf.agent("bau", bauNachrunde(ueberlebende), sitzung)) return false;
-  const { antwort } = lauf.agenten.at(-1);
-  const noetig = meldungen(antwort, NOETIG).filter(({ mutant }) => ueberlebende.includes(mutant));
-  const gleichwertig = meldungen(antwort).filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
+  const weg = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende), sitzung);
+  if (weg === null) return false;
+  const noetig = weg.noetig.filter(({ mutant }) => ueberlebende.includes(mutant));
+  const gleichwertig = weg.gleichwertig.filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
   for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(`${GLEICHWERTIG}${mutant}${BEGRUENDET}${grund}`);
   return lauf.bauSchritte().slice(1).every((schritt) => schritt()) && noetig;
 }
 
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
-  if (!lauf.agent("test", testNachrunde(lauf.kontext, ueberlebende, vorgabe))) return false;
-  return lauf.grenzen("test", lauf.basisBau);
+  const weg = lauf.setzeAgentEinUndUebernimmAusgang(
+    "test",
+    testNachrunde(lauf.kontext, ueberlebende, vorgabe),
+  );
+  return weg !== null && lauf.grenzen("test", lauf.basisBau) ? weg : null;
 }
 
 function testNachgeholt(lauf, ueberlebende, noetig) {
@@ -176,8 +173,9 @@ function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
 }
 
 function testRunde(lauf, ueberlebende, gemeldet) {
-  if (!testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND })) return false;
-  for (const { mutant, grund } of meldungen(lauf.agenten.at(-1).antwort)) {
+  const weg = testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND });
+  if (weg === null) return false;
+  for (const { mutant, grund } of weg.gleichwertig) {
     if (ueberlebende.includes(mutant)) gemeldet.set(mutant, grund);
   }
   if (aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return null;

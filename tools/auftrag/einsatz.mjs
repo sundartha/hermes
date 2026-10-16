@@ -3,16 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import { pid } from "node:process";
 
 import { starteAgent } from "./agenten.mjs";
+import { ausgang } from "./ausgang.mjs";
 import { git } from "./git.mjs";
 import { UEBERGABE } from "./verlauf.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 const MS_JE_MINUTE = 60_000;
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
-const VORAUSSETZUNG = /^Voraussetzung fehlt:\s*(\S.*)$/m;
-const AUSSTIEG = /^Auftrag passt nicht:\s*(\S.*)$/m;
 const BAU = "bau";
-const MIT_AUSSTIEG = new Set([BAU, "test"]);
 const LESE_WERKZEUGE = ["Read", "Grep", "Glob"];
 const LESE_MODELL = "opus";
 const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
@@ -94,14 +92,6 @@ function ergebnisDesBaus({ art }) {
   return [...VORAUSSETZUNG_FEHLT, ...(art === UMBAU ? ALTFUNKTIONEN_AUFRAEUMEN : ALTFUNKTIONEN_ABGEBEN)].join("\n");
 }
 
-function voraussetzung({ rolle, antwort = "" }) {
-  return rolle === BAU ? (VORAUSSETZUNG.exec(antwort)?.[1] ?? null) : null;
-}
-
-function ausstieg({ rolle, antwort = "" }) {
-  return MIT_AUSSTIEG.has(rolle) ? (AUSSTIEG.exec(antwort)?.[1] ?? null) : null;
-}
-
 export function entnimmVolleAntwort({ sitzung, antwort = "" }) {
   const voll = VOLLE_ANTWORTEN.get(sitzung) ?? antwort;
   VOLLE_ANTWORTEN.delete(sitzung);
@@ -125,11 +115,13 @@ export function setzeEin(kontext, prompt, start = {}) {
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
-    const sitzung = gemerkt(starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true }), start, `${kontext.phase.phase}/${kontext.auftrag.id}`);
+    const roh = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
+    const sitzung = gemerkt(roh, start, `${kontext.phase.phase}/${kontext.auftrag.id}`);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
-      return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung), ausstieg: ausstieg(sitzung) };
+      const weg = ausgang(roh.volleAntwort ?? roh.antwort, kontext.rolle);
+      return { ...sitzung, grund, sitzungen, ausgang: weg, voraussetzung: weg.voraussetzung, ausstieg: weg.ausstieg, alterTest: weg.alterTest };
     }
     vorgaenger = { grund, antwort: sitzung.antwort, kontextGrenze: !sitzung.limit };
   }
