@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { once } from "node:events";
 
 import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository } from "./probe-repo.js";
-import { FRIST, SCHWERLAUF, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
+import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 import { echtWarten } from "../echt-warten.js";
 
 const PRUEFABSTAND_MS = 100;
@@ -34,7 +34,7 @@ async function nacheinander(laeufe) {
 
 test("zwei gleichzeitig gestartete schwere Läufe laufen nacheinander, der wartende nennt Halter und Beginn", FRIST, async (context) => {
   const env = umgebung(context);
-  const laeufe = ["A", "B"].map((name) => starteArbeit(context, name, env));
+  const laeufe = ["A", "B"].map((name) => starteArbeit(context, name, { env }));
   const { erster, zweiter } = await nacheinander(laeufe);
 
   assert.equal(erster.stderr, "");
@@ -53,8 +53,8 @@ test("--stand nennt den Halter, solange die Sperre gehalten wird, und danach fre
   const frei = starte([SCHWERLAUF, "--stand"], { env });
   await frei.ende;
 
-  assert.match(belegt.stdout, new RegExp(`^belegt: PID ${gehalten.kind.pid}, Halter im Test, `));
-  assert.match(frei.stdout, /^frei \(/);
+  assert.match(belegt.stdout, new RegExp(`^Platz 1: belegt von PID ${gehalten.kind.pid}, Halter im Test, `, "m"));
+  assert.match(frei.stdout, EIN_PLATZ_FREI);
 });
 
 test("--stand meldet frei, während ein anderes Nachsehen auf die Sperre schaut", FRIST, async (context) => {
@@ -65,7 +65,7 @@ test("--stand meldet frei, während ein anderes Nachsehen auf die Sperre schaut"
   const stand = starte([SCHWERLAUF, "--stand"], { env });
   await stand.ende;
 
-  assert.match(stand.stdout, /^frei \(/);
+  assert.match(stand.stdout, EIN_PLATZ_FREI);
 });
 
 test("stirbt der Halter, wird die Sperre ohne Eingriff frei und der nächste Lauf startet", FRIST, async (context) => {
@@ -90,12 +90,12 @@ test("ein Lauf, den der Halter selbst startet, wartet nicht auf die eigene Sperr
 test("der Schlüssel eines beendeten Halters öffnet die Sperre nicht mehr", FRIST, async (context) => {
   const env = umgebung(context);
   const gehalten = await halter(context, env);
-  const { schluessel } = JSON.parse(readFileSync(`${env.SCHWERLAUF_SPERRDATEI}.json`, "utf8"));
+  const { schluessel } = JSON.parse(readFileSync(`${env.SCHWERLAUF_SPERRDATEI}.platz-1.json`, "utf8"));
   gehalten.kind.kill("SIGKILL");
   await gehalten.ende;
   const laeufe = [
-    starteArbeit(context, "alt", { ...env, SCHWERLAUF_HALTER: schluessel }),
-    starteArbeit(context, "neu", env),
+    starteArbeit(context, "alt", { env: { ...env, SCHWERLAUF_HALTER: schluessel } }),
+    starteArbeit(context, "neu", { env }),
   ];
   await nacheinander(laeufe);
 
@@ -194,12 +194,12 @@ async function endetOhneHalterEintrag(context, env) {
   assert.equal(lauf.kind.exitCode, 1, lauf.stderr);
   assert.match(lauf.stderr, /Sperre für schwere Läufe nicht erhalten: Halter nicht eintragbar/);
   assert.equal(existsSync(marke), false);
-  assert.match(danach.stdout, /^frei \(/);
+  assert.match(danach.stdout, EIN_PLATZ_FREI);
 }
 
 test("lässt sich der Halter nicht eintragen, endet der Lauf mit Exit 1 und die Sperre ist frei", FRIST, async (context) => {
   const env = umgebung(context);
-  mkdirSync(`${env.SCHWERLAUF_SPERRDATEI}.json`);
+  mkdirSync(`${env.SCHWERLAUF_SPERRDATEI}.platz-1.json`);
 
   await endetOhneHalterEintrag(context, env);
 });
@@ -208,7 +208,7 @@ test("liegt an der Stelle der Halterdatei ein Symlink, bleibt sein Ziel unberüh
   const env = umgebung(context);
   const ziel = join(probeDirectory(context, {}), "fremde-datei");
   writeFileSync(ziel, "unberührt");
-  symlinkSync(ziel, `${env.SCHWERLAUF_SPERRDATEI}.json`);
+  symlinkSync(ziel, `${env.SCHWERLAUF_SPERRDATEI}.platz-1.json`);
 
   await endetOhneHalterEintrag(context, env);
   assert.equal(readFileSync(ziel, "utf8"), "unberührt");
@@ -218,7 +218,7 @@ test("die Halterdatei kann nur der eigene Nutzer lesen und schreiben", FRIST, as
   const env = umgebung(context);
   await halter(context, env);
 
-  assert.equal(statSync(`${env.SCHWERLAUF_SPERRDATEI}.json`).mode & RECHTE_BITS, NUR_EIGENTUEMER);
+  assert.equal(statSync(`${env.SCHWERLAUF_SPERRDATEI}.platz-1.json`).mode & RECHTE_BITS, NUR_EIGENTUEMER);
 });
 
 async function wartetAufSperre(context, [skript, ...args], dateien = {}) {

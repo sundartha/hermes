@@ -10,9 +10,14 @@ export const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
 const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
 export const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
 export const FRIST = { timeout: 30_000 };
+export const EIN_PLATZ_FREI = /^Platz 1: frei\nAllein: frei\nWartet: niemand$/m;
 
-export function umgebung(context) {
-  const env = { ...isolatedEnvironment(), SCHWERLAUF_SPERRDATEI: join(probeDirectory(context, {}), "sperre") };
+export function umgebung(context, plaetze = 1) {
+  const env = {
+    ...isolatedEnvironment(),
+    SCHWERLAUF_SPERRDATEI: join(probeDirectory(context, {}), "sperre"),
+    SCHWERLAUF_PLAETZE: String(plaetze),
+  };
   delete env.SCHWERLAUF_HALTER;
   return env;
 }
@@ -55,8 +60,8 @@ function arbeit(name) {
   return `const beginn = Date.now(); console.log("begonnen"); process.stdin.resume().on("end", () => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })));`;
 }
 
-export function starteArbeit(context, name, env) {
-  const lauf = starte([SCHWERLAUF, "--", process.execPath, "-e", arbeit(name)], { env, stdin: "pipe" });
+export function starteArbeit(context, name, { env, optionen = [] }) {
+  const lauf = starte([SCHWERLAUF, ...optionen, "--", process.execPath, "-e", arbeit(name)], { env, stdin: "pipe" });
   lauf.begonnen = zeile(lauf.kind.stdout, /^begonnen$/).then(() => "begonnen");
   lauf.wartend = zeile(lauf.kind.stderr, WARTET).then(() => "wartet");
   context.after(() => {
