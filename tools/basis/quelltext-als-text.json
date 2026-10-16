@@ -14,7 +14,6 @@
     "test/mcp-kompatibilitaetsvertrag.test.js|9f46e10753eb78bf",
     "test/openai-t2-01-widget-resource-meta.test.js|49d54f86d7e72343",
     "test/openai-t2-02-widget-uris.test.js|9f8bb3cd2e398cf7",
-    "test/openai-t2-20-reviewer-doku.test.js|8e5dc08555ce9c55",
     "test/reattach-active-call.test.js|0f1743f325f77cbb"
   ]
 }
