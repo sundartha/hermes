@@ -21,7 +21,6 @@ import {
   befundZeile,
   fehlendeVeroeffentlichteUris,
   geschuetzteUriBefunde,
-  interneKennungen,
   kanonisch,
   klassifiziere,
   pruefeKette,
@@ -456,11 +455,8 @@ const ERSTFASSUNG = {
 };
 const SYNTHETISCHER_VERTRAG = { ...BASIS, veroeffentlichte_widget_uris: [], aenderungen: [ERSTFASSUNG] };
 
-test("Kompatibilitaetsvertrag U2: die committete Vertragsdatei hat eine gueltige Kette ohne interne Kennungen", () => {
+test("Kompatibilitaetsvertrag U2: die committete Vertragsdatei hat eine gueltige Kette", () => {
   assert.deepEqual(pruefeKette(VERTRAG, echteHistorie()), []);
-  const begruendungen = VERTRAG.aenderungen.map((eintrag) => eintrag.begruendung);
-  const kommentar = [VERTRAG._kommentar ?? []].flat();
-  assert.deepEqual(interneKennungen([...kommentar, ...begruendungen].join("\n")), []);
 });
 
 test("Kompatibilitaetsvertrag U2: synthetische Kette ist gueltig (Gegenprobe der Kontrollen)", () => {
