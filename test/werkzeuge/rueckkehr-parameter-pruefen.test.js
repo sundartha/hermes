@@ -130,3 +130,53 @@ test("ein Zweig fuer einen laengeren Bezeichner zaehlt nicht als Zweig fuer den 
     assert.match(result.stdout, /KARTE_GESPEICHERT: kein Zweig "card === RETURN_OK"/, fremderName);
   }
 });
+
+function verschachtelteShell(imFunktionsrumpf, nachDerFunktion) {
+  return [
+    "<script>",
+    '  const RETURN_PARAM_CARD = "card";',
+    '  const RETURN_PARAM_SUB = "sub";',
+    '  const RETURN_OK = "ok";',
+    '  const RETURN_FAILED = "failed";',
+    "  const params = new URLSearchParams(window.location.search);",
+    "  function zeigeRueckkehr() {",
+    "    function returnMessageText(card, sub) {",
+    CARD_BRANCH,
+    ...imFunktionsrumpf,
+    '      return "";',
+    "    }",
+    "    returnMessageText(params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB));",
+    ...nachDerFunktion,
+    "  }",
+    "</script>",
+  ].join("\n");
+}
+
+const VERGLEICH_NACH_DER_FUNKTION = "    if (sub === RETURN_FAILED) track();";
+
+test("ein Vergleich nach dem Ende einer tiefer eingerueckten Funktion ist kein Zweig der Funktion", (kontext) => {
+  const result = runInMiniRoot(kontext, {
+    [SHELL_FILE]: verschachtelteShell([], [VERGLEICH_NACH_DER_FUNKTION]),
+  });
+  assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
+  assert.match(result.stdout, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/);
+  assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT/);
+});
+
+test("ein Zweig hinter einem inneren Block einer Funktion in Spalte 0 zaehlt als Zweig der Funktion", (kontext) => {
+  const rumpf = ["    if (card === RETURN_OK) {", '      return "Karte gespeichert";', "    }", SUB_BRANCH];
+  const shell = shellSource(rumpf).replaceAll("\n  ", "\n");
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+  assert.equal(result.stdout, "");
+  assert.equal(result.status, EXIT_OK, result.stderr);
+});
+
+test("Klammern in Zeichenketten und Kommentaren verschieben das Funktionsende nicht", (kontext) => {
+  const stoerer = ['return "{";', "return '{';", "return `{`;", String.raw`return "\"{";`, "// {", "/* { */"];
+  for (const zeile of stoerer) {
+    const shell = verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]);
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+    assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/, zeile);
+  }
+});

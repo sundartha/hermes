@@ -11,7 +11,8 @@ const PORTAL_PATHS_FILE = "src/portal-paths.js";
 const WEB_SOURCE_DIR = "apps/web/src";
 const RETURN_CONSTANT = /const (RETURN_\w+) = "([^"]+)";/g;
 const RETURN_PARAM_PREFIX = /^RETURN_PARAM_/;
-const RETURN_FUNCTION = /function returnMessageText\(([^)]*)\)\s*\{([\s\S]*?)\n {2}\}/;
+const RETURN_FUNCTION_HEAD = /function returnMessageText\(([^)]*)\)\s*\{/;
+const CODE_TOKEN = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|[{}]/g;
 const RETURN_CALL = /returnMessageText\(((?:\s*params\.get\(\w+\)\s*,?)+)\)/;
 const QUERY_READ = /params\.get\((\w+)\)/g;
 const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
@@ -54,9 +55,20 @@ function readShell(file) {
   const source = readFileSync(file, "utf8");
   const constants = new Map();
   for (const match of source.matchAll(RETURN_CONSTANT)) constants.set(match[2], match[1]);
-  const found = RETURN_FUNCTION.exec(source);
-  const branch = found && { args: found[1].split(",").map((arg) => arg.trim()), body: found[2] };
-  return { source, constants, branch, passed: passedParams(source), line: found ? lineAt(source, found.index) : 1 };
+  const head = RETURN_FUNCTION_HEAD.exec(source);
+  const body = head === null ? undefined : functionBody(source, head.index + head[0].length);
+  const branch = body === undefined ? undefined : { args: head[1].split(",").map((arg) => arg.trim()), body };
+  return { source, constants, branch, passed: passedParams(source), line: head ? lineAt(source, head.index) : 1 };
+}
+
+function functionBody(source, bodyStart) {
+  let depth = 1;
+  for (const token of source.slice(bodyStart).matchAll(CODE_TOKEN)) {
+    if (token[0] === "{") depth += 1;
+    if (token[0] === "}") depth -= 1;
+    if (depth === 0) return source.slice(bodyStart, bodyStart + token.index);
+  }
+  return undefined;
 }
 
 function passedParams(source) {
