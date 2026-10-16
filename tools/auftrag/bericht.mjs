@@ -14,10 +14,14 @@ const MAX_NOTIZ_ZEICHEN = 20_000;
 const LEERRAUM = /\s\S*$/;
 const ERSTE_ZUSATZNUMMER = 2;
 
+function zitierteHinweise(text) {
+  return [HINWEISE_DES_BAUS, ...text.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+}
+
 export function hinweiseDesBaus(agenten = []) {
   const antwort = (agenten.findLast(({ rolle }) => rolle === "bau")?.antwort ?? "").trim();
   if (antwort === "") return [];
-  return [HINWEISE_DES_BAUS, ...antwort.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+  return zitierteHinweise(antwort);
 }
 
 function gekuerzt(text) {
@@ -38,7 +42,7 @@ export function hinweiseFuerNotiz(agenten, entnimmVolleAntwort) {
   const bau = agenten.findLast(({ rolle }) => rolle === "bau");
   const auszug = bau ? notizAuszug(entnimmVolleAntwort(bau), bau.sitzung) : "";
   if (auszug === "") return [];
-  return [HINWEISE_DES_BAUS, ...auszug.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+  return zitierteHinweise(auszug);
 }
 
 export function belegVerzeichnis(root, phase) {

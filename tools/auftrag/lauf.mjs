@@ -43,6 +43,10 @@ function eintraege(text) {
     .reduce((summe, { count }) => summe + count, 0);
 }
 
+function herkunftsZeilen(phase, { id, art }) {
+  return [`Auftrag: ${phase.phase}/${id}`, `Art: ${art}`];
+}
+
 function nachfrage(ids) {
   return [
     "## Zweck-Absatz fehlt",
@@ -291,7 +295,7 @@ class AuftragsLauf {
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
     const absatz = auftrag.art === "fehlerbehebung" ? "Ursache" : "Warum";
     const warum = `${absatz}: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
-    const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, `Art: ${auftrag.art}`];
+    const herkunft = herkunftsZeilen(phase, auftrag);
     const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
     const hinweise = hinweiseDesBaus(this.agenten);
     const abschnitt = hinweise.length > 0 ? [...hinweise, ""] : [];
@@ -383,8 +387,7 @@ class AuftragsLauf {
 
 function gebauteAuftraege(phase, root) {
   const commits = auftragsTrailer(root);
-  const gebaut = ({ id, art }) =>
-    commits.some((trailer) => trailer.has(`Auftrag: ${phase.phase}/${id}`) && trailer.has(`Art: ${art}`));
+  const gebaut = (auftrag) => commits.some((trailer) => herkunftsZeilen(phase, auftrag).every((zeile) => trailer.has(zeile)));
   return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));
 }
 
