@@ -336,7 +336,7 @@ async function lokal(optionen, root, { github = githubZugang(), programm } = {})
   if (auswahl.commits.length === 0) throw new Error(`Keine Commits zwischen ${optionen.basis} und HEAD.`);
   const text = await auftragstext(github, { body: `Closes #${optionen.issue}` }, branch);
   if (!text) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
-  const kontext = { root, token, programm, ciLauf: "", auftragstext: text };
+  const kontext = { root, token, programm, ciLauf: "", auftragstext: text, blockerAblegen: true };
   const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
   const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
   console.log(NUR_LOKAL);
