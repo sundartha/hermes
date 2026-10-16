@@ -182,7 +182,7 @@ process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "
 `;
 const PLAN = "plaene/P-001-probe";
 
-function ausPlanung(context, ausweg) {
+function ausPlanung(context, ausweg, roteRunden = []) {
   const root = probeRepository(context, { [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: "{}\n" });
   const werkzeug = probeDirectory(context, { "claude.mjs": NOTIZ_ERSATZ });
   chmodSync(join(werkzeug, "claude.mjs"), 0o755);
@@ -196,7 +196,8 @@ function ausPlanung(context, ausweg) {
   });
   const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
   const kontext = { phase: { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] }, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
-  const runde = () => ({ ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...ausweg });
+  const offen = [...roteRunden];
+  const runde = () => ({ ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...(offen.shift() ?? ausweg) });
   const ergebnis = fuehreRundenAus(kontext, runde);
   const starts = existsSync(join(werkzeug, "starts.txt")) ? readFileSync(join(werkzeug, "starts.txt"), "utf8") : "";
   const beleg = JSON.parse(readFileSync(join(root, ".fortschritt/P-001-probe/a1.json"), "utf8"));
@@ -214,5 +215,20 @@ test("ein alter Test und ein unklarer Zweck gehen auch bei einer Phase aus einem
     const { ergebnis, starts } = ausPlanung(context, ausweg);
     assert.equal(ergebnis, ROT);
     assert.ok(starts.startsWith(erster), JSON.stringify({ ausweg, starts }));
+  }
+});
+
+test("die Entscheidungsnotiz nennt die Prüfung, an der ausgestiegen wurde: die rote der Runde davor, die aus der Zeile oder keine", (context) => {
+  const lintRot = { grund: "lint endete mit Exit 1.", pruefungen: [{ name: "lint", exitCode: 1, zeilen: ["src/a.js: Name zu kurz"] }] };
+  const alterTest = { zeile: ALTER_TEST_ZEILE, datei: "test/rechnen.test.js", test: "verdopple lässt die Zahl", grund: "Das Ziel verlangt das Verdoppeln.", rot: false };
+  const faelle = [
+    [{ ausstieg: GRUND }, [lintRot], "lint"],
+    [{ ausstieg: GRUND }, [], "keine"],
+    [{ ausstieg: "Zweck der Prüfung typprüfung unklar: Das Projekt hat keine Typen." }, [lintRot], "typprüfung"],
+    [{ alterTest }, [], "betroffene tests"],
+  ];
+  for (const [ausweg, roteRunden, pruefung] of faelle) {
+    const { beleg } = ausPlanung(context, ausweg, roteRunden);
+    assert.ok(beleg.entscheidung.text.includes(`\nAusweg bei Prüfung: ${pruefung}\n`), beleg.entscheidung.text);
   }
 });
