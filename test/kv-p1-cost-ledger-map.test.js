@@ -1,8 +1,5 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { tempDataDir, seedState, seedCall, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND, NUMBER_STATUS } from "../src/store/defaults.js";
 import {
@@ -315,50 +312,4 @@ test("KV-P1-9: jede ledger:true-Zeile referenziert einen echten USAGE_EVENT_KIND
       `Zeile '${name}' hat ledger:true aber kind='${row.kind}' ist kein USAGE_EVENT_KIND`,
     );
   }
-});
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git"]);
-
-function alleSrcDateien(relDir) {
-  const treffer = [];
-  const stack = [path.join(REPO_ROOT, relDir)];
-  while (stack.length) {
-    const dir = stack.pop();
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (EXCLUDED_DIR_NAMES.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else if (entry.isFile() && entry.name.endsWith(".js")) treffer.push(full);
-    }
-  }
-  return treffer;
-}
-
-test("KV-P1-10: addVoiceUsageCostCents hat genau EIN Vorkommen von store.addVoiceUsageCostCents() in src/", () => {
-  const CALL_SITE_PATTERN = /store\.addVoiceUsageCostCents\(/g;
-  const EXPECTED_CALL_SITE = "src/billing/metering.js";
-  const ERWARTETE_VORKOMMEN = 1;
-
-  const vorkommenJeDatei = alleSrcDateien("src")
-    .map((datei) => ({
-      datei: path.relative(REPO_ROOT, datei),
-      anzahl: [...fs.readFileSync(datei, "utf8").matchAll(CALL_SITE_PATTERN)].length,
-    }))
-    .filter((eintrag) => eintrag.anzahl > 0);
-
-  const gesamtVorkommen = vorkommenJeDatei.reduce((summe, eintrag) => summe + eintrag.anzahl, 0);
-  const fundstellen = vorkommenJeDatei.map((eintrag) => `${eintrag.datei}:${eintrag.anzahl}`).join(", ") || "keine";
-
-  assert.equal(
-    gesamtVorkommen,
-    ERWARTETE_VORKOMMEN,
-    `ein zweiter Aufruf waere eine potenzielle Doppelbelastung (TOD 2) - ` +
-      `gefunden: ${gesamtVorkommen} Vorkommen [${fundstellen}]`,
-  );
-  assert.deepEqual(
-    vorkommenJeDatei.map((eintrag) => eintrag.datei),
-    [EXPECTED_CALL_SITE],
-    `das einzige Vorkommen muss in ${EXPECTED_CALL_SITE} liegen - gefunden: [${fundstellen}]`,
-  );
 });

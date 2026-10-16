@@ -1406,11 +1406,6 @@
       "count": 1
     }
   },
-  "test/kv-p1-cost-ledger-map.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/kv-p3-inbound-truing.test.js": {
     "no-param-reassign": {
       "count": 1
