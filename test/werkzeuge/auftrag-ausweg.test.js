@@ -182,18 +182,22 @@ process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "
 `;
 const PLAN = "plaene/P-001-probe";
 
+function setzeUmgebung(context, werte) {
+  const vorher = new Map(Object.keys(werte).map((name) => [name, env[name]]));
+  Object.assign(env, werte);
+  context.after(() => {
+    vorher.forEach((alt, name) => {
+      if (alt === undefined) delete env[name];
+      else env[name] = alt;
+    });
+  });
+}
+
 function ausPlanung(context, ausweg, roteRunden = []) {
   const root = probeRepository(context, { [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: "{}\n" });
   const werkzeug = probeDirectory(context, { "claude.mjs": NOTIZ_ERSATZ });
   chmodSync(join(werkzeug, "claude.mjs"), 0o755);
-  const vorher = { HERMES_CLAUDE: env.HERMES_CLAUDE, ERSATZ_STARTS: env.ERSATZ_STARTS };
-  Object.assign(env, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
-  context.after(() => {
-    for (const [name, wert] of Object.entries(vorher)) {
-      if (wert === undefined) delete env[name];
-      else env[name] = wert;
-    }
-  });
+  setzeUmgebung(context, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
   const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
   const kontext = { phase: { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] }, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
   const offen = [...roteRunden];
