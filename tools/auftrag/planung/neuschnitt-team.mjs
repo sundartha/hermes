@@ -151,7 +151,7 @@ class NeuschnittPlanung extends Planung {
   }
 
   async schneide() {
-    await this.planerStufe(await this.planerNachricht(), (wert) => this.nimmSchnitt(wert));
+    return this.planerStufe(await this.planerNachricht(), (wert) => this.nimmSchnitt(wert));
   }
 
   skriptPruefung(schnitt, eingaben) {
@@ -174,9 +174,9 @@ class NeuschnittPlanung extends Planung {
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
   }
 
-  prueflisteSchluessel() {
-    const durchstich = this.durchstich(this.schnitt);
-    const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
+  prueflisteSchluessel(schnitt) {
+    const durchstich = this.durchstich(schnitt);
+    const schluessel = prueflisteSoll(schnitt, this.soll, this.erkunderAnnahmen());
     if (durchstich === undefined) return schluessel.filter((zeile) => zeile !== DURCHSTICH_ZEILE);
     return schluessel.map((zeile) => (zeile === DURCHSTICH_ZEILE ? `durchstich:${durchstich}` : zeile));
   }
@@ -191,18 +191,18 @@ class NeuschnittPlanung extends Planung {
     return abschnitt("Neuschnitt", [anlass, regeln.join(" "), `Phasendatei ${datei}:`, json(this.phase)].join("\n\n"));
   }
 
-  neuschnittAbschnitte() {
-    return [this.neuschnittKopf()];
+  kartenAbschnitte() {
+    return [];
   }
 
-  async prueferNachricht(schluessel, teil) {
-    const grundlage = this.pruefGrundlage(schluessel, await this.prueferSicht(teil));
-    return nachricht("Prüfung", [...this.neuschnittAbschnitte(), abschnitt("Schnittliste", json(this.schnitt)), ...grundlage]);
+  async neuschnittPrueferNachricht(schnitt, schluessel) {
+    const grundlage = this.pruefGrundlage(schluessel, await this.prueferSicht({ gruppe: null, schluessel }));
+    return nachricht("Prüfung", [this.neuschnittKopf(), ...(await this.kartenAbschnitte(schnitt)), abschnitt("Schnittliste", json(schnitt)), ...grundlage]);
   }
 
-  async pruefliste(datei) {
-    const schluessel = this.prueflisteSchluessel();
-    const text = await this.prueferNachricht(schluessel, { gruppe: null, schluessel });
+  async pruefliste(datei, schnitt) {
+    const schluessel = this.prueflisteSchluessel(schnitt);
+    const text = await this.neuschnittPrueferNachricht(schnitt, schluessel);
     const { befunde } = await this.pruefeMitFrischemPruefer(text, schluessel, { datei, grund: PRUEFUNG_UNVOLLSTAENDIG });
     return befunde;
   }
@@ -212,11 +212,11 @@ class NeuschnittPlanung extends Planung {
     return super.beantworte(befunde, wert, vorher);
   }
 
-  async pruefe() {
-    const befunde = await this.pruefliste(ERSTE_PRUEFLISTE);
+  async pruefe(schnitt) {
+    const befunde = await this.pruefliste(ERSTE_PRUEFLISTE, schnitt);
     if (befunde.length === 0) return;
-    await this.korrigiere(befunde, this.schnitt);
-    const danach = await this.pruefliste(PRUEFLISTE_NACH_KORREKTUR);
+    const korrektur = await this.korrigiere(befunde, schnitt);
+    const danach = await this.pruefliste(PRUEFLISTE_NACH_KORREKTUR, korrektur.schnitt);
     if (danach.length > 0) throw new Ende(EXIT_BEFUNDE, PRUEFUNG_OFFEN, danach.map(prueferZeile));
   }
 
@@ -259,8 +259,7 @@ class NeuschnittPlanung extends Planung {
 
   async laufe() {
     await this.erkundeNummern();
-    await this.schneide();
-    await this.pruefe();
+    await this.pruefe(await this.schneide());
     this.setzeEin(await this.entwerfe());
   }
 
@@ -332,18 +331,22 @@ class UmbauNeuschnittPlanung extends NeuschnittPlanung {
     return this.ersatzKarten([this.alt]);
   }
 
+  kartenMitNeuenUmbauten(schnitt) {
+    const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
+    return this.ersatzKarten([this.alt, ...umbauten]);
+  }
+
   erkundungsbericht() {
     return this.ersatzbericht(this.produktDateien([this.alt]));
   }
 
   async skriptPruefung(schnitt, eingaben) {
-    const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
-    this.umbauKarten = await this.ersatzKarten([this.alt, ...umbauten]);
-    return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...this.umbauKarten });
+    return schnittBefunde(schnitt, { ...eingaben, berichte: [], ...(await this.kartenMitNeuenUmbauten(schnitt)) });
   }
 
-  neuschnittAbschnitte() {
-    return [this.neuschnittKopf(), abschnitt("Funktionsliste", json(this.umbauKarten.funktionsliste)), abschnitt("Dateikarte", json(this.umbauKarten.dateikarte))];
+  async kartenAbschnitte(schnitt) {
+    const { funktionsliste, dateikarte } = await this.kartenMitNeuenUmbauten(schnitt);
+    return [abschnitt("Funktionsliste", json(funktionsliste)), abschnitt("Dateikarte", json(dateikarte))];
   }
 }
 
