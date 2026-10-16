@@ -85,8 +85,11 @@ function withoutPositions(key, value) {
   return typeof value === "bigint" ? `${value}n` : value;
 }
 
-function treeText(tree) {
-  return JSON.stringify(tree, withoutPositions);
+function treeText(tree, replacements = new Map()) {
+  return JSON.stringify(
+    tree,
+    (key, value) => replacements.get(value) ?? withoutPositions(key, value),
+  );
 }
 
 function relativeSources(tree) {
@@ -98,16 +101,17 @@ function relativeSources(tree) {
   return relative.toSorted((left, right) => left.start - right.start);
 }
 
-function followRenames(tree, file, renames) {
+function resolvedSources(tree, file, renames) {
   const followed = new Map();
+  const replacements = new Map();
   for (const source of relativeSources(tree)) {
     const resolved = posix.join(posix.dirname(file), source.value);
     const target = renames.get(resolved) ?? resolved;
     if (target !== resolved) followed.set(resolved, target);
-    source.value = target;
-    source.raw = `${source.raw.at(0)}${target}${source.raw.at(-1)}`;
+    const raw = `${source.raw.at(0)}${target}${source.raw.at(-1)}`;
+    replacements.set(source, { ...source, value: target, raw });
   }
-  return followed;
+  return { followed, replacements };
 }
 
 function renameReason(followed) {
@@ -120,9 +124,14 @@ function modifiedReason(context, file) {
   const after = syntaxTree(file, fileAt("HEAD", file));
   if (before === null || after === null) return undefined;
   if (treeText(before) === treeText(after)) return COMMENTS_ONLY;
-  const followed = followRenames(before, file, context.renames());
-  followRenames(after, file, new Map());
-  const same = followed.size > 0 && treeText(before) === treeText(after);
+  const { followed, replacements: beforeSources } = resolvedSources(
+    before,
+    file,
+    context.renames(),
+  );
+  const { replacements: afterSources } = resolvedSources(after, file, new Map());
+  const same =
+    followed.size > 0 && treeText(before, beforeSources) === treeText(after, afterSources);
   return same ? renameReason(followed) : undefined;
 }
 
