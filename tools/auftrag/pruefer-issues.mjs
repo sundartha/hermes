@@ -7,6 +7,8 @@ const MIN_ZAUN = 3;
 const BACKTICKS = /`+/g;
 const KATALOG_ID = /^(?:[A-Z]\d{1,2}|SG-\d{2,3})$/;
 const OHNE_ID = "Befund";
+const MIT_PR = / \(PR #\d+\)$/;
+const OFFEN = "open";
 
 function katalogId(id) {
   return KATALOG_ID.test(id) ? id : "";
@@ -53,10 +55,14 @@ export function issueText({ sha, pr = null, befund, grund }) {
   ].join("\n");
 }
 
+function sperrtNeues({ state, title }) {
+  return state === OFFEN || MIT_PR.test(title);
+}
+
 export async function legeIssuesAn(issues, github) {
   if (issues.length === 0) return { neu: 0, vorhanden: 0 };
   const bekannt = await github.alle(`/issues?state=all&labels=${LABEL}`, (liste) => liste);
-  const titel = new Set(bekannt.map(({ title }) => title));
+  const titel = new Set(bekannt.filter(sperrtNeues).map(({ title }) => title));
   let neu = 0;
   for (const issue of issues) {
     const title = titelVon(issue.titel);
