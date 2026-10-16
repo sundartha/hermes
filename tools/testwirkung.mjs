@@ -18,6 +18,7 @@ const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const AUFRUF = "Aufruf: node tools/testwirkung.mjs --basis <commit>";
 const VERGLEICHBAR = /\.[cm]?js$/;
+const KEIN_LAUF = { ergebnisse: new Map(), uebersprungen: new Set() };
 
 function geaenderteTestdateien(basis) {
   const liste = git(["diff", "--name-only", "-z", "--no-renames", "--diff-filter=d", basis, "--", "test/"]);
@@ -78,11 +79,13 @@ function namensmuster(tests) {
 
 function lauf(tests, vorspann) {
   const dateien = [...new Set(tests.map(({ datei }) => datei))];
-  const jeTest = new Map(tests.map((test) => [schluessel(test), []]));
-  for (const gelaufen of testlauf({ dateien, muster: namensmuster(tests), vorspann })) {
-    jeTest.get(schluessel(gelaufen))?.push(gelaufen.bestanden);
+  const ergebnisse = new Map(tests.map((test) => [schluessel(test), []]));
+  const uebersprungen = new Set();
+  for (const gelaufen of testlauf({ dateien, muster: namensmuster(tests), vorspann, mitUebersprungenen: true })) {
+    if (gelaufen.uebersprungen) uebersprungen.add(schluessel(gelaufen));
+    else ergebnisse.get(schluessel(gelaufen))?.push(gelaufen.bestanden);
   }
-  return jeTest;
+  return { ergebnisse, uebersprungen };
 }
 
 function mitHilfsdatei(vergleich) {
@@ -124,15 +127,19 @@ function laufname(index) {
   return index === 0 ? LAUF_OHNE_PRUEFUNG : `${WIEDERHOLUNGSLAUF}${index}`;
 }
 
-function befund(test, { ohnePruefung, wiederholungen }) {
+function fehlendeLaeufe(laeufe, kennung, ueberspringenErlaubt) {
+  const erlaubt = ({ uebersprungen }) => ueberspringenErlaubt && uebersprungen.has(kennung);
+  return laeufe.flatMap((lauf, index) => (lauf.ergebnisse.get(kennung)?.length === 0 && !erlaubt(lauf) ? [laufname(index)] : []));
+}
+
+function befund(test, { ueberspringenErlaubt, ohnePruefung, wiederholungen }) {
   const kennung = schluessel(test);
-  const laeufe = [ohnePruefung, ...wiederholungen].map((ergebnisse) => ergebnisse.get(kennung));
-  const [ersterLauf, ...weitere] = laeufe;
+  const [ersterLauf, ...weitere] = [ohnePruefung, ...wiederholungen].map(({ ergebnisse }) => ergebnisse.get(kennung));
   const rot = weitere.filter((ergebnisse) => ergebnisse.includes(false)).length;
   const gruen = weitere.filter((ergebnisse) => ergebnisse.length > 0 && !ergebnisse.includes(false)).length;
   return {
     kennung,
-    fehlt: ersterLauf === undefined ? [] : laeufe.flatMap((ergebnisse, index) => (ergebnisse.length === 0 ? [laufname(index)] : [])),
+    fehlt: fehlendeLaeufe([ohnePruefung, ...wiederholungen], kennung, ueberspringenErlaubt),
     leer: ersterLauf?.includes(true) === true,
     wackelt: rot > 0 && gruen > 0,
     rot,
@@ -142,11 +149,16 @@ function befund(test, { ohnePruefung, wiederholungen }) {
 function befunde(tests, wiederholt) {
   const alle = vereint(tests, wiederholt);
   if (alle.length === 0) return [];
-  const ohnePruefung = tests.length === 0 ? new Map() : lauf(tests, UNTER_ATTRAPPE);
+  const ohnePruefung = tests.length === 0 ? KEIN_LAUF : lauf(tests, UNTER_ATTRAPPE);
   const wiederholungen = wiederholt.length === 0 ? [] : Array.from({ length: WIEDERHOLUNGEN }, () => lauf(wiederholt, []));
   const zuWiederholen = new Set(wiederholt.map(schluessel));
+  const imLaufA = new Set(tests.map(schluessel));
   return alle.map((test) =>
-    befund(test, { ohnePruefung, wiederholungen: zuWiederholen.has(schluessel(test)) ? wiederholungen : [] }),
+    befund(test, {
+      ueberspringenErlaubt: !imLaufA.has(schluessel(test)),
+      ohnePruefung,
+      wiederholungen: zuWiederholen.has(schluessel(test)) ? wiederholungen : [],
+    }),
   );
 }
 

@@ -16,9 +16,9 @@ const TESTKONTEXT = "NODE_TEST_CONTEXT";
 
 function eintragIn(verzeichnis) {
   return (zeile) => {
-    const { name, datei, bestanden, zeile: aufrufzeile, spalte } = JSON.parse(zeile);
+    const { name, datei, bestanden, uebersprungen, zeile: aufrufzeile, spalte } = JSON.parse(zeile);
     const pfad = datei?.startsWith("file:") ? fileURLToPath(datei) : (datei ?? "");
-    return { datei: relative(verzeichnis, pfad), name, bestanden, zeile: aufrufzeile, spalte };
+    return { datei: relative(verzeichnis, pfad), name, bestanden, uebersprungen, zeile: aufrufzeile, spalte };
   };
 }
 
@@ -44,14 +44,15 @@ function abgebrochen(grund) {
   return new Error(`Testlauf abgebrochen: ${grund}`);
 }
 
-export function testlauf(lauf) {
+export function testlauf({ mitUebersprungenen = false, ...lauf }) {
   const { argumente, optionen } = aufruf(lauf);
   const beginn = Date.now();
   const ergebnis = spawnSync(process.execPath, argumente, { ...optionen, encoding: "utf8", maxBuffer: MAX_AUSGABE });
   berichteDauer(beginn);
   if (ergebnis.error !== undefined || ergebnis.signal !== null) throw abgebrochen(ergebnis.error?.message ?? ergebnis.signal);
   const zeilen = ergebnis.stdout.split("\n");
-  return zeilen.filter(Boolean).map(eintragIn(optionen.cwd));
+  const eintraege = zeilen.filter(Boolean).map(eintragIn(optionen.cwd));
+  return eintraege.filter(({ uebersprungen }) => mitUebersprungenen || !uebersprungen);
 }
 
 export function testlaufNebenher(lauf) {
