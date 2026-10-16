@@ -25,10 +25,13 @@ import {
 } from "./pruefer-lauf.mjs";
 import {
   ABLAGE_DATEI,
+  BLOCKER,
   ERGEBNIS_DATEI,
   FORMAT,
+  GEPRUEFT,
   NACHSTELLUNG_DATEI,
   SCHWEREN,
+  SOLLTE,
   ablageAus,
   ergebnisAus,
   nachstellungAus,
@@ -58,6 +61,11 @@ const JSON_EINRUECKUNG = 2;
 const ERFOLG = "success";
 const FEHLER = "error";
 const EXIT_HERKUNFT = 1;
+const EXIT_BEFUNDE = 1;
+const EXIT_NICHT_GELAUFEN = 3;
+const ZU_BEHEBEN = new Set([BLOCKER, SOLLTE]);
+const NUR_LOKAL =
+  "Lokaler Vorab-Lauf: kein Prüfer-Ergebnis, kein Status, kein Issue, kein Merge-Signal. Maßgeblich bleibt der Prüfer auf GitHub.";
 
 function falscheHerkunft(herkunft) {
   console.error(
@@ -197,12 +205,28 @@ function meldeSumme(ergebnis) {
   console.log(`Prüfer: ${ergebnis.commits.length} Commits; Befunde ${jeSchwere.join(", ")}.`);
 }
 
-async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
+function nimmToken() {
   const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
+  return token;
+}
+
+async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
+  const offen = (fertig) =>
+    auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
+  const schreibe = (fertig) =>
+    schreibeErgebnis(optionen.aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
+  const { ergebnisse: commits, ablage } = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
+  legeAblageBereit(optionen, ablage);
+  meldeSumme({ ...kopf, commits });
+  return commits;
+}
+
+async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
+  const token = nimmToken();
   const ausloeser = ausloesenderLauf();
   if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
-  const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
+  const { head, "pr-branch": branch, "pr-repo": prRepo } = optionen;
   if (ablageImArtefakt(optionen)) throw new Error("Die Ablage darf nicht im Ordner --aus liegen, der hochgeladen wird.");
   const pr = await offenerPr(github, head);
   const basis = basisVon(pr, head, root);
@@ -223,13 +247,7 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
     pr: pr.number,
     probeBranch: auswahl.probeBranch,
   };
-  const offen = (fertig) =>
-    auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
-  const schreibe = (fertig) =>
-    schreibeErgebnis(aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
-  const { ergebnisse: commits, ablage } = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
-  legeAblageBereit(optionen, ablage);
-  meldeSumme({ ...kopf, commits });
+  await pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf });
   return 0;
 }
 
@@ -302,6 +320,29 @@ async function ablegen(optionen, root, { github = githubZugang({ repo: optionen.
   return 0;
 }
 
+function lokalerExit(commits) {
+  if (commits.some(({ zustand }) => zustand !== GEPRUEFT)) return EXIT_NICHT_GELAUFEN;
+  const befunde = commits.flatMap((commit) => commit.befunde);
+  return befunde.some(({ schwere }) => ZU_BEHEBEN.has(schwere)) ? EXIT_BEFUNDE : 0;
+}
+
+async function lokal(optionen, root, { github = githubZugang(), programm } = {}) {
+  const token = nimmToken();
+  if (ablageImArtefakt(optionen)) throw new Error("Die Ablage darf nicht im Ordner --aus liegen.");
+  const head = gitAusgabe(["rev-parse", "HEAD"], root).trim();
+  const branch = gitAusgabe(["rev-parse", "--abbrev-ref", "HEAD"], root).trim();
+  const basis = gitAusgabe(["merge-base", optionen.basis, head], root).trim();
+  const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo: "", root });
+  if (auswahl.commits.length === 0) throw new Error(`Keine Commits zwischen ${optionen.basis} und HEAD.`);
+  const text = await auftragstext(github, { body: `Closes #${optionen.issue}` }, branch);
+  if (!text) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
+  const kontext = { root, token, programm, ciLauf: "", auftragstext: text };
+  const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
+  const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
+  console.log(NUR_LOKAL);
+  return lokalerExit(commits);
+}
+
 const UNTERBEFEHLE = new Map([
   ["artefakt", artefakt],
   ["pruefen", pruefen],
@@ -315,4 +356,4 @@ export function pruefer(art, optionen, root) {
   return befehl(optionen, root);
 }
 
-export { artefakt, pruefen, entscheiden, ablegen };
+export { artefakt, pruefen, entscheiden, ablegen, lokal };

@@ -1,0 +1,200 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+
+import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
+import {
+  SCHEIN_TOKEN,
+  aufzeichnung,
+  ersatzPruefer,
+  ohneGitVariablen,
+  probeRepo,
+  scheinGithub,
+} from "./pruefer/hilfen.mjs";
+
+ohneGitVariablen();
+
+const EINSTIEG = join(REPO_ROOT, "tools/pruefer-lokal.mjs");
+const ISSUE_NUMMER = 41;
+const NACHRICHT = "Setze die Zahl\n\nWarum: Auftrag a1.\n\nPaket: EF5\n";
+const EXIT_BEFUNDE = 1;
+const EXIT_AUFRUF = 2;
+const EXIT_NICHT_GELAUFEN = 3;
+const AUSFUEHRBAR = 0o755;
+const ERSATZ = fileURLToPath(new URL("pruefer/ersatz-pruefer.mjs", import.meta.url));
+
+function mitBefunden(schweren) {
+  const aufnahme = aufzeichnung("gueltig");
+  const ergebnis = aufnahme.zeilen.find((zeile) => zeile.type === "result");
+  const befunde = ergebnis.structured_output.befunde.filter(({ schwere }) => schweren.includes(schwere));
+  ergebnis.structured_output = { urteil: befunde.length ? "NICHT_BESTANDEN" : "BESTANDEN", befunde };
+  return aufnahme;
+}
+
+function ohneBefunde() {
+  return mitBefunden([]);
+}
+
+function paketBranch(context) {
+  const repo = probeRepo(context);
+  repo.git(["branch", "-M", "master"]);
+  repo.git(["checkout", "-q", "-b", "paket/EF5-probe"]);
+  repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, NACHRICHT);
+  repo.committe({ "src/name.js": "export const NAME = 'b';\n" }, NACHRICHT);
+  return repo;
+}
+
+function diffZaehler(context, aufnahme) {
+  const ordner = probeDirectory(context, { "aufnahme.json": JSON.stringify(aufnahme) });
+  const liste = join(ordner, "diffs.txt");
+  const programm = join(ordner, "claude.mjs");
+  const einstellung = { aufzeichnung: join(ordner, "aufnahme.json"), protokoll: join(ordner, "protokoll.json"), liestDiffs: true };
+  writeFileSync(
+    programm,
+    [
+      "#!/usr/bin/env node",
+      'import { appendFileSync, readFileSync, readdirSync } from "node:fs";',
+      `import { spiele } from ${JSON.stringify(ERSATZ)};`,
+      'const inhalt = readdirSync("diff").map((name) => readFileSync(`diff/${name}`, "utf8")).join("");',
+      `appendFileSync(${JSON.stringify(liste)}, \`\${inhalt.length}\\n\`);`,
+      `spiele(${JSON.stringify(einstellung)});`,
+      "",
+    ].join("\n"),
+  );
+  chmodSync(programm, AUSFUEHRBAR);
+  const laengen = () => readFileSync(liste, "utf8").trim().split("\n").map(Number);
+  return { programm, protokoll: () => null, laengen };
+}
+
+async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issueLesbar = true, unterordner = "", ersatz: eigenerErsatz }) {
+  const repo = paketBranch(context);
+  const ersatz = eigenerErsatz ?? ersatzPruefer(context, { aufnahme });
+  const routen = issueLesbar
+    ? [[`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket EF5", body: "Ziel" }]]
+    : [];
+  const github = await scheinGithub(context, new Map(routen));
+  const ablage = join(probeDirectory(context, {}), "nicht-oeffentlich");
+  const aus = join(probeDirectory(context, {}), "ergebnis");
+  const umgebung = {
+    ...isolatedEnvironment(),
+    HERMES_CLAUDE: ersatz.programm,
+    GH_TOKEN: "schein-gh",
+    GITHUB_API_URL: github.url,
+    GITHUB_REPOSITORY: "sundartha/hermes",
+    CLAUDE_CODE_OAUTH_TOKEN: token,
+  };
+  const args = argumente ?? ["--basis", "master", "--issue", String(ISSUE_NUMMER), "--aus", aus, "--ablage", ablage];
+  const kind = spawn(process.execPath, [EINSTIEG, ...args], { cwd: join(repo.ordner, unterordner), env: umgebung });
+  let ausgabe = "";
+  kind.stdout.on("data", (stueck) => (ausgabe += stueck));
+  kind.stderr.on("data", (stueck) => (ausgabe += stueck));
+  const [status] = await once(kind, "close");
+  const datei = join(aus, "ergebnis.json");
+  const ergebnis = existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null;
+  return { status, ausgabe, ergebnis, repo, anfragen: github.anfragen, protokoll: ersatz.protokoll() };
+}
+
+test("lokal prüft jeden Commit seit master mit dem Befehl der CI, endet bei BLOCKER oder SOLLTE mit 1 und schreibt nichts nach GitHub", async (context) => {
+  const { status, ausgabe, ergebnis, repo, anfragen, protokoll } = await starte(context, {
+    aufnahme: aufzeichnung("gueltig"),
+  });
+  assert.equal(status, EXIT_BEFUNDE, ausgabe);
+  assert.equal(ergebnis.head, repo.git(["rev-parse", "HEAD"]));
+  assert.equal(ergebnis.basis, repo.git(["rev-parse", "master"]));
+  assert.equal(ergebnis.lokal, true);
+  assert.deepEqual(
+    ergebnis.commits.map(({ zustand }) => zustand),
+    ["geprueft", "geprueft"],
+  );
+  assert.deepEqual(
+    anfragen.map(({ methode, pfad }) => `${methode} ${pfad}`),
+    [`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`],
+  );
+  assert.match(protokoll.argumente.join(" "), /^-p --restricted --tools Read,Grep,Glob /);
+  assert.deepEqual(Object.keys(protokoll.umgebung).filter((name) => !name.startsWith("__CF_")).sort(), [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "HOME",
+    "PATH",
+  ]);
+  assert.match(ausgabe, /kein Merge-Signal/);
+  assert.doesNotMatch(ausgabe, /success/);
+});
+
+test("lokal aus einem Unterordner gibt dem Prüfer dieselben Diffs wie aus der Wurzel", async (context) => {
+  const wurzel = diffZaehler(context, ohneBefunde());
+  await starte(context, { ersatz: wurzel });
+  const unten = diffZaehler(context, ohneBefunde());
+  const { status, ausgabe } = await starte(context, { ersatz: unten, unterordner: "src" });
+  assert.equal(status, 0, ausgabe);
+  assert.ok(unten.laengen().every((laenge) => laenge > 0));
+  assert.deepEqual(unten.laengen(), wurzel.laengen());
+});
+
+test("lokal mit nicht lesbarem Issue endet mit 2 und startet den Prüfer nicht", async (context) => {
+  const { status, ausgabe, protokoll } = await starte(context, { aufnahme: ohneBefunde(), issueLesbar: false });
+  assert.equal(status, EXIT_AUFRUF);
+  assert.match(ausgabe, /Issue #41 nicht lesbar/);
+  assert.equal(protokoll, null);
+});
+
+test("lokal mit unbekannter Basis endet mit 2, nicht mit dem Code für Befunde", async (context) => {
+  const aus = join(probeDirectory(context, {}), "ergebnis");
+  const { status, protokoll } = await starte(context, {
+    aufnahme: ohneBefunde(),
+    argumente: ["--basis", "gibtsnicht", "--issue", String(ISSUE_NUMMER), "--aus", aus, "--ablage", `${aus}-ablage`],
+  });
+  assert.equal(status, EXIT_AUFRUF);
+  assert.equal(protokoll, null);
+});
+
+test("lokal mit der Basis auf HEAD findet keine Commits und endet mit 2 statt mit einem sauberen Ergebnis", async (context) => {
+  const aus = join(probeDirectory(context, {}), "ergebnis");
+  const { status, ausgabe, protokoll, anfragen } = await starte(context, {
+    aufnahme: ohneBefunde(),
+    argumente: ["--basis", "HEAD", "--issue", String(ISSUE_NUMMER), "--aus", aus, "--ablage", `${aus}-ablage`],
+  });
+  assert.equal(status, EXIT_AUFRUF, ausgabe);
+  assert.match(ausgabe, /Keine Commits/);
+  assert.equal(protokoll, null);
+  assert.deepEqual(anfragen, []);
+});
+
+test("lokal endet auch mit nur einem SOLLTE mit 1, weil SOLLTE vor dem Approve behoben wird", async (context) => {
+  const { status, ausgabe } = await starte(context, { aufnahme: mitBefunden(["SOLLTE"]) });
+  assert.equal(status, EXIT_BEFUNDE, ausgabe);
+});
+
+test("lokal endet ohne BLOCKER und SOLLTE mit 0", async (context) => {
+  const { status, ausgabe } = await starte(context, { aufnahme: ohneBefunde() });
+  assert.equal(status, 0, ausgabe);
+});
+
+test("lokal ohne Token startet den Prüfer nicht und endet mit 3", async (context) => {
+  const { status, ergebnis, protokoll } = await starte(context, {
+    aufnahme: ohneBefunde(),
+    token: "",
+  });
+  assert.equal(status, EXIT_NICHT_GELAUFEN);
+  assert.equal(protokoll, null);
+  assert.deepEqual(
+    ergebnis.commits.map(({ zustand, grund }) => [zustand, grund]),
+    [
+      ["nicht_gelaufen", "Token fehlt"],
+      ["nicht_gelaufen", "Token fehlt, nicht gestartet"],
+    ],
+  );
+});
+
+test("lokal ohne Issue-Nummer endet mit 2 und startet nichts", async (context) => {
+  const { status, ausgabe, protokoll } = await starte(context, {
+    aufnahme: ohneBefunde(),
+    argumente: ["--basis", "master", "--aus", "/tmp/egal", "--ablage", "/tmp/egal-ablage"],
+  });
+  assert.equal(status, EXIT_AUFRUF);
+  assert.match(ausgabe, /Aufruf:/);
+  assert.equal(protokoll, null);
+});
