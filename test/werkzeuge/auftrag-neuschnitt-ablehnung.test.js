@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ersterVersuch, EXIT_ROT, funktion, lauf, MIT_TEXT, neu, neuUmbau, OHNE_FIX, ORDNER, phase, PHASENDATEI, PITCH, REPO, S1, schneide, SCHNITT, TEST, VERBOT } from "./neuschnitt-probe.js";
+import { ersterVersuch, EXIT_ROT, funktion, lauf, MIT_TEXT, neu, neuUmbau, OHNE_FIX, ohneTeam, ORDNER, phase, PHASENDATEI, PITCH, REPO, S1, schneide, SCHNITT, TEST, VERBOT } from "./neuschnitt-probe.js";
 
 test("ein Neuschnitt, der den Szenariotext in der Phasendatei ändert, wird abgelehnt und endet nach dem zweiten Versuch als Entscheidungsnotiz", (context) => {
   const geaendert = { dateien: { [PHASENDATEI]: phase([funktion("a1-n1", { szenarien: { S1: S1.replace("`4`", "`4` oder mehr") } })]) } };
@@ -43,4 +43,17 @@ test("ein Neuschnitt, der den Satz aus wasDarfNiePassieren nur einem Umbau gibt,
   const schnitt = schneide([neuUmbau("a1-n1"), neu("a1-n2", { wasDarfNiePassieren: [], abhaengigVon: [{ id: "a1-n1", grund }] })]);
   const { befunde } = ersterVersuch(context, { planer: [schnitt], erkunder: [MIT_TEXT] });
   assert.deepEqual(befunde, [`Kein neuer Auftrag mit eigenem Abnahmetest übernimmt aus a1 wörtlich: ${VERBOT}`]);
+});
+
+test("lässt der Kindlauf eine unlesbare Phasendatei, einen geänderten Szenariotext, einen geänderten Pitch oder eine rote Abdeckung durch, lehnt lauf den Neuschnitt selbst mit diesen Befunden ab", (context) => {
+  const anders = S1.replace("`4`", "`5`");
+  ohneTeam(context, [
+    { kind: { [PHASENDATEI]: "{" }, erwartet: [{ anfang: `${PHASENDATEI} ist nicht lesbar: ` }] },
+    { kind: { [PHASENDATEI]: phase([funktion("a1-n1", { szenarien: { S1: S1.replace("`4`", "`4` oder mehr") } })]) }, erwartet: [`rot: 1 Befunde in ${ORDNER}.`, { anfang: 'a1-n1: szenarien["S1"] ist nicht wörtlich der Text aus pitch.md: ' }] },
+    { kind: { [`${ORDNER}/pitch.md`]: PITCH.replace(S1, anders), [PHASENDATEI]: phase([funktion("a1-n1", { szenarien: { S1: anders } })]) }, erwartet: [`Der Planer darf nur ${PHASENDATEI} ändern, nicht ${ORDNER}/pitch.md.`] },
+    {
+      kind: { [PHASENDATEI]: phase([funktion("a1-n1", { prueft: ["B1"], szenarien: { B1: S1 } })]) },
+      erwartet: [`rot: 2 Befunde in ${ORDNER}.`, "S1 gehört keinem Auftrag", "a1-n1: B1 steht weder in pitch.md noch unter „2. Angriffswege“ in sicherheit.md"],
+    },
+  ]);
 });

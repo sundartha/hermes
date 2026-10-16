@@ -52,6 +52,20 @@ process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: a
 process.exitCode = einsatz.exit ?? 0;
 `;
 
+const KIND = `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const zaehler = join(dirname(process.env.ERSATZ_DREHBUCH), "anzahl-kind");
+const nummer = existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
+writeFileSync(zaehler, String(nummer + 1));
+const liste = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8")).kind;
+const { ergebnis = { exitCode: 0, antwort: "neu geschnitten", sitzungen: [] }, ...dateien } = liste[Math.min(nummer, liste.length - 1)];
+for (const [pfad, inhalt] of Object.entries(dateien)) {
+  mkdirSync(dirname(pfad), { recursive: true });
+  writeFileSync(pfad, inhalt);
+}
+writeFileSync(join(process.argv[2], "ergebnis.json"), JSON.stringify(ergebnis));
+`;
+
 const GH = `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 const eingabe = process.argv.includes("-") ? readFileSync(0, "utf8") : "";
@@ -159,11 +173,12 @@ export function teamRepository(context, dateien) {
 }
 
 export function ersatzUmgebung(context, drehbuch) {
-  const werkzeug = probeDirectory(context, { "claude.mjs": CLAUDE, "gh.mjs": GH, "drehbuch.json": JSON.stringify(drehbuch) });
+  const werkzeug = probeDirectory(context, { "claude.mjs": CLAUDE, "gh.mjs": GH, "kind.mjs": KIND, "drehbuch.json": JSON.stringify(drehbuch) });
   chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
   chmodSync(join(werkzeug, "gh.mjs"), AUSFUEHRBAR);
   const ersatz = Object.entries(ERSATZ).map(([name, datei]) => [name, join(werkzeug, datei)]);
-  return { werkzeug, env: { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...IDENTITAET, HOME: werkzeug } };
+  const kind = drehbuch.kind ? { HERMES_NEUSCHNITT_START: join(werkzeug, "kind.mjs") } : {};
+  return { werkzeug, env: { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...kind, ...IDENTITAET, HOME: werkzeug } };
 }
 
 export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATEI, umgebung = {} } = {}) {
@@ -208,3 +223,16 @@ export const UMBAU_ZWEI = { dateien: { "src/text.js": "export function gross(ein
 export const OHNE_EMPFEHLUNG = "Zu „Pitch ändern: …“ fehlt die Zeile „Empfehlung: …“.";
 
 export const GESTOPPT = "Auftrag a1 der Phase P-001-probe ist nach 2 roten Runden gestoppt.";
+
+function befundeWie(befunde, erwartet) {
+  const gekuerzt = befunde.map((befund, stelle) => (erwartet[stelle]?.anfang === undefined ? befund : befund.slice(0, erwartet[stelle].anfang.length)));
+  assert.deepEqual(gekuerzt, erwartet.map((eintrag) => eintrag.anfang ?? eintrag), befunde.join("\n"));
+}
+
+export function ohneTeam(context, faelle) {
+  for (const { kind, dateien, bau, erwartet } of faelle) {
+    const { befunde, datei } = ersterVersuch(context, { kind: [kind] }, { dateien, bau });
+    befundeWie(befunde, erwartet);
+    assert.deepEqual(["planer", "erkunder", "kind"].map((rolle) => datei(`anzahl-${rolle}`)), ["", "", "2"]);
+  }
+}
