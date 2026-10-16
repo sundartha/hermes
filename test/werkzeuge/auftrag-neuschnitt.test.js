@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ORDNER, phase, PHASENDATEI, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
+import { AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ORDNER, phase, PHASENDATEI, RECHNEN_BESTAND, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
 
 test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn neu und der Lauf wird ohne Entscheidungsnotiz grün", (context) => {
   const drehbuch = { test: [TEST], bau: [OHNE_FIX, OHNE_FIX, MIT_FIX], planer: [SCHNITT] };
@@ -102,4 +102,20 @@ test("scheitert der Commit des Neuschnitts, wird er mit der Fehlerausgabe abgele
   assert.deepEqual(versuche.map(({ befunde }) => befunde), [["git commit des Neuschnitts endete mit Exit 1: Neuschnitt abgelehnt"], ["git commit des Neuschnitts endete mit Exit 1: Neuschnitt abgelehnt"]]);
   assert.equal(git("show", `HEAD:${PHASENDATEI}`), REPO[PHASENDATEI]);
   assert.equal(git("status", "--porcelain"), "");
+});
+
+test("ein Neuschnitt mit einem Bereich, den ein anderer Auftrag nutzt, lässt dessen Entwurf unverändert und startet keinen Entwurf-Schreiber", (context) => {
+  const nachbar = umbau("a2", { bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: RECHNEN_BESTAND, abhaengigVon: ["a1"] });
+  const { versuche, git, datei } = ersterVersuch(context, { planer: [SCHNITT] }, { dateien: { [PHASENDATEI]: phase([funktion("a1"), nachbar]) } });
+  assert.deepEqual(versuche.map((versuch) => ohne(versuch, "planung")), [{ neu: [{ id: "a1-n1", bereich: "src/rechnen.js" }] }]);
+  assert.equal(datei("anzahl-entwurf"), "");
+  assert.equal(JSON.parse(git("show", `HEAD:${PHASENDATEI}`)).entwurf["src/rechnen.js"], "Entwurf.");
+});
+
+test("stürzt das Kind ohne ergebnis.json ab, ist der Befund ‚Der Neuschnitt des Teams endete ohne Ergebnis (Exit …)‘, auch wenn in der Ablage ein grünes ergebnis.json eines früheren Laufs lag", (context) => {
+  const ergebnis = ".git/auftrag-neuschnitt/P-001-probe/a1/versuch-1/ergebnis.json";
+  const frueher = { [ergebnis]: JSON.stringify({ exitCode: 0, antwort: "a1-n1: aus einem früheren Lauf", sitzungen: [] }) };
+  const absturz = { ...SCHNITT, dateien: { [`${ergebnis}/gesperrt`]: "" } };
+  const { befunde } = ersterVersuch(context, { planer: [absturz] }, { dateien: frueher });
+  assert.deepEqual(befunde, ["Der Neuschnitt des Teams endete ohne Ergebnis (Exit 1)."]);
 });
