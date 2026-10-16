@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { istTestdatei, istUmbau } from "../format.mjs";
@@ -16,6 +16,14 @@ const SKRIPTBEFUNDE = "die Skriptprüfung hat den neuen Schnitt abgelehnt";
 const FUER_DEN_OWNER = "der neue Schnitt braucht den Owner";
 const FUER_OWNER_FELDER = ["ownerAufgaben", "fehlendeSzenarien"];
 const QUELLTEXT = /\.[cm]?js$/;
+const ERSTE_PLANUNG = "planung";
+const GLIEDERUNG = "gliederung.json";
+const ERKUNDUNG = /^erkundung-.+\.json$/;
+const ERKUNDUNG_OFFEN = "die Erkundung für den Neuschnitt blieb offen";
+
+function leseJson(pfad) {
+  return JSON.parse(readFileSync(pfad, "utf8"));
+}
 
 class NeuschnittTeam extends Team {
   volleAntworten = new Map();
@@ -48,6 +56,33 @@ class NeuschnittPlanung extends Planung {
     this.andererAusgang = andererAusgang;
     this.team = new NeuschnittTeam(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
+    const gliederung = join(this.ordner, ERSTE_PLANUNG, GLIEDERUNG);
+    this.gliederung = existsSync(gliederung) ? leseJson(gliederung) : { gruppen: [] };
+  }
+
+  designAbschnitte(ueberschriften) {
+    return ueberschriften.length === 0 ? (this.designText ?? "keine") : super.designAbschnitte(ueberschriften);
+  }
+
+  async erkundeNummern() {
+    if (this.soll.size === 0) return;
+    const { auftragId, anlass, verlauf, hinweise } = this.eingabe;
+    const nummern = [...this.soll.keys()];
+    const kopf = [abschnitt("Anlass", anlass), abschnitt("Verlauf", verlauf.join("\n")), abschnitt("Hinweise", hinweise.join("\n"))];
+    const fragen = [`Woran ist ${auftragId} gescheitert, und welche Stellen müssen sich für diese Nummern ändern?`];
+    const [ergebnis] = await this.team.gruppe([this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf }), nummern)]);
+    this.berichte = [ergebnis.bericht];
+    if (ergebnis.befunde.length === 0) this.uebernimmWeg(ergebnis);
+    this.legeBerichte();
+    const offen = this.offenePunkte();
+    if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, ERKUNDUNG_OFFEN, offen);
+  }
+
+  ersteBerichte() {
+    const ablage = join(this.ordner, ERSTE_PLANUNG);
+    if (!existsSync(ablage)) return [];
+    const berichte = readdirSync(ablage).filter((name) => ERKUNDUNG.test(name)).toSorted().map((name) => leseJson(join(ablage, name)));
+    return berichte.filter(({ gruppe }) => liste(gruppe).some((nummer) => this.soll.has(nummer)));
   }
 
   produktDateien(auftraege) {
@@ -96,6 +131,7 @@ class NeuschnittPlanung extends Planung {
       abschnitt("Phasendatei", `${datei}\n\n${json(this.phase)}`),
       abschnitt("Nummern", nummernText(this.soll, [...this.soll.keys()])),
       abschnitt("Erkundungsbericht", json(this.erkundungsbericht())),
+      abschnitt("Berichte der ersten Planung", json(this.ersteBerichte())),
       ...(await this.lagebild()),
       abschnitt(VORLAGE, dateiText(this.root, VORLAGE)),
       kopf.slice(stelle),
@@ -138,6 +174,7 @@ class NeuschnittPlanung extends Planung {
   }
 
   async laufe() {
+    await this.erkundeNummern();
     await this.schneide();
   }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
@@ -13,6 +13,8 @@ const NUMMERN = ["S2", "S3", "S6", "T1"];
 const ANLASS = "Der Abnahmetest von a2 wurde nach dem Bau nicht grün.";
 const VERLAUF_ZEILEN = ["test: a2 rot wie erwartet", "bau: a2 nach drei Versuchen gescheitert"];
 const KOPF = ["", "## Neuschnitt", "", ANLASS, "", "## Verlauf", "", ...VERLAUF_ZEILEN].join("\n");
+const STELLE_VERLAUF = KOPF.indexOf("\n## Verlauf\n");
+const PLANER_ABSCHNITTE = ["Dokumente", "Phasendatei", "Nummern", "Erkundungsbericht", "Berichte der ersten Planung", "Annahmen der Erkunder", "Offene Punkte", "Funktionsliste", "Dateikarte", ".claude/skills/pitch/phase-vorlage.md"];
 const AENDERUNG = "a2 wird in einen Auftrag mit eigener Abnahme geschnitten.";
 const PITCH_AENDERN = "Pitch ändern: S2 und S3 widersprechen sich\nEmpfehlung: S3 an S2 anpassen";
 const PASST_NICHT = "Zerlegung passt nicht: a2 lässt sich nicht kleiner schneiden";
@@ -40,7 +42,10 @@ function grundAntworten() {
 function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien = {} } = {}) {
   const ablage = probeDirectory(context, {});
   const argumente = (wurzel) => {
-    for (const [pfad, inhalt] of Object.entries(dateien)) writeFileSync(join(wurzel, pfad), inhalt);
+    for (const [pfad, inhalt] of Object.entries(dateien)) {
+      mkdirSync(dirname(join(wurzel, pfad)), { recursive: true });
+      writeFileSync(join(wurzel, pfad), inhalt);
+    }
     writeFileSync(join(wurzel, DATEI), `${JSON.stringify(phaseFuer(wurzel, umbau), null, 2)}\n`);
     const daten = { root: wurzel, ordner: ORDNER, datei: DATEI, auftragId: GESCHEITERT, fertig: ["a1"], anlass: ANLASS, kopf: KOPF, verlauf: VERLAUF_ZEILEN, hinweise: [], ...eingabe };
     writeFileSync(join(ablage, "eingabe.json"), JSON.stringify(daten));
@@ -148,4 +153,56 @@ test("Neuschnitt: eine Datei ohne Quelltext in erwarteteDateien des alten Umbaus
   exit(lauf, 0);
   const [, bericht] = aufrufe(lauf, "planer")[0].eingabe.split("### Erkundungsbericht");
   assert.ok(bericht.includes('"datei": "CLAUDE.md"'), bericht);
+});
+
+test("Neuschnitt: der Erkunder bekommt Anlass, Verlauf und das ganze Design Doc, der Planer die Abschnitte vor dem Verlauf", (context) => {
+  const lauf = neuschnitt(context);
+  exit(lauf, 0);
+  assert.equal(lauf.ergebnis.antwort, AENDERUNG);
+  const [erkunder] = aufrufe(lauf, "erkunder", "## Nachfrage");
+  assert.ok(erkunder.eingabe.includes(`### Anlass\n\n${ANLASS}\n`), erkunder.eingabe);
+  assert.ok(erkunder.eingabe.includes(`### Verlauf\n\n${VERLAUF_ZEILEN.join("\n")}\n`), erkunder.eingabe);
+  assert.ok(erkunder.eingabe.includes("## Lösung") && erkunder.eingabe.includes("## Fehlerfälle"), erkunder.eingabe);
+  assert.ok(erkunder.eingabe.includes("#### S2 (") && !erkunder.eingabe.includes("#### S1 ("), erkunder.eingabe);
+  const [{ eingabe: planer }] = aufrufe(lauf, "planer");
+  assert.ok(planer.startsWith(KOPF.slice(0, STELLE_VERLAUF)), planer);
+  assert.ok(planer.endsWith(KOPF.slice(STELLE_VERLAUF)), planer);
+  const vorVerlauf = planer.slice(0, planer.length - KOPF.length + STELLE_VERLAUF);
+  for (const titel of PLANER_ABSCHNITTE) assert.ok(vorVerlauf.includes(`\n### ${titel}\n`), titel);
+  assert.ok(existsSync(join(lauf.ablage, "erkundung-g1.json")));
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
+});
+
+test("Neuschnitt: ein offener Befund der Wegprüfung endet mit Exit 4 vor dem Planer", (context) => {
+  const ueberschrieben = { "pruefer-planung|## Wegprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "weg:S2": "der Weg endet nicht im Speicher" } }], "erkunder|## Befunde": [alsJson({}), alsJson({})] };
+  const lauf = neuschnitt(context, { ueberschrieben });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /Weg S2: der Weg endet nicht im Speicher/);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+});
+
+test("Neuschnitt: mit gliederung.json bekommt der Erkunder die Abschnitte seiner Gruppe, der Planer die Berichte der ersten Planung zu seinen Nummern", (context) => {
+  const gliederung = { gruppen: [{ nummern: NUMMERN, eingang: "POST /api/self-service/private-number/confirm", ueberschriften: ["## Fehlerfälle"], fragen: [] }] };
+  const dateien = {
+    [`${ORDNER}/planung/gliederung.json`]: JSON.stringify(gliederung),
+    [`${ORDNER}/planung/erkundung-g1.json`]: JSON.stringify({ gruppe: ["S1"], nummern: {}, hinweise: ["Bericht der ersten Gruppe"] }),
+    [`${ORDNER}/planung/erkundung-g2.json`]: JSON.stringify({ gruppe: NUMMERN, nummern: {}, hinweise: ["Bericht der zweiten Gruppe"] }),
+  };
+  const lauf = neuschnitt(context, { dateien });
+  exit(lauf, 0);
+  const [erkunder] = aufrufe(lauf, "erkunder", "## Nachfrage");
+  assert.ok(erkunder.eingabe.includes("## Fehlerfälle") && !erkunder.eingabe.includes("## Lösung"), erkunder.eingabe);
+  const [{ eingabe: planer }] = aufrufe(lauf, "planer");
+  assert.ok(planer.includes("Bericht der zweiten Gruppe") && !planer.includes("Bericht der ersten Gruppe"), planer);
+});
+
+test("Neuschnitt: ein Skriptbefund endet ohne zweite Planer-Nachricht mit Exit 4, die Zwischenstände liegen in der Ablage", (context) => {
+  const [ersatz] = neuerSchnitt().auftraege;
+  const schnitt = neuerSchnitt({ auftraege: [{ ...ersatz, abhaengigVon: [...ersatz.abhaengigVon, { id: "a9", grund: "braucht etwas, das es nicht gibt" }] }] });
+  const lauf = neuschnitt(context, { ueberschrieben: planerAntwort(alsJson({ schnitt })) });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, /abhaengigVon.*a9|a9.*abhaengigVon/);
+  assert.equal(aufrufe(lauf, "planer").length, 1);
+  assert.deepEqual(JSON.parse(readFileSync(join(lauf.ablage, "schnitt.json"), "utf8")), schnitt);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
 });
