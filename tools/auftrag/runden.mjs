@@ -119,9 +119,19 @@ export function umbauPhase(phase, auftrag, antwort) {
   return { ...phase, entwurf, auftraege: [umbau] };
 }
 
+function echtesVerhalten(antwort) {
+  const zeile = String(antwort ?? "")
+    .split("\n")
+    .map((teil) => teil.trim())
+    .find((teil) => teil.startsWith(ECHTES_VERHALTEN));
+  return zeile?.slice(ECHTES_VERHALTEN.length).trim();
+}
+
 function planBefunde(plan, neu, root) {
   if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
-  return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
+  if (neu !== null) return phasenBefunde(neu, root);
+  const verhalten = echtesVerhalten(plan.volleAntwort ?? plan.antwort);
+  return [verhalten === undefined ? KEIN_VORSCHLAG : `Der Plan-Agent sieht echtes Verhalten: ${verhalten}`];
 }
 
 function ohneTestumbau(auftrag, alterTest, zaehler) {
