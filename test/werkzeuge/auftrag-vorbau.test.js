@@ -10,6 +10,7 @@ import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn 
 
 const AUSFUEHRBAR = 0o755;
 const EXIT_ROT = 1;
+const GH_AUFRUFE_JE_NOTIZ = 2;
 const ISSUE = 54;
 const PROBE = "probe@example.invalid";
 
@@ -85,8 +86,8 @@ function lauf(context, drehbuch) {
 }
 
 test("Vorbau: meldet der Bau-Agent einen alten Test, dessen Vorbau kollidiert, läuft erst ein testumbau und dann der Auftrag grün", (context) => {
-  const test = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
-  const { repo, ergebnis, beleg, log } = lauf(context, { bau: BAU, test, plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
+  const { repo, ergebnis, beleg, log } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: JSON.stringify(UMBAU) }] });
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.equal(beleg("A1-plan").grund, MELDUNG);
   assert.deepEqual([beleg("A1-umbau").ergebnis, beleg("A1").ergebnis], ["grün", "grün"]);
@@ -129,7 +130,7 @@ test("Vorbau: scheitert der testumbau, bekommt Antonio genau eine Notiz zum alte
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.equal(beleg("A1-umbau").ergebnis, "rot");
   assert.match(beleg("A1").entscheidung.text, /Der testumbau A1-umbau vorweg ist gescheitert \(rot\); sein Beleg heißt A1-umbau\./);
-  assert.equal(gh.filter(([befehl]) => befehl === "issue").length, 2);
+  assert.equal(gh.filter(([befehl]) => befehl === "issue").length, GH_AUFRUFE_JE_NOTIZ);
   assert.equal(log.includes(UMBAU.ziel), false);
 });
 
