@@ -39,7 +39,7 @@ function grundAntworten() {
   };
 }
 
-function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien = {}, aendere = (phase) => phase } = {}) {
+function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, eingabeText, umbau, dateien = {}, aendere = (phase) => phase } = {}) {
   const ablage = probeDirectory(context, {});
   let vorher = null;
   const argumente = (wurzel) => {
@@ -50,7 +50,8 @@ function neuschnitt(context, { ueberschrieben = {}, eingabe = {}, umbau, dateien
     vorher = aendere(phaseFuer(wurzel, umbau));
     writeFileSync(join(wurzel, DATEI), `${JSON.stringify(vorher, null, 2)}\n`);
     const daten = { root: wurzel, ordner: ORDNER, datei: DATEI, auftragId: GESCHEITERT, fertig: ["a1"], anlass: ANLASS, kopf: KOPF, verlauf: VERLAUF_ZEILEN, hinweise: [], ...eingabe };
-    writeFileSync(join(ablage, "eingabe.json"), JSON.stringify(daten));
+    const text = eingabeText === undefined ? JSON.stringify(daten) : eingabeText;
+    if (text !== null) writeFileSync(join(ablage, "eingabe.json"), text);
     return [ablage];
   };
   const lauf = plane(context, { werkzeug: START, grund: grundAntworten(), ueberschrieben, argumente });
@@ -104,6 +105,23 @@ test("Neuschnitt: eine fehlende Phasendatei endet mit Exit 2", (context) => {
   const lauf = neuschnitt(context, { eingabe: { datei: `${ORDNER}/fehlt.json` } });
   exit(lauf, 2);
   assert.equal(lauf.ergebnis.grund, `die Phasendatei ${ORDNER}/fehlt.json gibt es nicht`);
+});
+
+test("Neuschnitt: eine fehlende oder kaputte eingabe.json endet mit Exit 2 und ergebnis.json", (context) => {
+  const fehlt = neuschnitt(context, { eingabeText: null });
+  exit(fehlt, 2);
+  assert.deepEqual(fehlt.ergebnis, { exitCode: 2, grund: "eingabe.json fehlt in der Ablage", sitzungen: [] });
+  const kaputt = neuschnitt(context, { eingabeText: "{ kein JSON" });
+  exit(kaputt, 2);
+  assert.match(kaputt.ergebnis.grund, /^eingabe\.json ist kein JSON: /);
+});
+
+test("Neuschnitt: eine kaputte Phasendatei endet mit Exit 2 und ergebnis.json", (context) => {
+  const datei = `${ORDNER}/kaputt.json`;
+  const lauf = neuschnitt(context, { dateien: { [datei]: "{ kein JSON" }, eingabe: { datei } });
+  exit(lauf, 2);
+  assert.match(lauf.ergebnis.grund, new RegExp(`^die Phasendatei ${datei} ist kein JSON: `));
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
 });
 
 test("Neuschnitt: Pitch ändern endet mit Exit 3 und beiden Zeilen der Antwort", (context) => {
