@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -18,6 +17,7 @@ import {
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { widgetHtml } from "../src/ui/widget-catalog.js";
+import { chatgptEgressStand } from "../src/ui/registry.js";
 import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
@@ -410,9 +410,7 @@ test("T8 (Widget-Scan, T-30-Exaktheit): kein Widget laedt von aussen - weder ueb
   }
 });
 
-const CHATGPT_RANGES_URL = new URL("../src/ui/chatgpt-egress-ranges.json", import.meta.url);
-const CHATGPT_RANGES = JSON.parse(fs.readFileSync(CHATGPT_RANGES_URL, "utf8"));
-const [CHATGPT_FIRST_CIDR] = CHATGPT_RANGES.prefixes;
+const [CHATGPT_FIRST_CIDR] = chatgptEgressStand().prefixes;
 const CHATGPT_SAMPLE_IP = CHATGPT_FIRST_CIDR.ipv4Prefix.split("/")[0];
 
 const OTHER_CLIENT_IP = "160.79.104.10";
