@@ -394,3 +394,20 @@ test("deploy rot über 202: Suchen und Verfolgen teilen sich eine Frist ab dem A
   assert.equal(abbruch.zeit - deployPost(lauf).zeit, KURZE_TAKTE.schutzgrenzeMs);
   assert.match(lauf.text, /Schutzgrenze im Schritt deploy_status erreicht/);
 });
+
+test("deploy über 201 ohne gültige Deploy-ID: der Lauf sucht den angelegten Deploy und verfolgt ihn mit Anruf-Check", async (kontext) => {
+  for (const ausloesenAntwort of [{}, { id: "kein-deploy" }]) {
+    const lauf = await deployMit(kontext, { welt: { ausloesenAntwort, alteDeploys: [ALTER_DEPLOY] } });
+    assert.equal(lauf.ok, true);
+    assert.equal(deployPost(lauf).pfad, DEPLOYS_PFAD);
+    assert.ok(anfragenAn(lauf.attrappe, "GET", STATUS_ABFRAGE).length > 0);
+    assert.equal(anfragenAn(lauf.attrappe, "GET", ANRUFE).length, ZWEI_ANRUFE);
+    assert.match(lauf.text, /Deploy-Status: update_in_progress/);
+  }
+});
+
+test("deploy rot über 201 ohne gültige Deploy-ID: taucht der Deploy bis zur Frist nicht auf, warnt der Lauf", async (kontext) => {
+  const lauf = await deployMit(kontext, { welt: { ausloesenAntwort: {}, neuInListe: [false] } });
+  assert.equal(lauf.ok, false);
+  assert.match(lauf.text, /Rot: Render hat den Deploy angenommen, er ist bis zur Frist nicht auffindbar/);
+});
