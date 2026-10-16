@@ -228,6 +228,14 @@ test("ausmisten-messung: ohne genaue Issue-Zeile bleibt der Plan ohne Issue", as
   assert.equal(geplant(stand).issue, null);
 });
 
+test("ausmisten-messung: eine Zeile Issue: #0 lässt den Plan ohne Issue", async (context) => {
+  for (const zeile of ["Issue: #0", "Issue: #000"]) {
+    const stand = await plane(context, { weg: [DOPPELT], nachricht: `Miste aus\n\n${zeile}\nPaket: 37` });
+    assert.equal(stand.planen.status, EXIT_GRUEN, stand.planen.ausgabe);
+    assert.equal(geplant(stand).issue, null, zeile);
+  }
+});
+
 function basisMutanten(artefakte, paket) {
   const name = `basis-${paket}`;
   return JSON.parse(readFileSync(join(artefakte, name, `${name}.json`), "utf8")).mutanten;

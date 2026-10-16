@@ -35,7 +35,7 @@ const ZAHLENSPALTE = /^(\d+)\t(\d+)\t/;
 const EINRUECKUNG = 2;
 const MS_JE_SEKUNDE = 1000;
 const SEKUNDEN_JE_MINUTE = 60;
-const ISSUE_ZEILE = /^Issue: #(\d{1,9})$/m;
+const ISSUE_ZEILE = /^Issue: #([1-9]\d{0,8})$/m;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 
