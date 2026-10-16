@@ -4,6 +4,7 @@ import { VisitorKeys, parse } from "espree";
 import { quelltextLesestellen } from "../eslint-rules/kein-quelltext-als-text.js";
 import { alleKnoten } from "../eslint-rules/knoten.js";
 import {
+  STATUS_DELETED,
   gatesAt,
   git,
   isJavaScript,
@@ -13,17 +14,10 @@ import {
 } from "./aenderungen.mjs";
 
 const STATUS_MODIFIED = "M";
-const STATUS_DELETED = "D";
 const RENAME_STATUS = "R";
 const SINGLE_PATH_FIELDS = 2;
 const PAIRED_PATH_FIELDS = 3;
 const POSITION_FIELDS = new Set(["start", "end", "range", "loc"]);
-const IMPORT_NODES = new Set([
-  "ImportDeclaration",
-  "ExportNamedDeclaration",
-  "ExportAllDeclaration",
-  "ImportExpression",
-]);
 const RELATIVE_SOURCE = /^\.\.?\//;
 const DECLARATIONS = new Set(["Variable", "FunctionName"]);
 const ALLOWED_MODULES = new Set([
@@ -41,6 +35,7 @@ const STATIC_IMPORTS = new Set([
   "ExportAllDeclaration",
 ]);
 const DYNAMIC_IMPORT = "ImportExpression";
+const IMPORT_NODES = new Set([...STATIC_IMPORTS, DYNAMIC_IMPORT]);
 const CODE_NAMES = new Set(["require", "eval", "Function"]);
 const NODE_PREFIX = "node:";
 const COMMENTS_ONLY = "nur Kommentare oder Leerraum geändert (Syntaxbaum gleich)";
