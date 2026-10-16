@@ -146,15 +146,15 @@ function testsFesthalten(lauf, ueberlebende) {
   return lauf.festschreiben(PRUEFUNG.TESTS_ALTER_STAND, [`Halte Verhalten vor Umbau ${auftrag.id} fest`, "", warum, "", ...begruendung, ...herkunft, ""].join("\n"));
 }
 
-function eingespielt(lauf, { datei, inhalt }) {
+function spieleUnveraendertenPatchEin(lauf, { datei, inhalt }) {
   const befehl = ["git", "apply", "--index", datei];
   if (readFileSync(datei, "utf8") === inhalt) return lauf.pruefung(PRUEFUNG.UMBAU_EINSPIELEN, befehl).exitCode === 0;
   lauf.pruefungen.push(beleg({ name: PRUEFUNG.UMBAU_EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
   return false;
 }
 
-function einspielen(lauf, patch) {
-  const passt = eingespielt(lauf, patch);
+function spieleUmbauEinOderBaueNeu(lauf, patch) {
+  const passt = spieleUnveraendertenPatchEin(lauf, patch);
   const schritte = lauf.bauSchritte();
   return (passt ? schritte.slice(1) : schritte).every((schritt) => schritt());
 }
@@ -201,7 +201,7 @@ function alterStand(lauf) {
     vorher = ueberlebende.length;
     const getestet = testRunde(lauf, ueberlebende, gemeldet);
     if (getestet === null) return entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch });
-    if (!getestet || !einspielen(lauf, patch)) return false;
+    if (!getestet || !spieleUmbauEinOderBaueNeu(lauf, patch)) return false;
   }
 }
 
