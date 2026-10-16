@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -303,16 +303,30 @@ function engsterOrdner(dateien) {
   return `${gemeinsam.join("/")}/`;
 }
 
+const PRODUKTDATEIEN = { gehoert: (datei) => !istTestdatei(datei), einzahl: "Produktdatei", mehrzahl: "Produktdateien" };
+const TESTDATEIEN = { gehoert: istTestdatei, einzahl: "Testdatei", mehrzahl: "Testdateien" };
+
+function fremdeDateien(auftrag, art) {
+  if (art !== TESTDATEIEN) return [];
+  const fremde = liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && !art.gehoert(datei));
+  return fremde.map((datei) => `${auftrag.id}: ein ${TESTUMBAU} nennt in erwarteteDateien nur Testdateien, nicht ${datei}`);
+}
+
+function bereichDerDateien(auftrag, art) {
+  const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)))];
+  if (dateien.length === 0) return [`${auftrag.id}: erwarteteDateien nennt keine ${art.einzahl}`];
+  const erwartet = dateien.length === 1 ? dateien[0] : engsterOrdner(dateien);
+  if (erwartet === WURZEL) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];
+  const mehrere = new Set(dateien.map((datei) => dirname(datei))).size > 1;
+  const eigene = auftrag.bereich === erwartet ? [] : [`${auftrag.id}: bereich ist ${auftrag.bereich}, die ${art.mehrzahl} verlangen ${erwartet}`];
+  const grund = mehrere && !GRUND.test(auftrag.bereichsgrund ?? "") ? [`${auftrag.id}: ${art.mehrzahl} in mehreren Ordnern brauchen bereichsgrund`] : [];
+  return [...eigene, ...grund];
+}
+
 function bereichBefunde(auftraege) {
   const befunde = auftraege.flatMap((auftrag) => {
-    const produkt = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && !istTestdatei(datei)))];
-    if (produkt.length === 0) return [`${auftrag.id}: erwarteteDateien nennt keine Produktdatei`];
-    const erwartet = produkt.length === 1 ? produkt[0] : engsterOrdner(produkt);
-    if (erwartet === WURZEL) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];
-    const mehrere = new Set(produkt.map((datei) => dirname(datei))).size > 1;
-    const eigene = auftrag.bereich === erwartet ? [] : [`${auftrag.id}: bereich ist ${auftrag.bereich}, die Produktdateien verlangen ${erwartet}`];
-    const grund = mehrere && !GRUND.test(auftrag.bereichsgrund ?? "") ? [`${auftrag.id}: Produktdateien in mehreren Ordnern brauchen bereichsgrund`] : [];
-    return [...eigene, ...grund];
+    const art = auftrag.art === TESTUMBAU ? TESTDATEIEN : PRODUKTDATEIEN;
+    return [...fremdeDateien(auftrag, art), ...bereichDerDateien(auftrag, art)];
   });
   return mitRegel(REGEL.bereich, befunde);
 }
