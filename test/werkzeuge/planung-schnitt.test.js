@@ -553,6 +553,34 @@ test("Bereich: mehrere Dateien im selben Ordner mit bereich auf den Ordner sind 
   gruen(lauf(b));
 });
 
+const UMBAU_TEST = "test/anrufe/vorbereitung.test.js";
+
+function testumbau(b, ueberschrieben = {}) {
+  return Object.assign(eigener(b, "a1"), { art: "testumbau", bereich: UMBAU_TEST, erwarteteDateien: [UMBAU_TEST], abnahme: UMBAU_TEST, prueft: UMBAU_AUSWEG, ...ueberschrieben });
+}
+
+test("Bereich: ein testumbau nur mit Testdateien und deren Datei als bereich ist grün", (context) => {
+  const b = basis(context);
+  testumbau(b);
+  angabenVon(b, "S1").aenderungen[0].datei = UMBAU_TEST;
+  const { befunde } = lauf(b);
+  assert.deepEqual(befunde.filter((befund) => befund.startsWith(`Regel ${REGEL.bereich}: `)), []);
+});
+
+test("Bereich: ein testumbau, der eine Produktdatei nennt, ist rot", (context) => {
+  const b = basis(context);
+  testumbau(b, { erwarteteDateien: [UMBAU_TEST, DATEI_A] });
+  const { befunde } = lauf(b);
+  assert.deepEqual(befunde.filter((befund) => befund.startsWith(`Regel ${REGEL.bereich}: `)), [`Regel ${REGEL.bereich}: a1: ein testumbau nennt in erwarteteDateien nur Testdateien, nicht ${DATEI_A}`]);
+});
+
+test("Bereich: ein testumbau, dessen bereich nicht der engste Ordner seiner Testdateien ist, ist rot", (context) => {
+  const b = basis(context);
+  testumbau(b, { bereich: "test/", erwarteteDateien: [UMBAU_TEST, "test/anrufe/ende.test.js"] });
+  const { befunde } = lauf(b);
+  assert.deepEqual(befunde.filter((befund) => befund.startsWith(`Regel ${REGEL.bereich}: `)), [`Regel ${REGEL.bereich}: a1: bereich ist test/, die Testdateien verlangen test/anrufe/`]);
+});
+
 test("Änderungsdateien: eine Datei von a2 außerhalb von a2 und seiner Kette ist rot", (context) => {
   const b = basis(context);
   angabenVon(b, "S2").aenderungen.push({ datei: "src/nummern/fremd.js", funktion: "fremd", von: 1, bis: 2, neueZeilen: 1 });
