@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -585,8 +584,19 @@ function repoMitProben(kontext, { zielExit, aktuellExit, zielMitAnrufpause = fal
   return { ordner, protokoll, ziel: staende[0] };
 }
 
-function probeOrdner() {
-  return readdirSync(tmpdir()).filter((name) => name.startsWith("probe-auth-ziel-"));
+function eigenesTempVerzeichnis(kontext) {
+  const ordner = temporaerOrdner(kontext);
+  const vorher = process.env.TMPDIR;
+  process.env.TMPDIR = ordner;
+  kontext.after(() => {
+    if (vorher === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = vorher;
+  });
+  return ordner;
+}
+
+function probeOrdner(tempVerzeichnis) {
+  return readdirSync(tempVerzeichnis).filter((name) => name.startsWith("probe-auth-ziel-"));
 }
 
 function weltMitZiel(ziel, mehr = {}) {
@@ -598,10 +608,10 @@ test("zurueckrollen startet die Negativproben aus dem Ziel-Commit, nicht aus dem
   const repo = repoMitProben(kontext, { zielExit: EXIT_OK, aktuellExit: EXIT_ROT });
   const mehr = { GITHUB_WORKSPACE: repo.ordner };
   const welt = weltMitZiel(repo.ziel);
-  const vorher = probeOrdner();
+  const tempVerzeichnis = eigenesTempVerzeichnis(kontext);
   const lauf = await rollbackMit(kontext, { welt, mehr, ziel: repo.ziel, echteProbe: true });
   assert.equal(lauf.ok, true, lauf.text);
-  assert.deepEqual(probeOrdner(), vorher);
+  assert.deepEqual(probeOrdner(tempVerzeichnis), []);
   assert.match(lauf.text, /Negativproben ohne Zugangsdaten gegen Produktion: Exit 0/);
   const aufruf = readFileSync(repo.protokoll, "utf8").split("\n");
   assert.deepEqual(aufruf, [lauf.attrappe.basis + "/prod", repo.ziel, ""]);
