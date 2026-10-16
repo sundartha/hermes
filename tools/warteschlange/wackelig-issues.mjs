@@ -92,17 +92,32 @@ async function wackeligeIssuesLesen(github) {
   return alle.filter((issue) => !issue.pull_request);
 }
 
+async function legeAnOderFuehreZusammen(github, { eintrag, lauf, issues }) {
+  const titel = titelVon(eintrag);
+  const neu = await github.sende("POST", "/issues", {
+    title: titel,
+    body: neuerText(eintrag, lauf),
+    labels: [LABEL],
+  });
+  const frueher = (await wackeligeIssuesLesen(github))
+    .filter((issue) => issue.title === titel && issue.number < neu.number)
+    .sort((erstes, zweites) => erstes.number - zweites.number)[0];
+  if (frueher === undefined) {
+    issues.push({ ...neu, title: titel, state: "open" });
+    console.log(`Neues Issue: ${titel}`);
+    return;
+  }
+  await github.sende("POST", `/issues/${neu.number}/comments`, { body: `Doppelt zu #${frueher.number}.` });
+  await github.sende("PATCH", `/issues/${neu.number}`, { state: "closed", state_reason: "not_planned" });
+  issues.push(frueher);
+  await halteFest(github, { eintrag, lauf, issues });
+}
+
 async function halteFest(github, { eintrag, lauf, issues }) {
   const titel = titelVon(eintrag);
   const vorhanden = issues.find((issue) => issue.title === titel);
   if (vorhanden === undefined) {
-    const neu = await github.sende("POST", "/issues", {
-      title: titel,
-      body: neuerText(eintrag, lauf),
-      labels: [LABEL],
-    });
-    issues.push({ ...neu, title: titel, state: "open" });
-    console.log(`Neues Issue: ${titel}`);
+    await legeAnOderFuehreZusammen(github, { eintrag, lauf, issues });
     return;
   }
   if (vorhanden.state === "closed") {
