@@ -31,7 +31,6 @@ import {
   GEPRUEFT,
   NACHSTELLUNG_DATEI,
   SCHWEREN,
-  SOLLTE,
   ablageAus,
   ergebnisAus,
   nachstellungAus,
@@ -63,7 +62,6 @@ const FEHLER = "error";
 const EXIT_HERKUNFT = 1;
 const EXIT_BEFUNDE = 1;
 const EXIT_NICHT_GELAUFEN = 3;
-const ZU_BEHEBEN = new Set([BLOCKER, SOLLTE]);
 const NUR_LOKAL =
   "Lokaler Vorab-Lauf: kein Prüfer-Ergebnis, kein Status, kein Issue, kein Merge-Signal. Maßgeblich bleibt der Prüfer auf GitHub.";
 
@@ -329,7 +327,7 @@ async function ablegen(optionen, root, { github = githubZugang({ repo: optionen.
 function lokalerExit(commits) {
   if (commits.some(({ zustand }) => zustand !== GEPRUEFT)) return EXIT_NICHT_GELAUFEN;
   const befunde = commits.flatMap((commit) => commit.befunde);
-  return befunde.some(({ schwere }) => ZU_BEHEBEN.has(schwere)) ? EXIT_BEFUNDE : 0;
+  return befunde.some(({ schwere }) => schwere === BLOCKER) ? EXIT_BEFUNDE : 0;
 }
 
 async function lokal(optionen, root, { github = githubZugang(), programm } = {}) {

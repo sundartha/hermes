@@ -17,8 +17,9 @@ function dateiSpan(datei) {
   return `\`${inhalt}\``;
 }
 
-export function issueTitel(befund) {
-  return `Prüfer: ${katalogId(befund.id) || OHNE_ID} in ${dateiSpan(befund.datei)}`;
+export function issueTitel(befund, pr = null) {
+  const titel = `Prüfer: ${katalogId(befund.id) || OHNE_ID} in ${dateiSpan(befund.datei)}`;
+  return pr === null ? titel : `${titel} (PR #${pr})`;
 }
 
 function titelVon(titel) {
@@ -35,12 +36,12 @@ function eingezaeunt(text) {
   return [`${zaun}text`, inhalt, zaun].join("\n");
 }
 
-export function issueText({ sha, befund, grund }) {
+export function issueText({ sha, pr = null, befund, grund }) {
   const abschnitt = (titel, inhalt) =>
     inhalt.trim() === "" ? [] : [`### ${titel}`, "", eingezaeunt(inhalt), ""];
   const id = katalogId(befund.id);
   return [
-    `Der Prüfer hat im Commit ${sha} einen Befund gemeldet, der den Merge nicht aufhält.`,
+    `Der Prüfer hat ${pr === null ? "" : `im Pull Request #${pr} `}im Commit ${sha} einen Befund gemeldet, der den Merge nicht aufhält.`,
     "",
     `- Schwere: ${befund.schwere}${grund ? ` (${grund})` : ""}`,
     ...(id ? [`- Katalog-ID: ${id}`] : []),
@@ -54,8 +55,8 @@ export function issueText({ sha, befund, grund }) {
 
 export async function legeIssuesAn(issues, github) {
   if (issues.length === 0) return { neu: 0, vorhanden: 0 };
-  const offen = await github.alle(`/issues?state=open&labels=${LABEL}`, (liste) => liste);
-  const titel = new Set(offen.map(({ title }) => title));
+  const bekannt = await github.alle(`/issues?state=all&labels=${LABEL}`, (liste) => liste);
+  const titel = new Set(bekannt.map(({ title }) => title));
   let neu = 0;
   for (const issue of issues) {
     const title = titelVon(issue.titel);

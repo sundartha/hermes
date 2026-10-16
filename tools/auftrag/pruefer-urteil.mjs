@@ -2,6 +2,7 @@ import { issueTitel } from "./pruefer-issues.mjs";
 import {
   BLOCKER,
   GEPRUEFT,
+  HINWEIS,
   UNVOLLSTAENDIG,
   reproduzierbareBlocker,
   schluesselVon,
@@ -86,15 +87,15 @@ function blockerGrund(befund, eintrag) {
 }
 
 function issueGrund(befund, eintrag) {
-  if (befund.sicherheit || befund.id.trim() === "") return null;
+  if (befund.sicherheit || befund.schwere === HINWEIS) return null;
   return befund.schwere === BLOCKER ? blockerGrund(befund, eintrag) : "";
 }
 
-function issuesDes(commit, nachstellung) {
+function issuesDes(commit, { nachstellung, pr }) {
   return commit.befunde.flatMap((befund, index) => {
     const grund = issueGrund(befund, nachstellung?.get(schluesselVon(commit.sha, index)));
     if (grund === null) return [];
-    return [{ titel: issueTitel(befund), sha: commit.sha, befund, grund }];
+    return [{ titel: issueTitel(befund, pr), sha: commit.sha, pr, befund, grund }];
   });
 }
 
@@ -103,7 +104,7 @@ function ohneDoppelte(issues) {
   return issues.filter((issue) => !titel.has(issue.titel) && titel.add(issue.titel));
 }
 
-export function urteile({ probeBranch = false, commits, nachstellung = null }) {
+export function urteile({ probeBranch = false, commits, nachstellung = null, pr = null }) {
   const lage = {
     probeBranch,
     commits,
@@ -113,6 +114,6 @@ export function urteile({ probeBranch = false, commits, nachstellung = null }) {
   const status = REGELN.map((regel) => regel(lage)).find(Boolean);
   const issues = probeBranch
     ? []
-    : ohneDoppelte(geprueft(commits).flatMap((commit) => issuesDes(commit, nachstellung)));
+    : ohneDoppelte(geprueft(commits).flatMap((commit) => issuesDes(commit, { nachstellung, pr })));
   return { ...gekuerzteBeschreibung(status), issues };
 }

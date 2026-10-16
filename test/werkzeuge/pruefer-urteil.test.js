@@ -198,3 +198,21 @@ test("eine im Diff eingebettete Anweisung ändert mit derselben aufgezeichneten 
   assert.deepEqual(praepariert, sauber);
   assert.equal(praepariert.state, "failure");
 });
+
+test("SOLLTE und HINWEIS halten den PR nicht auf; nur jeder SOLLTE wird ein Folge-Issue mit PR im Titel, auch ohne Katalog-ID", () => {
+  const ohneReproduktion = { schwere: "SOLLTE", reproduktion: "" };
+  const befunde = [
+    befund(ohneReproduktion),
+    befund({ ...ohneReproduktion, id: "", datei: "src/text.js" }),
+    befund({ ...ohneReproduktion, schwere: "HINWEIS", id: "G25" }),
+  ];
+  const { state, issues } = urteile({ commits: [commit({ befunde })], pr: 1012 });
+  assert.equal(state, "success");
+  assert.deepEqual(
+    issues.map(({ titel, pr }) => [titel, pr]),
+    [
+      ["Prüfer: G5 in `src/zahl.js` (PR #1012)", 1012],
+      ["Prüfer: Befund in `src/text.js` (PR #1012)", 1012],
+    ],
+  );
+});
