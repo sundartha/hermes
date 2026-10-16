@@ -151,7 +151,7 @@
     "wozu": "Die Änderung darf nicht an anderer Stelle brechen, was bisher funktionierte.",
     "behebung": "Den Bruch im Produktcode vermeiden.",
     "nichtAngenommen": "Eine Weiche, die für den alten Test das alte und sonst das neue Verhalten liefert.",
-    "ausweg": "Ändert der Auftrag das Verhalten absichtlich und hält ein alter Test das alte Verhalten fest, beende als Bau-Agent deine Antwort mit der eigenen Zeile „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; beim Test-Agenten gilt diese Zeile als „Auftrag passt nicht“. Das Skript führt die Testdatei des genannten Tests auf deiner Änderung aus, verwirft die Änderung und legt Zeile, Ergebnis und Diff Antonio als Entscheidungsnotiz vor; den Test änderst du nicht."
+    "ausweg": "Ändert der Auftrag das Verhalten absichtlich und hält ein alter Test das alte Verhalten fest, beende als Bau-Agent deine Antwort mit der eigenen Zeile „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; beim Test-Agenten gilt diese Zeile als „Auftrag passt nicht“. Das Skript führt die Testdatei des genannten Tests auf deiner Änderung aus und verwirft die Änderung. Ist die Testdatei damit rot, lässt es zuerst einen reinen Testumbau ihres Vorbaus planen und ausführen, der keine Erwartung ändert, und startet den Auftrag danach neu; geht das nicht, legt es Zeile, Ergebnis und Diff Antonio als Entscheidungsnotiz vor. Den Test änderst du nicht."
   },
   "mutation": {
     "liste": "A14",

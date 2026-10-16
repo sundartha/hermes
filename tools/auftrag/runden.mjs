@@ -22,6 +22,7 @@ const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "abnahme"];
 const CODEBLOCK = "```";
 const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
+const ECHTES_VERHALTEN = "Verhalten:";
 const AUSWEG_SCHLUSS =
   "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ und „Alter Test hält altes Verhalten fest“ liest das Skript nur beim Bau-Agenten.";
 
@@ -55,6 +56,19 @@ function voraussetzungsAnlass(satz) {
     zeilen: [`Der Bau-Agent hat aufgehört: ${satz}`],
     aufgabe: "Mach aus der fehlenden Voraussetzung genau einen Umbau-Auftrag, der sie herstellt und das Verhalten nicht ändert.",
     grund: `Voraussetzung fehlt: ${satz}`,
+  };
+}
+
+function vorbauAnlass({ zeile, datei, diff = "" }) {
+  return {
+    titel: "Alter Test hält altes Verhalten fest",
+    zeilen: [`Der Bau-Agent hat aufgehört: ${zeile}`, `Die Testdatei ${datei} ist mit seiner Änderung rot. Das ist sein verworfener Diff:`, CODEBLOCK, diff, CODEBLOCK],
+    aufgabe: [
+      `Prüf, ob nur der Vorbau dieses alten Tests (gemeinsame Vorbereitung, Testdaten, Testhilfe) mit dem Auftrag kollidiert und nicht seine Erwartung.`,
+      `Wenn ja, mach daraus genau einen ${TESTUMBAU}, der den Vorbau so umbaut, dass jeder Fall in ${datei} vor und nach dem Umbau grün ist und keine Erwartung sich ändert; abnahme ist ${datei}.`,
+      `Hält der Test genau das Verhalten fest, das der Auftrag ändert, antworte statt des JSON-Objekts nur mit einer Zeile, die mit „${ECHTES_VERHALTEN}“ beginnt und danach deinen Grund nennt; dann entscheidet Antonio.`,
+    ].join(" "),
+    grund: zeile,
   };
 }
 
@@ -109,6 +123,12 @@ function planBefunde(plan, neu, root) {
   return neu === null ? [KEIN_VORSCHLAG] : phasenBefunde(neu, root);
 }
 
+function vorbauBefund(plan, datei) {
+  if (plan.befunde.length > 0) return plan.befunde.join("; ");
+  const { art, abnahme } = plan.kontext.auftrag;
+  return art === TESTUMBAU && abnahme === datei ? null : `kein ${TESTUMBAU} mit abnahme ${datei}`;
+}
+
 function veroeffentliche(issue, text, root) {
   const ziel = String(issue ?? "");
   if (!ISSUE.test(ziel)) {
@@ -151,7 +171,11 @@ class Runden {
       const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte(), vorigeRunden: this.roteRunden });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
       if (ergebnis.entscheidung) return this.entscheidung(ergebnis, ergebnis.entscheidung);
-      if (ergebnis.alterTest) return this.legeAltenTestAntonioVor(ergebnis);
+      if (ergebnis.alterTest) {
+        const vorlauf = this.vorbauUmbauen(ergebnis);
+        if (vorlauf !== GRUEN) return vorlauf;
+        continue;
+      }
       if (ergebnis.ausstieg) return this.ausgestiegen(ergebnis);
       if (ergebnis.voraussetzung) {
         const vorlauf = this.voraussetzungFehlt(ergebnis);
@@ -185,6 +209,21 @@ class Runden {
       return this.zurueckInDenEntwurf(ergebnis, `Kein gültiger Umbau-Auftrag: ${plan.befunde.join("; ")}`, zweckBlock(MELDUNG.UMBAU_PLAN));
     }
     return new Runden({ ...this.kontext, ...plan.kontext, aufraeumen: ergebnis.voraussetzung.startsWith("Altfunktionen aufräumen:") }, this.starteRunde).fuehreAus();
+  }
+
+  vorbauUmbauen(ergebnis) {
+    const { auftrag, zaehler, root } = this.kontext;
+    const { alterTest } = ergebnis;
+    if (istUmbau(auftrag) || !alterTest.rot || zaehler.vorbauten > 0) return this.legeAltenTestAntonioVor(ergebnis);
+    zaehler.vorbauten += 1;
+    verwerfe(ergebnis.basis, root);
+    const plan = this.planeUmbau(vorbauAnlass(alterTest));
+    const abgelehnt = vorbauBefund(plan, alterTest.datei);
+    if (abgelehnt !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${abgelehnt}. Der Plan steht im Beleg ${auftrag.id}-plan.`);
+    const umbau = plan.kontext.auftrag;
+    const vorlauf = new Runden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
+    if (vorlauf !== GRUEN) return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} vorweg ist gescheitert (${vorlauf}); sein Beleg heißt ${umbau.id}.`);
+    return GRUEN;
   }
 
   planeUmbau(anlass) {
@@ -235,7 +274,7 @@ class Runden {
     return this.zurueckAnDiePlanung(ergebnis, gestoppt);
   }
 
-  legeAltenTestAntonioVor(ergebnis) {
+  legeAltenTestAntonioVor(ergebnis, vorbau = null) {
     verwerfe(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
     const { zeile, datei, test, rot } = ergebnis.alterTest;
@@ -247,6 +286,7 @@ class Runden {
       "",
       `Die Testdatei ${datei} ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}. Den Testnamen gibt es in der Datei; ob genau dieser Fall rot ist, prüft das Skript nicht.`,
       `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`,
+      ...(vorbau === null ? [] : [vorbau]),
     ].join("\n");
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
     return this.entscheidung(ergebnis, { kopf, anlass: `Der Bau-Agent meldet: ${zeile}`, verlauf: [...this.fehler, zeile], hinweise });
@@ -280,5 +320,5 @@ class Runden {
 }
 
 export function fuehreRundenAus(kontext, starteRunde) {
-  return new Runden({ ...kontext, zaehler: { voraussetzungen: 0 } }, starteRunde).fuehreAus();
+  return new Runden({ ...kontext, zaehler: { voraussetzungen: 0, vorbauten: 0 } }, starteRunde).fuehreAus();
 }
