@@ -51,10 +51,10 @@ async function starteAnbieter() {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     starts: () => anfragen.filter((a) => a.methode === "POST" && a.pfad.startsWith(START_PFAD)),
-    beendet: (konversation) =>
-      anfragen.some(
-        (a) => a.methode === "DELETE" && (konversation ? a.pfad === KONVERSATION_PFAD + konversation : true),
-      ),
+    beendetGespraech: (konversation) => {
+      assert.ok(konversation, "ohne Gespraechs-ID laesst sich das Beenden keinem Anruf zuordnen");
+      return anfragen.some((a) => a.methode === "DELETE" && a.pfad === KONVERSATION_PFAD + konversation);
+    },
     schliessen: () => new Promise((fertig) => server.close(fertig)),
   };
 }
@@ -248,8 +248,9 @@ async function endeDesAuftragsAnrufs(srv) {
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
   await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
-    assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "budget-exhausted");
-    await waitUntil(() => anbieter.beendet(), { timeoutMs: 3000 });
+    const anruf = await endeDesAuftragsAnrufs(srv);
+    assert.equal(anruf.failureReason, "budget-exhausted");
+    await waitUntil(() => anbieter.beendetGespraech(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
   });
 });
 
@@ -272,9 +273,9 @@ test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterd
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
-    await waitUntil(() => anbieter.beendet(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
+    await waitUntil(() => anbieter.beendetGespraech(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
     const langerAnruf = anrufAn(srv, LANGES_ZIEL);
     assert.equal(langerAnruf.status, "active");
-    assert.equal(anbieter.beendet(langerAnruf.elevenlabsConversationId), false);
+    assert.equal(anbieter.beendetGespraech(langerAnruf.elevenlabsConversationId), false);
   });
 });
