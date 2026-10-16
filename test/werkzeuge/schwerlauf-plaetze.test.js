@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { test } from "node:test";
 
-import { FRIST, SCHWERLAUF, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, zeitenVon } from "./schwerlauf-lauf.js";
+import { FRIST, SCHWERLAUF, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 
+const EXIT_FRIST = 124;
 const ZWEI_PLAETZE = 2;
 const EXIT_NICHT_GESTARTET = 1;
+const FRIST_SEKUNDEN = 1;
+const MS_PRO_SEKUNDE = 1000;
+const ABGELAUFEN = new RegExp(`Frist von ${FRIST_SEKUNDEN} s ab Erhalt des Platzes abgelaufen`);
 
 async function erstesEreignis(lauf) {
   return Promise.race([lauf.begonnen, lauf.wartend, lauf.ende.then(() => "geendet")]);
@@ -13,6 +19,15 @@ async function erstesEreignis(lauf) {
 async function beenden(...laeufe) {
   for (const lauf of laeufe) lauf.kind.stdin.end();
   await Promise.all(laeufe.map(({ ende }) => ende));
+}
+
+function mitFrist(befehl) {
+  return [SCHWERLAUF, "--frist", String(FRIST_SEKUNDEN), "--", ...befehl];
+}
+
+async function prozessNummerAus(context, lauf) {
+  const nummer = Number(await zeile(lauf.kind.stdout, /^\d+$/));
+  context.after(() => spawnSync("/bin/kill", ["-KILL", String(nummer)]));
 }
 
 async function stand(env) {
@@ -95,6 +110,54 @@ test("--stand zeigt jeden von zwei Plätzen mit seinem Halter und die Wartenden"
   assert.match(belegt, new RegExp(`^Wartet: PID ${wartend.kind.pid}, `, "m"));
   assert.match(danach, new RegExp(`^Platz 1: belegt von PID ${wartend.kind.pid}, `, "m"));
   assert.match(danach, /^Wartet: niemand$/m);
+});
+
+test("--frist zählt erst ab Erhalt des Platzes: wer länger als seine Frist auf den Platz gewartet hat, läuft danach durch", FRIST, async (context) => {
+  const env = umgebung(context);
+  const gehalten = await halter(context, env);
+  const gestartet = Date.now();
+  const lauf = starte(mitFrist(["/bin/echo", "lief"]), { env });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await wartet(lauf);
+  const gewartetMs = Date.now() - gestartet;
+  gehalten.kind.kill("SIGKILL");
+  await lauf.ende;
+
+  assert.ok(gewartetMs > FRIST_SEKUNDEN * MS_PRO_SEKUNDE, `nur ${gewartetMs} ms gewartet`);
+  assert.equal(lauf.kind.exitCode, 0, lauf.stderr);
+  assert.equal(lauf.stdout, "lief\n");
+});
+
+test("läuft ein Lauf über seine Frist, wird er beendet und endet mit Exit 124", FRIST, async (context) => {
+  const env = umgebung(context);
+  const lauf = starte(mitFrist([process.execPath, "-e", "setInterval(() => {}, 1000)"]), { env });
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, EXIT_FRIST, lauf.stderr);
+  assert.match(lauf.stderr, ABGELAUFEN);
+});
+
+test("ignoriert ein Lauf das Ende seiner Frist, wird er hart beendet und endet mit Exit 124", FRIST, async (context) => {
+  const env = umgebung(context);
+  const stur = "process.on('SIGTERM', () => {}); console.log(process.pid); setInterval(() => {}, 1000)";
+  const lauf = starte(mitFrist([process.execPath, "-e", stur]), { env });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await prozessNummerAus(context, lauf);
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, EXIT_FRIST, lauf.stderr);
+  assert.match(lauf.stderr, ABGELAUFEN);
+});
+
+test("läuft ein Lauf über seine Frist, endet auch der Enkelprozess, den er gestartet hat", FRIST, async (context) => {
+  const env = umgebung(context);
+  const enkel = `${JSON.stringify(process.execPath)} -e "console.log(process.pid); setInterval(() => {}, 1000)" & wait`;
+  const lauf = starte(mitFrist(["/bin/sh", "-c", enkel]), { env });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await prozessNummerAus(context, lauf);
+  await Promise.all([lauf.ende, once(lauf.kind.stdout, "end")]);
+
+  assert.equal(lauf.kind.exitCode, EXIT_FRIST, lauf.stderr);
 });
 
 test("ist die Zahl der Plätze keine positive ganze Zahl, startet der schwere Lauf nicht", FRIST, async (context) => {
