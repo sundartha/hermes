@@ -191,7 +191,7 @@ Zuordnung zur OpenAI-Tabelle (Abschnitt 2):
    Vertrag.
 3. Gewollt: Brueche nur, wenn eine Anforderung sie verlangt (Abschnitt 5 bzw. 6), und
    dann mit ALLEN Aufrufern, Tests, Beschreibungen und Doku nachgezogen.
-4. Ist-Stand uebernehmen: der Test schreibt ihn nach `os.tmpdir()`, Dateiname
+4. Ist-Stand uebernehmen: der Test schreibt ihn nach `.pruefung/` im Repo, Dateiname
    `mcp-vertrag-ist-gesamt.json` (alle Profile) bzw. `mcp-vertrag-ist-<profil>.json`
    (ein Profil). `profile` und `werkzeuge` aus der Gesamt-Datei in
    `docs/mcp-vertrag.json` uebernehmen - nie von Hand abtippen.

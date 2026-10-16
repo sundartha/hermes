@@ -1,7 +1,6 @@
 import { after } from "node:test";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
@@ -9,9 +8,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { abfragenZaehlendeHuelle, abwartenBisNichtsMehrLaeuft } from "./gemeinsam/pglite-instanz.js";
 import { testkostenZaehler } from "./testkosten.js";
 
-const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
 const PGLITE_NAME = "@electric-sql/pglite";
 const PGLITE_PAKET = paketDateiFinden(PGLITE_NAME);
+const PAKETE_ORDNER = path.resolve(path.dirname(PGLITE_PAKET), ...PGLITE_NAME.split("/").map(() => ".."));
+export const VORLAGEN_ORDNER = path.join(PAKETE_ORDNER, ".cache", "hermes-pglite-vorlagen");
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
 const VORLAGE_UNABHAENGIG = "HERMES_VORLAGE_UNABHAENGIG";
 

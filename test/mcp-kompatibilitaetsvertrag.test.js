@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { ROOT } from "./helpers.js";
 import { WIDGET_CALL, widgetHtml, widgetVersion } from "../src/ui/widget-catalog.js";
@@ -76,7 +75,9 @@ const PROFILE = Object.freeze([
 const gemessen = {};
 
 function schreibeIstStand(name, stand) {
-  const datei = path.join(os.tmpdir(), `mcp-vertrag-ist-${name}.json`);
+  const ordner = path.join(ROOT, ".pruefung");
+  fs.mkdirSync(ordner, { recursive: true });
+  const datei = path.join(ordner, `mcp-vertrag-ist-${name}.json`);
   const inhalt = { profile: stand.profile, werkzeuge: stand.werkzeuge, stand_sha256: standSha256(stand) };
   fs.writeFileSync(datei, `${JSON.stringify(inhalt, null, JSON_EINRUECKUNG)}\n`);
   return datei;
