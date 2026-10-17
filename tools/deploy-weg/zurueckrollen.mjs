@@ -147,7 +147,8 @@ async function rollbackAusloesen(kontext, { gewaehlt, bekannt }) {
 async function rollbackVerfolgen({ render, ausgabe, uhr, takte }, id) {
   let bisher = null;
   const ergebnis = await abwarten({ uhr, ...takte.status }, async () => {
-    const { daten } = await render.lesen(id);
+    const { status, daten } = await render.lesen(id);
+    if (status !== HTTP_OK) return undefined;
     const zustand = statusWort(daten?.status);
     if (zustand !== bisher) ausgabe.melde("deploy_status", { status: zustand });
     bisher = zustand;

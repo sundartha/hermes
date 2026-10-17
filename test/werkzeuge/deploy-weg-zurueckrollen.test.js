@@ -441,6 +441,21 @@ test("zurueckrollen hält an der Schutzgrenze des Deploy-Status an und stellt da
   assert.deepEqual(anfragenAn(lauf.attrappe, "POST", /\/cancel$/), []);
 });
 
+test("zurueckrollen wertet Fehlerantworten beim Deploy-Status nicht als Zustand und beobachtet weiter bis live", async (kontext) => {
+  const welt = {
+    deployStatus: ["update_in_progress", "live"],
+    lesenStatus: [HTTP_OK, HTTP_FEHLER, HTTP_NICHT_ERREICHBAR, HTTP_OK],
+  };
+  const lauf = await rollbackMit(kontext, { welt });
+  assert.equal(lauf.ok, true, lauf.text);
+  assert.deepEqual(
+    lauf.zeilen.filter((zeile) => zeile.startsWith("Deploy-Status:")),
+    ["Deploy-Status: update_in_progress", "Deploy-Status: live"],
+  );
+  assert.equal(anfragenAn(lauf.attrappe, "GET", STATUS_ABFRAGEN).length, 4);
+  assert.deepEqual(rollbackKoerper(lauf), [{ deployId: "dep-p" }]);
+});
+
 test("zurueckrollen ist rot, wenn healthz den Ziel-Commit nicht meldet", async (kontext) => {
   const lauf = await rollbackMit(kontext, {
     welt: { produktion: [COMMIT_C, COMMIT_C], dienst: [AN, AUS, AN] },
