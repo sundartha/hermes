@@ -14,18 +14,25 @@ const AUSWEG_BEI = "Ausweg bei Prüfung: ";
 const PRUEFUNG_TRENNER = ", ";
 const OHNE_ROTE_PRUEFUNG = "keine";
 const ALTER_TEST = "alterTest";
+const NACH_KOPF = /^:\s*(\S.*)$/;
 const AUSWEGE = [
-  { art: AUSSTIEG, anfang: new RegExp(`^${AUSSTIEG_KOPF}:\\s*(\\S.*)$`), rollen: ["bau", "test"] },
-  { art: "voraussetzung", anfang: new RegExp(`^${VORAUSSETZUNG_KOPF}:\\s*(\\S.*)$`), rollen: ["bau"] },
-  { art: ALTER_TEST, anfang: new RegExp(`^${ALTER_TEST_KOPF}:\\s*(\\S.*)$`), rollen: ["bau", "test"] },
+  { art: AUSSTIEG, kopf: AUSSTIEG_KOPF, rollen: ["bau", "test"] },
+  { art: "voraussetzung", kopf: VORAUSSETZUNG_KOPF, rollen: ["bau"] },
+  { art: ALTER_TEST, kopf: ALTER_TEST_KOPF, rollen: ["bau", "test"] },
 ];
-const AUSSTIEG_ZEILE = new RegExp(`^${AUSSTIEG_KOPF}: \\S`, "m");
-const ALTER_TEST_ZEILE = new RegExp(`^${ALTER_TEST_KOPF}: \\S`, "m");
 const AUSWEG_BEI_ZEILE = new RegExp(`^${AUSWEG_BEI}(\\S.*)$`, "gm");
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
 const ZWECK_KOPF = /^Zweck ([^:\s][^:]*):(.*)$/;
 const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, "Gleichwertig", "Nötig"].join("|")}):`);
+
+function grundNach(kopf, zeile) {
+  return zeile.startsWith(kopf) ? NACH_KOPF.exec(zeile.slice(kopf.length))?.[1] : undefined;
+}
+
+function enthaeltZeile(text, kopf) {
+  return zeilenDes(text).some((zeile) => grundNach(kopf, zeile) !== undefined);
+}
 
 function nurPlatzhalter(text) {
   return !INHALT.test(text.replace(PLATZHALTER, ""));
@@ -43,8 +50,8 @@ export function antwortZeilen(text) {
 }
 
 function auswegDer(zeile, rolle) {
-  for (const { art, anfang, rollen } of AUSWEGE) {
-    const grund = anfang.exec(zeile)?.[1];
+  for (const { art, kopf, rollen } of AUSWEGE) {
+    const grund = grundNach(kopf, zeile);
     if (grund !== undefined && rollen.includes(rolle) && !nurPlatzhalter(begruendungDer(art, grund))) return { art, grund, zeile };
   }
   return null;
@@ -109,11 +116,11 @@ export function pruefungenDerAuswege(text) {
 }
 
 export function enthaeltAusstiegszeile(text) {
-  return AUSSTIEG_ZEILE.test(text);
+  return enthaeltZeile(text, AUSSTIEG_KOPF);
 }
 
 export function enthaeltAlteTestZeile(text) {
-  return ALTER_TEST_ZEILE.test(text);
+  return enthaeltZeile(text, ALTER_TEST_KOPF);
 }
 
 function lesarten(rest) {

@@ -148,3 +148,21 @@ test("Wochenbericht: zählt den Ausstieg und die Prüfung aus dem Kommentar, den
   const bericht = await berichtZuKommentaren(context, beleg.entscheidung.text);
   assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 1", "- Ausstiege je Prüfung: keine 1", "- Alter Test hält altes Verhalten fest: 0"]);
 });
+
+test("Wochenbericht: zählt eine Ausstiegs- und eine Alter-Test-Zeile mit jedem Leerraum nach dem Doppelpunkt, den ausgang erkennt", async (context) => {
+  const ausstiege = ["Auftrag passt nicht:Grund", "Auftrag passt nicht:   Grund", "Auftrag passt nicht:\tGrund"];
+  const alteTests = ["Alter Test hält altes Verhalten fest:test/a.test.js:alt – neu", "Alter Test hält altes Verhalten fest:   test/a.test.js:alt – neu"];
+  const erkannt = [...ausstiege, ...alteTests].map((zeile) => ausgang(zeile, "bau").zeile);
+  assert.deepEqual(erkannt, [...ausstiege, ...alteTests]);
+  const bericht = await berichtZuKommentaren(context, ...erkannt);
+  assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 3", "- Ausstiege je Prüfung: 0", "- Alter Test hält altes Verhalten fest: 2"]);
+});
+
+test("Wochenbericht: zählt eine Ausstiegs- und eine Alter-Test-Zeile hinter jedem Zeilenende, das ausgang als Zeilenende erkennt", async (context) => {
+  const ausstieg = `Auftrag passt nicht: ${GRUND}`;
+  const alterTest = "Alter Test hält altes Verhalten fest: test/a.test.js:alt – neu";
+  const antworten = ["\r\n", "\r", "\u2028"].map((ende) => `Ich höre auf.${ende}${ausstieg}${ende}${alterTest}${ende}`);
+  assert.deepEqual(antworten.map((antwort) => ausgang(antwort, "bau").zeile), [alterTest, alterTest, alterTest]);
+  const bericht = await berichtZuKommentaren(context, ...antworten);
+  assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 3", "- Ausstiege je Prüfung: 0", "- Alter Test hält altes Verhalten fest: 3"]);
+});
