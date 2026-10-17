@@ -1,3 +1,4 @@
+import { isBuiltin } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 
 import { gelesen } from "../syntaxbaum.mjs";
@@ -57,6 +58,40 @@ const TESTHUELLEN = new Set(["test", "it", "describe", "suite", "skip", "only", 
 const TESTOPTIONEN = new Set(["skip", "todo", "only", "timeout", "signal", "concurrency", "plan"]);
 const BERECHNETER_ZUGRIFF = "x[berechnet]";
 const AUFRUFE = new Set(["CallExpression", "NewExpression"]);
+const VERGLEICHE = new Set(["equal", "strictEqual", "deepEqual", "deepStrictEqual", "notEqual", "notStrictEqual", "notDeepEqual", "notDeepStrictEqual"]);
+const EINGRIFFE = new Set([ZUSICHERUNG, ERWARTUNG, "mock"]);
+const HILFENRUMPF = "⟨Hilfe⟩";
+const QUELLE = /^(\.\.?\/|[\w@])[^:]*$/u;
+const ABSCHNITT = /^[\w-]+$/u;
+const PRODUKTIONSDATEI = /^[\w-]+\.m?js$/u;
+const ERLAUBT = new Map(
+  Object.entries({
+    Identifier: () => [],
+    Literal: () => [],
+    TemplateElement: () => [],
+    TemplateLiteral: ({ quasis, expressions }) => [...quasis, ...expressions],
+    ObjectExpression: ({ properties }) => properties,
+    ObjectPattern: ({ properties }) => properties,
+    Property: ({ computed, kind, key, value }) => !computed && kind === "init" && key.type === "Identifier" && [value],
+    SpreadElement: ({ argument }) => [argument],
+    ArrayExpression: ({ elements }) => !elements.includes(null) && elements,
+    ArrowFunctionExpression: zugelasseneFunktion,
+    FunctionExpression: zugelasseneFunktion,
+    CallExpression: ({ callee, arguments: argumente }) => [callee, ...argumente],
+    NewExpression: ({ callee, arguments: argumente }) => [callee, ...argumente],
+    MemberExpression: ({ computed, object, property }) => !computed && property.type === "Identifier" && [object],
+    AwaitExpression: ({ argument }) => [argument],
+    AssignmentExpression: ({ operator, left, right }) => operator === "=" && left.type === "MemberExpression" && [left, right],
+    ConditionalExpression: ({ test, consequent, alternate }) => [test, consequent, alternate],
+    BinaryExpression: ({ left, right }) => [left, right],
+    LogicalExpression: ({ left, right }) => [left, right],
+    UnaryExpression: ({ operator, argument }) => operator !== "delete" && [argument],
+    VariableDeclaration: ({ kind, declarations }) => (kind === "const" || kind === "let") && declarations,
+    VariableDeclarator: ({ id, init }) => [id, init].filter(Boolean),
+    ExpressionStatement: ({ expression }) => [expression],
+    ReturnStatement: ({ argument }) => [argument].filter(Boolean),
+  }),
+);
 
 function* knoten(wert) {
   if (Array.isArray(wert)) for (const teil of wert) yield* knoten(teil);
@@ -311,6 +346,7 @@ function bindungen(teil) {
   if (teil.type === "VariableDeclarator") return [[teil.id, teil.init]];
   if (teil.type === "FunctionDeclaration") return [[teil.id, teil]];
   if (teil.type === "ForOfStatement" || teil.type === "ForInStatement") return [[teil.left, teil.right]];
+  if (teil.type === "AssignmentExpression") return [[basis(teil.left), teil.right]];
   return teil.type === "CallExpression" ? rueckrufe(teil).map(({ params }) => [params, teil.callee]) : [];
 }
 
@@ -320,9 +356,9 @@ function herkunft(baum) {
   return werte;
 }
 
-function mitHerkunft(namen, baum) {
+function mitHerkunft(namen, baum, schritt = bezeichner) {
   const werte = herkunft(baum);
-  for (const name of namen) for (const wert of werte.get(name) ?? []) for (const weiter of bezeichner(wert)) namen.add(weiter);
+  for (const name of namen) for (const wert of werte.get(name) ?? []) for (const weiter of schritt(wert)) namen.add(weiter);
   return namen;
 }
 
@@ -345,10 +381,45 @@ function* ausserhalbVonAufrufen(wert) {
   }
 }
 
-function erwartungen(baum) {
+function zusicherungenDer(baum) {
   const hilfen = hilfenMitZusicherung(baum);
-  const zusicherungen = [...knoten(baum)].filter(({ type, callee }) => type === "CallExpression" && prueft(namen(callee), hilfen));
-  return mitHerkunft(new Set(zusicherungen.flatMap((aufruf) => [...ausserhalbVonAufrufen(argumenteDerKette(aufruf))])), baum);
+  return [...knoten(baum)].filter(({ type, callee }) => type === "CallExpression" && prueft(namen(callee), hilfen));
+}
+
+function operanden(baum) {
+  return new Set(zusicherungenDer(baum).flatMap((aufruf) => [...ausserhalbVonAufrufen(argumenteDerKette(aufruf))]));
+}
+
+function seitenDer(aufruf) {
+  const [ist] = aufruf.arguments;
+  const vergleich = VERGLEICHE.has(namen(aufruf.callee).at(-1)) && aufruf.arguments.length > 1;
+  const alle = argumenteDerKette(aufruf);
+  return vergleich ? { ist: [ist], soll: alle.filter((teil) => teil !== ist) } : { ist: [], soll: alle };
+}
+
+function hilfenaufruf(wert, hilfen) {
+  const aufruf = wert?.type === "AwaitExpression" ? wert.argument : wert;
+  const { callee } = aufruf?.type === "CallExpression" ? aufruf : {};
+  return callee?.type === "Identifier" && hilfen.has(callee.name) ? aufruf : undefined;
+}
+
+function seitennamen(baum) {
+  const seiten = zusicherungenDer(baum).map(seitenDer);
+  return { ist: new Set(seiten.flatMap(({ ist }) => [...ausserhalbVonAufrufen(ist)])), soll: new Set(seiten.flatMap(({ soll }) => bezeichner(soll))) };
+}
+
+function gesperrteHilfen(baum) {
+  const eigenschaften = [...knoten(baum)].filter(({ type, left }) => type === "AssignmentExpression" && left.type !== "Identifier");
+  const oben = new Set([...baum.body.flatMap(obereBindungen).map(([, wert]) => wert), ...eigenschaften.map(({ right }) => right)]);
+  const hilfen = new Set(baum.body.flatMap((anweisung) => [hilfeDer(anweisung)].filter(Boolean)).map(([name]) => name));
+  const istSchritt = (wert) => bezeichner((!oben.has(wert) && hilfenaufruf(wert, hilfen)?.arguments) || wert);
+  const { ist, soll } = seitennamen(baum);
+  const gesperrt = mitHerkunft(new Set([...soll, ...testOptionen(baum)]), baum);
+  return new Set([...gesperrt, ...mitHerkunft(ist, baum, istSchritt)]);
+}
+
+function erwartungen(baum) {
+  return mitHerkunft(operanden(baum), baum);
 }
 
 function deklarationErgaenzt(vorher, nachher, quellen) {
@@ -363,10 +434,213 @@ function entspricht(vorher, nachher, quellen) {
   return geruest(vorher, quellen.alt) === geruest(nachher, quellen.neu) || deklarationErgaenzt(vorher, nachher, quellen);
 }
 
+function hilfeDer(anweisung) {
+  const [hilfe] = (anweisung.type === "VariableDeclaration" ? anweisung.declarations : [anweisung]).flatMap(benannteFunktion);
+  return hilfe;
+}
+
+function rahmen(anweisung, [, funktion], quelle) {
+  const [anfang, ende] = funktion.body.range;
+  return `${quelle.slice(anweisung.range[0], anfang)}${HILFENRUMPF}${quelle.slice(ende, anweisung.range[1])}`.replace(LEERRAUM, " ");
+}
+
+function gebundeneNamen(teil) {
+  if (teil.type === "VariableDeclarator") return ziele(teil.id, jedesZiel);
+  if (FUNKTIONEN.has(teil.type)) return teil.params.flatMap((muster) => ziele(muster, jedesZiel));
+  return teil.type === "CatchClause" ? ziele(teil.param, jedesZiel) : [];
+}
+
+function eigeneObjekte(funktion) {
+  const namen = [...knoten(funktion)].flatMap(gebundeneNamen).map(({ name }) => name);
+  const oben = funktion.body.type === "BlockStatement" ? funktion.body.body : [];
+  const belegungen = oben.flatMap(({ declarations = [] }) => declarations);
+  const frisch = belegungen.filter(({ id, init }) => id.type === "Identifier" && FRISCHE_WERTE.has(init?.type)).map(({ id }) => id.name);
+  return new Set(frisch.filter((name) => namen.filter((gebunden) => gebunden === name).length === 1));
+}
+
+function rueckrufeOhne({ arguments: argumente }) {
+  return argumente.filter(({ type }) => !FUNKTIONEN.has(type));
+}
+
+function schreibtNurEigenes(funktion) {
+  const eigen = eigeneObjekte(funktion);
+  const teile = [...knoten(funktion.body)];
+  const schreibziele = teile.flatMap((teil) => veraendert(teil, jedesZiel));
+  const zugriffe = teile.filter(({ type }) => type === "MemberExpression");
+  const methoden = teile.filter(({ type, callee }) => AUFRUFE.has(type) && callee.type === "MemberExpression");
+  const uebergeben = methoden.flatMap((aufruf) => [...verweise(rueckrufeOhne(aufruf))]);
+  const eigenes = ({ object }) => (object?.type === "Identifier" && eigen.has(object.name)) || FRISCHE_WERTE.has(object?.type);
+  return schreibziele.every(({ object }) => object?.type === "Identifier" && eigen.has(object.name)) && zugriffe.every(eigenes) && uebergeben.every(({ name }) => eigen.has(name));
+}
+
+function wortDes({ type, name, value }) {
+  return type === "Identifier" ? name : value;
+}
+
+function eingriff(teil) {
+  const wort = wortDes(teil);
+  return EINGRIFFE.has(wort) || TESTOPTIONEN.has(wort);
+}
+
+function* verweise(wert) {
+  if (Array.isArray(wert)) for (const teil of wert) yield* verweise(teil);
+  else if (typeof wert?.type === "string") {
+    if (wert.type === "Identifier") yield wert;
+    const beschriftung = wert.property ?? wert.key;
+    for (const teil of Object.values(wert)) if (teil !== beschriftung) yield* verweise(teil);
+  }
+}
+
+function obereBindungen(teil) {
+  if (teil.type === "VariableDeclaration") return teil.declarations.map(({ id, init }) => [id, init]);
+  return teil.type === "FunctionDeclaration" ? [[teil.id, teil]] : [];
+}
+
+function vorwaerts(namen, oben) {
+  let bekannt = -1;
+  while (namen.size !== bekannt) {
+    bekannt = namen.size;
+    for (const [ziel, wert] of oben) if ([...verweise(wert)].some(({ name }) => namen.has(name))) for (const { name } of ziele(ziel, jedesZiel)) namen.add(name);
+  }
+  return namen;
+}
+
+function erreichteNamen(baum, hilfe) {
+  const { ist, soll } = seitennamen(baum);
+  const namen = mitHerkunft(new Set([...ist, ...soll, ...testOptionen(baum)]), baum, (wert) => (wert === hilfe ? [] : bezeichner(wert)));
+  return vorwaerts(namen, baum.body.flatMap(obereBindungen));
+}
+
+function importierteNamen(baum) {
+  const statisch = baum.body.filter(({ type }) => type === "ImportDeclaration").flatMap(({ specifiers }) => specifiers.map(({ local }) => local));
+  return [...statisch, ...importBelegungen(baum).flatMap(({ id }) => ziele(id, jedesZiel))].map(({ name }) => name);
+}
+
+function nenntNurFreies(funktion, teile, { erreicht, importiert }) {
+  const aufgerufen = new Set(teile.filter(({ type }) => AUFRUFE.has(type)).map(({ callee }) => callee));
+  return [...verweise(funktion.body)].every((teil) => !erreicht.has(teil.name) && (aufgerufen.has(teil) || !importiert.has(teil.name)));
+}
+
+function rumpfteile(rumpf) {
+  return rumpf.type === "BlockStatement" ? rumpf.body : [rumpf];
+}
+
+function zugelasseneFunktion({ generator, params, body }) {
+  return !generator && params.every(({ type }) => type === "Identifier") && [...params, ...rumpfteile(body)];
+}
+
+function zugelassen(teil) {
+  const kinder = ERLAUBT.get(teil.type)?.(teil);
+  return Array.isArray(kinder) && kinder.every(zugelassen);
+}
+
+function wertstellen(teil) {
+  if (AUFRUFE.has(teil.type)) return teil.arguments;
+  if (teil.type === "BinaryExpression") return [teil.left, teil.right];
+  if (teil.type === "UnaryExpression") return [teil.argument];
+  return teil.type === "TemplateLiteral" ? teil.expressions : [];
+}
+
+function geltungsbereich(funktion) {
+  const belegungen = rumpfteile(funktion.body).flatMap(({ declarations = [] }) => declarations);
+  const namen = (liste) => new Set(liste.map(({ name }) => name));
+  return { bereich: funktion.body.range, parameter: namen(funktion.params ?? []), belegt: namen(belegungen.flatMap(({ id }) => ziele(id, jedesZiel))) };
+}
+
+function bindenderBereich(bereiche, { name, range }) {
+  const umgibt = ({ bereich }) => bereich[0] <= range[0] && range[1] <= bereich[1];
+  return bereiche.filter((bereich) => umgibt(bereich) && (bereich.parameter.has(name) || bereich.belegt.has(name))).at(-1);
+}
+
+function nenntNurBekanntes(funktion, teile, bekannt) {
+  const bereiche = [funktion, ...teile.filter(({ type }) => FUNKTIONEN.has(type))].map(geltungsbereich);
+  const gebunden = new Set([...(funktion.params ?? []), ...teile.flatMap(gebundeneNamen)]);
+  const wertstelle = new Set(teile.flatMap(wertstellen));
+  const erlaubt = (teil) => {
+    const bindend = bindenderBereich(bereiche, teil);
+    if (!bindend) return bekannt.has(teil.name);
+    return !bindend.parameter.has(teil.name) || wertstelle.has(teil);
+  };
+  return [...verweise(funktion.body)].filter((teil) => !gebunden.has(teil)).every(erlaubt);
+}
+
+function ausProduktion(quelle) {
+  const teile = String(quelle).split("/");
+  const tiefe = teile.indexOf("src");
+  const ordner = teile.slice(tiefe + 1, -1);
+  return tiefe > 0 && teile.slice(0, tiefe).every((teil) => teil === "..") && ordner.every((teil) => ABSCHNITT.test(teil)) && PRODUKTIONSDATEI.test(teile.at(-1));
+}
+
+function fremderImport([ziel, wert]) {
+  if (!importBelegung(ziel, wert)) return false;
+  const { source } = wert.argument;
+  return !ausProduktion(source.value);
+}
+
+function bekannteNamen(baum) {
+  const importe = baum.body.filter(({ type, source }) => type === "ImportDeclaration" && ausProduktion(source.value));
+  const bindungenOben = baum.body.flatMap(obereBindungen).filter((bindung) => !fremderImport(bindung));
+  const oben = bindungenOben.flatMap(([ziel]) => ziele(ziel, jedesZiel));
+  const neuBelegt = new Set([...knoten(baum)].flatMap((teil) => veraendert(teil, jedesZiel)).map(({ name }) => name));
+  const namen = [...importe.flatMap(({ specifiers }) => specifiers.map(({ local }) => local)), ...oben].map(({ name }) => name);
+  return new Set(namen.filter((name) => !neuBelegt.has(name)));
+}
+
+function eingriffsfrei(funktion, hilfen, sperren) {
+  const teile = [...knoten(funktion.body)];
+  if (!(funktion.params ?? []).every(({ type }) => type === "Identifier") || !rumpfteile(funktion.body).every(zugelassen)) return false;
+  if (!nenntNurBekanntes(funktion, teile, sperren.bekannt) || teile.some(eingriff) || !nenntNurFreies(funktion, teile, sperren)) return false;
+  return !teile.some((teil) => umweg(teil).length > 0) && !enthaeltZusicherung(funktion, hilfen) && schreibtNurEigenes(funktion);
+}
+
+function obereWerte(baum) {
+  const bindungen = baum.body.flatMap(obereBindungen).filter(([ziel, wert]) => wert && !importBelegung(ziel, wert));
+  return new Map(bindungen.flatMap(([ziel, wert]) => ziele(ziel, jedesZiel).map(({ name }) => [name, wert])));
+}
+
+function genannteWerte(funktion, oben) {
+  const werte = new Map();
+  const offen = [funktion.body];
+  while (offen.length > 0) {
+    for (const { name } of verweise(offen.pop())) {
+      if (oben.has(name) && !werte.has(name)) offen.push(werte.set(name, oben.get(name)).get(name));
+    }
+  }
+  return [...werte.values()];
+}
+
+function erreichbarFrei([, funktion], { hilfen, sperren, oben }) {
+  return [funktion, ...genannteWerte(funktion, oben)].every((wert) => eingriffsfrei(FUNKTIONEN.has(wert.type) ? wert : { body: wert }, hilfen, sperren));
+}
+
+function hilfeUmgebaut(vorher, nachher, quellen) {
+  const [alt, neu] = [hilfeDer(vorher), hilfeDer(nachher)];
+  if (!alt || !neu || quellen.festeHilfen.has(alt[0]) || rahmen(vorher, alt, quellen.alt) !== rahmen(nachher, neu, quellen.neu)) return false;
+  const { hilfen, sperren, oben, bekannt, baeume } = quellen;
+  const erreicht = new Set([...erreichteNamen(baeume.alt, alt[1]), ...erreichteNamen(baeume.neu, neu[1])]);
+  const seite = (name) => ({ hilfen: hilfen[name], sperren: { ...sperren, erreicht, bekannt: bekannt[name] }, oben: oben[name] });
+  return erreichbarFrei(alt, seite("alt")) && erreichbarFrei(neu, seite("neu"));
+}
+
+function erlaubteQuelle({ source, options }) {
+  const quelle = source.value;
+  return !options && typeof quelle === "string" && QUELLE.test(quelle) && !isBuiltin(quelle) && !TESTBIBLIOTHEK.test(quelle);
+}
+
+function eigenerName({ computed, value }) {
+  return !computed && value?.type === "Identifier" && !EINGRIFFE.has(value.name);
+}
+
+function importBelegung(id, init) {
+  if (id.type !== "ObjectPattern" || !id.properties.every(eigenerName)) return false;
+  return init.type === "AwaitExpression" && init.argument.type === "ImportExpression" && erlaubteQuelle(init.argument);
+}
+
 function zugelasseneForm(anweisung) {
   if (anweisung.type === "ImportDeclaration") return anweisung.specifiers.length > 0 && !TESTBIBLIOTHEK.test(String(anweisung.source.value));
   if (anweisung.type === "FunctionDeclaration") return true;
-  return anweisung.type === "VariableDeclaration" && anweisung.kind === "const" && anweisung.declarations.every(({ id, init }) => id.type === "Identifier" && rein(init));
+  const belegung = ({ id, init }) => (id.type === "Identifier" && rein(init)) || importBelegung(id, init);
+  return anweisung.type === "VariableDeclaration" && anweisung.kind === "const" && anweisung.declarations.every(belegung);
 }
 
 function neueNamen(anweisung) {
@@ -382,7 +656,7 @@ function obersteEbeneGleich(alte, neue, quellen) {
   const alteNamen = new Set(bezeichner(alte));
   let offen = 0;
   for (const anweisung of neue) {
-    if (offen < alte.length && entspricht(alte[offen], anweisung, quellen)) offen += 1;
+    if (offen < alte.length && (entspricht(alte[offen], anweisung, quellen) || hilfeUmgebaut(alte[offen], anweisung, quellen))) offen += 1;
     else if (!zugelassenNeu(anweisung, alteNamen)) return false;
   }
   return offen === alte.length;
@@ -411,12 +685,18 @@ function faelleGleich(altBaum, neuBaum, quellen) {
 function aufbauGleich(vorher, nachher) {
   const [altBaum, neuBaum] = [gelesen(vorher, MODUL), gelesen(nachher, MODUL)];
   const gesperrt = [altBaum, neuBaum].flatMap((baum) => [...testOptionen(baum), ...erwartungen(baum)]);
-  const quellen = { alt: vorher, neu: nachher, gesperrt: new Set(gesperrt) };
+  const hilfen = { alt: hilfenMitZusicherung(altBaum), neu: hilfenMitZusicherung(neuBaum) };
+  const festeHilfen = new Set([altBaum, neuBaum].flatMap((baum) => [...gesperrteHilfen(baum)]));
+  const sperren = { importiert: new Set([altBaum, neuBaum].flatMap(importierteNamen)) };
+  const oben = { alt: obereWerte(altBaum), neu: obereWerte(neuBaum) };
+  const bekannt = { alt: bekannteNamen(altBaum), neu: bekannteNamen(neuBaum) };
+  const baeume = { alt: altBaum, neu: neuBaum };
+  const quellen = { alt: vorher, neu: nachher, gesperrt: new Set(gesperrt), hilfen, festeHilfen, sperren, oben, bekannt, baeume };
   return obersteEbeneGleich(altBaum.body, neuBaum.body, quellen) && faelleGleich(altBaum, neuBaum, quellen);
 }
 
-function benannterUmweg({ type, name, value }) {
-  const wort = type === "Identifier" ? name : value;
+function benannterUmweg(teil) {
+  const wort = wortDes(teil);
   return UMWEGE.has(wort) ? [wort] : [];
 }
 
@@ -445,20 +725,27 @@ function bereiche(baum) {
   return [baum.body, ...funktionen.map(({ params, body }) => [...params, body])];
 }
 
-function ziele(muster) {
-  if (muster === null) return [];
-  if (muster.type === "MemberExpression") return [muster];
-  if (muster.type === "ObjectPattern") return muster.properties.flatMap((teil) => ziele(teil.type === "RestElement" ? teil.argument : teil.value));
-  if (muster.type === "ArrayPattern") return muster.elements.flatMap(ziele);
-  if (muster.type === "RestElement") return ziele(muster.argument);
-  return muster.type === "AssignmentPattern" ? ziele(muster.left) : [];
+function mitglied(teil) {
+  return teil.type === "MemberExpression" ? [teil] : [];
 }
 
-function veraendert(teil) {
-  if (teil.type === "AssignmentExpression") return ziele(teil.left);
-  if (teil.type === "UpdateExpression") return ziele(teil.argument);
-  if (teil.type === "UnaryExpression" && teil.operator === "delete") return ziele(teil.argument);
-  return teil.type === "ForInStatement" || teil.type === "ForOfStatement" ? ziele(teil.left) : [];
+function jedesZiel(teil) {
+  return teil.type === "VariableDeclaration" ? [] : [teil];
+}
+
+function ziele(muster, blatt) {
+  if (muster === null) return [];
+  if (muster.type === "ObjectPattern") return muster.properties.flatMap((teil) => ziele(teil.type === "RestElement" ? teil.argument : teil.value, blatt));
+  if (muster.type === "ArrayPattern") return muster.elements.flatMap((teil) => ziele(teil, blatt));
+  if (muster.type === "RestElement") return ziele(muster.argument, blatt);
+  return muster.type === "AssignmentPattern" ? ziele(muster.left, blatt) : blatt(muster);
+}
+
+function veraendert(teil, blatt) {
+  if (teil.type === "AssignmentExpression") return ziele(teil.left, blatt);
+  if (teil.type === "UpdateExpression") return ziele(teil.argument, blatt);
+  if (teil.type === "UnaryExpression" && teil.operator === "delete") return ziele(teil.argument, blatt);
+  return teil.type === "ForInStatement" || teil.type === "ForOfStatement" ? ziele(teil.left, blatt) : [];
 }
 
 function basis(ausdruck) {
@@ -471,13 +758,22 @@ function frischeBindung({ type, id, init }) {
 
 function fremdeVeraenderungen(teile, quelle) {
   const lokal = new Set([...eigene(teile)].filter(frischeBindung).map(({ id }) => id.name));
-  const fremd = (teil) => veraendert(teil).some((ziel) => !lokal.has(basis(ziel).name));
+  const fremd = (teil) => veraendert(teil, mitglied).some((ziel) => !lokal.has(basis(ziel).name));
   return [...eigene(teile)].filter(fremd).map((teil) => `Veränderung ${quelle.slice(...teil.range).replace(LEERRAUM, " ")}`);
+}
+
+function importBelegungen(baum) {
+  return baum.body.flatMap(({ declarations = [] }) => declarations).filter(({ id, init }) => importBelegung(id, init));
+}
+
+function freieImporte(baum) {
+  return new Set(importBelegungen(baum).map(({ init }) => init.argument));
 }
 
 function umwegeDer(quelle) {
   const baum = gelesen(quelle, MODUL);
-  const eintraege = [...[...knoten(baum)].flatMap(umweg), ...bereiche(baum).flatMap((teile) => fremdeVeraenderungen(teile, quelle))];
+  const frei = freieImporte(baum);
+  const eintraege = [...[...knoten(baum)].filter((teil) => !frei.has(teil)).flatMap(umweg), ...bereiche(baum).flatMap((teile) => fremdeVeraenderungen(teile, quelle))];
   const zahl = new Map();
   for (const eintrag of eintraege) zahl.set(eintrag, (zahl.get(eintrag) ?? 0) + 1);
   return zahl;
