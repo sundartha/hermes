@@ -108,49 +108,79 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
 
 const HINZUGEFUEGT = /^\+(?!\+\+ )/;
 const ZIELDATEI = /^\+\+\+ b\/(.+)$/;
+const HUNK_KOPF = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+const JS_DATEI = /\.[cm]?js$/;
+const JAVASCRIPT = { ecmaVersion: "latest", sourceType: "module", loc: true };
+const BEZEICHNER = "Identifier";
 
-function hinzugefuegteZeilen(basis, root) {
+function vorgemerkteNeueZeilen(basis, root) {
   const diff = git(["-c", "core.quotePath=false", "diff", "--cached", "--unified=0", "--no-color", basis], { cwd: root }).split("\n");
+  const jeDatei = new Map();
   let datei = "";
-  return diff.flatMap((zeile) => {
-    const kopf = ZIELDATEI.exec(zeile);
-    if (kopf !== null) datei = kopf[1];
-    return kopf === null && HINZUGEFUEGT.test(zeile) ? [{ datei, text: zeile.slice(1) }] : [];
-  });
+  let naechste = 0;
+  for (const zeile of diff) {
+    const ziel = ZIELDATEI.exec(zeile);
+    const kopf = HUNK_KOPF.exec(zeile);
+    if (ziel !== null) datei = ziel[1];
+    else if (kopf !== null) naechste = Number(kopf[1]);
+    else if (HINZUGEFUEGT.test(zeile)) jeDatei.set(datei, [...(jeDatei.get(datei) ?? []), naechste++]);
+  }
+  return [...jeDatei].map(([pfad, neu]) => ({ datei: pfad, neu, inhalt: git(["show", `:${pfad}`], { cwd: root }) }));
 }
 
-const JAVASCRIPT = { ecmaVersion: "latest", sourceType: "module" };
-const BEZEICHNER = "Identifier";
+function bezeichnerJeZeile(inhalt) {
+  const jeZeile = new Map();
+  for (const { type, value, loc } of tokenize(inhalt, JAVASCRIPT)) {
+    if (type === BEZEICHNER) jeZeile.set(loc.start.line, (jeZeile.get(loc.start.line) ?? new Set()).add(value));
+  }
+  return jeZeile;
+}
+
+function neueZeilenDer({ datei, inhalt, neu }) {
+  const bezeichner = JS_DATEI.test(datei) ? bezeichnerJeZeile(inhalt) : new Map();
+  const texte = inhalt.split("\n");
+  return neu.map((nummer) => ({ datei, text: texte[nummer - 1], bezeichner: bezeichner.get(nummer) ?? new Set() }));
+}
+
+function lesbareZeilen(dateien) {
+  const zeilen = [];
+  const unlesbar = [];
+  for (const datei of dateien) {
+    try {
+      zeilen.push(...neueZeilenDer(datei));
+    } catch (fehler) {
+      unlesbar.push(`nicht lesbar: ${datei.datei} ist kein lesbares JavaScript (${fehler.message})`);
+    }
+  }
+  return { zeilen, unlesbar };
+}
 
 function deklarationsMuster(funktion) {
   const name = maskiert(funktion);
   return new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`);
 }
 
-function bezeichnerIn(text) {
-  try {
-    return new Set(tokenize(text, JAVASCRIPT).filter(({ type }) => type === BEZEICHNER).map(({ value }) => value));
-  } catch {
-    return new Set();
-  }
+function verstossBei({ datei, funktion, fuer }, zeilen) {
+  const deklariert = deklarationsMuster(funktion);
+  const nachbau = zeilen.find((zeile) => zeile.datei !== datei && deklariert.test(zeile.text));
+  if (nachbau !== undefined) return [`nachgebaut: ${nachbau.datei} deklariert ${funktion} neu, statt ${datei}:${funktion} zu nutzen (für ${fuer})`];
+  const aufgerufen = zeilen.some((zeile) => zeile.bezeichner.has(funktion) && !deklariert.test(zeile.text));
+  return aufgerufen ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
 }
 
-export function nutzungsVerstoesse(nutzen, zeilen) {
-  return nutzen.flatMap(({ datei, funktion, fuer }) => {
-    const deklariert = deklarationsMuster(funktion);
-    const nachbau = zeilen.find((zeile) => zeile.datei !== datei && deklariert.test(zeile.text));
-    if (nachbau !== undefined) return [`nachgebaut: ${nachbau.datei} deklariert ${funktion} neu, statt ${datei}:${funktion} zu nutzen (für ${fuer})`];
-    const genutzt = zeilen.some((zeile) => bezeichnerIn(zeile.text).has(funktion) && !deklariert.test(zeile.text));
-    return genutzt ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
-  });
+export function nutzungsVerstoesse(nutzen, dateien) {
+  if (nutzen.length === 0) return [];
+  const { zeilen, unlesbar } = lesbareZeilen(dateien);
+  return [...unlesbar, ...nutzen.flatMap((eintrag) => verstossBei(eintrag, zeilen))];
 }
 
 export function genutzt(phasendatei, kennung, { basis, root }) {
   const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
   if (befunde.length > 0) return meldeBefunde(befunde);
   const nutzen = auftrag.nutzen ?? [];
-  const verstoesse = nutzungsVerstoesse(nutzen, nutzen.length > 0 ? hinzugefuegteZeilen(basis, root) : []);
+  const verstoesse = nutzungsVerstoesse(nutzen, nutzen.length > 0 ? vorgemerkteNeueZeilen(basis, root) : []);
   for (const verstoss of verstoesse) console.log(`${VERSTOSS}${verstoss}`);
-  console.log(`${verstoesse.length === 0 ? "grün" : "rot"}: ${nutzen.length - verstoesse.length} von ${nutzen.length} vorhandenen Funktionen in den neuen Zeilen genutzt.`);
+  const urteil = verstoesse.length === 0 ? `grün: ${nutzen.length} von ${nutzen.length} vorhandenen Funktionen in den neuen Zeilen genutzt.` : `rot: ${verstoesse.length} Verstöße bei ${nutzen.length} vorhandenen Funktionen in den neuen Zeilen.`;
+  console.log(urteil);
   return verstoesse.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }

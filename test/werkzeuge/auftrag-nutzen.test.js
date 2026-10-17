@@ -85,29 +85,47 @@ const GENUTZT = { "src/text.js": 'import { verdopple } from "./rechnen.js";\n\ne
 
 const NICHT_GENUTZT = "nicht genutzt: src/rechnen.js:verdopple (für gross)";
 
-function neueZeile(text, datei = "src/text.js") {
-  return { datei, text };
+function neueDatei(zeilen, { datei = "src/text.js", alt = [] } = {}) {
+  return { datei, inhalt: [...alt, ...zeilen].join("\n"), neu: zeilen.map((_, index) => alt.length + index + 1) };
 }
 
+const NACHBAU_UNTER_ANDEREM_NAMEN = ["export function doppelt(zahl) {", "  return zahl * 2;", "}"];
+
 test("nur ein Aufruf oder Import mit ganzem Namen zählt als genutzt, keine Deklaration und kein längerer Name", () => {
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const x = verdopple(2);")]), []);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile('import { verdopple } from "./rechnen.js";')]), []);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const x = verdoppleAlles(2);")]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const x = verdopple(2);"])]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(['import { verdopple } from "./rechnen.js";'])]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const x = verdoppleAlles(2);"])]), [NICHT_GENUTZT]);
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], []), [NICHT_GENUTZT]);
 });
 
+test("nur neue Zeilen zählen: ein Aufruf, der schon vorher in der Datei stand, ist keine Nutzung", () => {
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const x = 1;"], { alt: ["verdopple(1);"] })]), [NICHT_GENUTZT]);
+});
+
 test("nennt der Bau den Namen nur im Kommentar oder in einem Text und baut die Regel unter anderem Namen nach, ist die Funktion nicht genutzt", () => {
-  const nachbau = [neueZeile("export function doppelt(zahl) {"), neueZeile("  return zahl * 2;"), neueZeile("}")];
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("// verdopple passt hier nicht"), ...nachbau]), [NICHT_GENUTZT]);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile('const grund = "verdopple passt hier nicht";'), ...nachbau]), [NICHT_GENUTZT]);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const text = `doppelt: ${verdopple(2)}`;")]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["// verdopple passt hier nicht", ...NACHBAU_UNTER_ANDEREM_NAMEN])]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(['const grund = "verdopple passt hier nicht";', ...NACHBAU_UNTER_ANDEREM_NAMEN])]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["/**", " * verdopple passt hier nicht", " */", ...NACHBAU_UNTER_ANDEREM_NAMEN])]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei([" * verdopple passt hier nicht", " */", ...NACHBAU_UNTER_ANDEREM_NAMEN], { alt: ["/**"] })]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["verdopple(2);"], { datei: "docs/notiz.md" })]), [NICHT_GENUTZT]);
+});
+
+test("ein Aufruf in einer Vorlage zählt als genutzt, auch wenn die Vorlage über mehrere Zeilen geht", () => {
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const text = `doppelt: ${verdopple(2)}`;"])]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const text = `doppelt:", "${verdopple(2)}`;"])]), []);
+});
+
+test("eine neue Datei, die kein lesbares JavaScript ist, wird als Verstoß gemeldet statt still als nicht genutzt", () => {
+  const [unlesbar, ...rest] = nutzungsVerstoesse([VERDOPPLE], [neueDatei(['const text = "offen;', "verdopple(2);"])]);
+  assert.match(unlesbar, /^nicht lesbar: src\/text\.js ist kein lesbares JavaScript \(.+\)$/);
+  assert.deepEqual(rest, [NICHT_GENUTZT]);
 });
 
 test("deklariert der Bau dieselbe Funktion in einer anderen Datei neu, ist das ein Nachbau, auch wenn er sie danach aufruft", () => {
-  const kopie = [neueZeile("function verdopple(zahl) {"), neueZeile("  return zahl * 2;"), neueZeile("export const doppelt = verdopple(1);")];
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], kopie), ["nachgebaut: src/text.js deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)"]);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const verdopple = (zahl) => zahl * 2;")]).length, 1);
-  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("export function verdopple(zahl) {", "src/rechnen.js"), neueZeile("verdopple(1);")]), []);
+  const kopie = neueDatei(["function verdopple(zahl) {", "  return zahl * 2;", "}", "export const doppelt = verdopple(1);"]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [kopie]), ["nachgebaut: src/text.js deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)"]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const verdopple = (zahl) => zahl * 2;"])]).length, 1);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["export function verdopple(zahl) {", "}"], { datei: "src/rechnen.js" }), neueDatei(["verdopple(1);"])]), []);
 });
 
 test("baut der Bau-Agent die Regel nach, statt die vorhandene Funktion zu nutzen, ist die Runde rot und Runde 2 nennt Zweck und Ausweg", (context) => {
