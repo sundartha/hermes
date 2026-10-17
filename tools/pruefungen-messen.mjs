@@ -209,10 +209,18 @@ function entryCount(data) {
   return data !== null && typeof data === "object" ? Object.keys(data).length : 0;
 }
 
+function exceptionData(root, definition) {
+  const path = join(root, definition.datei);
+  return existsSync(path) ? readJson(path) : [];
+}
+
+function listedEntries(data) {
+  return Array.isArray(data) ? data : data?.befunde;
+}
+
 function countExceptions(root, definition) {
   if (root === undefined || definition === undefined) return undefined;
-  const path = join(root, definition.datei);
-  const data = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : [];
+  const data = exceptionData(root, definition);
   if (definition.zaehlen !== "summe") return { count: entryCount(data) };
   return {
     count: leaves(data)
@@ -245,7 +253,7 @@ function isAffected(id, manifest, changedFiles) {
   return changedFiles.some((path) => own.some((pattern) => matches(pattern, path)));
 }
 
-function basisWorktree(basis, checkFiles) {
+function worktreeWithBasisFiles(basis, checkFiles) {
   const directory = mkdtempSync(join(tmpdir(), "freigabe-basis-"));
   git(["worktree", "add", "-q", "--detach", "--force", directory, "HEAD"]);
   for (const path of checkFiles) {
@@ -271,12 +279,53 @@ function trend(before, after) {
   return Math.sign(after.count - before.count);
 }
 
+async function entriesOfFreshBaseline(definition, { basis, fake, checkFiles }) {
+  if (definition.anlegen === undefined) return undefined;
+  const root = worktreeWithBasisFiles(basis, checkFiles);
+  try {
+    rmSync(join(root, definition.datei), { force: true });
+    const { command, extraEnv } = prepare(definition.anlegen, { root, fake, basis });
+    const result = await run(command, { cwd: root, extraEnv });
+    return result.status === 0 ? listedEntries(exceptionData(root, definition)) : undefined;
+  } finally {
+    git(["worktree", "remove", "--force", root]);
+  }
+}
+
+function without(entries, removed) {
+  const left = [...entries];
+  for (const entry of removed) {
+    const index = left.indexOf(entry);
+    if (index !== -1) left.splice(index, 1);
+  }
+  return left;
+}
+
+async function isOnlyWidening(definition, { roots, basis, fake, changedFiles, checkFiles }) {
+  const before = listedEntries(exceptionData(roots.basis, definition));
+  const after = listedEntries(exceptionData(roots.pr, definition));
+  const basisSetting = { basis, fake, checkFiles };
+  const prSetting = { basis, fake, checkFiles: [] };
+  const reportedBefore = await entriesOfFreshBaseline(definition, basisSetting);
+  const reportedAfter = await entriesOfFreshBaseline(definition, prSetting);
+  if ([before, after, reportedBefore, reportedAfter].includes(undefined)) return false;
+  const added = without(after, before);
+  const reportedOnlyAfter = without(reportedAfter, reportedBefore);
+  const touchesChange = (entry) => changedFiles.some((path) => entry.includes(path));
+  return (
+    without(reportedBefore, reportedAfter).length === 0 &&
+    without(added, reportedOnlyAfter).length === 0 &&
+    !added.some(touchesChange)
+  );
+}
+
 function judge(result) {
   if (result.neu) return NEU;
   const lostProbe = result.proben.some(({ basis, pr }) => basis === GESTOPPT && pr !== GESTOPPT);
   const newProbe = result.proben.some(({ basis, pr }) => basis !== GESTOPPT && pr === GESTOPPT);
   const hits = trend(result.treffer.basis, result.treffer.pr);
-  const exceptions = trend(result.ausnahmen.basis, result.ausnahmen.pr);
+  const counted = trend(result.ausnahmen.basis, result.ausnahmen.pr);
+  const exceptions = result.ausnahmen.nurAusweitung ? 0 : counted;
   if (lostProbe || hits < 0 || exceptions > 0) return LOCKERER;
   if (newProbe || hits > 0 || exceptions < 0) return STRENGER;
   return GLEICH;
@@ -298,7 +347,13 @@ function skipped(allCases) {
   }));
 }
 
-async function measureCheck(id, manifest, { contexts, roots, basis }) {
+async function isGrowthOnlyWidening(definition, ausnahmen, measuring) {
+  if (trend(ausnahmen.basis, ausnahmen.pr) <= 0) return false;
+  return isOnlyWidening(definition, measuring);
+}
+
+async function measureCheck(id, manifest, measuring) {
+  const { contexts, roots, basis } = measuring;
   const own = `${ROTPROBEN_DIR}/${id}`;
   const probes = new Map([...cases(roots.pr, own), ...cases(roots.basis, own)]);
   const alarms = cases(roots.pr, `${FEHLALARME_DIR}/${id}`);
@@ -320,6 +375,11 @@ async function measureCheck(id, manifest, { contexts, roots, basis }) {
     proben: await verdicts(probes),
     fehlalarme: await verdicts(alarms),
   };
+  result.ausnahmen.nurAusweitung = await isGrowthOnlyWidening(
+    manifest.ausnahmen,
+    result.ausnahmen,
+    measuring,
+  );
   const fehlalarmBelegt = isFalseAlarmProven(basis, result.fehlalarme);
   return { ...result, urteil: judge(result), fehlalarmBelegt };
 }
@@ -333,7 +393,7 @@ export function fakeGitHub() {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
-async function measureAll(basis, { changedFiles, worktree, fake }) {
+async function measureAll(basis, { changedFiles, checkFiles, worktree, fake }) {
   const basisManifests = manifests(worktree);
   const prManifests = manifests(".");
   const ids = [...new Set([...basisManifests.keys(), ...prManifests.keys()])].sort();
@@ -347,17 +407,18 @@ async function measureAll(basis, { changedFiles, worktree, fake }) {
       basis: basisRoot && { root: basisRoot, fake, basis },
       pr: { root: roots.pr, fake, basis },
     };
-    results.push(await measureCheck(id, manifest, { contexts, roots, basis }));
+    const measuring = { contexts, roots, basis, fake, changedFiles, checkFiles };
+    results.push(await measureCheck(id, manifest, measuring));
   }
   return { results, all: [...basisManifests, ...prManifests] };
 }
 
 export async function measureChecks(basis, { changedFiles, checkFiles }) {
-  const worktree = basisWorktree(basis, checkFiles);
+  const worktree = worktreeWithBasisFiles(basis, checkFiles);
   const server = await fakeGitHub();
   try {
     const fake = `http://127.0.0.1:${server.address().port}`;
-    const { results, all } = await measureAll(basis, { changedFiles, worktree, fake });
+    const { results, all } = await measureAll(basis, { changedFiles, checkFiles, worktree, fake });
     const covered = (path) => all.some(([id, manifest]) => isAffected(id, manifest, [path]));
     return { pruefungen: results, ohneMessung: checkFiles.filter((path) => !covered(path)) };
   } finally {
