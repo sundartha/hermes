@@ -1,11 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  ROUTE_KIND,
+  TOOL_KIND,
+  WEBHOOK_KIND,
+  registeredSurfaces,
+  surfacesInCleanEnvironment,
+} from "./flaechen.mjs";
 
 const CATALOG_PATH = "docs/sicherheitsgrenzen.md";
 const MAPPING_PATH = "docs/sicherheitsabgleich.json";
@@ -21,28 +26,13 @@ const TABLE_ROW_PATTERN = /^\|(.*)\|\s*$/;
 const HTTPS_PATTERN = /^https:\/\/\S+$/;
 const THREAT_COLUMNS = 5;
 const SURFACE_COLUMNS = 3;
-const TOOL_KIND = "Werkzeug";
-const ROUTE_KIND = "Route";
-const WEBHOOK_KIND = "Webhook";
 const SURFACE_KINDS = new Set([TOOL_KIND, ROUTE_KIND, WEBHOOK_KIND]);
-const WEBHOOK_PREFIXES = ["/voice/", "/webhooks/"];
 const TOP_TEN = 10;
 const TWO_DIGITS = 2;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
 const COMMIT_OBJECT_TYPE = "commit";
-const MAX_DISCOVERY_OUTPUT_BYTES = 16_777_216;
-const NODE_ENV_WITHOUT_DOTENV = "test";
-const PRODUCTION_STORE_BACKEND = "pg";
-const PROBE_PUBLIC_URL = "https://katalog-pruefen.invalid";
-const PROBE_SESSION_SECRET = "katalog-pruefen";
-const DEPENDENCY_NAMES = [
-  ...["store", "audit", "callFinish", "lifecycle", "provisioning", "outboundGates"],
-  ...["callQuotaDenial", "requestTenant", "requireTenant", "conversationWatchdog", "ttsStore"],
-  ...["directiveSynth", "voiceRender", "costTruing", "messaging", "consultDelivery"],
-  ...["elevenLabsOutbound", "inboundBridges", "accountsRef", "auditStoreRef", "durableAuditFor"],
-];
 const NUMBERED = (format) => Array.from({ length: TOP_TEN }, (_unused, index) => format(index + 1));
 const TWO_DIGIT = (number) => String(number).padStart(TWO_DIGITS, "0");
 const EXPECTED_POINTS = {
@@ -83,20 +73,11 @@ const MESSAGE = {
 const USAGE = "Aufruf: node tools/katalog-pruefen.mjs [--basis <commit>] [--liste-neu]";
 const BY_ID = (left, right) => left.localeCompare(right, "en", { numeric: true });
 
-const standIn = new Proxy(function standIn() {}, {
-  get: (_target, key) => {
-    if (key === "then") return undefined;
-    return key === Symbol.iterator ? [][Symbol.iterator] : standIn;
-  },
-  apply: () => standIn,
-});
-
 const report = (path, values, message) => values.map((value) => `${path}: ${message(value)}`);
 const outside = (values, known) => values.filter((value) => !known.has(value));
 const inside = (values, known) => values.filter((value) => known.has(value));
 const trimmedParts = (text, separator) => text.split(separator).map((part) => part.trim());
 const partsOf = (text = "", separator = ",") => trimmedParts(text, separator).filter(Boolean);
-const moduleUrl = (root, path) => pathToFileURL(join(root, path)).href;
 
 function duplicates(values) {
   return [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
@@ -259,81 +240,6 @@ function basisList(basis) {
   return shown.status === EXIT_OK ? new Set(partsOf(shown.stdout, "\n")) : null;
 }
 
-async function registeredTools(root) {
-  const { registerTools } = await import(moduleUrl(root, "src/mcp-tools.js"));
-  const server = new McpServer({ name: "katalog-pruefen", version: "0.0.0" });
-  const names = [];
-  const register = server.registerTool.bind(server);
-  server.registerTool = (name, ...rest) => {
-    names.push(name);
-    return register(name, ...rest);
-  };
-  registerTools(server, { consultAllowed: true });
-  return names.map((name) => ({ art: TOOL_KIND, flaeche: name }));
-}
-
-function routesOf(stack) {
-  return stack.flatMap((layer) => {
-    if (layer.handle?.stack) return routesOf(layer.handle.stack);
-    const methods = Object.keys(layer.route?.methods ?? {});
-    return methods.map((method) => ({ method: method.toUpperCase(), path: layer.route.path }));
-  });
-}
-
-async function quietly(work) {
-  const { log, error, warn } = console;
-  console.log = console.error = console.warn = () => {};
-  try {
-    return await work();
-  } finally {
-    Object.assign(console, { log, error, warn });
-  }
-}
-
-async function productionApp(root, scratch) {
-  const { config } = await import(moduleUrl(root, "src/config.js"));
-  const webDistDir = join(scratch, "web");
-  Object.assign(config.server, { dataDir: scratch, webDistDir, publicUrl: PROBE_PUBLIC_URL });
-  Object.assign(config.auth, { sessionSecret: PROBE_SESSION_SECRET });
-  Object.assign(config.tenancy, { multiTenant: true, selfServiceEnabled: true });
-  const { buildApp } = await quietly(() => import(moduleUrl(root, "src/app.js")));
-  config.store.storeBackend = PRODUCTION_STORE_BACKEND;
-  const dependencies = {
-    ...Object.fromEntries(DEPENDENCY_NAMES.map((name) => [name, standIn])),
-    config,
-    createPortalRunner: async () => ({ withClient: async (work) => work(standIn), _pool: null }),
-  };
-  const { app } = await quietly(() => buildApp(dependencies));
-  return app;
-}
-
-async function registeredRoutes(root) {
-  const scratch = mkdtempSync(join(tmpdir(), "katalog-pruefen-"));
-  try {
-    const routes = routesOf((await productionApp(root, scratch))._router.stack);
-    const unique = new Map(routes.map((route) => [`${route.method} ${route.path}`, route.path]));
-    return [...unique].map(([flaeche, path]) => {
-      const webhook = WEBHOOK_PREFIXES.some((prefix) => path.startsWith(prefix));
-      return { art: webhook ? WEBHOOK_KIND : ROUTE_KIND, flaeche, path };
-    });
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
-
-function surfacesInCleanEnvironment(root) {
-  const discovery = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--flaechen"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { NODE_ENV: NODE_ENV_WITHOUT_DOTENV },
-    maxBuffer: MAX_DISCOVERY_OUTPUT_BYTES,
-  });
-  if (discovery.status !== EXIT_OK) {
-    throw new Error(`Werkzeuge und Routen ließen sich nicht ermitteln: ${discovery.stderr.trim()}`);
-  }
-  return JSON.parse(discovery.stdout);
-}
-
 function summary({ threats, listed, surfaces, mapping }) {
   const count = (kind) => surfaces.filter(({ art }) => art === kind).length;
   const lists = mapping.listen ?? [];
@@ -380,9 +286,7 @@ async function main() {
   const options = { basis: { type: "string" }, "liste-neu": flag, flaechen: flag };
   const { values } = parseArgs({ options });
   if (values.flaechen) {
-    console.log(
-      JSON.stringify([...(await registeredTools(".")), ...(await registeredRoutes("."))]),
-    );
+    console.log(JSON.stringify(await registeredSurfaces(".")));
     return EXIT_OK;
   }
   if (values["liste-neu"]) return writeList(".");
