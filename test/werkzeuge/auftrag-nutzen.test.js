@@ -65,6 +65,7 @@ test("der Bau-Agent sieht den Code jeder Funktion, die er nutzen soll, auch auß
   assert.ok(text.includes("export function summeMikroCent(betraege) {\n  return betraege.reduce"), text);
   assert.ok(!text.includes("const VORSPANN"), text);
   assert.ok(text.includes("Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>"), text);
+  assert.ok(text.includes("aufrufst oder importierst; nur erwähnen (in einem Kommentar oder Text) zählt nicht"), text);
 });
 
 test("ist die Funktion nicht mehr da, verlangt der Prompt den Ausstieg statt eines Nachbaus", (context) => {
