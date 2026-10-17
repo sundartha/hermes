@@ -1,0 +1,11 @@
+{
+  "titel": "Exportierte Funktion ohne ausgeschriebenen Rückgabetyp",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function eins() {",
+      "  return 1;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/explicit-module-boundary-types\""
+}

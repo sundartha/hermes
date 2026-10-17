@@ -14,13 +14,19 @@ const WRITE_OPTION = "--basis-schreiben";
 const ONLY_KEYWORD = "only";
 const ALLOWED_PARAMS = 3;
 const LOOSENED_PARAMS = 5;
+const TYPESCRIPT_FILES = ["{src,test,tools}/**/*.{ts,mts,cts}"];
 
-function rootConfig({ maxParams = ALLOWED_PARAMS, noInlineConfig = true } = {}) {
+function rootConfig({ maxParams = ALLOWED_PARAMS, noInlineConfig = true, typescript } = {}) {
   const config = {
     linterOptions: { noInlineConfig },
     rules: { "no-var": "error", "max-params": ["error", { max: maxParams }] },
   };
-  return `export default [${JSON.stringify(config)}];\n`;
+  const blocks = typescript === undefined ? [config] : [config, typescriptBlock(typescript)];
+  return `export default ${JSON.stringify(blocks)};\n`;
+}
+
+function typescriptBlock({ files = TYPESCRIPT_FILES, noEval = "error" }) {
+  return { files, rules: { "no-eval": noEval } };
 }
 
 function packageJson(scripts = {}) {
@@ -159,4 +165,45 @@ test("eslint-konfig-pruefen: der Schalter fuer nur markierte Tests in package.js
   });
   assert.equal(result.status, EXIT_FINDING);
   assert.match(result.output, new RegExp(`^package\\.json:1: --test-${ONLY_KEYWORD}`, "m"));
+});
+
+test("eslint-konfig-pruefen: abgeschwaechte TypeScript-Regel stoppt die Pruefung, auch ohne eine .ts-Datei", () => {
+  const result = checkAfterChange({
+    before: { "eslint.config.js": rootConfig({ typescript: {} }) },
+    after: { "eslint.config.js": rootConfig({ typescript: { noEval: "warn" } }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^src \(\.ts\): Regel no-eval ist \[1,\{"allowIndirect":false\}\], die Kopie sagt \[2,/m);
+  assert.doesNotMatch(result.output, /^src: /m);
+});
+
+test("eslint-konfig-pruefen: Ordner, dessen .ts-Dateien nicht mehr gelintet werden, stoppt die Pruefung", () => {
+  const result = checkAfterChange({
+    before: { "eslint.config.js": rootConfig({ typescript: {} }) },
+    after: { "eslint.config.js": rootConfig({ typescript: { files: ["{src,tools}/**/*.{ts,mts,cts}"] } }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^test \(\.ts\): test\/eslint-konfig-probe\.ts wird nicht mehr gelintet$/m);
+});
+
+test("eslint-konfig-pruefen: .mts und .cts, die anders geprueft werden als .ts, stoppen die Pruefung", () => {
+  const result = checkAfterChange({
+    before: { "eslint.config.js": rootConfig({ typescript: { files: ["{src,test,tools}/**/*.ts"] } }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(
+    result.output,
+    /^src \(\.ts\): src\/eslint-konfig-probe\.mts wird anders geprüft als src\/eslint-konfig-probe\.ts$/m,
+  );
+  assert.match(result.output, /^test \(\.ts\): test\/eslint-konfig-probe\.cts wird anders geprüft/m);
+});
+
+test("eslint-konfig-pruefen: abgeschwaechte Regel nur fuer .test.ts stoppt die Pruefung", () => {
+  const weaker = { files: ["**/*.test.ts"], rules: { "no-eval": "off" } };
+  const result = checkAfterChange({
+    before: { "eslint.config.js": rootConfig({ typescript: {} }) },
+    after: { "eslint.config.js": rootConfig({ typescript: {} }).replace("];", `,${JSON.stringify(weaker)}];`) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^test \(\.ts\): test\/eslint-konfig-probe\.test\.ts wird anders geprüft als test\/eslint-konfig-probe\.ts$/m);
 });

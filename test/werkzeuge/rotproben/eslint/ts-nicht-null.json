@@ -1,0 +1,10 @@
+{
+  "titel": "Nicht-null-Behauptung in einer TypeScript-Datei",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "const NUMMERN = new Map<string, string>([[\"a\", \"+491\"]]);",
+      "export const erste: string = NUMMERN.get(\"a\")!;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-non-null-assertion\""
+}

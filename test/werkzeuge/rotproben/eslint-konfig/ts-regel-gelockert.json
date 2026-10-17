@@ -1,0 +1,12 @@
+{
+  "titel": "TypeScript-Regel gelockert, ohne dass es eine .ts-Datei gibt",
+  "dateien": {
+    "eslint.config.js": [
+      "export default [{ linterOptions: { noInlineConfig: true } }, { files: [\"src/**/*.{ts,mts,cts}\"], rules: {} }];"
+    ],
+    "src/modul.js": [
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "src (.ts): Regel @typescript-eslint/no-unsafe-assignment ist nicht gesetzt"
+}
