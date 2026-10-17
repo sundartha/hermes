@@ -14,13 +14,15 @@ import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const KOSTEN = ["const VORSPANN = 1;", "", "export function summeMikroCent(betraege) {", "  return betraege.reduce((gesamt, betrag) => gesamt + betrag, VORSPANN);", "}", ""].join("\n");
 const SUMME = { datei: "src/kosten.js", funktion: "summeMikroCent" };
+const ZEILE_DER_SUMME = "src/kosten.js:3";
+const GESCHAETZTE_NEUE_ZEILEN = 5;
 const SOLL = new Map([
   ["S1", { text: "Wenn S1" }],
   ["S2", { text: "Wenn S2" }],
 ]);
 
 function neueStelle(funktion, nutzen) {
-  return { datei: "src/bericht.js", funktion, neu: "funktion", neueZeilen: 5, vorhanden: { suche: ["Mikro"], treffer: ["src/kosten.js:3"], urteil: NUTZEN, nutzen } };
+  return { datei: "src/bericht.js", funktion, neu: "funktion", neueZeilen: GESCHAETZTE_NEUE_ZEILEN, vorhanden: { suche: ["Mikro"], treffer: [ZEILE_DER_SUMME], urteil: NUTZEN, nutzen } };
 }
 
 const BERICHTE = [
