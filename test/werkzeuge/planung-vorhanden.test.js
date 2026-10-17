@@ -13,7 +13,9 @@ const KOSTEN = [
   "",
 ].join("\n");
 const SOLL = new Map([["S1", { text: "Gegeben ein Lauf\nWenn er endet\nDann steht die Summe da" }]]);
-const NEUE_FUNKTION = { datei: "src/bericht.js", funktion: "gesamtKosten", neu: "funktion", neueZeilen: 8 };
+const GESCHAETZTE_NEUE_ZEILEN = 8;
+const GANZE_FUNKTION = { von: 1, bis: 3 };
+const NEUE_FUNKTION = { datei: "src/bericht.js", funktion: "gesamtKosten", neu: "funktion", neueZeilen: GESCHAETZTE_NEUE_ZEILEN };
 const TREFFER_DER_REGEL = "src/kosten.js:3";
 
 function repo(context) {
@@ -31,8 +33,8 @@ function bericht(vorhanden) {
     nummern: {
       S1: {
         weg: [
-          { rolle: "eingang", datei: "src/eingang.js", funktion: "nimmAn", von: 1, bis: 3 },
-          { rolle: "wirkung", datei: "src/bericht.js", funktion: "zeige", von: 1, bis: 3 },
+          { rolle: "eingang", datei: "src/eingang.js", funktion: "nimmAn", ...GANZE_FUNKTION },
+          { rolle: "wirkung", datei: "src/bericht.js", funktion: "zeige", ...GANZE_FUNKTION },
         ],
         aenderungen: [{ ...NEUE_FUNKTION, vorhanden }],
         tests: ["test/vorhanden.test.js"],
