@@ -478,3 +478,159 @@ const BASISLINIEN_PAKET_35 = ["tools/basis/anweisungen.json", "tools/basis/wurze
 test("(a) aus den Basislinien von Paket 35 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
   await nurStreichenIstStrenger(context, BASISLINIEN_PAKET_35);
 });
+
+const KOPIEN_BASIS = "tools/basis/kopien.json";
+const KOPIEN_EINSTELLUNG = "tools/kopien.json";
+const ALTE_KOPIE = "src/a.js|src/b.js";
+const YAML_ALTFUNDE = ["config/eins.yml|config/zwei.yml", "config/fuenf.yml|config/vier.yml"];
+const NEUE_JS_KOPIE = { "src/c.js": "export const wert = 1;\n" };
+const NEUE_JS_EINTRAEGE = ["src/a.js|src/c.js", "src/b.js|src/c.js"];
+const kopienBasis = (...befunde) => json({ befunde: [ALTE_KOPIE, ...befunde] });
+const formate = (...liste) => json({ formate: liste });
+const KOPIEN_PRUEFUNG = "test/werkzeuge/rotproben/kopien/pruefung.json";
+const KOPIEN_ANLEGEN = { befehl: ["node", "{wurzel}/tools/kopien.mjs", "--anlegen"] };
+
+function kopienPruefung(anlegen) {
+  return json({
+    titel: "Kopien",
+    pfade: ["tools/kopien.mjs", KOPIEN_EINSTELLUNG, KOPIEN_BASIS],
+    treffer: {
+      befehl: ["node", "{wurzel}/tools/kopien.mjs"],
+      zaehlen: "zahlen",
+      vor: [" neue Befunde", " bekannte"],
+    },
+    ausnahmen: {
+      bezeichnung: "Eingefrorene Kopien",
+      datei: KOPIEN_BASIS,
+      zaehlen: "anzahl",
+      anlegen,
+    },
+    probe: {
+      mitnehmen: [KOPIEN_EINSTELLUNG, KOPIEN_BASIS],
+      befehl: ["node", "{wurzel}/tools/kopien.mjs"],
+    },
+  });
+}
+
+const KOPIEN_FILES = {
+  "tools/kopien.mjs": [
+    'import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";',
+    `const BASIS = "${KOPIEN_BASIS}";`,
+    `const { formate } = JSON.parse(readFileSync("${KOPIEN_EINSTELLUNG}", "utf8"));`,
+    'const passt = (pfad) => !pfad.startsWith(".git") && formate.some((format) => pfad.endsWith("." + format));',
+    'const dateien = readdirSync(".", { recursive: true }).filter(passt).sort();',
+    "const befunde = [];",
+    "for (const [index, erste] of dateien.entries()) {",
+    "  for (const zweite of dateien.slice(index + 1)) {",
+    '    const gleich = readFileSync(erste, "utf8") === readFileSync(zweite, "utf8");',
+    '    if (gleich) befunde.push(erste + "|" + zweite);',
+    "  }",
+    "}",
+    'if (process.argv[2] === "--anlegen") {',
+    '  if (existsSync(BASIS)) throw new Error("Die Basislinie gibt es schon.");',
+    "  writeFileSync(BASIS, JSON.stringify({ befunde }));",
+    "} else {",
+    '  const bekannt = JSON.parse(readFileSync(BASIS, "utf8")).befunde;',
+    "  const neu = befunde.filter((befund) => !bekannt.includes(befund));",
+    '  console.log(neu.length + " neue Befunde, " + (befunde.length - neu.length) + " bekannte.");',
+    "  if (neu.length > 0) process.exitCode = 1;",
+    "}",
+    "",
+  ].join("\n"),
+  [KOPIEN_EINSTELLUNG]: formate("js"),
+  [KOPIEN_BASIS]: kopienBasis(),
+  "src/a.js": "export const wert = 1;\n",
+  "src/b.js": "export const wert = 1;\n",
+  "config/eins.yml": "wert: 1\n",
+  "config/zwei.yml": "wert: 1\n",
+  "config/drei.yml": "wert: 3\n",
+  "config/vier.yml": "wert: 4\n",
+  "config/fuenf.yml": "wert: 4\n",
+  [KOPIEN_PRUEFUNG]: kopienPruefung(KOPIEN_ANLEGEN),
+  "test/werkzeuge/rotproben/kopien/gleiche-dateien.json": json({
+    titel: "Gleiche JS- und YAML-Dateien",
+    dateien: {
+      "neu/x.js": "x;\n",
+      "neu/y.js": "x;\n",
+      "neu/p.yml": "p: 1\n",
+      "neu/q.yml": "p: 1\n",
+    },
+    erwartet: "neue Befunde",
+  }),
+};
+
+const AUSWEITUNG = {
+  [KOPIEN_EINSTELLUNG]: formate("js", "yml"),
+  [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE),
+};
+
+test("eine Prüfung, die auf ein neues Format ausgeweitet wird und nur dessen Altfunde in unveränderten Dateien einträgt, wird strenger", async (context) => {
+  const result = await check(context, {
+    basisFiles: KOPIEN_FILES,
+    changes: AUSWEITUNG,
+    approval: "aktuell",
+  });
+  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
+  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
+});
+
+async function wirdLockerer(context, changes, basisFiles = KOPIEN_FILES) {
+  const result = await check(context, { basisFiles, changes, approval: "aktuell" });
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  assert.match(result.stdout, /Muss geändert werden: Die Prüfung „Kopien“ wird lockerer/);
+}
+
+test("eine neue JS-Kopie samt Eintrag neben der Ausweitung: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, {
+    ...NEUE_JS_KOPIE,
+    ...AUSWEITUNG,
+    [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE, ...NEUE_JS_EINTRAEGE),
+  });
+});
+
+test("ein eingetragener Fund in einer YAML-Datei, die der PR ändert: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, {
+    "config/drei.yml": "wert: 1\n",
+    ...AUSWEITUNG,
+    [KOPIEN_BASIS]: kopienBasis(
+      ...YAML_ALTFUNDE,
+      "config/drei.yml|config/eins.yml",
+      "config/drei.yml|config/zwei.yml",
+    ),
+  });
+});
+
+test("ein neuer Eintrag ohne Ausweitung: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, {
+    ...NEUE_JS_KOPIE,
+    [KOPIEN_BASIS]: kopienBasis(...NEUE_JS_EINTRAEGE),
+  });
+});
+
+test("ein Eintrag, den auch die ausgeweitete Prüfung nicht meldet: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, {
+    ...AUSWEITUNG,
+    [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE, "config/drei.yml|config/eins.yml"),
+  });
+});
+
+test("eine Ausweitung, die einen Fund der bisherigen Einstellung verliert: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, { ...AUSWEITUNG, [KOPIEN_EINSTELLUNG]: formate("yml") });
+});
+
+test("ein gestrichener Eintrag bei unveränderter Einstellung bleibt strenger", async (context) => {
+  const result = await check(context, {
+    basisFiles: KOPIEN_FILES,
+    changes: {
+      [KOPIEN_EINSTELLUNG]: '{"formate":["js"]}\n',
+      [KOPIEN_BASIS]: json({ befunde: [] }),
+    },
+    approval: "aktuell",
+  });
+  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
+  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
+});
+
+test("eine Prüfung ohne Befehl zum Anlegen der Basislinie bleibt bei der Ausweitung lockerer", async (context) => {
+  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: kopienPruefung() });
+});
