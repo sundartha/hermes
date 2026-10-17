@@ -109,7 +109,7 @@ export function testumbauPrompt(phase, auftrag, root = cwd()) {
     ...absichtAbschnitt(phase),
     auftragAbschnitt(auftrag),
     entwurfAbschnitt(phase, auftrag),
-    musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme)),
+    testMusterAbschnitt(root, auftrag),
     testumbauAbschnitt(auftrag),
   ].join("\n");
 }
@@ -120,13 +120,18 @@ function dateiAbschnitt(titel, root, pfad) {
   return abschnitt(`${titel}: ${pfad}`, block(readFileSync(datei, "utf8")));
 }
 
-function musterAbschnitt(root, pfad, muster) {
+function musterAbschnitt(root, pfad, nachschlagen) {
+  const muster = nachschlagen(pfad);
   if (muster === null) return abschnitt("Muster", `Für ${pfad} gibt es kein Muster.`);
   return [dateiAbschnitt(`Muster (${muster.art})`, root, muster.datei), MUSTER_REGEL, ""].join("\n");
 }
 
+function testMusterAbschnitt(root, auftrag) {
+  return musterAbschnitt(root, auftrag.abnahme, testMusterFuer);
+}
+
 export function testAgentPrompt({ phase, auftrag, root }) {
-  return [testPrompt(phase, auftrag, root), musterAbschnitt(root, auftrag.abnahme, testMusterFuer(auftrag.abnahme))].join("\n");
+  return [testPrompt(phase, auftrag, root), testMusterAbschnitt(root, auftrag)].join("\n");
 }
 
 export function bauPrompt({ phase, auftrag, root }, testausgabe) {
@@ -136,7 +141,7 @@ export function bauPrompt({ phase, auftrag, root }, testausgabe) {
     auftragAbschnitt(auftrag),
     entwurfAbschnitt(phase, auftrag),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
-    musterAbschnitt(root, auftrag.bereich, musterFuer(auftrag.bereich)),
+    musterAbschnitt(root, auftrag.bereich, musterFuer),
     dateiAbschnitt("Funktionskarte", root, funktionskartePfad(auftrag.bereich)),
   ].join("\n");
 }
