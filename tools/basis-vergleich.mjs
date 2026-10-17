@@ -27,6 +27,7 @@ const SEMGREP_RULES_FILE = "tools/basis/semgrep-regeln.json";
 const SEMGREP_WITHOUT_RULE_TIMEOUT = "0";
 const SEMGREP_SINGLE_THREAD = "1";
 const JSCPD_REPORT_FILE = "jscpd-report.json";
+const JSCPD_PACKAGE_FILE = join(REPO_ROOT, "node_modules/jscpd/package.json");
 const KNIP_EXIT_ISSUES_FOUND = 1;
 const KNIP_ROW_FIELDS_WITHOUT_ISSUES = new Set(["file", "owners"]);
 const KEY_SEPARATOR = "|";
@@ -122,6 +123,10 @@ function jscpdShrunk(findings, freeKeys) {
     shrunk.keys.push(...free.splice(index, 1));
   }
   return shrunk;
+}
+
+function jscpdVersion() {
+  return JSON.parse(readFileSync(JSCPD_PACKAGE_FILE, "utf8")).version;
 }
 
 function jscpdFindings(root) {
@@ -334,7 +339,7 @@ function keyPart(index) {
 }
 
 const TOOLS = {
-  jscpd: { findings: jscpdFindings, path: keyPart(0), shrunk: jscpdShrunk },
+  jscpd: { findings: jscpdFindings, version: jscpdVersion, path: keyPart(0), shrunk: jscpdShrunk },
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
@@ -374,7 +379,8 @@ function checkVersion({ toolName, tool, root }, baseline) {
   const installed = installedVersion(tool, root);
   if (installed === baseline.version) return;
   throw new Error(
-    `${toolName} ${installed} ist installiert, ${baselineFile(toolName)} gilt für ${toolName} ${baseline.version}.`,
+    `${toolName} ${installed} ist installiert, ${baselineFile(toolName)} gilt für ${toolName} ${baseline.version}. ` +
+      `Nach einem Versionswechsel wird die Basislinie im selben PR neu angelegt: rm ${baselineFile(toolName)} && node tools/basis-vergleich.mjs ${toolName} --${CREATE_OPTION}`,
   );
 }
 
