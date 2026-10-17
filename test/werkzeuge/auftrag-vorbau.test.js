@@ -165,11 +165,11 @@ test("Vorbau: schwächt der testumbau eine Zusicherung des alten Tests ab, wird 
   assert.match(notiz, /Label verhalten-geaendert am Issue mit test\/versand\.test\.js:versendet den Code/);
 });
 
-test("Vorbau: ändert der testumbau den Rumpf einer bestehenden Hilfe, ist seine Runde vor der Mutationsprüfung rot und der Test-Agent erfährt, was erlaubt ist", (context) => {
+test("Vorbau: verändert eine bestehende Hilfe nach dem testumbau ein importiertes Objekt, ist seine Runde vor der Mutationsprüfung rot und der Test-Agent erfährt, was erlaubt ist", (context) => {
   const paket = JSON.parse(REPO["package.json"]);
-  const mitHilfe = (rumpf) => `${KOPF}function kunde() {\n  return ${rumpf};\n}\ntest("versendet den Code", () => assert.equal(versende(kunde()), true));\n`;
-  const dateien = { ...REPO, [ALT]: mitHilfe("{}"), "package.json": JSON.stringify({ ...paket, scripts: { ...paket.scripts, "test:mutation": "node -e 0 --" } }) };
-  const { umbau } = vorwegVerworfen(context, { dateien: { [ALT]: mitHilfe("{ gates: true }") } }, { dateien });
+  const mitHilfe = (rumpf) => `${KOPF}function kunde() {\n  ${rumpf}\n}\ntest("versendet den Code", () => assert.equal(versende(kunde()), true));\n`;
+  const dateien = { ...REPO, [ALT]: mitHilfe("return {};"), "package.json": JSON.stringify({ ...paket, scripts: { ...paket.scripts, "test:mutation": "node -e 0 --" } }) };
+  const { umbau } = vorwegVerworfen(context, { dateien: { [ALT]: mitHilfe("versende.gates = true;\n  return { gates: true };") } }, { dateien });
   assert.equal(umbau.pruefungen.some(({ name }) => name === "mutation testumbau"), false);
   assert.match(umbau.runden[0], /neue Hilfe, ein neuer Import oder ein ergänzter Wert einer bestehenden Belegung/);
   assert.match(umbau.runden[0], /vorbau nur ergänzt:[\s\S]*Echte Behebung: Am alten Test nur ergänzen: eine neue Hilfe, einen neuen Import/);
@@ -196,7 +196,7 @@ test("Zusicherungen je Fall: ein gestrichenes await vor einer Zusicherung und ei
   );
 });
 
-test("Zusicherungen je Fall: ein abgeschalteter Fall, eine Zusicherung hinter Steuerung oder Sprung, eine Attrappe für assert, eine gestrichene Prüfhilfe, eine geänderte Hilfe und ein Vorbau im Fall, den eine Zusicherung direkt prüft, zählen als Änderung, eine neue Hilfe nicht", () => {
+test("Zusicherungen je Fall: ein abgeschalteter Fall, eine Zusicherung hinter Steuerung oder Sprung, eine Attrappe für assert, eine gestrichene Prüfhilfe und ein Vorbau im Fall, den eine Zusicherung direkt prüft, zählen als Änderung, eine neue oder geänderte Hilfe ohne Zusicherung nicht", () => {
   const alt = `${KOPF}function kunde() {\n  return {};\n}\nfunction pruefe(geprueft) {\n  assert.ok(geprueft);\n}\ntest("a", (t) => {\n  const testkunde = {};\n  pruefe(testkunde);\n  assert.equal(versende(testkunde), true);\n  t.assert.ok(testkunde);\n});\n`;
   const gleich = (neu) => zusicherungenGleich(alt, neu);
   const ZUSICHERUNG = "assert.equal(versende(testkunde), true);";
@@ -216,7 +216,7 @@ test("Zusicherungen je Fall: ein abgeschalteter Fall, eine Zusicherung hinter St
     [ZUSICHERUNG, `return; ${ZUSICHERUNG}`, false],
     [ZUSICHERUNG, `aus: { break aus; ${ZUSICHERUNG} }`, false],
     [VORBAU, "const testkunde = { gates: true };", false],
-    ["return {};", "return { gates: true };", false],
+    ["return {};", "return { gates: true };", true],
     ['"node:assert/strict"', '"node:assert"', false],
     ["  assert.ok(geprueft);", "  return;\n  assert.ok(geprueft);", false],
     ["  assert.ok(geprueft);", '  throw new Error("aus");\n  assert.ok(geprueft);', false],
@@ -237,7 +237,7 @@ test("Zusicherungen je Fall: ein abgeschalteter Fall, eine Zusicherung hinter St
   );
 });
 
-test("Oberste Ebene: neue Hilfen, fremde Importe und ergänzte Werte zählen nicht, jede andere Änderung außerhalb der Fälle schon", () => {
+test("Oberste Ebene: neue und geänderte Hilfen ohne Zusicherung, fremde Importe und ergänzte Werte zählen nicht, jede andere Änderung außerhalb der Fälle schon", () => {
   const alt = `${KOPF}const FAELLE = [1, 2, 3];\nconst KUNDE = { gates: false, adresse: { land: "DE" } };\nfunction kunde() {\n  return KUNDE;\n}\ntest("a", () => assert.equal(versende(kunde()), FAELLE.length > 0));\n`;
   const ECHTER_UMBAU = '$&import { join } from "node:path";\nfunction ordner() {\n  return join("a");\n}\n';
   const faelle = [
@@ -250,7 +250,7 @@ test("Oberste Ebene: neue Hilfen, fremde Importe und ergänzte Werte zählen nic
     ["const KUNDE = {", "const KUNDE = { ...FAELLE,", false],
     ["const KUNDE = {", "const KUNDE = { seit: Date.now(),", false],
     ["function kunde() {", "const SEIT = Date.now();\nfunction kunde() {", false],
-    ["return KUNDE;", "return { ...KUNDE, gates: true };", false],
+    ["return KUNDE;", "return { ...KUNDE, gates: true };", true],
     ['import { test } from "node:test";', 'import { skip as test } from "node:test";', false],
     ["function kunde() {", "process.exit(0);\nfunction kunde() {", false],
     ["function kunde() {", "const nachgiebig = assert;\nnachgiebig.equal = () => {};\nfunction kunde() {", false],
