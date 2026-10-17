@@ -32,6 +32,7 @@ const ANWEISUNG = "Schreibe die Summe absichtlich anders, damit jscpd nicht ansc
 const NACHRICHT = "Füge addiere hinzu\n\nWarum: Probe.\n\nPaket: KU2\n";
 const PAKET_ISSUE = "## Absicht\n\nDie Summe kommt aus der vorhandenen Hilfe, nicht aus einer Kopie.\n\n## Ziel\n\nZiel";
 const EXIT_BEFUNDE = 1;
+const LAENGER_ALS_JEDE_ARGUMENTGRENZE = 4_194_304;
 
 function befund(felder = {}) {
   return {
@@ -98,6 +99,12 @@ test("verschobener Code ist kein Nachbau, weil die neue Stelle schon in einer an
   const sha = repo.committe({ "src/neu.js": NACHBAU }, NACHRICHT);
   const umgebung = { root: repo.ordner, basis, head: sha, auftragstext: "", nachrichten: [] };
   assert.deepEqual(belegeEinen(umgebung, sha, {}), [false, "neue Stelle stand schon auf der Basis"]);
+});
+
+test("ein Nachbau ist nicht belegt, wenn die Suche auf der Basis scheitert, statt als neu zu gelten", (context) => {
+  const zeile = `export const LANG = "${"x".repeat(LAENGER_ALS_JEDE_ARGUMENTGRENZE)}";`;
+  const { umgebung, shas } = lage(context, [{ "src/lang.js": `${zeile}\n` }]);
+  assert.deepEqual(belegeEinen(umgebung, shas[0], { neu: "src/lang.js:1-1" }), [false, "Suche auf der Basis gescheitert"]);
 });
 
 test("eine Anordnung ist belegt, wenn das Zitat mit beliebigem Leerraum im Issue oder in einer Commit-Nachricht steht", (context) => {
