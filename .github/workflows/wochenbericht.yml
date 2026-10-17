@@ -9,6 +9,8 @@ on:
     paths:
       - tools/wochenbericht.mjs
       - tools/wochenbericht/**
+      - tools/auftrag/ausgang.mjs
+      - tools/auftrag/zeilen.mjs
       - tools/akteure.mjs
       - tools/freigabe-strenger.mjs
       - tools/pruefungen-messen.mjs
@@ -19,6 +21,8 @@ on:
     paths:
       - tools/wochenbericht.mjs
       - tools/wochenbericht/**
+      - tools/auftrag/ausgang.mjs
+      - tools/auftrag/zeilen.mjs
       - tools/akteure.mjs
       - tools/freigabe-strenger.mjs
       - tools/pruefungen-messen.mjs
