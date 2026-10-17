@@ -6,6 +6,7 @@ import { env } from "node:process";
 import { tokenize } from "espree";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
+import { maskiert } from "../testwirkung/aufrufe.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
@@ -107,7 +108,6 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
 
 const HINZUGEFUEGT = /^\+(?!\+\+ )/;
 const ZIELDATEI = /^\+\+\+ b\/(.+)$/;
-const SONDERZEICHEN = /[.*+?^${}()|[\]\\]/g;
 
 function hinzugefuegteZeilen(basis, root) {
   const diff = git(["-c", "core.quotePath=false", "diff", "--cached", "--unified=0", "--no-color", basis], { cwd: root }).split("\n");
@@ -123,7 +123,7 @@ const JAVASCRIPT = { ecmaVersion: "latest", sourceType: "module" };
 const BEZEICHNER = "Identifier";
 
 function deklarationsMuster(funktion) {
-  const name = funktion.replace(SONDERZEICHEN, "\\$&");
+  const name = maskiert(funktion);
   return new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`);
 }
 
