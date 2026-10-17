@@ -109,3 +109,25 @@ test("freigabe-strenger: eine erhöhte oder neue Zahl in eslint-suppressions.jso
   });
   assert.deepEqual([erhoeht, neu], [null, null]);
 });
+
+function unterdrueckungenRoh(inhalt) {
+  return `${JSON.stringify(inhalt)}\n`;
+}
+
+test("freigabe-strenger: eine neue Datei oder Regel ohne Zahl in eslint-suppressions.json ist nicht strenger", (context) => {
+  const alt = { "src/a.js": { complexity: { count: 3 } } };
+  const gesenkt = { "src/a.js": { complexity: { count: 2 } } };
+  const neueDatei = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungenRoh(alt),
+    nachher: unterdrueckungenRoh({ ...alt, "src/x.js": {} }),
+  });
+  const neueDateiBeiSenkung = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungenRoh(alt),
+    nachher: unterdrueckungenRoh({ ...gesenkt, "src/x.js": {} }),
+  });
+  const neueRegel = einstufung(context, UNTERDRUECKUNGEN, {
+    vorher: unterdrueckungenRoh(alt),
+    nachher: unterdrueckungenRoh({ "src/a.js": { ...alt["src/a.js"], "no-x": {} } }),
+  });
+  assert.deepEqual([neueDatei, neueDateiBeiSenkung, neueRegel], [null, null, null]);
+});
