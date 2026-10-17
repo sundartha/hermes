@@ -45,8 +45,6 @@
     "exports|scripts/iel-mess-belege.mjs|sipStatusAus",
     "exports|scripts/iel-mess-belege.mjs|werteMitschnittAus",
     "exports|scripts/kv2-5-telnyx-belegtypen.mjs|inferenceBilanz",
-    "exports|scripts/lib/elevenlabs-besitz.mjs|SCHREIBWEG_BESITZ_SCHLUESSEL",
-    "exports|scripts/lib/elevenlabs-besitz.mjs|SCHREIBWEG_SCHLUESSEL",
     "exports|scripts/lib/reviewer-demo-seed.mjs|planReviewerSeed",
     "exports|src/app.js|SECURITY_TXT_BODY",
     "exports|src/app.js|SECURITY_TXT_EXPIRES",
