@@ -10,7 +10,7 @@ import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schrei
 import { bisektion } from "./bisektion.mjs";
 import { TESTUMBAU, brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
-import { entnimmVolleAntwort, legeVolleAntwortAb, setzeEin } from "./einsatz.mjs";
+import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
@@ -145,10 +145,7 @@ class AuftragsLauf {
 
   nachgefragt(rolle, nachher) {
     const arbeit = this.agenten.findLast((eintrag) => eintrag.rolle === rolle);
-    const voll = entnimmVolleAntwort(arbeit);
     const weg = this.eingesetzt(rolle, nachfrage(this.fehlendeAbsaetze(rolle)), { fortsetzung: arbeit.sitzung, sitzungen: this.nachfragen });
-    entnimmVolleAntwort({ sitzung: arbeit.sitzung });
-    legeVolleAntwortAb(arbeit.sitzung, voll);
     if (weg === null) return false;
     if (arbeitsstand(this.kontext.root) !== nachher) return this.scheitert("Die Nachfrage zum Zweck hat Dateien geändert.", GRUND.ZWECK_ABSATZ);
     const offen = this.fehlendeAbsaetze(rolle);

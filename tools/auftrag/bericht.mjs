@@ -39,9 +39,9 @@ export function notizAuszug(antwort, sitzung) {
   return kurz.gekuerzt ? `${kurz.text} … [gekürzt; ${ort}]` : `${kurz.text}\n\n(Volle Antwort: Sitzung ${sitzung})`;
 }
 
-export function hinweiseFuerNotiz(agenten, entnimmVolleAntwort) {
+export function hinweiseFuerNotiz(agenten) {
   const bau = agenten.findLast(({ rolle }) => rolle === "bau");
-  const auszug = bau ? notizAuszug(entnimmVolleAntwort(bau), bau.sitzung) : "";
+  const auszug = bau ? notizAuszug(bau.volleAntwort, bau.sitzung) : "";
   if (auszug === "") return [];
   return zitierteHinweise(auszug);
 }
@@ -84,12 +84,16 @@ function freierRundenPfad(root, { phase, auftrag }, runde) {
   return pfad;
 }
 
+function belegWert(schluessel, wert) {
+  return schluessel === "volleAntwort" && this.groessterKontext === undefined ? undefined : wert;
+}
+
 export function schreibeBeleg(root, beleg) {
   mkdirSync(belegVerzeichnis(root, beleg.phase), { recursive: true });
   const pfad = belegPfad(root, beleg.phase, beleg.auftrag);
   const runde = fruehereRunde(pfad, beleg);
   if (runde !== null) renameSync(pfad, freierRundenPfad(root, beleg, runde));
-  writeFileSync(pfad, `${JSON.stringify(beleg, null, JSON_EINRUECKUNG)}\n`);
+  writeFileSync(pfad, `${JSON.stringify(beleg, belegWert, JSON_EINRUECKUNG)}\n`);
   return pfad;
 }
 
