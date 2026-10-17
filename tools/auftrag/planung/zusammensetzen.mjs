@@ -5,7 +5,7 @@ import { pid } from "node:process";
 import { phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
-import { istText, liste } from "./erkundung.mjs";
+import { istText, liste, nutzenFuer } from "./erkundung.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
@@ -14,12 +14,16 @@ const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "abnahme", "
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
 const JSON_EINRUECKUNG = 2;
+const OHNE_BERICHTE = "auftragAusSchnitt braucht die Erkundungsberichte; ohne sie fiele nutzen still weg";
 
-export function auftragAusSchnitt(eintrag, soll) {
+export function auftragAusSchnitt(eintrag, soll, berichte) {
+  if (!Array.isArray(berichte)) throw new TypeError(OHNE_BERICHTE);
   const auftrag = Object.fromEntries(FELDER.filter((feld) => eintrag[feld] !== undefined).map((feld) => [feld, eintrag[feld]]));
   if (Array.isArray(eintrag.wasDarfNiePassieren)) auftrag.wasDarfNiePassieren = eintrag.wasDarfNiePassieren.map(({ satz }) => satz);
   auftrag.prueft = eintrag.prueft;
   if (Array.isArray(eintrag.prueft)) auftrag.szenarien = Object.fromEntries(eintrag.prueft.map((nummer) => [nummer, soll.get(nummer)?.text ?? ""]));
+  const nutzen = nutzenFuer(berichte, liste(eintrag.erwarteteDateien));
+  if (nutzen.length > 0) auftrag.nutzen = nutzen;
   auftrag.abhaengigVon = liste(eintrag.abhaengigVon).map(({ id }) => id);
   return auftrag;
 }
@@ -75,7 +79,7 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   const absichtFehlt = pitchAbsichtBefunde(pitch);
   if (absichtFehlt.length > 0) return { befunde: absichtFehlt };
   const { soll } = nummernImOrdner(ordner);
-  const auftraege = schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, soll));
+  const auftraege = schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, soll, berichte));
   const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereich))];
   const vorab = [...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };

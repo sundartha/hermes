@@ -312,3 +312,21 @@ export function aenderungsStellen(berichte) {
     }),
   );
 }
+
+function istNutzen(vorhanden) {
+  return vorhanden?.urteil === NUTZEN && istText(vorhanden.nutzen?.datei) && istText(vorhanden.nutzen?.funktion);
+}
+
+function nutzenDerStelle(stelle, dateien) {
+  if (!dateien.includes(stelle?.datei) || !istNutzen(stelle.vorhanden)) return [];
+  const { datei, funktion } = stelle.vorhanden.nutzen;
+  return [{ datei, funktion, fuer: stelle.funktion ?? stelle.datei }];
+}
+
+export function nutzenFuer(berichte, dateien) {
+  const eintraege = berichte.flatMap((bericht) =>
+    Object.values(bericht?.nummern ?? {}).flatMap((angaben) => liste(angaben?.aenderungen).flatMap((stelle) => nutzenDerStelle(stelle, dateien))),
+  );
+  const schluessel = (eintrag) => `${eintrag.datei}:${eintrag.funktion}`;
+  return eintraege.filter((eintrag, stelle) => eintraege.findIndex((frueher) => schluessel(frueher) === schluessel(eintrag)) === stelle);
+}

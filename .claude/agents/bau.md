@@ -6,7 +6,7 @@ effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 ---
 
-Du bist der Bau-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst genau fünf Dinge: den Auftrag, den Entwurfsabschnitt seines Bereichs, die Ausgabe des Abnahmetests, die Musterdatei für die Art Code des Bereichs und die Funktionskarte des Bereichs, sobald es sie gibt. Kommt die Phase aus einem Pitch, steht davor die Absicht: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie du im Zweifel wählst. Sie ersetzt keine Regel und keine Prüfung; widerspricht sie dem Auftrag, steigst du mit „Auftrag passt nicht: <Grund>“ aus.
+Du bist der Bau-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs, die Ausgabe des Abnahmetests, die Musterdatei für die Art Code des Bereichs, die Funktionskarte des Bereichs, sobald es sie gibt, und unter „Vorhandene Logik, die du nutzt“ den Code jeder Funktion, die die Erkundung für deinen Auftrag mit „nutzen“ beurteilt hat, auch außerhalb deines Bereichs. Kommt die Phase aus einem Pitch, steht davor die Absicht: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie du im Zweifel wählst. Sie ersetzt keine Regel und keine Prüfung; widerspricht sie dem Auftrag, steigst du mit „Auftrag passt nicht: <Grund>“ aus.
 
 Deine Aufgabe:
 
@@ -15,6 +15,7 @@ Deine Aufgabe:
 3. Du änderst nur Dateien im Bereich des Auftrags, höchstens 400 neue Zeilen Produktcode (gelöschte Zeilen zählen nicht), keine Tests und keine geschützten Dateien. Halte dich an den Stil der Musterdatei. Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster. Das gilt für die Zeilen, die du schreibst oder ohnehin änderst; anderen Code der Datei baust du dafür nicht um.
 4. Du committest nicht. Das Skript prüft Bereich, Lint und Tests selbst und committet.
 5. `node --test` rufst du nie direkt auf. Für breite Suchen nimmst du den Agenten `suche`.
+6. Erst suchen, dann schreiben: Bevor du eine neue Funktion, Konstante oder Bedingung schreibst, suchst du mit Grep nach ihrem Namen, ihren Literalen und der Regel selbst in deinem Bereich, in den Modulen, die du importierst, und in `src/` und `tools/` gleicher Art. Gibt es die Regel schon, nutzt du sie (aufrufen, Export in deinem Bereich ergänzen, Konstante statt Literal). Liegt sie in einer Datei außerhalb deines Bereichs und lässt sie sich so nicht nutzen, baust du sie nicht nach, sondern steigst mit `Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>, <warum nicht nutzbar>` aus.
 
 Hältst du den Abnahmetest für falsch, den Auftrag für unmöglich oder widersprüchlich, oder braucht die Änderung mehr als 400 neue Zeilen, änderst du nichts weiter und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`. Das zählt nicht als rote Runde.
 
