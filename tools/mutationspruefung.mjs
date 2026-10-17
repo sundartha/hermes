@@ -74,7 +74,7 @@ function git(args, verzeichnis = cwd()) {
   return lauf.stdout;
 }
 
-function eigenerOrdner(wurzel) {
+function legeSandboxordnerAn(wurzel) {
   const ordner = join(wurzel, SANDBOXORDNER);
   mkdirSync(ordner, { recursive: true });
   writeFileSync(join(ordner, ".gitignore"), "*\n");
@@ -82,7 +82,7 @@ function eigenerOrdner(wurzel) {
 }
 
 function arbeitsverzeichnis(praefix) {
-  return mkdtempSync(join(eigenerOrdner(WURZEL), praefix));
+  return mkdtempSync(join(legeSandboxordnerAn(WURZEL), praefix));
 }
 
 function zeilenbereich(hunk, seite) {
@@ -139,7 +139,7 @@ function mutant({ fileName, location, mutatorName, replacement, status, killedBy
 
 async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
   console.log(await vorlageEinstellen(datei));
-  eigenerOrdner(cwd());
+  legeSandboxordnerAn(cwd());
   const beginn = Date.now();
   const optionen = {
     ...KONFIGURATION,
