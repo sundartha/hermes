@@ -92,6 +92,17 @@ test("fundstelle: fehlende Datei, zu große Zeile, Pfad mit .. und falsche Form 
   assert.equal(fundstelleBefund("", ort), "Fundstelle fehlt");
 });
 
+test("fundstelle: hinter dem letzten Zeilenumbruch beginnt keine Zeile, eine leere Datei hat keine", (context) => {
+  const files = { "src/a.js": "eins\nzwei\ndrei\n", "src/b.js": "eins\nzwei", "src/leer.js": "" };
+  const ort = { root: probeDirectory(context, files), dokumente: DOKUMENTE };
+  const keineZeile = (datei, zeile) => `Fundstelle „${datei}:${zeile}“: ${datei} hat keine Zeile ${zeile}`;
+  assert.equal(fundstelleBefund("src/a.js:3", ort), null);
+  assert.equal(fundstelleBefund("src/a.js:4", ort), keineZeile("src/a.js", 4));
+  assert.equal(fundstelleBefund("src/b.js:2", ort), null);
+  assert.equal(fundstelleBefund("src/b.js:3", ort), keineZeile("src/b.js", 3));
+  assert.equal(fundstelleBefund("src/leer.js:1", ort), keineZeile("src/leer.js", 1));
+});
+
 test("fundstelle: eine Überschrift, die fehlt oder doppelt steht, ist ein Befund", (context) => {
   const ort = kontext(context);
   assert.equal(fundstelleBefund("design.md, ## Gibt es nicht", ort), "Fundstelle „design.md, ## Gibt es nicht“: die Überschrift steht nicht genau einmal in design.md");
