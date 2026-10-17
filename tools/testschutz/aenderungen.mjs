@@ -4,6 +4,7 @@ import { extname } from "node:path";
 import { Linter } from "eslint";
 
 const TEST_DIR = "test/";
+const CARD_DIR = "docs/funktionen/";
 const UNPROTECTED_TEST_PATHS = [":(exclude)test/testbaenke-run.mjs", ":(exclude)test/werkzeuge/"];
 const GATE_TESTS_FILE = "tools/gate-tests.json";
 const TEST_FUNCTIONS = new Set(["test", "it"]);
@@ -41,6 +42,7 @@ export function changedExistingTestFiles(basis) {
     "HEAD",
     "--",
     TEST_DIR,
+    CARD_DIR,
     ...UNPROTECTED_TEST_PATHS,
   ]).split("\0");
   const changes = [];
@@ -100,6 +102,10 @@ export function staticTestName(argument) {
     return quasi.value.cooked;
   }
   return undefined;
+}
+
+export function isCard(file) {
+  return file.startsWith(CARD_DIR);
 }
 
 export function sourceTypeOf(file) {
