@@ -159,21 +159,12 @@ export async function findPinMismatches({ stagedFiles, legacyExceptions, readSta
   return offenders;
 }
 
-function suppressionCounts(suppressions) {
-  return Object.entries(suppressions).flatMap(([file, rules]) =>
-    Object.entries(rules).map(([rule, entry]) => ({ file, rule, count: entry.count })),
-  );
-}
-
-function countIn(suppressions, file, rule) {
-  const rules = suppressions[file] ?? {};
-  return rules[rule]?.count ?? 0;
+function suppressionTally(rules) {
+  return new Map(Object.entries(rules).map(([rule, entry]) => [rule, entry.count]));
 }
 
 export function findRaisedSuppressions(before, after) {
-  return suppressionCounts(after)
-    .map(({ file, rule, count }) => ({ file, rule, countBefore: countIn(before, file, rule), countAfter: count }))
-    .filter(({ countBefore, countAfter }) => !(countAfter <= countBefore));
+  return increasesPerFile(before, after, suppressionTally);
 }
 
 function increasesPerFile(before, after, tallyOf) {
