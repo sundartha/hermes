@@ -17,7 +17,6 @@ const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 const VOLLE_ANTWORTEN = new Map();
-let auftragDerAntworten = null;
 const UMBAU = "umbau";
 const VORAUSSETZUNG_FEHLT = [
   "",
@@ -102,12 +101,8 @@ export function legeVolleAntwortAb(sitzung, voll) {
   VOLLE_ANTWORTEN.set(sitzung, voll);
 }
 
-function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start, auftrag) {
-  if (typeof voll === "string") {
-    if (auftrag !== auftragDerAntworten) VOLLE_ANTWORTEN.clear();
-    auftragDerAntworten = auftrag;
-    VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
-  }
+function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start) {
+  if (typeof voll === "string") VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
   return start.vollstaendig ? { ...sitzung, volleAntwort: voll, groessterKontext } : sitzung;
 }
 
@@ -120,7 +115,7 @@ export function setzeEin(kontext, prompt, start = {}) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
     const roh = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
-    const sitzung = gemerkt(roh, start, `${kontext.phase.phase}/${kontext.auftrag.id}`);
+    const sitzung = gemerkt(roh, start);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
