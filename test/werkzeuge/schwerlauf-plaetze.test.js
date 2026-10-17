@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { test } from "node:test";
 
-import { FRIST, SCHWERLAUF, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
+import { FRIST, SCHWERLAUF, halter, naechsterLaufNachTodVon, stand, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 
 const EXIT_FRIST = 124;
 const ZWEI_PLAETZE = 2;
@@ -28,13 +28,6 @@ function mitFrist(befehl) {
 async function prozessNummerAus(context, lauf) {
   const nummer = Number(await zeile(lauf.kind.stdout, /^\d+$/));
   context.after(() => spawnSync("/bin/kill", ["-KILL", String(nummer)]));
-}
-
-async function stand(env) {
-  const lauf = starte([SCHWERLAUF, "--stand"], { env });
-  await lauf.ende;
-  assert.equal(lauf.kind.exitCode, 0, lauf.stderr);
-  return lauf.stdout;
 }
 
 test("mit zwei Plätzen laufen zwei gleichzeitig gestartete schwere Läufe gleichzeitig", FRIST, async (context) => {

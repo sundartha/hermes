@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
@@ -22,12 +23,19 @@ export function umgebung(context, plaetze = 1) {
   return env;
 }
 
-export function starte(args, { env, cwd = REPO_ROOT, stdin = "ignore" }) {
-  const kind = spawn(process.execPath, args, { cwd, env, stdio: [stdin, "pipe", "pipe"] });
+export function starte(args, { env, cwd = REPO_ROOT, stdin = "ignore", programm = process.execPath }) {
+  const kind = spawn(programm, args, { cwd, env, stdio: [stdin, "pipe", "pipe"] });
   const lauf = { kind, stdout: "", stderr: "", ende: once(kind, "exit") };
   kind.stdout.setEncoding("utf8").on("data", (teil) => (lauf.stdout += teil));
   kind.stderr.setEncoding("utf8").on("data", (teil) => (lauf.stderr += teil));
   return lauf;
+}
+
+export async function stand(env) {
+  const lauf = starte([SCHWERLAUF, "--stand"], { env });
+  await lauf.ende;
+  assert.equal(lauf.kind.exitCode, 0, lauf.stderr);
+  return lauf.stdout;
 }
 
 export function zeile(strom, muster) {
