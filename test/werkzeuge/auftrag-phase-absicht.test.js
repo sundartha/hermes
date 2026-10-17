@@ -14,10 +14,10 @@ const AUSFUEHRBAR = 0o755;
 const ISSUE = 7;
 const ABSICHT = "Die Zahl soll verdoppelt werden, ohne Sonderfall für die Testeingabe.";
 
-function starteMitIssue(context, ghSkript) {
+function starteMitIssue(context, ghSkript, felder = { absicht: ABSICHT }) {
   const repo = probeRepository(context, BASIS);
   const werkzeug = probeDirectory(context, {});
-  const phase = { phase: "probe-absicht", issue: ISSUE, absicht: ABSICHT, entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [funktion("2 !== 4")] };
+  const phase = { phase: "probe-absicht", issue: ISSUE, ...felder, entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [funktion("2 !== 4")] };
   writeFileSync(join(werkzeug, "phase.json"), JSON.stringify(phase));
   writeFileSync(join(werkzeug, "gh.mjs"), `#!/usr/bin/env node\n${ghSkript}\n`);
   chmodSync(join(werkzeug, "gh.mjs"), AUSFUEHRBAR);
@@ -26,7 +26,7 @@ function starteMitIssue(context, ghSkript) {
     encoding: "utf8",
     env: { ...isolatedEnvironment(), HOME: werkzeug, HERMES_GH: join(werkzeug, "gh.mjs") },
   });
-  return { lauf, repo };
+  return { lauf, repo, werkzeug };
 }
 
 test("phase mit Feld absicht startet nicht, wenn das Issue den Abschnitt „Absicht“ nicht wörtlich hat, und legt keinen Worktree an", (context) => {
@@ -52,4 +52,9 @@ test("ein Issue mit wörtlich gleicher Absicht ist kein Befund, eine Phase ohne 
   assert.deepEqual(issueAbsichtBefunde(phase, () => `## Absicht\n\n${ABSICHT}\n\n## Ziel\n\nZahl\n`), []);
   assert.deepEqual(issueAbsichtBefunde({ issue: ISSUE }, leseIssue), []);
   assert.deepEqual(gelesen, []);
+});
+
+test("phase ohne Feld absicht (Phase von vor der Absicht) fragt das Issue nicht ab", (context) => {
+  const { werkzeug } = starteMitIssue(context, `import { writeFileSync } from "node:fs";\nwriteFileSync(process.env.HOME + "/gh-aufgerufen", "");`, {});
+  assert.equal(existsSync(join(werkzeug, "gh-aufgerufen")), false);
 });
