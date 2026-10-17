@@ -16,6 +16,7 @@ export const PRUEFUNG = {
   TYPPRUEFUNG: "typprüfung",
   LINT: "lint",
   PIN: "pin-prüfung",
+  GENUTZT: "vorhandenes genutzt",
   ABNAHME: "abnahme",
   BETROFFENE_TESTS: "betroffene tests",
   MUTATION: "mutation",

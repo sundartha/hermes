@@ -313,5 +313,12 @@
     "behebung": "In der letzten Antwort je zugeordneter Prüfung einen Absatz mit der eigenen Zeile „Zweck <ID>:“ schreiben: wovor die Prüfung schützt, warum der eigene Befund ein solcher Fall ist und warum die Änderung die Ursache beseitigt.",
     "nichtAngenommen": "Den Zweck-Text der Meldung abschreiben oder einen Absatz schreiben, der eine andere Änderung beschreibt als den Diff. Das Skript prüft nur, ob der Absatz da ist; den Inhalt prüft der KI-Prüfer.",
     "ausweg": "Kannst du den Zweck nicht benennen, ändere nichts und antworte als Letztes mit der eigenen Zeile „Auftrag passt nicht: Zweck der Prüfung <ID> unklar: <was dir fehlt>“; sie geht direkt an Antonio."
+  },
+  "vorhandenes genutzt": {
+    "liste": "ohne Nummer",
+    "wozu": "Die Erkundung hat die Regel deines Auftrags schon in einer vorhandenen Funktion gefunden und „nutzen“ geurteilt. Eine zweite Fassung derselben Regel weicht mit der Zeit ab, und der KI-Prüfer findet sie erst am fertigen PR.",
+    "behebung": "Die genannte Funktion in deinen neuen Zeilen aufrufen oder importieren und die eigene Fassung der Regel streichen; fehlt der Export und liegt die Datei in deinem Bereich, den Export ergänzen.",
+    "nichtAngenommen": "Den Namen nur erwähnen, ohne die Funktion zu nutzen, oder die Regel unter einem anderen Namen nachbauen.",
+    "ausweg": "Lässt sich die Funktion nicht nutzen, etwa weil ihre Datei außerhalb deines Bereichs liegt und der Export fehlt oder weil sie eine andere Regel umsetzt, die eigene letzte Zeile „Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>, <warum nicht nutzbar>“."
   }
 }
