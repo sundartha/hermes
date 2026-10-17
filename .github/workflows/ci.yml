@@ -108,6 +108,12 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node tools/ts-sperre.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
 
+      - name: Migrationen prüfen
+        if: ${{ !cancelled() }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node tools/migrationen-pruefen.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
+
       - name: Unterdrückungen steigen nicht
         if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
         env:

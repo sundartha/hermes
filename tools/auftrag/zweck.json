@@ -132,6 +132,13 @@
     "nichtAngenommen": "Die Datei mit einer anderen Schreibweise der Endung, in einem anderen Ordner ablegen oder in tools/basis/ts-bestand.json eintragen, damit die Sperre sie nicht sieht; der Bestand darf nur kürzer werden.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: braucht TypeScript, weil <Grund>“."
   },
+  "migrationen": {
+    "liste": "ohne Nummer",
+    "wozu": "Hermes ändert sein Datenbankschema nur über nummerierte Migrationen unter src/db/migrations/, die je genau einmal und in eigener Transaktion laufen. Squawk prüft jede neue Migration darauf, dass sie Tabellen nicht unbegrenzt sperrt (lock_timeout, statement_timeout) und dass sie nichts löscht oder umbenennt, was die noch laufende vorige Hermes-Version liest. Löschen ist nur in src/db/migrations/rueckbau/ erlaubt, in einem eigenen Stand, nachdem der Code die Spalte oder Tabelle nicht mehr nutzt.",
+    "behebung": "Eine neue Migration mit der nächsten freien Nummer anlegen und darin SET LOCAL lock_timeout und SET LOCAL statement_timeout setzen; Spalten erst ergänzen, den Code umstellen und das Alte in einem späteren Stand über src/db/migrations/rueckbau/ entfernen; Schemaänderungen nie in JavaScript-Code schreiben.",
+    "nichtAngenommen": "Eine gemergte Migration ändern, die Schemaänderung in JavaScript-Code, eine SQL-Datei außerhalb von src/db/migrations/ oder eine Rückbau-Migration verlegen, die Squawk-Einstellung ändern, eine eigene .squawk.toml oder einen Kommentar squawk-ignore anlegen, damit Squawk die Änderung nicht sieht, eine Schemaänderung in dynamischem SQL (EXECUTE) verstecken oder eine Zeitgrenze setzen, die nichts begrenzt.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: braucht eine Schemaänderung, die die Migrationsprüfung nicht zulässt, weil <Grund>“."
+  },
   "lint": {
     "liste": "A10",
     "wozu": "Die Regeln fangen fehlerträchtige Muster, bevor sie in den Hauptstand kommen; den Grund der einzelnen Regel nennt ihre Meldung.",

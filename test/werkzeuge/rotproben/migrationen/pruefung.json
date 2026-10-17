@@ -1,0 +1,25 @@
+{
+  "titel": "Migrationen: Squawk, Rückbau-Ordner, gemergte Migrationen und Schemaänderungen im Code",
+  "pfade": [
+    "tools/migrationen-pruefen.mjs",
+    "tools/basis/squawk.toml"
+  ],
+  "treffer": {
+    "befehl": [
+      "node",
+      "{wurzel}/tools/migrationen-pruefen.mjs"
+    ],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "mitnehmen": [
+      "tools/basis/squawk.toml"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/migrationen-pruefen.mjs",
+      "--basis",
+      "HEAD~1"
+    ]
+  }
+}

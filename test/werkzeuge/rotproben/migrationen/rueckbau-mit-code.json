@@ -1,0 +1,24 @@
+{
+  "titel": "Rückbau-Migration im selben Stand wie eine Codeänderung",
+  "vorher": {
+    "src/db/migrations/0001_ausgang.sql": [
+      "CREATE TABLE IF NOT EXISTS tenant (id text PRIMARY KEY);"
+    ],
+    "src/db/migrations/0002_name.sql": [
+      "SET LOCAL lock_timeout = '2s';",
+      "SET LOCAL statement_timeout = '30s';",
+      "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS name text;"
+    ]
+  },
+  "dateien": {
+    "src/db/migrations/rueckbau/0003_weg.sql": [
+      "SET LOCAL lock_timeout = '2s';",
+      "SET LOCAL statement_timeout = '30s';",
+      "ALTER TABLE tenant DROP COLUMN IF EXISTS name;"
+    ],
+    "src/store/name.js": [
+      "export const NAME = null;"
+    ]
+  },
+  "erwartet": "geändert im selben Stand wie eine Rückbau-Migration"
+}

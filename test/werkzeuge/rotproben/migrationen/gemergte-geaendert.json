@@ -1,0 +1,22 @@
+{
+  "titel": "Schon gemergte Migration nachträglich geändert",
+  "vorher": {
+    "src/db/migrations/0001_ausgang.sql": [
+      "CREATE TABLE IF NOT EXISTS tenant (id text PRIMARY KEY);"
+    ],
+    "src/db/migrations/0002_name.sql": [
+      "SET LOCAL lock_timeout = '2s';",
+      "SET LOCAL statement_timeout = '30s';",
+      "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS name text;"
+    ]
+  },
+  "dateien": {
+    "src/db/migrations/0002_name.sql": [
+      "SET LOCAL lock_timeout = '2s';",
+      "SET LOCAL statement_timeout = '30s';",
+      "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS name text;",
+      "ALTER TABLE tenant DROP COLUMN IF EXISTS alt;"
+    ]
+  },
+  "erwartet": "schon gemergte Migration geändert"
+}
