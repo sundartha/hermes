@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, utimesS
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { abdruck, abdruckUnterschiede, rollenStart } from "../../tools/auftrag/planung/team.mjs";
+import { Team, abdruck, abdruckUnterschiede, rollenStart } from "../../tools/auftrag/planung/team.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -186,6 +186,27 @@ test("team: der Abdruck sieht Änderungen an Git-Konfiguration, Hooks und info",
   assert.deepEqual(geaendertNach(ort, () => writeFileSync(join(ort, ".git/hooks/pre-commit"), "#!/bin/sh\n", { mode: AUSFUEHRBAR })), [".git/hooks/pre-commit"]);
   assert.deepEqual(geaendertNach(ort, () => chmodSync(join(ort, ".git/hooks/pre-push"), AUSFUEHRBAR)), [".git/hooks/pre-push"]);
   assert.deepEqual(geaendertNach(ort, () => writeFileSync(join(ort, ".git/info/exclude"), "src/\n")), [".git/info/exclude"]);
+});
+
+function probeMitZweitemWorktree(context) {
+  const ort = probe(context);
+  const zweiter = join(probeDirectory(context, {}), "zweiter");
+  git(ort, "worktree", "add", "-q", "-b", "anderer", zweiter);
+  return { ort, zweiter };
+}
+
+async function gruppeMit(ort, aendere) {
+  const team = new Team(ort, join(ort, ORDNER));
+  return team.gruppe([{ rolle: "planer", lauf: async () => {
+    aendere();
+  } }]);
+}
+
+test("team: legt ein anderer Worktree während einer Gruppe einen Branch mit Tracking an oder löscht ihn, bricht die Gruppe nicht ab", async (context) => {
+  const { ort, zweiter } = probeMitZweitemWorktree(context);
+  await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "branch", "--track", "spaeter.v2", "anderer")));
+  await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "config", "branch.anderer.remote", "upstream")));
+  await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "branch", "-D", "spaeter.v2")));
 });
 
 test("team: der Abdruck sieht eine Änderung am Index und eine Datei, die der Index als unverändert führt", (context) => {
