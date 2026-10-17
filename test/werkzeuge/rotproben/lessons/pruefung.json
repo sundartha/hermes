@@ -19,7 +19,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Zeilen von docs/lessons.md",
     "datei": "tools/basis/lessons.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "lessons", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [

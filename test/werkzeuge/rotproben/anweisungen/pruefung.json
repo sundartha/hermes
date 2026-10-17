@@ -20,7 +20,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Zeilen der Anweisungsdateien und Fachordner ohne eigene Regeln",
     "datei": "tools/basis/anweisungen.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "anweisungen", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [

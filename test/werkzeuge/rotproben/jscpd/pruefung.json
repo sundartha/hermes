@@ -9,7 +9,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Befunde in der Basislinie",
     "datei": "tools/basis/jscpd.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [".jscpd.json", "tools/basis/jscpd.json"],

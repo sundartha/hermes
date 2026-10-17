@@ -9,7 +9,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Befunde in der Basislinie",
     "datei": "tools/basis/knip.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": ["knip.json", "tools/basis/knip.json"],

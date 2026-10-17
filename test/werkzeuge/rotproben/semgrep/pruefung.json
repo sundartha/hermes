@@ -13,7 +13,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Befunde in der Basislinie",
     "datei": "tools/basis/semgrep.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": ["tools/basis/semgrep-regeln.json", "tools/basis/semgrep.json"],
