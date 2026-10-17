@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { lineFingerprint } from "../../tools/anweisungen-befunde.mjs";
 import {
   REPO_ROOT,
   commitAll,
@@ -744,5 +745,50 @@ test("eine Basislinie, die ihre Version verliert, ohne dass das Werkzeug eine sc
     ...KOPIEN_FILES,
     ...NEUE_JS_KOPIE,
     [KOPIEN_BASIS]: versionsBasis(1),
+  });
+});
+
+const ANWEISUNGEN_LISTE = "tools/basis/anweisungen.json";
+const ANWEISUNGEN_PRUEFUNG = "tools/anweisungen-pruefung.mjs";
+const ALTE_REGELN = ["# Regeln", "Erst testen, dann bauen.", "Alte Zeile ohne Eintrag."];
+const NEUE_REGELN = ["Keine Prüfung umgehen.", "Kein Hook wird übersprungen."];
+const zeilen = (liste) => `${liste.join("\n")}\n`;
+const eintrag = (path, zeile) => `${path}|${lineFingerprint(zeile)}`;
+const claudeEintraege = (liste) => liste.map((zeile) => eintrag("CLAUDE.md", zeile));
+const ALTE_EINTRAEGE = [...claudeEintraege(ALTE_REGELN.slice(0, 2)), eintrag("AGENTS.md", "Andere Datei.")];
+const anweisungsListe = (...neu) => findings(...ALTE_EINTRAEGE, ...neu);
+
+function listenPruefung(titel, liste) {
+  return json({
+    titel,
+    pfade: [liste, ANWEISUNGEN_PRUEFUNG],
+    treffer: { befehl: ["node", `{wurzel}/${ANWEISUNGEN_PRUEFUNG}`], zaehlen: "stderr-zeilen" },
+    ausnahmen: { bezeichnung: titel, datei: liste, zaehlen: "anzahl" },
+    probe: { befehl: ["node", `{wurzel}/${ANWEISUNGEN_PRUEFUNG}`] },
+  });
+}
+
+const ANWEISUNGEN_FILES = {
+  "CLAUDE.md": zeilen(ALTE_REGELN),
+  "AGENTS.md": zeilen(["Andere Datei."]),
+  [ANWEISUNGEN_LISTE]: anweisungsListe(),
+  [ANWEISUNGEN_PRUEFUNG]: "\n",
+  "test/werkzeuge/rotproben/anweisungen/pruefung.json": listenPruefung("Anweisungen", ANWEISUNGEN_LISTE),
+};
+
+async function nurMitFreigabe(context, changes) {
+  const scenario = { basisFiles: ANWEISUNGEN_FILES, changes };
+  const unapproved = await check(context, scenario);
+  assert.equal(unapproved.status, EXIT_FAILURE, unapproved.stdout);
+  assert.doesNotMatch(unapproved.stdout, /Muss geändert werden/);
+  assert.match(unapproved.stdout, /Es fehlt eine Freigabe/);
+  const approved = await check(context, { ...scenario, approval: "aktuell" });
+  assert.equal(approved.status, EXIT_OK, approved.stdout + approved.stderr);
+}
+
+test("zwei neue Zeilen in CLAUDE.md und genau ihre zwei Einträge: die Anweisungsprüfung wird nicht lockerer, braucht aber eine Freigabe", async (context) => {
+  await nurMitFreigabe(context, {
+    "CLAUDE.md": zeilen([...ALTE_REGELN, ...NEUE_REGELN]),
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
   });
 });
