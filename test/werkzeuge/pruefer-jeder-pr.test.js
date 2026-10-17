@@ -40,7 +40,7 @@ function ohneBefund() {
   return aufnahme;
 }
 
-function scheinGithub({ basis, head, davor = [], issueText }) {
+function scheinGithub({ basis, head, davor = [], issueText, verknuepft }) {
   const gesendet = [];
   const pr = {
     number: PR_NUMMER,
@@ -51,7 +51,7 @@ function scheinGithub({ basis, head, davor = [], issueText }) {
   };
   const antworten = new Map([
     [`/commits/${head}/pulls`, [...davor, pr]],
-    [`/issues/${ISSUE_NUMMER}`, { title: "Paket 99", body: issueText }],
+    [`/issues/${ISSUE_NUMMER}`, { title: "Paket 99", body: issueText, ...verknuepft }],
   ]);
   return {
     gesendet,
@@ -81,7 +81,7 @@ function stumm(context) {
 
 async function pruefeUndMelde(
   context,
-  { repo, basis, branch, prRepo = EIGENES_REPO, token, davor = [], issueText = branch === PAKET_BRANCH ? PAKET_ISSUE : undefined },
+  { repo, basis, branch, prRepo = EIGENES_REPO, token, davor = [], issueText = branch === PAKET_BRANCH ? PAKET_ISSUE : undefined, verknuepft },
 ) {
   const head = repo.git(["rev-parse", "HEAD"]);
   const aus = join(probeDirectory(context, {}), "ergebnis");
@@ -92,7 +92,7 @@ async function pruefeUndMelde(
   });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token ?? SCHEIN_TOKEN;
   setzeAusloeser(context, ciLauf());
-  const github = scheinGithub({ basis, head, davor, issueText });
+  const github = scheinGithub({ basis, head, davor, issueText, verknuepft });
   await pruefen({ head, "pr-branch": branch, "pr-repo": prRepo, aus }, repo.ordner, {
     github,
     programm,
@@ -303,4 +303,19 @@ test("ein Paket-PR aus einem Fork, dessen Issue keinen Abschnitt „Absicht“ h
     lauf.status.map(({ state, description }) => [state, description]),
     [["success", "2 Commits geprüft, 0 übernommen"]],
   );
+});
+
+test("ein Paket-PR, der mit Closes auf einen Pull Request statt auf ein Issue zeigt, bekommt dessen Text nie als Absicht", async (context) => {
+  stumm(context);
+  const lauf = await pruefeUndMelde(context, {
+    ...paketPr(context),
+    branch: PAKET_BRANCH,
+    verknuepft: { pull_request: { url: `https://api.github.com/repos/${EIGENES_REPO}/pulls/${ISSUE_NUMMER}` } },
+  });
+  assert.equal(lauf.aufrufe, 0);
+  assert.deepEqual(
+    lauf.status.map(({ state }) => state),
+    ["error"],
+  );
+  assert.match(lauf.status[0].description, new RegExp(`^Prüfer nicht gelaufen: Absicht fehlt: Issue #${ISSUE_NUMMER} nicht lesbar`));
 });
