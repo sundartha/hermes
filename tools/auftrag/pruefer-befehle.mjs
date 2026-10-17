@@ -38,6 +38,7 @@ import {
   nachstellungAus,
   reproduzierbareBlocker,
 } from "./pruefer-schema.mjs";
+import { belegeUmgehungen } from "./pruefer-umgehung.mjs";
 import { KONTEXT, urteile } from "./pruefer-urteil.mjs";
 
 export const PRUEFER_OPTIONEN = new Map([
@@ -227,7 +228,15 @@ async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
   const schreibe = (fertig) =>
     schreibeErgebnis(optionen.aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
   const mitPr = { ...kontext, basis: kopf.basis, commits: alle };
-  const { ergebnisse: commits, ablage } = await pruefeAlle(alle, frueher, { kontext: mitPr, schreibe });
+  const { ergebnisse, ablage } = await pruefeAlle(alle, frueher, { kontext: mitPr, schreibe });
+  const commits = belegeUmgehungen(ergebnisse, {
+    root: kontext.root,
+    basis: kopf.basis,
+    head: kopf.head,
+    auftragstext: kontext.auftragstext,
+    nachrichten: alle.map(({ nachricht }) => nachricht),
+  });
+  schreibeErgebnis(optionen.aus, { ...kopf, commits });
   legeAblageBereit(optionen, ablage);
   meldeSumme({ ...kopf, commits });
   return commits;

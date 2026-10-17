@@ -67,6 +67,12 @@ const REGELN = [
     const treffer = blocker.find(({ schluessel }) => bestaetigt(nachstellung?.get(schluessel)));
     return treffer ? { state: ROT, description: `BLOCKER bestätigt: ${treffer.datei}` } : null;
   },
+  ({ commits }) => {
+    const treffer = geprueft(commits)
+      .flatMap(({ befunde }) => befunde)
+      .find((befund) => befund.schwere === BLOCKER && befund.belegt === true);
+    return treffer ? { state: ROT, description: `Umgehung belegt: ${treffer.datei}` } : null;
+  },
   ohneNachstellung,
   erfolg,
 ];
@@ -80,6 +86,9 @@ function gekuerzteBeschreibung({ state, description }) {
 }
 
 function blockerGrund(befund, eintrag) {
+  if (befund.belegt === true) return null;
+  if (befund.umgehung && befund.reproduktion.trim() === "")
+    return `verworfen: ${befund.belegGrund || "ohne Beleg"}`;
   if (befund.reproduktion.trim() === "") return "verworfen: ohne Reproduktion";
   if (eintrag === undefined || bestaetigt(eintrag)) return null;
   if (eintrag.pr === ERWARTUNG) return "schon auf master";
