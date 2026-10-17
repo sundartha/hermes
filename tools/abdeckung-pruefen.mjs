@@ -13,12 +13,24 @@ const ERSTES_EIGENES_ARGUMENT = 2;
 const AUFRUF_HINWEIS = "Aufruf: node tools/abdeckung-pruefen.mjs plaene/P-<Nummer>-<kurzname>/";
 const PHASE = "phase.json";
 
+function unlesbar(grund) {
+  return { befunde: [`${PHASE} ist nicht lesbar: ${grund}`] };
+}
+
+function artDes(wert) {
+  if (wert === null) return "null";
+  return Array.isArray(wert) ? "array" : typeof wert;
+}
+
 function ladePhase(ordner) {
+  let phase;
   try {
-    return { phase: JSON.parse(readFileSync(join(ordner, PHASE), "utf8")) };
+    phase = JSON.parse(readFileSync(join(ordner, PHASE), "utf8"));
   } catch (fehler) {
-    return { befunde: [`${PHASE} ist nicht lesbar: ${fehler.message}`] };
+    return unlesbar(fehler.message);
   }
+  if (artDes(phase) !== "object") return unlesbar(`erwartet ein JSON-Objekt, gefunden ${artDes(phase)}`);
+  return { phase };
 }
 
 function pruefe(argumente) {
