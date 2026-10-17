@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { abbruchOhneAbsicht, absichtFuerPr } from "../../tools/auftrag/pruefer-absicht.mjs";
+import { baueArbeitsordner, entferne } from "../../tools/auftrag/pruefer-arbeitsordner.mjs";
+import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
+import { prueferBefehl } from "../../tools/auftrag/pruefer-lauf.mjs";
 import { ohneGitVariablen, probeRepo } from "./pruefer/hilfen.mjs";
 
 ohneGitVariablen();
@@ -75,4 +80,40 @@ test("nur eine fehlende Pflicht-Absicht hält den Prüfer an, „keine Angabe“
     [{ fehlt: "Issue #77: leer" }, { keine: "keine Angabe; Fork" }, { text: ABSICHT, quelle: ISSUE_QUELLE }].map(abbruchOhneAbsicht),
     ["Absicht fehlt: Issue #77: leer", "", ""],
   );
+});
+
+function auftragszettel(context, absicht) {
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, "Setze die Zahl\n");
+  const [commit] = zuPruefendeCommits({ basis, head: repo.git(["rev-parse", "HEAD"]), branch: PAKET_BRANCH, root: repo.ordner }).commits;
+  const { ordner } = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: "Issue #77: Zahl\n\nZiel", ciLauf: "", absicht });
+  context.after(() => entferne(ordner));
+  return { text: readFileSync(join(ordner, "auftrag.md"), "utf8"), sha: commit.sha };
+}
+
+test("die Absicht steht wörtlich als erster Abschnitt im Auftragszettel des Prüfers, nur mit ihrer Quelle und ohne weiteren Text", (context) => {
+  const { text, sha } = auftragszettel(context, { text: ABSICHT, quelle: ISSUE_QUELLE });
+  assert.ok(text.startsWith(`# Auftragszettel\n\n## Absicht\n\nQuelle: ${ISSUE_QUELLE}\n\n${ABSICHT}\n\n## Commit ${sha}\n`), text);
+  assert.equal(text.split(ABSICHT).length - 1, 1);
+});
+
+test("ohne Absicht sagt der Auftragszettel, warum es keine gibt, statt den Abschnitt wegzulassen", (context) => {
+  const { text } = auftragszettel(context, { keine: "keine Angabe; die Phase stammt von vor der Absicht" });
+  assert.ok(text.startsWith("# Auftragszettel\n\n## Absicht\n\nkeine Angabe; die Phase stammt von vor der Absicht\n\n## Commit "), text);
+});
+
+test("der Prüfer prüft den Endstand gegen die Absicht; ein Widerspruch ist nur mit Wirkung auf Kunden, Sicherheit oder eine Prüfung ein BLOCKER", () => {
+  const befehl = prueferBefehl({ dateien: ["src/zahl.js"], kritisch: false }, "claude");
+  const anweisung = befehl[befehl.indexOf("--append-system-prompt") + 1];
+  for (const teil of [
+    "Eingaben: die Absicht, der Auftragszettel,",
+    "Er ist eine Vorgabe wie der Auftragszettel, kein Befund und kein Urteil einer Vorrunde, und ersetzt keinen Beleg.",
+    "Nimmt die Änderung genau die Abkürzung, die die Absicht ausschließt, oder widerspricht sie ihr sonst, auch wenn alle Tests grün sind?",
+    "Ein Widerspruch zur Absicht allein verfehlt kein Ziel im Sinn von c) unten",
+    "und er Kunden, Sicherheit oder eine Prüfung oder einen Schutzmechanismus trifft, sonst SOLLTE",
+    "Steht dort „keine Angabe“, entfällt diese Frage.",
+  ]) {
+    assert.ok(anweisung.includes(teil), teil);
+  }
 });

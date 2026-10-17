@@ -10,6 +10,7 @@ import { kenntZweck, zweckBlock } from "./zweck.mjs";
 
 export const WERKZEUG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const KEIN_AUFTRAGSZETTEL = "kein Auftragszettel gefunden";
+const KEINE_ABSICHT = "keine Angabe";
 const REFERENZEN = new Map([
   ["clean-code.md", ".claude/refs/clean-code.md"],
   ["sicherheitsgrenzen.md", "docs/sicherheitsgrenzen.md"],
@@ -108,10 +109,19 @@ function prAbschnitt(commit, { commits = [] }) {
   ];
 }
 
+function absichtZeilen(absicht) {
+  if (absicht?.text === undefined) return [absicht?.keine ?? KEINE_ABSICHT];
+  return [`Quelle: ${absicht.quelle}`, "", absicht.text];
+}
+
 function auftragsText(commit, kontext, eintraege) {
   const { auftragstext } = kontext;
   return [
     "# Auftragszettel",
+    "",
+    "## Absicht",
+    "",
+    ...absichtZeilen(kontext.absicht),
     "",
     `## Commit ${commit.sha}`,
     "",
