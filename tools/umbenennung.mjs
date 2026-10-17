@@ -32,6 +32,7 @@ const GELOESCHT = "D";
 const HINZUGEFUEGT = "A";
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_GRUEN = 0;
+const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const GRUND = {
   syntax:
@@ -40,7 +41,7 @@ const GRUND = {
   pfad: "Laufzeitcode liest den eigenen Dateipfad (import.meta, __filename, module)",
   geaendert: "Laufzeitcode nach Entfernen der Typen anders als vorher",
 };
-const AUFRUF = "Aufruf: node tools/umbenennung.mjs --basis <commit> [--bis <commit>]";
+const AUFRUF = "Aufruf: node tools/umbenennung.mjs --basis <commit> [--bis <commit>] [--streng]";
 
 function git(args) {
   const lauf = spawnSync("git", args, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -181,7 +182,13 @@ function zeile({ alt, neu, nurTypen, grund }) {
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { basis: { type: "string" }, bis: { type: "string" } } });
+  const { values } = parseArgs({
+    options: {
+      basis: { type: "string" },
+      bis: { type: "string" },
+      streng: { type: "boolean", default: false },
+    },
+  });
   if (values.basis === undefined) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
@@ -189,7 +196,7 @@ async function main() {
   const { paare } = await umbenennungen({ von: values.basis, bis: values.bis });
   if (paare.length === 0) console.log("Keine Umbenennung .js→.ts.");
   for (const paar of paare) console.log(zeile(paar));
-  return EXIT_GRUEN;
+  return values.streng && paare.some(({ nurTypen }) => !nurTypen) ? EXIT_ROT : EXIT_GRUEN;
 }
 
 if (import.meta.url === pathToFileURL(realpathSync(argv[1] ?? ".")).href) {

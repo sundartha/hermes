@@ -1,0 +1,11 @@
+{
+  "titel": "Umbenennung macht aus einem Objekt ein enum",
+  "vorher": {
+    "src/probe/richtung.js": ["export const Richtung = { Ein: 0, Aus: 1 };"]
+  },
+  "loeschen": ["src/probe/richtung.js"],
+  "dateien": {
+    "src/probe/richtung.ts": ["export enum Richtung {", "  Ein,", "  Aus,", "}"]
+  },
+  "erwartet": "src/probe/richtung.js → src/probe/richtung.ts: geändert (TypeScript-Syntax mit Laufzeitwirkung"
+}

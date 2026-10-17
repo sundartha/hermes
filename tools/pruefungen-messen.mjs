@@ -118,6 +118,14 @@ function writeTree(root, files) {
   }
 }
 
+function removeFiles(root, paths = []) {
+  for (const path of paths) {
+    if (!existsSync(join(root, path)))
+      throw new Error(`Die Rot-Probe löscht ${path}, das es im Vorher-Stand nicht gibt.`);
+    rmSync(join(root, path));
+  }
+}
+
 function commitAll(directory, message) {
   git(["add", "-A"], { cwd: directory, probe: true });
   git(["commit", "-q", "--allow-empty", "-m", message], { cwd: directory, probe: true });
@@ -142,6 +150,7 @@ export async function runCase(context, probe, fall) {
     const carried = carriedFiles(context.root, probe.mitnehmen);
     writeTree(directory, { ".gitignore": ["node_modules"], ...carried, ...fall.vorher });
     commitAll(directory, "vorher");
+    removeFiles(directory, fall.loeschen);
     writeTree(directory, fall.dateien);
     commitAll(directory, "nachher");
     const modules = join(context.root, "node_modules");
