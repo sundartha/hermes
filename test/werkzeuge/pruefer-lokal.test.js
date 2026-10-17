@@ -21,6 +21,8 @@ ohneGitVariablen();
 const EINSTIEG = join(REPO_ROOT, "tools/pruefer-lokal.mjs");
 const ISSUE_NUMMER = 41;
 const NACHRICHT = "Setze die Zahl\n\nWarum: Auftrag a1.\n\nPaket: EF5\n";
+const PAKET_ABSICHT = "Die Zahl soll 2 sein, ohne Sonderfall für die Testeingabe.";
+const PAKET_ISSUE = `## Absicht\n\n${PAKET_ABSICHT}\n\n## Ziel\n\nZiel`;
 const EXIT_BEFUNDE = 1;
 const EXIT_AUFRUF = 2;
 const EXIT_NICHT_GELAUFEN = 3;
@@ -72,13 +74,14 @@ function diffZaehler(context, aufnahme) {
   return { programm, protokoll: () => null, laengen };
 }
 
-async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, issueLesbar = true, unterordner = "", ersatz: eigenerErsatz, letzterLeer = false }) {
+function issueRouten({ issueLesbar = true, issueText = PAKET_ISSUE }) {
+  return issueLesbar ? [[`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket EF5", body: issueText }]] : [];
+}
+
+async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, unterordner = "", ersatz: eigenerErsatz, letzterLeer = false, ...issue }) {
   const repo = paketBranch(context, { letzterLeer });
   const ersatz = eigenerErsatz ?? ersatzPruefer(context, { aufnahme });
-  const routen = issueLesbar
-    ? [[`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket EF5", body: "Ziel" }]]
-    : [];
-  const github = await scheinGithub(context, new Map(routen));
+  const github = await scheinGithub(context, new Map(issueRouten(issue)));
   const ablage = join(probeDirectory(context, {}), "nicht-oeffentlich");
   const aus = join(probeDirectory(context, {}), "ergebnis");
   const umgebung = {
@@ -223,4 +226,14 @@ test("lokal ohne Issue-Nummer endet mit 2 und startet nichts", async (context) =
   assert.equal(status, EXIT_AUFRUF);
   assert.match(ausgabe, /Aufruf:/);
   assert.equal(protokoll, null);
+});
+
+test("lokal mit einem Paket-Issue ohne Abschnitt „Absicht“ endet mit 3 und startet den Prüfer nicht", async (context) => {
+  const lauf = await starte(context, { aufnahme: ohneBefunde(), issueText: "## Ziel\n\nZiel" });
+  assert.equal(lauf.status, EXIT_NICHT_GELAUFEN, lauf.ausgabe);
+  assert.equal(lauf.protokoll, null);
+  assert.deepEqual(
+    [...new Set(lauf.ergebnis.commits.map(({ zustand, grund }) => `${zustand}: ${grund}`))],
+    [`nicht_gelaufen: Absicht fehlt: Issue #${ISSUE_NUMMER}: Paket-PR und Phase mit Absicht brauchen im Issue den Abschnitt „## Absicht“`],
+  );
 });

@@ -24,6 +24,8 @@ process.env.GITHUB_REPOSITORY = EIGENES_REPO;
 
 const PR_NUMMER = 9;
 const PAKET_BRANCH = "paket/99-x";
+const ISSUE_NUMMER = 98;
+const PAKET_ISSUE = "## Absicht\n\nDie Zahl soll 2 sein, ohne Sonderfall.\n\n## Ziel\n\nZahl 2";
 const PAKET_NACHRICHT = "Setze die Zahl\n\nWarum: Probe.\n\nPaket: 99\n";
 const DEPENDABOT_NACHRICHT =
   "Bump eslint from 9.0.0 to 9.1.0\n\nSigned-off-by: dependabot[bot] <support@github.com>\n";
@@ -38,19 +40,22 @@ function ohneBefund() {
   return aufnahme;
 }
 
-function scheinGithub({ basis, head, davor = [] }) {
+function scheinGithub({ basis, head, davor = [], issueText }) {
   const gesendet = [];
   const pr = {
     number: PR_NUMMER,
     state: "open",
     head: { sha: head },
     base: { sha: basis, ref: "master" },
-    body: "",
+    body: issueText === undefined ? "" : `Closes #${ISSUE_NUMMER}`,
   };
+  const antworten = new Map([
+    [`/commits/${head}/pulls`, [...davor, pr]],
+    [`/issues/${ISSUE_NUMMER}`, { title: "Paket 99", body: issueText }],
+  ]);
   return {
     gesendet,
-    hole: async (pfad) =>
-      pfad === `/commits/${head}/pulls` ? [...davor, pr] : workflowAbfrage(pfad),
+    hole: async (pfad) => antworten.get(pfad) ?? workflowAbfrage(pfad),
     alle: async () => [],
     sende: async (methode, pfad, daten) => {
       gesendet.push({ methode, pfad, daten });
@@ -76,7 +81,7 @@ function stumm(context) {
 
 async function pruefeUndMelde(
   context,
-  { repo, basis, branch, prRepo = EIGENES_REPO, token, davor = [] },
+  { repo, basis, branch, prRepo = EIGENES_REPO, token, davor = [], issueText = branch === PAKET_BRANCH ? PAKET_ISSUE : undefined },
 ) {
   const head = repo.git(["rev-parse", "HEAD"]);
   const aus = join(probeDirectory(context, {}), "ergebnis");
@@ -87,7 +92,7 @@ async function pruefeUndMelde(
   });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token ?? SCHEIN_TOKEN;
   setzeAusloeser(context, ciLauf());
-  const github = scheinGithub({ basis, head, davor });
+  const github = scheinGithub({ basis, head, davor, issueText });
   await pruefen({ head, "pr-branch": branch, "pr-repo": prRepo, aus }, repo.ordner, {
     github,
     programm,
@@ -268,6 +273,19 @@ test("zum Kopf-Commit zählt der PR nach master, auch wenn ein PR gegen einen an
       pfad: `/statuses/${head}`,
       state: "success",
       description: "2 Commits geprüft, 0 übernommen",
+    },
+  ]);
+});
+
+test("ein Paket-PR, dessen Issue keinen Abschnitt „Absicht“ hat, wird nicht gelesen und bleibt ohne grün", async (context) => {
+  stumm(context);
+  const lauf = await pruefeUndMelde(context, { ...paketPr(context), branch: PAKET_BRANCH, issueText: "## Ziel\n\nZahl 2" });
+  assert.equal(lauf.aufrufe, 0);
+  assert.deepEqual(lauf.status, [
+    {
+      pfad: `/statuses/${lauf.head}`,
+      state: "error",
+      description: `Prüfer nicht gelaufen: Absicht fehlt: Issue #${ISSUE_NUMMER}: Paket-PR und Phase mit Absicht brauchen im Issue den Abschnitt „## Absicht“`,
     },
   ]);
 });
