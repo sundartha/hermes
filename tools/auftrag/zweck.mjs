@@ -9,6 +9,7 @@ export const PRUEFUNG = {
   GRENZEN_TEST: "grenzen test",
   GEAENDERTE_FAELLE: "geänderte fälle",
   TESTUMBAU_FAELLE: "testumbau fälle",
+  VORBAU_NUR_ERGAENZT: "vorbau nur ergänzt",
   MUTATION_TESTUMBAU: "mutation testumbau",
   ROT: "rot",
   ABNAHME_VORHER: "abnahme vorher",

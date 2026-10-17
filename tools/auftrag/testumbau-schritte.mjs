@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { testumbauPrompt } from "./agenten.mjs";
-import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
+import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, hatSkript } from "./befehle.mjs";
+import { git } from "./git.mjs";
+import { zusicherungenGleich } from "./testtitel.mjs";
 import { ENTFERNT } from "./testumbau.mjs";
 import { GRUND, PRUEFUNG } from "./zweck.mjs";
 
@@ -32,6 +36,17 @@ function faelleGruen(lauf, antwort) {
   return lauf.gruenOderScheitert(ergebnis) && pruefeUndVermerkeEntfernteFaelle(lauf, ergebnis.ausgabe, antwort);
 }
 
+function vorbauNurErgaenzt(lauf) {
+  const datei = lauf.vorbau;
+  if (datei === null) return true;
+  const { root } = lauf.kontext;
+  const gleich = zusicherungenGleich(git(["show", `${lauf.basis}:${datei}`], { cwd: root }), readFileSync(join(root, datei), "utf8"));
+  const ausgabe = gleich
+    ? `${datei} ergänzt den alten Test nur.`
+    : `Der Testumbau ändert in ${datei} Bestehendes. Erlaubt ist nur Ergänzen: eine neue Hilfe, ein neuer Import oder ein ergänzter Wert einer bestehenden Belegung; bestehende Hilfen, Fälle und Zusicherungen bleiben, wie sie sind.`;
+  return lauf.gruenOderScheitert(lauf.belegt({ name: PRUEFUNG.VORBAU_NUR_ERGAENZT, befehl: `zusicherungenGleich ${lauf.basis}:${datei} ${datei}`, exitCode: gleich ? EXIT_GRUEN : EXIT_ROT, ausgabe }));
+}
+
 function mutationNichtSchlechter(lauf) {
   if (hatSkript(lauf.kontext.root, MUTATION)) {
     return lauf.gruen(PRUEFUNG.MUTATION_TESTUMBAU, ["npm", "--silent", "run", MUTATION, "--", "--basis", lauf.basis, "--testumbau"]);
@@ -47,6 +62,7 @@ export function testumbauSchritte(lauf) {
       const antwort = umbauAntwort(lauf);
       return antwort !== null && lauf.grenzen("test", lauf.basis) && faelleGruen(lauf, antwort);
     },
+    () => vorbauNurErgaenzt(lauf),
     () => lauf.allesVormerken(),
     () => lauf.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
     () => lauf.pinPruefung(),

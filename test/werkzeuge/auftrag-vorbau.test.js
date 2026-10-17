@@ -71,8 +71,8 @@ function umgebung(werkzeug) {
   return { ...isolatedEnvironment(), HOME: werkzeug, ...Object.fromEntries(ersatz), ...IDENTITAET };
 }
 
-function lauf(context, drehbuch) {
-  const repo = probeRepository(context, REPO);
+function lauf(context, drehbuch, dateien = REPO) {
+  const repo = probeRepository(context, dateien);
   const phase = { phase: "probe", issue: ISSUE, entwurf: { [VERSAND]: "Entwurf." }, auftraege: [AUFTRAG] };
   const werkzeug = probeDirectory(context, { "claude.mjs": CLAUDE, "gh.mjs": GH, "drehbuch.json": JSON.stringify(drehbuch), "phase.json": JSON.stringify(phase) });
   for (const name of ["claude.mjs", "gh.mjs"]) chmodSync(join(werkzeug, name), AUSFUEHRBAR);
@@ -84,6 +84,17 @@ function lauf(context, drehbuch) {
   const ghLog = join(werkzeug, "gh.log");
   const gh = existsSync(ghLog) ? readFileSync(ghLog, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile)) : [];
   return { repo, ergebnis, beleg, log, gh };
+}
+
+function vorwegVerworfen(context, testumbau, { bau = BAU, dateien = REPO } = {}) {
+  const { ergebnis, beleg, log } = lauf(context, { bau, test: [ROTER_TEST, testumbau], plan: [{ antwort: JSON.stringify(UMBAU) }] }, dateien);
+  assert.equal(ergebnis.status, EXIT_ROT);
+  const umbau = beleg("A1-umbau");
+  assert.equal(umbau.ergebnis, "rot");
+  assert.deepEqual(umbau.pruefungen.filter(({ exitCode }) => exitCode !== 0).map(({ name }) => name), ["vorbau nur ergänzt"]);
+  assert.match(beleg("A1").entscheidung.text, /Der testumbau A1-umbau vorweg ist gescheitert \(rot\)/);
+  assert.equal(log.includes(UMBAU.ziel), false);
+  return { umbau, notiz: beleg("A1").entscheidung.text };
 }
 
 test("Vorbau: meldet der Bau-Agent einen alten Test, dessen Vorbau kollidiert, läuft erst ein testumbau und dann der Auftrag grün", (context) => {
@@ -118,20 +129,15 @@ test("Vorbau: hält der alte Test echtes altes Verhalten fest, geht die Meldung 
 
 test("Vorbau: benennt der testumbau den gemeldeten Fall um, wird er verworfen und Antonio entscheidet", (context) => {
   const umbenannt = { dateien: { [ALT]: alterTest("{ gates: true }", "versendet mit Gates") }, antwort: `Entfernt: ${ALT}: versendet den Code, weil er jetzt mit Gates heißt` };
-  const { ergebnis, beleg, log } = lauf(context, { bau: BAU, test: [ROTER_TEST, umbenannt], plan: [{ antwort: JSON.stringify(UMBAU) }] });
-  assert.equal(ergebnis.status, EXIT_ROT);
-  assert.equal(beleg("A1-umbau").ergebnis, "grün");
-  assert.match(beleg("A1").entscheidung.text, /hat den Fall versendet den Code entfernt oder umbenannt; er ist verworfen\./);
-  assert.equal(log.includes(UMBAU.ziel), false);
+  const { notiz } = vorwegVerworfen(context, umbenannt);
+  assert.match(notiz, /test\/versand\.test\.js:versendet den Code/);
 });
 
 test("Vorbau: nach einem verworfenen testumbau zitiert die Notiz an Antonio den Anfang einer langen Antwort des Bau-Agenten", (context) => {
   const lang = `Hinweis vom Anfang der Bau-Antwort.\n${"Weitere Erklärung des Bau-Agenten. ".repeat(SAETZE_UEBER_DER_KUERZUNGSGRENZE)}\n${MELDUNG}`;
   const umbenannt = { dateien: { [ALT]: alterTest("{ gates: true }", "versendet mit Gates") }, antwort: `Entfernt: ${ALT}: versendet den Code, weil er jetzt mit Gates heißt` };
-  const { ergebnis, beleg } = lauf(context, { bau: [{ ...GATES, antwort: lang }], test: [ROTER_TEST, umbenannt], plan: [{ antwort: JSON.stringify(UMBAU) }] });
-  assert.equal(ergebnis.status, EXIT_ROT);
-  assert.equal(beleg("A1-umbau").ergebnis, "grün");
-  assert.match(beleg("A1").entscheidung.text, /Hinweise des Bau-Agenten:\n> Hinweis vom Anfang der Bau-Antwort\./);
+  const { notiz } = vorwegVerworfen(context, umbenannt, { bau: [{ ...GATES, antwort: lang }] });
+  assert.match(notiz, /Hinweise des Bau-Agenten:\n> Hinweis vom Anfang der Bau-Antwort\./);
 });
 
 test("Vorbau: meldet der Bau-Agent den alten Test nach einem grünen testumbau erneut, nennt die Notiz an Antonio den Grund", (context) => {
@@ -155,11 +161,17 @@ test("Vorbau: scheitert der testumbau, bekommt Antonio genau eine Notiz zum alte
 
 test("Vorbau: schwächt der testumbau eine Zusicherung des alten Tests ab, wird er verworfen und Antonio entscheidet", (context) => {
   const schwach = { dateien: { [ALT]: `${KOPF}const KUNDE = { gates: true };\ntest("versendet den Code", () => assert.ok(typeof versende(KUNDE) === "boolean"));\n` } };
-  const { ergebnis, beleg, log } = lauf(context, { bau: BAU, test: [ROTER_TEST, schwach], plan: [{ antwort: JSON.stringify(UMBAU) }] });
-  assert.equal(ergebnis.status, EXIT_ROT);
-  assert.equal(beleg("A1-umbau").ergebnis, "grün");
-  assert.match(beleg("A1").entscheidung.text, /ändert Fälle oder Zusicherungen in test\/versand\.test\.js; er ist verworfen\./);
-  assert.equal(log.includes(UMBAU.ziel), false);
+  const { notiz } = vorwegVerworfen(context, schwach);
+  assert.match(notiz, /Label verhalten-geaendert am Issue mit test\/versand\.test\.js:versendet den Code/);
+});
+
+test("Vorbau: ändert der testumbau den Rumpf einer bestehenden Hilfe, ist seine Runde vor der Mutationsprüfung rot und der Test-Agent erfährt, was erlaubt ist", (context) => {
+  const paket = JSON.parse(REPO["package.json"]);
+  const mitHilfe = (rumpf) => `${KOPF}function kunde() {\n  return ${rumpf};\n}\ntest("versendet den Code", () => assert.equal(versende(kunde()), true));\n`;
+  const dateien = { ...REPO, [ALT]: mitHilfe("{}"), "package.json": JSON.stringify({ ...paket, scripts: { ...paket.scripts, "test:mutation": "node -e 0 --" } }) };
+  const { umbau } = vorwegVerworfen(context, { dateien: { [ALT]: mitHilfe("{ gates: true }") } }, { dateien });
+  assert.equal(umbau.pruefungen.some(({ name }) => name === "mutation testumbau"), false);
+  assert.match(umbau.runden[0], /neue Hilfe, ein neuer Import oder ein ergänzter Wert einer bestehenden Belegung/);
 });
 
 test("Zusicherungen je Fall: Einrückung zählt nicht, gestrichene, geänderte, verschobene Zusicherungen, neue Fälle und ein Vorbau, den eine Zusicherung direkt prüft, schon", () => {

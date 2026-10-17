@@ -239,7 +239,7 @@ class Runden {
     const abgelehnt = vorbauBefund(plan, alterTest.datei);
     if (abgelehnt !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${abgelehnt}. Der Plan steht im Beleg ${auftrag.id}-plan.`);
     const umbau = plan.kontext.auftrag;
-    const vorlauf = new VorbauRunden({ ...this.kontext, ...plan.kontext }, this.starteRunde).fuehreAus();
+    const vorlauf = new VorbauRunden({ ...this.kontext, ...plan.kontext, vorbau: alterTest.datei }, this.starteRunde).fuehreAus();
     if (vorlauf !== GRUEN) return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} vorweg ist gescheitert (${vorlauf}); sein Beleg heißt ${umbau.id}.`);
     if (nenntAltenTest(alterTest, testTitel(readFileSync(join(root, alterTest.datei), "utf8"))) === null) {
       return this.legeAltenTestAntonioVor(ergebnis, `Der ${TESTUMBAU} ${umbau.id} hat den Fall ${alterTest.test} entfernt oder umbenannt; er ist verworfen.`);

@@ -167,6 +167,13 @@
     "nichtAngenommen": "Tests, die nur die Schreibweise des Codes festnageln.",
     "ausweg": "Ändert ein Mutant kein beobachtbares Verhalten, antwortet der Test-Agent je Mutant mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <Satz>“; die Meldung geht zur Freigabe an Antonio."
   },
+  "vorbau nur ergänzt": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Testumbau vor einem Auftrag baut nur den Vorbau des alten Tests um, den der Bau-Agent gemeldet hat: Jeder Fall und jede Zusicherung der Datei prüft danach genau dasselbe wie vorher, damit kein Testumbau eine Erwartung am Label verhalten-geaendert vorbei ändert.",
+    "behebung": "Am alten Test nur ergänzen: eine neue Hilfe, einen neuen Import oder einen ergänzten Wert einer bestehenden Belegung, und bestehende Hilfen, Fälle und Zusicherungen so lassen, wie sie sind.",
+    "nichtAngenommen": "Den Rumpf einer bestehenden Hilfe oder eines Falls ändern, eine Zusicherung umformulieren, abschwächen oder verschieben, einen Fall umbenennen oder die Prüfung über eine Attrappe, einen Umweg oder ein fremdes Objekt umgehen.",
+    "ausweg": "Geht der Umbau nur durch eine Änderung an Bestehendem, ist er kein Testumbau vorweg: eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Testname> braucht eine Änderung an Bestehendem, weil <Grund>“."
+  },
   "mutation testumbau": {
     "liste": "ohne Nummer",
     "wozu": "Ein Testumbau darf nicht weniger prüfen als vorher: Jeder Mutant der Quelldateien, die die betroffenen Tests importieren, den sie vorher getötet haben, muss nachher weiter getötet werden.",
