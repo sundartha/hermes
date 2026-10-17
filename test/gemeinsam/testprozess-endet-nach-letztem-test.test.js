@@ -75,7 +75,8 @@ test("keine Testdatei legt PGlite an den Hilfen vorbei an, die ihre Instanzen am
 test("der Waechter meldet jede Schreibweise, mit der eine Testdatei PGlite an den Hilfen vorbei laedt", (t) => {
   const ordner = ordnerMitDateien({ ...IMPORTFORMEN.erkannt, ...IMPORTFORMEN.unauffaellig });
   t.after(() => fs.rmSync(ordner, { recursive: true, force: true }));
-  assert.deepEqual(dateienMitPgliteAnDenHilfenVorbei(ordner), Object.keys(IMPORTFORMEN.erkannt).sort());
+  const erwartet = Object.keys(IMPORTFORMEN.erkannt).map((relativ) => path.normalize(relativ)).sort();
+  assert.deepEqual(dateienMitPgliteAnDenHilfenVorbei(ordner), erwartet);
 });
 
 test("eine Testdatei mit PGlite endet binnen einer Sekunde nach ihrem letzten Test", async () => {
