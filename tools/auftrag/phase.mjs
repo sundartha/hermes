@@ -10,6 +10,7 @@ import { sperrSchluessel } from "./bereiche.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { reihenfolge } from "./format.mjs";
 import { git, kopf } from "./git.mjs";
+import { issueAbsichtBefunde } from "./planung/absicht.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { REMOTE, belegteSperren, eigeneSperren, erwerben, freigeben } from "./sperren.mjs";
 import {
@@ -202,6 +203,16 @@ function issueBefunde(phase) {
   return Number.isInteger(phase.issue) && phase.issue > 0 ? [] : ["issue muss die Nummer des Phasen-Issues sein."];
 }
 
+function issueText(issue, root) {
+  const gh = env.HERMES_GH ?? "gh";
+  const lauf = spawnSync(gh, ["issue", "view", String(issue), "--json", "body", "--jq", ".body"], { cwd: root, encoding: "utf8" });
+  return lauf.status === 0 ? lauf.stdout : null;
+}
+
+function absichtImIssueBefunde(phase, root) {
+  return Object.hasOwn(phase, "absicht") ? issueAbsichtBefunde(phase, issueText(phase.issue, root)) : [];
+}
+
 async function bauePhase(ort, lauf) {
   await erwerben({ cwd: ort.integration, phase: ort.phase, schluessel: await sperrSchluessel(ort.root, ort.phase) }, warten);
   git(["fetch", "-q", REMOTE, "master"], { cwd: ort.integration });
@@ -211,7 +222,8 @@ async function bauePhase(ort, lauf) {
 
 export async function phase(phasendatei, root) {
   const { phase: beschreibung, befunde } = gueltigePhase(phasendatei, root);
-  const alle = befunde.length > 0 ? befunde : issueBefunde(beschreibung);
+  const vorab = befunde.length > 0 ? befunde : issueBefunde(beschreibung);
+  const alle = vorab.length > 0 ? vorab : absichtImIssueBefunde(beschreibung, root);
   for (const befund of alle) console.error(befund);
   if (alle.length > 0) return EXIT_ROT;
   mkdirSync(belegVerzeichnis(root, beschreibung.phase), { recursive: true });

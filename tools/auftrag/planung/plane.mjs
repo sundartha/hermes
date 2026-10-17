@@ -4,7 +4,9 @@ import { pid } from "node:process";
 import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
+import { ABSICHT } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
+import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
   antwortenBefunde,
   entwurfBefunde,
@@ -21,7 +23,7 @@ import {
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn } from "./erkundung.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
-import { nummernImOrdner } from "./nummern.mjs";
+import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, schnittImOrdner } from "./schnitt.mjs";
@@ -222,9 +224,15 @@ export class Planung {
     return [abschnitt("Eingang laut Design Doc", punkte(gruppen.map((gruppe) => gruppe.eingang))), abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften))];
   }
 
+  absichtTeil() {
+    const absicht = absichtAusPitch(this.dokumente[PITCH] ?? "");
+    return absicht === undefined ? [] : [abschnitt(ABSICHT, absicht)];
+  }
+
   erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [] }) {
     return nachricht(ueberschrift, [
       ...kopf,
+      ...this.absichtTeil(),
       abschnitt("Deine Nummern", nummernText(this.soll, nummern)),
       ...this.designTeile(nummern),
       abschnitt("Fragen des Planers", punkte(fragen)),
@@ -632,7 +640,9 @@ export class Planung {
 function aufrufFehler(ordner) {
   if (!existsSync(join(ordner, "pitch.md")) || !existsSync(join(ordner, "sicherheit.md"))) return `${ordner} enthält kein pitch.md und sicherheit.md`;
   if (existsSync(join(ordner, PHASE))) return `${join(ordner, PHASE)} gibt es schon; plane überschreibt nichts`;
-  return existsSync(join(ordner, PLANUNG)) ? `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts` : null;
+  if (existsSync(join(ordner, PLANUNG))) return `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts`;
+  const absichtFehlt = pitchAbsichtBefunde(readFileSync(join(ordner, PITCH), "utf8"));
+  return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
 }
 
 function ausgang(fehler) {

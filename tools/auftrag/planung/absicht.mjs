@@ -25,3 +25,10 @@ export function phasenAbsichtBefunde(pitch, phase) {
   if (befunde.length > 0 || absichtAusPitch(pitch) === phase.absicht) return befunde;
   return ["phase.json: absicht weicht vom Abschnitt „## Absicht“ in pitch.md ab; sie wird wörtlich übernommen"];
 }
+
+export function issueAbsichtBefunde(phase, body) {
+  if (!Object.hasOwn(phase, "absicht")) return [];
+  if (body === null) return [`Issue #${phase.issue} nicht lesbar; ohne seinen Abschnitt „## ${ABSICHT}“ startet die Phase nicht`];
+  if (absichtAusPitch(body) === phase.absicht) return [];
+  return [`Issue #${phase.issue}: der Abschnitt „## ${ABSICHT}“ fehlt oder weicht von absicht in phase.json ab; schreib ihn wörtlich aus pitch.md ins Issue`];
+}
