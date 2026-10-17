@@ -435,6 +435,7 @@ const tsBloecke = [
         },
       ],
       "@typescript-eslint/no-misused-promises": "error",
+      "no-unreachable": "error",
     },
   },
 ];
