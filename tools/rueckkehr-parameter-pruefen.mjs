@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { VisitorKeys, parse } from "espree";
 
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
@@ -14,9 +15,17 @@ const RETURN_PARAM_PREFIX = /^RETURN_PARAM_/;
 const RETURN_FUNCTION_HEAD = /^[ \t]*function returnMessageText\(([^)]*)\)\s*\{/gm;
 const CODE_TOKEN = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\$]|\\.|\$(?!\{))*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|[{}/`"']/g;
 const UNCLEAR_TOKENS = new Set(["/", "`", '"', "'"]);
-const RETURN_CALL = /returnMessageText\(((?:\s*params\.get\(\w+\)\s*,?)+)\)/;
-const QUERY_READ = /params\.get\((\w+)\)/g;
 const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
+const MARKUP_PART = /<[!]--[\s\S]*?(?:-->|$)|<script\b[^>]*>([\s\S]*?)<\/script>/dg;
+const PARSER_OPTIONS = { ecmaVersion: "latest", sourceType: "module", comment: true, range: true };
+const RETURN_FUNCTION = "returnMessageText";
+const PARAMS_NAME = "params";
+const QUERY_SOURCES = new Set(["location.search", "window.location.search"]);
+const SCOPE_NODES = new Set(["BlockStatement", "Program"]);
+const GUARDED_NAMES = new Set([PARAMS_NAME, "location", "window", "URLSearchParams"]);
+const UNREADABLE_SCRIPT = "ein script-Block der Shell laesst sich nicht als JavaScript lesen";
+const UNCLEAR_CALL = "returnMessageText wird anders als mit params.get(...) als Argumenten aufgerufen oder weitergereicht";
+const NOT_FROM_LOCATION = "params ist beim Aufruf nicht aus new URLSearchParams(window.location.search) gesetzt";
 const LOCALE_FORMATTING = /toLocale|Intl|de-DE|fr-FR/g;
 const LOCALE_HINT = "in einem script-Block; Datum und Zahlen formatiert apps/web nur in apps/web/src/lib/subscribe.js";
 const DEFAULT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,16 +61,48 @@ function returnParts(target) {
   return { param, value };
 }
 
+function blankOut(text) {
+  return text.replace(/[^\n]/g, " ");
+}
+
+function parseScript(text) {
+  try {
+    return { program: parse(text, PARSER_OPTIONS) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function withoutComments(text, comments) {
+  return comments.reduce((rest, { range: [from, to] }) => rest.slice(0, from) + blankOut(rest.slice(from, to)) + rest.slice(to), text);
+}
+
+function readScripts(source) {
+  let code = blankOut(source);
+  const programs = [];
+  const unreadable = [];
+  for (const part of source.matchAll(MARKUP_PART)) {
+    if (part[1] === undefined) continue;
+    const [start, end] = part.indices[1];
+    const { program, error } = parseScript(part[1]);
+    if (error) unreadable.push({ line: lineAt(source, start) + error.lineNumber - 1, text: UNREADABLE_SCRIPT });
+    else programs.push(program);
+    const visible = program ? withoutComments(part[1], program.comments) : part[1];
+    code = code.slice(0, start) + visible + code.slice(end);
+  }
+  return { code, programs, unreadable };
+}
+
 function readShell(file) {
-  const source = readFileSync(file, "utf8");
+  const { code, programs, unreadable } = readScripts(readFileSync(file, "utf8"));
   const constants = new Map();
-  for (const match of source.matchAll(RETURN_CONSTANT)) constants.set(match[2], match[1]);
-  const heads = [...source.matchAll(RETURN_FUNCTION_HEAD)];
+  for (const match of code.matchAll(RETURN_CONSTANT)) constants.set(match[2], match[1]);
+  const heads = [...code.matchAll(RETURN_FUNCTION_HEAD)];
   const [head] = heads;
-  const body = heads.length === 1 ? functionBody(source, head.index + head[0].length) : undefined;
+  const body = heads.length === 1 ? functionBody(code, head.index + head[0].length) : undefined;
   const branch = body === undefined ? undefined : { args: head[1].split(",").map((arg) => arg.trim()), body };
-  const line = head ? lineAt(source, head.index) : 1;
-  return { source, constants, found: heads.length > 0, branch, passed: passedParams(source), line };
+  const line = head ? lineAt(code, head.index) : 1;
+  return { constants, found: heads.length > 0, branch, ...queryUse(programs), unreadable, line };
 }
 
 function functionBody(source, bodyStart) {
@@ -75,10 +116,95 @@ function functionBody(source, bodyStart) {
   return undefined;
 }
 
-function passedParams(source) {
-  const call = RETURN_CALL.exec(source);
-  const reads = call ? [...call[1].matchAll(QUERY_READ)] : [];
-  return new Map(reads.map(([, paramConst], position) => [paramConst, position]));
+function walk(node, path, visit) {
+  visit(node, path);
+  for (const key of VisitorKeys[node.type]) {
+    for (const child of [node[key]].flat()) if (child) walk(child, [...path, node], visit);
+  }
+}
+
+function memberPath(node) {
+  if (node.type === "Identifier") return node.name;
+  if (node.type !== "MemberExpression" || node.computed) return undefined;
+  const object = memberPath(node.object);
+  return object === undefined ? undefined : `${object}.${node.property.name}`;
+}
+
+function isLocationQuery(init) {
+  if (init?.type !== "NewExpression" || memberPath(init.callee) !== "URLSearchParams") return false;
+  return init.arguments.length === 1 && QUERY_SOURCES.has(memberPath(init.arguments[0]));
+}
+
+function isLocationDeclarator(declarator) {
+  return declarator.id.name === PARAMS_NAME && isLocationQuery(declarator.init);
+}
+
+function declaresParams(scope, isBefore) {
+  const declares = (statement) =>
+    statement.type === "VariableDeclaration" && isBefore(statement) && statement.declarations.some(isLocationDeclarator);
+  return SCOPE_NODES.has(scope.type) && scope.body.some(declares);
+}
+
+function isSetBeforeCall({ node, path }) {
+  const nearest = path.findLast((scope) => declaresParams(scope, () => true));
+  return nearest !== undefined && declaresParams(nearest, (statement) => statement.range[1] <= node.range[0]);
+}
+
+function isParamsGet(node) {
+  return node.type === "CallExpression" && memberPath(node.callee) === `${PARAMS_NAME}.get`;
+}
+
+function isReturnCall(node) {
+  if (node.type !== "CallExpression" || memberPath(node.callee) !== RETURN_FUNCTION) return false;
+  return node.arguments.length > 0 && node.arguments.every(isParamsGet);
+}
+
+function isStrayParams(parent, grandparent) {
+  const declaration = parent.type === "VariableDeclarator" && isLocationDeclarator(parent);
+  const read = parent === grandparent.callee && isParamsGet(grandparent);
+  return !declaration && !read;
+}
+
+function isStrayGlobal(node, parent) {
+  const member = parent.type === "MemberExpression" && parent.object === node;
+  const constructed = parent.type === "NewExpression" && parent.callee === node;
+  return !member && !constructed;
+}
+
+function isStrayName(node, path) {
+  if (node.type !== "Identifier" || !GUARDED_NAMES.has(node.name)) return false;
+  const [parent, grandparent] = path.toReversed();
+  if (parent.type === "MemberExpression" && parent.property === node && !parent.computed) return false;
+  return node.name === PARAMS_NAME ? isStrayParams(parent, grandparent) : isStrayGlobal(node, parent);
+}
+
+function isStrayReturnFunction(node, path) {
+  if (node.type !== "Identifier" || node.name !== RETURN_FUNCTION) return false;
+  const parent = path.at(-1);
+  const declared = parent.type === "FunctionDeclaration" && parent.id === node;
+  const called = parent.type === "CallExpression" && parent.callee === node && isReturnCall(parent);
+  return !declared && !called;
+}
+
+function queryUse(programs) {
+  const calls = [];
+  let stray = 0;
+  let strayCalls = 0;
+  for (const program of programs) {
+    walk(program, [], (node, path) => {
+      if (isReturnCall(node)) calls.push({ node, path });
+      if (isStrayName(node, path)) stray += 1;
+      if (isStrayReturnFunction(node, path)) strayCalls += 1;
+    });
+  }
+  const reads = calls.map(({ node }) => node.arguments.map((read) => read.arguments[0]?.name));
+  const [first = [], ...others] = reads;
+  const agreed = (name, position) => others.every((names) => names[position] === name);
+  return {
+    passed: new Map(first.flatMap((name, position) => (agreed(name, position) ? [[name, position]] : []))),
+    fromLocation: stray === 0 && calls.every(isSetBeforeCall),
+    callsClear: strayCalls === 0,
+  };
 }
 
 const IDENTIFIER_CHAR_AT_END = /(?:[\p{ID_Continue}$\u200c\u200d]|\\u\{[0-9a-fA-F]+\})$/u;
@@ -99,6 +225,8 @@ function branchProblem(shell, paramConst, valueConst) {
   if (!shell.found) return "die Shell hat keine Funktion returnMessageText()";
   if (!shell.branch) return "der Rumpf von returnMessageText() laesst sich nicht eindeutig lesen";
   if (!shell.passed.has(paramConst)) return `die Shell gibt ${paramConst} nicht an returnMessageText weiter`;
+  if (!shell.callsClear) return UNCLEAR_CALL;
+  if (!shell.fromLocation) return NOT_FROM_LOCATION;
   const arg = shell.branch.args[shell.passed.get(paramConst)];
   if (containsWholeName(shell.branch.body, `${arg} === ${valueConst}`)) return undefined;
   return `kein Zweig "${arg} === ${valueConst}" - der Fall bleibt fuer den Kunden stumm`;
@@ -118,7 +246,8 @@ function targetProblems(shell, param, value) {
 function shellFindings(root, checkoutReturn) {
   const file = join(root, SHELL_FILE);
   const shell = readShell(file);
-  return Object.entries(checkoutReturn).flatMap(([name, target]) => {
+  const unreadable = shell.unreadable.map(({ line, text }) => ({ file: SHELL_FILE, line, text }));
+  const targets = Object.entries(checkoutReturn).flatMap(([name, target]) => {
     const { param, value } = returnParts(target);
     return targetProblems(shell, param, value).map((problem) => ({
       file: SHELL_FILE,
@@ -126,6 +255,7 @@ function shellFindings(root, checkoutReturn) {
       text: `${name}: ${problem}`,
     }));
   });
+  return [...unreadable, ...targets];
 }
 
 function astroFiles(dir) {

@@ -247,3 +247,184 @@ test("zwei Funktionen returnMessageText machen die Shell unlesbar", (kontext) =>
   assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
   assert.match(result.stdout, /Rumpf von returnMessageText\(\) laesst sich nicht eindeutig lesen/);
 });
+
+const PARAMS_LINE = "  const params = new URLSearchParams(window.location.search);";
+const CALL_LINE = "  returnMessageText(params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB));";
+const CALL_TEXT = CALL_LINE.trim();
+const SWAPPED_CALL_LINE = "  returnMessageText(params.get(RETURN_PARAM_SUB), params.get(RETURN_PARAM_CARD));";
+const OTHER_CALL_LINE = "  zeigeAn(params.get(RETURN_PARAM_SUB), params.get(RETURN_PARAM_CARD));";
+const UNCLEAR_CALL = "returnMessageText wird anders als mit params\\.get\\(\\.\\.\\.\\) als Argumenten aufgerufen oder weitergereicht";
+const NOT_FROM_LOCATION = "params ist beim Aufruf nicht aus new URLSearchParams\\(window\\.location\\.search\\) gesetzt";
+
+function meldeJedenFall(kontext, shell, muster) {
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+  assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
+  for (const [fall, regel] of muster) assert.match(result.stdout, regel, fall);
+  return result;
+}
+
+test("ein Aufruf von returnMessageText, der nur in einem Kommentar, einer Zeichenkette oder ausserhalb des Skripts steht, zaehlt nicht", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const faelle = {
+    zeilenkommentar: clean.replace(CALL_LINE, `  // ${CALL_TEXT}`),
+    blockkommentar: clean.replace(CALL_LINE, `  /*\n  ${CALL_TEXT}\n  */`),
+    zeichenkette: clean.replace(CALL_LINE, `  const aufruf = "${CALL_TEXT}";`),
+    markup: `${clean.replace(CALL_LINE, "")}\n<p>${CALL_TEXT}</p>`,
+    "ohne Namen": clean.replace(CALL_LINE, "  returnMessageText(params.get(), params.get());"),
+    berechnet: clean.replace(CALL_LINE, "  const get = 'get';\n  returnMessageText(params[get](RETURN_PARAM_CARD), params[get](RETURN_PARAM_SUB));"),
+  };
+  for (const [fall, shell] of Object.entries(faelle)) {
+    meldeJedenFall(kontext, shell, [
+      [fall, /KARTE_GESPEICHERT: die Shell gibt RETURN_PARAM_CARD nicht an returnMessageText weiter/],
+      [fall, /ABO_GESCHEITERT: die Shell gibt RETURN_PARAM_SUB nicht an returnMessageText weiter/],
+    ]);
+  }
+});
+
+test("eine Konstante, die nur in einem Kommentar oder ausserhalb des Skripts steht, kennt die Shell nicht", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const wert = '  const RETURN_FAILED = "failed";';
+  const parameter = '  const RETURN_PARAM_SUB = "sub";';
+  meldeJedenFall(kontext, clean.replace(wert, `  // ${wert.trim()}`), [
+    ["Wert im Kommentar", /ABO_GESCHEITERT: die Shell kennt den Wert "failed" nicht/],
+  ]);
+  meldeJedenFall(kontext, clean.replace(wert, "") + `\n<p>${wert.trim()}</p>`, [
+    ["Wert im Markup", /ABO_GESCHEITERT: die Shell kennt den Wert "failed" nicht/],
+  ]);
+  meldeJedenFall(kontext, clean.replace(parameter, `  /* ${parameter.trim()} */`), [
+    ["Parameter im Kommentar", /ABO_GESCHEITERT: die Shell kennt den Parameter "sub" nicht/],
+  ]);
+});
+
+test("ein Zweig oder eine Funktion returnMessageText, die nur in einem Kommentar steht, zaehlt nicht", (kontext) => {
+  const kommentarZweig = '    // if (sub === RETURN_FAILED) return "Abo gescheitert";';
+  const blockZweig = '    /* if (sub === RETURN_FAILED) return "Abo gescheitert"; */';
+  for (const zweig of [kommentarZweig, blockZweig]) {
+    meldeJedenFall(kontext, shellSource([CARD_BRANCH, zweig]), [
+      [zweig, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/],
+    ]);
+  }
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const ausgeklammert = clean
+    .replace("  function returnMessageText(card, sub) {", "  /*\n  function returnMessageText(card, sub) {")
+    .replace('    return "";\n  }', '    return "";\n  }\n  */');
+  meldeJedenFall(kontext, ausgeklammert, [
+    ["Funktion im Kommentar", /KARTE_GESPEICHERT: die Shell hat keine Funktion returnMessageText\(\)/],
+  ]);
+});
+
+test("params, das nicht aus der Adresse der Seite entsteht, wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const fremd = {
+    "eine Map": "  const params = new Map(window.location.search);",
+    "ein anderer Name": "  const suche = new URLSearchParams(window.location.search);",
+    "der Cookie": "  const params = new URLSearchParams(document.cookie);",
+    "ein fester Text": '  const params = new URLSearchParams("card=ok&sub=ok");',
+    "der Hash": "  const params = new URLSearchParams(window.location.hash);",
+    "eine Destrukturierung": "  const { params } = window;",
+    "nur ein Kommentar": `  // ${PARAMS_LINE.trim()}`,
+    "spaeter ueberschrieben": `${PARAMS_LINE.replace("const", "let")}\n  params = new Map();`,
+    "ein Funktionsparameter": `  function fremd(params) {\n    return params;\n  }\n${PARAMS_LINE}`,
+    "eine andere Funktion": `  function liesAdresse() {\n  ${PARAMS_LINE.trim()}\n  }`,
+    "ohne new": "  const params = URLSearchParams(window.location.search);",
+    "eigenes location": `  const location = { search: "?card=ok" };\n  const params = new URLSearchParams(location.search);`,
+    "eigenes window": `  const window = {};\n${PARAMS_LINE}`,
+    "eigene Klasse": `  class URLSearchParams {\n    get() {\n      return null;\n    }\n  }\n${PARAMS_LINE}`,
+    "ohne Adresse": "  const params = new URLSearchParams();",
+    "weitergegeben": `${PARAMS_LINE}\n  aendere(params);`,
+    "als Schluessel": `${PARAMS_LINE}\n  const treffer = lookup[params];`,
+    "ein Eintrag geloescht": `${PARAMS_LINE}\n  params.delete(RETURN_PARAM_CARD);`,
+    "get ersetzt": `${PARAMS_LINE}\n  params.get = () => null;`,
+    "als Argument von get": `${PARAMS_LINE}\n  params.get(params + 1);`,
+    "in einer anderen Funktion ueberdeckt": `${PARAMS_LINE}\n  function anders() {\n    const params = new Map();\n  }`,
+  };
+  for (const [fall, zeile] of Object.entries(fremd)) {
+    meldeJedenFall(kontext, clean.replace(PARAMS_LINE, zeile), [
+      [fall, new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+      [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+    ]);
+  }
+});
+
+test("params aus der Adresse der Seite bleibt in jeder ueblichen Form ohne Befund", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const imBlock = clean.replace(PARAMS_LINE, `  function zeige() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }`);
+  const formen = {
+    "location.search": clean.replace("window.location.search", "location.search"),
+    let: clean.replace("const params", "let params"),
+    "im Block der Funktion": imBlock,
+    "oben, benutzt in der Funktion": clean.replace(CALL_LINE, `  function zeige() {\n  ${CALL_TEXT}\n  }`),
+    "ein HTML-Kommentar vor dem Skript": `<!-- Rueckkehr -->\n${clean}`,
+    "ein <!-- in einer Zeichenkette": clean.replace('  const RETURN_OK = "ok";', '  const RETURN_OK = "ok";\n  const marker = "<!--";'),
+    "ein Feld namens params": `${clean}\n<script>\n  const treffer = history.params;\n</script>`,
+    "zwei gleiche Aufrufe": clean.replace(CALL_LINE, `${CALL_LINE}\n${CALL_LINE}`),
+    "ein anderer Aufruf mit anderer Reihenfolge": clean.replace(CALL_LINE, `${CALL_LINE}\n${OTHER_CALL_LINE}`),
+  };
+  for (const [fall, shell] of Object.entries(formen)) {
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+    assert.equal(result.stdout, "", fall);
+    assert.equal(result.status, EXIT_OK, `${fall}: ${result.stderr}`);
+  }
+});
+
+test("ein zweiter Aufruf von returnMessageText mit vertauschten Argumenten oder ohne params in Reichweite wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const vertauscht = clean.replace(CALL_LINE, `${CALL_LINE}\n${SWAPPED_CALL_LINE}`);
+  meldeJedenFall(kontext, vertauscht, [
+    ["vertauscht Karte", /KARTE_GESPEICHERT: die Shell gibt RETURN_PARAM_CARD nicht an returnMessageText weiter/],
+    ["vertauscht Abo", /ABO_GESCHEITERT: die Shell gibt RETURN_PARAM_SUB nicht an returnMessageText weiter/],
+  ]);
+  const imBlock = clean.replace(PARAMS_LINE, `  function zeige() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }\n${CALL_LINE}`);
+  meldeJedenFall(kontext, imBlock, [
+    ["ausserhalb Karte", new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+    ["ausserhalb Abo", new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+  ]);
+});
+
+test("params, das erst nach dem Aufruf von returnMessageText deklariert wird, ist beim Aufruf noch nicht da", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const faelle = {
+    "im selben Block": clean.replace(PARAMS_LINE, "").replace(CALL_LINE, `${CALL_LINE}\n${PARAMS_LINE}`),
+    "verdeckt die aeussere Deklaration": clean.replace(CALL_LINE, `  {\n  ${CALL_TEXT}\n  ${PARAMS_LINE.trim()}\n  }`),
+  };
+  for (const [fall, shell] of Object.entries(faelle)) {
+    meldeJedenFall(kontext, shell, [
+      [fall, new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+      [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+    ]);
+  }
+});
+
+test("ein Skript-Block in einem HTML-Kommentar wird nicht ausgefuehrt und zaehlt nicht", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  for (const [fall, shell] of Object.entries({ geschlossen: `<!--\n${clean}\n-->`, offen: `<!--\n${clean}` })) {
+    meldeJedenFall(kontext, shell, [[fall, /KARTE_GESPEICHERT: die Shell kennt den Parameter "card" nicht/]]);
+  }
+});
+
+test("ein Aufruf von returnMessageText, der nicht nur params.get uebergibt oder die Funktion weiterreicht, wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const zusaetze = {
+    "ohne Argumente": "  returnMessageText();",
+    "vertauscht mit Zusatz": "  returnMessageText(params.get(RETURN_PARAM_SUB), params.get(RETURN_PARAM_CARD) ?? null);",
+    "mit einer Variablen": "  returnMessageText(params.get(RETURN_PARAM_CARD), RETURN_OK);",
+    "mit einem Template": "  returnMessageText(`${params.get(RETURN_PARAM_CARD)}`, params.get(RETURN_PARAM_SUB));",
+    "als Wert weitergereicht": "  const weiter = returnMessageText;",
+    "ueber call": "  returnMessageText.call(null, params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB));",
+  };
+  for (const [fall, zeile] of Object.entries(zusaetze)) {
+    meldeJedenFall(kontext, clean.replace(CALL_LINE, `${CALL_LINE}\n${zeile}`), [
+      [fall, new RegExp(`KARTE_GESPEICHERT: ${UNCLEAR_CALL}`)],
+      [fall, new RegExp(`ABO_GESCHEITERT: ${UNCLEAR_CALL}`)],
+    ]);
+  }
+});
+
+test("ein script-Block, der kein gueltiges JavaScript ist, macht die Shell unlesbar und wird mit seiner Zeile gemeldet", (kontext) => {
+  const einmal = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const zeilen = einmal.split("\n").length;
+  const result = meldeJedenFall(kontext, `${einmal}\n<script>\n  const kaputt = ;\n</script>`, [
+    ["Zeile", new RegExp(`BillingIsland\\.astro:${zeilen + 2} ein script-Block der Shell laesst sich nicht als JavaScript lesen`)],
+  ]);
+  assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT|ABO_GESCHEITERT/);
+});
