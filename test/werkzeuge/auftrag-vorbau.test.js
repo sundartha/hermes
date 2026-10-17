@@ -11,6 +11,7 @@ import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn 
 const AUSFUEHRBAR = 0o755;
 const EXIT_ROT = 1;
 const GH_AUFRUFE_JE_NOTIZ = 2;
+const SAETZE_UEBER_DER_KUERZUNGSGRENZE = 40;
 const ISSUE = 54;
 const PROBE = "probe@example.invalid";
 
@@ -113,6 +114,15 @@ test("Vorbau: benennt der testumbau den gemeldeten Fall um, wird er verworfen un
   assert.equal(beleg("A1-umbau").ergebnis, "grün");
   assert.match(beleg("A1").entscheidung.text, /hat den Fall versendet den Code entfernt oder umbenannt; er ist verworfen\./);
   assert.equal(log.includes(UMBAU.ziel), false);
+});
+
+test("Vorbau: nach einem verworfenen testumbau zitiert die Notiz an Antonio den Anfang einer langen Antwort des Bau-Agenten", (context) => {
+  const lang = `Hinweis vom Anfang der Bau-Antwort.\n${"Weitere Erklärung des Bau-Agenten. ".repeat(SAETZE_UEBER_DER_KUERZUNGSGRENZE)}\n${MELDUNG}`;
+  const umbenannt = { dateien: { [ALT]: alterTest("{ gates: true }", "versendet mit Gates") }, antwort: `Entfernt: ${ALT}: versendet den Code, weil er jetzt mit Gates heißt` };
+  const { ergebnis, beleg } = lauf(context, { bau: [{ ...GATES, antwort: lang }], test: [ROTER_TEST, umbenannt], plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  assert.equal(ergebnis.status, EXIT_ROT);
+  assert.equal(beleg("A1-umbau").ergebnis, "grün");
+  assert.match(beleg("A1").entscheidung.text, /Hinweise des Bau-Agenten:\n> Hinweis vom Anfang der Bau-Antwort\./);
 });
 
 test("Vorbau: meldet der Bau-Agent den alten Test nach einem grünen testumbau erneut, nennt die Notiz an Antonio den Grund", (context) => {

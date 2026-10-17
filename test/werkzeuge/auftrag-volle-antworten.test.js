@@ -36,11 +36,11 @@ test("der erste Abruf liefert die volle Antwort, der zweite nur die gekürzte", 
   assert.equal(entnimmVolleAntwort(lauf), lauf.antwort);
 });
 
-test("nach einer Sitzung eines anderen Auftrags liefert eine frühere Sitzung nur die gekürzte Antwort", (context) => {
+test("nach einer Sitzung eines anderen Auftrags liefert auch eine frühere Sitzung ihre volle Antwort", (context) => {
   const sitzung = sitzungenMitErsatz(context);
   const frueher = sitzung("V2", "zwei");
   const spaeter = sitzung("V3", "drei");
-  assert.equal(entnimmVolleAntwort(frueher), frueher.antwort);
+  assert.equal(entnimmVolleAntwort(frueher), `zwei ${FUELLUNG}`);
   assert.equal(entnimmVolleAntwort(spaeter), `drei ${FUELLUNG}`);
 });
 
