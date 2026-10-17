@@ -138,16 +138,17 @@ function verschachtelteShell(imFunktionsrumpf, nachDerFunktion) {
     '  const RETURN_PARAM_SUB = "sub";',
     '  const RETURN_OK = "ok";',
     '  const RETURN_FAILED = "failed";',
-    "  const params = new URLSearchParams(window.location.search);",
     "  function zeigeRueckkehr() {",
     "    function returnMessageText(card, sub) {",
     CARD_BRANCH,
     ...imFunktionsrumpf,
     '      return "";',
     "    }",
+    "    const params = new URLSearchParams(window.location.search);",
     "    returnMessageText(params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB));",
     ...nachDerFunktion,
     "  }",
+    "  zeigeRueckkehr();",
     "</script>",
   ].join("\n");
 }
@@ -348,12 +349,11 @@ test("params, das nicht aus der Adresse der Seite entsteht, wird gemeldet", (kon
 
 test("params aus der Adresse der Seite bleibt in jeder ueblichen Form ohne Befund", (kontext) => {
   const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
-  const imBlock = clean.replace(PARAMS_LINE, `  function zeige() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }`);
+  const imBlock = clean.replace(PARAMS_LINE, `  function zeige() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }\n  zeige();`);
   const formen = {
     "location.search": clean.replace("window.location.search", "location.search"),
     let: clean.replace("const params", "let params"),
     "im Block der Funktion": imBlock,
-    "oben, benutzt in der Funktion": clean.replace(CALL_LINE, `  function zeige() {\n  ${CALL_TEXT}\n  }`),
     "ein HTML-Kommentar vor dem Skript": `<!-- Rueckkehr -->\n${clean}`,
     "ein <!-- in einer Zeichenkette": clean.replace('  const RETURN_OK = "ok";', '  const RETURN_OK = "ok";\n  const marker = "<!--";'),
     "ein Feld namens params": `${clean}\n<script>\n  const treffer = history.params;\n</script>`,
@@ -393,6 +393,45 @@ test("params, das erst nach dem Aufruf von returnMessageText deklariert wird, is
       [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
     ]);
   }
+});
+
+test("ein Aufruf in einer Funktion zaehlt nur, wenn die Funktion nachweislich nach der Deklaration von params laeuft", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const zeige = `  function zeige() {\n  ${CALL_TEXT}\n  }`;
+  const ohneAufruf = clean.replace(PARAMS_LINE, "").replace(CALL_LINE, `${PARAMS_LINE}\n${zeige}`);
+  const zeigeMitParams = `  function zeige() {\n${PARAMS_LINE}\n  ${CALL_TEXT}\n  }`;
+  const mitParams = clean.replace(PARAMS_LINE, "").replace(CALL_LINE, zeigeMitParams);
+  const rot = {
+    "oben, benutzt in der Funktion": clean.replace(CALL_LINE, `  function zeige() {\n  ${CALL_TEXT}\n  }\n  zeige();`),
+    "params im selben Rumpf, die Funktion aber auch als Wert weitergegeben": mitParams.replace(zeigeMitParams, `${zeigeMitParams}\n  zeige();\n  const auchZeige = zeige;`),
+    "params im Rumpf einer Funktion ohne Namen": clean.replace(PARAMS_LINE, `  export default function () {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }`),
+    "vor der Deklaration aufgerufen": ohneAufruf.replace(PARAMS_LINE, `  zeige();\n${PARAMS_LINE}`),
+    "ueber eine zweite Funktion vor der Deklaration": ohneAufruf.replace(PARAMS_LINE, `  vorher();\n${PARAMS_LINE}\n  function vorher() {\n    zeige();\n  }`),
+    "nie aufgerufen": mitParams,
+    "nur von sich selbst aufgerufen": mitParams.replace(`${CALL_TEXT}\n  }`, `${CALL_TEXT}\n    zeige();\n  }`),
+    "als Rueckruf weitergereicht": mitParams.replace(zeigeMitParams, `${zeigeMitParams}\n  setTimeout(zeige);`),
+    "als Generator": mitParams.replace(zeigeMitParams, `${zeigeMitParams.replace("function zeige", "function* zeige")}\n  zeige();`),
+    "als async-Funktion": mitParams.replace(zeigeMitParams, `${zeigeMitParams.replace("function zeige", "async function zeige")}\n  zeige();`),
+    "in einer Pfeilfunktion": clean.replace(CALL_LINE, `  const zeige = () => {\n  ${CALL_TEXT}\n  };\n  zeige();`),
+    "in einem Funktionsausdruck": clean.replace(CALL_LINE, `  const zeige = function () {\n  ${CALL_TEXT}\n  };\n  zeige();`),
+    "in einem Klassenfeld": clean.replace(CALL_LINE, `  class Anzeige {\n    feld = ${CALL_TEXT}\n  }\n  new Anzeige();`),
+    "in einem static-Block": clean.replace(CALL_LINE, `  class Anzeige {\n    static {\n  ${CALL_TEXT}\n    }\n  }`),
+    "params im Rumpf einer Funktion, die nur ein anderer Skript-Block aufruft": `${clean.replace(PARAMS_LINE, `  function nie() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }`)}\n<script>\n  nie();\n</script>`,
+    "params im Rumpf einer nie aufgerufenen Funktion": clean.replace(PARAMS_LINE, `  function nie() {\n${PARAMS_LINE}`).replace(CALL_LINE, `${CALL_LINE}\n  }`),
+    "in einer nie aufgerufenen inneren Funktion": clean.replace(CALL_LINE, `  function aussen() {\n    function innen() {\n  ${CALL_TEXT}\n    }\n  }\n  aussen();`),
+    "in einer Pfeilfunktion einer aufgerufenen Funktion": clean.replace(CALL_LINE, `  function aussen() {\n    const innen = () => {\n  ${CALL_TEXT}\n    };\n  }\n  aussen();`),
+    "nur in einem anderen Skript-Block aufgerufen": `${mitParams}\n<script>\n  zeige();\n</script>`,
+  };
+  for (const [fall, shell] of Object.entries(rot)) {
+    meldeJedenFall(kontext, shell, [
+      [fall, new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+      [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+    ]);
+  }
+  const spaeter = mitParams.replace(zeigeMitParams, `${zeigeMitParams}\n  function spaeter() {\n    function innen() {\n      zeige();\n    }\n    innen();\n  }\n  spaeter();`);
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: spaeter });
+  assert.equal(result.stdout, "");
+  assert.equal(result.status, EXIT_OK, result.stderr);
 });
 
 test("ein Skript-Block in einem HTML-Kommentar wird nicht ausgefuehrt und zaehlt nicht", (kontext) => {
