@@ -66,7 +66,7 @@ function nameFindings(migrations) {
     const number = numberOf(path);
     if (number === undefined) {
       found.push(
-        `${path}: Name passt nicht; erlaubt sind ${FOLDER}<vierstellige Nummer>_<name>.sql und ${ROLLBACK_FOLDER}<vierstellige Nummer>_<name>.sql, kleingeschrieben, Wörter mit Bindestrich.`,
+        `${path}: Name passt nicht; erlaubt sind ${FOLDER}NNNN_name.sql und ${ROLLBACK_FOLDER}NNNN_name.sql mit vierstelliger Nummer NNNN, kleingeschrieben, Wörter mit Bindestrich.`,
       );
       continue;
     }
