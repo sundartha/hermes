@@ -102,8 +102,12 @@ export function aufraeumenVormerken(storeHolen) {
   };
   after(() => aufraeumen(eintrag));
   return async (abbild) => {
-    datenbankStarts.zaehle(1);
-    eintrag.pg = await PGlite.create({ loadDataDir: abbild });
+    const beginn = performance.now();
+    try {
+      eintrag.pg = await PGlite.create({ loadDataDir: abbild });
+    } finally {
+      datenbankStarts.zaehle(performance.now() - beginn);
+    }
     offene.add(eintrag);
     return abfragenZaehlendeHuelle(eintrag.pg, eintrag.laufend);
   };

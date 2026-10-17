@@ -32,6 +32,8 @@ function zeile(datei, { dauer, kind, tests }) {
     datei: path.relative(process.cwd(), datei),
     dauer_ms: dauer === null ? null : runde(dauer),
     ausklingen_ms: kind === null ? null : runde(Math.max(0, kind - tests)),
+    tests_ms: runde(tests),
+    kind_ms: kind === null ? null : runde(kind),
   };
 }
 

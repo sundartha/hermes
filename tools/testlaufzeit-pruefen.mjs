@@ -3,6 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { ausklingBefunde, grenzeAbleiten, zeilenAus } from "./testlaufzeit/ausklingen.mjs";
+import {
+  TABELLENKOPF,
+  kostenJeDatei,
+  sekunden,
+  tabellenZeile,
+} from "./testlaufzeit/aufteilung.mjs";
 import { aufrufeInDateien, echtWartenBefunde } from "./testlaufzeit/echt-warten-statisch.mjs";
 import { TESTDATEI_ENDUNG, hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
 import { ausklingenStrenger, zeitgliederStrenger } from "./testlaufzeit/nur-strenger.mjs";
@@ -14,8 +20,6 @@ const BASIS_ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const LAUFZEITEN = ".pruefung/dateien.jsonl";
 const TESTDATEIEN = ["test/*.js", "test/*.mjs", "test/*.cjs"];
 const LANGSAMSTE = 20;
-const MS_JE_SEKUNDE = 1000;
-const NACHKOMMASTELLEN = 2;
 const JSON_EINRUECKUNG = 2;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
@@ -28,10 +32,6 @@ function json(datei) {
   return JSON.parse(readFileSync(datei, "utf8"));
 }
 
-function sekunden(ms) {
-  return ms === null ? "–" : (ms / MS_JE_SEKUNDE).toFixed(NACHKOMMASTELLEN);
-}
-
 function testdateien() {
   return execFileSync(
     "git",
@@ -42,28 +42,6 @@ function testdateien() {
   )
     .split("\n")
     .filter((datei) => datei !== "" && existsSync(datei));
-}
-
-function kostenJeDatei(kostenDatei) {
-  const kosten = new Map();
-  if (!kostenDatei || !existsSync(kostenDatei)) return kosten;
-  for (const { datei, art, anzahl, summe } of zeilenAus(kostenDatei)) {
-    const eintrag = kosten.get(datei) ?? {};
-    const bisher = eintrag[art] ?? { anzahl: 0, summe: 0 };
-    kosten.set(datei, {
-      ...eintrag,
-      [art]: { anzahl: bisher.anzahl + anzahl, summe: bisher.summe + summe },
-    });
-  }
-  return kosten;
-}
-
-function kostenText(kosten) {
-  const datenbank = kosten?.datenbankStarts?.anzahl ?? 0;
-  const server = kosten?.serverStarts?.anzahl ?? 0;
-  const warten = kosten?.echtWarten;
-  const echt = warten ? `${warten.anzahl}× / ${warten.summe} ms` : "–";
-  return `${datenbank} | ${server} | ${echt}`;
 }
 
 function neueTestdateien(basis) {
@@ -96,14 +74,8 @@ function berichtZeilen(zeilen, kosten, { neue, teil, basis }) {
     (links, rechts) => (rechts.dauer_ms ?? 0) - (links.dauer_ms ?? 0),
   );
   const tabelle = (auswahl) =>
-    auswahl.map(
-      ({ datei, dauer_ms: dauer, ausklingen_ms: ausklingen }) =>
-        `| ${datei} | ${sekunden(dauer)} | ${sekunden(ausklingen)} | ${kostenText(kosten.get(datei))} |`,
-    );
-  const kopf = [
-    "| Datei | Dauer (s) | Ausklingzeit (s) | Datenbankstarts | Serverstarts | echtWarten |",
-    "|---|---|---|---|---|---|",
-  ];
+    auswahl.map((zeile) => tabellenZeile(zeile, kosten.get(zeile.datei)));
+  const kopf = TABELLENKOPF;
   const mitWarten = zeilen.filter(({ datei }) => kosten.get(datei)?.echtWarten);
   const neuGemessen = zeilen.filter(({ datei }) => neue.includes(datei));
   return [

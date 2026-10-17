@@ -825,7 +825,7 @@ export async function startServerExpectExit({
 } = {}) {
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
-  serverStarts.zaehle(1);
+  const beginn = performance.now();
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
@@ -843,7 +843,7 @@ export async function startServerExpectExit({
       clearTimeout(timer);
       resolve({ code, output, dataDir });
     });
-  });
+  }).finally(() => serverStarts.zaehle(performance.now() - beginn));
 }
 
 export async function startServer({
@@ -855,7 +855,7 @@ export async function startServer({
 } = {}) {
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
-  serverStarts.zaehle(1);
+  const beginn = performance.now();
   const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
@@ -884,7 +884,7 @@ export async function startServer({
       clearTimeout(timer);
       reject(new Error(`Server vorzeitig beendet (code ${code}). Output:\n${output.text}`));
     });
-  });
+  }).finally(() => serverStarts.zaehle(performance.now() - beginn));
 
   return {
     port,
