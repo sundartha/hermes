@@ -44,6 +44,10 @@ function quelle(kontext, datei) {
   return kontext.quellen.get(datei);
 }
 
+function funktionsnamen(datei, kontext) {
+  return funktionenIn(datei, quelle(kontext, datei)).map(({ name }) => name);
+}
+
 function auswegBefund({ ort, feld }, wert, kontext) {
   const treffer = AUSWEG.exec(wert);
   if (treffer === null) return `${ort}: ${feld} ist weder eine Angabe noch „${NICHT_GEFUNDEN}, weil …“`;
@@ -96,8 +100,7 @@ function neueStelleBefund(ort, stelle, kontext) {
   const befund = dateiBefund(ort, stelle, kontext);
   if (befund !== null) return befund;
   if (!istText(stelle.funktion)) return `${ort}: funktion fehlt`;
-  const namen = funktionenIn(stelle.datei, quelle(kontext, stelle.datei)).map(({ name }) => name);
-  return namen.includes(stelle.funktion) ? `${ort}: Funktion ${stelle.funktion} gibt es schon in ${stelle.datei}` : null;
+  return funktionsnamen(stelle.datei, kontext).includes(stelle.funktion) ? `${ort}: Funktion ${stelle.funktion} gibt es schon in ${stelle.datei}` : null;
 }
 
 function wegEintragBefund(ort, eintrag, kontext) {
@@ -134,8 +137,7 @@ function nutzenBefund(ort, { nutzen, treffer }, kontext) {
   if (!treffer.some((stelle) => stelle.startsWith(`${nutzen.datei}:`))) return `${ort}: nutzen nennt ${nutzen.datei}, das unter treffer nicht vorkommt`;
   const befund = dateiBefund(ort, nutzen, kontext);
   if (befund !== null) return befund;
-  const namen = funktionenIn(nutzen.datei, quelle(kontext, nutzen.datei)).map(({ name }) => name);
-  return namen.includes(nutzen.funktion) ? null : `${ort}: Funktion ${nutzen.funktion} fehlt in ${nutzen.datei}`;
+  return funktionsnamen(nutzen.datei, kontext).includes(nutzen.funktion) ? null : `${ort}: Funktion ${nutzen.funktion} fehlt in ${nutzen.datei}`;
 }
 
 function urteilBefund(ort, vorhanden, kontext) {
@@ -147,21 +149,31 @@ function urteilBefund(ort, vorhanden, kontext) {
   return null;
 }
 
+function suchErgebnis(ort, { name, begriffe }, kontext) {
+  if (!begriffe.some((begriff) => begriff !== name)) return { befund: `${ort}: vorhanden.suche nennt keinen Suchbegriff außer dem neuen Namen ${name}` };
+  const jeBegriff = begriffe.map((begriff) => [begriff, trefferJeBegriff(begriff, kontext)]);
+  const ungueltig = jeBegriff.find(([, gefunden]) => gefunden === null);
+  if (ungueltig !== undefined) return { befund: `${ort}: Suchbegriff ${ungueltig[0]} ist kein gültiges Muster für suche` };
+  if (!jeBegriff.some(([begriff, stellen]) => begriff !== name && stellen.length > 0)) return { befund: `${ort}: die Suche nach ${begriffe.join(", ")} findet im Code nichts; nenn Begriffe der Regel, die im Code vorkommen (Literale, Schlüssel, Feldnamen aus deinem Weg)` };
+  return { gefunden: jeBegriff.flatMap(([, stellen]) => stellen) };
+}
+
+function trefferBefund(ort, { begriffe, gefunden, treffer }, kontext) {
+  const erfunden = treffer.filter((stelle) => !trefferInFundDatei(stelle, gefunden, kontext));
+  if (erfunden.length > 0) return `${ort}: treffer ${erfunden.join(", ")} liegt in keiner Datei, in der die Suche nach ${begriffe.join(", ")} etwas findet, oder die Zeile gibt es dort nicht`;
+  return treffer.length === 0 ? `${ort}: die Suche nach ${begriffe.join(", ")} hat ${gefunden.length} Treffer, treffer nennt keinen` : null;
+}
+
 function vorhandenBefund(ort, stelle, kontext) {
   const name = stelle.neu === "datei" ? stelle.datei : stelle.funktion;
   const { vorhanden } = stelle;
   if (!istObjekt(vorhanden)) return `${ort}: neue ${stelle.neu} ${name} ohne vorhanden; such zuerst mit suche nach Namen, Literalen und der Regel selbst und nenn Suchbegriffe, Treffer und Urteil`;
   const begriffe = liste(vorhanden.suche).filter(istText);
-  if (!begriffe.some((begriff) => begriff !== name)) return `${ort}: vorhanden.suche nennt keinen Suchbegriff außer dem neuen Namen ${name}`;
-  const jeBegriff = begriffe.map((begriff) => [begriff, trefferJeBegriff(begriff, kontext)]);
-  const ungueltig = jeBegriff.find(([, gefunden]) => gefunden === null);
-  if (ungueltig !== undefined) return `${ort}: Suchbegriff ${ungueltig[0]} ist kein gültiges Muster für suche`;
-  if (!jeBegriff.some(([begriff, stellen]) => begriff !== name && stellen.length > 0)) return `${ort}: die Suche nach ${begriffe.join(", ")} findet im Code nichts; nenn Begriffe der Regel, die im Code vorkommen (Literale, Schlüssel, Feldnamen aus deinem Weg)`;
-  const gefunden = jeBegriff.flatMap(([, stellen]) => stellen);
+  const { befund, gefunden } = suchErgebnis(ort, { name, begriffe }, kontext);
+  if (befund !== undefined) return befund;
   const treffer = liste(vorhanden.treffer);
-  const erfunden = treffer.filter((stelle) => !trefferInFundDatei(stelle, gefunden, kontext));
-  if (erfunden.length > 0) return `${ort}: treffer ${erfunden.join(", ")} liegt in keiner Datei, in der die Suche nach ${begriffe.join(", ")} etwas findet, oder die Zeile gibt es dort nicht`;
-  if (gefunden.length > 0 && treffer.length === 0) return `${ort}: die Suche nach ${begriffe.join(", ")} hat ${gefunden.length} Treffer, treffer nennt keinen`;
+  const trefferFehler = trefferBefund(ort, { begriffe, gefunden, treffer }, kontext);
+  if (trefferFehler !== null) return trefferFehler;
   return urteilBefund(ort, { ...vorhanden, treffer, beleg: `Suche nach ${begriffe.join(", ")}: ${gefunden.length} Funde` }, kontext);
 }
 
