@@ -37,7 +37,7 @@ function stehtIn(zeilen, teil) {
   );
 }
 
-function treffer(revs, zeile, root) {
+function dateinamenMit(revs, zeile, root) {
   try {
     return gitAusgabe(["grep", "-l", "-z", "-F", "-e", zeile, ...revs, "--"], root).split(NUL).filter(Boolean);
   } catch {
@@ -49,11 +49,12 @@ function dateienIn(rev, namen) {
   return namen.filter((name) => name.startsWith(`${rev}:`)).map((name) => name.slice(rev.length + 1));
 }
 
-function standAufBasis({ basis, sha }, teil, root) {
+function herkunftGrund({ basis, sha }, teil, root) {
   const anker = teil.find((zeile) => zeile.trim() !== "");
-  const namen = treffer([basis, sha], anker, root);
-  if (dateienIn(sha, namen).length === 0) return null;
-  return dateienIn(basis, namen).some((datei) => stehtIn(zeilenAm(basis, datei, root), teil));
+  const namen = dateinamenMit([basis, sha], anker, root);
+  if (dateienIn(sha, namen).length === 0) return "Suche auf der Basis gescheitert";
+  const aufBasis = dateienIn(basis, namen).some((datei) => stehtIn(zeilenAm(basis, datei, root), teil));
+  return aufBasis ? "neue Stelle stand schon auf der Basis" : "";
 }
 
 function nachbauGrund(befund, sha, { root, basis, head }) {
@@ -65,9 +66,8 @@ function nachbauGrund(befund, sha, { root, basis, head }) {
   if (!stehtIn(zeilenAm(head, vorhanden.datei, root), alt)) return "vorhandene Stelle im PR geändert";
   const hinzu = block(sha, neu, root);
   if (!hinzu) return "neue Stelle fehlt im Commit";
-  const aufBasis = standAufBasis({ basis, sha }, hinzu, root);
-  if (aufBasis === null) return "Suche auf der Basis gescheitert";
-  if (aufBasis) return "neue Stelle stand schon auf der Basis";
+  const herkunft = herkunftGrund({ basis, sha }, hinzu, root);
+  if (herkunft !== "") return herkunft;
   return stehtIn(zeilenAm(head, neu.datei, root), hinzu) ? "" : "neue Stelle fehlt am Endstand";
 }
 
