@@ -21,6 +21,35 @@ const DUPLICATED_BLOCK = `export function summe(werte) {
 }
 `;
 const OTHER_CODE = "export const wert = 1;\n";
+const DUPLICATED_STEPS = `jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+      - name: Abhaengigkeiten
+        run: npm ci --ignore-scripts
+      - name: Pruefen
+        run: node tools/pruefen.mjs --kopf "$KOPF" --aus "$RUNNER_TEMP/pruefung"
+`;
+const DUPLICATED_TEXT = `# Betrieb
+
+1. Pruefen: Im Dashboard steht unter \`Anrufe\`, ob ein Gespraech laeuft.
+2. Sperren: \`OUTBOUND_FROZEN=true\` setzen und im Render-Dashboard speichern.
+3. Warten: Erst wenn \`GET /healthz\` meldet, dass kein Anruf offen ist, geht es weiter.
+4. Neu starten: Im Render-Dashboard auf \`Manual Deploy\` klicken und das Protokoll lesen.
+5. Pruefen: Im Protokoll steht nach dem Start \`Hermes laeuft\`, sonst zurueckrollen.
+6. Freigeben: \`OUTBOUND_FROZEN\` wieder entfernen und einen Testanruf machen.
+7. Melden: Das Ergebnis mit Uhrzeit und Commit in den Betriebskanal schreiben.
+`;
+const OTHER_TEXT = "# Anderes\n\nHier steht etwas ganz anderes, das mit dem Betrieb nichts zu tun hat und lang genug ist.\n";
+const REPO_JSCPD_CONFIG = readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8");
 const INJECTION = "export const lauf = (befehl) => exec(befehl);\n";
 const FAKE_SEMGREP = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -75,6 +104,20 @@ test("basis-vergleich: eine neue Kopie ist rot und nennt die neue Datei", (conte
   const probed = probe(context, JSCPD, "jscpd");
   write(probed, "src/drei.js", DUPLICATED_BLOCK);
   expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/drei.js" });
+});
+
+test("basis-vergleich: eine neue Kopie in einem Workflow ist mit der Konfiguration des Repos rot", (context) => {
+  const files = { ".jscpd.json": REPO_JSCPD_CONFIG, ".github/workflows/eins.yml": DUPLICATED_STEPS };
+  const probed = probe(context, { ...files, ".github/workflows/zwei.yml": "name: Anderes\n" }, "jscpd");
+  write(probed, ".github/workflows/drei.yml", DUPLICATED_STEPS);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: ".github/workflows/drei.yml" });
+});
+
+test("basis-vergleich: eine neue Kopie in einem Markdown-Text ist mit der Konfiguration des Repos rot", (context) => {
+  const files = { ".jscpd.json": REPO_JSCPD_CONFIG, "docs/eins.md": DUPLICATED_TEXT, "docs/zwei.md": OTHER_TEXT };
+  const probed = probe(context, files, "jscpd");
+  write(probed, "docs/drei.md", DUPLICATED_TEXT);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "docs/drei.md" });
 });
 
 test("basis-vergleich: eine behobene Kopie ist gruen und nennt --basis-kuerzen", (context) => {
