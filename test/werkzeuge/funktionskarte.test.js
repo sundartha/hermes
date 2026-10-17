@@ -462,3 +462,35 @@ test(
     );
   },
 );
+
+test(
+  "ein Routenmuster mit :param oder * deckt die passende Anfrage ab, ein längeres Muster nicht",
+  TEST_FRIST,
+  async () => {
+    const werkzeuge = FLAECHEN.filter(({ art }) => art === "Werkzeug");
+    const mitMuster = (flaeche, path) => [
+      ...werkzeuge,
+      { art: "Route", flaeche, path },
+      { art: "Route", flaeche: "GET /healthz", path: "/healthz" },
+    ];
+    const karte = (flaeche) => ({
+      ...NUMMER_KARTE,
+      flaechen: ["get_agent_number", "get_agent_status", flaeche],
+    });
+    for (const [flaeche, path] of [
+      ["POST /:pfad", "/:pfad"],
+      ["POST /*", "/*"],
+    ]) {
+      const lauf = await pruefen(
+        bestand({ vorher: sauberVorher(karte(flaeche)), flaechen: mitMuster(flaeche, path) }),
+      );
+      assert.equal(lauf.exit, 0, `${flaeche}: ${lauf.stdout}${lauf.stderr}`);
+    }
+    const laenger = "POST /mcp/:mehr";
+    const rot = await pruefen(
+      bestand({ vorher: sauberVorher(karte(laenger)), flaechen: mitMuster(laenger, "/mcp/:mehr") }),
+    );
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(rot.stderr, /nummer\.md: kein Schritt ruft POST \/mcp\/:mehr auf/);
+  },
+);
