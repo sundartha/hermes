@@ -28,16 +28,22 @@ const HUELLENFELDER = new Set([
   "sitzung",
 ]);
 
+const istObjekt = (wert) => wert !== null && typeof wert === "object" && !Array.isArray(wert);
+
 function rezeptLesen(text) {
   const bloecke = [...text.matchAll(REZEPT_BLOCK)];
   if (bloecke.length !== 1) {
     return { fehler: [`braucht genau einen Block \`\`\`json rezept, hat ${bloecke.length}`] };
   }
+  let rezept;
   try {
-    return { rezept: JSON.parse(bloecke[0][1]), fehler: [] };
+    rezept = JSON.parse(bloecke[0][1]);
   } catch (fehler) {
     return { fehler: [`Rezept ist kein gültiges JSON: ${fehler.message}`] };
   }
+  return istObjekt(rezept)
+    ? { rezept, fehler: [] }
+    : { fehler: ["Rezept muss ein JSON-Objekt sein"] };
 }
 
 function erwartungFehler(erwartung, nummer) {
@@ -93,6 +99,7 @@ function hintergrundFehler(schritt, nummer, { hatBefehl, hintergruende }) {
 }
 
 function schrittFehler(schritt, nummer, hintergruende) {
+  if (!istObjekt(schritt)) return [`Schritt ${nummer}: muss ein JSON-Objekt sein`];
   const fehler = [];
   const hatBefehl = Array.isArray(schritt.befehl) && schritt.befehl.length > 0;
   if (hatBefehl === (schritt.abwarten !== undefined)) {
@@ -104,7 +111,12 @@ function schrittFehler(schritt, nummer, hintergruende) {
     fehler.push(`Schritt ${nummer}: braucht mindestens eine Erwartung an die Antwort („erwarte“)`);
     return fehler;
   }
-  return [...fehler, ...schritt.erwarte.flatMap((erwartung) => erwartungFehler(erwartung, nummer))];
+  const erwartungsfehler = schritt.erwarte.flatMap((erwartung) =>
+    istObjekt(erwartung)
+      ? erwartungFehler(erwartung, nummer)
+      : [`Schritt ${nummer}: jede Erwartung muss ein JSON-Objekt sein`],
+  );
+  return [...fehler, ...erwartungsfehler];
 }
 
 function formFehler(text, rezept) {
