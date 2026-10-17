@@ -55,6 +55,36 @@ test("Unterdrückungen: ein vorgemerkter neuer Eintrag in eslint-suppressions.js
   assert.match(lauf.ausgabe, /src\/neu\.js -> complexity: 0 -> 1/);
 });
 
+test("Unterdrückungen: ein vorgemerkter Eintrag in eslint-suppressions.json ohne Zahl ist am Tor rot", (context) => {
+  const repo = repoMit(context, { "src/alt.js": 2 });
+  writeFiles(repo, { [UNTERDRUECKUNGEN]: `${JSON.stringify({ "src/alt.js": { complexity: {} } })}\n` });
+  runIn(repo, "git", ["add", UNTERDRUECKUNGEN]);
+  const lauf = tor(repo);
+  assert.equal(lauf.status, EXIT_ROT, lauf.ausgabe);
+  assert.match(lauf.ausgabe, /src\/alt\.js -> complexity: 2 -> /);
+});
+
+test("Unterdrückungen: ein Eintrag ohne Zahl im alten Stand zählt als 0 und lässt sich streichen", (context) => {
+  const statusNach = (zahlen) => {
+    const repo = repoMit(context, {});
+    writeFiles(repo, { [UNTERDRUECKUNGEN]: `${JSON.stringify({ "src/alt.js": { complexity: {} } })}\n` });
+    commitAll(repo, "ohne Zahl");
+    vormerken(repo, zahlen);
+    return tor(repo).status;
+  };
+  const status = [{ "src/alt.js": 0 }, {}, { "src/alt.js": KLEINSTER_ANSTIEG }].map(statusNach);
+  assert.deepEqual(status, [EXIT_GRUEN, EXIT_GRUEN, EXIT_ROT]);
+});
+
+test("Unterdrückungen: ein Eintrag ohne Zahl in eslint-suppressions.json bleibt rot, auch wenn er sich nicht ändert", (context) => {
+  const repo = repoMit(context, {});
+  writeFiles(repo, { [UNTERDRUECKUNGEN]: `${JSON.stringify({ "src/alt.js": { complexity: {} } })}\n` });
+  commitAll(repo, "ohne Zahl");
+  runIn(repo, "git", ["add", UNTERDRUECKUNGEN]);
+  const lauf = tor(repo);
+  assert.equal(lauf.status, EXIT_ROT, lauf.ausgabe);
+});
+
 test("Unterdrückungen: vorgemerktes Senken und Streichen in eslint-suppressions.json ist am Tor grün", (context) => {
   const repo = repoMit(context, { "src/alt.js": 2, "src/weg.js": 1 });
   vormerken(repo, { "src/alt.js": 1 });
