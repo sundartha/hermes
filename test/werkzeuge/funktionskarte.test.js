@@ -11,6 +11,7 @@ const FUNKTIONSKARTE = join(REPO, "tools", "funktionskarte.mjs");
 const TEST_FRIST = { timeout: 170000 };
 const LAUF_FRIST_MS = 160000;
 const EXIT_ROT = 1;
+const EXIT_AUFRUF = 2;
 const EXIT_BLOCKIERT = 3;
 const STATUS_SIGNATUR_ABGELEHNT = 403;
 const OFFEN = "tools/basis/funktionskarte-offen.json";
@@ -78,15 +79,19 @@ function bestand({ vorher, nachher = {}, flaechen = FLAECHEN }) {
   return wurzel;
 }
 
-function pruefen(wurzel, env = process.env) {
+function aufrufen(wurzel, argumente, env = process.env) {
   return new Promise((fertig) => {
     execFile(
       process.execPath,
-      [FUNKTIONSKARTE, "pruefen", "--basis", "HEAD", "--flaechen-datei", "flaechen.json"],
+      [FUNKTIONSKARTE, ...argumente],
       { cwd: wurzel, env, timeout: LAUF_FRIST_MS },
       (fehler, stdout, stderr) => fertig({ exit: fehler?.code ?? 0, stdout, stderr }),
     );
   });
+}
+
+function pruefen(wurzel, env = process.env) {
+  return aufrufen(wurzel, ["pruefen", "--basis", "HEAD", "--flaechen-datei", "flaechen.json"], env);
 }
 
 const sauberVorher = (karte = NUMMER_KARTE) => ({
@@ -351,7 +356,8 @@ test(
   TEST_FRIST,
   async () => {
     const wurzel = bestand({ vorher: sauberVorher() });
-    const lauf = await pruefen(wurzel, { ...process.env, TMPDIR: join(wurzel, "flaechen.json") });
+    const tempOrdnerIstDatei = join(wurzel, "flaechen.json");
+    const lauf = await pruefen(wurzel, { ...process.env, TMPDIR: tempOrdnerIstDatei });
     assert.equal(lauf.exit, EXIT_BLOCKIERT, `${lauf.stdout}${lauf.stderr}`);
     assert.match(lauf.stderr, /nummer\.md: hermes-ctl start scheiterte/);
     assert.match(lauf.stdout, /Funktionskarte: blockiert, 1 Befunde\./);
@@ -393,5 +399,66 @@ test(
       assert.equal(lauf.exit, EXIT_ROT, `${lauf.stdout}${lauf.stderr}`);
       assert.match(lauf.stderr, meldung);
     }
+  },
+);
+
+test(
+  "eine Anfrage an einen anderen Ursprung als die Sitzung deckt keine Route von Hermes ab",
+  TEST_FRIST,
+  async () => {
+    const fremd = "POST /hermes-ctl/ende/:kennung";
+    const flaechen = [
+      ...FLAECHEN,
+      { art: "Route", flaeche: fremd, path: "/hermes-ctl/ende/:kennung" },
+    ];
+    const karte = {
+      flaechen: [fremd],
+      schritte: [
+        {
+          befehl: ["anbieter", "elevenlabs-ende", { conversation_id: "conv_fremd" }],
+          erwarte: [{ pfad: "conversation_id", gleich: "conv_fremd" }],
+        },
+      ],
+    };
+    const vorher = { ...sauberVorher(), "docs/funktionen/fremd.md": karteText(karte) };
+    const lauf = await pruefen(bestand({ vorher, flaechen }));
+    assert.equal(lauf.exit, EXIT_ROT, `${lauf.stdout}${lauf.stderr}`);
+    assert.match(lauf.stderr, /fremd\.md: kein Schritt ruft POST \/hermes-ctl\/ende\/:kennung auf/);
+  },
+);
+
+test(
+  "ein falscher Aufruf oder eine Basis, die kein Commit ist, endet mit Exit 2",
+  TEST_FRIST,
+  async () => {
+    const wurzel = bestand({ vorher: sauberVorher() });
+    const ohneBefehl = await aufrufen(wurzel, []);
+    assert.equal(ohneBefehl.exit, EXIT_AUFRUF);
+    const falscheBasis = await aufrufen(wurzel, [
+      "pruefen",
+      "--basis",
+      "gibt-es-nicht",
+      "--flaechen-datei",
+      "flaechen.json",
+    ]);
+    assert.equal(falscheBasis.exit, EXIT_AUFRUF);
+    assert.match(falscheBasis.stderr, /Die Basis gibt-es-nicht ist kein Commit/);
+  },
+);
+
+test(
+  "fehlt die Liste offener Flächen im Basis-Commit, entfällt nur der Vergleich mit der Basis",
+  TEST_FRIST,
+  async () => {
+    const { [OFFEN]: liste, ...ohneListe } = sauberVorher();
+    const sauber = await pruefen(bestand({ vorher: ohneListe, nachher: { [OFFEN]: liste } }));
+    assert.equal(sauber.exit, 0, `${sauber.stdout}${sauber.stderr}`);
+    const unsortiert = { [OFFEN]: ["get_agent_status", "GET /healthz"] };
+    const rot = await pruefen(bestand({ vorher: ohneListe, nachher: unsortiert }));
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(
+      rot.stderr,
+      /funktionskarte-offen\.json: eine Fläche je Eintrag, sortiert, ohne Doppelte/,
+    );
   },
 );
