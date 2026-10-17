@@ -32,14 +32,14 @@ function starteMitIssue(context, ghSkript, felder = { absicht: ABSICHT }) {
 test("phase mit Feld absicht startet nicht, wenn das Issue den Abschnitt „Absicht“ nicht wörtlich hat, und legt keinen Worktree an", (context) => {
   const { lauf, repo } = starteMitIssue(context, `console.log(${JSON.stringify(`## Absicht\n\n${ABSICHT.slice(0, -1)}\n\n## Ziel\n`)});`);
   assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
-  assert.match(lauf.stderr, /Issue #7: der Abschnitt „## Absicht“ fehlt oder weicht von absicht in phase\.json ab/);
+  assert.match(lauf.stderr, new RegExp(`Issue #${ISSUE}: der Abschnitt „## Absicht“ fehlt oder weicht von absicht in phase\\.json ab`));
   assert.equal(existsSync(join(repo, ".claude/worktrees")), false);
 });
 
 test("phase mit Feld absicht startet nicht, wenn das Issue nicht lesbar ist", (context) => {
   const { lauf } = starteMitIssue(context, "process.exit(1);");
   assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
-  assert.match(lauf.stderr, /Issue #7 nicht lesbar; ohne seinen Abschnitt „## Absicht“ startet die Phase nicht/);
+  assert.match(lauf.stderr, new RegExp(`Issue #${ISSUE} nicht lesbar; ohne seinen Abschnitt „## Absicht“ startet die Phase nicht`));
 });
 
 test("ein Issue mit wörtlich gleicher Absicht ist kein Befund, eine Phase ohne Feld fragt das Issue gar nicht", () => {
