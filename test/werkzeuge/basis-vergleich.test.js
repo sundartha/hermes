@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
+import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { isolatedEnvironment, probeDirectory, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
@@ -76,7 +77,7 @@ function expectRun({ directory, environment }, args, { status, shows, hides }) {
   const run = spawnSync(process.execPath, [SCRIPT, ...args], options);
   const output = `${run.stdout}${run.stderr}`;
   assert.equal(run.status, status, output);
-  if (shows !== undefined) assert.ok(output.includes(shows), output);
+  for (const text of [shows ?? []].flat()) assert.ok(output.includes(text), output);
   if (hides !== undefined) assert.ok(!output.includes(hides), output);
 }
 
@@ -118,6 +119,12 @@ test("basis-vergleich: eine neue Kopie in einem Markdown-Text ist mit der Konfig
   const probed = probe(context, files, "jscpd");
   write(probed, "docs/drei.md", DUPLICATED_TEXT);
   expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "docs/drei.md" });
+});
+
+test("basis-vergleich: eine neue Kopie nennt Zweck, echte Behebung, Umgehungsverbot und Ausweg aus zweck.json", (context) => {
+  const probed = probe(context, JSCPD, "jscpd");
+  write(probed, "src/drei.js", DUPLICATED_BLOCK);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: ["src/drei.js", ...zweckBlock(MELDUNG.JSCPD)] });
 });
 
 test("basis-vergleich: eine behobene Kopie ist gruen und nennt --basis-kuerzen", (context) => {

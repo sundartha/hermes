@@ -55,6 +55,7 @@ export const MELDUNG = {
   TS_SPERRE: "ts-sperre",
   WERKZEUGABBRUCH: "werkzeugabbruch",
   MIGRATIONEN: "migrationen",
+  JSCPD: "jscpd",
 };
 
 export const ALTER_TEST = "alter test";
