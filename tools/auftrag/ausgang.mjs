@@ -7,18 +7,25 @@ const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+)$/;
 const MELDUNG = /^(Gleichwertig|Nötig): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
 const BAU = "bau";
+const AUSSTIEG_KOPF = "Auftrag passt nicht";
+const VORAUSSETZUNG_KOPF = "Voraussetzung fehlt";
+const ALTER_TEST_KOPF = "Alter Test hält altes Verhalten fest";
 const AUSWEG_BEI = "Ausweg bei Prüfung: ";
+const PRUEFUNG_TRENNER = ", ";
 const OHNE_ROTE_PRUEFUNG = "keine";
 const ALTER_TEST = "alterTest";
 const AUSWEGE = [
-  { art: AUSSTIEG, anfang: /^Auftrag passt nicht:\s*(\S.*)$/, rollen: ["bau", "test"] },
-  { art: "voraussetzung", anfang: /^Voraussetzung fehlt:\s*(\S.*)$/, rollen: ["bau"] },
-  { art: ALTER_TEST, anfang: /^Alter Test hält altes Verhalten fest:\s*(\S.*)$/, rollen: ["bau", "test"] },
+  { art: AUSSTIEG, anfang: new RegExp(`^${AUSSTIEG_KOPF}:\\s*(\\S.*)$`), rollen: ["bau", "test"] },
+  { art: "voraussetzung", anfang: new RegExp(`^${VORAUSSETZUNG_KOPF}:\\s*(\\S.*)$`), rollen: ["bau"] },
+  { art: ALTER_TEST, anfang: new RegExp(`^${ALTER_TEST_KOPF}:\\s*(\\S.*)$`), rollen: ["bau", "test"] },
 ];
+const AUSSTIEG_ZEILE = new RegExp(`^${AUSSTIEG_KOPF}: \\S`, "m");
+const ALTER_TEST_ZEILE = new RegExp(`^${ALTER_TEST_KOPF}: \\S`, "m");
+const AUSWEG_BEI_ZEILE = new RegExp(`^${AUSWEG_BEI}(\\S.*)$`, "gm");
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
 const ZWECK_KOPF = /^Zweck ([^:\s][^:]*):(.*)$/;
-const ABSATZ_ENDE = /^(?:Auftrag passt nicht|Voraussetzung fehlt|Alter Test hält altes Verhalten fest|Gleichwertig|Nötig):/;
+const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, "Gleichwertig", "Nötig"].join("|")}):`);
 
 function nurPlatzhalter(text) {
   return !INHALT.test(text.replace(PLATZHALTER, ""));
@@ -94,7 +101,19 @@ export function ausgang(text, rolle) {
 }
 
 export function auswegBei(ids) {
-  return `${AUSWEG_BEI}${ids.length > 0 ? ids.join(", ") : OHNE_ROTE_PRUEFUNG}`;
+  return `${AUSWEG_BEI}${ids.length > 0 ? ids.join(PRUEFUNG_TRENNER) : OHNE_ROTE_PRUEFUNG}`;
+}
+
+export function pruefungenDerAuswege(text) {
+  return [...text.matchAll(AUSWEG_BEI_ZEILE)].flatMap(([, ids]) => ids.split(PRUEFUNG_TRENNER));
+}
+
+export function enthaeltAusstiegszeile(text) {
+  return AUSSTIEG_ZEILE.test(text);
+}
+
+export function enthaeltAlteTestZeile(text) {
+  return ALTER_TEST_ZEILE.test(text);
 }
 
 function lesarten(rest) {
