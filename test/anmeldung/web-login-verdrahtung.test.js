@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
 import { echtWarten } from "../echt-warten.js";
 
 process.env.STRIPE_SECRET_KEY = "sk_test_x";
@@ -16,7 +16,7 @@ const echtesFetch = globalThis.fetch;
 const WORKOS = "https://api.workos.test";
 const stub = { workosUser: null, stripeStatus: "active", stripeAbrufe: [] };
 
-globalThis.fetch = async (url, opts) => {
+globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   if (u.startsWith(`${WORKOS}/user_management/authenticate`)) {
     const sid = "sess_workos_1";
@@ -33,7 +33,10 @@ globalThis.fetch = async (url, opts) => {
       headers: { "content-type": "application/json" },
     });
   }
-  return echtesFetch(url, opts);
+  return echtesFetch(url, {
+    ...opts,
+    signal: AbortSignal.any([fristSignal(), ...(opts.signal ? [opts.signal] : [])]),
+  });
 };
 
 async function makePgliteRunner() {

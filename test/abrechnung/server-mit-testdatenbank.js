@@ -4,7 +4,7 @@ import pg from "pg";
 import { BASE_ENV, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
 
 const BETREIBER_MAIL = "betreiber@kv2.invalid";
 export const LOGIN_SUB = "kv2-betreiber";
@@ -96,7 +96,10 @@ function aussenweltAbfangen(testPostfach) {
       return new Response(JSON.stringify({ user }), { status: 200 });
     }
     if (!ziel.startsWith(LOKAL)) throw new Error(`Testaufbau: Zugriff nach außen gesperrt (${ziel})`);
-    return echtesFetch(url, optionen);
+    return echtesFetch(url, {
+      ...optionen,
+      signal: AbortSignal.any([fristSignal(), ...(optionen.signal ? [optionen.signal] : [])]),
+    });
   };
 }
 

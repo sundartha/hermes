@@ -4,6 +4,7 @@ import http from "node:http";
 import { readJsonBody } from "../scripts/convo-bench/http-fake-helpers.mjs";
 import { startConsultPump } from "../scripts/convo-bench/consult-pump.mjs";
 import { withFetch } from "./helpers.js";
+import { fristSignal } from "./gemeinsam/antwortfrist.mjs";
 
 const CALL_ID = "call1";
 const CONSULT_PATH = `/api/calls/${CALL_ID}/consult`;
@@ -77,8 +78,11 @@ test("AL-D3-N7: startConsultPump wirft ueber stop(), wenn die Pumpe auf eine 403
   const echtesFetch = globalThis.fetch;
   let antwortErhalten;
   const antwortBeiDerPumpe = new Promise((resolve) => (antwortErhalten = resolve));
-  const beobachtetesFetch = async (...args) => {
-    const antwort = await echtesFetch(...args);
+  const beobachtetesFetch = async (url, optionen = {}) => {
+    const antwort = await echtesFetch(url, {
+      ...optionen,
+      signal: AbortSignal.any([fristSignal(), ...(optionen.signal ? [optionen.signal] : [])]),
+    });
     antwortErhalten();
     return antwort;
   };

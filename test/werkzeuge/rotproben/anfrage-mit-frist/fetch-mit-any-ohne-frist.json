@@ -1,0 +1,10 @@
+{
+  "titel": "Test schickt fetch mit AbortSignal.any, in dessen Liste keine Frist steht",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "const abbruch = new AbortController();",
+      "export const antwort = await fetch(\"http://127.0.0.1:3999/healthz\", { signal: AbortSignal.any([abbruch.signal]) });"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}
