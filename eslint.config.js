@@ -14,8 +14,9 @@ const ZEITGLIEDER_BESTAND_DATEI = new URL(
 const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
   : {};
-const ENDUNGEN = "{js,mjs,cjs,ts,mts,cts}";
-const MODUL_ENDUNGEN = "{mjs,cjs,ts,mts,cts}";
+const ENDUNGEN_LISTE = ["js", "mjs", "cjs", "ts", "mts", "cts"];
+const ENDUNGEN = `{${ENDUNGEN_LISTE.join(",")}}`;
+const ENDUNGEN_OHNE_JS = `{${ENDUNGEN_LISTE.filter((endung) => endung !== "js").join(",")}}`;
 const TS_ENDUNGEN = "{ts,mts,cts}";
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
@@ -151,9 +152,9 @@ const STEUERUNG_AUSNAHMEN = [
 const PROZESS_WAECHTER = "./process-guards.js";
 const KONFIG_GRUPPEN = ["telnyxElevenLabs", "elevenLabsPlayTts"];
 const KONFIG_SKRIPTE_MIT_BLATT = [
-  `scripts/telnyx-call-latency.${MODUL_ENDUNGEN}`,
-  `scripts/smoke-stripe-payment.${MODUL_ENDUNGEN}`,
-  `scripts/el-nummern-registrierung.${MODUL_ENDUNGEN}`,
+  `scripts/telnyx-call-latency.${ENDUNGEN_OHNE_JS}`,
+  `scripts/smoke-stripe-payment.${ENDUNGEN_OHNE_JS}`,
+  `scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`,
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const ABLEHNUNGS_TABELLE = {
@@ -198,12 +199,12 @@ const hermesBloecke =
         },
         {
           name: "hermes-wort-nur-in-wahlskripte",
-          files: [`scripts/el-nummern-registrierung.${MODUL_ENDUNGEN}`, `scripts/push-elevenlabs.${MODUL_ENDUNGEN}`],
+          files: [`scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`, `scripts/push-elevenlabs.${ENDUNGEN_OHNE_JS}`],
           rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
         },
         {
           name: "hermes-wort-nur-in-geheimnis-skripte",
-          files: [`scripts/iel-geheimnisse*.${MODUL_ENDUNGEN}`],
+          files: [`scripts/iel-geheimnisse*.${ENDUNGEN_OHNE_JS}`],
           rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
         },
         {
@@ -327,8 +328,8 @@ const dateiBloecke = [
       "no-restricted-imports": [
         "error",
         {
-          paths: ["../telephony/outbound-gates.js", "../telephony/outbound-gates.ts"].map((name) => ({
-            name,
+          paths: ENDUNGEN_LISTE.map((endung) => ({
+            name: `../telephony/outbound-gates.${endung}`,
             importNames: ["tariffCentsPerMin"],
             message:
               "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
@@ -339,7 +340,7 @@ const dateiBloecke = [
   },
   {
     name: "anruf-unterbrechungen-nur-lesen",
-    files: [`scripts/anruf-unterbrechungen.${MODUL_ENDUNGEN}`],
+    files: [`scripts/anruf-unterbrechungen.${ENDUNGEN_OHNE_JS}`],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -353,7 +354,7 @@ const dateiBloecke = [
   },
   {
     name: "probe-as-nur-lesen",
-    files: [`scripts/probe-as-faehigkeiten.${MODUL_ENDUNGEN}`],
+    files: [`scripts/probe-as-faehigkeiten.${ENDUNGEN_OHNE_JS}`],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -384,7 +385,7 @@ const dateiBloecke = [
   },
   {
     name: "iel-mess-auflegestufen",
-    files: [`scripts/iel-mess*.${MODUL_ENDUNGEN}`],
+    files: [`scripts/iel-mess*.${ENDUNGEN_OHNE_JS}`],
     ignores: ["scripts/iel-mess.mjs"],
     rules: {
       "no-restricted-syntax": [
