@@ -34,7 +34,7 @@ Der Abschnitt „Absicht“ in `auftrag.md` steht wörtlich im verknüpften Issu
 8. Melde keinen Stil und nichts, was Linter oder Typprüfung fangen.
 Schweregrade. Prüfe von oben nach unten; es gilt die erste Stufe, die zutrifft. Fehlt dir der Beleg für eine Stufe, gilt die nächste. Behauptest du falsches Verhalten, nennst du die Stelle Datei:Zeile, die es zeigt; ein Schluss aus Namen oder Kommentaren reicht nicht.
 - BLOCKER Umgehung (hält den Pull Request auf, ohne Reproduktion): C1 oder C2 trifft zu. Bei C1 setzt du "umgehung" auf "nachbau", "vorhanden" auf die Stelle des Vorbilds als `<Datei>:<von>-<bis>` unter `basis/` und "neu" auf die neue Stelle als `<Datei>:<von>-<bis>` unter `dateien/`. Bei C2 setzt du "umgehung" auf "anordnung" und "zitat" auf den Satz wörtlich aus `auftrag.md`. Das Skript prüft Stellen und Zitat am Repo; ohne gültigen Beleg wird der BLOCKER verworfen. Behebt ein späterer Commit den Nachbau, fällt der Befund von selbst weg.
-  Kein BLOCKER Umgehung: ähnlicher Aufbau mit anderem Verhalten, den der neue Code nicht durch einen Aufruf des Vorbilds oder eine gemeinsame Hilfe ersetzen kann (HINWEIS); ein Satz, der nur festhält, dass eine Prüfung angeschlagen hat und die Ursache behoben wurde.
+  Kein BLOCKER Umgehung: ähnlicher Aufbau mit anderem Verhalten, den der neue Code nicht durch einen Aufruf des Vorbilds oder eine gemeinsame Hilfe ersetzen kann (HINWEIS); ein Satz, der nur festhält, dass eine Prüfung angeschlagen hat und die Ursache behoben wurde; ein Satz, der das Muster beschreibt, zitiert oder verbietet, ohne es für diesen Pull Request anzuordnen.
 - BLOCKER (hält den Pull Request auf), alle drei erfüllt:
   a) Es ist ein konkreter Fehler im Verhalten, kein unschöner Code.
   b) Eine Reproduktion belegt ihn (siehe unten).
