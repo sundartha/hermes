@@ -1,0 +1,19 @@
+{
+  "titel": "Neue Route in die eingefrorene Liste geschrieben statt eine Karte",
+  "vorher": {
+    "flaechen.json": [
+      "[{ \"art\": \"Route\", \"flaeche\": \"GET /healthz\", \"path\": \"/healthz\" }]"
+    ],
+    "tools/basis/funktionskarte-offen.json": ["[\"GET /healthz\"]"]
+  },
+  "dateien": {
+    "flaechen.json": [
+      "[",
+      "  { \"art\": \"Route\", \"flaeche\": \"GET /healthz\", \"path\": \"/healthz\" },",
+      "  { \"art\": \"Route\", \"flaeche\": \"GET /api/beispiel\", \"path\": \"/api/beispiel\" }",
+      "]"
+    ],
+    "tools/basis/funktionskarte-offen.json": ["[\"GET /api/beispiel\", \"GET /healthz\"]"]
+  },
+  "erwartet": "darf nur kürzer werden"
+}

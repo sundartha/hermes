@@ -1,0 +1,32 @@
+{
+  "titel": "Funktionskarte (jede Fläche hat eine Karte, deren Rezept sie aufruft und die Antwort prüft)",
+  "pfade": [
+    "tools/funktionskarte.mjs",
+    "tools/funktionskarte/karten.mjs",
+    "tools/funktionskarte/lauf.mjs",
+    "tools/funktionskarte/zuordnung.mjs",
+    "tools/flaechen.mjs",
+    "tools/basis/funktionskarte-offen.json"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/funktionskarte.mjs", "pruefen", "--basis", "{basis}"],
+    "zaehlen": "zahlen",
+    "vor": [" Befunde."]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Flächen ohne Funktionskarte",
+    "datei": "tools/basis/funktionskarte-offen.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "befehl": [
+      "node",
+      "{wurzel}/tools/funktionskarte.mjs",
+      "pruefen",
+      "--basis",
+      "HEAD~1",
+      "--flaechen-datei",
+      "flaechen.json"
+    ]
+  }
+}

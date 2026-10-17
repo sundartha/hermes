@@ -1,0 +1,18 @@
+{
+  "titel": "Neue Route ohne Funktionskarte und ohne Listeneintrag",
+  "vorher": {
+    "flaechen.json": [
+      "[{ \"art\": \"Route\", \"flaeche\": \"GET /healthz\", \"path\": \"/healthz\" }]"
+    ],
+    "tools/basis/funktionskarte-offen.json": ["[\"GET /healthz\"]"]
+  },
+  "dateien": {
+    "flaechen.json": [
+      "[",
+      "  { \"art\": \"Route\", \"flaeche\": \"GET /healthz\", \"path\": \"/healthz\" },",
+      "  { \"art\": \"Route\", \"flaeche\": \"GET /api/beispiel\", \"path\": \"/api/beispiel\" }",
+      "]"
+    ]
+  },
+  "erwartet": "GET /api/beispiel hat keine Funktionskarte"
+}

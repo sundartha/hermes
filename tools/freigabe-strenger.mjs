@@ -27,6 +27,7 @@ export const OLD_FINDING_LISTS = new Map([
   ["tools/basis/test-importe.json", WHOLE_FILE],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
   ["tools/basis/katalog-ohne-test.txt", WHOLE_FILE],
+  ["tools/basis/funktionskarte-offen.json", WHOLE_FILE],
   ["eslint-suppressions.json", SUPPRESSION_COUNTS],
 ]);
 
