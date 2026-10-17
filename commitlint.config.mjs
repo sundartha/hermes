@@ -5,20 +5,32 @@ const BEGRUENDUNG = /\n\n(?:Warum|Ursache): \S/;
 const HERKUNFT = /^(?:Paket: \S+|Auftrag: [^\s/]+\/\S+)$/m;
 const DEPENDABOT = /^Signed-off-by: dependabot\[bot\] <support@github\.com>$/m;
 const RUECKNAHME = /^Revert ".+"\n\nThis reverts commit [0-9a-f]{40}\.$/m;
+const AUFRAEUMEN = /^(?:fixup|squash|amend)!/i;
 
 function verlangt(muster, meldung) {
   return ({ raw }) => [muster.test(raw ?? ""), meldung];
 }
 
+function verbietet(muster, meldung) {
+  return ({ header }) => [!muster.test(header ?? ""), meldung];
+}
+
 export default {
   defaultIgnores: false,
-  ignores: [(nachricht) => DEPENDABOT.test(nachricht) || RUECKNAHME.test(nachricht)],
+  ignores: [
+    (nachricht) =>
+      !AUFRAEUMEN.test(nachricht) && (DEPENDABOT.test(nachricht) || RUECKNAHME.test(nachricht)),
+  ],
   plugins: [
     {
       rules: {
         begruendung: verlangt(
           BEGRUENDUNG,
           "Ein Absatz muss mit „Warum:“ beginnen, bei einer Fehlerbehebung mit „Ursache:“.",
+        ),
+        "kein-fixup": verbietet(
+          AUFRAEUMEN,
+          "Ein Commit mit fixup!, squash! oder amend! gehört in den Commit, den er verbessert: vor dem Merge mit „git rebase -i --autosquash <Basis>“ falten.",
         ),
         herkunft: verlangt(HERKUNFT, "Eine Zeile „Paket: NN“ oder „Auftrag: <phase>/<id>“ fehlt."),
       },
@@ -29,5 +41,6 @@ export default {
     "body-leading-blank": [FEHLER, IMMER],
     begruendung: [FEHLER, IMMER],
     herkunft: [FEHLER, IMMER],
+    "kein-fixup": [FEHLER, IMMER],
   },
 };
