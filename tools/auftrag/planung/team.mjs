@@ -22,6 +22,8 @@ const LEERER_KOPF = "ref: refs/heads/abdruck\n";
 const ROHINHALT = "* -text -eol -ident -filter -working-tree-encoding\n";
 const GIT_GRUEN = 0;
 const GIT_OHNE_TREFFER = 1;
+const ZWEIG_REF = "refs/heads/";
+const ZWEIG_EINTRAG = /^branch\.(.+)\.[^.]+$/;
 export const ANTWORT_OHNE_JSON = "Antwort ohne JSON-Block";
 const OHNE = "ohne";
 const FEHLERZEILEN = 5;
@@ -147,9 +149,25 @@ function inhaltsAbdruck(pfad) {
   return `${stand.mode}:${createHash("sha256").update(readFileSync(pfad)).digest("hex")}`;
 }
 
+function eigenerZweig(root) {
+  const kopf = git(root, ["symbolic-ref", "-q", "HEAD"], { erlaubt: [GIT_GRUEN, GIT_OHNE_TREFFER] }).trim();
+  return kopf.startsWith(ZWEIG_REF) ? kopf.slice(ZWEIG_REF.length) : null;
+}
+
+function fremderZweig(eintrag, zweig) {
+  const name = ZWEIG_EINTRAG.exec(eintrag.split("\n", 1)[0])?.[1];
+  return zweig !== null && name !== undefined && name !== zweig;
+}
+
+function konfigurationsAbdruck(root, pfad) {
+  const zweig = eigenerZweig(root);
+  const eintraege = git(root, ["config", "--file", pfad, "--list", "--null"]).split("\0").filter((eintrag) => !fremderZweig(eintrag, zweig));
+  return `${lstatSync(pfad).mode}:${createHash("sha256").update(eintraege.join("\0")).digest("hex")}`;
+}
+
 function gitAbdruck(root, umgebung, pfade) {
   const dateien = GIT_STEUERUNG.flatMap((name) => dateienIn(pfade[name]));
-  const steuerung = Object.fromEntries(dateien.map((pfad) => [relative(root, pfad), inhaltsAbdruck(pfad)]));
+  const steuerung = Object.fromEntries(dateien.map((pfad) => [relative(root, pfad), pfad === pfade.config ? konfigurationsAbdruck(root, pfad) : inhaltsAbdruck(pfad)]));
   const index = git(root, ["ls-files", "-z", "-s", "-v"], { zusatz: { ...umgebung, GIT_INDEX_FILE: pfade.index } });
   const kopf = git(root, ["rev-parse", "-q", "--verify", "HEAD"], { erlaubt: [GIT_GRUEN, GIT_OHNE_TREFFER] }).trim();
   return { ...steuerung, [relative(root, pfade.index)]: index, HEAD: kopf };
