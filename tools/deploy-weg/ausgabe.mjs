@@ -280,11 +280,15 @@ export function statusWort(wert) {
   return STATUS_WOERTER.has(wert) ? wert : "unbekannt";
 }
 
+function wertOhnePruefungAlsText(wert) {
+  if (typeof wert === "boolean") return wert ? "ja" : "nein";
+  return String(wert);
+}
+
 function wertText(name, wert) {
   const pruefer = PRUEFER.get(name);
   if (pruefer === undefined || !pruefer(wert)) throw new AusgabeVerweigert();
-  if (typeof wert === "boolean") return wert ? "ja" : "nein";
-  return String(wert);
+  return wertOhnePruefungAlsText(wert);
 }
 
 function zeileErlaubt(text) {
@@ -324,7 +328,7 @@ export function ausgabeAnlegen(schreiben = standardSchreiben) {
 }
 
 function ausgabeWert(wert) {
-  const text = typeof wert === "boolean" ? (wert ? "ja" : "nein") : String(wert);
+  const text = wertOhnePruefungAlsText(wert);
   if (!zeileErlaubt(text)) throw new AusgabeVerweigert();
   return text;
 }
