@@ -1,3 +1,4 @@
+import { aufweckenMelden } from "./deploy.mjs";
 import { notfallErlaubt } from "./herkunft.mjs";
 import { hermesZugang } from "./netz.mjs";
 import { AUFWACHEN_TAKTE, ECHTE_UHR } from "./takt.mjs";
@@ -5,13 +6,8 @@ import { AUFWACHEN_TAKTE, ECHTE_UHR } from "./takt.mjs";
 const HTTP_OK = 200;
 
 async function aufwachen({ hermes, ausgabe }, { uhr, takte }) {
-  const wecken = await hermes.aufwecken({ uhr, takte, grenzeMs: takte.schutzgrenzeMs });
-  if (wecken.schutzgrenze) {
-    ausgabe.melde("rot_aufwachen_zeitgrenze", { schritt: "anrufpause", minuten: wecken.minuten });
-    return false;
-  }
-  if (wecken.frischGeweckt) ausgabe.melde("frisch_geweckt");
-  return true;
+  const rahmen = { schritt: "anrufpause", takte, grenzeMs: takte.schutzgrenzeMs };
+  return (await aufweckenMelden({ hermes, ausgabe, uhr }, rahmen)) !== null;
 }
 
 function bestaetigt({ ausgabe, an }, { status, daten }) {

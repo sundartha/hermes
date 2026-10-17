@@ -20,16 +20,20 @@ function schutzgrenzeMelden(ausgabe, { schritt, ergebnis }) {
   return false;
 }
 
-async function weckenImSchritt(kontext, { schritt, start, grenzeMs }) {
-  const { hermes, ausgabe, uhr, takte } = kontext;
-  const rest = grenzeMs - (uhr.jetzt() - start);
-  const wecken = await hermes.aufwecken({ uhr, takte: takte.aufwachen, grenzeMs: rest });
+export async function aufweckenMelden({ hermes, ausgabe, uhr }, { schritt, takte, grenzeMs }) {
+  const wecken = await hermes.aufwecken({ uhr, takte, grenzeMs });
   if (wecken.schutzgrenze) {
     ausgabe.melde("rot_aufwachen_zeitgrenze", { schritt, minuten: wecken.minuten });
     return null;
   }
   if (wecken.frischGeweckt) ausgabe.melde("frisch_geweckt");
   return wecken;
+}
+
+function weckenImSchritt(kontext, { schritt, start, grenzeMs }) {
+  const { uhr, takte } = kontext;
+  const rest = grenzeMs - (uhr.jetzt() - start);
+  return aufweckenMelden(kontext, { schritt, takte: takte.aufwachen, grenzeMs: rest });
 }
 
 function anrufeBeobachter({ hermes, ausgabe, uhr, takte }, ruhefenster) {
