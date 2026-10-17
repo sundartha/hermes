@@ -197,6 +197,34 @@ test("basis-vergleich: die Basislinie waechst weder durch Kuerzen noch durch Anl
   expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/zwei.js" });
 });
 
+const JSCPD_BASIS = "tools/basis/jscpd.json";
+const JSCPD_NEU_ANLEGEN = `node tools/basis-vergleich.mjs jscpd ${CREATE}`;
+
+function installedJscpd() {
+  return JSON.parse(readFileSync(join(REPO_ROOT, "node_modules/jscpd/package.json"), "utf8")).version;
+}
+
+function jscpdBaseline(probed) {
+  return JSON.parse(readFileSync(join(probed.directory, JSCPD_BASIS), "utf8"));
+}
+
+test("basis-vergleich: --basis-anlegen hält die installierte jscpd-Version fest", (context) => {
+  const probed = probe(context, JSCPD, "jscpd");
+  assert.equal(jscpdBaseline(probed).version, installedJscpd());
+});
+
+test("basis-vergleich: eine Basislinie für eine andere jscpd-Version ist rot und nennt den Befehl zum Neuanlegen", (context) => {
+  const probed = probe(context, JSCPD, "jscpd");
+  write(probed, JSCPD_BASIS, JSON.stringify({ ...jscpdBaseline(probed), version: OTHER_VERSION }));
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: JSCPD_NEU_ANLEGEN });
+});
+
+test("basis-vergleich: eine Basislinie ohne jscpd-Version ist rot", (context) => {
+  const probed = probe(context, JSCPD, "jscpd");
+  write(probed, JSCPD_BASIS, JSON.stringify({ befunde: jscpdBaseline(probed).befunde }));
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: installedJscpd() });
+});
+
 test("basis-vergleich: ohne Basislinie ist der Vergleich rot", (context) => {
   const directory = probeDirectory(context, JSCPD);
   expectRun({ directory }, ["jscpd"], { status: EXIT_FINDING, shows: "fehlt" });
