@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { ausklingBefunde, grenzeAbleiten, zeilenAus } from "./testlaufzeit/ausklingen.mjs";
 import { aufrufeInDateien, echtWartenBefunde } from "./testlaufzeit/echt-warten-statisch.mjs";
-import { hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
+import { TESTDATEI_ENDUNG, hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
 import { ausklingenStrenger, zeitgliederStrenger } from "./testlaufzeit/nur-strenger.mjs";
 import { zeitgliederBefunde } from "./testlaufzeit/zeitglieder.mjs";
 
@@ -76,7 +76,7 @@ function neueTestdateien(basis) {
     },
   )
     .split("\n")
-    .filter((datei) => datei.endsWith(".test.js"));
+    .filter((datei) => datei.endsWith(TESTDATEI_ENDUNG));
 }
 
 function streichbar(zeilen, basis) {

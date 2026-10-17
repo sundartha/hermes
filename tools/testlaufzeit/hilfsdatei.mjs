@@ -1,4 +1,4 @@
-const TESTDATEI_ENDUNG = ".test.js";
+export const TESTDATEI_ENDUNG = ".test.js";
 
 export function hilfsdateiBefunde(zeilen) {
   return zeilen
