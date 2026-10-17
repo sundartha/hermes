@@ -21,7 +21,7 @@ export function zeilenAus(datei) {
     .map((zeile) => JSON.parse(zeile));
 }
 
-function runde(ms) {
+export function runde(ms) {
   return Math.round(ms * NACHKOMMASTELLEN) / NACHKOMMASTELLEN;
 }
 
