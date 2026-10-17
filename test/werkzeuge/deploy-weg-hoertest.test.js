@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { HOERTEST_TITEL, hoertest } from "../../tools/deploy-weg/hoertest.mjs";
+import { HOERTEST_TITEL, hoertestIssueAnlegenOderErsetzen } from "../../tools/deploy-weg/hoertest.mjs";
 import {
   anfragenAn,
   attrappeStarten,
@@ -27,8 +27,8 @@ async function hoertestMit(kontext, welt = {}) {
   const attrappe = await attrappeStarten(kontext, weltAnlegen(welt));
   const einstellungen = einstellungenFuer("hoertest", attrappe.basis);
   const { zeilen, ausgabe } = sammler();
-  const ok = await hoertest({ einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe });
-  return { ok, text: zeilen.join("\n"), attrappe };
+  await hoertestIssueAnlegenOderErsetzen({ einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe });
+  return { text: zeilen.join("\n"), attrappe };
 }
 
 function volleSeite() {
@@ -75,7 +75,6 @@ function erwarteterText(basis) {
 
 test("Hörtest-Issue wird angelegt, wenn keins offen ist, mit festem Titel und nur Commit, Teil-Namen, Lauf-Link und Anleitung", async (kontext) => {
   const lauf = await hoertestMit(kontext);
-  assert.equal(lauf.ok, true);
   const [anlage, ...mehr] = anfragenAn(lauf.attrappe, "POST", /\/issues$/);
   assert.deepEqual(mehr, []);
   assert.deepEqual(anlage.koerper, { title: HOERTEST_TITEL, body: erwarteterText(lauf.attrappe.basis) });
@@ -87,7 +86,6 @@ test("Hörtest-Issue wird angelegt, wenn keins offen ist, mit festem Titel und n
 test("Hörtest-Issue: ein offenes Issue des Bots wird ersetzt statt ein zweites anzulegen", async (kontext) => {
   const issue = { number: VORHANDENES_ISSUE, title: HOERTEST_TITEL, user: { login: BOT } };
   const lauf = await hoertestMit(kontext, { issues: [issue] });
-  assert.equal(lauf.ok, true);
   assert.deepEqual(anfragenAn(lauf.attrappe, "POST", /\/issues$/), []);
   const aenderungen = anfragenAn(lauf.attrappe, "PATCH", /\/issues\//);
   assert.deepEqual(
@@ -109,7 +107,7 @@ test("Hörtest-Issue: scheitert die Suche, wird nichts geschrieben", async (kont
   const attrappe = await attrappeStarten(kontext, weltAnlegen({ issuesStatus: HTTP_FEHLER }));
   const einstellungen = einstellungenFuer("hoertest", attrappe.basis);
   const rahmen = { einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe: sammler().ausgabe };
-  await assert.rejects(hoertest(rahmen), { name: "Abbruch", schritt: "issue_suche" });
+  await assert.rejects(hoertestIssueAnlegenOderErsetzen(rahmen), { name: "Abbruch", schritt: "issue_suche" });
   assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
 });
 
@@ -119,7 +117,7 @@ test("Hörtest-Issue: liegt das offene Issue des Bots auf Seite 2, wird es erset
     [HTTP_OK, volleSeite()],
     [HTTP_OK, [issue]],
   ]);
-  assert.equal(await hoertest(rahmen), true);
+  await hoertestIssueAnlegenOderErsetzen(rahmen);
   assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
   const aenderungen = anfragenAn(attrappe, "PATCH", /\/issues\//);
   assert.deepEqual(
@@ -135,7 +133,7 @@ test("Hörtest-Issue: ist Seite 2 nicht lesbar, wird abgebrochen und nichts gesc
   ];
   for (const seiteZwei of unlesbar) {
     const { attrappe, rahmen } = await mitSeiten(kontext, [[HTTP_OK, volleSeite()], seiteZwei]);
-    await assert.rejects(hoertest(rahmen), { name: "Abbruch", schritt: "issue_suche" });
+    await assert.rejects(hoertestIssueAnlegenOderErsetzen(rahmen), { name: "Abbruch", schritt: "issue_suche" });
     assert.deepEqual(anfragenAn(attrappe, "POST", /\/issues$/), []);
     assert.deepEqual(anfragenAn(attrappe, "PATCH", /\/issues\//), []);
   }
@@ -146,7 +144,7 @@ test("Hörtest-Issue: ist es auf keiner Seite, wird nach dem Lesen aller Seiten 
     [HTTP_OK, volleSeite()],
     [HTTP_OK, []],
   ]);
-  assert.equal(await hoertest(rahmen), true);
+  await hoertestIssueAnlegenOderErsetzen(rahmen);
   const gelesen = anfragenAn(attrappe, "GET", /\/issues\?/);
   assert.deepEqual(gelesen.map(({ pfad }) => seitenNummer(pfad)), [1, 2]);
   assert.equal(anfragenAn(attrappe, "POST", /\/issues$/).length, 1);
@@ -159,7 +157,7 @@ test("Hörtest-Issue: stehen mehrere Issues des Bots auf verschiedenen Seiten, w
     [HTTP_OK, [neueres, ...volleSeite().slice(1)]],
     [HTTP_OK, [aelteres]],
   ]);
-  assert.equal(await hoertest(rahmen), true);
+  await hoertestIssueAnlegenOderErsetzen(rahmen);
   const aenderungen = anfragenAn(attrappe, "PATCH", /\/issues\//);
   assert.deepEqual(
     aenderungen.map(({ pfad }) => pfad),

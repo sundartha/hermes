@@ -19,6 +19,7 @@ import {
 
 const EXIT_OK = 0;
 const EXIT_ROT = 1;
+const NEUES_ISSUE = 99;
 const AUFRUF = /Aufruf: node tools\/deploy-weg\.mjs/;
 const AUSLOESEN = /\/deploys$/;
 const MASKE = "::add-mask::";
@@ -51,6 +52,16 @@ test("CLI hoertest mit unzulässigem Teil-Namen meldet den Aufruf", async () => 
   assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.ausgabe, AUFRUF);
   assert.ok(!lauf.ausgabe.includes("12345678"));
+});
+
+test("CLI hoertest grün: legt das Hörtest-Issue an und endet mit Exit 0", async (kontext) => {
+  const attrappe = await attrappeStarten(kontext, weltAnlegen());
+  const argumente = ["hoertest", "--commit", COMMIT_C, "--teile", "anrufstart.de.eigentuemer,stimmen"];
+  const lauf = await werkzeugStarten(argumente, umgebungFuer(attrappe.basis));
+  assert.equal(lauf.status, EXIT_OK, lauf.ausgabe);
+  assert.equal(anfragenAn(attrappe, "POST", /\/issues$/).length, 1);
+  assert.match(lauf.ausgabe, new RegExp("Hörtest-Issue #" + NEUES_ISSUE + " angelegt"));
+  assert.match(lauf.ausgabe, /Ergebnis: ja/);
 });
 
 test("CLI deploy ohne Einstellungen nennt nur die Namen der fehlenden Einstellungen", async () => {
