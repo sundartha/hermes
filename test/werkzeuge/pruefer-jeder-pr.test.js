@@ -289,3 +289,18 @@ test("ein Paket-PR, dessen Issue keinen Abschnitt „Absicht“ hat, wird nicht 
     },
   ]);
 });
+
+test("ein Paket-PR aus einem Fork, dessen Issue keinen Abschnitt „Absicht“ hat, wird trotzdem gelesen", async (context) => {
+  stumm(context);
+  const lauf = await pruefeUndMelde(context, {
+    ...paketPr(context),
+    branch: PAKET_BRANCH,
+    prRepo: FORK_REPO,
+    issueText: "## Ziel\n\nZahl 2",
+  });
+  assert.equal(lauf.aufrufe, ZWEI_COMMITS);
+  assert.deepEqual(
+    lauf.status.map(({ state, description }) => [state, description]),
+    [["success", "2 Commits geprüft, 0 übernommen"]],
+  );
+});
