@@ -99,3 +99,20 @@ test("Kettensumme: ändert sich mit jeder Datei der Kette, auch einer nur mittel
     fs.rmSync(wurzel, { recursive: true, force: true });
   }
 });
+
+test("Kettensumme: ändert sich mit jeder Migrationsdatei, auch im Rückbau-Ordner, und gilt auch ohne schema.sql", async () => {
+  const wurzel = attrappe();
+  try {
+    fs.rmSync(path.join(wurzel, "src/db/schema.sql"));
+    fs.mkdirSync(path.join(wurzel, "src/db/migrations/rueckbau"), { recursive: true });
+    fs.writeFileSync(path.join(wurzel, "src/db/migrations/0001_ausgang.sql"), "CREATE TABLE eins (wert int);\n");
+    const anfang = await summeNach(wurzel);
+    const nachAusgang = await summeNach(wurzel, "src/db/migrations/0001_ausgang.sql", "CREATE TABLE zwei (wert int);\n");
+    assert.notEqual(nachAusgang, anfang);
+    const nachNeuer = await summeNach(wurzel, "src/db/migrations/0002_neu.sql", "CREATE TABLE drei (wert int);\n");
+    assert.notEqual(nachNeuer, nachAusgang);
+    assert.notEqual(await summeNach(wurzel, "src/db/migrations/rueckbau/0003_weg.sql", "DROP TABLE drei;\n"), nachNeuer);
+  } finally {
+    fs.rmSync(wurzel, { recursive: true, force: true });
+  }
+});

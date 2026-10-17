@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
 import { cwd, env } from "node:process";
 
 import { cruise } from "dependency-cruiser";
@@ -8,6 +8,7 @@ import { cruise } from "dependency-cruiser";
 export const VORLAGE_UNABHAENGIG = "HERMES_VORLAGE_UNABHAENGIG";
 const KETTENANFANG = "src/db/migrate.js";
 const SCHEMA = "src/db/schema.sql";
+const MIGRATIONEN = "src/db/migrations";
 const LOKAL = "local";
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const jeWurzel = new Map();
@@ -24,9 +25,20 @@ export async function vorlagenkette(wurzel) {
   return [...kette].sort();
 }
 
+function schemadateien(wurzel) {
+  const ordner = join(wurzel, MIGRATIONEN);
+  const migrationen = existsSync(ordner)
+    ? readdirSync(ordner, { recursive: true, withFileTypes: true })
+        .filter((eintrag) => eintrag.isFile())
+        .map((eintrag) => relative(wurzel, join(eintrag.parentPath, eintrag.name)))
+        .sort()
+    : [];
+  return [SCHEMA, ...migrationen].filter((datei) => existsSync(join(wurzel, datei)));
+}
+
 export function kettensumme(kette, wurzel) {
   const hash = createHash("sha256");
-  for (const datei of [...kette, SCHEMA]) {
+  for (const datei of [...kette, ...schemadateien(wurzel)]) {
     const inhalt = readFileSync(join(wurzel, datei), "utf8");
     hash.update(`${datei.length}:${datei}${inhalt.length}:${inhalt}`);
   }
