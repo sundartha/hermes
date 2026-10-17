@@ -11,6 +11,8 @@ const FUNKTIONSKARTE = join(REPO, "tools", "funktionskarte.mjs");
 const TEST_FRIST = { timeout: 170000 };
 const LAUF_FRIST_MS = 160000;
 const EXIT_ROT = 1;
+const EXIT_BLOCKIERT = 3;
+const STATUS_SIGNATUR_ABGELEHNT = 403;
 const OFFEN = "tools/basis/funktionskarte-offen.json";
 const FLAECHEN = [
   { art: "Werkzeug", flaeche: "get_agent_number" },
@@ -76,12 +78,12 @@ function bestand({ vorher, nachher = {}, flaechen = FLAECHEN }) {
   return wurzel;
 }
 
-function pruefen(wurzel) {
+function pruefen(wurzel, env = process.env) {
   return new Promise((fertig) => {
     execFile(
       process.execPath,
       [FUNKTIONSKARTE, "pruefen", "--basis", "HEAD", "--flaechen-datei", "flaechen.json"],
-      { cwd: wurzel, timeout: LAUF_FRIST_MS },
+      { cwd: wurzel, env, timeout: LAUF_FRIST_MS },
       (fehler, stdout, stderr) => fertig({ exit: fehler?.code ?? 0, stdout, stderr }),
     );
   });
@@ -288,7 +290,10 @@ test(
       /ablehnung\.md: kein Schritt ruft POST \/webhooks\/elevenlabs\/lookup auf/,
     );
     const gruen = await pruefen(
-      bestand({ vorher: vorher([{ pfad: "status", gleich: 403 }]), flaechen }),
+      bestand({
+        vorher: vorher([{ pfad: "status", gleich: STATUS_SIGNATUR_ABGELEHNT }]),
+        flaechen,
+      }),
     );
     assert.equal(gruen.exit, 0, `${gruen.stdout}${gruen.stderr}`);
   },
@@ -301,3 +306,72 @@ test("ein Hintergrund-Schritt, den kein Schritt abwartet, ist rot", TEST_FRIST, 
   assert.equal(lauf.exit, EXIT_ROT);
   assert.match(lauf.stderr, /Hintergrund status wird von keinem Schritt abgewartet/);
 });
+
+test("eine unsortierte oder doppelte Liste offener Flächen ist rot", TEST_FRIST, async () => {
+  const flaechen = [...FLAECHEN, { art: "Route", flaeche: "GET /api/zwei", path: "/api/zwei" }];
+  for (const offen of [
+    ["GET /healthz", "GET /api/zwei"],
+    ["GET /api/zwei", "GET /healthz", "GET /healthz"],
+  ]) {
+    const vorher = { ...sauberVorher(), [OFFEN]: offen };
+    const lauf = await pruefen(bestand({ vorher, flaechen }));
+    assert.equal(lauf.exit, EXIT_ROT);
+    assert.match(
+      lauf.stderr,
+      /funktionskarte-offen\.json: eine Fläche je Eintrag, sortiert, ohne Doppelte/,
+    );
+  }
+});
+
+test("eine Fläche, für die zwei Karten zuständig sind, ist rot", TEST_FRIST, async () => {
+  const zweite = {
+    flaechen: ["get_agent_status"],
+    schritte: [
+      { befehl: STATUS_LESEN.befehl, erwarte: [{ pfad: "ergebnis.owner", typ: "string" }] },
+    ],
+  };
+  const vorher = { ...sauberVorher(), "docs/funktionen/status.md": karteText(zweite) };
+  const lauf = await pruefen(bestand({ vorher }));
+  assert.equal(lauf.exit, EXIT_ROT);
+  assert.match(
+    lauf.stderr,
+    /status\.md: get_agent_status steht schon in docs\/funktionen\/nummer\.md; genau eine Karte je Fläche/,
+  );
+});
+
+test("ein Listeneintrag für eine Fläche, die es nicht mehr gibt, ist rot", TEST_FRIST, async () => {
+  const vorher = { ...sauberVorher(), [OFFEN]: ["GET /alt", "GET /healthz"] };
+  const lauf = await pruefen(bestand({ vorher }));
+  assert.equal(lauf.exit, EXIT_ROT);
+  assert.match(lauf.stderr, /GET \/alt gibt es nicht mehr; streiche den Eintrag/);
+});
+
+test(
+  "startet die Sitzung von hermes-ctl nicht, ist die Prüfung blockiert",
+  TEST_FRIST,
+  async () => {
+    const wurzel = bestand({ vorher: sauberVorher() });
+    const lauf = await pruefen(wurzel, { ...process.env, TMPDIR: join(wurzel, "flaechen.json") });
+    assert.equal(lauf.exit, EXIT_BLOCKIERT, `${lauf.stdout}${lauf.stderr}`);
+    assert.match(lauf.stderr, /nummer\.md: hermes-ctl start scheiterte/);
+    assert.match(lauf.stdout, /Funktionskarte: blockiert, 1 Befunde\./);
+  },
+);
+
+test(
+  "ein abgewarteter Hintergrund-Schritt deckt seine Fläche ab und wird an seiner Antwort geprüft",
+  TEST_FRIST,
+  async () => {
+    const imHintergrund = { befehl: STATUS_LESEN.befehl, hintergrund: "status" };
+    const abwarten = (erwarte) => ({
+      ...NUMMER_KARTE,
+      schritte: [NUMMER_LESEN, imHintergrund, { abwarten: "status", erwarte }],
+    });
+    const gruen = await pruefen(bestand({ vorher: sauberVorher(abwarten(STATUS_LESEN.erwarte)) }));
+    assert.equal(gruen.exit, 0, `${gruen.stdout}${gruen.stderr}`);
+    const falsch = abwarten([{ pfad: "ergebnis.calls", gleich: 1 }]);
+    const rot = await pruefen(bestand({ vorher: sauberVorher(falsch) }));
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(rot.stderr, /nummer\.md Schritt 3: ergebnis\.calls ist 0, erwartet 1/);
+  },
+);
