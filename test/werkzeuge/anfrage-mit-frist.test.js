@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import * as anfrageMitFristModul from "../gemeinsam/anfrage-mit-frist.mjs";
+import * as antwortfristModul from "../gemeinsam/antwortfrist.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
-import { befundZeilen } from "./testregeln-probe.js";
+import { befundTexte, befundZeilen } from "./testregeln-probe.js";
 
 const REGEL = "hermes-tests/anfrage-mit-frist";
 const DATEI = "test/anrufe/probe.test.js";
 const ABRUF = "await fetch(`${srv.localUrl}/api/calls`);";
+const HILFSMODULE = new Map([
+  ["test/gemeinsam/antwortfrist.mjs", antwortfristModul],
+  ["test/gemeinsam/anfrage-mit-frist.mjs", anfrageMitFristModul],
+]);
+const HILFSNAME_ODER_DATEI = /\b[a-z]+(?:[A-Z][a-z]+)+\b|test\/[\w/.-]+\.mjs/g;
 
 function befunde(zeilen) {
   return befundZeilen({ verzeichnis: REPO_ROOT, datei: DATEI, regel: REGEL }, zeilen);
@@ -14,6 +21,24 @@ function befunde(zeilen) {
 
 function nurBefunde(kopf, aufrufe) {
   return befunde([...kopf, ...aufrufe]);
+}
+
+function exportiert(modul, name) {
+  return name in modul || modul.default?.name === name;
+}
+
+function genannteHilfen(meldung) {
+  const hilfen = [];
+  let namen = [];
+  for (const [treffer] of meldung.matchAll(HILFSNAME_ODER_DATEI)) {
+    if (treffer.startsWith("test/")) {
+      hilfen.push({ datei: treffer, namen });
+      namen = [];
+    } else {
+      namen.push(treffer);
+    }
+  }
+  return { hilfen, ohneDatei: namen };
 }
 
 test("anfrage-mit-frist: ein nackter fetch an den Testserver wird gemeldet", () => {
@@ -160,4 +185,17 @@ test("anfrage-mit-frist: andere Aufrufe namens request oder get bleiben frei", (
     "map.get(schluessel);",
   ];
   assert.deepEqual(nurBefunde(kopf, aufrufe), []);
+});
+
+test("anfrage-mit-frist: die Meldung nennt nur Hilfen, die ihre genannte Datei auch exportiert", () => {
+  const [meldung] = befundTexte({ verzeichnis: REPO_ROOT, datei: DATEI, regel: REGEL }, [ABRUF]);
+  const { hilfen, ohneDatei } = genannteHilfen(meldung);
+  assert.deepEqual(ohneDatei, [], meldung);
+  assert.ok(hilfen.length > 0, meldung);
+  for (const { datei, namen } of hilfen) {
+    const modul = HILFSMODULE.get(datei);
+    assert.ok(modul, `${datei} ist keine bekannte Hilfsdatei: ${meldung}`);
+    assert.ok(namen.length > 0, `${datei} ohne Namen: ${meldung}`);
+    for (const name of namen) assert.ok(exportiert(modul, name), `${name} fehlt in ${datei}`);
+  }
 });

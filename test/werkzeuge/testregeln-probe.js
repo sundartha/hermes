@@ -8,7 +8,7 @@ import { REPO_ROOT } from "./probe-repo.js";
 const TESTREGELN_PLUGIN = "hermes-tests";
 const TESTREGELN_URL = pathToFileURL(join(REPO_ROOT, "tools/eslint-rules/tests.js")).href;
 
-export function befundZeilen({ verzeichnis, datei, regel, bestand }, zeilen) {
+function befunde({ verzeichnis, datei, regel, bestand }, zeilen) {
   const linter = new Linter({ cwd: verzeichnis });
   const optionen = bestand === undefined ? [] : [{ bestand }];
   const konfiguration = {
@@ -20,8 +20,15 @@ export function befundZeilen({ verzeichnis, datei, regel, bestand }, zeilen) {
   });
   const abbruch = meldungen.find(({ fatal }) => fatal);
   if (abbruch !== undefined) throw new Error(`Probe nicht lesbar: ${abbruch.message}`);
-  const eigene = meldungen.filter(({ ruleId }) => ruleId === regel);
-  return eigene.map(({ line }) => zeilen[line - 1].trim());
+  return meldungen.filter(({ ruleId }) => ruleId === regel);
+}
+
+export function befundZeilen(ort, zeilen) {
+  return befunde(ort, zeilen).map(({ line }) => zeilen[line - 1].trim());
+}
+
+export function befundTexte(ort, zeilen) {
+  return befunde(ort, zeilen).map(({ message }) => message);
 }
 
 export function konfigurationMitTestregeln(regel, bestand) {

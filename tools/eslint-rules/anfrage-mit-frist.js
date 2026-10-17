@@ -1,5 +1,5 @@
 const MELDUNG =
-  "Anfrage ohne Antwortfrist: nutze abrufMitFrist, anfrageMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
+  "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
 const HTTP_FUNKTIONEN = new Set(["request", "get"]);
 const GLOBALE_HUELLEN = new Set(["globalThis", "global"]);
