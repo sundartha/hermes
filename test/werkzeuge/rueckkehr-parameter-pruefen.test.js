@@ -519,6 +519,162 @@ test("Konstanten, Funktion und Zweig zaehlen nur als Code im Syntaxbaum, nicht a
   assert.equal(result.status, EXIT_OK, result.stderr);
 });
 
+function meldeJedeZusatzzeile(kontext, clean, zeilen) {
+  for (const [fall, zeile] of Object.entries(zeilen)) {
+    meldeJedenFall(kontext, clean.replace(CALL_LINE, `${CALL_LINE}\n${zeile}`), [
+      [fall, new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+      [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+    ]);
+  }
+}
+
+test("jede Zuweisung an URLSearchParams, location oder ihre Eigenschaften wird gemeldet, auch ueber window, globalThis und self", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const ersatz = "class {\n    get() {\n      return null;\n    }\n  }";
+  const zuweisungen = {
+    "Prototyp von get": "  URLSearchParams.prototype.get = () => null;",
+    "ueber window": `  window.URLSearchParams = ${ersatz};`,
+    "ueber globalThis": `  globalThis.URLSearchParams = ${ersatz};`,
+    "ueber self": `  self.URLSearchParams = ${ersatz};`,
+    "per Schluessel an window": `  window["URLSearchParams"] = ${ersatz};`,
+    "per Schluessel an einem anderen Objekt": `  document.defaultView["URLSearchParams"] = ${ersatz};`,
+    "per Template-Schluessel": `  document.defaultView[\`URLSearchParams\`] = ${ersatz};`,
+    "per berechnetem Schluessel": `  const name = "URLSearch" + "Params";\n  document.defaultView[name] = ${ersatz};`,
+    "Name als Argument von defineProperty": '  Object.defineProperty(document.defaultView, "URLSearchParams", { value: null });',
+    "Name als Template in defineProperty": "  Object.defineProperty(document.defaultView, `URLSearchParams`, { value: null });",
+    "Prototyp ueber eine zweite Instanz": '  Object.getPrototypeOf(new URLSearchParams("")).get = () => null;',
+    "im Kopf einer for-Schleife": "  for (new URLSearchParams(location.search); ; ) break;",
+    "ueber defineProperty": '  Object.defineProperty(URLSearchParams.prototype, "get", { value: () => null });',
+    "globalThis als Alias": "  const global = globalThis;",
+    "self als Alias": "  const fenster = self;",
+    "location.search": '  location.search = "?card=ok";',
+    "window.location": '  window.location = "/app?card=ok";',
+    "document.location per Schluessel": '  document["location"] = "/app?card=ok";',
+    "location per Schluessel gelesen": '  const suche = location["search"];',
+    "location als Schluessel": "  const treffer = lookup[location];",
+    "zusammengesetzte Zuweisung": '  window.location.search += "&card=ok";',
+    "hochgezaehlt": "  location.port++;",
+    "geloescht": "  delete location.search;",
+    "Destrukturierung in ein Objekt": '  ({ search: location.search } = { search: "?card=ok" });',
+    "Destrukturierung mit Vorgabe": '  ({ search: location.search = "?card=ok" } = {});',
+    "Destrukturierung in eine Liste": '  [location.hash] = ["#karte"];',
+    "Rest einer Liste": '  [...location.hash] = "#karte";',
+    "for-in": "  for (location.hash in { karte: 1 });",
+    "for-of": '  for (location.hash of ["#karte"]);',
+  };
+  meldeJedeZusatzzeile(kontext, clean, zuweisungen);
+  const lesend = [
+    "  let ziel;",
+    "  const erster = [ziel][0];",
+    "  ziel = location.hash;",
+    "  const kopie = { hash: location.hash, pfad: window.location.pathname };",
+    '  window.location.assign("/app");',
+    "  self.addEventListener(\"pageshow\", () => ziel);",
+  ];
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: clean.replace(CALL_LINE, `${CALL_LINE}\n${lesend.join("\n")}`) });
+  assert.equal(result.stdout, "");
+  assert.equal(result.status, EXIT_OK, result.stderr);
+});
+
+test("Werkzeuge der Metaprogrammierung, mit denen sich URLSearchParams auf Umwegen ersetzen liesse, werden gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const umwege = {
+    "Prototyp einer Instanz aus URL": "  Object.getPrototypeOf(new URL(location.href).searchParams).get = () => null;",
+    "zusammengesetzter Name": '  const name = "URLSearch" + "Params";\n  Object.defineProperty(top, name, { value: null });',
+    Object: "  const schluessel = Object.keys({});",
+    Reflect: "  Reflect.ownKeys({});",
+    Proxy: "  const huelle = new Proxy({}, {});",
+    eval: '  eval("1");',
+    Function: '  const rechne = new Function("return 1");',
+    URL: '  const adresse = new URL("https://example.com");',
+    prototype: "  const art = Array.prototype;",
+    __proto__: "  const art = [].__proto__;",
+    constructor: "  const art = [].constructor;",
+    searchParams: "  const suche = anker.searchParams;",
+    defaultView: "  const fenster = document.defaultView;",
+    "Name als Text": '  const name = "constructor";',
+    "Name als Template": "  const name = `prototype`;",
+    "dynamischer Import": '  import("./fremd.js");',
+    "berechneter Schluessel in einem Muster": '  const schluessel = "UR" + "LSearchParams";\n  const { [schluessel]: Klasse } = anker;',
+    "berechneter Schluessel in einem Objekt": '  const schluessel = "UR" + "LSearchParams";\n  const objekt = { [schluessel]: null };',
+    "__defineGetter__": '  window.__defineGetter__("UR" + "LSearchParams", () => null);',
+    "__ als Schluesseltext": '  anker["__defineSetter__"]("wert", () => null);',
+    top: "  const fenster = top;",
+    parent: "  const fenster = parent;",
+    frames: "  const fenster = frames;",
+    opener: "  const fenster = opener;",
+  };
+  meldeJedeZusatzzeile(kontext, clean, umwege);
+});
+
+test("Wege, Text als Code auszufuehren, werden gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const html = '"<b></b>"';
+  const wege = {
+    "Code als Text": '  const code = "URLSearchParams.prototype.get = () => null;";',
+    "javascript-Adresse": '  window.location.assign("javascript:void 0");',
+    "setTimeout mit Text": '  setTimeout("void 0");',
+    "setTimeout mit Variable": '  const code = "void 0";\n  setTimeout(code);',
+    "setInterval mit Text": '  setInterval("void 0");',
+    "setTimeout ueber window": "  window.setTimeout(() => null);",
+    "setTimeout ohne Argument": "  setTimeout();",
+    "setTimeout mit neu zugewiesener Funktion": '  function spaeter() {}\n  spaeter = "void 0";\n  setTimeout(spaeter);',
+    "setTimeout mit ueberdeckter Funktion": '  function spaeter() {}\n  {\n    const spaeter = "void 0";\n    setTimeout(spaeter);\n  }',
+    "setTimeout mit Funktion als Parameter ueberdeckt": "  function spaeter() {}\n  function plane(spaeter) {\n    setTimeout(spaeter);\n  }",
+    "setTimeout mit Funktion aus einem inneren Block": "  {\n    function spaeter() {}\n  }\n  setTimeout(spaeter);",
+    "setTimeout mit zweimal deklarierter Funktion": "  function spaeter() {}\n  {\n    function spaeter() {}\n  }\n  setTimeout(spaeter);",
+    createElement: '  const knoten = document.createElement("div");',
+    createAttribute: '  const merkmal = document.createAttribute("data-x");',
+    setAttribute: '  anker.setAttribute("onclick", "void 0");',
+    setAttributeNS: '  anker.setAttributeNS(null, "onclick", "void 0");',
+    innerHTML: `  anker.innerHTML = ${html};`,
+    outerHTML: `  anker.outerHTML = ${html};`,
+    insertAdjacentHTML: `  anker.insertAdjacentHTML("beforeend", ${html});`,
+    srcdoc: `  rahmen.srcdoc = ${html};`,
+    write: `  document.write(${html});`,
+    writeln: `  document.writeln(${html});`,
+    createContextualFragment: `  document.createRange().createContextualFragment(${html});`,
+    setHTMLUnsafe: `  anker.setHTMLUnsafe(${html});`,
+    parseHTMLUnsafe: `  Document.parseHTMLUnsafe(${html});`,
+  };
+  meldeJedeZusatzzeile(kontext, clean, wege);
+  const erlaubt = ["  setTimeout(() => null);", "  function spaeter() {}", "  setInterval(spaeter);", '  const hinweis = "Abo gebucht";', "  const zahl = 1;"];
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: clean.replace(CALL_LINE, `${CALL_LINE}\n${erlaubt.join("\n")}`) });
+  assert.equal(result.stdout, "");
+  assert.equal(result.status, EXIT_OK, result.stderr);
+});
+
+test("ein script-Tag in anderer Schreibweise wird gelesen, und ausfuehrbares Markup ausserhalb eines script-Blocks wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  meldeJedenFall(kontext, `${clean}\n<SCRIPT>\n  URLSearchParams.prototype.get = () => null;\n</SCRIPT>`, [
+    ["Grossbuchstaben Karte", new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
+    ["Grossbuchstaben Abo", new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
+  ]);
+  const mitLeerzeichen = runInMiniRoot(kontext, { [SHELL_FILE]: clean.replace("</script>", "</script >") });
+  assert.equal(mitLeerzeichen.stdout, "");
+  assert.equal(mitLeerzeichen.status, EXIT_OK, mitLeerzeichen.stderr);
+  const zeile = clean.split("\n").length + 1;
+  const markup = {
+    "on-Attribut": '<img src="x" onerror="void 0">',
+    "javascript-Adresse": '<a href="javascript:void 0">x</a>',
+    "set:html": "<div set:html={inhalt}></div>",
+    srcdoc: '<iframe srcdoc="x"></iframe>',
+    "offener script-Block": "<script>",
+  };
+  for (const [fall, teil] of Object.entries(markup)) {
+    meldeJedenFall(kontext, `${clean}\n${teil}`, [[fall, new RegExp(`BillingIsland\\.astro:${zeile} \\S+ ist ausfuehrbares Markup ausserhalb eines lesbaren script-Blocks`)]]);
+  }
+});
+
+test("ein Datumsformat in einem script-Block jeder Schreibweise wird gemeldet, auch in einem HTML-Kommentar", (kontext) => {
+  const seite = ["---", "---", "<p></p>", "<SCRIPT>", "  new Date().toLocaleDateString();", "</SCRIPT >", "<!--", "<script>", "  new Intl.DateTimeFormat();", "</script>", "-->"];
+  const result = runInMiniRoot(kontext, { [DATE_PAGE]: seite.join("\n"), [SHELL_FILE]: shellSource([CARD_BRANCH, SUB_BRANCH]) });
+  const zeilen = result.stdout.trim().split("\n");
+  const befunde = zeilen.map((zeile) => zeile.split(" ", 2).join(" "));
+  assert.deepEqual(befunde, [`${DATE_PAGE}:5 toLocale`, `${DATE_PAGE}:9 Intl`]);
+  assert.equal(result.status, EXIT_FINDING, result.stderr);
+});
+
 test("ein Skript-Block in einem HTML-Kommentar wird nicht ausgefuehrt und zaehlt nicht", (kontext) => {
   const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
   for (const [fall, shell] of Object.entries({ geschlossen: `<!--\n${clean}\n-->`, offen: `<!--\n${clean}` })) {

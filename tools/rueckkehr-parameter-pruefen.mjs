@@ -12,16 +12,54 @@ const PORTAL_PATHS_FILE = "src/portal-paths.js";
 const WEB_SOURCE_DIR = "apps/web/src";
 const RETURN_NAME = /^RETURN_/;
 const RETURN_PARAM_PREFIX = /^RETURN_PARAM_/;
-const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
-const MARKUP_PART = /<[!]--[\s\S]*?(?:-->|$)|<script\b[^>]*>([\s\S]*?)<\/script>/dg;
+const SCRIPT_PART = String.raw`<script\b[^>]*>([\s\S]*?)<\/script\s*>`;
+const SCRIPT_BLOCK = new RegExp(SCRIPT_PART, "gi");
+const MARKUP_PART = new RegExp(String.raw`<[!]--[\s\S]*?(?:-->|$)|${SCRIPT_PART}`, "dgi");
+const EXECUTABLE_MARKUP = /<script|\son[a-z]+\s*=|javascript:|set:html|srcdoc/gi;
 const PARSER_OPTIONS = { ecmaVersion: "latest", sourceType: "module", range: true };
 const RETURN_FUNCTION = "returnMessageText";
 const PARAMS_NAME = "params";
 const QUERY_SOURCES = new Set(["location.search", "window.location.search"]);
 const SCOPE_NODES = new Set(["BlockStatement", "Program"]);
 const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassBody"]);
-const GUARDED_NAMES = new Set([PARAMS_NAME, "location", "window", "URLSearchParams"]);
+const QUERY_CLASS = "URLSearchParams";
+const LOCATION = "location";
+const GLOBAL_OBJECTS = new Set(["window", "globalThis", "self", "top", "parent", "frames", "opener"]);
+const GUARDED_KEYS = new Set([QUERY_CLASS, LOCATION]);
+const META_WORDS = new Set([
+  "Object",
+  "Reflect",
+  "Proxy",
+  "eval",
+  "Function",
+  "URL",
+  "prototype",
+  "constructor",
+  "searchParams",
+  "defaultView",
+  "createElement",
+  "createAttribute",
+  "setAttribute",
+  "setAttributeNS",
+  "innerHTML",
+  "outerHTML",
+  "insertAdjacentHTML",
+  "srcdoc",
+  "write",
+  "writeln",
+  "createContextualFragment",
+  "setHTMLUnsafe",
+  "parseHTMLUnsafe",
+]);
+const META_PREFIX = "__";
+const FORBIDDEN_TEXT = [...GUARDED_KEYS, ...META_WORDS, META_PREFIX, "javascript:"];
+const TIMERS = new Set(["setTimeout", "setInterval"]);
+const FUNCTION_VALUES = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
+const GUARDED_NAMES = new Set([PARAMS_NAME, ...GUARDED_KEYS, ...GLOBAL_OBJECTS]);
+const WRITE_LEFT = new Set(["AssignmentExpression", "AssignmentPattern", "ForInStatement", "ForOfStatement"]);
+const WRITE_ALWAYS = new Set(["UpdateExpression", "UnaryExpression", "ArrayPattern", "RestElement"]);
 const UNREADABLE_SCRIPT = "ein script-Block der Shell laesst sich nicht als JavaScript lesen";
+const EXECUTABLE_HINT = "ist ausfuehrbares Markup ausserhalb eines lesbaren script-Blocks";
 const UNCLEAR_CALL = "returnMessageText wird anders als mit params.get(...) als Argumenten aufgerufen oder weitergereicht";
 const HIDDEN_FUNCTION = "returnMessageText ist am Ort eines Aufrufs nicht sichtbar";
 const NOT_FROM_LOCATION = "params ist beim Aufruf nicht aus new URLSearchParams(window.location.search) gesetzt";
@@ -68,17 +106,28 @@ function parseScript(text) {
   }
 }
 
+function executableMarkup(source, from, to) {
+  return [...source.slice(from, to).matchAll(EXECUTABLE_MARKUP)].map((hit) => ({
+    line: lineAt(source, from + hit.index),
+    text: `${hit[0].trim()} ${EXECUTABLE_HINT}`,
+  }));
+}
+
 function readScripts(source) {
   const programs = [];
-  const unreadable = [];
+  const findings = [];
+  let markupStart = 0;
   for (const part of source.matchAll(MARKUP_PART)) {
+    findings.push(...executableMarkup(source, markupStart, part.index));
+    markupStart = part.index + part[0].length;
     if (part[1] === undefined) continue;
     const [start] = part.indices[1];
     const { program, error } = parseScript(part[1]);
-    if (error) unreadable.push({ line: lineAt(source, start) + error.lineNumber - 1, text: UNREADABLE_SCRIPT });
+    if (error) findings.push({ line: lineAt(source, start) + error.lineNumber - 1, text: UNREADABLE_SCRIPT });
     else programs.push({ program, start });
   }
-  return { programs, unreadable };
+  findings.push(...executableMarkup(source, markupStart, source.length));
+  return { programs, findings };
 }
 
 function returnConstants(programs) {
@@ -127,7 +176,7 @@ function returnFunctions(programs) {
 
 function readShell(file) {
   const source = readFileSync(file, "utf8");
-  const { programs, unreadable } = readScripts(source);
+  const { programs, findings } = readScripts(source);
   const functions = returnFunctions(programs);
   const [first] = functions;
   const single = functions.length === 1;
@@ -137,7 +186,7 @@ function readShell(file) {
   const blockUses = home.flatMap(({ program }) => identifiers(program)).filter(({ node }) => !declared.has(node));
   const line = first ? lineAt(source, first.start + first.node.range[0]) : 1;
   const use = queryUse(programs.map(({ program }) => program));
-  return { constants, declarations, blockUses, functionScope: first?.scope, found: functions.length > 0, branch, ...use, unreadable, line };
+  return { constants, declarations, blockUses, functionScope: first?.scope, found: functions.length > 0, branch, ...use, markupFindings: findings, line };
 }
 
 function walk(node, path, visit) {
@@ -208,23 +257,99 @@ function isStrayParams(parent, grandparent) {
   return !declaration && !read;
 }
 
-function isStrayGlobal(node, parent) {
-  const member = parent.type === "MemberExpression" && parent.object === node;
-  const constructed = parent.type === "NewExpression" && parent.callee === node;
-  return !member && !constructed;
+function isMemberObject(node, parent) {
+  return parent.type === "MemberExpression" && parent.object === node && !parent.computed;
+}
+
+function isWritten(top, path) {
+  const [parent, grandparent] = path.toReversed();
+  if (WRITE_LEFT.has(parent.type)) return parent.left === top;
+  if (parent.type === "Property") return grandparent.type === "ObjectPattern";
+  return WRITE_ALWAYS.has(parent.type);
+}
+
+function isLocationRead(node, path) {
+  if (!isMemberObject(node, path.at(-1))) return false;
+  let top = node;
+  let rest = path;
+  while (rest.at(-1).type === "MemberExpression" && rest.at(-1).object === top) {
+    top = rest.at(-1);
+    rest = rest.slice(0, -1);
+  }
+  return !isWritten(top, rest);
+}
+
+function isStrayGlobal(node, path) {
+  const parent = path.at(-1);
+  if (node.name === QUERY_CLASS) return !isParamsClass(path.toReversed());
+  if (node.name === LOCATION) return !isLocationRead(node, path);
+  return !isMemberObject(node, parent);
+}
+
+function isStrayProperty(node, member, path) {
+  if (node.name === QUERY_CLASS) return true;
+  return node.name === LOCATION && !isLocationRead(member, path);
+}
+
+function isComputedKey(node) {
+  return node.computed === true && (node.property ?? node.key).type !== "Literal";
+}
+
+function isMetaTool(node) {
+  const metaName = node.type === "Identifier" && (META_WORDS.has(node.name) || node.name.startsWith(META_PREFIX));
+  return metaName || node.type === "ImportExpression";
+}
+
+function textOf(node) {
+  if (node.type === "Literal") return String(node.value);
+  return node.type === "TemplateElement" ? (node.value.cooked ?? "") : "";
+}
+
+function isForbiddenText(node) {
+  const text = textOf(node);
+  return FORBIDDEN_TEXT.some((word) => text.includes(word));
+}
+
+function declaresFunction(node, parent) {
+  return parent.type === "FunctionDeclaration" && parent.id === node;
+}
+
+function isFixedFunction(name, path, names) {
+  const uses = names.filter(({ node }) => node.name === name);
+  const declarations = uses.filter((use) => declaresFunction(use.node, use.path.at(-1)));
+  if (declarations.length !== 1) return false;
+  const [, scope] = declarations[0].path.toReversed();
+  const plain = (use) => declarations.includes(use) || use.path.at(-1).type === "CallExpression";
+  return path.includes(scope) && uses.every(plain);
+}
+
+function isTimerWithFunction({ node, path }, names) {
+  const call = path.at(-1);
+  if (call.type !== "CallExpression" || call.callee !== node) return false;
+  const [first] = call.arguments;
+  if (first?.type === "Identifier") return isFixedFunction(first.name, path, names);
+  return FUNCTION_VALUES.has(first?.type);
+}
+
+function strayTimers(names) {
+  return names.filter((use) => TIMERS.has(use.node.name) && !isTimerWithFunction(use, names)).length;
+}
+
+function isParamsClass([parent, declarator]) {
+  return declarator.type === "VariableDeclarator" && declarator.init === parent && isLocationDeclarator(declarator);
 }
 
 function isStrayName(node, path) {
   if (node.type !== "Identifier" || !GUARDED_NAMES.has(node.name)) return false;
   const [parent, grandparent] = path.toReversed();
-  if (parent.type === "MemberExpression" && parent.property === node && !parent.computed) return false;
-  return node.name === PARAMS_NAME ? isStrayParams(parent, grandparent) : isStrayGlobal(node, parent);
+  if (parent.type === "MemberExpression" && parent.property === node && !parent.computed) return isStrayProperty(node, parent, path.slice(0, -1));
+  return node.name === PARAMS_NAME ? isStrayParams(parent, grandparent) : isStrayGlobal(node, path);
 }
 
 function isStrayReturnFunction(node, path) {
   if (node.type !== "Identifier" || node.name !== RETURN_FUNCTION) return false;
   const parent = path.at(-1);
-  const declared = parent.type === "FunctionDeclaration" && parent.id === node;
+  const declared = declaresFunction(node, parent);
   const called = parent.type === "CallExpression" && parent.callee === node && isReturnCall(parent);
   return !declared && !called;
 }
@@ -238,10 +363,11 @@ function queryUse(programs) {
     walk(program, [], (node, path) => {
       if (isReturnCall(node)) calls.push({ node, path });
       if (node.type === "Identifier") names.push({ node, path });
-      if (isStrayName(node, path)) stray += 1;
+      if (isStrayName(node, path) || isComputedKey(node) || isMetaTool(node) || isForbiddenText(node)) stray += 1;
       if (isStrayReturnFunction(node, path)) strayCalls += 1;
     });
   }
+  stray += strayTimers(names);
   const reads = calls.map(({ node }) => node.arguments.map((read) => read.arguments[0]?.name));
   const [first = [], ...others] = reads;
   const agreed = (name, position) => others.every((names) => names[position] === name);
@@ -337,7 +463,7 @@ function targetProblems(shell, param, value) {
 function shellFindings(root, checkoutReturn) {
   const file = join(root, SHELL_FILE);
   const shell = readShell(file);
-  const unreadable = shell.unreadable.map(({ line, text }) => ({ file: SHELL_FILE, line, text }));
+  const markup = shell.markupFindings.map(({ line, text }) => ({ file: SHELL_FILE, line, text }));
   const targets = Object.entries(checkoutReturn).flatMap(([name, target]) => {
     const { param, value } = returnParts(target);
     return targetProblems(shell, param, value).map((problem) => ({
@@ -346,7 +472,7 @@ function shellFindings(root, checkoutReturn) {
       text: `${name}: ${problem}`,
     }));
   });
-  return [...unreadable, ...targets];
+  return [...markup, ...targets];
 }
 
 function astroFiles(dir) {
