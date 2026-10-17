@@ -33,6 +33,8 @@ const NACHRICHT = "Füge addiere hinzu\n\nWarum: Probe.\n\nPaket: KU2\n";
 const PAKET_ISSUE = "## Absicht\n\nDie Summe kommt aus der vorhandenen Hilfe, nicht aus einer Kopie.\n\n## Ziel\n\nZiel";
 const EXIT_BEFUNDE = 1;
 const LAENGER_ALS_JEDE_ARGUMENTGRENZE = 4_194_304;
+const HINTER_DEM_DATEIENDE = 90;
+const ISSUE_NUMMER = 41;
 
 function befund(felder = {}) {
   return {
@@ -85,7 +87,7 @@ test("ein Nachbau ist nicht belegt, wenn die neue Stelle schon auf der Basis sta
   const faelle = [
     [{ neu: "src/hilfe.js:1-3" }, "neue Stelle stand schon auf der Basis"],
     [{ neu: "src/fehlt.js:1-3" }, "neue Stelle fehlt im Commit"],
-    [{ vorhanden: "src/hilfe.js:2-90" }, "vorhandene Stelle fehlt auf der Basis"],
+    [{ vorhanden: `src/hilfe.js:2-${HINTER_DEM_DATEIENDE}` }, "vorhandene Stelle fehlt auf der Basis"],
     [{ vorhanden: "src/hilfe.js" }, "Stelle nicht in der Form <Datei>:<von>-<bis>"],
     [{ neu: "src/neu.js:3-1" }, "Stelle nicht in der Form <Datei>:<von>-<bis>"],
   ];
@@ -160,7 +162,7 @@ test("der lokale Prüferlauf belegt einen gemeldeten Nachbau am Repo und schreib
   repo.git(["checkout", "-q", "-b", "paket/KU2-probe"]);
   repo.committe({ "src/neu.js": NACHBAU }, NACHRICHT);
   const ersatz = ersatzPruefer(context, { aufnahme: mitNachbauBlocker() });
-  const route = ["GET /repos/sundartha/hermes/issues/41", { title: "Paket KU2", body: PAKET_ISSUE }];
+  const route = [`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket KU2", body: PAKET_ISSUE }];
   const github = await scheinGithub(context, new Map([route]));
   const aus = join(probeDirectory(context, {}), "ergebnis");
   const umgebung = {
@@ -171,7 +173,7 @@ test("der lokale Prüferlauf belegt einen gemeldeten Nachbau am Repo und schreib
     GITHUB_REPOSITORY: "sundartha/hermes",
     CLAUDE_CODE_OAUTH_TOKEN: SCHEIN_TOKEN,
   };
-  const args = ["--basis", "master", "--issue", "41", "--aus", aus, "--ablage", `${aus}-ablage`];
+  const args = ["--basis", "master", "--issue", String(ISSUE_NUMMER), "--aus", aus, "--ablage", `${aus}-ablage`];
   const kind = spawn(process.execPath, [join(REPO_ROOT, "tools/pruefer-lokal.mjs"), ...args], { cwd: repo.ordner, env: umgebung });
   const [status] = await once(kind, "close");
   const { commits } = JSON.parse(readFileSync(join(aus, "ergebnis.json"), "utf8"));
