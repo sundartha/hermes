@@ -278,7 +278,9 @@ async function main() {
     console.error(error);
     return EXIT_USAGE;
   }
-  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
+  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "), {
+    vorrangFuerPush: true,
+  });
   if (options["teile-pruefen"] !== undefined) return checkParts(options);
   if (options.werkzeugteil !== undefined) return partRun(options, parsePart(options.werkzeugteil));
   return fullRun(options);

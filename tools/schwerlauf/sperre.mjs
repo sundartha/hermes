@@ -11,6 +11,8 @@ import { neuerTempOrdner } from "../temp-ordner.mjs";
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
 export const PLAETZE_VARIABLE = "SCHWERLAUF_PLAETZE";
 export const HALTER_VARIABLE = "SCHWERLAUF_HALTER";
+const VORRANG_VARIABLE = "SCHWERLAUF_VORRANG";
+const VORRANG_PUSH = "push";
 export const STANDARD_PLAETZE = 2;
 const ANZAHL = /^[1-9]\d*$/;
 const STANDARD_ORDNER = "/tmp";
@@ -262,11 +264,18 @@ function gibSchluesselAnKindprozesseWeiter(schluessel) {
   env[HALTER_VARIABLE] = schluessel;
 }
 
-export async function nimmSperreAuchFuerKindprozesse(anlass, { allein = false } = {}) {
+function entnimmVorrangDerUmgebung(vorrangFuerPush) {
+  const vorrang = vorrangFuerPush && env[VORRANG_VARIABLE] === VORRANG_PUSH;
+  delete env[VORRANG_VARIABLE];
+  return vorrang;
+}
+
+export async function nimmSperreAuchFuerKindprozesse(anlass, { allein = false, vorrangFuerPush = false } = {}) {
+  const vorrang = entnimmVorrangDerUmgebung(vorrangFuerPush);
   const datei = sperrdatei();
   const anzahl = plaetze();
   if (innerhalbDesHalters(datei, anzahl)) return;
-  gibSchluesselAnKindprozesseWeiter(await sperreNehmenUndHalterEintragen(datei, anlass, { allein, plaetze: anzahl }));
+  gibSchluesselAnKindprozesseWeiter(await sperreNehmenUndHalterEintragen(datei, anlass, { allein, vorrang, plaetze: anzahl }));
 }
 
 export async function nimmEigeneSperreFuerTests(umgebung) {
