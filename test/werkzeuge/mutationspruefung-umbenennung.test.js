@@ -22,6 +22,7 @@ const TESTDATEI_TS = testdatei([-1, "negativ"], [1, "positiv"]).replace(
   "../src/zahl.ts",
 );
 
+const ZEILE_DER_NULLPRUEFUNG = quelle(NEGATIV, NULL).split("\n").indexOf(NULL) + 1;
 const UMBAU_TEIL = /^Teil \d+ von \d+: Umbau \d+: /m;
 const UMBAU = "Benenne um\n\nWarum: Typen.\n\nArt: umbau\nPaket: 27";
 
@@ -82,7 +83,7 @@ test("eine umbenannte .ts-Datei mit einer ungetesteten Zeile wird ganz mutiert u
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
   const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
   assert.ok(
-    ueberlebende.some((mutant) => mutant.startsWith("src/zahl.ts:3:")),
+    ueberlebende.some((mutant) => mutant.startsWith(`src/zahl.ts:${ZEILE_DER_NULLPRUEFUNG}:`)),
     rot.stdout,
   );
   assert.ok(
