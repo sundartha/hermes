@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { bauPrompt, testAgentPrompt } from "./agenten.mjs";
+import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
@@ -34,6 +34,7 @@ const NICHT_GEKUERZT =
   "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
 const ZITAT = "> ";
+const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
 
@@ -298,7 +299,8 @@ class AuftragsLauf {
     const hinweise = hinweiseDesBaus(this.agenten);
     const abschnitt = hinweise.length > 0 ? [...hinweise, ""] : [];
     const begruendung = this.uebernimmBegruendung(Object.keys(this.zweck));
-    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...begruendung, ...abschnitt, ...herkunft, ...paket, ""].join("\n");
+    const zettel = [AUFTRAG_LAUT_PHASE, "", ...auftragsBlock(phase, auftrag)];
+    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...begruendung, ...abschnitt, ...zettel, ...herkunft, ...paket, ""].join("\n");
   }
 
   uebernimmBegruendung(rollen) {
