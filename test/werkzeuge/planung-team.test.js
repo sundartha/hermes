@@ -22,6 +22,7 @@ const VIELE_DATEIEN = 6000;
 const LANGER_NAME = "n".repeat(200);
 const UNGUELTIGER_BAUM = "1".repeat(40);
 const ANDERER_UNGUELTIGER_BAUM = "2".repeat(40);
+const KONFIGURATION_GEAENDERT = /planer haben (.+, )?\.git\/config(, | geändert)/;
 
 function wertNach(argumente, schalter) {
   const stelle = argumente.indexOf(schalter);
@@ -207,6 +208,22 @@ test("team: legt ein anderer Worktree während einer Gruppe einen Branch mit Tra
   await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "branch", "--track", "spaeter.v2", "anderer")));
   await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "config", "branch.anderer.remote", "upstream")));
   await assert.doesNotReject(gruppeMit(ort, () => git(zweiter, "branch", "-D", "spaeter.v2")));
+});
+
+test("team: ändern sich Hooks-Pfad, Eintrag des eigenen Branches, Remote oder Include in der gemeinsamen Konfiguration, bricht die Gruppe weiter ab", async (context) => {
+  const { ort, zweiter } = probeMitZweitemWorktree(context);
+  const eigener = git(ort, "symbolic-ref", "--short", "HEAD");
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", "core.hooksPath", "/tmp/fremde-hooks")), KONFIGURATION_GEAENDERT);
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", `branch.${eigener}.remote`, "upstream")), KONFIGURATION_GEAENDERT);
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", "remote.x.url", "https://example.invalid/x.git")), KONFIGURATION_GEAENDERT);
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", "include.path", "/tmp/fremde-konfiguration")), KONFIGURATION_GEAENDERT);
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", "branch.autoSetupMerge", "always")), KONFIGURATION_GEAENDERT);
+});
+
+test("team: steht HEAD auf keinem Branch, bricht auch ein fremder Branch-Eintrag die Gruppe ab", async (context) => {
+  const { ort, zweiter } = probeMitZweitemWorktree(context);
+  git(ort, "checkout", "-q", "--detach");
+  await assert.rejects(gruppeMit(ort, () => git(zweiter, "config", "branch.anderer.remote", "upstream")), KONFIGURATION_GEAENDERT);
 });
 
 test("team: der Abdruck sieht eine Änderung am Index und eine Datei, die der Index als unverändert führt", (context) => {
