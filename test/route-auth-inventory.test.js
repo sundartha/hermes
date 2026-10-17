@@ -18,6 +18,9 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const DEPLOY_TOKEN = "d".repeat(DEPLOY_TOKEN_MIN_LENGTH);
+const PRODUKTIONS_BACKEND = "pg";
+const EIN_LAUFENDER_ANRUF = Object.freeze({ id: "call_inventar_laufend", status: "active" });
+const MAX_DAUER_S = 600;
 
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-inventory-"));
 
@@ -68,6 +71,12 @@ const inventoryDeps = () => ({
   }),
 });
 
+const speicherMitEinemLaufendenAnruf = () => ({
+  load: () => ({ numbers: [], calls: [EIN_LAUFENDER_ANRUF], tenants: {} }),
+  classifyCallTime: () => ({ expired: false }),
+  MAX_CALL_DURATION_CAP_S: MAX_DAUER_S,
+});
+
 async function withSilencedConsole(fn) {
   const { log, error } = console;
   console.log = noop;
@@ -98,18 +107,22 @@ function collectRoutes(app) {
   return routes;
 }
 
-async function graphFor(storeBackend) {
+async function buildAppFor(storeBackend, deps) {
   const previous = config.store.storeBackend;
   config.store.storeBackend = storeBackend;
   try {
-    const { app } = await withSilencedConsole(() => buildApp(inventoryDeps()));
-    return collectRoutes(app);
+    const { app } = await withSilencedConsole(() => buildApp(deps));
+    return app;
   } finally {
     config.store.storeBackend = previous;
   }
 }
 
-const PROD_GRAPH = await graphFor("pg");
+async function graphFor(storeBackend) {
+  return collectRoutes(await buildAppFor(storeBackend, inventoryDeps()));
+}
+
+const PROD_GRAPH = await graphFor(PRODUKTIONS_BACKEND);
 const LEAN_GRAPH = await graphFor("json");
 
 const keysOf = (graph) => new Set(graph.map((route) => routeKey(route.method, route.path)));
@@ -248,7 +261,8 @@ test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration u
   kontext.after(() => {
     config.auth.deployToken = vorher;
   });
-  const { app } = await withSilencedConsole(() => buildApp(inventoryDeps()));
+  const deps = { ...inventoryDeps(), store: speicherMitEinemLaufendenAnruf() };
+  const app = await buildAppFor(PRODUKTIONS_BACKEND, deps);
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   kontext.after(() => {
@@ -263,7 +277,7 @@ test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration u
     headers: { authorization: `Bearer ${DEPLOY_TOKEN}` },
   });
   assert.equal(mitToken.status, HTTP_OK);
-  assert.deepEqual(await mitToken.json(), { laufend: 0 });
+  assert.deepEqual(await mitToken.json(), { laufend: 1 });
 });
 
 test("Routen-Inventar: der Routen-Fingerprint ist unveraendert", () => {
