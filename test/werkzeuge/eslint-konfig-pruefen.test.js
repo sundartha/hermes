@@ -15,14 +15,26 @@ const ONLY_KEYWORD = "only";
 const ALLOWED_PARAMS = 3;
 const LOOSENED_PARAMS = 5;
 const TYPESCRIPT_FILES = ["{src,test,tools}/**/*.{ts,mts,cts}"];
+const DECLARATION_FILES = ["**/*.d.ts"];
+const WARN_SEVERITY = 1;
+const ERROR_SEVERITY = 2;
 
-function rootConfig({ maxParams = ALLOWED_PARAMS, noInlineConfig = true, typescript } = {}) {
+function rootConfig({ maxParams = ALLOWED_PARAMS, noInlineConfig = true, typescript, declarations } = {}) {
   const config = {
     linterOptions: { noInlineConfig },
     rules: { "no-var": "error", "max-params": ["error", { max: maxParams }] },
   };
-  const blocks = typescript === undefined ? [config] : [config, typescriptBlock(typescript)];
+  const blocks = [config];
+  if (typescript !== undefined) blocks.push(typescriptBlock(typescript));
+  if (declarations !== undefined) blocks.push(typescriptBlock({ files: DECLARATION_FILES, ...declarations }));
   return `export default ${JSON.stringify(blocks)};\n`;
+}
+
+function weakenedNoEval(key) {
+  return new RegExp(
+    `^src \\(${key}\\): Regel no-eval ist \\[${WARN_SEVERITY},\\{"allowIndirect":false\\}\\], die Kopie sagt \\[${ERROR_SEVERITY},`,
+    "m",
+  );
 }
 
 function typescriptBlock({ files = TYPESCRIPT_FILES, noEval = "error" }) {
@@ -173,8 +185,18 @@ test("eslint-konfig-pruefen: abgeschwaechte TypeScript-Regel stoppt die Pruefung
     after: { "eslint.config.js": rootConfig({ typescript: { noEval: "warn" } }) },
   });
   assert.equal(result.status, EXIT_FINDING);
-  assert.match(result.output, /^src \(\.ts\): Regel no-eval ist \[1,\{"allowIndirect":false\}\], die Kopie sagt \[2,/m);
+  assert.match(result.output, weakenedNoEval("\\.ts"));
   assert.doesNotMatch(result.output, /^src: /m);
+});
+
+test("eslint-konfig-pruefen: abgeschwaechte Regel nur fuer .d.ts stoppt die Pruefung, auch ohne eine .d.ts-Datei", () => {
+  const result = checkAfterChange({
+    before: { "eslint.config.js": rootConfig({ typescript: {}, declarations: {} }) },
+    after: { "eslint.config.js": rootConfig({ typescript: {}, declarations: { noEval: "warn" } }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, weakenedNoEval("\\.d\\.ts"));
+  assert.doesNotMatch(result.output, /^src \(\.ts\): /m);
 });
 
 test("eslint-konfig-pruefen: Ordner, dessen .ts-Dateien nicht mehr gelintet werden, stoppt die Pruefung", () => {
