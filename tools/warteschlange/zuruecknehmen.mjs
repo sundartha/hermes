@@ -2,11 +2,10 @@ import { spawnSync } from "node:child_process";
 import { env } from "node:process";
 
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
+import { BOT, BOT_EMAIL } from "../ziele/prs.mjs";
 import { ciLauf, git, schreibeAusgabe } from "./gleicher-stand.mjs";
 import { eintraegeAus, leseBelege } from "./wackelig-issues.mjs";
 
-const BOT = "sundartha-agent[bot]";
-const BOT_ADRESSE = "340129717+sundartha-agent[bot]@users.noreply.github.com";
 const MASTER = "master";
 const RUECKNAHME_PRAEFIX = "revert/";
 const WORKFLOW_ORDNER = ".github/workflows/";
@@ -85,7 +84,7 @@ async function hindernis(github, { lauf, bereich, ordner }, root) {
 }
 
 function nimmZurueck({ aelteste, kopf }, root) {
-  const identitaet = ["-c", `user.name=${BOT}`, "-c", `user.email=${BOT_ADRESSE}`];
+  const identitaet = ["-c", `user.name=${BOT}`, "-c", `user.email=${BOT_EMAIL}`];
   const lauf = spawnSync("git", [...identitaet, "revert", "--no-edit", `${aelteste}^..${kopf}`], {
     cwd: root,
     encoding: "utf8",
