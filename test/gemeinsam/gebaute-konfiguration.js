@@ -1,8 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
+const TEST_UMGEBUNG = "test";
+
+function pruefeNodeEnv(ueberschreiben) {
+  if (!Object.hasOwn(ueberschreiben, "NODE_ENV") || ueberschreiben.NODE_ENV === TEST_UMGEBUNG) return;
+  throw new Error(
+    `gebauteKonfiguration: NODE_ENV=${String(ueberschreiben.NODE_ENV)} ist nicht erlaubt, ` +
+      `die Konfiguration liest dann die lokale .env; nur "${TEST_UMGEBUNG}" ist zulässig`,
+  );
+}
+
 function kindUmgebung(ueberschreiben) {
-  const umgebung = { PATH: process.env.PATH, ...BASE_ENV, ...ueberschreiben, NODE_ENV: "test" };
+  pruefeNodeEnv(ueberschreiben);
+  const umgebung = { PATH: process.env.PATH, ...BASE_ENV, NODE_ENV: TEST_UMGEBUNG, ...ueberschreiben };
   return Object.fromEntries(Object.entries(umgebung).filter(([, wert]) => wert !== undefined));
 }
 

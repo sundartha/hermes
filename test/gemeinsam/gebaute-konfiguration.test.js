@@ -33,3 +33,16 @@ test("ein verlangtes Feld ohne Wert in der gebauten Konfiguration bricht ab, sta
   const OHNE_WERT = `${STUNDENLIMIT}.gibtEsNicht`;
   assert.throws(() => gebauteKonfiguration({}, [OHNE_WERT, STUNDENLIMIT]), (fehler) => fehler.message.includes(OHNE_WERT));
 });
+
+test("ein übergebenes NODE_ENV außer test bricht ab, statt still verworfen zu werden", () => {
+  for (const nodeEnv of ["production", undefined]) {
+    assert.throws(
+      () => gebauteKonfiguration({ NODE_ENV: nodeEnv }, [STUNDENLIMIT]),
+      (fehler) => fehler.message.includes("NODE_ENV") && fehler.message.includes(String(nodeEnv)),
+    );
+  }
+});
+
+test("ein übergebenes NODE_ENV=test ändert nichts an der gebauten Konfiguration", () => {
+  assert.deepEqual(gebauteKonfiguration({ NODE_ENV: "test" }, [STUNDENLIMIT]), { [STUNDENLIMIT]: STUNDENLIMIT_TESTBASIS });
+});
