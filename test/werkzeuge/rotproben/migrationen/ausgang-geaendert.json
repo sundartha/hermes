@@ -1,0 +1,15 @@
+{
+  "titel": "Ausgangsmigration weicht von schema.sql der Basis ab",
+  "vorher": {
+    "src/db/schema.sql": [
+      "CREATE TABLE IF NOT EXISTS tenant (id text PRIMARY KEY);"
+    ]
+  },
+  "dateien": {
+    "src/db/migrations/0001_ausgang.sql": [
+      "CREATE TABLE IF NOT EXISTS tenant (id text PRIMARY KEY);",
+      "ALTER TABLE tenant DROP COLUMN IF EXISTS alt;"
+    ]
+  },
+  "erwartet": "Ausgangsmigration ist nicht unverändert"
+}
