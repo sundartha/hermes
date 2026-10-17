@@ -1,0 +1,123 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { ENTWURF_HINWEIS, ENTWURF_ROUTE, FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, KENNUNG, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, auftrag, bericht, exit, plane as planeLauf, schnittliste } from "./planung-probe.js";
+import { REPO_ROOT, runIn } from "./probe-repo.js";
+
+export const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
+export const EXIT_GRUEN = 0;
+export const EXIT_ABBRUCH = 1;
+export const EXIT_AUFRUF = 2;
+export const EXIT_PASST_NICHT = 3;
+export const EXIT_BEFUNDE = 4;
+export const ABSTURZ_EXIT = 3;
+export const ABSTURZ_FEHLER = "Error: spawn claude ENOENT";
+export const WARTEN_MS = 1500;
+
+function planeAntworten() {
+  return {
+    "planer|## Gliederung": [alsJson({ gruppen: GRUPPEN })],
+    "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern)],
+    "erkunder|## Erkundung|S2": [bericht(GRUPPEN[1].nummern)],
+    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern)],
+    "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })],
+    "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN }, () => GRUEN_PRUEFLISTE),
+    "pruefer-planung|## Prüfung": jePruefer(GRUEN_PRUEFLISTE),
+    "pruefer-planung|## Nachprüfung": [GRUEN_PRUEFLISTE],
+    [`entwurf|## Entwurf|${ROUTE}`]: [ENTWURF_ROUTE],
+    [`entwurf|## Entwurf|${HINWEIS}`]: [ENTWURF_HINWEIS],
+  };
+}
+
+export function plane(context, ueberschrieben = {}, argumente = [ORDNER]) {
+  return planeLauf(context, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
+}
+
+export function phaseDatei({ wurzel }) {
+  return join(wurzel, ORDNER, "phase.json");
+}
+
+export function planungsBericht({ wurzel }) {
+  return JSON.parse(readFileSync(join(wurzel, ".fortschritt", KENNUNG, "planung.json"), "utf8"));
+}
+
+export function werkzeug({ wurzel }, ...argumente) {
+  return runIn(wurzel, process.execPath, argumente);
+}
+
+export const A2_BEFUND = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1" } };
+
+export const A2_KORRIGIERT = { ziel: "Ziel a2 mit dem Code aus a1" };
+
+export const A2_ANTWORT = [{ schluessel: "allein-gruen:a2", antwort: "korrigiert: a2 liest den Code aus a1" }];
+
+const ZUSATZ_TESTS = { a14: "rueckruf", a15: "ansage", a16: "sperre", a17: "notiz", a18: "zeitfenster", a19: "sprache", a20: "warteschlange", a21: "weiterleitung", a22: "mailbox", a23: "rueckfrage" };
+
+export function zusatz(id, prueft) {
+  return auftrag(id, HINWEIS, { prueft, abnahme: `test/anrufe/hinweis-${ZUSATZ_TESTS[id]}.test.js`, abhaengigVon: [] });
+}
+
+export function korrektur({ a2 = {}, a3 = {}, dazu = [] } = {}) {
+  const schnitt = schnittliste();
+  const geaendert = { a2, a3 };
+  return { ...schnitt, auftraege: [...schnitt.auftraege.map((eintrag) => ({ ...eintrag, ...geaendert[eintrag.id] })), ...dazu] };
+}
+
+export function antwortMit(schnitt, antworten = A2_ANTWORT) {
+  return alsJson({ schnitt, antworten });
+}
+
+export const OHNE_NUMMER = korrektur({ a2: A2_KORRIGIERT, dazu: [zusatz("a14", [])] });
+
+export const MIT_NUMMER = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"])] });
+
+export const UEBERGREIFENDER_PRUEFER = 1;
+
+export function jePruefer(eintrag) {
+  return Array.from({ length: GRUPPEN.length + UEBERGREIFENDER_PRUEFER }, () => eintrag);
+}
+
+export function auftragAus(schnitt, id, geaendert = {}) {
+  return { ...schnitt.auftraege.find((eintrag) => eintrag.id === id), ...geaendert };
+}
+
+export function geplanteListe({ wurzel }) {
+  return JSON.parse(readFileSync(join(wurzel, ORDNER, "planung", "schnitt.json"), "utf8"));
+}
+
+export const WEGFEHLER = { ...GRUEN_PRUEFLISTE, befunde: { "weg:S7": "der Weg endet nicht in speichereStatus" } };
+
+export const WEG_ZEILE = `Weg S7: der Weg endet nicht in speichereStatus (Fundstelle: ${FUNDSTELLE})`;
+
+export function wegpruefungen(lauf, erste) {
+  return aufrufe(lauf, "pruefer-planung", "## Wegprüfung").filter(({ eingabe }) => eingabe.includes(`#### ${erste} (`));
+}
+
+export function offenePunkte({ eingabe }) {
+  const [, offen] = eingabe.split("### Offene Punkte");
+  return offen.split("\n### ")[0];
+}
+
+export function wegfehlerLaufMitKorrektur(context, hinweis) {
+  const korrigiert = alsJson({ nummern: Object.fromEntries(GRUPPEN[0].nummern.map((nummer) => [nummer, angaben(nummer)])), hinweise: [hinweis] });
+  const lauf = plane(context, { "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, GRUEN_PRUEFLISTE], "erkunder|## Befunde": [korrigiert] });
+  exit(lauf, EXIT_GRUEN);
+  return lauf;
+}
+
+export function gruppenPruefung(lauf, nummer) {
+  return aufrufe(lauf, "pruefer-planung", "## Prüfung").find(({ eingabe }) => eingabe.includes("### Erkundungsbericht deiner Gruppe") && eingabe.includes(`#### ${nummer} (`));
+}
+
+export function abgelegt({ wurzel }, name) {
+  return JSON.parse(readFileSync(join(wurzel, ORDNER, "planung", name), "utf8"));
+}
+
+export function prueflisteZeilen({ eingabe }) {
+  const [, zeilen] = eingabe.split("### Zeilen deiner Prüfliste");
+  return zeilen.split("\n").filter((zeile) => zeile.startsWith("- ")).map((zeile) => zeile.slice(2));
+}
+
+export function zeilenDes(id) {
+  return ["nie-saetze", "allein-gruen", "nicht-zusammengelegt"].map((regel) => `${regel}:${id}`);
+}
