@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { test } from "node:test";
 
 import { ausgang, nenntAltenTest } from "../../tools/auftrag/ausgang.mjs";
-import { ROT } from "../../tools/auftrag/bericht.mjs";
+import { GRUEN, ROT } from "../../tools/auftrag/bericht.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { teamRepository } from "./neuschnitt-probe.js";
@@ -203,12 +203,35 @@ function ausPlanung(context, ausweg, roteRunden = []) {
   setzeUmgebung(context, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
   const kontext = { phase, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
   const offen = [...roteRunden];
-  const runde = () => ({ ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...(offen.shift() ?? ausweg) });
+  const gestartet = [];
+  const runde = (rundenKontext) => {
+    gestartet.push(rundenKontext.runde);
+    return { ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...(offen.shift() ?? ausweg) };
+  };
   const ergebnis = fuehreRundenAus(kontext, runde);
   const starts = existsSync(join(werkzeug, "starts.txt")) ? readFileSync(join(werkzeug, "starts.txt"), "utf8") : "";
-  const beleg = JSON.parse(readFileSync(join(root, ".fortschritt/P-001-probe/a1.json"), "utf8"));
-  return { ergebnis, starts, beleg };
+  const belegDatei = join(root, ".fortschritt/P-001-probe/a1.json");
+  const beleg = existsSync(belegDatei) ? JSON.parse(readFileSync(belegDatei, "utf8")) : null;
+  return { ergebnis, starts, beleg, gestartet };
 }
+
+test("ein Werkzeugabbruch zählt nicht als rote Runde, wird einmal wiederholt und hält danach mit „Entscheidung nötig“ an statt neu zu schneiden", (context) => {
+  const abbrueche = [
+    { grund: "mutation nach Bau ist mit Exit 2 abgebrochen.", roteIds: ["mutation abbruch"], pruefungen: [{ name: "mutation nach Bau", exitCode: 2, zeilen: ["Stryker: Netzfehler"] }] },
+    { grund: "Der Agent bau-kritisch endete mit Exit 1.", roteIds: ["agent exit"] },
+  ];
+  for (const abbruch of abbrueche) {
+    const { ergebnis, starts, beleg, gestartet } = ausPlanung(context, abbruch);
+    assert.deepEqual([ergebnis, starts, gestartet, beleg.runden], [ROT, "notiz\n", [1, 1], []], abbruch.grund);
+    assert.ok(beleg.entscheidung.text.startsWith("## Entscheidung nötig\n"), beleg.entscheidung.text);
+    assert.ok(beleg.entscheidung.text.includes(abbruch.grund), beleg.entscheidung.text);
+  }
+  const danachGruen = ausPlanung(context, { ergebnis: GRUEN }, [abbrueche[0]]);
+  assert.deepEqual([danachGruen.ergebnis, danachGruen.gestartet], [GRUEN, [1, 1]]);
+  const lintRot = { grund: "lint endete mit Exit 1.", roteIds: [], pruefungen: [{ name: "lint", exitCode: 1, zeilen: ["src/a.js: Name zu kurz"] }] };
+  const gemischt = ausPlanung(context, { ...abbrueche[1], roteIds: ["agent exit", "lint"] }, [lintRot]);
+  assert.ok(gemischt.starts.startsWith("planer\n"), gemischt.starts);
+});
 
 test("ein unklarer Zweck geht auch bei einer Phase aus einem Pitch direkt an Antonio, ein alter Test erst an den Plan-Agenten für einen Testumbau, ein anderer Ausstieg zum Planer", (context) => {
   const alterTest = { zeile: ALTER_TEST_ZEILE, datei: "test/rechnen.test.js", test: "verdopple lässt die Zahl", grund: "Das Ziel verlangt das Verdoppeln.", rot: true };

@@ -915,6 +915,34 @@ test("Nie-Sätze: ganze Zeilen aus Listen sind grün", (context) => {
   gruen(lauf(b));
 });
 
+test("Nie-Sätze: ein Satz, der nur als Überschrift im Abschnitt steht, ist grün, mit oder ohne Etikett aus Wort und Kennung", (context) => {
+  const b = basis(context);
+  const kunde = "Der Kunde wird nie belästigt.";
+  b.eingaben.dokumente = { "pitch.md": ["# Pitch", "", "## Nicht-Ziele", "", `### Regel R3: ${NIE_A}`, "", "Begründung.", "", `#### Grenze 12: ${NIE_B}`, "", `### ${kunde}`].join("\n") };
+  eigener(b, "a1").wasDarfNiePassieren = [NIE_A, NIE_B, kunde].map((satz) => ({ satz, quelle: "pitch.md", abschnitt: "## Nicht-Ziele" }));
+  gruen(lauf(b));
+});
+
+test("Nie-Sätze: ein Teil einer Überschrift oder einer Zeile mit Rauten in der Mitte bleibt rot", (context) => {
+  const zeilen = [
+    "# Pitch",
+    "",
+    "## Nicht-Ziele",
+    "",
+    `### Regel R3: ${NIE_A}`,
+    "### Der Agent: ruft nie ohne Kosten an.",
+    "### Hinweis zu Regel R4: wählt nie nachts.",
+    "Nicht als Überschrift: ## Regel R5: hält nie still.",
+    NIE_B,
+  ];
+  for (const satz of ["ruft nie ohne Freigabe an.", `R3: ${NIE_A}`, "ruft nie ohne Kosten an.", "wählt nie nachts.", "hält nie still."]) {
+    const b = basis(context);
+    b.eingaben.dokumente = { "pitch.md": zeilen.join("\n") };
+    eigener(b, "a1").wasDarfNiePassieren[0].satz = satz;
+    erwarte(lauf(b), REGEL.nie, `a1 wasDarfNiePassieren: „${satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in pitch.md, ## Nicht-Ziele`);
+  }
+});
+
 test("Nie-Sätze: ein ganzer Satz aus einer Zeile mit zwei Sätzen ist grün", (context) => {
   const b = basis(context);
   b.eingaben.dokumente = { "pitch.md": ["# Pitch", "", "## Nicht-Ziele", "", `${NIE_A} ${NIE_B}`].join("\n") };
