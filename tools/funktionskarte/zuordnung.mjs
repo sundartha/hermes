@@ -58,6 +58,34 @@ function zustaendigkeit(karten) {
   return { zustaendig, fehler };
 }
 
+function unbekannteFlaechen(zustaendig, bekannt) {
+  return [...zustaendig]
+    .filter(([flaeche]) => !bekannt.has(flaeche))
+    .map(([flaeche, pfad]) => `${pfad}: nennt ${flaeche}, das Hermes nicht registriert.`);
+}
+
+function veralteteEintraege(offen, bekannt) {
+  return offen
+    .filter((flaeche) => !bekannt.has(flaeche))
+    .map((flaeche) => `${OFFEN_PFAD}: ${flaeche} gibt es nicht mehr; streiche den Eintrag.`);
+}
+
+function eintraegeMitKarte(offen, zustaendig) {
+  return offen
+    .filter((flaeche) => zustaendig.has(flaeche))
+    .map(
+      (flaeche) =>
+        `${OFFEN_PFAD}: ${flaeche} hat jetzt eine Karte (${zustaendig.get(flaeche)}); streiche den Eintrag.`,
+    );
+}
+
+function flaechenOhneKarte(bekannt, zustaendig, offen) {
+  const offenSet = new Set(offen);
+  return [...bekannt]
+    .filter((flaeche) => !zustaendig.has(flaeche) && !offenSet.has(flaeche))
+    .map((flaeche) => `${flaeche} hat keine Funktionskarte unter docs/funktionen/.`);
+}
+
 export function zuordnungPruefen({ wurzel, karten, flaechen, basis }) {
   const offen = offenLesen(wurzel);
   const bekannt = new Set(flaechen.map(({ flaeche }) => flaeche));
@@ -66,26 +94,13 @@ export function zuordnungPruefen({ wurzel, karten, flaechen, basis }) {
     ({ rezept }) => rezept !== undefined && Array.isArray(rezept.flaechen),
   );
   const { zustaendig, fehler } = zustaendigkeit(lesbar);
-  const offenSet = new Set(offen);
-  const unbekannt = [...zustaendig].filter(([flaeche]) => !bekannt.has(flaeche));
   return [
     ...formFehler,
     ...fehler,
     ...listenFehler(offen, offenAnDerBasis(wurzel, basis)),
-    ...unbekannt.map(
-      ([flaeche, pfad]) => `${pfad}: nennt ${flaeche}, das Hermes nicht registriert.`,
-    ),
-    ...offen
-      .filter((flaeche) => !bekannt.has(flaeche))
-      .map((flaeche) => `${OFFEN_PFAD}: ${flaeche} gibt es nicht mehr; streiche den Eintrag.`),
-    ...offen
-      .filter((flaeche) => zustaendig.has(flaeche))
-      .map(
-        (flaeche) =>
-          `${OFFEN_PFAD}: ${flaeche} hat jetzt eine Karte (${zustaendig.get(flaeche)}); streiche den Eintrag.`,
-      ),
-    ...[...bekannt]
-      .filter((flaeche) => !zustaendig.has(flaeche) && !offenSet.has(flaeche))
-      .map((flaeche) => `${flaeche} hat keine Funktionskarte unter docs/funktionen/.`),
+    ...unbekannteFlaechen(zustaendig, bekannt),
+    ...veralteteEintraege(offen, bekannt),
+    ...eintraegeMitKarte(offen, zustaendig),
+    ...flaechenOhneKarte(bekannt, zustaendig, offen),
   ];
 }

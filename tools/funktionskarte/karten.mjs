@@ -69,7 +69,7 @@ function erwartungFehler(erwartung, nummer) {
   return fehler;
 }
 
-function hintergrundFehler(schritt, nummer, { hatBefehl, hintergruende }) {
+function hintergrundEintragen(schritt, nummer, { hatBefehl, hintergruende }) {
   const fehler = [];
   if (schritt.abwarten !== undefined) {
     const abgewartet = hintergruende.get(schritt.abwarten);
@@ -105,7 +105,7 @@ function schrittFehler(schritt, nummer, hintergruende) {
   if (hatBefehl === (schritt.abwarten !== undefined)) {
     fehler.push(`Schritt ${nummer}: braucht entweder „befehl“ oder „abwarten“`);
   }
-  fehler.push(...hintergrundFehler(schritt, nummer, { hatBefehl, hintergruende }));
+  fehler.push(...hintergrundEintragen(schritt, nummer, { hatBefehl, hintergruende }));
   if (schritt.hintergrund !== undefined) return fehler;
   if (!Array.isArray(schritt.erwarte) || schritt.erwarte.length === 0) {
     fehler.push(`Schritt ${nummer}: braucht mindestens eine Erwartung an die Antwort („erwarte“)`);
