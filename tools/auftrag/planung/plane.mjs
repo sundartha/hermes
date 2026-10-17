@@ -635,13 +635,13 @@ function aufrufFehler(ordner) {
   return existsSync(join(ordner, PLANUNG)) ? `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts` : null;
 }
 
-export function ausgang(fehler) {
+function ausgang(fehler) {
   if (fehler instanceof Ende) return { exit: fehler.exit, grund: fehler.message, offen: fehler.befunde };
   if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, grund: fehler.message, offen: [] };
   throw fehler;
 }
 
-function ausgangOhneWurf(fehler) {
+export function ausgangOhneWurf(fehler) {
   if (fehler instanceof Ende || fehler instanceof Abbruch) return ausgang(fehler);
   return { exit: EXIT_ABBRUCH, grund: `unerwarteter Fehler: ${inspect(fehler)}`, offen: [] };
 }

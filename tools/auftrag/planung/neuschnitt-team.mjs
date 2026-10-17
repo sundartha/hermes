@@ -9,7 +9,7 @@ import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { prueflisteSoll } from "./antworten.mjs";
 import { druckePlanBericht, planBericht } from "./planbericht.mjs";
-import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgang, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
+import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
 import { auftragAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
@@ -294,7 +294,7 @@ class NeuschnittPlanung extends Planung {
       await this.laufe();
       return { exit: EXIT_GRUEN, grund: `grün: ${this.eingabe.datei} geschrieben`, offen: [] };
     } catch (fehler) {
-      return ausgang(fehler);
+      return ausgangOhneWurf(fehler);
     }
   }
 
