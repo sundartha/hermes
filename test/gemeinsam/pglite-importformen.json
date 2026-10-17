@@ -1,0 +1,24 @@
+{
+  "erkannt": {
+    "paket-doppelte-anfuehrungszeichen.test.js": "import { PGlite } from \"@electric-sql/pglite\";\n",
+    "paket-einfache-anfuehrungszeichen.test.js": "import { PGlite } from '@electric-sql/pglite';\n",
+    "unterpfad-worker.test.js": "import { PGliteWorker } from \"@electric-sql/pglite/worker\";\n",
+    "unterpfad-vorlage.test.js": "import { PGlite } from '@electric-sql/pglite/template';\n",
+    "unterpfad-beigaben.test.js": "import { pg_trgm } from \"@electric-sql/pglite/contrib/pg_trgm\";\n",
+    "dynamisch-backticks.test.js": "const { PGlite } = await import(`@electric-sql/pglite`);\n",
+    "dynamisch-backticks-unterpfad.test.js": "const { live } = await import(`@electric-sql/pglite/live`);\n",
+    "require-aufruf.test.cjs": "const { PGlite } = require(\"@electric-sql/pglite\");\n",
+    "pfad-ueber-node-modules.test.mjs": "import { PGlite } from \"../node_modules/@electric-sql/pglite/dist/index.js\";\n",
+    "pfad-in-getrennten-stuecken.test.js": "const ort = path.join(\"node_modules\", \"@electric-sql\", \"pglite\");\n",
+    "paketname-zusammengesetzt.test.js": "const name = \"@electric-sql\" + \"/pglite\";\n",
+    "schwesterpaket.test.js": "import { startSocket } from \"@electric-sql/pglite-socket\";\n",
+    "im-unterordner/direkt-angelegt.test.js": "const pg = new PGlite();\n",
+    "im-unterordner/pglite-helfer.js": "import { PGlite } from \"@electric-sql/pglite\";\n"
+  },
+  "unauffaellig": {
+    "ueber-die-hilfe.test.js": "import { neuePglite } from \"./pglite-helfer.js\";\nconst pg = await neuePglite();\n",
+    "ohne-datenbank.test.js": "import assert from \"node:assert/strict\";\n",
+    "pglite-helfer.js": "import { PGlite } from \"@electric-sql/pglite\";\n",
+    "gemeinsam/pglite-instanz.js": "const pg = new PGlite();\n"
+  }
+}
