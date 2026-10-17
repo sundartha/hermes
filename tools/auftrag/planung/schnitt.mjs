@@ -23,6 +23,8 @@ const PFAD_TRENNER = "/";
 const WORT_RAND = /^[„“"'`([]+|[„“"'`)\],;:.!?]+$/g;
 const LEERRAUM = /\s+/;
 const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
+const UEBERSCHRIFT = /^#+ (.+)/;
+const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
 const WURZEL = "/";
 const GRENZE_NEUE_ZEILEN = 400;
@@ -399,8 +401,13 @@ function eingangBefunde(auftraege, { schnitt }) {
   return mitRegel(REGEL.eingang, befunde);
 }
 
+function varianten(zeile) {
+  const titel = UEBERSCHRIFT.exec(gleicherText(zeile))?.[1];
+  return titel === undefined ? [zeile.replace(LISTENZEICHEN, "")] : [zeile, ETIKETT.exec(titel)?.[1] ?? titel];
+}
+
 function saetzeIn(abschnitt) {
-  const zeilen = abschnitt.split("\n").map((zeile) => zeile.replace(LISTENZEICHEN, ""));
+  const zeilen = abschnitt.split("\n").flatMap(varianten);
   return new Set(zeilen.flatMap((zeile) => [zeile, ...zeile.split(SATZENDE)]).map(gleicherText).filter(Boolean));
 }
 
