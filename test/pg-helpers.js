@@ -1,4 +1,5 @@
 import { makePgStore, BOOTSTRAP_TENANT_ID, anrufpauseSetzen } from "../src/store/pg.js";
+import { macheSpeicherSperre } from "../src/store/pg.js";
 import { applySchema, schemaDdl } from "../src/db/migrate.js";
 import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
@@ -17,6 +18,7 @@ export async function makePgTestStore() {
   };
   store = makePgStore(runner);
   store.setzeAnrufpause = (an) => anrufpauseSetzen(store, an);
+  store.withStoreLock = macheSpeicherSperre();
   await store.init();
   return { store, db, runner };
 }
