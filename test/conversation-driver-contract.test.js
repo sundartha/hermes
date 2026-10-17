@@ -3,57 +3,57 @@ import { test } from "node:test";
 import { summarizeCall } from "../src/claude.js";
 import {
   baseStartParams,
-  checkConcurrentConsultAnswersMatchByRequestId,
-  checkConsultAnswerArrives,
-  checkConsultRejectedIsValidOutcome,
-  checkConsultRequestCarriesTranscript,
-  checkConsultTimeoutIsValidOutcome,
-  checkEndConcurrentCallsAreSafe,
-  checkEndIsIdempotent,
-  checkEndResolvesOpenConsult,
-  checkEndsWithoutHeartbeat,
-  checkNeverConnectedIsDistinctSignal,
-  checkOutcomeClosesConversation,
-  checkSequentialConsultAnswersAreCorrectlyPaired,
-  checkSilentIndistinguishableFromConducted,
-  checkStartFailsCleanly,
-  checkStartSucceeds,
+  concurrentConsultAnswersMatchByRequestIdCase,
+  consultAnswerArrivesCase,
+  consultRejectedIsValidOutcomeCase,
+  consultRequestCarriesTranscriptCase,
+  consultTimeoutIsValidOutcomeCase,
+  endConcurrentCallsAreSafeCase,
+  endIsIdempotentCase,
+  endResolvesOpenConsultCase,
+  endsWithoutHeartbeatCase,
   makeCallbackSpy,
   MOCK_OBJECTIVE,
+  neverConnectedIsDistinctSignalCase,
+  outcomeClosesConversationCase,
+  sequentialConsultAnswersAreCorrectlyPairedCase,
+  silentIndistinguishableFromConductedCase,
+  startFailsCleanlyCase,
+  startSucceedsCase,
   waitUntil,
 } from "./conversation-driver-contract.js";
 import { makeMockConversationDriver } from "./fixtures/mock-conversation-driver.js";
 
 test("Vertrag: startConversation liefert bei Erfolg ok:true", () =>
-  checkStartSucceeds(makeMockConversationDriver));
+  startSucceedsCase(makeMockConversationDriver));
 test("Vertrag: startConversation scheitert sauber - ok:false mit einem Grund", () =>
-  checkStartFailsCleanly(makeMockConversationDriver));
+  startFailsCleanlyCase(makeMockConversationDriver));
 test("Vertrag: ein stummer Start ist am Ergebnis allein nicht von einem gefuehrten Gespraech zu unterscheiden", () =>
-  checkSilentIndistinguishableFromConducted(makeMockConversationDriver));
+  silentIndistinguishableFromConductedCase(makeMockConversationDriver));
 test("Vertrag: endConversation ist idempotent - ein zweiter, nacheinander gestellter Aufruf ist kein Fehler", () =>
-  checkEndIsIdempotent(makeMockConversationDriver));
+  endIsIdempotentCase(makeMockConversationDriver));
 test("Vertrag: gleichzeitige endConversation-Aufrufe auf demselben Anruf sind sicher (Ueberschneidung, s. EndConversationParams)", () =>
-  checkEndConcurrentCallsAreSafe(makeMockConversationDriver));
+  endConcurrentCallsAreSafeCase(makeMockConversationDriver));
 test("Vertrag: eine Rueckfrage haelt offen, und die Antwort kommt im Gespraech an", () =>
-  checkConsultAnswerArrives(makeMockConversationDriver));
+  consultAnswerArrivesCase(makeMockConversationDriver));
 test("Vertrag: eine unbeantwortete Rueckfrage (Zeitablauf) ist ein gueltiger Ausgang, kein Absturz", () =>
-  checkConsultTimeoutIsValidOutcome(makeMockConversationDriver));
+  consultTimeoutIsValidOutcomeCase(makeMockConversationDriver));
 test("Vertrag: eine vom Gate/der Sanitisierung abgelehnte Rueckfrage ist ein EIGENER Ausgang, kein Zeitablauf (Befund 5, G26)", () =>
-  checkConsultRejectedIsValidOutcome(makeMockConversationDriver));
+  consultRejectedIsValidOutcomeCase(makeMockConversationDriver));
 test("Vertrag: zwei NACHEINANDER gestellte Rueckfragen tragen unterscheidbare Kennungen, keine ueberschreibt die andere", () =>
-  checkSequentialConsultAnswersAreCorrectlyPaired(makeMockConversationDriver));
+  sequentialConsultAnswersAreCorrectlyPairedCase(makeMockConversationDriver));
 test("Vertrag: zwei GLEICHZEITIG offene, AUSSER DER REIHE beantwortete Rueckfragen werden ueber requestId zugeordnet, nicht ueber Ankunftsreihenfolge (Befund 1, Blocker)", () =>
-  checkConcurrentConsultAnswersMatchByRequestId(makeMockConversationDriver));
+  concurrentConsultAnswersMatchByRequestIdCase(makeMockConversationDriver));
 test("Vertrag: die Rueckfrage-Anfrage liefert den bisherigen Gespraechsverlauf mit (Befund 4, Blocker)", () =>
-  checkConsultRequestCarriesTranscript(makeMockConversationDriver));
+  consultRequestCarriesTranscriptCase(makeMockConversationDriver));
 test("Vertrag: 'nie verbunden' ist ein eigenes Signal, getrennt von einem gefuehrten, aber ergebnislosen Gespraech (Befund 2, Blocker)", () =>
-  checkNeverConnectedIsDistinctSignal(makeMockConversationDriver));
+  neverConnectedIsDistinctSignalCase(makeMockConversationDriver));
 test("Vertrag: endConversation schliesst eine offen haengende Rueckfrage als unbeantwortet ab, mit erkennbarem Grund (Befund 3, Blocker)", () =>
-  checkEndResolvesOpenConsult(makeMockConversationDriver));
+  endResolvesOpenConsultCase(makeMockConversationDriver));
 test("Vertrag: ein geliefertes Ergebnis schliesst das Gespraech ab", () =>
-  checkOutcomeClosesConversation(makeMockConversationDriver));
+  outcomeClosesConversationCase(makeMockConversationDriver));
 test("Vertrag: verstummt das Laufwerk, beendet Hermes selbst mit Grund - der Port hat dafuer bewusst keine Lebenszeichen-Methode", () =>
-  checkEndsWithoutHeartbeat(makeMockConversationDriver));
+  endsWithoutHeartbeatCase(makeMockConversationDriver));
 
 test("Vertrag: die Anbieter-Zusammenfassung aus onOutcomeDelivered ersetzt unsere eigene summarizeCall nicht", async () => {
   assert.equal(typeof summarizeCall, "function", "summarizeCall bleibt bestehen und aufrufbar");
