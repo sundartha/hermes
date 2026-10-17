@@ -47,7 +47,7 @@ function schreibe(datei, inhalt) {
   writeFileSync(datei, inhalt, { flag: "wx", mode: NUR_LESEN });
 }
 
-function inhaltNachCommit(sha, pfad, root) {
+export function inhaltNachCommit(sha, pfad, root) {
   try {
     return gitAusgabe(["show", `${sha}:${pfad}`], root, { kodierung: "buffer" });
   } catch {

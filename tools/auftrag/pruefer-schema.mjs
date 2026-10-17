@@ -11,6 +11,11 @@ export const ERGEBNIS_DATEI = "ergebnis.json";
 export const NACHSTELLUNG_DATEI = "nachstellung.json";
 export const ABLAGE_DATEI = "sicherheitshinweise.json";
 export const FORMAT = 1;
+const KEINE = "keine";
+export const NACHBAU = "nachbau";
+export const ANORDNUNG = "anordnung";
+const UMGEHUNGEN = [KEINE, NACHBAU, ANORDNUNG];
+const UMGEHUNGSFELDER = ["vorhanden", "neu", "zitat"];
 const URTEILE = ["BESTANDEN", "NICHT_BESTANDEN"];
 const TEXTFELDER = ["id", "datei", "beleg", "reproduktion", "reparatur"];
 const MAX_TEXT_ZEICHEN = 40_000;
@@ -23,6 +28,13 @@ const ENTF = 0x7f;
 const REPRODUKTION_TEXT =
   "Vollständiger node:test-Test (Inhalt der Datei test/pruefer-reproduktion.test.js), der am Endstand des Pull Requests an einer Erwartung scheitert; leer bei SOLLTE und HINWEIS.";
 const REPARATUR_TEXT = "Die Reparatur in einem Satz, ohne Code.";
+const UMGEHUNG_TEXT =
+  "nachbau: neuer Code baut vorhandenen Code in anderer Schreibweise nach (C1); anordnung: Issue oder Commit-Nachricht ordnet an, Code so zu schreiben, dass eine Prüfung ihn nicht erkennt (C2); sonst keine.";
+const VORHANDEN_TEXT =
+  "Nur bei nachbau: die vorhandene Stelle als <Datei>:<von>-<bis> unter basis/, sonst leer.";
+const NEU_TEXT =
+  "Nur bei nachbau: die neue Stelle als <Datei>:<von>-<bis> unter dateien/, sonst leer.";
+const ZITAT_TEXT = "Nur bei anordnung: der Satz wörtlich aus auftrag.md, sonst leer.";
 
 const text = { type: "string" };
 
@@ -37,7 +49,7 @@ export const ANTWORT_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["schwere", ...TEXTFELDER, "zeile", "sicherheit"],
+        required: ["schwere", ...TEXTFELDER, "zeile", "sicherheit", "umgehung", ...UMGEHUNGSFELDER],
         properties: {
           schwere: { type: "string", enum: SCHWEREN },
           id: text,
@@ -47,6 +59,10 @@ export const ANTWORT_SCHEMA = {
           reproduktion: { type: "string", description: REPRODUKTION_TEXT },
           reparatur: { type: "string", description: REPARATUR_TEXT },
           sicherheit: { type: "boolean" },
+          umgehung: { type: "string", enum: UMGEHUNGEN, description: UMGEHUNG_TEXT },
+          vorhanden: { type: "string", description: VORHANDEN_TEXT },
+          neu: { type: "string", description: NEU_TEXT },
+          zitat: { type: "string", description: ZITAT_TEXT },
         },
       },
     },
@@ -70,13 +86,30 @@ function istText(wert) {
   return typeof wert === "string" && wert.length <= MAX_TEXT_ZEICHEN;
 }
 
+function umgehungAus(wert) {
+  const umgehung = wert.umgehung ?? KEINE;
+  if (!UMGEHUNGEN.includes(umgehung)) return null;
+  if (umgehung === KEINE) return {};
+  const felder = UMGEHUNGSFELDER.map((feld) => [feld, wert[feld] ?? ""]);
+  return felder.every(([, text]) => istText(text))
+    ? { umgehung, ...Object.fromEntries(felder) }
+    : null;
+}
+
 function befundAus(wert) {
   if (!istObjekt(wert) || !SCHWEREN.includes(wert.schwere) || typeof wert.sicherheit !== "boolean")
     return null;
   if (!TEXTFELDER.every((feld) => istText(wert[feld]))) return null;
   if (!Number.isInteger(wert.zeile) || wert.zeile < 0) return null;
+  const umgehung = umgehungAus(wert);
+  if (!umgehung) return null;
   const felder = Object.fromEntries(TEXTFELDER.map((feld) => [feld, wert[feld]]));
-  return { schwere: wert.schwere, ...felder, zeile: wert.zeile, sicherheit: wert.sicherheit };
+  return { schwere: wert.schwere, ...felder, zeile: wert.zeile, sicherheit: wert.sicherheit, ...umgehung };
+}
+
+function belegAus(wert, befund) {
+  if (!befund.umgehung || typeof wert.belegt !== "boolean") return befund;
+  return { ...befund, belegt: wert.belegt, belegGrund: istText(wert.belegGrund) ? wert.belegGrund : "" };
 }
 
 export function gekuerzt(befund) {
@@ -112,7 +145,7 @@ function artefaktBefund(wert) {
     return SCHWEREN.includes(wert.schwere) ? { sicherheit: true, schwere: wert.schwere } : null;
   }
   const befund = befundAus(wert);
-  return befund && !befund.sicherheit ? befund : null;
+  return befund && !befund.sicherheit ? belegAus(wert, befund) : null;
 }
 
 function kopfGueltig(wert) {
