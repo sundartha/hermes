@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -97,6 +97,22 @@ test("am letzten Commit liegt der ganze PR als Diff gegen die Basis, muss gelese
   assert.ok(gesamt.includes("+export const ZAHL = 2;") && gesamt.includes('+export const NAME = "a";'), gesamt);
   assert.ok(readFileSync(join(ordner, "auftrag.md"), "utf8").includes("Nummer 2 von 2. Er ist der letzte"));
   assert.equal(zuegeFuer(zweiter) - zuegeFuer({ ...zweiter, letzter: false }), zuegeFuer(erster) - zuegeFuer({ ...erster, dateien: [] }));
+});
+
+test("der Prüfer sieht unter basis/ jede versionierte Datei der Basis, Steuerdateien nur umbenannt und nichts Unversioniertes", (context) => {
+  const repo = probeRepo(context, { "src/zahl.js": "export const ZAHL = 1;\n", "src/alt.js": "export const ALT = 1;\n", "CLAUDE.md": "Regel\n", ".claude/agents/bau.md": "Rolle\n" });
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, "Setze die Zahl\n");
+  writeFileSync(join(repo.ordner, ".env"), "GEHEIM=1\n");
+  const [commit] = zuPruefendeCommits({ basis, head: repo.git(["rev-parse", "HEAD"]), branch: "fix/zahl", root: repo.ordner }).commits;
+  const { ordner } = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: "", ciLauf: "", basis });
+  context.after(() => entferne(ordner));
+  const inBasis = (pfad) => join(ordner, "basis", pfad);
+  assert.equal(readFileSync(inBasis("src/alt.js"), "utf8"), "export const ALT = 1;\n");
+  assert.equal(readFileSync(inBasis("src/zahl.js"), "utf8"), "export const ZAHL = 1;\n");
+  assert.equal(readFileSync(inBasis("_CLAUDE.md"), "utf8"), "Regel\n");
+  assert.equal(readFileSync(inBasis("_.claude/agents/bau.md"), "utf8"), "Rolle\n");
+  for (const pfad of ["CLAUDE.md", ".claude", ".env", "_.env"]) assert.ok(!existsSync(inBasis(pfad)), pfad);
 });
 
 test("der Prüfer bekommt die drei Schweregrade mit Prüffragen, die Zuordnung des Katalogs und die Reparatur in einem Satz", () => {

@@ -22,6 +22,11 @@ const NUR_LESEN = 0o444;
 const ROTE_RUNDEN = "## Rote Prüfungen im Auftragsweg vor diesem Commit";
 const EINRUECKUNG = "    ";
 const PR_PATCH = "pr/gesamt.patch";
+const BASIS_ORDNER = "basis";
+const BAUM_EINTRAG = /^(\d{6}) blob ([0-9a-f]+)\t(.+)$/s;
+const DATEI_MODI = new Set(["100644", "100755"]);
+const ZEILENENDE = 0x0a;
+const GROESSE_IM_KOPF = 2;
 const DIFF_OPTIONEN = ["--no-color", "--no-ext-diff", "--no-renames"];
 
 function sichererPfad(pfad) {
@@ -73,6 +78,39 @@ function legeDateiAb(ordner, { sha, pfad, root }) {
     return { ablage: null, grund: "nicht ablegbar" };
   }
   return { ablage: `dateien/${ziel}`, grund: "" };
+}
+
+function basisEintrag(eintrag) {
+  const treffer = BAUM_EINTRAG.exec(eintrag);
+  if (treffer === null || !DATEI_MODI.has(treffer[1])) return [];
+  const [, , objekt, pfad] = treffer;
+  const ziel = sichererPfad(pfad);
+  return ziel === null ? [] : [{ objekt, ziel }];
+}
+
+function basisDateien(basis, root) {
+  return gitAusgabe(["ls-tree", "-r", "-z", basis], root).split("\0").flatMap(basisEintrag);
+}
+
+function blobInhalte(objekte, root) {
+  const eingabe = Buffer.from(objekte.map((objekt) => `${objekt}\n`).join(""));
+  const ausgabe = gitAusgabe(["cat-file", "--batch"], root, { eingabe, kodierung: "buffer" });
+  let stelle = 0;
+  return objekte.map(() => {
+    const kopfEnde = ausgabe.indexOf(ZEILENENDE, stelle);
+    const groesse = Number(ausgabe.toString("utf8", stelle, kopfEnde).split(" ")[GROESSE_IM_KOPF]);
+    const anfang = kopfEnde + 1;
+    stelle = anfang + groesse + 1;
+    return ausgabe.subarray(anfang, anfang + groesse);
+  });
+}
+
+function legeBasisAb(ordner, { basis, root }) {
+  if (basis === undefined) return;
+  const wurzel = join(ordner, BASIS_ORDNER);
+  const dateien = basisDateien(basis, root).filter(({ ziel }) => resolve(wurzel, ziel).startsWith(wurzel + sep));
+  const inhalte = blobInhalte(dateien.map(({ objekt }) => objekt), root);
+  dateien.forEach(({ ziel }, index) => schreibe(join(wurzel, ziel), inhalte[index]));
 }
 
 function dateiZeile({ patch, pfad, ablage, grund }) {
@@ -198,6 +236,7 @@ export function baueArbeitsordner(commit, kontext) {
     patches.push(PR_PATCH);
   }
   legeReferenzenAb(ordner);
+  legeBasisAb(ordner, kontext);
   schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, eintraege));
   schreibe(join(ordner, "ergebnisse.md"), ergebnisseText(commit, kontext));
   return { ordner, patches };
