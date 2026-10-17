@@ -3,7 +3,7 @@
   "reporters": ["console"],
   "gitignore": false,
   "absolute": false,
-  "format": ["javascript", "typescript", "jsx", "tsx"],
+  "format": ["javascript", "typescript", "jsx", "tsx", "yaml", "markdown"],
   "ignore": [
     "**/node_modules/**",
     "**/coverage/**",
