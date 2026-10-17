@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
 
+import { ausgang, auswegBei } from "../../tools/auftrag/ausgang.mjs";
 import { incentiveSection } from "../../tools/wochenbericht/anreize.mjs";
 import { raiseEmptyLists, transitionLists, transitionSection } from "../../tools/wochenbericht/uebergang.mjs";
+import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
 const JETZT = new Date("2026-10-12T05:23:00Z");
@@ -81,8 +83,8 @@ function antwortenFuerAnreize(url) {
     return [
       { commit: { message: "Baue um\n\nWarum: x\n\nGleichwertig: a.js:3 > zu >=, weil die Grenze nie erreicht wird\nGleichwertig: a.js:9 + zu -, weil null addiert wird\nPaket: AN1" } },
       { commit: { message: "Ändere b\n\nWarum: y\n\nGleichwertig: ohne Begründung\nPaket: AN1" } },
-      { commit: { message: "Schneide den Auftrag a1 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: x\nAusweg bei Prüfung: lint\n\nAuftrag: P-001/a1" } },
-      { commit: { message: "Schneide den Auftrag a2 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: y\nAusweg bei Prüfung: lint, typprüfung\n\nAuftrag: P-001/a2" } },
+      { commit: { message: `Schneide den Auftrag a1 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: x\n${auswegBei(["lint"])}\n\nAuftrag: P-001/a1` } },
+      { commit: { message: `Schneide den Auftrag a2 neu\n\nWarum: Der Agent ist ausgestiegen.\n\nAuftrag passt nicht: y\n${auswegBei(["lint", "typprüfung"])}\n\nAuftrag: P-001/a2` } },
     ];
   }
   if (url.pathname.endsWith("/issues/comments")) {
@@ -90,8 +92,8 @@ function antwortenFuerAnreize(url) {
       { created_at: IN_DER_WOCHE, body: "## Entscheidung nötig\n\nAuftrag passt nicht: Der Abnahmetest prüft das Gegenteil des Ziels." },
       { created_at: VOR_DER_WOCHE, body: "Auftrag passt nicht: alt" },
       { created_at: IN_DER_WOCHE, body: "Voraussetzung fehlt: Altfunktionen aufräumen: src/a.js:rechne" },
-      { created_at: IN_DER_WOCHE, body: "## Entscheidung nötig\n\nAlter Test hält altes Verhalten fest: test/a.test.js:alt – neu\nAusweg bei Prüfung: betroffene tests" },
-      { created_at: VOR_DER_WOCHE, body: "Ausweg bei Prüfung: lint" },
+      { created_at: IN_DER_WOCHE, body: `## Entscheidung nötig\n\nAlter Test hält altes Verhalten fest: test/a.test.js:alt – neu\n${auswegBei(["betroffene tests"])}` },
+      { created_at: VOR_DER_WOCHE, body: auswegBei(["lint"]) },
     ];
   }
   if (url.pathname.endsWith("/issues/11/events")) return [{ event: "closed", commit_id: "a".repeat(40) }];
@@ -117,4 +119,32 @@ test("Wochenbericht: zählt angenommene Gleichwertig-Meldungen, Ausstiege „Auf
     "- Geschlossene Prüfer-Issues: 1 mit einer Änderung, 1 ohne Änderung",
     "",
   ]);
+});
+
+const GRUND = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
+const AUSWEG_ZAEHLUNG = /^- (?:Ausstiege|Alter Test)/;
+
+async function berichtZuKommentaren(context, ...koerper) {
+  await attrappe(context, (url) => (url.pathname.endsWith("/issues/comments") ? koerper.map((body) => ({ created_at: IN_DER_WOCHE, body })) : []));
+  return (await incentiveSection(JETZT)).filter((zeile) => AUSWEG_ZAEHLUNG.test(zeile));
+}
+
+test("Wochenbericht: zählt jede Prüfung aus den Ausweg-Zeilen, die auswegBei schreibt, mit mehreren Prüfungen und ohne rote Prüfung", async (context) => {
+  const bericht = await berichtZuKommentaren(context, `## Entscheidung nötig\n\n${auswegBei(["lint", "typprüfung"])}`, auswegBei(["betroffene tests"]), auswegBei([]));
+  assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 0", "- Ausstiege je Prüfung: betroffene tests 1, keine 1, lint 1, typprüfung 1", "- Alter Test hält altes Verhalten fest: 0"]);
+});
+
+test("Wochenbericht: zählt die Zeilen als Ausstieg und als alten Test, die ausgang in einer Antwort des Agenten erkennt", async (context) => {
+  const ausstieg = ausgang(`Ich höre auf.\nAuftrag passt nicht: ${GRUND}`, "bau").zeile;
+  const alterTest = ausgang("Alter Test hält altes Verhalten fest: test/a.test.js:alt – neu", "bau").zeile;
+  const bericht = await berichtZuKommentaren(context, ausstieg, alterTest);
+  assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 1", "- Ausstiege je Prüfung: 0", "- Alter Test hält altes Verhalten fest: 1"]);
+});
+
+test("Wochenbericht: zählt den Ausstieg und die Prüfung aus dem Kommentar, den der Auftragsweg bei einem Ausstieg schreibt", async (context) => {
+  const drehbuch = { "bau-antwort": `Ich höre auf.\nAuftrag passt nicht: ${GRUND}`, "notiz-antwort": "1. Entwurf klären" };
+  const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  const bericht = await berichtZuKommentaren(context, beleg.entscheidung.text);
+  assert.deepEqual(bericht, ["- Ausstiege „Auftrag passt nicht“ in Kommentaren: 1", "- Ausstiege je Prüfung: keine 1", "- Alter Test hält altes Verhalten fest: 0"]);
 });
