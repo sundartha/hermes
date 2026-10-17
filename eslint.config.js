@@ -400,8 +400,9 @@ const dateiBloecke = [
     },
   },
 ];
-const TS_DATEIEN = [`{src,test,tools,scripts}/**/*.${TS_ENDUNGEN}`];
-const TS_DEKLARATIONEN = [`{src,test,tools,scripts}/**/*.d.${TS_ENDUNGEN}`];
+const TS_ORDNER = "{src,test,tools,scripts}";
+const TS_DATEIEN = [`${TS_ORDNER}/**/*.${TS_ENDUNGEN}`];
+const TS_DEKLARATIONEN = [`${TS_ORDNER}/**/*.d.${TS_ENDUNGEN}`];
 const DEKLARATION_MELDUNG =
   "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.";
 const TS_VORGABEN = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked];
