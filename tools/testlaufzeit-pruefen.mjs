@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 
 import { ausklingBefunde, grenzeAbleiten, zeilenAus } from "./testlaufzeit/ausklingen.mjs";
 import { aufrufeInDateien, echtWartenBefunde } from "./testlaufzeit/echt-warten-statisch.mjs";
+import { hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
 import { ausklingenStrenger, zeitgliederStrenger } from "./testlaufzeit/nur-strenger.mjs";
 import { zeitgliederBefunde } from "./testlaufzeit/zeitglieder.mjs";
 
@@ -133,6 +134,7 @@ async function pruefen(werte) {
     ...zeitgliederStrenger(werte.basis, BASIS_ZEITGLIEDER, zeitglieder),
     ...echtWartenBefunde(aufrufeInDateien(".", testdateien()), json(BASIS_ECHTE_WARTEZEITEN)),
     ...(await zeitgliederBefunde(process.cwd(), zeitglieder)),
+    ...hilfsdateiBefunde(zeilen),
     ...ausklingBefunde(zeilen, ausklingen),
   ];
   console.log(befunde.length === 0 ? "Testlaufzeit: keine Befunde" : "### Befunde");
