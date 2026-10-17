@@ -6,7 +6,6 @@ import { env } from "node:process";
 import { tokenize } from "espree";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
-import { maskiert } from "../testwirkung/aufrufe.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
@@ -128,18 +127,65 @@ function vorgemerkteNeueZeilen(basis, root) {
   return [...jeDatei].map(([pfad, neu]) => ({ datei: pfad, neu, inhalt: git(["show", `:${pfad}`], { cwd: root }) }));
 }
 
-function bezeichnerJeZeile(inhalt) {
-  const jeZeile = new Map();
-  for (const { type, value, loc } of tokenize(inhalt, JAVASCRIPT)) {
-    if (type === BEZEICHNER) jeZeile.set(loc.start.line, (jeZeile.get(loc.start.line) ?? new Set()).add(value));
+const DEKLARIERT_NACH = new Set(["function", "const", "let", "var", "class"]);
+const METHODEN_VORSATZ = new Set(["async", "static"]);
+const GENERATOR = "*";
+const KLAMMER_AUF = "(";
+const KLAMMER_ZU = ")";
+const BLOCK_AUF = "{";
+const ABSTAND_FUNCTION_VOR_STERN = 2;
+
+function anfangsZeile({ loc }) {
+  return loc.start.line;
+}
+
+function endZeile({ loc }) {
+  return loc.end.line;
+}
+
+function stehtAmZeilenanfang(tokens, index) {
+  const zeile = anfangsZeile(tokens[index]);
+  let davor = index - 1;
+  while (davor >= 0 && anfangsZeile(tokens[davor]) === zeile && METHODEN_VORSATZ.has(tokens[davor].value)) davor -= 1;
+  return davor < 0 || endZeile(tokens[davor]) < zeile;
+}
+
+function folgtBlockAufParameter(tokens, index) {
+  if (tokens[index + 1]?.value !== KLAMMER_AUF) return false;
+  let tiefe = 0;
+  for (let stelle = index + 1; stelle < tokens.length; stelle += 1) {
+    tiefe += Number(tokens[stelle].value === KLAMMER_AUF) - Number(tokens[stelle].value === KLAMMER_ZU);
+    if (tiefe === 0) return tokens[stelle + 1]?.value === BLOCK_AUF;
   }
+  return false;
+}
+
+function istDeklaration(tokens, index) {
+  const davor = tokens[index - 1];
+  if (DEKLARIERT_NACH.has(davor?.value) || (davor?.value === GENERATOR && tokens[index - ABSTAND_FUNCTION_VOR_STERN]?.value === "function")) return true;
+  return stehtAmZeilenanfang(tokens, index) && folgtBlockAufParameter(tokens, index);
+}
+
+function leereNamen() {
+  return { genannt: new Set(), deklariert: new Set() };
+}
+
+function namenJeZeile(inhalt) {
+  const jeZeile = new Map();
+  const tokens = tokenize(inhalt, JAVASCRIPT);
+  tokens.forEach((token, index) => {
+    if (token.type !== BEZEICHNER) return;
+    const zeile = anfangsZeile(token);
+    const namen = jeZeile.get(zeile) ?? leereNamen();
+    namen[istDeklaration(tokens, index) ? "deklariert" : "genannt"].add(token.value);
+    jeZeile.set(zeile, namen);
+  });
   return jeZeile;
 }
 
 function neueZeilenDer({ datei, inhalt, neu }) {
-  const bezeichner = JS_DATEI.test(datei) ? bezeichnerJeZeile(inhalt) : new Map();
-  const texte = inhalt.split("\n");
-  return neu.map((nummer) => ({ datei, text: texte[nummer - 1], bezeichner: bezeichner.get(nummer) ?? new Set() }));
+  const namen = JS_DATEI.test(datei) ? namenJeZeile(inhalt) : new Map();
+  return neu.map((nummer) => ({ datei, ...(namen.get(nummer) ?? leereNamen()) }));
 }
 
 function lesbareZeilen(dateien) {
@@ -155,17 +201,10 @@ function lesbareZeilen(dateien) {
   return { zeilen, unlesbar };
 }
 
-function deklarationsMuster(funktion) {
-  const name = maskiert(funktion);
-  return new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`);
-}
-
 function verstossBei({ datei, funktion, fuer }, zeilen) {
-  const deklariert = deklarationsMuster(funktion);
-  const nachbau = zeilen.find((zeile) => zeile.datei !== datei && deklariert.test(zeile.text));
+  const nachbau = zeilen.find((zeile) => zeile.datei !== datei && zeile.deklariert.has(funktion));
   if (nachbau !== undefined) return [`nachgebaut: ${nachbau.datei} deklariert ${funktion} neu, statt ${datei}:${funktion} zu nutzen (für ${fuer})`];
-  const aufgerufen = zeilen.some((zeile) => zeile.bezeichner.has(funktion) && !deklariert.test(zeile.text));
-  return aufgerufen ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
+  return zeilen.some((zeile) => zeile.genannt.has(funktion)) ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
 }
 
 export function nutzungsVerstoesse(nutzen, dateien) {

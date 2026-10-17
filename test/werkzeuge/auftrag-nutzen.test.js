@@ -139,6 +139,9 @@ test("deklariert der Bau dieselbe Funktion in einer anderen Datei neu, ist das e
   const kopie = neueDatei(["function verdopple(zahl) {", "  return zahl * 2;", "}", "export const doppelt = verdopple(1);"]);
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [kopie]), ["nachgebaut: src/text.js deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)"]);
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const verdopple = (zahl) => zahl * 2;"])]).length, 1);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["let verdopple = 2;"])]).length, 1);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["function* verdopple() {", "}"])]).length, 1);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["class Rechner {", "  static async verdopple(zahl) {", "    return zahl * 2;", "  }", "}"])]).length, 1);
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["export function verdopple(zahl) {", "}"], { datei: "src/rechnen.js" }), neueDatei(["verdopple(1);"])]), []);
 });
 
