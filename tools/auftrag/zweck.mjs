@@ -52,6 +52,7 @@ export const MELDUNG = {
   ABDECKUNG: "abdeckung",
   SCHNITT: "schnitt",
   TS_SPERRE: "ts-sperre",
+  WERKZEUGABBRUCH: "werkzeugabbruch",
 };
 
 export const ALTER_TEST = "alter test";
