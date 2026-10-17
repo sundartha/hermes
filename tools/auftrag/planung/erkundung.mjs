@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { TEST_FILE } from "../../testgraph.mjs";
 import { funktionenIn } from "../../ziele/funktionen.mjs";
 import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from "../format.mjs";
+import { zeilenDes } from "../zeilen.mjs";
+import { suchTreffer } from "./suche.mjs";
 
 export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
 const PFLICHT_ROLLEN = ["eingang", "wirkung"];
@@ -18,6 +20,8 @@ const WENN = /^\s*Wenn\s/;
 const IN_BACKTICKS = /`([^`]+)`/g;
 const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
 export const PLATZHALTER = "<AUSFUELLEN>";
+export const NUTZEN = "nutzen";
+const KEIN_TREFFER_PASST = /^kein Treffer passt, weil(.*)$/su;
 
 export function istObjekt(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -111,11 +115,64 @@ function wegBefunde(ort, weg, kontext) {
   return [...befunde, ...fehlend.map((rolle) => `${ort}: Weg ohne Stelle mit Rolle ${rolle} und ohne Ausweg`)];
 }
 
+function trefferJeBegriff(begriff, kontext) {
+  if (!kontext.suchen.has(begriff)) kontext.suchen.set(begriff, suchTreffer(begriff, kontext.root));
+  return kontext.suchen.get(begriff);
+}
+
+const DATEI_ZEILE = /^(.+):(\d+)$/;
+
+function trefferInFundDatei(stelle, gefunden, kontext) {
+  const teile = DATEI_ZEILE.exec(typeof stelle === "string" ? stelle : "");
+  if (teile === null || !gefunden.some((fund) => fund.startsWith(`${teile[1]}:`))) return false;
+  return Number(teile[2]) <= zeilenDes(quelle(kontext, teile[1])).length;
+}
+
+function nutzenBefund(ort, { nutzen, treffer }, kontext) {
+  if (!istObjekt(nutzen) || !istText(nutzen.datei) || !istText(nutzen.funktion)) return `${ort}: urteil „${NUTZEN}“ braucht nutzen mit datei und funktion`;
+  if (!treffer.some((stelle) => stelle.startsWith(`${nutzen.datei}:`))) return `${ort}: nutzen nennt ${nutzen.datei}, das unter treffer nicht vorkommt`;
+  const befund = dateiBefund(ort, nutzen, kontext);
+  if (befund !== null) return befund;
+  const namen = funktionenIn(nutzen.datei, quelle(kontext, nutzen.datei)).map(({ name }) => name);
+  return namen.includes(nutzen.funktion) ? null : `${ort}: Funktion ${nutzen.funktion} fehlt in ${nutzen.datei}`;
+}
+
+function urteilBefund(ort, vorhanden, kontext) {
+  if (vorhanden.urteil === NUTZEN) return nutzenBefund(ort, vorhanden, kontext);
+  const grund = KEIN_TREFFER_PASST.exec(vorhanden.urteil ?? "");
+  if (grund === null) return `${ort}: urteil muss „${NUTZEN}“ oder „kein Treffer passt, weil …“ sein`;
+  if (!GRUND.test(grund[1])) return `${ort}: „kein Treffer passt, weil …“ ohne Grund`;
+  kontext.annahmen.push({ nummer: kontext.nummer, angabe: "vorhanden", text: `${ort}: ${vorhanden.urteil.trim()} (${vorhanden.beleg})` });
+  return null;
+}
+
+function vorhandenBefund(ort, stelle, kontext) {
+  const name = stelle.neu === "datei" ? stelle.datei : stelle.funktion;
+  const { vorhanden } = stelle;
+  if (!istObjekt(vorhanden)) return `${ort}: neue ${stelle.neu} ${name} ohne vorhanden; such zuerst mit suche nach Namen, Literalen und der Regel selbst und nenn Suchbegriffe, Treffer und Urteil`;
+  const begriffe = liste(vorhanden.suche).filter(istText);
+  if (!begriffe.some((begriff) => begriff !== name)) return `${ort}: vorhanden.suche nennt keinen Suchbegriff außer dem neuen Namen ${name}`;
+  const jeBegriff = begriffe.map((begriff) => [begriff, trefferJeBegriff(begriff, kontext)]);
+  const ungueltig = jeBegriff.find(([, gefunden]) => gefunden === null);
+  if (ungueltig !== undefined) return `${ort}: Suchbegriff ${ungueltig[0]} ist kein gültiges Muster für suche`;
+  if (!jeBegriff.some(([begriff, stellen]) => begriff !== name && stellen.length > 0)) return `${ort}: die Suche nach ${begriffe.join(", ")} findet im Code nichts; nenn Begriffe der Regel, die im Code vorkommen (Literale, Schlüssel, Feldnamen aus deinem Weg)`;
+  const gefunden = jeBegriff.flatMap(([, stellen]) => stellen);
+  const treffer = liste(vorhanden.treffer);
+  const erfunden = treffer.filter((stelle) => !trefferInFundDatei(stelle, gefunden, kontext));
+  if (erfunden.length > 0) return `${ort}: treffer ${erfunden.join(", ")} liegt in keiner Datei, in der die Suche nach ${begriffe.join(", ")} etwas findet, oder die Zeile gibt es dort nicht`;
+  if (gefunden.length > 0 && treffer.length === 0) return `${ort}: die Suche nach ${begriffe.join(", ")} hat ${gefunden.length} Treffer, treffer nennt keinen`;
+  return urteilBefund(ort, { ...vorhanden, treffer, beleg: `Suche nach ${begriffe.join(", ")}: ${gefunden.length} Funde` }, kontext);
+}
+
+function neueAenderungBefund(ort, stelle, kontext) {
+  return neueStelleBefund(ort, stelle, kontext) ?? vorhandenBefund(ort, stelle, kontext);
+}
+
 function aenderungBefund(ort, stelle, kontext) {
   if (!istObjekt(stelle)) return `${ort}: Änderungsstelle ist kein Objekt`;
   if (!Number.isInteger(stelle.neueZeilen) || stelle.neueZeilen < 0) return `${ort}: neueZeilen fehlt (grobe Schätzung neuer Zeilen)`;
   if (stelle.neu === undefined) return stelleBefund(ort, stelle, kontext);
-  return ["datei", "funktion"].includes(stelle.neu) ? neueStelleBefund(ort, stelle, kontext) : `${ort}: neu muss „datei“ oder „funktion“ sein`;
+  return ["datei", "funktion"].includes(stelle.neu) ? neueAenderungBefund(ort, stelle, kontext) : `${ort}: neu muss „datei“ oder „funktion“ sein`;
 }
 
 function aenderungenBefunde(ort, aenderungen, kontext) {
@@ -204,7 +261,7 @@ export function erkundungBefunde(bericht, { gruppe, soll, root }) {
   const annahmen = [];
   const nummern = bericht?.nummern;
   if (!istObjekt(nummern)) return { befunde: ["nummern fehlt: je Nummer der Gruppe ein Objekt mit den Angaben"], annahmen };
-  const kontext = { root, soll, annahmen, muster: geschuetzteMuster(root), quellen: new Map() };
+  const kontext = { root, soll, annahmen, muster: geschuetzteMuster(root), quellen: new Map(), suchen: new Map() };
   const befunde = gruppe.filter((nummer) => !Object.hasOwn(nummern, nummer)).map((nummer) => `${nummer}: Nummer der Gruppe fehlt im Bericht`);
   for (const [nummer, angaben] of Object.entries(nummern)) {
     if (gruppe.includes(nummer) && !soll.has(nummer)) befunde.push(`${nummer}: steht nicht in den Soll-Nummern`);
