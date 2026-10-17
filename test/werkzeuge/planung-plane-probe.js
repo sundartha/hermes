@@ -14,7 +14,7 @@ export const ABSTURZ_EXIT = 3;
 export const ABSTURZ_FEHLER = "Error: spawn claude ENOENT";
 export const WARTEN_MS = 1500;
 
-function planeAntworten() {
+export function planeAntworten() {
   return {
     "planer|## Gliederung": [alsJson({ gruppen: GRUPPEN })],
     "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern)],
