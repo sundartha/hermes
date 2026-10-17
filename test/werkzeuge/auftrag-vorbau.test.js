@@ -172,6 +172,7 @@ test("Vorbau: ändert der testumbau den Rumpf einer bestehenden Hilfe, ist seine
   const { umbau } = vorwegVerworfen(context, { dateien: { [ALT]: mitHilfe("{ gates: true }") } }, { dateien });
   assert.equal(umbau.pruefungen.some(({ name }) => name === "mutation testumbau"), false);
   assert.match(umbau.runden[0], /neue Hilfe, ein neuer Import oder ein ergänzter Wert einer bestehenden Belegung/);
+  assert.match(umbau.runden[0], /vorbau nur ergänzt:[\s\S]*Echte Behebung: Am alten Test nur ergänzen: eine neue Hilfe, einen neuen Import/);
 });
 
 test("Zusicherungen je Fall: Einrückung zählt nicht, gestrichene, geänderte, verschobene Zusicherungen, neue Fälle und ein Vorbau, den eine Zusicherung direkt prüft, schon", () => {
