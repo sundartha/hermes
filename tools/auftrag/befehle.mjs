@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "node:process";
 
+import { tokenize } from "espree";
+
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
@@ -117,20 +119,28 @@ function hinzugefuegteZeilen(basis, root) {
   });
 }
 
-function namensMuster(funktion) {
+const JAVASCRIPT = { ecmaVersion: "latest", sourceType: "module" };
+const BEZEICHNER = "Identifier";
+
+function deklarationsMuster(funktion) {
   const name = funktion.replace(SONDERZEICHEN, "\\$&");
-  return {
-    erwaehnt: new RegExp(`(?<![\\w$])${name}(?![\\w$])`),
-    deklariert: new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`),
-  };
+  return new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`);
+}
+
+function bezeichnerIn(text) {
+  try {
+    return new Set(tokenize(text, JAVASCRIPT).filter(({ type }) => type === BEZEICHNER).map(({ value }) => value));
+  } catch {
+    return new Set();
+  }
 }
 
 export function nutzungsVerstoesse(nutzen, zeilen) {
   return nutzen.flatMap(({ datei, funktion, fuer }) => {
-    const { erwaehnt, deklariert } = namensMuster(funktion);
+    const deklariert = deklarationsMuster(funktion);
     const nachbau = zeilen.find((zeile) => zeile.datei !== datei && deklariert.test(zeile.text));
     if (nachbau !== undefined) return [`nachgebaut: ${nachbau.datei} deklariert ${funktion} neu, statt ${datei}:${funktion} zu nutzen (für ${fuer})`];
-    const genutzt = zeilen.some((zeile) => erwaehnt.test(zeile.text) && !deklariert.test(zeile.text));
+    const genutzt = zeilen.some((zeile) => bezeichnerIn(zeile.text).has(funktion) && !deklariert.test(zeile.text));
     return genutzt ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
   });
 }
