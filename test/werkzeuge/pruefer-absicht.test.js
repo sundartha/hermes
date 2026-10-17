@@ -11,20 +11,21 @@ import { ohneGitVariablen, probeRepo } from "./pruefer/hilfen.mjs";
 
 ohneGitVariablen();
 
+const VERKNUEPFTES_ISSUE = 77;
 const PHASE = "P-002-probe";
 const ORDNER = `plaene/${PHASE}`;
-const PHASEN_BRANCH = `phase/77-${PHASE}`;
+const PHASEN_BRANCH = `phase/${VERKNUEPFTES_ISSUE}-${PHASE}`;
 const PAKET_BRANCH = "paket/AB2-probe";
 const ABSICHT = [
   "Die Zahl soll aus der Konfiguration kommen, damit sie an einer Stelle steht.",
   "### Nicht gewollt",
   "Ein Sonderfall nur für die Testeingabe – auch wenn alle Tests grün sind.",
 ].join("\n");
-const ISSUE_QUELLE = "Abschnitt „## Absicht“ in Issue #77";
+const ISSUE_QUELLE = `Abschnitt „## Absicht“ in Issue #${VERKNUEPFTES_ISSUE}`;
 const PFLICHT = "Paket-PR und Phase mit Absicht brauchen im Issue den Abschnitt „## Absicht“";
 
 function issue(body) {
-  return { nummer: "77", title: "Phase 77", body };
+  return { nummer: String(VERKNUEPFTES_ISSUE), title: `Phase ${VERKNUEPFTES_ISSUE}`, body };
 }
 
 function mitAbsicht(absicht) {
@@ -47,9 +48,9 @@ test("die Absicht kommt wörtlich aus dem Abschnitt des verknüpften Issues, nie
 
 test("bringt der PR eine Phase mit Feld absicht, hält ein fehlender oder abweichender Abschnitt im Issue den Prüfer an", (context) => {
   const pr = phasenPr(context, { feld: ABSICHT });
-  assert.deepEqual(absichtFuerPr({ ...pr, issue: issue("## Ziel\n\nZahl 2\n") }), { fehlt: `Issue #77: ${PFLICHT}` });
+  assert.deepEqual(absichtFuerPr({ ...pr, issue: issue("## Ziel\n\nZahl 2\n") }), { fehlt: `Issue #${VERKNUEPFTES_ISSUE}: ${PFLICHT}` });
   assert.deepEqual(absichtFuerPr({ ...pr, issue: mitAbsicht(ABSICHT.slice(1)) }), {
-    fehlt: `Issue #77: der Abschnitt „## Absicht“ weicht von absicht in ${ORDNER}/phase.json ab`,
+    fehlt: `Issue #${VERKNUEPFTES_ISSUE}: der Abschnitt „## Absicht“ weicht von absicht in ${ORDNER}/phase.json ab`,
   });
 });
 
@@ -62,7 +63,7 @@ test("ein Paket-PR bekommt die Absicht wörtlich aus dem Issue; ohne Issue, ohne
   assert.deepEqual(absichtFuerPr({ branch: PAKET_BRANCH, issue: mitAbsicht(ABSICHT) }), { text: ABSICHT, quelle: ISSUE_QUELLE });
   assert.deepEqual(
     [issue("## Ziel\n\nZahl 2\n"), null, issue("## Absicht\n\n## Ziel\n"), issue(null)].map((eintrag) => absichtFuerPr({ branch: PAKET_BRANCH, issue: eintrag }).fehlt),
-    [`Issue #77: ${PFLICHT}`, `kein verknüpftes Issue: ${PFLICHT}`, "Issue #77: der Abschnitt „## Absicht“ ist leer", `Issue #77 nicht lesbar: ${PFLICHT}`],
+    [`Issue #${VERKNUEPFTES_ISSUE}: ${PFLICHT}`, `kein verknüpftes Issue: ${PFLICHT}`, `Issue #${VERKNUEPFTES_ISSUE}: der Abschnitt „## Absicht“ ist leer`, `Issue #${VERKNUEPFTES_ISSUE} nicht lesbar: ${PFLICHT}`],
   );
 });
 
@@ -77,8 +78,8 @@ test("ein Fork-PR bekommt nie eine Absicht als Vorgabe, auch mit Branch paket/ u
 
 test("nur eine fehlende Pflicht-Absicht hält den Prüfer an, „keine Angabe“ und eine vorhandene Absicht nicht", () => {
   assert.deepEqual(
-    [{ fehlt: "Issue #77: leer" }, { keine: "keine Angabe; Fork" }, { text: ABSICHT, quelle: ISSUE_QUELLE }].map(abbruchOhneAbsicht),
-    ["Absicht fehlt: Issue #77: leer", "", ""],
+    [{ fehlt: `Issue #${VERKNUEPFTES_ISSUE}: leer` }, { keine: "keine Angabe; Fork" }, { text: ABSICHT, quelle: ISSUE_QUELLE }].map(abbruchOhneAbsicht),
+    [`Absicht fehlt: Issue #${VERKNUEPFTES_ISSUE}: leer`, "", ""],
   );
 });
 
@@ -87,7 +88,7 @@ function auftragszettel(context, absicht) {
   const basis = repo.git(["rev-parse", "HEAD"]);
   repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, "Setze die Zahl\n");
   const [commit] = zuPruefendeCommits({ basis, head: repo.git(["rev-parse", "HEAD"]), branch: PAKET_BRANCH, root: repo.ordner }).commits;
-  const { ordner } = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: "Issue #77: Zahl\n\nZiel", ciLauf: "", absicht });
+  const { ordner } = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: `Issue #${VERKNUEPFTES_ISSUE}: Zahl\n\nZiel`, ciLauf: "", absicht });
   context.after(() => entferne(ordner));
   return { text: readFileSync(join(ordner, "auftrag.md"), "utf8"), sha: commit.sha };
 }
