@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { chdir, cwd } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,6 @@ import { parseArgs } from "node:util";
 
 import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
-import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { legeWorktreeAn } from "./auftrag/git.mjs";
@@ -20,15 +19,15 @@ import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige 
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
-import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
+import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
 const { $schema: _schema, ...KONFIGURATION } = JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8"));
 const WURZEL = cwd();
-const ARBEITSVERZEICHNIS = join(WURZEL, "node_modules", ".cache", "mutationspruefung");
+const SANDBOXORDNER = ".mutationspruefung";
 const BANK = "regression";
-const QUELLDATEI = /^src\/.+\.[cm]?js$/;
-const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
+const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
+const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
 const GRAPH_WURZELN = ["src", "test"];
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
@@ -75,9 +74,15 @@ function git(args, verzeichnis = cwd()) {
   return lauf.stdout;
 }
 
+function eigenerOrdner(wurzel) {
+  const ordner = join(wurzel, SANDBOXORDNER);
+  mkdirSync(ordner, { recursive: true });
+  writeFileSync(join(ordner, ".gitignore"), "*\n");
+  return ordner;
+}
+
 function arbeitsverzeichnis(praefix) {
-  mkdirSync(ARBEITSVERZEICHNIS, { recursive: true });
-  return mkdtempSync(join(ARBEITSVERZEICHNIS, praefix));
+  return mkdtempSync(join(eigenerOrdner(WURZEL), praefix));
 }
 
 function zeilenbereich(hunk, seite) {
@@ -134,25 +139,21 @@ function mutant({ fileName, location, mutatorName, replacement, status, killedBy
 
 async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
   console.log(await vorlageEinstellen(datei));
-  const tempDirName = arbeitsverzeichnis("mutation-");
+  eigenerOrdner(cwd());
   const beginn = Date.now();
-  try {
-    const optionen = {
-      ...KONFIGURATION,
-      mutate: zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`),
-      tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
-      timeoutMS: KONFIGURATION.timeoutMS * faktor,
-      configFile: KONFIGURATIONSDATEI,
-      concurrency,
-      tempDirName,
-    };
-    const ergebnisse = (await new Stryker(optionen).runMutationTest()).map(mutant);
-    const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
-    console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
-    return ergebnisse;
-  } finally {
-    rmSync(tempDirName, { recursive: true, force: true });
-  }
+  const optionen = {
+    ...KONFIGURATION,
+    mutate: zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`),
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
+    timeoutMS: KONFIGURATION.timeoutMS * faktor,
+    configFile: KONFIGURATIONSDATEI,
+    concurrency,
+    tempDirName: SANDBOXORDNER,
+  };
+  const ergebnisse = (await new Stryker(optionen).runMutationTest()).map(mutant);
+  const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
+  console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
+  return ergebnisse;
 }
 
 function ueberlebt({ status }) {
@@ -266,20 +267,24 @@ function abschaltungen(datei, bereiche) {
   );
 }
 
-function inhaltImCommit(commit, datei) {
-  const lauf = spawnSync("git", ["show", `${commit}:${datei}`], { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
-  return lauf.status === 0 ? lauf.stdout : undefined;
+async function gleicherLaufzeitcode(datei, { von, bis, seite }, umbenannt) {
+  const paar = umbenannt.paare.find(({ alt, neu }) => (seite === "neu" ? neu : alt) === datei);
+  if (paar !== undefined) {
+    return paar.nurTypen ? `${paar.neu}: nur Typen ergänzt gegenüber ${paar.alt}, Laufzeitcode gleich, keine Mutanten nötig.` : undefined;
+  }
+  const [vorher, nachher] = [inhalt(von, datei), inhalt(bis, datei)];
+  if (vorher === undefined || nachher === undefined) return undefined;
+  const { gleich } = await umbenannt.vergleiche({ pfad: datei, text: vorher }, { pfad: datei, text: nachher });
+  return gleich ? `${datei}: Syntaxbaum unverändert, keine Mutanten nötig.` : undefined;
 }
 
-async function ohneGleichenSyntaxbaum(zeilen, { von, bis }) {
-  const eslint = new ESLint();
+async function ohneGleichenSyntaxbaum(zeilen, pruefung) {
+  const umbenannt = await umbenennungen(pruefung);
   for (const datei of [...zeilen.keys()]) {
-    const vorher = inhaltImCommit(von, datei);
-    const nachher = bis ? inhaltImCommit(bis, datei) : readFileSync(datei, "utf8");
-    if (vorher === undefined || nachher === undefined) continue;
-    if (!(await nurKommentareGeaendert({ pfad: datei, vorher, nachher }, eslint))) continue;
+    const meldung = await gleicherLaufzeitcode(datei, pruefung, umbenannt);
+    if (meldung === undefined) continue;
     zeilen.delete(datei);
-    console.log(`${datei}: Syntaxbaum unverändert, keine Mutanten nötig.`);
+    console.log(meldung);
   }
   return zeilen;
 }
@@ -292,7 +297,7 @@ async function bestandteile({ von, bis, seite }) {
     bereiche,
     abgeschaltet: seite === "neu" ? abschaltungen(datei, bereiche) : [],
   }));
-  const zeilen = await ohneGleichenSyntaxbaum(geaendert, { von, bis });
+  const zeilen = await ohneGleichenSyntaxbaum(geaendert, { von, bis, seite });
   return einheiten
     .map((einheit) => (zeilen.has(einheit.datei) ? einheit : { ...einheit, bereiche: undefined }))
     .filter(({ bereiche, abgeschaltet }) => bereiche !== undefined || abgeschaltet.length > 0);

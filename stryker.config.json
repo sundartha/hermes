@@ -11,5 +11,5 @@
   "logLevel": "error",
   "cleanTempDir": "always",
   "disableTypeChecks": false,
-  "ignorePatterns": ["/.claude/worktrees", "/.fortschritt", "/.pruefung", "/data", "/coverage"]
+  "ignorePatterns": ["/.claude/worktrees", "/.mutationspruefung", "/.fortschritt", "/.pruefung", "/data", "/coverage"]
 }

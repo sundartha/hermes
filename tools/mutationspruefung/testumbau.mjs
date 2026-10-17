@@ -5,7 +5,7 @@ import { cruise } from "dependency-cruiser";
 
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
-const QUELLDATEI = /^src\/.+\.[cm]?js$/;
+const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTSEITE = /^test\//;
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const EXIT_GRUEN = 0;
