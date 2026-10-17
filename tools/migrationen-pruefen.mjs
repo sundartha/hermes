@@ -124,11 +124,16 @@ function ignoreFindings(migrations) {
     );
 }
 
-function isStartingMigration(path, basis, baseMigrations) {
-  if (basis === undefined) return numberOf(path) === STARTING_NUMBER && !isRollback(path);
-  if (numberOf(path) !== STARTING_NUMBER || isRollback(path) || baseMigrations.length > 0)
-    return false;
-  return fileAt(basis, SCHEMA) === readFileSync(path, "utf8");
+function isStartingMigration(path) {
+  return numberOf(path) === STARTING_NUMBER && !isRollback(path);
+}
+
+function isUnchangedSchemaMove(path, basis, baseMigrations) {
+  return (
+    isStartingMigration(path) &&
+    baseMigrations.length === 0 &&
+    fileAt(basis, SCHEMA) === readFileSync(path, "utf8")
+  );
 }
 
 function mergedFindings(basis, baseMigrations, migrations) {
@@ -158,11 +163,7 @@ function freshFindings(basis, baseMigrations, fresh) {
       found.push(
         `${path}: Nummer ${numberText(number)} ist nicht größer als die höchste gemergte (${numberText(highest)}).`,
       );
-    if (
-      number === STARTING_NUMBER &&
-      !isRollback(path) &&
-      !isStartingMigration(path, basis, baseMigrations)
-    )
+    if (isStartingMigration(path) && !isUnchangedSchemaMove(path, basis, baseMigrations))
       found.push(
         `${path}: Ausgangsmigration ist nicht unverändert ${SCHEMA} der Basis; sie wird wie jede andere Migration geprüft.`,
       );
@@ -197,7 +198,7 @@ function basisFindings(basis, migrations) {
       ...freshFindings(basis, baseMigrations, fresh),
       ...rollbackFindings(basis, fresh),
     ],
-    fresh: fresh.filter((path) => !isStartingMigration(path, basis, baseMigrations)),
+    fresh: fresh.filter((path) => !isUnchangedSchemaMove(path, basis, baseMigrations)),
   };
 }
 
@@ -240,7 +241,7 @@ function findings(basis) {
   ];
   if (basis === undefined) {
     const checked = migrations.filter(
-      (path) => numberOf(path) !== undefined && !isStartingMigration(path, basis, []),
+      (path) => numberOf(path) !== undefined && !isStartingMigration(path),
     );
     return [...own, ...squawkFindings(checked)];
   }
