@@ -12,7 +12,7 @@ import { druckePlanBericht, planBericht } from "./planbericht.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
-import { auftragAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
+import { auftraegeAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
 
 export const VERLAUF = "\n## Verlauf\n";
 const NACHFRAGEN = "Nachfragen gibt es beim Neuschnitt nicht";
@@ -248,11 +248,11 @@ class NeuschnittPlanung extends Planung {
   }
 
   setzeEin(entwuerfe) {
-    const neue = this.schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, this.soll, this.berichte));
+    const { auftraege: neue, befunde: nutzenBefunde } = auftraegeAusSchnitt(this.schnitt.auftraege, this.soll, this.berichte);
     const kennungen = neue.map(({ id }) => id);
     const auftraege = this.phase.auftraege.flatMap((auftrag) => (auftrag === this.alt ? neue : [this.ohneAlten(auftrag, kennungen)]));
     const phase = { ...this.phase, entwurf: { ...this.phase.entwurf, ...entwuerfe }, auftraege };
-    const befunde = [...phasenBefunde(phase, this.root), ...befundeImOrdner(this.ordner, phase).befunde];
+    const befunde = [...nutzenBefunde, ...phasenBefunde(phase, this.root), ...befundeImOrdner(this.ordner, phase).befunde];
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, PHASE_MIT_BEFUNDEN, befunde);
     schreibeJson(join(this.root, this.eingabe.datei), phase);
   }
