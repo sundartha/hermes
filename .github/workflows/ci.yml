@@ -132,7 +132,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node tools/neue-kommentare.mjs --basis "$PR_BASE_SHA"
 
-      - name: Syntax
+      - name: Syntax (.js und .mjs; .ts prüft die Typprüfung)
         run: |
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check

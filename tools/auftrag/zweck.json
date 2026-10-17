@@ -136,7 +136,7 @@
     "liste": "A10",
     "wozu": "Die Regeln fangen fehlerträchtige Muster, bevor sie in den Hauptstand kommen; den Grund der einzelnen Regel nennt ihre Meldung.",
     "behebung": "Den Verstoß an der Stelle beheben.",
-    "nichtAngenommen": "Dasselbe Muster in einer Form schreiben, die die Regel nicht erkennt.",
+    "nichtAngenommen": "Dasselbe Muster in einer Form schreiben, die die Regel nicht erkennt; in .ts-Dateien besonders any durch unknown ohne Prüfung ersetzen, eine Behauptung mit as oder ! in eine Hilfsfunktion verschieben, void vor ein vergessenes await setzen, einen exportierten Typ als unknown ausschreiben oder einen Typwächter schreiben, der den Typ nicht wirklich prüft.",
     "ausweg": "Nur als Bau-Agent, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt, eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“; sonst „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“."
   },
   "pin-prüfung": {

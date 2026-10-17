@@ -1,5 +1,5 @@
 #!/bin/sh
-staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.mjs')
+staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.mjs' '*.ts' '*.mts' '*.cts')
 if [ -n "$staged_js" ]; then
   dirty_staged=$(printf '%s\n' "$staged_js" | while IFS= read -r f; do
     git diff --name-only -- "$f"

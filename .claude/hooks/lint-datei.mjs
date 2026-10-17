@@ -7,7 +7,7 @@ import { env } from "node:process";
 
 import { block, readInput, repositoryRoot, startDirectory, withoutGitVariables } from "./lib.mjs";
 
-const LINTED_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+const LINTED_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"]);
 const ESLINT_PACKAGE = "eslint/package.json";
 const ESLINT_BIN = join("bin", "eslint.js");
 const ERROR_SEVERITY = 2;

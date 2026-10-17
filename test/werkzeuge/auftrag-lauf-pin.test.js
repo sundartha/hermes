@@ -35,3 +35,11 @@ test("fehlt das Pin-Skript, obwohl ein pre-commit-Hook da ist, scheitert die Pin
   scheitertAnPinPruefung(lauf, beleg);
   assert.ok(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8").includes(PIN_FEHLT));
 });
+
+test("die Pin-Prüfung bekommt auch vorgemerkte TypeScript-Dateien", (context) => {
+  const typdatei = "src/rechnen.ts";
+  const auftrag = { ...funktion("2 !== 4"), bereich: typdatei, erwarteteDateien: [typdatei, "test/rechnen.test.js"] };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { [typdatei]: "export const zwei: number = 2;\n" }, "bau-antwort": ABSATZ_PIN };
+  const { repo } = starte(context, { auftrag, drehbuch, dateien: MIT_PIN_PRUEFUNG });
+  assert.ok(readFileSync(join(repo, "pin-aufrufe.txt"), "utf8").includes(`"${typdatei}"`));
+});
