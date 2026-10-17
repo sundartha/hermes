@@ -106,7 +106,8 @@ async function issueZumPr(github, pr, branch) {
   const nummer = ISSUE_IM_TEXT.exec(pr.body ?? "")?.[1] ?? PHASEN_BRANCH.exec(branch)?.[1];
   if (nummer === undefined) return null;
   try {
-    const { title, body } = await github.hole(`/issues/${nummer}`);
+    const { title, body, pull_request: pullRequest } = await github.hole(`/issues/${nummer}`);
+    if (pullRequest !== undefined) return { nummer, title: "", body: null };
     return { nummer, title, body: body ?? "" };
   } catch {
     return { nummer, title: "", body: null };
