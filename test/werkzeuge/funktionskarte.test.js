@@ -521,3 +521,38 @@ test(
     assert.match(rot.stderr, /Schritt 2: ergebnis\.planUsagePercent hat Typ null, erwartet object/);
   },
 );
+
+test(
+  "ein * trifft einen Rest aus mehreren Teilen, ein :param trifft keinen leeren Teil",
+  TEST_FRIST,
+  async () => {
+    const rest = "POST /webhooks/*";
+    const flaechen = [...FLAECHEN, { art: "Webhook", flaeche: rest, path: "/webhooks/*" }];
+    const lookup = {
+      flaechen: [rest],
+      schritte: [
+        {
+          befehl: [
+            "webhook",
+            "elevenlabs-lookup",
+            { conversation_id: "x", query: "y" },
+            "--falsche-signatur",
+          ],
+          erwarte: [{ pfad: "status", gleich: STATUS_SIGNATUR_ABGELEHNT }],
+        },
+      ],
+    };
+    const vorher = { ...sauberVorher(), "docs/funktionen/rest.md": karteText(lookup) };
+    const gruen = await pruefen(bestand({ vorher, flaechen }));
+    assert.equal(gruen.exit, 0, `${gruen.stdout}${gruen.stderr}`);
+    const leer = "POST :vorne/mcp";
+    const ohneMcp = [
+      ...FLAECHEN.filter(({ flaeche }) => flaeche !== "POST /mcp"),
+      { art: "Route", flaeche: leer, path: ":vorne/mcp" },
+    ];
+    const karte = { ...NUMMER_KARTE, flaechen: ["get_agent_number", "get_agent_status", leer] };
+    const rot = await pruefen(bestand({ vorher: sauberVorher(karte), flaechen: ohneMcp }));
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(rot.stderr, /nummer\.md: kein Schritt ruft POST :vorne\/mcp auf/);
+  },
+);
