@@ -10,6 +10,7 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { env } from "node:process";
 
+import { istIssue } from "../ziele/github.mjs";
 import { stelleNach } from "./nachstellen.mjs";
 import { abbruchOhneAbsicht, absichtFuerPr } from "./pruefer-absicht.mjs";
 import { gitAusgabe, istEigenesRepo, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
@@ -106,9 +107,9 @@ async function issueZumPr(github, pr, branch) {
   const nummer = ISSUE_IM_TEXT.exec(pr.body ?? "")?.[1] ?? PHASEN_BRANCH.exec(branch)?.[1];
   if (nummer === undefined) return null;
   try {
-    const { title, body, pull_request: pullRequest } = await github.hole(`/issues/${nummer}`);
-    if (pullRequest !== undefined) return { nummer, title: "", body: null };
-    return { nummer, title, body: body ?? "" };
+    const eintrag = await github.hole(`/issues/${nummer}`);
+    if (!istIssue(eintrag)) return { nummer, title: "", body: null };
+    return { nummer, title: eintrag.title, body: eintrag.body ?? "" };
   } catch {
     return { nummer, title: "", body: null };
   }
