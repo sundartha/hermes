@@ -82,6 +82,7 @@ export function weltAnlegen(abweichung = {}) {
     ausloesenStatus: HTTP_ANGELEGT,
     neuInListe: [true],
     deployStatus: ["build_in_progress", "update_in_progress", "live"],
+    lesenStatus: [HTTP_OK],
     alteDeploys: [],
     deployListe: null,
     listeNachRollback: null,
@@ -222,6 +223,8 @@ function renderRouten(welt) {
       "GET",
       /^\/deploys\/([\w-]+)$/,
       ([, id]) => {
+        const antwort = naechster(welt.lesenStatus);
+        if (antwort !== HTTP_OK) return [antwort, { message: "internal server error" }];
         const status = naechster(welt.deployStatus);
         if (status === LIVE) welt.merker.add(LIVE);
         return [HTTP_OK, { id, status }];
