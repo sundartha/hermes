@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -13,7 +12,7 @@ import {
   lesestellenSchluessel,
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
-import { instructionFindings, rootFindings } from "./anweisungen-befunde.mjs";
+import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import {
   selbstpruefungen,
   selbstpruefungsSchluessel,
@@ -32,7 +31,6 @@ const KNIP_EXIT_ISSUES_FOUND = 1;
 const KNIP_ROW_FIELDS_WITHOUT_ISSUES = new Set(["file", "owners"]);
 const KEY_SEPARATOR = "|";
 const SYMBOL_SEPARATOR = "+";
-const FINGERPRINT_LENGTH = 16;
 const WHITESPACE_PATTERN = /\s+/g;
 const BYTES_PER_KIBIBYTE = 1024;
 const BYTES_PER_MEBIBYTE = BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
@@ -73,9 +71,8 @@ function toolFailure(name, { status, stderr }) {
   );
 }
 
-function fingerprint(text) {
-  const compact = text.replace(WHITESPACE_PATTERN, "");
-  return createHash("sha256").update(compact).digest("hex").slice(0, FINGERPRINT_LENGTH);
+function fingerprintWithoutWhitespace(text) {
+  return lineFingerprint(text.replace(WHITESPACE_PATTERN, ""));
 }
 
 function findingKey(parts) {
@@ -179,7 +176,7 @@ function semgrepFinding(root, { check_id: ruleId, path, start, end }) {
     .subarray(start.offset, end.offset)
     .toString("utf8");
   return {
-    key: findingKey([ruleId, path, fingerprint(snippet)]),
+    key: findingKey([ruleId, path, fingerprintWithoutWhitespace(snippet)]),
     location: `${withLine(path, start.line)} ${ruleId}`,
   };
 }
@@ -298,10 +295,6 @@ function placeholderImportFindings(root) {
     keysOf: placeholderImportKeys,
     files: TEST_FILES,
   });
-}
-
-function lineFingerprint(line) {
-  return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
 
 function misplacedLessons(root) {

@@ -25,7 +25,7 @@ const CODE_FENCE = /^```/;
 const CODE_SPAN = /`[^`]*`/g;
 const IMPORT = /(?:^|\s)@[^\s@]/;
 
-function lineFingerprint(line) {
+export function lineFingerprint(line) {
   return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
 
