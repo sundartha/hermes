@@ -248,6 +248,27 @@ test("abdeckung-pruefen: eine unlesbare Phasendatei ist rot, ein falscher Aufruf
   assert.match(fehlt.stderr, /^Im Ordner plaene\/P-999-gibt-es-nicht fehlt: pitch\.md, sicherheit\.md, phase\.json$/m);
 });
 
+const KEIN_OBJEKT = [
+  ["null", "null"],
+  ["0", "number"],
+  ["1", "number"],
+  ['""', "string"],
+  ['"x"', "string"],
+  ["true", "boolean"],
+  ["false", "boolean"],
+  ["[]", "array"],
+  ["[1]", "array"],
+];
+
+test("abdeckung-pruefen: eine phase.json, die kein JSON-Objekt ist, ist rot mit der Meldung „nicht lesbar“ und ohne Absturz", (context) => {
+  for (const [inhalt, gefunden] of KEIN_OBJEKT) {
+    const lauf = pruefe(context, { phase: inhalt });
+    assert.equal(lauf.status, EXIT_ROT, `${inhalt}: ${lauf.stderr}`);
+    assert.equal(lauf.stderr, `phase.json ist nicht lesbar: erwartet ein JSON-Objekt, gefunden ${gefunden}\n`, inhalt);
+    assert.match(lauf.stdout, /^rot: 1 Befunde in P-001-probe\.$/m, inhalt);
+  }
+});
+
 const ABSICHT = "Ein Kunde soll seine eigene Nummer nur mit Code bestätigen können. Im Zweifel bleibt der Hinweis an.";
 
 function mitAbsicht(absicht) {
