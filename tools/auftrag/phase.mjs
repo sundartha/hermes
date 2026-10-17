@@ -210,7 +210,7 @@ function issueText(issue, root) {
 }
 
 function absichtImIssueBefunde(phase, root) {
-  return Object.hasOwn(phase, "absicht") ? issueAbsichtBefunde(phase, issueText(phase.issue, root)) : [];
+  return issueAbsichtBefunde(phase, () => issueText(phase.issue, root));
 }
 
 async function bauePhase(ort, lauf) {

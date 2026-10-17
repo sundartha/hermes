@@ -44,6 +44,12 @@ test("phase mit Feld absicht startet nicht, wenn das Issue nicht lesbar ist", (c
 
 test("ein Issue mit wörtlich gleicher Absicht ist kein Befund, eine Phase ohne Feld fragt das Issue gar nicht", () => {
   const phase = { issue: ISSUE, absicht: ABSICHT };
-  assert.deepEqual(issueAbsichtBefunde(phase, `## Absicht\n\n${ABSICHT}\n\n## Ziel\n\nZahl\n`), []);
-  assert.deepEqual(issueAbsichtBefunde({ issue: ISSUE }, null), []);
+  const gelesen = [];
+  const leseIssue = () => {
+    gelesen.push(ISSUE);
+    return null;
+  };
+  assert.deepEqual(issueAbsichtBefunde(phase, () => `## Absicht\n\n${ABSICHT}\n\n## Ziel\n\nZahl\n`), []);
+  assert.deepEqual(issueAbsichtBefunde({ issue: ISSUE }, leseIssue), []);
+  assert.deepEqual(gelesen, []);
 });
