@@ -11,7 +11,7 @@ import {
 import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
-import { hoertest } from "./deploy-weg/hoertest.mjs";
+import { hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
@@ -85,13 +85,15 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       argumente: ["--commit", "--teile"],
-      ausfuehren: ({ einstellungen, werte, ausgabe }) =>
-        hoertest({
+      ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
+        await hoertestIssueAnlegenOderErsetzen({
           einstellungen,
           commit: werte.get("--commit"),
           teile: werte.get("--teile"),
           ausgabe,
-        }),
+        });
+        return true;
+      },
     },
   ],
   [

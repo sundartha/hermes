@@ -57,7 +57,7 @@ async function vorhandenesIssue(github) {
   return eigene[0] ?? null;
 }
 
-export async function hoertest({ einstellungen, commit, teile, ausgabe }) {
+export async function hoertestIssueAnlegenOderErsetzen({ einstellungen, commit, teile, ausgabe }) {
   const github = githubZugang(einstellungen);
   const { serverUrl, repository, runId } = einstellungen;
   const laufUrl = [serverUrl, repository, "actions/runs", runId].join("/");
@@ -68,7 +68,7 @@ export async function hoertest({ einstellungen, commit, teile, ausgabe }) {
     const { status } = await github.senden({ methode: "PATCH", pfad, koerper: { body } });
     if (status !== HTTP_OK) throw new Abbruch("issue_schreiben", status);
     ausgabe.melde("issue_ersetzt", { nummer: vorhanden.number });
-    return true;
+    return;
   }
   const koerper = { title: HOERTEST_TITEL, body };
   const { status, daten } = await github.senden({ methode: "POST", pfad: "/issues", koerper });
@@ -76,5 +76,4 @@ export async function hoertest({ einstellungen, commit, teile, ausgabe }) {
     throw new Abbruch("issue_schreiben", status);
   }
   ausgabe.melde("issue_angelegt", { nummer: daten.number });
-  return true;
 }
