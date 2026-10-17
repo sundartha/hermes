@@ -58,9 +58,10 @@ function nachfrage(ids) {
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false }) {
+  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null }) {
     this.kontext = { phase, auftrag, root };
     this.aufraeumen = aufraeumen;
+    this.vorbau = vorbau;
     this.phasendatei = phasendatei;
     this.runde = runde;
     this.vorgeschichte = vorgeschichte;
