@@ -199,6 +199,17 @@ test("ein Absatz zählt nur als eigene Zeile außerhalb von Zitat und Code-Block
   assert.deepEqual(absaetze(antwort), { "grenzen/bereich": "erste Zeile\nzweite Zeile", "keine änderung": "kurz" });
 });
 
+test("ein Absatz endet an jeder Meldezeile des Agenten, nicht erst an der Leerzeile", () => {
+  const meldungen = [
+    "Auftrag passt nicht: Grund",
+    "Voraussetzung fehlt: Erst src/a.js aufräumen.",
+    "Alter Test hält altes Verhalten fest: test/a.test.js:alt – neu",
+    "Gleichwertig: src/a.js:1:1 Mutant, weil nichts passiert",
+    "Nötig: src/a.js:1:1 Mutant, weil etwas passiert",
+  ];
+  for (const meldung of meldungen) assert.deepEqual(absaetze(["Zweck lint: erste Zeile", meldung, "weiter"].join("\n")), { lint: "erste Zeile" }, meldung);
+});
+
 test("zugeordnet wird nach dem roten Schritt: Test-Schritte dem Test-Agenten, Gründe eines Agenten dem, der zuletzt lief, Skript-Schritte keinem", () => {
   const runde = roteRunde({
     runde: 1,
