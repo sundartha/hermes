@@ -82,7 +82,8 @@ export function onlyLowersCounts(before, after) {
   const [old, current] = [countEntries(before), countEntries(after)];
   if (old === undefined || current === undefined) return false;
   const holds = current.every(({ file, rule, entry }) => isLowerCount(before[file]?.[rule], entry));
-  return holds && !isDeepStrictEqual(before, after);
+  const addsNoFile = Object.keys(after).every((file) => Object.hasOwn(before, file));
+  return holds && addsNoFile && !isDeepStrictEqual(before, after);
 }
 
 function onlyDropsEntries(before, after, key) {
