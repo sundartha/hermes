@@ -11,7 +11,8 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { env } from "node:process";
 
 import { stelleNach } from "./nachstellen.mjs";
-import { gitAusgabe, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
+import { abbruchOhneAbsicht, absichtFuerPr } from "./pruefer-absicht.mjs";
+import { gitAusgabe, istEigenesRepo, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
 import { artefaktName, bekanntesErgebnis, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
 import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
@@ -101,15 +102,19 @@ function basisVon(pr, head, root) {
   throw new Error(`Keine gemeinsame Basis für ${head} gefunden.`);
 }
 
-async function auftragstext(github, pr, branch) {
+async function issueZumPr(github, pr, branch) {
   const nummer = ISSUE_IM_TEXT.exec(pr.body ?? "")?.[1] ?? PHASEN_BRANCH.exec(branch)?.[1];
-  if (nummer === undefined) return "";
+  if (nummer === undefined) return null;
   try {
-    const issue = await github.hole(`/issues/${nummer}`);
-    return `Issue #${nummer}: ${issue.title}\n\n${issue.body ?? ""}`;
+    const { title, body } = await github.hole(`/issues/${nummer}`);
+    return { nummer, title, body: body ?? "" };
   } catch {
-    return "";
+    return { nummer, title: "", body: null };
   }
+}
+
+function auftragstext(issue) {
+  return issue?.body == null ? "" : `Issue #${issue.nummer}: ${issue.title}\n\n${issue.body}`;
 }
 
 async function gedaechtnis(github, pr, auswahl) {
@@ -158,7 +163,7 @@ function meldeCommit({ sha, zustand, grund, uebernommen: frueher, zaehler }) {
 async function pruefeAlle(commits, frueher, { kontext, schreibe }) {
   const ergebnisse = [];
   const ablage = [];
-  let abbruch = "";
+  let abbruch = abbruchOhneAbsicht(kontext.absicht);
   schreibe(ergebnisse);
   for (const commit of commits) {
     const { ablage: hinweise = [], ...eintrag } = await einerVon(commit, { frueher, abbruch, kontext });
@@ -236,12 +241,14 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   const basis = basisVon(pr, head, root);
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
   const frueher = await gedaechtnis(github, pr.number, auswahl);
+  const issue = await issueZumPr(github, pr, branch);
   const kontext = {
     root,
     token,
     programm,
     ciLauf: ausloeser.html_url ?? "",
-    auftragstext: await auftragstext(github, pr, branch),
+    auftragstext: auftragstext(issue),
+    absicht: absichtFuerPr({ branch, issue, fork: Boolean(prRepo) && !istEigenesRepo(prRepo), basis, head, root }),
   };
   const kopf = {
     format: FORMAT,
@@ -338,9 +345,10 @@ async function lokal(optionen, root, { github = githubZugang(), programm } = {})
   const basis = gitAusgabe(["merge-base", optionen.basis, head], root).trim();
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo: "", root });
   if (auswahl.commits.length === 0) throw new Error(`Keine Commits zwischen ${optionen.basis} und HEAD.`);
-  const text = await auftragstext(github, { body: `Closes #${optionen.issue}` }, branch);
-  if (!text) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
-  const kontext = { root, token, programm, ciLauf: "", auftragstext: text, blockerAblegen: true };
+  const issue = await issueZumPr(github, { body: `Closes #${optionen.issue}` }, branch);
+  if (issue.body === null) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
+  const absicht = absichtFuerPr({ branch, issue, basis, head, root });
+  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht, blockerAblegen: true };
   const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
   const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
   console.log(NUR_LOKAL);
