@@ -248,7 +248,7 @@ class NeuschnittPlanung extends Planung {
   }
 
   setzeEin(entwuerfe) {
-    const neue = this.schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, this.soll));
+    const neue = this.schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, this.soll, this.berichte));
     const kennungen = neue.map(({ id }) => id);
     const auftraege = this.phase.auftraege.flatMap((auftrag) => (auftrag === this.alt ? neue : [this.ohneAlten(auftrag, kennungen)]));
     const phase = { ...this.phase, entwurf: { ...this.phase.entwurf, ...entwuerfe }, auftraege };

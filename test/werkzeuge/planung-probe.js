@@ -208,7 +208,7 @@ export function phaseFuer(wurzel, umbau) {
   const { auftraege } = schnittliste({ umbau });
   const eintraege = umbau === undefined ? ohneUmbau(auftraege) : auftraege;
   const entwurf = Object.fromEntries(Object.entries(ENTWURF_TEXT).map(([bereich, text]) => [bereich, entwurfFuer(text, eintraege.filter((eintrag) => eintrag.bereich === bereich))]));
-  return { phase: KENNUNG, entwurf, auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll)) };
+  return { phase: KENNUNG, entwurf, auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll, [])) };
 }
 
 export function plane(context, { werkzeug, grund, ueberschrieben, argumente }) {
