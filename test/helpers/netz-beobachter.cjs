@@ -24,6 +24,7 @@ const LESE_FUNKTIONEN = ["readFileSync", "readFile", "open"];
 const LOOPBACK_V4 = "127.";
 const LOKALE_ADRESSEN = new Set(["::1", "::", "0.0.0.0", "::ffff:127.0.0.1"]);
 const KIND_ZIEL_LAENGE = 200;
+const ABRUF_FRIST_MS = 15_000;
 
 const eigeneAdressen = new Set(
   Object.values(os.networkInterfaces())
@@ -127,7 +128,11 @@ globalThis.fetch = async function beobachteterAbruf(eingabe, optionen) {
   const extern = !istLokal(host);
   schreibe({ art: "abruf", ziel, extern });
   if (extern) throw new TypeError("fetch failed", { cause: gesperrt("abruf", ziel) });
-  return originalFetch(eingabe, optionen);
+  const eigenes = optionen?.signal ?? eingabe?.signal;
+  return originalFetch(eingabe, {
+    ...optionen,
+    signal: AbortSignal.any([AbortSignal.timeout(ABRUF_FRIST_MS), ...(eigenes ? [eigenes] : [])]),
+  });
 };
 
 function istEnvDatei(datei) {

@@ -199,3 +199,90 @@ test("anfrage-mit-frist: die Meldung nennt nur Hilfen, die ihre genannte Datei a
     for (const name of namen) assert.ok(exportiert(modul, name), `${name} fehlt in ${datei}`);
   }
 });
+
+test("anfrage-mit-frist: AbortSignal.any ohne eigene Frist in der Liste wird gemeldet", () => {
+  const aufrufe = [
+    "await fetch(url, { signal: AbortSignal.any([abbruch.signal]) });",
+    "await fetch(url, { signal: AbortSignal.any([abbruch.signal, AbortSignal.abort()]) });",
+    "await fetch(url, { signal: AbortSignal.any([]) });",
+    "await fetch(url, { signal: AbortSignal.any([, abbruch.signal]) });",
+    "await fetch(url, { signal: AbortSignal.any([...signale]) });",
+    "await fetch(url, { signal: AbortSignal.any(signale) });",
+    "await fetch(url, { signal: AbortSignal.any() });",
+    "await fetch(url, { signal: AbortSignal.any([fristVorher]) });",
+    "await fetch(url, { signal: AbortSignal.any([AbortSignal.any([abbruch.signal])]) });",
+    'await fetch(url, { signal: AbortSignal["any"]([abbruch.signal]) });',
+  ];
+  assert.deepEqual(befunde(aufrufe), aufrufe);
+});
+
+test("anfrage-mit-frist: AbortSignal.any mit einer Frist in der Liste bleibt frei", () => {
+  const aufrufe = [
+    "await fetch(url, { signal: AbortSignal.any([abbruch.signal, AbortSignal.timeout(5000)]) });",
+    "await fetch(url, { signal: AbortSignal.any([fristSignal(), abbruch.signal]) });",
+    "await fetch(url, { signal: AbortSignal.any([...signale, fristSignal()]) });",
+    "await fetch(url, { signal: AbortSignal.any([, AbortSignal.timeout(5000)]) });",
+    "await fetch(url, { signal: AbortSignal.any([AbortSignal.any([abbruch.signal, fristSignal()])]) });",
+    "await fetch(url, { signal: AbortSignal.any([fristSignal(), ...(eigenes ? [eigenes] : [])]) });",
+  ];
+  assert.deepEqual(befunde(aufrufe), []);
+});
+
+test("anfrage-mit-frist: ein Alias des echten fetch ohne Frist wird gemeldet", () => {
+  const faelle = [
+    ["const echterFetch = globalThis.fetch;", ABRUF.replace("fetch", "echterFetch")],
+    ["const echt = fetch;", "await echt(url);"],
+    ["const echt = global.fetch;", "await echt(url, { method: 'POST' });"],
+    ['const echt = globalThis["fetch"];', "await echt(url, { signal: abbruch.signal });"],
+    ["let echt;", "echt = globalThis.fetch;", "await echt(url);"],
+    ["var echt = fetch;", "echt = attrappe;", "await echt(url);"],
+    ["const eins = fetch;", "const zwei = eins;", "const drei = zwei;", "await drei(url);"],
+    ["const { fetch: echt } = globalThis;", "await echt(url);"],
+    ["const { fetch } = global;", "await fetch(url);"],
+    ["const { fetch: echt = attrappe } = globalThis;", "await echt(url);"],
+    ["const echt = fetch;", "async function lauf() {", "  await echt(url);", "}"],
+    ["function lauf(abruf = fetch) {", "  return abruf(url);", "}"],
+    [
+      "const echt = globalThis.fetch;",
+      "const weiter = async (url, optionen) => echt(url, optionen);",
+    ],
+  ];
+  for (const zeilen of faelle) {
+    assert.equal(befunde(zeilen).length, 1, zeilen.join("\n"));
+  }
+});
+
+test("anfrage-mit-frist: ein Alias des echten fetch mit Frist bleibt frei", () => {
+  const faelle = [
+    ["const echt = globalThis.fetch;", "await echt(url, { signal: AbortSignal.timeout(5000) });"],
+    ["const eins = fetch;", "const zwei = eins;", "await zwei(url, { signal: fristSignal() });"],
+    ["const { fetch: echt } = globalThis;", "await echt(url, { ...o, signal: fristSignal() });"],
+    [
+      "const echt = fetch;",
+      "await echt(url, { signal: AbortSignal.any([eigenes, fristSignal()]) });",
+    ],
+  ];
+  for (const zeilen of faelle) assert.deepEqual(befunde(zeilen), [], zeilen.join("\n"));
+});
+
+test("anfrage-mit-frist: ein Alias auf etwas anderes als den echten fetch bleibt frei", () => {
+  const faelle = [
+    ["const echt = harness.fetch;", "await echt(url);"],
+    ["const echt = attrappe;", "await echt(url);"],
+    ["const echt = () => null;", "await echt(url);"],
+    ["const echt = globalThis.structuredClone;", "echt(wert);"],
+    ["const fetch = () => null;", "const alias = fetch;", "await alias(url);"],
+    ["function lauf(globalThis) {", "  const echt = globalThis.fetch;", "  return echt(url);", "}"],
+    ["const { fetch: echt } = harness;", "await echt(url);"],
+    ["const { structuredClone: kopie } = globalThis;", "kopie(wert);"],
+    ["const { structuredClone, ...rest } = globalThis;", "rest(wert);"],
+    ["for (const { fetch: echt } of faelle) {", "  await echt(url);", "}"],
+    ["const { fetch: echt } = auswahl();", "await echt(url);"],
+    ["const { name: nutzlos } = fetch;", "nutzlos(url);"],
+    ["function lauf(global) {", "  const { fetch } = global;", "  return fetch(url);", "}"],
+    ["const echt = globalThis.fetch;", "echt.name;"],
+    ["let eins = zwei;", "let zwei = eins;", "await eins(url);"],
+    ["globalThis.fetch = attrappe;", "const echt = attrappe;", "await echt(url);"],
+  ];
+  for (const zeilen of faelle) assert.deepEqual(befunde(zeilen), [], zeilen.join("\n"));
+});

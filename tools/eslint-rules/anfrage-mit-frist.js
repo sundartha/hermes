@@ -3,7 +3,8 @@ const MELDUNG =
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
 const HTTP_FUNKTIONEN = new Set(["request", "get"]);
 const GLOBALE_HUELLEN = new Set(["globalThis", "global"]);
-const FRIST_ERZEUGER = new Set(["timeout", "any"]);
+const FRIST_ERZEUGER = new Set(["timeout"]);
+const SIGNAL_VERKNUEPFUNG = new Set(["any"]);
 const HUELLE_FUER_HTTP = "mitAntwortfrist";
 const FRIST_FUNKTION = "fristSignal";
 const SIGNAL_OPTION = "signal";
@@ -40,11 +41,60 @@ function istZugriffAuf(knoten, objektName, namen) {
   );
 }
 
-function istGlobalesFetch(scope, ausdruck) {
+function istEchtesFetch(scope, ausdruck) {
   if (ausdruck.type === "Identifier") return ausdruck.name === "fetch" && istGlobal(scope, "fetch");
   if (ausdruck.type !== "MemberExpression" || ausdruck.object.type !== "Identifier") return false;
   const { name } = ausdruck.object;
   return GLOBALE_HUELLEN.has(name) && istGlobal(scope, name) && zugriffsName(ausdruck) === "fetch";
+}
+
+function weistZu({ identifier }) {
+  const { parent } = identifier;
+  if (parent.type === "VariableDeclarator") return parent.id === identifier;
+  return (
+    (parent.type === "AssignmentExpression" || parent.type === "AssignmentPattern") &&
+    parent.left === identifier
+  );
+}
+
+function gebundenerName(wert) {
+  return wert?.type === "AssignmentPattern" ? wert.left : wert;
+}
+
+function entpacktFetch(scope, definition) {
+  if (definition.type !== "Variable") return false;
+  const { id, init } = definition.node;
+  if (id.type !== "ObjectPattern") return false;
+  const eigenschaft = id.properties.find(
+    ({ value }) => gebundenerName(value)?.name === definition.name.name,
+  );
+  return (
+    eigenschaft !== undefined &&
+    schluesselName(eigenschaft) === "fetch" &&
+    GLOBALE_HUELLEN.has(init?.name) &&
+    istGlobal(scope, init.name)
+  );
+}
+
+function istAliasVonFetch(variable, besucht) {
+  if (besucht.has(variable)) return false;
+  besucht.add(variable);
+  const zugewiesen = variable.references.some(
+    (zugriff) =>
+      zugriff.isWrite() &&
+      weistZu(zugriff) &&
+      istGlobalesFetch(zugriff.from, zugriff.writeExpr, besucht),
+  );
+  return (
+    zugewiesen || variable.defs.some((definition) => entpacktFetch(variable.scope, definition))
+  );
+}
+
+function istGlobalesFetch(scope, ausdruck, besucht = new Set()) {
+  if (istEchtesFetch(scope, ausdruck)) return true;
+  if (ausdruck.type !== "Identifier") return false;
+  const variable = bindung(scope, ausdruck.name);
+  return variable !== undefined && istAliasVonFetch(variable, besucht);
 }
 
 function schluesselName(eigenschaft) {
@@ -52,18 +102,28 @@ function schluesselName(eigenschaft) {
   return eigenschaft.key.type === "Identifier" ? eigenschaft.key.name : eigenschaft.key.value;
 }
 
-function istFristErzeuger({ callee }) {
+function enthaeltFrist(signale) {
+  return (
+    signale?.type === "ArrayExpression" &&
+    signale.elements.some((signal) => signal !== null && istFrist(signal))
+  );
+}
+
+function istFrist(ausdruck) {
+  if (ausdruck.type !== "CallExpression") return false;
+  const { callee, arguments: argumente } = ausdruck;
   if (callee.type === "Identifier") return callee.name === FRIST_FUNKTION;
-  return istZugriffAuf(callee, "AbortSignal", FRIST_ERZEUGER);
+  if (istZugriffAuf(callee, "AbortSignal", FRIST_ERZEUGER)) return true;
+  return (
+    istZugriffAuf(callee, "AbortSignal", SIGNAL_VERKNUEPFUNG) &&
+    enthaeltFrist(argumente[ERSTES_ARGUMENT])
+  );
 }
 
 function hatFristSignal(optionen) {
   if (optionen?.type !== "ObjectExpression") return false;
   return optionen.properties.some(
-    (eigenschaft) =>
-      schluesselName(eigenschaft) === SIGNAL_OPTION &&
-      eigenschaft.value.type === "CallExpression" &&
-      istFristErzeuger(eigenschaft.value),
+    (eigenschaft) => schluesselName(eigenschaft) === SIGNAL_OPTION && istFrist(eigenschaft.value),
   );
 }
 

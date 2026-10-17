@@ -1,0 +1,10 @@
+{
+  "titel": "Test schickt den echten fetch über einen Alias ohne Antwortfrist",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "const echterFetch = globalThis.fetch;",
+      "export const antwort = await echterFetch(\"http://127.0.0.1:3999/healthz\");"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}
