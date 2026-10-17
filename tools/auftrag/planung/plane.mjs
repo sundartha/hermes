@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pid } from "node:process";
+import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
 import { abschnitte } from "./abschnitte.mjs";
@@ -640,6 +641,11 @@ export function ausgang(fehler) {
   throw fehler;
 }
 
+function ausgangOhneWurf(fehler) {
+  if (fehler instanceof Ende || fehler instanceof Abbruch) return ausgang(fehler);
+  return { exit: EXIT_ABBRUCH, grund: `unerwarteter Fehler: ${inspect(fehler)}`, offen: [] };
+}
+
 function berichte(planung, ergebnis) {
   const lauf = {
     ...ergebnis,
@@ -673,7 +679,7 @@ export async function plane(ordnerAngabe, root) {
     await planung.laufe();
     return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });
   } catch (abbruch) {
-    return berichte(planung, ausgang(abbruch));
+    return berichte(planung, ausgangOhneWurf(abbruch));
   }
 }
 
