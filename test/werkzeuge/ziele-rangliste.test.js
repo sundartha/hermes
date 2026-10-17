@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { issueTitel } from "../../tools/auftrag/pruefer-issues.mjs";
 import { sammelText } from "../../tools/ziele/sammel.mjs";
 
 import {
@@ -25,6 +26,10 @@ const ECHTE_AENDERUNGEN = 3;
 const PRUEFER_ISSUES = 40;
 const ERSTES_PRUEFER_ISSUE = 100;
 const SAMMEL_TITEL = "Aufräumen: Rangliste und Befunde";
+const NICHT_ZUORDENBAR = "pruefer-nicht-zuordenbar";
+const LANGE_DATEI = `src/${"lang".repeat(40)}.js`;
+const ZWILLING_A = `src/${"x".repeat(130)}a.js`;
+const ZWILLING_B = `src/${"x".repeat(130)}b.js`;
 
 function exporte(namen) {
   return quelltext(namen.map((name) => `export function ${name}() {\n  return "${name}";\n}`));
@@ -62,8 +67,9 @@ test("ziele-rangliste: der Brennpunkt ist Änderungen mal Umfang, und tiefe Einr
   assert.deepEqual(drei.map(({ datei, aenderungen }) => [datei, aenderungen]), [["src/oft.js", 20], ["src/tief.js", 1], ["src/sehroft.js", 30]]);
 });
 
-function repoMitBrennpunkt(context) {
+function repoMitBrennpunkt(context, zusatz = {}) {
   const repo = zieleRepo(context, {
+    ...zusatz,
     "test/haupt.test.js": testFuer("src/main.js"),
     "src/main.js": quelltext(['import { gross } from "./gross.js";', 'import { klein } from "./klein.js";', "console.log(gross([]), klein());"]),
     "src/gross.js": grosseDatei(0),
@@ -135,6 +141,7 @@ async function vollerLauf(context, repo, github) {
   const ordner = await waehle(context, repo, github);
   const lauf = await starteZiele(["ergebnis", "--ordner", ordner, "--workflow", "aufraeumen"], { cwd: repo.ordner, env: umgebung(github) });
   assert.equal(lauf.status, 0, lauf.stderr);
+  return ordner;
 }
 
 test("ziele-rangliste: Läufe mit vielen Befunden legen höchstens ein Sammel-Issue an und ersetzen danach nur dessen Text", async (context) => {
@@ -178,4 +185,68 @@ test("ziele-rangliste: der Text des Sammel-Issues bleibt bei einer langen Rangli
   const gezeigt = (text.match(/^\| \d+ \| `src\/datei-/gm) ?? []).length;
   assert.ok(gezeigt > 500);
   assert.ok(text.endsWith(`Die übrigen ${3000 - gezeigt} Dateien stehen in \`durchgang.json\` im Artefakt \`ziel\` des Laufs.`));
+});
+
+function prueferIssue(nummer, titel) {
+  return botIssue(nummer, titel, { labels: [{ name: "pruefer" }] });
+}
+
+function prueferTitel(id, datei, pr = null) {
+  return issueTitel({ id, datei, zeile: 7 }, pr);
+}
+
+function befundeDer(durchgang, pruefung) {
+  return durchgang.befunde.filter((befund) => befund.pruefung === pruefung);
+}
+
+function zugeordnet(durchgang) {
+  const texte = befundeDer(durchgang, "pruefer").map(({ datei, regel }) => `${datei} ${regel}`);
+  return texte.sort();
+}
+
+function nichtZuordenbar(durchgang) {
+  return befundeDer(durchgang, NICHT_ZUORDENBAR).map(({ nummer, regel }) => [nummer, regel]);
+}
+
+test("ziele-rangliste: Prüfer-Issues zählen in jeder Titelform, und ein Titel ohne Katalog-ID zählt für die Datei, ohne eine Lint-Regel vorzuschlagen", async (context) => {
+  const titel = [
+    "Prüfer: G1 in `src/gross.js`",
+    prueferTitel("G1", "src/gross.js"),
+    prueferTitel("G1", "src/klein.js", 1246),
+    "Prüfer: G1 in `src/klein.js` (PR #1246)",
+    prueferTitel("kein-katalog", "src/klein.js"),
+  ];
+  const github = await githubAttrappe(context, { issues: titel.map((text, index) => prueferIssue(ERSTES_PRUEFER_ISSUE + index, text)) });
+  const durchgang = gelesen(await waehle(context, repoMitBrennpunkt(context), github), "ziel/durchgang.json");
+  assert.deepEqual(zugeordnet(durchgang), ["src/gross.js G1", "src/gross.js G1", "src/klein.js Befund", "src/klein.js G1", "src/klein.js G1"]);
+  assert.deepEqual(nichtZuordenbar(durchgang), []);
+  assert.deepEqual(durchgang.vorschlaege, [{ regel: "G1", dateien: 2 }]);
+});
+
+test("ziele-rangliste: ein im Titel gekürzter Dateiname geht an die eine Datei, die so beginnt; passen zwei, bleibt der Befund unzugeordnet", async (context) => {
+  const repo = repoMitBrennpunkt(context, { [LANGE_DATEI]: exporte(["lang"]), [ZWILLING_A]: exporte(["za"]), [ZWILLING_B]: exporte(["zb"]) });
+  const titel = [prueferTitel("G2", LANGE_DATEI, 1300), prueferTitel("G2", ZWILLING_A)];
+  assert.ok(!titel[0].includes(LANGE_DATEI));
+  const github = await githubAttrappe(context, { issues: titel.map((text, index) => prueferIssue(ERSTES_PRUEFER_ISSUE + index, text)) });
+  const durchgang = gelesen(await waehle(context, repo, github), "ziel/durchgang.json");
+  assert.deepEqual(zugeordnet(durchgang), [`${LANGE_DATEI} G2`]);
+  assert.deepEqual(nichtZuordenbar(durchgang), [[ERSTES_PRUEFER_ISSUE + 1, "Dateiname mehrdeutig"]]);
+});
+
+test("ziele-rangliste: ein Prüfer-Issue ohne erkennbare Datei steht als nicht zuordenbar in der Befundzeile des Sammel-Issues", async (context) => {
+  const titel = [prueferTitel("G1", "src/gross.js"), prueferTitel("G1", "src/gibt-es-nicht.js"), "Prüfer: G1 ohne Datei"];
+  const github = await githubAttrappe(context, { issues: titel.map((text, index) => prueferIssue(ERSTES_PRUEFER_ISSUE + index, text)) });
+  const ordner = await vollerLauf(context, repoMitBrennpunkt(context), github);
+  const durchgang = gelesen(ordner, "ziel/durchgang.json");
+  assert.deepEqual(nichtZuordenbar(durchgang), [[ERSTES_PRUEFER_ISSUE + 1, "Datei nicht im Repo"], [ERSTES_PRUEFER_ISSUE + 2, "Titel nicht erkannt"]]);
+  assert.deepEqual(zugeordnet(durchgang), ["src/gross.js G1"]);
+  const sammel = github.zustand.issues.find(({ title }) => title === SAMMEL_TITEL);
+  assert.match(sammel.body, /^Befunde: \d+ in \d+ Dateien \(.*`pruefer` 1, `pruefer-nicht-zuordenbar` 2\)\.$/m);
+});
+
+test("ziele-rangliste: eine Datei, deren Name im Titel leer bliebe, bricht die Rangliste nicht und bekommt keinen fremden Befund", async (context) => {
+  const github = await githubAttrappe(context, { issues: [prueferIssue(ERSTES_PRUEFER_ISSUE, prueferTitel("G1", "src/gross.js"))] });
+  const durchgang = gelesen(await waehle(context, repoMitBrennpunkt(context, { "`": "Name nur aus Backtick\n" }), github), "ziel/durchgang.json");
+  assert.deepEqual(zugeordnet(durchgang), ["src/gross.js G1"]);
+  assert.deepEqual(nichtZuordenbar(durchgang), []);
 });
