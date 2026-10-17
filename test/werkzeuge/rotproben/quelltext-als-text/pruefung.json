@@ -21,7 +21,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Lesestellen in der Basislinie",
     "datei": "tools/basis/quelltext-als-text.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "quelltext-als-text", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [

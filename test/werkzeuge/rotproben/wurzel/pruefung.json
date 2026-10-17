@@ -20,7 +20,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Einträge im Wurzelordner",
     "datei": "tools/basis/wurzel.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "wurzel", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [

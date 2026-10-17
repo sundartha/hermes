@@ -14,7 +14,15 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Importe mit Platzhalter in der Basislinie",
     "datei": "tools/basis/fester-importpfad.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": [
+        "node",
+        "{wurzel}/tools/basis-vergleich.mjs",
+        "fester-importpfad",
+        "--basis-anlegen"
+      ]
+    }
   },
   "probe": {
     "mitnehmen": [

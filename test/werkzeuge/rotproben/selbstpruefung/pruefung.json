@@ -14,7 +14,10 @@
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Selbstprüfungen in der Basislinie",
     "datei": "tools/basis/selbstpruefung.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "selbstpruefung", "--basis-anlegen"]
+    }
   },
   "probe": {
     "mitnehmen": [
