@@ -192,20 +192,73 @@ test("Klammern in Zeichenketten und Kommentaren verschieben das Funktionsende ni
   }
 });
 
-test("Code im Funktionsrumpf, den die Pruefung nicht eindeutig liest, macht den Rumpf unlesbar und wird gemeldet", (kontext) => {
-  const unklar = [
-    'if (/\\{/.test(card)) return "";',
-    "return card / 2;",
-    "return `${`{`}`;",
-    "return `${card}`;",
-    'return "{;',
-    "return '{;",
+function befundMitRumpfzeile(kontext, zeile) {
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]) });
+  assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
+  return result.stdout;
+}
+
+test("Code im Funktionsrumpf, den nur ein Textleser missverstuende, liest die Pruefung aus dem Syntaxbaum", (kontext) => {
+  const gueltig = ['if (/\\{/.test(wert)) return "";', "return wert / 2;", "return `${`{`}`;", "return `${wert}`;"];
+  for (const zeile of gueltig) {
+    const befund = befundMitRumpfzeile(kontext, zeile);
+    assert.match(befund, /ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"/, zeile);
+    assert.doesNotMatch(befund, /KARTE_GESPEICHERT/, zeile);
+  }
+  for (const zeile of ['return "{;', "return '{;"]) {
+    const befund = befundMitRumpfzeile(kontext, zeile);
+    assert.match(befund, /BillingIsland\.astro:\d+ ein script-Block der Shell laesst sich nicht als JavaScript lesen/, zeile);
+  }
+});
+
+test("ein Zweig, dessen Argument oder Konstante neu gebunden oder anders verwendet wird, zaehlt nicht", (kontext) => {
+  const ueberdeckt = {
+    "Konstante im Rumpf": ['    const RETURN_FAILED = "anders";', SUB_BRANCH],
+    "Konstante als Parameter einer inneren Funktion": ["    const pruefe = (RETURN_FAILED) => RETURN_FAILED;", SUB_BRANCH],
+    "Argument neu zugewiesen": ["    sub = null;", SUB_BRANCH],
+    "Argument mit var ueberdeckt": ["    var sub = null;", SUB_BRANCH],
+    "mit vertauschten Seiten": ['    if (RETURN_FAILED === sub) return "Abo gescheitert";'],
+    "mit ==": ['    if (sub == RETURN_FAILED) return "Abo gescheitert";'],
+  };
+  for (const [fall, rumpf] of Object.entries(ueberdeckt)) {
+    const result = meldeJedenFall(kontext, shellSource([CARD_BRANCH, ...rumpf]), [
+      [fall, /ABO_GESCHEITERT: sub oder RETURN_FAILED steht ausserhalb eines Vergleichs "sub === RETURN_FAILED" und kann ueberdeckt sein/],
+    ]);
+    assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT/, fall);
+  }
+  const zugewiesen = shellSource([CARD_BRANCH, SUB_BRANCH]).replace("  const params", '  RETURN_FAILED = "anders";\n  const params');
+  meldeJedenFall(kontext, zugewiesen, [
+    ["Konstante zugewiesen", /ABO_GESCHEITERT: sub oder RETURN_FAILED steht ausserhalb eines Vergleichs/],
+  ]);
+});
+
+test("eine Parameter-Konstante ausserhalb von params.get oder eine Konstante, die erst nach dem Aufruf entsteht, wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const parameter = '  const RETURN_PARAM_SUB = "sub";';
+  const wert = '  const RETURN_FAILED = "failed";';
+  const ausserhalb = /ABO_GESCHEITERT: RETURN_PARAM_SUB steht ausserhalb von params\.get\(RETURN_PARAM_SUB\) und kann ueberdeckt sein/;
+  const faelle = [
+    ["im Block ueberdeckt", clean.replace(CALL_LINE, `  {\n    const RETURN_PARAM_SUB = "card";\n  ${CALL_TEXT}\n  }`), ausserhalb],
+    ["anders verwendet", clean.replace(CALL_LINE, `${CALL_LINE}\n  const kopie = RETURN_PARAM_SUB;`), ausserhalb],
+    ["Wert nach dem Aufruf", clean.replace(wert, "").replace(CALL_LINE, `${CALL_LINE}\n${wert}`), /ABO_GESCHEITERT: RETURN_FAILED ist beim Aufruf von returnMessageText noch nicht deklariert/],
+    ["Parameter nach dem Aufruf", clean.replace(parameter, "").replace(CALL_LINE, `${CALL_LINE}\n${parameter}`), /ABO_GESCHEITERT: RETURN_PARAM_SUB ist beim Aufruf von returnMessageText noch nicht deklariert/],
   ];
-  for (const zeile of unklar) {
-    const shell = verschachtelteShell([`      ${zeile}`], [VERGLEICH_NACH_DER_FUNKTION]);
-    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
-    assert.equal(result.status, EXIT_FINDING, `${zeile}: ${result.stdout}${result.stderr}`);
-    assert.match(result.stdout, /Rumpf von returnMessageText\(\) laesst sich nicht eindeutig lesen/, zeile);
+  for (const [fall, shell, muster] of faelle) {
+    const result = meldeJedenFall(kontext, shell, [[fall, muster]]);
+    assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT/, fall);
+  }
+});
+
+test("eine Funktion returnMessageText, die am Ort des Aufrufs nicht sichtbar ist, wird gemeldet", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const kopf = "  function returnMessageText(card, sub) {";
+  const ende = '    return "";\n  }';
+  const huellen = { "nie aufgerufene Funktion": "  function versteckt() {", Block: "  {" };
+  for (const [fall, huelle] of Object.entries(huellen)) {
+    meldeJedenFall(kontext, clean.replace(kopf, `${huelle}\n${kopf}`).replace(ende, `${ende}\n  }`), [
+      [fall, /KARTE_GESPEICHERT: returnMessageText ist am Ort eines Aufrufs nicht sichtbar/],
+      [fall, /ABO_GESCHEITERT: returnMessageText ist am Ort eines Aufrufs nicht sichtbar/],
+    ]);
   }
 });
 
@@ -230,7 +283,7 @@ test("fehlt die Funktion returnMessageText ganz, meldet das Skript genau das", (
   const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
   assert.equal(result.status, EXIT_FINDING, result.stderr);
   assert.match(result.stdout, /KARTE_GESPEICHERT: die Shell hat keine Funktion returnMessageText\(\)/);
-  assert.doesNotMatch(result.stdout, /laesst sich nicht eindeutig lesen/);
+  assert.doesNotMatch(result.stdout, /mehr als eine Funktion returnMessageText/);
 });
 
 test("ein auskommentierter Funktionskopf vor der echten Funktion verschiebt deren Ende nicht", (kontext) => {
@@ -246,7 +299,7 @@ test("zwei Funktionen returnMessageText machen die Shell unlesbar", (kontext) =>
   const einmal = shellSource([CARD_BRANCH, SUB_BRANCH]);
   const result = runInMiniRoot(kontext, { [SHELL_FILE]: `${einmal}\n${einmal}` });
   assert.equal(result.status, EXIT_FINDING, result.stdout + result.stderr);
-  assert.match(result.stdout, /Rumpf von returnMessageText\(\) laesst sich nicht eindeutig lesen/);
+  assert.match(result.stdout, /es gibt mehr als eine Funktion returnMessageText\(\)/);
 });
 
 const PARAMS_LINE = "  const params = new URLSearchParams(window.location.search);";
@@ -430,6 +483,38 @@ test("ein Aufruf in einer Funktion zaehlt nur, wenn die Funktion nachweislich na
   }
   const spaeter = mitParams.replace(zeigeMitParams, `${zeigeMitParams}\n  function spaeter() {\n    function innen() {\n      zeige();\n    }\n    innen();\n  }\n  spaeter();`);
   const result = runInMiniRoot(kontext, { [SHELL_FILE]: spaeter });
+  assert.equal(result.stdout, "");
+  assert.equal(result.status, EXIT_OK, result.stderr);
+});
+
+test("Konstanten, Funktion und Zweig zaehlen nur als Code im Syntaxbaum, nicht als Text in Zeichenketten", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const wert = '  const RETURN_FAILED = "failed";';
+  const kopf = "  function returnMessageText(card, sub) {";
+  const ohneWert = clean.replace(wert, "");
+  const wertUnbekannt = /ABO_GESCHEITERT: die Shell kennt den Wert "failed" nicht/;
+  const kopfzeile = clean.split("\n").indexOf(kopf) + 1;
+  meldeJedenFall(kontext, clean.replace(wert, `  const hinweis = '${wert.trim()}';`), [["Wert in Zeichenkette", wertUnbekannt]]);
+  meldeJedenFall(kontext, clean.replace(wert, `  const hinweis = \`${wert.trim()}\`;`), [["Wert in Template", wertUnbekannt]]);
+  meldeJedenFall(kontext, clean.replace(wert, wert.replace("const", "let")), [["Wert mit let", wertUnbekannt]]);
+  meldeJedenFall(kontext, ohneWert.replace(kopf, `${kopf}\n${wert}`), [["Wert im Funktionsrumpf", wertUnbekannt]]);
+  meldeJedenFall(kontext, `${ohneWert}\n<script>\n${wert}\n</script>`, [["Wert in anderem Skript-Block", wertUnbekannt]]);
+  const imTemplate = clean.replace(kopf, `  const vorlage = \`\n${kopf}`).replace('    return "";\n  }', '    return "";\n  }\n  `;');
+  meldeJedenFall(kontext, imTemplate, [
+    ["Funktion in Template", /KARTE_GESPEICHERT: die Shell hat keine Funktion returnMessageText\(\)/],
+  ]);
+  const zweige = {
+    "in einer Zeichenkette": '    const hinweis = "if (sub === RETURN_FAILED) return x";',
+    "in einer Pfeilfunktion": "    const pruefe = () => sub === RETURN_FAILED;",
+    "in einem inneren if": '    if (Date.now() > 0) {\n      if (sub === RETURN_FAILED) return "Abo gescheitert";\n    }',
+  };
+  for (const [fall, zweig] of Object.entries(zweige)) {
+    const result = meldeJedenFall(kontext, shellSource([CARD_BRANCH, zweig]), [
+      [fall, new RegExp(`BillingIsland\\.astro:${kopfzeile} ABO_GESCHEITERT: kein Zweig "sub === RETURN_FAILED"`)],
+    ]);
+    assert.doesNotMatch(result.stdout, /KARTE_GESPEICHERT/, fall);
+  }
+  const result = runInMiniRoot(kontext, { [SHELL_FILE]: `${clean}\n<script>\n  export default function () {}\n</script>` });
   assert.equal(result.stdout, "");
   assert.equal(result.status, EXIT_OK, result.stderr);
 });
