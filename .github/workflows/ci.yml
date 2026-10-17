@@ -243,6 +243,16 @@ jobs:
           set -o pipefail
           node tools/testlaufzeit-pruefen.mjs --teil "$TEIL" --kosten .pruefung/testkosten.jsonl ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Testlaufzeit hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: testlaufzeit-teil-${{ matrix.teil }}
+          path: |
+            .pruefung/dateien.jsonl
+            .pruefung/testkosten.jsonl
+          if-no-files-found: ignore
+
       - name: Bestandene Tests melden
         id: bestanden
         if: always()

@@ -76,14 +76,26 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
+          TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
         run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE"
+
+      - name: Testlaufzeit
+        if: always()
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEIL: ${{ matrix.teil }}
+        run: |
+          set -o pipefail
+          node tools/testlaufzeit-pruefen.mjs --laufzeiten ".pruefung/werkzeugteil-$TEIL.jsonl" --kosten ".pruefung/testkosten-werkzeugteil-$TEIL.jsonl" --teil "werkzeuge-$TEIL" ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Bericht des Teils hochladen
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: werkzeugteil-${{ matrix.teil }}
-          path: .pruefung/werkzeugteil-${{ matrix.teil }}.jsonl
+          path: |
+            .pruefung/werkzeugteil-${{ matrix.teil }}.jsonl
+            .pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
           if-no-files-found: ignore
 
   pruefleiter:
