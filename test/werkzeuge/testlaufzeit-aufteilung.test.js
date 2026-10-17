@@ -36,7 +36,7 @@ test("die Aufteilung trennt Prozessstart, Tests, Datenbank, Server und Ausklinge
 });
 
 test("Prozessstart und Laden wird nie negativ, und ohne Kosten zählen keine Starts", () => {
-  const teile = aufteilung({ ...ZEILE, kind_ms: 5000 }, undefined);
+  const teile = aufteilung({ ...ZEILE, kind_ms: ZEILE.dauer_ms + 1 }, undefined);
   assert.equal(teile.prozessstart_ms, 0);
   assert.deepEqual(teile.datenbank, { anzahl: 0, ms: 0 });
   assert.deepEqual(teile.server, { anzahl: 0, ms: 0 });
