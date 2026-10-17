@@ -36,7 +36,13 @@ function hermesCtl(sitzung, argumente) {
 const wertAn = (objekt, pfad) =>
   pfad
     .split(".")
-    .reduce((wert, teil) => (wert === undefined || wert === null ? undefined : wert[teil]), objekt);
+    .reduce(
+      (wert, teil) =>
+        wert !== null && typeof wert === "object" && Object.hasOwn(wert, teil)
+          ? wert[teil]
+          : undefined,
+      objekt,
+    );
 
 function einsetzen(wert, gemerkt) {
   if (typeof wert === "string") {

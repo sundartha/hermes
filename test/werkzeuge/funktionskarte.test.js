@@ -230,6 +230,29 @@ test(
 );
 
 test(
+  "eine Erwartung oder ein Platzhalter an ein geerbtes Feld wie constructor ist rot",
+  TEST_FRIST,
+  async () => {
+    const geerbt = {
+      ...STATUS_LESEN,
+      erwarte: [{ pfad: "constructor.name", gleich: "Object" }],
+    };
+    const karte = { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, geerbt] };
+    const lauf = await pruefen(bestand({ vorher: sauberVorher(karte) }));
+    assert.equal(lauf.exit, EXIT_ROT);
+    assert.match(lauf.stderr, /nummer\.md Schritt 2: constructor\.name fehlt in der Antwort/);
+    const platzhalter = {
+      ...STATUS_LESEN,
+      erwarte: [{ pfad: "ergebnis.number", gleich: "{{constructor.name}}" }],
+    };
+    const zweite = { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, platzhalter] };
+    const rot = await pruefen(bestand({ vorher: sauberVorher(zweite) }));
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(rot.stderr, /Schritt 2: Platzhalter \{\{constructor\.name\}\} nennt nichts/);
+  },
+);
+
+test(
   "ein abgelehnter HTTP-Aufruf deckt seine Fläche nur ab, wenn der Schritt den Status prüft",
   TEST_FRIST,
   async () => {
