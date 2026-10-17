@@ -115,7 +115,7 @@ function liestEigenenPfad(baum) {
   );
 }
 
-function folgtUmbenennung(baum, datei, altFuer) {
+function importendungenAngleichen(baum, datei, altFuer) {
   for (const knoten of alleKnoten({ ast: baum, visitorKeys: VisitorKeys })) {
     const quelle = QUELLKNOTEN.has(knoten.type) ? knoten.source : undefined;
     if (quelle?.type !== "Literal" || typeof quelle.value !== "string") continue;
@@ -144,7 +144,7 @@ export async function laufzeitVergleich({ alt, neu }, { paare = [], eslint = new
   const { baeume, grund } = await laufzeitBaeume({ alt, neu }, eslint);
   if (baeume === undefined) return { gleich: false, grund };
   const altFuer = new Map(paare.map(({ alt: vorher, neu: nachher }) => [nachher, vorher]));
-  const gleich = gleicherBaum(baeume[0], folgtUmbenennung(baeume[1], neu.pfad, altFuer));
+  const gleich = gleicherBaum(baeume[0], importendungenAngleichen(baeume[1], neu.pfad, altFuer));
   return gleich ? { gleich } : { gleich, grund: GRUND.geaendert };
 }
 
