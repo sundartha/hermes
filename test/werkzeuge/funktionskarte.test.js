@@ -494,3 +494,30 @@ test(
     assert.match(rot.stderr, /nummer\.md: kein Schritt ruft POST \/mcp\/:mehr auf/);
   },
 );
+
+test(
+  "eine Erwartung, die erst nach dem Einsetzen oder an null nichts mehr verlangt, ist rot",
+  TEST_FRIST,
+  async () => {
+    const statusMerken = { ...STATUS_LESEN, merke: "status" };
+    const zahlAlsText = {
+      befehl: STATUS_LESEN.befehl,
+      erwarte: [{ pfad: "ergebnis.number", enthaelt: "{{status.ergebnis.calls}}" }],
+    };
+    const karte = { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, statusMerken, zahlAlsText] };
+    const lauf = await pruefen(bestand({ vorher: sauberVorher(karte) }));
+    assert.equal(lauf.exit, EXIT_ROT);
+    assert.match(
+      lauf.stderr,
+      /Schritt 3: ergebnis\.number: „enthaelt“ braucht nach dem Einsetzen einen nicht leeren Text/,
+    );
+    const nullAlsObjekt = {
+      ...STATUS_LESEN,
+      erwarte: [{ pfad: "ergebnis.planUsagePercent", typ: "object" }],
+    };
+    const zweite = { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, nullAlsObjekt] };
+    const rot = await pruefen(bestand({ vorher: sauberVorher(zweite) }));
+    assert.equal(rot.exit, EXIT_ROT);
+    assert.match(rot.stderr, /Schritt 2: ergebnis\.planUsagePercent hat Typ null, erwartet object/);
+  },
+);
