@@ -15,6 +15,7 @@ import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 export { BOOTSTRAP_TENANT_ID };
 export { anrufpauseSetzen } from "./state-ops.js";
+export { macheSpeicherSperre } from "./sperre.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
 
