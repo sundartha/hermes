@@ -203,9 +203,9 @@ test("eine Datei unter codeowners, die nicht in CODEOWNERS steht, ist ein Befund
   genau(befunde, "codeowners nennt src/logik.js, das nicht in CODEOWNERS steht");
 });
 
-test("eine neue Datei ist grün", (context) => {
+test("eine neue Datei ohne Suche nach vorhandener Logik ist ein Befund", (context) => {
   const { befunde } = einzeln(context, { aenderungen: [{ datei: "src/neu.js", neu: "datei", neueZeilen: 10 }] });
-  assert.deepEqual(befunde, []);
+  genau(befunde, "neue datei src/neu.js ohne vorhanden");
 });
 
 test("eine als neu gemeldete Datei, die es schon gibt, ist ein Befund", (context) => {
@@ -218,9 +218,9 @@ test("eine als neu gemeldete Funktion, die es schon gibt, ist ein Befund", (cont
   genau(befunde, "gibt es schon");
 });
 
-test("eine neue Funktion mit neuem Namen in bestehender Datei ist grün", (context) => {
+test("eine neue Funktion mit neuem Namen ohne Suche nach vorhandener Logik ist ein Befund", (context) => {
   const { befunde } = einzeln(context, { aenderungen: [{ datei: "src/logik.js", funktion: "rechneNeu", neu: "funktion", neueZeilen: 5 }] });
-  assert.deepEqual(befunde, []);
+  genau(befunde, "neue funktion rechneNeu ohne vorhanden");
 });
 
 test("eine Änderung ohne neueZeilen ist ein Befund", (context) => {
