@@ -344,6 +344,7 @@ class AuftragsLauf {
       () => this.grenzen("bau", this.basisBau),
       () => this.bauHatGeaendert(),
       () => this.allesVormerken(),
+      () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.typpruefung(),
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
       () => this.pinPruefung(),

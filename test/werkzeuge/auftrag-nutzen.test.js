@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { bauPrompt } from "../../tools/auftrag/agenten.mjs";
+import { GRUEN } from "../../tools/auftrag/bericht.mjs";
+import { nutzungsVerstoesse } from "../../tools/auftrag/befehle.mjs";
 import { NUTZEN } from "../../tools/auftrag/planung/erkundung.mjs";
 import { auftragAusSchnitt } from "../../tools/auftrag/planung/zusammensetzen.mjs";
-import { probeDirectory } from "./probe-repo.js";
+import { PRUEFUNG } from "../../tools/auftrag/zweck.mjs";
+import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const KOSTEN = ["const VORSPANN = 1;", "", "export function summeMikroCent(betraege) {", "  return betraege.reduce((gesamt, betrag) => gesamt + betrag, VORSPANN);", "}", ""].join("\n");
 const SUMME = { datei: "src/kosten.js", funktion: "summeMikroCent" };
@@ -67,4 +73,47 @@ test("ist die Funktion nicht mehr da, verlangt der Prompt den Ausstieg statt ein
 
 test("ohne nutzen hat der Prompt keinen Abschnitt zur vorhandenen Logik", (context) => {
   assert.ok(!prompt(context).includes("Vorhandene Logik"));
+});
+
+const ZWECK = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/zweck.json"), "utf8"));
+const VERDOPPLE = { datei: "src/rechnen.js", funktion: "verdopple", fuer: "gross" };
+const MIT_NUTZEN = { ...UMBAU, nutzen: [VERDOPPLE] };
+const NACHGEBAUT = { "src/text.js": "export function gross(text) {\n  return text.toUpperCase();\n}\n\nexport function doppelt(zahl) {\n  return zahl;\n}\n" };
+const GENUTZT = { "src/text.js": 'import { verdopple } from "./rechnen.js";\n\nexport function gross(text) {\n  return text.toUpperCase();\n}\n\nexport const doppelt = verdopple;\n' };
+
+const NICHT_GENUTZT = "nicht genutzt: src/rechnen.js:verdopple (für gross)";
+
+function neueZeile(text, datei = "src/text.js") {
+  return { datei, text };
+}
+
+test("nur ein Aufruf oder Import mit ganzem Namen zählt als genutzt, keine Deklaration und kein längerer Name", () => {
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const x = verdopple(2);")]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile('import { verdopple } from "./rechnen.js";')]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const x = verdoppleAlles(2);")]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], []), [NICHT_GENUTZT]);
+});
+
+test("deklariert der Bau dieselbe Funktion in einer anderen Datei neu, ist das ein Nachbau, auch wenn er sie danach aufruft", () => {
+  const kopie = [neueZeile("function verdopple(zahl) {"), neueZeile("  return zahl * 2;"), neueZeile("export const doppelt = verdopple(1);")];
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], kopie), ["nachgebaut: src/text.js deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)"]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const verdopple = (zahl) => zahl * 2;")]).length, 1);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("export function verdopple(zahl) {", "src/rechnen.js"), neueZeile("verdopple(1);")]), []);
+});
+
+test("baut der Bau-Agent die Regel nach, statt die vorhandene Funktion zu nutzen, ist die Runde rot und Runde 2 nennt Zweck und Ausweg", (context) => {
+  const { werkzeug, lauf, beleg } = starte(context, { auftrag: MIT_NUTZEN, drehbuch: { bau: NACHGEBAUT } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(beleg.runden[0], new RegExp(`^Runde 1: ${PRUEFUNG.GENUTZT} endete mit Exit 1\\.`));
+  const prompt = readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8");
+  const teile = ["## Vorhandene Logik, die du nutzt", "Verstoß: nicht genutzt: src/rechnen.js:verdopple (für gross)", `\nWozu: ${ZWECK[PRUEFUNG.GENUTZT].wozu}\n`, `\nAusweg: ${ZWECK[PRUEFUNG.GENUTZT].ausweg}\n`];
+  assert.deepEqual(teile.filter((teil) => !prompt.includes(teil)), []);
+});
+
+test("nutzt der Bau-Agent die vorhandene Funktion, ist die Prüfung grün und die Runde geht weiter", (context) => {
+  const { lauf, beleg } = starte(context, { auftrag: MIT_NUTZEN, drehbuch: { bau: GENUTZT } });
+  const pruefung = beleg?.pruefungen.find(({ name }) => name === PRUEFUNG.GENUTZT);
+  assert.equal(pruefung?.exitCode, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(pruefung.zeilen, ["grün: 1 von 1 vorhandenen Funktionen in den neuen Zeilen genutzt."]);
+  assert.equal(beleg.ergebnis, GRUEN);
 });

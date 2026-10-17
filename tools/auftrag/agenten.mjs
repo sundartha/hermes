@@ -17,6 +17,7 @@ const NUTZEN_REGEL = [
   "Diese Funktionen setzen eine Regel deines Auftrags schon um; der Erkunder hat sie gesucht und mit „nutzen“ beurteilt.",
   "Du rufst sie auf oder importierst sie, statt die Regel nachzubauen. Fehlt der Export und liegt die Datei in deinem Bereich, ergänzt du den Export.",
   "Liegt sie außerhalb deines Bereichs und lässt sie sich so nicht nutzen, antwortest du als Letztes mit genau einer Zeile: „Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>, <warum nicht nutzbar>“.",
+  "Nach deinem Bau prüft das Skript, dass jede dieser Funktionen in deinen neuen Zeilen vorkommt.",
 ].join("\n");
 const EXIT_OHNE_STATUS = 1;
 const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));

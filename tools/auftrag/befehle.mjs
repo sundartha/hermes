@@ -6,7 +6,7 @@ import { env } from "node:process";
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
-import { aenderungenSeit, gibtEsIn } from "./git.mjs";
+import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
@@ -100,5 +100,47 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   console.log(
     `${urteil}: ${aenderungen.length} Dateien geändert, ${produktzeilen} neue Zeilen Produktcode, Rolle ${rolle}.`,
   );
+  return verstoesse.length === 0 ? EXIT_GRUEN : EXIT_ROT;
+}
+
+const HINZUGEFUEGT = /^\+(?!\+\+ )/;
+const ZIELDATEI = /^\+\+\+ b\/(.+)$/;
+const SONDERZEICHEN = /[.*+?^${}()|[\]\\]/g;
+
+function hinzugefuegteZeilen(basis, root) {
+  const diff = git(["-c", "core.quotePath=false", "diff", "--cached", "--unified=0", "--no-color", basis], { cwd: root }).split("\n");
+  let datei = "";
+  return diff.flatMap((zeile) => {
+    const kopf = ZIELDATEI.exec(zeile);
+    if (kopf !== null) datei = kopf[1];
+    return kopf === null && HINZUGEFUEGT.test(zeile) ? [{ datei, text: zeile.slice(1) }] : [];
+  });
+}
+
+function namensMuster(funktion) {
+  const name = funktion.replace(SONDERZEICHEN, "\\$&");
+  return {
+    erwaehnt: new RegExp(`(?<![\\w$])${name}(?![\\w$])`),
+    deklariert: new RegExp(`(?:function\\*?\\s+|(?:const|let|var|class)\\s+)${name}(?![\\w$])|^\\s*(?:async\\s+|static\\s+)*${name}\\s*\\([^)]*\\)\\s*\\{`),
+  };
+}
+
+export function nutzungsVerstoesse(nutzen, zeilen) {
+  return nutzen.flatMap(({ datei, funktion, fuer }) => {
+    const { erwaehnt, deklariert } = namensMuster(funktion);
+    const nachbau = zeilen.find((zeile) => zeile.datei !== datei && deklariert.test(zeile.text));
+    if (nachbau !== undefined) return [`nachgebaut: ${nachbau.datei} deklariert ${funktion} neu, statt ${datei}:${funktion} zu nutzen (für ${fuer})`];
+    const genutzt = zeilen.some((zeile) => erwaehnt.test(zeile.text) && !deklariert.test(zeile.text));
+    return genutzt ? [] : [`nicht genutzt: ${datei}:${funktion} (für ${fuer})`];
+  });
+}
+
+export function genutzt(phasendatei, kennung, { basis, root }) {
+  const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
+  if (befunde.length > 0) return meldeBefunde(befunde);
+  const nutzen = auftrag.nutzen ?? [];
+  const verstoesse = nutzungsVerstoesse(nutzen, nutzen.length > 0 ? hinzugefuegteZeilen(basis, root) : []);
+  for (const verstoss of verstoesse) console.log(`${VERSTOSS}${verstoss}`);
+  console.log(`${verstoesse.length === 0 ? "grün" : "rot"}: ${nutzen.length - verstoesse.length} von ${nutzen.length} vorhandenen Funktionen in den neuen Zeilen genutzt.`);
   return verstoesse.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
