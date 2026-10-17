@@ -215,7 +215,9 @@ function exceptionData(root, definition) {
 }
 
 function listedEntries(data) {
-  return Array.isArray(data) ? data : data?.befunde;
+  const entries = Array.isArray(data) ? data : data?.befunde;
+  const isList = Array.isArray(entries) && entries.every((entry) => typeof entry === "string");
+  return isList ? entries : undefined;
 }
 
 function countExceptions(root, definition) {
