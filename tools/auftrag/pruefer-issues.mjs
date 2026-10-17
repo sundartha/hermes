@@ -2,6 +2,7 @@ import { ersetzeSteuerzeichen } from "./pruefer-schema.mjs";
 
 export const LABEL = "pruefer";
 const MAX_TITEL = 200;
+const MAX_DATEI_IM_TITEL = 120;
 const MAX_FELD = 6000;
 const MIN_ZAUN = 3;
 const BACKTICKS = /`+/g;
@@ -14,13 +15,14 @@ function katalogId(id) {
   return KATALOG_ID.test(id) ? id : "";
 }
 
-function dateiSpan(datei) {
-  const inhalt = ersetzeSteuerzeichen(datei, " ").replace(BACKTICKS, "").slice(0, MAX_TITEL);
+function dateiSpan(datei, grenze = MAX_TITEL) {
+  const inhalt = ersetzeSteuerzeichen(datei, " ").replace(BACKTICKS, "").slice(0, grenze);
   return `\`${inhalt}\``;
 }
 
 export function issueTitel(befund, pr = null) {
-  const titel = `Prüfer: ${katalogId(befund.id) || OHNE_ID} in ${dateiSpan(befund.datei)}`;
+  const stelle = `${dateiSpan(befund.datei, MAX_DATEI_IM_TITEL)}, Zeile ${befund.zeile}`;
+  const titel = `Prüfer: ${katalogId(befund.id) || OHNE_ID} in ${stelle}`;
   return pr === null ? titel : `${titel} (PR #${pr})`;
 }
 

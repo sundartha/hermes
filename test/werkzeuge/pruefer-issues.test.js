@@ -20,9 +20,10 @@ import {
 const HEAD = scheinSha("d");
 const TITEL = "Prüfer: N7 in src/zahl.js";
 const PRIVAT = "sundartha/hermes-sicherheit";
-const ABLAGE_TITEL = "Sicherheit: Prüfer: SG-12 in `src/zahl.js`";
-const TITEL_MIT_SPAN = "Prüfer: N7 in `src/zahl.js`";
+const ABLAGE_TITEL = "Sicherheit: Prüfer: SG-12 in `src/zahl.js`, Zeile 1";
+const TITEL_MIT_SPAN = "Prüfer: N7 in `src/zahl.js`, Zeile 1";
 const GUELTIGE_PR = 1133;
+const TITELLIMIT = 200;
 
 function mitStatus(offen, geschlossen) {
   return [...offen.map((title) => ({ title, state: "open" })), ...geschlossen.map((title) => ({ title, state: "closed" }))];
@@ -102,6 +103,58 @@ test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue n
   assert.equal(github.gesendet.filter(({ pfad }) => pfad === "/issues").length, 1);
 });
 
+async function angelegt(context, commits) {
+  setzeAusloeser(context, ciLauf());
+  const ordner = ergebnisOrdner(context, commits, { pr: GUELTIGE_PR });
+  const github = scheinGithub();
+  await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+  const ersterLauf = github.gesendet.filter(({ pfad }) => pfad === "/issues").map(({ daten }) => daten);
+  await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+  const alle = github.gesendet.filter(({ pfad }) => pfad === "/issues").map(({ daten }) => daten);
+  return { ersterLauf, wiederholt: alle.length - ersterLauf.length };
+}
+
+test("zwei Befunde in derselben Datei, mit oder ohne Katalog-ID, werden zwei Issues mit je eigenem Beleg; ein Wiederholungslauf legt keine weiteren an", async (context) => {
+  const befunde = [
+    hinweis({ id: "", zeile: 10, beleg: "ERSTER-OHNE-ID" }),
+    hinweis({ id: "", zeile: 20, beleg: "ZWEITER-OHNE-ID" }),
+    hinweis({ zeile: 30, beleg: "ERSTER-MIT-ID" }),
+    hinweis({ zeile: 40, beleg: "ZWEITER-MIT-ID" }),
+  ];
+  const { ersterLauf, wiederholt } = await angelegt(context, [
+    { sha: HEAD, patchId: "", zustand: "geprueft", befunde },
+  ]);
+  const titel = ersterLauf.map(({ title }) => title);
+  assert.equal(new Set(titel).size, befunde.length, JSON.stringify(titel));
+  for (const { beleg } of befunde) {
+    assert.equal(ersterLauf.filter(({ body }) => body.includes(beleg)).length, 1, beleg);
+  }
+  assert.equal(wiederholt, 0);
+});
+
+test("derselbe Befund an derselben Stelle in zwei Commits wird nur ein Issue", async (context) => {
+  const befund = hinweis({ id: "", zeile: 10 });
+  const { ersterLauf } = await angelegt(context, [
+    { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [befund] },
+    { sha: scheinSha("e"), patchId: "", zustand: "geprueft", befunde: [befund] },
+  ]);
+  assert.equal(ersterLauf.length, 1);
+});
+
+test("ein sehr langer Dateipfad kostet im Titel weder die Zeile noch die PR-Nummer", async (context) => {
+  const datei = `src/${"a".repeat(TITELLIMIT)}.js`;
+  const befunde = [hinweis({ id: "", datei, zeile: 5 }), hinweis({ id: "", datei, zeile: 6 })];
+  const { ersterLauf } = await angelegt(context, [
+    { sha: HEAD, patchId: "", zustand: "geprueft", befunde },
+  ]);
+  assert.equal(ersterLauf.length, 2);
+  for (const [index, zeile] of [5, 6].entries()) {
+    const { title } = ersterLauf[index];
+    assert.ok(title.length <= TITELLIMIT, title);
+    assert.ok(title.endsWith(`, Zeile ${zeile} (PR #${GUELTIGE_PR})`), title);
+  }
+});
+
 test("fehlt das Ergebnis, setzt entscheiden error; war der auslösende Lauf rot, setzt es nichts", async (context) => {
   const leer = probeDirectory(context, {});
   const github = scheinGithub();
@@ -153,7 +206,7 @@ test("eine Katalog-ID ausserhalb des Katalogmusters steht weder im Titel noch im
   const { titel, text } = einzigesIssue(
     hinweis({ id: "G5 @jemand [mehr](https://boese.example)", datei: "src/`zahl`.js @jemand" }),
   );
-  assert.equal(titel, "Prüfer: Befund in `src/zahl.js @jemand`");
+  assert.equal(titel, "Prüfer: Befund in `src/zahl.js @jemand`, Zeile 1");
   assert.equal(text.includes("Katalog-ID"), false);
   assert.equal(text.includes("boese.example"), false);
   assert.ok(text.includes("- Stelle: `src/zahl.js @jemand`, Zeile 1"), text);
@@ -161,7 +214,7 @@ test("eine Katalog-ID ausserhalb des Katalogmusters steht weder im Titel noch im
 
 test("eine Katalog-ID nach Muster und die Datei als Code-Span stehen in Titel und Text", () => {
   const { titel, text } = einzigesIssue(hinweis({ id: "SG-07", datei: "src/zahl.js" }));
-  assert.equal(titel, "Prüfer: SG-07 in `src/zahl.js`");
+  assert.equal(titel, "Prüfer: SG-07 in `src/zahl.js`, Zeile 1");
   assert.ok(text.includes("- Katalog-ID: SG-07\n- Stelle: `src/zahl.js`, Zeile 1"), text);
 });
 

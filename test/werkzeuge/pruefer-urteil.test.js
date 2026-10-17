@@ -68,7 +68,7 @@ test("ein BLOCKER ohne Reproduktion, mit Ladefehler oder gr체ner Reproduktion h�
     assert.equal(state, "success", grund);
     assert.deepEqual(
       issues.map((issue) => [issue.titel, issue.grund]),
-      [["Pr체fer: G5 in `src/zahl.js`", grund]],
+      [["Pr체fer: G5 in `src/zahl.js`, Zeile 1", grund]],
     );
   }
 });
@@ -211,8 +211,8 @@ test("SOLLTE und HINWEIS halten den PR nicht auf; nur jeder SOLLTE wird ein Folg
   assert.deepEqual(
     issues.map(({ titel, pr }) => [titel, pr]),
     [
-      ["Pr체fer: G5 in `src/zahl.js` (PR #1012)", 1012],
-      ["Pr체fer: Befund in `src/text.js` (PR #1012)", 1012],
+      ["Pr체fer: G5 in `src/zahl.js`, Zeile 1 (PR #1012)", 1012],
+      ["Pr체fer: Befund in `src/text.js`, Zeile 1 (PR #1012)", 1012],
     ],
   );
 });
