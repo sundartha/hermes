@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { MELDUNG, befundeMelden } from "./auftrag/zweck.mjs";
+import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
 import { CHECKED_ROOTS, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
 
@@ -59,4 +59,4 @@ function findings(basis) {
 }
 
 const { values } = parseArgs({ options: { basis: { type: "string" } } });
-befundeMelden(findings(values.basis), MELDUNG.TS_SPERRE);
+befundeMeldenUndScheitern(findings(values.basis), MELDUNG.TS_SPERRE);
