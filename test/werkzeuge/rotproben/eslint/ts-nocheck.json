@@ -1,0 +1,10 @@
+{
+  "titel": "Ganze TypeScript-Datei per Kommentar von der Typprüfung ausgenommen",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "// @ts-nocheck",
+      "export const zahl: number = \"x\";"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/ban-ts-comment\""
+}

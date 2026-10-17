@@ -1,0 +1,13 @@
+{
+  "titel": "Lese-Skript als .ts schreibt eine Datei",
+  "dateien": {
+    "scripts/anruf-unterbrechungen.ts": [
+      "import { writeFileSync } from \"node:fs\";",
+      "",
+      "export function schreibt(): void {",
+      "  writeFileSync(\"x\", \"y\");",
+      "}"
+    ]
+  },
+  "erwartet": "Dieses Skript liest nur"
+}

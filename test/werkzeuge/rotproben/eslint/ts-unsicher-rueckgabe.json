@@ -1,0 +1,18 @@
+{
+  "titel": "any aus einer JS-Quelle als Rückgabe",
+  "dateien": {
+    "src/probe/alt.js": [
+      "export function roh(wert) {",
+      "  return wert;",
+      "}"
+    ],
+    "src/probe/probe.ts": [
+      "import { roh } from \"./alt.js\";",
+      "",
+      "export function gibt(): number {",
+      "  return roh(1);",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-unsafe-return\""
+}

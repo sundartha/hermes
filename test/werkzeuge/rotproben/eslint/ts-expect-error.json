@@ -1,0 +1,10 @@
+{
+  "titel": "Typprüfung per Kommentar abgeschaltet",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "// @ts-expect-error",
+      "export const zahl: number = \"x\";"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/ban-ts-comment\""
+}

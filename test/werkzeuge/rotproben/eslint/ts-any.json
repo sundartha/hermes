@@ -1,0 +1,11 @@
+{
+  "titel": "any in einer TypeScript-Datei",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function verdoppelt(wert: any): number {",
+      "  return Number(wert);",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-explicit-any\""
+}

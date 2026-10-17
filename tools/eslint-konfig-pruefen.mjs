@@ -6,6 +6,13 @@ import { ESLint } from "eslint";
 const BASELINE_FILE = "tools/basis/eslint-wirksam.json";
 const SCANNED_ROOTS = ["src", "test", "scripts", "tools", "apps/web/src"];
 const LINTED_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+const TYPESCRIPT_PROBE = "eslint-konfig-probe";
+const TYPESCRIPT_EXTENSION = ".ts";
+const TYPESCRIPT_TWINS = [".mts", ".cts", ".test.ts"];
+const DECLARATION_EXTENSION = ".d.ts";
+const TYPESCRIPT_KEY = ` (${TYPESCRIPT_EXTENSION})`;
+const DECLARATION_KEY = ` (${DECLARATION_EXTENSION})`;
+const JAVASCRIPT_KEY = "";
 const SKIPPED_DIRECTORY_NAMES = new Set(["node_modules", ".git"]);
 const NESTED_CHECKOUTS_DIRECTORY = ".claude/worktrees";
 const ROOT_FOLDER = ".";
@@ -42,13 +49,28 @@ function filesIn(root, dir) {
     .map((entry) => join(dir, entry.name));
 }
 
-function probes(root) {
-  const folders = SCANNED_ROOTS.filter((scanRoot) => existsSync(join(root, scanRoot))).flatMap(
-    (scanRoot) => [...directoriesBelow(root, scanRoot)],
-  );
+function scannedFolders(root) {
+  return SCANNED_ROOTS.filter((scanRoot) => existsSync(join(root, scanRoot))).flatMap((scanRoot) => [
+    ...directoriesBelow(root, scanRoot),
+  ]);
+}
+
+function javascriptProbes(root, folders) {
   return folders
-    .map((folder) => ({ folder, file: filesIn(root, folder).find(isLintedFile) }))
+    .map((folder) => ({ folder, key: JAVASCRIPT_KEY, file: filesIn(root, folder).find(isLintedFile) }))
     .filter(({ file }) => file !== undefined);
+}
+
+function typescriptProbes(folders) {
+  return folders.flatMap((folder) => [
+    { folder, key: TYPESCRIPT_KEY, file: join(folder, `${TYPESCRIPT_PROBE}${TYPESCRIPT_EXTENSION}`) },
+    { folder, key: DECLARATION_KEY, file: join(folder, `${TYPESCRIPT_PROBE}${DECLARATION_EXTENSION}`) },
+  ]);
+}
+
+function probes(root) {
+  const folders = scannedFolders(root);
+  return [...javascriptProbes(root, folders), ...typescriptProbes(folders)];
 }
 
 function isLintedFile(file) {
@@ -72,23 +94,35 @@ async function effectiveConfig(eslint, root, file) {
   return canonical({ linterOptions: printed.linterOptions ?? {}, rules: printed.rules ?? {} });
 }
 
+async function twinsOf(eslint, root, probe) {
+  if (probe.key !== TYPESCRIPT_KEY) return [];
+  const stem = join(probe.folder, TYPESCRIPT_PROBE);
+  return Promise.all(
+    TYPESCRIPT_TWINS.map(async (extension) => ({
+      file: `${stem}${extension}`,
+      config: await effectiveConfig(eslint, root, `${stem}${extension}`),
+    })),
+  );
+}
+
 async function measure(root) {
   const eslint = new ESLint({ cwd: root });
   return Promise.all(
     probes(root).map(async (probe) => ({
       ...probe,
       config: await effectiveConfig(eslint, root, probe.file),
+      twins: await twinsOf(eslint, root, probe),
     })),
   );
 }
 
-function recordedFolder(baseline, folder) {
+function recordedFolder(baseline, folder, key) {
   let candidate = folder;
-  while (!Object.hasOwn(baseline, candidate)) {
+  while (!Object.hasOwn(baseline, `${candidate}${key}`)) {
     if (candidate === ROOT_FOLDER) return undefined;
     candidate = dirname(candidate);
   }
-  return candidate;
+  return `${candidate}${key}`;
 }
 
 function isSameConfig(left, right) {
@@ -97,10 +131,10 @@ function isSameConfig(left, right) {
 
 function baselineFrom(measured) {
   const baseline = {};
-  for (const { folder, config } of measured) {
-    const inherited = recordedFolder(baseline, dirname(folder));
-    if (inherited === undefined) baseline[ROOT_FOLDER] = config;
-    else if (!isSameConfig(baseline[inherited], config)) baseline[folder] = config;
+  for (const { folder, key, config } of measured) {
+    const inherited = recordedFolder(baseline, dirname(folder), key);
+    if (inherited === undefined) baseline[`${ROOT_FOLDER}${key}`] = config;
+    else if (!isSameConfig(baseline[inherited], config)) baseline[`${folder}${key}`] = config;
   }
   return baseline;
 }
@@ -129,23 +163,29 @@ function driftFindings(folder, expected, actual) {
     );
 }
 
-function lintedStateFindings({ folder, file, config }, expected) {
+function lintedStateFindings({ folder, key, file, config }, expected) {
   if (config === null && expected === null) return [];
   const state = config === null ? "wird nicht mehr gelintet" : "wird gelintet, laut Kopie nicht";
-  return [`${folder}: ${file} ${state}`];
+  return [`${folder}${key}: ${file} ${state}`];
 }
 
 function baselineFindings(baseline, probe) {
-  const recorded = recordedFolder(baseline, probe.folder);
-  if (recorded === undefined) return [`${probe.folder}: keine Kopie in ${BASELINE_FILE}`];
+  const recorded = recordedFolder(baseline, probe.folder, probe.key);
+  if (recorded === undefined) return [`${probe.folder}${probe.key}: keine Kopie in ${BASELINE_FILE}`];
   const expected = baseline[recorded];
   if (probe.config === null || expected === null) return lintedStateFindings(probe, expected);
-  return driftFindings(probe.folder, expected, probe.config);
+  return driftFindings(`${probe.folder}${probe.key}`, expected, probe.config);
 }
 
-function inlineConfigFindings({ folder, config }) {
+function twinFindings({ folder, file, config, twins = [] }) {
+  return twins
+    .filter((twin) => !isSameConfig(twin.config, config))
+    .map((twin) => `${folder}${TYPESCRIPT_KEY}: ${twin.file} wird anders geprüft als ${file}`);
+}
+
+function inlineConfigFindings({ folder, key, config }) {
   if (config === null || config.linterOptions.noInlineConfig === true) return [];
-  return [`${folder}: noInlineConfig ist nicht gesetzt`];
+  return [`${folder}${key}: noInlineConfig ist nicht gesetzt`];
 }
 
 function nestedConfigFindings(root) {
@@ -194,6 +234,7 @@ function report(root, measured) {
   const findings = [
     ...copyFindings,
     ...measured.flatMap(inlineConfigFindings),
+    ...measured.flatMap(twinFindings),
     ...nestedConfigFindings(root),
     ...onlyFindings(root),
   ];

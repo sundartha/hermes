@@ -1,0 +1,14 @@
+{
+  "titel": "Umwandlung, die einen Typ enger macht als bewiesen",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "interface Anruf {",
+      "  readonly nummer: string;",
+      "}",
+      "export function alsAnruf(roh: unknown): Anruf {",
+      "  return roh as Anruf;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-unsafe-type-assertion\""
+}

@@ -26,6 +26,7 @@
   "probe": {
     "mitnehmen": [
       "eslint.config.js",
+      "tsconfig.json",
       "tools/eslint-rules/index.js",
       "tools/eslint-rules/bestand.js",
       "tools/eslint-rules/keine-kommentare.js",

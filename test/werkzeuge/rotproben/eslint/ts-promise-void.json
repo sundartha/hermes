@@ -1,0 +1,14 @@
+{
+  "titel": "Vergessenes await mit void verdeckt",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "async function laedt(): Promise<number> {",
+      "  return Promise.resolve(1);",
+      "}",
+      "export function startet(): void {",
+      "  void laedt();",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-floating-promises\""
+}

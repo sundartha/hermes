@@ -1,0 +1,13 @@
+{
+  "titel": "async-Funktion, wo kein Promise erwartet wird",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function zaehlt(liste: readonly number[]): void {",
+      "  liste.forEach(async (wert) => {",
+      "    await Promise.resolve(wert);",
+      "  });",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"@typescript-eslint/no-misused-promises\""
+}
