@@ -94,6 +94,13 @@ test("nur ein Aufruf oder Import mit ganzem Namen zählt als genutzt, keine Dekl
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], []), [NICHT_GENUTZT]);
 });
 
+test("nennt der Bau den Namen nur im Kommentar oder in einem Text und baut die Regel unter anderem Namen nach, ist die Funktion nicht genutzt", () => {
+  const nachbau = [neueZeile("export function doppelt(zahl) {"), neueZeile("  return zahl * 2;"), neueZeile("}")];
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("// verdopple passt hier nicht"), ...nachbau]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile('const grund = "verdopple passt hier nicht";'), ...nachbau]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueZeile("const text = `doppelt: ${verdopple(2)}`;")]), []);
+});
+
 test("deklariert der Bau dieselbe Funktion in einer anderen Datei neu, ist das ein Nachbau, auch wenn er sie danach aufruft", () => {
   const kopie = [neueZeile("function verdopple(zahl) {"), neueZeile("  return zahl * 2;"), neueZeile("export const doppelt = verdopple(1);")];
   assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], kopie), ["nachgebaut: src/text.js deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)"]);
