@@ -669,3 +669,80 @@ test("der Befehl zum Anlegen im Manifest der Kopienprüfung schreibt eine Liste,
   assert.equal(befunde.length, 1, JSON.stringify(befunde));
   assert.match(befunde[0], /^lib\/zwei\.js\|src\/eins\.js\|\d+$/);
 });
+
+const KOPIEN_VERSION = "kopien-version.json";
+const werkzeugVersion = (version) => json({ version });
+const versionsBasis = (version, ...befunde) => json({ version, befunde: [ALTE_KOPIE, ...befunde] });
+const VERSIONS_MANIFEST = JSON.parse(kopienPruefung(KOPIEN_ANLEGEN));
+VERSIONS_MANIFEST.probe.mitnehmen.push(KOPIEN_VERSION);
+const VERSIONS_ERSATZ = [
+  [
+    "const passt =",
+    `const { version } = JSON.parse(readFileSync("${KOPIEN_VERSION}", "utf8"));\nif (version > 1) formate.push("yml");\nconst passt =`,
+  ],
+  ["JSON.stringify({ befunde: ", "JSON.stringify({ version, befunde: "],
+  [
+    "const bekannt =",
+    'const gespeichert = JSON.parse(readFileSync(BASIS, "utf8"));\nif (gespeichert.version !== version) throw new Error("Die Basislinie gilt für eine andere Version.");\nconst bekannt =',
+  ],
+];
+const VERSIONIERTE_KOPIEN = VERSIONS_ERSATZ.reduce(
+  (skript, [alt, neu]) => skript.replace(alt, neu),
+  KOPIEN_FILES["tools/kopien.mjs"],
+);
+const VERSIONS_FILES = {
+  ...KOPIEN_FILES,
+  "tools/kopien.mjs": VERSIONIERTE_KOPIEN,
+  [KOPIEN_VERSION]: werkzeugVersion(1),
+  [KOPIEN_BASIS]: versionsBasis(1),
+  [KOPIEN_PRUEFUNG]: json(VERSIONS_MANIFEST),
+};
+const VERSIONSWECHSEL = {
+  [KOPIEN_VERSION]: werkzeugVersion(2),
+  [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE),
+};
+
+test("ein Versionswechsel, der die Basislinie mit Altfunden unveränderter Dateien neu anlegt, wird nicht lockerer", async (context) => {
+  const result = await check(context, {
+    basisFiles: VERSIONS_FILES,
+    changes: VERSIONSWECHSEL,
+    approval: "aktuell",
+  });
+  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
+  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
+});
+
+test("ein Versionswechsel mit einer neuen Kopie in einer geänderten Datei: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(
+    context,
+    {
+      ...NEUE_JS_KOPIE,
+      ...VERSIONSWECHSEL,
+      [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE, ...NEUE_JS_EINTRAEGE),
+    },
+    VERSIONS_FILES,
+  );
+});
+
+test("neue Einträge ohne Versionswechsel: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, { [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE) }, {
+    ...VERSIONS_FILES,
+    [KOPIEN_VERSION]: werkzeugVersion(2),
+    [KOPIEN_BASIS]: versionsBasis(2),
+  });
+});
+
+test("eine Basislinie mit einer anderen Version als der installierten: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, {
+    ...VERSIONSWECHSEL,
+    [KOPIEN_BASIS]: versionsBasis(3, ...YAML_ALTFUNDE),
+  }, VERSIONS_FILES);
+});
+
+test("eine Basislinie, die ihre Version verliert, ohne dass das Werkzeug eine schreibt: die Prüfung wird lockerer", async (context) => {
+  await wirdLockerer(context, { [KOPIEN_BASIS]: kopienBasis(...NEUE_JS_EINTRAEGE) }, {
+    ...KOPIEN_FILES,
+    ...NEUE_JS_KOPIE,
+    [KOPIEN_BASIS]: versionsBasis(1),
+  });
+});
