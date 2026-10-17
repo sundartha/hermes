@@ -110,7 +110,7 @@ export function zweckBlock(id) {
   return BLOCK.map(([titel, feld]) => `${titel}: ${text[feld]}`);
 }
 
-export function befundeMelden(befunde, id) {
+export function befundeMeldenUndScheitern(befunde, id) {
   for (const befund of befunde) console.error(befund);
   if (befunde.length === 0) return;
   console.error(zweckBlock(id).join("\n"));
