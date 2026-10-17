@@ -375,3 +375,23 @@ test(
     assert.match(rot.stderr, /nummer\.md Schritt 3: ergebnis\.calls ist 0, erwartet 1/);
   },
 );
+
+test(
+  "ein Rezept, ein Schritt oder eine Erwartung, die kein JSON-Objekt ist, ist ein Formfehler",
+  TEST_FRIST,
+  async () => {
+    const faelle = [
+      [null, /nummer\.md: Rezept muss ein JSON-Objekt sein/],
+      [{ ...NUMMER_KARTE, schritte: [NUMMER_LESEN, null] }, /Schritt 2: muss ein JSON-Objekt sein/],
+      [
+        { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, { ...STATUS_LESEN, erwarte: [null] }] },
+        /Schritt 2: jede Erwartung muss ein JSON-Objekt sein/,
+      ],
+    ];
+    for (const [karte, meldung] of faelle) {
+      const lauf = await pruefen(bestand({ vorher: sauberVorher(karte) }));
+      assert.equal(lauf.exit, EXIT_ROT, `${lauf.stdout}${lauf.stderr}`);
+      assert.match(lauf.stderr, meldung);
+    }
+  },
+);
