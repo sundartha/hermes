@@ -132,8 +132,12 @@ function trefferInFundDatei(stelle, gefunden, kontext) {
   return istZeile(zeile) && zeile <= zeilenDes(quelle(kontext, teile[1])).length;
 }
 
+function istNutzenAngabe(nutzen) {
+  return istObjekt(nutzen) && istText(nutzen.datei) && istText(nutzen.funktion);
+}
+
 function nutzenBefund(ort, { nutzen, treffer }, kontext) {
-  if (!istObjekt(nutzen) || !istText(nutzen.datei) || !istText(nutzen.funktion)) return `${ort}: urteil „${NUTZEN}“ braucht nutzen mit datei und funktion`;
+  if (!istNutzenAngabe(nutzen)) return `${ort}: urteil „${NUTZEN}“ braucht nutzen mit datei und funktion`;
   if (!treffer.some((stelle) => stelle.startsWith(`${nutzen.datei}:`))) return `${ort}: nutzen nennt ${nutzen.datei}, das unter treffer nicht vorkommt`;
   const befund = dateiBefund(ort, nutzen, kontext);
   if (befund !== null) return befund;
@@ -327,7 +331,7 @@ export function aenderungsStellen(berichte) {
 }
 
 function istNutzen(vorhanden) {
-  return vorhanden?.urteil === NUTZEN && istText(vorhanden.nutzen?.datei) && istText(vorhanden.nutzen?.funktion);
+  return vorhanden?.urteil === NUTZEN && istNutzenAngabe(vorhanden.nutzen);
 }
 
 function nutzenDerStelle(stelle, dateien) {
@@ -337,9 +341,7 @@ function nutzenDerStelle(stelle, dateien) {
 }
 
 export function nutzenFuer(berichte, dateien) {
-  const eintraege = berichte.flatMap((bericht) =>
-    Object.values(bericht?.nummern ?? {}).flatMap((angaben) => liste(angaben?.aenderungen).flatMap((stelle) => nutzenDerStelle(stelle, dateien))),
-  );
+  const eintraege = aenderungsStellen(berichte).flatMap((stelle) => nutzenDerStelle(stelle, dateien));
   const schluessel = (eintrag) => `${eintrag.datei}:${eintrag.funktion}`;
   return eintraege.filter((eintrag, stelle) => eintraege.findIndex((frueher) => schluessel(frueher) === schluessel(eintrag)) === stelle);
 }
