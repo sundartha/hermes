@@ -3,6 +3,7 @@ import globals from "globals";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicornPlugin from "eslint-plugin-unicorn";
 import * as espree from "espree";
+import tseslint from "typescript-eslint";
 
 import { existsSync, readFileSync } from "node:fs";
 
@@ -13,6 +14,7 @@ const ZEITGLIEDER_BESTAND_DATEI = new URL(
 const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
   : {};
+const QUELL_DATEIEN = "src/**/*.{js,mjs,cjs,ts,mts,cts}";
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const WORT_NUR_IN = [
@@ -146,9 +148,9 @@ const STEUERUNG_AUSNAHMEN = [
 const PROZESS_WAECHTER = "./process-guards.js";
 const KONFIG_GRUPPEN = ["telnyxElevenLabs", "elevenLabsPlayTts"];
 const KONFIG_SKRIPTE_MIT_BLATT = [
-  "scripts/telnyx-call-latency.mjs",
-  "scripts/smoke-stripe-payment.mjs",
-  "scripts/el-nummern-registrierung.mjs",
+  "scripts/telnyx-call-latency.{mjs,cjs,ts,mts,cts}",
+  "scripts/smoke-stripe-payment.{mjs,cjs,ts,mts,cts}",
+  "scripts/el-nummern-registrierung.{mjs,cjs,ts,mts,cts}",
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const ABLEHNUNGS_TABELLE = {
@@ -183,7 +185,7 @@ const hermesBloecke =
         },
         {
           name: "hermes-wort-nur-in",
-          files: ["src/**/*.js"],
+          files: [QUELL_DATEIEN],
           rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
         },
         {
@@ -193,32 +195,32 @@ const hermesBloecke =
         },
         {
           name: "hermes-wort-nur-in-wahlskripte",
-          files: ["scripts/el-nummern-registrierung.mjs", "scripts/push-elevenlabs.mjs"],
+          files: ["scripts/el-nummern-registrierung.{mjs,cjs,ts,mts,cts}", "scripts/push-elevenlabs.{mjs,cjs,ts,mts,cts}"],
           rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
         },
         {
           name: "hermes-wort-nur-in-geheimnis-skripte",
-          files: ["scripts/iel-geheimnisse*.mjs"],
+          files: ["scripts/iel-geheimnisse*.{mjs,cjs,ts,mts,cts}"],
           rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
         },
         {
           name: "hermes-steuerung-ueber-meldung",
-          files: ["src/**/*.js"],
+          files: [QUELL_DATEIEN],
           rules: { "hermes/keine-steuerung-ueber-meldung": ["error", ...STEUERUNG_AUSNAHMEN] },
         },
         {
           name: "hermes-erster-import",
-          files: ["src/server.js", "src/mcp-server.js"],
+          files: ["src/server.{js,mjs,cjs,ts,mts,cts}", "src/mcp-server.{js,mjs,cjs,ts,mts,cts}"],
           rules: { "hermes/erster-import": ["error", { quelle: PROZESS_WAECHTER }] },
         },
         {
           name: "hermes-ablehnungsgruende",
-          files: ["src/telephony/outbound-gates.js"],
+          files: ["src/telephony/outbound-gates.{js,mjs,cjs,ts,mts,cts}"],
           rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
         },
         {
           name: "hermes-config-pfade",
-          files: ["scripts/**/*.{js,mjs}"],
+          files: ["scripts/**/*.{js,mjs,cjs,ts,mts,cts}"],
           ignores: KONFIG_SKRIPTE_MIT_BLATT,
           rules: {
             "hermes/config-pfade": [
@@ -274,7 +276,7 @@ const schreibFunktion = {
 const dateiBloecke = [
   {
     name: "rueckfrage-auditor",
-    files: ["src/server.js", "src/app.js"],
+    files: ["src/server.{js,mjs,cjs,ts,mts,cts}", "src/app.{js,mjs,cjs,ts,mts,cts}"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -295,7 +297,7 @@ const dateiBloecke = [
   },
   {
     name: "cent-schreibstellen",
-    files: ["src/store/state-ops.js"],
+    files: ["src/store/state-ops.{js,mjs,cjs,ts,mts,cts}"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -317,26 +319,24 @@ const dateiBloecke = [
   },
   {
     name: "kalibrierung-ohne-gate-tarif",
-    files: ["src/billing/cost-calibration.js"],
+    files: ["src/billing/cost-calibration.{js,mjs,cjs,ts,mts,cts}"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [
-            {
-              name: "../telephony/outbound-gates.js",
-              importNames: ["tariffCentsPerMin"],
-              message:
-                "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
-            },
-          ],
+          paths: ["../telephony/outbound-gates.js", "../telephony/outbound-gates.ts"].map((name) => ({
+            name,
+            importNames: ["tariffCentsPerMin"],
+            message:
+              "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
+          })),
         },
       ],
     },
   },
   {
     name: "anruf-unterbrechungen-nur-lesen",
-    files: ["scripts/anruf-unterbrechungen.mjs"],
+    files: ["scripts/anruf-unterbrechungen.{mjs,cjs,ts,mts,cts}"],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -350,7 +350,7 @@ const dateiBloecke = [
   },
   {
     name: "probe-as-nur-lesen",
-    files: ["scripts/probe-as-faehigkeiten.mjs"],
+    files: ["scripts/probe-as-faehigkeiten.{mjs,cjs,ts,mts,cts}"],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -381,7 +381,7 @@ const dateiBloecke = [
   },
   {
     name: "iel-mess-auflegestufen",
-    files: ["scripts/iel-mess*.mjs"],
+    files: ["scripts/iel-mess*.{mjs,cjs,ts,mts,cts}"],
     ignores: ["scripts/iel-mess.mjs"],
     rules: {
       "no-restricted-syntax": [
@@ -393,6 +393,48 @@ const dateiBloecke = [
             "Die Auflege-Stufen stehen genau einmal in scripts/iel-mess.mjs (Test 9a); die Hilfsmodule bekommen sie von dort.",
         },
       ],
+    },
+  },
+];
+const TS_DATEIEN = ["{src,test,tools,scripts}/**/*.{ts,mts,cts}"];
+const TS_DEKLARATIONEN = ["{src,test,tools,scripts}/**/*.d.{ts,mts,cts}"];
+const DEKLARATION_MELDUNG =
+  "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.";
+const TS_VORGABEN = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked];
+const tsBloecke = [
+  ...TS_VORGABEN.map((vorgabe) => ({ ...vorgabe, files: TS_DATEIEN })),
+  {
+    name: "typescript-sperrregeln",
+    files: TS_DATEIEN,
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      "@typescript-eslint/no-unsafe-type-assertion": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        { "ts-check": true, "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true },
+      ],
+      "@typescript-eslint/explicit-module-boundary-types": "error",
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        {
+          ignoreVoid: false,
+          allowForKnownSafeCalls: [
+            { from: "package", package: "node:test", name: ["test", "describe", "it", "suite"] },
+          ],
+        },
+      ],
+      "@typescript-eslint/no-misused-promises": "error",
     },
   },
 ];
@@ -494,6 +536,7 @@ export default [
       "unicorn/error-message": "error",
     },
   },
+  ...tsBloecke,
   {
     files: ["apps/web/**/*.js"],
     languageOptions: { globals: { ...globals.browser } },
@@ -577,4 +620,9 @@ export default [
   ...dateiBloecke,
   ...hermesBloecke,
   ...testRegelBloecke,
+  {
+    name: "keine-eigenen-typdeklarationen",
+    files: TS_DEKLARATIONEN,
+    rules: { "no-restricted-syntax": ["error", { selector: "Program", message: DEKLARATION_MELDUNG }] },
+  },
 ];
