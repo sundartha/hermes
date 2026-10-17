@@ -181,7 +181,13 @@ function answerGithub(request, response) {
   const { pathname } = new URL(request.url, apiUrl);
   const bearer = (request.headers.authorization ?? "").replace(/^Bearer /, "");
   requests.push(`${request.method} ${pathname}`);
-  if (request.method === "POST" && pathname === ACCESS_TOKENS_PATH && isValidAppJwt(bearer)) {
+  const tokenIssuable = issuedTokens.length < (scenario.tokenLimit ?? Infinity);
+  if (
+    request.method === "POST" &&
+    pathname === ACCESS_TOKENS_PATH &&
+    isValidAppJwt(bearer) &&
+    tokenIssuable
+  ) {
     issueToken(response);
     return;
   }
@@ -385,6 +391,21 @@ test("sitzung: läuft das Token bald ab, holt jeder Aufruf von gh und git ein ne
   });
   assert.equal(launch.env.GH_TOKEN, issuedTokens[issuedBefore]);
   assert.deepEqual(tokensUsedInSession(launch), issuedTokens.slice(issuedBefore + 1));
+});
+
+test("sitzung: kann der Helfer kein Token mehr holen, scheitern git und gh sofort ohne Passwort", async () => {
+  const { launch } = await runSession({
+    cwd: worktrees.paket.worktree,
+    minutes: SHORT_VALIDITY_MINUTES,
+    tokenLimit: issuedTokens.length + 1,
+  });
+  for (const call of [...launch.gh, ...launch.credentials]) {
+    assert.notEqual(call.status, EXIT_OK);
+    assert.match(call.stderr, /GitHub gibt kein Installations-Token aus \(HTTP 401\)/);
+  }
+  for (const credential of launch.credentials) {
+    assert.doesNotMatch(credential.stdout, /^password=/m);
+  }
 });
 
 test("sitzung: läuft das Token noch lange, nutzen gh und git es ohne neue Anfrage", async () => {

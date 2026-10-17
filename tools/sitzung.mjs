@@ -282,7 +282,7 @@ function sessionEnvironment(token, store) {
     ["credential.helper", ""],
     [
       "credential.helper",
-      `!f() { echo username=${GIT_USERNAME}; echo "password=$(${helperCommand(store)})"; }; f`,
+      `!f() { token="$(${helperCommand(store)})" || exit 1; echo username=${GIT_USERNAME}; echo "password=$token"; }; f`,
     ],
     ["user.name", BOT_LOGIN],
     ["user.email", BOT_EMAIL],
