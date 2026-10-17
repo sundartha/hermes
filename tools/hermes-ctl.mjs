@@ -16,6 +16,7 @@ import {
   HermesCtlFehler,
   STANDARD_SITZUNG,
 } from "./hermes-ctl/sitzung.mjs";
+import { aufrufe } from "./hermes-ctl/zugriff.mjs";
 
 const EXIT_OK = 0;
 const EXIT_AUFRUF = 2;
@@ -132,14 +133,14 @@ async function hauptprogramm() {
       return EXIT_AUFRUF;
     }
     const ergebnis = await ausfuehren(gelesen.aufruf);
-    ausgeben({ ok: true, befehl, ms: dauer(), ...ergebnis });
+    ausgeben({ ok: true, befehl, ms: dauer(), ...ergebnis, aufrufe: aufrufe() });
     return EXIT_OK;
   } catch (fehler) {
     const tun =
       fehler instanceof HermesCtlFehler
         ? fehler.tun
         : "Prüfe den Aufruf mit „npm run hermes-ctl -- hilfe“.";
-    ausgeben({ ok: false, befehl, ms: dauer(), fehler: fehler.message, tun });
+    ausgeben({ ok: false, befehl, ms: dauer(), fehler: fehler.message, tun, aufrufe: aufrufe() });
     return EXIT_FEHLER;
   }
 }

@@ -9,6 +9,9 @@ const ANTWORT_GRENZE = 20000;
 const DATENZEILE = "data:";
 const NACHRICHTEN_KENNUNG = 1;
 export const HTTP_OK = 200;
+const gesendet = [];
+
+export const aufrufe = () => [...gesendet];
 
 export async function anfrage(url, optionen, fristMs = STANDARD_FRIST_MS) {
   const beginn = performance.now();
@@ -22,6 +25,12 @@ export async function anfrage(url, optionen, fristMs = STANDARD_FRIST_MS) {
     );
   }
   const text = await antwort.text();
+  const adresse = new URL(url);
+  gesendet.push({
+    methode: optionen.method ?? "GET",
+    adresse: `${adresse.origin}${adresse.pathname}`,
+    status: antwort.status,
+  });
   return { status: antwort.status, text, anfrageMs: Math.round(performance.now() - beginn) };
 }
 
@@ -77,6 +86,10 @@ export async function werkzeugAufrufen(zustand, name, argumente) {
     LANGE_FRIST_MS,
   );
   const nachricht = rpcNachricht(text);
+  gesendet.push({
+    werkzeug: name,
+    abgelehnt: nachricht.error !== undefined || nachricht.result?.isError === true,
+  });
   if (nachricht.error !== undefined) {
     throw new HermesCtlFehler(
       `MCP-Fehler bei ${name}: ${nachricht.error.message}`,
