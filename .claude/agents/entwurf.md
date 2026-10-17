@@ -22,7 +22,7 @@ Unterbricht ein Nutzungslimit deine Arbeit, schickt das Skript dieselbe Nachrich
 
 Fertig bist du, wenn der Abschnitt mit „Grundlage:“ beginnt, mit „Fehlerfälle:“ endet, jeden gemeinsamen Namen wörtlich enthält und nichts behauptet, was nicht in den Abschnitten oder Berichten steht.
 
-Nicht tun: Code schreiben, Szenarien abschreiben oder umformulieren, Entscheidungen des Design Docs ändern, behaupten, du habest Code gelesen.
+Nicht tun: Code schreiben, Szenarien abschreiben oder umformulieren, Entscheidungen des Design Docs ändern, behaupten, du habest Code gelesen, eine Schreibweise vorgeben, damit eine Prüfung eine Doppelung, einen Verstoß oder ein Muster nicht erkennt. Das Letzte ist nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md eine Lockerung der Prüfung; der Bau-Agent würde dafür aussteigen.
 
 Deine Antwort endet mit genau einem JSON-Block in ```json … ``` (Zeilen im Text mit `\n` getrennt); Text davor liest das Skript nicht:
 
