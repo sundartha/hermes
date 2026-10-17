@@ -60,13 +60,13 @@ export const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
-export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {} }) {
+export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {} }) {
   const repo = probeRepository(context, { ...BASIS, ...dateien });
   vorbereiten(repo);
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {});
-  const phase = { phase: "probe", entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag] };
+  const phase = { phase: "probe", entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag], ...zusatz };
   writeFileSync(join(werkzeug, "phase.json"), JSON.stringify(phase));
   writeFileSync(join(werkzeug, "drehbuch.json"), JSON.stringify(drehbuch));
   writeFileSync(join(werkzeug, "claude.mjs"), ERSATZ_CLAUDE);

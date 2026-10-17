@@ -77,6 +77,10 @@ function entwurfAbschnitt(phase, auftrag) {
   return abschnitt(`Entwurf für ${auftrag.bereich}`, phase.entwurf[auftrag.bereich]);
 }
 
+export function auftragsBlock(phase, auftrag) {
+  return [...absichtAbschnitt(phase), auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag)];
+}
+
 function geplanteTests(auftrag) {
   return (auftrag?.erwarteteDateien ?? []).filter(istTestdatei);
 }
@@ -96,7 +100,7 @@ function geplanteTestsAbschnitt(auftrag, root) {
 }
 
 export function testPrompt(phase, auftrag, root = cwd()) {
-  return [...absichtAbschnitt(phase), auftragAbschnitt(auftrag), entwurfAbschnitt(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
+  return [...auftragsBlock(phase, auftrag), ...geplanteTestsAbschnitt(auftrag, root)].join("\n");
 }
 
 function testumbauAbschnitt(auftrag) {
@@ -113,9 +117,7 @@ function testumbauAbschnitt(auftrag) {
 
 export function testumbauPrompt(phase, auftrag, root = cwd()) {
   return [
-    ...absichtAbschnitt(phase),
-    auftragAbschnitt(auftrag),
-    entwurfAbschnitt(phase, auftrag),
+    ...auftragsBlock(phase, auftrag),
     testMusterAbschnitt(root, auftrag),
     testumbauAbschnitt(auftrag),
   ].join("\n");
@@ -159,9 +161,7 @@ function nutzenAbschnitt(root, auftrag) {
 export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   const titel = auftrag.erwarteterFehler ? "Ausgabe des roten Tests" : "Ausgabe des Abnahmetests";
   return [
-    ...absichtAbschnitt(phase),
-    auftragAbschnitt(auftrag),
-    entwurfAbschnitt(phase, auftrag),
+    ...auftragsBlock(phase, auftrag),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
     musterAbschnitt(root, auftrag.bereich, musterFuer),
     dateiAbschnitt("Funktionskarte", root, funktionskartePfad(auftrag.bereich)),
