@@ -528,7 +528,9 @@ const KOPIEN_FILES = {
     "}",
     'if (process.argv[2] === "--anlegen") {',
     '  if (existsSync(BASIS)) throw new Error("Die Basislinie gibt es schon.");',
-    "  writeFileSync(BASIS, JSON.stringify({ befunde }));",
+    '  const ohneListe = process.argv.includes("--ohne-liste");',
+    "  writeFileSync(BASIS, JSON.stringify({ befunde: ohneListe ? { anzahl: befunde.length } : befunde }));",
+    '  if (process.argv.includes("--fehler")) process.exitCode = 1;',
     "} else {",
     '  const bekannt = JSON.parse(readFileSync(BASIS, "utf8")).befunde;',
     "  const neu = befunde.filter((befund) => !bekannt.includes(befund));",
@@ -633,4 +635,37 @@ test("ein gestrichener Eintrag bei unveränderter Einstellung bleibt strenger", 
 
 test("eine Prüfung ohne Befehl zum Anlegen der Basislinie bleibt bei der Ausweitung lockerer", async (context) => {
   await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: kopienPruefung() });
+});
+
+const anlegenMit = (zusatz) => ({ befehl: [...KOPIEN_ANLEGEN.befehl, zusatz] });
+
+test("das Anlegen der Basislinie endet mit einem Fehler: die Ausweitung bleibt lockerer", async (context) => {
+  const pruefung = kopienPruefung(anlegenMit("--fehler"));
+  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: pruefung });
+});
+
+test("das Anlegen der Basislinie schreibt keine Liste: die Ausweitung bleibt lockerer", async (context) => {
+  const pruefung = kopienPruefung(anlegenMit("--ohne-liste"));
+  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: pruefung });
+});
+
+const JSCPD_PRUEFUNG = join(REPO_ROOT, "test/werkzeuge/rotproben/jscpd/pruefung.json");
+const KOPIERTE_ZEILEN = 30;
+
+test("der Befehl zum Anlegen im Manifest der Kopienprüfung schreibt eine Liste, die beide Fundstellen wörtlich nennt", (context) => {
+  const { ausnahmen } = JSON.parse(readFileSync(JSCPD_PRUEFUNG, "utf8"));
+  const zeilen = Array.from(
+    { length: KOPIERTE_ZEILEN },
+    (_, i) => `export const wert${i} = ${i} * 2;`,
+  );
+  const kopie = `${zeilen.join("\n")}\n`;
+  const directory = probeRepository(context, { "src/eins.js": kopie, "lib/zwei.js": kopie });
+  const [program, ...args] = ausnahmen.anlegen.befehl.map((teil) =>
+    teil.replace("{wurzel}", REPO_ROOT),
+  );
+  const result = runIn(directory, program === "node" ? process.execPath : program, args);
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const { befunde } = JSON.parse(readFileSync(join(directory, ausnahmen.datei), "utf8"));
+  assert.equal(befunde.length, 1, JSON.stringify(befunde));
+  assert.match(befunde[0], /^lib\/zwei\.js\|src\/eins\.js\|\d+$/);
 });
