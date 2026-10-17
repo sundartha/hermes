@@ -55,14 +55,14 @@ export function makeCallbackSpy(overrides = {}) {
   return { callbacks, consults, outcomes };
 }
 
-export async function checkStartSucceeds(makeDriver) {
+export async function startSucceedsCase(makeDriver) {
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
   const result = await driver.startConversation(baseStartParams("cdc-start-ok", MOCK_OBJECTIVE.SILENT));
   assert.equal(result.ok, true, "ok:true bei erfolgreichem Start");
 }
 
-export async function checkStartFailsCleanly(makeDriver) {
+export async function startFailsCleanlyCase(makeDriver) {
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
   const result = await driver.startConversation(baseStartParams("cdc-start-reject", MOCK_OBJECTIVE.REJECT));
@@ -73,7 +73,7 @@ export async function checkStartFailsCleanly(makeDriver) {
   assert.equal(spy.outcomes.length, 0, "eine Ablehnung liefert kein Ergebnis");
 }
 
-export async function checkSilentIndistinguishableFromConducted(makeDriver) {
+export async function silentIndistinguishableFromConductedCase(makeDriver) {
   const silent = makeCallbackSpy();
   const silentDriver = makeDriver({ callbacks: silent.callbacks });
   const silentResult = await silentDriver.startConversation(
@@ -100,7 +100,7 @@ export async function checkSilentIndistinguishableFromConducted(makeDriver) {
   assert.equal(talking.outcomes[0].connected, true, "das gefuehrte Gespraech ist verbunden");
 }
 
-export async function checkEndIsIdempotent(makeDriver) {
+export async function endIsIdempotentCase(makeDriver) {
   const callId = "cdc-idempotent";
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
@@ -115,7 +115,7 @@ export async function checkEndIsIdempotent(makeDriver) {
   );
 }
 
-export async function checkEndConcurrentCallsAreSafe(makeDriver) {
+export async function endConcurrentCallsAreSafeCase(makeDriver) {
   const callId = "cdc-end-concurrent";
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
@@ -130,7 +130,7 @@ export async function checkEndConcurrentCallsAreSafe(makeDriver) {
   );
 }
 
-export async function checkConsultAnswerArrives(makeDriver) {
+export async function consultAnswerArrivesCase(makeDriver) {
   const callId = "cdc-consult-answered";
   const spy = makeCallbackSpy({
     onConsultRaised: async () => ({ kind: "answered", facts: ["Rueckruf um 15 Uhr ist in Ordnung"] }),
@@ -155,7 +155,7 @@ export async function checkConsultAnswerArrives(makeDriver) {
   );
 }
 
-export async function checkConsultTimeoutIsValidOutcome(makeDriver) {
+export async function consultTimeoutIsValidOutcomeCase(makeDriver) {
   const callId = "cdc-consult-timeout";
   const answer = { kind: "timeout", facts: [], reason: "zeitablauf" };
   assert.ok(Array.isArray(answer.facts), "facts ist ein Array, auch bei Zeitablauf (kleiner Befund)");
@@ -176,7 +176,7 @@ export async function checkConsultTimeoutIsValidOutcome(makeDriver) {
   );
 }
 
-export async function checkConsultRejectedIsValidOutcome(makeDriver) {
+export async function consultRejectedIsValidOutcomeCase(makeDriver) {
   const callId = "cdc-consult-rejected";
   const answer = { kind: "rejected", facts: [], reason: "gate" };
   assert.ok(Array.isArray(answer.facts), "facts ist ein Array, auch bei Ablehnung (kleiner Befund)");
@@ -196,7 +196,7 @@ export async function checkConsultRejectedIsValidOutcome(makeDriver) {
   );
 }
 
-export async function checkSequentialConsultAnswersAreCorrectlyPaired(makeDriver) {
+export async function sequentialConsultAnswersAreCorrectlyPairedCase(makeDriver) {
   const callId = "cdc-consult-twice";
   const answersGiven = [];
   const spy = makeCallbackSpy({
@@ -236,7 +236,7 @@ export async function checkSequentialConsultAnswersAreCorrectlyPaired(makeDriver
   );
 }
 
-export async function checkConcurrentConsultAnswersMatchByRequestId(makeDriver) {
+export async function concurrentConsultAnswersMatchByRequestIdCase(makeDriver) {
   const callId = "cdc-consult-concurrent";
   const spy = makeCallbackSpy({
     onConsultRaised: (_request) => {
@@ -271,7 +271,7 @@ export async function checkConcurrentConsultAnswersMatchByRequestId(makeDriver) 
   );
 }
 
-export async function checkConsultRequestCarriesTranscript(makeDriver) {
+export async function consultRequestCarriesTranscriptCase(makeDriver) {
   const callId = "cdc-consult-transcript";
   const spy = makeCallbackSpy({
     onConsultRaised: async () => ({ kind: "timeout", facts: [], reason: "zeitablauf" }),
@@ -301,7 +301,7 @@ export async function checkConsultRequestCarriesTranscript(makeDriver) {
   );
 }
 
-export async function checkNeverConnectedIsDistinctSignal(makeDriver) {
+export async function neverConnectedIsDistinctSignalCase(makeDriver) {
   const callId = "cdc-never-connected";
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
@@ -323,7 +323,7 @@ export async function checkNeverConnectedIsDistinctSignal(makeDriver) {
   assert.equal(outcome.achieved, null, "ohne Gespraech ist der Auftrag nicht auswertbar - NIE false");
 }
 
-export async function checkEndResolvesOpenConsult(makeDriver) {
+export async function endResolvesOpenConsultCase(makeDriver) {
   const callId = "cdc-end-mid-consult";
   const spy = makeCallbackSpy({
     onConsultRaised: () => new Promise(() => undefined),
@@ -352,7 +352,7 @@ export async function checkEndResolvesOpenConsult(makeDriver) {
   );
 }
 
-export async function checkOutcomeClosesConversation(makeDriver) {
+export async function outcomeClosesConversationCase(makeDriver) {
   const callId = "cdc-outcome";
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
@@ -380,7 +380,7 @@ export async function checkOutcomeClosesConversation(makeDriver) {
   );
 }
 
-export async function checkEndsWithoutHeartbeat(makeDriver) {
+export async function endsWithoutHeartbeatCase(makeDriver) {
   const callId = "cdc-heartbeat-less";
   const spy = makeCallbackSpy();
   const driver = makeDriver({ callbacks: spy.callbacks });
