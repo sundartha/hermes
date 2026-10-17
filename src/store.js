@@ -1,8 +1,7 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
 import { anrufpauseSetzen } from "./store/state-ops.js";
-import { makeChainMutex } from "./chain-mutex.js";
+import { macheSpeicherSperre } from "./store/sperre.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -193,15 +192,4 @@ export function setzeAnrufpause(an) {
 export { classifyCallTime } from "./store/state-ops.js";
 export { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 
-const runStoreExclusive = makeChainMutex();
-const storeLockContext = new AsyncLocalStorage();
-const REENTRANCY_MARKER = Symbol("store-lock-active");
-export function withStoreLock(fn) {
-  if (storeLockContext.getStore()) {
-    throw new Error(
-      "withStoreLock reentrant: ein withStoreLock-Body darf NIE erneut withStoreLock aufrufen " +
-        "(Deadlock-Schutz). Verschachtelten Store-Lock aufloesen; kritischen Abschnitt kurz halten.",
-    );
-  }
-  return runStoreExclusive(() => storeLockContext.run(REENTRANCY_MARKER, fn));
-}
+export const withStoreLock = macheSpeicherSperre();
