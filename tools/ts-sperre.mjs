@@ -1,14 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { MELDUNG, befundeMelden } from "./auftrag/zweck.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
 import { CHECKED_ROOTS, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
 
 const STOCK_FILE = "tools/basis/ts-bestand.json";
 const CHECKED_ROOT_LIST = new Intl.ListFormat("de", { type: "disjunction" }).format(CHECKED_ROOTS);
 const NUL = "\0";
-const EXIT_FINDING = 1;
 
 function stockOf(text, source) {
   const stock = JSON.parse(text);
@@ -60,9 +59,4 @@ function findings(basis) {
 }
 
 const { values } = parseArgs({ options: { basis: { type: "string" } } });
-const found = findings(values.basis);
-for (const finding of found) console.error(finding);
-if (found.length > 0) {
-  console.error(zweckBlock(MELDUNG.TS_SPERRE).join("\n"));
-  process.exitCode = EXIT_FINDING;
-}
+befundeMelden(findings(values.basis), MELDUNG.TS_SPERRE);
