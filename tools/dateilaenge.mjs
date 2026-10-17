@@ -2,6 +2,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
+import { umbenennungen } from "./umbenennung.mjs";
+
 const CHECKED_DIRECTORIES = ["src", "tools", "scripts"];
 const REPORT_THRESHOLD = 400;
 const DATA_FILE_SUFFIX = ".json";
@@ -67,15 +69,18 @@ function basisPaths(basis) {
   return new Set(listing.split("\0").filter(Boolean));
 }
 
-function grownFiles(basis, files) {
+function lineCountAt(basis, path) {
+  return lineCount(git(["show", `${basis}:${path}`], "buffer"));
+}
+
+async function grownFiles(basis, files) {
   const paths = basisPaths(basis);
+  const { nurTypen } = await umbenennungen({ von: basis });
   return files
-    .map((file) => ({
-      ...file,
-      before: paths.has(file.path)
-        ? lineCount(git(["show", `${basis}:${file.path}`], "buffer"))
-        : undefined,
-    }))
+    .map((file) => {
+      const previous = paths.has(file.path) ? file.path : nurTypen(file.path);
+      return { ...file, before: previous === undefined ? undefined : lineCountAt(basis, previous) };
+    })
     .filter(({ lines, before }) => before === undefined || lines > before);
 }
 
@@ -91,10 +96,10 @@ function table(grown) {
   return [...TABLE_HEADER, ...rows, ""];
 }
 
-function report(basis) {
+async function report(basis) {
   const commit = verifiedCommit(basis);
   const files = longFiles();
-  const grown = grownFiles(basis, files);
+  const grown = await grownFiles(basis, files);
   const changed = grown.length === 0 ? "keine Datei" : fileCount(grown.length);
   return [
     HEADING,
@@ -106,15 +111,15 @@ function report(basis) {
   ];
 }
 
-function reportLines() {
+async function reportLines() {
   try {
     const { values } = parseArgs({ options: { basis: { type: "string" } } });
     if (values.basis === undefined) throw new Error(MISSING_BASIS);
-    return report(values.basis);
+    return await report(values.basis);
   } catch (error) {
     return [HEADING, "", `${UNAVAILABLE}${error.message}`];
   }
 }
 
-console.log(reportLines().join(LINE_BREAK));
+console.log((await reportLines()).join(LINE_BREAK));
 process.exitCode = EXIT_OK;
