@@ -16,7 +16,6 @@ const LESE_MODELL = "opus";
 const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
 const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
-const VOLLE_ANTWORTEN = new Map();
 const UMBAU = "umbau";
 const VORAUSSETZUNG_FEHLT = [
   "",
@@ -91,19 +90,8 @@ function ergebnisDesBaus({ art }) {
   return [...VORAUSSETZUNG_FEHLT, ...(art === UMBAU ? ALTFUNKTIONEN_AUFRAEUMEN : ALTFUNKTIONEN_ABGEBEN)].join("\n");
 }
 
-export function entnimmVolleAntwort({ sitzung, antwort = "" }) {
-  const voll = VOLLE_ANTWORTEN.get(sitzung) ?? antwort;
-  VOLLE_ANTWORTEN.delete(sitzung);
-  return voll;
-}
-
-export function legeVolleAntwortAb(sitzung, voll) {
-  VOLLE_ANTWORTEN.set(sitzung, voll);
-}
-
-function gemerkt({ volleAntwort: voll, groessterKontext, ...sitzung }, start) {
-  if (typeof voll === "string") VOLLE_ANTWORTEN.set(sitzung.sitzung, voll);
-  return start.vollstaendig ? { ...sitzung, volleAntwort: voll, groessterKontext } : sitzung;
+function alsEintrag({ volleAntwort = "", groessterKontext, ...sitzung }, start) {
+  return start.vollstaendig ? { ...sitzung, volleAntwort, groessterKontext } : { ...sitzung, volleAntwort };
 }
 
 export function setzeEin(kontext, prompt, start = {}) {
@@ -115,11 +103,11 @@ export function setzeEin(kontext, prompt, start = {}) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
     const roh = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
-    const sitzung = gemerkt(roh, start);
+    const sitzung = alsEintrag(roh, start);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
-      const weg = ausgang(roh.volleAntwort ?? roh.antwort, kontext.rolle);
+      const weg = ausgang(sitzung.volleAntwort, kontext.rolle);
       return { ...sitzung, grund, sitzungen, ausgang: weg, voraussetzung: weg.voraussetzung, ausstieg: weg.ausstieg, alterTest: weg.alterTest };
     }
     vorgaenger = { grund, antwort: sitzung.antwort, kontextGrenze: !sitzung.limit };

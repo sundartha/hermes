@@ -96,6 +96,15 @@ test("Vorbau: meldet der Bau-Agent einen alten Test, dessen Vorbau kollidiert, l
   assert.match(readFileSync(join(repo, ALT), "utf8"), /gates: true[\s\S]*versendet den Code[\s\S]*true\)/);
 });
 
+test("Vorbau: der Beleg des Plans enthält die volle Antwort des Plan-Agenten, die Belege der übrigen Agenten nicht", (context) => {
+  const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
+  const { ergebnis, beleg } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  assert.deepEqual(beleg("A1-plan").agenten.map(({ volleAntwort }) => volleAntwort), [JSON.stringify(UMBAU)]);
+  const uebrige = ["A1-umbau", "A1"].flatMap((name) => [...beleg(name).agenten, ...beleg(name).nachfragen]);
+  assert.deepEqual([uebrige.length > 0, uebrige.filter((agent) => "volleAntwort" in agent)], [true, []]);
+});
+
 test("Vorbau: hält der alte Test echtes altes Verhalten fest, geht die Meldung ohne Testumbau zu Antonio", (context) => {
   const plan = [{ antwort: "Verhalten: Der Test hält genau den Versand ohne Gates fest." }];
   const { ergebnis, beleg, log } = lauf(context, { bau: BAU, test: [ROTER_TEST], plan });

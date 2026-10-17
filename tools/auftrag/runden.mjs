@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { auswegBei, nenntAltenTest, zweckUnklar } from "./ausgang.mjs";
-import { entnimmVolleAntwort, frage } from "./einsatz.mjs";
+import { frage } from "./einsatz.mjs";
 import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -130,7 +130,7 @@ function echtesVerhalten(antwort) {
 function planBefunde(plan, neu, root) {
   if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
   if (neu !== null) return phasenBefunde(neu, root);
-  const verhalten = echtesVerhalten(plan.volleAntwort ?? plan.antwort);
+  const verhalten = echtesVerhalten(plan.volleAntwort);
   return [verhalten === undefined ? KEIN_VORSCHLAG : `Der Plan-Agent sieht echtes Verhalten: ${verhalten}`];
 }
 
@@ -253,7 +253,7 @@ class Runden {
   planeUmbau(anlass) {
     const { phase, auftrag, root } = this.kontext;
     const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, anlass), { vollstaendig: true });
-    const neu = umbauPhase(phase, auftrag, plan.volleAntwort ?? plan.antwort);
+    const neu = umbauPhase(phase, auftrag, plan.volleAntwort);
     const umbau = neu?.auftraege[0];
     const befunde = planBefunde(plan, neu, root);
     schreibeBeleg(root, {
@@ -327,13 +327,13 @@ class Runden {
     if (gestoppt.notiz !== undefined) return { text: gestoppt.notiz, sitzungen: gestoppt.sitzungen };
     const { phase, auftrag, root } = this.kontext;
     const lauf = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
-    return { text: notizAuszug(entnimmVolleAntwort(lauf), lauf.sitzung), sitzungen: lauf.sitzungen };
+    return { text: notizAuszug(lauf.volleAntwort, lauf.sitzung), sitzungen: lauf.sitzungen };
   }
 
   entscheidung(ergebnis, gestoppt) {
     const { phase, auftrag, root } = this.kontext;
     const notiz = this.notiz(gestoppt);
-    const hinweise = hinweiseFuerNotiz(ergebnis.agenten, entnimmVolleAntwort);
+    const hinweise = hinweiseFuerNotiz(ergebnis.agenten);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");
     const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notizText, "", ...hinweise, ...(hinweise.length > 0 ? [""] : [])].join("\n");
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);

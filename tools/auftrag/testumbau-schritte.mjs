@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { testumbauPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { entnimmVolleAntwort } from "./einsatz.mjs";
 import { ENTFERNT } from "./testumbau.mjs";
 import { GRUND, PRUEFUNG } from "./zweck.mjs";
 
@@ -14,7 +13,7 @@ const BEGRUENDET = /^Entfernt: (.+?), weil (\S.*)$/gm;
 function umbauAntwort(lauf) {
   const { phase, auftrag, root } = lauf.kontext;
   if (!lauf.agent("test", testumbauPrompt(phase, auftrag, root))) return null;
-  return entnimmVolleAntwort(lauf.agenten.at(-1));
+  return lauf.agenten.at(-1).volleAntwort;
 }
 
 function pruefeUndVermerkeEntfernteFaelle(lauf, ausgabe, antwort) {

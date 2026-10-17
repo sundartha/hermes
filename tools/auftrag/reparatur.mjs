@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { auswegBei } from "./ausgang.mjs";
 import { GRUEN as BELEG_GRUEN, ROT, belegVerzeichnis, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
-import { entnimmVolleAntwort, frage, setzeEin } from "./einsatz.mjs";
+import { frage, setzeEin } from "./einsatz.mjs";
 import { REPRODUKTION, fuehreReproduktionAus } from "./nachstellen.mjs";
 import { leseDatei } from "./pruefer-befehle.mjs";
 import {
@@ -180,14 +180,14 @@ function legeVor({ root, blocker }, runde, { zeilen, anlass, kopf, titel }) {
     { rolle: "notiz", phase, auftrag, root },
     notizAuftrag(phase, auftrag, { zeilen, anlass }),
   );
-  const hinweise = hinweiseFuerNotiz(sitzung.sitzungen, entnimmVolleAntwort);
+  const hinweise = hinweiseFuerNotiz(sitzung.sitzungen);
   const text = [
     "## Entscheidung nötig",
     "",
     `Die Reparatur von ${auftrag.ziel} ${anlass}.`,
     ...kopf,
     "",
-    notizAuszug(entnimmVolleAntwort(notiz), notiz.sitzung) || zeilen.join("\n"),
+    notizAuszug(notiz.volleAntwort, notiz.sitzung) || zeilen.join("\n"),
     "",
     ...hinweise,
     ...(hinweise.length > 0 ? [""] : []),
