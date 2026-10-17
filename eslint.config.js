@@ -14,7 +14,10 @@ const ZEITGLIEDER_BESTAND_DATEI = new URL(
 const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
   : {};
-const QUELL_DATEIEN = "src/**/*.{js,mjs,cjs,ts,mts,cts}";
+const ENDUNGEN = "{js,mjs,cjs,ts,mts,cts}";
+const MODUL_ENDUNGEN = "{mjs,cjs,ts,mts,cts}";
+const TS_ENDUNGEN = "{ts,mts,cts}";
+const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const WORT_NUR_IN = [
@@ -148,9 +151,9 @@ const STEUERUNG_AUSNAHMEN = [
 const PROZESS_WAECHTER = "./process-guards.js";
 const KONFIG_GRUPPEN = ["telnyxElevenLabs", "elevenLabsPlayTts"];
 const KONFIG_SKRIPTE_MIT_BLATT = [
-  "scripts/telnyx-call-latency.{mjs,cjs,ts,mts,cts}",
-  "scripts/smoke-stripe-payment.{mjs,cjs,ts,mts,cts}",
-  "scripts/el-nummern-registrierung.{mjs,cjs,ts,mts,cts}",
+  `scripts/telnyx-call-latency.${MODUL_ENDUNGEN}`,
+  `scripts/smoke-stripe-payment.${MODUL_ENDUNGEN}`,
+  `scripts/el-nummern-registrierung.${MODUL_ENDUNGEN}`,
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const ABLEHNUNGS_TABELLE = {
@@ -195,12 +198,12 @@ const hermesBloecke =
         },
         {
           name: "hermes-wort-nur-in-wahlskripte",
-          files: ["scripts/el-nummern-registrierung.{mjs,cjs,ts,mts,cts}", "scripts/push-elevenlabs.{mjs,cjs,ts,mts,cts}"],
+          files: [`scripts/el-nummern-registrierung.${MODUL_ENDUNGEN}`, `scripts/push-elevenlabs.${MODUL_ENDUNGEN}`],
           rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
         },
         {
           name: "hermes-wort-nur-in-geheimnis-skripte",
-          files: ["scripts/iel-geheimnisse*.{mjs,cjs,ts,mts,cts}"],
+          files: [`scripts/iel-geheimnisse*.${MODUL_ENDUNGEN}`],
           rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
         },
         {
@@ -210,17 +213,17 @@ const hermesBloecke =
         },
         {
           name: "hermes-erster-import",
-          files: ["src/server.{js,mjs,cjs,ts,mts,cts}", "src/mcp-server.{js,mjs,cjs,ts,mts,cts}"],
+          files: [`src/server.${ENDUNGEN}`, `src/mcp-server.${ENDUNGEN}`],
           rules: { "hermes/erster-import": ["error", { quelle: PROZESS_WAECHTER }] },
         },
         {
           name: "hermes-ablehnungsgruende",
-          files: ["src/telephony/outbound-gates.{js,mjs,cjs,ts,mts,cts}"],
+          files: [`src/telephony/outbound-gates.${ENDUNGEN}`],
           rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
         },
         {
           name: "hermes-config-pfade",
-          files: ["scripts/**/*.{js,mjs,cjs,ts,mts,cts}"],
+          files: [`scripts/**/*.${ENDUNGEN}`],
           ignores: KONFIG_SKRIPTE_MIT_BLATT,
           rules: {
             "hermes/config-pfade": [
@@ -276,7 +279,7 @@ const schreibFunktion = {
 const dateiBloecke = [
   {
     name: "rueckfrage-auditor",
-    files: ["src/server.{js,mjs,cjs,ts,mts,cts}", "src/app.{js,mjs,cjs,ts,mts,cts}"],
+    files: [`src/server.${ENDUNGEN}`, `src/app.${ENDUNGEN}`],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -297,7 +300,7 @@ const dateiBloecke = [
   },
   {
     name: "cent-schreibstellen",
-    files: ["src/store/state-ops.{js,mjs,cjs,ts,mts,cts}"],
+    files: [`src/store/state-ops.${ENDUNGEN}`],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -319,7 +322,7 @@ const dateiBloecke = [
   },
   {
     name: "kalibrierung-ohne-gate-tarif",
-    files: ["src/billing/cost-calibration.{js,mjs,cjs,ts,mts,cts}"],
+    files: [`src/billing/cost-calibration.${ENDUNGEN}`],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -336,7 +339,7 @@ const dateiBloecke = [
   },
   {
     name: "anruf-unterbrechungen-nur-lesen",
-    files: ["scripts/anruf-unterbrechungen.{mjs,cjs,ts,mts,cts}"],
+    files: [`scripts/anruf-unterbrechungen.${MODUL_ENDUNGEN}`],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -350,7 +353,7 @@ const dateiBloecke = [
   },
   {
     name: "probe-as-nur-lesen",
-    files: ["scripts/probe-as-faehigkeiten.{mjs,cjs,ts,mts,cts}"],
+    files: [`scripts/probe-as-faehigkeiten.${MODUL_ENDUNGEN}`],
     rules: {
       "no-restricted-imports": nurLesenImporte,
       "no-restricted-syntax": [
@@ -381,7 +384,7 @@ const dateiBloecke = [
   },
   {
     name: "iel-mess-auflegestufen",
-    files: ["scripts/iel-mess*.{mjs,cjs,ts,mts,cts}"],
+    files: [`scripts/iel-mess*.${MODUL_ENDUNGEN}`],
     ignores: ["scripts/iel-mess.mjs"],
     rules: {
       "no-restricted-syntax": [
@@ -396,8 +399,8 @@ const dateiBloecke = [
     },
   },
 ];
-const TS_DATEIEN = ["{src,test,tools,scripts}/**/*.{ts,mts,cts}"];
-const TS_DEKLARATIONEN = ["{src,test,tools,scripts}/**/*.d.{ts,mts,cts}"];
+const TS_DATEIEN = [`{src,test,tools,scripts}/**/*.${TS_ENDUNGEN}`];
+const TS_DEKLARATIONEN = [`{src,test,tools,scripts}/**/*.d.${TS_ENDUNGEN}`];
 const DEKLARATION_MELDUNG =
   "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.";
 const TS_VORGABEN = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked];
