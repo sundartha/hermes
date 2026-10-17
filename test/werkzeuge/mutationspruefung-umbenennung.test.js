@@ -22,11 +22,14 @@ const TESTDATEI_TS = testdatei([-1, "negativ"], [1, "positiv"]).replace(
   "../src/zahl.ts",
 );
 
-function umbenannt(context, inhalt) {
-  const repo = probeRepository(context, BASIS);
+const UMBAU_TEIL = /^Teil \d+ von \d+: Umbau \d+: /m;
+const UMBAU = "Benenne um\n\nWarum: Typen.\n\nArt: umbau\nPaket: 27";
+
+function umbenannt(context, inhalt, { basis = BASIS, nachricht = "Umbenennung" } = {}) {
+  const repo = probeRepository(context, basis);
   rmSync(join(repo, "src/zahl.js"));
   writeFiles(repo, { "src/zahl.ts": inhalt, "test/zahl.test.js": TESTDATEI_TS });
-  commitAll(repo, "Umbenennung");
+  commitAll(repo, nachricht);
   return repo;
 }
 
@@ -55,6 +58,23 @@ test("eine Umbenennung .js→.ts, die nur Typen ergänzt, plant keine Mutanten; 
   const geaendert = plan(context, umbenannt(context, TYPISIERT(quelle(NEGATIV, NULL))));
   assert.match(geaendert, /^Teil 1 von 1: src\/zahl\.ts /m);
   assert.doesNotMatch(geaendert, /nur Typen ergänzt/);
+});
+
+test("ein Umbau-Commit .js→.ts, der nur Typen ergänzt, plant auf dem alten Stand keine Mutanten; entfernt er eine Zeile, plant er die alte Datei", (context) => {
+  const gleich = plan(context, umbenannt(context, TYPISIERT(quelle(NEGATIV)), { nachricht: UMBAU }));
+  assert.doesNotMatch(gleich, UMBAU_TEIL);
+  assert.match(
+    gleich,
+    /^Plan: keine geänderte Zeile unter src\/ mit Mutanten oder Abschaltung\.$/m,
+  );
+  const entfernt = plan(
+    context,
+    umbenannt(context, TYPISIERT(quelle(NEGATIV)), {
+      basis: { ...BASIS, "src/zahl.js": quelle(NEGATIV, NULL) },
+      nachricht: UMBAU,
+    }),
+  );
+  assert.match(entfernt, /^Teil \d+ von \d+: Umbau 1: src\/zahl\.js /m);
 });
 
 test("eine umbenannte .ts-Datei mit einer ungetesteten Zeile wird ganz mutiert und bleibt rot", (context) => {
