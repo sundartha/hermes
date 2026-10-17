@@ -22,6 +22,7 @@ const RETURN_FUNCTION = "returnMessageText";
 const PARAMS_NAME = "params";
 const QUERY_SOURCES = new Set(["location.search", "window.location.search"]);
 const SCOPE_NODES = new Set(["BlockStatement", "Program"]);
+const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassBody"]);
 const GUARDED_NAMES = new Set([PARAMS_NAME, "location", "window", "URLSearchParams"]);
 const UNREADABLE_SCRIPT = "ein script-Block der Shell laesst sich nicht als JavaScript lesen";
 const UNCLEAR_CALL = "returnMessageText wird anders als mit params.get(...) als Argumenten aufgerufen oder weitergereicht";
@@ -139,15 +140,34 @@ function isLocationDeclarator(declarator) {
   return declarator.id.name === PARAMS_NAME && isLocationQuery(declarator.init);
 }
 
-function declaresParams(scope, isBefore) {
-  const declares = (statement) =>
-    statement.type === "VariableDeclaration" && isBefore(statement) && statement.declarations.some(isLocationDeclarator);
-  return SCOPE_NODES.has(scope.type) && scope.body.some(declares);
+function paramsDeclaration(scope) {
+  if (!SCOPE_NODES.has(scope.type)) return undefined;
+  return scope.body.find((statement) => statement.type === "VariableDeclaration" && statement.declarations.some(isLocationDeclarator));
 }
 
-function isSetBeforeCall({ node, path }) {
-  const nearest = path.findLast((scope) => declaresParams(scope, () => true));
-  return nearest !== undefined && declaresParams(nearest, (statement) => statement.range[1] <= node.range[0]);
+function isCalledOnly(boundary, { names, visiting }, runs) {
+  if (boundary.type !== "FunctionDeclaration" || boundary.id === null || boundary.generator || boundary.async || visiting.has(boundary)) return false;
+  const inside = new Set([...visiting, boundary]);
+  const called = (use) => {
+    const parent = use.path.at(-1);
+    return parent.type === "CallExpression" && parent.callee === use.node && runs({ node: parent, path: use.path.slice(0, -1) }, inside);
+  };
+  const [, declaredIn] = names.find((use) => use.node === boundary.id).path.toReversed();
+  const uses = names.filter((use) => use.node.name === boundary.id.name && use.node !== boundary.id && use.path.includes(declaredIn));
+  return uses.length > 0 && uses.every(called);
+}
+
+function isInvoked(path, names, visiting) {
+  const boundary = path.findLast((step) => FUNCTION_NODES.has(step.type));
+  return boundary === undefined || isCalledOnly(boundary, { names, visiting }, (call, inside) => isInvoked(call.path, names, inside));
+}
+
+function isSetBeforeCall({ node, path }, names) {
+  const scope = path.findLast((step) => paramsDeclaration(step) !== undefined);
+  if (scope === undefined) return false;
+  const outside = path.slice(0, path.indexOf(scope));
+  const sameBody = !path.slice(outside.length).some((step) => FUNCTION_NODES.has(step.type));
+  return sameBody && node.range[0] >= paramsDeclaration(scope).range[1] && isInvoked(outside, names, new Set());
 }
 
 function isParamsGet(node) {
@@ -188,11 +208,13 @@ function isStrayReturnFunction(node, path) {
 
 function queryUse(programs) {
   const calls = [];
+  const names = [];
   let stray = 0;
   let strayCalls = 0;
   for (const program of programs) {
     walk(program, [], (node, path) => {
       if (isReturnCall(node)) calls.push({ node, path });
+      if (node.type === "Identifier") names.push({ node, path });
       if (isStrayName(node, path)) stray += 1;
       if (isStrayReturnFunction(node, path)) strayCalls += 1;
     });
@@ -202,7 +224,7 @@ function queryUse(programs) {
   const agreed = (name, position) => others.every((names) => names[position] === name);
   return {
     passed: new Map(first.flatMap((name, position) => (agreed(name, position) ? [[name, position]] : []))),
-    fromLocation: stray === 0 && calls.every(isSetBeforeCall),
+    fromLocation: stray === 0 && calls.every((call) => isSetBeforeCall(call, names)),
     callsClear: strayCalls === 0,
   };
 }
