@@ -72,21 +72,32 @@ export function findingTally(messages) {
   return tally;
 }
 
+function tallyComparison(before, after) {
+  return [...new Set([...before.keys(), ...after.keys()])].map((key) => ({
+    key,
+    countBefore: before.has(key) ? before.get(key) : 0,
+    countAfter: after.has(key) ? after.get(key) : 0,
+  }));
+}
+
 export function tallyDifferences(before, after) {
-  const differences = [];
-  for (const key of new Set([...before.keys(), ...after.keys()])) {
-    const countBefore = before.get(key) ?? 0;
-    const countAfter = after.get(key) ?? 0;
-    if (countBefore !== countAfter) {
-      differences.push({ key, countBefore, countAfter });
-    }
-  }
-  return differences;
+  return tallyComparison(before, after).filter(
+    ({ countBefore, countAfter }) => countBefore !== countAfter,
+  );
+}
+
+function isCount(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function risesAbove(countBefore, countAfter) {
+  if (!isCount(countAfter)) return true;
+  return countAfter > (isCount(countBefore) ? countBefore : 0);
 }
 
 function tallyIncreases(before, after) {
-  return tallyDifferences(before, after).filter(
-    ({ countBefore, countAfter }) => countAfter > countBefore,
+  return tallyComparison(before, after).filter(({ countBefore, countAfter }) =>
+    risesAbove(countBefore, countAfter),
   );
 }
 
@@ -164,6 +175,24 @@ export function findRaisedSuppressions(before, after) {
   return suppressionCounts(after)
     .map(({ file, rule, count }) => ({ file, rule, countBefore: countIn(before, file, rule), countAfter: count }))
     .filter(({ countBefore, countAfter }) => !(countAfter <= countBefore));
+}
+
+function increasesPerFile(before, after, tallyOf) {
+  return Object.entries(after).flatMap(([file, entry]) =>
+    tallyIncreases(before[file] ? tallyOf(before[file]) : new Map(), tallyOf(entry)).map(
+      ({ key, countBefore, countAfter }) => ({ file, rule: key, countBefore, countAfter }),
+    ),
+  );
+}
+
+const LEGACY_ENTRY_KEY = "Altlast-Eintrag";
+
+function pinTally(entry) {
+  return tallyFromFindings(entry.findings ?? {}).set(LEGACY_ENTRY_KEY, 1);
+}
+
+function findRaisedLegacyPins(before, after) {
+  return increasesPerFile(before, after, pinTally);
 }
 
 function formatOffender({ file, ruleCounts, reasons = [] }) {
@@ -288,43 +317,54 @@ const BASIS_OPTION = "--basis";
 const HEAD_REVISION = "HEAD";
 const STAGED_REVISION = "";
 
-function suppressionsAt(revision) {
+function jsonAt(revision, relativePath) {
   let text;
   try {
-    text = readGitContent(`${revision}:${SUPPRESSIONS_REL}`);
+    text = readGitContent(`${revision}:${relativePath}`);
   } catch {
     return {};
   }
   return JSON.parse(text);
 }
 
-function printRaisedReport(raised) {
+function printRaisedReport(relativePath, raised) {
   console.error("");
-  logLine(`Abgebrochen: in ${SUPPRESSIONS_REL} steigen Zahlen:`);
+  logLine(`Abgebrochen: in ${relativePath} steigen Zahlen:`);
   for (const { file, rule, countBefore, countAfter } of raised) {
     console.error(`  ${file} -> ${rule}: ${countBefore} -> ${countAfter}`);
   }
-  console.error("");
-  logLine("Die Liste wird nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
-  logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
 }
 
-function raisedSuppressionsStatus(beforeRevision, afterRevision) {
-  const raised = findRaisedSuppressions(suppressionsAt(beforeRevision), suppressionsAt(afterRevision));
-  if (raised.length === 0) return 0;
-  printRaisedReport(raised);
+const RAISED_LISTS = [
+  { relativePath: SUPPRESSIONS_REL, findRaised: findRaisedSuppressions },
+  { relativePath: LEGACY_EXCEPTIONS_REL, findRaised: findRaisedLegacyPins },
+];
+
+function raisedCountsStatus(beforeRevision, afterRevision) {
+  const reports = RAISED_LISTS.map(({ relativePath, findRaised }) => ({
+    relativePath,
+    raised: findRaised(
+      jsonAt(beforeRevision, relativePath),
+      jsonAt(afterRevision, relativePath),
+    ),
+  })).filter(({ raised }) => raised.length > 0);
+  if (reports.length === 0) return 0;
+  for (const { relativePath, raised } of reports) printRaisedReport(relativePath, raised);
+  console.error("");
+  logLine("Die Listen werden nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
+  logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
   return 1;
 }
 
 function basisStatus(basis) {
   if (!isNonEmptyText(basis)) throw new Error(`${BASIS_OPTION} braucht einen Commit`);
-  return raisedSuppressionsStatus(basis, HEAD_REVISION);
+  return raisedCountsStatus(basis, HEAD_REVISION);
 }
 
 async function runCli() {
   const args = process.argv.slice(CLI_ARGS_OFFSET);
   if (args[0] === BASIS_OPTION) return basisStatus(args[1]);
-  if (raisedSuppressionsStatus(HEAD_REVISION, STAGED_REVISION) !== 0) return 1;
+  if (raisedCountsStatus(HEAD_REVISION, STAGED_REVISION) !== 0) return 1;
   return stagedFilesStatus(args);
 }
 
