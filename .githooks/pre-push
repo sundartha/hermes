@@ -1,4 +1,5 @@
 #!/bin/sh
 unset $(git rev-parse --local-env-vars)
 unset SCHWERLAUF_SPERRDATEI
+export SCHWERLAUF_VORRANG=push
 exec npm run --silent pruefleiter -- --basis upstream/master --ohne-werkzeugtests
