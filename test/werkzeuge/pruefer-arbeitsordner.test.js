@@ -115,7 +115,7 @@ test("der Prüfer sieht unter basis/ jede versionierte Datei der Basis, Steuerda
   for (const pfad of ["CLAUDE.md", ".claude", ".env", "_.env"]) assert.ok(!existsSync(inBasis(pfad)), pfad);
 });
 
-test("zwei Basisdateien mit demselben Ablagenamen brechen den Arbeitsordner nicht ab, die übrigen liegen unter basis/", (context) => {
+test("von zwei Basisdateien mit demselben Ablagenamen liegt die erste unter basis/, die zweite nennt auftrag.md, die übrigen fehlen nicht", (context) => {
   const repo = probeRepo(context, { "CLAUDE.md": "Regel\n", "_CLAUDE.md": "Unterstrich\n", "src/alt.js": "export const ALT = 1;\n" });
   const basis = repo.git(["rev-parse", "HEAD"]);
   repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, "Setze die Zahl\n");
@@ -123,8 +123,9 @@ test("zwei Basisdateien mit demselben Ablagenamen brechen den Arbeitsordner nich
   const { ordner } = baueArbeitsordner(commit, { root: repo.ordner, auftragstext: "", ciLauf: "", basis });
   context.after(() => entferne(ordner));
   assert.equal(readFileSync(join(ordner, "basis", "src/alt.js"), "utf8"), "export const ALT = 1;\n");
-  assert.ok(existsSync(join(ordner, "basis", "_CLAUDE.md")));
-  assert.ok(existsSync(join(ordner, "auftrag.md")));
+  assert.equal(readFileSync(join(ordner, "basis", "_CLAUDE.md"), "utf8"), "Regel\n");
+  const auftrag = readFileSync(join(ordner, "auftrag.md"), "utf8");
+  assert.ok(auftrag.includes('## Nicht unter basis/ abgelegt\n\n- "_CLAUDE.md" (EEXIST)\n'));
 });
 
 test("der Prüfer bekommt die drei Schweregrade mit Prüffragen, die Zuordnung des Katalogs und die Reparatur in einem Satz", () => {

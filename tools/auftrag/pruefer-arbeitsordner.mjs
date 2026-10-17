@@ -27,6 +27,7 @@ const BAUM_EINTRAG = /^(\d{6}) blob ([0-9a-f]+)\t(.+)$/s;
 const DATEI_MODI = new Set(["100644", "100755"]);
 const ZEILENENDE = 0x0a;
 const GROESSE_IM_KOPF = 2;
+const BASIS_UEBERSPRUNGEN = "## Nicht unter basis/ abgelegt";
 const DIFF_OPTIONEN = ["--no-color", "--no-ext-diff", "--no-renames"];
 
 function sichererPfad(pfad) {
@@ -69,15 +70,6 @@ function zielIn(wurzel, ziel) {
   return datei.startsWith(wurzel + sep) ? datei : null;
 }
 
-function legeAb(datei, inhalt) {
-  try {
-    schreibe(datei, inhalt);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function legeDateiAb(ordner, { sha, pfad, root }) {
   const ziel = sichererPfad(pfad);
   if (ziel === null) return { ablage: null, grund: "Pfad verworfen" };
@@ -85,7 +77,11 @@ function legeDateiAb(ordner, { sha, pfad, root }) {
   if (inhalt === null) return { ablage: null, grund: "nach dem Commit nicht vorhanden" };
   const datei = zielIn(join(ordner, "dateien"), ziel);
   if (datei === null) return { ablage: null, grund: "Pfad verworfen" };
-  if (!legeAb(datei, inhalt)) return { ablage: null, grund: "nicht ablegbar" };
+  try {
+    schreibe(datei, inhalt);
+  } catch {
+    return { ablage: null, grund: "nicht ablegbar" };
+  }
   return { ablage: `dateien/${ziel}`, grund: "" };
 }
 
@@ -94,7 +90,7 @@ function basisEintrag(eintrag) {
   if (treffer === null || !DATEI_MODI.has(treffer[1])) return [];
   const [, , objekt, pfad] = treffer;
   const ziel = sichererPfad(pfad);
-  return ziel === null ? [] : [{ objekt, ziel }];
+  return ziel === null ? [] : [{ objekt, pfad, ziel }];
 }
 
 function basisDateien(basis, root) {
@@ -114,15 +110,29 @@ function blobInhalte(objekte, root) {
   });
 }
 
+function legeBasisDateiAb({ pfad, datei }, inhalt) {
+  try {
+    schreibe(datei, inhalt);
+    return [];
+  } catch (fehler) {
+    return [{ pfad, grund: fehler.code }];
+  }
+}
+
 function legeBasisAb(ordner, { basis, root }) {
-  if (basis === undefined) return;
+  if (basis === undefined) return [];
   const wurzel = join(ordner, BASIS_ORDNER);
-  const dateien = basisDateien(basis, root).flatMap(({ objekt, ziel }) => {
+  const dateien = basisDateien(basis, root).flatMap(({ objekt, pfad, ziel }) => {
     const datei = zielIn(wurzel, ziel);
-    return datei === null ? [] : [{ objekt, datei }];
+    return datei === null ? [] : [{ objekt, pfad, datei }];
   });
   const inhalte = blobInhalte(dateien.map(({ objekt }) => objekt), root);
-  dateien.forEach(({ datei }, index) => legeAb(datei, inhalte[index]));
+  return dateien.flatMap((eintrag, index) => legeBasisDateiAb(eintrag, inhalte[index]));
+}
+
+function basisAbschnitt(uebersprungen) {
+  if (uebersprungen.length === 0) return [];
+  return [BASIS_UEBERSPRUNGEN, "", ...uebersprungen.map(({ pfad, grund }) => `- ${JSON.stringify(pfad)} (${grund})`), ""];
 }
 
 function dateiZeile({ patch, pfad, ablage, grund }) {
@@ -164,7 +174,7 @@ function absichtZeilen(absicht) {
   return [`Quelle: ${absicht.quelle}`, "", absicht.text];
 }
 
-function auftragsText(commit, kontext, eintraege) {
+function auftragsText(commit, kontext, { eintraege, uebersprungen }) {
   const { auftragstext } = kontext;
   return [
     "# Auftragszettel",
@@ -185,6 +195,7 @@ function auftragsText(commit, kontext, eintraege) {
     "",
     ...eintraege.map(dateiZeile),
     "",
+    ...basisAbschnitt(uebersprungen),
     "## Commits des Pull Requests",
     "",
     ...prAbschnitt(commit, kontext),
@@ -248,8 +259,8 @@ export function baueArbeitsordner(commit, kontext) {
     patches.push(PR_PATCH);
   }
   legeReferenzenAb(ordner);
-  legeBasisAb(ordner, kontext);
-  schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, eintraege));
+  const uebersprungen = legeBasisAb(ordner, kontext);
+  schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, { eintraege, uebersprungen }));
   schreibe(join(ordner, "ergebnisse.md"), ergebnisseText(commit, kontext));
   return { ordner, patches };
 }
