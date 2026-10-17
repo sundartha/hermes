@@ -7,7 +7,7 @@ import { bauPrompt } from "../../tools/auftrag/agenten.mjs";
 import { GRUEN } from "../../tools/auftrag/bericht.mjs";
 import { nutzungsVerstoesse } from "../../tools/auftrag/befehle.mjs";
 import { NUTZEN } from "../../tools/auftrag/planung/erkundung.mjs";
-import { auftragAusSchnitt } from "../../tools/auftrag/planung/zusammensetzen.mjs";
+import { auftraegeAusSchnitt, auftragAusSchnitt } from "../../tools/auftrag/planung/zusammensetzen.mjs";
 import { PRUEFUNG } from "../../tools/auftrag/zweck.mjs";
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
@@ -48,8 +48,21 @@ test("ein Auftrag, der keine Datei einer neuen Stelle mit Urteil nutzen ändert,
   assert.equal(Object.hasOwn(auftragAusSchnitt(eintrag(["S1"], ["src/ohne.js"]), SOLL, BERICHTE), "nutzen"), false);
 });
 
+test("eine neue Stelle mit Urteil nutzen, deren Datei kein Auftrag nennt, ist ein Befund der Planung, statt still zu verschwinden", () => {
+  const { auftraege, befunde } = auftraegeAusSchnitt([eintrag(["S1"])], SOLL, BERICHTE);
+  assert.deepEqual(auftraege[0].nutzen, [{ ...SUMME, fuer: "gesamt" }]);
+  assert.deepEqual(befunde, ["S2: neue Stelle andere in src/anderswo.js soll src/kosten.js:summeMikroCent nutzen, aber kein Auftrag nennt src/anderswo.js unter erwarteteDateien"]);
+  assert.deepEqual(auftraegeAusSchnitt([eintrag(["S1"]), eintrag(["S2"], ["src/anderswo.js"])], SOLL, BERICHTE).befunde, []);
+});
+
 test("fehlen die Erkundungsberichte, bricht das Zusammensetzen ab, statt nutzen still wegzulassen", () => {
   assert.throws(() => auftragAusSchnitt(eintrag(["S1"]), SOLL), /Erkundungsberichte/);
+});
+
+test("eine bestehende Stelle gibt kein nutzen weiter, weil die Erkundung vorhanden nur bei neuen Stellen prüft", () => {
+  const bestehend = { ...neueStelle("gesamt", SUMME), neu: undefined, von: 1, bis: 2 };
+  const berichte = [{ gruppe: ["S1"], nummern: { S1: { aenderungen: [bestehend] } } }];
+  assert.equal(Object.hasOwn(auftragAusSchnitt(eintrag(["S1"]), SOLL, berichte), "nutzen"), false);
 });
 
 function prompt(context, nutzen) {

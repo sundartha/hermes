@@ -5,7 +5,7 @@ import { pid } from "node:process";
 import { phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
-import { istText, liste, nutzenFuer } from "./erkundung.mjs";
+import { istText, liste, nutzenFuer, nutzenOhneAuftrag } from "./erkundung.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
@@ -26,6 +26,10 @@ export function auftragAusSchnitt(eintrag, soll, berichte) {
   if (nutzen.length > 0) auftrag.nutzen = nutzen;
   auftrag.abhaengigVon = liste(eintrag.abhaengigVon).map(({ id }) => id);
   return auftrag;
+}
+
+export function auftraegeAusSchnitt(eintraege, soll, berichte) {
+  return { auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll, berichte)), befunde: nutzenOhneAuftrag(berichte, eintraege) };
 }
 
 function auftragsEintrag({ id, ziel }) {
@@ -79,9 +83,9 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   const absichtFehlt = pitchAbsichtBefunde(pitch);
   if (absichtFehlt.length > 0) return { befunde: absichtFehlt };
   const { soll } = nummernImOrdner(ordner);
-  const auftraege = schnitt.auftraege.map((eintrag) => auftragAusSchnitt(eintrag, soll, berichte));
+  const { auftraege, befunde: nutzenBefunde } = auftraegeAusSchnitt(schnitt.auftraege, soll, berichte);
   const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereich))];
-  const vorab = [...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
+  const vorab = [...nutzenBefunde, ...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };
   const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich))]));
   const phase = { phase: basename(resolve(ordner)), absicht: absichtAusPitch(pitch), entwurf, auftraege };

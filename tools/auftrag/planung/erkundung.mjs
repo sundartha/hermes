@@ -334,10 +334,20 @@ function istNutzen(vorhanden) {
   return vorhanden?.urteil === NUTZEN && istNutzenAngabe(vorhanden.nutzen);
 }
 
+function gibtNutzenWeiter(stelle) {
+  return stelle.neu !== undefined && istNutzen(stelle.vorhanden);
+}
+
 function nutzenDerStelle(stelle, dateien) {
-  if (!dateien.includes(stelle?.datei) || !istNutzen(stelle.vorhanden)) return [];
+  if (!dateien.includes(stelle.datei) || !gibtNutzenWeiter(stelle)) return [];
   const { datei, funktion } = stelle.vorhanden.nutzen;
   return [{ datei, funktion, fuer: stelle.funktion ?? stelle.datei }];
+}
+
+export function nutzenOhneAuftrag(berichte, auftraege) {
+  const genannt = new Set(auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien)));
+  const verwaist = aenderungsStellen(berichte).filter((stelle) => gibtNutzenWeiter(stelle) && !genannt.has(stelle.datei));
+  return verwaist.map(({ nummer, datei, funktion, vorhanden: { nutzen } }) => `${nummer}: neue Stelle ${funktion ?? datei} in ${datei} soll ${nutzen.datei}:${nutzen.funktion} nutzen, aber kein Auftrag nennt ${datei} unter erwarteteDateien`);
 }
 
 export function nutzenFuer(berichte, dateien) {
