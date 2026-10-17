@@ -7,7 +7,7 @@ const HTTP_ANGELEGT = 201;
 const HTTP_ANGENOMMEN = 202;
 const LIVE = "live";
 const UMSCHALTEN = "update_in_progress";
-export const ROTE_ENDZUSTAENDE = new Set([
+const ROTE_ENDZUSTAENDE = new Set([
   "build_failed",
   "update_failed",
   "canceled",
@@ -138,10 +138,9 @@ async function umschaltenPruefen(kontext, start) {
   return (await umschaltenErlaubt(kontext)) ? null : "anruf_beim_umschalten";
 }
 
-function statusBeobachter(kontext, { id, start }) {
-  const { render, ausgabe } = kontext;
+export function statusBeobachter({ render, ausgabe }, { id, beiUmschalten = async () => null }) {
   let bisher = null;
-  return wachhaltend(kontext, async () => {
+  return async () => {
     const { status, daten } = await render.lesen(id);
     if (status !== HTTP_OK) return undefined;
     const zustand = statusWort(daten?.status);
@@ -151,14 +150,17 @@ function statusBeobachter(kontext, { id, start }) {
     if (zustand === LIVE) return { live: true };
     if (ROTE_ENDZUSTAENDE.has(zustand)) return { live: false, endzustand: zustand };
     if (!neu || zustand !== UMSCHALTEN) return undefined;
-    const abbruch = await umschaltenPruefen(kontext, start);
+    const abbruch = await beiUmschalten();
     return abbruch === null ? undefined : { live: false, abbruch };
-  });
+  };
 }
 
 async function deployVerfolgen(kontext, { id, start }) {
   const { ausgabe, uhr, takte } = kontext;
-  const beobachter = statusBeobachter(kontext, { id, start });
+  const beobachter = wachhaltend(
+    kontext,
+    statusBeobachter(kontext, { id, beiUmschalten: () => umschaltenPruefen(kontext, start) }),
+  );
   const ergebnis = await abwarten({ uhr, ...takte.status, start }, beobachter);
   if (ergebnis.schutzgrenze) {
     schutzgrenzeMelden(ausgabe, { schritt: "deploy_status", ergebnis });

@@ -1,5 +1,5 @@
-import { COMMIT_MUSTER, DEPLOY_ID, statusWort } from "./ausgabe.mjs";
-import { produktionAbwarten, ROTE_ENDZUSTAENDE } from "./deploy.mjs";
+import { COMMIT_MUSTER, DEPLOY_ID } from "./ausgabe.mjs";
+import { produktionAbwarten, statusBeobachter } from "./deploy.mjs";
 import { notfallErlaubt } from "./herkunft.mjs";
 import { hermesZugang, renderZugang } from "./netz.mjs";
 import { abwarten, DEPLOY_TAKTE, ECHTE_UHR } from "./takt.mjs";
@@ -145,22 +145,15 @@ async function rollbackAusloesen(kontext, { gewaehlt, bekannt }) {
 }
 
 async function rollbackVerfolgen({ render, ausgabe, uhr, takte }, id) {
-  let bisher = null;
-  const ergebnis = await abwarten({ uhr, ...takte.status }, async () => {
-    const { status, daten } = await render.lesen(id);
-    if (status !== HTTP_OK) return undefined;
-    const zustand = statusWort(daten?.status);
-    if (zustand !== bisher) ausgabe.melde("deploy_status", { status: zustand });
-    bisher = zustand;
-    if (zustand === LIVE) return { live: true };
-    return ROTE_ENDZUSTAENDE.has(zustand) ? { live: false, zustand } : undefined;
-  });
+  const beobachter = statusBeobachter({ render, ausgabe }, { id });
+  const ergebnis = await abwarten({ uhr, ...takte.status }, beobachter);
   if (ergebnis.schutzgrenze) {
     ausgabe.melde("schutzgrenze", { schritt: "deploy_status", minuten: ergebnis.minuten });
     return false;
   }
-  if (!ergebnis.wert.live) ausgabe.melde("deploy_gescheitert", { status: ergebnis.wert.zustand });
-  return ergebnis.wert.live;
+  const { live, endzustand } = ergebnis.wert;
+  if (!live) ausgabe.melde("deploy_gescheitert", { status: endzustand });
+  return live;
 }
 
 async function rollbackLaufen(kontext, { id, commit }) {
