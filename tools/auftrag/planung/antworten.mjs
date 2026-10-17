@@ -24,6 +24,7 @@ const SCHNITT_LISTEN = ["annahmen", "ownerAufgaben", "fehlendeSzenarien", "gemei
 const GRUNDLAGE = /^Grundlage:/;
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
+const LETZTER_ZEILENUMBRUCH = /\n$/;
 
 function dokumentStelleBefund(fundstelle, [, name, ueberschrift], dokumente) {
   const text = dokumente[name];
@@ -32,10 +33,14 @@ function dokumentStelleBefund(fundstelle, [, name, ueberschrift], dokumente) {
   return befunde.length === 0 ? null : `Fundstelle „${fundstelle}“: die Überschrift steht nicht genau einmal in ${name}`;
 }
 
+function zeilenzahl(text) {
+  return text === "" ? 0 : text.replace(LETZTER_ZEILENUMBRUCH, "").split("\n").length;
+}
+
 function dateiStelleBefund(fundstelle, [, datei, zeile], root) {
   const pfad = join(root, datei);
   if (!pfadIstSauber(datei) || !existsSync(pfad) || !statSync(pfad).isFile()) return `Fundstelle „${fundstelle}“: ${datei} ist keine Datei im Repo`;
-  const zeilen = readFileSync(pfad, "utf8").split("\n").length;
+  const zeilen = zeilenzahl(readFileSync(pfad, "utf8"));
   return Number(zeile) <= zeilen ? null : `Fundstelle „${fundstelle}“: ${datei} hat keine Zeile ${zeile}`;
 }
 
