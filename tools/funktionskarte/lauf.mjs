@@ -68,6 +68,11 @@ function fehlendePlatzhalter(wert, gemerkt) {
     .map((pfad) => `Platzhalter {{${pfad}}} nennt nichts, was ein früherer Schritt gemerkt hat`);
 }
 
+function artVon(wert) {
+  if (wert === null) return "null";
+  return Array.isArray(wert) ? "array" : typeof wert;
+}
+
 function erwartungVerfehlt(ausgabe, erwartung) {
   const ist = wertAn(ausgabe, erwartung.pfad);
   if (ist === undefined) return `${erwartung.pfad} fehlt in der Antwort`;
@@ -76,10 +81,14 @@ function erwartungVerfehlt(ausgabe, erwartung) {
     return `${erwartung.pfad} ist ${JSON.stringify(ist)}, erwartet ${JSON.stringify(erwartung.gleich)}`;
   }
   if (Object.hasOwn(erwartung, "enthaelt")) {
-    if (typeof ist === "string" && ist.includes(erwartung.enthaelt)) return undefined;
-    return `${erwartung.pfad} ist ${JSON.stringify(ist)}, enthält nicht ${JSON.stringify(erwartung.enthaelt)}`;
+    const { enthaelt } = erwartung;
+    if (typeof enthaelt !== "string" || enthaelt === "") {
+      return `${erwartung.pfad}: „enthaelt“ braucht nach dem Einsetzen einen nicht leeren Text`;
+    }
+    if (typeof ist === "string" && ist.includes(enthaelt)) return undefined;
+    return `${erwartung.pfad} ist ${JSON.stringify(ist)}, enthält nicht ${JSON.stringify(enthaelt)}`;
   }
-  const art = Array.isArray(ist) ? "array" : typeof ist;
+  const art = artVon(ist);
   return art === erwartung.typ
     ? undefined
     : `${erwartung.pfad} hat Typ ${art}, erwartet ${erwartung.typ}`;
