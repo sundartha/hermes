@@ -13,10 +13,12 @@ import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
 import { testTitel, zusicherungenGleich } from "./testtitel.mjs";
-import { MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
+import { GRUND, MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
+const MAX_WIEDERHOLUNGEN = 1;
+const WERKZEUGABBRUCH = new Set([GRUND.MUTATION_ABBRUCH, GRUND.AGENT_EXIT]);
 const LABEL = "entscheidung";
 const JSON_OBJEKT = /\{[\s\S]*\}/;
 const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
@@ -49,6 +51,10 @@ function fehlerausgabe(ergebnis) {
   const schluss = [...gezeigt].some(hatAusweg) ? [AUSWEG_SCHLUSS] : [];
   const absatz = absatzZuordnung(pflichtDer([roteRunde(ergebnis)]));
   return [`Runde ${runde}: ${grund}`, ...zeilen, ...ohneSchritt, ...schluss, ...absatz, ...hinweiseDesBaus(agenten)].join("\n");
+}
+
+function nurAbgebrochen({ roteIds = [] }) {
+  return roteIds.length > 0 && roteIds.every((id) => WERKZEUGABBRUCH.has(id));
 }
 
 function voraussetzungsAnlass(satz) {
@@ -169,6 +175,7 @@ class Runden {
     this.starteRunde = starteRunde;
     this.fehler = [];
     this.roteRunden = [];
+    this.abbrueche = [];
   }
 
   vorgeschichte() {
@@ -199,11 +206,22 @@ class Runden {
         if (vorlauf !== GRUEN) return vorlauf;
         continue;
       }
-      this.fehler.push(fehlerausgabe(ergebnis));
-      this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
-      if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
-      verwerfe(ergebnis.basis, this.kontext.root);
+      const halt = this.rot(ergebnis);
+      if (halt !== null) return halt;
     }
+  }
+
+  rot(ergebnis) {
+    if (nurAbgebrochen(ergebnis)) {
+      verwerfe(ergebnis.basis, this.kontext.root);
+      this.abbrueche.push(`Runde ${ergebnis.runde}: ${ergebnis.grund}`);
+      return this.abbrueche.length > MAX_WIEDERHOLUNGEN ? this.entscheidung(ergebnis, this.abgebrochen()) : null;
+    }
+    this.fehler.push(fehlerausgabe(ergebnis));
+    this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
+    if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
+    verwerfe(ergebnis.basis, this.kontext.root);
+    return null;
   }
 
   zuletztRot() {
@@ -271,6 +289,13 @@ class Runden {
     const phasendatei = join(belegVerzeichnis(root, phase.phase), `${umbau.id}.phase.json`);
     writeFileSync(phasendatei, JSON.stringify(neu));
     return { befunde, kontext: { phase: neu, auftrag: umbau, phasendatei } };
+  }
+
+  abgebrochen() {
+    const { phase, auftrag } = this.kontext;
+    const kopf = [`Auftrag ${auftrag.id} der Phase ${phase.phase} ist angehalten: Ein Werkzeug ist ${this.abbrueche.length}-mal abgebrochen, ohne etwas zu messen.`, "", ...this.abbrueche].join("\n");
+    const anlass = `Ein Werkzeug ist ${this.abbrueche.length}-mal abgebrochen; das zählt nicht als rote Runde und geht nicht zurück an die Planung.`;
+    return { kopf, anlass, verlauf: [...this.fehler, ...this.abbrueche], zweck: zweckBlock(MELDUNG.WERKZEUGABBRUCH) };
   }
 
   gestoppt() {

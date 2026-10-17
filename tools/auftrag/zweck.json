@@ -230,6 +230,13 @@
     "nichtAngenommen": "In Runde 2 die rote Prüfung um jeden Preis grün machen.",
     "ausweg": "Für den Planer eine eigene Zeile „Zerlegung passt nicht: <Grund>“ oder „Pitch ändern: <Frage>“ mit einer Zeile „Empfehlung: <Vorschlag>“; für den Notiz-Agenten entfällt er."
   },
+  "werkzeugabbruch": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein abgebrochener Mutationslauf oder Agent hat nichts gemessen; das sagt nichts über den Bau und darf weder als grün noch als rote Runde zählen, sonst schickte ein Abbruch einen fertigen Schritt in den Neuschnitt.",
+    "behebung": "Die Ursache des Abbruchs aus der Ausgabe beheben (Netz, Werkzeug, Rechner) und den Auftrag neu starten; Antonio entscheidet.",
+    "nichtAngenommen": "Den Abbruch als grün werten oder den Auftrag neu schneiden lassen.",
+    "ausweg": "entfällt."
+  },
   "umbau-plan": {
     "liste": "A18",
     "wozu": "Ein unvollständiger Umbau-Auftrag schickte die Agenten an Arbeit, die nicht gelingen kann.",
