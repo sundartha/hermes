@@ -81,3 +81,9 @@ jobs:
         env:
           BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node tools/katalog-pruefen.mjs --basis "$BASIS"
+
+      - name: Funktionskarte
+        if: ${{ !cancelled() }}
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node tools/funktionskarte.mjs pruefen --basis "$BASIS"
