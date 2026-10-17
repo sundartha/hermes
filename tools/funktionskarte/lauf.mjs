@@ -11,6 +11,8 @@ const PLATZHALTER = /\{\{([\w.]+)\}\}/g;
 const GANZER_PLATZHALTER = /^\{\{([\w.]+)\}\}$/;
 const ROUTEN_ARTEN = new Set([ROUTE_KIND, WEBHOOK_KIND]);
 const ERSTER_FEHLERSTATUS = 400;
+const PARAMETER_ZEICHEN = ":";
+const BELIEBIGER_REST = "*";
 
 function hermesCtl(sitzung, argumente) {
   const texte = argumente.map((wert) => (typeof wert === "string" ? wert : JSON.stringify(wert)));
@@ -86,16 +88,22 @@ function erwartungVerfehlt(ausgabe, erwartung) {
 function routenMuster(flaechen) {
   return flaechen
     .filter(({ art }) => ROUTEN_ARTEN.has(art))
-    .map(({ flaeche, path }) => {
-      const muster = path
-        .split("/")
-        .map((teil) => {
-          if (teil.startsWith(":")) return "[^/]+";
-          return teil.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*");
-        })
-        .join("/");
-      return { flaeche, methode: flaeche.split(" ")[0], muster: new RegExp(`^${muster}$`) };
-    });
+    .map(({ flaeche, path }) => ({
+      flaeche,
+      methode: flaeche.split(" ")[0],
+      teile: path.split("/"),
+    }));
+}
+
+function routePasst(musterTeile, pfad) {
+  const teile = pfad.split("/");
+  for (const [index, teil] of musterTeile.entries()) {
+    if (index >= teile.length) return false;
+    if (teil === BELIEBIGER_REST) return true;
+    const passt = teil.startsWith(PARAMETER_ZEICHEN) ? teile[index] !== "" : teil === teile[index];
+    if (!passt) return false;
+  }
+  return musterTeile.length === teile.length;
 }
 
 function pfadBeiHermes(adresse, url) {
@@ -122,7 +130,7 @@ function getroffeneFlaechen(aufrufe, schritt, { url, muster, werkzeuge }) {
     if (pfad === undefined) continue;
     if (!(aufruf.status < ERSTER_FEHLERSTATUS) && !fehlerstatusGeprueft) continue;
     const route = muster.find(
-      (kandidat) => kandidat.methode === aufruf.methode && kandidat.muster.test(pfad),
+      (kandidat) => kandidat.methode === aufruf.methode && routePasst(kandidat.teile, pfad),
     );
     if (route) getroffen.add(route.flaeche);
   }
