@@ -19,7 +19,7 @@ const SQL_FILE = /\.sql$/i;
 const CODE_FILE = /\.(?:[cm]?js|[cm]?ts|tsx)$/i;
 const CODE_ROOTS = ["src/", "scripts/"];
 const DDL =
-  /\b(?:alter|create|drop)\s+(?:or\s+replace\s+)?(?:unique\s+index|table|index|policy|trigger|function|column|view|type|extension|schema|sequence)\b/i;
+  /\b(?:alter|create|drop)\s+(?:(?:or\s+replace|unique|materialized|unlogged|temp|temporary|global|local|constraint|recursive)\s+)*(?:table|index|policy|trigger|function|column|view|type|extension|schema|sequence)\b/i;
 const ROLLBACK_RULES = [
   "ban-drop-column",
   "ban-drop-table",

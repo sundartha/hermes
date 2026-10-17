@@ -166,6 +166,25 @@ test("migrationen: Schemaänderung im Code und SQL-Dateien außerhalb des Ordner
   );
 });
 
+test("migrationen: Schemaänderung mit Zusatzwort vor der Objektart ist im Code rot, Fließtext nicht", (context) => {
+  const statements = [
+    "CREATE MATERIALIZED VIEW umsatz AS SELECT id FROM tenant",
+    "CREATE UNLOGGED TABLE zwischen (id text)",
+    "DROP MATERIALIZED VIEW umsatz",
+    "CREATE CONSTRAINT TRIGGER pruefen AFTER INSERT ON tenant",
+    "CREATE TEMPORARY TABLE rest (id text)",
+    "CREATE OR REPLACE RECURSIVE VIEW kette (id) AS SELECT 1",
+  ];
+  const prose = "create the table later";
+  const lines = [...statements, prose].map((text) => `export const q = "${text}";`);
+  const result = checkChange(context, MERGED, { "src/store/sonder.js": `${lines.join("\n")}\n` });
+  assertRed(
+    result,
+    ...statements.map((_, index) => `src/store/sonder.js:${index + 1}: Schemaänderung im Code`),
+  );
+  assert.ok(!result.output.includes(`src/store/sonder.js:${lines.length}:`), result.output);
+});
+
 test("migrationen: eine eigene .squawk.toml lockert nichts", (context) => {
   const result = checkChange(context, MERGED, {
     ".squawk.toml": 'excluded_rules = ["ban-drop-column"]\n',
