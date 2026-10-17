@@ -21,7 +21,7 @@ const SCHLUESSEL = /^[0-9a-f]{40}(?:[0-9a-f]{24})?-\d+$/;
 const LEERZEICHEN = 0x20;
 const ENTF = 0x7f;
 const REPRODUKTION_TEXT =
-  "Vollständiger node:test-Test (Inhalt der Datei test/pruefer-reproduktion.test.js), der auf diesem Commit an einer Erwartung scheitert; leer bei SOLLTE und HINWEIS.";
+  "Vollständiger node:test-Test (Inhalt der Datei test/pruefer-reproduktion.test.js), der am Endstand des Pull Requests an einer Erwartung scheitert; leer bei SOLLTE und HINWEIS.";
 const REPARATUR_TEXT = "Die Reparatur in einem Satz, ohne Code.";
 
 const text = { type: "string" };
