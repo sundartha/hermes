@@ -317,6 +317,15 @@ test("zusammensetzen: fehlt der Entwurf eines Bereichs, gibt es einen Befund und
   rot(ordner, ergebnis, `Entwurf für den Bereich ${HINWEIS} fehlt`);
 });
 
+test("zusammensetzen: ein Entwurf, der Zahl oder Objekt ist, ergibt den Befund „fehlt“, keinen Absturz und keine Phase", async (context) => {
+  for (const kaputt of [42, { text: "liest bestaetigt" }]) {
+    const ordner = ordnerMitDokumenten(context);
+    const ergebnis = await zusammen(ordner, { entwurf: entwuerfe({ [HINWEIS]: kaputt }) });
+    rot(ordner, ergebnis, `Entwurf für den Bereich ${HINWEIS} fehlt`);
+    rot(ordner, ergebnis, `gemeinsamer Name bestaetigt steht nicht wörtlich im Entwurf von ${HINWEIS}`);
+  }
+});
+
 test("zusammensetzen: ein Entwurf mit eigener Aufträge- oder Reihenfolge-Zeile wird abgelehnt", async (context) => {
   for (const zeile of ["Aufträge: a1: selbst geschrieben", "Reihenfolge: keine Vorgänger"]) {
     const ordner = ordnerMitDokumenten(context);
