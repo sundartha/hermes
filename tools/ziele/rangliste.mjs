@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
-import { LABEL as PRUEFER_LABEL } from "../auftrag/pruefer-issues.mjs";
+import { LABEL as PRUEFER_LABEL, issueTitel } from "../auftrag/pruefer-issues.mjs";
 import { istVomBot } from "./befunde.mjs";
 import { issuesMitLabel } from "./github.mjs";
 import { UNTERDRUECKUNGEN } from "./sorten.mjs";
@@ -19,7 +19,11 @@ const FELD = "|";
 const PRUEFSUMME = /^[0-9a-f]{16}$/;
 const ZAHL = /^\d+$/;
 const CODE = /\.(?:[cm]?js|jsx|tsx?)$/;
-const PRUEFER_TITEL = /^Prüfer: (\S+) in `([^`]+)`$/;
+const PRUEFER_TITEL = /^Prüfer: (\S+) in `([^`]*)`(?:, Zeile \d+)?(?: \(PR #\d+\))?$/;
+const NICHT_ZUORDENBAR = "pruefer-nicht-zuordenbar";
+const TITEL_UNBEKANNT = "Titel nicht erkannt";
+const DATEI_UNBEKANNT = "Datei nicht im Repo";
+const DATEI_MEHRDEUTIG = "Dateiname mehrdeutig";
 const KATALOG_ID = /^(?:[A-Z]\d{1,2}|SG-\d{2,3})$/;
 const EINRUECKUNG = /^[ \t]*/;
 const TAB = "\t";
@@ -84,10 +88,38 @@ function eslintBefunde(root, dateien) {
     .flatMap(([datei, regeln]) => Object.entries(regeln ?? {}).map(([regel, wert]) => ({ datei, pruefung: ESLINT, regel, anzahl: Number(wert?.count) || 1 })));
 }
 
+function titelDatei(datei) {
+  return PRUEFER_TITEL.exec(issueTitel({ id: "", datei, zeile: 0 }))[2];
+}
+
+function dateienJeTitelName(dateien) {
+  const jeName = new Map();
+  for (const datei of dateien) {
+    const name = titelDatei(datei);
+    jeName.set(name, [...(jeName.get(name) ?? []), datei]);
+  }
+  return jeName;
+}
+
+function zuordnung(title, jeName) {
+  const treffer = PRUEFER_TITEL.exec(title);
+  if (treffer === null) return { grund: TITEL_UNBEKANNT };
+  const [, regel, name] = treffer;
+  const kandidaten = jeName.get(name) ?? [];
+  if (kandidaten.length === 1) return { regel, datei: kandidaten[0] };
+  return { grund: kandidaten.length === 0 ? DATEI_UNBEKANNT : DATEI_MEHRDEUTIG };
+}
+
 async function prueferBefunde(github, dateien) {
   const issues = (await issuesMitLabel(github, PRUEFER_LABEL, "open")).filter(istVomBot);
-  const treffer = issues.map(({ title }) => PRUEFER_TITEL.exec(title ?? "")).filter((eintrag) => eintrag && dateien.has(eintrag[2]));
-  return treffer.map(([, regel, datei]) => ({ datei, pruefung: PRUEFER, regel, anzahl: 1 }));
+  const jeName = dateienJeTitelName(dateien);
+  const befunde = { zugeordnet: [], offen: [] };
+  for (const { number, title } of issues) {
+    const { regel, datei, grund } = zuordnung(title, jeName);
+    if (datei === undefined) befunde.offen.push({ pruefung: NICHT_ZUORDENBAR, regel: grund, nummer: number, anzahl: 1 });
+    else befunde.zugeordnet.push({ datei, pruefung: PRUEFER, regel, anzahl: 1 });
+  }
+  return befunde;
 }
 
 function eintrag(datei, liste, { root, aenderungen }) {
@@ -120,6 +152,7 @@ export function lintVorschlaege(befunde) {
 
 export async function durchgang({ github, root }) {
   const dateien = new Set(gitZeilen(["ls-files"], root).filter((datei) => existsSync(join(root, datei))));
-  const befunde = [...basisBefunde(root, dateien), ...eslintBefunde(root, dateien), ...(await prueferBefunde(github, dateien))];
-  return { befunde, rangliste: rangliste({ befunde, dateien, root, aenderungen: aenderungenJeDatei(root) }), vorschlaege: lintVorschlaege(befunde) };
+  const pruefer = await prueferBefunde(github, dateien);
+  const befunde = [...basisBefunde(root, dateien), ...eslintBefunde(root, dateien), ...pruefer.zugeordnet];
+  return { befunde: [...befunde, ...pruefer.offen], rangliste: rangliste({ befunde, dateien, root, aenderungen: aenderungenJeDatei(root) }), vorschlaege: lintVorschlaege(befunde) };
 }
