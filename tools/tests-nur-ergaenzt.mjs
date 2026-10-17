@@ -3,6 +3,7 @@ import {
   changedExistingTestFiles,
   changedUnits,
   gatesByTestFile,
+  isCard,
 } from "./testschutz/aenderungen.mjs";
 import { ausmistenFrei } from "./testschutz/ausmisten.mjs";
 import { deletedFinding, mechanicalProofs } from "./testschutz/ausnahmen.mjs";
@@ -24,7 +25,15 @@ function parseOptions() {
   return { basis: values.basis, pullRequest: Number(values.pr) };
 }
 
+function cardFindings(unit, names) {
+  if (names.has(unit.file)) return [];
+  return [
+    `${unit.file}: bestehende Funktionskarte geändert oder gelöscht, aber die Karte steht nicht ${listHint()}.`,
+  ];
+}
+
 function unitFindings(unit, names, gates) {
+  if (isCard(unit.file)) return cardFindings(unit, names);
   if (unit.deleted) return [deletedFinding(unit)];
   const where = unit.lines.length > 0 ? `, Zeilen ${unit.lines.join(", ")}` : "";
   const findings = [];

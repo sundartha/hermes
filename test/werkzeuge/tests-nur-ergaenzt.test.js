@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { appendFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -306,4 +306,58 @@ test("tests-nur-ergaenzt: ein Label startet den Testschutz der verknüpften PRs 
   assert.ok(result.requests.includes(`POST ${rerunPath}`));
   assert.ok(!result.requests.some((request) => request.includes(OTHER_SHA)));
   assert.match(result.output, /PR #7: Testschutz-Lauf 4711 neu gestartet/);
+});
+
+const CARD_FILE = "docs/funktionen/nummer.md";
+const CARD_EXPECTATION = '{ "pfad": "ergebnis.calls", "gleich": 0 }';
+
+function cardProbe(context) {
+  const { directory } = probe(context);
+  const card = ["# Nummer", "", "```json rezept", CARD_EXPECTATION, "```", ""].join("\n");
+  mkdirSync(join(directory, "docs/funktionen"), { recursive: true });
+  writeFileSync(join(directory, CARD_FILE), card);
+  commitAll(directory, "Lege eine Karte an");
+  return { directory, basis: runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim() };
+}
+
+test("tests-nur-ergaenzt: eine neue Funktionskarte geht ohne Frage an GitHub durch", async (context) => {
+  const repo = cardProbe(context);
+  writeFileSync(join(repo.directory, "docs/funktionen/posteingang.md"), "# Posteingang\n");
+  commitAll(repo.directory, "Lege eine zweite Karte an");
+  const result = await check(repo);
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.deepEqual(result.requests, []);
+});
+
+test("tests-nur-ergaenzt: eine abgeschwächte Funktionskarte stoppt ohne Freigabe", async (context) => {
+  const repo = cardProbe(context);
+  change(repo.directory, {
+    file: CARD_FILE,
+    from: CARD_EXPECTATION,
+    to: '{ "pfad": "ergebnis.calls", "typ": "number" }',
+  });
+  const result = await check(repo, linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)] }));
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /docs\/funktionen\/nummer\.md: bestehende Funktionskarte geändert/);
+});
+
+test("tests-nur-ergaenzt: eine gelöschte Funktionskarte stoppt ohne Label", async (context) => {
+  const repo = cardProbe(context);
+  rmSync(join(repo.directory, CARD_FILE));
+  commitAll(repo.directory, "Lösche die Karte");
+  const result = await check(repo, linkedIssue({ names: [CARD_FILE] }));
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /trägt das Label verhalten-geaendert nicht/);
+});
+
+test("tests-nur-ergaenzt: eine geänderte Funktionskarte mit Label und genannter Karte geht durch", async (context) => {
+  const repo = cardProbe(context);
+  change(repo.directory, {
+    file: CARD_FILE,
+    from: CARD_EXPECTATION,
+    to: '{ "pfad": "ergebnis.calls", "gleich": 1 }',
+  });
+  const result = await check(repo, linkedIssue({ names: [CARD_FILE], events: [labeled(ANTONIO)] }));
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.match(result.output, /durch Issue #12 freigegeben/);
 });
