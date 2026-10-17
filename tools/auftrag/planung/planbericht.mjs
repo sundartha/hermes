@@ -5,7 +5,7 @@ import { pid } from "node:process";
 import { BELEGE } from "../bericht.mjs";
 import { reihenfolge } from "../format.mjs";
 import { transkriptVerzeichnis, transkripteDerSitzung } from "../kosten.mjs";
-import { liste } from "./erkundung.mjs";
+import { istObjekt, liste } from "./erkundung.mjs";
 import { fortsetzungen, messeDatei } from "./messung.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
@@ -73,9 +73,10 @@ function arten(auftraege) {
 function auftraegeDes(schnitt) {
   const auftraege = liste(schnitt?.auftraege);
   if (auftraege.length === 0) return KEINE_SCHNITTLISTE;
-  const mitIds = auftraege.map((auftrag) => ({ ...auftrag, abhaengigVon: liste(auftrag.abhaengigVon).map(({ id }) => id) }));
+  const mitIds = auftraege.filter(istObjekt).map((auftrag) => ({ ...auftrag, abhaengigVon: liste(auftrag.abhaengigVon).map((abhaengig) => abhaengig?.id) }));
   const { ordnung } = reihenfolge(mitIds);
-  return (ordnung.length > 0 ? ordnung : mitIds).map(({ id, art, ziel, bereich, prueft }) => ({ id, art, ziel, bereich, prueft }));
+  const gueltige = (ordnung.length > 0 ? ordnung : mitIds).map(({ id, art, ziel, bereich, prueft }) => ({ id, art, ziel, bereich, prueft }));
+  return [...gueltige, ...auftraege.filter((auftrag) => !istObjekt(auftrag)).map((auftrag) => ({ ungueltig: JSON.stringify(auftrag) }))];
 }
 
 export function annahmeText({ auftrag, nummer, text }) {
@@ -100,7 +101,7 @@ export function planBericht(lauf, { root, team }) {
     beteiligte,
     laufzeitS: sekunden(Date.now() - lauf.beginn),
     token: summeDerToken(beteiligte),
-    arten: arten(liste(lauf.schnitt?.auftraege)),
+    arten: arten(liste(lauf.schnitt?.auftraege).filter(istObjekt)),
   };
 }
 
@@ -114,9 +115,14 @@ export function schreibePlanBericht(root, bericht) {
   return ziel;
 }
 
+function auftragsZeile({ id, ziel, bereich, prueft, ungueltig }) {
+  if (ungueltig !== undefined) return `ungültig\t${ungueltig}`;
+  return [id, ziel, bereich, Array.isArray(prueft) ? prueft.join(", ") : prueft].join("\t");
+}
+
 function auftragsZeilen(auftraege) {
   if (!Array.isArray(auftraege)) return [`Aufträge: ${auftraege}`];
-  return ["Aufträge:", ...auftraege.map(({ id, ziel, bereich, prueft }) => [id, ziel, bereich, Array.isArray(prueft) ? prueft.join(", ") : prueft].join("\t"))];
+  return ["Aufträge:", ...auftraege.map(auftragsZeile)];
 }
 
 function befundZeilen({ offen, korrigiert, zurueckgewiesen }) {
