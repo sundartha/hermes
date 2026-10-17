@@ -1,0 +1,15 @@
+{
+  "titel": "Umbenennung ergänzt nur Typen",
+  "vorher": {
+    "src/probe/zahl.js": ["export function doppelt(zahl) {", "  return zahl * 2;", "}"]
+  },
+  "loeschen": ["src/probe/zahl.js"],
+  "dateien": {
+    "src/probe/zahl.ts": [
+      "export function doppelt(zahl: number): number {",
+      "  return zahl * 2;",
+      "}"
+    ]
+  },
+  "erwartet": "src/probe/zahl.js → src/probe/zahl.ts: geändert"
+}

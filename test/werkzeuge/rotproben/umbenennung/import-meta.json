@@ -1,0 +1,11 @@
+{
+  "titel": "Umbenannte Datei liest import.meta",
+  "vorher": {
+    "src/probe/ort.js": ["export const ort = import.meta.url;"]
+  },
+  "loeschen": ["src/probe/ort.js"],
+  "dateien": {
+    "src/probe/ort.ts": ["export const ort: string = import.meta.url;"]
+  },
+  "erwartet": "src/probe/ort.js → src/probe/ort.ts: geändert (Laufzeitcode liest den eigenen Dateipfad"
+}

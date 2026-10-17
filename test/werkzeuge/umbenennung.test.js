@@ -14,6 +14,7 @@ import {
 
 const WERKZEUG = join(REPO_ROOT, "tools/umbenennung.mjs");
 const EXIT_GRUEN = 0;
+const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const NUR_TYPEN = "src/zahl.js → src/zahl.ts: nur Typen ergänzt, Laufzeitcode gleich.";
 const GEAENDERT =
@@ -57,6 +58,18 @@ test("eine Umbenennung .js→.ts, die nur Typen ergänzt, gilt im Arbeitsbaum un
   assert.deepEqual(ausgabe(repo, "--basis", "HEAD"), [NUR_TYPEN]);
   commitAll(repo, "Umbenennung");
   assert.deepEqual(ausgabe(repo, "--basis", "HEAD~1", "--bis", "HEAD"), [NUR_TYPEN]);
+});
+
+test("mit --streng endet ein geändertes Paar mit Exit 1, ein Paar nur mit Typen mit Exit 0", (context) => {
+  const geaendert = runIn(umbenannt(context, `${TS}export const neu = 1;\n`), process.execPath, [
+    WERKZEUG,
+    "--basis",
+    "HEAD",
+    "--streng",
+  ]);
+  assert.equal(geaendert.status, EXIT_ROT, geaendert.stderr);
+  assert.deepEqual(outputLines(geaendert.stdout), [GEAENDERT]);
+  assert.deepEqual(ausgabe(umbenannt(context, TS), "--basis", "HEAD", "--streng"), [NUR_TYPEN]);
 });
 
 test("eine zusätzliche oder geänderte Laufzeitzeile in der umbenannten Datei gilt als geändert", (context) => {

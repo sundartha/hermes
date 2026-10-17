@@ -1,0 +1,7 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen (Baustein der Dateilängen- und Mutationsprüfung)",
+  "pfade": ["tools/umbenennung.mjs", "tools/syntaxbaum.mjs", "tools/eslint-rules/knoten.js"],
+  "probe": {
+    "befehl": ["node", "{wurzel}/tools/umbenennung.mjs", "--basis", "HEAD~1", "--streng"]
+  }
+}
