@@ -13,6 +13,7 @@ import {
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
+import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import {
   selbstpruefungen,
   selbstpruefungsSchluessel,
@@ -339,7 +340,7 @@ function keyPart(index) {
 }
 
 const TOOLS = {
-  jscpd: { findings: jscpdFindings, version: jscpdVersion, path: keyPart(0), shrunk: jscpdShrunk },
+  jscpd: { findings: jscpdFindings, version: jscpdVersion, path: keyPart(0), shrunk: jscpdShrunk, zweck: MELDUNG.JSCPD },
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
@@ -445,12 +446,13 @@ function reportFixed({ toolName }, fixedKeys) {
   );
 }
 
-function reportAdded({ toolName }, addedFindings) {
+function reportAdded({ toolName, tool }, addedFindings) {
   console.error(
     `${addedFindings.length} neue Befunde von ${toolName}, die nicht in ${baselineFile(toolName)} stehen:`,
   );
   for (const finding of addedFindings) console.error(`  ${finding.location}`);
   console.error("Neue Befunde werden behoben; die Basislinie nimmt keine neuen auf.");
+  if (tool.zweck !== undefined) console.error(zweckBlock(tool.zweck).join(LINE_BREAK));
 }
 
 async function compare(context) {
