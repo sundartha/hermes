@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { bauPrompt } from "../../tools/auftrag/agenten.mjs";
+import { bauPrompt, testumbauPrompt } from "../../tools/auftrag/agenten.mjs";
 import { UMBAU_AUSWEG, geschuetzteMuster, istGeschuetzt, phasenBefunde } from "../../tools/auftrag/format.mjs";
 import { starte } from "./auftrag-lauf-probe.js";
 import { ESLINT_BIN, REPO_ROOT, probeDirectory } from "./probe-repo.js";
@@ -100,6 +100,17 @@ test("der Test-Agent bekommt im Lauf das Testmuster seiner Abnahme samt Regel, a
   assert.ok(testPrompt.includes(`## Muster (Sicherheitstest): ${datei}\n`), testPrompt);
   assert.ok(testPrompt.includes("export const SICHERHEITSMUSTER = 1;"), testPrompt);
   assert.ok(testPrompt.includes(`\n${REGEL}\n`), testPrompt);
+});
+
+test("der Testumbau-Agent bekommt wie der Test-Agent das Testmuster seiner Abnahme samt Regel", (context) => {
+  const { datei: musterDatei } = muster("Sicherheitstest");
+  const abnahme = "test/sicherheit/rechnen.test.js";
+  const root = probeDirectory(context, { [musterDatei]: "export const UMBAUMUSTER = 1;\n", [abnahme]: 'test("alt", () => {});\n' });
+  const umbau = { id: "A1", art: "testumbau", ziel: "Baue Tests um", bereich: abnahme, erwarteteDateien: [abnahme], abnahme };
+  const text = testumbauPrompt({ entwurf: { [abnahme]: "Entwurf." } }, umbau, root);
+  assert.ok(text.includes(`## Muster (Sicherheitstest): ${musterDatei}\n`), text);
+  assert.ok(text.includes("export const UMBAUMUSTER = 1;"), text);
+  assert.ok(text.includes(`\n${REGEL}\n`), text);
 });
 
 test("eine alte Phasendatei, deren Auftrag noch ein Vorbild auf eine fehlende Datei nennt, bleibt ohne Befund", (context) => {
