@@ -197,6 +197,20 @@ test("deploy rot: der Status wird bis zur Schutzgrenze nicht live, der Deploy wi
   assert.equal(anfragenAn(lauf.attrappe, "POST", ABBRECHEN).length, 1);
 });
 
+test("deploy wertet Fehlerantworten beim Deploy-Status nicht als Zustand und beobachtet weiter bis live", async (kontext) => {
+  const welt = {
+    deployStatus: ["build_in_progress", "live"],
+    lesenStatus: [HTTP_OK, HTTP_SERVERFEHLER, HTTP_SERVERFEHLER, HTTP_OK],
+  };
+  const lauf = await deployMit(kontext, { welt });
+  assert.equal(lauf.ok, true, lauf.text);
+  assert.deepEqual(lauf.text.match(/Deploy-Status: \w+/g), [
+    "Deploy-Status: build_in_progress",
+    "Deploy-Status: live",
+  ]);
+  assert.deepEqual(anfragenAn(lauf.attrappe, "POST", ABBRECHEN), []);
+});
+
 test("deploy rot: Render lehnt den Deploy mit 409 ab, keine Status-Abfrage", async (kontext) => {
   const lauf = await deployMit(kontext, { welt: { ausloesenStatus: HTTP_KONFLIKT } });
   assert.equal(lauf.ok, false);
