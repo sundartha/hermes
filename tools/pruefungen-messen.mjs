@@ -281,14 +281,14 @@ function trend(before, after) {
   return Math.sign(after.count - before.count);
 }
 
-async function entriesOfFreshBaseline(definition, { basis, fake, checkFiles }) {
+async function freshBaseline(definition, { basis, fake, checkFiles }) {
   if (definition.anlegen === undefined) return undefined;
   const root = worktreeWithBasisFiles(basis, checkFiles);
   try {
     rmSync(join(root, definition.datei), { force: true });
     const { command, extraEnv } = prepare(definition.anlegen, { root, fake, basis });
     const result = await run(command, { cwd: root, extraEnv });
-    return result.status === 0 ? listedEntries(exceptionData(root, definition)) : undefined;
+    return result.status === 0 ? exceptionData(root, definition) : undefined;
   } finally {
     git(["worktree", "remove", "--force", root]);
   }
@@ -303,16 +303,26 @@ function without(entries, removed) {
   return left;
 }
 
+function versionOf(data) {
+  return Array.isArray(data) ? undefined : data?.version;
+}
+
+function isVersionUpdate(before, after, fresh) {
+  const version = versionOf(after);
+  return version !== undefined && version !== versionOf(before) && version === versionOf(fresh);
+}
+
 async function isOnlyWidening(definition, { roots, basis, fake, changedFiles, checkFiles }) {
-  const before = listedEntries(exceptionData(roots.basis, definition));
-  const after = listedEntries(exceptionData(roots.pr, definition));
-  const basisSetting = { basis, fake, checkFiles };
-  const prSetting = { basis, fake, checkFiles: [] };
-  const reportedBefore = await entriesOfFreshBaseline(definition, basisSetting);
-  const reportedAfter = await entriesOfFreshBaseline(definition, prSetting);
-  if ([before, after, reportedBefore, reportedAfter].includes(undefined)) return false;
+  const basisData = exceptionData(roots.basis, definition);
+  const prData = exceptionData(roots.pr, definition);
+  const freshBefore = await freshBaseline(definition, { basis, fake, checkFiles });
+  const freshAfter = await freshBaseline(definition, { basis, fake, checkFiles: [] });
+  const lists = [basisData, prData, freshBefore, freshAfter].map(listedEntries);
+  if (lists.includes(undefined)) return false;
+  const [before, after, reportedBefore, reportedAfter] = lists;
   const added = without(after, before);
-  const reportedOnlyAfter = without(reportedAfter, reportedBefore);
+  const updated = isVersionUpdate(basisData, prData, freshAfter);
+  const reportedOnlyAfter = updated ? reportedAfter : without(reportedAfter, reportedBefore);
   const touchesChange = (entry) => changedFiles.some((path) => entry.includes(path));
   return (
     without(reportedBefore, reportedAfter).length === 0 &&
