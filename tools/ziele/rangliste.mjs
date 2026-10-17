@@ -116,7 +116,7 @@ async function prueferBefunde(github, dateien) {
   const befunde = { zugeordnet: [], offen: [] };
   for (const { number, title } of issues) {
     const { regel, datei, grund } = zuordnung(title, jeName);
-    if (datei === undefined) befunde.offen.push({ pruefung: NICHT_ZUORDENBAR, regel: grund, nummer: number, anzahl: 1 });
+    if (datei === undefined) befunde.offen.push({ pruefung: NICHT_ZUORDENBAR, grund, nummer: number, anzahl: 1 });
     else befunde.zugeordnet.push({ datei, pruefung: PRUEFER, regel, anzahl: 1 });
   }
   return befunde;

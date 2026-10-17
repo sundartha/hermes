@@ -27,6 +27,7 @@ const PRUEFER_ISSUES = 40;
 const ERSTES_PRUEFER_ISSUE = 100;
 const SAMMEL_TITEL = "Aufräumen: Rangliste und Befunde";
 const NICHT_ZUORDENBAR = "pruefer-nicht-zuordenbar";
+const TITEL_ZEILE = 7;
 const LANGE_DATEI = `src/${"lang".repeat(40)}.js`;
 const ZWILLING_A = `src/${"x".repeat(130)}a.js`;
 const ZWILLING_B = `src/${"x".repeat(130)}b.js`;
@@ -192,7 +193,7 @@ function prueferIssue(nummer, titel) {
 }
 
 function prueferTitel(id, datei, pr = null) {
-  return issueTitel({ id, datei, zeile: 7 }, pr);
+  return issueTitel({ id, datei, zeile: TITEL_ZEILE }, pr);
 }
 
 function befundeDer(durchgang, pruefung) {
@@ -205,7 +206,7 @@ function zugeordnet(durchgang) {
 }
 
 function nichtZuordenbar(durchgang) {
-  return befundeDer(durchgang, NICHT_ZUORDENBAR).map(({ nummer, regel }) => [nummer, regel]);
+  return befundeDer(durchgang, NICHT_ZUORDENBAR).map(({ nummer, grund }) => [nummer, grund]);
 }
 
 test("ziele-rangliste: Prüfer-Issues zählen in jeder Titelform, und ein Titel ohne Katalog-ID zählt für die Datei, ohne eine Lint-Regel vorzuschlagen", async (context) => {
@@ -225,8 +226,9 @@ test("ziele-rangliste: Prüfer-Issues zählen in jeder Titelform, und ein Titel 
 
 test("ziele-rangliste: ein im Titel gekürzter Dateiname geht an die eine Datei, die so beginnt; passen zwei, bleibt der Befund unzugeordnet", async (context) => {
   const repo = repoMitBrennpunkt(context, { [LANGE_DATEI]: exporte(["lang"]), [ZWILLING_A]: exporte(["za"]), [ZWILLING_B]: exporte(["zb"]) });
-  const titel = [prueferTitel("G2", LANGE_DATEI, 1300), prueferTitel("G2", ZWILLING_A)];
-  assert.ok(!titel[0].includes(LANGE_DATEI));
+  const gekuerzt = [LANGE_DATEI, ZWILLING_A];
+  const titel = gekuerzt.map((datei) => prueferTitel("G2", datei, 1300));
+  assert.ok(gekuerzt.every((datei, index) => !titel[index].includes(datei)));
   const github = await githubAttrappe(context, { issues: titel.map((text, index) => prueferIssue(ERSTES_PRUEFER_ISSUE + index, text)) });
   const durchgang = gelesen(await waehle(context, repo, github), "ziel/durchgang.json");
   assert.deepEqual(zugeordnet(durchgang), [`${LANGE_DATEI} G2`]);
