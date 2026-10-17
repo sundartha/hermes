@@ -155,6 +155,10 @@ const KATALOG = new Map([
   ["deploy_status", "Deploy-Status: {status}"],
   ["anruf_beim_umschalten", "Rot: beim Umschalten läuft ein Anruf; der Deploy wird abgebrochen"],
   [
+    "umschalten_anrufe_nicht_lesbar",
+    "Rot: beim Umschalten war die Anruf-Abfrage nicht lesbar; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
+  ],
+  [
     "umschalten_ungemessen",
     "Rot: beim Umschalten war Produktion frisch geweckt oder nicht wach; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
   ],

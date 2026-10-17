@@ -38,6 +38,7 @@ import {
 
 const MINUTE_MS = 60000;
 const HTTP_SERVERFEHLER = 500;
+const OHNE_ZAHL = null;
 const SEKUNDE_MS = 1000;
 const ANRUFE_TAKT_S = 60;
 const ANRUFE_GRENZE_MIN = 35;
@@ -77,6 +78,15 @@ function umschaltenUngemessenAbgebrochen(lauf) {
   assert.equal(anfragenAn(lauf.attrappe, "GET", ANRUFE).length, 1);
   assert.match(lauf.text, /Produktion hat geschlafen und ist frisch geweckt/);
   assert.match(lauf.text, /beim Umschalten war Produktion frisch geweckt oder nicht wach/);
+}
+
+function deployAbgebrochen(lauf) {
+  assert.equal(lauf.ok, false);
+  const abbrueche = anfragenAn(lauf.attrappe, "POST", ABBRECHEN);
+  assert.deepEqual(
+    abbrueche.map(({ pfad }) => pfad),
+    [DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel"],
+  );
 }
 
 async function deployMit(kontext, optionen = {}) {
@@ -165,13 +175,17 @@ test("deploy rot: Produktion fährt nicht mehr den Commit aus der Entscheidung, 
 
 test("deploy rot: beim Umschalten (update_in_progress) läuft ein Anruf, der Deploy wird abgebrochen", async (kontext) => {
   const lauf = await deployMit(kontext, { welt: { laufend: [0, 1] } });
-  assert.equal(lauf.ok, false);
-  const abbrueche = anfragenAn(lauf.attrappe, "POST", ABBRECHEN);
-  assert.deepEqual(
-    abbrueche.map(({ pfad }) => pfad),
-    [DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel"],
-  );
+  deployAbgebrochen(lauf);
   assert.match(lauf.text, /beim Umschalten läuft ein Anruf/);
+  assert.doesNotMatch(lauf.text, /Produktion fährt jetzt/);
+});
+
+test("deploy rot: beim Umschalten (update_in_progress) liefert die Anruf-Abfrage keine Zahl, der Deploy wird abgebrochen und meldet keinen Anruf", async (kontext) => {
+  const lauf = await deployMit(kontext, { welt: { laufend: [0, OHNE_ZAHL] } });
+  deployAbgebrochen(lauf);
+  assert.match(lauf.text, new RegExp("Abbruch im Schritt anrufe: HTTP " + HTTP_OK));
+  assert.match(lauf.text, /beim Umschalten war die Anruf-Abfrage nicht lesbar/);
+  assert.doesNotMatch(lauf.text, /beim Umschalten läuft ein Anruf/);
   assert.doesNotMatch(lauf.text, /Produktion fährt jetzt/);
 });
 

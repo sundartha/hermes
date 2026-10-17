@@ -128,18 +128,21 @@ async function deployAbbrechen({ render, ausgabe }, id) {
   ausgabe.melde("abgebrochen", { http: status });
 }
 
-async function umschaltenErlaubt({ hermes, ausgabe }) {
+async function anrufeBeimUmschalten({ hermes, ausgabe }) {
   const { status, laufend } = await hermes.anrufe();
-  if (laufend === null) ausgabe.melde("abbruch_http", { schritt: "anrufe", http: status });
-  else ausgabe.melde("anrufe", { anzahl: laufend });
-  return laufend === 0;
+  if (laufend === null) {
+    ausgabe.melde("abbruch_http", { schritt: "anrufe", http: status });
+    return "umschalten_anrufe_nicht_lesbar";
+  }
+  ausgabe.melde("anrufe", { anzahl: laufend });
+  return laufend === 0 ? null : "anruf_beim_umschalten";
 }
 
 async function umschaltenPruefen(kontext, start) {
   const grenzeMs = kontext.takte.status.schutzgrenzeMs;
   const wecken = await weckenImSchritt(kontext, { schritt: "deploy_status", start, grenzeMs });
   if (wecken === null || wecken.frischGeweckt) return "umschalten_ungemessen";
-  return (await umschaltenErlaubt(kontext)) ? null : "anruf_beim_umschalten";
+  return anrufeBeimUmschalten(kontext);
 }
 
 export function statusBeobachter({ render, ausgabe }, { id, beiUmschalten = async () => null }) {
