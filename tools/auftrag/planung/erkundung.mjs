@@ -125,7 +125,8 @@ const DATEI_ZEILE = /^(.+):(\d+)$/;
 function trefferInFundDatei(stelle, gefunden, kontext) {
   const teile = DATEI_ZEILE.exec(typeof stelle === "string" ? stelle : "");
   if (teile === null || !gefunden.some((fund) => fund.startsWith(`${teile[1]}:`))) return false;
-  return Number(teile[2]) <= zeilenDes(quelle(kontext, teile[1])).length;
+  const zeile = Number(teile[2]);
+  return istZeile(zeile) && zeile <= zeilenDes(quelle(kontext, teile[1])).length;
 }
 
 function nutzenBefund(ort, { nutzen, treffer }, kontext) {

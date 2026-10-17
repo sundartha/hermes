@@ -66,6 +66,7 @@ test("eine neue Funktion, deren Regel die Suche in einer anderen Datei findet, i
 test("ein Treffer in einer Datei, in der die Suche nichts findet, oder auf einer Zeile, die es nicht gibt, ist ein Befund", (context) => {
   nurBefund(pruefe(context, { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, "src/eingang.js:1"] }), "treffer src/eingang.js:1 liegt in keiner Datei");
   nurBefund(pruefe(context, { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, "src/kosten.js:9"] }), "treffer src/kosten.js:9 liegt in keiner Datei");
+  nurBefund(pruefe(context, { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, "src/kosten.js:0"] }), "treffer src/kosten.js:0 liegt in keiner Datei");
 });
 
 test("eine angesehene Zeile in einer Datei mit Fund zählt als Treffer, auch wenn die Suche genau diese Zeile nicht ausgibt", (context) => {
