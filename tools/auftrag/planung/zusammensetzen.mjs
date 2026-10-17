@@ -44,16 +44,20 @@ export function entwurfFuer(text, eigene) {
   return [...zeilen.slice(0, stelle), auftraegeZeile(eigene), ...zeilen.slice(stelle), reihenfolgeZeile(eigene)].join("\n");
 }
 
+function entwurfText(entwuerfe, bereich) {
+  return istText(entwuerfe[bereich]) ? entwuerfe[bereich] : "";
+}
+
 function entwurfBefunde(bereiche, entwuerfe) {
-  const fehlend = bereiche.filter((bereich) => !istText(entwuerfe[bereich])).map((bereich) => `Entwurf für den Bereich ${bereich} fehlt`);
-  const doppelt = bereiche.filter((bereich) => BERECHNETE_ZEILE.test(entwuerfe[bereich] ?? "")).map((bereich) => `Entwurf für ${bereich} enthält schon eine Zeile „Aufträge:“ oder „Reihenfolge:“; die rechnet das Zusammensetzen aus der Schnittliste`);
+  const fehlend = bereiche.filter((bereich) => entwurfText(entwuerfe, bereich) === "").map((bereich) => `Entwurf für den Bereich ${bereich} fehlt`);
+  const doppelt = bereiche.filter((bereich) => BERECHNETE_ZEILE.test(entwurfText(entwuerfe, bereich))).map((bereich) => `Entwurf für ${bereich} enthält schon eine Zeile „Aufträge:“ oder „Reihenfolge:“; die rechnet das Zusammensetzen aus der Schnittliste`);
   const fremd = Object.keys(entwuerfe).filter((bereich) => !bereiche.includes(bereich)).map((bereich) => `Entwurf für ${bereich} gehört zu keinem Auftrag der Schnittliste`);
   return [...fehlend, ...doppelt, ...fremd];
 }
 
 function namenBefunde(gemeinsameNamen, entwuerfe) {
   return liste(gemeinsameNamen).flatMap(({ name, anbieter, nutzer }) =>
-    [anbieter, nutzer].filter((bereich) => !(istText(entwuerfe[bereich]) ? entwuerfe[bereich] : "").includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
+    [anbieter, nutzer].filter((bereich) => !entwurfText(entwuerfe, bereich).includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
   );
 }
 
