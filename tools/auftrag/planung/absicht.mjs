@@ -26,8 +26,9 @@ export function phasenAbsichtBefunde(pitch, phase) {
   return ["phase.json: absicht weicht vom Abschnitt „## Absicht“ in pitch.md ab; sie wird wörtlich übernommen"];
 }
 
-export function issueAbsichtBefunde(phase, body) {
+export function issueAbsichtBefunde(phase, leseIssue) {
   if (!Object.hasOwn(phase, "absicht")) return [];
+  const body = leseIssue();
   if (body === null) return [`Issue #${phase.issue} nicht lesbar; ohne seinen Abschnitt „## ${ABSICHT}“ startet die Phase nicht`];
   if (absichtAusPitch(body) === phase.absicht) return [];
   return [`Issue #${phase.issue}: der Abschnitt „## ${ABSICHT}“ fehlt oder weicht von absicht in phase.json ab; schreib ihn wörtlich aus pitch.md ins Issue`];
