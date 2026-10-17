@@ -53,7 +53,7 @@ function entwurfBefunde(bereiche, entwuerfe) {
 
 function namenBefunde(gemeinsameNamen, entwuerfe) {
   return liste(gemeinsameNamen).flatMap(({ name, anbieter, nutzer }) =>
-    [anbieter, nutzer].filter((bereich) => !(entwuerfe[bereich] ?? "").includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
+    [anbieter, nutzer].filter((bereich) => !(istText(entwuerfe[bereich]) ? entwuerfe[bereich] : "").includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
   );
 }
 
