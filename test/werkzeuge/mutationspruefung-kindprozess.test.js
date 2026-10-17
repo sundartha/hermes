@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, renameSync, symlinkSync } from "node:fs";
+import { cpSync, readFileSync, renameSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
-import { AKTIVER_MUTANT, pruefe } from "./mutationspruefung-hilfen.js";
+import {
+  AKTIVER_MUTANT,
+  BASIS,
+  EXIT_ROT,
+  pruefe,
+  schluessel,
+  ZUSTAND,
+} from "./mutationspruefung-hilfen.js";
 import {
   REPO_ROOT,
   isolatedEnvironment,
@@ -137,4 +144,27 @@ test("eine Quelldatei, die nur ein als Kind gestarteter Einstieg lädt, zählt j
     ["1 von 2", "2 von 2"],
     lauf.stdout,
   );
+});
+
+const WEITERGEBENDE = ["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"];
+const WEITERGABE_IMPORT = /^import .+ from "([^"]+\/zustand\.mjs)";$/m;
+
+function weitergabeImport(datei) {
+  return WEITERGABE_IMPORT.exec(readFileSync(join(REPO_ROOT, datei), "utf8"));
+}
+
+test("nur die beiden gemeinsamen Startwege dürfen die Weitergabe des aktiven Mutanten importieren; jede andere Datei, die sie oder ihr Modul nennt, macht die Prüfung rot", (context) => {
+  const repo = probeRepository(context, BASIS);
+  const [zeile, modul] = weitergabeImport(WEITERGEBENDE[0]);
+  writeFiles(repo, {
+    ...Object.fromEntries(WEITERGEBENDE.map((datei) => [datei, `${weitergabeImport(datei)[0]}\n`])),
+    "test/fremd.test.js": `${zeile}\n`,
+    "test/namensraum.test.js": `import * as zustand from "${modul}";\n`,
+  });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual(schluessel(lauf.stdout, ZUSTAND), [
+    "test/fremd.test.js:1",
+    "test/namensraum.test.js:1",
+  ]);
 });
