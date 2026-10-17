@@ -798,6 +798,11 @@ const ANDERER_KURZER_NAME = meldung(
   ZEILE_VORHER,
 );
 const MAGISCHE_ZAHL = meldung("no-magic-numbers", "No magic number: 7.", ZEILE_NACHHER);
+const WIRKUNGSLOSE_DIREKTIVE = meldung(
+  null,
+  "'// eslint-disable-next-line id-length' has no effect because you have 'noInlineConfig' setting in your config.",
+  ZEILE_VORHER,
+);
 
 async function abgelehnt(before, after) {
   return findChangedFindings({
@@ -877,6 +882,12 @@ describe("findChangedFindings (Attrappe)", () => {
     assert.match(begruendung(offenders), /No magic number: 7\./);
   });
 
+  it("lehnt ab, wenn ein Befund ohne Regelnamen dazukommt", async () => {
+    const offenders = await abgelehnt([KURZER_NAME], [KURZER_NAME, WIRKUNGSLOSE_DIREKTIVE]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /0 -> 1 {2}.*has no effect/);
+  });
+
   it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
     const offenders = await findChangedFindings({
       candidates: KANDIDATEN,
@@ -931,6 +942,16 @@ describe("findPinMismatches (Attrappe)", () => {
     assert.deepEqual(offenders, []);
   });
 
+  it("lehnt ab, wenn ueber dem Pin ein Befund ohne Regelnamen dazukommt", async () => {
+    const offenders = await findPinMismatches({
+      stagedFiles: ["src/dummy/altlast.js"],
+      legacyExceptions: LEGACY_EXCEPTIONS,
+      readStagedFindings: async () => [...kurzeNamen(PIN_BASISZEILEN), WIRKUNGSLOSE_DIREKTIVE],
+    });
+    assert.equal(offenders.length, 1);
+    assert.match(begruendung(offenders), /0 -> 1 {2}.*has no effect/);
+  });
+
   it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
     const offenders = await findPinMismatches({
       stagedFiles: ["src/dummy/altlast.js"],
@@ -948,6 +969,7 @@ const PROBE_CODE_VERSCHOBEN = `\n${PROBE_CODE}`;
 const PROBE_CODE_SCHLECHTER = `${PROBE_CODE}export function zweite(x) {\n  return x;\n}\n`;
 const IGNORIERTER_PFAD = "data/dummy-probe.js";
 const KAPUTTER_CODE = "export function probe(((;\n";
+const PROBE_CODE_MIT_DIREKTIVE = `// eslint-disable-next-line id-length\n${PROBE_CODE}`;
 
 describe("Ungefilterte Befunde (echtes eslint)", () => {
   it("sieht die Befunde, die eslint-suppressions.json einfriert", async () => {
@@ -975,6 +997,17 @@ describe("Ungefilterte Befunde (echtes eslint)", () => {
     const differences = tallyDifferences(vorher, nachher);
     assert.equal(differences.length, 1);
     assert.match(differences[0].key, /id-length.*'x' is too short/);
+  });
+
+  it("zaehlt auch die Meldung ohne Regelnamen, die eine wirkungslose eslint-disable-Zeile ausloest", async () => {
+    const lintContent = await makeUnfilteredLinter();
+    const messages = await lintContent(PROBE_CODE_MIT_DIREKTIVE, PROBE_PFAD);
+    assert.ok(
+      messages.some(({ ruleId }) => ruleId === null),
+      "Probe ohne Meldung ohne Regelnamen prueft nichts",
+    );
+    const gezaehlt = [...findingTally(messages).values()].reduce((summe, anzahl) => summe + anzahl, 0);
+    assert.equal(gezaehlt, messages.length);
   });
 
   it("bricht fail-closed ab, wenn der Inhalt nicht parsebar ist", async () => {
