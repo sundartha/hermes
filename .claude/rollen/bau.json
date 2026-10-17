@@ -24,6 +24,7 @@
       "Edit(test/werkzeuge/werkzeugtexte.json)",
       "Edit(test/gemeinsam/erfundene-geheimnisse.js)",
       "Edit(scripts/check-staged-suppressions.js)",
+      "Edit(src/db/migrations/rueckbau/**)",
       "Edit(test/**)"
     ]
   },

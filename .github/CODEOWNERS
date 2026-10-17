@@ -21,3 +21,4 @@ tsconfig*.json @Antonio20045 @jonas986
 /test/werkzeuge/werkzeugtexte.json @Antonio20045 @jonas986
 /test/gemeinsam/erfundene-geheimnisse.js @Antonio20045 @jonas986
 /scripts/check-staged-suppressions.js @Antonio20045 @jonas986
+/src/db/migrations/rueckbau/ @Antonio20045 @jonas986
