@@ -266,7 +266,7 @@ class AuftragsLauf {
       if (!existsSync(join(root, PIN_HAKEN))) return true;
       return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
     }
-    const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs"], { cwd: root });
+    const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
     return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
