@@ -1,0 +1,18 @@
+{
+  "titel": "Entwicklungsabhängigkeit, die nur Code unter tools/ benutzt",
+  "dateien": {
+    "package.json": [
+      "{",
+      "  \"name\": \"rotprobe\",",
+      "  \"type\": \"module\",",
+      "  \"devDependencies\": { \"@electric-sql/pglite-socket\": \"0.2.11\" }",
+      "}"
+    ],
+    "tools/hermes-ctl/pg-wirt.mjs": [
+      "import { PGLiteSocketServer } from \"@electric-sql/pglite-socket\";",
+      "",
+      "export const server = PGLiteSocketServer;"
+    ]
+  },
+  "erwartet": "@electric-sql/pglite-socket"
+}
