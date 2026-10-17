@@ -1,11 +1,8 @@
+import { enthaeltAlteTestZeile, enthaeltAusstiegszeile, pruefungenDerAuswege } from "../auftrag/ausgang.mjs";
 import { repoPages } from "./github.mjs";
 import { WEEK_MS } from "./zeit.mjs";
 
 const EQUIVALENT_LINE = /^Gleichwertig: .+, weil .+$/gm;
-const EXIT_LINE = /^Auftrag passt nicht: \S/m;
-const EXIT_BY_CHECK = /^Ausweg bei Prüfung: (\S.*)$/gm;
-const OLD_TEST_LINE = /^Alter Test hält altes Verhalten fest: \S/m;
-const CHECK_SEPARATOR = ", ";
 const REVIEW_LABEL = "pruefer";
 const CLOSED = "closed";
 
@@ -16,9 +13,7 @@ function equivalentCount(commits) {
 function exitsByCheck(texts) {
   const counts = new Map();
   for (const text of texts) {
-    for (const [, ids] of text.matchAll(EXIT_BY_CHECK)) {
-      for (const id of ids.split(CHECK_SEPARATOR)) counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
+    for (const id of pruefungenDerAuswege(text)) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   const sorted = [...counts].sort(([first, many], [second, more]) => more - many || first.localeCompare(second));
   return sorted.length > 0 ? sorted.map(([id, count]) => `${id} ${count}`).join(", ") : "0";
@@ -43,8 +38,8 @@ export async function incentiveSection(now) {
     repoPages(`/issues?labels=${REVIEW_LABEL}&state=${CLOSED}&since=${since}`),
   ]);
   const weekComments = comments.filter(({ created_at: created }) => inWeek(created, start)).map(({ body }) => body ?? "");
-  const exits = weekComments.filter((body) => EXIT_LINE.test(body));
-  const oldTests = weekComments.filter((body) => OLD_TEST_LINE.test(body));
+  const exits = weekComments.filter(enthaeltAusstiegszeile);
+  const oldTests = weekComments.filter(enthaeltAlteTestZeile);
   const byCheck = exitsByCheck([...commits.map(({ commit }) => commit.message), ...weekComments]);
   const closed = reviewIssues.filter(({ pull_request: pull, closed_at: closedAt }) => pull === undefined && inWeek(closedAt, start));
   let withChange = 0;
