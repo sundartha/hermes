@@ -1,0 +1,16 @@
+{
+  "titel": "Hilfsdatei ruft selbst test() auf",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"],
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": null, \"ausklingen_bestand\": [] }"
+    ]
+  },
+  "dateien": {
+    ".pruefung/dateien.jsonl": [
+      "{\"datei\":\"test/x.test.js\",\"dauer_ms\":120,\"ausklingen_ms\":3}",
+      "{\"datei\":\"test/x-helfer.js\",\"dauer_ms\":null,\"ausklingen_ms\":null}"
+    ]
+  },
+  "erwartet": "Testfälle in test/x-helfer.js: test() gehört in die Testdatei"
+}
