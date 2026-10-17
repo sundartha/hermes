@@ -54,6 +54,7 @@ export const MELDUNG = {
   SCHNITT: "schnitt",
   TS_SPERRE: "ts-sperre",
   WERKZEUGABBRUCH: "werkzeugabbruch",
+  MIGRATIONEN: "migrationen",
 };
 
 export const ALTER_TEST = "alter test";
@@ -77,6 +78,7 @@ const GRENZ_ARTEN = [
   [PHASE_PASST_NICHT, "grenzen/phasendatei"],
 ];
 const OHNE_AUSWEG = "entfällt";
+const EXIT_BEFUND = 1;
 const BLOCK = [
   ["Wozu", "wozu"],
   ["Echte Behebung", "behebung"],
@@ -106,6 +108,13 @@ export function zweckBlock(id) {
   const text = TEXTE[id];
   if (text === undefined) throw new Error(`Kein Zweck-Text für die Prüfung ${id} in tools/auftrag/zweck.json.`);
   return BLOCK.map(([titel, feld]) => `${titel}: ${text[feld]}`);
+}
+
+export function befundeMelden(befunde, id) {
+  for (const befund of befunde) console.error(befund);
+  if (befunde.length === 0) return;
+  console.error(zweckBlock(id).join("\n"));
+  process.exitCode = EXIT_BEFUND;
 }
 
 export function hatAusweg(id) {
