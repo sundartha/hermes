@@ -64,19 +64,28 @@ function prPatchVon(commit, { basis, root }) {
   return gitAusgabe(["diff", ...DIFF_OPTIONEN, basis, commit.sha], root, { kodierung: "buffer" });
 }
 
+function zielIn(wurzel, ziel) {
+  const datei = resolve(wurzel, ziel);
+  return datei.startsWith(wurzel + sep) ? datei : null;
+}
+
+function legeAb(datei, inhalt) {
+  try {
+    schreibe(datei, inhalt);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function legeDateiAb(ordner, { sha, pfad, root }) {
   const ziel = sichererPfad(pfad);
   if (ziel === null) return { ablage: null, grund: "Pfad verworfen" };
   const inhalt = inhaltNachCommit(sha, pfad, root);
   if (inhalt === null) return { ablage: null, grund: "nach dem Commit nicht vorhanden" };
-  const datei = resolve(ordner, "dateien", ziel);
-  if (!datei.startsWith(join(ordner, "dateien") + sep))
-    return { ablage: null, grund: "Pfad verworfen" };
-  try {
-    schreibe(datei, inhalt);
-  } catch {
-    return { ablage: null, grund: "nicht ablegbar" };
-  }
+  const datei = zielIn(join(ordner, "dateien"), ziel);
+  if (datei === null) return { ablage: null, grund: "Pfad verworfen" };
+  if (!legeAb(datei, inhalt)) return { ablage: null, grund: "nicht ablegbar" };
   return { ablage: `dateien/${ziel}`, grund: "" };
 }
 
@@ -108,9 +117,12 @@ function blobInhalte(objekte, root) {
 function legeBasisAb(ordner, { basis, root }) {
   if (basis === undefined) return;
   const wurzel = join(ordner, BASIS_ORDNER);
-  const dateien = basisDateien(basis, root).filter(({ ziel }) => resolve(wurzel, ziel).startsWith(wurzel + sep));
+  const dateien = basisDateien(basis, root).flatMap(({ objekt, ziel }) => {
+    const datei = zielIn(wurzel, ziel);
+    return datei === null ? [] : [{ objekt, datei }];
+  });
   const inhalte = blobInhalte(dateien.map(({ objekt }) => objekt), root);
-  dateien.forEach(({ ziel }, index) => schreibe(join(wurzel, ziel), inhalte[index]));
+  dateien.forEach(({ datei }, index) => legeAb(datei, inhalte[index]));
 }
 
 function dateiZeile({ patch, pfad, ablage, grund }) {
