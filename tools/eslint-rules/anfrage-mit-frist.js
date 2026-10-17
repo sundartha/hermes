@@ -41,11 +41,21 @@ function istZugriffAuf(knoten, objektName, namen) {
   );
 }
 
+function istGlobaleHuelle(scope, knoten) {
+  return (
+    knoten?.type === "Identifier" &&
+    GLOBALE_HUELLEN.has(knoten.name) &&
+    istGlobal(scope, knoten.name)
+  );
+}
+
 function istEchtesFetch(scope, ausdruck) {
   if (ausdruck.type === "Identifier") return ausdruck.name === "fetch" && istGlobal(scope, "fetch");
-  if (ausdruck.type !== "MemberExpression" || ausdruck.object.type !== "Identifier") return false;
-  const { name } = ausdruck.object;
-  return GLOBALE_HUELLEN.has(name) && istGlobal(scope, name) && zugriffsName(ausdruck) === "fetch";
+  return (
+    ausdruck.type === "MemberExpression" &&
+    istGlobaleHuelle(scope, ausdruck.object) &&
+    zugriffsName(ausdruck) === "fetch"
+  );
 }
 
 function weistZu({ identifier }) {
@@ -57,36 +67,25 @@ function weistZu({ identifier }) {
   );
 }
 
-function gebundenerName(wert) {
-  return wert?.type === "AssignmentPattern" ? wert.left : wert;
-}
-
-function entpacktFetch(scope, definition) {
-  if (definition.type !== "Variable") return false;
-  const { id, init } = definition.node;
-  if (id.type !== "ObjectPattern") return false;
-  const eigenschaft = id.properties.find(
-    ({ value }) => gebundenerName(value)?.name === definition.name.name,
-  );
+function entpacktFetchAusHuelle({ identifier, writeExpr, from }) {
+  const ziel = identifier.parent.type === "AssignmentPattern" ? identifier.parent : identifier;
+  const eigenschaft = ziel.parent;
   return (
-    eigenschaft !== undefined &&
+    eigenschaft.type === "Property" &&
+    eigenschaft.parent.type === "ObjectPattern" &&
     schluesselName(eigenschaft) === "fetch" &&
-    GLOBALE_HUELLEN.has(init?.name) &&
-    istGlobal(scope, init.name)
+    istGlobaleHuelle(from, writeExpr)
   );
 }
 
 function istAliasVonFetch(variable, besucht) {
   if (besucht.has(variable)) return false;
   besucht.add(variable);
-  const zugewiesen = variable.references.some(
+  return variable.references.some(
     (zugriff) =>
       zugriff.isWrite() &&
-      weistZu(zugriff) &&
-      istGlobalesFetch(zugriff.from, zugriff.writeExpr, besucht),
-  );
-  return (
-    zugewiesen || variable.defs.some((definition) => entpacktFetch(variable.scope, definition))
+      ((weistZu(zugriff) && istGlobalesFetch(zugriff.from, zugriff.writeExpr, besucht)) ||
+        entpacktFetchAusHuelle(zugriff)),
   );
 }
 
