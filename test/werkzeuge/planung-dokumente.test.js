@@ -55,6 +55,24 @@ test("unbekannte und mehrfache Überschriften sind Befunde, Überschriften in Co
   assert.equal(gefunden.size, 1);
 });
 
+test("eine Überschrift, deren Text mit # beginnt, wird mit diesem # gefunden und nicht mit der ohne #", () => {
+  const text = ["# Doc", "## #1 Ziel", "eins", "## 1 Ziel", "zwei", "### C# ###", "drei", ""].join("\n");
+  const { abschnitte: gefunden, befunde } = abschnitte(text, ["## #1 Ziel", "#1 Ziel", " ## 1 Ziel ", "C#"]);
+  assert.deepEqual(befunde, []);
+  assert.equal(gefunden.get("## #1 Ziel"), "## #1 Ziel\neins");
+  assert.equal(gefunden.get("#1 Ziel"), "## #1 Ziel\neins");
+  assert.equal(gefunden.get(" ## 1 Ziel "), "## 1 Ziel\nzwei\n### C# ###\ndrei");
+  assert.equal(gefunden.get("C#"), "### C# ###\ndrei");
+});
+
+test("eine Überschrift aus nur Rauten ist leer und wird auf beiden Seiten gleich behandelt", () => {
+  const text = ["# Doc", "## ##", "eins", "## Ziel ####", "zwei", ""].join("\n");
+  const { abschnitte: gefunden, befunde } = abschnitte(text, ["## ##", "#", "### Ziel", "Ziel #"]);
+  assert.deepEqual(befunde, ["Überschrift „## ##“ ist leer", "Überschrift „#“ ist leer", "Überschrift „### Ziel“ steht nicht im Design Doc"]);
+  assert.equal(gefunden.get("Ziel #"), "## Ziel ####\nzwei");
+  assert.equal(gefunden.size, 1);
+});
+
 test("leere Suche, falsche Stufe und Zaun mit Sprachangabe im Codeblock finden nichts", () => {
   const text = ["## #", "## Lösung", "eins", "```md", "```js", "## Weg", "```", "zwei", "## Ende", ""].join("\n");
   const { abschnitte: gefunden, befunde } = abschnitte(text, ["", "### Lösung", "## Weg", "Lösung"]);
