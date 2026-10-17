@@ -13,7 +13,8 @@ const HILFSMODULE = new Map([
   ["test/gemeinsam/antwortfrist.mjs", antwortfristModul],
   ["test/gemeinsam/anfrage-mit-frist.mjs", anfrageMitFristModul],
 ]);
-const HILFSNAME_ODER_DATEI = /\b[a-z]+(?:[A-Z][a-z]+)+\b|test\/[\w/.-]+\.mjs/g;
+const HILFEN_ABSCHNITT = /nutze (.+?), sonst/;
+const HILFEN_VERBINDER = new Set(["oder", "aus"]);
 
 function befunde(zeilen) {
   return befundZeilen({ verzeichnis: REPO_ROOT, datei: DATEI, regel: REGEL }, zeilen);
@@ -28,14 +29,15 @@ function exportiert(modul, name) {
 }
 
 function genannteHilfen(meldung) {
+  const abschnitt = HILFEN_ABSCHNITT.exec(meldung)?.[1] ?? "";
   const hilfen = [];
   let namen = [];
-  for (const [treffer] of meldung.matchAll(HILFSNAME_ODER_DATEI)) {
-    if (treffer.startsWith("test/")) {
-      hilfen.push({ datei: treffer, namen });
+  for (const wort of abschnitt.split(/[\s,]+/).filter((teil) => !HILFEN_VERBINDER.has(teil))) {
+    if (wort.startsWith("test/")) {
+      hilfen.push({ datei: wort, namen });
       namen = [];
     } else {
-      namen.push(treffer);
+      namen.push(wort);
     }
   }
   return { hilfen, ohneDatei: namen };
@@ -240,6 +242,11 @@ test("anfrage-mit-frist: ein Alias des echten fetch ohne Frist wird gemeldet", (
     ["const { fetch: echt } = globalThis;", "await echt(url);"],
     ["const { fetch } = global;", "await fetch(url);"],
     ["const { fetch: echt = attrappe } = globalThis;", "await echt(url);"],
+    ["let echt;", "({ fetch: echt } = globalThis);", "await echt(url);"],
+    ["let fetch;", "({ fetch } = global);", "await fetch(url);"],
+    ["let echt;", "({ fetch: echt = attrappe } = globalThis);", "await echt(url);"],
+    ["async function lauf({ fetch: echt } = globalThis) {", "  return echt(url);", "}"],
+    ["const lauf = ({ fetch } = global) => fetch(url);"],
     ["const echt = fetch;", "async function lauf() {", "  await echt(url);", "}"],
     ["function lauf(abruf = fetch) {", "  return abruf(url);", "}"],
     [
@@ -257,6 +264,7 @@ test("anfrage-mit-frist: ein Alias des echten fetch mit Frist bleibt frei", () =
     ["const echt = globalThis.fetch;", "await echt(url, { signal: AbortSignal.timeout(5000) });"],
     ["const eins = fetch;", "const zwei = eins;", "await zwei(url, { signal: fristSignal() });"],
     ["const { fetch: echt } = globalThis;", "await echt(url, { ...o, signal: fristSignal() });"],
+    ["let echt;", "({ fetch: echt } = globalThis);", "await echt(url, { signal: fristSignal() });"],
     [
       "const echt = fetch;",
       "await echt(url, { signal: AbortSignal.any([eigenes, fristSignal()]) });",
@@ -276,6 +284,9 @@ test("anfrage-mit-frist: ein Alias auf etwas anderes als den echten fetch bleibt
     ["const { fetch: echt } = harness;", "await echt(url);"],
     ["const { structuredClone: kopie } = globalThis;", "kopie(wert);"],
     ["const { structuredClone, ...rest } = globalThis;", "rest(wert);"],
+    ["let echt;", "({ fetch: echt } = harness);", "await echt(url);"],
+    ["let kopie;", "({ structuredClone: kopie } = globalThis);", "kopie(wert);"],
+    ["async function lauf({ fetch: echt } = harness) {", "  return echt(url);", "}"],
     ["for (const { fetch: echt } of faelle) {", "  await echt(url);", "}"],
     ["const { fetch: echt } = auswahl();", "await echt(url);"],
     ["const { name: nutzlos } = fetch;", "nutzlos(url);"],
