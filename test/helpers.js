@@ -12,6 +12,7 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { testkostenZaehler } from "./testkosten.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { mitAktivemMutanten } from "../tools/mutationspruefung/zustand.mjs";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -815,6 +816,10 @@ export function assertReauthChallenge(result) {
   assert.ok(challenge[0].includes('error_description="'));
 }
 
+function serverUmgebung(env, dataDir) {
+  return mitAktivemMutanten({ PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir });
+}
+
 export async function startServerExpectExit({
   env = {},
   seed,
@@ -828,7 +833,7 @@ export async function startServerExpectExit({
   const beginn = performance.now();
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
+    env: serverUmgebung(env, dataDir),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -858,7 +863,7 @@ export async function startServer({
   const beginn = performance.now();
   const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
+    env: serverUmgebung(env, dataDir),
     stdio: ["ignore", "pipe", "pipe"],
   });
 

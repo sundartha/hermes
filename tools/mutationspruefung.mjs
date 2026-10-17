@@ -18,6 +18,7 @@ import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
+import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -42,6 +43,8 @@ const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
 const ZUSTANDSBEREICH = [".", ":(exclude)tools/mutationspruefung.mjs", ":(exclude)tools/mutationspruefung/"];
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
+const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
+const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ABSCHALTUNG_VERSTOSS =
   "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
@@ -357,11 +360,17 @@ function unverfolgteZeilen() {
   );
 }
 
+function fragtZustand({ datei, text }) {
+  if (STRYKER_ZUSTAND.some((muster) => muster.test(text))) return true;
+  const weitergabe = text.includes(mitAktivemMutanten.name) || text.includes(WEITERGABE_MODUL);
+  return weitergabe && !WEITERGABE_ERLAUBT.has(datei);
+}
+
 function zustandszugriffe({ von, seite }) {
   if (seite !== "neu") return [];
   const diff = git([...DIFF_ALS_TEXT, von, "--", ...ZUSTANDSBEREICH]);
   return [...hinzugefuegt(diff), ...unverfolgteZeilen()]
-    .filter(({ text }) => STRYKER_ZUSTAND.some((muster) => muster.test(text)))
+    .filter(fragtZustand)
     .map(({ datei, zeile }) => `${datei}:${zeile}`);
 }
 
