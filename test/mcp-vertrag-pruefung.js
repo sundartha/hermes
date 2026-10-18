@@ -489,8 +489,14 @@ function istVorlauf(frueher, marke, { bisher, standZu }) {
   return markenBruchBefunde(vertrag, bisher, standZu).length === 0;
 }
 
-function vorlaufBefunde(marke, { standZu, fruehereVertraege }) {
-  const bisher = fruehereVertraege.map(markeVon).find((frueher) => frueher && frueher.stand_sha256 !== marke.stand_sha256);
+function bisherigeMarke(vertrag, marke, fruehereVertraege) {
+  const andere = fruehereVertraege.map(markeVon).filter((frueher) => frueher && frueher.stand_sha256 !== marke.stand_sha256);
+  const index = (frueher) => kettenIndex(vertrag, frueher.stand_sha256);
+  return andere.reduce((neueste, frueher) => (index(frueher) > index(neueste) ? frueher : neueste), andere[0]);
+}
+
+function vorlaufBefunde(vertrag, marke, { standZu, fruehereVertraege }) {
+  const bisher = bisherigeMarke(vertrag, marke, fruehereVertraege);
   if (!bisher) return [];
   if (fruehereVertraege.some((frueher) => istVorlauf(frueher, marke, { bisher, standZu }))) return [];
   return [
@@ -502,7 +508,7 @@ function vorlaufBefunde(marke, { standZu, fruehereVertraege }) {
 export function veroeffentlichungsBefunde(vertrag, umgebung) {
   const marke = vertrag.veroeffentlichung ?? null;
   const befunde = markenHistorieBefunde(vertrag, marke, umgebung.fruehereVertraege);
-  if (marke) befunde.push(...markenBruchBefunde(vertrag, marke, umgebung.standZu), ...vorlaufBefunde(marke, umgebung));
+  if (marke) befunde.push(...markenBruchBefunde(vertrag, marke, umgebung.standZu), ...vorlaufBefunde(vertrag, marke, umgebung));
   return befunde;
 }
 

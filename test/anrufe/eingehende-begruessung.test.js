@@ -139,7 +139,7 @@ test("IEL-B1-GOLDEN-1: Schalter aus, Default-Env - Inbound-TeXML byte-identisch 
   const { texml } = await renderIncoming({});
   if (RECORD) {
     fs.writeFileSync(FIXTURE_PATH, `${texml}\n`);
-    return;
+    assert.fail(`Golden Master neu aufgenommen: ${FIXTURE_PATH} - ohne IEL_GOLDEN_RECORD erneut laufen lassen`);
   }
   assert.equal(`${texml}\n`, goldenFixture());
 });

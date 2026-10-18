@@ -687,6 +687,25 @@ test("Kompatibilitaetsvertrag U5: Marke nach sperrfreiem Vorlauf vorgerueckt ist
   assert.deepEqual(sperre(vorgerueckt(STAND_WIDGET_NEU), STAND_WIDGET_NEU, widget), []);
 });
 
+test("Kompatibilitaetsvertrag U5: die bisherige Marke haengt nicht an der Reihenfolge der fruehereVertraege", () => {
+  const zweiterStand = abgeleitet(STAND_ADDITIV, [setze([...A_EIN, "properties", "zweites_extra"], { type: "string" })]);
+  const eintraege = [STAND_ADDITIV, zweiterStand].map((stand) => ({ ...ERSTFASSUNG, art: "additiv", stand_sha256: standSha256(stand) }));
+  const vertragAuf = (stand, marke) => ({ ...stand, veroeffentlichte_widget_uris: [], aenderungen: [ERSTFASSUNG, ...eintraege], veroeffentlichung: marke });
+  const aufsteigend = [
+    BASIS_VEROEFFENTLICHT,
+    { quelle: "erste-vorrueckung", vertrag: vertragAuf(STAND_ADDITIV, markeAuf(STAND_ADDITIV)) },
+    { quelle: "vorlauf-commit", vertrag: vertragAuf(zweiterStand, markeAuf(STAND_ADDITIV)) },
+  ];
+  const befundeBei = (fruehereVertraege) =>
+    veroeffentlichungsBefunde(vertragAuf(zweiterStand, markeAuf(zweiterStand)), {
+      standZu: standAus(BASIS, STAND_ADDITIV, zweiterStand),
+      fruehereVertraege,
+    });
+  const absteigend = befundeBei([...aufsteigend].reverse());
+  assert.deepEqual(absteigend, [], absteigend.join("\n"));
+  assert.deepEqual(befundeBei(aufsteigend), absteigend);
+});
+
 const PAKET = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const UMGEBUNG = {
   exists: (relativ) => fs.existsSync(path.join(ROOT, relativ)),
