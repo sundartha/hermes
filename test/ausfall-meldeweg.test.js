@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportSystematicOutage, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
+import { meldeBetreiberAlarm, meldeVollBefund, reportSystematicOutage, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 
 const FENSTER_MS = 3600000;
@@ -293,4 +293,151 @@ test("M12 (G26, Review-Blocker Runde 2): zwei GLEICHZEITIG endende not-placed-An
   assert.equal(spies.smsCalls.length, 1, "genau EINE SMS trotz zweier gleichzeitig endender Anrufe");
   const [marker] = store.load().outageAlerts;
   assert.ok(marker.lastAttemptAt, "lastAttemptAt gesetzt (Reservierung)");
+});
+
+const VOLL_BEFUND = Object.freeze({
+  bucket: "price-drift:test",
+  aktion: "price_drift",
+  zeile: "Hermes Betriebsmeldung\nKatalogpreis weicht ab",
+});
+const VOLL_BEFUND_JETZT_MS = Date.parse(NOW_ISO);
+
+function meldeVoll({ store, spies }) {
+  return meldeVollBefund({
+    store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer,
+    ...VOLL_BEFUND, nowMs: VOLL_BEFUND_JETZT_MS,
+  });
+}
+
+function bekannterMarker({ code = VOLL_BEFUND.bucket, lastAttemptAt, reportedAt = null }) {
+  return {
+    id: `otg_${code}`, code, firstSeenAt: "2026-08-27T01:00:00Z", lastSeenAt: lastAttemptAt,
+    lastAttemptAt, reportedAt, deliveredChannels: reportedAt ? "mail" : null, closedAt: null,
+  };
+}
+
+test("M13 (#546): zwei GLEICHZEITIGE Voll-Befunde zum selben Bucket schicken GENAU EINEN Alarm", async () => {
+  const spies = makeSpies();
+  const store = makeStore({ platformNumberUse: boundSender() });
+  await Promise.all([meldeVoll({ store, spies }), meldeVoll({ store, spies })]);
+  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail");
+  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS");
+  assert.deepEqual(
+    spies.auditCalls.map((eintrag) => eintrag.action).sort(),
+    [VOLL_BEFUND.aktion, `${VOLL_BEFUND.aktion}_entprellt`],
+    "der zweite Befund wird als Notiz entprellt",
+  );
+  const [marker] = store.load().outageAlerts;
+  assert.ok(marker.reportedAt, "zugestellt und im Marker vermerkt");
+});
+
+test("M13b (#546): auch nach abgelaufener Entprellung schickt ein zweiter gleichzeitiger Befund keinen zweiten Alarm", async () => {
+  const spies = makeSpies();
+  const alt = "2026-08-27T08:00:00Z";
+  const store = makeStore({
+    platformNumberUse: boundSender(),
+    outageAlerts: [bekannterMarker({ lastAttemptAt: alt, reportedAt: alt })],
+  });
+  await Promise.all([meldeVoll({ store, spies }), meldeVoll({ store, spies })]);
+  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail");
+  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS");
+});
+
+test("M13c (#546): ein Voll-Befund innerhalb der Entprellung bleibt eine Notiz ohne Versand", async () => {
+  const spies = makeSpies();
+  const gemeldet = "2026-08-27T15:00:00Z";
+  const store = makeStore({
+    platformNumberUse: boundSender(),
+    outageAlerts: [bekannterMarker({ lastAttemptAt: gemeldet, reportedAt: gemeldet })],
+  });
+  await meldeVoll({ store, spies });
+  assert.equal(spies.mailCalls.length, 0, "keine Mail");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
+  assert.deepEqual(spies.auditCalls.map((eintrag) => eintrag.action), [`${VOLL_BEFUND.aktion}_entprellt`]);
+});
+
+test("M13d (#546): ohne reservierten Sendeplatz wirft der Alarm und sendet nichts", async () => {
+  const spies = makeSpies();
+  const store = makeStore({ platformNumberUse: boundSender() });
+  await assert.rejects(
+    meldeBetreiberAlarm({
+      store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer,
+      ...VOLL_BEFUND, nowMs: VOLL_BEFUND_JETZT_MS,
+    }),
+    /nicht reserviert/,
+  );
+  assert.equal(spies.mailCalls.length, 0, "keine Mail");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
+  assert.deepEqual(spies.auditCalls, [], "kein Audit");
+});
+
+test("M13e (#546): als reserviert zählt nur der Versuch dieses Buckets zu genau diesem Zeitpunkt", async () => {
+  const jetzt = new Date(VOLL_BEFUND_JETZT_MS).toISOString();
+  const faelle = {
+    "Versuch eines anderen Buckets zur selben Zeit": [bekannterMarker({ code: "price-drift:anderer", lastAttemptAt: jetzt })],
+    "älterer Versuch im selben Bucket": [bekannterMarker({ lastAttemptAt: "2026-08-27T16:00:00.000Z" })],
+  };
+  for (const [name, outageAlerts] of Object.entries(faelle)) {
+    const spies = makeSpies();
+    const store = makeStore({ platformNumberUse: boundSender(), outageAlerts });
+    await assert.rejects(
+      meldeBetreiberAlarm({
+        store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer,
+        ...VOLL_BEFUND, nowMs: VOLL_BEFUND_JETZT_MS,
+      }),
+      /nicht reserviert/,
+      name,
+    );
+    assert.equal(spies.mailCalls.length, 0, `${name}: keine Mail`);
+  }
+});
+
+test("M13f (#546): ein Versuch genau outageAlertRetryMs her gibt den Sendeplatz frei, eine Millisekunde jünger sperrt ihn", async () => {
+  const retryMs = CONFIG.billing.outageAlertRetryMs;
+  const gemeldet = "2026-08-27T08:00:00Z";
+  for (const [vorMs, erwarteteMails] of [[retryMs, 1], [retryMs - 1, 0]]) {
+    const spies = makeSpies();
+    const lastAttemptAt = new Date(VOLL_BEFUND_JETZT_MS - vorMs).toISOString();
+    const store = makeStore({
+      platformNumberUse: boundSender(),
+      outageAlerts: [bekannterMarker({ lastAttemptAt, reportedAt: gemeldet })],
+    });
+    await meldeVoll({ store, spies });
+    assert.equal(spies.mailCalls.length, erwarteteMails, `Versuch ${vorMs} ms her`);
+  }
+});
+
+test("M13g (#546): schlägt die Zustellung fehl, bleibt der Sendeplatz belegt, aber nichts gilt als gemeldet", async () => {
+  const spies = makeSpies({ mailThrows: true });
+  const store = makeStore({ platformNumberUse: boundSender() });
+  const log = captureLog();
+  try {
+    await meldeVoll({ store, spies });
+    await meldeVoll({ store, spies });
+  } finally {
+    log.restore();
+  }
+  const [marker] = store.load().outageAlerts;
+  assert.equal(marker.reportedAt, null, "nicht als gemeldet vermerkt");
+  assert.ok(marker.lastAttemptAt, "Versuch vermerkt");
+  assert.equal(
+    spies.order.filter((schritt) => schritt === "mail").length,
+    1,
+    "der zweite Befund wiederholt nicht sofort",
+  );
+});
+
+test("M13h (#546): der Sendeplatz ist gespeichert, bevor die erste Mail rausgeht", async () => {
+  const spies = makeSpies();
+  const store = makeStore({ platformNumberUse: boundSender() });
+  const speicherungen = [];
+  store.save = () => {
+    const { outageAlerts } = store.load();
+    speicherungen.push({
+      mailsDavor: spies.order.filter((schritt) => schritt === "mail").length,
+      reserviert: Boolean(outageAlerts[0]?.lastAttemptAt),
+    });
+  };
+  await meldeVoll({ store, spies });
+  assert.deepEqual(speicherungen[0], { mailsDavor: 0, reserviert: true });
 });

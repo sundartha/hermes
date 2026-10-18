@@ -62,7 +62,14 @@ async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
   store.save();
 }
 
+function sendeplatzReserviert({ store, bucket, nowMs }) {
+  const reserviertAm = new Date(nowMs).toISOString();
+  return store.load().outageAlerts.some((alert) => alert.code === bucket && alert.lastAttemptAt === reserviertAm);
+}
+
 export async function meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
+  if (!sendeplatzReserviert({ store, bucket, nowMs }))
+    throw new Error(`meldeBetreiberAlarm: Sendeplatz fuer ${bucket} nicht reserviert`);
   console.warn(`[outage] ${aktion} klasse=${bucket}`);
   audit(aktion, null, zeile);
   await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
@@ -78,17 +85,25 @@ export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile,
   store.save();
 }
 
-function alarmErlaubt({ store, bucket, config, nowMs }) {
-  const marker = ops.openOutageAlert(store.load(), bucket);
+function sendeplatzFrei({ marker, nowMs, config }) {
   if (!marker) return true;
-  return meldeErlaubt(marker, nowMs, {
-    debounceMs: config.billing.outageAlertDebounceMs,
-    retryMs: config.billing.outageAlertRetryMs,
+  const { outageAlertDebounceMs: debounceMs, outageAlertRetryMs: retryMs } = config.billing;
+  if (marker.lastAttemptAt && nowMs - Date.parse(marker.lastAttemptAt) < retryMs) return false;
+  return meldeErlaubt(marker, nowMs, { debounceMs, retryMs });
+}
+
+async function reserviereSendeplatz({ store, config, bucket, nowMs }) {
+  return store.withStoreLock(() => {
+    const state = store.load();
+    if (!sendeplatzFrei({ marker: ops.openOutageAlert(state, bucket), nowMs, config })) return false;
+    ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
+    store.save();
+    return true;
   });
 }
 
 export async function meldeVollBefund({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
-  if (alarmErlaubt({ store, bucket, config, nowMs })) {
+  if (await reserviereSendeplatz({ store, config, bucket, nowMs })) {
     await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs });
   } else {
     await meldeBetreiberNotiz({ store, audit, bucket, aktion: `${aktion}_entprellt`, zeile, nowMs });
