@@ -13,7 +13,7 @@ import {
   pathExists,
   regexFindings,
 } from "./feste-pfade/muster.mjs";
-import { git } from "./pruefungen-messen.mjs";
+import { git, matches } from "./pruefungen-messen.mjs";
 
 const NUL = "\0";
 const SEPARATOR = "/";
@@ -246,10 +246,14 @@ function areaFindings(state, file) {
   );
 }
 
+function manifestPathFindings(state, where, pattern) {
+  return state.files.some((file) => matches(pattern, file)) ? [] : [missing(where, pattern)];
+}
+
 function manifestFindings(state, manifest) {
   const { pfade = [], probe = {} } = readJson(state, manifest);
   return [
-    ...pfade.flatMap((path) => pathOrGlobFindings(state, `${manifest} pfade`, path)),
+    ...pfade.flatMap((path) => manifestPathFindings(state, `${manifest} pfade`, path)),
     ...fileOnlyFindings(state, `${manifest} probe.mitnehmen`, probe.mitnehmen ?? []),
   ];
 }
