@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { istTestdatei, istUmbau, phasenBefunde } from "../format.mjs";
 import { saetze } from "../neuschnitt.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
+import { istQuelltext } from "../../ziele/funktionen.mjs";
 import { istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
@@ -20,7 +21,6 @@ const NACHFRAGEN = "Nachfragen gibt es beim Neuschnitt nicht";
 const SKRIPTBEFUNDE = "die Skriptprüfung hat den neuen Schnitt abgelehnt";
 const FUER_DEN_OWNER = "der neue Schnitt braucht den Owner";
 const FUER_OWNER_FELDER = ["ownerAufgaben", "fehlendeSzenarien"];
-const QUELLTEXT = /\.[cm]?js$/;
 const ERSTE_PLANUNG = "planung";
 const GLIEDERUNG = "gliederung.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
@@ -330,7 +330,7 @@ class UmbauNeuschnittPlanung extends NeuschnittPlanung {
 
   async ersatzKarten(auftraege) {
     const dateien = this.produktDateien(auftraege);
-    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter((datei) => QUELLTEXT.test(datei)))]);
+    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter(istQuelltext))]);
     return { funktionsliste, dateikarte: await dateiKarte(this.root, [this.ersatzbericht(dateien)]) };
   }
 

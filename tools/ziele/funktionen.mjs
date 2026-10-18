@@ -10,6 +10,23 @@ const KONFIGURATION = "eslint.config.js";
 const FUNKTIONSARTEN = ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"];
 const FEHLER = 2;
 const ladeModul = createRequire(import.meta.url);
+export const JAVASCRIPT_DATEI = /\.[cm]?js$/;
+export const TYPESCRIPT_DATEI = /\.[cm]?ts$/;
+const TYPESCRIPT_MUSTER = ["**/*.ts", "**/*.mts", "**/*.cts"];
+const MODUL = { ecmaVersion: "latest", sourceType: "module" };
+
+export function typescriptParser() {
+  return ladeModul("typescript-eslint").parser;
+}
+
+export function istQuelltext(datei) {
+  return JAVASCRIPT_DATEI.test(datei) || TYPESCRIPT_DATEI.test(datei);
+}
+
+function sprachangaben(datei) {
+  if (!TYPESCRIPT_DATEI.test(datei)) return { languageOptions: MODUL };
+  return { files: TYPESCRIPT_MUSTER, languageOptions: { ...MODUL, parser: typescriptParser() } };
+}
 
 export function ungefilterteMeldungen(root, dateien) {
   const ordner = mkdtempSync(join(tmpdir(), "ziele-altfunktion-"));
@@ -34,7 +51,7 @@ export function funktionenIn(datei, quelltext) {
   const sammle = (knoten) => gefunden.push({ name: funktionsname(knoten), von: knoten.loc.start.line, bis: knoten.loc.end.line, start: knoten.range[0] });
   const regel = { create: () => Object.fromEntries(FUNKTIONSARTEN.map((art) => [art, sammle])) };
   const konfiguration = {
-    languageOptions: { ecmaVersion: "latest", sourceType: "module" },
+    ...sprachangaben(datei),
     plugins: { ziele: { rules: { funktionen: regel } } },
     rules: { "ziele/funktionen": "error" },
   };
