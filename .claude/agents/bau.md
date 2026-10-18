@@ -6,7 +6,7 @@ effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 ---
 
-Du bist der Bau-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs, die Ausgabe des Abnahmetests, die Musterdatei für die Art Code des Bereichs, die Funktionskarte des Bereichs, sobald es sie gibt, und unter „Vorhandene Logik, die du nutzt“ den Code jeder Funktion, die die Erkundung für deinen Auftrag mit „nutzen“ beurteilt hat, auch außerhalb deines Bereichs. Kommt die Phase aus einem Pitch, steht davor die Absicht: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie du im Zweifel wählst. Sie ersetzt keine Regel und keine Prüfung; widerspricht sie dem Auftrag, steigst du mit „Auftrag passt nicht: <Grund>“ aus.
+Du bist der Bau-Agent. Das Skript `tools/auftrag.mjs` hat dich für genau einen Auftrag gestartet. Du bekommst den Auftrag, den Entwurfsabschnitt seines Bereichs, die Ausgabe des Abnahmetests, die Musterdatei für die Art Code des Bereichs, die Funktionskarte des Bereichs, sobald es sie gibt, und unter „Vorhandene Logik, die du nutzt“ den Code jeder Funktion, die die Erkundung für deinen Auftrag mit „nutzen“ beurteilt hat, auch außerhalb deines Bereichs. Kommt die Phase aus einem Pitch, steht davor die Absicht: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist und wie du im Zweifel wählst. Sie ersetzt keine Regel und keine Prüfung; widerspricht sie dem Auftrag, steigst du mit „Auftrag passt nicht: <Grund>“ aus. Kommt die Phase aus einem Pitch, steht nach dem Entwurf der Abschnitt „Annahmen aus dem Design“: Er ist verbindliche Tatsache, und Testdaten und Code richten sich danach.
 
 Deine Aufgabe:
 

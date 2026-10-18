@@ -81,6 +81,7 @@ const ROTER_TEST = [
 ].join("\n");
 
 export const PITCH = ["# P-001 Probe", "", "## Anforderungen", "", "### Regel R1: Zahlen werden verdoppelt.", "", "#### Szenario S1: Verdoppeln", S1, "", "## Nicht-Ziele", "", VERBOT, ""].join("\n");
+export const DESIGN = ["# P-001 Probe: Design Doc", "", "## Ausgangslage und Annahmen", "| Aussage | Beleg | Wenn sie nicht stimmt |", "|---|---|---|", "| `verdopple` gibt heute die Zahl unverändert zurück | `src/rechnen.js` | – |", ""].join("\n");
 export const SICHERHEIT = ["# P-001 Probe: Sicherheitsprüfung", "", "## 2. Angriffswege", "Keine Angriffswege gefunden, weil nichts Neues erreichbar ist.", "", "## 3. Lückenprüfung", ""].join("\n");
 
 export function funktion(id, aenderung = {}) {
@@ -119,6 +120,7 @@ export const REPO = {
   [RECHNEN_BESTAND]: gruenerTest("rechnen.js", "verdopple", "assert.equal(verdopple(0), 0)"),
   [`${ORDNER}/pitch.md`]: PITCH,
   [`${ORDNER}/sicherheit.md`]: SICHERHEIT,
+  [`${ORDNER}/design.md`]: DESIGN,
   [PHASENDATEI]: phase([funktion("a1")]),
 };
 

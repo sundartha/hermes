@@ -84,7 +84,7 @@ test("lässt der Kindlauf einen Schnitt durch, der andere Aufträge, Rahmen, Vor
         "S1 gehört keinem Auftrag",
       ],
     },
-    { kind: { [PHASENDATEI]: phase([funktion("a1-n1"), umbau("a2")]), [`${ORDNER}/design.md`]: "# Design\n", "notiz.txt": "Notiz\n" }, dateien: nurA1, erwartet: [`Der Planer darf nur ${PHASENDATEI} ändern, nicht notiz.txt, ${ORDNER}/design.md.`] },
+    { kind: { [PHASENDATEI]: phase([funktion("a1-n1"), umbau("a2")]), [`${ORDNER}/design.md`]: "# Design\n", "notiz.txt": "Notiz\n" }, dateien: nurA1, erwartet: [`Der Planer darf nur ${PHASENDATEI} ändern, nicht ${ORDNER}/design.md, notiz.txt.`] },
     { kind: { [PHASENDATEI]: phase([funktion("a1-n1", { art: "falsch" })]) }, erwartet: ["a1-n1: art muss eine von funktion, fehlerbehebung, umbau, testumbau sein", `a1-n1: ein Umbau braucht einen bestehenden Verhaltenstest, ${ABNAHME} fehlt`] },
     {
       kind: { [PHASENDATEI]: phase([umbau("a1-n1", { bereich: "test/", erwarteteDateien: [TEXT_TEST], wasDarfNiePassieren: [] }), funktion("a1-n2", { abhaengigVon: ["a1-n1"] })], { entwurf }) },

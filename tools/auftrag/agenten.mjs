@@ -6,6 +6,7 @@ import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { funktionenIn } from "../ziele/funktionen.mjs";
+import { ANNAHMEN, annahmenAus } from "./annahmen.mjs";
 import { ABSICHT, TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
@@ -19,6 +20,7 @@ const NUTZEN_REGEL = [
   "Liegt sie außerhalb deines Bereichs und lässt sie sich so nicht nutzen, antwortest du als Letztes mit genau einer Zeile: „Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>, <warum nicht nutzbar>“.",
   "Nach deinem Bau prüft das Skript, dass du jede dieser Funktionen in deinen neuen Zeilen aufrufst oder importierst; nur erwähnen (in einem Kommentar oder Text) zählt nicht, und eine eigene Deklaration desselben Namens in einer anderen Datei ist ein Nachbau.",
 ].join("\n");
+const ANNAHMEN_FOLGE = "Testdaten und Code stehen auf diesen Tatsachen. Widerspricht eine davon dem Auftrag oder dem Code, den du liest, steigst du mit „Auftrag passt nicht: <Grund>“ aus.";
 const EXIT_OHNE_STATUS = 1;
 const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
 const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--include-hook-events"];
@@ -139,8 +141,16 @@ function testMusterAbschnitt(root, auftrag) {
   return musterAbschnitt(root, auftrag.abnahme, testMusterFuer);
 }
 
-export function testAgentPrompt({ phase, auftrag, root }) {
-  return [testPrompt(phase, auftrag, root), testMusterAbschnitt(root, auftrag)].join("\n");
+function annahmenAbschnitt(root, design) {
+  if (design === undefined || design === null) return [];
+  const { text, befunde } = annahmenAus(root, design);
+  if (text === undefined) throw new Error(befunde.join("\n"));
+  const herkunft = `Der Abschnitt „${ANNAHMEN}“ aus ${design}, wörtlich: was über Datenformate, vorhandene Bausteine und das heutige Verhalten feststeht oder angenommen wird.`;
+  return [abschnitt("Annahmen aus dem Design", [herkunft, ANNAHMEN_FOLGE, "", text].join("\n"))];
+}
+
+export function testAgentPrompt({ phase, auftrag, root, design }) {
+  return [testPrompt(phase, auftrag, root), ...annahmenAbschnitt(root, design), testMusterAbschnitt(root, auftrag)].join("\n");
 }
 
 function vorhandeneFunktion(root, { datei, funktion }) {
@@ -158,10 +168,11 @@ function nutzenAbschnitt(root, auftrag) {
   return [abschnitt("Vorhandene Logik, die du nutzt", [NUTZEN_REGEL, "", ...stellen].join("\n"))];
 }
 
-export function bauPrompt({ phase, auftrag, root }, testausgabe) {
+export function bauPrompt({ phase, auftrag, root, design }, testausgabe) {
   const titel = auftrag.erwarteterFehler ? "Ausgabe des roten Tests" : "Ausgabe des Abnahmetests";
   return [
     ...auftragsBlock(phase, auftrag),
+    ...annahmenAbschnitt(root, design),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
     musterAbschnitt(root, auftrag.bereich, musterFuer),
     dateiAbschnitt("Funktionskarte", root, funktionskartePfad(auftrag.bereich)),
