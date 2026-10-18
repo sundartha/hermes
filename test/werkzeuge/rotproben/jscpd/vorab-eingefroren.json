@@ -1,0 +1,31 @@
+{
+  "titel": "Eintrag für eine Kopie, die es noch nicht gibt, in unveränderten Dateien vorab eingefroren",
+  "vorher": {
+    "src/probe/eins.js": [
+      "export function summe(liste) {",
+      "  let ergebnis = 0;",
+      "  for (const eintrag of liste) {",
+      "    if (eintrag.aktiv && eintrag.wert > 0) {",
+      "      ergebnis += eintrag.wert * eintrag.faktor;",
+      "    } else if (eintrag.rest) {",
+      "      ergebnis -= eintrag.rest.wert + eintrag.rest.abzug;",
+      "    }",
+      "  }",
+      "  return { ergebnis, anzahl: liste.length, leer: liste.length === 0 };",
+      "}"
+    ],
+    "src/probe/drei.js": ["export const anderes = 1;"],
+    "tools/basis/jscpd.json": ["{", "  \"version\": \"5.0.14\",", "  \"befunde\": []", "}"]
+  },
+  "dateien": {
+    "tools/basis/jscpd.json": [
+      "{",
+      "  \"version\": \"5.0.14\",",
+      "  \"befunde\": [",
+      "    \"src/probe/drei.js|src/probe/eins.js|88\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "erwartet": "stehen nicht auf der Basis HEAD~1"
+}
