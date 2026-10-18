@@ -45,6 +45,7 @@ const VORLAGE_ENTWURF = "## Entwurf je Bereich";
 const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"];
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
+const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit `datei` und `ausweg` „nicht gefunden, weil `<Name>` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei.";
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
@@ -237,7 +238,7 @@ export class Planung {
       ...this.designTeile(nummern),
       abschnitt("Fragen des Planers", punkte(fragen)),
       abschnitt("Gerüst deines Berichts", json(berichtsGeruest(nummern))),
-      abschnitt("Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen", punkte(nummern.map((nummer) => this.namenZeile(nummer)))),
+      abschnitt("Namen aus dem Wenn, die in deiner Eingangsdatei stehen müssen", `${punkte(nummern.map((nummer) => this.namenZeile(nummer)))}\n\n${NEUER_NAME}`),
       ...ERKUNDER_KONTEXT.map((pfad) => abschnitt(pfad, dateiText(this.root, pfad))),
     ]);
   }
