@@ -3,20 +3,24 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { DEPENDENCY_TOOL, REPO_ROOT, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import {
+  KONFIGURATION,
+  BEREICHE_DATEI,
+  TESTIMPORTE,
+  ALTVERSTOESSE,
+  EINGANGSREGEL,
+  EXIT_OK,
+  EXIT_FINDING,
+  liste,
+  pruefe,
+} from "./abhaengigkeiten-probe.js";
+import { REPO_ROOT, probeRepository, writeFiles } from "./probe-repo.js";
 
-const KONFIGURATION = ".dependency-cruiser.cjs";
-const BEREICHE_DATEI = "tools/bereiche.json";
-const TESTIMPORTE = "tools/basis/test-importe.json";
-const ALTVERSTOESSE = ".dependency-cruiser-known-violations.json";
 const NEUER_TEST = "test/anrufe/anruf-starten.test.js";
 const WERKZEUG_TEST = "test/werkzeuge/x.test.js";
 const INTERN = "src/store/defaults.js";
 const EINGANG = "src/routes/voice.js";
 const FACHLOGIK = "src/billing/period.js";
-const EINGANGSREGEL = "tests-nur-ueber-eingaenge";
-const EXIT_OK = 0;
-const EXIT_FINDING = 1;
 
 const BEREICHE = [
   {
@@ -57,16 +61,8 @@ function eingefroren(von, nach) {
   };
 }
 
-function liste(eintraege) {
-  return `${JSON.stringify(eintraege)}\n`;
-}
-
 function probe(context, dateien = {}) {
   return probeRepository(context, { ...GRUNDSTAND, ...dateien });
-}
-
-function pruefe(verzeichnis) {
-  return runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD"]);
 }
 
 test("ein neuer Test, der ein internes Modul aus src/ importiert, ist rot und nennt die Regel", (context) => {

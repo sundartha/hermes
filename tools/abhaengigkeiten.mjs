@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
+import { umbenennungen } from "./umbenennung.mjs";
 
 const CONFIG_PATH = ".dependency-cruiser.cjs";
 const SOURCE_DIRECTORY = "src";
@@ -27,6 +28,7 @@ const FROZEN_LISTS = [
   },
 ];
 const KEY_SEPARATOR = "\0";
+const TYPESCRIPT_PATH = /\.[cm]?ts$/;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
@@ -94,16 +96,44 @@ function missingFrom(violations, reference) {
   return violations.filter((violation) => !referenceKeys.has(violationKey(violation)));
 }
 
+function grownBeyond(entries, reference, keyOf) {
+  const left = new Map();
+  for (const entry of reference)
+    left.set(violationKey(entry), (left.get(violationKey(entry)) ?? 0) + 1);
+  return entries.filter((entry) => {
+    const key = keyOf(entry);
+    const count = left.get(key) ?? 0;
+    left.set(key, count - 1);
+    return count <= 0;
+  });
+}
+
+function samePath(path) {
+  return path;
+}
+
+async function oldPathOf(basis, states) {
+  const grown = states.flatMap(({ known, basisKnown }) => missingFrom(known, basisKnown ?? known));
+  const renamed = grown.some(
+    ({ from, to }) => TYPESCRIPT_PATH.test(from) || TYPESCRIPT_PATH.test(to),
+  );
+  if (!renamed) return samePath;
+  const { nurTypen } = await umbenennungen({ von: basis });
+  return (path) => nurTypen(path) ?? path;
+}
+
 function describe(violation, comments) {
   const { rule, from, to } = violation;
   return `${from} → ${to} verstößt gegen „${rule.name}“. ${comments.get(rule.name)}`;
 }
 
-function findingsFor({ path, violations, known, basisKnown }, comments) {
+function findingsFor({ path, violations, known, basisKnown }, { comments, oldPath }) {
   const newViolations = missingFrom(violations, known).map(
     (violation) => `Neuer Verstoß: ${describe(violation, comments)}`,
   );
-  const grownEntries = missingFrom(known, basisKnown ?? known).map(
+  const asBefore = ({ rule, from, to }) =>
+    violationKey({ rule, from: oldPath(from), to: oldPath(to) });
+  const grownEntries = grownBeyond(known, basisKnown ?? known, asBefore).map(
     (violation) =>
       `${path} darf nur kürzer werden, neu eingefroren ist: ${describe(violation, comments)}`,
   );
@@ -119,7 +149,7 @@ function summary({ path, label, violations, known, basisKnown }) {
   return `${violations.length} ${label}, alle eingefroren in ${path}; ${fixed} eingefrorene Einträge sind behoben und können gestrichen werden; ${basisNote}`;
 }
 
-function main() {
+async function main() {
   const basis = optionValue("--basis");
   if (basis === undefined) {
     console.error(USAGE);
@@ -129,9 +159,10 @@ function main() {
   const violations = currentViolations();
   const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
   const comments = ruleComments();
+  const oldPath = await oldPathOf(basis, states);
   const order = testordnung(basis);
   const findings = [
-    ...states.flatMap((state) => findingsFor(state, comments)),
+    ...states.flatMap((state) => findingsFor(state, { comments, oldPath })),
     ...bestaendeNurKuerzer(basis),
     ...order.befunde,
   ];
@@ -143,7 +174,7 @@ function main() {
 }
 
 try {
-  process.exitCode = main();
+  process.exitCode = await main();
 } catch (error) {
   console.error(error.message);
   process.exitCode = EXIT_USAGE;
