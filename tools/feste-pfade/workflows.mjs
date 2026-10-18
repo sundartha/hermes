@@ -43,6 +43,13 @@ export function filterProblem({ event, key }) {
   return `${["on", event, key].filter(Boolean).join(".")} ${UNREADABLE}`;
 }
 
+export function filterHits({ patterns }, path, matches) {
+  return patterns.reduce(
+    (hit, pattern) => (matches(positivePattern(pattern), path) ? !NEGATION.test(pattern) : hit),
+    false,
+  );
+}
+
 export function positivePattern(pattern) {
   return pattern.replace(NEGATION, "");
 }

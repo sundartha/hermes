@@ -1,10 +1,10 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 import { geschuetzteMuster } from "./auftrag/format.mjs";
-import { ROLLBACK_FOLDER } from "./migrationen-orte.mjs";
 import {
   WILDCARD,
   gitignoreGlob,
@@ -14,22 +14,30 @@ import {
   pathExists,
   regexFindings,
 } from "./feste-pfade/muster.mjs";
+import {
+  ALLOWED_UNCHECKED,
+  READ,
+  exportedValue,
+  manifestFiles,
+  moduleOf,
+  permissionTarget,
+  readJson,
+  roleFiles,
+  stringsIn,
+} from "./feste-pfade/lesen.mjs";
 import { filterProblem, positivePattern, workflowFilters } from "./feste-pfade/workflows.mjs";
+import { ROLLBACK_FOLDER } from "./migrationen-orte.mjs";
 import { git, matches } from "./pruefungen-messen.mjs";
+import { isCommit } from "./ts-dateien.mjs";
 
 const NUL = "\0";
 const SEPARATOR = "/";
 const ANCHOR = "#";
-const MANIFEST = "pruefung.json";
 const RED_PROBES = "test/werkzeuge/rotproben/";
 const ROLES = ".claude/rollen/";
-const JSON_ENDING = ".json";
 const WORKFLOW_FILE = /\.ya?ml$/;
 const RULE_FILES = ["HERMES_REGELN_DATEI", "TESTREGELN_DATEI"];
 const FUTURE_FOLDER = `${ROLLBACK_FOLDER}**`;
-const EDITING = /^(?:Edit|Write)\((.+)\)$/;
-const READING = /^Read\((.+)\)$/;
-const OUTSIDE_REPOSITORY = /^(?:\/\/|~)/;
 const PATH_IN_TEXT = /[\w.-]+(?:\/[\w.-]+)+/g;
 const WHITESPACE = /\s/;
 const CURRENT_FOLDER = /^\.\//;
@@ -41,20 +49,14 @@ const HINT = [
   "In tools/gate-tests.json, tools/ziele/geschuetzt.json, tools/auftrag/musterdateien.json, .github/CODEOWNERS, .claude/rollen/ und .claude/settings.json nie selbst löschen: Eine Schutzliste zu kürzen ist eine Lockerung und braucht Antonios Freigabe.",
 ].join("\n");
 const NOT_DECLARED = "ist dort nicht deklariert";
-const NOT_EXPORTED =
-  "wird dort nicht exportiert; die Prüfung fester Pfade liest die Liste über den Export";
-const ALLOWED_UNCHECKED =
-  "allowed: die Prüfung fester Pfade prüft allowed-Regeln nicht; eine Erlaubnisliste trifft eine umbenannte Datei still nicht mehr";
 const DECLARATION = /^(?:export\s+)?(?:async\s+)?(?:function\*?|class|const|let|var)\s+([\w$]+)/gm;
 const EXPORT_LIST = /^export\s*\{([^}]*)\}/gm;
 const EXPORTED_NAME = /(?:[\w$]+\s+as\s+)?([\w$]+)/g;
+const NO_COMMIT =
+  "ist kein lesbarer Commit; ohne Basis lässt sich der Schutz umbenannter Dateien nicht vergleichen.";
 
 function missing(where, entry) {
   return `${where}: ${entry} trifft keine versionierte Datei`;
-}
-
-function readJson(state, path) {
-  return JSON.parse(readFileSync(join(state.root, path), "utf8"));
 }
 
 function fileOrFolderFindings(state, where, paths) {
@@ -82,13 +84,6 @@ function pathOrGlobFindings(state, where, path) {
 function isRepositoryPath(state, text) {
   const [first] = text.split(SEPARATOR);
   return !WHITESPACE.test(text) && text.includes(SEPARATOR) && state.top.has(first);
-}
-
-function stringsIn(value) {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(stringsIn);
-  if (value !== null && typeof value === "object") return Object.values(value).flatMap(stringsIn);
-  return [];
 }
 
 function declaredNames(text) {
@@ -155,11 +150,9 @@ function codeownersFindings(state, file) {
 }
 
 function permissionPath(state, rule) {
-  const edited = EDITING.exec(rule)?.[1];
-  if (edited !== undefined)
-    return OUTSIDE_REPOSITORY.test(edited) ? [] : [edited.replace(CURRENT_FOLDER, "")];
-  const read = READING.exec(rule)?.[1]?.replace(CURRENT_FOLDER, "");
-  return read !== undefined && isRepositoryPath(state, read) ? [read] : [];
+  const target = permissionTarget(rule);
+  if (target === undefined) return [];
+  return target.tool === READ && !isRepositoryPath(state, target.pattern) ? [] : [target.pattern];
 }
 
 function permissionFindings(state, where, { deny = [], ...others } = {}) {
@@ -196,23 +189,12 @@ function settingsFindings(state, file) {
 }
 
 function roleFindings(state, folder) {
-  const roles = state.files.filter((path) => path.startsWith(folder) && path.endsWith(JSON_ENDING));
-  return roles.flatMap((role) => settingsFindings(state, role));
+  return roleFiles(state, folder).flatMap((role) => settingsFindings(state, role));
 }
 
 function optionFindings(state, where, rules = {}) {
   const paths = stringsIn(rules).filter((text) => isRepositoryPath(state, text));
   return paths.flatMap((path) => pathOrGlobFindings(state, where, path));
-}
-
-function moduleOf(state, file) {
-  return import(pathToFileURL(resolve(state.root, file)).href);
-}
-
-function exportedValue(module, file, name) {
-  return module[name] === undefined
-    ? { finding: `${file}: ${name} ${NOT_EXPORTED}` }
-    : { value: module[name] };
 }
 
 function ruleFileFindings(state, file, module) {
@@ -297,12 +279,7 @@ function manifestFindings(state, manifest) {
 }
 
 function redProbeFindings(state, folder) {
-  const manifests = readdirSync(join(state.root, folder)).map(
-    (id) => `${folder}${id}${SEPARATOR}${MANIFEST}`,
-  );
-  return manifests
-    .filter((manifest) => state.files.includes(manifest))
-    .flatMap((manifest) => manifestFindings(state, manifest));
+  return manifestFiles(state, folder).flatMap((manifest) => manifestFindings(state, manifest));
 }
 
 function codeList(names, hits) {
@@ -379,11 +356,37 @@ function findingsOf(state, { path, check }) {
   return check(state, path);
 }
 
-const files = git(["ls-files", "-z"]).split(NUL).filter(Boolean);
-const state = { root: ".", files, top: new Set(files.map((path) => path.split(SEPARATOR)[0])) };
-const findings = (await Promise.all(SOURCES.map((source) => findingsOf(state, source)))).flat();
-for (const finding of findings) console.error(finding);
-if (findings.length > 0) {
+function stateOf(root, files) {
+  return { root, files, top: new Set(files.map((path) => path.split(SEPARATOR)[0])) };
+}
+
+async function existenceFindings(state) {
+  return (await Promise.all(SOURCES.map((source) => findingsOf(state, source)))).flat();
+}
+
+async function basisFindings(state, basis) {
+  const { renamePairs, trackedAt, withSnapshot } = await import("./feste-pfade/basis.mjs");
+  const { protectionFindings } = await import("./feste-pfade/schutz.mjs");
+  const pairs = renamePairs(basis);
+  const current = await existenceFindings(state);
+  if (pairs.length === 0) return current;
+  return withSnapshot(basis, async (root) => {
+    const before = stateOf(root, trackedAt(basis));
+    return [...current, ...(await protectionFindings(pairs, { before, after: state }))];
+  });
+}
+
+function findings({ basis }) {
+  const state = stateOf(".", git(["ls-files", "-z"]).split(NUL).filter(Boolean));
+  if (basis === undefined) return existenceFindings(state);
+  if (!isCommit(basis)) return [`--basis ${JSON.stringify(basis)} ${NO_COMMIT}`];
+  return basisFindings(state, basis);
+}
+
+const { values } = parseArgs({ options: { basis: { type: "string" } } });
+const found = [...new Set(await findings(values))];
+for (const finding of found) console.error(finding);
+if (found.length > 0) {
   console.log(HINT);
   process.exitCode = 1;
 }

@@ -161,7 +161,9 @@ jobs:
 
       - name: Feste Pfade
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/feste-pfade.mjs
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node tools/feste-pfade.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
 
       - name: Audit
         env:

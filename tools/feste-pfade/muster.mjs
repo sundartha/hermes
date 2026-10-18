@@ -136,7 +136,16 @@ export function gitignoreGlob(pattern) {
   return placed.endsWith(SEPARATOR) ? `${placed}**` : placed;
 }
 
-function regexHits(files, source) {
+export function globMatches(pattern, path) {
+  return matchesSteps(globSteps(pattern), path, 0);
+}
+
+export function gitignoreMatches(pattern, path) {
+  const glob = gitignoreGlob(pattern);
+  return globMatches(glob, path) || globMatches(`${glob}${ALL_BELOW}`, path);
+}
+
+export function regexHits(files, source) {
   const regex = new RegExp(source);
   return files.some((file) => regex.test(file));
 }
