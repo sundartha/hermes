@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { gespraechVergleichen } from "../../tools/deploy-weg/abdruck.mjs";
-import { REPO_ROOT, commitAll, runIn } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, probeDirectory, runIn } from "./probe-repo.js";
 
 const VORLAGE = "elevenlabs/agent_configs/outbound-agent.template.json";
 const VORLAGE_PROMPT_ELTERN = ["agent", "conversation_config", "agent", "prompt"];
 const JSON_EINRUECKUNG = 2;
 const FREMDZIEL_DEUTSCH = "anrufstart/de/fremd/consult-an";
 const MISCHSPRACHE = "anrufstart/de-nach-fr/fremd/consult-aus";
+const PROBE_INHALT = [".gitignore", "package.json", "README.md", "elevenlabs", "src"];
 
 const GESPRAECHSDATEIEN = [
   { datei: VORLAGE, teil: "vorlage/prompt", jsonEltern: VORLAGE_PROMPT_ELTERN, jsonFeld: "prompt", ersatz: " Probe." },
@@ -92,10 +92,10 @@ function git(verzeichnis, argumente) {
 }
 
 function tempKlon(context) {
-  const ordner = mkdtempSync(join(tmpdir(), "abdruck-rotprobe-"));
-  context.after(() => rmSync(ordner, { recursive: true, force: true }));
-  const klon = join(ordner, "klon");
-  git(ordner, ["clone", "--quiet", "--shared", REPO_ROOT, klon]);
+  const klon = probeDirectory(context, {});
+  for (const eintrag of PROBE_INHALT) cpSync(join(REPO_ROOT, eintrag), join(klon, eintrag), { recursive: true });
+  git(klon, ["init", "--quiet"]);
+  commitAll(klon, "Basis");
   const module = join(REPO_ROOT, "node_modules");
   if (existsSync(module)) symlinkSync(module, join(klon, "node_modules"));
   return { klon, basis: git(klon, ["rev-parse", "HEAD"]) };
