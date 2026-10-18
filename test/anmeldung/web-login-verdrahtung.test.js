@@ -428,6 +428,101 @@ test("Hintergrundlaeufe starten mit dem Store und melden keinen Fehler", async (
   }
 });
 
+const SECHS_STUNDEN_MS = 6 * 60 * 60 * 1000;
+const mitZahlung = { ...baseConfig, billing: { paymentEnabled: true, stripeWebhookSecret: "whsec_x" } };
+const SWEEP_TAGS = ["did-release", "contract-end", "cancellation-mail", "stripe-reconcile"];
+const SWEEP_NACHLAUF_MS = 80;
+
+async function zeitVorstellen(t, ms) {
+  const capture = captureConsole();
+  try {
+    t.mock.timers.tick(ms);
+    await echtWarten(SWEEP_NACHLAUF_MS);
+  } finally {
+    capture.restore();
+  }
+  return capture.logs;
+}
+
+const anzahl = (calls, name) => calls.filter((c) => c[0] === name).length;
+const vorkommen = (text, teil) => text.split(teil).length - 1;
+const aktiveTimer = () => process.getActiveResourcesInfo().filter((r) => r === "Timeout").length;
+
+test("Hintergrundlaeufe wiederholen sich nach sechs Stunden, nicht frueher", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fake = makeStore({ tenants: [{ id: "t_heil", stripeSubscriptionId: "sub_heil", status: "active" }] });
+  const w = await boot({ fake, stub: { stripeStatus: "canceled" }, deps: { config: mitZahlung } });
+  try {
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingContractEndCleanup"), 1);
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingCancellationMail"), 1);
+    assert.equal(w.stripeAbrufe.length, 1);
+    await zeitVorstellen(t, SECHS_STUNDEN_MS - 1);
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingContractEndCleanup"), 1);
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingCancellationMail"), 1);
+    assert.equal(w.stripeAbrufe.length, 1);
+    const logs = await zeitVorstellen(t, 1);
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingContractEndCleanup"), 2);
+    assert.equal(anzahl(fake.log.calls, "tenantsPendingCancellationMail"), 2);
+    assert.equal(w.stripeAbrufe.length, 2);
+    assert.match(logs.warn, /heile tenant=t_heil/);
+    assert.equal(logs.err, "");
+  } finally {
+    w.close();
+  }
+});
+
+test("Hintergrundlaeufe halten den Prozess nicht am Leben", async () => {
+  const runner = await makePgliteRunner();
+  const vorher = aktiveTimer();
+  const w = await boot({ runner, deps: { config: mitZahlung } });
+  try {
+    assert.equal(aktiveTimer(), vorher);
+  } finally {
+    w.close();
+  }
+});
+
+test("Hintergrundlauf-Fehler wird mit seinem Kennzeichen geloggt statt geworfen, und der naechste Lauf kommt", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fake = makeStore();
+  const kaputt = () => {
+    throw new Error("sweep kaputt");
+  };
+  fake.store.load = kaputt;
+  fake.store.tenantsPendingContractEndCleanup = kaputt;
+  fake.store.tenantsPendingCancellationMail = kaputt;
+  const w = await boot({ fake, deps: { config: mitZahlung } });
+  try {
+    for (const tag of SWEEP_TAGS) assert.equal(vorkommen(w.logs.err, `[${tag}] sweep kaputt`), 1, tag);
+    const logs = await zeitVorstellen(t, SECHS_STUNDEN_MS);
+    for (const tag of SWEEP_TAGS) assert.equal(vorkommen(logs.err, `[${tag}] sweep kaputt`), 1, tag);
+    const start = await abrufMitFrist(`${w.url}/auth/login`, { redirect: "manual" });
+    assert.equal(start.status, 302);
+  } finally {
+    w.close();
+  }
+});
+
+test("Konten- und Audit-Zugriff der Verdrahtung arbeiten auf der Datenbank des Logins", async () => {
+  const accountsRef = {};
+  const auditStoreRef = {};
+  const w = await boot({ deps: { config: devConfig, accountsRef, auditStoreRef } });
+  try {
+    const { session } = await devLogin(w.url);
+    assert.ok(session);
+    const tenantId = tenantIdForSubject("dev-user");
+    const konto = await accountsRef.current.accountByTenant(tenantId);
+    assert.equal(konto.sub, "dev-user");
+    await auditStoreRef.current.record({ tenantId, action: "pruef_eintrag", detail: "d1" });
+    const { rows } = await w.runner.withClient((c) =>
+      c.query("SELECT tenant_id, detail FROM audit_log WHERE action = 'pruef_eintrag'"),
+    );
+    assert.deepEqual(rows, [{ tenant_id: tenantId, detail: "d1" }]);
+  } finally {
+    w.close();
+  }
+});
+
 test("Stripe-Abgleich: ohne PAYMENT_ENABLED wird kein Abo bei Stripe abgefragt", async () => {
   const fake = makeStore({ tenants: [{ id: "t_ohne", stripeSubscriptionId: "sub_ohne", status: "active" }] });
   const w = await boot({ fake });
