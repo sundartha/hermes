@@ -1,0 +1,16 @@
+{
+  "titel": "Kommentarsatz wandert in eine Zeichenkette einer neuen .ts-Datei",
+  "vorher": {
+    "src/rotprobe.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const wert = true;"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": ["export const wert = true;"],
+    "src/hinweis.ts": [
+      "export const hinweis: string = \"Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.\";"
+    ]
+  },
+  "erwartet": "taucht in src/hinweis.ts:1 wieder auf"
+}

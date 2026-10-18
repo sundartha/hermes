@@ -1,0 +1,19 @@
+{
+  "titel": "Kommentar aus einer anderen Datei landet als Literaltyp in einer Umbenennung nur mit Typen",
+  "vorher": {
+    "src/probe/quelle.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const wert = 1;"
+    ],
+    "src/probe/abruf.js": ["export const hinweis = \"\";"]
+  },
+  "loeschen": ["src/probe/abruf.js"],
+  "dateien": {
+    "src/probe/quelle.js": ["export const wert = 1;"],
+    "src/probe/abruf.ts": [
+      "type Grund = \"Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.\";",
+      "export const hinweis: Grund | \"\" = \"\";"
+    ]
+  },
+  "erwartet": "taucht in src/probe/abruf.ts:1 wieder auf"
+}

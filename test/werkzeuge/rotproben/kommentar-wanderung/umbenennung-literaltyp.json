@@ -1,0 +1,17 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen versteckt einen Kommentar in einem Literaltyp",
+  "vorher": {
+    "src/probe/abruf.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const hinweis = \"\";"
+    ]
+  },
+  "loeschen": ["src/probe/abruf.js"],
+  "dateien": {
+    "src/probe/abruf.ts": [
+      "type Grund = \"Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.\";",
+      "export const hinweis: Grund | \"\" = \"\";"
+    ]
+  },
+  "erwartet": "Kommentar aus src/probe/abruf.js:1 taucht in src/probe/abruf.ts:1 wieder auf"
+}
