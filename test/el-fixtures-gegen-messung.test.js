@@ -49,9 +49,17 @@ const AUS_DER_AUFZEICHNUNG = Object.freeze([
   Object.freeze({ fixturePfad: "metadata.termination_reason", messfeld: "termination_reason" }),
 ]);
 
-const OHNE_AUFZEICHNUNG = Object.freeze(["status", "analysis"]);
+const ABGELEITET_ART = "abgeleitet";
 
-const ABGELEITET = Object.freeze(["transcript"]);
+const CLOSE_1008_HERKUNFT = Object.entries(HERKUNFT[CLOSE_1008_NAME]);
+
+const OHNE_AUFZEICHNUNG = Object.freeze(
+  CLOSE_1008_HERKUNFT.filter(([, art]) => art !== ABGELEITET_ART).map(([feld]) => feld),
+);
+
+const ABGELEITET = Object.freeze(
+  CLOSE_1008_HERKUNFT.filter(([, art]) => art === ABGELEITET_ART).map(([feld]) => feld),
+);
 
 test("Fixture-Abgleich: die aufgezeichneten Felder des CLOSE-1008-Fundes stehen woertlich so in tasks/spike2-messung.jsonl", () => {
   assert.ok(TESTANRUF_1, "Aufzeichnung ohne testanruf nr.1 - die Quelle dieses Fundes fehlt");
@@ -76,6 +84,11 @@ test("Fixture-Abgleich: das leere Transkript des CLOSE-1008-Fundes deckt sich mi
     CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES.transcript,
     [],
     "agent_redet:false laesst nur ein leeres Transkript zu",
+  );
+  assert.deepEqual(
+    ABGELEITET,
+    ["transcript"],
+    `nur das Transkript ist hier aus der Aufzeichnung abgeleitet - jedes andere Feld, das HERKUNFT.${CLOSE_1008_NAME} '${ABGELEITET_ART}' nennt, hat keine Ableitung`,
   );
 });
 
