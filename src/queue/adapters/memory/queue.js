@@ -1,13 +1,20 @@
 import { PROVISIONING_JOB_STATUS } from "../../../store/defaults.js";
 
+const JOB_ID_RADIX = 36;
+const JOB_ID_RANDOM_START = 2;
+const JOB_ID_RANDOM_END = 6;
+
 export function makeMemoryQueue() {
   const jobs = [];
   const byKey = new Map();
 
   function enqueue({ kind, payload, idempotencyKey }) {
+    if (typeof idempotencyKey !== "string" || idempotencyKey === "")
+      throw new TypeError("enqueue: idempotencyKey muss ein nicht-leerer String sein");
     const existing = byKey.get(idempotencyKey);
     if (existing) return existing;
-    const id = "job_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const random = Math.random().toString(JOB_ID_RADIX).slice(JOB_ID_RANDOM_START, JOB_ID_RANDOM_END);
+    const id = "job_" + Date.now().toString(JOB_ID_RADIX) + random;
     jobs.push({ id, kind, payload, idempotencyKey, status: PROVISIONING_JOB_STATUS.QUEUED });
     byKey.set(idempotencyKey, id);
     return id;
