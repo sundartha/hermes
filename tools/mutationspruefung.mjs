@@ -79,7 +79,6 @@ const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
 const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
-const erstlaufMitschrift = [];
 const AUFRUF =
   "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
 
@@ -638,27 +637,34 @@ async function main() {
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-function schreibeErstlaufMit() {
-  const schreiben = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (teil, ...rest) => {
-    if (String(teil).includes(ERSTLAUF_ROT)) erstlaufMitschrift.push(String(teil));
-    return schreiben(teil, ...rest);
-  };
-}
-
-function roteErstlaeufe() {
-  return erstlaufMitschrift.flatMap((block) =>
+function roteErstlaeufe(mitschrift) {
+  return mitschrift.flatMap((block) =>
     [...block.matchAll(ROTE_TESTDATEI)].flatMap(([, datei, meldung]) =>
       [...meldung.matchAll(ROTER_TEST)].map(([, test]) => `Abbruch: Erstlauf rot: ${datei} › ${test}`),
     ),
   );
 }
 
-schreibeErstlaufMit();
+async function mitErstlaufMitschrift(ausfuehren) {
+  const mitschrift = [];
+  const schreiben = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (teil, ...rest) => {
+    if (String(teil).includes(ERSTLAUF_ROT)) mitschrift.push(String(teil));
+    return schreiben(teil, ...rest);
+  };
+  try {
+    return await ausfuehren();
+  } catch (fehler) {
+    if (fehler.message === ERSTLAUF_ABBRUCH) for (const zeile of roteErstlaeufe(mitschrift)) console.error(zeile);
+    throw fehler;
+  } finally {
+    process.stdout.write = schreiben;
+  }
+}
+
 try {
-  process.exitCode = await main();
+  process.exitCode = await mitErstlaufMitschrift(main);
 } catch (fehler) {
-  if (fehler.message === ERSTLAUF_ABBRUCH) for (const zeile of roteErstlaeufe()) console.error(zeile);
   console.error(`Abbruch: ${fehler.message}`);
   process.exitCode = EXIT_ABBRUCH;
 }
