@@ -40,7 +40,8 @@ import {
   reproduzierbareBlocker,
 } from "./pruefer-schema.mjs";
 import { belegeUmgehungen } from "./pruefer-umgehung.mjs";
-import { KONTEXT, urteile } from "./pruefer-urteil.mjs";
+import { KONTEXT, urteileMitZweck } from "./pruefer-urteil.mjs";
+import { PRUEFER_ZWECK, statusZweck, zweckZeilen } from "./pruefer-zweck.mjs";
 
 export const PRUEFER_OPTIONEN = new Map([
   ["artefakt", ["head"]],
@@ -284,17 +285,18 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
 
 function urteilFuer(ergebnis, { head, nachstellung }) {
   if (ergebnis === null)
-    return { state: FEHLER, description: "Prüfer nicht gelaufen: kein Ergebnis", issues: [] };
+    return { state: FEHLER, description: "Prüfer nicht gelaufen: kein Ergebnis", issues: [], zweck: PRUEFER_ZWECK.NICHT_GELAUFEN };
   if (head && ergebnis.head !== head) {
     return {
       state: FEHLER,
       description: "Prüfer nicht gelaufen: Ergebnis gehört zu einem anderen Commit",
       issues: [],
+      zweck: PRUEFER_ZWECK.NICHT_GELAUFEN,
     };
   }
-  if (!nachstellung) return urteile({ ...ergebnis, nachstellung: null });
+  if (!nachstellung) return urteileMitZweck({ ...ergebnis, nachstellung: null });
   const erlaubt = new Set(reproduzierbareBlocker(ergebnis).map(({ schluessel }) => schluessel));
-  return urteile({
+  return urteileMitZweck({
     ...ergebnis,
     nachstellung: nachstellungAus(leseDatei(nachstellung, NACHSTELLUNG_DATEI) ?? "", erlaubt),
   });
@@ -334,6 +336,7 @@ async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
   console.log(
     `Prüfer: ${urteil.state} (${urteil.description}); Issues neu ${issues.neu}, Kommentare neu ${issues.kommentare}, schon vorhanden ${issues.vorhanden}.`,
   );
+  for (const zeile of zweckZeilen(statusZweck(urteil))) console.log(zeile);
   return 0;
 }
 
