@@ -379,7 +379,7 @@ export function vereinige(teile) {
   };
 }
 
-function aufBranchGetoetet(branchStatus, basisStatus) {
+export function aufBranchGetoetet(branchStatus, basisStatus) {
   if (branchStatus === TIMEOUT) return basisStatus === TIMEOUT;
   return rang(branchStatus) > 0;
 }
