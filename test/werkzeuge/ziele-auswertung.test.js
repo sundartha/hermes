@@ -111,6 +111,13 @@ test("ziele-auswertung: ein Kommentar „Wieder aufgetreten“ zählt als Vorkom
   assert.equal(unveraendert.ausgang, "sauber");
 });
 
+test("ziele-auswertung: ein Bot-Kommentar, der nur mit „Wieder“ beginnt, zählt nicht als Vorkommen", async (context) => {
+  const befund = issue(BEFUND_NUMMER, "Aufräumen: AR-lint in `src/x.js`", { labels: [{ name: "aufraeumen" }], comments: 1 });
+  const kommentar = { nummer: BEFUND_NUMMER, body: "Wieder geöffnet: Lauf 2", user: { login: "github-actions[bot]" }, created_at: "2026-10-03T00:00:00Z", html_url: "https://github.com/sundartha/hermes/issues/5#c1" };
+  const lauf = await auswertung(context, { issues: [befund], kommentare: [kommentar] }, { schritte: ["zaehlen"] });
+  assert.deepEqual([lauf.zaehlung.ausgang, lauf.zaehlung.grund], ["sauber", "kein wiederkehrender Befund"]);
+});
+
 test("ziele-auswertung: ein früherer Lauf auf demselben Stand, in dem „Zählen“ nicht gelaufen ist, zählt nicht als bearbeitet", async (context) => {
   const anfang = { issues: [vorherVorkommen(ERSTES, "src/a.js"), neuesVorkommen(ZWEITES, "src/b.js")] };
   const zaehlung = await zaehleNachLauf(context, { anfang, lauf: (kopf) => eigenerLauf(LAUF_NUMMER, kopf, { schritt: "Zählen", ergebnis: "skipped" }) });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { issueTitel } from "../../tools/auftrag/pruefer-issues.mjs";
-import { sammelText } from "../../tools/ziele/sammel.mjs";
+import { lintVorschlaege, sammelText } from "../../tools/ziele/sammel.mjs";
 
 import {
   arbeitsordner,
@@ -221,7 +221,17 @@ test("ziele-rangliste: Prüfer-Issues zählen in jeder Titelform, und ein Titel 
   const durchgang = gelesen(await waehle(context, repoMitBrennpunkt(context), github), "ziel/durchgang.json");
   assert.deepEqual(zugeordnet(durchgang), ["src/gross.js G1", "src/gross.js G1", "src/klein.js Befund", "src/klein.js G1", "src/klein.js G1"]);
   assert.deepEqual(nichtZuordenbar(durchgang), []);
-  assert.deepEqual(durchgang.vorschlaege, [{ regel: "G1", dateien: 2 }]);
+  assert.deepEqual(lintVorschlaege(durchgang.befunde), [{ regel: "G1", dateien: 2 }]);
+});
+
+test("ziele-rangliste: kehrt dieselbe Prüfer-Regel in zwei Dateien wieder, schlägt das Sammel-Issue eine Lint-Regel vor", async (context) => {
+  const titel = [prueferTitel("G1", "src/gross.js"), prueferTitel("G1", "src/klein.js"), prueferTitel("G2", "src/gross.js")];
+  const github = await githubAttrappe(context, { issues: titel.map((text, index) => prueferIssue(ERSTES_PRUEFER_ISSUE + index, text)) });
+  await vollerLauf(context, repoMitBrennpunkt(context), github);
+  const sammel = github.zustand.issues.find(({ title }) => title === SAMMEL_TITEL);
+  const [, ab] = sammel.body.split("## Vorschläge für Lint-Regeln");
+  const [vorschlaege] = ab.split("## Rangliste");
+  assert.deepEqual(vorschlaege.match(/^- .*$/gm), ["- `G1` in 2 Dateien"]);
 });
 
 test("ziele-rangliste: ein im Titel gekürzter Dateiname geht an die eine Datei, die so beginnt; passen zwei, bleibt der Befund unzugeordnet", async (context) => {

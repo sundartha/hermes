@@ -24,11 +24,9 @@ const NICHT_ZUORDENBAR = "pruefer-nicht-zuordenbar";
 const TITEL_UNBEKANNT = "Titel nicht erkannt";
 const DATEI_UNBEKANNT = "Datei nicht im Repo";
 const DATEI_MEHRDEUTIG = "Dateiname mehrdeutig";
-const KATALOG_ID = /^(?:[A-Z]\d{1,2}|SG-\d{2,3})$/;
 const EINRUECKUNG = /^[ \t]*/;
 const TAB = "\t";
 const LEERZEICHEN_JE_STUFE = 2;
-const WIEDERKEHREND = 2;
 
 function gitZeilen(argumente, root) {
   return gitAusgabe(["-c", "core.quotePath=false", ...argumente], root).split("\n").filter(Boolean);
@@ -141,18 +139,9 @@ export function rangliste({ befunde, dateien, root, aenderungen }) {
   return [...jeDatei].map(([datei, liste]) => eintrag(datei, liste, { root, aenderungen })).sort(vorrang);
 }
 
-export function lintVorschlaege(befunde) {
-  const jeRegel = new Map();
-  for (const { pruefung, regel, datei } of befunde) {
-    if (pruefung === PRUEFER && KATALOG_ID.test(regel)) jeRegel.set(regel, new Set([...(jeRegel.get(regel) ?? []), datei]));
-  }
-  const wiederkehrend = [...jeRegel].filter(([, liste]) => liste.size >= WIEDERKEHREND);
-  return wiederkehrend.map(([regel, liste]) => ({ regel, dateien: liste.size })).sort((links, rechts) => rechts.dateien - links.dateien || links.regel.localeCompare(rechts.regel));
-}
-
 export async function durchgang({ github, root }) {
   const dateien = new Set(gitZeilen(["ls-files"], root).filter((datei) => existsSync(join(root, datei))));
   const pruefer = await prueferBefunde(github, dateien);
   const befunde = [...basisBefunde(root, dateien), ...eslintBefunde(root, dateien), ...pruefer.zugeordnet];
-  return { befunde: [...befunde, ...pruefer.offen], rangliste: rangliste({ befunde, dateien, root, aenderungen: aenderungenJeDatei(root) }), vorschlaege: lintVorschlaege(befunde) };
+  return { befunde: [...befunde, ...pruefer.offen], rangliste: rangliste({ befunde, dateien, root, aenderungen: aenderungenJeDatei(root) }) };
 }
