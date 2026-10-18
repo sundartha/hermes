@@ -112,9 +112,8 @@ function pollAfterOpenConsult(srv) {
 }
 
 function pollNextConsult(srv, callId = CALL_ID) {
-  return abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/consult`, {}, { wartezeitMs: CONSULT_POLL_HOLD_MS }).then(
-    async (res) => ({ status: res.status, body: await res.json() }),
-    (err) => ({ status: null, fehler: String(err) }),
+  return mitDauer(() =>
+    abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/consult`, {}, { wartezeitMs: CONSULT_POLL_HOLD_MS }),
   );
 }
 

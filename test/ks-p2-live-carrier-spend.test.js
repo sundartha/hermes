@@ -13,6 +13,7 @@ import {
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const TARIFF_CENTS_PER_MIN = 50;
 const INBOUND_TARIFF_CENTS_PER_MIN = 20;
@@ -82,18 +83,6 @@ function axisFor(s, tenantId = TENANT) {
   return blockingBudgetAxis({ store: storeOver(s), billing: CFG, tenantId });
 }
 
-function captureErr(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs;
-}
-
 test("KS-P2-1: die laufende Minute allein reisst den Cap - der Turn liefert budget_tenant", () => {
   const s = stateWith({ capCents: 100, legs: [activeLeg()] });
 
@@ -137,7 +126,7 @@ test("KS-P2-4: unlesbarer Zeitanker sperrt fail-closed mit grund=usage_korrupt f
   const s = stateWith({ capCents: 100, legs: [activeLeg({ startedAt: null, answeredAt: null })] });
 
   let axis;
-  const logs = captureErr(() => {
+  const logs = fehlerausgabeVon(() => {
     axis = axisFor(s);
   });
 

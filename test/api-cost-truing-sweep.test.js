@@ -45,13 +45,7 @@ async function startSweepApp(state) {
   };
 }
 
-const SWEEP_RESPONSE_TIMEOUT_MS = 15000;
-
-const sweep = (app) =>
-  abrufMitFrist(`${app.base}/api/billing/cost-truing/sweep`, {
-    method: "POST",
-    signal: AbortSignal.timeout(SWEEP_RESPONSE_TIMEOUT_MS),
-  });
+const sweep = (app) => abrufMitFrist(`${app.base}/api/billing/cost-truing/sweep`, { method: "POST" });
 
 function endedOutboundCall(state, { minutesAgo = ENDED_MINUTES_AGO } = {}) {
   const call = createCall(state, {
