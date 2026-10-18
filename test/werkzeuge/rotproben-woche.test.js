@@ -29,18 +29,28 @@ const AUSFUEHRBAR = 0o755;
 const MS_JE_STUNDE = 3_600_000;
 const STUNDEN_JE_TAG = 24;
 const ACHT_TAGE = 8;
-const FAELLE = ["lint-fehler", "lint-konfiguration", "umgeschriebener-test", "geschuetzte-datei"];
+const FAELLE = ["lint-fehler", "lint-konfiguration", "umgeschriebener-test", "geschuetzte-datei", "ts-any", "ts-as", "ts-typfehler"];
+const TS_VORLAGEN = [
+  "test/werkzeuge/rotproben/eslint/ts-any.json",
+  "test/werkzeuge/rotproben/eslint/ts-as.json",
+  "test/werkzeuge/rotproben/typpruefung/typfehler-der-laeuft.json",
+];
+const TS_PROBE = "src/probe/probe.ts";
 const ANKERDATEIEN = {
   "src/billing/provider-enum.js": "export const MAX_ENUM_LENGTH = 64;\n",
   "eslint.config.js": 'export default [{ rules: { "no-useless-constructor": "error" } }];\n',
   "test/plans-find-plan.test.js": 'assert.equal(findPlan("nope"), null);\n',
   ".github/CODEOWNERS": "/tools/ @Antonio20045\n",
+  ...Object.fromEntries(TS_VORLAGEN.map((pfad) => [pfad, readFileSync(join(REPO_ROOT, pfad), "utf8")])),
 };
 const ERWARTETE_AENDERUNGEN = new Map([
   ["lint-fehler", /^\+\/\/ const ALTE_GRENZE = MAX_ENUM_LENGTH;$/m],
   ["lint-konfiguration", /^\+.*"no-useless-constructor": "off"/m],
   ["umgeschriebener-test", /^\+assert\.equal\(findPlan\("gibt-es-nicht"\), null\);$/m],
   ["geschuetzte-datei", /^\+$/m],
+  ["ts-any", /^new file mode 100644\n(?:.*\n)*\+export function verdoppelt\(wert: any\): number \{$/m],
+  ["ts-as", /^new file mode 100644\n(?:.*\n)*\+ {2}return roh as Anruf;$/m],
+  ["ts-typfehler", /^new file mode 100644\n(?:.*\n)*\+const SEKUNDEN: number = "dreissig";$/m],
 ]);
 const LINT_GESTOPPT = /^\| lint-fehler \| #233 \| CI \/ Prüfungen \/ Lint \| gestoppt \|$/m;
 
@@ -167,6 +177,13 @@ function mitSchritt(aufnahme, { lauf, schritt, ergebnis = "failure" }) {
   return { ...aufnahme, jobs: { ...aufnahme.jobs, [lauf]: jobs } };
 }
 
+function mitTyppruefung(aufnahme, ergebnis) {
+  const zusatz = (schritte) =>
+    schritte.flatMap((eintrag) => (eintrag.name === "Lint" ? [eintrag, { ...eintrag, name: "Typprüfung", conclusion: ergebnis }] : [eintrag]));
+  const jobs = aufnahme.jobs[CI_LAUF].map((job) => ({ ...job, steps: zusatz(job.steps) }));
+  return { ...aufnahme, jobs: { ...aufnahme.jobs, [CI_LAUF]: jobs } };
+}
+
 function lintRot(aufnahme = AUFNAHME) {
   return mitSchritt(aufnahme, { lauf: CI_LAUF, schritt: "Lint" });
 }
@@ -176,9 +193,9 @@ function allesGruen(aufnahme) {
   return JSON.parse(text);
 }
 
-async function auswerten(context, aufnahme) {
+async function auswerten(context, aufnahme, fall = "lint-fehler") {
   const api = await nachgebauteApi(context, zustandAus(aufnahme));
-  return werkzeug(["--auswerten", `lint-fehler=${PR}`], { umgebung: api.umgebung });
+  return werkzeug(["--auswerten", `${fall}=${PR}`], { umgebung: api.umgebung });
 }
 
 function upstreamMit(context, hakenText) {
@@ -222,10 +239,15 @@ function probePull(nummer, ref) {
   return { ...AUFNAHME.pr, number: nummer, head: { ...AUFNAHME.pr.head, ref } };
 }
 
-test("Rot-Proben: --nur-patches schreibt vier anwendbare Patches und lässt den Arbeitsbaum unverändert", async (context) => {
-  const arbeit = probeRepository(context, ANKERDATEIEN);
+async function nurPatchesIn(context, dateien) {
+  const arbeit = probeRepository(context, dateien);
   const ordner = join(probeDirectory(context, {}), "patches");
   const lauf = await werkzeug(["--nur-patches", ordner], { cwd: arbeit });
+  return { arbeit, ordner, lauf };
+}
+
+test("Rot-Proben: --nur-patches schreibt sieben anwendbare Patches und lässt den Arbeitsbaum unverändert", async (context) => {
+  const { arbeit, ordner, lauf } = await nurPatchesIn(context, ANKERDATEIEN);
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.deepEqual(readdirSync(ordner).sort(), FAELLE.map((fall) => `${fall}.patch`).sort());
   for (const [fall, aenderung] of ERWARTETE_AENDERUNGEN) {
@@ -233,14 +255,62 @@ test("Rot-Proben: --nur-patches schreibt vier anwendbare Patches und lässt den 
     assert.match(readFileSync(patch, "utf8"), aenderung);
     assert.equal(runIn(arbeit, "git", ["apply", "--check", patch]).status, EXIT_OK, fall);
   }
-  assert.equal(gitIn(arbeit, ["status", "--porcelain"]), "");
+  assert.equal(gitIn(arbeit, ["status", "--porcelain", "--untracked-files=all"]), "");
   assert.match(lauf.stdout, /^- geschuetzte-datei: .*geschuetzte-datei\.patch$/m);
 });
 
+test("Rot-Proben: --nur-patches nimmt den Inhalt einer TypeScript-Probe aus ihrem Manifest", async (context) => {
+  const manifest = { titel: "geändert", dateien: { [TS_PROBE]: ["export const ANDERS: number = 1;"] } };
+  const { ordner, lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, [TS_VORLAGEN[0]]: JSON.stringify(manifest) });
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  const patch = readFileSync(join(ordner, "ts-any.patch"), "utf8");
+  assert.match(patch, /^\+export const ANDERS: number = 1;$/m);
+  assert.doesNotMatch(patch, /any/);
+});
+
+test("Rot-Proben: --nur-patches meldet laut, wenn es die Datei einer TypeScript-Probe schon gibt, und lässt sie stehen", async (context) => {
+  const { arbeit, lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, [TS_PROBE]: "export const DA = 1;\n" });
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stderr, /^ts-any: nicht erzeugbar: src\/probe\/probe\.ts gibt es schon$/m);
+  assert.equal(readFileSync(join(arbeit, TS_PROBE), "utf8"), "export const DA = 1;\n");
+  assert.equal(gitIn(arbeit, ["status", "--porcelain", "--untracked-files=all"]), "");
+});
+
+test("Rot-Proben: --nur-patches legt mehrere neue Dateien in neuen Ordnern an und räumt sie wieder weg", async (context) => {
+  const dateien = { "src/neu/eins.ts": ["export const EINS: number = 1;"], "test/neu/zwei.ts": ["export const ZWEI: number = 2;"] };
+  const { arbeit, ordner, lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, [TS_VORLAGEN[0]]: JSON.stringify({ titel: "zwei", dateien }) });
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  const patch = join(ordner, "ts-any.patch");
+  assert.match(readFileSync(patch, "utf8"), /^\+\+\+ b\/src\/neu\/eins\.ts$(?:.*\n)*^\+\+\+ b\/test\/neu\/zwei\.ts$/m);
+  assert.equal(runIn(arbeit, "git", ["apply", "--check", patch]).status, EXIT_OK);
+  assert.deepEqual(readdirSync(join(arbeit, "src")).sort(), ["billing"]);
+  assert.equal(gitIn(arbeit, ["status", "--porcelain", "--untracked-files=all", "--ignored"]), "");
+});
+
+test("Rot-Proben: --nur-patches lässt einen schon vorhandenen Ordner mit seinen Dateien stehen", async (context) => {
+  const { arbeit, lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, "src/probe/bleibt.js": "export const BLEIBT = 1;\n" });
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.deepEqual(readdirSync(join(arbeit, "src/probe")), ["bleibt.js"]);
+});
+
+test("Rot-Proben: --nur-patches meldet laut, wenn das Manifest einer TypeScript-Probe vorher oder loeschen braucht", async (context) => {
+  for (const feld of ["vorher", "loeschen"]) {
+    const manifest = { titel: "mit Vorstand", dateien: { [TS_PROBE]: ["export const X = 1;"] }, [feld]: feld === "vorher" ? { "src/alt.js": ["export const A = 1;"] } : ["src/billing/provider-enum.js"] };
+    const { lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, [TS_VORLAGEN[1]]: JSON.stringify(manifest) });
+    assert.equal(lauf.status, EXIT_ROT);
+    assert.match(lauf.stderr, /^ts-as: nicht erzeugbar: test\/werkzeuge\/rotproben\/eslint\/ts-as\.json braucht vorher oder loeschen/m);
+  }
+});
+
+test("Rot-Proben: --nur-patches meldet laut, wenn das Manifest einer TypeScript-Probe fehlt", async (context) => {
+  const ohneManifest = Object.fromEntries(Object.entries(ANKERDATEIEN).filter(([pfad]) => pfad !== TS_VORLAGEN[2]));
+  const { lauf } = await nurPatchesIn(context, ohneManifest);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stderr, /^ts-typfehler: nicht erzeugbar: test\/werkzeuge\/rotproben\/typpruefung\/typfehler-der-laeuft\.json fehlt$/m);
+});
+
 test("Rot-Proben: --nur-patches bricht laut ab, wenn eine Ankerzeile fehlt, und nennt die Datei", async (context) => {
-  const arbeit = probeRepository(context, { ...ANKERDATEIEN, "eslint.config.js": "export default [];\n" });
-  const ordner = join(probeDirectory(context, {}), "patches");
-  const lauf = await werkzeug(["--nur-patches", ordner], { cwd: arbeit });
+  const { arbeit, lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, "eslint.config.js": "export default [];\n" });
   assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.stderr, /^lint-konfiguration: nicht erzeugbar: eslint\.config\.js\//m);
   assert.equal(gitIn(arbeit, ["status", "--porcelain"]), "");
@@ -250,6 +320,18 @@ test("Rot-Proben: --auswerten meldet gestoppt, wenn der erwartete Schritt und de
   const lauf = await auswerten(context, lintRot());
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.match(lauf.stdout, LINT_GESTOPPT);
+});
+
+test("Rot-Proben: --auswerten meldet ts-typfehler als gestoppt, wenn die Typprüfung und der Pflicht-Check rot sind", async (context) => {
+  const lauf = await auswerten(context, mitTyppruefung(AUFNAHME, "failure"), "ts-typfehler");
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.match(lauf.stdout, /^\| ts-typfehler \| #233 \| CI \/ Prüfungen \/ Typprüfung \| gestoppt \|$/m);
+});
+
+test("Rot-Proben: --auswerten meldet bei ts-typfehler den falschen Schritt, wenn nur Lint rot ist", async (context) => {
+  const lauf = await auswerten(context, lintRot(mitTyppruefung(AUFNAHME, "success")), "ts-typfehler");
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, /^\| ts-typfehler \| #233 \| .* \| falscher Schritt: Prüfungen \/ Lint \|$/m);
 });
 
 test("Rot-Proben: --auswerten meldet durchgegangen, wenn alles grün ist", async (context) => {
@@ -321,7 +403,7 @@ test("Rot-Proben: --nur-push meldet falschen Grund, wenn upstream wegen fehlende
   assert.equal(gitIn(nackt, ["rev-parse", "refs/heads/master"]), vorher);
 });
 
-test("Rot-Proben: --aufraeumen schließt nur die vier Probe-PRs und löscht nur ihre Branches", async (context) => {
+test("Rot-Proben: --aufraeumen schließt nur die sieben Probe-PRs und löscht nur ihre Branches", async (context) => {
   const proben = FAELLE.map((fall, index) => probePull(ERSTE_PROBE + index, `rotprobe/20-${fall}`));
   const fremde = [probePull(FREMDER_PR, "paket/20-soll-und-rotproben"), probePull(FREMDE_PROBE, "rotprobe/05-label-antonio")];
   const zustand = zustandAus(AUFNAHME, { offen: [...fremde, ...proben], schonWeg: new Set(["rotprobe/20-lint-fehler"]) });
@@ -335,7 +417,7 @@ test("Rot-Proben: --aufraeumen schließt nur die vier Probe-PRs und löscht nur 
   const geloescht = schreibend.filter(({ methode }) => methode === "DELETE").map(({ pfad }) => pfad);
   assert.deepEqual(geloescht, FAELLE.map((fall) => `/repos/${REPOSITORY}/git/refs/heads/rotprobe/20-${fall}`));
   assert.equal(schreibend.length, geschlossen.length + geloescht.length);
-  assert.match(lauf.stdout, /^Aufgeräumt: offene Proben-PRs geschlossen: #300, #301, #302, #303;/m);
+  assert.match(lauf.stdout, /^Aufgeräumt: offene Proben-PRs geschlossen: #300, #301, #302, #303, #304, #305, #306;/m);
 });
 
 test("Rot-Proben: --ohne-menschen ist grün und meldet keine solchen PRs, wenn nichts gemergt wurde", async (context) => {
@@ -376,7 +458,7 @@ function allesGestoppt() {
     { lauf: PRUEFUNGEN_LAUF, schritt: "ESLint-Konfiguration, Unterordner und only prüfen" },
     { lauf: TESTSCHUTZ_LAUF, schritt: "Bestehende Tests nur ergänzt" },
   ];
-  const aufnahme = schritte.reduce(mitSchritt, lintRot());
+  const aufnahme = schritte.reduce(mitSchritt, lintRot(mitTyppruefung(AUFNAHME, "failure")));
   const pflicht = new Set(["Prüfungen prüfen", "Testschutz"]);
   const checks = aufnahme.checks.map((check) => (pflicht.has(check.name) ? { ...check, conclusion: "failure" } : check));
   return { ...aufnahme, checks };
@@ -398,7 +480,7 @@ function nachgebautesGh(ordner) {
   return bin;
 }
 
-test("Rot-Proben: der volle Lauf legt vier Proben an, prüft den Push, wertet aus und räumt auf", async (context) => {
+test("Rot-Proben: der volle Lauf legt sieben Proben an, prüft den Push, wertet aus und räumt auf", async (context) => {
   const { arbeit, nackt } = upstreamMit(context, NUR_MASTER_HAKEN);
   gitIn(arbeit, ["remote", "set-url", "upstream", "https://github.com/sundartha/hermes.git"]);
   gitIn(arbeit, ["remote", "set-url", "--push", "upstream", nackt]);
@@ -422,12 +504,10 @@ test("Rot-Proben: der volle Lauf legt vier Proben an, prüft den Push, wertet au
 
 const VORLAGE_ANKER = 'assert.equal(findPlan("nope"), null);';
 const VORLAGE_TEST = `test("Plan", () => {\n  ${VORLAGE_ANKER}\n});\n`;
-const OHNE_VORLAGE = Object.fromEntries(Object.entries(ANKERDATEIEN).filter(([datei]) => !datei.startsWith("test/")));
+const OHNE_VORLAGE = Object.fromEntries(Object.entries(ANKERDATEIEN).filter(([datei]) => !datei.startsWith("test/") || TS_VORLAGEN.includes(datei)));
 
 async function umgeschriebenerTestPatch(context, dateien) {
-  const arbeit = probeRepository(context, { ...OHNE_VORLAGE, ...dateien });
-  const ordner = join(probeDirectory(context, {}), "patches");
-  const lauf = await werkzeug(["--nur-patches", ordner], { cwd: arbeit });
+  const { arbeit, ordner, lauf } = await nurPatchesIn(context, { ...OHNE_VORLAGE, ...dateien });
   const patch = join(ordner, "umgeschriebener-test.patch");
   return { arbeit, lauf, patch };
 }
