@@ -1,4 +1,11 @@
-const LOOP = 76;
+const MAX_RATIO = 0.9999;
+const PERCENT = 100;
+
+function loopMs(track) {
+  const fill = track && track.querySelector(".hd-fill");
+  const [anim] = fill ? fill.getAnimations() : [];
+  return anim && anim.effect ? anim.effect.getTiming().duration : 0;
+}
 
 function initStage(stage) {
   const track = stage.querySelector("[data-hd-track]");
@@ -16,20 +23,21 @@ function initStage(stage) {
   };
 
   const seek = (ratio) => {
-    at = Math.max(0, Math.min(0.9999, ratio));
+    at = Math.max(0, Math.min(MAX_RATIO, ratio));
     stage.style.setProperty("--hd-t", "0s");
     if (!stage.getAnimations) return;
-    const ms = at * LOOP * 1000;
+    const loop = loopMs(track);
+    const ms = at * loop;
     for (const anim of stage.getAnimations({ subtree: true })) {
       const timing = anim.effect && anim.effect.getTiming();
-      if (timing && timing.duration === LOOP * 1000) {
+      if (loop && timing && timing.duration === loop) {
         try {
           anim.currentTime = ms;
         } catch {
         }
       }
     }
-    if (track) track.setAttribute("aria-valuenow", String(Math.round(at * 100)));
+    if (track) track.setAttribute("aria-valuenow", String(Math.round(at * PERCENT)));
   };
 
   if (pauseBtn) {

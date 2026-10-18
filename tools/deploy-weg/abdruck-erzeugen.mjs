@@ -154,12 +154,13 @@ function exportTeile(praefix, modul, bekannt) {
   return teile;
 }
 
-async function promptTeile(wurzel, bekannt) {
+async function promptTeile(wurzel) {
+  const bekannt = new Map();
   let dateien;
   try {
     dateien = readdirSync(join(wurzel, PFADE.prompts)).filter((datei) => datei.endsWith(".js")).sort();
   } catch {
-    return { prompts: FEHLER };
+    return { teile: { prompts: FEHLER }, bekannt };
   }
   const teile = {};
   for (const datei of dateien) {
@@ -171,7 +172,7 @@ async function promptTeile(wurzel, bekannt) {
       teile[praefix] = FEHLER;
     }
   }
-  return teile;
+  return { teile, bekannt };
 }
 
 function katalogAufrufe(funktion, katalog) {
@@ -271,8 +272,7 @@ function vorlageTeile(wurzel) {
 }
 
 async function abdruck(wurzel) {
-  const bekannt = new Map();
-  const prompts = await promptTeile(wurzel, bekannt);
+  const { teile: prompts, bekannt } = await promptTeile(wurzel);
   return {
     ...prompts,
     ...(await localeTeile(wurzel, bekannt)),
