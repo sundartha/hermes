@@ -1,0 +1,13 @@
+{
+  "titel": "Neuer Eintrag in der Liste der Tests, die Quelltext als Text lesen",
+  "vorher": {
+    "src/app.js": ["export const app = true;"],
+    "tools/basis/quelltext-als-text.json": ["{ \"befunde\": [] }"]
+  },
+  "dateien": {
+    "tools/basis/quelltext-als-text.json": [
+      "{ \"befunde\": [\"test/anrufe/alt.test.js|0123456789abcdef\"] }"
+    ]
+  },
+  "erwartet": "tools/basis/quelltext-als-text.json darf nur kürzer werden"
+}

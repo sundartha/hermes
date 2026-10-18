@@ -6,7 +6,9 @@
     ".dependency-cruiser-known-violations.json",
     "tools/umbenennung.mjs",
     "tools/syntaxbaum.mjs",
-    "tools/eslint-rules/knoten.js"
+    "tools/eslint-rules/knoten.js",
+    "tools/abhaengigkeiten/bestaende.mjs",
+    "tools/bestand-rueckfuehrung.mjs"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],
