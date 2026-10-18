@@ -96,7 +96,7 @@ test("ts-sperre: jede TypeScript-Datei, die ESLint, tsc, Semgrep oder knip nicht
 
 test("ts-sperre: eine Deklarationsdatei unter src, test, tools oder scripts macht rot, weil tsc ihren Inhalt nicht prüft", (context) => {
   const reason = "Deklarationsdatei, deren Inhalt tsc wegen skipLibCheck nicht prüft";
-  for (const path of ["src/typen.d.ts", "tools/x.d.ts", "test/typen.d.ts", "scripts/typen.d.ts", "src/stil.d.css.ts", "src/a.d.b.c.ts"]) {
+  for (const path of ["src/typen.d.ts", "tools/x.d.ts", "test/typen.d.ts", "scripts/typen.d.ts", "src/stil.d.css.ts", "src/a.d.b.c.ts", "src/gross.D.ts"]) {
     const result = runLockInNewRepo(context, { [path]: "export declare const neu: number;\n" });
     assert.equal(result.status, EXIT_RED, `${path}: ${result.output}`);
     assert.ok(result.output.startsWith(`${path}: ${reason}`), result.output);

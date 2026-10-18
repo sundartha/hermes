@@ -4,10 +4,9 @@ import { isDeepStrictEqual } from "node:util";
 import { ESLint } from "eslint";
 import tseslint from "typescript-eslint";
 
-import { CHECKED_ROOTS, TYPESCRIPT_FILE } from "../ts-dateien.mjs";
+import { CHECKED_ROOTS, DECLARATION_FILE, TYPESCRIPT_FILE } from "../ts-dateien.mjs";
 
 const OFF = 0;
-const DECLARATION_FILE = /\.d\.[cm]?ts$/i;
 const LEVELS = { off: 0, warn: 1, error: 2 };
 const EXTENSION = "@typescript-eslint/";
 function normalized(setting) {
