@@ -17,7 +17,7 @@ import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung
 import { geteiltBeiZeitgrenze, gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
-import { planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
+import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
@@ -76,7 +76,6 @@ const EXIT_ABBRUCH = 2;
 const GANZ = { anteil: 1, von: 1 };
 const TEILANGABEN = 3;
 const BETRIEBSARTEN_HOECHSTENS = 1;
-const ERGEBNISDATEI = /\.json$/;
 const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
 const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ERSTLAUF_GESCHEITERT = "Something went wrong in the initial test run";

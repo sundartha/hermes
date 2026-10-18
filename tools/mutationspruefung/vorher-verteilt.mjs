@@ -12,7 +12,7 @@ import { getoetetIn, imVorherStand } from "./testumbau.mjs";
 export const SEKUNDEN_JE_KNOTEN_UND_TESTDATEI = 0.19;
 export const STUECK_SEKUNDEN = 600;
 export const PLANDATEI = "plan.json";
-const ERGEBNISDATEI = /\.json$/;
+export const ERGEBNISDATEI = /\.json$/;
 const QUELLDATEI = /^src\/[\w./-]+\.[cm]?[jt]s$/;
 const TESTPFAD = /^test\/[\w./-]+$/;
 const ELTERNORDNER = "..";
