@@ -5,7 +5,7 @@
     { "art": "Telefonie", "praefix": "src/telephony/", "datei": "src/telephony/outage-detection.js" },
     { "art": "Abrechnung", "praefix": "src/billing/", "datei": "src/billing/kostenarten.js" },
     { "art": "ElevenLabs", "praefix": "src/elevenlabs/", "datei": "src/elevenlabs/b1-doppelankaendigung.js" },
-    { "art": "Modul", "praefix": "src/", "datei": "src/tool-follow-up.js" },
+    { "art": "Modul", "praefix": "src/", "datei": "src/diagnostic-retention.js" },
     { "art": "Skript", "praefix": "scripts/", "datei": "scripts/check-elevenlabs-drift.mjs" }
   ],
   "test": [
