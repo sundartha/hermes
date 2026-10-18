@@ -59,8 +59,7 @@ test("T-P1-01b: bricht der finale Rename ab, bleibt store.json unveraendert (NIE
     throw new Error("rename blocked (test)");
   };
   try {
-    store.save();
-  } catch {
+    assert.throws(() => store.save(), /rename blocked \(test\)/);
   } finally {
     fs.renameSync = origRename;
   }

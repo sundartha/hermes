@@ -94,7 +94,13 @@ test("Produktionskonfiguration (GAP-33): Outbound ins Ausland kommt unter ausgel
   }
 });
 
-test("Produktionskonfiguration (GAP-33): der Blueprint render.yaml ist startfaehig", async () => {
+test("Produktionskonfiguration (GAP-33): der Blueprint render.yaml bootet mit den Ersatzwerten aus PROD_ENV_EXEMPTIONS, die leere Pflicht-Menge der Kostenkorrektur bleibt Boot-Blocker", async () => {
+  assert.equal(
+    RENDER_ENV.COST_TRUING_REQUIRED_RECORD_TYPES,
+    "",
+    "bekannter Boot-Blocker: ein Deploy allein aus render.yaml startet mit leerer COST_TRUING_REQUIRED_RECORD_TYPES nicht",
+  );
+  assert.ok("COST_TRUING_REQUIRED_RECORD_TYPES" in PROD_ENV_EXEMPTIONS, "der Boot unten ersetzt den Blocker-Wert");
   let srv = null;
   try {
     srv = await startServer({ env: blueprintEnv() });

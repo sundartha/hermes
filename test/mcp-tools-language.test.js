@@ -137,12 +137,16 @@ test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT
 });
 
 test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async () => {
-  await withGateway({}, async () => {
+  const calls = [{ id: "c2", direction: "inbound", to: "+491517654", status: "missed", startedAt: "2026-12-03T15:04:00.000Z" }];
+  await withGateway({ calls }, async () => {
     const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
     const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", language: "en" });
     const textDe = toolText(await handlersDe.get("list_calls")());
     const textEn = toolText(await handlersEn.get("list_calls")());
     assert.notEqual(textDe, textEn, "dieselbe Fixture liefert unter de/en unterschiedliche Texte");
+    assert.match(textDe, /\[c2\].*03\.12\./, "die Textzeile unter de traegt das de-DE-Datum");
+    assert.match(textEn, /\[c2\].*03\/12/, "die Textzeile unter en traegt das en-GB-Datum");
+    assert.doesNotMatch(textEn, /\d{2}\.\d{2}\./, "unter en steht kein de-DE-Datum im Text");
   });
 });
 
