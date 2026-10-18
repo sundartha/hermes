@@ -7,11 +7,13 @@ import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
-import { brauchtRotenTest, ladePhase, phasenBefunde } from "./format.mjs";
+import { brauchtRotenTest, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, git, kopf, offenePfade, vormerken } from "./git.mjs";
+import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
 import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
+import { listHint } from "../testschutz/freigabe.mjs";
 
 export const NEU_GESCHNITTEN = "neu geschnitten";
 export const NEUSCHNITTE_JE_AUFTRAG = 1;
@@ -141,10 +143,31 @@ function rahmen(phase) {
   return { ...phase, auftraege: undefined, entwurf: undefined };
 }
 
+function neueAlteTests(vorher, neue, root) {
+  const genannt = new Set([...vorher.erwarteteDateien, vorher.abnahme]);
+  const neuAufgenommen = (auftrag, datei) => istTestdatei(datei) && datei !== auftrag.abnahme && !genannt.has(datei) && existsSync(join(root, datei));
+  return neue.filter(brauchtRotenTest).flatMap((auftrag) => auftrag.erwarteteDateien.filter((datei) => neuAufgenommen(auftrag, datei)).map((datei) => ({ id: auftrag.id, datei })));
+}
+
+function neueAuftraege(alt, neu) {
+  const bekannt = new Set(alt.auftraege.map(({ id }) => id));
+  return neu.auftraege.filter(({ id }) => !bekannt.has(id));
+}
+
+function freigabeBefunde({ phase: alt, auftrag: vorher, root }, neu) {
+  const alte = neueAlteTests(vorher, neueAuftraege(alt, neu), root);
+  if (alte.length === 0) return [];
+  const issue = phasenIssue(alt.issue, root);
+  return alte.flatMap(({ id, datei }) => {
+    const problem = freigabeProblem(issue, datei);
+    if (problem === null) return [];
+    return [`${id}: ${datei} ist ein bestehender Test, den ${vorher.id} nicht nannte, und der Test-Agent dürfte ihn ändern. Ein Neuschnitt nimmt ihn nur mit Freigabe auf: Listenpunkt \`${datei}\` ${listHint()}, hier Issue #${alt.issue}. Ohne lesbare Freigabe lehnt er ab: ${problem}.`];
+  });
+}
+
 function schnittBefunde(alt, neu, vorher) {
   const kennung = vorher.id;
-  const bekannt = new Set(alt.auftraege.map(({ id }) => id));
-  const neue = neu.auftraege.filter(({ id }) => !bekannt.has(id));
+  const neue = neueAuftraege(alt, neu);
   const schnitt = { kennung, neue: neue.map(({ id }) => id) };
   return [
     ...(neu.auftraege.some(({ id }) => id === kennung) ? [`${kennung} steht noch in der Phasendatei; der Neuschnitt ersetzt ihn.`] : []),
@@ -163,7 +186,8 @@ function abdeckungBefunde(root, ordner) {
   return lauf.exitCode === 0 ? [] : ohneZweck(lauf.ausgabe.split("\n")).filter((zeile) => zeile.trim() !== "");
 }
 
-function geschnittenePhase({ phase, auftrag, root }, ort) {
+function geschnittenePhase(kontext, ort) {
+  const { phase, auftrag, root } = kontext;
   const fremd = offenePfade(root).filter((pfad) => pfad !== ort.datei);
   if (fremd.length > 0) return { befunde: [`Der Planer darf nur ${ort.datei} ändern, nicht ${fremd.join(", ")}.`], arten: [MELDUNG.NEUSCHNITT] };
   let neu;
@@ -174,7 +198,7 @@ function geschnittenePhase({ phase, auftrag, root }, ort) {
   }
   const format = phasenBefunde(neu, root);
   if (format.length > 0) return { befunde: format, arten: [MELDUNG.PHASENDATEI] };
-  const schnitt = schnittBefunde(phase, neu, auftrag);
+  const schnitt = [...schnittBefunde(phase, neu, auftrag), ...freigabeBefunde(kontext, neu)];
   const abdeckung = abdeckungBefunde(root, ort.ordner);
   const arten = [[MELDUNG.NEUSCHNITT, schnitt], [MELDUNG.ABDECKUNG, abdeckung]].filter(([, liste]) => liste.length > 0).map(([art]) => art);
   return arten.length > 0 ? { befunde: [...schnitt, ...abdeckung], arten } : { neu };
