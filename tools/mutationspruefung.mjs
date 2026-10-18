@@ -75,6 +75,11 @@ const GANZ = { anteil: 1, von: 1 };
 const TEILANGABEN = 3;
 const BETRIEBSARTEN_HOECHSTENS = 1;
 const ERGEBNISDATEI = /\.json$/;
+const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
+const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
+const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
+const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
+const erstlaufMitschrift = [];
 const AUFRUF =
   "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
 
@@ -633,9 +638,27 @@ async function main() {
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
+function schreibeErstlaufMit() {
+  const schreiben = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (teil, ...rest) => {
+    if (String(teil).includes(ERSTLAUF_ROT)) erstlaufMitschrift.push(String(teil));
+    return schreiben(teil, ...rest);
+  };
+}
+
+function roteErstlaeufe() {
+  return erstlaufMitschrift.flatMap((block) =>
+    [...block.matchAll(ROTE_TESTDATEI)].flatMap(([, datei, meldung]) =>
+      [...meldung.matchAll(ROTER_TEST)].map(([, test]) => `Abbruch: Erstlauf rot: ${datei} › ${test}`),
+    ),
+  );
+}
+
+schreibeErstlaufMit();
 try {
   process.exitCode = await main();
 } catch (fehler) {
+  if (fehler.message === ERSTLAUF_ABBRUCH) for (const zeile of roteErstlaeufe()) console.error(zeile);
   console.error(`Abbruch: ${fehler.message}`);
   process.exitCode = EXIT_ABBRUCH;
 }
