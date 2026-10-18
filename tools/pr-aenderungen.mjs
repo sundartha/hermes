@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { extname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
@@ -144,4 +146,9 @@ export async function ausfuehren(pruefung) {
     if (!(error instanceof Abbruch)) console.error(error.stack);
     process.exitCode = EXIT_ABBRUCH;
   }
+}
+
+export async function direktAusfuehren(modul, { aufruf, pruefen }) {
+  if (modul !== pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) return;
+  await ausfuehren(async (root) => pruefen(root, basisAusAufruf(aufruf, root)));
 }
