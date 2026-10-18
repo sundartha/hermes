@@ -20,6 +20,13 @@ const PARSER_OPTIONS = { ecmaVersion: "latest", sourceType: "module", range: tru
 const RETURN_FUNCTION = "returnMessageText";
 const PARAMS_NAME = "params";
 const QUERY_SOURCES = new Set(["location.search", "window.location.search"]);
+const PATH_SOURCES = new Set(["location.pathname", "window.location.pathname"]);
+const HISTORY = "history";
+const HISTORY_WRITE = "history.replaceState";
+const HISTORY_NAMES = new Set([HISTORY, "replaceState"]);
+const URL_ARGUMENT = 2;
+const UNCONDITIONAL_STEPS = new Set(["VariableDeclaration", "VariableDeclarator", "ExpressionStatement"]);
+const RETURN_BASE = "https://rueckkehr.invalid";
 const SCOPE_NODES = new Set(["BlockStatement", "Program"]);
 const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassBody"]);
 const QUERY_CLASS = "URLSearchParams";
@@ -50,9 +57,11 @@ const META_WORDS = new Set([
   "createContextualFragment",
   "setHTMLUnsafe",
   "parseHTMLUnsafe",
+  "pushState",
+  "navigation",
 ]);
 const META_PREFIX = "__";
-const FORBIDDEN_TEXT = [...GUARDED_KEYS, ...META_WORDS, META_PREFIX, "javascript:"];
+const FORBIDDEN_TEXT = [...GUARDED_KEYS, ...META_WORDS, ...HISTORY_NAMES, META_PREFIX, "javascript:"];
 const TIMERS = new Set(["setTimeout", "setInterval"]);
 const FUNCTION_VALUES = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
 const GUARDED_NAMES = new Set([PARAMS_NAME, ...GUARDED_KEYS, ...GLOBAL_OBJECTS]);
@@ -92,10 +101,9 @@ function lineAt(source, index) {
   return source.slice(0, index).split("\n").length;
 }
 
-function returnParts(target) {
-  const query = target.split("?")[1] ?? "";
-  const [param, value] = query.split("=");
-  return { param, value };
+function returnPairs(target) {
+  const pairs = [...new URL(target, RETURN_BASE).searchParams];
+  return pairs.length > 0 ? pairs : [[""]];
 }
 
 function parseScript(text) {
@@ -354,20 +362,50 @@ function isStrayReturnFunction(node, path) {
   return !declared && !called;
 }
 
+function keepsQuery(call) {
+  const url = call.arguments[URL_ARGUMENT];
+  if (url?.type !== "BinaryExpression" || url.operator !== "+") return false;
+  return PATH_SOURCES.has(memberPath(url.left)) && QUERY_SOURCES.has(memberPath(url.right));
+}
+
+function runsUnconditionallyBefore(call, block, statement) {
+  if (!call.path.includes(block)) return false;
+  const steps = call.path.slice(call.path.indexOf(block) + 1);
+  return steps.every((step) => UNCONDITIONAL_STEPS.has(step.type)) && call.node.range[1] <= statement.range[0];
+}
+
+function followsOnlyReturnCall(call, path, calls) {
+  const [statement, block] = path.toReversed();
+  if (calls.length !== 1 || statement.type !== "ExpressionStatement" || statement.expression !== call) return false;
+  return SCOPE_NODES.has(block.type) && runsUnconditionallyBefore(calls[0], block, statement);
+}
+
+function isQuerySafeHistoryUse({ node, path }, calls) {
+  const [member, call] = path.toReversed();
+  const write = memberPath(member) === HISTORY_WRITE;
+  if (node.name !== HISTORY) return write && member.property === node;
+  if (!isMemberObject(node, member)) return false;
+  if (call.type !== "CallExpression" || call.callee !== member) return !write;
+  return write && (keepsQuery(call) || followsOnlyReturnCall(call, path.slice(0, path.indexOf(call)), calls));
+}
+
 function queryUse(programs) {
   const calls = [];
   const names = [];
+  const historyUses = [];
   let stray = 0;
   let strayCalls = 0;
   for (const program of programs) {
     walk(program, [], (node, path) => {
       if (isReturnCall(node)) calls.push({ node, path });
       if (node.type === "Identifier") names.push({ node, path });
+      if (node.type === "Identifier" && HISTORY_NAMES.has(node.name)) historyUses.push({ node, path });
       if (isStrayName(node, path) || isComputedKey(node) || isMetaTool(node) || isForbiddenText(node)) stray += 1;
       if (isStrayReturnFunction(node, path)) strayCalls += 1;
     });
   }
   stray += strayTimers(names);
+  stray += historyUses.filter((use) => !isQuerySafeHistoryUse(use, calls)).length;
   const reads = calls.map(({ node }) => node.arguments.map((read) => read.arguments[0]?.name));
   const [first = [], ...others] = reads;
   const agreed = (name, position) => others.every((names) => names[position] === name);
@@ -464,14 +502,13 @@ function shellFindings(root, checkoutReturn) {
   const file = join(root, SHELL_FILE);
   const shell = readShell(file);
   const markup = shell.markupFindings.map(({ line, text }) => ({ file: SHELL_FILE, line, text }));
-  const targets = Object.entries(checkoutReturn).flatMap(([name, target]) => {
-    const { param, value } = returnParts(target);
-    return targetProblems(shell, param, value).map((problem) => ({
+  const targets = Object.entries(checkoutReturn).flatMap(([name, target]) =>
+    returnPairs(target).flatMap(([param, value]) => targetProblems(shell, param, value)).map((problem) => ({
       file: SHELL_FILE,
       line: shell.line,
       text: `${name}: ${problem}`,
-    }));
-  });
+    })),
+  );
   return [...markup, ...targets];
 }
 

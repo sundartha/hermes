@@ -519,9 +519,15 @@ test("Konstanten, Funktion und Zweig zaehlen nur als Code im Syntaxbaum, nicht a
   assert.equal(result.status, EXIT_OK, result.stderr);
 });
 
+const nachDemAufruf = (clean) => (zeile) => clean.replace(CALL_LINE, `${CALL_LINE}\n${zeile}`);
+
 function meldeJedeZusatzzeile(kontext, clean, zeilen) {
+  meldeJedeEingefuegteZeile(kontext, zeilen, nachDemAufruf(clean));
+}
+
+function meldeJedeEingefuegteZeile(kontext, zeilen, einfuegen) {
   for (const [fall, zeile] of Object.entries(zeilen)) {
-    meldeJedenFall(kontext, clean.replace(CALL_LINE, `${CALL_LINE}\n${zeile}`), [
+    meldeJedenFall(kontext, einfuegen(zeile), [
       [fall, new RegExp(`KARTE_GESPEICHERT: ${NOT_FROM_LOCATION}`)],
       [fall, new RegExp(`ABO_GESCHEITERT: ${NOT_FROM_LOCATION}`)],
     ]);
@@ -605,6 +611,66 @@ test("Werkzeuge der Metaprogrammierung, mit denen sich URLSearchParams auf Umweg
     opener: "  const fenster = opener;",
   };
   meldeJedeZusatzzeile(kontext, clean, umwege);
+});
+
+test("Wege, die die Adresse ohne Zuweisung aendern, werden gemeldet, wenn sie die Abfrage vor dem Aufruf von returnMessageText verlieren koennen", (kontext) => {
+  const clean = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const paramsZeile = "  const params = new URLSearchParams(window.location.search);";
+  const davor = (zeile) => clean.replace(paramsZeile, `${zeile}\n${paramsZeile}`);
+  const vorDemAufruf = {
+    replaceState: '  history.replaceState(null, "", "/app");',
+    "replaceState nur mit dem Pfad": '  history.replaceState(null, "", location.pathname);',
+    "Abfrage nicht hinter dem Pfad": '  history.replaceState(null, "", "/app?" + location.search);',
+    "replaceState ueber window": '  window.history.replaceState(null, "", location.pathname + location.search);',
+    pushState: '  history.pushState(null, "", "/app");',
+    "ein anderer Aufruf an history": "  history.go(0);",
+    navigation: '  navigation.navigate("/app");',
+    "history als Alias": "  const verlauf = history;",
+    "replaceState als Alias": "  const ersetze = history.replaceState;",
+    "Name als Text": '  const name = "replaceState";',
+  };
+  meldeJedeEingefuegteZeile(kontext, vorDemAufruf, davor);
+  meldeJedeZusatzzeile(kontext, clean, {
+    "nach dem Aufruf unter einer Bedingung": '  if (document.hidden) history.replaceState(null, "", "/app");',
+    "nach dem Aufruf in einer Funktion": '  function leeren() {\n    history.replaceState(null, "", "/app");\n  }',
+    "zwischen zwei Aufrufen": `  history.replaceState(null, "", "/app");\n${CALL_LINE}`,
+  });
+  const erlaubt = [
+    davor('  history.replaceState(null, "", location.pathname + location.search);'),
+    nachDemAufruf(clean)('  history.replaceState(null, "", location.pathname);'),
+  ];
+  for (const shell of erlaubt) {
+    const result = runInMiniRoot(kontext, { [SHELL_FILE]: shell });
+    assert.equal(result.stdout, "");
+    assert.equal(result.status, EXIT_OK, result.stderr);
+  }
+});
+
+test("ein Rueckkehrziel mit mehreren Parametern wird je Parameter geprueft", (kontext) => {
+  const shell = shellSource([CARD_BRANCH, SUB_BRANCH]);
+  const mitFremdem = runInMiniRoot(kontext, {
+    "src/portal-paths.js": PORTAL_PATHS.replace("/app?card=ok", "/app?card=ok&x=1"),
+    [SHELL_FILE]: shell,
+  });
+  assert.equal(mitFremdem.status, EXIT_FINDING, mitFremdem.stderr);
+  assert.match(mitFremdem.stdout, /KARTE_GESPEICHERT: die Shell kennt den Parameter "x" nicht/);
+  assert.doesNotMatch(mitFremdem.stdout, /kennt den Wert/);
+  const beideBekannt = runInMiniRoot(kontext, {
+    "src/portal-paths.js": PORTAL_PATHS.replace("/app?card=ok", "/app?card=ok&sub=failed"),
+    [SHELL_FILE]: shell,
+  });
+  assert.equal(beideBekannt.stdout, "");
+  assert.equal(beideBekannt.status, EXIT_OK, beideBekannt.stderr);
+});
+
+test("ein Rueckkehrziel ohne Abfrage wird gemeldet", (kontext) => {
+  const result = runInMiniRoot(kontext, {
+    "src/portal-paths.js": PORTAL_PATHS.replace("/app?card=ok", "/app"),
+    [SHELL_FILE]: shellSource([CARD_BRANCH, SUB_BRANCH]),
+  });
+  assert.equal(result.status, EXIT_FINDING, result.stderr);
+  assert.match(result.stdout, /KARTE_GESPEICHERT: die Shell kennt den Parameter "" nicht/);
+  assert.doesNotMatch(result.stdout, /ABO_GESCHEITERT/);
 });
 
 test("Wege, Text als Code auszufuehren, werden gemeldet", (kontext) => {
