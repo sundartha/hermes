@@ -1,6 +1,13 @@
 {
   "titel": "Kopien (jscpd)",
-  "pfade": ["tools/basis-vergleich.mjs", ".jscpd.json", "tools/basis/jscpd.json"],
+  "pfade": [
+    "tools/basis-vergleich.mjs",
+    ".jscpd.json",
+    "tools/basis/jscpd.json",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/bestand-rueckfuehrung.mjs"
+  ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"],
     "zaehlen": "zahlen",
@@ -16,6 +23,6 @@
   },
   "probe": {
     "mitnehmen": [".jscpd.json", "tools/basis/jscpd.json"],
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"]
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd", "--basis", "HEAD~1"]
   }
 }
