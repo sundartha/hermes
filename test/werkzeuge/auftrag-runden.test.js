@@ -13,6 +13,7 @@ const ISSUE = 54;
 const ZWEITE_RUNDE = 2;
 const PROBE = "probe@example.invalid";
 const CODEBLOCK = "```";
+const alsBlock = (felder) => `${CODEBLOCK}json\n${JSON.stringify(felder)}\n${CODEBLOCK}`;
 
 const CLAUDE = `#!/usr/bin/env node
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -141,7 +142,7 @@ test("die letzte Antwort des Bau-Agenten steht als Hinweis in der Fehlerausgabe 
 
 test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftrag und geht beim zweiten Mal zurück in die Entwurfsprüfung", (context) => {
   const umbau = { ziel: "Lege text an", bereich: "src/text.js", erwarteteDateien: ["src/text.js"], vorbild: "src/zahl.js" };
-  const plan = [{ antwort: JSON.stringify({ ...umbau, abnahme: "test/zahl.test.js", entwurf: "Text anlegen." }) }];
+  const plan = [{ antwort: alsBlock({ ...umbau, abnahme: "test/zahl.test.js", entwurf: "Text anlegen." }) }];
   const bau = [
     { dateien: { "src/zahl.js": "kaputt\n" }, antwort: "Voraussetzung fehlt: Es braucht zuerst src/text.js." },
     { dateien: { "src/text.js": "export const TEXT = 1;\n" } },
@@ -181,7 +182,7 @@ function raeumtAltfunktionAuf(context, planAntwort) {
 }
 
 test("„Altfunktionen aufräumen“ baut erst einen Umbau, der eslint-suppressions.json kürzt, und startet dann den Auftrag neu", (context) => {
-  raeumtAltfunktionAuf(context, JSON.stringify({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }));
+  raeumtAltfunktionAuf(context, alsBlock({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }));
 });
 
 test("ein Umbau-Vorschlag, dessen JSON länger als 1000 Zeichen ist, wird aus der vollständigen Antwort gelesen", (context) => {
@@ -314,7 +315,7 @@ const ALT_BLEIBT = { dateien: { [ZAHL]: "const alt = 2;\nexport const ZAHL = 1;\
 const UNTERDRUECKUNGEN_AM_ANFANG = JSON.parse(MIT_ALTFUNKTION["eslint-suppressions.json"]);
 
 test("ein Aufräum-Umbau, der die Altfunktion stehen lässt, wird nicht als grüner Umbau festgehalten", (context) => {
-  const plan = [{ antwort: JSON.stringify({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }) }];
+  const plan = [{ antwort: alsBlock({ ...ALTFUNKTION_UMBAU, entwurf: "Die ungenutzte Variable alt fällt weg." }) }];
   const drehbuch = { bau: [{ antwort: ALTFUNKTION_FEHLT }, ALT_BLEIBT], plan, notiz: [{ antwort: "1. Umbau wiederholen" }], test: ROTER_TEST, auftrag: FUNKTION };
   const { repo, ergebnis, beleg } = lauf(context, drehbuch, MIT_ALTFUNKTION);
   const git = (...args) => runIn(repo, "git", args).stdout.trim();
@@ -336,7 +337,7 @@ test("ein geplanter Umbau, der keine Altfunktion aufräumen soll, bleibt grün, 
 test("ein Umbau aus einer anderen fehlenden Voraussetzung bleibt grün, auch wenn eslint-suppressions.json gleich bleibt", (context) => {
   const vorbereiten = { ...ALTFUNKTION_UMBAU, ziel: "Bereite zahl vor" };
   const bau = [{ antwort: `Voraussetzung fehlt: Erst muss alt in ${ZAHL} den Wert 2 haben.` }, ALT_BLEIBT, { dateien: { [ZAHL]: "const alt = 2;\nexport const ZAHL = 2;\n" } }];
-  const plan = [{ antwort: JSON.stringify({ ...vorbereiten, entwurf: "alt bekommt den Wert 2." }) }];
+  const plan = [{ antwort: alsBlock({ ...vorbereiten, entwurf: "alt bekommt den Wert 2." }) }];
   const { repo, ergebnis, beleg } = lauf(context, { bau, plan, test: ROTER_TEST, auftrag: FUNKTION }, MIT_ALTFUNKTION);
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.equal(beleg("A1-umbau").ergebnis, "grün");

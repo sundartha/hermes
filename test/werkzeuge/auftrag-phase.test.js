@@ -131,7 +131,7 @@ test("ein Auftrag, der nach „Voraussetzung fehlt“ einen Umbau-Commit mitbrin
   const umbau = { ziel: "Lege e an", bereich: "src/e.js", erwarteteDateien: ["src/e.js"], vorbild: "src/d.js", abnahme: "test/ok.test.js", entwurf: "E anlegen." };
   const probe = aufbau(context, {
     "85-V1": {
-      plan: [{ antwort: JSON.stringify(umbau) }],
+      plan: [{ antwort: ["```json", JSON.stringify(umbau), "```"].join("\n") }],
       test: [{ dateien: { "test/d.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { WERT } from "../src/d.js";\ntest("zwei", () => assert.equal(WERT, 2));\n' } }],
       bau: [
         { antwort: "Voraussetzung fehlt: Es braucht zuerst src/e.js." },
