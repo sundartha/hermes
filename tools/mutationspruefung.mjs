@@ -13,7 +13,7 @@ import { gleichwertigGemeldet } from "./auftrag/gleichwertig.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { gruppen } from "./mutationspruefung/gruppen.mjs";
+import { geteiltBeiZeitgrenze, gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
@@ -77,6 +77,9 @@ const BETRIEBSARTEN_HOECHSTENS = 1;
 const ERGEBNISDATEI = /\.json$/;
 const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
 const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
+const ERSTLAUF_GESCHEITERT = "Something went wrong in the initial test run";
+const ERSTLAUF_ZEITGRENZE = "Initial test run timed out!";
+const ERSTLAUF_FEHLER = "One or more tests resulted in an error:";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
@@ -261,9 +264,32 @@ function wellen(testgruppen) {
   );
 }
 
+function zeitgrenzeSeit(beginn) {
+  return (fehler) => {
+    const seither = ERSTLAUF_MITSCHRIFT.slice(beginn);
+    const gemeldet = (meldung) => seither.some((zeile) => zeile.includes(meldung));
+    return fehler.message === ERSTLAUF_GESCHEITERT && gemeldet(ERSTLAUF_ZEITGRENZE) && !gemeldet(ERSTLAUF_FEHLER);
+  };
+}
+
+async function geteilterGruppenlauf(lauf) {
+  const ueberZeitgrenze = zeitgrenzeSeit(ERSTLAUF_MITSCHRIFT.length);
+  const laufen = async (tests) => {
+    try {
+      return await gruppenlauf({ ...lauf, tests });
+    } catch (fehler) {
+      if (tests.length === 1 && ueberZeitgrenze(fehler)) console.error(`Abbruch: Erstlauf über der Zeitgrenze: ${tests[0]}`);
+      throw fehler;
+    }
+  };
+  const teile = await geteiltBeiZeitgrenze(lauf.tests, laufen, ueberZeitgrenze);
+  if (teile.length > 1) console.log(`${lauf.datei}: Erstlauf über der Zeitgrenze, ${lauf.tests.length} Testdateien in ${teile.length} Teilen geprüft`);
+  return vereine(teile[0], teile);
+}
+
 async function welle(datei, zeilen, testgruppen) {
   const concurrency = Math.max(1, Math.floor(GLEICHZEITIG / testgruppen.length));
-  const laeufe = await Promise.allSettled(testgruppen.map((tests) => gruppenlauf({ datei, zeilen, tests, concurrency })));
+  const laeufe = await Promise.allSettled(testgruppen.map((tests) => geteilterGruppenlauf({ datei, zeilen, tests, concurrency })));
   const fehlschlag = laeufe.find(({ status }) => status === ABGELEHNT);
   if (fehlschlag) throw fehlschlag.reason;
   return laeufe.map(({ value }) => value);
@@ -661,7 +687,7 @@ function roteTests(mitschrift) {
 async function mitErstlaufMitschrift(ausfuehren) {
   const schreiben = process.stdout.write.bind(process.stdout);
   process.stdout.write = (teil, ...rest) => {
-    if (String(teil).includes(ERSTLAUF_ROT)) ERSTLAUF_MITSCHRIFT.push(String(teil));
+    if ([ERSTLAUF_ROT, ERSTLAUF_ZEITGRENZE, ERSTLAUF_FEHLER].some((meldung) => String(teil).includes(meldung))) ERSTLAUF_MITSCHRIFT.push(String(teil));
     return schreiben(teil, ...rest);
   };
   try {
