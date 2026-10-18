@@ -7,7 +7,7 @@ import { laufzeitText } from "../umbenennung.mjs";
 
 const OBERGRENZE_MS = 100;
 const NAME = "echtWarten";
-const MODUL_ENDE = "echt-warten.js";
+const MODUL_ENDE = /echt-warten\.[cm]?[jt]s$/;
 const PARSER_OPTIONEN = { ecmaVersion: "latest", sourceType: "module", range: true };
 const RECHENARTEN = new Map([
   ["+", (links, rechts) => links + rechts],
@@ -78,8 +78,7 @@ function konstantenVon(programm) {
 function lokaleNamen(programm) {
   const namen = new Set([NAME]);
   const importe = programm.body.filter(
-    (knoten) =>
-      knoten.type === "ImportDeclaration" && String(knoten.source.value).endsWith(MODUL_ENDE),
+    (knoten) => knoten.type === "ImportDeclaration" && MODUL_ENDE.test(String(knoten.source.value)),
   );
   for (const { specifiers } of importe) {
     for (const { imported, local } of specifiers)
