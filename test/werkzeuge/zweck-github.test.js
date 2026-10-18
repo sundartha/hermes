@@ -3,18 +3,22 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
+import { kenntZweck, ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { FREIGABE_GRUENDE } from "../../tools/freigabe-gruende.mjs";
-import { REPO_ROOT, commitAll, outputLines, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { ZWECK_JE_TEIL, alsBericht, gruen, rot, technisch } from "../../tools/rotproben-woche/bericht.mjs";
+import { REPO_ROOT, commitAll, outputLines, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { scheinGithub } from "./pruefer/hilfen.mjs";
 import { API_PFAD, REPO, starteWerkzeug } from "./warteschlange/hilfen.mjs";
 
 const DATEN = "tools/zweck/github.json";
 const FREIGABE = "tools/freigabe-pruefung.mjs";
+const ROTPROBEN_WOCHE = "tools/rotproben-woche.mjs";
 const GITHUB_ID = /"(github\/[a-z-]+)"/g;
 const GRUND_AUFRUF = /\b(?:grund|listed)\(\s*([^,\s]+),/g;
 const GRUND_KONSTANTE = /^FREIGABE_GRUENDE\.([A-Z_]+)$/;
 const DURCHGEREICHT = "zweck";
+const TEIL_AUS_LAUF = /\bteile\.([a-z]+) =|alsBericht\(\{ ([a-z]+):/g;
+const TEILE_OHNE_ZWECK = ["aufgeraeumt"];
 const PR = 7;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
@@ -49,6 +53,76 @@ test("tools/zweck/github.json hat genau die IDs, die die Werkzeuge nennen", () =
   const genutzt = new Set(quelltextIds());
   for (const id of genutzt) assert.ok(kenntZweck(id), `kein Text für ${id}`);
   assert.deepEqual(Object.keys(JSON.parse(quelle(DATEN))).toSorted(), [...genutzt].toSorted());
+});
+
+test("jeder Teil der Rot-Proben-Woche, der rot werden kann, hat einen Zweck-Text", () => {
+  const teile = [...quelle(ROTPROBEN_WOCHE).matchAll(TEIL_AUS_LAUF)].map((treffer) => treffer[1] ?? treffer[2]);
+  const bekannt = [...Object.keys(ZWECK_JE_TEIL), ...TEILE_OHNE_ZWECK];
+  assert.deepEqual([...new Set(teile)].filter((teil) => !bekannt.includes(teil)), []);
+  for (const id of Object.values(ZWECK_JE_TEIL)) assert.ok(kenntZweck(id), id);
+});
+
+test("der Bericht der Rot-Proben nennt nach der Tabelle je roter Art den Block in eigenen Zeilen, bei Technik und Grün keinen", () => {
+  const probe = { fall: "lint-fehler", pr: 1, workflow: "CI", job: "Prüfungen", schritt: "Lint" };
+  const durch = alsBericht({ proben: [{ ...probe, ergebnis: rot("durchgegangen") }], menschen: rot("Mit Approve") });
+  const zeilen = durch.zeilen.filter((zeile) => zeile !== "");
+  const tabelle = zeilen.indexOf("| lint-fehler | #1 | CI / Prüfungen / Lint | durchgegangen |");
+  const block = zeilen.indexOf(zweckBlock("github/rotproben")[0]);
+  assert.ok(tabelle >= 0 && block > tabelle, durch.zeilen.join("\n"));
+  assert.deepEqual(zeilen.slice(block), [...zweckBlock("github/rotproben"), ...zweckBlock("github/ohne-menschen")]);
+  assert.equal(durch.zeilen.at(-2), "");
+  const leise = alsBericht({ proben: [{ ...probe, ergebnis: gruen("gestoppt") }], push: technisch("Push-Probe nicht ausgeführt") });
+  assert.doesNotMatch(leise.zeilen.join("\n"), /Wozu:/);
+  assert.equal(leise.urteile.length, 2);
+});
+
+function codeownersLauf(context, bauRegeln) {
+  const verzeichnis = probeDirectory(context, {
+    ".github/CODEOWNERS": OWNERS,
+    ".claude/rollen/bau.json": JSON.stringify({ permissions: { deny: bauRegeln } }),
+    ".claude/rollen/test.json": JSON.stringify({ permissions: { deny: ["Edit(tools/**)", "Edit(src/**)"] } }),
+  });
+  return runIn(REPO_ROOT, process.execPath, [join(REPO_ROOT, "tools/codeowners-abgleich.mjs"), verzeichnis]);
+}
+
+test("der CODEOWNERS-Abgleich nennt bei Rot den Block auf stdout und lässt die Befundzeilen auf stderr allein", (context) => {
+  const lauf = codeownersLauf(context, ["Edit(tools/**)", "Edit(test/**)", "Edit(scripts/**)"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  assert.deepEqual(outputLines(lauf.stderr), ["nur in .claude/rollen/bau.json, nicht in .github/CODEOWNERS: scripts/**"]);
+  assert.equal(lauf.stdout, `${zweckBlock("github/codeowners").join("\n")}\n`);
+  const gruen = codeownersLauf(context, ["Edit(tools/**)", "Edit(test/**)"]);
+  assert.equal(gruen.status, EXIT_OK, gruen.stderr);
+  assert.equal(`${gruen.stdout}${gruen.stderr}`, "");
+});
+
+test("Workflows prüfen nennt bei Rot den Block auf stdout und lässt die Befundzeilen auf stderr allein", (context) => {
+  const kopf = ["name: Probe", "on: push", "permissions: {}", "jobs:", "  probe:", "    runs-on: ubuntu-latest", "    steps:"];
+  const verzeichnis = probeDirectory(context, { "probe.yml": [...kopf, "      - run: make || true", ""].join("\n") });
+  const lauf = runIn(REPO_ROOT, process.execPath, [join(REPO_ROOT, "tools/workflows-pruefen.mjs"), verzeichnis, join(verzeichnis, "keine")]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  assert.ok(outputLines(lauf.stderr).every((zeile) => zeile.startsWith(join(verzeichnis, "probe.yml:"))), lauf.stderr);
+  assert.equal(lauf.stdout, `${zweckBlock("github/workflows").join("\n")}\n`);
+});
+
+function testschutzRepo(context) {
+  const vorher = ['import { test } from "node:test";', 'test("eins", () => { if (1 !== 1) throw new Error(); });', ""];
+  const verzeichnis = probeRepository(context, { "tools/gate-tests.json": "{}\n", "test/eins.test.js": vorher.join("\n") });
+  writeFiles(verzeichnis, { "test/eins.test.js": vorher.join("\n").replace("1 !== 1", "1 !== 2") });
+  commitAll(verzeichnis, "Test geändert");
+  return verzeichnis;
+}
+
+test("der Testschutz nennt nach den Befundzeilen ohne Freigabe den Block", async (context) => {
+  const verzeichnis = testschutzRepo(context);
+  const github = await scheinGithub(context, new Map([[`GET ${API_PFAD}/pulls/${PR}`, { body: "", head: { ref: "paket/probe" } }]]));
+  const lauf = await starteWerkzeug([join(REPO_ROOT, "tools/tests-nur-ergaenzt.mjs"), "--basis", "HEAD~1", "--pr", String(PR)], {
+    cwd: verzeichnis,
+    umgebung: { GITHUB_API_URL: github.url, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO },
+  });
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stdout + lauf.stderr);
+  const zeilen = outputLines(lauf.stderr);
+  assert.deepEqual(zeilen.slice(-zweckBlock("github/testschutz").length), zweckBlock("github/testschutz"));
+  assert.ok(ohneZweck(zeilen).some((zeile) => zeile.includes("test/eins.test.js, Testfall „eins“")), lauf.stderr);
 });
 
 async function freigabeLauf(context, reviews) {
