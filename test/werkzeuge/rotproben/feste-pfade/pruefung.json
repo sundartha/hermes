@@ -6,13 +6,15 @@
     "tools/migrationen-orte.mjs",
     "tools/ts-dateien.mjs",
     "tools/pruefungen-messen.mjs",
-    "tools/workflows-pruefen/struktur.mjs"
+    "tools/workflows-pruefen/struktur.mjs",
+    "tools/umbenennung.mjs",
+    "tools/auftrag/format.mjs"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"],
     "zaehlen": "stderr-zeilen"
   },
   "probe": {
-    "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"]
+    "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs", "--basis", "HEAD~1"]
   }
 }

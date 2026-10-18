@@ -1,0 +1,64 @@
+{
+  "titel": "Wechsel nach .mts mit ergänzten Typen fällt aus dem Bereich",
+  "vorher": {
+    "package.json": ["{\"type\": \"module\"}"],
+    "src/a.js": ["export const eins = 1;"],
+    "test/a.test.js": ["export const probe = 1;"],
+    ".claude/hooks/h.mjs": ["export const haken = 1;"],
+    "tools/gate-tests.json": [
+      "{\"Probe\": {\"module\": [\"src/a.js#eins\"], \"tests\": [\"test/a.test.js\"]}}"
+    ],
+    "tools/ziele/geschuetzt.json": [
+      "{\"gates\": \"tools/gate-tests.json\", \"gruppe\": [\"src/a.js\", \"src/\"]}"
+    ],
+    "tools/auftrag/musterdateien.json": [
+      "{\"regel\": \"Muster\", \"bau\": [{\"art\": \"Modul\", \"praefix\": \"src/\", \"datei\": \"src/a.js\"}]}"
+    ],
+    ".github/CODEOWNERS": ["/tools/ @probe", "/src/db/migrations/rueckbau/ @probe"],
+    ".claude/rollen/bau.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Read(data/**)\"]}, \"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"node \\\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/h.mjs\\\"\"}]}]}}"
+    ],
+    ".claude/settings.json": ["{\"permissions\": {\"allow\": [\"Bash(node:*)\"]}}"],
+    "eslint.config.js": [
+      "export default [{ ignores: [\"coverage/**\"] }, { name: \"probe\", files: [\"src/a.{js,ts}\", \"{src,test}/**/*.{ts,mts}\"], rules: { \"no-console\": \"error\" } }];",
+      "export const HERMES_REGELN_DATEI = new URL(\"./tools/eslint-rules/index.js\", import.meta.url);",
+      "export const TESTREGELN_DATEI = new URL(\"./tools/eslint-rules/tests.js\", import.meta.url);"
+    ],
+    ".dependency-cruiser.cjs": [
+      "module.exports = { forbidden: [{ name: \"probe\", from: { path: \"^src/\" }, to: { path: \"^(src|test)/\" } }], required: [{ name: \"pflicht\", module: { path: \"^src/a\\\\.js$\" }, to: { path: \"^src/\" } }] };"
+    ],
+    "tools/bereiche.json": [
+      "[{\"bereich\": \"probe\", \"quellen\": [\"^src/geheim/[cd]\\\\.js$\"]}]"
+    ],
+    "test/werkzeuge/rotproben/probe/pruefung.json": [
+      "{\"pfade\": [\"tools/\", \"src/*.js\"], \"probe\": {\"mitnehmen\": [\"tools/gate-tests.json\"]}}"
+    ],
+    "tools/eslint-rules/index.js": ["export default {};"],
+    "tools/eslint-rules/tests.js": ["export default {};"],
+    "tools/auftrag/agenten.mjs": [
+      "export const KRITISCH_OHNE_GATE_TEST = [\"src/a.js\", \"src/\"];"
+    ],
+    "tools/auftrag/bereiche.mjs": ["export const GEMEINSAME_ORDNER = [\"src/\"];"],
+    "tools/auftrag/lauf.mjs": [
+      "export const PIN_PRUEFUNG = \"scripts/pin.js\";",
+      "export const PIN_HAKEN = \".githooks/pre-commit\";"
+    ],
+    "scripts/pin.js": ["export const pin = 1;"],
+    ".githooks/pre-commit": ["#!/bin/sh"],
+    "tools/mutationspruefung/vorlage.mjs": [
+      "export const KETTENANFANG = \"src/a.js\";",
+      "export const SCHEMA = \"src/schema.sql\";"
+    ],
+    "src/schema.sql": ["select 1;"],
+    ".github/workflows/probe.yml": ["on:", "  push:", "    paths:", "      - src/**", "jobs: {}"],
+    "test/abnahme-ausgewandert.json": ["[{\"id\": \"A1\", \"file\": \"test/a.test.js\"}]"],
+    "src/b.js": ["export const zwei = 2;"],
+    "src/geheim/c.js": ["export const drei = 3;"],
+    "src/geheim/d.js": ["export const vier = 4;"]
+  },
+  "loeschen": ["src/geheim/d.js"],
+  "dateien": {
+    "src/geheim/d.mts": ["export const vier: number = 4;"]
+  },
+  "erwartet": "src/geheim/d.js → src/geheim/d.mts: tools/bereiche.json probe.quellen trifft src/geheim/d.js, aber nicht src/geheim/d.mts"
+}
