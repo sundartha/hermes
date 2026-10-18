@@ -177,6 +177,16 @@ test("ein Wert über dem Höchstwert seines Eintrags ist rot, ebenso ein verwais
   assert.match(verwaist[0], /passt zu keinem Aufruf/);
 });
 
+test("echtWarten unter anderem Namen zählt bei jeder Endung des Helfers", () => {
+  for (const endung of ["js", "mjs", "cjs", "ts", "mts", "cts"]) {
+    const zeilen = [
+      `import { echtWarten as warte } from "./echt-warten.${endung}";`,
+      "await warte(500);",
+    ];
+    assert.equal(befundeFuer(zeilen).length, 1, endung);
+  }
+});
+
 test("echtWarten lässt echte Zeit verstreichen", async () => {
   const start = performance.now();
   await echtWarten(KURZ_WARTEN_MS);
