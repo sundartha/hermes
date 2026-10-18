@@ -133,6 +133,43 @@ test("endActiveCall: Ergebnisabruf scheitert -> Persistenz entfaellt, der Loesch
   assert.deepEqual(store.order, [], "ohne Ergebnis gibt es nichts zu persistieren");
 });
 
+async function statusWarnungenBeimLoeschen(kontext, call, loeschAntwort) {
+  const el = makeOutbound(spyStore(call));
+  const warnungen = kontext.mock.method(console, "warn", () => {});
+  await withFetch(async (_url, init) => {
+    if (init.method === "GET") throw new Error("provider timeout");
+    return loeschAntwort;
+  }, () => el.endActiveCall(call.id));
+  const zeilen = warnungen.mock.calls.map((aufruf) => String(aufruf.arguments[0]));
+  return zeilen.filter((zeile) => zeile.includes("status="));
+}
+
+test("endActiveCall: Anbieter lehnt den Loeschversuch ab -> eine Warnung nennt Anruf und Status", async (kontext) => {
+  const call = { id: "call_4", elevenlabsConversationId: CONV_ID, endedAt: null };
+  const mitStatus = await statusWarnungenBeimLoeschen(kontext, call, { ok: false, status: HTTP_SERVER_ERROR });
+  assert.equal(mitStatus.length, 1, "genau eine Warnung zum abgelehnten Loeschversuch");
+  assert.ok(mitStatus[0].includes(`call=${call.id}`), mitStatus[0]);
+  assert.ok(mitStatus[0].includes(`status=${HTTP_SERVER_ERROR}`), mitStatus[0]);
+});
+
+test("endActiveCall: Anbieter nimmt den Loeschversuch an -> keine Warnung mit Status", async (kontext) => {
+  const call = { id: "call_5", elevenlabsConversationId: CONV_ID, endedAt: null };
+  const mitStatus = await statusWarnungenBeimLoeschen(kontext, call, { ok: true, status: HTTP_OK });
+  assert.deepEqual(mitStatus, []);
+});
+
+test("endActiveCall: unbekannter Anruf -> kein Fehler und kein Netzzugriff", async () => {
+  const store = { ...spyStore(null), getCall: () => undefined };
+  const el = makeOutbound(store);
+  const methoden = [];
+  await withFetch(async (_url, init) => {
+    methoden.push(init.method);
+    return { ok: true, status: HTTP_OK };
+  }, () => el.endActiveCall("call_unbekannt"));
+  assert.deepEqual(methoden, []);
+  assert.deepEqual(store.order, []);
+});
+
 test("endActiveCall: ohne elevenlabsConversationId -> No-op (kein Netzzugriff)", async () => {
   const store = spyStore({ id: "call_3", elevenlabsConversationId: null });
   const el = makeOutbound(store);

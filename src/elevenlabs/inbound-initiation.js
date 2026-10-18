@@ -3,9 +3,12 @@ import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-o
 import { callLocaleFor } from "./call-locale.js";
 import { callTimeContext } from "./time-context.js";
 import {
-  OVERRIDE_ALLOWED_LEAF_PATHS,
+  OVERRIDE_ALL_LEAF_PATHS,
   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,
+  isPlainObject,
   overrideLeafPaths,
+  overrideValueAtPath,
+  verboteneOverridePfade,
 } from "./convai.js";
 import { PLACEHOLDER_OPENER, auftraggeberAusdruck, dynamicVariables } from "./outbound.js";
 import { EL_CALL_BINDING_SIP_HEADER } from "./inbound-sip-uri.js";
@@ -23,23 +26,17 @@ export const SIP_HEADERS_FORM = Object.freeze({
 
 const HEADER_KLEIN = EL_CALL_BINDING_SIP_HEADER.toLowerCase();
 const KEIN_TOKEN = "";
-const ERLAUBTE_OVERRIDE_PFADE = Object.freeze([
-  ...OVERRIDE_ALLOWED_LEAF_PATHS,
-  ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,
-]);
-const OVERRIDE_PFAD_TRENNER = ".";
 const FIRST_MESSAGE_PFAD = OVERRIDE_FIRST_MESSAGE_LEAF_PATHS[0];
 const OHNE_AUFTRAG = Object.freeze({});
 const OHNE_GEGENSTELLE = "";
 
 const alsToken = (wert) => (typeof wert === "string" ? wert : KEIN_TOKEN);
-const istEinfachesObjekt = (wert) => wert !== null && typeof wert === "object" && !Array.isArray(wert);
 
 export function sipHeadersFormOf(body) {
   const kopfzeilen = body?.sip_headers;
   if (kopfzeilen === undefined || kopfzeilen === null) return SIP_HEADERS_FORM.FEHLT;
   if (Array.isArray(kopfzeilen)) return SIP_HEADERS_FORM.LISTE;
-  return istEinfachesObjekt(kopfzeilen) ? SIP_HEADERS_FORM.OBJEKT : SIP_HEADERS_FORM.UNBEKANNT;
+  return isPlainObject(kopfzeilen) ? SIP_HEADERS_FORM.OBJEKT : SIP_HEADERS_FORM.UNBEKANNT;
 }
 
 function tokenAusObjekt(kopfzeilen) {
@@ -129,9 +126,6 @@ function inboundOverride({ text, locale }) {
 
 const istSichererText = (wert) => typeof wert === "string" && !wert.includes(PLACEHOLDER_OPENER);
 
-const wertAmPfad = (objekt, pfad) =>
-  pfad.split(OVERRIDE_PFAD_TRENNER).reduce((knoten, schluessel) => knoten?.[schluessel], objekt);
-
 function unsichereVariablen(variablen) {
   return Object.entries(variablen)
     .filter(([, wert]) => !istSichererText(wert))
@@ -140,9 +134,9 @@ function unsichereVariablen(variablen) {
 
 function unsichereOverridePfade(override) {
   const pfade = overrideLeafPaths(override, []);
-  const verboten = pfade.filter((pfad) => !ERLAUBTE_OVERRIDE_PFADE.includes(pfad));
-  const unsicher = pfade.filter((pfad) => !istSichererText(wertAmPfad(override, pfad)));
-  const eroeffnung = wertAmPfad(override, FIRST_MESSAGE_PFAD);
+  const verboten = verboteneOverridePfade(override, OVERRIDE_ALL_LEAF_PATHS);
+  const unsicher = pfade.filter((pfad) => !istSichererText(overrideValueAtPath(override, pfad)));
+  const eroeffnung = overrideValueAtPath(override, FIRST_MESSAGE_PFAD);
   const ohneEroeffnung = typeof eroeffnung === "string" && eroeffnung.trim() ? [] : [FIRST_MESSAGE_PFAD];
   return [...verboten, ...unsicher, ...ohneEroeffnung];
 }
@@ -150,7 +144,7 @@ function unsichereOverridePfade(override) {
 const EROEFFNUNG_BEFUND_PRAEFIX = "eroeffnung.";
 
 function eroeffnungsDefekteDer(antwort, sollform) {
-  const text = wertAmPfad(antwort.conversation_config_override, FIRST_MESSAGE_PFAD);
+  const text = overrideValueAtPath(antwort.conversation_config_override, FIRST_MESSAGE_PFAD);
   return inboundEroeffnungDefekte({ text, ...sollform }).map((defekt) => `${EROEFFNUNG_BEFUND_PRAEFIX}${defekt}`);
 }
 

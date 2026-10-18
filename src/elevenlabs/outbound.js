@@ -537,17 +537,22 @@ async function finishOnPermanentError(deps) {
   await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
 }
 
+function billingAfterAnchor({ store, callId, anchor, billThunk, finishCall }) {
+  applyAnsweredAnchor(store, callId, anchor);
+  return billThunk(finishCall, store, callId);
+}
+
 async function finishFromConversation({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
   const politik = nachlaufPolitikFuer(store.getCall(callId));
   persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
   const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
   const ended = endCall();
   const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
-  applyAnsweredAnchor(store, callId, anchor);
+  const bill = billingAfterAnchor({ store, callId, anchor, billThunk, finishCall });
   await terminateAndBillCall({
     persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall }),
     hangUp: null,
-    bill: billThunk(finishCall, store, callId),
+    bill,
     callId,
   });
 }
@@ -623,6 +628,30 @@ function rearmActiveConversationPolls({ store, pollConversationResult, laufendeI
     console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
 }
 
+async function saveProviderResultIfFetched({ store, fetchConversationSoft, callId }) {
+  const call = store.getCall(callId);
+  const conversationId = call?.elevenlabsConversationId;
+  if (!conversationId) return null;
+  const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
+  if (conversation) {
+    const politik = nachlaufPolitikFuer(call);
+    persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
+    applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
+  }
+  return { callId, conversationId };
+}
+
+async function deleteConversationAtProvider({ account, callId, conversationId }) {
+  const { accepted, status } = await endConversation({
+    fetchImpl: fetch,
+    account,
+    conversationId,
+    timeoutMs: EL_ABORT_PROVIDER_TIMEOUT_MS,
+  });
+  if (!accepted)
+    console.warn(`[el-outbound] Loeschversuch beim Anbieter fehlgeschlagen (call=${callId}) status=${status}`);
+}
+
 export function makeElevenLabsOutbound({
   store,
   config,
@@ -675,21 +704,9 @@ export function makeElevenLabsOutbound({
   }
 
   async function endActiveCall(callId) {
-    const call = store.getCall(callId);
-    const conversationId = call?.elevenlabsConversationId;
-    if (!conversationId) return;
-    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
-    if (conversation) {
-      const politik = nachlaufPolitikFuer(call);
-      persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
-      applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
-    }
-    await endConversation({
-      fetchImpl: fetch,
-      account: settings(),
-      conversationId,
-      timeoutMs: EL_ABORT_PROVIDER_TIMEOUT_MS,
-    });
+    const conversationRef = await saveProviderResultIfFetched({ store, fetchConversationSoft, callId });
+    if (!conversationRef) return;
+    await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
 
   async function originateCall(call) {
