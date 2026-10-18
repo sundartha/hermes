@@ -1,6 +1,13 @@
 {
   "titel": "Toter Code (knip)",
-  "pfade": ["tools/basis-vergleich.mjs", "knip.json", "tools/basis/knip.json"],
+  "pfade": [
+    "tools/basis-vergleich.mjs",
+    "knip.json",
+    "tools/basis/knip.json",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/bestand-rueckfuehrung.mjs"
+  ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip"],
     "zaehlen": "zahlen",
@@ -16,6 +23,6 @@
   },
   "probe": {
     "mitnehmen": ["knip.json", "tools/basis/knip.json"],
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip"]
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip", "--basis", "HEAD~1"]
   }
 }

@@ -1,0 +1,27 @@
+{
+  "titel": "Umbenennung .js→.ts ändert den Text, der Eintrag der Basislinie wandert mit",
+  "vorher": {
+    "src/gruss.js": ["export const gruss = (name) => `Hallo {name}`;"],
+    "tools/basis/semgrep.json": [
+      "{",
+      "  \"version\": \"1.177.0\",",
+      "  \"befunde\": [",
+      "    \"missing-template-string-indicator|src/gruss.js|0000000000000000\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "loeschen": ["src/gruss.js"],
+  "dateien": {
+    "src/gruss.ts": ["export const gruss = (name: string): string => `Hallo {name}!`;"],
+    "tools/basis/semgrep.json": [
+      "{",
+      "  \"version\": \"1.177.0\",",
+      "  \"befunde\": [",
+      "    \"missing-template-string-indicator|src/gruss.ts|0000000000000000\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "erwartet": "stehen nicht auf der Basis HEAD~1"
+}
