@@ -413,6 +413,15 @@ const dateiBloecke = [
 const TS_ORDNER = "{src,test,tools,scripts}";
 const TS_DATEIEN = [`${TS_ORDNER}/**/*.${TS_ENDUNGEN}`];
 const TS_DEKLARATIONEN = [`${TS_ORDNER}/**/*.d.${TS_ENDUNGEN}`];
+const UNGENUTZT_OPTIONEN = {
+  vars: "all",
+  args: "after-used",
+  caughtErrors: "all",
+  ignoreRestSiblings: false,
+  ignoreClassWithStaticInitBlock: false,
+  ignoreUsingDeclarations: false,
+  reportUsedIgnorePattern: false,
+};
 const DEKLARATION_MELDUNG =
   "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.";
 const TYPWAECHTER_MELDUNG =
@@ -455,6 +464,7 @@ const tsBloecke = [
         },
       ],
       "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/no-unused-vars": ["error", UNGENUTZT_OPTIONEN],
       "no-unreachable": "error",
     },
   },
@@ -498,7 +508,7 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "no-unused-vars": ["warn", UNGENUTZT_OPTIONEN],
       "no-console": "off",
       "no-empty": ["warn", { allowEmptyCatch: true }],
       "no-constant-condition": ["error", { checkLoops: false }],

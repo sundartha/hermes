@@ -438,14 +438,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -930,14 +928,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -1422,14 +1418,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -1914,14 +1908,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -2406,14 +2398,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -2898,14 +2888,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -3390,14 +3378,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -3882,14 +3868,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -4374,14 +4358,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -4866,14 +4848,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -5358,14 +5338,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -5850,14 +5828,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -6342,14 +6318,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -6834,14 +6808,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -7326,14 +7298,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -7818,14 +7788,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -8310,14 +8278,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -8802,14 +8768,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -9294,14 +9258,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -9786,14 +9748,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -10234,14 +10194,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -10656,14 +10614,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -11043,14 +10999,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -11430,14 +11384,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -11817,14 +11769,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -12192,14 +12142,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -12584,14 +12532,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -12976,14 +12922,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -13368,14 +13312,12 @@
         1,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -13667,7 +13609,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -14239,14 +14190,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -14563,7 +14512,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -15135,14 +15093,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -15459,7 +15415,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -15987,14 +15952,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -16311,7 +16274,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -16831,14 +16803,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -17155,7 +17125,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -17622,14 +17601,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -17946,7 +17923,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -18413,14 +18399,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -18737,7 +18721,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -19192,14 +19185,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
@@ -19516,7 +19507,16 @@
         }
       ],
       "@typescript-eslint/no-unused-vars": [
-        2
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
       ],
       "@typescript-eslint/no-useless-constructor": [
         2
@@ -19971,14 +19971,12 @@
         0,
         {
           "args": "after-used",
-          "argsIgnorePattern": "^_",
           "caughtErrors": "all",
           "ignoreClassWithStaticInitBlock": false,
           "ignoreRestSiblings": false,
           "ignoreUsingDeclarations": false,
           "reportUsedIgnorePattern": false,
-          "vars": "all",
-          "varsIgnorePattern": "^_"
+          "vars": "all"
         }
       ],
       "no-useless-assignment": [
