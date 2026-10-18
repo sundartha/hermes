@@ -13,9 +13,16 @@ function json(value) {
   return `${JSON.stringify(value)}\n`;
 }
 
+const RULE_FILES = [
+  'export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);',
+  'export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);',
+].join("\n");
+
 function eslintConfig(files, options = []) {
-  return `export default [{ ignores: ["coverage/**"] }, { name: "probe", files: ${JSON.stringify(files)}, rules: { "no-console": ["error", ...${JSON.stringify(options)}] } }];\n`;
+  return `export default [{ ignores: ["coverage/**"] }, { name: "probe", files: ${JSON.stringify(files)}, rules: { "no-console": ["error", ...${JSON.stringify(options)}] } }];\n${RULE_FILES}\n`;
 }
+
+const WORKFLOW = 'on:\n  push:\n    paths:\n      - src/**\n      - "!src/a.js"\njobs: {}\n';
 
 const BASE_FILES = {
   "package.json": json({ type: "module" }),
@@ -59,6 +66,19 @@ const BASE_FILES = {
     pfade: ["tools/", "src/*.js"],
     probe: { mitnehmen: ["tools/gate-tests.json"] },
   }),
+  "tools/eslint-rules/index.js": "export default {};\n",
+  "tools/eslint-rules/tests.js": "export default {};\n",
+  "tools/auftrag/agenten.mjs": 'export const KRITISCH_OHNE_GATE_TEST = ["src/a.js", "src/"];\n',
+  "tools/auftrag/bereiche.mjs": 'export const GEMEINSAME_ORDNER = ["src/"];\n',
+  "tools/auftrag/lauf.mjs":
+    'export const PIN_PRUEFUNG = "scripts/pin.js";\nexport const PIN_HAKEN = ".githooks/pre-commit";\n',
+  "scripts/pin.js": "export const pin = 1;\n",
+  ".githooks/pre-commit": "#!/bin/sh\n",
+  "tools/mutationspruefung/vorlage.mjs":
+    'export const KETTENANFANG = "src/a.js";\nexport const SCHEMA = "src/schema.sql";\n',
+  "src/schema.sql": "select 1;\n",
+  ".github/workflows/probe.yml": WORKFLOW,
+  "test/abnahme-ausgewandert.json": json([{ id: "A1", file: "test/a.test.js" }]),
 };
 
 function run(repo) {
@@ -342,7 +362,9 @@ test("feste-pfade: Ausnahmen eines Blocks, nicht prüfbare Ausdrücke und Ordner
     ],
     [
       {
-        "tools/bereiche.json": json([{ bereich: "probe", quellen: ["^test/a\\.(test|weg)\\.js$"] }]),
+        "tools/bereiche.json": json([
+          { bereich: "probe", quellen: ["^test/a\\.(test|weg)\\.js$"] },
+        ]),
       },
       "die Alternative weg trifft keine versionierte Datei",
     ],
@@ -371,4 +393,98 @@ test("feste-pfade: eine fehlende Liste ist rot statt übersprungen", (context) =
   runIn(repo, "git", ["rm", "-q", "tools/ziele/geschuetzt.json"]);
   commitAll(repo, "Liste weg");
   assertRed(run(repo), "tools/ziele/geschuetzt.json fehlt");
+});
+
+test("feste-pfade: Listen im Code, Workflow-Pfade, Abnahmeliste und Hausregel-Dateien melden ihren fehlenden Eintrag", (context) => {
+  const cases = [
+    [
+      { "tools/auftrag/agenten.mjs": 'export const KRITISCH_OHNE_GATE_TEST = ["src/weg/"];\n' },
+      `tools/auftrag/agenten.mjs KRITISCH_OHNE_GATE_TEST: src/weg/ ${MISSING}`,
+    ],
+    [
+      { "tools/auftrag/bereiche.mjs": 'export const GEMEINSAME_ORDNER = ["src/weg/"];\n' },
+      `tools/auftrag/bereiche.mjs GEMEINSAME_ORDNER: src/weg/ ${MISSING}`,
+    ],
+    [
+      {
+        "tools/auftrag/lauf.mjs":
+          'export const PIN_PRUEFUNG = "scripts/weg.js";\nexport const PIN_HAKEN = ".githooks/pre-commit";\n',
+      },
+      `tools/auftrag/lauf.mjs PIN_PRUEFUNG: scripts/weg.js ${MISSING}`,
+    ],
+    [
+      {
+        "tools/mutationspruefung/vorlage.mjs":
+          'export const KETTENANFANG = "src/a.js";\nexport const SCHEMA = "src/weg.sql";\n',
+      },
+      `tools/mutationspruefung/vorlage.mjs SCHEMA: src/weg.sql ${MISSING}`,
+    ],
+    [
+      { ".github/workflows/probe.yml": WORKFLOW.replace("src/**", "lib/**") },
+      `.github/workflows/probe.yml on.push.paths: lib/** ${MISSING}`,
+    ],
+    [
+      { ".github/workflows/probe.yml": WORKFLOW.replace('"!src/a.js"', '"!src/weg.js"') },
+      `.github/workflows/probe.yml on.push.paths: src/weg.js ${MISSING}`,
+    ],
+    [
+      { "test/abnahme-ausgewandert.json": json([{ id: "A1", file: "test/weg.test.js" }]) },
+      `test/abnahme-ausgewandert.json file: test/weg.test.js ${MISSING}`,
+    ],
+    [
+      {
+        "eslint.config.js": eslintConfig(["src/a.js"]).replace(
+          "eslint-rules/tests.js",
+          "eslint-rules/weg.js",
+        ),
+      },
+      `eslint.config.js TESTREGELN_DATEI: tools/eslint-rules/weg.js ${MISSING}`,
+    ],
+  ];
+  for (const [files, expected] of cases) assertRed(runInNewRepo(context, files), expected);
+});
+
+test("feste-pfade: eine Liste im Code ohne Export, unlesbare Workflow-Pfade und allowed-Regeln sind rot", (context) => {
+  const cases = [
+    [
+      { "tools/auftrag/agenten.mjs": 'const KRITISCH_OHNE_GATE_TEST = ["src/a.js"];\n' },
+      "tools/auftrag/agenten.mjs: KRITISCH_OHNE_GATE_TEST wird dort nicht exportiert",
+    ],
+    [
+      {
+        "eslint.config.js": eslintConfig(["src/a.js"]).replace(
+          "export const HERMES",
+          "const HERMES",
+        ),
+      },
+      "eslint.config.js: HERMES_REGELN_DATEI wird dort nicht exportiert",
+    ],
+    [
+      { ".github/workflows/probe.yml": "on:\n  push:\n    paths: [src/**]\njobs: {}\n" },
+      ".github/workflows/probe.yml: on.push.paths lässt sich nicht als Liste je Zeile lesen",
+    ],
+    [
+      { ".github/workflows/probe.yml": 'on: { push: { paths: ["src/**"] } }\njobs: {}\n' },
+      ".github/workflows/probe.yml: on.paths lässt sich nicht als Liste je Zeile lesen",
+    ],
+    [
+      { ".github/workflows/probe.yml": 'on:\n  push: { paths: ["src/**"] }\njobs: {}\n' },
+      ".github/workflows/probe.yml: on.push.paths lässt sich nicht als Liste je Zeile lesen",
+    ],
+    [
+      {
+        ".dependency-cruiser.cjs":
+          'module.exports = { allowed: [{ from: { path: "^src/" }, to: { path: "^src/" } }] };\n',
+      },
+      ".dependency-cruiser.cjs allowed: die Prüfung fester Pfade prüft allowed-Regeln nicht",
+    ],
+  ];
+  for (const [files, expected] of cases) assertRed(runInNewRepo(context, files), expected);
+});
+
+test("feste-pfade: ein fehlender Workflow-Ordner und eine fehlende Liste im Code sind rot statt übersprungen", (context) => {
+  const repo = probeRepository(context, BASE_FILES);
+  runIn(repo, "git", ["rm", "-q", ".github/workflows/probe.yml", "tools/auftrag/bereiche.mjs"]);
+  commitAll(repo, "Listen weg");
+  assertRed(run(repo), ".github/workflows/ fehlt", "tools/auftrag/bereiche.mjs fehlt");
 });

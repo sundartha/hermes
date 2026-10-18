@@ -20,7 +20,7 @@ const ENDUNGEN = `{${ENDUNGEN_LISTE.join(",")}}`;
 const ENDUNGEN_OHNE_JS = `{${ENDUNGEN_LISTE.filter((endung) => endung !== "js").join(",")}}`;
 const TS_ENDUNGEN = "{ts,mts,cts}";
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
-const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
+export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const WORT_NUR_IN = [
   {
@@ -167,7 +167,7 @@ const ABLEHNUNGS_TABELLE = {
   tabelle: "MCP_DENIAL_TEXTS",
   sprache: "en",
 };
-const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
+export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
 const hermesRegeln = existsSync(HERMES_REGELN_DATEI)

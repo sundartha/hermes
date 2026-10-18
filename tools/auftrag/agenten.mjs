@@ -26,7 +26,7 @@ const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
 const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--include-hook-events"];
 const GATE_TESTS = new URL("../gate-tests.json", import.meta.url);
 const GATE_ANKER = "#";
-const KRITISCH_OHNE_GATE_TEST = [
+export const KRITISCH_OHNE_GATE_TEST = [
   "src/middleware.js",
   "src/boot-guard.js",
   "src/process-guards.js",

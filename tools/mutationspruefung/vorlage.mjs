@@ -5,10 +5,11 @@ import { cwd, env } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
+import { FOLDER } from "../migrationen-orte.mjs";
+
 export const VORLAGE_UNABHAENGIG = "HERMES_VORLAGE_UNABHAENGIG";
-const KETTENANFANG = "src/db/migrate.js";
-const SCHEMA = "src/db/schema.sql";
-const MIGRATIONEN = "src/db/migrations";
+export const KETTENANFANG = "src/db/migrate.js";
+export const SCHEMA = "src/db/schema.sql";
 const LOKAL = "local";
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const jeWurzel = new Map();
@@ -26,7 +27,7 @@ export async function vorlagenkette(wurzel) {
 }
 
 function schemadateien(wurzel) {
-  const ordner = join(wurzel, MIGRATIONEN);
+  const ordner = join(wurzel, FOLDER);
   const migrationen = existsSync(ordner)
     ? readdirSync(ordner, { recursive: true, withFileTypes: true })
         .filter((eintrag) => eintrag.isFile())

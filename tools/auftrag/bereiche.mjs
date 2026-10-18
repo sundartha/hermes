@@ -5,7 +5,7 @@ import { cruise } from "dependency-cruiser";
 
 import { imBereich } from "./format.mjs";
 
-const GEMEINSAME_ORDNER = ["src/store/", "src/utils/"];
+export const GEMEINSAME_ORDNER = ["src/store/", "src/utils/"];
 const DIREKTE_IMPORTE = { doNotFollow: { path: "node_modules" }, maxDepth: 1, moduleSystems: ["es6", "cjs"] };
 const ENDSCHRAEGSTRICH = /\/$/;
 

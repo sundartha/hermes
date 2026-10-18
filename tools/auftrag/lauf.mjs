@@ -30,8 +30,8 @@ const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
-const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
-const PIN_HAKEN = ".githooks/pre-commit";
+export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
+export const PIN_HAKEN = ".githooks/pre-commit";
 export const PIN_FEHLT =
   "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
