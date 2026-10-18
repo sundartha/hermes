@@ -1,4 +1,4 @@
-import { GERMAN_STOPWORDS } from "../helpers.js";
+import { GERMAN_STOPWORDS } from "../gemeinsam/deutsch-erkennung.mjs";
 
 const CODE_MASK = "\u0000";
 const MIN_PINNED_TEXT_LENGTH = 20;

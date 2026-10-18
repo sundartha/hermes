@@ -15,9 +15,9 @@ import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "./_prices.js";
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
-const TOKENS_PER_EUR = 1_000_000 / 0.93;
-
 const RATE = PRICES.modelPricesUsd[TEST_MODEL_CHEAP];
+
+const TOKENS_PER_EUR = 1_000_000 / (RATE.inPerMTok * PRICES.usdToEur);
 
 test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.platformSpendCapCents (byte-identisch)", () => {
   const s = makeDefaultState();
