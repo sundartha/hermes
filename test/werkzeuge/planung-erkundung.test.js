@@ -148,6 +148,34 @@ test("eine Route aus dem Wenn wird über ihren Pfad in der Eingangsdatei gefunde
   assert.deepEqual(befunde, []);
 });
 
+const WENN_NEUE_ROUTE = "Gegeben ein Kunde\nWenn er über `POST /api/probe/confirm` bestätigt\nDann kommt eine Antwort";
+const NEUE_ROUTE = { rolle: "eingang", datei: "src/eingang.js", ausweg: "nicht gefunden, weil `POST /api/probe/confirm` entsteht neu in src/eingang.js" };
+const ANDERER_AUSWEG = { ...NEUE_ROUTE, ausweg: "nicht gefunden, weil der Eingang entsteht neu in src/eingang.js" };
+const AENDERUNG_IM_EINGANG = { datei: "src/eingang.js", funktion: "nimmAn", von: 2, bis: 4, neueZeilen: 6 };
+
+test("eine neue Route aus dem Wenn ist geplant, wenn ein Eingang mit Ausweg sie nennt und eine Änderung in seiner Datei liegt", (context) => {
+  const weg = [EINGANGS_STELLE, NEUE_ROUTE, WIRKUNGS_STELLE];
+  const { befunde, annahmen } = einzeln(context, { weg, aenderungen: [AENDERUNG, AENDERUNG_IM_EINGANG] }, { soll: sollMitText(WENN_NEUE_ROUTE) });
+  assert.deepEqual(befunde, []);
+  assert.deepEqual(annahmen, [{ nummer: "S1", angabe: "weg eingang", text: NEUE_ROUTE.ausweg }]);
+});
+
+test("eine neue Route aus dem Wenn bleibt ein Befund ohne Änderung in der Datei des Eingangs oder ohne Ausweg, der sie nennt", (context) => {
+  const faelle = [
+    { weg: [EINGANGS_STELLE, NEUE_ROUTE, WIRKUNGS_STELLE], aenderungen: [AENDERUNG] },
+    { weg: [EINGANGS_STELLE, ANDERER_AUSWEG, WIRKUNGS_STELLE], aenderungen: [AENDERUNG, AENDERUNG_IM_EINGANG] },
+    { weg: [EINGANGS_STELLE, WIRKUNGS_STELLE], aenderungen: [AENDERUNG, AENDERUNG_IM_EINGANG] },
+    { weg: [EINGANGS_STELLE, { ...NEUE_ROUTE, rolle: "wirkung" }, WIRKUNGS_STELLE], aenderungen: [AENDERUNG, AENDERUNG_IM_EINGANG] },
+    { weg: [EINGANGS_STELLE, { ...NEUE_ROUTE, datei: undefined }, WIRKUNGS_STELLE], aenderungen: [AENDERUNG, { ...AENDERUNG_IM_EINGANG, datei: undefined }] },
+  ];
+  for (const fall of faelle) {
+    const { befunde } = einzeln(context, fall, { soll: sollMitText(WENN_NEUE_ROUTE) });
+    const wenn = befunde.filter((befund) => befund.includes("`POST /api/probe/confirm` aus dem Wenn steht in keiner gemeldeten Eingangsdatei"));
+    assert.equal(wenn.length, 1, befunde.join("\n"));
+    assert.ok(wenn[0].includes("„nicht gefunden, weil `POST /api/probe/confirm` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei"), wenn[0]);
+  }
+});
+
 test("eine S-Nummer ohne Änderungsstelle und ohne Ausweg ist ein Befund", (context) => {
   const { befunde } = einzeln(context, { aenderungen: [] });
   genau(befunde, "ohne Änderungsstelle und ohne „keine Änderung, weil …“");
