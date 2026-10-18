@@ -199,7 +199,7 @@ function hochladen(ort) {
   return EXIT_GRUEN;
 }
 
-function issueBefunde(phase) {
+export function issueBefunde(phase) {
   return Number.isInteger(phase.issue) && phase.issue > 0 ? [] : ["issue muss die Nummer des Phasen-Issues sein."];
 }
 

@@ -7,6 +7,8 @@ import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const AUSFUEHRBAR = 0o755;
 export const EXIT_ROT = 1;
+const ISSUE = 54;
+const GH_OHNE_WIRKUNG = "true";
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -66,7 +68,7 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {});
-  const phase = { phase: "probe", entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag], ...zusatz };
+  const phase = { phase: "probe", issue: ISSUE, entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag], ...zusatz };
   writeFileSync(join(werkzeug, "phase.json"), JSON.stringify(phase));
   writeFileSync(join(werkzeug, "drehbuch.json"), JSON.stringify(drehbuch));
   writeFileSync(join(werkzeug, "claude.mjs"), ERSATZ_CLAUDE);
@@ -80,6 +82,7 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
       ...isolatedEnvironment(),
       HOME: werkzeug,
       HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
+      HERMES_GH: GH_OHNE_WIRKUNG,
       ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
     },
   });

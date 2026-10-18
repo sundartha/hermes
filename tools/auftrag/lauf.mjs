@@ -15,6 +15,7 @@ import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
+import { issueBefunde } from "./phase.mjs";
 import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
@@ -37,6 +38,8 @@ const ZITAT = "> ";
 const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
+const ISSUE_ZWECK =
+  'lauf schreibt jede Entscheidung als Kommentar an das Phasen-Issue und liest dort die Freigabe eines alten Tests. Ohne gültige Nummer liefe ein Auftrag stundenlang in eine Entscheidung, die nirgends ankommt. Ausweg: Trag die Nummer des Phasen-Issues als "issue": <Nummer> in die Phasendatei ein.';
 
 function eintraege(text) {
   return Object.values(JSON.parse(text))
@@ -392,12 +395,19 @@ function gebauteAuftraege(phase, root) {
   return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));
 }
 
-export function lauf(phasendatei, root) {
+function startBefunde(phasendatei, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
-  const zweck = befunde.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
-  if (!istSauber(root)) befunde.push("Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand.");
+  const ohneIssue = befunde.length === 0 ? issueBefunde(phase) : [];
+  const form = ohneIssue.length > 0 ? [...ohneIssue, ISSUE_ZWECK] : befunde;
+  const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
+  const sauber = istSauber(root) ? [] : ["Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand."];
+  return { phase, befunde: [...form, ...sauber, ...zweck] };
+}
+
+export function lauf(phasendatei, root) {
+  const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
-    for (const befund of [...befunde, ...zweck]) console.error(befund);
+    for (const befund of befunde) console.error(befund);
     return EXIT_ROT;
   }
   const plan = { phase, fertig: gebauteAuftraege(phase, root) };

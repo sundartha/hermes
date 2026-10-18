@@ -270,6 +270,7 @@ const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert 
 const KEIN_WEG = { antwort: "Ich finde keinen Weg." };
 const NUR_UMBAU = {
   phase: "P-001-probe",
+  issue: 54,
   entwurf: { "src/text.js": "Entwurf." },
   auftraege: [{ ...UMBAU, id: "a2", bereich: "src/text.js", prueft: UMBAU_AUSWEG }],
 };
