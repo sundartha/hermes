@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import { funktionenIn, regelnJeFunktion, ungefilterteMeldungen } from "../../ziele/funktionen.mjs";
+import { ungefilterteMeldungen } from "../../ziele/eslint-ungefiltert.mjs";
+import { funktionenIn, regelnJeFunktion } from "../../ziele/funktionen.mjs";
 import { pfadIstSauber } from "../format.mjs";
 import { gitLauf } from "./git.mjs";
 

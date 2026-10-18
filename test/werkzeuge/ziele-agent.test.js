@@ -21,6 +21,7 @@ import {
 const TOKEN = "schein-token-ziele";
 const KURZE_FRIST_SEKUNDEN = 0.3;
 const STUNDE_MS = 3_600_000;
+const KNAPP_MS = 330_000;
 const FREI = quelltext(["function rest() {\n  return 2;\n}", "export function frei() {\n  return 1;\n}", "export function weg() {\n  return rest();\n}"]);
 const FREI_SAUBER = quelltext(["export function frei() {\n  return 1;\n}"]);
 const ZIEL = { format: 1, ausgang: "weiter", grund: "", befunde: [], sorte: "knip", datei: "src/frei.js", zielbefunde: ["exports weg"], arten: ["exports"], agent: true, agentErlaubt: true, minuten: 10 };
@@ -42,6 +43,13 @@ async function agent(context, repo, { programm, token = TOKEN, start = new Date(
   return { ...lauf, ordner, ergebnis: gelesen(ordner, "agent/agent.json"), ausgaben: ausgabenAus(join(ordner, "ausgaben.txt")) };
 }
 
+async function fixer(context, repo, vorpruefung = {}) {
+  const github = await githubAttrappe(context);
+  const ordner = arbeitsordner(context, { "ziel/ziel.json": { ...ZIEL, agent: undefined, master: repo.sha() }, ...vorpruefung, "ausgaben.txt": "" });
+  const lauf = await starteZiele(["fixen", "--ordner", ordner], { cwd: repo.ordner, env: umgebung(github, { GITHUB_OUTPUT: join(ordner, "ausgaben.txt") }) });
+  return { ...lauf, ergebnis: gelesen(ordner, "ziel/ziel.json"), ausgaben: ausgabenAus(join(ordner, "ausgaben.txt")) };
+}
+
 function kurz({ status, ergebnis }) {
   return [status, ergebnis.ausgang, ergebnis.grund, ...ergebnis.befunde.map(({ id, datei }) => `${id} ${datei}`)];
 }
@@ -52,11 +60,8 @@ function ergebnisZeile(felder) {
 
 test("ziele-agent: fehlt der Budget-Eintrag, endet der Fixer blockiert und rot, und kein Agent startet", async (context) => {
   const repo = probe(context, { Wochenbericht: 5 });
-  const github = await githubAttrappe(context);
-  const ordner = arbeitsordner(context, { "ziel/ziel.json": { ...ZIEL, agent: undefined, master: repo.sha() }, "ausgaben.txt": "" });
-  const lauf = await starteZiele(["fixen", "--ordner", ordner], { cwd: repo.ordner, env: umgebung(github, { GITHUB_OUTPUT: join(ordner, "ausgaben.txt") }) });
-  const ziel = gelesen(ordner, "ziel/ziel.json");
-  assert.deepEqual([lauf.status, ziel.ausgang, ziel.agent, ausgabenAus(join(ordner, "ausgaben.txt")).agent], [1, "blockiert", false, "nein"]);
+  const { status, ergebnis: ziel, ausgaben } = await fixer(context, repo);
+  assert.deepEqual([status, ziel.ausgang, ziel.agent, ausgaben.agent], [1, "blockiert", false, "nein"]);
   assert.match(ziel.grund, /fehlt minutenJeLauf\["Aufräumen"\]/);
   const claude = ersatzClaude(context, { antwort: ANTWORT });
   const direkt = await agent(context, repo, { programm: claude.programm });
@@ -72,6 +77,16 @@ test("ziele-agent: reicht die Zeit im Budget nach Abzug der Reserve nicht, start
   assert.deepEqual([status, ausgang, befund], [0, "blockiert", "AR-budget src/frei.js"]);
   assert.match(grund, /^Agent: nur noch -\d+ s im Budget$/);
   assert.equal(claude.protokoll(), null);
+});
+
+test("ziele-agent: reicht die Restzeit knapp nicht, entscheiden Fixer und Agent gleich: derselbe Ausgang, Grund und Befund", async (context) => {
+  const repo = probe(context);
+  const start = new Date(Date.now() - KNAPP_MS).toISOString();
+  const vomFixer = kurz(await fixer(context, repo, { "ziel/vorpruefung.json": { ausgang: "weiter", start } }));
+  const claude = ersatzClaude(context, { antwort: ANTWORT });
+  const vomAgenten = kurz(await agent(context, repo, { programm: claude.programm, start }));
+  const ohneSekunden = ([status, ausgang, grund, ...befunde]) => [status, ausgang, grund.replace(/^Agent: /, "").replace(/-?\d+ s /, "N s "), ...befunde];
+  assert.deepEqual(ohneSekunden(vomFixer), ohneSekunden(vomAgenten));
 });
 
 test("ziele-agent: der Agent sieht nur eine Kopie der Zieldatei in einem Wegwerf-Ordner und bekommt nur PATH, HOME und das Token", async (context) => {

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
 import { LABEL as PRUEFER_LABEL, issueTitel } from "../auftrag/pruefer-issues.mjs";
 import { istVomBot } from "./befunde.mjs";
+import { UNTERDRUECKUNGEN } from "./eslint-ungefiltert.mjs";
 import { issuesMitLabel } from "./github.mjs";
-import { UNTERDRUECKUNGEN } from "./sorten.mjs";
 
 export const DURCHGANG_DATEI = "durchgang.json";
 export const ESLINT = "eslint";

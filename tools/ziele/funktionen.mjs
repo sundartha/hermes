@@ -1,12 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 
-import { eslintBefehl, fuehreAus } from "./werkzeuge.mjs";
-
-export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
-const KONFIGURATION = "eslint.config.js";
 const FUNKTIONSARTEN = ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"];
 const FEHLER = 2;
 const ladeModul = createRequire(import.meta.url);
@@ -26,18 +19,6 @@ export function istQuelltext(datei) {
 function sprachangaben(datei) {
   if (!TYPESCRIPT_DATEI.test(datei)) return { languageOptions: MODUL };
   return { files: TYPESCRIPT_MUSTER, languageOptions: { ...MODUL, parser: typescriptParser() } };
-}
-
-export function ungefilterteMeldungen(root, dateien) {
-  const ordner = mkdtempSync(join(tmpdir(), "ziele-altfunktion-"));
-  try {
-    const leer = join(ordner, UNTERDRUECKUNGEN);
-    writeFileSync(leer, "{}");
-    const lauf = fuehreAus(eslintBefehl(["--config", resolve(root, KONFIGURATION), "--format", "json", "--suppressions-location", leer, ...dateien]), root);
-    return JSON.parse(lauf.stdout || "[]");
-  } finally {
-    rmSync(ordner, { recursive: true, force: true });
-  }
 }
 
 function funktionsname(knoten) {

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
-import { MIN_AGENT_SEKUNDEN, budgetFehlt, budgetMinuten, restSekunden } from "./agent.mjs";
+import { agentZeit } from "./agent.mjs";
 import { BLOCKIERT, SAUBER, WEITER, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
 import { IDS, befund } from "./befunde.mjs";
 import { arbeitsbaumAenderungen, patchPruefsumme, schreibePatch } from "./patch.mjs";
@@ -63,12 +63,11 @@ export function fixe(root, ziel) {
 }
 
 function agentSchritt(root, { ziel, start }) {
-  const minuten = budgetMinuten(root, BUDGET_NAME);
-  if (minuten === null) return { ausgang: BLOCKIERT, grund: budgetFehlt(BUDGET_NAME), agent: false, rot: true };
-  const sekunden = restSekunden(minuten, { start, jetzt: Date.now() });
-  if (sekunden >= MIN_AGENT_SEKUNDEN) return { ausgang: WEITER, grund: "", agent: true, minuten, rot: false };
+  const { fehlt, knapp, sekunden, minuten } = agentZeit(root, BUDGET_NAME, { start });
+  if (fehlt) return { ausgang: BLOCKIERT, grund: fehlt, agent: false, rot: true };
+  if (!knapp) return { ausgang: WEITER, grund: "", agent: true, minuten, rot: false };
   const text = `Für den Agenten blieben nur ${sekunden} s im Budget von ${minuten} Minuten.`;
-  return { ausgang: BLOCKIERT, grund: `nur noch ${sekunden} s im Budget`, agent: false, befunde: [befund(IDS.budget, ziel.datei, text)], rot: false };
+  return { ausgang: BLOCKIERT, grund: knapp, agent: false, befunde: [befund(IDS.budget, ziel.datei, text)], rot: false };
 }
 
 function schrittFuer(root, { kandidat, fix, patch, start }) {

@@ -2,10 +2,9 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
-import { UNTERDRUECKUNGEN, funktionenIn, regelnJeFunktion, ungefilterteMeldungen } from "./funktionen.mjs";
+import { UNTERDRUECKUNGEN, ungefilterteMeldungen } from "./eslint-ungefiltert.mjs";
+import { funktionenIn, regelnJeFunktion } from "./funktionen.mjs";
 import { eslintBefehl, fuehreAus, paketBefehl, werkzeugBefehl } from "./werkzeuge.mjs";
-
-export { UNTERDRUECKUNGEN } from "./funktionen.mjs";
 
 export const KNIP = "knip";
 export const JSCPD = "jscpd";
