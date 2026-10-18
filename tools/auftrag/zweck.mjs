@@ -1,8 +1,36 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 import { AUSSERHALB, GESCHUETZT, PHASE_PASST_NICHT, ROLLE, VERSTOSS, ZU_VIELE_ZEILEN, beleg } from "./pruefungen.mjs";
 
-const TEXTE = JSON.parse(readFileSync(new URL("zweck.json", import.meta.url), "utf8"));
+const AUFTRAGSWEG = "tools/auftrag/zweck.json";
+const WEITERE = "tools/zweck/";
+const WEITERE_ORDNER = new URL("../zweck/", import.meta.url);
+const JSON_ENDUNG = ".json";
+
+function gelesen(url) {
+  return JSON.parse(readFileSync(url, "utf8"));
+}
+
+function weitereQuellen() {
+  if (!existsSync(WEITERE_ORDNER)) return [];
+  const dateien = readdirSync(WEITERE_ORDNER).filter((name) => name.endsWith(JSON_ENDUNG)).toSorted();
+  return dateien.map((name) => [`${WEITERE}${name}`, gelesen(new URL(name, WEITERE_ORDNER))]);
+}
+
+export function zweckTexteVereinen(quellen) {
+  const texte = {};
+  const herkunft = new Map();
+  for (const [datei, eintraege] of quellen) {
+    for (const [id, text] of Object.entries(eintraege)) {
+      if (herkunft.has(id)) throw new Error(`Die Zweck-ID ${id} steht doppelt: in ${herkunft.get(id)} und in ${datei}.`);
+      herkunft.set(id, datei);
+      texte[id] = text;
+    }
+  }
+  return texte;
+}
+
+const TEXTE = zweckTexteVereinen([[AUFTRAGSWEG, gelesen(new URL("zweck.json", import.meta.url))], ...weitereQuellen()]);
 
 export const PRUEFUNG = {
   GRENZEN_BAU: "grenzen bau",
@@ -108,7 +136,7 @@ export function zweckIds({ name, zeilen = [] }) {
 
 export function zweckBlock(id) {
   const text = TEXTE[id];
-  if (text === undefined) throw new Error(`Kein Zweck-Text für die Prüfung ${id} in tools/auftrag/zweck.json.`);
+  if (text === undefined) throw new Error(`Kein Zweck-Text für die Prüfung ${id} in ${AUFTRAGSWEG} oder ${WEITERE}.`);
   return BLOCK.map(([titel, feld]) => `${titel}: ${text[feld]}`);
 }
 
