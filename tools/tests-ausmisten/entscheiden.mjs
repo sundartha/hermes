@@ -71,15 +71,21 @@ function gleicheSha(wert, erwartet) {
   return typeof wert === "string" && SHA.test(wert) && wert === erwartet;
 }
 
+function kopfPruefungen(daten, art, erwartet) {
+  return [
+    [daten.format === FORMAT && daten.art === art, "Format oder Art passt nicht"],
+    [gleicheSha(daten.kopf, erwartet.kopf), "Kopf-SHA passt nicht"],
+    [gleicheSha(daten.master, erwartet.master), "master-SHA passt nicht"],
+    [daten.bereich === erwartet.bereich, "Bereich passt nicht"],
+  ];
+}
+
 function gemeinsameFehler(daten, art, erwartet) {
   const dateien = Array.isArray(daten.dateien) ? daten.dateien : [];
   const mutantenGueltig =
     istMutantenListe(daten.mutanten, dateien) && istMutantenListe(daten.gate, dateien);
   const pruefungen = [
-    [daten.format === FORMAT && daten.art === art, "Format oder Art passt nicht"],
-    [gleicheSha(daten.kopf, erwartet.kopf), "Kopf-SHA passt nicht"],
-    [gleicheSha(daten.master, erwartet.master), "master-SHA passt nicht"],
-    [daten.bereich === erwartet.bereich, "Bereich passt nicht"],
+    ...kopfPruefungen(daten, art, erwartet),
     [istSortierteListe(daten.dateien, QUELLDATEI), "Dateiliste ist ungültig"],
     [mutantenGueltig, "Mutantenliste ist ungültig"],
     [istZahl(daten.trockenlauf?.sekunden), "Trockenlauf fehlt"],
@@ -312,10 +318,7 @@ function planFehler(daten, erwartet) {
   const ganze = pakete.filter((paket) => paket?.teil === undefined).flatMap(dateienVon);
   const alle = [...ganze, ...teile.keys()];
   const pruefungen = [
-    [daten.format === FORMAT && daten.art === PLAN_ART, "Format oder Art passt nicht"],
-    [gleicheSha(daten.kopf, erwartet.kopf), "Kopf-SHA passt nicht"],
-    [gleicheSha(daten.master, erwartet.master), "master-SHA passt nicht"],
-    [daten.bereich === erwartet.bereich, "Bereich passt nicht"],
+    ...kopfPruefungen(daten, PLAN_ART, erwartet),
     [
       pakete.length > 0 && pakete.length <= MAX_PAKETE && pakete.every(paketGueltig),
       "Paketliste ist ungültig",

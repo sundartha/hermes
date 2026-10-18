@@ -230,8 +230,12 @@ export async function planen({ aus, speicher }) {
   return lauf;
 }
 
+function erwartetVon({ kopf, master, bereich }) {
+  return { kopf, master, bereich };
+}
+
 function geplant(ordner, lauf) {
-  const erwartet = { kopf: lauf.kopf, master: lauf.master, bereich: lauf.bereich };
+  const erwartet = erwartetVon(lauf);
   const { daten, fehler } = lesePlan({ ordner, summe: env.PLAN_PRUEFSUMME, erwartet });
   if (fehler) throw new Error(`Plan unbrauchbar: ${fehler.join("; ")}`);
   return daten;
@@ -313,7 +317,7 @@ export async function basis({ aus, planDaten, paket }) {
 }
 
 function basisArtefakt(ordner, { lauf, nummer }) {
-  const erwartet = { kopf: lauf.kopf, master: lauf.master, bereich: lauf.bereich };
+  const erwartet = erwartetVon(lauf);
   const name = paketName(BASIS, nummer);
   const { daten, fehler } = leseArtefakt({
     ordner,
