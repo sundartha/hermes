@@ -1,24 +1,36 @@
-process.env.MAX_BUDGET_EUR = "30";
-process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
-
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "./pglite-helfer.js";
+import { importNachUmgebung } from "./gemeinsam/umgebung-import.js";
 
 let makePgStore, config, ops, subscribeMod, webhookMod, activationMod, backfillMod, planCapsMod;
 let USAGE_EVENT_KIND, KYC_LEVEL, CATALOG_SLUGS;
 
 before(async () => {
-  ({ makePgStore } = await import("../src/store/pg.js"));
-  ({ config } = await import("../src/config.js"));
-  ops = await import("../src/store/state-ops.js");
-  subscribeMod = await import("../src/billing/subscribe.js");
-  webhookMod = await import("../src/billing/webhook.js");
-  activationMod = await import("../src/billing/activation.js");
-  backfillMod = await import("../src/billing/backfill-profiles.js");
-  planCapsMod = await import("../src/billing/plan-caps.js");
-  ({ CATALOG_SLUGS } = await import("../src/plans.js"));
-  ({ USAGE_EVENT_KIND, KYC_LEVEL } = await import("../src/store/defaults.js"));
+  [
+    { makePgStore },
+    { config },
+    ops,
+    subscribeMod,
+    webhookMod,
+    activationMod,
+    backfillMod,
+    planCapsMod,
+    { CATALOG_SLUGS },
+    { USAGE_EVENT_KIND, KYC_LEVEL },
+  ] = await importNachUmgebung(
+    { MAX_BUDGET_EUR: "30", VOICE_TARIFF_DEFAULT_CENTS: "6" },
+    () => import("../src/store/pg.js"),
+    () => import("../src/config.js"),
+    () => import("../src/store/state-ops.js"),
+    () => import("../src/billing/subscribe.js"),
+    () => import("../src/billing/webhook.js"),
+    () => import("../src/billing/activation.js"),
+    () => import("../src/billing/backfill-profiles.js"),
+    () => import("../src/billing/plan-caps.js"),
+    () => import("../src/plans.js"),
+    () => import("../src/store/defaults.js"),
+  );
   config.billing.stripeStarterPriceId = "price_starter_test";
   config.billing.stripeBusinessPriceId = "price_business_test";
 });

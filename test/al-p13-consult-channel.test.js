@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import express from "express";
 import { startServer, seedState, seedCall, BASE_ENV } from "./helpers.js";
+import { importNachUmgebung } from "./gemeinsam/umgebung-import.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TENANT = "tenant_owner";
@@ -29,22 +30,34 @@ let dataDir;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p13-"));
-  process.env.DATA_DIR = dataDir;
-  process.env.CONSULT_ENABLED = "true";
-  process.env.ASSISTANT_CONTEXT_ENABLED = "true";
-  await import("../src/config.js");
-  ({ withConfigNamespaces } = await import("./config-namespaces-helper.js"));
-  ops = await import("../src/store/state-ops.js");
-  defaults = await import("../src/store/defaults.js");
-  delivery = await import("../src/consult/delivery.js");
-  gate = await import("../src/consult/gate.js");
-  ({ makeCallRoutes } = await import("../src/routes/api-calls.js"));
-  ({ makeGracefulShutdown } = await import("../src/boot.js"));
-  ({ registerTools } = await import("../src/mcp-tools.js"));
-  mcpServerInfo = await import("../src/mcp-server-info.js");
-  mcpRoutes = await import("../src/routes/mcp.js");
-  ({ validateAssistantContext } = await import("../src/routes/_validation.js"));
-  claude = await import("../src/claude.js");
+  [
+    { withConfigNamespaces },
+    ops,
+    defaults,
+    delivery,
+    gate,
+    { makeCallRoutes },
+    { makeGracefulShutdown },
+    { registerTools },
+    mcpServerInfo,
+    mcpRoutes,
+    { validateAssistantContext },
+    claude,
+  ] = await importNachUmgebung(
+    { DATA_DIR: dataDir, CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
+    () => import("./config-namespaces-helper.js"),
+    () => import("../src/store/state-ops.js"),
+    () => import("../src/store/defaults.js"),
+    () => import("../src/consult/delivery.js"),
+    () => import("../src/consult/gate.js"),
+    () => import("../src/routes/api-calls.js"),
+    () => import("../src/boot.js"),
+    () => import("../src/mcp-tools.js"),
+    () => import("../src/mcp-server-info.js"),
+    () => import("../src/routes/mcp.js"),
+    () => import("../src/routes/_validation.js"),
+    () => import("../src/claude.js"),
+  );
 });
 
 after(() => fs.rmSync(dataDir, { recursive: true, force: true }));

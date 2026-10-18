@@ -14,6 +14,7 @@ import {
 } from "../src/route-policy.js";
 import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { importNachKonfiguration } from "./gemeinsam/umgebung-import.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -24,15 +25,16 @@ const MAX_DAUER_S = 600;
 
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-inventory-"));
 
-const { config } = await import("../src/config.js");
-config.server.dataDir = TEMP_DATA_DIR;
-config.auth.sessionSecret = "route-inventory-test-secret";
-config.tenancy.multiTenant = true;
-config.tenancy.selfServiceEnabled = true;
-config.server.webDistDir = path.join(TEMP_DATA_DIR, "web-dist");
-config.server.publicUrl = "https://route-inventory.test";
-
-const { buildApp } = await import("../src/app.js");
+const [{ config }, { buildApp }] = await importNachKonfiguration(
+  { DATA_DIR: TEMP_DATA_DIR },
+  {
+    auth: { sessionSecret: "route-inventory-test-secret" },
+    tenancy: { multiTenant: true, selfServiceEnabled: true },
+    server: { webDistDir: path.join(TEMP_DATA_DIR, "web-dist"), publicUrl: "https://route-inventory.test" },
+  },
+  () => import("../src/config.js"),
+  () => import("../src/app.js"),
+);
 
 after(() => fs.rmSync(TEMP_DATA_DIR, { recursive: true, force: true }));
 
