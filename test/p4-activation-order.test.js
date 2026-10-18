@@ -132,3 +132,61 @@ test("ensureTenant (Spiegel-Nachzug) nur im Erfolgsfall", async () => {
   const { ensureTenantCalls: okCalls } = await runActivation(PROVISION_REASON.QUEUED);
   assert.deepEqual(okCalls, ["t_order"], "ensureTenant genau einmal im Erfolgsfall");
 });
+
+async function exemptionSeenByProvision({ storedExempt, retrieveSubscription }) {
+  const state = makeDefaultState();
+  registerTenant(state, "t_exempt", {});
+  setTenantSubscription(state, "t_exempt", {
+    planSlug: "starter",
+    subscriptionId: "sub_exempt",
+    numberSetupFeeExempt: storedExempt,
+  });
+  const retrieved = [];
+  const seenDuringProvision = [];
+  const result = await activatePaidTenant({
+    store: storeOn(state),
+    accounts: fakeAccounts(),
+    provision: async (tenant) => {
+      seenDuringProvision.push(tenantSubscription(state, tenant).numberSetupFeeExempt);
+      return { ok: true, reason: PROVISION_REASON.QUEUED };
+    },
+    billing: {
+      retrieveSubscription: async (id) => {
+        retrieved.push(id);
+        await Promise.resolve();
+        return retrieveSubscription();
+      },
+    },
+    tenant: "t_exempt",
+  });
+  return { result, retrieved, seenDuringProvision };
+}
+
+test("Befreiung von der Einrichtungsgebuehr steht am Tenant, bevor provision() die Nummer anstoesst", async () => {
+  const { result, retrieved, seenDuringProvision } = await exemptionSeenByProvision({
+    storedExempt: false,
+    retrieveSubscription: () => ({ numberSetupFeeExempt: true }),
+  });
+  assert.deepEqual(retrieved, ["sub_exempt"]);
+  assert.deepEqual(seenDuringProvision, [true]);
+  assert.equal(result.activated, true);
+});
+
+test("veraltete Befreiung ist vor provision() durch die Gebuehrenpflicht aus dem Abo ersetzt", async () => {
+  const { seenDuringProvision } = await exemptionSeenByProvision({
+    storedExempt: true,
+    retrieveSubscription: () => ({ numberSetupFeeExempt: false }),
+  });
+  assert.deepEqual(seenDuringProvision, [false]);
+});
+
+test("scheitert die Abo-Abfrage, laeuft provision() mit dem gespeicherten Gebuehrenstand weiter", async () => {
+  const { result, seenDuringProvision } = await exemptionSeenByProvision({
+    storedExempt: false,
+    retrieveSubscription: () => {
+      throw new Error("HTTP 500");
+    },
+  });
+  assert.deepEqual(seenDuringProvision, [false]);
+  assert.equal(result.activated, true);
+});
