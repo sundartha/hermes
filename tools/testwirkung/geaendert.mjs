@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSyn
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { testaufrufe } from "./aufrufe.mjs";
+import { dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { git, inBasis } from "./git.mjs";
 import { UNTER_ATTRAPPE, testlauf } from "./testlauf.mjs";
 
@@ -71,10 +71,10 @@ function stelle({ datei, zeile, spalte }) {
 }
 
 export function ergebnisseJeTest(tests, seite, lauf) {
-  const dateien = [...new Set(tests.map(({ datei }) => datei))];
+  const dateien = [...new Set(tests.map((test) => dateiAuf(test, seite)))];
   const muster = [...new Set(tests.flatMap((test) => test[seite].flatMap((aufruf) => aufruf.muster)))];
   const nachStelle = new Map(
-    tests.flatMap((test) => test[seite].map((aufruf) => [stelle({ datei: test.datei, ...aufruf }), test.kennung])),
+    tests.flatMap((test) => test[seite].map((aufruf) => [stelle({ datei: dateiAuf(test, seite), ...aufruf }), test.kennung])),
   );
   const jeTest = new Map(tests.map(({ kennung }) => [kennung, []]));
   for (const ergebnis of testlauf({ dateien, muster, ...lauf })) {

@@ -5,10 +5,11 @@ import { cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { gelaufeneAufrufzeilen } from "./abdeckung.mjs";
-import { TESTDATEI, testaufrufe } from "./aufrufe.mjs";
+import { TESTDATEI, dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { abschnitte, arbeitsbaumAbbauen, basisArbeitsbaum, innersterTest } from "./geaendert.mjs";
 import { git } from "./git.mjs";
 import { testlaufNebenher } from "./testlauf.mjs";
+import { umbenennungen } from "../umbenennung.mjs";
 
 const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
 const ABDECKUNG = "NODE_V8_COVERAGE";
@@ -30,13 +31,18 @@ function nachTestUmgezogen(basis) {
   return umgezogen;
 }
 
-function neuerCodeIn(verzeichnis, basis) {
+async function wieAufDerBasis(basis) {
+  const { paare } = await umbenennungen({ von: basis });
+  return new Set([...nachTestUmgezogen(basis), ...paare.filter(({ nurTypen }) => nurTypen).map(({ alt }) => alt)]);
+}
+
+async function neuerCodeIn(verzeichnis, basis) {
   const abweichend = [
     ...namen(["diff", "--name-only", "-z", "--no-renames", basis]),
     ...namen(["ls-files", "--others", "--exclude-standard", "-z"]),
   ];
-  const umgezogen = nachTestUmgezogen(basis);
-  for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !umgezogen.has(pfad))) {
+  const bleibt = await wieAufDerBasis(basis);
+  for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !bleibt.has(pfad))) {
     const ziel = join(verzeichnis, datei);
     rmSync(ziel, { force: true });
     if (!existsSync(datei)) continue;
@@ -48,7 +54,7 @@ function neuerCodeIn(verzeichnis, basis) {
 async function erreicht({ tests, vergleich }, seite, verzeichnis) {
   const ordner = realpathSync(mkdtempSync(join(tmpdir(), ABDECKUNGSORDNER)));
   try {
-    const dateien = [...new Set(tests.map(({ datei }) => datei))];
+    const dateien = [...new Set(tests.map((test) => dateiAuf(test, seite)))];
     const muster = [...new Set(tests.flatMap((test) => test[seite]))];
     await testlaufNebenher({ dateien, muster, vorspann: ECHT, verzeichnis, umgebung: { [ABDECKUNG]: ordner } });
     return gelaufeneAufrufzeilen(ordner, { verzeichnis, dateien: vergleich });
@@ -60,7 +66,7 @@ async function erreicht({ tests, vergleich }, seite, verzeichnis) {
 async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
-    neuerCodeIn(verzeichnis, basis);
+    await neuerCodeIn(verzeichnis, basis);
     return await erreicht(auftrag, "alt", verzeichnis);
   } finally {
     arbeitsbaumAbbauen(verzeichnis);

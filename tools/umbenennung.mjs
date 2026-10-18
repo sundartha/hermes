@@ -91,7 +91,7 @@ function typescriptPfad(datei) {
   return neu === undefined ? undefined : `${datei.slice(0, -endung.length)}${neu}`;
 }
 
-function javascriptPfad(datei) {
+export function javascriptPfad(datei) {
   return datei.replace(TYPESCRIPT, ".$1js");
 }
 
@@ -120,7 +120,8 @@ function liestEigenenPfad(baum) {
   );
 }
 
-function importendungenAngleichen(baum, datei, altFuer) {
+function angeglicheneQuellen(baum, datei, altFuer) {
+  const angeglichen = [];
   for (const knoten of alleKnoten({ ast: baum, visitorKeys: VisitorKeys })) {
     const quelle = QUELLKNOTEN.has(knoten.type) ? knoten.source : undefined;
     if (quelle?.type !== "Literal" || typeof quelle.value !== "string") continue;
@@ -129,10 +130,41 @@ function importendungenAngleichen(baum, datei, altFuer) {
       : undefined;
     if (alt === undefined) continue;
     const [neuEndung, altEndung] = [ENDUNG.exec(quelle.value)[0], ENDUNG.exec(alt)[0]];
-    quelle.value = `${quelle.value.slice(0, -neuEndung.length)}${altEndung}`;
-    quelle.raw = `${quelle.raw.slice(0, -neuEndung.length - 1)}${altEndung}${quelle.raw.at(-1)}`;
+    angeglichen.push({
+      quelle,
+      value: `${quelle.value.slice(0, -neuEndung.length)}${altEndung}`,
+      raw: `${quelle.raw.slice(0, -neuEndung.length - 1)}${altEndung}${quelle.raw.at(-1)}`,
+    });
+  }
+  return angeglichen;
+}
+
+function importendungenAngleichen(baum, datei, altFuer) {
+  for (const { quelle, value, raw } of angeglicheneQuellen(baum, datei, altFuer)) {
+    quelle.value = value;
+    quelle.raw = raw;
   }
   return baum;
+}
+
+async function nurQuellenNachgezogen(datei, { von, bis, paare, eslint }) {
+  const [vorher, nachher] = [inhalt(von, datei), inhalt(bis, datei)];
+  if (vorher === undefined || nachher === undefined || vorher === nachher) return false;
+  const laufzeit = laufzeitText(datei, nachher);
+  const baum =
+    laufzeit === undefined
+      ? undefined
+      : gelesen(laufzeit, await einstellungenFuer(javascriptPfad(datei), eslint));
+  if (baum === undefined) return false;
+  const altFuer = new Map(paare.filter(({ nurTypen }) => nurTypen).map(({ alt, neu }) => [neu, alt]));
+  const ersetzungen = angeglicheneQuellen(baum, datei, altFuer).toSorted(
+    (links, rechts) => rechts.quelle.range[0] - links.quelle.range[0],
+  );
+  const angeglichen = ersetzungen.reduce(
+    (text, { quelle, raw }) => `${text.slice(0, quelle.range[0])}${raw}${text.slice(quelle.range[1])}`,
+    nachher,
+  );
+  return ersetzungen.length > 0 && angeglichen === vorher;
 }
 
 async function laufzeitBaeume({ alt, neu }, eslint) {
@@ -181,6 +213,8 @@ export async function umbenennungen({ von, bis }, eslint = new ESLint()) {
     nurTypen: (neu) => geprueft.find((paar) => paar.neu === neu && paar.nurTypen)?.alt,
     vorher: (alt) => geprueft.find((paar) => paar.alt === alt && paar.nurTypen)?.neu,
     vergleiche: (alt, neu) => laufzeitVergleich({ alt, neu }, { paare, eslint }),
+    nurQuellenNachgezogen: (datei) =>
+      nurQuellenNachgezogen(datei, { von, bis, paare: geprueft, eslint }),
   };
 }
 

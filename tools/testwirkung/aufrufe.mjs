@@ -2,12 +2,14 @@ import { extname } from "node:path";
 
 import { Linter } from "eslint";
 
-export const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
+import { javascriptPfad, laufzeitText } from "../umbenennung.mjs";
+
+export const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
 const TESTFUNKTIONEN = new Set(["test", "it"]);
 const UNTERTEST = "test";
 const MIN_UNTERTEST_ARGUMENTE = 2;
 const FUNKTIONSARTEN = new Set(["ArrowFunctionExpression", "FunctionExpression"]);
-const COMMONJS = ".cjs";
+const COMMONJS = new Set([".cjs", ".cts"]);
 const REGEL = "testwirkung/testaufrufe";
 const REGEX_ZEICHEN = /[.*+?^${}()|[\]\\]/g;
 const BELIEBIG = ".*";
@@ -70,12 +72,18 @@ function erfasse(quelle, knoten) {
 
 function besuche(datei, quelltext, besucher) {
   const konfiguration = {
-    languageOptions: { ecmaVersion: "latest", sourceType: extname(datei) === COMMONJS ? "commonjs" : "module" },
+    languageOptions: { ecmaVersion: "latest", sourceType: COMMONJS.has(extname(datei)) ? "commonjs" : "module" },
     plugins: { testwirkung: { rules: { testaufrufe: { create: (kontext) => besucher(kontext.sourceCode) } } } },
     rules: { [REGEL]: "error" },
   };
-  const fatal = new Linter().verify(quelltext, konfiguration, { filename: datei }).find((meldung) => meldung.fatal);
+  const laufzeit = laufzeitText(datei, quelltext);
+  if (laufzeit === undefined) throw new Error(`${datei} lässt sich nicht lesen: TypeScript-Syntax mit Laufzeitwirkung`);
+  const fatal = new Linter().verify(laufzeit, konfiguration, { filename: javascriptPfad(datei) }).find((meldung) => meldung.fatal);
   if (fatal !== undefined) throw new Error(`${datei} lässt sich nicht lesen: ${fatal.message}`);
+}
+
+export function dateiAuf(test, seite) {
+  return seite === "alt" ? (test.altDatei ?? test.datei) : test.datei;
 }
 
 export function testaufrufe(datei, quelltext) {
