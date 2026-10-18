@@ -69,8 +69,8 @@ export function entscheidendeZeilen(ausgabe) {
   return auswahl.slice(0, MAX_BELEGZEILEN);
 }
 
-export function beleg({ name, befehl, exitCode, ausgabe, dauer_ms }) {
-  return { name, befehl, exitCode, dauer_ms, zeilen: entscheidendeZeilen(ausgabe) };
+export function beleg({ name, befehl, exitCode, ausgabe }) {
+  return { name, befehl, exitCode, zeilen: entscheidendeZeilen(ausgabe) };
 }
 
 export function vollerBeleg(ergebnis) {
