@@ -1,0 +1,8 @@
+{
+  "titel": "Neue .ts-Datei unter src/, die der Projektdienst nicht kennt (tsconfig ohne src)",
+  "dateien": {
+    "tsconfig.json": ["{ \"compilerOptions\": { \"noEmit\": true }, \"include\": [\"test\"] }"],
+    "src/rotprobe.ts": ["export function neu(wert: number): number {", "  return wert;", "}"]
+  },
+  "erwartet": "src/rotprobe.ts:undefined Parser: Parsing error"
+}
