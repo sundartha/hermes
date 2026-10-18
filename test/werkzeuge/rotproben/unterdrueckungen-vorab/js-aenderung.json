@@ -1,0 +1,35 @@
+{
+  "titel": "Geänderte .js-Datei mit Eintrag bringt einen neuen Lint-Befund mit",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\", \"scripts\": { \"lint\": \"true\" } }"],
+    "eslint.config.js": [
+      "import tseslint from \"typescript-eslint\";",
+      "",
+      "export default [",
+      "  { files: [\"**/*.ts\"], languageOptions: { parser: tseslint.parser } },",
+      "  { files: [\"**/*.{js,cjs,ts}\"], rules: { \"no-var\": \"error\", \"no-warning-comments\": \"error\" } },",
+      "];"
+    ],
+    "eslint-suppressions.empty.json": ["{}"],
+    "src/probe/zahl.js": [
+      "var grenze = 10;",
+      "",
+      "export function klein(zahl) {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": ["{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}}"],
+    "eslint-legacy-exceptions.json": ["{}"]
+  },
+  "dateien": {
+    "src/probe/zahl.js": [
+      "// TODO: pruefen",
+      "var grenze = 10;",
+      "",
+      "export function klein(zahl) {",
+      "  return zahl < grenze;",
+      "}"
+    ]
+  },
+  "erwartet": "no-warning-comments"
+}
