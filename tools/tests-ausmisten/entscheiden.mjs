@@ -7,10 +7,14 @@ export const BASIS = "basis";
 export const BRANCH = "branch";
 export const PLAN_ART = "plan";
 export const UNVERAENDERT = "unverändert";
+export const GEAENDERT = "geändert";
+export const GELOESCHT = "gelöscht";
+export const DATEI_GEAENDERT = "Datei geändert";
+export const HILFSDATEI_GEAENDERT = "Hilfsdatei geändert: ";
 export const MAX_PAKETE = 20;
 const SHA = /^[0-9a-f]{40}$/;
 const PRUEFSUMME = /^[0-9a-f]{64}$/;
-const QUELLDATEI = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
+export const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
 const TESTPFAD = /^test\/.+/;
 const ORT_LAENGE = 2;
 const STATUS = new Set([
@@ -32,13 +36,8 @@ const RANG = new Map([
   [TIMEOUT, RANG_ZEITUEBERSCHREITUNG],
 ]);
 const MAX_BESCHREIBUNG = 140;
-const STAND_IM_BRANCH = new Set([
-  "unverändert",
-  "geändert",
-  "gelöscht",
-  "Datei geändert",
-]);
-const HILFSDATEI_IM_BRANCH = /^Hilfsdatei geändert: test\/\S+$/;
+const STAND_IM_BRANCH = new Set([UNVERAENDERT, GEAENDERT, GELOESCHT, DATEI_GEAENDERT]);
+const HILFSDATEI = /^test\/\S+$/;
 const AUSLASSUNG = "…";
 
 export function rang(status) {
@@ -86,7 +85,7 @@ function gemeinsameFehler(daten, art, erwartet) {
     istMutantenListe(daten.mutanten, dateien) && istMutantenListe(daten.gate, dateien);
   const pruefungen = [
     ...kopfPruefungen(daten, art, erwartet),
-    [istSortierteListe(daten.dateien, QUELLDATEI), "Dateiliste ist ungültig"],
+    [istSortierteListe(daten.dateien, MESSBAR), "Dateiliste ist ungültig"],
     [mutantenGueltig, "Mutantenliste ist ungültig"],
     [istZahl(daten.trockenlauf?.sekunden), "Trockenlauf fehlt"],
   ];
@@ -108,7 +107,9 @@ function istOrt(ort) {
 }
 
 function istStand(stand) {
-  return STAND_IM_BRANCH.has(stand) || HILFSDATEI_IM_BRANCH.test(stand ?? "");
+  if (STAND_IM_BRANCH.has(stand)) return true;
+  if (typeof stand !== "string" || !stand.startsWith(HILFSDATEI_GEAENDERT)) return false;
+  return HILFSDATEI.test(stand.slice(HILFSDATEI_GEAENDERT.length));
 }
 
 function istFall(fall, dateien) {
@@ -149,7 +150,7 @@ function orteGueltig({ orte, mutanten, gate }) {
 function basisFehler(daten) {
   const dateien = new Set(Array.isArray(daten.dateien) ? daten.dateien : []);
   const teilmenge = (liste) =>
-    istSortierteListe(liste, QUELLDATEI) && liste.every((datei) => dateien.has(datei));
+    istSortierteListe(liste, MESSBAR) && liste.every((datei) => dateien.has(datei));
   const pruefungen = [
     [
       teilmenge(daten.erreicht) && teilmenge(daten.erreichtGate),
@@ -215,7 +216,7 @@ function branchFehler(daten) {
   const gemessen = Array.isArray(daten.gemessen) ? daten.gemessen : [];
   const anfang = gemessen.every((datei, index) => datei === dateien[index]);
   const fehler = [];
-  if (!istSortierteListe(daten.gemessen, QUELLDATEI) || !anfang)
+  if (!istSortierteListe(daten.gemessen, MESSBAR) || !anfang)
     fehler.push("Liste der gemessenen Dateien ist ungültig");
   if (!istFallListe(daten.ausgenommen, dateien))
     fehler.push("Liste der ausgenommenen Testfälle ist ungültig");
@@ -280,7 +281,7 @@ function paketGueltig(paket) {
   return (
     istObjekt(paket) &&
     istZahl(paket.mutanten) &&
-    istSortierteListe(paket.dateien, QUELLDATEI) &&
+    istSortierteListe(paket.dateien, MESSBAR) &&
     paket.dateien.length > 0 &&
     (paket.teil === undefined || (paket.dateien.length === 1 && istTeil(paket.teil)))
   );
