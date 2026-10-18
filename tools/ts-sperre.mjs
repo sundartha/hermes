@@ -10,8 +10,8 @@ import { CHECKED_ROOTS, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
 const STOCK_FILE = "tools/basis/ts-bestand.json";
 const CHECKED_ROOT_LIST = new Intl.ListFormat("de", { type: "disjunction" }).format(CHECKED_ROOTS);
 const NUL = "\0";
-const CHECKED_EXTENSION = /\.[cm]?ts$/;
-const UNRUN_TEST_FILE = /\.test\.[cm]ts$/;
+const CHECKED_EXTENSION = /\.ts$/;
+const NOT_YET_CHECKED_EXTENSION = /\.[cm]ts$/;
 const TSCONFIG = "tsconfig.json";
 
 function stockOf(text, source) {
@@ -23,6 +23,12 @@ function stockOf(text, source) {
 
 function isInCheckedPlace(path) {
   return CHECKED_EXTENSION.test(path) && CHECKED_ROOTS.some((root) => path.startsWith(root));
+}
+
+function outsidePlaceFinding(path) {
+  if (NOT_YET_CHECKED_EXTENSION.test(path))
+    return `${path}: TypeScript-Datei mit .mts oder .cts, die Semgrep und knip noch nicht prüfen; zugelassen ist nur .ts klein geschrieben unter ${CHECKED_ROOT_LIST}`;
+  return `${path}: TypeScript-Datei, die ESLint oder tsc nicht prüfen; geprüft wird nur .ts klein geschrieben unter ${CHECKED_ROOT_LIST}`;
 }
 
 function typecheckedFiles(ts) {
@@ -58,8 +64,6 @@ async function placeFindings(paths) {
     if (ignored[index])
       return [`${path}: TypeScript-Datei, die ESLint nicht prüft (in eslint.config.js ausgenommen oder ohne passenden Block)`];
     if (!typechecked.has(path)) return [`${path}: TypeScript-Datei, die tsc nicht prüft (nicht in ${TSCONFIG} enthalten)`];
-    if (UNRUN_TEST_FILE.test(path))
-      return [`${path}: TypeScript-Testdatei, die der Testläufer nicht startet; Testdateien enden auf .test.ts`];
     return [];
   });
 }
@@ -93,12 +97,7 @@ async function findings(basis) {
   const allowed = new Set(stock);
   const tracked = typescriptFiles(git(["ls-files", "-z"])).filter((path) => !allowed.has(path));
   return [
-    ...tracked
-      .filter((path) => !isInCheckedPlace(path))
-      .map(
-        (path) =>
-          `${path}: TypeScript-Datei, die ESLint oder tsc nicht prüfen; geprüft wird nur .ts, .mts oder .cts klein geschrieben unter ${CHECKED_ROOT_LIST}`,
-      ),
+    ...tracked.filter((path) => !isInCheckedPlace(path)).map(outsidePlaceFinding),
     ...stock
       .filter((path) => CHECKED_ROOTS.some((root) => path.startsWith(root)))
       .map(

@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .cts-Datei unter src, die Semgrep und knip nicht sehen",
+  "dateien": {
+    "src/probe/probe.cts": ["export const neu = 1;"]
+  },
+  "erwartet": "src/probe/probe.cts: TypeScript-Datei"
+}
