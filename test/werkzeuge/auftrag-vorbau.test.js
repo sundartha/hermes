@@ -220,6 +220,44 @@ test("Freigabe: auch mit Freigabe darf der Bau-Agent den alten Test nicht änder
   gesperrt(nachEntscheidung(context, { test: [ROTER_TEST], bau }), /Der Bau-Agent hat einen Test geändert: test\/versand\.test\.js/, /Issue #54 gibt test\/versand\.test\.js frei/);
 });
 
+const ALT_ZWEI = "test/versand-zwei.test.js";
+const ISO_HALT = { phase: "probe", auftrag: "A1", runde: 2, entscheidung: { text: "Gilt die ISO-Regel auch hier?" }, alterTest: null };
+const haltMit = (auftrag, datei, runde = 1) => ({ phase: "probe", auftrag, runde, entscheidung: { text: `Alter Test ${datei}` }, alterTest: { datei } });
+const belege = (eintraege) => Object.fromEntries(Object.entries(eintraege).map(([name, inhalt]) => [`.fortschritt/probe/${name}.json`, JSON.stringify(inhalt)]));
+
+function nachHalten(context, halte, { issue = freigabeIssue(), test = [FREIGEGEBEN] } = {}) {
+  const repo = probeRepository(context, { ...REPO, [ALT_ZWEI]: alterTest("{}"), ...belege(halte) });
+  return laufIn(context, repo, { drehbuch: { bau: [GATES], test }, issue });
+}
+
+test("Freigabe: hält ein späterer Lauf aus einem anderen Grund an, gibt das Issue den alten Test aus dem früheren Halt trotzdem frei", (context) => {
+  const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: ISO_HALT });
+  assert.equal(zweiter.ergebnis.status, 0, zweiter.ergebnis.stdout + zweiter.ergebnis.stderr);
+  assert.equal(readFileSync(join(zweiter.repo, ALT), "utf8"), ALT_OHNE_GATES);
+});
+
+test("Freigabe: steht der alte Test aus dem früheren Halt nicht im Issue, bleibt er gesperrt", (context) => {
+  const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: ISO_HALT }, { issue: freigabeIssue({ liste: ["test/anderes.test.js"] }) });
+  gesperrt(zweiter, FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: test\/versand\.test\.js steht nicht als eigener Listenpunkt/);
+});
+
+test("Freigabe: ein alter Test aus dem Halt eines anderen Auftrags gibt diesem Auftrag nichts frei", (context) => {
+  const zweiter = nachHalten(context, { "A10.runde-1": haltMit("A10", ALT), A2: haltMit("A2", ALT), A1: ISO_HALT });
+  assert.equal(zweiter.ergebnis.status, EXIT_ROT);
+  assert.doesNotMatch(zweiter.ergebnis.stdout, /test\/versand\.test\.js frei/);
+  assert.match(JSON.stringify(zweiter.beleg("A1")), FREMDER_TEST);
+  assert.deepEqual(zweiter.gh.filter(([befehl]) => befehl === "api"), []);
+});
+
+test("Freigabe: zwei Halte mit zwei verschiedenen alten Tests, beide im Issue, geben beide frei", (context) => {
+  const beide = { dateien: { ...FREIGEGEBEN.dateien, [ALT_ZWEI]: ALT_OHNE_GATES } };
+  const issue = freigabeIssue({ liste: [ALT, ALT_ZWEI] });
+  const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: haltMit("A1", ALT_ZWEI, 2) }, { issue, test: [beide] });
+  assert.equal(zweiter.ergebnis.status, 0, zweiter.ergebnis.stdout + zweiter.ergebnis.stderr);
+  for (const datei of [ALT, ALT_ZWEI]) assert.match(zweiter.ergebnis.stdout, new RegExp(`Issue #54 gibt ${datei.replaceAll(".", "\\.")} frei`));
+  assert.equal(readFileSync(join(zweiter.repo, ALT_ZWEI), "utf8"), ALT_OHNE_GATES);
+});
+
 test("Vorbau: benennt der testumbau den gemeldeten Fall um, wird er verworfen und Antonio entscheidet", (context) => {
   const umbenannt = { dateien: { [ALT]: alterTest("{ gates: true }", "versendet mit Gates") }, antwort: `Entfernt: ${ALT}: versendet den Code, weil er jetzt mit Gates heißt` };
   const { notiz } = vorwegVerworfen(context, umbenannt);
