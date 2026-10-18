@@ -2,6 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import { VisitorKeys } from "espree";
+
+import { alleKnoten } from "../eslint-rules/knoten.js";
 import { einstellungenFuer, gelesen } from "../syntaxbaum.mjs";
 import { MATRIX_HOECHSTENS } from "./teile.mjs";
 import { getoetetIn, imVorherStand } from "./testumbau.mjs";
@@ -14,7 +17,6 @@ const QUELLDATEI = /^src\/[\w./-]+\.[cm]?[jt]s$/;
 const TESTPFAD = /^test\/[\w./-]+$/;
 const ELTERNORDNER = "..";
 const PROGRAMM = "Program";
-const OHNE_KINDER = new Set(["loc", "range", "parent", "comments", "tokens"]);
 const MS_JE_SEKUNDE = 1000;
 const BEREICH_LAENGE = 2;
 
@@ -30,22 +32,8 @@ export function testsAus(text) {
   return tests;
 }
 
-function istKnoten(wert) {
-  return typeof wert?.type === "string" && wert.loc !== undefined;
-}
-
 export function knotenIn(baum) {
-  const alle = [];
-  const offen = [baum];
-  while (offen.length > 0) {
-    const knoten = offen.pop();
-    if (knoten.type !== PROGRAMM) alle.push(knoten);
-    for (const [schluessel, wert] of Object.entries(knoten)) {
-      const kinder = [wert].flat();
-      if (!OHNE_KINDER.has(schluessel)) offen.push(...kinder.filter(istKnoten));
-    }
-  }
-  return alle;
+  return alleKnoten({ ast: baum, visitorKeys: VisitorKeys }).filter(({ type }) => type !== PROGRAMM);
 }
 
 function knotenJeZeile(baum, zeilen) {
