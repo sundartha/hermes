@@ -84,14 +84,13 @@ async function healNumberGeoForTenant(db, tenantId) {
   return written;
 }
 
-async function backfillNumberGeo(db, restoreTenantId) {
+async function backfillNumberGeo(db) {
   const { rows } = await db.query(`SELECT id FROM tenant`);
   let written = 0;
   for (const { id } of rows) {
     await setCurrentTenant(db, id);
     written += await healNumberGeoForTenant(db, id);
   }
-  await setCurrentTenant(db, restoreTenantId);
   if (written) console.log(`[migrate] number geo backfill: ${written} Zeile(n) geheilt`);
 }
 
@@ -164,11 +163,16 @@ export async function seedDefaults(db, tenantId) {
   }
 }
 
+async function seedDefaultsInTenantScope(db, tenantId) {
+  await setCurrentTenant(db, tenantId);
+  await seedDefaults(db, tenantId);
+}
+
 export async function migrate(db, tenantId) {
   await applySchema(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
-  await backfillNumberGeo(db, tenantId);
-  await seedDefaults(db, tenantId);
+  await backfillNumberGeo(db);
+  await seedDefaultsInTenantScope(db, tenantId);
 }
