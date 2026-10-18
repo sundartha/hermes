@@ -1,4 +1,11 @@
 {
+  "github/ci-sammeljob": {
+    "liste": "G7",
+    "wozu": "Der Sammeljob CI ist der eine Pflicht-Check für alle Teiljobs der CI (Prüfungen, Tests, Mutationsplan, Mutationsprüfung, Mutationsurteil). Er ist nur grün, wenn jeder Teiljob erfolgreich war; sonst ginge ein übersprungener oder abgebrochener Teiljob als bestanden durch, und Code käme etwa ohne gelaufene Tests auf master.",
+    "behebung": "Den Teiljob grün machen, den die Zeile „Nicht erfolgreich:“ nennt. Sein roter Schritt nennt den Befund und, wo vorhanden, Zweck und Ausweg; ein abgebrochener oder übersprungener Teiljob läuft nach der Ursache neu.",
+    "nichtAngenommen": "Einen Teiljob aus der Liste needs streichen, seine Bedingung so ändern, dass er übersprungen wird, oder ein anderes Ergebnis als success als bestanden werten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Der Sammeljob hat keinen eigenen Grund. Den Ausweg nennt die Meldung des roten Schritts im genannten Teiljob; nennt sie keinen, hörst du auf und schreibst den Befund als Entscheidungsnotiz ins Issue."
+  },
   "github/codeowners": {
     "liste": "G5",
     "wozu": "Jede geschützte Datei steht zweimal: in .github/CODEOWNERS (dann wartet die Freigabe-Prüfung auf Antonios Approve) und als Schreibverbot in den Rollen-Dateien von Bau- und Test-Agent unter .claude/rollen/. Fehlt eine Seite, darf ein Agent im Auftragsweg eine Prüfungsdatei selbst ändern, oder eine Änderung daran kommt ohne Approve durch; in beiden Fällen ließe sich eine Prüfung lockern, ohne dass Antonio es sieht.",
@@ -41,6 +48,13 @@
     "nichtAngenommen": "Den Code des Pakets ins Repo kopieren, es außerhalb von package.json laden oder es in einen Abschnitt eintragen, den die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit Paket und Zweck ins Issue."
   },
+  "github/freigabe-neustart": {
+    "liste": "G3",
+    "wozu": "Ein Approve wirkt nur, wenn danach die Freigabe-Prüfung für genau den freigegebenen Stand neu läuft; sie startet sonst nur bei einem neuen oder geänderten PR. Gibt es für den Stand keinen Lauf, bliebe die Freigabe ohne Folge, und der PR stünde weiter auf Rot.",
+    "behebung": "Einen neuen Commit pushen; das startet die Freigabe-Prüfung für den neuen Stand. Danach gibt Antonio auf diesem Stand erneut ein Approve.",
+    "nichtAngenommen": "Einen Lauf der Freigabe-Prüfung für einen anderen Stand neu starten oder den Neustart-Job so ändern, dass er ohne passenden Lauf grün endet. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ein neuer Push startet die Freigabe-Prüfung; in einer Paket-Sitzung schreibt die Sitzung danach „Wartet auf Freigabe“ ins Issue, damit Antonio den neuen Stand freigibt."
+  },
   "github/freigabe-ohne-fehlalarm": {
     "liste": "G2",
     "wozu": "Eine Prüfung soll nicht lockerer werden, nur weil jemand ihre Meldung einen Fehlalarm nennt. Ohne Beleg verschwände still eine Sperre, und ein Fehler, den sie bisher gestoppt hat, käme auf master und zu den Kunden; deshalb bleibt der PR auch mit Approve rot.",
@@ -82,6 +96,13 @@
     "behebung": "Antonio liest Vorher und Nachher im Kommentar „Freigabe-Prüfung: Zusammenfassung“ und gibt auf dem aktuellen Stand ein Approve. Gehört die Textänderung nicht zum Auftrag, wird sie zurückgenommen.",
     "nichtAngenommen": "Den Text an einer Stelle ändern, die test/werkzeuge/werkzeugtexte.json nicht festhält, oder die festgehaltene Datei so anpassen, dass keine Änderung erscheint. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit den geänderten Werkzeugen ins Issue."
+  },
+  "github/install-skripte": {
+    "liste": "G9",
+    "wozu": "npm ci läuft mit --ignore-scripts, damit ein gekapertes Paket beim Installieren keinen eigenen Code in der CI ausführt, etwa um Zugangsdaten zu lesen. Nur Pakete aus tools/basis/install-skripte.json werden danach mit npm rebuild nachgebaut; rot heißt, dass dieser Nachbau gescheitert ist oder die Liste nicht lesbar ist.",
+    "behebung": "Den Fehler aus der Ausgabe von npm rebuild beheben (passende Version, fehlende Systembibliothek) oder die Liste wieder zu gültigem JSON machen. Der Eintrag bleibt, solange das Paket sein Skript braucht.",
+    "nichtAngenommen": "Das Paket aus der Liste streichen, obwohl es sein Skript braucht, ein anderes Paket aufnehmen, nur damit der Nachbau gelingt, oder den Nachbau aus dem Schritt nehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt die Ursache außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit Paket und Fehler ins Issue. Eine Änderung an tools/basis/install-skripte.json ist freigabepflichtig und wartet auf Antonios Approve."
   },
   "github/ohne-menschen": {
     "liste": "G11",

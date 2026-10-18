@@ -39,6 +39,11 @@ jobs:
           lauf=$(gh run list --workflow freigabe.yml --event pull_request --commit "$kopf" --limit 1 --json databaseId --jq '.[].databaseId')
           if [ -z "$lauf" ]; then
             echo "Für den Stand $kopf gibt es keinen Lauf der Freigabe-Prüfung; ein neuer Push startet ihn."
+            printf '%s\n' \
+              'Wozu: Ein Approve wirkt nur, wenn danach die Freigabe-Prüfung für genau den freigegebenen Stand neu läuft; sie startet sonst nur bei einem neuen oder geänderten PR. Gibt es für den Stand keinen Lauf, bliebe die Freigabe ohne Folge, und der PR stünde weiter auf Rot.' \
+              'Echte Behebung: Einen neuen Commit pushen; das startet die Freigabe-Prüfung für den neuen Stand. Danach gibt Antonio auf diesem Stand erneut ein Approve.' \
+              'Nicht angenommen: Einen Lauf der Freigabe-Prüfung für einen anderen Stand neu starten oder den Neustart-Job so ändern, dass er ohne passenden Lauf grün endet. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.' \
+              'Ausweg: Ein neuer Push startet die Freigabe-Prüfung; in einer Paket-Sitzung schreibt die Sitzung danach „Wartet auf Freigabe“ ins Issue, damit Antonio den neuen Stand freigibt.'
             exit 1
           fi
           gh run watch "$lauf" --interval "$WARTEN_SEKUNDEN" > /dev/null

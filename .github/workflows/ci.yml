@@ -82,6 +82,10 @@ jobs:
           set -euo pipefail
           jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
 
+      - name: Zweck der Install-Skripte
+        if: failure() && steps.installskripte.outcome == 'failure'
+        run: node tools/zweck-zeigen.mjs github/install-skripte
+
       - name: Commit-Prüfung
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
@@ -213,18 +217,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Node 22, npm ci und Install-Skripte
+        uses: ./.github/actions/node-npm-ci
         with:
-          node-version: 22
-
-      - name: npm ci
-        run: npm ci --ignore-scripts
-
-      - name: Install-Skripte
-        run: |
-          set -euo pipefail
-          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+          web: "false"
 
       - name: Tests
         env:
@@ -336,20 +332,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Node 22, npm ci und Install-Skripte
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
         with:
-          node-version: 22
-
-      - name: npm ci
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        run: npm ci --ignore-scripts
-
-      - name: Install-Skripte
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        run: |
-          set -euo pipefail
-          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+          web: "false"
 
       - name: Mutationsprüfung
         if: needs.mutationsplan.outputs.messen == 'ja'
@@ -380,20 +367,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Node 22, npm ci und Install-Skripte
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
         with:
-          node-version: 22
-
-      - name: npm ci
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        run: npm ci --ignore-scripts
-
-      - name: Install-Skripte
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        run: |
-          set -euo pipefail
-          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+          web: "false"
 
       - name: Teilergebnisse laden
         if: needs.mutationsplan.outputs.messen == 'ja'
@@ -421,6 +399,7 @@ jobs:
         run: jq -r '[.[] | select(. != "") | tonumber] | "\(add // 0) Tests bestanden über alle Teile"' <<< "$BESTANDEN"
 
       - name: Alle Jobs erfolgreich
+        id: alle
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
@@ -430,3 +409,20 @@ jobs:
             echo "Nicht erfolgreich: $nicht_erfolgreich"
             exit 1
           fi
+
+      - name: Checkout für Zweck und Ausweg
+        if: failure() && steps.alle.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          sparse-checkout: tools
+
+      - name: Node 22 für Zweck und Ausweg
+        if: failure() && steps.alle.outcome == 'failure'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Zweck und Ausweg des Sammeljobs
+        if: failure() && steps.alle.outcome == 'failure'
+        run: node tools/zweck-zeigen.mjs github/ci-sammeljob
