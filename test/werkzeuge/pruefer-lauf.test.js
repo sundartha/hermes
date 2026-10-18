@@ -30,6 +30,7 @@ const PR_NUMMER = 7;
 const ISSUE_NUMMER = 41;
 const ZUEGE_EINE_DATEI = "14";
 const MACOS_ZUSATZ = "__CF_";
+const LANGE_ZEILE = `export const TEXT = "${"x".repeat(6000)}";`;
 
 function einCommit(context, dateien = { "src/zahl.js": "export const ZAHL = 2;\n" }) {
   const repo = probeRepo(context);
@@ -44,11 +45,13 @@ function einCommit(context, dateien = { "src/zahl.js": "export const ZAHL = 2;\n
   return { repo, basis, commit };
 }
 
-async function pruefeMit(context, { aufnahme, liestDiffs, dateien }) {
-  const { repo, commit } = einCommit(context, dateien);
+async function pruefeMit(context, { aufnahme, liestDiffs, dateien, letzter = false }) {
+  const { repo, basis, commit: gewaehlt } = einCommit(context, dateien);
+  const commit = { ...gewaehlt, letzter };
   const ersatz = ersatzPruefer(context, { aufnahme, liestDiffs });
   const kontext = {
     root: repo.ordner,
+    basis,
     token: SCHEIN_TOKEN,
     programm: ersatz.programm,
     auftragstext: "",
@@ -109,15 +112,51 @@ test("Nutzungslimit, abgelaufenes Token und aufgebrauchte Züge ergeben nicht_ge
   }
 });
 
-test("wurde eine Diff-Datei nie mit Read geöffnet, ist die Prüfung unvollstaendig", async (context) => {
-  const { ergebnis } = await pruefeMit(context, {
+test("öffnet der Prüfer keine Diff-Datei mit Read, ist die Prüfung trotzdem geprueft, weil die Patches in seiner Eingabe stehen", async (context) => {
+  const { ergebnis, protokoll } = await pruefeMit(context, {
     aufnahme: aufzeichnung("gueltig"),
     liestDiffs: false,
   });
+  assert.equal(ergebnis.zustand, "geprueft");
+  assert.match(protokoll.eingabe, /\+export const ZAHL = 2;/);
+});
+
+test("verdichtet die CLI den Kontext im Lauf, ist die Prüfung unvollstaendig, auch bei gültiger Antwort", async (context) => {
+  const verdichtet = aufzeichnung("gueltig");
+  verdichtet.zeilen.splice(-1, 0, {
+    type: "system",
+    subtype: "compact_boundary",
+    compact_metadata: { trigger: "auto" },
+  });
+  const { ergebnis } = await pruefeMit(context, { aufnahme: verdichtet });
   assert.deepEqual(
     [ergebnis.zustand, ergebnis.grund, ergebnis.befunde],
-    ["unvollstaendig", "nicht gelesen: diff/001.patch", []],
+    ["unvollstaendig", "Kontext im Lauf verdichtet, Patch-Text nicht mehr sicher vollständig", []],
   );
+});
+
+test("eine Zeile mit 6000 Zeichen steht am letzten Commit ganz in der Eingabe, einmal aus diff/001.patch und einmal aus pr/gesamt.patch", async (context) => {
+  const { ergebnis, protokoll } = await pruefeMit(context, {
+    aufnahme: aufzeichnung("gueltig"),
+    dateien: { "src/text.js": `${LANGE_ZEILE}\n` },
+    letzter: true,
+  });
+  assert.equal(ergebnis.zustand, "geprueft");
+  assert.equal(protokoll.eingabe.split(`+${LANGE_ZEILE}\n`).length - 1, 2);
+  assert.match(protokoll.eingabe, / diff\/001\.patch\n/);
+  assert.match(protokoll.eingabe, / pr\/gesamt\.patch\n/);
+});
+
+test("steht ein Patch nicht byte-genau in der Eingabe, weil er kein gültiges UTF-8 ist, startet der Prüfer nicht und die Prüfung ist unvollstaendig", async (context) => {
+  const { ergebnis, protokoll } = await pruefeMit(context, {
+    aufnahme: aufzeichnung("gueltig"),
+    dateien: { "src/latin1.txt": Buffer.from("Gr\xfc\xdfe\n", "latin1") },
+  });
+  assert.deepEqual(
+    [ergebnis.zustand, ergebnis.grund, ergebnis.befunde],
+    ["unvollstaendig", "nicht vollständig in der Eingabe: diff/001.patch", []],
+  );
+  assert.equal(protokoll, null);
 });
 
 test("ein Sicherheitsbefund wird vor dem Artefakt auf Schwere und Merker gekürzt", async (context) => {
