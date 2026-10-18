@@ -7,6 +7,7 @@ import {
   reproduzierbareBlocker,
   schluesselVon,
 } from "./pruefer-schema.mjs";
+import { PRUEFER_ZWECK } from "./pruefer-zweck.mjs";
 
 export const KONTEXT = "Prüfer";
 const MAX_BESCHREIBUNG = 140;
@@ -41,18 +42,18 @@ function ohneNachstellung({ blocker, nachstellung }) {
   const offen = blocker.find(({ schluessel }) => !nachstellung?.has(schluessel));
   if (!offen) return null;
   if (nachstellung === null) return { state: WARTET, description: "Reproduktion läuft" };
-  return { state: FEHLER, description: `Nachstellung fehlt: ${offen.datei}` };
+  return { state: FEHLER, description: `Nachstellung fehlt: ${offen.datei}`, zweck: PRUEFER_ZWECK.NICHT_GELAUFEN };
 }
 
 const REGELN = [
   ({ probeBranch }) =>
-    probeBranch ? { state: FEHLER, description: "Probe-Branch, nicht geprüft" } : null,
+    probeBranch ? { state: FEHLER, description: "Probe-Branch, nicht geprüft", zweck: PRUEFER_ZWECK.NICHT_GELAUFEN } : null,
   ({ commits }) =>
-    commits.length === 0 ? { state: FEHLER, description: "keine Commits geprüft" } : null,
+    commits.length === 0 ? { state: FEHLER, description: "keine Commits geprüft", zweck: PRUEFER_ZWECK.NICHT_GELAUFEN } : null,
   ({ commits }) => {
     const offen = commits.find(({ zustand }) => zustand !== GEPRUEFT);
     return offen
-      ? { state: FEHLER, description: `Prüfer nicht gelaufen: ${grundDes(offen)}` }
+      ? { state: FEHLER, description: `Prüfer nicht gelaufen: ${grundDes(offen)}`, zweck: PRUEFER_ZWECK.NICHT_GELAUFEN }
       : null;
   },
   ({ commits }) => {
@@ -60,18 +61,18 @@ const REGELN = [
       befunde.some((befund) => befund.sicherheit && befund.schwere === BLOCKER),
     );
     return sicherheit
-      ? { state: ROT, description: "Sicherheitsbefund, Details nicht öffentlich" }
+      ? { state: ROT, description: "Sicherheitsbefund, Details nicht öffentlich", zweck: PRUEFER_ZWECK.SICHERHEIT }
       : null;
   },
   ({ blocker, nachstellung }) => {
     const treffer = blocker.find(({ schluessel }) => bestaetigt(nachstellung?.get(schluessel)));
-    return treffer ? { state: ROT, description: `BLOCKER bestätigt: ${treffer.datei}` } : null;
+    return treffer ? { state: ROT, description: `BLOCKER bestätigt: ${treffer.datei}`, zweck: PRUEFER_ZWECK.BESTAETIGT } : null;
   },
   ({ commits }) => {
     const treffer = geprueft(commits)
       .flatMap(({ befunde }) => befunde)
       .find((befund) => befund.schwere === BLOCKER && befund.belegt === true);
-    return treffer ? { state: ROT, description: `Umgehung belegt: ${treffer.datei}` } : null;
+    return treffer ? { state: ROT, description: `Umgehung belegt: ${treffer.datei}`, zweck: PRUEFER_ZWECK.UMGEHUNG } : null;
   },
   ohneNachstellung,
   erfolg,
@@ -113,7 +114,7 @@ function ohneDoppelte(issues) {
   return issues.filter((issue) => !titel.has(issue.titel) && titel.add(issue.titel));
 }
 
-export function urteile({ probeBranch = false, commits, nachstellung = null, pr = null }) {
+function urteilen({ probeBranch = false, commits, nachstellung = null, pr = null }) {
   const lage = {
     probeBranch,
     commits,
@@ -124,5 +125,15 @@ export function urteile({ probeBranch = false, commits, nachstellung = null, pr 
   const issues = probeBranch
     ? []
     : ohneDoppelte(geprueft(commits).flatMap((commit) => issuesDes(commit, { nachstellung, pr })));
+  return { status, issues };
+}
+
+export function urteile(eingabe) {
+  const { status, issues } = urteilen(eingabe);
   return { ...gekuerzteBeschreibung(status), issues };
+}
+
+export function urteileMitZweck(eingabe) {
+  const { status, issues } = urteilen(eingabe);
+  return { ...gekuerzteBeschreibung(status), issues, zweck: status.zweck };
 }
