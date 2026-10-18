@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { gelesen } from "../../tools/syntaxbaum.mjs";
 import { vorherGetoetet } from "../../tools/mutationspruefung/testumbau.mjs";
 import { knotenIn, PLANDATEI, schneide, vereineStuecke, vorherPlan, vorherStueck } from "../../tools/mutationspruefung/vorher-verteilt.mjs";
+import { MATRIX_HOECHSTENS } from "../../tools/mutationspruefung/teile.mjs";
 import { werkzeug as werkzeugAufruf } from "./mutationspruefung-probe.js";
 import { probeDirectory, probeRepository, runIn, REPO_ROOT } from "./probe-repo.js";
 
@@ -41,6 +42,8 @@ const KLEINSTE = 1;
 const EINORDNEN_ERSTE_ZEILE = 3;
 const EINORDNEN_LETZTE_ZEILE = 7;
 const MITTEN_IN_EINORDNEN = 4;
+const BEREICH_AUS_ANDEREM_PLAN = [[1, 99]];
+const UEBER_DER_MATRIX = Array.from({ length: MATRIX_HOECHSTENS + 1 }, (_wert, index) => `export const wert${index} = ${index};`).join("\n");
 
 function strykerAttrappe(datei, zeilen) {
   const baum = gelesen(readFileSync(datei, "utf8"), MODUL);
@@ -120,7 +123,7 @@ test("mutationspruefung vorher verteilt: ein fehlendes, doppeltes oder fremdes S
   assert.throws(() => vereineStuecke(plan, berichte.slice(1)), /es fehlen die Stücke 1 von/);
   assert.throws(() => vereineStuecke(plan, [...berichte, berichte[0]]), /Stück 1 liegt doppelt vor/);
   assert.throws(() => vereineStuecke(plan, [{ ...berichte[0], basis: "andere" }, ...berichte.slice(1)]), /Stück 1 gehört zu einem anderen Plan/);
-  const verschoben = { ...berichte[0], stueck: { ...berichte[0].stueck, zeilen: [[1, 99]] } };
+  const verschoben = { ...berichte[0], stueck: { ...berichte[0].stueck, zeilen: BEREICH_AUS_ANDEREM_PLAN } };
   assert.throws(() => vereineStuecke(plan, [verschoben, ...berichte.slice(1)]), /Stück 1 gehört zu einem anderen Plan/);
   assert.throws(() => vereineStuecke({ ...plan, stuecke: plan.stuecke.slice(1) }, berichte.slice(1)), /nicht lückenlos/);
   assert.throws(() => vereineStuecke({ ...plan, stuecke: plan.stuecke.slice(0, -1) }, berichte.slice(0, -1)), /deckt src\/wort\.js nicht lückenlos ab/);
@@ -132,6 +135,32 @@ test("mutationspruefung vorher verteilt: ein fehlendes, doppeltes oder fremdes S
   const lauf = runIn(ordner, process.execPath, [join(REPO_ROOT, "tools/mutationspruefung.mjs"), "--vorher-zusammen", ordner, "--ergebnis", join(ordner, "ergebnis.out")]);
   assert.equal(lauf.status, EXIT_ABBRUCH);
   assert.match(lauf.stderr, /Abbruch: es fehlen die Stücke 1 von/);
+});
+
+test("mutationspruefung vorher verteilt: --vorher-zusammen vereint vollständige Stücke und nennt Stücke, Rechenzeit und Getötete", async (context) => {
+  const repo = probeRepository(context, DATEIEN);
+  const { plan, berichte } = await verteilt(attrappe(repo), KLEINSTE);
+  const gezeitet = berichte.map((bericht) => ({ ...bericht, sekunden: bericht.stueck.nummer }));
+  const ordner = probeDirectory(context, {});
+  writeFileSync(join(ordner, PLANDATEI), JSON.stringify(plan));
+  for (const bericht of gezeitet) writeFileSync(join(ordner, `stueck-${bericht.stueck.nummer}.json`), JSON.stringify(bericht));
+  const ziel = join(ordner, "ergebnis.out");
+  const lauf = runIn(ordner, process.execPath, [join(REPO_ROOT, "tools/mutationspruefung.mjs"), "--vorher-zusammen", ordner, "--ergebnis", ziel]);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const vereint = vereineStuecke(plan, gezeitet);
+  assert.deepEqual(JSON.parse(readFileSync(ziel, "utf8")), vereint);
+  const letztes = plan.stuecke.at(-1);
+  const mutanten = vereint.stuecke.reduce((summe, { anzahl }) => summe + anzahl, 0);
+  assert.match(lauf.stdout, new RegExp(`^- Stücke: ${plan.stuecke.length}$`, "m"));
+  assert.match(lauf.stdout, new RegExp(`^- Rechenzeit aller Stücke zusammen: ${(plan.stuecke.length * (plan.stuecke.length + 1)) / 2} s$`, "m"));
+  assert.match(lauf.stdout, new RegExp(`^- Längstes Stück: Stück ${letztes.nummer} \\(${letztes.datei}:${letztes.zeilen[0].join("-")}\\) mit ${letztes.nummer} s$`, "m"));
+  assert.match(lauf.stdout, new RegExp(`^- Mutanten: ${mutanten}, davon getötet: ${vereint.getoetet.length}$`, "m"));
+});
+
+test("mutationspruefung vorher verteilt: mehr Stücke, als eine Matrix fasst, brechen den Plan ab", async (context) => {
+  const repo = probeRepository(context, { ...DATEIEN, "src/viele.js": UEBER_DER_MATRIX, "test/viele.test.js": 'export * from "../src/viele.js";\n' });
+  const stand = { basis: "basis", tests: ["test/viele.test.js"] };
+  await assert.rejects(vorherPlan(stand, attrappe(repo), KLEINSTE), new RegExp(`^Error: ${MATRIX_HOECHSTENS + 1} Stücke, höchstens ${MATRIX_HOECHSTENS} gehen in eine Matrix`));
 });
 
 test("mutationspruefung vorher verteilt: ein Stück für eine Datei, die die betroffenen Tests nicht importieren, bricht ab", async (context) => {
