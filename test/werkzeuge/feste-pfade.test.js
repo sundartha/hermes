@@ -170,12 +170,17 @@ test("feste-pfade: jede Liste meldet ihren fehlenden Eintrag", (context) => {
       { "test/werkzeuge/rotproben/probe/pruefung.json": json({ pfade: ["src/a.{js,ts}"] }) },
       `test/werkzeuge/rotproben/probe/pruefung.json pfade: src/a.{js,ts} ${MISSING}`,
     ],
-    [
-      { "test/werkzeuge/rotproben/probe/pruefung.json": json({ pfade: ["src/**/*.js"] }) },
-      "mehr als ein Sternchen",
-    ],
   ];
   for (const [files, expected] of cases) assertRed(runInNewRepo(context, files), expected);
+});
+
+test("feste-pfade: ein Manifest-Muster mit mehr als einem Sternchen wird mit Manifest gemeldet und verdeckt keinen anderen Befund", (context) => {
+  const manifest = "test/werkzeuge/rotproben/probe/pruefung.json";
+  assertRed(
+    runInNewRepo(context, { [manifest]: json({ pfade: ["src/**/*.js", "tools/weg.mjs"] }) }),
+    `${manifest} pfade: Das Muster src/**/*.js hat mehr als ein Sternchen`,
+    `${manifest} pfade: tools/weg.mjs ${MISSING}`,
+  );
 });
 
 test("feste-pfade: jede Alternative eines Musters braucht ihre Datei, nur Endungs-Alternativen zählen zusammen", (context) => {
