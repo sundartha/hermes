@@ -3,6 +3,7 @@ import globals from "globals";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicornPlugin from "eslint-plugin-unicorn";
 import * as espree from "espree";
+import { builtinRules } from "eslint/use-at-your-own-risk";
 import tseslint from "typescript-eslint";
 
 import { existsSync, readFileSync } from "node:fs";
@@ -405,12 +406,16 @@ const TS_DATEIEN = [`${TS_ORDNER}/**/*.${TS_ENDUNGEN}`];
 const TS_DEKLARATIONEN = [`${TS_ORDNER}/**/*.d.${TS_ENDUNGEN}`];
 const DEKLARATION_MELDUNG =
   "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.";
+const TYPWAECHTER_MELDUNG =
+  "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.";
+const typenRegeln = { rules: { "keine-typwaechter": builtinRules.get("no-restricted-syntax") } };
 const TS_VORGABEN = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked];
 const tsBloecke = [
   ...TS_VORGABEN.map((vorgabe) => ({ ...vorgabe, files: TS_DATEIEN })),
   {
     name: "typescript-sperrregeln",
     files: TS_DATEIEN,
+    plugins: { "hermes-typen": typenRegeln },
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
@@ -425,6 +430,7 @@ const tsBloecke = [
       "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
       "@typescript-eslint/no-unsafe-type-assertion": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
+      "hermes-typen/keine-typwaechter": ["error", { selector: "TSTypePredicate", message: TYPWAECHTER_MELDUNG }],
       "@typescript-eslint/ban-ts-comment": [
         "error",
         { "ts-check": true, "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true },
