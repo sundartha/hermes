@@ -4,16 +4,7 @@ import { basename, join } from "node:path";
 
 import { IDS, befund } from "./befunde.mjs";
 import { BLOCKIERT, WEITER, ergebnisVon, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
-import {
-  MIN_AGENT_SEKUNDEN,
-  agentBefehl,
-  budgetFehlt,
-  budgetMinuten,
-  istWartend,
-  nimmToken,
-  restSekunden,
-  starteAgent,
-} from "./agent.mjs";
+import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
 import { BUDGET_NAME, FIXER_PATCH } from "./fixer.mjs";
 import { patchPruefsumme, schreibePatch, wendeAn } from "./patch.mjs";
 import { DATEI as VORPRUEFUNG, ORDNER } from "./vorpruefen.mjs";
@@ -89,11 +80,10 @@ async function inArbeitsordner(root, ziel, ausfuehren) {
 }
 
 function zeitrahmen(root, ordner) {
-  const minuten = budgetMinuten(root, BUDGET_NAME);
-  if (minuten === null) return { fehler: { grund: budgetFehlt(BUDGET_NAME), tokens: 0, zuege: 0 } };
   const start = leseJson(join(ordner, ORDNER), VORPRUEFUNG)?.start ?? new Date().toISOString();
-  const sekunden = restSekunden(minuten, { start, jetzt: Date.now() });
-  if (sekunden < MIN_AGENT_SEKUNDEN) return { fehler: { grund: `nur noch ${sekunden} s im Budget`, budget: true, tokens: 0, zuege: 0 } };
+  const { fehlt, knapp, sekunden } = agentZeit(root, BUDGET_NAME, { start });
+  if (fehlt) return { fehler: { grund: fehlt, tokens: 0, zuege: 0 } };
+  if (knapp) return { fehler: { grund: knapp, budget: true, tokens: 0, zuege: 0 } };
   return { sekunden };
 }
 

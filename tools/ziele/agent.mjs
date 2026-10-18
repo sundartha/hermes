@@ -40,6 +40,14 @@ export function budgetFehlt(name) {
   return `in ${BUDGET_DATEI} fehlt minutenJeLauf["${name}"]; ohne Zeitgrenze startet kein Agent`;
 }
 
+export function agentZeit(root, name, { start, jetzt = Date.now(), reserve }) {
+  const minuten = budgetMinuten(root, name);
+  if (minuten === null) return { fehlt: budgetFehlt(name) };
+  const sekunden = restSekunden(minuten, { start, jetzt, reserve });
+  if (sekunden < MIN_AGENT_SEKUNDEN) return { knapp: `nur noch ${sekunden} s im Budget`, sekunden, minuten };
+  return { sekunden, minuten };
+}
+
 export function nimmToken() {
   const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
   delete env.CLAUDE_CODE_OAUTH_TOKEN;

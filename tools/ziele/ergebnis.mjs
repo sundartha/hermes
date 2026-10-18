@@ -23,6 +23,7 @@ export const ERGEBNIS_ORDNER = "ergebnis";
 export const ERGEBNIS_DATEI = "ergebnis.json";
 const MS_JE_SEKUNDE = 1000;
 const MAX_GRUND = 300;
+const JOBS_UNLESBAR = "JOB_ERGEBNISSE unlesbar";
 const AUSGAENGE = new Set([SAUBER, GEAENDERT, BLOCKIERT, WEITER]);
 export const QUELLEN = {
   aufraeumen: [
@@ -60,8 +61,9 @@ function gescheiterteJobs() {
   try {
     const jobs = Object.entries(JSON.parse(env.JOB_ERGEBNISSE ?? "{}"));
     return jobs.filter(([, { result }]) => result === "failure" || result === "cancelled").map(([name, { result }]) => `${name}: ${result}`);
-  } catch {
-    return [];
+  } catch (fehler) {
+    console.error(`${JOBS_UNLESBAR}: ${fehler.message}`);
+    return [JOBS_UNLESBAR];
   }
 }
 

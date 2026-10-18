@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { SYSTEM_LABEL, aeltestesSystemIssue } from "../auftrag/system.mjs";
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
 import { ersetzeSteuerzeichen } from "../auftrag/pruefer-schema.mjs";
-import { MIN_AGENT_SEKUNDEN, agentBefehl, budgetFehlt, budgetMinuten, istWartend, nimmToken, restSekunden, starteAgent } from "./agent.mjs";
+import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
 import {
   BLOCKIERT,
   GEAENDERT,
@@ -214,10 +214,9 @@ async function imArchiv(root, ausfuehren) {
 }
 
 async function vorschlagsLauf(root, { zaehlung, token }) {
-  const minuten = budgetMinuten(root, BUDGET_NAME);
-  if (minuten === null) return { grund: budgetFehlt(BUDGET_NAME), tokens: 0, zuege: 0 };
-  const sekunden = restSekunden(minuten, { start: zaehlung.start, jetzt: Date.now(), reserve: RESERVE_ISSUE_SEKUNDEN });
-  if (sekunden < MIN_AGENT_SEKUNDEN) return { grund: `nur noch ${sekunden} s im Budget`, wartend: true, tokens: 0, zuege: 0 };
+  const { fehlt, knapp, sekunden } = agentZeit(root, BUDGET_NAME, { start: zaehlung.start, reserve: RESERVE_ISSUE_SEKUNDEN });
+  if (fehlt) return { grund: fehlt, tokens: 0, zuege: 0 };
+  if (knapp) return { grund: knapp, wartend: true, tokens: 0, zuege: 0 };
   const befehl = agentBefehl({ werkzeuge: "Read,Grep,Glob", erlaubt: [], modell: "opus", schema: SCHEMA, prompt: PROMPT });
   return imArchiv(root, (stand) =>
     starteAgent({ root: stand, befehl, eingabe: vorschlagsAuftrag(zaehlung.kandidat), sekunden, token, pruefeAntwort: gueltigerVorschlag }),
