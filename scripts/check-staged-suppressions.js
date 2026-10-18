@@ -113,22 +113,30 @@ function describeDifferences(differences) {
   return hidden > 0 ? [...shown, `... und ${hidden} weitere`] : shown;
 }
 
+function rejectionFor(differences) {
+  return { reasons: describeDifferences(differences), keys: differences.map(({ key }) => key) };
+}
+
+function unverifiable(err) {
+  return { reasons: [`nicht pruefbar (fail-closed): ${err.message}`], keys: [] };
+}
+
 async function reasonsToReject(file, readFindings) {
   let differences;
   try {
     const { before, after } = await readFindings(file);
     differences = tallyIncreases(findingTally(before), findingTally(after));
   } catch (err) {
-    return [`nicht pruefbar (fail-closed): ${err.message}`];
+    return unverifiable(err);
   }
-  return differences.length === 0 ? null : describeDifferences(differences);
+  return differences.length === 0 ? null : rejectionFor(differences);
 }
 
 export async function findChangedFindings({ candidates, readFindings }) {
   const offenders = [];
   for (const candidate of candidates) {
-    const reasons = await reasonsToReject(candidate.file, readFindings);
-    if (reasons) offenders.push({ ...candidate, reasons });
+    const rejection = await reasonsToReject(candidate.file, readFindings);
+    if (rejection) offenders.push({ ...candidate, ...rejection });
   }
   return offenders;
 }
@@ -147,12 +155,12 @@ export async function findPinMismatches({ stagedFiles, legacyExceptions, readSta
     try {
       actual = findingTally(await readStagedFindings(file));
     } catch (err) {
-      offenders.push({ file, reasons: [`nicht pruefbar (fail-closed): ${err.message}`] });
+      offenders.push({ file, ...unverifiable(err) });
       continue;
     }
     const differences = tallyIncreases(pin, actual);
     if (differences.length === 0) continue;
-    offenders.push({ file, reasons: describeDifferences(differences) });
+    offenders.push({ file, ...rejectionFor(differences) });
   }
   return offenders;
 }
@@ -259,6 +267,31 @@ function printPinMismatchReport(offenders) {
   for (const offender of offenders) console.error(formatPinOffender(offender));
   console.error("");
   for (const line of PIN_WAY_OUT_LINES) logLine(line);
+}
+
+const PURPOSE_TEXTS = new URL("../tools/auftrag/zweck.mjs", import.meta.url);
+const PURPOSE_GROUPS = new URL("../tools/lint-zweck.mjs", import.meta.url);
+const PURPOSE = {
+  RAISED: "lint/unterdrueckungen-steigen",
+  CHANGED: "lint/altdatei-neue-befunde",
+  PIN: "lint/altlast-pin",
+};
+
+async function printPurposes(ids, keys) {
+  try {
+    const { zweckBlock } = await import(PURPOSE_TEXTS);
+    const { befundAusSchluessel, lintZweckZeilen } = await import(PURPOSE_GROUPS);
+    console.error([...lintZweckZeilen(keys.map(befundAusSchluessel)), ...ids.flatMap(zweckBlock)].join("\n"));
+  } catch (err) {
+    logLine(`Zweck-Texte nicht geladen: ${err.message}`);
+  }
+}
+
+function printOffenderPurposes(changedOffenders, pinOffenders) {
+  const changed = changedOffenders.length > 0 ? [PURPOSE.CHANGED] : [];
+  const pins = pinOffenders.length > 0 ? [PURPOSE.PIN] : [];
+  const keys = [...changedOffenders, ...pinOffenders].flatMap((offender) => offender.keys);
+  return printPurposes([...changed, ...pins], keys);
 }
 
 function readRepoFile(relativePath) {
@@ -393,6 +426,7 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
   console.error("");
   logLine("Die Listen werden nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
   logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
+  await printPurposes([PURPOSE.RAISED], reports.flatMap(({ raised }) => raised.map(({ rule }) => rule)));
   return 1;
 }
 
@@ -441,6 +475,7 @@ async function stagedFilesStatus(stagedFiles, lookup) {
   if (changedOffenders.length === 0 && pinOffenders.length === 0) return 0;
   if (changedOffenders.length > 0) printReport(changedOffenders);
   if (pinOffenders.length > 0) printPinMismatchReport(pinOffenders);
+  await printOffenderPurposes(changedOffenders, pinOffenders);
   return 1;
 }
 

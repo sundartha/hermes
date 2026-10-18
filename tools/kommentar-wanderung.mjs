@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { ESLint, Linter } from "eslint";
 
+import { befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { alleKnoten } from "./eslint-rules/knoten.js";
 import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
 import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
@@ -31,6 +32,7 @@ const UNBEKANNTE_ZAHL = "-";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = "Aufruf: node tools/kommentar-wanderung.mjs --basis <commit>";
+const ZWECK = "lint/kommentar-wanderung";
 
 export function woerter(text) {
   const getrennt = text.toLowerCase().replace(NICHT_WORT, WORTTRENNER);
@@ -221,7 +223,7 @@ async function pruefen(root, basis) {
   for (const eintrag of quellen) entfernt.push(...(await entfernteKommentare(werkzeug, eintrag)));
   const gewandert = wanderungen(entfernt, await wiederaufnahmeOrte(werkzeug, dateien));
   const funde = [...werkzeug.unlesbar, ...gewandert];
-  for (const fund of funde) console.error(fund);
+  befundeMeldenUndScheitern(funde, ZWECK);
   console.log(`Markdown-Zuwachs im PR: ${markdownZuwachs(werkzeug)} Zeilen (wird nur angezeigt).`);
   console.log(
     `Kommentar-Wanderung: ${entfernt.length} entfernte Kommentare, ${gewandert.length} wieder aufgetaucht, ${werkzeug.unlesbar.size} Parser-Fehler.`,

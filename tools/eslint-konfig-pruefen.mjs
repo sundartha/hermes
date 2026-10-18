@@ -3,7 +3,10 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const BASELINE_FILE = "tools/basis/eslint-wirksam.json";
+const PURPOSE = "lint/pruefungen-pruefen";
 const SCANNED_ROOTS = ["src", "test", "scripts", "tools", "apps/web/src"];
 const LINTED_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
 const TYPESCRIPT_PROBE = "eslint-konfig-probe";
@@ -240,7 +243,9 @@ function report(root, measured) {
   ];
   for (const finding of findings) console.error(finding);
   if (copyFindings.length > 0) console.error(WRITE_HINT);
-  if (findings.length > 0) process.exitCode = 1;
+  if (findings.length === 0) return;
+  console.log(zweckBlock(PURPOSE).join("\n"));
+  process.exitCode = 1;
 }
 
 const { values, positionals } = parseArgs({

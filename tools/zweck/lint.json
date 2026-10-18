@@ -6,6 +6,20 @@
     "nichtAngenommen": "Den Grund unter einem Schlüssel weiterreichen, den die Regel nicht prüft. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“ aus, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt und der Auftrag kein Umbau ist; sonst steigen Bau- und Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit der Datei ins Issue, wenn die Behebung eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
   },
+  "lint/altdatei-neue-befunde": {
+    "liste": "L22",
+    "wozu": "In einer Datei mit Einträgen in eslint-suppressions.json zählt die Zahl je Regel nur, wie viele Verstöße geduldet sind. Ohne diesen Vergleich könnte man einen alten Verstoß beheben und einen neuen derselben Art einbauen; die Zahl bliebe gleich, und der neue Verstoß bliebe unbemerkt.",
+    "behebung": "Die neuen Befunde in der vorgemerkten Datei beheben; weniger Befunde sind erlaubt.",
+    "nichtAngenommen": "Den Commit mit --no-verify machen, einen alten Befund gegen einen neuen tauschen oder die Datei in eslint-legacy-exceptions.json aufnehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht die Behebung den Umbau einer ganzen Altfunktion oder eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit Datei und Funktion ins Issue; daraus wird ein Umbau davor."
+  },
+  "lint/altlast-pin": {
+    "liste": "L23",
+    "wozu": "Für große Altdateien, deren Aufräumen ein eigener Umbau ist, hält eslint-legacy-exceptions.json die erlaubte Befundmenge fest. Ohne diesen Pin bekämen diese Dateien unbemerkt immer mehr Verstöße.",
+    "behebung": "Die neuen Verstöße in der Datei beheben, ohne den Pin anzuheben.",
+    "nichtAngenommen": "Den Pin mit einem Begründungstext anheben, neben der Altfunktion eine zweite Fassung bauen, die einen Teil ihrer Aufgabe übernimmt, während die alte unverändert bleibt, oder den Commit mit --no-verify machen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht die Behebung den Umbau der Altdatei oder eine Datei außerhalb deines Bereichs, hörst du auf: im Auftragsweg als Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …“, in einer Paket-Sitzung mit „Voraussetzung fehlt:“ samt Datei und Funktion im Issue. Ein Pin steigt nicht, auch nicht mit Begründung."
+  },
   "lint/anfrage-mit-frist": {
     "liste": "L20",
     "wozu": "Eine Testanfrage ohne Antwortfrist hängt bei einem Mutanten, der die Antwort verschluckt, bis zum Zeitlimit des Tests; die Mutationsprüfung dauert dann viel länger, und jeder PR wartet länger auf ihr Ergebnis.",
@@ -83,6 +97,13 @@
     "nichtAngenommen": "Den Code nur so zurechtschneiden oder zusammenpressen, dass die Zahlen knapp halten, ohne Aufgaben zu trennen: Stücke ohne eigene Aufgabe auslagern, Zeilen zusammenziehen, beliebige Parameter in ein Objekt stopfen oder neben der Altfunktion eine zweite Fassung bauen, die einen Teil ihrer Aufgabe übernimmt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“ aus, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt und der Auftrag kein Umbau ist; sonst steigen Bau- und Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit der Datei ins Issue, wenn die Behebung eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
   },
+  "lint/gesamt": {
+    "liste": "L1",
+    "wozu": "Neue Verstöße gegen die Code-Regeln kämen in den Hauptstand, und der eingefrorene Altbestand in eslint-suppressions.json wüchse wieder; der Code würde Stück für Stück schwerer zu lesen und fehlerfrei zu ändern. Wovor die einzelne Regel schützt, steht darüber im Block ihrer Regelgruppe.",
+    "behebung": "Die gemeldeten Verstöße in den vorgemerkten Dateien beheben, wie es der Block der jeweiligen Regelgruppe sagt, die Dateien erneut vormerken und neu committen. npm run lint:fix behebt nur, was ESLint selbst sicher umschreiben kann.",
+    "nichtAngenommen": "Den Commit mit --no-verify oder mit abgeschalteten Hooks machen, eine Regel im Code oder in eslint.config.js abschalten oder eine Zahl in eslint-suppressions.json oder eslint-legacy-exceptions.json erhöhen; die CI prüft denselben Stand ohnehin. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht die Behebung eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Hältst du eine Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
+  },
   "lint/inline-abschalten": {
     "liste": "L6",
     "wozu": "Ein Kommentar wie eslint-disable würde eine Regel genau für die Zeile abschalten, an der sonst ein Verstoß zu beheben wäre; der Verstoß bliebe im Code, und kein Melder zeigte ihn mehr. Die Einstellung noInlineConfig macht solche Kommentare deshalb wirkungslos.",
@@ -97,12 +118,26 @@
     "nichtAngenommen": "tariffCentsPerMin über einen anderen Importweg, eine Kopie oder eine Durchreiche holen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“ aus, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt und der Auftrag kein Umbau ist; sonst steigen Bau- und Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit der Datei ins Issue, wenn die Behebung eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
   },
+  "lint/kommentar-wanderung": {
+    "liste": "L25",
+    "wozu": "Ein gelöschter Kommentar, dessen Text wortgleich als Doku, Zeichenkette oder an anderer Stelle wieder auftaucht, bringt die Rechtfertigung zurück ins Repo; spätere Agenten übernehmen sie wie aus einem Kommentar.",
+    "behebung": "Die Information im Code ausdrücken (Name, Funktion, Test) oder ganz streichen; eine Entscheidung gehört in die Commit-Nachricht.",
+    "nichtAngenommen": "Den Text umformulieren, bis er nicht mehr wortgleich ist; dieselbe Rechtfertigung bliebe im Repo. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ist die Stelle, an der der Text wieder auftaucht, selbst Doku, die es braucht, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Braucht das Streichen eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue."
+  },
   "lint/kommentare": {
     "liste": "L10",
     "wozu": "Agenten lesen Rechtfertigungen aus Kommentaren und schreiben sie weiter; eine einmal notierte Ausrede für eine Abkürzung wird so zur Vorlage für die nächste. Deshalb sind Kommentare im Code ohne Ausnahme verboten.",
     "behebung": "Die Absicht im Code ausdrücken: besserer Name, eigene Funktion, Typ, benannte Konstante oder ein Test, dessen Name die Regel ausspricht; sonst den Kommentar ersatzlos löschen.",
     "nichtAngenommen": "Den Text als Zeichenkette, als Name, als Doku-Zeile oder in einer anderen Datei weiterführen; die Rechtfertigung bliebe im Repo. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Ein Grund, der nicht in den Code passt, gehört in einer Paket-Sitzung in die Commit-Nachricht, nach docs/entscheidungen/ oder als offener Befund ins Issue. Im Auftragsweg hat der Agent keinen dieser Orte: Er löscht den Kommentar, und passt das nicht, antwortet er als Letztes mit „Auftrag passt nicht: <Grund>“."
+  },
+  "lint/kommentare-yaml-shell": {
+    "liste": "L27",
+    "wozu": "Die Lint-Regel gegen Kommentare sieht nur JavaScript. Ohne diese Prüfung wanderten Erklärungen und Ausreden in die Workflows unter .github/, in render.yaml, in die Git-Hooks und in Shell-Skripte; das Kommentarverbot hätte dort eine offene Hintertür.",
+    "behebung": "Die #-Zeile löschen und die Absicht über einen sprechenden Schritt- oder Variablennamen ausdrücken; eine Entscheidung gehört in die Commit-Nachricht.",
+    "nichtAngenommen": "Den Text in eine Bildschirmausgabe (echo), einen Schrittnamen oder eine Variable verlegen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Die Fundstellen liegen fast immer in geschützten Dateien; braucht das Löschen eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Ist eine gemeldete Zeile gar keine Erklärung (etwa eine Markdown-Überschrift in einem Heredoc, das eine Datei schreibt), gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an tools/kommentare-yaml-shell.mjs braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/kommentare-yaml-shell/, das master meldet und der PR nicht mehr, und Antonios Approve."
   },
   "lint/namen": {
     "liste": "L3",
@@ -152,6 +187,13 @@
     "behebung": "Den Wert in src/config.js aufnehmen, in .env.example nennen und an der Stelle über config.<namensraum>.<wert> lesen.",
     "nichtAngenommen": "Die Umgebung auf einem Weg lesen, den die Regel nicht als process.env erkennt, etwa über eine Variable, die process zwischenspeichert. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“ aus, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt und der Auftrag kein Umbau ist; sonst steigen Bau- und Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit der Datei ins Issue, wenn die Behebung eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
+  },
+  "lint/pruefungen-pruefen": {
+    "liste": "L28",
+    "wozu": "npm run lint bleibt grün, wenn jemand eine Regel lockert, eine ESLint-Konfiguration in einen Unterordner legt, noInlineConfig abschaltet oder mit .only die übrigen Tests einer Datei abschaltet. Diese Prüfung vergleicht die wirksame Einstellung mit der Kopie tools/basis/eslint-wirksam.json und sucht .only, sodass keine Regel und kein Test still außer Kraft gerät.",
+    "behebung": "Die Lockerung zurücknehmen, die Unterordner-Konfiguration löschen oder .only entfernen. Eine gewollte Verschärfung kommt mit neu geschriebener Kopie im selben PR.",
+    "nichtAngenommen": "Eine Regel lockern und die Kopie im selben PR mit --basis-schreiben neu schreiben, ohne dass Antonio diese Lockerung entschieden hat. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ist die Änderung eine gewollte Verschärfung oder von Antonio entschieden, schreibt node tools/eslint-konfig-pruefen.mjs --basis-schreiben die Kopie neu; sie steht unter CODEOWNERS und kommt nur mit Antonios Approve in den Hauptstand. Fehlt diese Entscheidung, gehören Regel und Grund als Entscheidungsnotiz ins Issue."
   },
   "lint/quelltext-als-text": {
     "liste": "L12",
@@ -222,6 +264,13 @@
     "behebung": "Den Test oder den Code reparieren, bis der Test ohne skip grün läuft.",
     "nichtAngenommen": "Den Test auf eine Art abschalten, die die Regel nicht kennt (eine Bedingung, die ihn nie ausführt, ein leerer Rumpf, todo, eine eigene Hülle um test), oder ihn so abschwächen, dass er immer grün ist. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hält der Test im Auftragsweg ein Verhalten fest, das der Auftrag absichtlich ändert, antwortet der Agent als Letztes mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; passt der Auftrag sonst nicht, mit „Auftrag passt nicht: <Grund>“. In einer Paket-Sitzung gehört ein Test, der altes Verhalten festhält, in den Abschnitt „Tests, deren Erwartung sich ändern darf“ des Issues, den nur Antonio mit dem Label verhalten-geaendert freigibt; sonst gehören Test, Fehler und Grund als Entscheidungsnotiz ins Issue."
+  },
+  "lint/unterdrueckungen-steigen": {
+    "liste": "L21",
+    "wozu": "eslint-suppressions.json und eslint-legacy-exceptions.json halten nur alte Verstöße fest. Steigt eine Zahl, wird ein neuer Verstoß als alt eingetragen: Er bleibt für immer im Code, keine Prüfung meldet ihn, und die Altlast wächst wieder.",
+    "behebung": "Den neuen Verstoß beheben und die erhöhte Zahl zurücksetzen; die Zahlen dürfen nur sinken.",
+    "nichtAngenommen": "Die Zahl erhöhen, einen Eintrag unter neuem Dateinamen anlegen, den Verstoß in eine andere Datei mit Eintrag verschieben oder die Prüfung mit --no-verify überspringen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht die Behebung eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Bei einer Umbenennung von .js nach .ts übernimmt die Prüfung die Einträge der alten Datei nur, wenn der Laufzeitcode ohne die Typen gleich bleibt, je Regel höchstens gleich viele (tools/umbenennung.mjs, Antonio 17.10.); die Meldung nennt die Datei dann mit „umbenannt aus …“. Ändert die Umbenennung auch Laufzeitcode, zählen die Einträge unter dem neuen Namen als neu, und der Anstieg ist echt. Meldet die Prüfung einen Anstieg, obwohl in der Datei kein Verstoß dazugekommen ist und sich kein Laufzeitcode geändert hat, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an scripts/check-staged-suppressions.js oder tools/umbenennung.mjs braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/unterdrueckungen/, das master meldet und der PR nicht mehr, und Antonios Approve. Für einen echten Anstieg gibt es keinen Ausweg."
   },
   "lint/versprechen": {
     "liste": "L-neu (TypeScript)",
