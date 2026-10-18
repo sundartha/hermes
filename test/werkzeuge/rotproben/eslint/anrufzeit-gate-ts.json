@@ -1,0 +1,10 @@
+{
+  "titel": "Zeitzonen-Quelle mit TypeScript-Endung in der Gate-Kette",
+  "dateien": {
+    "src/telephony/outbound-gates.js": [
+      "import { callTimeContext } from \"../elevenlabs/time-context.ts\";",
+      "export const probeKontext = callTimeContext;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/wort-nur-in\""
+}
