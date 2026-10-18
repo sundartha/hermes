@@ -90,7 +90,7 @@ function coverageLine({ asked, total, missing }) {
 
 export async function expensiveRunsSection(runs, now, { fetchJobs = runJobs } = {}) {
   const billed = weekRuns(runs, now);
-  const asked = billed.slice(0, JOB_RUN_LIMIT);
+  const asked = billed;
   const answers = await answersFor(asked, fetchJobs);
   const missing = answers.filter((answer) => answer === null).length;
   const rows = jobRows(asked, answers);
