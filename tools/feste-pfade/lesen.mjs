@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { isListed } from "./muster.mjs";
+
 const SEPARATOR = "/";
 const ANCHOR = "#";
 const MANIFEST = "pruefung.json";
@@ -63,5 +65,5 @@ export function manifestFiles(state, folder) {
   const manifests = readdirSync(join(state.root, folder)).map(
     (id) => `${folder}${id}${SEPARATOR}${MANIFEST}`,
   );
-  return manifests.filter((manifest) => state.files.includes(manifest));
+  return manifests.filter((manifest) => isListed(state.files, manifest));
 }

@@ -11,6 +11,7 @@ import {
   gitignoreGlob,
   hasFileBelow,
   hasFileStartingWith,
+  isListed,
   missingGlobAlternatives,
   pathExists,
   regexFindings,
@@ -60,10 +61,6 @@ function fileOrFolderFindings(state, where, paths) {
   return paths.filter((path) => !pathExists(state.files, path)).map((path) => missing(where, path));
 }
 
-function isListed(files, path) {
-  return files.includes(path);
-}
-
 function fileOnlyFindings(state, where, paths) {
   return paths.filter((path) => !isListed(state.files, path)).map((path) => missing(where, path));
 }
@@ -101,7 +98,7 @@ function declares(text, name) {
 
 function moduleFindings(state, where, entry) {
   const [path, anchor] = entry.split(ANCHOR);
-  if (!state.files.includes(path)) return [missing(where, entry)];
+  if (!isListed(state.files, path)) return [missing(where, entry)];
   const text = readFileSync(join(state.root, path), "utf8");
   return anchor === undefined || declares(text, anchor)
     ? []
