@@ -3,6 +3,7 @@ import { posix } from "node:path";
 
 import { Linter } from "eslint";
 
+import { gebundeneNamen } from "../eslint-rules/namen-ohne-begruendung.js";
 import { laufzeitText } from "../umbenennung.mjs";
 
 const COMMONJS = /\.c[jt]s$/;
@@ -12,6 +13,14 @@ const ANHANG = /[?#].*$/s;
 const NACH_OBEN = /^\.\.(?:\/|$)/;
 const MAX_TIEFE = 8;
 const DYNAMISCHER_IMPORT = "import(";
+const BINDENDE_KNOTEN = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+  "ClassDeclaration",
+  "ClassExpression",
+  "CatchClause",
+]);
 
 export function syntaxbaum(datei, text) {
   const laufzeit = laufzeitText(datei, text);
@@ -40,16 +49,22 @@ export function syntaxknoten(datei, text) {
   return gefunden;
 }
 
+function namen(knoten) {
+  return gebundeneNamen(knoten).map(({ name }) => name);
+}
+
 function konstanten(knoten) {
   const bindungen = new Map();
   const deklarationen = knoten.filter(({ type }) => type === "VariableDeclaration");
   for (const { kind, declarations } of deklarationen) {
-    for (const { id, init } of declarations) {
-      if (id.type !== "Identifier") continue;
-      const eindeutig = kind === "const" && init && !bindungen.has(id.name);
-      bindungen.set(id.name, eindeutig ? init : null);
+    for (const deklarator of declarations) {
+      const { id, init } = deklarator;
+      const eindeutig = id.type === "Identifier" && kind === "const" && init && !bindungen.has(id.name);
+      for (const name of namen(deklarator)) bindungen.set(name, eindeutig ? init : null);
     }
   }
+  const bindend = knoten.filter(({ type }) => BINDENDE_KNOTEN.has(type));
+  for (const name of bindend.flatMap(namen)) bindungen.set(name, null);
   return bindungen;
 }
 

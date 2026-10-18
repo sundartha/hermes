@@ -150,6 +150,28 @@ test("ausmisten-zwischenspeicher: der Schlüssel ändert sich mit jeder Eingabe 
   }
 });
 
+test("ausmisten-zwischenspeicher: bei festem master ändert jede Eingabe für sich den Schlüssel", (context) => {
+  const gleich = "export {};\n";
+  const ordner = probeRepository(context, {
+    "src/a.js": gleich,
+    "src/b.js": gleich,
+    "test/a.test.js": gleich,
+    "test/b.test.js": gleich,
+  });
+  const eingaben = { master: gitKopf(ordner), dateien: ["src/a.js"], alt: ["test/a.test.js"] };
+  const anfang = basisSchluessel({ ...eingaben, verzeichnis: ordner });
+  writeFiles(ordner, { "docs/x.md": "x\n" });
+  commitAll(ordner, "Ändere nur docs/x.md");
+  for (const [eingabe, wert] of [
+    ["dateien", ["src/b.js"]],
+    ["alt", ["test/b.test.js"]],
+    ["master", gitKopf(ordner)],
+  ]) {
+    const neu = basisSchluessel({ ...eingaben, [eingabe]: wert, verzeichnis: ordner });
+    assert.notEqual(neu, anfang, `${eingabe} ändert den Schlüssel nicht`);
+  }
+});
+
 test("ausmisten-zwischenspeicher: jeder Teil einer Datei hat einen eigenen Schlüssel", (context) => {
   const ordner = probeRepository(context, {
     "src/a.js": "export const a = 1;\n",

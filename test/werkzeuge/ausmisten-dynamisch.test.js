@@ -125,6 +125,48 @@ test("ausmisten-dynamisch: eine doppelt vergebene Konstante erreicht die Datei n
   ]);
 });
 
+async function erwarteVerschattet(context, zeilen) {
+  await erwarteUnerreicht(context, ['const PFAD = "../src/rechnen.js";', ...zeilen]);
+}
+
+test("ausmisten-dynamisch: ein Parameter, der eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, [
+    "const lade = (PFAD) => import(PFAD);",
+    'await lade("./anders.js");',
+  ]);
+});
+
+test("ausmisten-dynamisch: ein catch-Parameter, der eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, [
+    "try {",
+    "  throw 1;",
+    "} catch (PFAD) {",
+    "  await import(PFAD);",
+    "}",
+  ]);
+});
+
+test("ausmisten-dynamisch: ein Funktionsname, der eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, ["{", "  function PFAD() {}", "  await import(PFAD);", "}"]);
+});
+
+test("ausmisten-dynamisch: ein Klassenname, der eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, ["{", "  class PFAD {}", "  await import(PFAD);", "}"]);
+});
+
+test("ausmisten-dynamisch: ein Name aus einem Zerlegungsmuster, der eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, ["const lade = ({ PFAD }) => import(PFAD);"]);
+});
+
+test("ausmisten-dynamisch: eine Zerlegung in einem Block, die eine Konstante verschattet, erreicht die Datei nicht", async (context) => {
+  await erwarteVerschattet(context, [
+    "{",
+    '  const { PFAD } = { PFAD: "./anders.js" };',
+    "  await import(PFAD);",
+    "}",
+  ]);
+});
+
 test("ausmisten-dynamisch: ein umbenannter Test, der seine Datei über eine Naht lädt, bleibt grün", async (context) => {
   const neu = { [NAHT_TEST]: nahtTest("verdoppelt über die Naht, umbenannt") };
   const ergebnis = await messeUndMelde(context, { weg: [], neu }, { dateien: NAHT_DATEIEN });
