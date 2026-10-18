@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 
 const SCHLUESSEL_TRENNER = "|";
@@ -47,12 +47,20 @@ function nachDateiGezaehlt(befunde) {
   return nachDatei;
 }
 
+function dateiStand(pfad) {
+  if (!existsSync(pfad)) return undefined;
+  const { mtimeMs, size } = statSync(pfad);
+  return `${mtimeMs}${SCHLUESSEL_TRENNER}${size}`;
+}
+
 function gelesenerBestand(pfad) {
-  if (!geleseneBestaende.has(pfad)) {
-    const befunde = existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")).befunde : [];
-    geleseneBestaende.set(pfad, nachDateiGezaehlt(befunde));
-  }
-  return geleseneBestaende.get(pfad);
+  const stand = dateiStand(pfad);
+  const gelesen = geleseneBestaende.get(pfad);
+  if (gelesen !== undefined && gelesen.stand === stand) return gelesen.nachDatei;
+  const befunde = stand === undefined ? [] : JSON.parse(readFileSync(pfad, "utf8")).befunde;
+  const nachDatei = nachDateiGezaehlt(befunde);
+  geleseneBestaende.set(pfad, { stand, nachDatei });
+  return nachDatei;
 }
 
 export function bestandDerDatei(context) {

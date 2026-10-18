@@ -49,6 +49,17 @@ test("namen-ohne-begruendung: Namen mit einem Begründungswort als Wortteil werd
   ]);
 });
 
+test("namen-ohne-begruendung: ein über zwei camelCase-Wortteile geschriebenes Begründungswort wird gemeldet", () => {
+  const quelltext = [
+    "const workAround = 1;",
+    "function fixMe(toDoListe) {}",
+    "const otherWise = 2;",
+    "const toDocument = 3;",
+    "const fixMenu = 4;",
+  ].join("\n");
+  assert.deepEqual(gemeldeteNamen(quelltext), ["workAround", "fixMe", "toDoListe", "otherWise"]);
+});
+
 test("namen-ohne-begruendung: fallback, sinceMs, fehlergrund und Nutzungen bleiben frei", () => {
   const quelltext = [
     "const fallback = 1;",

@@ -1,14 +1,19 @@
-export function alleKnoten(sourceCode) {
+export function knotenUnter(start, visitorKeys, steigtAb = () => true) {
   const gefunden = [];
-  const offen = sourceCode === undefined ? [] : [sourceCode.ast];
+  const offen = [start];
   while (offen.length > 0) {
     const node = offen.pop();
     gefunden.push(node);
-    for (const schluessel of sourceCode.visitorKeys[node.type] ?? []) {
+    if (!steigtAb(node)) continue;
+    for (const schluessel of visitorKeys[node.type] ?? []) {
       offen.push(...[node[schluessel]].flat().filter(Boolean));
     }
   }
   return gefunden;
+}
+
+export function alleKnoten(sourceCode) {
+  return sourceCode === undefined ? [] : knotenUnter(sourceCode.ast, sourceCode.visitorKeys);
 }
 
 export function zugriffsName(zugriff) {
