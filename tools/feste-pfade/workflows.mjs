@@ -15,10 +15,14 @@ function itemOf(line) {
   return item?.trim().replace(QUOTES, "");
 }
 
+function endsBlock(line, indent) {
+  return indentOf(line) < indent || (indentOf(line) === indent && !ITEM.test(line));
+}
+
 function filterAt(lines, index, event) {
   const [, key, inline] = FILTER.exec(lines[index]);
   const indent = indentOf(lines[index]);
-  const end = lines.findIndex((line, at) => at > index && indentOf(line) <= indent);
+  const end = lines.findIndex((line, at) => at > index && endsBlock(line, indent));
   const body = lines.slice(index + 1, end === -1 ? lines.length : end);
   const patterns = body.map(itemOf);
   const readable = inline.replace(COMMENT, "").trim() === "" && !patterns.includes(undefined);

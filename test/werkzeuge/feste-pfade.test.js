@@ -343,6 +343,13 @@ test("feste-pfade: Listen im Code, Workflow-Pfade, Abnahmeliste und Hausregel-Da
       `.github/workflows/probe.yml on.push.paths: lib/** ${MISSING}`,
     ],
     [
+      {
+        ".github/workflows/probe.yml":
+          "on:\n  push:\n    paths:\n    - lib/**\n    branches:\n    - main\njobs: {}\n",
+      },
+      `.github/workflows/probe.yml on.push.paths: lib/** ${MISSING}`,
+    ],
+    [
       { ".github/workflows/probe.yml": WORKFLOW.replace('"!src/a.js"', '"!src/weg.js"') },
       `.github/workflows/probe.yml on.push.paths: src/weg.js ${MISSING}`,
     ],
