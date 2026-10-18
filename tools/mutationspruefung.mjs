@@ -79,6 +79,7 @@ const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
 const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
+const ERSTLAUF_MITSCHRIFT = [];
 const AUFRUF =
   "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
 
@@ -284,8 +285,22 @@ async function mutantenproben(datei, zeilen, { erste, alle }) {
   const offen = ergebnisse.filter(ueberlebt);
   const uebrige = alle.filter((test) => !erste.includes(test));
   if (offen.length === 0 || uebrige.length === 0) return ergebnisse;
-  const zweite = await durchgang(datei, offen.map((eintrag) => eintrag.zeilen), uebrige);
+  const zweite = await ohneRoteErstlaeufe(datei, offen.map((eintrag) => eintrag.zeilen), uebrige);
   return vereine(ergebnisse, [zweite]);
+}
+
+async function ohneRoteErstlaeufe(datei, zeilen, tests) {
+  if (tests.length === 0) return [];
+  const beginn = ERSTLAUF_MITSCHRIFT.length;
+  try {
+    return await durchgang(datei, zeilen, tests);
+  } catch (fehler) {
+    const rote = fehler.message === ERSTLAUF_ABBRUCH ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)) : [];
+    if (rote.length === 0 || !rote.every((rot) => tests.includes(rot.datei))) throw fehler;
+    ERSTLAUF_MITSCHRIFT.splice(beginn);
+    for (const rot of rote) console.log(`Zweite Stufe ohne ${rot.datei} › ${rot.test}: im Erstlauf rot`);
+    return ohneRoteErstlaeufe(datei, zeilen, tests.filter((test) => !rote.some((rot) => rot.datei === test)));
+  }
 }
 
 function testauswahl(datei, graph) {
@@ -548,7 +563,7 @@ async function zweiteStufe(datei, ergebnisse, { graph, loeschung }) {
   const offen = ergebnisse.filter((eintrag) => eintrag.schluessel.startsWith(`${datei}:`) && ueberlebt(eintrag));
   if (uebrig.length === 0 || offen.length === 0) return ergebnisse;
   const mutanten = offen.filter(({ art }) => art !== GELOESCHT && art !== ABSCHALTKOMMENTAR);
-  const vereint = mutanten.length === 0 ? ergebnisse : vereine(ergebnisse, [await durchgang(datei, mutanten.map(({ zeilen }) => zeilen), uebrig)]);
+  const vereint = mutanten.length === 0 ? ergebnisse : vereine(ergebnisse, [await ohneRoteErstlaeufe(datei, mutanten.map(({ zeilen }) => zeilen), uebrig)]);
   const geloescht = offen.filter(({ art }) => art === GELOESCHT);
   if (loeschung === null || geloescht.length === 0) return vereint;
   const nachgefasst = new Map(loeschung.nachfassen({ datei, eintraege: geloescht, uebrige: uebrig }).map((eintrag) => [eintrag.schluessel, eintrag]));
@@ -637,25 +652,22 @@ async function main() {
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-function roteErstlaeufe(mitschrift) {
+function roteTests(mitschrift) {
   return mitschrift.flatMap((block) =>
-    [...block.matchAll(ROTE_TESTDATEI)].flatMap(([, datei, meldung]) =>
-      [...meldung.matchAll(ROTER_TEST)].map(([, test]) => `Abbruch: Erstlauf rot: ${datei} › ${test}`),
-    ),
+    [...block.matchAll(ROTE_TESTDATEI)].flatMap(([, datei, meldung]) => [...meldung.matchAll(ROTER_TEST)].map(([, test]) => ({ datei, test }))),
   );
 }
 
 async function mitErstlaufMitschrift(ausfuehren) {
-  const mitschrift = [];
   const schreiben = process.stdout.write.bind(process.stdout);
   process.stdout.write = (teil, ...rest) => {
-    if (String(teil).includes(ERSTLAUF_ROT)) mitschrift.push(String(teil));
+    if (String(teil).includes(ERSTLAUF_ROT)) ERSTLAUF_MITSCHRIFT.push(String(teil));
     return schreiben(teil, ...rest);
   };
   try {
     return await ausfuehren();
   } catch (fehler) {
-    if (fehler.message === ERSTLAUF_ABBRUCH) for (const zeile of roteErstlaeufe(mitschrift)) console.error(zeile);
+    if (fehler.message === ERSTLAUF_ABBRUCH) for (const rot of roteTests(ERSTLAUF_MITSCHRIFT)) console.error(`Abbruch: Erstlauf rot: ${rot.datei} › ${rot.test}`);
     throw fehler;
   } finally {
     process.stdout.write = schreiben;
