@@ -8,14 +8,12 @@ const ALARM_POSTFACH = "postfach@kv2.invalid";
 const DECKUNG_BEFUND = /^grund=coverage_below_threshold deckung=0% /;
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: ALARM_POSTFACH });
-let sitzung = "";
 
 test("KV2-1 (e) Verhalten: Web-Anmeldung über den Rückruf gibt eine Sitzung und schreibt 'login' ins Prüfprotokoll", async () => {
   const hermes = laufendesHermes();
   const { rueckruf, sessionCookie } = await hermes.anmelden();
   assert.equal(rueckruf.status, HTTP_FOUND, "der Rückruf leitet nach erfolgreicher Anmeldung weiter");
   assert.ok(sessionCookie, "der Rückruf setzt das Sitzungs-Cookie");
-  sitzung = sessionCookie;
 
   const logins = await hermes.warteAufProtokoll("login", (zeile) => zeile.actor_sub === LOGIN_SUB);
   assert.equal(logins.length, 1, "genau ein 'login'-Eintrag für den angemeldeten Betreiber");
@@ -23,7 +21,8 @@ test("KV2-1 (e) Verhalten: Web-Anmeldung über den Rückruf gibt eine Sitzung un
 
 test("KV2-1 (e) Verhalten: der Kostenalarm aus dem Sweep landet als Mail im Test-Postfach und als Eintrag im Prüfprotokoll", async () => {
   const hermes = laufendesHermes();
-  assert.ok(sitzung, "setzt die Anmeldung aus dem Fall davor voraus");
+  const { sessionCookie: sitzung } = await hermes.anmelden();
+  assert.ok(sitzung, "die eigene Anmeldung des Falls gibt ein Sitzungs-Cookie");
   await hermes.db.query("UPDATE tenant SET status = 'active' WHERE id IN (SELECT tenant_id FROM account WHERE sub = $1)", [LOGIN_SUB]);
 
   const sweep = await hermes.anfrage("/api/billing/cost-truing/sweep", { method: "POST", headers: { cookie: sitzung } });

@@ -80,6 +80,7 @@ const GATE_CASES = Object.freeze([
   },
 ]);
 
+const NUMMER_ENDSTELLEN = 2;
 const tenantIdOf = (index) => `t_gate_${index}`;
 
 const tenantRow = (fall, index) => ({
@@ -94,7 +95,7 @@ const tenantRow = (fall, index) => ({
 
 const numberRow = (_fall, index) => ({
   id: `num_gate_${index}`,
-  e164: `+1202555020${index}`,
+  e164: `+120255502${String(index).padStart(NUMMER_ENDSTELLEN, "0")}`,
   tenantId: tenantIdOf(index),
   provider: "telnyx",
   status: "active",
