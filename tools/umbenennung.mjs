@@ -31,6 +31,7 @@ const FELDER_JE_EINTRAG = 2;
 const GELOESCHT = "D";
 const HINZUGEFUEGT = "A";
 const MAX_GIT_AUSGABE = 268_435_456;
+export const INDEX = "";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
@@ -41,7 +42,8 @@ const GRUND = {
   pfad: "Laufzeitcode liest den eigenen Dateipfad (import.meta, __filename, module)",
   geaendert: "Laufzeitcode nach Entfernen der Typen anders als vorher",
 };
-const AUFRUF = "Aufruf: node tools/umbenennung.mjs --basis <commit> [--bis <commit>] [--streng]";
+const AUFRUF =
+  'Aufruf: node tools/umbenennung.mjs --basis <commit> [--bis <commit> | --bis "" für den Index] [--streng]';
 
 function git(args) {
   const lauf = spawnSync("git", args, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -64,6 +66,7 @@ function aenderungen(von, bis) {
     "--no-renames",
     "--name-status",
     "-z",
+    ...(bis === INDEX ? ["--cached"] : []),
     von,
     ...(bis ? [bis] : []),
     "--",

@@ -177,3 +177,23 @@ test(".mjs→.mts mit nur Typen ist ein Paar; .cjs→.cts, das module liest, gil
     /^src\/ort\.cjs → src\/ort\.cts: geändert \(Laufzeitcode liest den eigenen Dateipfad/,
   );
 });
+
+function vormerken(repo, ...argumente) {
+  const lauf = runIn(repo, "git", ["add", ...argumente]);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+}
+
+test('im Index-Stand (--bis "") zählt nur Vorgemerktes; eine nicht vorgemerkte Löschung ergibt kein Paar', (context) => {
+  const repo = umbenannt(context, TS);
+  const imIndex = () => ausgabe(repo, "--basis", "HEAD", "--bis", "");
+  assert.deepEqual(ausgabe(repo, "--basis", "HEAD"), [NUR_TYPEN]);
+  assert.deepEqual(imIndex(), [KEINE]);
+  vormerken(repo, "src/zahl.ts");
+  assert.deepEqual(imIndex(), [KEINE]);
+  vormerken(repo, "-A");
+  rmSync(join(repo, "src/zahl.ts"));
+  assert.deepEqual(imIndex(), [NUR_TYPEN]);
+  writeFiles(repo, { "src/zahl.ts": `${TS}export const neu = 1;\n` });
+  assert.deepEqual(imIndex(), [NUR_TYPEN]);
+  assert.deepEqual(ausgabe(repo, "--basis", "HEAD"), [GEAENDERT]);
+});
