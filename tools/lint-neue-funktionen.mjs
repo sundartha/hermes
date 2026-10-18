@@ -10,9 +10,13 @@ import {
   dateiInhalt,
   geaenderteDateien,
   hunks,
+  hunksGegenueber,
+  nurTypenUmbenannt,
+  ohneTypinformation,
 } from "./pr-aenderungen.mjs";
+import { laufzeitText } from "./umbenennung.mjs";
 
-const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs"];
+const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs", "*.ts", "*.mts", "*.cts"];
 const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const STRENGE_NEBENREGELN = {
   "no-unused-expressions": "error",
@@ -41,12 +45,14 @@ function zeilenOhneKommentare(text, kommentare) {
   return ohne.split(ZEILENENDE).map((zeile) => zeile.replace(LEERRAUM, ""));
 }
 
-async function geparst(werkzeug, datei, text) {
+async function geparst(werkzeug, datei, { text, codeText = text }) {
   const config = await werkzeug.eslint.calculateConfigForFile(join(werkzeug.root, datei));
-  const meldungen = werkzeug.linter.verify(text, { languageOptions: config?.languageOptions ?? {} });
-  if (meldungen.some(({ fatal }) => fatal)) return { code: zeilenOhneKommentare(text, []) };
+  const meldungen = werkzeug.linter.verify(text, {
+    languageOptions: ohneTypinformation(config?.languageOptions),
+  });
+  if (meldungen.some(({ fatal }) => fatal)) return { code: zeilenOhneKommentare(codeText, []) };
   const sourceCode = werkzeug.linter.getSourceCode();
-  return { sourceCode, code: zeilenOhneKommentare(text, sourceCode.getAllComments()) };
+  return { sourceCode, code: zeilenOhneKommentare(codeText, sourceCode.getAllComments()) };
 }
 
 function codeVon(seite, { start, anzahl }) {
@@ -159,21 +165,37 @@ function langeNamen(sourceCode, stellen) {
   );
 }
 
+function vorher({ basis, root, nurTypen }, { status, datei }) {
+  const umbenannt = status === STATUS_NEU ? nurTypen(datei) : undefined;
+  if (umbenannt !== undefined) {
+    return {
+      text: dateiInhalt(basis, umbenannt, root),
+      hunks: hunksGegenueber(`${basis}:${umbenannt}`, datei, root),
+      nurTypen: true,
+    };
+  }
+  return {
+    text: status === STATUS_NEU ? "" : dateiInhalt(basis, datei, root),
+    hunks: hunks(basis, datei, root),
+  };
+}
+
 async function dateiPruefen(werkzeug, { status, datei }) {
-  const { basis, root } = werkzeug;
+  const { root } = werkzeug;
   const neuText = dateiInhalt("HEAD", datei, root);
-  const altText = status === STATUS_NEU ? "" : dateiInhalt(basis, datei, root);
-  const alt = await geparst(werkzeug, datei, altText);
-  const neu = await geparst(werkzeug, datei, neuText);
-  const stellen = geaenderteStellen(hunks(basis, datei, root), alt, neu);
+  const altStand = vorher(werkzeug, { status, datei });
+  const alt = await geparst(werkzeug, datei, { text: altStand.text });
+  const codeText = altStand.nurTypen ? laufzeitText(datei, neuText) : neuText;
+  const neu = await geparst(werkzeug, datei, { text: neuText, codeText });
+  const stellen = geaenderteStellen(altStand.hunks, alt, neu);
   const funktionen = alleKnoten(neu.sourceCode).filter((node) => FUNKTIONEN.has(node.type));
   const geaendert = geaenderteFunktionen(funktionen, stellen, neuText.split(ZEILENENDE));
   const [ergebnis] = await werkzeug.eslint.lintText(neuText, {
     filePath: join(root, datei),
     warnIgnored: false,
   });
-  const meldungen = (ergebnis?.messages ?? []).filter((meldung) =>
-    meldungZaehlt(meldung, { funktionen, geaendert, stellen }),
+  const meldungen = (ergebnis?.messages ?? []).filter(
+    (meldung) => meldung.fatal || meldungZaehlt(meldung, { funktionen, geaendert, stellen }),
   );
   return { datei, meldungen, namen: langeNamen(neu.sourceCode, stellen) };
 }
@@ -232,6 +254,7 @@ async function pruefen(root, basis) {
     basis,
     eslint: await eslintOhneBestand(root, dateien),
     linter: new Linter({ cwd: root }),
+    nurTypen: await nurTypenUmbenannt(basis),
   };
   const ergebnisse = [];
   for (const eintrag of dateien) ergebnisse.push(await dateiPruefen(werkzeug, eintrag));

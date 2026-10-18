@@ -207,3 +207,36 @@ test("--liste-neu schreibt die Kennungen ohne Negativtest sortiert, eine je Zeil
   assert.equal(result.status, EXIT_OK, result.stderr);
   assert.equal(readFileSync(join(directory, LIST_PATH), "utf8"), `${UNTESTED}\n${LATER}\n`);
 });
+
+test("ein Negativtest in einer .test.ts-Datei zählt", (context) => {
+  const result = runCatalogCheck(
+    probe(context, {
+      "test/zweite.test.ts": passingTest(`${UNTESTED} wird abgelehnt`),
+      [LIST_PATH]: "",
+    }),
+  );
+  assert.equal(result.status, EXIT_OK, result.stderr);
+});
+
+test("ein Import in einer .ts-Datei unter src hebt „kein_import“ auf", (context) => {
+  const exemption = {
+    "cimd-trust-policies": {
+      kennung: "cimd-trust-policies",
+      trifft_nicht_zu: {
+        begruendung: "Kein Kindprozess.",
+        pruefung: { art: "kein_import", modul: "node:child_process" },
+      },
+    },
+  };
+  const holds = runCatalogCheck(probe(context, { [MAPPING_PATH]: mapping(exemption) }));
+  assert.equal(holds.status, EXIT_OK, holds.stderr);
+  const broken = runCatalogCheck(
+    probe(context, {
+      [MAPPING_PATH]: mapping(exemption),
+      "src/start.ts":
+        'import { spawn } from "node:child_process";\nexport const start: typeof spawn = spawn;\n',
+    }),
+  );
+  assert.equal(broken.status, EXIT_FINDING);
+  assert.match(broken.stderr, /src\/start\.ts importiert node:child_process/);
+});

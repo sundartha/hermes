@@ -3,6 +3,8 @@ import { extname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
+import { umbenennungen } from "./umbenennung.mjs";
+
 const HUNK_KOPF = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const ZEILENENDE = "\n";
 const ENTFERNT = "-";
@@ -12,7 +14,8 @@ const FELDER_JE_DATEI = 2;
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_ABBRUCH = 2;
 const OBJEKTART_COMMIT = "commit";
-const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
+const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"]);
+const OHNE_TYPINFORMATION = { project: null, projectService: false, programs: null };
 const DIFF_OHNE_UMBENENNUNG = ["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0"];
 
 export const STATUS_NEU = "A";
@@ -103,8 +106,24 @@ export function hinzugefuegteZeilen(basis, datei, root) {
   return zeilenDerHunks(hunks(basis, datei, root));
 }
 
+export function hunksGegenueber(vorher, datei, root) {
+  return hunksAus(git([...DIFF_OHNE_UMBENENNUNG, vorher, `HEAD:${datei}`], root));
+}
+
 export function hinzugefuegteZeilenGegenueber(vorher, datei, root) {
-  return zeilenDerHunks(hunksAus(git([...DIFF_OHNE_UMBENENNUNG, vorher, `HEAD:${datei}`], root)));
+  return zeilenDerHunks(hunksGegenueber(vorher, datei, root));
+}
+
+export async function nurTypenUmbenannt(basis) {
+  const { nurTypen } = await umbenennungen({ von: basis, bis: "HEAD" });
+  return nurTypen;
+}
+
+export function ohneTypinformation(languageOptions = {}) {
+  return {
+    ...languageOptions,
+    parserOptions: { ...languageOptions.parserOptions, ...OHNE_TYPINFORMATION },
+  };
 }
 
 export async function gelinteteJsDateien(root, dateien) {

@@ -14,6 +14,9 @@ import {
   gelinteteJsDateien,
   git,
   hinzugefuegteZeilen,
+  hinzugefuegteZeilenGegenueber,
+  nurTypenUmbenannt,
+  ohneTypinformation,
 } from "./pr-aenderungen.mjs";
 
 const MARKDOWN = ".md";
@@ -56,7 +59,9 @@ function zusammengefasst(eintraege) {
 async function quelltext(werkzeug, datei, text) {
   if (text === "") return undefined;
   const config = await werkzeug.eslint.calculateConfigForFile(join(werkzeug.root, datei));
-  const meldungen = werkzeug.linter.verify(text, { languageOptions: config?.languageOptions ?? {} });
+  const meldungen = werkzeug.linter.verify(text, {
+    languageOptions: ohneTypinformation(config?.languageOptions),
+  });
   return meldungen.some(({ fatal }) => fatal) ? undefined : werkzeug.linter.getSourceCode();
 }
 
@@ -101,11 +106,21 @@ function entfernteBloecke(alt, neu) {
   });
 }
 
+function vorherInhalt(werkzeug, eintrag) {
+  const alt = werkzeug.nurTypen(eintrag.datei);
+  if (eintrag.status === STATUS_NEU && alt !== undefined) {
+    return dateiInhalt(werkzeug.basis, alt, werkzeug.root);
+  }
+  return inhaltOderLeer(werkzeug.basis, eintrag, werkzeug.root);
+}
+
 async function entfernteKommentare(werkzeug, eintrag) {
-  const { basis, root } = werkzeug;
-  const alt = await kommentarBloecke(werkzeug, eintrag.datei, inhaltOderLeer(basis, eintrag, root));
+  const { root } = werkzeug;
+  const alt = await kommentarBloecke(werkzeug, eintrag.datei, vorherInhalt(werkzeug, eintrag));
   const neu = await kommentarBloecke(werkzeug, eintrag.datei, inhaltOderLeer("HEAD", eintrag, root));
-  return entfernteBloecke(alt, neu).map((block) => ({ ...block, datei: eintrag.datei }));
+  const herkunft =
+    (eintrag.status === STATUS_NEU && werkzeug.nurTypen(eintrag.datei)) || eintrag.datei;
+  return entfernteBloecke(alt, neu).map((block) => ({ ...block, datei: herkunft }));
 }
 
 function wortFolge(abschnitte) {
@@ -132,13 +147,20 @@ function textAufZeilen(sourceCode, zeilen) {
     .map((node) => ({ zeile: node.loc.start.line, text: node.type === "TemplateElement" ? (node.value.cooked ?? node.value.raw) : node.value }));
 }
 
+function zielZeilen({ basis, root, nurTypen }, datei) {
+  const alt = nurTypen(datei);
+  if (alt === undefined) return hinzugefuegteZeilen(basis, datei, root);
+  return hinzugefuegteZeilenGegenueber(`${basis}:${alt}`, datei, root);
+}
+
 async function jsZiele(werkzeug, datei) {
-  const zeilen = new Set(hinzugefuegteZeilen(werkzeug.basis, datei, werkzeug.root).map(({ zeile }) => zeile));
+  const zeilen = new Set(zielZeilen(werkzeug, datei).map(({ zeile }) => zeile));
   if (zeilen.size === 0) return [];
   return textAufZeilen(await quelltext(werkzeug, datei, dateiInhalt("HEAD", datei, werkzeug.root)), zeilen);
 }
 
 async function nurKommentareWeg(werkzeug, eintrag) {
+  if (werkzeug.nurTypen(eintrag.datei) !== undefined) return false;
   const vorher = inhaltOderLeer(werkzeug.basis, eintrag, werkzeug.root);
   const nachher = inhaltOderLeer("HEAD", eintrag, werkzeug.root);
   return nurKommentareGeaendert({ pfad: eintrag.datei, vorher, nachher }, werkzeug.eslint);
@@ -184,8 +206,14 @@ async function pruefen(root, basis) {
     eslint: new ESLint({ cwd: root }),
     linter: new Linter({ cwd: root }),
     js: await gelinteteJsDateien(root, dateien),
+    nurTypen: await nurTypenUmbenannt(basis),
   };
-  const quellen = dateien.filter(({ datei }) => werkzeug.js.has(datei) || istYamlOderShell(datei));
+  const umbenannt = new Set(dateien.map(({ datei }) => werkzeug.nurTypen(datei)).filter(Boolean));
+  const gepaart = ({ status, datei }) => status === STATUS_GELOESCHT && umbenannt.has(datei);
+  const quellen = dateien.filter(
+    (eintrag) =>
+      (werkzeug.js.has(eintrag.datei) || istYamlOderShell(eintrag.datei)) && !gepaart(eintrag),
+  );
   const entfernt = [];
   for (const eintrag of quellen) entfernt.push(...(await entfernteKommentare(werkzeug, eintrag)));
   const funde = wanderungen(entfernt, await wiederaufnahmeOrte(werkzeug, dateien));

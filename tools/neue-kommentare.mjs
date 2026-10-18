@@ -12,6 +12,8 @@ import {
   gibtEs,
   hinzugefuegteZeilen,
   hinzugefuegteZeilenGegenueber,
+  nurTypenUmbenannt,
+  ohneTypinformation,
 } from "./pr-aenderungen.mjs";
 
 const LEHREN = "docs/lessons.md";
@@ -20,6 +22,7 @@ const LEHREN_DATEIEN = new Set([LEHREN, FRUEHERE_LEHREN]);
 const PRUEF_PLUGIN = "neue-kommentare";
 const PRUEFREGEL = `${PRUEF_PLUGIN}/kommentar`;
 const NEUE_DATEIEN_UND_AENDERUNGEN = "AM";
+const TS_DATEIEN = ["**/*.{ts,mts,cts}"];
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = "Aufruf: node tools/neue-kommentare.mjs --basis <commit>";
@@ -30,10 +33,13 @@ function kommentarPruefer(root) {
   return new ESLint({
     cwd: root,
     applySuppressions: false,
-    overrideConfig: {
-      plugins: { [PRUEF_PLUGIN]: { rules: { kommentar: keineKommentare } } },
-      rules: { [PRUEFREGEL]: "error" },
-    },
+    overrideConfig: [
+      {
+        plugins: { [PRUEF_PLUGIN]: { rules: { kommentar: keineKommentare } } },
+        rules: { [PRUEFREGEL]: "error" },
+      },
+      { files: TS_DATEIEN, languageOptions: ohneTypinformation() },
+    ],
     ruleFilter: ({ ruleId }) => ruleId === PRUEFREGEL,
   });
 }
@@ -62,7 +68,9 @@ async function kommentarZeilen(werkzeug, datei, zeilen) {
   return istYamlOderShell(datei) ? textKommentarZeilen(werkzeug, datei) : [];
 }
 
-function hinzugefuegt({ basis, root }, datei) {
+function hinzugefuegt({ basis, root, nurTypen }, datei) {
+  const alt = nurTypen(datei);
+  if (alt !== undefined) return hinzugefuegteZeilenGegenueber(`${basis}:${alt}`, datei, root);
   const umgezogen =
     datei === LEHREN && !gibtEs(basis, LEHREN, root) && gibtEs(basis, FRUEHERE_LEHREN, root);
   if (!umgezogen) return hinzugefuegteZeilen(basis, datei, root);
@@ -82,7 +90,13 @@ async function befundeDerDatei(werkzeug, datei) {
 
 async function pruefen(root, basis) {
   const dateien = geaenderteDateien(basis, root, { filter: NEUE_DATEIEN_UND_AENDERUNGEN });
-  const werkzeug = { root, basis, eslint: kommentarPruefer(root), js: await gelinteteJsDateien(root, dateien) };
+  const werkzeug = {
+    root,
+    basis,
+    eslint: kommentarPruefer(root),
+    js: await gelinteteJsDateien(root, dateien),
+    nurTypen: await nurTypenUmbenannt(basis),
+  };
   const befunde = [];
   for (const { datei } of dateien) befunde.push(...(await befundeDerDatei(werkzeug, datei)));
   for (const befund of befunde) console.error(befund);
