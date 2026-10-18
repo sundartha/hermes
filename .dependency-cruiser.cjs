@@ -30,7 +30,7 @@ module.exports = {
       severity: "error",
       comment:
         "Innereien aus src/store/ nicht direkt importieren, sondern über die Speicher-Fassade src/store.js.",
-      from: { path: "^src/", pathNot: "^src/(store/|store\\.js$)" },
+      from: { path: "^src/", pathNot: "^src/(store/|store\\.[jt]s$)" },
       to: { path: "^src/store/" },
     },
     {
