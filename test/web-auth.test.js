@@ -56,6 +56,12 @@ function cookieValue(setCookie, name) {
   return null;
 }
 
+function geloeschteCookies(setCookie) {
+  return setCookie
+    .filter((eintrag) => eintrag.split("; ").includes("Max-Age=0"))
+    .map((eintrag) => eintrag.split("=")[0]);
+}
+
 function rawGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const req = mitAntwortfrist(
@@ -201,10 +207,7 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     assert.match(gesetzt, /;\s*Secure/i);
     assert.match(gesetzt, /;\s*Path=\/(;|$)/i);
     assert.doesNotMatch(gesetzt, /;\s*Domain=/i, "__Host- verbietet Domain=");
-    assert.match(
-      joined,
-      /pkce_verifier=;|pkce_verifier=deleted|Max-Age=0[\s\S]*pkce_verifier|pkce_verifier[\s\S]*Max-Age=0|pkce_verifier[\s\S]*Expires=Thu, 01 Jan 1970/i,
-    );
+    assert.ok(geloeschteCookies(res.setCookie).includes("pkce_verifier"), "pkce_verifier wird geloescht");
     assert.equal(calls.audit.length, 1);
     assert.equal(calls.audit[0].action, "login");
     assert.equal(calls.audit[0].actorSub, "user-1");
@@ -402,11 +405,7 @@ test("POST /auth/logout invalidiert die Session und loescht das Cookie -> 204", 
     const res = await rawPost(`${srv.base}/auth/logout`, { Cookie: cookie });
     assert.equal(res.status, 204);
     assert.deepEqual(calls.invalidate, ["sess-abc-123"]);
-    const joined = res.setCookie.join("\n");
-    assert.match(
-      joined,
-      new RegExp(`${SESSION_COOKIE_NAME}=;|Max-Age=0|Expires=Thu, 01 Jan 1970`, "i"),
-    );
+    assert.ok(geloeschteCookies(res.setCookie).includes(SESSION_COOKIE_NAME), "Session-Cookie wird geloescht");
   } finally {
     await srv.close();
   }
@@ -562,8 +561,7 @@ test("T-F2-05: GET /auth/callback Happy-Path: oidc_nonce-Cookie wird beim Cleanu
     assert.equal(res.status, 302);
     const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123");
-    const joined = res.setCookie.join("\n");
-    assert.match(joined, /oidc_nonce=;|oidc_nonce[\s\S]*Max-Age=0|Max-Age=0[\s\S]*oidc_nonce/i);
+    assert.ok(geloeschteCookies(res.setCookie).includes("oidc_nonce"), "oidc_nonce wird geloescht");
   } finally {
     await srv.close();
   }
@@ -1198,14 +1196,13 @@ test("Login-Fehlerpfad: authorizeUrl wirft -> 500 und login_failed innerhalb der
     const antwort = await abrufMitFrist(`${srv.base}/auth/login`, {
       redirect: "manual",
       signal: AbortSignal.timeout(FRIST_MS),
-    }).catch((fehler) => assert.fail(`keine Antwort innerhalb von ${FRIST_MS} ms: ${fehler.name}`));
-    const gesetzteCookies = antwort.headers.getSetCookie();
-    const geloeschteCookies = gesetzteCookies
-      .filter((eintrag) => eintrag.split("; ").includes("Max-Age=0"))
-      .map((eintrag) => eintrag.split("=")[0]);
+    }).catch((fehler) => {
+      if (fehler.name === "TimeoutError") assert.fail(`keine Antwort innerhalb von ${FRIST_MS} ms`);
+      throw fehler;
+    });
     assert.equal(antwort.status, ERWARTETER_STATUS);
     assert.equal(await antwort.text(), "login_failed");
-    assert.deepEqual(geloeschteCookies.toSorted(), ["oauth_state", "oidc_nonce", "pkce_verifier"]);
+    assert.deepEqual(geloeschteCookies(antwort.headers.getSetCookie()).toSorted(), ["oauth_state", "oidc_nonce", "pkce_verifier"]);
   } finally {
     await srv.close();
   }

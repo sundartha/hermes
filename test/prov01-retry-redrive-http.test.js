@@ -1,4 +1,4 @@
-import { test, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
@@ -45,15 +45,7 @@ async function until(predicate, timeoutMs = 4000) {
   }
 }
 
-const offeneMocks = [];
-after(async () => {
-  for (const mock of offeneMocks) {
-    mock.release();
-    await mock.close();
-  }
-});
-
-async function startHangableTelnyxMock() {
+async function startHangableTelnyxMock(t) {
   let heldRes = null;
   let searchCount = 0;
   const orderRequests = [];
@@ -82,7 +74,7 @@ async function startHangableTelnyxMock() {
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
+  const mock = {
     url: `http://127.0.0.1:${server.address().port}`,
     orderRequests,
     searchCount: () => searchCount,
@@ -93,6 +85,11 @@ async function startHangableTelnyxMock() {
     },
     close: () => new Promise((r) => server.close(r)),
   };
+  t.after(async () => {
+    mock.release();
+    await mock.close();
+  });
+  return mock;
 }
 
 async function withTelnyxMock(url, fn) {
@@ -188,9 +185,8 @@ async function seedAndEnqueue(state, orchestrator, tenantId) {
   return { numberId: r.number.id, jobId: jobRes.jobId };
 }
 
-test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf (kein Doppelkauf)", async () => {
-  const telnyx = await startHangableTelnyxMock();
-  offeneMocks.push(telnyx);
+test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf (kein Doppelkauf)", async (t) => {
+  const telnyx = await startHangableTelnyxMock(t);
   await withTelnyxMock(telnyx.url, async () => {
     const state = makeDefaultState();
     const { store, orchestrator, config: cfg } = buildOrchestrator(state);
@@ -199,8 +195,8 @@ test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf 
     await until(() => telnyx.searchCount() >= 1, 4000);
 
     const stuck = await seedAndEnqueue(state, orchestrator, "t_stuck");
-    state.tenants.find((t) => t.id === "t_stuck").status = TENANT_STATUS.ACTIVE;
-    state.tenants.find((t) => t.id === "t_stuck").kycLevel = KYC_LEVEL.CARD;
+    state.tenants.find((tenant) => tenant.id === "t_stuck").status = TENANT_STATUS.ACTIVE;
+    state.tenants.find((tenant) => tenant.id === "t_stuck").kycLevel = KYC_LEVEL.CARD;
     assert.equal(findNumber(state, stuck.numberId).status, NUMBER_STATUS.REQUESTED);
     assert.equal(telnyx.searchCount(), 1, "t_stuck wurde NICHT bearbeitet (Drain haengt noch)");
 
@@ -228,7 +224,6 @@ test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf 
       await app.close();
     }
   });
-  await telnyx.close();
 });
 
 function seedTooOldStuck() {
@@ -261,9 +256,8 @@ function seedTooOldStuck() {
   return s;
 }
 
-test("needs_manual_reconcile: 409 + Runbook-Message bei zu altem stuck-Job, KEIN Kauf", async () => {
-  const telnyx = await startHangableTelnyxMock();
-  offeneMocks.push(telnyx);
+test("needs_manual_reconcile: 409 + Runbook-Message bei zu altem stuck-Job, KEIN Kauf", async (t) => {
+  const telnyx = await startHangableTelnyxMock(t);
   await withTelnyxMock(telnyx.url, async () => {
     const state = seedTooOldStuck();
     const { store, orchestrator, config: cfg } = buildOrchestrator(state);
@@ -284,5 +278,4 @@ test("needs_manual_reconcile: 409 + Runbook-Message bei zu altem stuck-Job, KEIN
       await app.close();
     }
   });
-  await telnyx.close();
 });
