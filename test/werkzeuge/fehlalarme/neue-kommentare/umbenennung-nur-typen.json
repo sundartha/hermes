@@ -1,0 +1,21 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen behält den alten Kommentar",
+  "vorher": {
+    "src/probe/zahl.js": [
+      "// Verdoppelt die Zahl.",
+      "export function doppelt(zahl) {",
+      "  return zahl * 2;",
+      "}"
+    ]
+  },
+  "loeschen": ["src/probe/zahl.js"],
+  "dateien": {
+    "src/probe/zahl.ts": [
+      "// Verdoppelt die Zahl.",
+      "export function doppelt(zahl: number): number {",
+      "  return zahl * 2;",
+      "}"
+    ]
+  },
+  "erwartet": "neuer Kommentar"
+}

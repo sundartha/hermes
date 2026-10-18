@@ -4,7 +4,9 @@
     "tools/neue-kommentare.mjs",
     "tools/pr-aenderungen.mjs",
     "tools/kommentare-yaml-shell.mjs",
-    "tools/eslint-rules/"
+    "tools/eslint-rules/",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs"
   ],
   "probe": {
     "mitnehmen": [

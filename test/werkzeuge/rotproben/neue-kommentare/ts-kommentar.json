@@ -1,0 +1,10 @@
+{
+  "titel": "Neuer Kommentar in einer .ts-Datei",
+  "dateien": {
+    "src/rotprobe.ts": [
+      "// Begründung in einer TypeScript-Datei",
+      "export const wert: boolean = true;"
+    ]
+  },
+  "erwartet": "src/rotprobe.ts:1 neuer Kommentar"
+}
