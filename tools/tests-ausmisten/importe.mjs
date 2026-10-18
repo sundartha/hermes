@@ -3,7 +3,10 @@ import { posix } from "node:path";
 
 import { Linter } from "eslint";
 
-const COMMONJS = /\.cjs$/;
+import { laufzeitText } from "../umbenennung.mjs";
+
+const COMMONJS = /\.c[jt]s$/;
+const JAVASCRIPT_ENDUNG = /\.([cm]?)js$/;
 const RELATIV = /^\.{1,2}\//;
 const ANHANG = /[?#].*$/s;
 const NACH_OBEN = /^\.\.(?:\/|$)/;
@@ -11,9 +14,11 @@ const MAX_TIEFE = 8;
 const DYNAMISCHER_IMPORT = "import(";
 
 export function syntaxbaum(datei, text) {
+  const laufzeit = laufzeitText(datei, text);
+  if (laufzeit === undefined) return undefined;
   const linter = new Linter();
   const sourceType = COMMONJS.test(datei) ? "commonjs" : "module";
-  const meldungen = linter.verify(text, { languageOptions: { ecmaVersion: "latest", sourceType } });
+  const meldungen = linter.verify(laufzeit, { languageOptions: { ecmaVersion: "latest", sourceType } });
   if (meldungen.some(({ fatal }) => fatal)) return undefined;
   const { ast, visitorKeys } = linter.getSourceCode();
   return { ast, visitorKeys };
@@ -144,7 +149,8 @@ function aufgeloest(knoten, bindungen, tiefe = 0) {
 function zielDatei(datei, { pfad, relativ }) {
   if (!relativ && !RELATIV.test(pfad)) return undefined;
   const ziel = posix.normalize(posix.join(posix.dirname(datei), pfad));
-  return NACH_OBEN.test(ziel) || !existsSync(ziel) ? undefined : ziel;
+  const vorhanden = [ziel, ziel.replace(JAVASCRIPT_ENDUNG, ".$1ts")].find((kandidat) => existsSync(kandidat));
+  return NACH_OBEN.test(ziel) ? undefined : vorhanden;
 }
 
 export function dynamischeZiele(datei) {

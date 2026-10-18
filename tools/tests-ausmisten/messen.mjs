@@ -26,7 +26,7 @@ const KONFIGURATION = Object.fromEntries(
   ),
 );
 const BANK = "regression";
-const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
+const SANDBOXORDNER_DER_MUTATIONSPRUEFUNG = ".mutationspruefung";
 const LEERRAUM = /\s+/g;
 const LAUF_SKRIPT = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
 const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
@@ -79,7 +79,7 @@ async function inEigenerGruppe(args, optionen) {
 }
 
 async function strykerImEigenenProzess(optionen) {
-  const ordner = mkdtempSync(join(ARBEITSORDNER, "auftrag-"));
+  const ordner = neuerArbeitsordner("auftrag");
   try {
     const [auftrag, antwort] = [join(ordner, "optionen.json"), join(ordner, "ergebnis.json")];
     writeFileSync(auftrag, JSON.stringify(optionen));
@@ -113,18 +113,43 @@ function strykerOptionen({ mutate, tests, ausnahmen = [], tempDirName }) {
   };
 }
 
+function sandboxordner() {
+  mkdirSync(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, { recursive: true });
+  writeFileSync(join(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, ".gitignore"), "*\n");
+  return SANDBOXORDNER_DER_MUTATIONSPRUEFUNG;
+}
+
 function neuerArbeitsordner(art) {
-  mkdirSync(ARBEITSORDNER, { recursive: true });
-  return mkdtempSync(join(ARBEITSORDNER, `${art}-`));
+  return mkdtempSync(join(sandboxordner(), `${art}-`));
 }
 
 async function strykerLauf(lauf) {
-  const tempDirName = neuerArbeitsordner("lauf");
+  const optionen = strykerOptionen({ ...lauf, tempDirName: sandboxordner() });
+  return (await strykerImEigenenProzess(optionen)).map(eintrag);
+}
+
+function sandboxen() {
+  return new Set(readdirSync(sandboxordner()).filter((name) => SANDBOX.test(name)));
+}
+
+async function neueSandboxen(optionen) {
+  const vorher = sandboxen();
   try {
-    return (await strykerImEigenenProzess(strykerOptionen({ ...lauf, tempDirName }))).map(eintrag);
-  } finally {
-    rmSync(tempDirName, { recursive: true, force: true });
+    await strykerImEigenenProzess({ ...optionen, dryRunOnly: true, cleanTempDir: false });
+  } catch (fehler) {
+    if (!TROCKENLAUF_GESCHEITERT.test(fehler.message)) throw fehler;
   }
+  return [...sandboxen()].filter((name) => !vorher.has(name));
+}
+
+export function eigeneSandbox(neu) {
+  if (neu.length === 0) throw new Error("Der umgebaute Stand für die Fallsuche fehlt.");
+  if (neu.length > 1) {
+    throw new Error(
+      `Der umgebaute Stand für die Fallsuche ist nicht eindeutig: ${neu.join(", ")} entstanden zugleich in ${SANDBOXORDNER_DER_MUTATIONSPRUEFUNG}/.`,
+    );
+  }
+  return join(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, neu[0]);
 }
 
 async function testfaelle(tests, verzeichnis) {
@@ -149,21 +174,15 @@ async function testfaelle(tests, verzeichnis) {
 }
 
 async function ermittleAusnahmen({ mutate, tests }) {
-  const tempDirName = neuerArbeitsordner("umbau");
+  const sandbox = eigeneSandbox(
+    await neueSandboxen(strykerOptionen({ mutate, tests, tempDirName: sandboxordner() })),
+  );
   try {
-    const optionen = strykerOptionen({ mutate, tests, tempDirName });
-    try {
-      await strykerImEigenenProzess({ ...optionen, dryRunOnly: true, cleanTempDir: false });
-    } catch (fehler) {
-      if (!TROCKENLAUF_GESCHEITERT.test(fehler.message)) throw fehler;
-    }
-    const sandbox = readdirSync(tempDirName).find((name) => SANDBOX.test(name));
-    if (sandbox === undefined) throw new Error("Der umgebaute Stand für die Fallsuche fehlt.");
     const ohne = await testfaelle(tests, cwd());
-    const mit = await testfaelle(tests, join(cwd(), tempDirName, sandbox));
+    const mit = await testfaelle(tests, join(cwd(), sandbox));
     return auswerten({ ohne, mit });
   } finally {
-    rmSync(tempDirName, { recursive: true, force: true });
+    rmSync(sandbox, { recursive: true, force: true });
   }
 }
 

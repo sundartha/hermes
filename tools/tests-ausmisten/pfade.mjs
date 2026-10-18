@@ -24,7 +24,7 @@ const GESPERRTE_MODI = new Set(["120000", "160000"]);
 const STATUS_GELOESCHT = "D";
 const RAW_KOPF = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ ([A-Z])\d*$/;
 const MAX_GIT_AUSGABE = 268_435_456;
-const QUELLDATEI = /^src\/.+\.[cm]?js$/;
+const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const FELDER_JE_AENDERUNG = 2;
 
 export function git(args, verzeichnis, eingabe) {
