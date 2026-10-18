@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { OLD_FINDING_LISTS } from "../freigabe-strenger.mjs";
-import { repo } from "./github.mjs";
+import { raiseIssueOnce } from "./github.mjs";
 
 export const EMPTY_LIST_PREFIX = "Übergangsliste leer:";
 const SUPPRESSIONS = "eslint-suppressions.json";
@@ -78,12 +78,6 @@ function emptyListBody(path) {
 
 export async function raiseEmptyLists(lists, openIssues, { limit }) {
   for (const { path } of lists.filter(({ count }) => count === 0)) {
-    const title = `${EMPTY_LIST_PREFIX} ${path}`;
-    if (openIssues.some((issue) => issue.title === title)) continue;
-    if (openIssues.length >= limit) {
-      console.error(`Obergrenze von ${limit} offenen Issues erreicht; „${title}“ fehlt.`);
-      continue;
-    }
-    openIssues.push(await repo("/issues", { method: "POST", body: { title, body: emptyListBody(path) } }));
+    await raiseIssueOnce(openIssues, { title: `${EMPTY_LIST_PREFIX} ${path}`, body: emptyListBody(path), limit });
   }
 }

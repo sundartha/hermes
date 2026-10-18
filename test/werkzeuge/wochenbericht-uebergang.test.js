@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createServer } from "node:http";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { ausgang, auswegBei } from "../../tools/auftrag/ausgang.mjs";
 import { incentiveSection } from "../../tools/wochenbericht/anreize.mjs";
 import { raiseEmptyLists, transitionLists, transitionSection } from "../../tools/wochenbericht/uebergang.mjs";
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { probeDirectory } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
 const JETZT = new Date("2026-10-12T05:23:00Z");
 const IN_DER_WOCHE = "2026-10-08T10:00:00Z";
 const VOR_DER_WOCHE = "2026-09-30T10:00:00Z";
 const OBERGRENZE = 25;
+const WOCHENBERICHT = join(REPO_ROOT, "tools/wochenbericht.mjs");
+const NACHTLAUF = { id: 7, name: "Nachtlauf" };
+const ROTER_LAUF = { conclusion: "failure", created_at: IN_DER_WOCHE, html_url: "https://github.com/sundartha/hermes/actions/runs/1" };
 
 async function attrappe(context, antworten) {
   const schreibvorgaenge = [];
@@ -21,7 +26,7 @@ async function attrappe(context, antworten) {
     anfrage.on("data", (stueck) => (text += stueck));
     anfrage.on("end", () => {
       if (anfrage.method !== "GET") schreibvorgaenge.push({ pfad: url.pathname, inhalt: JSON.parse(text) });
-      const liste = url.searchParams.get("page") === "1" ? (antworten(url) ?? []) : [];
+      const liste = (url.searchParams.get("page") ?? "1") === "1" ? (antworten(url) ?? []) : [];
       antwort.setHeader("content-type", "application/json");
       antwort.end(JSON.stringify(anfrage.method === "GET" ? liste : { number: schreibvorgaenge.length, title: JSON.parse(text).title }));
     });
@@ -75,6 +80,29 @@ test("Wochenbericht: legt kein Issue für eine leere Liste an, wenn die Obergren
   const schreibvorgaenge = await attrappe(context, () => []);
   const offen = Array.from({ length: OBERGRENZE }, (_wert, nummer) => ({ title: `Offen ${nummer}` }));
   await raiseEmptyLists([{ path: "tools/basis/knip.json", count: 0 }], offen, { limit: OBERGRENZE });
+  assert.deepEqual(schreibvorgaenge, []);
+});
+
+function antwortenBeiObergrenze(url) {
+  if (url.pathname.endsWith("/actions/workflows")) return { workflows: [NACHTLAUF] };
+  if (url.pathname.endsWith(`/actions/workflows/${NACHTLAUF.id}/runs`)) return { workflow_runs: [ROTER_LAUF, ROTER_LAUF, ROTER_LAUF] };
+  if (url.pathname.endsWith("/issues") && url.searchParams.has("creator")) return Array.from({ length: OBERGRENZE }, (_wert, nummer) => ({ title: `Offen ${nummer}` }));
+  return [];
+}
+
+function alarmeIn(ordner) {
+  return new Promise((fertig) => execFile(process.execPath, [WOCHENBERICHT, "--alarme"], { cwd: ordner, env: isolatedEnvironment() }, (fehler, _ausgabe, stderr) => fertig({ status: fehler?.code ?? 0, stderr })));
+}
+
+test("Wochenbericht: bei erreichter Obergrenze melden roter Lauf und leere Übergangsliste dieselbe Zeile und legen nichts an", async (context) => {
+  const schreibvorgaenge = await attrappe(context, antwortenBeiObergrenze);
+  const ordner = probeDirectory(context, { "tools/basis/knip.json": JSON.stringify({ befunde: [] }) });
+  const { status, stderr } = await alarmeIn(ordner);
+  assert.equal(status, 0);
+  assert.deepEqual(stderr.split("\n").filter((zeile) => zeile.startsWith("Obergrenze")), [
+    `Obergrenze von ${OBERGRENZE} offenen Issues erreicht; „Geplanter Lauf dreimal hintereinander rot: Nachtlauf“ fehlt.`,
+    `Obergrenze von ${OBERGRENZE} offenen Issues erreicht; „Übergangsliste leer: tools/basis/knip.json“ fehlt.`,
+  ]);
   assert.deepEqual(schreibvorgaenge, []);
 });
 

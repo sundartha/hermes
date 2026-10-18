@@ -11,7 +11,7 @@ import {
   markPresented,
   openDecisions,
 } from "./wochenbericht/entscheidungen.mjs";
-import { PER_PAGE, repo, repoPages } from "./wochenbericht/github.mjs";
+import { PER_PAGE, raiseIssueOnce, repo, repoPages } from "./wochenbericht/github.mjs";
 import { costSection, readBudget, runWindowStart } from "./wochenbericht/kosten.mjs";
 import { expensiveRunsSection } from "./wochenbericht/prueflaeufe.mjs";
 import {
@@ -80,16 +80,11 @@ function alarmBody(runs) {
 
 async function raiseAlarms(streaks, openIssues) {
   for (const { name, runs } of streaks) {
-    const title = `${ALARM_PREFIX} ${name}`;
-    if (openIssues.some((issue) => issue.title === title)) continue;
-    if (openIssues.length >= OPEN_ISSUE_LIMIT) {
-      console.error(
-        `Obergrenze von ${OPEN_ISSUE_LIMIT} offenen Issues erreicht; „${title}“ fehlt.`,
-      );
-      continue;
-    }
-    const body = { title, body: alarmBody(runs) };
-    openIssues.push(await repo("/issues", { method: "POST", body }));
+    await raiseIssueOnce(openIssues, {
+      title: `${ALARM_PREFIX} ${name}`,
+      body: alarmBody(runs),
+      limit: OPEN_ISSUE_LIMIT,
+    });
   }
 }
 

@@ -37,6 +37,15 @@ export function repo(suffix, options) {
   return api(`/repos/${repository()}${suffix}`, options);
 }
 
+export async function raiseIssueOnce(openIssues, { title, body, limit }) {
+  if (openIssues.some((issue) => issue.title === title)) return;
+  if (openIssues.length >= limit) {
+    console.error(`Obergrenze von ${limit} offenen Issues erreicht; „${title}“ fehlt.`);
+    return;
+  }
+  openIssues.push(await repo("/issues", { method: "POST", body: { title, body } }));
+}
+
 function withPage(path, page) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}per_page=${PER_PAGE}&page=${page}`;
