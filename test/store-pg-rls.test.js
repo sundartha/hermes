@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "./pglite-helfer.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
-import { applySchema, seedDefaults } from "../src/db/migrate.js";
+import { applySchema, migrate, seedDefaults } from "../src/db/migrate.js";
 import { demoCalendar } from "../src/store/defaults.js";
-import { makePgTestStore } from "./pg-helpers.js";
+import { makePgTestStore, pgliteAlsRolleOhneSuperuser } from "./pg-helpers.js";
 
 const OTHER_TENANT_ID = "other";
 const APP_ROLE = "app_user";
@@ -235,4 +235,60 @@ test("PA-3/S1-1 Gegenprobe: als Superuser (BYPASSRLS) faellt der Bug NICHT auf -
     store.getCall(LOST_CALL_ID),
     "als Superuser ist die Zeile ohnehin sichtbar (RLS umgangen) - der Read-Pfad ist so nicht pruefbar",
   );
+});
+
+const MIGRATE_TENANT_ID = "t_migrate_eigen";
+const FREMD_TENANT_ID = "t_migrate_fremd";
+
+async function tenantDefaults(conn, tenantId) {
+  await conn.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
+  const settings = (await conn.query(`SELECT tenant_id, agent_name FROM settings`)).rows;
+  const usage = (await conn.query(`SELECT tenant_id FROM usage`)).rows;
+  const kalender = (await conn.query(`SELECT id FROM calendar_event ORDER BY id`)).rows;
+  return { settings, usage, kalender: kalender.map((r) => r.id) };
+}
+
+function erwarteteDefaults(tenantId) {
+  return {
+    settings: [{ tenant_id: tenantId, agent_name: "Hermes" }],
+    usage: [{ tenant_id: tenantId }],
+    kalender: demoCalendar()
+      .map((ev) => ev.id)
+      .sort(),
+  };
+}
+
+test("migrate als Rolle ohne Superuser legt auf leerer DB die Defaults des Tenants unter FORCE RLS an", async () => {
+  const conn = await pgliteAlsRolleOhneSuperuser();
+  await migrate(conn, MIGRATE_TENANT_ID);
+  assert.deepEqual(
+    await tenantDefaults(conn, MIGRATE_TENANT_ID),
+    erwarteteDefaults(MIGRATE_TENANT_ID),
+  );
+  const tenants = (await conn.query(`SELECT id, status FROM tenant`)).rows;
+  assert.deepEqual(tenants, [{ id: MIGRATE_TENANT_ID, status: "active" }]);
+});
+
+test("migrate als Rolle ohne Superuser heilt die Nummer eines fremden Tenants und seedet danach den eigenen", async () => {
+  const conn = await pgliteAlsRolleOhneSuperuser();
+  await applySchema(conn);
+  await conn.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active')`, [FREMD_TENANT_ID]);
+  await conn.query(`SELECT set_config('app.current_tenant', $1, false)`, [FREMD_TENANT_ID]);
+  await conn.query(
+    `INSERT INTO number (id, tenant_id, e164, provider, status, country, language)
+     VALUES ('num_fremd_fr', $1, '+33123456789', 'telnyx', 'active', NULL, NULL)`,
+    [FREMD_TENANT_ID],
+  );
+
+  await migrate(conn, MIGRATE_TENANT_ID);
+
+  assert.deepEqual(
+    await tenantDefaults(conn, MIGRATE_TENANT_ID),
+    erwarteteDefaults(MIGRATE_TENANT_ID),
+  );
+  await conn.query(`SELECT set_config('app.current_tenant', $1, false)`, [FREMD_TENANT_ID]);
+  const nummern = (await conn.query(`SELECT id, country, language FROM number`)).rows;
+  assert.deepEqual(nummern, [{ id: "num_fremd_fr", country: "FR", language: "fr" }]);
+  const fremdSettings = (await conn.query(`SELECT tenant_id FROM settings`)).rows;
+  assert.deepEqual(fremdSettings, [], "der fremde Tenant bekommt keine Defaults des eigenen");
 });
