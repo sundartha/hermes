@@ -112,6 +112,10 @@ export function hasFileBelow(files, folder) {
   return folder !== "" && hasFileStartingWith(files, prefix);
 }
 
+export function isListed(files, path) {
+  return files.includes(path);
+}
+
 export function pathExists(files, path) {
   return files.some((file) => imBereich(path, file));
 }
