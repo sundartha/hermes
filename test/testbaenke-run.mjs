@@ -14,7 +14,7 @@ const MODE_GATES = "gates";
 const MODE_ABNAHME = "abnahme";
 const MODES = [MODE_REGRESSION, MODE_GATES, MODE_ABNAHME];
 
-const TEST_GLOB = "test/**/*.test.js";
+const TEST_GLOB = "test/**/*.test.{js,ts}";
 const FIRST_FILE_ARGUMENT = 3;
 const PATTERN_CHARACTERS = /[*?[{]/;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
@@ -26,7 +26,7 @@ const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
 export const FAILURE_FILE_VARIABLE = "TESTFEHLER_DATEI";
 const FAILURE_FIELDS = ["error", "expected", "actual"];
 
-const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.js$/;
+const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.[jt]s$/;
 const EMPTY_PLAN_LINE = "1..0";
 const CANCELLED_LINE = /^# cancelled (\d+)$/m;
 const RESULT_LINE = /^( *)(not ok|ok) \d+ - (.*)$/;

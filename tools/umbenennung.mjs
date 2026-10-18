@@ -30,6 +30,7 @@ const PFADABHAENGIG = { meta: "import", bezeichner: new Set(["__filename", "modu
 const FELDER_JE_EINTRAG = 2;
 const GELOESCHT = "D";
 const HINZUGEFUEGT = "A";
+const GEAENDERT = "M";
 const MAX_GIT_AUSGABE = 268_435_456;
 export const INDEX = "";
 const EXIT_GRUEN = 0;
@@ -102,7 +103,7 @@ export function umbenennungsPaare({ von, bis }) {
     .sort((links, rechts) => links.alt.localeCompare(rechts.alt));
 }
 
-function laufzeitText(datei, text) {
+export function laufzeitText(datei, text) {
   if (!TYPESCRIPT.test(datei)) return text;
   try {
     return stripTypeScriptTypes(text, { mode: "strip" });
@@ -152,30 +153,43 @@ export async function laufzeitVergleich({ alt, neu }, { paare = [], eslint = new
   return gleich ? { gleich } : { gleich, grund: GRUND.geaendert };
 }
 
+async function paarVergleich(paar, { von, bis, paare, eslint }) {
+  const [altText, neuText] = [inhalt(von, paar.alt), inhalt(bis, paar.neu)];
+  if (altText === undefined || neuText === undefined) return { gleich: false, grund: GRUND.lesbar };
+  return laufzeitVergleich(
+    { alt: { pfad: paar.alt, text: altText }, neu: { pfad: paar.neu, text: neuText } },
+    { paare, eslint },
+  );
+}
+
 export async function umbenennungen({ von, bis }, eslint = new ESLint()) {
-  const paare = umbenennungsPaare({ von, bis });
-  const geprueft = [];
-  for (const paar of paare) {
-    const [altText, neuText] = [inhalt(von, paar.alt), inhalt(bis, paar.neu)];
-    const vergleich =
-      altText === undefined || neuText === undefined
-        ? { gleich: false, grund: GRUND.lesbar }
-        : await laufzeitVergleich(
-            { alt: { pfad: paar.alt, text: altText }, neu: { pfad: paar.neu, text: neuText } },
-            { paare, eslint },
-          );
-    geprueft.push({
-      ...paar,
-      nurTypen: vergleich.gleich,
-      ...(vergleich.grund ? { grund: vergleich.grund } : {}),
-    });
+  const geprueft = umbenennungsPaare({ von, bis }).map((paar) => ({ ...paar, nurTypen: true }));
+  let geaendert = true;
+  while (geaendert) {
+    geaendert = false;
+    const paare = geprueft.filter(({ nurTypen }) => nurTypen);
+    for (const paar of paare) {
+      const vergleich = await paarVergleich(paar, { von, bis, paare, eslint });
+      if (vergleich.gleich) continue;
+      Object.assign(paar, { nurTypen: false, grund: vergleich.grund });
+      geaendert = true;
+    }
   }
+  const paare = geprueft.filter(({ nurTypen }) => nurTypen);
   return {
     paare: geprueft,
     nurTypen: (neu) => geprueft.find((paar) => paar.neu === neu && paar.nurTypen)?.alt,
     vorher: (alt) => geprueft.find((paar) => paar.alt === alt && paar.nurTypen)?.neu,
     vergleiche: (alt, neu) => laufzeitVergleich({ alt, neu }, { paare, eslint }),
   };
+}
+
+export function mitNeuenPfaden(eintraege, umbenannt) {
+  const ersetzt = eintraege.map((eintrag) => {
+    const neu = eintrag.status === GELOESCHT ? umbenannt.vorher(eintrag.path) : undefined;
+    return neu === undefined ? eintrag : { status: GEAENDERT, path: neu };
+  });
+  return [...new Map(ersetzt.map((eintrag) => [eintrag.path, eintrag])).values()];
 }
 
 function zeile({ alt, neu, nurTypen, grund }) {

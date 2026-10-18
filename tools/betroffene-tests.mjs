@@ -1,13 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
+import { argv } from "node:process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { dependentsGraph, testsReaching } from "./testgraph.mjs";
+import { mitNeuenPfaden, umbenennungen } from "./umbenennung.mjs";
 
 const DEFAULT_BASE_REF = "upstream/master";
 const SELECTABLE_PREFIXES = ["src/", "test/"];
 const WEB_PREFIX = "apps/web/";
-const FULL_SUITE_GLOB = "test/**/*.test.js";
+const FULL_SUITE_GLOB = "test/**/*.test.{js,ts}";
 const WEB_SUITE_GLOB = "apps/web/test/**/*.test.js";
 const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const DELETED = "D";
@@ -25,12 +28,16 @@ function git(args) {
   return result.status === 0 ? result.stdout : null;
 }
 
-function changedFiles(baseRef) {
+export async function changedFiles(baseRef) {
   const mergeBase = git(["merge-base", "HEAD", baseRef])?.trim();
   if (!mergeBase) return null;
   const diff = git(["diff", "--name-status", "--no-renames", "-z", mergeBase]);
   if (diff === null) return null;
-  return [...diff.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({ status, path }));
+  const changes = [...diff.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({
+    status,
+    path,
+  }));
+  return mitNeuenPfaden(changes, await umbenennungen({ von: mergeBase }));
 }
 
 function needsFullSuite({ status, path }) {
@@ -45,7 +52,7 @@ async function affectedTestFiles(changes) {
   return [...new Set(reachedPerChange.flat())].sort();
 }
 
-async function testPatternsFor(changes) {
+export async function testPatternsFor(changes) {
   if (changes === null) return [FULL_SUITE_GLOB];
   const rootPatterns = (await affectedTestFiles(changes)) ?? [FULL_SUITE_GLOB];
   const touchesWeb = changes.some(({ path }) => path.startsWith(WEB_PREFIX));
@@ -70,7 +77,7 @@ async function main() {
       [SKIP_FULL_SUITE_OPTION]: { type: "boolean", default: false },
     },
   });
-  const changes = changedFiles(values.basis);
+  const changes = await changedFiles(values.basis);
   if (changes?.length === 0) {
     console.log(NO_CHANGES_MESSAGE);
     return;
@@ -82,4 +89,4 @@ async function main() {
   if (selected.length > 0) process.exitCode = runBank(selected);
 }
 
-await main();
+if (import.meta.url === pathToFileURL(realpathSync(argv[1] ?? ".")).href) await main();

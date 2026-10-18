@@ -4,7 +4,7 @@ import { cruise } from "dependency-cruiser";
 
 const GRAPH_ROOTS = ["src", "test"];
 const CRUISE_OPTIONS = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
-export const TEST_FILE = /^test\/.+\.test\.js$/;
+export const TEST_FILE = /^test\/.+\.test\.[jt]s$/;
 
 export async function dependentsGraph(baseDir = cwd()) {
   const { output } = await cruise(GRAPH_ROOTS, { ...CRUISE_OPTIONS, baseDir });

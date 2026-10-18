@@ -157,7 +157,7 @@ async function main() {
   const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
   const comments = ruleComments();
   const oldPath = await oldPathOf(basis, states);
-  const order = testordnung(basis);
+  const order = await testordnung(basis);
   const findings = [
     ...states.flatMap((state) => findingsFor(state, { comments, oldPath })),
     ...bestaendeNurKuerzer(basis),

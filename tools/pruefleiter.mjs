@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
+import { mitNeuenPfaden, umbenennungen } from "./umbenennung.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -17,7 +18,7 @@ const EXIT_USAGE = 2;
 const SKIP_FULL_SUITE_FLAG = "--ohne-volle-suite";
 const DEFAULT_BASE_REF = "upstream/master";
 const TOOL_BANK = "regression";
-const TOOL_TEST_GLOB = "test/werkzeuge/**/*.test.js";
+const TOOL_TEST_GLOB = "test/werkzeuge/**/*.test.{js,ts}";
 const TEST_CONCURRENCY = 4;
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
 const DELETED = "D";
@@ -86,16 +87,16 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
-function changedEntries(baseRef) {
+async function changedEntries(baseRef) {
   const mergeBase = spawnSync("git", ["merge-base", "HEAD", baseRef], { encoding: "utf8" });
   if (mergeBase.status !== 0) return null;
-  const diff = spawnSync(
-    "git",
-    ["diff", "--name-status", "--no-renames", "-z", mergeBase.stdout.trim()],
-    { encoding: "utf8" },
-  );
+  const von = mergeBase.stdout.trim();
+  const diff = spawnSync("git", ["diff", "--name-status", "--no-renames", "-z", von], {
+    encoding: "utf8",
+  });
   if (diff.status !== 0) return null;
-  return [...diff.stdout.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({ status, path }));
+  const changes = [...diff.stdout.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({ status, path }));
+  return mitNeuenPfaden(changes, await umbenennungen({ von }));
 }
 
 function isProductChange({ status, path }) {
@@ -103,8 +104,8 @@ function isProductChange({ status, path }) {
   return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_PREFIX);
 }
 
-function needsToolTests(baseRef) {
-  const changes = changedEntries(baseRef);
+async function needsToolTests(baseRef) {
+  const changes = await changedEntries(baseRef);
   return changes === null || changes.some((change) => !isProductChange(change));
 }
 
@@ -165,19 +166,19 @@ function runsToolTests(options) {
   return wanted && !options["ohne-werkzeugtests"];
 }
 
-function fullRun(options) {
+async function fullRun(options) {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
   const affectedStatus = affectedTests(affectedTestArgs(options));
-  if (!runsToolTests(options) || !needsToolTests(selectedBaseRef(options))) {
+  if (!runsToolTests(options) || !(await needsToolTests(selectedBaseRef(options)))) {
     return affectedStatus;
   }
   const toolStatus = toolTests();
   return affectedStatus === 0 ? toolStatus : affectedStatus;
 }
 
-function partRun(options, part) {
-  if (!needsToolTests(selectedBaseRef(options))) {
+async function partRun(options, part) {
+  if (!(await needsToolTests(selectedBaseRef(options)))) {
     console.log(
       `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
     );
@@ -234,8 +235,8 @@ function emptyGlobFindings(toolTestsNeeded, expected) {
   return [`${TOOL_TEST_GLOB} findet keine Werkzeug-Testdatei.`];
 }
 
-function checkParts(options) {
-  const toolTestsNeeded = needsToolTests(selectedBaseRef(options));
+async function checkParts(options) {
+  const toolTestsNeeded = await needsToolTests(selectedBaseRef(options));
   const expected = expectedToolTestFiles(toolTestsNeeded);
   const findings = [
     ...emptyGlobFindings(toolTestsNeeded, expected),
