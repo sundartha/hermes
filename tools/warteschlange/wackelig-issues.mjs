@@ -7,7 +7,7 @@ import { ciLauf } from "./gleicher-stand.mjs";
 
 const BELEG_DATEI = "wackelig.json";
 const LABEL = "wackelig";
-const TESTDATEI = /^test\/[A-Za-z0-9._/-]+\.test\.js$/;
+const TESTDATEI = /^test\/[A-Za-z0-9._/-]+\.test\.[cm]?[jt]s$/;
 const ELTERNORDNER = "..";
 const MAX_TESTNAME = 200;
 const ERSTES_DRUCKBARES = 32;

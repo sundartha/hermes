@@ -115,6 +115,16 @@ test("ein Test, der zweimal rot ist, bleibt rot und steht unter rot", (context) 
   assert.equal(ergebnis.zweiterLief, true);
 });
 
+test("rote Tests in .test.ts-Dateien bekommen wie in .test.js einen zweiten Lauf", (context) => {
+  const wackelDatei = "test/wackel.test.ts";
+  const rotDatei = "test/rot.test.ts";
+  const ergebnis = lauf(context, { [wackelDatei]: wackelTest(WACKEL_NAME), [rotDatei]: immerRot("immer rot") });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.deepEqual(ergebnis.wackelig.wackelig, [{ datei: wackelDatei, test: WACKEL_NAME }]);
+  assert.deepEqual(ergebnis.wackelig.rot, [{ datei: rotDatei, test: "immer rot", grund: "zweimal rot" }]);
+  assert.equal(ergebnis.zweiterLief, true);
+});
+
 test("ein Test aus tools/gate-tests.json bekommt keinen zweiten Lauf", (context) => {
   const ergebnis = lauf(context, {
     [WACKEL_DATEI]: wackelTest(WACKEL_NAME),
