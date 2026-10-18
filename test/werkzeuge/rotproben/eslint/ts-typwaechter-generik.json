@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter mit Typparameter",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function istWie<T>(wert: unknown, muster: T): wert is T {",
+      "  return typeof wert === typeof muster;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

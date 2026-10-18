@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter in einer .mts-Datei unter tools/",
+  "dateien": {
+    "tools/probe/probe.mts": [
+      "export function istZahl(wert: unknown): wert is number {",
+      "  return wert !== undefined;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

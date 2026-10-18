@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter mit asserts wert is T",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function sichereZahl(wert: unknown): asserts wert is number {",
+      "  if (wert === undefined) throw new Error(\"kein Wert\");",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

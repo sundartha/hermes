@@ -1,0 +1,15 @@
+{
+  "titel": "Ungeprüfter Typwächter auf this",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export class Anruf {",
+      "  readonly nummer: string | undefined = undefined;",
+      "",
+      "  hatNummer(): this is { readonly nummer: string } {",
+      "    return this.nummer !== \"\";",
+      "  }",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

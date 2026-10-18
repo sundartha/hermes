@@ -1,0 +1,9 @@
+{
+  "titel": "Ungeprüfter Typwächter als Pfeilfunktion",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export const istZahl = (wert: unknown): wert is number => wert !== undefined;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}
