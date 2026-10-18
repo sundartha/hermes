@@ -418,7 +418,8 @@ function satzBefund(ort, eintrag, kontext) {
   const { abschnitte: gefunden, befunde } = abschnitte(text, [eintrag.abschnitt]);
   if (befunde.length > 0) return `${ort}: ${befunde[0]} (${eintrag.quelle})`;
   const satz = gleicherText(eintrag.satz);
-  if (!saetzeIn(gefunden.get(eintrag.abschnitt)).has(satz)) return `${ort}: „${eintrag.satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in ${eintrag.quelle}, ${eintrag.abschnitt}`;
+  const uebernommen = liste(kontext.alteNie).some((alt) => gleicherText(alt) === satz);
+  if (!uebernommen && !saetzeIn(gefunden.get(eintrag.abschnitt)).has(satz)) return `${ort}: „${eintrag.satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in ${eintrag.quelle}, ${eintrag.abschnitt}`;
   const szenario = [...kontext.soll].find(([, { text: szenarioText }]) => gleicherText(szenarioText).includes(satz));
   return szenario ? `${ort}: „${eintrag.satz}“ steht im Szenario ${szenario[0]}` : null;
 }

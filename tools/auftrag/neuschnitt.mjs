@@ -118,7 +118,7 @@ function unveraendertBefunde(alt, auftraege, schnitt) {
     });
 }
 
-function saetze(nie) {
+export function saetze(nie) {
   if (Array.isArray(nie)) return nie;
   return nie && typeof nie === "object" ? Object.values(nie) : [];
 }

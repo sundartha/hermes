@@ -415,3 +415,33 @@ test("Neuschnitt: die Abnahme eines vorhandenen Auftrags ist ein Befund", (conte
   assert.match(lauf.ergebnis.grund, /abnahme test\/nummern\/eigene-nummer-hinterlegen\.test\.js hat schon der vorhandene Auftrag a1/);
   assert.equal(aufrufe(lauf, "planer").length, PLANER_NACHRICHTEN_IM_NEUSCHNITT);
 });
+
+const ALTER_NIE = "Der Bestätigungscode landet in keinem Protokoll.";
+
+function mitAltemNie(phase, wasDarfNiePassieren = [ALTER_NIE]) {
+  return { ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === GESCHEITERT ? { ...eintrag, wasDarfNiePassieren } : eintrag)) };
+}
+
+function schnittMitNie(satz) {
+  const [ersatz] = neuerSchnitt().auftraege;
+  return alsJson({ schnitt: neuerSchnitt({ auftraege: [{ ...ersatz, wasDarfNiePassieren: [{ satz, quelle: "pitch.md", abschnitt: "## Nicht-Ziele" }] }] }), aenderung: AENDERUNG });
+}
+
+test("Neuschnitt: ein Nie-Satz des alten Auftrags, der nur in der Phasendatei steht, darf wörtlich übernommen werden", (context) => {
+  const lauf = neuschnitt(context, { aendere: mitAltemNie, ueberschrieben: planerAntwort(schnittMitNie(` ${ALTER_NIE.replace(" ", "  ")}`)) });
+  exit(lauf, 0);
+  const ersatz = lauf.phase.auftraege.find(({ id }) => id === "a2-n1");
+  assert.equal(ersatz.wasDarfNiePassieren.length, 1);
+});
+
+test("Neuschnitt: ein Nie-Satz des alten Auftrags in Objektform darf wörtlich übernommen werden", (context) => {
+  const lauf = neuschnitt(context, { aendere: (phase) => mitAltemNie(phase, { protokoll: ALTER_NIE }), ueberschrieben: planerAntwort(schnittMitNie(ALTER_NIE)) });
+  exit(lauf, 0);
+});
+
+test("Neuschnitt: ein geänderter Nie-Satz des alten Auftrags muss weiter wörtlich in Pitch oder Design Doc stehen", (context) => {
+  const geaendert = ALTER_NIE.replace("keinem", "kaum einem");
+  const lauf = neuschnitt(context, { aendere: mitAltemNie, ueberschrieben: planerAntwort(schnittMitNie(geaendert)) });
+  exit(lauf, 4);
+  assert.match(lauf.ergebnis.grund, new RegExp(`a2-n1 wasDarfNiePassieren: „${geaendert}“ steht nicht wörtlich`));
+});
