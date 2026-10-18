@@ -21,7 +21,7 @@ const CODE_ROOTS = ["src/", "scripts/"];
 const DDL =
   /\b(?:alter|create|drop)\s+(?:table|index|policy|trigger|function|column|view|type|extension|schema|sequence)\b/i;
 const DDL_MODIFIER =
-  /\b(?:or\s+replace|unique|materialized|unlogged|temp|temporary|global|local|constraint|recursive)\b/gi;
+  /\b(?:or\s+replace|unique|materialized|unlogged|temp|temporary|global|local|constraint|recursive|foreign|event)\b/gi;
 const ROLLBACK_RULES = [
   "ban-drop-column",
   "ban-drop-table",
