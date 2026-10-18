@@ -6,7 +6,7 @@ import {
   isProviderMicroCents,
   istBeweisendeHerkunft,
 } from "../store/defaults.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
@@ -30,7 +30,6 @@ import { reifeElBelege } from "./el-reifung.js";
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
 
 const PERCENT_BASE = 100;
-const MS_PER_MINUTE = 60 * 1000;
 const SWEEP_RUNNING_REASON = "sweep_running";
 const POOL_INCOMPLETE_REASON = "pool_incomplete";
 const COST_TRUING_FINDING = Object.freeze({
