@@ -1,0 +1,39 @@
+{
+  "titel": "Gate-Test ohne Datei",
+  "vorher": {
+    "package.json": ["{\"type\": \"module\"}"],
+    "src/a.js": ["export const eins = 1;"],
+    "test/a.test.js": ["export const probe = 1;"],
+    ".claude/hooks/h.mjs": ["export const haken = 1;"],
+    "tools/gate-tests.json": [
+      "{\"Probe\": {\"module\": [\"src/a.js#eins\"], \"tests\": [\"test/a.test.js\"]}}"
+    ],
+    "tools/ziele/geschuetzt.json": [
+      "{\"gates\": \"tools/gate-tests.json\", \"gruppe\": [\"src/a.js\", \"src/\"]}"
+    ],
+    "tools/auftrag/musterdateien.json": [
+      "{\"regel\": \"Muster\", \"bau\": [{\"art\": \"Modul\", \"praefix\": \"src/\", \"datei\": \"src/a.js\"}]}"
+    ],
+    ".github/CODEOWNERS": ["/tools/ @probe", "/src/db/migrations/rueckbau/ @probe"],
+    ".claude/rollen/bau.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Read(data/**)\"]}, \"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"node \\\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/h.mjs\\\"\"}]}]}}"
+    ],
+    ".claude/settings.json": ["{\"permissions\": {\"allow\": [\"Bash(node:*)\"]}}"],
+    "eslint.config.js": [
+      "export default [{ ignores: [\"coverage/**\"] }, { name: \"probe\", files: [\"src/a.{js,ts}\", \"{src,test}/**/*.{ts,mts}\"], rules: { \"no-console\": [\"error\", {\"nurIn\": [\"src/a.js\"]}] } }];"
+    ],
+    ".dependency-cruiser.cjs": [
+      "module.exports = { forbidden: [{ name: \"probe\", from: { path: \"^src/\" }, to: { path: \"^(src|test)/\" } }], required: [{ name: \"pflicht\", module: { path: \"^src/a\\\\.js$\" }, to: { path: \"^src/\" } }] };"
+    ],
+    "tools/bereiche.json": ["[{\"bereich\": \"probe\", \"quellen\": [\"^src/a\\\\.(js|ts)$\"]}]"],
+    "test/werkzeuge/rotproben/probe/pruefung.json": [
+      "{\"pfade\": [\"tools/\", \"src/*.js\"], \"probe\": {\"mitnehmen\": [\"tools/gate-tests.json\"]}}"
+    ]
+  },
+  "dateien": {
+    "tools/gate-tests.json": [
+      "{\"Probe\": {\"module\": [\"src/a.js\"], \"tests\": [\"test/weg.test.js\"]}}"
+    ]
+  },
+  "erwartet": "Probe.tests: test/weg.test.js trifft keine versionierte Datei"
+}

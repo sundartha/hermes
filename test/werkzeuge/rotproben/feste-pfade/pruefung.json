@@ -1,0 +1,17 @@
+{
+  "titel": "Feste Pfade zeigen auf versionierte Dateien",
+  "pfade": [
+    "tools/feste-pfade.mjs",
+    "tools/feste-pfade/",
+    "tools/migrationen-orte.mjs",
+    "tools/ts-dateien.mjs",
+    "tools/pruefungen-messen.mjs"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"]
+  }
+}
