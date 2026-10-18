@@ -2,7 +2,15 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { terminateAndBillCall, billThunk, hangUpAction } from "../src/telephony/call-termination.js";
-import { seedCall, seedState, tempDataDir, waitUntil } from "./helpers.js";
+import {
+  callAttrappenBesitztJedenAnruf,
+  schalteNebenkanaeleAb,
+  seedCall,
+  seedState,
+  tempDataDir,
+  voiceAttrappenOhneSignatur,
+  waitUntil,
+} from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 test("hangUp wird VOLLSTAENDIG abgewartet, BEVOR bill (Buchung/Summary/SMS) angestossen wird", async () => {
@@ -175,8 +183,7 @@ let webhookEvents;
 let withConfigNamespaces;
 
 before(async () => {
-  const ohneNebenkanaele = ["PRECALL_BRIEFING", "ASSISTANT_CONTEXT", "IN_CALL_CONSULT", "CONSULT", "METRICS"];
-  for (const kanal of ohneNebenkanaele) process.env[`${kanal}_ENABLED`] = "false";
+  schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(
     seedState({
       calls: [
@@ -191,12 +198,6 @@ before(async () => {
   ({ makeCallRoutes } = await import("../src/routes/api-calls.js"));
   ({ makeVoiceRoutes } = await import("../src/routes/voice.js"));
   ({ webhookEvents } = await import("../src/telephony/registry.js"));
-});
-
-const OHNE_SPRACHAUSGABE = Object.freeze({
-  ttsStore: { takeOnce: async () => null },
-  directiveSynth: { synthesizeDirectiveAudio: async (_call, anweisungen) => anweisungen },
-  voiceRender: { followupTurnDirectives: () => [], render: () => "", sayInCallVoice: () => null, turnDirectives: () => [] },
 });
 
 function endpfadBank() {
@@ -237,15 +238,12 @@ function endpfadBank() {
   app.use(express.json());
   app.use(
     makeVoiceRoutes({
+      ...voiceAttrappenOhneSignatur(),
       store,
       config,
-      audit: () => {},
-      ...OHNE_SPRACHAUSGABE,
       lifecycle: { reattachActiveCall: async () => ({ call: null }) },
       finishCall,
       webhookEvents,
-      providerFromHeaders: () => null,
-      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
       terminateAndBillCall: gatewayMitAuflegeprotokoll,
       billThunk,
       startInboundNachlauf: () => {},
@@ -253,9 +251,9 @@ function endpfadBank() {
   );
   app.use(
     makeCallRoutes({
+      ...callAttrappenBesitztJedenAnruf(MANDANT),
       store,
       config,
-      audit: () => {},
       outboundGates: [
         {
           name: "fester-kontext",
@@ -281,11 +279,6 @@ function endpfadBank() {
       hangUpAction,
       billThunk,
       finishCall,
-      arm: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
-      tenant: { requestTenant: () => MANDANT, requireTenant: () => MANDANT, tenantOwnsCall: () => true },
-      consultDelivery: { waitForEvent: async () => ({}) },
-      internalIdentity: () => null,
-      OWNER_ID: "owner",
     }),
   );
   return { app, ablauf, abrechnungen, gewaehlt };

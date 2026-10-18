@@ -22,7 +22,18 @@ import { reattachActiveCall as reattachActiveCallCore } from "../src/telephony/r
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
-import { captureConsole, seedCall, seedState, startServer, waitForLog, waitForStoreState, waitUntil, withFetch } from "./helpers.js";
+import {
+  callAttrappenBesitztJedenAnruf,
+  captureConsole,
+  seedCall,
+  seedState,
+  startServer,
+  voiceAttrappenOhneSignatur,
+  waitForLog,
+  waitForStoreState,
+  waitUntil,
+  withFetch,
+} from "./helpers.js";
 import {
   CONV_ID,
   FIXTURE_ZEILEN,
@@ -138,17 +149,12 @@ function baueLifecycle({ harness, folge }) {
 
 function baueVoiceRoutes({ harness, lifecycle }) {
   return makeVoiceRoutes({
+    ...voiceAttrappenOhneSignatur(),
     store: harness.store,
     config: withConfigNamespaces({ skipTwilioSignatureCheck: true }),
-    audit: () => {},
-    voiceRender: { render: () => "", turnDirectives: () => [], sayInCallVoice: () => null, followupTurnDirectives: () => [] },
-    directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
-    ttsStore: { takeOnce: async () => null },
     lifecycle,
     finishCall: harness.callFinish.finishCall,
     webhookEvents: () => telnyxWebhookEvents,
-    providerFromHeaders: () => null,
-    inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
     terminateAndBillCall,
     billThunk,
     startInboundNachlauf: harness.el.startInboundNachlauf,
@@ -157,9 +163,9 @@ function baueVoiceRoutes({ harness, lifecycle }) {
 
 function baueCancelRoutes({ harness, folge }) {
   return makeCallRoutes({
+    ...callAttrappenBesitztJedenAnruf(null),
     store: harness.store,
     config: withConfigNamespaces({ multiTenant: false, elevenLabsOutbound: { enabled: false } }),
-    audit: () => {},
     outboundGates: [],
     voiceControl: () => ({
       endCall: async (sid) => folge.push(["endCall", sid]),
@@ -172,11 +178,6 @@ function baueCancelRoutes({ harness, folge }) {
     awaitAndPersistInboundElResult: harness.el.awaitAndPersistInboundElResult,
     billThunk,
     finishCall: harness.callFinish.finishCall,
-    arm: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
-    tenant: { requestTenant: () => null, requireTenant: () => null, tenantOwnsCall: () => true },
-    consultDelivery: { waitForEvent: async () => ({}) },
-    internalIdentity: () => null,
-    OWNER_ID: "owner",
   });
 }
 

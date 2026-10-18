@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { tempDataDir, seedState } from "./helpers.js";
+import { schalteNebenkanaeleAb, tempDataDir, seedState } from "./helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
@@ -20,11 +20,7 @@ let GATE_ERROR_GRUND;
 let GATE_ERROR_MESSAGE;
 
 before(async () => {
-  process.env.PRECALL_BRIEFING_ENABLED = "false";
-  process.env.ASSISTANT_CONTEXT_ENABLED = "false";
-  process.env.IN_CALL_CONSULT_ENABLED = "false";
-  process.env.CONSULT_ENABLED = "false";
-  process.env.METRICS_ENABLED = "false";
+  schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(seedState({}));
   ({ makeCallRoutes } = await import("../src/routes/api-calls.js"));
   ({ makeOutboundGates, GATE_ERROR_GRUND, GATE_ERROR_MESSAGE } = await import(

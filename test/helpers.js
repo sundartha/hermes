@@ -914,3 +914,31 @@ export async function startServer({
 
 export const GERMAN_STOPWORDS =
   /Guten Tag|Hallo|kann gerade nicht|Anruf|Gegenseite|Bitte spaeter erneut|Nachricht|Ungueltige|Anmeldung fehlgeschlagen|Sitzung abgelaufen|Grund|Besitzer|Auftrag/;
+
+const NEBENKANAELE = ["PRECALL_BRIEFING", "ASSISTANT_CONTEXT", "IN_CALL_CONSULT", "CONSULT", "METRICS"];
+
+export function schalteNebenkanaeleAb() {
+  for (const kanal of NEBENKANAELE) process.env[`${kanal}_ENABLED`] = "false";
+}
+
+export function voiceAttrappenOhneSignatur() {
+  return {
+    audit: () => {},
+    voiceRender: { render: () => "", turnDirectives: () => [], sayInCallVoice: () => null, followupTurnDirectives: () => [] },
+    directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
+    ttsStore: { takeOnce: async () => null },
+    providerFromHeaders: () => null,
+    inboundSignatureVerifier: () => ({ verifyInboundSignature: () => false }),
+  };
+}
+
+export function callAttrappenBesitztJedenAnruf(mandant) {
+  return {
+    audit: () => {},
+    arm: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
+    tenant: { requestTenant: () => mandant, requireTenant: () => mandant, tenantOwnsCall: () => true },
+    consultDelivery: { waitForEvent: async () => ({}) },
+    internalIdentity: () => null,
+    OWNER_ID: "owner",
+  };
+}
