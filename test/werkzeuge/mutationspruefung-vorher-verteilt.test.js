@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { gelesen } from "../../tools/syntaxbaum.mjs";
 import { vorherGetoetet } from "../../tools/mutationspruefung/testumbau.mjs";
-import { PLANDATEI, schneide, vereineStuecke, vorherPlan, vorherStueck } from "../../tools/mutationspruefung/vorher-verteilt.mjs";
+import { knotenIn, PLANDATEI, schneide, vereineStuecke, vorherPlan, vorherStueck } from "../../tools/mutationspruefung/vorher-verteilt.mjs";
 import { werkzeug as werkzeugAufruf } from "./mutationspruefung-probe.js";
 import { probeDirectory, probeRepository, runIn, REPO_ROOT } from "./probe-repo.js";
 
@@ -38,24 +38,14 @@ const DATEIEN = {
 };
 const AM_STUECK = 1_000_000;
 const KLEINSTE = 1;
-
-function knoten(baum) {
-  const alle = [];
-  const offen = [...baum.body];
-  while (offen.length > 0) {
-    const eintrag = offen.pop();
-    alle.push(eintrag);
-    for (const [schluessel, wert] of Object.entries(eintrag)) {
-      if (schluessel !== "loc" && schluessel !== "range") offen.push(...[wert].flat().filter((kind) => typeof kind?.type === "string" && kind.loc));
-    }
-  }
-  return alle;
-}
+const EINORDNEN_ERSTE_ZEILE = 3;
+const EINORDNEN_LETZTE_ZEILE = 7;
+const MITTEN_IN_EINORDNEN = 4;
 
 function strykerAttrappe(datei, zeilen) {
   const baum = gelesen(readFileSync(datei, "utf8"), MODUL);
   const enthalten = ({ start, end }) => zeilen.some(([von, bis]) => von <= start.line && end.line <= bis);
-  return knoten(baum)
+  return knotenIn(baum)
     .filter(({ loc }) => enthalten(loc))
     .map(({ type, loc: { start, end } }) => ({
       schluessel: `${datei}:${start.line}:${start.column} ${type}`,
@@ -97,18 +87,10 @@ test("mutationspruefung vorher verteilt: der Schnitt trennt nie eine Anweisung d
   assert.deepEqual(bereiche[0][0], 1);
   assert.equal(bereiche.at(-1)[1], RECHNEN.split("\n").length);
   bereiche.slice(1).forEach(([von], index) => assert.equal(von, bereiche[index][1] + 1));
-  for (const { loc } of knoten(baum)) {
+  for (const { loc } of knotenIn(baum)) {
     assert.ok(bereiche.some(([von, bis]) => von <= loc.start.line && loc.end.line <= bis), `Knoten ${loc.start.line}-${loc.end.line} liegt über einer Grenze`);
   }
-  assert.equal(bereiche.some(([von]) => von > 3 && von <= 7), false);
-});
-
-test("mutationspruefung vorher verteilt: ein Schnitt mitten in einer Anweisung verlöre Mutanten, die Attrappe bemerkt das", (context) => {
-  const repo = probeRepository(context, DATEIEN);
-  const datei = join(repo, "src/rechnen.js");
-  const ganz = strykerAttrappe(datei, [[1, RECHNEN.split("\n").length]]);
-  const zerschnitten = [...strykerAttrappe(datei, [[1, 4]]), ...strykerAttrappe(datei, [[5, RECHNEN.split("\n").length]])];
-  assert.ok(zerschnitten.length < ganz.length);
+  assert.equal(bereiche.some(([von]) => von > EINORDNEN_ERSTE_ZEILE && von <= EINORDNEN_LETZTE_ZEILE), false);
 });
 
 test("mutationspruefung vorher verteilt: die vereinten Stücke töten genau die Mutanten, die die Vorher-Seite am Stück tötet", async (context) => {
@@ -126,6 +108,10 @@ test("mutationspruefung vorher verteilt: die vereinten Stücke töten genau die 
   assert.deepEqual(geteilt.vereint.tests, amStueck.tests);
   const mutanten = (vereint) => vereint.stuecke.reduce((summe, { anzahl }) => summe + anzahl, 0);
   assert.equal(mutanten(geteilt.vereint), mutanten(ganz.vereint));
+  const datei = join(repo, "src/rechnen.js");
+  const ende = RECHNEN.split("\n").length;
+  const zerschnitten = [...strykerAttrappe(datei, [[1, MITTEN_IN_EINORDNEN]]), ...strykerAttrappe(datei, [[MITTEN_IN_EINORDNEN + 1, ende]])];
+  assert.ok(zerschnitten.length < strykerAttrappe(datei, [[1, ende]]).length);
 });
 
 test("mutationspruefung vorher verteilt: ein fehlendes, doppeltes oder fremdes Stück ist ein Fehler, kein stilles Grün", async (context) => {
