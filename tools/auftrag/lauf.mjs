@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
@@ -10,6 +9,7 @@ import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
+import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
@@ -24,7 +24,6 @@ import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
-import { ISSUE_QUERY, issueApproval, listHint } from "../testschutz/freigabe.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
@@ -432,24 +431,6 @@ function entschiedenerAlterTest(pfad) {
 function entschiedeneAlteTests({ phase, auftrag, root }) {
   const dateien = belegeDesAuftrags(root, phase.phase, auftrag.id).map(entschiedenerAlterTest);
   return [...new Set(dateien.filter((datei) => datei !== null))].sort();
-}
-
-function phasenIssue(nummer, root) {
-  const befehl = ["api", "graphql", "-f", `query=${ISSUE_QUERY}`, "-F", "owner={owner}", "-F", "name={repo}", "-F", `number=${nummer}`];
-  const antwort = spawnSync(env.HERMES_GH ?? "gh", befehl, { cwd: root, encoding: "utf8", env });
-  try {
-    const { data } = JSON.parse(antwort.stdout);
-    return data.repository.issue ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function freigabeProblem(issue, datei) {
-  if (issue === null) return "gh lieferte kein lesbares Issue";
-  const { problem, names } = issueApproval(issue);
-  if (problem !== undefined) return problem;
-  return names.includes(datei) ? null : `${datei} steht nicht als eigener Listenpunkt ${listHint()}`;
 }
 
 function freigabe(kontext) {
