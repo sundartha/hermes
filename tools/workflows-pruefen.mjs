@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   SECRETS_PATTERN,
+  WORKFLOW_RUN_PATTERN,
   indentOf,
   isContentLine,
   structureRules,
@@ -11,11 +12,17 @@ import {
 } from "./workflows-pruefen/struktur.mjs";
 
 const DEFAULT_WORKFLOW_DIR = ".github/workflows";
+const DEFAULT_ACTIONS_DIR = ".github/actions";
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PULL_REQUEST_TARGET_PATTERN = /\bpull_request_target\b/;
 const USES_REFERENCE_PATTERN = /\buses:\s*["']?([^\s"'#]+)/;
 const COMMIT_SHA_REFERENCE_PATTERN = /@[0-9a-f]{40}$/;
 const LOCAL_WORKFLOW_PATTERN = /^\.\/\.github\/workflows\/([\w.-]+\.ya?ml)$/;
+const LOCAL_ACTION_PATTERN = /^\.\/\.github\/actions\/(\w[\w.-]*)$/;
+const ACTION_FILE_NAME = "action.yml";
+const ACTION_USING_PATTERN = /(?:^|[\s{,])["']?using["']?\s*:\s*["']?([\w-]*)/;
+const COMPOSITE = "composite";
+const COMPOSITE_ONLY = "lokale Actions nur mit runs.using: composite";
 const NPM_CI_PATTERN = /\bnpm\s+ci\b/;
 const STEP_NAME_PATTERN = /^\s*(?:-\s+)?name\s*:/;
 const IGNORE_SCRIPTS_PATTERN = /--ignore-scripts(?:=true)?(?=\s|$)/;
@@ -40,13 +47,22 @@ function pullRequestTarget(line) {
   return "pull_request_target ist als Auslöser verboten";
 }
 
-function actionWithoutCommitSha(workflowDir) {
+function localActionFinding(reference, { actionsDir, localActionsAllowed }) {
+  const action = LOCAL_ACTION_PATTERN.exec(reference)?.[1];
+  if (action === undefined || !existsSync(join(actionsDir, action, ACTION_FILE_NAME))) {
+    return `${reference} ist nicht per 40-stelliger Commit-SHA eingebunden`;
+  }
+  if (localActionsAllowed) return undefined;
+  return `${reference}: lokale Actions nur in Workflows außerhalb von ${SECRET_WORKFLOWS_NAME} und ohne workflow_run`;
+}
+
+function actionWithoutCommitSha({ workflowDir, actionsDir }, localActionsAllowed) {
   return (line) => {
     const reference = USES_REFERENCE_PATTERN.exec(line)?.[1];
     if (reference === undefined || COMMIT_SHA_REFERENCE_PATTERN.test(reference)) return undefined;
     const local = LOCAL_WORKFLOW_PATTERN.exec(reference)?.[1];
     if (local !== undefined && existsSync(join(workflowDir, local))) return undefined;
-    return `${reference} ist nicht per 40-stelliger Commit-SHA eingebunden`;
+    return localActionFinding(reference, { actionsDir, localActionsAllowed });
   };
 }
 
@@ -98,12 +114,16 @@ function runsForPullRequests(lines) {
   return section === undefined || PULL_REQUEST_TRIGGER_PATTERN.test(section);
 }
 
-function lineRulesFor(filePath, lines) {
-  const listed = SECRET_WORKFLOWS.includes(basename(filePath));
+function startsByWorkflowRun(lines) {
+  return WORKFLOW_RUN_PATTERN.test(triggerSection(lines) ?? "");
+}
+
+function lineRulesFor(lines, { listed, directories }) {
   const pullRequestRules = runsForPullRequests(lines) ? [secretsInPullRequestWorkflow] : [];
+  const localActionsAllowed = !listed && !startsByWorkflowRun(lines);
   const rules = [
     ...LINE_RULES,
-    actionWithoutCommitSha(dirname(filePath)),
+    actionWithoutCommitSha(directories, localActionsAllowed),
     ...pullRequestRules,
     ...structureRules(lines, { listed }),
   ];
@@ -111,14 +131,35 @@ function lineRulesFor(filePath, lines) {
   return [...rules, secretsOutsideList, productionEnvironmentOutsideList, environmentOutsideList];
 }
 
-function findingsInFile({ filePath, lines }) {
-  const rules = lineRulesFor(filePath, lines);
-  return lines.flatMap((line, index) =>
-    rules
-      .map((rule) => rule(line, index, lines))
-      .filter(Boolean)
-      .map((finding) => `${filePath}:${index + 1}: ${finding}`),
-  );
+function listedWorkflow(filePath) {
+  return SECRET_WORKFLOWS.includes(basename(filePath));
+}
+
+function neverListed() {
+  return false;
+}
+
+function compositeOnly(line, index, lines) {
+  const runsUsing = ACTION_USING_PATTERN.exec(line)?.[1];
+  if (runsUsing !== undefined && runsUsing !== COMPOSITE) return COMPOSITE_ONLY;
+  if (index > 0) return undefined;
+  const composite = lines.some((other) => ACTION_USING_PATTERN.exec(other)?.[1] === COMPOSITE);
+  return composite ? undefined : COMPOSITE_ONLY;
+}
+
+function findingsInFile(directories, isListed, extraRules = []) {
+  return ({ filePath, lines }) => {
+    const rules = [
+      ...lineRulesFor(lines, { listed: isListed(filePath), directories }),
+      ...extraRules,
+    ];
+    return lines.flatMap((line, index) =>
+      rules
+        .map((rule) => rule(line, index, lines))
+        .filter(Boolean)
+        .map((finding) => `${filePath}:${index + 1}: ${finding}`),
+    );
+  };
 }
 
 function readWorkflow(filePath) {
@@ -132,8 +173,24 @@ function workflowFiles(workflowDir) {
   return paths.sort().map(readWorkflow);
 }
 
-const [, , workflowDir = DEFAULT_WORKFLOW_DIR] = process.argv;
+function actionFiles(actionsDir) {
+  if (!existsSync(actionsDir)) return [];
+  const paths = readdirSync(actionsDir).map((name) => join(actionsDir, name, ACTION_FILE_NAME));
+  return paths
+    .filter((filePath) => existsSync(filePath))
+    .sort()
+    .map(readWorkflow);
+}
+
+const [, , workflowDir = DEFAULT_WORKFLOW_DIR, actionsDir = DEFAULT_ACTIONS_DIR] = process.argv;
+const directories = { workflowDir, actionsDir };
 const workflows = workflowFiles(workflowDir);
-const findings = [...workflows.flatMap(findingsInFile), ...workflowNameFindings(workflows)];
+const findings = [
+  ...workflows.flatMap(findingsInFile(directories, listedWorkflow)),
+  ...actionFiles(directories.actionsDir).flatMap(
+    findingsInFile(directories, neverListed, [compositeOnly]),
+  ),
+  ...workflowNameFindings(workflows),
+];
 for (const finding of findings) console.error(finding);
 if (findings.length > 0) process.exitCode = 1;
