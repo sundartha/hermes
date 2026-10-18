@@ -59,6 +59,22 @@ test("ein Adapter ohne Eintrag in der Anzeigenamen-Karte wird gemeldet", (contex
   assert.ok(meldung.startsWith(`${SUCH_ORDNER}/neuer-anbieter.js:1 `), meldung);
 });
 
+for (const endung of [".ts", ".mts", ".cts"]) {
+  test(`ein Adapter mit Endung ${endung} wird wie .js gegen Karte und Datenschutzerklaerung geprueft`, (context) => {
+    const ohneKarte = einzigeMeldung(context, {
+      adapter: [`${SPRACHMODELL_ORDNER}/anthropic.js`, `${SUCH_ORDNER}/neuer-anbieter${endung}`],
+      anbieterImText: ["Anthropic"],
+    });
+    assert.ok(ohneKarte.startsWith(`${SUCH_ORDNER}/neuer-anbieter${endung}:1 `), ohneKarte);
+    const ohneNennung = einzigeMeldung(context, {
+      adapter: [`${SPRACHMODELL_ORDNER}/deepseek${endung}`, `${SUCH_ORDNER}/exa-search.js`],
+      anbieterImText: ["Exa"],
+    });
+    assert.ok(ohneNennung.startsWith(`${SPRACHMODELL_ORDNER}/deepseek${endung}:1 `), ohneNennung);
+    assert.ok(ohneNennung.includes("DeepSeek"), ohneNennung);
+  });
+}
+
 test("eine Mini-Wurzel, deren Datenschutzerklaerung alle Anbieter nennt, besteht ohne Meldung", (context) => {
   const wurzel = miniWurzel(context, {
     adapter: [`${SPRACHMODELL_ORDNER}/anthropic.js`, `${SUCH_ORDNER}/exa-search.js`],

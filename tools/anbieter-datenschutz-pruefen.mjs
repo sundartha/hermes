@@ -11,16 +11,16 @@ const AUFRUF_HINWEIS = "Aufruf: node tools/anbieter-datenschutz-pruefen.mjs [--w
 const STANDARD_WURZEL = new URL("..", import.meta.url);
 const DATENSCHUTZ_DATEI = "apps/web/src/data/legal/privacy.de.json";
 const ADAPTER_ORDNER = Object.freeze(["src/llm/adapters/", "src/research/adapters/"]);
-const ADAPTER_ENDUNG = ".js";
+const ADAPTER_DATEI = /\.[cm]?[jt]s$/;
 const TEXT_TRENNER = "\n";
 const WORT_ZEICHEN_AM_ENDE = /[\p{L}\p{M}\p{N}]$/u;
 const WORT_ZEICHEN_AM_ANFANG = /^[\p{L}\p{M}\p{N}]/u;
 
 const ANBIETER_ANZEIGENAMEN = new Map([
-  ["anthropic.js", "Anthropic"],
-  ["deepseek.js", "DeepSeek"],
-  ["anthropic-web-search.js", "Anthropic"],
-  ["exa-search.js", "Exa"],
+  ["anthropic", "Anthropic"],
+  ["deepseek", "DeepSeek"],
+  ["anthropic-web-search", "Anthropic"],
+  ["exa-search", "Exa"],
 ]);
 
 const ORDNER_FEHLT = "Adapter-Ordner fehlt";
@@ -48,9 +48,9 @@ function adapterImOrdner(wurzel, ordner) {
   const ort = new URL(ordner, wurzel);
   if (!existsSync(ort)) return { fehlt: true, dateien: [] };
   const dateien = readdirSync(ort)
-    .filter((name) => name.endsWith(ADAPTER_ENDUNG))
+    .filter((name) => ADAPTER_DATEI.test(name))
     .sort()
-    .map((name) => ({ pfad: `${ordner}${name}`, name }));
+    .map((name) => ({ pfad: `${ordner}${name}`, name: name.replace(ADAPTER_DATEI, "") }));
   return { fehlt: false, dateien };
 }
 
