@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -73,6 +73,27 @@ test("ausmisten-lokal: mit --alle bleibt ein abgebrochener Branch-Schritt rot, a
     chmodSync(altesArtefakt, LESEN_SCHREIBEN),
   );
   assert.match(zweiter.ausgabe, /Lokal: rot in Paket 0; weiter wegen --alle\./);
+  assert.equal(zweiter.status, EXIT_ROT, zweiter.ausgabe);
+});
+
+const ZUSATZ = "src/zzz/zusatz.js";
+
+test("ausmisten-lokal: ein liegengebliebenes Artefakt mit anderen Dateien als geplant macht lokal rot", async (context) => {
+  const repo = lokalesRepo(context, [DOPPELT]);
+  const erster = await lokal(context, repo);
+  assert.equal(erster.status, EXIT_GRUEN, erster.ausgabe);
+  const ordner = join(erster.aus, "branch-0");
+  const alt = artefakt(erster.aus, "branch-0");
+  const anders = { ...alt, dateien: [...alt.dateien, ZUSATZ] };
+  writeFileSync(join(ordner, "branch-0.json"), JSON.stringify(anders));
+  chmodSync(ordner, NUR_LESEN);
+  const zweiter = await lokal(context, repo, ["--alle", "--aus", erster.aus]).finally(() =>
+    chmodSync(ordner, LESEN_SCHREIBEN),
+  );
+  assert.match(
+    zweiter.ausgabe,
+    /Verstoß: Artefakt branch-0 hat andere Dateien gemessen als geplant/,
+  );
   assert.equal(zweiter.status, EXIT_ROT, zweiter.ausgabe);
 });
 
