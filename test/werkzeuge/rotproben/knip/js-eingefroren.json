@@ -1,0 +1,19 @@
+{
+  "titel": "Neue ungenutzte .js-Datei wird in die Basislinie geschrieben",
+  "vorher": {
+    "package.json": ["{ \"name\": \"rotprobe\", \"type\": \"module\" }"],
+    "src/server.js": ["export const start = true;"],
+    "tools/basis/knip.json": ["{", "  \"befunde\": []", "}"]
+  },
+  "dateien": {
+    "src/unbenutzt.js": ["export const wert = true;"],
+    "tools/basis/knip.json": [
+      "{",
+      "  \"befunde\": [",
+      "    \"files|src/unbenutzt.js|src/unbenutzt.js\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "erwartet": "stehen nicht auf der Basis HEAD~1"
+}

@@ -1,0 +1,7 @@
+{
+  "titel": "Platzhalter ohne Dollarzeichen in einer neuen .ts-Datei",
+  "dateien": {
+    "src/gruss.ts": ["export const gruss = (name: string): string => `Hallo {name}`;"]
+  },
+  "erwartet": "missing-template-string-indicator"
+}

@@ -1,0 +1,9 @@
+{
+  "titel": "Neue .ts-Datei, die niemand importiert",
+  "dateien": {
+    "package.json": ["{ \"name\": \"rotprobe\", \"type\": \"module\" }"],
+    "src/server.js": ["export const start = true;"],
+    "src/unbenutzt.ts": ["export const wert: boolean = true;"]
+  },
+  "erwartet": "src/unbenutzt.ts"
+}

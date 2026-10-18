@@ -3,7 +3,10 @@
   "pfade": [
     "tools/basis-vergleich.mjs",
     "tools/basis/semgrep-regeln.json",
-    "tools/basis/semgrep.json"
+    "tools/basis/semgrep.json",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/bestand-rueckfuehrung.mjs"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep"],
@@ -20,7 +23,7 @@
   },
   "probe": {
     "mitnehmen": ["tools/basis/semgrep-regeln.json", "tools/basis/semgrep.json"],
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep"]
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep", "--basis", "HEAD~1"]
   },
   "benoetigt": "semgrep"
 }

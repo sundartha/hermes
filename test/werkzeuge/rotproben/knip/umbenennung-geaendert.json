@@ -1,0 +1,38 @@
+{
+  "titel": "Umbenennung .js→.ts ändert den Code, der Eintrag der Basislinie wandert mit",
+  "vorher": {
+    "package.json": ["{ \"name\": \"rotprobe\", \"type\": \"module\" }"],
+    "src/server.js": ["import { genutzt } from \"./teil.js\";", "console.log(genutzt);"],
+    "src/teil.js": [
+      "export const genutzt = 1;",
+      "export function alt(wert) {",
+      "  return wert + 1;",
+      "}"
+    ],
+    "tools/basis/knip.json": [
+      "{",
+      "  \"befunde\": [",
+      "    \"exports|src/teil.js|alt\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "loeschen": ["src/teil.js"],
+  "dateien": {
+    "src/server.js": ["import { genutzt } from \"./teil.ts\";", "console.log(genutzt);"],
+    "src/teil.ts": [
+      "export const genutzt = 1;",
+      "export function alt(wert: number): number {",
+      "  return wert + 2;",
+      "}"
+    ],
+    "tools/basis/knip.json": [
+      "{",
+      "  \"befunde\": [",
+      "    \"exports|src/teil.ts|alt\"",
+      "  ]",
+      "}"
+    ]
+  },
+  "erwartet": "stehen nicht auf der Basis HEAD~1"
+}
