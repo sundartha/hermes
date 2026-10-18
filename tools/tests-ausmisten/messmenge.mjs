@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -7,10 +6,16 @@ import { chdir, cwd } from "node:process";
 import { cruise } from "dependency-cruiser";
 
 import { dynamischeZiele, syntaxknoten } from "./importe.mjs";
-import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
+import {
+  QUELLDATEI,
+  git,
+  gitGelingt,
+  gitLauf,
+  quellenDesBereichs,
+  testpfadFrei,
+} from "./pfade.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
-const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
 const TESTHILFE = /^test\//;
 const WURZELN = ["src", "test"];
@@ -22,7 +27,6 @@ const WERKZEUG_DATEI_IN_TEXT =
   /(?:^|[^\w-])((?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|mts|cts|ts|sh|json))\b/g;
 const SKRIPT = /\.[cm]?[jt]s$/;
 const EIGENES_MODUL = /^(?:src|test)\/.+\.[cm]?[jt]s$/;
-const MAX_GIT_AUSGABE = 268_435_456;
 
 export async function importgraph() {
   const { output } = await cruise(WURZELN, OPTIONEN);
@@ -72,19 +76,7 @@ export function erreichendeTests(datei, graph) {
 function erwaehnende(namen, rev) {
   if (namen.length === 0) return [];
   const muster = [...new Set(namen)].flatMap((name) => ["-e", name]);
-  const args = [
-    "-c",
-    "core.quotePath=false",
-    "grep",
-    "-l",
-    "-z",
-    "-F",
-    ...muster,
-    rev,
-    "--",
-    "test/",
-  ];
-  const lauf = spawnSync("git", args, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
+  const lauf = gitLauf(["grep", "-l", "-z", "-F", ...muster, rev, "--", "test/"]);
   if (lauf.status === KEIN_TREFFER) return [];
   if (lauf.status !== 0) throw new Error(`git grep in ${rev}: ${lauf.stderr.trim()}`);
   const eintraege = lauf.stdout.split("\0").filter(Boolean);
@@ -123,10 +115,7 @@ function direkteQuellen(startpfade, graph) {
 }
 
 function inhaltIm(rev, pfad) {
-  const lauf = spawnSync("git", ["show", `${rev}:${pfad}`], {
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_AUSGABE,
-  });
+  const lauf = gitLauf(["show", `${rev}:${pfad}`]);
   return lauf.status === 0 ? lauf.stdout : "";
 }
 
