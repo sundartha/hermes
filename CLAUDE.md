@@ -33,7 +33,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    Die pro-Tenant-Kostendecke sperrt weiterhin BEIDE Richtungen, Inbound eingeschlossen.
    Ohne dieses Gate kann eingehender Verkehr die Tenant-Decke unbegrenzt ueberziehen.
    Nicht ohne ausdrueckliche Owner-Entscheidung anfassen.
-2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt
+2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (Wortlaut aus `LOCALES.<lang>.disclosure`, vor dem ElevenLabs-Anrufstart geprueft in `src/elevenlabs/convai.js`) bleibt
    fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
    **Owner-Entscheidung 2026-08-20 (OC): der Offenlegungssatz entfaellt bei einem Anruf an die eigene
    hinterlegte Nummer des anrufenden Tenants — und NUR dort; die KI-Kennzeichnung entfaellt dabei NICHT.**
