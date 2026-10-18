@@ -123,7 +123,7 @@ test("eine Anordnung ist belegt, wenn das Zitat mit beliebigem Leerraum im Issue
 
 test("nur BLOCKER ohne Sicherheitsmerker mit einer Umgehung werden belegt", (context) => {
   const { umgebung, shas } = lage(context, [{ "src/neu.js": NACHBAU }]);
-  const ohneBeleg = [befund({ schwere: "SOLLTE" }), { sicherheit: true, schwere: "BLOCKER" }, befund({ umgehung: undefined })];
+  const ohneBeleg = [befund({ schwere: "SOLLTE" }), { sicherheit: true, schwere: "BLOCKER" }, befund({ sicherheit: true }), befund({ umgehung: undefined })];
   const [commit] = belegeUmgehungen([{ sha: shas[0], befunde: ohneBeleg }], umgebung);
   assert.deepEqual(commit.befunde, ohneBeleg);
 });
