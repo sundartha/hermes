@@ -51,13 +51,14 @@ function erfasse(quelle, knoten) {
   const [erstes] = knoten.arguments;
   const vorfahren = quelle
     .getAncestors(knoten)
-    .filter((vorfahr) => vorfahr.type === "CallExpression" && istTestaufruf(vorfahr));
+    .filter((vorfahr) => vorfahr.type === "CallExpression" && istTestaufruf(vorfahr))
+    .map((vorfahr) => namensmuster(vorfahr.arguments[0]));
   return {
     name: festerText(erstes),
     text: erstes === undefined ? "" : quelle.getText(erstes),
-    vorfahren: vorfahren.map((vorfahr) => festerText(vorfahr.arguments[0])).filter((name) => name !== undefined),
+    vorfahren,
     bezeichnung: bezeichnung(quelle, erstes),
-    muster: [knoten, ...vorfahren].map((aufruf) => namensmuster(aufruf.arguments[0])),
+    muster: [namensmuster(erstes), ...vorfahren],
     von: knoten.loc.start.line,
     bis: knoten.loc.end.line,
     ...aufrufstelle(knoten),
