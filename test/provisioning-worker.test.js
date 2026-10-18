@@ -116,6 +116,23 @@ test("Idempotenz: doppeltes enqueue = ein Job; zweiter drain ist No-op (kein Dop
   assert.equal(s.provisioningJobs.length, 1, "nur ein persistenter Job-Record");
 });
 
+const KEIN_TEXT = 7;
+
+test("Queue: enqueue ohne, mit leerem oder mit nicht-textlichem idempotencyKey wird abgewiesen statt still verworfen", async () => {
+  const queue = makeMemoryQueue();
+  const ohneSchluessel = { kind: PROVISION_NUMBER_JOB, payload: { numberId: "num_a" } };
+  const abgewiesen = { name: "TypeError", message: /idempotencyKey/ };
+  assert.throws(() => queue.enqueue(ohneSchluessel), abgewiesen);
+  assert.throws(() => queue.enqueue({ ...ohneSchluessel, idempotencyKey: "" }), abgewiesen);
+  assert.throws(() => queue.enqueue({ ...ohneSchluessel, idempotencyKey: KEIN_TEXT }), abgewiesen);
+
+  const jobId = queue.enqueue({ ...ohneSchluessel, idempotencyKey: "provision_num_a" });
+  const verarbeitet = [];
+  await queue.drain((job) => verarbeitet.push(job.id));
+  assert.deepEqual(verarbeitet, [jobId], "nur der Job mit Schluessel liegt in der Queue");
+  assert.match(jobId, /^job_[0-9a-z]+$/, "Kennung: Praefix job_ und Suffix ohne Punkt");
+});
+
 test("Fehler -> Rollback im Worker: captureHold wirft -> released, cancelHold, Job 'failed'", async () => {
   const { s, numberId } = seedRequested();
   const queue = makeMemoryQueue();
