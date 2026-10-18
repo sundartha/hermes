@@ -1,0 +1,11 @@
+{
+  "titel": "Neue Funktion mit einer Zahl ohne Namen in einer .ts-Datei",
+  "dateien": {
+    "src/rotprobe.ts": [
+      "export function verdoppelt(wert: number): number {",
+      "  return wert * 42;",
+      "}"
+    ]
+  },
+  "erwartet": "src/rotprobe.ts:2 no-magic-numbers: No magic number: 42"
+}

@@ -1,0 +1,27 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen, die Funktion mit dem Altbefund bleibt unverändert",
+  "vorher": {
+    "src/probe/rechnen.js": [
+      "export function alt(wert) {",
+      "  return wert * 42;",
+      "}",
+      "",
+      "export function sauber(wert) {",
+      "  return wert + 1;",
+      "}"
+    ]
+  },
+  "loeschen": ["src/probe/rechnen.js"],
+  "dateien": {
+    "src/probe/rechnen.ts": [
+      "export function alt(wert) {",
+      "  return wert * 42;",
+      "}",
+      "",
+      "export function sauber(wert: number): number {",
+      "  return wert + 1;",
+      "}"
+    ]
+  },
+  "erwartet": "no-magic-numbers"
+}

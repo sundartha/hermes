@@ -3,7 +3,9 @@
   "pfade": [
     "tools/lint-neue-funktionen.mjs",
     "tools/pr-aenderungen.mjs",
-    "tools/eslint-rules/"
+    "tools/eslint-rules/",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs"
   ],
   "probe": {
     "mitnehmen": [
@@ -15,7 +17,8 @@
       "tools/eslint-rules/kein-quelltext-als-text.js",
       "tools/eslint-rules/pfad-falten.js",
       "tools/eslint-rules/namen-ohne-begruendung.js",
-      "tools/eslint-rules/knoten.js"
+      "tools/eslint-rules/knoten.js",
+      "tsconfig.json"
     ],
     "befehl": [
       "node",
