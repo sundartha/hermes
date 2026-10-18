@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { exitCodes } from "./auftrag-lauf-hilfen.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -151,10 +152,6 @@ function starte(context, drehbuch) {
 
 function agentenMit(beleg, rolle) {
   return beleg.agenten.filter((agent) => agent.rolle === rolle);
-}
-
-function exitCodes(beleg, name) {
-  return beleg.pruefungen.filter((eintrag) => eintrag.name === name).map(({ exitCode }) => exitCode);
 }
 
 function lesePrompt(werkzeug, nummer) {

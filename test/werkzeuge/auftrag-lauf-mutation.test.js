@@ -3,13 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ABSATZ_MUTATION, ehrlicheNachrunde, funktion, GLEICHWERTIG_MIT_GRUND, MIT_MUTATION, MIT_SIEBEN, mitSieben, NEU_MUTANT, NOETIG, NOETIG_GRUND, pruefeGesichert, pruefung, ROTER_TEST, SIEBEN_TEST } from "./auftrag-lauf-hilfen.js";
+import { ABSATZ_MUTATION, ehrlicheNachrunde, exitCodes, funktion, GLEICHWERTIG_MIT_GRUND, MIT_MUTATION, MIT_SIEBEN, mitSieben, NEU_MUTANT, NOETIG, NOETIG_GRUND, pruefeGesichert, pruefung, ROTER_TEST, SIEBEN_TEST } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
-
-function mutationslaeufe(beleg) {
-  return beleg.pruefungen.filter(({ name }) => name === "mutation").map(({ exitCode }) => exitCode);
-}
 
 test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung, sonst ergänzt der Test-Agent", (context) => {
   const faelle = [
@@ -21,7 +17,7 @@ test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung
     const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_MUTATION });
     assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
     assert.deepEqual([pruefung(beleg, "mutation"), pruefung(beleg, letzte)], [EXIT_ROT, 0]);
-    assert.deepEqual(mutationslaeufe(beleg), [EXIT_ROT]);
+    assert.deepEqual(exitCodes(beleg, "mutation"), [EXIT_ROT]);
     const [ersterBau, nachrunde] = beleg.agenten.filter(({ rolle }) => rolle === "bau");
     assert.equal(nachrunde.sitzung, ersterBau.sitzung);
     assert.match(readFileSync(join(werkzeug, "prompt-bau-nachrunde.txt"), "utf8"), /src\/rechnen\.js:2:7/);
@@ -74,7 +70,7 @@ test("bricht die Mutationsprüfung einmal ab, wiederholt der Lauf nur diesen Sch
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
   const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": einmalAbbrechen } });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.deepEqual(mutationslaeufe(beleg), [2, 0]);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [2, 0]);
   assert.deepEqual(beleg.agenten.map(({ rolle }) => rolle), ["test", "bau"]);
 });
 
@@ -83,7 +79,7 @@ test("bricht die Mutationsprüfung auch in der Wiederholung ab, hält der Auftra
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
   const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": immerAbbrechen } });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.deepEqual(mutationslaeufe(beleg), [2, 2]);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [2, 2]);
   assert.equal(beleg.runde, 1);
   assert.ok(beleg.entscheidung.text.startsWith("## Entscheidung nötig\n"), beleg.entscheidung.text);
   assert.ok(beleg.entscheidung.text.includes("Ein Werkzeug ist 2-mal abgebrochen"), beleg.entscheidung.text);

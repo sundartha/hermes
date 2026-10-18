@@ -58,6 +58,10 @@ export function pruefung(beleg, name) {
   return beleg.pruefungen.findLast((eintrag) => eintrag.name === name)?.exitCode;
 }
 
+export function exitCodes(beleg, name) {
+  return beleg.pruefungen.filter((eintrag) => eintrag.name === name).map(({ exitCode }) => exitCode);
+}
+
 const PATCH = ".git/auftrag-umbau/probe/A1.patch";
 export const NOETIG_GRUND = "eine Sieben sonst verdoppelt würde";
 export const NOETIG = `Nötig: ${NEU_MUTANT}, weil ${NOETIG_GRUND}`;
