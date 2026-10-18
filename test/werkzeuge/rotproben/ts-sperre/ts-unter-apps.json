@@ -3,5 +3,5 @@
   "dateien": {
     "apps/web/c.ts": ["export const neu = 1;"]
   },
-  "erwartet": "apps/web/c.ts: TypeScript-Datei vor S71g"
+  "erwartet": "apps/web/c.ts: TypeScript-Datei"
 }

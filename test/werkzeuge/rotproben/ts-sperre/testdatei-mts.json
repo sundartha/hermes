@@ -1,0 +1,7 @@
+{
+  "titel": "Neue Testdatei mit .test.mts, die der Testläufer nicht startet",
+  "dateien": {
+    "test/probe.test.mts": ["export const neu = 1;"]
+  },
+  "erwartet": "test/probe.test.mts: TypeScript-"
+}

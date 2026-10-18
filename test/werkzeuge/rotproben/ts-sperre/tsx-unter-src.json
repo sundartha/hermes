@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .tsx-Datei unter src, die ESLint nicht sieht",
+  "dateien": {
+    "src/probe/probe.tsx": ["export const neu = 1;"]
+  },
+  "erwartet": "src/probe/probe.tsx: TypeScript-Datei"
+}

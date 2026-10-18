@@ -1,5 +1,5 @@
 {
-  "titel": "Neue .ts-Datei unter src",
+  "titel": "Neue .ts-Datei unter src, die ESLint und tsc sehen",
   "dateien": {
     "src/probe/probe.ts": ["export const neu = 1;"]
   },

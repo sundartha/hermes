@@ -1,6 +1,12 @@
 {
-  "titel": "TypeScript-Sperre bis S71g und fester Bestand",
-  "pfade": ["tools/ts-sperre.mjs", "tools/basis/ts-bestand.json"],
+  "titel": "TypeScript nur, wo ESLint und tsc es sehen, und fester Bestand",
+  "pfade": [
+    "tools/ts-sperre.mjs",
+    "tools/ts-dateien.mjs",
+    "tools/basis/ts-bestand.json",
+    "eslint.config.*",
+    "tsconfig.json"
+  ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/ts-sperre.mjs"],
     "zaehlen": "stderr-zeilen"
@@ -11,7 +17,19 @@
     "zaehlen": "anzahl"
   },
   "probe": {
-    "mitnehmen": ["tools/basis/ts-bestand.json"],
+    "mitnehmen": [
+      "tools/basis/ts-bestand.json",
+      "eslint.config.js",
+      "src/store.js",
+      "tsconfig.json",
+      "tools/eslint-rules/index.js",
+      "tools/eslint-rules/bestand.js",
+      "tools/eslint-rules/keine-kommentare.js",
+      "tools/eslint-rules/kein-quelltext-als-text.js",
+      "tools/eslint-rules/pfad-falten.js",
+      "tools/eslint-rules/namen-ohne-begruendung.js",
+      "tools/eslint-rules/knoten.js"
+    ],
     "befehl": ["node", "{wurzel}/tools/ts-sperre.mjs", "--basis", "HEAD~1"]
   }
 }

@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .ts-Datei in einem Ordner, den ESLint ausnimmt",
+  "dateien": {
+    "src/out/probe.ts": ["export const neu = 1;"]
+  },
+  "erwartet": "src/out/probe.ts: TypeScript-"
+}
