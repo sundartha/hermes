@@ -1,0 +1,21 @@
+{
+  "titel": "Neuer Test importiert ein internes .ts-Modul ohne Umbenennung",
+  "vorher": {
+    "src/store/intern.js": ["export const wert = 1;"],
+    "test/anrufe/anruf-starten.test.js": [
+      "import { wert } from \"../../src/store/intern.js\";",
+      "export const genutzt = wert;"
+    ],
+    "tools/basis/test-importe.json": [
+      "[{\"type\": \"dependency\", \"from\": \"test/anrufe/anruf-starten.test.js\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"tests-nur-ueber-eingaenge\"}}]"
+    ]
+  },
+  "dateien": {
+    "src/store/neu.ts": ["export const wert: number = 1;"],
+    "test/anrufe/neu.test.js": [
+      "import { wert } from \"../../src/store/neu.ts\";",
+      "export const genutzt = wert;"
+    ]
+  },
+  "erwartet": "„tests-nur-ueber-eingaenge“"
+}

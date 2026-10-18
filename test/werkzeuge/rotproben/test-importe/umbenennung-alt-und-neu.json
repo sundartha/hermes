@@ -1,0 +1,25 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen, eingefrorener Testimport unter altem und neuem Pfad",
+  "vorher": {
+    "src/store/intern.js": ["export const wert = 1;"],
+    "test/anrufe/anruf-starten.test.js": [
+      "import { wert } from \"../../src/store/intern.js\";",
+      "export const genutzt = wert;"
+    ],
+    "tools/basis/test-importe.json": [
+      "[{\"type\": \"dependency\", \"from\": \"test/anrufe/anruf-starten.test.js\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"tests-nur-ueber-eingaenge\"}}]"
+    ]
+  },
+  "loeschen": ["src/store/intern.js"],
+  "dateien": {
+    "src/store/intern.ts": ["export const wert: number = 1;"],
+    "test/anrufe/anruf-starten.test.js": [
+      "import { wert } from \"../../src/store/intern.ts\";",
+      "export const genutzt = wert;"
+    ],
+    "tools/basis/test-importe.json": [
+      "[{\"type\": \"dependency\", \"from\": \"test/anrufe/anruf-starten.test.js\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"tests-nur-ueber-eingaenge\"}}, {\"type\": \"dependency\", \"from\": \"test/anrufe/anruf-starten.test.js\", \"to\": \"src/store/intern.ts\", \"rule\": {\"severity\": \"error\", \"name\": \"tests-nur-ueber-eingaenge\"}}]"
+    ]
+  },
+  "erwartet": "neu eingefroren ist: test/anrufe/anruf-starten.test.js → src/store/intern.ts"
+}
