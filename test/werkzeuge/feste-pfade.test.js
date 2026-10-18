@@ -284,6 +284,12 @@ test("feste-pfade: nur ein TypeScript-Muster unter einem geprüften Ordner darf 
     runInNewRepo(context, { "eslint.config.js": eslintConfig(["lib/**/*.ts"]) }),
     `lib/**/*.ts ${MISSING}`,
   );
+  for (const pattern of ["src/*.ts", "src/*.d.ts"]) {
+    assertRed(
+      runInNewRepo(context, { "eslint.config.js": eslintConfig([pattern]) }),
+      `${pattern} ${MISSING}`,
+    );
+  }
 });
 
 test("feste-pfade: der Rückbau-Ordner gilt nur in CODEOWNERS und Rollen-Sperren als Vorab-Schutz", (context) => {
