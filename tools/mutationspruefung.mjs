@@ -17,6 +17,7 @@ import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung
 import { geteiltBeiZeitgrenze, gruppen } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
+import { planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
@@ -84,8 +85,15 @@ const ERSTLAUF_FEHLER = "One or more tests resulted in an error:";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
-const AUFRUF =
-  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]";
+const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
+const NUR_VORHER = ["tests", "stueck-sekunden"];
+const SEKUNDEN = /^[1-9]\d*$/;
+const EINRUECKUNG = 2;
+const AUFRUF = [
+  "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
+  "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
+].join("\n");
 
 function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -639,17 +647,67 @@ function gemeldet(basis) {
     .flatMap((nachricht) => gleichwertigGemeldet(nachricht));
 }
 
+function ohneAndereBetriebsart(values) {
+  const andere = [values.plan, values.teil, values.teile, values.urteil].every((wert) => wert === undefined);
+  return andere && !values.testumbau && !values["alter-stand"] && values.gleichwertig.length === 0;
+}
+
+function vorherAufrufGueltig(values, art) {
+  const zusammen = art === "vorher-zusammen";
+  const stand = zusammen ? values.basis === undefined && values.tests === undefined : values.basis !== undefined && values.tests !== undefined;
+  const ergebnis = (art === "vorher-plan") === (values.ergebnis === undefined);
+  const sekunden = values["stueck-sekunden"];
+  const groesse = sekunden === undefined || (art === "vorher-plan" && SEKUNDEN.test(sekunden));
+  return ohneAndereBetriebsart(values) && stand && ergebnis && groesse;
+}
+
 function aufrufGueltig(values) {
+  const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
+  if (vorher.length > 0) return vorher.length === 1 && vorherAufrufGueltig(values, vorher[0]);
+  if (NUR_VORHER.some((name) => values[name] !== undefined)) return false;
   const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
   const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length + Number(values.testumbau);
   const doppelt = values.testumbau && (values["alter-stand"] || values.gleichwertig.length > 0);
   return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && betriebsarten <= BETRIEBSARTEN_HOECHSTENS && !doppelt;
 }
 
+function schreibeJson(ziel, inhalt) {
+  writeFileSync(ziel, `${JSON.stringify(inhalt, null, EINRUECKUNG)}\n`);
+}
+
+async function vorherVerteilt(values) {
+  const werkzeug = { alterStand, durchgang, ueberlebt };
+  if (values["vorher-zusammen"] !== undefined) {
+    const vereint = vorherZusammen(values["vorher-zusammen"]);
+    schreibeJson(values.ergebnis, vereint);
+    console.log(zusammenZeilen(vereint).join("\n"));
+    return EXIT_GRUEN;
+  }
+  const stand = { basis: git(["rev-parse", "--verify", `${values.basis}^{commit}`]).trim(), tests: testsAus(values.tests) };
+  if (values["vorher-plan"] !== undefined) {
+    const plan = await vorherPlan(stand, werkzeug, values["stueck-sekunden"] === undefined ? undefined : Number(values["stueck-sekunden"]));
+    schreibeJson(values["vorher-plan"], plan);
+    console.log(planZeilen(plan).join("\n"));
+    return EXIT_GRUEN;
+  }
+  const stueck = stueckAus(values["vorher-stueck"]);
+  await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis} --vorher-stueck`);
+  kindprozesseInEigenemTempOrdner();
+  const bericht = await vorherStueck(stand, stueck, werkzeug);
+  schreibeJson(values.ergebnis, bericht);
+  console.log(`Stück ${bericht.stueck.nummer}: ${bericht.getoetet.length} von ${bericht.anzahl} Mutanten getötet in ${bericht.sekunden} s.`);
+  return EXIT_GRUEN;
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
       basis: { type: "string" },
+      tests: { type: "string" },
+      "stueck-sekunden": { type: "string" },
+      "vorher-plan": { type: "string" },
+      "vorher-stueck": { type: "string" },
+      "vorher-zusammen": { type: "string" },
       "alter-stand": { type: "boolean", default: false },
       testumbau: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
@@ -664,6 +722,7 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
+  if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
   await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis}`);
   kindprozesseInEigenemTempOrdner();
   if (values.testumbau) return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });

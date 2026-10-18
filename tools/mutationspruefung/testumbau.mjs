@@ -30,24 +30,32 @@ export function direkteQuellen(tests, graph) {
   return [...quellen].sort();
 }
 
-function ganzeDatei(datei) {
+export function ganzeDatei(datei) {
   return [[1, readFileSync(datei, "utf8").split("\n").length]];
 }
 
-async function vorherGetoetet(basis, geaendert, werkzeug) {
+export async function imVorherStand({ basis, tests: geaendert }, werkzeug, arbeit) {
   const zurueck = werkzeug.alterStand(basis);
   try {
     const tests = await betroffeneTests(geaendert, cwd());
-    const quellen = direkteQuellen(tests, await importe());
-    const getoetet = [];
-    for (const datei of quellen) {
-      const ergebnisse = await werkzeug.durchgang(datei, ganzeDatei(datei), tests);
-      getoetet.push(...ergebnisse.filter((eintrag) => !werkzeug.ueberlebt(eintrag)).map((eintrag) => ({ ...eintrag, datei })));
-    }
-    return { tests, quellen, getoetet };
+    return await arbeit({ tests, quellen: direkteQuellen(tests, await importe()) });
   } finally {
     zurueck();
   }
+}
+
+export async function getoetetIn({ datei, zeilen }, tests, werkzeug) {
+  const ergebnisse = await werkzeug.durchgang(datei, zeilen, tests);
+  const getoetet = ergebnisse.filter((eintrag) => !werkzeug.ueberlebt(eintrag)).map((eintrag) => ({ ...eintrag, datei }));
+  return { anzahl: ergebnisse.length, getoetet };
+}
+
+export function vorherGetoetet(basis, geaendert, werkzeug) {
+  return imVorherStand({ basis, tests: geaendert }, werkzeug, async ({ tests, quellen }) => {
+    const getoetet = [];
+    for (const datei of quellen) getoetet.push(...(await getoetetIn({ datei, zeilen: ganzeDatei(datei) }, tests, werkzeug)).getoetet);
+    return { tests, quellen, getoetet };
+  });
 }
 
 async function nachherVerloren(getoetet, tests, werkzeug) {
