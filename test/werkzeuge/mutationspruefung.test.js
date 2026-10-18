@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { AKTIVER_MUTANT, ANGENOMMEN, AUFTRAGSWEG, BASIS, EXIT_ROT, GRUND, NEGATIV, NULL, pruefe, quelle, schluessel, UEBERLEBT, ZUSTAND } from "./mutationspruefung-hilfen.js";
+import { AKTIVER_MUTANT, ANGENOMMEN, AUFTRAGSWEG, BASIS, EXIT_ABBRUCH, EXIT_ROT, GRUND, NEGATIV, NULL, pruefe, quelle, schluessel, UEBERLEBT, ZUSTAND } from "./mutationspruefung-hilfen.js";
 import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 test("eine neue Zeile ohne Test ist grün, wenn ein Commit des Auftragswegs ihre Mutanten mit Grund gleichwertig meldet; ohne Grund oder ohne Auftragsweg bleibt sie rot", (context) => {
@@ -103,4 +103,21 @@ test("geänderte Zeilen in Dateien, die Git als binär ansieht, prüft die Mutat
   assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:2"]);
   const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
   assert.ok(ueberlebende.length > 0 && ueberlebende.every((mutant) => mutant.startsWith("src/zahl.js:3:")), rot.stdout);
+});
+
+test("ist ein Test im Erstlauf rot, bricht die Mutationsprüfung mit Exit 2 ab und nennt Testdatei und Testname", (context) => {
+  const repo = probeRepository(context, BASIS);
+  const roterTest = [
+    'import assert from "node:assert/strict";',
+    'import { describe, test } from "node:test";',
+    'import { einordnen } from "../src/zahl.js";',
+    'test("bleibt grün", () => assert.equal(einordnen(1), "positiv"));',
+    'describe("Null", () => test("ist null, kein Wort", () => assert.equal(einordnen(0), 0)));',
+    "",
+  ].join("\n");
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL), "test/zahl.test.js": roterTest });
+  const abbruch = pruefe(repo, "--basis", "HEAD");
+  assert.equal(abbruch.status, EXIT_ABBRUCH, abbruch.stdout + abbruch.stderr);
+  const rote = [...abbruch.stderr.matchAll(/^Abbruch: Erstlauf rot: (.+)$/gm)].map(([, rot]) => rot);
+  assert.deepEqual(rote, ["test/zahl.test.js › Null > ist null, kein Wort"], abbruch.stdout + abbruch.stderr);
 });
