@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { env } from "node:process";
 
 import { tokenize } from "espree";
-import { parser } from "typescript-eslint";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
+import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
@@ -200,14 +200,14 @@ function kinderBereiche(knoten, name, schluessel) {
 }
 
 function typescriptTokens(inhalt) {
-  const { ast, visitorKeys } = parser.parseForESLint(inhalt, TYPESCRIPT);
+  const { ast, visitorKeys } = typescriptParser().parseForESLint(inhalt, TYPESCRIPT);
   const bereiche = typBereiche(ast, visitorKeys);
   return ast.tokens.filter(({ range: [anfang], value }) => !bereiche.some(([von, bis, nur]) => von <= anfang && anfang < bis && (nur?.has(value) ?? true)));
 }
 
 const LESARTEN = [
-  { endung: /\.[cm]?js$/, sprache: "JavaScript", tokens: (inhalt) => tokenize(inhalt, JAVASCRIPT) },
-  { endung: /\.[cm]?ts$/, sprache: "TypeScript", tokens: typescriptTokens },
+  { endung: JAVASCRIPT_DATEI, sprache: "JavaScript", tokens: (inhalt) => tokenize(inhalt, JAVASCRIPT) },
+  { endung: TYPESCRIPT_DATEI, sprache: "TypeScript", tokens: typescriptTokens },
 ];
 
 function lesartDer(datei) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { ENTWURF_HINWEIS, ENTWURF_ROUTE, ENTWURF_TEXT, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
@@ -175,6 +176,38 @@ test("Neuschnitt: ein Umbau endet ohne Erkunder grün, Planer und Prüfer sehen 
   const { auftraege } = lauf.phase;
   assert.deepEqual(auftraege.map(({ id }) => id), ["a0-n1", "a1", "a2", "a3"]);
   assert.deepEqual(auftraege[3].abhaengigVon, ["a2", "a0-n1"]);
+});
+
+const TS_URL = pathToFileURL(join(REPO_ROOT, "node_modules/typescript-eslint/dist/index.js")).href;
+const ESLINT_MIT_TYPESCRIPT = [
+  `import tseslint from ${JSON.stringify(TS_URL)};`,
+  "export default [",
+  '  { rules: { "no-var": "error" } },',
+  '  { files: ["**/*.ts", "**/*.mts", "**/*.cts"], languageOptions: { parser: tseslint.parser } },',
+  "];",
+  "",
+].join("\n");
+
+function pruefeFunktionslisteMit(context, datei) {
+  const dateien = { "eslint.config.js": ESLINT_MIT_TYPESCRIPT, [datei]: "export function istGesetzt(wert: string): boolean {\n  return wert.length > 0;\n}\n" };
+  const umbau = { erwarteteDateien: [...UMBAU.erwarteteDateien, datei] };
+  const lauf = neuschnitt(context, { umbau, dateien, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(NEUER_UMBAU)) });
+  exit(lauf, 0);
+  const [pruefer] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  const [, funktionsliste] = pruefer.eingabe.slice(pruefer.eingabe.indexOf("### Neuschnitt"), pruefer.eingabe.indexOf("### Dateikarte")).split("### Funktionsliste");
+  assert.ok(funktionsliste.includes(`"datei": "${datei}"`) && funktionsliste.includes('"name": "istGesetzt"'), funktionsliste);
+}
+
+test("Neuschnitt: der Prüfer sieht auch die Funktionen einer .ts-Datei des Umbaus in der Funktionsliste", (context) => {
+  pruefeFunktionslisteMit(context, "src/pruefung.ts");
+});
+
+test("Neuschnitt: der Prüfer sieht auch die Funktionen einer .mts-Datei des Umbaus in der Funktionsliste", (context) => {
+  pruefeFunktionslisteMit(context, "src/pruefung.mts");
+});
+
+test("Neuschnitt: der Prüfer sieht auch die Funktionen einer .cts-Datei des Umbaus in der Funktionsliste", (context) => {
+  pruefeFunktionslisteMit(context, "src/pruefung.cts");
 });
 
 test("Neuschnitt: ein Testumbau endet ohne Erkunder grün mit einem neuen Umbau", (context) => {

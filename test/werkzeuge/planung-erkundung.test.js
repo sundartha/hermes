@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ANGABEN, PLATZHALTER, berichtsGeruest, erkundungBefunde } from "../../tools/auftrag/planung/erkundung.mjs";
+import { funktionenIn } from "../../tools/ziele/funktionen.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const EINGANG = [
@@ -18,8 +19,9 @@ const GESCHUETZT = ["export function schuetze() {", "  return 1;", "}", ""].join
 const FASSADE = ["const backend = {};", "export const {", "  lade,", "  speichere,", "} = backend;", "", "export function pause() {", "  return lade();", "}", "", 'export { rechne } from "./logik.js";'].join("\n");
 const WENN_ROUTE = "Gegeben ein Kunde\nWenn er über `POST /api/probe` sendet\nDann kommt eine Antwort";
 
-function ordner(context) {
+function ordner(context, weitere = {}) {
   return probeDirectory(context, {
+    ...weitere,
     "src/eingang.js": EINGANG,
     "src/logik.js": LOGIK,
     "src/geschuetzt.js": GESCHUETZT,
@@ -55,8 +57,8 @@ function angaben(ueberschrieben = {}) {
   };
 }
 
-function lauf(context, nummern, { gruppe = ["S1"], soll = sollMitText() } = {}) {
-  return erkundungBefunde({ nummern }, { gruppe, soll, root: ordner(context) });
+function lauf(context, nummern, { gruppe = ["S1"], soll = sollMitText(), weitere = {} } = {}) {
+  return erkundungBefunde({ nummern }, { gruppe, soll, root: ordner(context, weitere) });
 }
 
 function einzeln(context, ueberschrieben, optionen) {
@@ -451,4 +453,61 @@ test("eine Änderung außerhalb von Funktionen mit falscher Datei oder falschen 
     const aenderungen = [{ datei: "src/fassade.js", art: "export", von: 2, bis: 5, neueZeilen: 1, ...ueberschrieben }];
     genau(einzeln(context, { aenderungen }).befunde, teil);
   }
+});
+
+const OHNE_TYPEN = ["export function rundeAb(betrag) {", "  return Math.floor(betrag);", "}", "const halbiere = (wert) => wert / 2;", "class Rechner {", "  verdopple(wert) {", "    return wert * 2;", "  }", "}", ""].join("\n");
+const MIT_TYPEN = [
+  "interface Betrag { wert: number }",
+  "export function rundeAb<T extends Betrag>(betrag: T): number {",
+  "  return Math.floor(betrag.wert);",
+  "}",
+  "const halbiere = (wert: number): number => wert / 2;",
+  "class Rechner implements Betrag {",
+  "  wert = 1;",
+  "  verdopple(wert: number): number {",
+  "    return wert * 2;",
+  "  }",
+  "}",
+  "",
+].join("\n");
+
+function pruefeFunktionenIn(datei) {
+  const alsJs = funktionenIn("src/regel.js", OHNE_TYPEN);
+  assert.equal(alsJs.length, 3);
+  assert.deepEqual(funktionenIn(datei, OHNE_TYPEN), alsJs);
+  const mitTypen = funktionenIn(datei, MIT_TYPEN).map(({ name, von, bis }) => ({ name, von, bis }));
+  assert.deepEqual(mitTypen, [
+    { name: "rundeAb", von: 2, bis: 4 },
+    { name: "halbiere", von: 5, bis: 5 },
+    { name: "verdopple", von: 8, bis: 10 },
+  ]);
+}
+
+function pruefeVorhandenIn(context, datei) {
+  const { befunde } = einzeln(context, { aenderungen: [{ datei, funktion: "rundeAb", neu: "funktion", neueZeilen: 5 }] }, { weitere: { [datei]: MIT_TYPEN } });
+  genau(befunde, `Funktion rundeAb gibt es schon in ${datei}`);
+}
+
+test("funktionenIn liest eine .ts-Datei wie dieselbe Datei als .js, auch mit Typen", () => {
+  pruefeFunktionenIn("src/regel.ts");
+});
+
+test("funktionenIn liest eine .mts-Datei wie dieselbe Datei als .js, auch mit Typen", () => {
+  pruefeFunktionenIn("src/regel.mts");
+});
+
+test("funktionenIn liest eine .cts-Datei wie dieselbe Datei als .js, auch mit Typen", () => {
+  pruefeFunktionenIn("src/regel.cts");
+});
+
+test("eine als neu gemeldete Funktion, die es in einer .ts-Datei schon gibt, ist ein Befund", (context) => {
+  pruefeVorhandenIn(context, "src/regel.ts");
+});
+
+test("eine als neu gemeldete Funktion, die es in einer .mts-Datei schon gibt, ist ein Befund", (context) => {
+  pruefeVorhandenIn(context, "src/regel.mts");
+});
+
+test("eine als neu gemeldete Funktion, die es in einer .cts-Datei schon gibt, ist ein Befund", (context) => {
+  pruefeVorhandenIn(context, "src/regel.cts");
 });
