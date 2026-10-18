@@ -1,0 +1,11 @@
+{
+  "titel": "Eingefrorene .test.ts-Datei lässt sich nicht mehr lesen",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.ts\": 1 }"],
+    "test/alt.test.ts": ["setTimeout((): void => {}, 1);"]
+  },
+  "dateien": {
+    "test/alt.test.ts": ["setTimeout((): void => {}, 1);", "const = ;"]
+  },
+  "erwartet": "test/alt.test.ts: TypeScript-Syntax mit Laufzeitwirkung, nicht lesbar"
+}

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
+import { rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
 import { ausklingBefunde, grenzeAbleiten, zeilenAus } from "./testlaufzeit/ausklingen.mjs";
 import {
   TABELLENKOPF,
@@ -100,10 +101,14 @@ async function pruefen(werte) {
   const ausklingen = json(BASIS_AUSKLINGEN);
   const zeitglieder = json(BASIS_ZEITGLIEDER);
   const kontext = { neue: neueTestdateien(werte.basis), teil: werte.teil, basis: ausklingen };
+  const vergleich = {
+    basis: werte.basis,
+    zurueck: werte.basis ? await rueckfuehrung(werte.basis) : unveraendert,
+  };
   for (const zeile of berichtZeilen(zeilen, kosten, kontext)) console.log(zeile);
   const befunde = [
-    ...ausklingenStrenger(werte.basis, BASIS_AUSKLINGEN, ausklingen),
-    ...zeitgliederStrenger(werte.basis, BASIS_ZEITGLIEDER, zeitglieder),
+    ...ausklingenStrenger(vergleich, BASIS_AUSKLINGEN, ausklingen),
+    ...zeitgliederStrenger(vergleich, BASIS_ZEITGLIEDER, zeitglieder),
     ...echtWartenBefunde(aufrufeInDateien(".", testdateien()), json(BASIS_ECHTE_WARTEZEITEN)),
     ...(await zeitgliederBefunde(process.cwd(), zeitglieder)),
     ...hilfsdateiBefunde(zeilen),

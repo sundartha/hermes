@@ -1,0 +1,22 @@
+{
+  "titel": "Eingefrorene .test.ts-Datei bekommt ein weiteres direktes Zeitglied",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.ts\": 1 }"],
+    "test/alt.test.ts": [
+      "setTimeout(() => {}, 1);",
+      "export function warte(ms: number): number {",
+      "  return ms;",
+      "}"
+    ]
+  },
+  "dateien": {
+    "test/alt.test.ts": [
+      "setInterval(() => {}, 1);",
+      "setTimeout(() => {}, 1);",
+      "export function warte(ms: number): number {",
+      "  return ms;",
+      "}"
+    ]
+  },
+  "erwartet": "2 direkte Zeitglieder, eingefroren sind 1"
+}
