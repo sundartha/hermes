@@ -60,7 +60,7 @@ function headOf(run) {
 }
 
 function topLines(rows) {
-  const longest = [...rows].sort((left, right) => right.ms - left.ms).slice(0, TOP_JOBS);
+  const longest = [...rows].slice(0, TOP_JOBS);
   return [
     "| Workflow | Job | Minuten | Lauf | Branch/PR |",
     "| --- | --- | ---: | --- | --- |",
