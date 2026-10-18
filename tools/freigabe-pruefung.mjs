@@ -7,8 +7,18 @@ import {
   textChanges,
   writeSummary,
 } from "./pr-zusammenfassung.mjs";
+import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
-import { LOCKERER, fileAt, git, matches, measureChecks } from "./pruefungen-messen.mjs";
+import {
+  FEHLALARME_DIR,
+  LOCKERER,
+  MANIFEST_FILE,
+  ROTPROBEN_DIR,
+  fileAt,
+  git,
+  matches,
+  measureChecks,
+} from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
 import { getJson, repositoryName } from "./testschutz/github.mjs";
 import {
@@ -35,6 +45,11 @@ const CONVERSATION_PATTERNS = [
   "src/conversation/elevenlabs-agent-config.js",
 ];
 const STATUS_ADDED = "A";
+const GLEICH = "gleich";
+const INSTRUCTIONS_CHECK = "anweisungen";
+const INSTRUCTION_LIST = "tools/basis/anweisungen.json";
+const KEY_SEPARATOR = "|";
+const LINE_BREAK = "\n";
 const NAME_STATUS_FIELDS = 2;
 const MIN_AGE_DAYS = 7;
 const MS_PER_DAY = 86_400_000;
@@ -291,13 +306,95 @@ function classify(basis) {
   return { changes, packages, strenger, kind: KINDS.find((kind) => kinds.has(kind)) ?? "code" };
 }
 
+function parsedJson(commit, path) {
+  try {
+    return JSON.parse(fileAt(commit, path));
+  } catch {
+    return undefined;
+  }
+}
+
+function changesInstructionCheck(basis, changes) {
+  const manifest = parsedJson(basis, `${ROTPROBEN_DIR}/${INSTRUCTIONS_CHECK}/${MANIFEST_FILE}`);
+  if (manifest?.ausnahmen?.datei !== INSTRUCTION_LIST || !Array.isArray(manifest.pfade)) return true;
+  const own = [ROTPROBEN_DIR, FEHLALARME_DIR].map((directory) => `${directory}/${INSTRUCTIONS_CHECK}/`);
+  const guarded = [...own, ...manifest.pfade].filter((pattern) => pattern !== INSTRUCTION_LIST);
+  return changes.some(({ path }) => guarded.some((pattern) => matches(pattern, path)));
+}
+
+function instructionList(commit) {
+  const content = parsedJson(commit, INSTRUCTION_LIST);
+  if (typeof content !== "object" || content === null || Array.isArray(content)) return undefined;
+  const { befunde, ...rest } = content;
+  const isTextList = Array.isArray(befunde) && befunde.every((entry) => typeof entry === "string");
+  return isTextList ? { befunde, rest } : undefined;
+}
+
+function addedEntries(basis) {
+  const [old, current] = [instructionList(basis), instructionList("HEAD")];
+  if (old === undefined || current === undefined) return undefined;
+  if (!isDeepStrictEqual(old.rest, current.rest)) return undefined;
+  const left = [...old.befunde];
+  return current.befunde.filter((entry) => {
+    const index = left.indexOf(entry);
+    if (index !== -1) left.splice(index, 1);
+    return index === -1;
+  });
+}
+
+function lineTexts(text = "") {
+  return text
+    .split(LINE_BREAK)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}
+
+function newLineEntries(basis, path) {
+  const before = new Set(lineTexts(fileAt(basis, path)));
+  return lineTexts(fileAt("HEAD", path))
+    .filter((line) => !before.has(line))
+    .map((line) => [path, lineFingerprint(line)].join(KEY_SEPARATOR));
+}
+
+function newInstructionEntries(basis, changes) {
+  const reported = new Set(
+    instructionFindings(".")
+      .filter((finding) => finding.always !== true)
+      .map(({ key }) => key),
+  );
+  const entries = changes.flatMap(({ path }) => newLineEntries(basis, path));
+  return new Set(entries.filter((entry) => reported.has(entry)));
+}
+
+function onlyAddsNewInstructionLines(basis, changes) {
+  if (changesInstructionCheck(basis, changes)) return false;
+  const added = addedEntries(basis);
+  if (added === undefined || added.length === 0 || new Set(added).size !== added.length) return false;
+  const expected = newInstructionEntries(basis, changes);
+  return added.length === expected.size && added.every((entry) => expected.has(entry));
+}
+
+function withNewInstructionLines(basis, changes, measured) {
+  if (!onlyAddsNewInstructionLines(basis, changes)) return measured;
+  const pruefungen = measured.pruefungen.map((result) =>
+    result.id === INSTRUCTIONS_CHECK && result.urteil === LOCKERER
+      ? { ...result, urteil: GLEICH }
+      : result,
+  );
+  return { ...measured, pruefungen };
+}
+
+async function measure(basis, changes) {
+  const checkFiles = changes.filter((change) => change.kind === "pruefung").map(({ path }) => path);
+  if (checkFiles.length === 0) return { pruefungen: [], ohneMessung: [] };
+  const changedFiles = changes.map(({ path }) => path);
+  const measured = await measureChecks(basis, { changedFiles, checkFiles });
+  return withNewInstructionLines(basis, changes, measured);
+}
+
 async function evaluate({ basis, sources }) {
   const { changes, packages, strenger, kind } = classify(basis);
-  const checkFiles = changes.filter((change) => change.kind === "pruefung").map(({ path }) => path);
-  const measured =
-    checkFiles.length === 0
-      ? { pruefungen: [], ohneMessung: [] }
-      : await measureChecks(basis, { changedFiles: changes.map(({ path }) => path), checkFiles });
+  const measured = await measure(basis, changes);
   const texts = textChanges(basis);
   const pakete = await Promise.all(
     packages.added.map((name) => packageFacts(name, lockedVersion(packages.lock, name), sources)),
