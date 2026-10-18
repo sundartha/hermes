@@ -27,7 +27,7 @@ function main() {
   const insideMain = isInside(target, checkout);
   const insideWorktrees = isInside(target, join(checkout, WORKTREES_DIRECTORY));
   if (!insideMain || insideWorktrees) return;
-  block([
+  block("hooks/worktree-pflicht", [
     `Schreibzugriff im Haupt-Checkout blockiert: ${path}`,
     `Arbeite in einem Worktree unter ${WORKTREES_DIRECTORY}/.`,
   ]);

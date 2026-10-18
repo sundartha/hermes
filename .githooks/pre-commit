@@ -14,6 +14,7 @@ if [ -n "$staged_js" ]; then
     echo ""
     echo "Bitte die Datei(en) vollstaendig vormerken (git add) oder die"
     echo "unvorgemerkten Aenderungen verwerfen, dann erneut committen."
+    [ -f tools/zweck-zeigen.mjs ] && node tools/zweck-zeigen.mjs hooks/pre-commit-unvorgemerkt
     exit 1
   fi
 fi

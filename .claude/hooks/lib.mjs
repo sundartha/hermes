@@ -2,8 +2,10 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { env } from "node:process";
+import { fileURLToPath } from "node:url";
 
 const BLOCK_EXIT_CODE = 2;
+const PURPOSE_SCRIPT = fileURLToPath(new URL("../../tools/zweck-zeigen.mjs", import.meta.url));
 const STDIN = 0;
 const GIT_CONFIG_VARIABLE = /^GIT_CONFIG_/;
 
@@ -15,8 +17,18 @@ export function readInput() {
   }
 }
 
-export function block(lines) {
-  console.error(lines.join("\n"));
+function outputLines(text) {
+  return (text ?? "").split("\n").filter(Boolean);
+}
+
+function purposeLines(id) {
+  const run = spawnSync(process.execPath, [PURPOSE_SCRIPT, id], { encoding: "utf8" });
+  const failure = run.error ? [`Zweck-Text ${id} nicht geladen: ${run.error.message}`] : [];
+  return [...outputLines(run.stderr), ...failure];
+}
+
+export function block(id, lines) {
+  console.error([...lines, ...purposeLines(id)].join("\n"));
   process.exit(BLOCK_EXIT_CODE);
 }
 

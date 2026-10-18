@@ -19,7 +19,7 @@ export function schreibziel() {
 export function rolle() {
   const name = env.HERMES_ROLLE;
   if (ROLLEN.has(name)) return name;
-  return block([
+  return block("hooks/rolle", [
     `HERMES_ROLLE ist ${JSON.stringify(name ?? null)}; ohne bekannte Rolle ist Schreiben gesperrt.`,
     "Die Rolle setzt tools/auftrag.mjs beim Start des Agenten.",
   ]);

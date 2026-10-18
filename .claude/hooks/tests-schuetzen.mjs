@@ -45,15 +45,15 @@ function main() {
   const name = rolle();
   const istTest = TESTDATEI.test(ziel.relativ);
   if (name === "bau" && istTest) {
-    block([
+    block("hooks/bau-aendert-keine-tests", [
       `Bau-Agenten ändern keine Tests: ${ziel.relativ}`,
       "Hältst du den Test für falsch, brich ab und nenne den Grund.",
     ]);
   }
-  if (name === "test" && !istTest) block([`Test-Agenten ändern keinen Produktcode: ${ziel.relativ}`]);
+  if (name === "test" && !istTest) block("hooks/test-aendert-keinen-produktcode", [`Test-Agenten ändern keinen Produktcode: ${ziel.relativ}`]);
   const geschuetzt = name === "test" && existsSync(ziel.absolut) && !istGeplant(ziel.relativ);
   if (geschuetzt && !haengtNurAn(ziel.absolut, ziel.input)) {
-    block([
+    block("hooks/nur-anhaengen", [
       `An bestehende Testdateien wird nur angehängt: ${ziel.relativ}`,
       "Der bisherige Inhalt bleibt unverändert am Anfang stehen.",
       "Bestehende Zeilen ändert der Test-Agent nur in den Testdateien, die der Auftrag in erwarteteDateien nennt.",

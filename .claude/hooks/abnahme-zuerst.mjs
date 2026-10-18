@@ -41,9 +41,9 @@ function main() {
   const ziel = schreibziel();
   if (ziel === null || !ziel.relativ.startsWith(PRODUKTCODE)) return;
   const abnahme = env.HERMES_ABNAHME;
-  if (!abnahme) block(["HERMES_ABNAHME fehlt; ohne Abnahmetest ist Schreiben unter src/ gesperrt."]);
+  if (!abnahme) block("hooks/abnahme-einstellung", ["HERMES_ABNAHME fehlt; ohne Abnahmetest ist Schreiben unter src/ gesperrt."]);
   if (hatAbnahmeAusgefuehrt(ziel.input.transcript_path, abnahme)) return;
-  block([
+  block("hooks/abnahme-zuerst", [
     `Schreibzugriff auf ${ziel.relativ} blockiert: führe zuerst den Abnahmetest selbst aus.`,
     `Befehl: npm --silent test -- ${abnahme}`,
   ]);
