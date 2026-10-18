@@ -458,14 +458,18 @@ function reportWidened({ toolName, basis }, widened) {
 }
 
 function reportGrown({ toolName, basis }, grown) {
-  console.error(
+  if (grown.length === 0) return;
+  console.log(
     `${grown.length} Einträge in ${baselineFile(toolName)} stehen nicht auf der Basis ${basis}:`,
   );
   for (const { schluessel, alt } of grown) {
-    console.error(`  ${schluessel}${alt === schluessel ? "" : ` (zurückgeführt: ${alt})`}`);
+    console.log(`  ${schluessel}${alt === schluessel ? "" : ` (zurückgeführt: ${alt})`}`);
   }
-  console.error(
-    "Die Basislinie wird nur kürzer. Ein auf eine umbenannte Datei verschobener Eintrag zählt nur, wenn tools/umbenennung.mjs für das Paar „nur Typen ergänzt“ meldet.",
+  console.log(
+    "Jeder dieser Einträge nimmt einen heutigen oder künftigen Befund aus der Prüfung. Er ist lockerer und kommt nur mit Freigabe (Approve eines Code-Owners) durch; bis dahin hält die Freigabe-Prüfung den PR rot.",
+  );
+  console.log(
+    "Ein auf eine umbenannte Datei verschobener Eintrag zählt nicht als neu, wenn tools/umbenennung.mjs für das Paar „nur Typen ergänzt“ meldet.",
   );
 }
 
@@ -549,10 +553,7 @@ async function compare(context) {
   const { added, known, exact } = await measure(context, baseline);
   const { widened, grown } = splitWidening(context, candidates, exact);
   reportWidened(context, widened);
-  if (grown.length > 0) {
-    reportGrown(context, grown);
-    process.exitCode = EXIT_FAILURE;
-  }
+  reportGrown(context, grown);
   reportFixed(context, known.darueber);
   console.log(
     `${context.toolName}: ${added.length} neue Befunde, ${known.innerhalb.length} bekannte.`,

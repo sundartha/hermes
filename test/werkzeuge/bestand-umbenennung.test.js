@@ -15,6 +15,7 @@ const EXECUTABLE_MODE = 0o755;
 const CREATE = "--basis-anlegen";
 const BASIS = ["--basis", "HEAD"];
 const NICHT_AUF_DER_BASIS = "nicht auf der Basis";
+const NUR_MIT_FREIGABE = "kommt nur mit Freigabe (Approve eines Code-Owners) durch";
 const BASISLINIE_FEHLT = "gibt es auf der Basis";
 const ANDERE_VERSION = "0.0.0";
 const ANDERE_VERSION_MELDUNG = "gilt für eine andere Version als auf der Basis";
@@ -78,6 +79,11 @@ function expectStatus(result, status, shows) {
   if (shows !== undefined) assert.ok(result.output.includes(shows), result.output);
 }
 
+function expectHeldForApproval(result, entry = NICHT_AUF_DER_BASIS) {
+  expectStatus(result, EXIT_OK, NUR_MIT_FREIGABE);
+  assert.ok(result.output.includes(entry), result.output);
+}
+
 function baselinePath(directory, tool) {
   return join(directory, `tools/basis/${tool}.json`);
 }
@@ -121,11 +127,11 @@ test("bestand-umbenennung: jscpd mit --basis, Umbenennung nur mit Typen und vers
   expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK);
 });
 
-test("bestand-umbenennung: jscpd mit --basis, verschobener Eintrag bei geänderter Rechnung ist rot", (context) => {
+test("bestand-umbenennung: jscpd mit --basis, verschobener Eintrag bei geänderter Rechnung geht nur über die Freigabe", (context) => {
   const directory = frozen(context, JSCPD, "jscpd");
   rename(directory, "src/zwei.js", BLOCK_GEAENDERT);
   moveEntries(directory, "jscpd", "src/zwei.js");
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]));
 });
 
 test("bestand-umbenennung: jscpd mit --basis, verschobener Eintrag ohne Umbenennung ist rot", (context) => {
@@ -151,7 +157,7 @@ function jscpdKeys(directory) {
   return JSON.parse(readFileSync(baselinePath(directory, "jscpd"), "utf8")).befunde;
 }
 
-test("bestand-umbenennung: jscpd mit --basis, eine neue Kopie in einer .js-Datei einzufrieren ist rot", (context) => {
+test("bestand-umbenennung: jscpd mit --basis, eine neue Kopie in einer .js-Datei einzufrieren geht nur über die Freigabe", (context) => {
   const directory = frozen(context, JSCPD, "jscpd");
   writeFileSync(join(directory, "src/drei.js"), BLOCK);
   const neu = run(directory, ["jscpd"]);
@@ -160,13 +166,13 @@ test("bestand-umbenennung: jscpd mit --basis, eine neue Kopie in einer .js-Datei
   expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
   assert.ok(jscpdKeys(directory).some((key) => key.includes("src/drei.js")));
   commitAll(directory, "eingefroren");
-  expectStatus(run(directory, ["jscpd", "--basis", "HEAD~1"]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["jscpd", "--basis", "HEAD~1"]));
 });
 
-test("bestand-umbenennung: jscpd mit --basis, ein Eintrag ohne heutigen Befund in unveränderten Dateien ist rot", (context) => {
+test("bestand-umbenennung: jscpd mit --basis, ein Eintrag ohne heutigen Befund in unveränderten Dateien geht nur über die Freigabe", (context) => {
   const directory = frozen(context, JSCPD, "jscpd");
   addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, UNGEMELDETER_EINTRAG);
+  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]), UNGEMELDETER_EINTRAG);
 });
 
 test("bestand-umbenennung: jscpd mit --basis, ohne Basislinie auf der Basis entfällt der Vergleich nur dort", (context) => {
@@ -175,7 +181,7 @@ test("bestand-umbenennung: jscpd mit --basis, ohne Basislinie auf der Basis entf
   commitAll(directory, "Basislinie");
   addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
   expectStatus(run(directory, ["jscpd", "--basis", "HEAD~1"]), EXIT_OK, BASISLINIE_FEHLT);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]));
 });
 
 test("bestand-umbenennung: jscpd mit --basis, nur nach einem echten Versionswechsel entfällt der Vergleich", (context) => {
@@ -187,7 +193,7 @@ test("bestand-umbenennung: jscpd mit --basis, nur nach einem echten Versionswech
   writeFileSync(path, aktuell);
   addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
   expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK, ANDERE_VERSION_MELDUNG);
-  expectStatus(run(directory, ["jscpd", "--basis", "HEAD~1"]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["jscpd", "--basis", "HEAD~1"]));
 });
 
 test("bestand-umbenennung: jscpd mit --basis, eine erst mit der neuen Einstellung gefundene Kopie in unveränderten Dateien darf eingefroren werden", (context) => {
@@ -218,16 +224,16 @@ function neuerOrdner(context, tool, { datei, eintrag }) {
   return run(directory, [tool, ...BASIS]);
 }
 
-test("bestand-umbenennung: wurzel mit --basis, ein neuer Ordner in der Wurzel ist rot", (context) => {
+test("bestand-umbenennung: wurzel mit --basis, ein neuer Ordner in der Wurzel geht nur über die Freigabe", (context) => {
   const eintrag = "neu|wurzel-eintrag";
   const result = neuerOrdner(context, "wurzel", { datei: "neu/teil.js", eintrag });
-  expectStatus(result, EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(result);
 });
 
-test("bestand-umbenennung: anweisungen mit --basis, ein neuer Ordner unter src ohne eigene Regeln ist rot", (context) => {
+test("bestand-umbenennung: anweisungen mit --basis, ein neuer Ordner unter src ohne eigene Regeln geht nur über die Freigabe", (context) => {
   const eintrag = "src/neu|ohne-eigene-regeln";
   const result = neuerOrdner(context, "anweisungen", { datei: "src/neu/teil.js", eintrag });
-  expectStatus(result, EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(result);
 });
 
 test("bestand-umbenennung: --basis mit einem unbekannten Commit bricht ab", (context) => {
@@ -273,7 +279,7 @@ test("bestand-umbenennung: knip mit --basis, eine ungenutzte Datei nur mit Typen
   expectStatus(run(directory, ["knip", ...BASIS]), EXIT_OK);
 });
 
-test("bestand-umbenennung: knip mit --basis, verschobener Eintrag bei geändertem Code ist rot", (context) => {
+test("bestand-umbenennung: knip mit --basis, verschobener Eintrag bei geändertem Code geht nur über die Freigabe", (context) => {
   const directory = frozen(context, KNIP, "knip");
   const changed = KNIP["src/teil.js"]
     .replace("alt(wert)", "alt(wert: number): number")
@@ -284,10 +290,10 @@ test("bestand-umbenennung: knip mit --basis, verschobener Eintrag bei geänderte
     KNIP["src/server.js"].replace("./teil.js", "./teil.ts"),
   );
   moveEntries(directory, "knip", "src/teil.js");
-  expectStatus(run(directory, ["knip", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["knip", ...BASIS]));
 });
 
-test("bestand-umbenennung: knip mit --basis, ein neuer Eintrag in einer unveränderten Datei, den eine Änderung anderswo auslöst, ist rot", (context) => {
+test("bestand-umbenennung: knip mit --basis, ein neuer Eintrag in einer unveränderten Datei, den eine Änderung anderswo auslöst, geht nur über die Freigabe", (context) => {
   const directory = frozen(context, KNIP, "knip");
   writeFileSync(
     join(directory, "src/server.js"),
@@ -295,7 +301,7 @@ test("bestand-umbenennung: knip mit --basis, ein neuer Eintrag in einer unverän
   );
   rmSync(baselinePath(directory, "knip"));
   expectStatus(run(directory, ["knip", CREATE]), EXIT_OK);
-  expectStatus(run(directory, ["knip", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["knip", ...BASIS]));
 });
 
 test("bestand-umbenennung: semgrep mit --basis, Umbenennung nur mit Typen und verschobenem Eintrag ist grün", (context) => {
@@ -305,7 +311,7 @@ test("bestand-umbenennung: semgrep mit --basis, Umbenennung nur mit Typen und ve
   expectStatus(run(directory, ["semgrep", ...BASIS]), EXIT_OK);
 });
 
-test("bestand-umbenennung: semgrep mit --basis, verschobener Eintrag bei geändertem Code ist rot", (context) => {
+test("bestand-umbenennung: semgrep mit --basis, verschobener Eintrag bei geändertem Code geht nur über die Freigabe", (context) => {
   const directory = frozen(context, SEMGREP, "semgrep");
   rename(
     directory,
@@ -313,7 +319,7 @@ test("bestand-umbenennung: semgrep mit --basis, verschobener Eintrag bei geände
     INJECTION.replace("(befehl)", "(befehl: string)").replace("lauf", "start"),
   );
   moveEntries(directory, "semgrep", "src/befehl.js");
-  expectStatus(run(directory, ["semgrep", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["semgrep", ...BASIS]));
 });
 
 test("bestand-umbenennung: Testbestand mit --basis, umbenannte Testdatei nur mit Typen und verschobenem Eintrag ist grün", (context) => {
@@ -323,11 +329,11 @@ test("bestand-umbenennung: Testbestand mit --basis, umbenannte Testdatei nur mit
   expectStatus(run(directory, ["selbstpruefung", ...BASIS]), EXIT_OK);
 });
 
-test("bestand-umbenennung: Testbestand mit --basis, verschobener Eintrag bei geändertem Test ist rot", (context) => {
+test("bestand-umbenennung: Testbestand mit --basis, verschobener Eintrag bei geändertem Test geht nur über die Freigabe", (context) => {
   const directory = frozen(context, SELBST, "selbstpruefung");
   rename(directory, "test/alt.test.js", SELBSTPRUEFUNG.replace('"immer"', '"anders"'));
   moveEntries(directory, "selbstpruefung", "test/alt.test.js");
-  expectStatus(run(directory, ["selbstpruefung", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
+  expectHeldForApproval(run(directory, ["selbstpruefung", ...BASIS]));
 });
 
 const ALT = "test/alt.test.js|0123456789abcdef";
