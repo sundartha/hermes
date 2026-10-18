@@ -326,11 +326,14 @@ const configPfade = {
 };
 
 const SPEICHER = "store";
+const KONFIG_NAMEN = new Set(["config", "cfg"]);
 const EINSTELLUNGEN = { ecmaVersion: "latest", sourceType: "module" };
 const FEHLT =
   "{{name}} ist kein Export von {{fassade}}. Im Betrieb ist der Speicher der Namensraum dieser Fassade; Tests mit dem PG- oder JSON-Speicher bleiben grün, der Betrieb wirft einen TypeError. Trag {{name}} in die Exportliste von {{fassade}} ein oder ruf einen vorhandenen Export auf.";
 const FEHLT_IN_FASSADE =
   "{{name}} aus {{datei}} fehlt in der Exportliste von {{fassade}}. Im Betrieb ist der Speicher der Namensraum dieser Fassade; Tests mit dem PG- oder JSON-Speicher bleiben grün, der Betrieb wirft einen TypeError. Trag {{name}} in die Exportliste von {{fassade}} ein.";
+const UNBENANNT =
+  "Dieser Zugriff auf den Speicher nennt keinen festen Namen (berechneter Schlüssel oder Rest); ob es ihn in der Exportliste von {{fassade}} gibt, lässt sich nicht prüfen, und ein fehlender Name wirft im Betrieb einen TypeError. Schreib den Namen aus.";
 const UNLESBAR =
   "{{datei}} lässt sich nicht auswerten ({{grund}}); ohne ihre Namen prüft diese Regel den Speicher nicht. Schreib die Namen als einfache Exporte oder als Schlüssel eines zurückgegebenen Objekts aus.";
 
@@ -439,7 +442,8 @@ function ausgewertet(datei, auswerten) {
 }
 
 function istSpeicher(knoten) {
-  return knoten?.name === SPEICHER;
+  if (knoten?.type !== "MemberExpression") return knoten?.name === SPEICHER;
+  return zugriffsName(knoten) === SPEICHER && !KONFIG_NAMEN.has(knoten.object.name);
 }
 
 function istAufbauAufruf(zugriff) {
@@ -475,7 +479,7 @@ const speicherFassade = {
         additionalProperties: false,
       },
     ],
-    messages: { fehlt: FEHLT, fehltInFassade: FEHLT_IN_FASSADE, unlesbar: UNLESBAR },
+    messages: { fehlt: FEHLT, unbenannt: UNBENANNT, fehltInFassade: FEHLT_IN_FASSADE, unlesbar: UNLESBAR },
   },
   create(context) {
     const [{ fassade, speicher }] = context.options;
@@ -484,17 +488,18 @@ const speicherFassade = {
     const inDerFassade = pfadInDerWurzel(context.cwd, context.filename) === fassade;
     const aufbau = new Set();
     const pruefen = (node, name) => {
-      if (name !== undefined && !exporte.has(name))
-        context.report({ node, messageId: "fehlt", data: { name, fassade } });
+      if (name === undefined) context.report({ node, messageId: "unbenannt", data: { fassade } });
+      else if (!exporte.has(name)) context.report({ node, messageId: "fehlt", data: { name, fassade } });
     };
     return {
       MemberExpression(node) {
         if (!istSpeicher(node.object)) return;
-        if (inDerFassade && istAufbauAufruf(node)) {
-          aufbau.add(zugriffsName(node));
+        const name = zugriffsName(node);
+        if (inDerFassade && name !== undefined && istAufbauAufruf(node)) {
+          aufbau.add(name);
           return;
         }
-        pruefen(node, zugriffsName(node));
+        pruefen(node, name);
       },
       VariableDeclarator(node) {
         if (node.id.type !== "ObjectPattern" || !istSpeicher(node.init)) return;
