@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { geschuetzteMuster } from "./auftrag/format.mjs";
+import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import {
   WILDCARD,
   gitignoreGlob,
@@ -42,16 +43,12 @@ const PATH_IN_TEXT = /[\w.-]+(?:\/[\w.-]+)+/g;
 const WHITESPACE = /\s/;
 const CURRENT_FOLDER = /^\.\//;
 const SCRIPT_ENDING = /\.(?:[cm]?[jt]s|sh)$/;
-const HINT = [
-  "Feste Pfade: Jeder Eintrag oben zeigt ins Leere und wirkt deshalb nicht mehr; die Prüfung überspringt keinen fehlenden Pfad.",
-  "Steht die Datei unter neuem Namen im Repo: den Eintrag auf den neuen Pfad nachziehen.",
-  "Ist sie gelöscht: in eslint.config.js, tools/bereiche.json, .dependency-cruiser.cjs oder einem Rot-Proben-Manifest den Eintrag löschen.",
-  "In tools/gate-tests.json, tools/ziele/geschuetzt.json, tools/auftrag/musterdateien.json, .github/CODEOWNERS, .claude/rollen/ und .claude/settings.json nie selbst löschen: Eine Schutzliste zu kürzen ist eine Lockerung und braucht Antonios Freigabe.",
-].join("\n");
 const NOT_DECLARED = "ist dort nicht deklariert";
 const DECLARATION = /^(?:export\s+)?(?:async\s+)?(?:function\*?|class|const|let|var)\s+([\w$]+)/gm;
 const EXPORT_LIST = /^export\s*\{([^}]*)\}/gm;
 const EXPORTED_NAME = /(?:[\w$]+\s+as\s+)?([\w$]+)/g;
+const ONLY_NEW_WITHOUT_BASIS =
+  "--nur-neue braucht --basis; ohne Basis lässt sich nicht sagen, welcher Befund neu ist.";
 const NO_COMMIT =
   "ist kein lesbarer Commit; ohne Basis lässt sich der Schutz umbenannter Dateien nicht vergleichen.";
 
@@ -364,29 +361,29 @@ async function existenceFindings(state) {
   return (await Promise.all(SOURCES.map((source) => findingsOf(state, source)))).flat();
 }
 
-async function basisFindings(state, basis) {
+async function basisFindings(state, { basis, onlyNew }) {
   const { renamePairs, trackedAt, withSnapshot } = await import("./feste-pfade/basis.mjs");
   const { protectionFindings } = await import("./feste-pfade/schutz.mjs");
   const pairs = renamePairs(basis);
   const current = await existenceFindings(state);
-  if (pairs.length === 0) return current;
+  if (pairs.length === 0 && !onlyNew) return current;
   return withSnapshot(basis, async (root) => {
     const before = stateOf(root, trackedAt(basis));
-    return [...current, ...(await protectionFindings(pairs, { before, after: state }))];
+    const known = new Set(onlyNew ? await existenceFindings(before) : []);
+    const lost =
+      pairs.length === 0 ? [] : await protectionFindings(pairs, { before, after: state });
+    return [...current.filter((finding) => !known.has(finding)), ...lost];
   });
 }
 
-function findings({ basis }) {
+function findings({ basis, "nur-neue": onlyNew }) {
   const state = stateOf(".", git(["ls-files", "-z"]).split(NUL).filter(Boolean));
-  if (basis === undefined) return existenceFindings(state);
+  if (basis === undefined) return onlyNew ? [ONLY_NEW_WITHOUT_BASIS] : existenceFindings(state);
   if (!isCommit(basis)) return [`--basis ${JSON.stringify(basis)} ${NO_COMMIT}`];
-  return basisFindings(state, basis);
+  return basisFindings(state, { basis, onlyNew });
 }
 
-const { values } = parseArgs({ options: { basis: { type: "string" } } });
-const found = [...new Set(await findings(values))];
-for (const finding of found) console.error(finding);
-if (found.length > 0) {
-  console.log(HINT);
-  process.exitCode = 1;
-}
+const { values } = parseArgs({
+  options: { basis: { type: "string" }, "nur-neue": { type: "boolean", default: false } },
+});
+befundeMeldenUndScheitern([...new Set(await findings(values))], MELDUNG.FESTE_PFADE);
