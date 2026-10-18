@@ -1,0 +1,218 @@
+name: testumbau-vorher
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Basis-Commit (40 Zeichen) mit den Quelldateien und dem alten Test
+        type: string
+        required: true
+      tests:
+        description: Geänderte Testdateien unter test/, durch Komma getrennt
+        type: string
+        required: true
+      stueck_sekunden:
+        description: Ziel-Rechenzeit je Stück in Sekunden (Schätzung des Plans)
+        type: string
+        required: false
+        default: "600"
+
+permissions: {}
+
+concurrency:
+  group: testumbau-vorher-${{ inputs.commit }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Vorher-Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.eingaben.outputs.commit }}
+      tests: ${{ steps.eingaben.outputs.tests }}
+      anzahl: ${{ steps.plan.outputs.anzahl }}
+      nummern: ${{ steps.plan.outputs.nummern }}
+      stuecke: ${{ steps.plan.outputs.stuecke }}
+    steps:
+      - name: Eingaben prüfen
+        id: eingaben
+        env:
+          COMMIT: ${{ inputs.commit }}
+          TESTS: ${{ inputs.tests }}
+          STUECK_SEKUNDEN: ${{ inputs.stueck_sekunden }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit muss eine Commit-SHA aus 40 Zeichen 0-9a-f sein"
+            exit 1
+          fi
+          if ! [[ "$TESTS" =~ ^test/[A-Za-z0-9_./-]+(,test/[A-Za-z0-9_./-]+)*$ ]] || [[ "$TESTS" == *..* ]]; then
+            echo "tests muss eine Liste von Pfaden unter test/ sein, durch Komma getrennt, ohne .."
+            exit 1
+          fi
+          if ! [[ "$STUECK_SEKUNDEN" =~ ^[1-9][0-9]{0,4}$ ]]; then
+            echo "stueck_sekunden muss eine ganze Zahl von 1 bis 99999 sein"
+            exit 1
+          fi
+          printf 'commit=%s\ntests=%s\nstueck_sekunden=%s\n' "$COMMIT" "$TESTS" "$STUECK_SEKUNDEN" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Basis holen
+        env:
+          COMMIT: ${{ steps.eingaben.outputs.commit }}
+        run: git fetch --no-tags --depth=1 origin "$COMMIT"
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+          install-skripte: "false"
+
+      - name: Vorher-Plan
+        id: plan
+        env:
+          COMMIT: ${{ steps.eingaben.outputs.commit }}
+          TESTS: ${{ steps.eingaben.outputs.tests }}
+          STUECK_SEKUNDEN: ${{ steps.eingaben.outputs.stueck_sekunden }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vorher"
+          npm run --silent test:mutation -- --basis "$COMMIT" --tests "$TESTS" --vorher-plan "$RUNNER_TEMP/vorher/plan.json" --stueck-sekunden "$STUECK_SEKUNDEN" | tee -a "$GITHUB_STEP_SUMMARY"
+          plan="$RUNNER_TEMP/vorher/plan.json"
+          anzahl=$(jq -e '.stuecke | length' "$plan")
+          nummern=$(jq -c -e '[.stuecke[].nummer] | if length == 0 then [0] else . end' "$plan")
+          stuecke=$(jq -c -e '[.stuecke[] | {nummer, datei, zeilen}]' "$plan")
+          printf 'anzahl=%s\nnummern=%s\nstuecke=%s\n' "$anzahl" "$nummern" "$stuecke" >> "$GITHUB_OUTPUT"
+
+      - name: Plan hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vorher-plan
+          path: ${{ runner.temp }}/vorher/plan.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  stueck:
+    name: Vorher-Stück ${{ matrix.nummer }}
+    needs: plan
+    if: needs.plan.outputs.anzahl != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        nummer: ${{ fromJSON(needs.plan.outputs.nummern) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Basis holen
+        env:
+          COMMIT: ${{ needs.plan.outputs.commit }}
+        run: git fetch --no-tags --depth=1 origin "$COMMIT"
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: Stück rechnen
+        env:
+          COMMIT: ${{ needs.plan.outputs.commit }}
+          TESTS: ${{ needs.plan.outputs.tests }}
+          STUECKE: ${{ needs.plan.outputs.stuecke }}
+          NUMMER: ${{ matrix.nummer }}
+        run: |
+          set -euo pipefail
+          stueck=$(jq -c -e --argjson nummer "$NUMMER" '.[] | select(.nummer == $nummer)' <<< "$STUECKE")
+          mkdir -p "$RUNNER_TEMP/vorher"
+          npm run test:mutation -- --basis "$COMMIT" --tests "$TESTS" --vorher-stueck "$stueck" --ergebnis "$RUNNER_TEMP/vorher/stueck-$NUMMER.json"
+
+      - name: Stück hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vorher-stueck-${{ matrix.nummer }}
+          path: ${{ runner.temp }}/vorher/stueck-${{ matrix.nummer }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  zusammen:
+    name: Vorher zusammen
+    needs: [plan, stueck]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+          install-skripte: "false"
+
+      - name: Plan laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: vorher-plan
+          path: ${{ runner.temp }}/vorher
+
+      - name: Stücke laden
+        if: needs.plan.outputs.anzahl != '0'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: vorher-stueck-*
+          path: ${{ runner.temp }}/vorher
+          merge-multiple: true
+
+      - name: Zusammenführen
+        run: |
+          set -euo pipefail
+          {
+            echo "## Vorher-Seite"
+            npm run --silent test:mutation -- --vorher-zusammen "$RUNNER_TEMP/vorher" --ergebnis "$RUNNER_TEMP/vorher-ergebnis.json"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Laufzeiten auf GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          lauf=$(gh api "repos/$REPO/actions/runs/$RUN_ID")
+          jobs=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" --jq '.jobs[]' | jq -s -c '[.[] | select(.name | startswith("Vorher-Stück")) | select(.completed_at != null)]')
+          {
+            jq -r '"- Gesamtzeit bis jetzt: \(now - (.run_started_at | fromdateiso8601) | floor) s ab Start des Laufs"' <<< "$lauf"
+            jq -r 'if length == 0 then "- Stück-Jobs: keine" else
+              "- Stück-Jobs: \(length), längster \(map((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) | max) s, längstes Warten auf einen Rechner \(map((.started_at | fromdateiso8601) - (.created_at | fromdateiso8601)) | max) s" end' <<< "$jobs"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Ergebnis hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vorher-ergebnis
+          path: ${{ runner.temp }}/vorher-ergebnis.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
