@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { geschuetzteMuster } from "./auftrag/format.mjs";
 import { ROLLBACK_FOLDER } from "./migrationen-orte.mjs";
@@ -9,10 +9,12 @@ import {
   WILDCARD,
   gitignoreGlob,
   hasFileBelow,
+  hasFileStartingWith,
   missingGlobAlternatives,
   pathExists,
   regexFindings,
 } from "./feste-pfade/muster.mjs";
+import { filterProblem, positivePattern, workflowFilters } from "./feste-pfade/workflows.mjs";
 import { git, matches } from "./pruefungen-messen.mjs";
 
 const NUL = "\0";
@@ -22,6 +24,8 @@ const MANIFEST = "pruefung.json";
 const RED_PROBES = "test/werkzeuge/rotproben/";
 const ROLES = ".claude/rollen/";
 const JSON_ENDING = ".json";
+const WORKFLOW_FILE = /\.ya?ml$/;
+const RULE_FILES = ["HERMES_REGELN_DATEI", "TESTREGELN_DATEI"];
 const FUTURE_FOLDER = `${ROLLBACK_FOLDER}**`;
 const EDITING = /^(?:Edit|Write)\((.+)\)$/;
 const READING = /^Read\((.+)\)$/;
@@ -37,6 +41,10 @@ const HINT = [
   "In tools/gate-tests.json, tools/ziele/geschuetzt.json, tools/auftrag/musterdateien.json, .github/CODEOWNERS, .claude/rollen/ und .claude/settings.json nie selbst löschen: Eine Schutzliste zu kürzen ist eine Lockerung und braucht Antonios Freigabe.",
 ].join("\n");
 const NOT_DECLARED = "ist dort nicht deklariert";
+const NOT_EXPORTED =
+  "wird dort nicht exportiert; die Prüfung fester Pfade liest die Liste über den Export";
+const ALLOWED_UNCHECKED =
+  "allowed: die Prüfung fester Pfade prüft allowed-Regeln nicht; eine Erlaubnisliste trifft eine umbenannte Datei still nicht mehr";
 const DECLARATION = /^(?:export\s+)?(?:async\s+)?(?:function\*?|class|const|let|var)\s+([\w$]+)/gm;
 const EXPORT_LIST = /^export\s*\{([^}]*)\}/gm;
 const EXPORTED_NAME = /(?:[\w$]+\s+as\s+)?([\w$]+)/g;
@@ -197,8 +205,31 @@ function optionFindings(state, where, rules = {}) {
   return paths.flatMap((path) => pathOrGlobFindings(state, where, path));
 }
 
+function moduleOf(state, file) {
+  return import(pathToFileURL(resolve(state.root, file)).href);
+}
+
+function exportedValue(module, file, name) {
+  return module[name] === undefined
+    ? { finding: `${file}: ${name} ${NOT_EXPORTED}` }
+    : { value: module[name] };
+}
+
+function ruleFileFindings(state, file, module) {
+  return RULE_FILES.flatMap((name) => {
+    const { finding, value } = exportedValue(module, file, name);
+    if (finding !== undefined) return [finding];
+    const path = relative(resolve(state.root), fileURLToPath(value));
+    return fileOnlyFindings(state, `${file} ${name}`, [path]);
+  });
+}
+
 async function eslintFindings(state, file) {
-  const { default: blocks } = await import(pathToFileURL(resolve(state.root, file)).href);
+  const module = await moduleOf(state, file);
+  return [...blockFindings(state, file, module.default), ...ruleFileFindings(state, file, module)];
+}
+
+function blockFindings(state, file, blocks) {
   return blocks.flatMap((block, index) => {
     const where = `${file} ${block.name ?? `Block ${index + 1}`}`;
     const patternsOf = (list) =>
@@ -221,10 +252,13 @@ function sourceFindings(state, where, sources) {
 }
 
 function dependencyFindings(state, file) {
-  const { forbidden = [], required = [] } = createRequire(import.meta.url)(
-    resolve(state.root, file),
-  );
+  const {
+    forbidden = [],
+    required = [],
+    allowed,
+  } = createRequire(import.meta.url)(resolve(state.root, file));
   return [
+    ...(allowed === undefined ? [] : [`${file} ${ALLOWED_UNCHECKED}`]),
     ...forbidden.flatMap(({ name, from, to }) => [
       ...sourceFindings(state, `${file} ${name} from.path`, from?.path),
       ...sourceFindings(state, `${file} ${name} to.path`, to?.path),
@@ -271,6 +305,47 @@ function redProbeFindings(state, folder) {
     .flatMap((manifest) => manifestFindings(state, manifest));
 }
 
+function codeList(names, hits) {
+  return async (state, file) => {
+    const module = await moduleOf(state, file);
+    return names.flatMap((name) => {
+      const { finding, value } = exportedValue(module, file, name);
+      if (finding !== undefined) return [finding];
+      const entries = [value].flat();
+      return entries
+        .filter((entry) => !hits(state.files, entry))
+        .map((entry) => missing(`${file} ${name}`, entry));
+    });
+  };
+}
+
+function isListed(files, path) {
+  return files.includes(path);
+}
+
+function workflowFindings(state, folder) {
+  const workflows = state.files.filter(
+    (path) => path.startsWith(folder) && WORKFLOW_FILE.test(path),
+  );
+  return workflows.flatMap((workflow) =>
+    workflowFilters(readFileSync(join(state.root, workflow), "utf8")).flatMap((filter) =>
+      filter.unreadable
+        ? [`${workflow}: ${filterProblem(filter)}`]
+        : filter.patterns.flatMap((pattern) =>
+            globFindings(state, {
+              where: `${workflow} on.${filter.event}.${filter.key}`,
+              pattern: positivePattern(pattern),
+            }),
+          ),
+    ),
+  );
+}
+
+function migratedFindings(state, file) {
+  const entries = readJson(state, file).map((entry) => entry.file);
+  return fileOnlyFindings(state, `${file} file`, entries);
+}
+
 const SOURCES = [
   { path: "tools/gate-tests.json", check: gateFindings },
   { path: "tools/ziele/geschuetzt.json", check: protectedFindings },
@@ -282,6 +357,18 @@ const SOURCES = [
   { path: ".dependency-cruiser.cjs", check: dependencyFindings },
   { path: "tools/bereiche.json", check: areaFindings },
   { path: RED_PROBES, check: redProbeFindings },
+  {
+    path: "tools/auftrag/agenten.mjs",
+    check: codeList(["KRITISCH_OHNE_GATE_TEST"], hasFileStartingWith),
+  },
+  { path: "tools/auftrag/bereiche.mjs", check: codeList(["GEMEINSAME_ORDNER"], pathExists) },
+  { path: "tools/auftrag/lauf.mjs", check: codeList(["PIN_PRUEFUNG", "PIN_HAKEN"], isListed) },
+  {
+    path: "tools/mutationspruefung/vorlage.mjs",
+    check: codeList(["KETTENANFANG", "SCHEMA"], isListed),
+  },
+  { path: ".github/workflows/", check: workflowFindings },
+  { path: "test/abnahme-ausgewandert.json", check: migratedFindings },
 ];
 
 function findingsOf(state, { path, check }) {

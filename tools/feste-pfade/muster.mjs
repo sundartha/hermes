@@ -103,9 +103,13 @@ function typescriptFolder(pattern) {
   return fits ? folder : undefined;
 }
 
+export function hasFileStartingWith(files, prefix) {
+  return prefix !== "" && files.some((file) => file.startsWith(prefix));
+}
+
 export function hasFileBelow(files, folder) {
   const prefix = folder.endsWith(SEPARATOR) ? folder : `${folder}${SEPARATOR}`;
-  return folder !== "" && files.some((file) => file.startsWith(prefix));
+  return folder !== "" && hasFileStartingWith(files, prefix);
 }
 
 export function pathExists(files, path) {

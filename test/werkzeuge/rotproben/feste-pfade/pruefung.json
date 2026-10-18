@@ -5,7 +5,8 @@
     "tools/feste-pfade/",
     "tools/migrationen-orte.mjs",
     "tools/ts-dateien.mjs",
-    "tools/pruefungen-messen.mjs"
+    "tools/pruefungen-messen.mjs",
+    "tools/workflows-pruefen/struktur.mjs"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"],
