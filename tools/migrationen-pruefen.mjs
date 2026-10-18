@@ -4,11 +4,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
+import { FOLDER, ROLLBACK_FOLDER } from "./migrationen-orte.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
 import { isCommit } from "./ts-dateien.mjs";
 
-const FOLDER = "src/db/migrations/";
-const ROLLBACK_FOLDER = `${FOLDER}rueckbau/`;
 const SCHEMA = "src/db/schema.sql";
 const CONFIG = "tools/basis/squawk.toml";
 const SQUAWK = fileURLToPath(import.meta.resolve("squawk-cli/js/bin/squawk"));

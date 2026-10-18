@@ -564,25 +564,6 @@ export default [
     languageOptions: { globals: { ...globals.browser } },
   },
   {
-    files: [".claude/workflows/**/*.js"],
-    languageOptions: {
-      globals: {
-        agent: "readonly",
-        parallel: "readonly",
-        pipeline: "readonly",
-        phase: "readonly",
-        log: "readonly",
-        args: "readonly",
-        budget: "readonly",
-        workflow: "readonly",
-        meta: "readonly",
-      },
-      parserOptions: {
-        ecmaFeatures: { globalReturn: true },
-      },
-    },
-  },
-  {
     files: ["src/config.js"],
     rules: {
       "no-restricted-properties": "off",
