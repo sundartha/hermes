@@ -1,3 +1,11 @@
+import { zweckBlock } from "../auftrag/zweck.mjs";
+
+export const ZWECK_JE_TEIL = {
+  proben: "github/rotproben",
+  push: "github/rotproben",
+  menschen: "github/ohne-menschen",
+};
+
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_TECHNIK = 2;
@@ -50,10 +58,21 @@ function berichtZeilen({ proben, push, menschen, aufgeraeumt }) {
   ];
 }
 
-function alleUrteile({ proben = [], push, menschen, aufgeraeumt }) {
-  return [...proben.map(({ ergebnis }) => ergebnis), push, menschen, aufgeraeumt].filter(Boolean);
+function urteileJeTeil({ proben, ...teile }) {
+  const einzeln = Object.entries(teile).filter(([, urteil]) => urteil !== undefined);
+  return [...(proben ?? []).map(({ ergebnis }) => ["proben", ergebnis]), ...einzeln];
+}
+
+function zweckZeilen(urteile) {
+  const rote = urteile.filter(([, { ok, technisch: technik }]) => !ok && !technik);
+  const ids = [...new Set(rote.map(([teil]) => ZWECK_JE_TEIL[teil]).filter(Boolean))];
+  return ids.flatMap(zweckBlock).flatMap((zeile) => ["", zeile]);
 }
 
 export function alsBericht(teile) {
-  return { zeilen: berichtZeilen(teile), urteile: alleUrteile(teile) };
+  const urteile = urteileJeTeil(teile);
+  return {
+    zeilen: [...berichtZeilen(teile), ...zweckZeilen(urteile)],
+    urteile: urteile.map(([, urteil]) => urteil),
+  };
 }

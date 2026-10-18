@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const CODEOWNERS_FILE = ".github/CODEOWNERS";
 const ROLE_SPECIFIC_PATH_BY_ROLE_FILE = {
   ".claude/rollen/bau.json": "test/**",
@@ -11,6 +13,7 @@ const ROOT_ANCHOR_PATTERN = /^\//;
 const ANY_DIRECTORY_PREFIX_PATTERN = /^\*\*\//;
 const DIRECTORY_SUFFIX = "/";
 const WHITESPACE_PATTERN = /\s+/;
+const ZWECK = "github/codeowners";
 
 function canonicalPath(pattern) {
   const path = pattern.replace(ROOT_ANCHOR_PATTERN, "").replace(ANY_DIRECTORY_PREFIX_PATTERN, "");
@@ -52,4 +55,7 @@ const findings = Object.keys(ROLE_SPECIFIC_PATH_BY_ROLE_FILE).flatMap((roleFile)
   findingsForRoleFile(root, roleFile, ownedPaths),
 );
 for (const finding of findings) console.error(finding);
-if (findings.length > 0) process.exitCode = 1;
+if (findings.length > 0) {
+  console.log(zweckBlock(ZWECK).join("\n"));
+  process.exitCode = 1;
+}

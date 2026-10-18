@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import {
   SECRETS_PATTERN,
   indentOf,
@@ -34,6 +35,7 @@ const ENVIRONMENT_BLOCK_PATTERN = /^\s*environment\s*:\s*(?:#.*)?$/;
 const ENVIRONMENT_KEY_PATTERN = /^\s*(?:-\s+)?["']?environment["']?\s*:/;
 const PULL_REQUEST_TRIGGER_PATTERN = /\b(?:pull_request|merge_group)/;
 const SECRET_WORKFLOWS_NAME = "tools/basis/geheimnis-workflows.json";
+const ZWECK = "github/workflows";
 const SECRET_WORKFLOWS = JSON.parse(
   readFileSync(new URL("basis/geheimnis-workflows.json", import.meta.url), "utf8"),
 );
@@ -189,4 +191,7 @@ const findings = [
   ...workflowNameFindings(workflows),
 ];
 for (const finding of findings) console.error(finding);
-if (findings.length > 0) process.exitCode = 1;
+if (findings.length > 0) {
+  console.log(zweckBlock(ZWECK).join("\n"));
+  process.exitCode = 1;
+}

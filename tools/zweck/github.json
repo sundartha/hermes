@@ -1,4 +1,11 @@
 {
+  "github/codeowners": {
+    "liste": "G5",
+    "wozu": "Jede geschützte Datei steht zweimal: in .github/CODEOWNERS (dann wartet die Freigabe-Prüfung auf Antonios Approve) und als Schreibverbot in den Rollen-Dateien von Bau- und Test-Agent unter .claude/rollen/. Fehlt eine Seite, darf ein Agent im Auftragsweg eine Prüfungsdatei selbst ändern, oder eine Änderung daran kommt ohne Approve durch; in beiden Fällen ließe sich eine Prüfung lockern, ohne dass Antonio es sieht.",
+    "behebung": "Den genannten Pfad auf der fehlenden Seite ergänzen: als Zeile in .github/CODEOWNERS oder als Edit(…)-Sperre in beiden Rollen-Dateien, mit demselben Pfad. Ist die Datei keine Prüfung mehr, weil sie gelöscht wurde, fällt der Pfad auf beiden Seiten weg.",
+    "nichtAngenommen": "Den Pfad auf beiden Seiten streichen, obwohl die Datei weiter prüft, ihn auf einer Seite so schreiben, dass der Abgleich ihn für gleich hält, obwohl er etwas anderes sperrt, oder die Liste der Rollen-Dateien im Abgleich kürzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegen .github/CODEOWNERS oder die Rollen-Dateien außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Pfad ins Issue. Beide Seiten sind selbst geschützt; die Ergänzung wartet auf Antonios Approve. Hältst du den Abgleich für falsch, gehört der Fall als Entscheidungsnotiz ins Issue; eine Änderung an tools/codeowners-abgleich.mjs braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/codeowners/ und Antonios Approve."
+  },
   "github/freigabe-alter-unbekannt": {
     "liste": "G1",
     "wozu": "Eine Paketversion wird erst nach sieben Tagen ohne Rückfrage übernommen, weil eine gekaperte Version meist in den ersten Tagen auffällt und zurückgezogen wird. Lässt sich das Alter nicht ermitteln, ist genau das nicht belegt, und ein Mensch muss die Version ansehen.",
@@ -75,5 +82,33 @@
     "behebung": "Antonio liest Vorher und Nachher im Kommentar „Freigabe-Prüfung: Zusammenfassung“ und gibt auf dem aktuellen Stand ein Approve. Gehört die Textänderung nicht zum Auftrag, wird sie zurückgenommen.",
     "nichtAngenommen": "Den Text an einer Stelle ändern, die test/werkzeuge/werkzeugtexte.json nicht festhält, oder die festgehaltene Datei so anpassen, dass keine Änderung erscheint. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit den geänderten Werkzeugen ins Issue."
+  },
+  "github/ohne-menschen": {
+    "liste": "G11",
+    "wozu": "Zeigt Antonio jede Woche, ob Code-PRs (Label art:code oder art:strenger) ohne Menschen durchlaufen. Hat ein Mensch einen solchen PR vor dem Merge freigegeben, hat ein PR, der keine Freigabe braucht, auf einen Menschen gewartet; dann trägt der Weg ohne Menschen nicht, und Änderungen bleiben wieder bei Antonio liegen.",
+    "behebung": "Beim genannten PR klären, warum er vor dem Merge ein Approve bekam: Brauchte er eine Freigabe, hat die Freigabe-Prüfung ihn falsch eingeordnet, und das ist ein Befund an tools/freigabe-pruefung.mjs; brauchte er keine, laufen solche PRs künftig ohne Approve durch.",
+    "nichtAngenommen": "Das Label eines PRs von Hand ändern, ein Approve erst nach dem Merge abgeben oder das Zeitfenster der Prüfung verkürzen, damit die Zeile grün wird. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Meldung bewertet keinen einzelnen PR und hält keinen Agenten auf. Ist ein Approve vor dem Merge bei Code-PRs gewollt, bleibt das Rot stehen, bis Antonio den Zweck dieser Prüfung neu festlegt."
+  },
+  "github/rotproben": {
+    "liste": "G10",
+    "wozu": "Eine Rot-Probe ist ein absichtlich falscher Probe-PR (Lint-Fehler, gelockerte Lint-Konfiguration, umgeschriebener Test, geänderte geschützte Datei) oder ein direkter Push auf master, den eine Sperre stoppen muss. Ohne den wöchentlichen Lauf fiele eine Sperre unbemerkt weg, und Antonio hielte einen Verstoß für gestoppt, der längst durchgeht.",
+    "behebung": "Die Sperre wiederherstellen, die die Zeile nennt: den Pflicht-Check zurück in den Regelsatz, den Schritt im Workflow wieder rot machen oder die Push-Regel einschalten. Ist ein Fall nicht erzeugbar, wird er in tools/rotproben-woche/faelle.mjs auf eine Datei umgestellt, die es gibt.",
+    "nichtAngenommen": "Einen Fall streichen oder so ändern, dass er nicht mehr an der Sperre geprüft wird, das erwartete Ergebnis an das tatsächliche anpassen oder das Rot nur mit einem weiteren Kommentar im Issue hinnehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Meldung richtet sich an Antonio und Jonas, die die Sperre selbst wiederherstellen können. Ist eine Sperre absichtlich aus, wird der Fall mit Antonios Entscheidung geändert, statt das Rot stehen zu lassen."
+  },
+  "github/testschutz": {
+    "liste": "G4",
+    "wozu": "Ein bestehender Test hält Verhalten fest, auf das sich Kunden verlassen. Ändert ein Agent ihn ohne Freigabe, kann er ihn so umschreiben, dass er eine falsche Änderung bestätigt; der Fehler ginge mit grünem Test live, und Kunden bekämen genau das Verhalten, das der alte Test verhindern sollte.",
+    "behebung": "Beschreibt der alte Test weiter gültiges Verhalten, die Änderung an ihm zurücknehmen und das neue Verhalten mit einem zusätzlichen Test belegen. Soll sich das Verhalten absichtlich ändern, stehen die betroffenen Tests unter „Tests, deren Erwartung sich ändern darf“ im verknüpften Issue, der PR verweist mit „Closes #<Issue>“ darauf, und Antonio oder Jonas setzt das Label verhalten-geaendert.",
+    "nichtAngenommen": "Den alten Test stehen lassen und einen widersprechenden daneben schreiben, ihn umbenennen oder verschieben, damit er als neu gilt, ihn so ändern, dass er nichts mehr prüft, oder den Issue-Text nach dem Label ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Muss sich die Erwartung ändern, schreibt die Paket-Sitzung die betroffenen Tests unter „Tests, deren Erwartung sich ändern darf“ ins verknüpfte Issue und bittet dort mit einer Entscheidungsnotiz um das Label verhalten-geaendert; setzen dürfen es nur Antonio und Jonas, danach startet „Testschutz neu auswerten“ die Prüfung. Die Sitzung setzt das Label nie selbst."
+  },
+  "github/workflows": {
+    "liste": "G6",
+    "wozu": "Ein Pflicht-Check soll nie grün enden, obwohl ein Schritt gescheitert ist (continue-on-error, || true), und Code aus einem fremden PR soll nie mit Zugangsdaten des Projekts laufen (pull_request_target, secrets außerhalb der Liste, Install-Skripte, Cache, Actions ohne Commit-SHA). Sonst käme ein Fehler mit grünem Check durch, oder Zugangsdaten könnten abfließen.",
+    "behebung": "Den Befund an der genannten Zeile beheben: das Verschlucken des Fehlers entfernen und die Ursache beheben, die es verdeckt hat, eine Action auf den Commit-SHA festlegen, npm ci mit --ignore-scripts aufrufen, secrets nur in Jobs mit environment und für die GitHub-API github.token nutzen.",
+    "nichtAngenommen": "Eine andere Schreibweise wählen, die den Fehler ebenso verschluckt oder Zugangsdaten ebenso weitergibt, aber nicht unter die Suchmuster fällt, oder einen Workflow in tools/basis/geheimnis-workflows.json eintragen, nur damit die Meldung verschwindet. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht ein Workflow wirklich secrets, gehört er mit Grund in tools/basis/geheimnis-workflows.json, zusammen mit einem Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/workflows/ (wie notfall.json), das master meldet und der PR nicht mehr; dann wartet der PR auf Antonios Approve. Liegt der Workflow außerhalb deines Bereichs, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Hältst du eine Regel für falsch, gehört sie als Entscheidungsnotiz ins Issue; eine Änderung an tools/workflows-pruefen.mjs braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/workflows/ und Antonios Approve."
   }
 }

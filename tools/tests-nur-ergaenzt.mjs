@@ -1,4 +1,6 @@
 import { parseArgs } from "node:util";
+
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import {
   changedExistingTestFiles,
   changedUnits,
@@ -11,6 +13,7 @@ import { approval, listHint } from "./testschutz/freigabe.mjs";
 import { rerunLinkedPullRequests } from "./testschutz/neustart.mjs";
 
 const EXIT_FAILURE = 1;
+const ZWECK = "github/testschutz";
 
 function parseOptions() {
   const { values } = parseArgs({
@@ -76,7 +79,7 @@ async function checkPullRequest({ basis, pullRequest }) {
     return;
   }
   console.error("Testschutz: bestehende Testzeilen sind geändert oder gelöscht, ohne Freigabe.");
-  for (const line of [...notes, ...findings]) console.error(line);
+  for (const line of [...notes, ...findings, ...zweckBlock(ZWECK)]) console.error(line);
   process.exitCode = EXIT_FAILURE;
 }
 
