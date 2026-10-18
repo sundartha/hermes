@@ -125,6 +125,19 @@ test("ein Sicherheitsbefund wird vor dem Artefakt auf Schwere und Merker gekürz
   assert.equal(JSON.stringify(ergebnis).includes("GEHEIM"), false);
 });
 
+test("ein Sicherheits-BLOCKER ohne lokalen Schalter geht mit Beleg in die Ablage, das Artefakt behält nur Schwere und Merker", async (context) => {
+  const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("sicherheit") });
+  assert.deepEqual(
+    ergebnis.befunde.map(({ sicherheit, schwere, id }) => [sicherheit, schwere, id]),
+    [[true, "BLOCKER", undefined], [false, "SOLLTE", "N7"]],
+  );
+  assert.equal(ergebnis.zaehler.BLOCKER, 1);
+  assert.deepEqual(
+    ergebnis.ablage.map(({ schwere, id, beleg }) => [schwere, id, beleg]),
+    [["BLOCKER", "SG-3", "GEHEIMER-BELEG-91c2"]],
+  );
+});
+
 test("das Feld urteil ändert das Ergebnis eines Commits nicht", async (context) => {
   const gueltig = aufzeichnung("gueltig");
   const bestanden = structuredClone(gueltig);

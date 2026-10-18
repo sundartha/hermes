@@ -267,13 +267,28 @@ test("ablegen ohne gültige Ablage-Datei scheitert und legt nichts an", async (c
   const ohneDatei = await ablegenGegen(context, leer);
   assert.notEqual(ohneDatei.lauf.status, 0);
   assert.deepEqual(ohneDatei.neu, []);
-  const blocker = hinweis({ schwere: "BLOCKER", sicherheit: true });
+  const ohneMerker = hinweis({ schwere: "BLOCKER" });
   const falsch = probeDirectory(context, {
-    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund: blocker }] }),
+    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund: ohneMerker }] }),
   });
-  const mitBlocker = await ablegenGegen(context, falsch);
-  assert.notEqual(mitBlocker.lauf.status, 0);
-  assert.deepEqual(mitBlocker.neu, []);
+  const ohneSicherheit = await ablegenGegen(context, falsch);
+  assert.notEqual(ohneSicherheit.lauf.status, 0);
+  assert.deepEqual(ohneSicherheit.neu, []);
+});
+
+test("ablegen legt einen Sicherheits-BLOCKER im privaten Repo an, der Titel nennt die Schwere", async (context) => {
+  const befund = hinweis({ id: "SG-12", schwere: "BLOCKER", beleg: "GEHEIMER-BELEG", sicherheit: true });
+  const ablage = probeDirectory(context, {
+    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund }] }),
+  });
+  const { lauf, neu } = await ablegenGegen(context, ablage);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  assert.deepEqual(
+    neu.map(({ pfad, rumpf }) => [pfad, rumpf.title]),
+    [[`/repos/${PRIVAT}/issues`, "Sicherheit BLOCKER: Prüfer: SG-12 in `src/zahl.js`, Zeile 1"]],
+  );
+  assert.match(neu[0].rumpf.body, /GEHEIMER-BELEG/);
+  assert.match(neu[0].rumpf.body, /Schwere: BLOCKER \(Sicherheitsbezug, nicht öffentlich\)/);
 });
 
 test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gleichem Titel verhindert ein neues", async () => {
