@@ -769,6 +769,8 @@ const OFFENLEGUNG_UNTERBRECHUNG = Object.freeze([
     vorlagePfad: "agent.conversation_config.agent.disable_first_message_interruptions",
     livePfad: "conversation_config.agent.disable_first_message_interruptions",
     soll: true,
+    schemaBeleg:
+      "openapi.json des Anbieters, gelesen 2026-08-18: Body_Create_Agent_v1_convai_agents_create_post.conversation_config -> ConversationalConfigAPIModel-Input.agent -> AgentConfigAPIModel-Input.disable_first_message_interruptions; boolean, Default false",
     zweck:
       "sperrt die Unterbrechung fuer den ERSTEN Satz und nur fuer ihn - ohne ihn bricht ein Huster auf der Leitung die Offenlegung ab, und Artikel 50 EU AI Act haengt an ihr",
   }),
@@ -777,6 +779,8 @@ const OFFENLEGUNG_UNTERBRECHUNG = Object.freeze([
     vorlagePfad: "agent.conversation_config.turn.transcribe_on_disabled_interruptions",
     livePfad: "conversation_config.turn.transcribe_on_disabled_interruptions",
     soll: false,
+    schemaBeleg:
+      "openapi.json des Anbieters, gelesen 2026-08-18: Body_Create_Agent_v1_convai_agents_create_post.conversation_config -> ConversationalConfigAPIModel-Input.turn -> TurnConfig.transcribe_on_disabled_interruptions; boolean, Default false",
     zweck:
       "verwirft, was waehrend des gesperrten Zuges erkannt wird - mit true kam ein Phantom-Zug der Anbieter-Erkennung als echter User-Zug beim Modell an und kippte den Anruf in eine fremde Sprache (2026-09-04, s. tasks/UEBERGABE-SPRACHDEFEKT.md)",
   }),
@@ -793,7 +797,7 @@ test("EL-START T5 (f, Mechanismus): die Offenlegung ist gegen Unterbrechung gesi
     "die Besitz-Erklaerung der Vorlage ist leer - dann prueft die zweite Haelfte unten nichts",
   );
 
-  for (const { feld, vorlagePfad, livePfad, soll, zweck } of OFFENLEGUNG_UNTERBRECHUNG) {
+  for (const { feld, vorlagePfad, livePfad, soll, schemaBeleg, zweck } of OFFENLEGUNG_UNTERBRECHUNG) {
     assert.equal(
       blattAnPfad(vorlage, vorlagePfad),
       soll,
@@ -818,7 +822,7 @@ test("EL-START T5 (f, Mechanismus): die Offenlegung ist gegen Unterbrechung gesi
     assert.deepEqual(
       eintrag.live,
       [livePfad],
-      `${feld}: der besessene LIVE-Pfad weicht vom Anbieter-Schema ab (s. Schema-Beleg im Kopf dieses Falls) - ein Waechter, der ins Nichts sieht, wird nie rot`,
+      `${feld}: der besessene LIVE-Pfad weicht vom Anbieter-Schema ab (${schemaBeleg}) - ein Waechter, der ins Nichts sieht, wird nie rot`,
     );
     assert.equal(
       eintrag.ausgenommen,
