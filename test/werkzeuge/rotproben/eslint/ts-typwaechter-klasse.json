@@ -1,0 +1,15 @@
+{
+  "titel": "Ungeprüfter Typwächter als Methode einer Klasse",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export class Pruefer {",
+      "  readonly grenze = \"\";",
+      "",
+      "  istZahl(wert: unknown): wert is number {",
+      "    return wert !== this.grenze;",
+      "  }",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter in einer .cts-Datei unter scripts/",
+  "dateien": {
+    "scripts/probe/probe.cts": [
+      "export function istZahl(wert: unknown): wert is number {",
+      "  return wert !== undefined;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

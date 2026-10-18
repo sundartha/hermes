@@ -1,0 +1,12 @@
+{
+  "titel": "Ungeprüfter Typwächter in einer Überladung",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function istZahl(wert: unknown): wert is number;",
+      "export function istZahl(wert: unknown): boolean {",
+      "  return wert !== undefined;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

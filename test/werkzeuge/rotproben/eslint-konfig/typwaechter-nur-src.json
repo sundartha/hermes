@@ -1,0 +1,26 @@
+{
+  "titel": "Typwächter-Sperre unter test/ abgeschaltet",
+  "dateien": {
+    "eslint.config.js": [
+      "import { builtinRules } from \"eslint/use-at-your-own-risk\";",
+      "",
+      "const typen = { rules: { \"keine-typwaechter\": builtinRules.get(\"no-restricted-syntax\") } };",
+      "export default [",
+      "  { linterOptions: { noInlineConfig: true } },",
+      "  {",
+      "    files: [\"{src,test}/**/*.{ts,mts,cts}\"],",
+      "    plugins: { \"hermes-typen\": typen },",
+      "    rules: { \"hermes-typen/keine-typwaechter\": [\"error\", { selector: \"TSTypePredicate\" }] },",
+      "  },",
+      "  { files: [\"test/**\"], rules: { \"hermes-typen/keine-typwaechter\": \"off\" } },",
+      "];"
+    ],
+    "src/modul.js": [
+      "export const wert = true;"
+    ],
+    "test/modul.test.js": [
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "test (.ts): Regel hermes-typen/keine-typwaechter ist [0,{\"selector\":\"TSTypePredicate\"}], die Kopie sagt [2,"
+}

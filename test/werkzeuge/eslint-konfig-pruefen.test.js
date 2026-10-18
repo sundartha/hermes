@@ -6,6 +6,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 
+import { DURCHGELASSEN, manifests, runCase } from "../../tools/pruefungen-messen.mjs";
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SCRIPT_PATH = resolve(REPO_ROOT, "tools/eslint-konfig-pruefen.mjs");
 const EXIT_OK = 0;
@@ -228,4 +230,37 @@ test("eslint-konfig-pruefen: abgeschwaechte Regel nur fuer .test.ts stoppt die P
   });
   assert.equal(result.status, EXIT_FINDING);
   assert.match(result.output, /^test \(\.ts\): test\/eslint-konfig-probe\.test\.ts wird anders geprüft als test\/eslint-konfig-probe\.ts$/m);
+});
+
+async function typescriptVerdict(zeilen) {
+  const { probe } = manifests(REPO_ROOT).get("eslint");
+  return runCase({ root: REPO_ROOT }, probe, { dateien: { "src/probe/probe.ts": zeilen } });
+}
+
+test("eslint.config.js: die Typwächter-Sperre lässt eine Funktion mit boolean-Rückgabe in .ts durch", async () => {
+  const verdict = await typescriptVerdict([
+    "export function istGesetzt(wert: unknown): boolean {",
+    "  return wert !== undefined;",
+    "}",
+  ]);
+  assert.equal(verdict, DURCHGELASSEN);
+});
+
+test("eslint.config.js: die Typwächter-Sperre lässt eine typeof-Einengung im Rumpf in .ts durch", async () => {
+  const verdict = await typescriptVerdict([
+    "export function verdoppelt(wert: unknown): number {",
+    '  if (typeof wert === "number") return wert + wert;',
+    "  return 0;",
+    "}",
+  ]);
+  assert.equal(verdict, DURCHGELASSEN);
+});
+
+test("eslint.config.js: die Typwächter-Sperre lässt einen vom Compiler abgeleiteten Typwächter in filter durch", async () => {
+  const verdict = await typescriptVerdict([
+    "export function zahlen(werte: readonly unknown[]): number[] {",
+    '  return werte.filter((wert) => typeof wert === "number");',
+    "}",
+  ]);
+  assert.equal(verdict, DURCHGELASSEN);
 });

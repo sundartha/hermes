@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter als Methodensignatur in einem Typliteral",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export type Pruefer = Readonly<{",
+      "  istZahl(wert: unknown): wert is number;",
+      "}>;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}

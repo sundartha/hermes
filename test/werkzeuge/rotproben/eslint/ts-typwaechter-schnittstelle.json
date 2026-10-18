@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter als Methodensignatur in einem Interface",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export interface Pruefer {",
+      "  istZahl(wert: unknown): wert is number;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}
