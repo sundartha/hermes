@@ -7,6 +7,10 @@ import { ABSATZ_MUTATION, ehrlicheNachrunde, funktion, GLEICHWERTIG_MIT_GRUND, M
 import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
+function mutationslaeufe(beleg) {
+  return beleg.pruefungen.filter(({ name }) => name === "mutation").map(({ exitCode }) => exitCode);
+}
+
 test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung, sonst ergänzt der Test-Agent", (context) => {
   const faelle = [
     { zusatz: { "bau-nachrunde-antwort": GLEICHWERTIG_MIT_GRUND }, letzte: "mutation nach Bau", nachricht: GLEICHWERTIG_MIT_GRUND },
@@ -17,6 +21,7 @@ test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung
     const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_MUTATION });
     assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
     assert.deepEqual([pruefung(beleg, "mutation"), pruefung(beleg, letzte)], [EXIT_ROT, 0]);
+    assert.deepEqual(mutationslaeufe(beleg), [EXIT_ROT]);
     const [ersterBau, nachrunde] = beleg.agenten.filter(({ rolle }) => rolle === "bau");
     assert.equal(nachrunde.sitzung, ersterBau.sitzung);
     assert.match(readFileSync(join(werkzeug, "prompt-bau-nachrunde.txt"), "utf8"), /src\/rechnen\.js:2:7/);
@@ -57,4 +62,29 @@ test("bricht die Mutationsprüfung mit rotem Erstlauf ab, nennt der Grund der Ru
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.equal(beleg.grund, "mutation ist mit Exit 2 abgebrochen: Erstlauf rot: test/rechnen.test.js › verdopple > sieben");
   assert.equal(pruefung(beleg, "mutation"), 2);
+});
+
+test("bricht die Mutationsprüfung einmal ab, wiederholt der Lauf nur diesen Schritt und setzt keinen Agenten neu ein", (context) => {
+  const einmalAbbrechen = [
+    'import { existsSync, writeFileSync } from "node:fs";',
+    'if (existsSync(".git/mutation-abgebrochen")) process.exitCode = 0;',
+    'else { writeFileSync(".git/mutation-abgebrochen", ""); console.error("Abbruch: Netzfehler"); process.exitCode = 2; }',
+    "",
+  ].join("\n");
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": einmalAbbrechen } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(mutationslaeufe(beleg), [2, 0]);
+  assert.deepEqual(beleg.agenten.map(({ rolle }) => rolle), ["test", "bau"]);
+});
+
+test("bricht die Mutationsprüfung auch in der Wiederholung ab, hält der Auftrag ohne neue Runde mit „Entscheidung nötig“ an", (context) => {
+  const immerAbbrechen = ['console.error("Abbruch: Netzfehler");', "process.exitCode = 2;", ""].join("\n");
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": immerAbbrechen } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual(mutationslaeufe(beleg), [2, 2]);
+  assert.equal(beleg.runde, 1);
+  assert.ok(beleg.entscheidung.text.startsWith("## Entscheidung nötig\n"), beleg.entscheidung.text);
+  assert.ok(beleg.entscheidung.text.includes("Ein Werkzeug ist 2-mal abgebrochen"), beleg.entscheidung.text);
 });
