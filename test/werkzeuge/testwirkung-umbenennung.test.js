@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
-import { EXIT_GRUEN, EXIT_ROT } from "./testwirkung-probe.js";
+import { EXIT_GRUEN, EXIT_ROT, pruefeMitEntfernten } from "./testwirkung-probe.js";
 
-const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
 const QUELLE_JS = "export function doppelt(wert) {\n  return wert + wert;\n}\n";
 const QUELLE_TS = "export function doppelt(wert: number): number {\n  return wert + wert;\n}\n";
 const QUELLE_TS_GEAENDERT = "export function doppelt(wert: number): number {\n  return wert * 2;\n}\n";
@@ -28,15 +24,8 @@ function testdatei({ quelle = "js", typ = "", pruefung = PRUEFUNG, einzug = "  "
 }
 
 function pruefeNach(context, { neu, entfernt = [] }) {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
-    "src/rechnen.js": QUELLE_JS,
-    "test/rechnen.test.js": testdatei(),
-  });
-  writeFiles(repo, neu);
-  for (const datei of entfernt) rmSync(join(repo, datei));
-  commitAll(repo, "Änderung");
-  return runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1"]);
+  const vorher = { "src/rechnen.js": QUELLE_JS, "test/rechnen.test.js": testdatei() };
+  return pruefeMitEntfernten(context, vorher, { nachher: neu, entfernt });
 }
 
 test("Testwirkung: eine Testdatei, die beim Wechsel nach .ts nur Typen bekommt, bringt keine neuen Tests", (context) => {
@@ -127,20 +116,15 @@ test("Testwirkung: eine reine Formatänderung in einer .js-Testdatei gilt wie he
 });
 
 test("Testwirkung: eine Importendung, die auf ein anderes nur-Typen-Modul zeigt, gilt als geändert", (context) => {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
-    "src/rechnen.js": QUELLE_JS,
-    "src/anders.js": QUELLE_JS,
-    "test/rechnen.test.js": testdatei(),
+  const vorher = { "src/rechnen.js": QUELLE_JS, "src/anders.js": QUELLE_JS, "test/rechnen.test.js": testdatei() };
+  const lauf = pruefeMitEntfernten(context, vorher, {
+    nachher: {
+      "src/rechnen.ts": QUELLE_TS,
+      "src/anders.ts": QUELLE_TS,
+      "test/rechnen.test.js": testdatei().replace("../src/rechnen.js", "../src/anders.ts"),
+    },
+    entfernt: ["src/rechnen.js", "src/anders.js"],
   });
-  writeFiles(repo, {
-    "src/rechnen.ts": QUELLE_TS,
-    "src/anders.ts": QUELLE_TS,
-    "test/rechnen.test.js": testdatei().replace("../src/rechnen.js", "../src/anders.ts"),
-  });
-  for (const datei of ["src/rechnen.js", "src/anders.js"]) rmSync(join(repo, datei));
-  commitAll(repo, "Änderung");
-  const lauf = runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1"]);
   assert.doesNotMatch(lauf.stdout, WIE_AUF_DER_BASIS);
   assert.match(lauf.stdout, /^Tests geänderter Testdateien: 1 in 5 Läufen wiederholt/m);
 });
@@ -161,15 +145,11 @@ function mitHilfe(quelle, aufruf) {
 }
 
 test("Testwirkung: erreichte Zeilen werden auch verglichen, wenn die Quelle nur mit Typen nach .ts wechselt", (context) => {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
-    "src/rechnen.js": QUELLE_JS,
-    "test/rechnen.test.js": mitHilfe("js", "pruefe();"),
+  const vorher = { "src/rechnen.js": QUELLE_JS, "test/rechnen.test.js": mitHilfe("js", "pruefe();") };
+  const lauf = pruefeMitEntfernten(context, vorher, {
+    nachher: { "src/rechnen.ts": QUELLE_TS, "test/rechnen.test.js": mitHilfe("ts", "assert.equal(doppelt(2), 4);") },
+    entfernt: ["src/rechnen.js"],
   });
-  writeFiles(repo, { "src/rechnen.ts": QUELLE_TS, "test/rechnen.test.js": mitHilfe("ts", "assert.equal(doppelt(2), 4);") });
-  rmSync(join(repo, "src/rechnen.js"));
-  commitAll(repo, "Änderung");
-  const lauf = runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1"]);
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/rechnen\.test\.js \(Zeile 5\)$/m);
 });
@@ -212,17 +192,16 @@ function katalogtest(typ = "") {
 }
 
 function katalogNach(context, umbenennen) {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
+  const vorher = {
     "docs/sicherheitsgrenzen.md": KATALOG,
     "src/rechnen.js": QUELLE_JS,
     "test/hilfe.js": hilfsdatei(false),
     "test/katalog.test.js": katalogtest(),
+  };
+  return pruefeMitEntfernten(context, vorher, {
+    nachher: { "test/hilfe.js": hilfsdatei(true), ...(umbenennen ? { "test/katalog.test.ts": katalogtest(": number") } : {}) },
+    entfernt: umbenennen ? ["test/katalog.test.js"] : [],
   });
-  writeFiles(repo, { "test/hilfe.js": hilfsdatei(true), ...(umbenennen ? { "test/katalog.test.ts": katalogtest(": number") } : {}) });
-  if (umbenennen) rmSync(join(repo, "test/katalog.test.js"));
-  commitAll(repo, "Änderung");
-  return runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1"]);
 }
 
 const NICHT_MEHR_ERREICHT = /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/hilfe\.js \(Zeile 5\)$/m;
