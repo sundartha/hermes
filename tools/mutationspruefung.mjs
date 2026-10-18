@@ -379,13 +379,14 @@ async function gleicherLaufzeitcode(datei, { von, bis, seite }, umbenannt) {
 
 async function ohneGleichenSyntaxbaum(zeilen, pruefung) {
   const umbenannt = await umbenennungen(pruefung);
-  for (const datei of [...zeilen.keys()]) {
+  const uebrig = new Map(zeilen);
+  for (const datei of zeilen.keys()) {
     const meldung = await gleicherLaufzeitcode(datei, pruefung, umbenannt);
     if (meldung === undefined) continue;
-    zeilen.delete(datei);
+    uebrig.delete(datei);
     console.log(meldung);
   }
-  return zeilen;
+  return uebrig;
 }
 
 async function bestandteile({ von, bis, seite }) {
