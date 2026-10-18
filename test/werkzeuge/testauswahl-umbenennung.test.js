@@ -11,6 +11,7 @@ import {
   DEPENDENCY_TOOL,
   PRUEFLEITER_TOOL,
   REPO_ROOT,
+  RUNNER,
   commitAll,
   failingTest,
   passingTest,
@@ -31,6 +32,9 @@ const ALTER_TEST = "test/alt-p1-probe.test.js";
 const BEREICHE = JSON.stringify([{ bereich: "anrufe", quellen: ["^src/"], eingaenge: [], fachlogik: [] }]);
 const KONFIGURATION = ".dependency-cruiser.cjs";
 const BAUSTEIN = join(REPO_ROOT, "tools/umbenennung.mjs");
+const AUSGEWANDERTE_KRITERIEN = join(REPO_ROOT, "test/abnahme-ausgewandert.json");
+const KRITERIUM = "ABNAHME-PROBE2: Kriterium neben einer Typen-Testdatei | ROT WEIL: keiner | FIX: keiner";
+const TYPEN_TESTDATEI = 'import { test } from "node:test";\nconst name: string = "gewöhnlich";\ntest(name, () => {});\n';
 const TESTLAUFZEIT_TOOL = join(REPO_ROOT, "tools/testlaufzeit-pruefen.mjs");
 const TS_ZEITGLIED_DATEI = "test/zeitglied.test.ts";
 const ZEITGLIEDER_KONFIGURATION =
@@ -201,4 +205,15 @@ test("Testlaufzeit: echtWarten über 100 ms in einer flachen .ts-Hilfsdatei ist 
 test("Testlaufzeit: Testfälle in einer .test.ts-Datei sind keine Hilfsdatei-Befunde", () => {
   assert.deepEqual(hilfsdateiBefunde([{ datei: "test/probe.test.ts" }]), []);
   assert.equal(hilfsdateiBefunde([{ datei: "test/helfer.ts" }]).length, 1);
+});
+
+test("Testläufer: eine .test.ts-Datei ohne Kriterium zählt in der Abnahme-Zahl nicht als Kriterium", (context) => {
+  const directory = probeDirectory(context, {
+    "test/typen.test.ts": TYPEN_TESTDATEI,
+    "test/abnahme/kriterium.test.js": passingTest(KRITERIUM),
+  });
+  const kriterien = JSON.parse(readFileSync(AUSGEWANDERTE_KRITERIEN, "utf8")).length + 1;
+  const lauf = runIn(directory, process.execPath, [RUNNER, "abnahme"]);
+  assert.equal(lauf.status, 0, lauf.stdout);
+  assert.ok(lauf.stdout.includes(`${kriterien} von ${kriterien} Abnahmekriterien erfuellt`), lauf.stdout);
 });
