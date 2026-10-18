@@ -9,6 +9,18 @@ const QUELLE_TS_GEAENDERT = "export function doppelt(wert: number): number {\n  
 const PRUEFUNG = "assert.equal(doppelt(ZWEI), 4);";
 const OHNE_PRUEFUNG = "doppelt(ZWEI);";
 const WIE_AUF_DER_BASIS = /^Wie auf der Basis: /m;
+const WIEDERHOLUNGSLAEUFE = 5;
+const EINMAL_WIEDERHOLT = new RegExp(`^Tests geänderter Testdateien: 1 in ${WIEDERHOLUNGSLAEUFE} Läufen wiederholt`, "m");
+const PRUEFUNG_IN_HILFE = "  assert.equal(doppelt(2), 4);";
+const PRUEFUNG_IN_HILFSDATEI = "  assert.equal(doppelt(wert), 4);";
+
+function zeileVon(text, zeile) {
+  return text.split("\n").indexOf(zeile) + 1;
+}
+
+function nichtMehrErreicht(datei, zeile) {
+  return new RegExp(`^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: ${datei.replaceAll(".", "\\.")} \\(Zeile ${zeile}\\)$`, "m");
+}
 
 function testdatei({ quelle = "js", typ = "", pruefung = PRUEFUNG, einzug = "  " } = {}) {
   return [
@@ -106,13 +118,13 @@ test("Testwirkung: nachgezogene Importendung einer Umbenennung mit geändertem L
     entfernt: ["src/rechnen.js"],
   });
   assert.doesNotMatch(lauf.stdout, WIE_AUF_DER_BASIS);
-  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 1 in 5 Läufen wiederholt/m);
+  assert.match(lauf.stdout, EINMAL_WIEDERHOLT);
 });
 
 test("Testwirkung: eine reine Formatänderung in einer .js-Testdatei gilt wie heute als geändert", (context) => {
   const lauf = pruefeNach(context, { neu: { "test/rechnen.test.js": testdatei({ einzug: "    " }) } });
   assert.doesNotMatch(lauf.stdout, WIE_AUF_DER_BASIS);
-  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 1 in 5 Läufen wiederholt/m);
+  assert.match(lauf.stdout, EINMAL_WIEDERHOLT);
 });
 
 test("Testwirkung: eine Importendung, die auf ein anderes nur-Typen-Modul zeigt, gilt als geändert", (context) => {
@@ -126,7 +138,7 @@ test("Testwirkung: eine Importendung, die auf ein anderes nur-Typen-Modul zeigt,
     entfernt: ["src/rechnen.js", "src/anders.js"],
   });
   assert.doesNotMatch(lauf.stdout, WIE_AUF_DER_BASIS);
-  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 1 in 5 Läufen wiederholt/m);
+  assert.match(lauf.stdout, EINMAL_WIEDERHOLT);
 });
 
 function mitHilfe(quelle, aufruf) {
@@ -135,7 +147,7 @@ function mitHilfe(quelle, aufruf) {
     'import { test } from "node:test";',
     `import { doppelt } from "../src/rechnen.${quelle}";`,
     "function pruefe() {",
-    "  assert.equal(doppelt(2), 4);",
+    PRUEFUNG_IN_HILFE,
     "}",
     'test("verdoppelt", () => {',
     `  ${aufruf}`,
@@ -151,7 +163,7 @@ test("Testwirkung: erreichte Zeilen werden auch verglichen, wenn die Quelle nur 
     entfernt: ["src/rechnen.js"],
   });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/rechnen\.test\.js \(Zeile 5\)$/m);
+  assert.match(lauf.stdout, nichtMehrErreicht("test/rechnen.test.js", zeileVon(mitHilfe("js", "pruefe();"), PRUEFUNG_IN_HILFE)));
 });
 
 test("Testwirkung: eine Testdatei, die nach .ts wechselt und einer Umbenennung mit geändertem Laufzeitcode folgt, gilt als geändert", (context) => {
@@ -160,7 +172,7 @@ test("Testwirkung: eine Testdatei, die nach .ts wechselt und einer Umbenennung m
     entfernt: ["src/rechnen.js", "test/rechnen.test.js"],
   });
   assert.doesNotMatch(lauf.stdout, WIE_AUF_DER_BASIS);
-  assert.match(lauf.stdout, /^Tests geänderter Testdateien: 1 in 5 Läufen wiederholt/m);
+  assert.match(lauf.stdout, EINMAL_WIEDERHOLT);
 });
 
 const KATALOG = "| Kennung | Fall | Ziel | Ort | Negativtest |\n|---|---|---|---|---|\n| SG-01 | a | b | c | SG-01 verdoppelt |\n";
@@ -171,7 +183,7 @@ function hilfsdatei(frueh) {
     'import { doppelt } from "../src/rechnen.js";',
     "export function pruefe(wert) {",
     frueh ? "  if (wert === 2) return;" : "  const erster = wert;",
-    "  assert.equal(doppelt(wert), 4);",
+    PRUEFUNG_IN_HILFSDATEI,
     "}",
     "",
   ].join("\n");
@@ -204,7 +216,7 @@ function katalogNach(context, umbenennen) {
   });
 }
 
-const NICHT_MEHR_ERREICHT = /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/hilfe\.js \(Zeile 5\)$/m;
+const NICHT_MEHR_ERREICHT = nichtMehrErreicht("test/hilfe.js", zeileVon(hilfsdatei(false), PRUEFUNG_IN_HILFSDATEI));
 
 test("Testwirkung: ein Katalogtest, der eine geschwächte Hilfsdatei nicht mehr erreicht, bleibt rot", (context) => {
   const lauf = katalogNach(context, false);
