@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { leseReferenzen } from "../../tools/auftrag/pruefer-arbeitsordner.mjs";
 import { entscheiden } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { issueText } from "../../tools/auftrag/pruefer-issues.mjs";
 import { ANTWORT_SCHEMA, KATEGORIEN, ZUSTAENDE, schluesselVon } from "../../tools/auftrag/pruefer-schema.mjs";
@@ -64,7 +65,16 @@ function genutzteIds() {
   return genutzt;
 }
 
-test("jede Katalog-ID bekommt den Block ihres Abschnitts, eine ID ohne Abschnitt keinen", () => {
+function katalogWurzel(context, buchstaben) {
+  const katalog = buchstaben.map((abschnitt) => `## ${abschnitt} — Abschnitt\n\n**${abschnitt}1 — Eintrag.** Text.\n`).join("\n");
+  return probeDirectory(context, { ".claude/refs/clean-code.md": katalog, "docs/sicherheitsgrenzen.md": "Grenzen\n" });
+}
+
+test("der Arbeitsordner des Prüfers bricht laut ab, wenn ein Katalog-Abschnitt keinen Zweck-Text hat oder ein Zweck-Text keinen Abschnitt", (context) => {
+  assert.ok(leseReferenzen().get("clean-code.md").length > 0);
+  assert.ok(leseReferenzen(katalogWurzel(context, abschnitte())).has("clean-code.md"));
+  assert.throws(() => leseReferenzen(katalogWurzel(context, [...abschnitte(), "X"])), /Abschnitte ohne Zweck-Text in tools\/zweck\/pruefer\.json: pruefer\/katalog-X\./);
+  assert.throws(() => leseReferenzen(katalogWurzel(context, abschnitte().slice(1))), new RegExp(`Zweck-Texte für Abschnitte, die .* nicht hat: ${katalogTexte()[0]}\\.`));
   assert.deepEqual(katalogIds().map((id) => befundZweck({ id, beleg: "b" })), katalogTexte().map((id) => [id]));
   assert.deepEqual(befundZweck({ id: "X1", beleg: "b" }), []);
 });

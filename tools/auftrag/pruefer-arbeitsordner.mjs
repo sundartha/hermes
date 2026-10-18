@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { gitAusgabe } from "./pruefer-auswahl.mjs";
 import { dateienImBaum, importeDes } from "./pruefer-importe.mjs";
+import { katalogAbgleich } from "./pruefer-zweck.mjs";
 import { ersetzeSteuerzeichen } from "./pruefer-schema.mjs";
 import { roteAusNachricht } from "./rote-pruefungen.mjs";
 import { kenntZweck, zweckBlock } from "./zweck.mjs";
@@ -12,8 +13,9 @@ import { kenntZweck, zweckBlock } from "./zweck.mjs";
 export const WERKZEUG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const KEIN_AUFTRAGSZETTEL = "kein Auftragszettel gefunden";
 const KEINE_ABSICHT = "keine Angabe";
+const KATALOG = "clean-code.md";
 const REFERENZEN = new Map([
-  ["clean-code.md", ".claude/refs/clean-code.md"],
+  [KATALOG, ".claude/refs/clean-code.md"],
   ["sicherheitsgrenzen.md", "docs/sicherheitsgrenzen.md"],
 ]);
 const HEIKLER_NAME = /^(?:\.|claude|agents\.md$)/i;
@@ -248,10 +250,22 @@ function ergebnisseText(commit, { ciLauf }) {
   ].join("\n");
 }
 
-function legeReferenzenAb(ordner) {
-  for (const [name, quelle] of REFERENZEN) {
-    schreibe(join(ordner, "refs", name), readFileSync(join(WERKZEUG_ROOT, quelle)));
-  }
+function verlangeKatalogZwecke(katalog) {
+  const { ohneText, ohneAbschnitt } = katalogAbgleich(katalog);
+  if (ohneText.length > 0)
+    throw new Error(`Der Katalog ${REFERENZEN.get(KATALOG)} hat Abschnitte ohne Zweck-Text in tools/zweck/pruefer.json: ${ohneText.join(", ")}.`);
+  if (ohneAbschnitt.length > 0)
+    throw new Error(`tools/zweck/pruefer.json hat Zweck-Texte für Abschnitte, die ${REFERENZEN.get(KATALOG)} nicht hat: ${ohneAbschnitt.join(", ")}.`);
+}
+
+export function leseReferenzen(wurzel = WERKZEUG_ROOT) {
+  const referenzen = new Map([...REFERENZEN].map(([name, quelle]) => [name, readFileSync(join(wurzel, quelle))]));
+  verlangeKatalogZwecke(referenzen.get(KATALOG).toString("utf8"));
+  return referenzen;
+}
+
+function legeReferenzenAb(ordner, referenzen) {
+  for (const [name, inhalt] of referenzen) schreibe(join(ordner, "refs", name), inhalt);
 }
 
 export function neuerOrdner(praefix) {
@@ -259,6 +273,7 @@ export function neuerOrdner(praefix) {
 }
 
 export function baueArbeitsordner(commit, kontext) {
+  const referenzen = leseReferenzen();
   const ordner = neuerOrdner("pruefer-");
   const eintraege = commit.dateien.map((pfad, index) => {
     const patch = `diff/${nummer(index, commit.dateien.length)}.patch`;
@@ -270,7 +285,7 @@ export function baueArbeitsordner(commit, kontext) {
     schreibe(join(ordner, PR_PATCH), prPatchVon(commit, kontext));
     patches.push(PR_PATCH);
   }
-  legeReferenzenAb(ordner);
+  legeReferenzenAb(ordner, referenzen);
   const uebersprungen = legeBasisAb(ordner, kontext);
   const importe = legeImporteAb(ordner, commit, kontext.root);
   schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, { eintraege, uebersprungen, importe }));
