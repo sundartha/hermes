@@ -15,6 +15,7 @@ const EINGANG = [
 ].join("\n");
 const LOGIK = ["export function rechne(wert) {", "  const doppelt = wert * 2;", "  return doppelt + 1;", "}", ""].join("\n");
 const GESCHUETZT = ["export function schuetze() {", "  return 1;", "}", ""].join("\n");
+const FASSADE = ["const backend = {};", "export const {", "  lade,", "  speichere,", "} = backend;", "", "export function pause() {", "  return lade();", "}", "", 'export { rechne } from "./logik.js";'].join("\n");
 const WENN_ROUTE = "Gegeben ein Kunde\nWenn er über `POST /api/probe` sendet\nDann kommt eine Antwort";
 
 function ordner(context) {
@@ -22,6 +23,7 @@ function ordner(context) {
     "src/eingang.js": EINGANG,
     "src/logik.js": LOGIK,
     "src/geschuetzt.js": GESCHUETZT,
+    "src/fassade.js": FASSADE,
     ".github/CODEOWNERS": "/src/geschuetzt.js @owner\n",
     "test/vorhanden.test.js": "",
   });
@@ -400,4 +402,25 @@ test("ein stehen gebliebener Platzhalter ist ein Befund", (context) => {
   genau(einzeln(context, { vorbild: `nicht gefunden, weil ${PLATZHALTER}` }).befunde, "S1: vorbild enthält noch den Platzhalter <AUSFUELLEN>");
   const widerspruch = { designDoc: "design.md, ## Lösung", code: `src/eingang.js:${PLATZHALTER}`, text: "Das Design Doc nennt PUT" };
   genau(einzeln(context, { widersprueche: [widerspruch] }).befunde, "S1: widersprueche[0].code enthält noch den Platzhalter <AUSFUELLEN>");
+});
+
+test("eine Änderung an einer Stelle außerhalb von Funktionen mit Art und Zeilen ist grün", (context) => {
+  const aenderungen = [
+    { datei: "src/fassade.js", art: "export", von: 2, bis: 5, neueZeilen: 1 },
+    { datei: "src/fassade.js", art: "export", von: 11, bis: 11, neueZeilen: 1 },
+  ];
+  assert.deepEqual(einzeln(context, { aenderungen }).befunde, []);
+});
+
+test("eine Änderung außerhalb von Funktionen mit falscher Datei oder falschen Zeilen ist ein Befund", (context) => {
+  const faelle = [
+    [{ von: 11, bis: 40 }, "Zeilen 11-40 gibt es in src/fassade.js nicht"],
+    [{ von: 5, bis: 8 }, "Zeilen 5-8 überdecken die Funktion pause (7-9) in src/fassade.js"],
+    [{ datei: "src/fehlt.js" }, "Datei src/fehlt.js fehlt"],
+    [{ von: 5, bis: 2 }, "Zeilen 5-2 sind keine Zeilen von-bis"],
+  ];
+  for (const [ueberschrieben, teil] of faelle) {
+    const aenderungen = [{ datei: "src/fassade.js", art: "export", von: 2, bis: 5, neueZeilen: 1, ...ueberschrieben }];
+    genau(einzeln(context, { aenderungen }).befunde, teil);
+  }
 });

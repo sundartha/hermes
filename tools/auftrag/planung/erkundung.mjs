@@ -58,11 +58,16 @@ function auswegBefund({ ort, feld }, wert, kontext) {
   return null;
 }
 
+function zeilenBefund(ort, { von, bis }) {
+  return istZeile(von) && istZeile(bis) && von <= bis ? null : `${ort}: Zeilen ${von}-${bis} sind keine Zeilen von-bis`;
+}
+
 function funktionBefund(ort, stelle, kontext) {
   const { datei, funktion, von, bis } = stelle;
   const gleichnamig = funktionenIn(datei, quelle(kontext, datei)).filter(({ name }) => name === funktion);
   if (gleichnamig.length === 0) return `${ort}: Funktion ${funktion} fehlt in ${datei}`;
-  if (!istZeile(von) || !istZeile(bis) || von > bis) return `${ort}: Zeilen ${von}-${bis} sind keine Zeilen von-bis`;
+  const zeilen = zeilenBefund(ort, stelle);
+  if (zeilen !== null) return zeilen;
   if (gleichnamig.some((gefunden) => gefunden.von <= von && bis <= gefunden.bis)) return null;
   const bereiche = gleichnamig.map((gefunden) => `${gefunden.von}-${gefunden.bis}`).join(", ");
   return `${ort}: Zeilen ${von}-${bis} liegen nicht in der Funktion ${funktion} (${bereiche}) in ${datei}`;
@@ -86,6 +91,22 @@ function stelleBefund(ort, stelle, kontext) {
   if (befund !== null) return befund;
   if (!istText(stelle.funktion)) return `${ort}: funktion fehlt`;
   return funktionBefund(ort, stelle, kontext);
+}
+
+function teilBefund(ort, stelle, kontext) {
+  const { datei, art, von, bis } = stelle;
+  const befund = dateiBefund(ort, { datei }, kontext) ?? zeilenBefund(ort, stelle);
+  if (befund !== null) return befund;
+  const anzahl = zeilenDes(quelle(kontext, datei)).length;
+  if (bis > anzahl) return `${ort}: Zeilen ${von}-${bis} gibt es in ${datei} nicht (${anzahl} Zeilen)`;
+  const ueberdeckt = funktionenIn(datei, quelle(kontext, datei)).filter((funktion) => funktion.von <= bis && von <= funktion.bis);
+  if (ueberdeckt.length === 0) return null;
+  const namen = ueberdeckt.map(({ name, von: anfang, bis: ende }) => `${name} (${anfang}-${ende})`).join(", ");
+  return `${ort}: Zeilen ${von}-${bis} überdecken die Funktion ${namen} in ${datei}; eine Stelle in einer Funktion nennt funktion statt art ${art}`;
+}
+
+function bestehendeStelleBefund(ort, stelle, kontext) {
+  return istText(stelle.art) && stelle.funktion === undefined ? teilBefund(ort, stelle, kontext) : stelleBefund(ort, stelle, kontext);
 }
 
 function neueDateiBefund(ort, datei, kontext) {
@@ -188,7 +209,7 @@ function neueAenderungBefund(ort, stelle, kontext) {
 function aenderungBefund(ort, stelle, kontext) {
   if (!istObjekt(stelle)) return `${ort}: Änderungsstelle ist kein Objekt`;
   if (!Number.isInteger(stelle.neueZeilen) || stelle.neueZeilen < 0) return `${ort}: neueZeilen fehlt (grobe Schätzung neuer Zeilen)`;
-  if (stelle.neu === undefined) return stelleBefund(ort, stelle, kontext);
+  if (stelle.neu === undefined) return bestehendeStelleBefund(ort, stelle, kontext);
   return ["datei", "funktion"].includes(stelle.neu) ? neueAenderungBefund(ort, stelle, kontext) : `${ort}: neu muss „datei“ oder „funktion“ sein`;
 }
 
