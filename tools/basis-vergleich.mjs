@@ -14,6 +14,7 @@ import {
 } from "./eslint-rules/kein-quelltext-als-text.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { aufgeteilt, gezaehlt, unveraendert } from "./bestand-rueckfuehrung.mjs";
 import {
   selbstpruefungen,
   selbstpruefungsSchluessel,
@@ -385,30 +386,6 @@ function checkVersion({ toolName, tool, root }, baseline) {
   );
 }
 
-function countKeys(keys) {
-  const counts = new Map();
-  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
-  return counts;
-}
-
-function splitByAllowance(items, allowedKeys, keyOf) {
-  const remaining = countKeys(allowedKeys);
-  const within = [];
-  const beyond = [];
-  for (const item of items) {
-    const key = keyOf(item);
-    const left = remaining.get(key) ?? 0;
-    remaining.set(key, left - 1);
-    if (left > 0) within.push(item);
-    else beyond.push(item);
-  }
-  return { within, beyond };
-}
-
-function identity(key) {
-  return key;
-}
-
 function findingKeyOf(finding) {
   return finding.key;
 }
@@ -427,13 +404,20 @@ async function measure(context, baseline) {
   checkVersion(context, baseline);
   const { tool, root } = context;
   const findings = await tool.findings(root);
-  const { within, beyond } = splitByAllowance(frozenFindings(findings), baseline.befunde, findingKeyOf);
-  const exact = within.map(findingKeyOf);
-  const unmatched = splitByAllowance(baseline.befunde, exact, identity).beyond;
-  const shrunk = tool.shrunk?.(beyond, unmatched) ?? NOTHING_SHRUNK;
+  const { innerhalb, darueber } = aufgeteilt(
+    frozenFindings(findings),
+    baseline.befunde,
+    findingKeyOf,
+  );
+  const exact = innerhalb.map(findingKeyOf);
+  const unmatched = aufgeteilt(baseline.befunde, exact, unveraendert).darueber;
+  const shrunk = tool.shrunk?.(darueber, unmatched) ?? NOTHING_SHRUNK;
   return {
-    added: [...findings.filter(isAlways), ...beyond.filter((finding) => !shrunk.covered.includes(finding))],
-    known: splitByAllowance(baseline.befunde, [...exact, ...shrunk.keys], identity),
+    added: [
+      ...findings.filter(isAlways),
+      ...darueber.filter((finding) => !shrunk.covered.includes(finding)),
+    ],
+    known: aufgeteilt(baseline.befunde, [...exact, ...shrunk.keys], unveraendert),
   };
 }
 
@@ -457,9 +441,9 @@ function reportAdded({ toolName, tool }, addedFindings) {
 
 async function compare(context) {
   const { added, known } = await measure(context, readBaseline(context.root, context.toolName));
-  reportFixed(context, known.beyond);
+  reportFixed(context, known.darueber);
   console.log(
-    `${context.toolName}: ${added.length} neue Befunde, ${known.within.length} bekannte.`,
+    `${context.toolName}: ${added.length} neue Befunde, ${known.innerhalb.length} bekannte.`,
   );
   if (added.length === 0) return;
   reportAdded(context, added);
@@ -469,9 +453,12 @@ async function compare(context) {
 async function shorten(context) {
   const baseline = readBaseline(context.root, context.toolName);
   const { known } = await measure(context, baseline);
-  writeBaseline(context.root, context.toolName, { version: baseline.version, keys: known.within });
+  writeBaseline(context.root, context.toolName, {
+    version: baseline.version,
+    keys: known.innerhalb,
+  });
   console.log(
-    `${baselineFile(context.toolName)}: ${known.beyond.length} behobene Befunde entfernt.`,
+    `${baselineFile(context.toolName)}: ${known.darueber.length} behobene Befunde entfernt.`,
   );
 }
 
@@ -493,7 +480,7 @@ function topFolder(path) {
 
 function perFolder(context) {
   const { befunde } = readBaseline(context.root, context.toolName);
-  const counts = countKeys(befunde.map((key) => topFolder(context.tool.path(key))));
+  const counts = gezaehlt(befunde.map((key) => topFolder(context.tool.path(key))));
   for (const [folder, count] of [...counts].sort(([left], [right]) => (left < right ? -1 : 1))) {
     console.log(`${folder}: ${count}`);
   }

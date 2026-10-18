@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -77,4 +77,44 @@ test("bestaende: ein Bestand, den es auf der Basis noch nicht gibt, gilt als neu
   });
   assert.equal(ergebnis.status, EXIT_OK, ergebnis.stderr);
   assert.match(ergebnis.stdout, /^0 neue Dateien unter test\/ seit der Basis/m);
+});
+
+const QUELLTEXT = "tools/basis/quelltext-als-text.json";
+const ALTE_DATEI = "test/anrufe/alt.test.js";
+const TEST_INHALT = 'import { test } from "node:test";\ntest("alt", () => {});\n';
+
+function umbenanntMitUmzug(context, neuerInhalt) {
+  const verzeichnis = probeRepository(context, {
+    ...GRUNDSTAND,
+    "tools/bereiche.json": readFileSync(join(REPO_ROOT, "tools/bereiche.json"), "utf8"),
+    [ALTE_DATEI]: TEST_INHALT,
+    [SELBSTPRUEFUNG]: bestand(ALT),
+  });
+  rmSync(join(verzeichnis, ALTE_DATEI));
+  writeFiles(verzeichnis, {
+    "test/anrufe/alt.test.ts": neuerInhalt,
+    [SELBSTPRUEFUNG]: bestand(ALT.replace("alt.test.js", "alt.test.ts")),
+  });
+  commitAll(verzeichnis, "umbenannt");
+  return runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD~1"]);
+}
+
+test("bestaende: ein Eintrag, der mit einer Umbenennung nur mit Typen wandert, ist grün", (context) => {
+  const ergebnis = umbenanntMitUmzug(context, TEST_INHALT.replace("() => {}", "(): void => {}"));
+  assert.equal(ergebnis.status, EXIT_OK, ergebnis.stderr);
+});
+
+test("bestaende: ein Eintrag, der mit einer Umbenennung mit geändertem Code wandert, ist rot", (context) => {
+  const ergebnis = umbenanntMitUmzug(context, TEST_INHALT.replace('"alt"', '"neu"'));
+  assert.equal(ergebnis.status, EXIT_FINDING, ergebnis.stderr);
+  assert.match(ergebnis.stderr, /selbstpruefung\.json darf nur kürzer werden, .*alt\.test\.ts/);
+});
+
+test("bestaende: ein neuer Eintrag in tools/basis/quelltext-als-text.json ist rot", (context) => {
+  const ergebnis = nachAenderung(context, {
+    vorher: { [QUELLTEXT]: bestand(ALT) },
+    nachher: { [QUELLTEXT]: bestand(ALT, NEU) },
+  });
+  assert.equal(ergebnis.status, EXIT_FINDING, ergebnis.stderr);
+  assert.match(ergebnis.stderr, /tools\/basis\/quelltext-als-text\.json darf nur kürzer werden/);
 });

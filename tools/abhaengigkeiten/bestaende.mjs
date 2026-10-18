@@ -1,7 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
-const NUR_KUERZER = ["tools/basis/selbstpruefung.json", "tools/basis/fester-importpfad.json"];
+import { gewachsen, pfadZurueck, unveraendert } from "../bestand-rueckfuehrung.mjs";
+
+const NUR_KUERZER = [
+  "tools/basis/selbstpruefung.json",
+  "tools/basis/fester-importpfad.json",
+  "tools/basis/quelltext-als-text.json",
+];
 const MAX_GIT_AUSGABE = 268_435_456;
 
 function befunde(text) {
@@ -20,28 +26,20 @@ function aufDerBasis(basis, pfad) {
   return lauf.status === 0 ? befunde(lauf.stdout) : undefined;
 }
 
-function gezaehlt(eintraege) {
-  const anzahl = new Map();
-  for (const eintrag of eintraege) anzahl.set(eintrag, (anzahl.get(eintrag) ?? 0) + 1);
-  return anzahl;
+function hinzugekommen(jetzt, vorher, zurueck) {
+  const ueber = gewachsen({ jetzt, vorher, zurueck: (eintrag) => pfadZurueck(eintrag, zurueck) });
+  return [...new Set(ueber.map(({ schluessel }) => schluessel))];
 }
 
-function hinzugekommen(jetzt, vorher) {
-  const erlaubt = gezaehlt(vorher);
-  return [...gezaehlt(jetzt)]
-    .filter(([eintrag, anzahl]) => anzahl > (erlaubt.get(eintrag) ?? 0))
-    .map(([eintrag]) => eintrag);
-}
-
-function befundeFuer(basis, pfad) {
+function befundeFuer(basis, pfad, zurueck) {
   const vorher = aufDerBasis(basis, pfad);
   if (vorher === undefined) return [];
-  return hinzugekommen(imArbeitsbaum(pfad), vorher).map(
+  return hinzugekommen(imArbeitsbaum(pfad), vorher, zurueck).map(
     (eintrag) =>
       `${pfad} darf nur kürzer werden, neu oder öfter eingefroren ist: ${eintrag}. Behebe den Befund im Test, statt ihn einzufrieren.`,
   );
 }
 
-export function bestaendeNurKuerzer(basis) {
-  return NUR_KUERZER.flatMap((pfad) => befundeFuer(basis, pfad));
+export function bestaendeNurKuerzer(basis, zurueck = unveraendert) {
+  return NUR_KUERZER.flatMap((pfad) => befundeFuer(basis, pfad, zurueck));
 }

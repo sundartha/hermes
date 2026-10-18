@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 
 import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
-import { TYPESCRIPT, umbenennungen } from "./umbenennung.mjs";
+import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
+import { TYPESCRIPT } from "./umbenennung.mjs";
 
 const CONFIG_PATH = ".dependency-cruiser.cjs";
 const SOURCE_DIRECTORY = "src";
@@ -95,28 +96,11 @@ function missingFrom(violations, reference) {
   return violations.filter((violation) => !referenceKeys.has(violationKey(violation)));
 }
 
-function grownBeyond(entries, reference, keyOf) {
-  const left = new Map();
-  for (const entry of reference)
-    left.set(violationKey(entry), (left.get(violationKey(entry)) ?? 0) + 1);
-  return entries.filter((entry) => {
-    const key = keyOf(entry);
-    const count = left.get(key) ?? 0;
-    left.set(key, count - 1);
-    return count <= 0;
-  });
-}
-
-function samePath(path) {
-  return path;
-}
-
-async function oldPathOf(basis, states) {
+async function oldPathOf(basis, states, grownStocks) {
   const grown = states.flatMap(({ known, basisKnown }) => missingFrom(known, basisKnown ?? known));
   const renamed = grown.some(({ from, to }) => TYPESCRIPT.test(from) || TYPESCRIPT.test(to));
-  if (!renamed) return samePath;
-  const { nurTypen } = await umbenennungen({ von: basis });
-  return (path) => nurTypen(path) ?? path;
+  if (!renamed && grownStocks.length === 0) return unveraendert;
+  return rueckfuehrung(basis);
 }
 
 function describe(violation, comments) {
@@ -130,7 +114,8 @@ function findingsFor({ path, violations, known, basisKnown }, { comments, oldPat
   );
   const asBefore = ({ rule, from, to }) =>
     violationKey({ rule, from: oldPath(from), to: oldPath(to) });
-  const grownEntries = grownBeyond(known, basisKnown ?? known, asBefore).map(
+  const allowed = (basisKnown ?? known).map(violationKey);
+  const grownEntries = aufgeteilt(known, allowed, asBefore).darueber.map(
     (violation) =>
       `${path} darf nur kürzer werden, neu eingefroren ist: ${describe(violation, comments)}`,
   );
@@ -156,11 +141,11 @@ async function main() {
   const violations = currentViolations();
   const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
   const comments = ruleComments();
-  const oldPath = await oldPathOf(basis, states);
+  const oldPath = await oldPathOf(basis, states, bestaendeNurKuerzer(basis));
   const order = await testordnung(basis);
   const findings = [
     ...states.flatMap((state) => findingsFor(state, { comments, oldPath })),
-    ...bestaendeNurKuerzer(basis),
+    ...bestaendeNurKuerzer(basis, oldPath),
     ...order.befunde,
   ];
   for (const finding of findings) console.error(finding);
