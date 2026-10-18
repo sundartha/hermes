@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { ENTWURF_HINWEIS, ENTWURF_ROUTE, ENTWURF_TEXT, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
+import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 
 const START = join(REPO_ROOT, "tools/auftrag/planung/neuschnitt-start.mjs");
 const DATEI = `${ORDNER}/phase.json`;
@@ -456,4 +457,39 @@ test("Neuschnitt: der Erkunder bekommt den Kopf der Phase mit dem Entwurf wie de
   assert.ok(erkunder.eingabe.includes(`### Anlass\n\n${ANLASS}\n`), erkunder.eingabe);
   const [{ eingabe: planer }] = aufrufe(lauf, "planer");
   assert.ok(planer.includes(entwurf), planer);
+});
+
+const SCHEMA_DATEI = "src/db/schema.sql";
+const SCHEMA_TEST = "test/anrufe/anrufreserve.test.js";
+
+function mitSchemaaenderung(vorgaenger) {
+  return (phase) => {
+    const spalte = { id: "u9", art: "umbau", ziel: "Füg die Spalte hinzu", bereich: SCHEMA_DATEI, erwarteteDateien: [SCHEMA_DATEI, SCHEMA_TEST], abnahme: SCHEMA_TEST, prueft: UMBAU_AUSWEG, abhaengigVon: vorgaenger };
+    return { ...phase, entwurf: { ...phase.entwurf, [SCHEMA_DATEI]: "Grundlage: design.md, Lösung\nAufträge: u9: Füg die Spalte hinzu\nFehlerfälle: keine\nReihenfolge: nach a2" }, auftraege: [...phase.auftraege, spalte] };
+  };
+}
+
+function schemaLauf(context, { vorgaenger, schema }) {
+  const [ersatz] = neuerSchnitt().auftraege;
+  const ueberschrieben = {
+    "erkunder|## Nachfrage": [bericht(NUMMERN, { S2: { schema: { aenderung: true, fundstelle: `${SCHEMA_DATEI}:1` } } })],
+    ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege: [{ ...ersatz, ...(schema ? { schema } : {}) }] }), aenderung: AENDERUNG })),
+  };
+  return neuschnitt(context, { aendere: mitSchemaaenderung(vorgaenger), dateien: { [SCHEMA_DATEI]: "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS probe TEXT;\n" }, ueberschrieben });
+}
+
+test("Neuschnitt: folgt die Schemaänderung der Phase erst nach dem alten Auftrag, ist der neue Auftrag mit schema vertraeglich grün", (context) => {
+  const lauf = schemaLauf(context, { vorgaenger: [GESCHEITERT], schema: "vertraeglich" });
+  exit(lauf, 0);
+  const spalte = lauf.phase.auftraege.find(({ id }) => id === "u9");
+  assert.deepEqual(spalte.abhaengigVon, ["a2-n1"]);
+});
+
+test("Neuschnitt: eine Schemaänderung laut Bericht bleibt ohne schema vertraeglich oder ohne spätere Schemaänderung ein Befund", (context) => {
+  const ohneVertraeglich = schemaLauf(context, { vorgaenger: [GESCHEITERT] });
+  exit(ohneVertraeglich, 4);
+  assert.match(ohneVertraeglich.ergebnis.grund, /S2: Schemaänderung laut Bericht; die Schemaänderung u9 folgt erst nach a2, a2-n1 braucht schema vertraeglich/);
+  const ohneZyklus = schemaLauf(context, { vorgaenger: ["a1"], schema: "vertraeglich" });
+  exit(ohneZyklus, 4);
+  assert.match(ohneZyklus.ergebnis.grund, /S2: Schemaänderung laut Bericht, a2-n1 braucht schema nutzung/);
 });

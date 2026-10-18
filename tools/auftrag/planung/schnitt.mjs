@@ -13,6 +13,7 @@ export const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
 const LISTEN_OBEN = ["annahmen", "fehlendeSzenarien", "ownerAufgaben", "gemeinsameNamen"];
 const SCHEMA = ["vertraeglich", "aenderung", "nutzung"];
 const DURCHSTICH = "a1";
+const SCHEMA_DATEI = "src/db/schema.sql";
 const ERREICHT = "erreicht";
 const NICHT_ERREICHT = /^nicht erreicht, weil(.*)$/su;
 const NUR_VERWEIS = /^(S[1-9]\d*) im Pitch\.?$/;
@@ -288,12 +289,26 @@ function schemaKettenBefunde(auftraege, nachId) {
   });
 }
 
+function haengtVon(auftrag, kennung, nachId) {
+  return [auftrag, ...kette(auftrag, nachId)].some((eintrag) => vorgaengerIds(eintrag).includes(kennung));
+}
+
+function spaetereSchemaaenderung({ ersetzt, vorhandene, nachId }) {
+  if (!istText(ersetzt)) return undefined;
+  return vorhandene.find(({ id, art, erwarteteDateien }) => art === "umbau" && liste(erwarteteDateien).includes(SCHEMA_DATEI) && haengtVon(nachId.get(id), ersetzt, nachId));
+}
+
+function schemaNummerBefunde(nummer, kontext, spaeter) {
+  const [besitzer] = kontext.besitzer.get(nummer) ?? [];
+  if (besitzer === undefined || besitzer.schema === "nutzung") return [];
+  if (spaeter === undefined) return [`${nummer}: Schemaänderung laut Bericht, ${besitzer.id} braucht schema nutzung`];
+  return besitzer.schema === "vertraeglich" ? [] : [`${nummer}: Schemaänderung laut Bericht; die Schemaänderung ${spaeter.id} folgt erst nach ${kontext.ersetzt}, ${besitzer.id} braucht schema vertraeglich`];
+}
+
 function schemaBefunde(auftraege, kontext) {
   const ungueltig = auftraege.filter(({ schema }) => schema !== undefined && !SCHEMA.includes(schema)).map(({ id }) => `${id}: schema muss eine von ${SCHEMA.join(", ")} sein`);
-  const ohneNutzung = [...new Set(schemaNummern(kontext.berichte))].flatMap((nummer) => {
-    const [besitzer] = kontext.besitzer.get(nummer) ?? [];
-    return besitzer === undefined || besitzer.schema === "nutzung" ? [] : [`${nummer}: Schemaänderung laut Bericht, ${besitzer.id} braucht schema nutzung`];
-  });
+  const spaeter = spaetereSchemaaenderung(kontext);
+  const ohneNutzung = [...new Set(schemaNummern(kontext.berichte))].flatMap((nummer) => schemaNummerBefunde(nummer, kontext, spaeter));
   return mitRegel(REGEL.schema, [...ungueltig, ...ohneNutzung, ...schemaKettenBefunde(auftraege, kontext.nachId)]);
 }
 
