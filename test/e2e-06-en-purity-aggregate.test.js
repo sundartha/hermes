@@ -6,8 +6,8 @@ import {
   seedCall,
   startServer,
   postTelnyxIncoming,
-  GERMAN_STOPWORDS,
 } from "./helpers.js";
+import { GERMAN_STOPWORDS } from "./gemeinsam/deutsch-erkennung.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { signValue, makeWebAuthRoutes } from "../src/web-auth.js";

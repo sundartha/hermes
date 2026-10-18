@@ -12,7 +12,7 @@ import {
   adminOnly,
   SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
-import { GERMAN_STOPWORDS } from "./helpers.js";
+import { GERMAN_STOPWORDS } from "./gemeinsam/deutsch-erkennung.mjs";
 import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 import { abrufMitFrist, mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
 

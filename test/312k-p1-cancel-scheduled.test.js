@@ -183,32 +183,32 @@ test("312k-P1 Test 3: customer.subscription.deleted bleibt SUSPEND (kein gespeic
   assert.deepEqual(deps.calls.subscription, [], "SUSPEND patcht keine Abo-Felder - unveraendert durch diese Phase");
 });
 
-test("312k-P1 Test 4a: Event-ID-Dedup gilt auch fuer CANCEL_SCHEDULED", async () => {
-  const subId = "sub_312k_dedup";
+test("312k-P1 Test 4a: Event-ID-Dedup gilt auch fuer CANCEL_SCHEDULED", async (t) => {
+  const subId = `sub_${t.name}`;
   const deps = fakeDeps();
-  const evt = cancelEvent({ id: "evt_312k_dup", created: 1_800_000_000, subId });
+  const evt = cancelEvent({ id: `evt_${t.name}`, created: 1_800_000_000, subId });
   await applyStripeWebhookSerialized(evt, deps);
   await applyStripeWebhookSerialized(evt, deps);
   assert.equal(deps.calls.subscription.length, 1, "Retry desselben Events ist ein No-op (Dedup)");
 });
 
-test("312k-P1 Test 4b: Stale-Guard - ein AELTERES CANCEL_SCHEDULED nach bereits verarbeitetem SUSPEND wird verworfen", async () => {
-  const subId = "sub_312k_stale";
+test("312k-P1 Test 4b: Stale-Guard - ein AELTERES CANCEL_SCHEDULED nach bereits verarbeitetem SUSPEND wird verworfen", async (t) => {
+  const subId = `sub_${t.name}`;
   const deps = fakeDeps();
   const later = 1_800_000_200;
   const earlier = 1_800_000_000;
-  await applyStripeWebhookSerialized(deletedEvent({ id: "evt_312k_susp", created: later, subId }), deps);
-  await applyStripeWebhookSerialized(cancelEvent({ id: "evt_312k_old_cancel", created: earlier, subId }), deps);
+  await applyStripeWebhookSerialized(deletedEvent({ id: `evt_${t.name}_suspend`, created: later, subId }), deps);
+  await applyStripeWebhookSerialized(cancelEvent({ id: `evt_${t.name}_cancel`, created: earlier, subId }), deps);
   assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]], "SUSPEND bleibt der zuletzt angewendete Zustand");
   assert.equal(deps.calls.subscription.length, 0, "das veraltete CANCEL_SCHEDULED wurde verworfen, kein Patch");
 });
 
-test("312k-P1 Test 4c: ein tatsaechlich SPAETERES CANCEL_SCHEDULED nach SUSPEND wird angewendet (kein Pauschal-Block)", async () => {
-  const subId = "sub_312k_after_suspend";
+test("312k-P1 Test 4c: ein tatsaechlich SPAETERES CANCEL_SCHEDULED nach SUSPEND wird angewendet (kein Pauschal-Block)", async (t) => {
+  const subId = `sub_${t.name}`;
   const deps = fakeDeps();
   const earlier = 1_800_000_000;
   const later = 1_800_000_300;
-  await applyStripeWebhookSerialized(deletedEvent({ id: "evt_312k_susp2", created: earlier, subId }), deps);
-  await applyStripeWebhookSerialized(cancelEvent({ id: "evt_312k_new_cancel", created: later, subId }), deps);
+  await applyStripeWebhookSerialized(deletedEvent({ id: `evt_${t.name}_suspend`, created: earlier, subId }), deps);
+  await applyStripeWebhookSerialized(cancelEvent({ id: `evt_${t.name}_cancel`, created: later, subId }), deps);
   assert.equal(deps.calls.subscription.length, 1, "ein tatsaechlich SPAETERES CANCEL_SCHEDULED wird angewendet, kein Stale");
 });

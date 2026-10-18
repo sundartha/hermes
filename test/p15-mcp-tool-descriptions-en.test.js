@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerTools } from "../src/mcp-tools.js";
 import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
-import { GERMAN_STOPWORDS } from "./helpers.js";
+import { GERMAN_STOPWORDS } from "./gemeinsam/deutsch-erkennung.mjs";
 
 const NON_EMPHASIS_TOKENS = new Set(["AI", "KYC", "XX", "JSON", "ID"]);
 const CAPS_TOKEN = /\b[A-Z]{2,}\b/g;
