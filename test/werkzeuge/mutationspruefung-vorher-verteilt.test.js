@@ -137,6 +137,8 @@ test("mutationspruefung vorher verteilt: ein fehlendes, doppeltes oder fremdes S
   const verschoben = { ...berichte[0], stueck: { ...berichte[0].stueck, zeilen: [[1, 99]] } };
   assert.throws(() => vereineStuecke(plan, [verschoben, ...berichte.slice(1)]), /Stück 1 gehört zu einem anderen Plan/);
   assert.throws(() => vereineStuecke({ ...plan, stuecke: plan.stuecke.slice(1) }, berichte.slice(1)), /nicht lückenlos/);
+  assert.throws(() => vereineStuecke({ ...plan, stuecke: plan.stuecke.slice(0, -1) }, berichte.slice(0, -1)), /deckt src\/wort\.js nicht lückenlos ab/);
+  assert.throws(() => vereineStuecke({ ...plan, quellen: plan.quellen.slice(1) }, berichte), /nicht lückenlos/);
 
   const ordner = probeDirectory(context, {});
   writeFileSync(join(ordner, PLANDATEI), JSON.stringify(plan));

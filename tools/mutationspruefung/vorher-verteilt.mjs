@@ -70,8 +70,12 @@ function packe(abschnittsliste, gewicht, grenze) {
   return [...stuecke, offen];
 }
 
+function zeilenzahl(text) {
+  return text.split("\n").length;
+}
+
 export function schneide(text, baum, grenze) {
-  const zeilen = text.split("\n").length;
+  const zeilen = zeilenzahl(text);
   if (baum === undefined) return [{ zeilen: [[1, zeilen]], knoten: null }];
   return packe(abschnitteZwischenOberstenAnweisungen(baum, zeilen), knotenJeZeile(baum, zeilen), grenze).map(({ von, bis, knoten }) => ({ zeilen: [[von, bis]], knoten }));
 }
@@ -83,18 +87,24 @@ function schaetzung(knoten, testdateien) {
 async function stueckeDerDatei(datei, { tests, grenze }) {
   const text = readFileSync(datei, "utf8");
   const baum = gelesen(text, { ...(await einstellungenFuer(datei)), loc: true });
-  return schneide(text, baum, grenze).map((stueck) => ({ datei, ...stueck, geschaetzt: schaetzung(stueck.knoten, tests.length) }));
+  const stuecke = schneide(text, baum, grenze).map((stueck) => ({ datei, ...stueck, geschaetzt: schaetzung(stueck.knoten, tests.length) }));
+  return { quelle: { datei, zeilen: zeilenzahl(text) }, stuecke };
 }
 
 export function vorherPlan(stand, werkzeug, stueckSekunden = STUECK_SEKUNDEN) {
   return imVorherStand(stand, werkzeug, async ({ tests, quellen }) => {
     const grenze = stueckSekunden / (SEKUNDEN_JE_KNOTEN_UND_TESTDATEI * Math.max(1, tests.length));
+    const dateien = [];
     const stuecke = [];
-    for (const datei of quellen) stuecke.push(...(await stueckeDerDatei(datei, { tests, grenze })));
+    for (const datei of quellen) {
+      const { quelle, stuecke: teile } = await stueckeDerDatei(datei, { tests, grenze });
+      dateien.push(quelle);
+      stuecke.push(...teile);
+    }
     if (stuecke.length > MATRIX_HOECHSTENS) {
       throw new Error(`${stuecke.length} Stücke, höchstens ${MATRIX_HOECHSTENS} gehen in eine Matrix; --stueck-sekunden erhöhen`);
     }
-    return { basis: stand.basis, tests: stand.tests, betroffen: tests, stuecke: stuecke.map((stueck, index) => ({ nummer: index + 1, ...stueck })) };
+    return { basis: stand.basis, tests: stand.tests, betroffen: tests, quellen: dateien, stuecke: stuecke.map((stueck, index) => ({ nummer: index + 1, ...stueck })) };
   });
 }
 
@@ -135,12 +145,16 @@ function nachNummer(berichte) {
   return berichtJe;
 }
 
-function lueckenlos(stuecke) {
+function lueckenlos({ quellen, stuecke }) {
   stuecke.forEach(({ datei, zeilen }, index) => {
     const vorher = stuecke[index - 1];
     const erwartet = vorher?.datei === datei ? vorher.zeilen[0][1] + 1 : 1;
     if (zeilen.length !== 1 || zeilen[0][0] !== erwartet) throw new Error(`der Plan deckt ${datei} nicht lückenlos ab (Stück ${index + 1})`);
   });
+  const ende = new Map(stuecke.map(({ datei, zeilen }) => [datei, zeilen[0][1]]));
+  const anfaenge = stuecke.filter(({ zeilen }) => zeilen[0][0] === 1).length;
+  const offen = quellen.filter(({ datei, zeilen }) => ende.get(datei) !== zeilen).map(({ datei }) => datei);
+  if (offen.length > 0 || anfaenge !== quellen.length) throw new Error(`der Plan deckt ${offen.join(", ") || "seine Quelldateien"} nicht lückenlos ab`);
 }
 
 function passtZumPlan(bericht, plan, stueck) {
@@ -149,7 +163,7 @@ function passtZumPlan(bericht, plan, stueck) {
 }
 
 export function vereineStuecke(plan, berichte) {
-  lueckenlos(plan.stuecke);
+  lueckenlos(plan);
   const berichtJe = nachNummer(berichte);
   const fremd = [...berichtJe.keys()].filter((nummer) => !plan.stuecke.some((stueck) => stueck.nummer === nummer));
   if (fremd.length > 0) throw new Error(`Stück ${fremd.join(", ")} steht nicht im Plan`);
@@ -160,7 +174,7 @@ export function vereineStuecke(plan, berichte) {
   const geordnet = plan.stuecke.map(({ nummer }) => berichtJe.get(nummer));
   return {
     tests: plan.betroffen,
-    quellen: [...new Set(plan.stuecke.map(({ datei }) => datei))],
+    quellen: plan.quellen.map(({ datei }) => datei),
     getoetet: geordnet.flatMap(({ getoetet }) => getoetet),
     stuecke: geordnet.map(({ stueck, anzahl, getoetet, sekunden }) => ({ ...stueck, anzahl, getoetet: getoetet.length, sekunden })),
   };
