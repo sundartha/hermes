@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { registerTools } from "../../src/mcp-tools.js";
 import { seedState, startServer, withFetch } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { captureToolHandlers } from "./werkzeug-registrierung.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -300,18 +300,8 @@ function gatewayStub(routes) {
   };
 }
 
-function toolHandlers() {
-  const handlers = new Map();
-  const server = {
-    registerTool: (name, _config, handler) => handlers.set(name, handler),
-    registerResource: () => {},
-  };
-  registerTools(server, { scopedTenant: "t_en", language: "en", consultAllowed: true });
-  return handlers;
-}
-
 async function deliveredText(fall) {
-  const call = toolHandlers().get(fall.tool);
+  const call = captureToolHandlers({ scopedTenant: "t_en", language: "en", consultAllowed: true }).get(fall.tool);
   const result = await withFetch(gatewayStub(fall.routes), () => call(fall.args ?? {}));
   const text = result.content.map((part) => part.text).join("\n");
   assert.match(text, /\S/, `${fall.tool}: keine Antwort`);
