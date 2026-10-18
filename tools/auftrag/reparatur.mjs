@@ -16,6 +16,7 @@ import {
   nachstellungAus,
   reproduzierbareBlocker,
 } from "./pruefer-schema.mjs";
+import { befundZweck, zweckZeilen } from "./pruefer-zweck.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
@@ -49,6 +50,7 @@ function entwurfText(befund) {
     `Beleg: ${befund.beleg}`,
     `Vorgeschlagene Reparatur: ${befund.reparatur}`,
     `Der Reproduktionstest ${REPRODUKTION} scheitert heute an einer Erwartung und muss danach grün sein.`,
+    ...zweckZeilen(befundZweck(befund)),
     ...zweckBlock(MELDUNG.REPARATUR),
   ].join("\n");
 }

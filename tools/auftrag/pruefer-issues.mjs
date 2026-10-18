@@ -1,4 +1,5 @@
 import { SOLLTE, ersetzeSteuerzeichen } from "./pruefer-schema.mjs";
+import { PRUEFER_ZWECK, befundZweck, zweckZeilen } from "./pruefer-zweck.mjs";
 
 export const LABEL = "pruefer";
 export const SAMMEL_PRAEFIX = "Prüfer-Sammlung: ";
@@ -46,6 +47,10 @@ function eingezaeunt(text) {
   return [`${zaun}text`, inhalt, zaun].join("\n");
 }
 
+function zweckAbsaetze(befund) {
+  return zweckZeilen([PRUEFER_ZWECK.ISSUE, ...befundZweck(befund)]).flatMap((zeile) => [zeile, ""]);
+}
+
 export function issueText({ sha, pr = null, befund, grund }) {
   const abschnitt = (titel, inhalt) =>
     inhalt.trim() === "" ? [] : [`### ${titel}`, "", eingezaeunt(inhalt), ""];
@@ -57,6 +62,7 @@ export function issueText({ sha, pr = null, befund, grund }) {
     ...(id ? [`- Katalog-ID: ${id}`] : []),
     `- Stelle: ${dateiSpan(befund.datei)}, Zeile ${befund.zeile}`,
     "",
+    ...zweckAbsaetze(befund),
     ...abschnitt("Beleg", befund.beleg),
     ...abschnitt("Reparatur", befund.reparatur),
     ...abschnitt("Reproduktion", befund.reproduktion),
