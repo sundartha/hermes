@@ -18,10 +18,10 @@ const BUDGET_DATEI = ".github/budget.json";
 const MS_JE_SEKUNDE = 1000;
 const SEKUNDEN_JE_MINUTE = 60;
 export const RESERVE_SEKUNDEN = 240;
-export const MIN_AGENT_SEKUNDEN = 60;
+const MIN_AGENT_SEKUNDEN = 60;
 const ERGEBNIS = "result";
 
-export function budgetMinuten(root, name) {
+function budgetMinuten(root, name) {
   try {
     const { minutenJeLauf } = JSON.parse(readFileSync(join(root, BUDGET_DATEI), "utf8"));
     const minuten = minutenJeLauf?.[name];
@@ -31,12 +31,12 @@ export function budgetMinuten(root, name) {
   }
 }
 
-export function restSekunden(minuten, { start, jetzt, reserve = RESERVE_SEKUNDEN }) {
+function restSekunden(minuten, { start, jetzt, reserve = RESERVE_SEKUNDEN }) {
   const verbraucht = (jetzt - Date.parse(start)) / MS_JE_SEKUNDE;
   return Math.floor(minuten * SEKUNDEN_JE_MINUTE - verbraucht - reserve);
 }
 
-export function budgetFehlt(name) {
+function budgetFehlt(name) {
   return `in ${BUDGET_DATEI} fehlt minutenJeLauf["${name}"]; ohne Zeitgrenze startet kein Agent`;
 }
 
