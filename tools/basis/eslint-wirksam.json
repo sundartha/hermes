@@ -13494,6 +13494,13 @@
           "allowImplicit": false
         }
       ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -14366,6 +14373,13 @@
         0,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
         }
       ],
       "hermes/keine-kommentare": [
@@ -15257,6 +15271,13 @@
           "bestand": "tools/basis/selbstpruefung.json"
         }
       ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
       "hermes/kein-quelltext-als-text": [
         2,
         {
@@ -16102,6 +16123,13 @@
           "bestand": "tools/basis/selbstpruefung.json"
         }
       ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
       "hermes/kein-quelltext-als-text": [
         2,
         {
@@ -16924,6 +16952,13 @@
           "allowImplicit": false
         }
       ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
       "hermes/config-pfade": [
         2,
         {
@@ -17706,6 +17741,13 @@
         0,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
         }
       ],
       "hermes/config-pfade": [
@@ -18492,6 +18534,13 @@
           "allowImplicit": false
         }
       ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -19262,6 +19311,13 @@
         0,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
         }
       ],
       "hermes/keine-kommentare": [
