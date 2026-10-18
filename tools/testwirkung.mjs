@@ -9,6 +9,7 @@ import { katalogtests } from "./testwirkung/katalog.mjs";
 import { UNTER_ATTRAPPE, testlauf } from "./testwirkung/testlauf.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { pruefeWeitergabe } from "./testwirkung/weitergabe.mjs";
+import { umbenennungen } from "./umbenennung.mjs";
 
 const WIEDERHOLUNGEN = 5;
 const LAUF_OHNE_PRUEFUNG = "A";
@@ -17,12 +18,26 @@ const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const AUFRUF = "Aufruf: node tools/testwirkung.mjs --basis <commit>";
-const VERGLEICHBAR = /\.[cm]?js$/;
+const VERGLEICHBAR = /\.[cm]?[jt]s$/;
 const KEIN_LAUF = { ergebnisse: new Map(), uebersprungen: new Set() };
 
 function geaenderteTestdateien(basis) {
   const liste = git(["diff", "--name-only", "-z", "--no-renames", "--diff-filter=d", basis, "--", "test/"]);
   return liste.split("\0").filter((datei) => TESTDATEI.test(datei));
+}
+
+async function wieAufDerBasis(datei, umbenannt) {
+  return umbenannt.nurTypen(datei) !== undefined || (await umbenannt.nurQuellenNachgezogen(datei));
+}
+
+async function ohneNurTypen(umbenannt, dateien) {
+  const geaendert = [];
+  for (const datei of dateien) {
+    if (await wieAufDerBasis(datei, umbenannt)) {
+      console.log(`Wie auf der Basis: ${datei} (nur Typen ergänzt oder nur Importendungen nachgezogen).`);
+    } else geaendert.push(datei);
+  }
+  return geaendert;
 }
 
 function geaenderteSkripte(basis) {
@@ -34,8 +49,8 @@ function aufrufeJetzt(datei) {
   return testaufrufe(datei, readFileSync(datei, "utf8"));
 }
 
-function aufrufeVorherNachher(basis, datei) {
-  const vorher = inBasis(basis, datei);
+function aufrufeVorherNachher(basis, datei, altDatei = datei) {
+  const vorher = inBasis(basis, altDatei);
   return { aufBasis: vorher !== undefined, alt: testaufrufe(datei, vorher ?? ""), neu: aufrufeJetzt(datei) };
 }
 
@@ -52,8 +67,8 @@ function neuIn(basis, datei) {
   return { benannt: [...benannt.values()], unbenannt: [...unbenannt] };
 }
 
-function neueTests(basis) {
-  const jeDatei = geaenderteTestdateien(basis).map((datei) => neuIn(basis, datei));
+function neueTests(basis, geaendert) {
+  const jeDatei = geaendert.map((datei) => neuIn(basis, datei));
   return {
     tests: jeDatei.flatMap(({ benannt }) => benannt),
     ohneNamen: jeDatei.flatMap(({ unbenannt }) => unbenannt),
@@ -88,6 +103,11 @@ function lauf(tests, vorspann) {
   return { ergebnisse, uebersprungen };
 }
 
+function mitAltemPfad(katalog, umbenannt) {
+  const altDatei = (datei) => umbenannt.nurTypen(datei) ?? datei;
+  return { ...katalog, tests: katalog.tests.map((test) => ({ ...test, altDatei: altDatei(test.datei) })) };
+}
+
 function mitHilfsdatei(vergleich) {
   return vergleich.some((datei) => !TESTDATEI.test(datei));
 }
@@ -99,21 +119,21 @@ function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
     .filter(({ aufBasis }) => aufBasis)
     .map(({ datei, alt, neu }) => ({ datei, alt: aufrufmuster(alt), neu: aufrufmuster(neu) }));
   const katalogtests = mitHilfsdatei(vergleich)
-    ? katalog.map((test) => ({ datei: test.datei, alt: namensmuster([test]), neu: namensmuster([test]) }))
+    ? katalog.map((test) => ({ datei: test.datei, altDatei: test.altDatei, alt: namensmuster([test]), neu: namensmuster([test]) }))
     : [];
   return vergleicheErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich });
 }
 
 function katalogeintraege(basis, katalog) {
   const jeDatei = new Map();
-  const aufrufeIn = (datei) => {
-    if (!jeDatei.has(datei)) jeDatei.set(datei, aufrufeVorherNachher(basis, datei));
+  const aufrufeIn = (datei, altDatei) => {
+    if (!jeDatei.has(datei)) jeDatei.set(datei, aufrufeVorherNachher(basis, datei, altDatei));
     return jeDatei.get(datei);
   };
-  return katalog.map(({ datei, name }) => {
-    const { alt, neu } = aufrufeIn(datei);
+  return katalog.map(({ datei, altDatei, name }) => {
+    const { alt, neu } = aufrufeIn(datei, altDatei);
     const benannt = (aufrufe) => aufrufe.filter((aufruf) => aufruf.name === name);
-    return { datei, kennung: `${datei} › ${name}`, alt: benannt(alt), neu: benannt(neu) };
+    return { datei, altDatei, kennung: `${datei} › ${name}`, alt: benannt(alt), neu: benannt(neu) };
   });
 }
 
@@ -224,9 +244,10 @@ async function main() {
     return EXIT_ABBRUCH;
   }
   await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
-  const { tests, ohneNamen } = neueTests(values.basis);
-  const katalog = katalogtests(values.basis);
-  const geaendert = new Set(geaenderteTestdateien(values.basis));
+  const umbenannt = await umbenennungen({ von: values.basis });
+  const geaendert = new Set(await ohneNurTypen(umbenannt, geaenderteTestdateien(values.basis)));
+  const { tests, ohneNamen } = neueTests(values.basis, [...geaendert]);
+  const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const inGeaenderten = alleTestsIn([...geaendert]);
   const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten));
