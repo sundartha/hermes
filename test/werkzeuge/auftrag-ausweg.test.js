@@ -217,19 +217,19 @@ function ausPlanung(context, ausweg, roteRunden = []) {
 
 test("ein Werkzeugabbruch zählt nicht als rote Runde, wird einmal wiederholt und hält danach mit „Entscheidung nötig“ an statt neu zu schneiden", (context) => {
   const abbrueche = [
-    { grund: "mutation nach Bau ist mit Exit 2 abgebrochen.", roteIds: ["mutation abbruch"], pruefungen: [{ name: "mutation nach Bau", exitCode: 2, zeilen: ["Stryker: Netzfehler"] }] },
-    { grund: "Der Agent bau-kritisch endete mit Exit 1.", roteIds: ["agent exit"] },
+    [{ grund: "mutation nach Bau ist mit Exit 2 abgebrochen.", roteIds: ["mutation abbruch"], pruefungen: [{ name: "mutation nach Bau", exitCode: 2, zeilen: ["Stryker: Netzfehler"] }] }, [1]],
+    [{ grund: "Der Agent bau-kritisch endete mit Exit 1.", roteIds: ["agent exit"] }, [1, 1]],
   ];
-  for (const abbruch of abbrueche) {
+  for (const [abbruch, runden] of abbrueche) {
     const { ergebnis, starts, beleg, gestartet } = ausPlanung(context, abbruch);
-    assert.deepEqual([ergebnis, starts, gestartet, beleg.runden], [ROT, "notiz\n", [1, 1], []], abbruch.grund);
+    assert.deepEqual([ergebnis, starts, gestartet, beleg.runden], [ROT, "notiz\n", runden, []], abbruch.grund);
     assert.ok(beleg.entscheidung.text.startsWith("## Entscheidung nötig\n"), beleg.entscheidung.text);
     assert.ok(beleg.entscheidung.text.includes(abbruch.grund), beleg.entscheidung.text);
   }
-  const danachGruen = ausPlanung(context, { ergebnis: GRUEN }, [abbrueche[0]]);
+  const danachGruen = ausPlanung(context, { ergebnis: GRUEN }, [abbrueche[1][0]]);
   assert.deepEqual([danachGruen.ergebnis, danachGruen.gestartet], [GRUEN, [1, 1]]);
   const lintRot = { grund: "lint endete mit Exit 1.", roteIds: [], pruefungen: [{ name: "lint", exitCode: 1, zeilen: ["src/a.js: Name zu kurz"] }] };
-  const gemischt = ausPlanung(context, { ...abbrueche[1], roteIds: ["agent exit", "lint"] }, [lintRot]);
+  const gemischt = ausPlanung(context, { ...abbrueche[1][0], roteIds: ["agent exit", "lint"] }, [lintRot]);
   assert.ok(gemischt.starts.startsWith("planer\n"), gemischt.starts);
 });
 

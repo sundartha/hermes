@@ -223,7 +223,8 @@ class Runden {
   rot(ergebnis) {
     if (nurAbgebrochen(ergebnis)) {
       verwerfe(ergebnis.basis, this.kontext.root);
-      this.abbrueche.push(`Runde ${ergebnis.runde}: ${ergebnis.grund}`);
+      const imSchritt = ergebnis.roteIds.includes(GRUND.MUTATION_ABBRUCH) ? [`Runde ${ergebnis.runde}: Die Mutationsprüfung ist abgebrochen und lief auf demselben Stand noch einmal.`] : [];
+      this.abbrueche.push(...imSchritt, `Runde ${ergebnis.runde}: ${ergebnis.grund}`);
       return this.abbrueche.length > MAX_WIEDERHOLUNGEN ? this.entscheidung(ergebnis, this.abgebrochen()) : null;
     }
     this.fehler.push(fehlerausgabe(ergebnis));
