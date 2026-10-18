@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 
-import { kenntZweck, zweckBlock } from "./auftrag/zweck.mjs";
+import { ZWECK_ORTE, kenntZweck, zweckBlock } from "./auftrag/zweck.mjs";
 
 const EXIT_AUFRUF = 2;
 const AUFRUF = "Aufruf: node tools/zweck-zeigen.mjs <id> [<id> …]";
@@ -12,7 +12,7 @@ function zeigen(ids) {
   }
   const unbekannt = ids.filter((id) => !kenntZweck(id));
   if (unbekannt.length > 0) {
-    console.error(`Kein Zweck-Text für ${unbekannt.join(", ")} in tools/auftrag/zweck.json oder tools/zweck/; der Aufruf nennt eine ID, die es nicht gibt.`);
+    console.error(`Kein Zweck-Text für ${unbekannt.join(", ")} in ${ZWECK_ORTE}; der Aufruf nennt eine ID, die es nicht gibt.`);
     return EXIT_AUFRUF;
   }
   for (const id of ids) console.error(zweckBlock(id).join("\n"));

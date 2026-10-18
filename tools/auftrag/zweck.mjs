@@ -4,6 +4,7 @@ import { AUSSERHALB, GESCHUETZT, PHASE_PASST_NICHT, ROLLE, VERSTOSS, ZU_VIELE_ZE
 
 const AUFTRAGSWEG = "tools/auftrag/zweck.json";
 const WEITERE = "tools/zweck/";
+export const ZWECK_ORTE = `${AUFTRAGSWEG} oder ${WEITERE}`;
 const WEITERE_ORDNER = new URL("../zweck/", import.meta.url);
 const JSON_ENDUNG = ".json";
 
@@ -136,7 +137,7 @@ export function zweckIds({ name, zeilen = [] }) {
 
 export function zweckBlock(id) {
   const text = TEXTE[id];
-  if (text === undefined) throw new Error(`Kein Zweck-Text für die Prüfung ${id} in ${AUFTRAGSWEG} oder ${WEITERE}.`);
+  if (text === undefined) throw new Error(`Kein Zweck-Text für die Prüfung ${id} in ${ZWECK_ORTE}.`);
   return BLOCK.map(([titel, feld]) => `${titel}: ${text[feld]}`);
 }
 
