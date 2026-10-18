@@ -163,6 +163,31 @@ test(
   },
 );
 
+test("ein zusätzlicher Abschnitt neben den vier vorgeschriebenen ist rot", TEST_FRIST, async () => {
+  const vorher = {
+    ...sauberVorher(),
+    "docs/funktionen/nummer.md": `${karteText(NUMMER_KARTE)}\n## Anhang\n\nText.\n`,
+  };
+  const lauf = await pruefen(bestand({ vorher }));
+  assert.equal(lauf.exit, EXIT_ROT);
+  assert.match(lauf.stderr, /nummer\.md: Abschnitt „## Anhang“ ist nicht vorgesehen/);
+});
+
+test(
+  "eine Zeile mit ## im Codeblock und eine Überschrift der dritten Stufe sind kein Abschnitt",
+  TEST_FRIST,
+  async () => {
+    const zusatz = "\n### Einzelheit\n\n```sh\n## Kommentar der Shell\n```\n";
+    const vorher = {
+      ...sauberVorher(),
+      "docs/funktionen/nummer.md": `${karteText(NUMMER_KARTE)}${zusatz}`,
+    };
+    const lauf = await pruefen(bestand({ vorher }));
+    assert.equal(lauf.exit, 0, `${lauf.stdout}${lauf.stderr}`);
+    assert.match(lauf.stdout, /docs\/funktionen\/nummer\.md: sauber/);
+  },
+);
+
 test("ein Schritt ohne Erwartung an die Antwort ist rot", TEST_FRIST, async () => {
   const ohneErwartung = { befehl: STATUS_LESEN.befehl };
   const karte = { ...NUMMER_KARTE, schritte: [NUMMER_LESEN, ohneErwartung] };
