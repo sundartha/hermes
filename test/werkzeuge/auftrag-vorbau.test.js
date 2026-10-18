@@ -241,20 +241,22 @@ test("Freigabe: steht der alte Test aus dem früheren Halt nicht im Issue, bleib
   gesperrt(zweiter, FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: test\/versand\.test\.js steht nicht als eigener Listenpunkt/);
 });
 
-test("Freigabe: ein alter Test aus dem Halt eines anderen Auftrags gibt diesem Auftrag nichts frei", (context) => {
-  const zweiter = nachHalten(context, { "A10.runde-1": haltMit("A10", ALT), A2: haltMit("A2", ALT), A1: ISO_HALT });
+test("Freigabe: ein alter Test aus dem Halt eines anderen Auftrags oder aus einer Nachbardatei, die kein Beleg ist, gibt diesem Auftrag nichts frei", (context) => {
+  const nachbarn = { "A1.freigabe.phase": haltMit("A1", ALT), "A1.runde-1.5.pruefung-1": haltMit("A1", ALT) };
+  const zweiter = nachHalten(context, { "A10.runde-1": haltMit("A10", ALT), A2: haltMit("A2", ALT), ...nachbarn, A1: ISO_HALT });
   assert.equal(zweiter.ergebnis.status, EXIT_ROT);
   assert.doesNotMatch(zweiter.ergebnis.stdout, /test\/versand\.test\.js frei/);
   assert.match(JSON.stringify(zweiter.beleg("A1")), FREMDER_TEST);
   assert.deepEqual(zweiter.gh.filter(([befehl]) => befehl === "api"), []);
 });
 
-test("Freigabe: zwei Halte mit zwei verschiedenen alten Tests, beide im Issue, geben beide frei", (context) => {
+test("Freigabe: zwei Halte mit zwei verschiedenen alten Tests, beide im Issue, geben beide frei, auch aus einem Beleg mit Zusatznummer", (context) => {
   const beide = { dateien: { ...FREIGEGEBEN.dateien, [ALT_ZWEI]: ALT_OHNE_GATES } };
   const issue = freigabeIssue({ liste: [ALT, ALT_ZWEI] });
-  const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: haltMit("A1", ALT_ZWEI, 2) }, { issue, test: [beide] });
+  const zweiter = nachHalten(context, { "A1.runde-1.2": haltMit("A1", ALT), A1: haltMit("A1", ALT_ZWEI, 2) }, { issue, test: [beide] });
   assert.equal(zweiter.ergebnis.status, 0, zweiter.ergebnis.stdout + zweiter.ergebnis.stderr);
   for (const datei of [ALT, ALT_ZWEI]) assert.match(zweiter.ergebnis.stdout, new RegExp(`Issue #54 gibt ${datei.replaceAll(".", "\\.")} frei`));
+  assert.deepEqual(zweiter.gh.filter(([befehl]) => befehl === "api").map((aufruf) => aufruf.at(-2)), [`number=${ISSUE}`]);
   assert.equal(readFileSync(join(zweiter.repo, ALT_ZWEI), "utf8"), ALT_OHNE_GATES);
 });
 
