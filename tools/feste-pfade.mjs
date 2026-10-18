@@ -247,7 +247,11 @@ function areaFindings(state, file) {
 }
 
 function manifestPathFindings(state, where, pattern) {
-  return state.files.some((file) => matches(pattern, file)) ? [] : [missing(where, pattern)];
+  try {
+    return state.files.some((file) => matches(pattern, file)) ? [] : [missing(where, pattern)];
+  } catch (error) {
+    return [`${where}: ${error.message}`];
+  }
 }
 
 function manifestFindings(state, manifest) {
