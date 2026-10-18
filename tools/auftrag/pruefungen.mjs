@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { TESTUMBAU, gehoertZumBereich, istAusfuehrbarerTest, istGeschuetzt, istTestdatei } from "./format.mjs";
 
@@ -9,6 +11,9 @@ const MAX_SCHLUSSZEILEN = 5;
 const BYTES_JE_MEBIBYTE = 1_048_576;
 const MAX_AUSGABE_MEBIBYTE = 64;
 const EXIT_OHNE_STATUS = 1;
+const MAX_AUSGABEDATEI_MEBIBYTE = 4;
+export const MAX_AUSGABEDATEI_BYTES = MAX_AUSGABEDATEI_MEBIBYTE * BYTES_JE_MEBIBYTE;
+const AUSGABE_ENDUNG = ".log";
 const ENTSCHEIDEND = [
   /^# (tests|pass|fail|cancelled|skipped|todo) /,
   /^\s*not ok /,
@@ -68,6 +73,20 @@ export function beleg({ name, befehl, exitCode, ausgabe }) {
 
 export function vollerBeleg(ergebnis) {
   return { ...beleg(ergebnis), zeilen: nichtLeer(ergebnis.ausgabe).slice(0, MAX_BELEGZEILEN) };
+}
+
+function begrenzteAusgabe(ausgabe) {
+  const bytes = Buffer.from(ausgabe);
+  if (bytes.length <= MAX_AUSGABEDATEI_BYTES) return ausgabe;
+  return `[${bytes.length - MAX_AUSGABEDATEI_BYTES} Bytes vom Anfang weggelassen]\n${bytes.subarray(-MAX_AUSGABEDATEI_BYTES).toString("utf8")}`;
+}
+
+export function legeAusgabeAb(eintrag, { exitCode, ausgabe }, { ordner, stamm }) {
+  if (exitCode === 0) return eintrag;
+  mkdirSync(ordner, { recursive: true });
+  const datei = `${stamm}${AUSGABE_ENDUNG}`;
+  writeFileSync(join(ordner, datei), `${begrenzteAusgabe(ausgabe)}\n`);
+  return { ...eintrag, ausgabeDatei: datei };
 }
 
 export function gekuerzteTestausgabe(ausgabe) {
