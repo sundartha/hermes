@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,7 @@ import {
   auswerten,
   faelleAusBericht,
 } from "./ausnehmen.mjs";
+import { SANDBOXORDNER, legeSandboxordnerAn } from "./arbeitsordner.mjs";
 import { rang } from "./entscheiden.mjs";
 import { TESTDATEI, erreichendeTests } from "./messmenge.mjs";
 import { GATE_DATEI, gateDateien } from "./pfade.mjs";
@@ -26,7 +27,6 @@ const KONFIGURATION = Object.fromEntries(
   ),
 );
 const BANK = "regression";
-const SANDBOXORDNER_DER_MUTATIONSPRUEFUNG = ".mutationspruefung";
 const LEERRAUM = /\s+/g;
 const LAUF_SKRIPT = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
 const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
@@ -114,9 +114,7 @@ function strykerOptionen({ mutate, tests, ausnahmen = [], tempDirName }) {
 }
 
 function sandboxordner() {
-  mkdirSync(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, { recursive: true });
-  writeFileSync(join(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, ".gitignore"), "*\n");
-  return SANDBOXORDNER_DER_MUTATIONSPRUEFUNG;
+  return legeSandboxordnerAn(".");
 }
 
 function neuerArbeitsordner(art) {
@@ -146,10 +144,10 @@ export function eigeneSandbox(neu) {
   if (neu.length === 0) throw new Error("Der umgebaute Stand für die Fallsuche fehlt.");
   if (neu.length > 1) {
     throw new Error(
-      `Der umgebaute Stand für die Fallsuche ist nicht eindeutig: ${neu.join(", ")} entstanden zugleich in ${SANDBOXORDNER_DER_MUTATIONSPRUEFUNG}/.`,
+      `Der umgebaute Stand für die Fallsuche ist nicht eindeutig: ${neu.join(", ")} entstanden zugleich in ${SANDBOXORDNER}/.`,
     );
   }
-  return join(SANDBOXORDNER_DER_MUTATIONSPRUEFUNG, neu[0]);
+  return join(SANDBOXORDNER, neu[0]);
 }
 
 async function testfaelle(tests, verzeichnis) {

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
 import { chdir, cwd } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -21,13 +21,12 @@ import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStuec
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
-import { entferneArbeitsordner, legeArbeitsordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
+import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
-const SANDBOXORDNER = ".mutationspruefung";
 const BANK = "regression";
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
@@ -99,13 +98,6 @@ function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
   if (lauf.status !== 0) throw new Error(`git ${args.join(" ")}: ${lauf.stderr.trim()}`);
   return lauf.stdout;
-}
-
-function legeSandboxordnerAn(wurzel) {
-  const ordner = join(wurzel, SANDBOXORDNER);
-  mkdirSync(ordner, { recursive: true });
-  writeFileSync(join(ordner, ".gitignore"), "*\n");
-  return ordner;
 }
 
 function arbeitsverzeichnis(praefix) {

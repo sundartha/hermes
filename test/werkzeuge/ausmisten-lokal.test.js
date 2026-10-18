@@ -124,6 +124,17 @@ test("ausmisten-lokal: nach dem Lauf bleibt kein zusätzlicher Arbeitsordner zur
   assert.equal(liste.match(/^worktree /gm).length, 1, liste);
 });
 
+test("ausmisten-lokal: scheitert das Verlinken der Module, bleibt kein zusätzlicher Arbeitsordner zurück", async (context) => {
+  const repo = lokalesRepo(context, [DOPPELT], {
+    dateien: { ".gitignore": "", "node_modules/eingecheckt.txt": "x\n" },
+  });
+  const ergebnis = await lokal(context, repo);
+  assert.notEqual(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.match(ergebnis.ausgabe, /EEXIST/);
+  const liste = repo.git(["worktree", "list", "--porcelain"]).stdout;
+  assert.equal(liste.match(/^worktree /gm).length, 1, liste);
+});
+
 test("ausmisten-lokal: ohne --master bricht der Befehl mit der Aufrufhilfe ab", async (context) => {
   const repo = lokalesRepo(context, [DOPPELT]);
   const ergebnis = await starte(WERKZEUG, {
