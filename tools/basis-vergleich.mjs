@@ -13,8 +13,20 @@ import {
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
+import { aenderungenSeit } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
-import { aufgeteilt, gezaehlt, unveraendert } from "./bestand-rueckfuehrung.mjs";
+import { fileAt } from "./pruefungen-messen.mjs";
+import { isCommit } from "./ts-dateien.mjs";
+import {
+  aufgeteilt,
+  gewachsen,
+  gezaehlt,
+  paarZurueck,
+  pfadZurueck,
+  rueckfuehrung,
+  teilZurueck,
+  unveraendert,
+} from "./bestand-rueckfuehrung.mjs";
 import {
   selbstpruefungen,
   selbstpruefungsSchluessel,
@@ -44,6 +56,7 @@ const JSON_INDENT = 2;
 const SHORTEN_OPTION = "basis-kuerzen";
 const CREATE_OPTION = "basis-anlegen";
 const PER_FOLDER_OPTION = "je-ordner";
+const BASIS_OPTION = "basis";
 const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
@@ -170,6 +183,12 @@ function knipFindings(root) {
     throw toolFailure("knip", result);
   }
   return JSON.parse(result.stdout).issues.flatMap(knipRowFindings);
+}
+
+function knipBack(key, back) {
+  const [type, file, ...symbol] = key.split(KEY_SEPARATOR);
+  const rest = symbol.join(KEY_SEPARATOR);
+  return findingKey([type, back(file), rest === file ? back(file) : rest]);
 }
 
 function semgrepVersion(root) {
@@ -340,16 +359,33 @@ function keyPart(index) {
   return (key) => key.split(KEY_SEPARATOR)[index];
 }
 
+const PATH_KEYED = { path: pfadAusSchluessel, back: pfadZurueck };
+const PER_FILE = { ...PATH_KEYED, findingPerFile: true };
+
 const TOOLS = {
-  jscpd: { findings: jscpdFindings, version: jscpdVersion, path: keyPart(0), shrunk: jscpdShrunk, zweck: MELDUNG.JSCPD },
-  knip: { findings: knipFindings, path: keyPart(1) },
-  semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
-  "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
-  selbstpruefung: { findings: selfCheckFindings, path: pfadAusSchluessel },
-  "fester-importpfad": { findings: placeholderImportFindings, path: pfadAusSchluessel },
-  lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
-  anweisungen: { findings: instructionFindings, path: pfadAusSchluessel },
-  wurzel: { findings: rootFindings, path: pfadAusSchluessel },
+  jscpd: {
+    findings: jscpdFindings,
+    version: jscpdVersion,
+    path: keyPart(0),
+    back: paarZurueck(JSCPD_PAIR_PARTS),
+    shrunk: jscpdShrunk,
+    zweck: MELDUNG.JSCPD,
+    findingPerFile: true,
+  },
+  knip: { findings: knipFindings, path: keyPart(1), back: knipBack },
+  semgrep: {
+    findings: semgrepFindings,
+    version: semgrepVersion,
+    path: keyPart(1),
+    back: teilZurueck(1),
+    findingPerFile: true,
+  },
+  "quelltext-als-text": { findings: textReadingFindings, ...PER_FILE },
+  selbstpruefung: { findings: selfCheckFindings, ...PER_FILE },
+  "fester-importpfad": { findings: placeholderImportFindings, ...PER_FILE },
+  lessons: { findings: lessonsFindings, ...PER_FILE },
+  anweisungen: { findings: instructionFindings, ...PATH_KEYED },
+  wurzel: { findings: rootFindings, ...PATH_KEYED },
 };
 
 function baselineFile(toolName) {
@@ -364,6 +400,73 @@ function readBaseline(root, toolName) {
     );
   }
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function checkBasis(basis) {
+  if (!isCommit(basis)) throw new Error(`Die Basis ${basis} ist kein Commit in diesem Repo.`);
+}
+
+function baselineAt(basis, toolName) {
+  const text = fileAt(basis, baselineFile(toolName));
+  return text === undefined ? undefined : JSON.parse(text);
+}
+
+async function grownEntries({ basis, toolName, tool }, baseline) {
+  if (basis === undefined) return [];
+  checkBasis(basis);
+  const before = baselineAt(basis, toolName);
+  if (before === undefined) {
+    console.log(`${baselineFile(toolName)} gibt es auf der Basis ${basis} noch nicht.`);
+    return [];
+  }
+  if (before.version !== baseline.version) {
+    console.log(
+      `${baselineFile(toolName)} gilt für eine andere Version als auf der Basis ${basis}; nach einem Versionswechsel wird sie neu angelegt.`,
+    );
+    return [];
+  }
+  const back = await rueckfuehrung(basis);
+  return gewachsen({
+    jetzt: baseline.befunde,
+    vorher: before.befunde,
+    zurueck: (key) => tool.back(key, back),
+  });
+}
+
+function changedSince(root, basis) {
+  return aenderungenSeit(basis, root).map(({ pfad }) => pfad);
+}
+
+function splitWidening({ root, basis, tool }, grown, exact) {
+  if (grown.length === 0 || tool.findingPerFile !== true) return { widened: [], grown };
+  const changed = changedSince(root, basis);
+  const touches = (entry) => changed.some((path) => entry.schluessel.includes(path));
+  const { innerhalb, darueber } = aufgeteilt(
+    grown.filter((entry) => !touches(entry)),
+    exact,
+    (entry) => entry.schluessel,
+  );
+  return { widened: innerhalb, grown: [...grown.filter(touches), ...darueber] };
+}
+
+function reportWidened({ toolName, basis }, widened) {
+  if (widened.length === 0) return;
+  console.log(
+    `${widened.length} Einträge in ${baselineFile(toolName)} sind neu gegenüber der Basis ${basis}, betreffen aber nur seit der Basis unveränderte Dateien und werden heute gemeldet (die Prüfung findet mehr):`,
+  );
+  for (const { schluessel } of widened) console.log(`  ${schluessel}`);
+}
+
+function reportGrown({ toolName, basis }, grown) {
+  console.error(
+    `${grown.length} Einträge in ${baselineFile(toolName)} stehen nicht auf der Basis ${basis}:`,
+  );
+  for (const { schluessel, alt } of grown) {
+    console.error(`  ${schluessel}${alt === schluessel ? "" : ` (zurückgeführt: ${alt})`}`);
+  }
+  console.error(
+    "Die Basislinie wird nur kürzer. Ein auf eine umbenannte Datei verschobener Eintrag zählt nur, wenn tools/umbenennung.mjs für das Paar „nur Typen ergänzt“ meldet.",
+  );
 }
 
 function writeBaseline(root, toolName, { version, keys }) {
@@ -418,6 +521,7 @@ async function measure(context, baseline) {
       ...darueber.filter((finding) => !shrunk.covered.includes(finding)),
     ],
     known: aufgeteilt(baseline.befunde, [...exact, ...shrunk.keys], unveraendert),
+    exact,
   };
 }
 
@@ -440,7 +544,15 @@ function reportAdded({ toolName, tool }, addedFindings) {
 }
 
 async function compare(context) {
-  const { added, known } = await measure(context, readBaseline(context.root, context.toolName));
+  const baseline = readBaseline(context.root, context.toolName);
+  const candidates = await grownEntries(context, baseline);
+  const { added, known, exact } = await measure(context, baseline);
+  const { widened, grown } = splitWidening(context, candidates, exact);
+  reportWidened(context, widened);
+  if (grown.length > 0) {
+    reportGrown(context, grown);
+    process.exitCode = EXIT_FAILURE;
+  }
   reportFixed(context, known.darueber);
   console.log(
     `${context.toolName}: ${added.length} neue Befunde, ${known.innerhalb.length} bekannte.`,
@@ -488,7 +600,7 @@ function perFolder(context) {
 }
 
 function usage() {
-  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}]`;
+  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${BASIS_OPTION} <commit> | --${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}]`;
 }
 
 function parseOptions() {
@@ -497,12 +609,13 @@ function parseOptions() {
       [SHORTEN_OPTION]: { type: "boolean", default: false },
       [CREATE_OPTION]: { type: "boolean", default: false },
       [PER_FOLDER_OPTION]: { type: "boolean", default: false },
+      [BASIS_OPTION]: { type: "string" },
     },
     allowPositionals: true,
   });
   const [toolName] = positionals;
   const modes = [SHORTEN_OPTION, CREATE_OPTION, PER_FOLDER_OPTION].filter((mode) => values[mode]);
-  const severalModes = modes.length > 1;
+  const severalModes = modes.length + (values[BASIS_OPTION] === undefined ? 0 : 1) > 1;
   if (!Object.hasOwn(TOOLS, toolName ?? "") || positionals.length > MAX_POSITIONALS || severalModes) {
     throw new Error(usage());
   }
@@ -518,7 +631,8 @@ function selectedMode(values) {
 
 try {
   const { toolName, values } = parseOptions();
-  await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd() });
+  const basis = values[BASIS_OPTION];
+  await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd(), basis });
 } catch (error) {
   console.error(`Abbruch: ${error.message}`);
   process.exitCode = EXIT_FAILURE;

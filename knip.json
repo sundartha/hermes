@@ -27,15 +27,15 @@
     "tools/hermes-ctl.mjs",
     "tools/hermes-ctl/wirt.mjs",
     "tools/hermes-ctl/pg-wirt.mjs",
-    "test/**/*.test.js"
+    "test/**/*.test.{js,ts}"
   ],
   "project": [
-    "*.{js,mjs}",
-    "src/**/*.js",
-    "scripts/**/*.{js,mjs}",
-    "test/**/*.js",
+    "*.{js,mjs,ts,mts}",
+    "src/**/*.{js,ts}",
+    "scripts/**/*.{js,mjs,ts,mts}",
+    "test/**/*.{js,ts}",
     "tools/hermes-ctl.mjs",
-    "tools/hermes-ctl/**/*.mjs"
+    "tools/hermes-ctl/**/*.{mjs,mts}"
   ],
   "ignore": [
     "coverage/**",
