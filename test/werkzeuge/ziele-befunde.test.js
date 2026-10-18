@@ -125,6 +125,16 @@ test("ziele-befunde: ein abgebrochener Lauf ohne Teilergebnis endet blockiert mi
   assert.deepEqual(github.zustand.issues, []);
 });
 
+test("ziele-befunde: sind die Job-Ergebnisse unlesbar, nennt der Grund des unvollständigen Laufs das und die Ursache steht im Protokoll", async (context) => {
+  const github = await githubAttrappe(context);
+  const ordner = arbeitsordner(context, teile(null));
+  const lauf = await starteZiele(["ergebnis", "--ordner", ordner, "--workflow", "aufraeumen"], { cwd: ordner, env: umgebung(github, { JOB_ERGEBNISSE: "{kaputt" }) });
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const geschrieben = gelesen(ordner, "ergebnis/ergebnis.json");
+  assert.deepEqual([geschrieben.ausgang, geschrieben.grund], ["blockiert", "Lauf unvollständig (JOB_ERGEBNISSE unlesbar)"]);
+  assert.match(lauf.stderr, /^JOB_ERGEBNISSE unlesbar: .+$/m);
+});
+
 test("ziele-befunde: eine saubere Vorprüfung ergibt den Ausgang sauber ohne Issue", async (context) => {
   const github = await githubAttrappe(context);
   const daten = { "ziel/vorpruefung.json": { format: 1, ausgang: "sauber", grund: "master unverändert", befunde: [], start: START } };
