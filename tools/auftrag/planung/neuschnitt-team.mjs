@@ -84,7 +84,7 @@ class NeuschnittPlanung extends Planung {
     if (this.soll.size === 0) return;
     const { auftragId, anlass, verlauf, hinweise } = this.eingabe;
     const nummern = [...this.soll.keys()];
-    const kopf = [abschnitt("Anlass", anlass), abschnitt("Verlauf", verlauf.join("\n")), abschnitt("Hinweise", hinweise.join("\n"))];
+    const kopf = [this.kopfTeile().phasenKopf, abschnitt("Anlass", anlass), abschnitt("Verlauf", verlauf.join("\n")), abschnitt("Hinweise", hinweise.join("\n"))];
     const fragen = [`Woran ist ${auftragId} gescheitert, und welche Stellen müssen sich für diese Nummern ändern?`];
     const [ergebnis] = await this.team.gruppe([this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf }), nummern)]);
     this.berichte = [ergebnis.bericht];
@@ -120,12 +120,18 @@ class NeuschnittPlanung extends Planung {
     return ergebnis.wert;
   }
 
-  async planerNachricht() {
-    const { kopf, datei } = this.eingabe;
+  kopfTeile() {
+    const { kopf } = this.eingabe;
     const stelle = kopf.indexOf(VERLAUF);
+    return { phasenKopf: kopf.slice(0, stelle), verlauf: kopf.slice(stelle) };
+  }
+
+  async planerNachricht() {
+    const { datei } = this.eingabe;
+    const { phasenKopf, verlauf } = this.kopfTeile();
     const dokumente = DOKUMENTE.map((name) => `#### ${name}\n\n${this.dokumente[name] ?? `${name} gibt es nicht.`}`);
     return [
-      kopf.slice(0, stelle),
+      phasenKopf,
       abschnitt("Dokumente", dokumente.join("\n\n")),
       abschnitt("Phasendatei", `${datei}\n\n${json(this.phase)}`),
       abschnitt("Nummern", nummernText(this.soll, [...this.soll.keys()])),
@@ -133,7 +139,7 @@ class NeuschnittPlanung extends Planung {
       abschnitt("Berichte der ersten Planung", json(this.ersteBerichte())),
       ...(await this.lagebild()),
       abschnitt(VORLAGE, dateiText(this.root, VORLAGE)),
-      kopf.slice(stelle),
+      verlauf,
     ].join("\n");
   }
 

@@ -445,3 +445,15 @@ test("Neuschnitt: ein geänderter Nie-Satz des alten Auftrags muss weiter wörtl
   exit(lauf, 4);
   assert.match(lauf.ergebnis.grund, new RegExp(`a2-n1 wasDarfNiePassieren: „${geaendert}“ steht nicht wörtlich`));
 });
+
+test("Neuschnitt: der Erkunder bekommt den Kopf der Phase mit dem Entwurf wie der Planer", (context) => {
+  const entwurf = ["", "## Entwurf für src/", "", "Neue Speicherfunktionen gehen nur über die Fassade src/store.js."].join("\n");
+  const kopf = `${KOPF.slice(0, STELLE_VERLAUF)}\n${entwurf}\n${KOPF.slice(STELLE_VERLAUF)}`;
+  const lauf = neuschnitt(context, { eingabe: { kopf } });
+  exit(lauf, 0);
+  const [erkunder] = aufrufe(lauf, "erkunder", "## Nachfrage");
+  assert.ok(erkunder.eingabe.includes(entwurf), erkunder.eingabe);
+  assert.ok(erkunder.eingabe.includes(`### Anlass\n\n${ANLASS}\n`), erkunder.eingabe);
+  const [{ eingabe: planer }] = aufrufe(lauf, "planer");
+  assert.ok(planer.includes(entwurf), planer);
+});
