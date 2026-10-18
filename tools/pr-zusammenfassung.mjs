@@ -125,6 +125,10 @@ function section(title, lines) {
   return lines.length === 0 ? [] : ["", `### ${title}`, "", ...lines];
 }
 
+function purposeLines(lines) {
+  return lines.flatMap((line) => ["", line]);
+}
+
 export function summaryText(report) {
   const status = report.gruende.map((grund) => `- ${grund}`);
   const checks = report.pruefungen.flatMap(checkLines);
@@ -133,7 +137,12 @@ export function summaryText(report) {
     "## Freigabe-Prüfung: Zusammenfassung",
     "",
     `Art des PRs: **art:${report.art}**`,
-    ...section("Was noch fehlt", status.length === 0 ? ["Nichts, keine Freigabe nötig."] : status),
+    ...section(
+      "Was noch fehlt",
+      status.length === 0
+        ? ["Nichts, keine Freigabe nötig."]
+        : [...status, ...purposeLines(report.zweck)],
+    ),
     ...section(
       "Nur strenger, ohne Freigabe",
       report.strenger.map(({ path, fall }) => `- \`${path}\`: ${fall}`),

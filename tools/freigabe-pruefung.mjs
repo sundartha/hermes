@@ -8,6 +8,7 @@ import {
   writeSummary,
 } from "./pr-zusammenfassung.mjs";
 import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs";
+import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
   FEHLALARME_DIR,
@@ -209,20 +210,26 @@ async function youngVersions(packages, sources) {
       const { ageDays } = await publication(name, version ?? "?", sources);
       if (ageDays < MIN_AGE_DAYS) {
         reasons.push(
-          `${name} ${version} ist erst ${ageDays} Tage veröffentlicht, verlangt sind ${MIN_AGE_DAYS}.`,
+          grund(
+            FREIGABE_GRUENDE.JUNGE_VERSION,
+            `${name} ${version} ist erst ${ageDays} Tage veröffentlicht, verlangt sind ${MIN_AGE_DAYS}.`,
+          ),
         );
       }
     } catch (error) {
       reasons.push(
-        `Das Alter von ${name} ${version ?? "?"} ist nicht ermittelbar: ${error.message}.`,
+        grund(
+          FREIGABE_GRUENDE.ALTER_UNBEKANNT,
+          `Das Alter von ${name} ${version ?? "?"} ist nicht ermittelbar: ${error.message}.`,
+        ),
       );
     }
   }
   return reasons;
 }
 
-function listed(prefix, items) {
-  return items.length === 0 ? [] : [`${prefix}: ${items.join(", ")}.`];
+function listed(zweck, prefix, items) {
+  return items.length === 0 ? [] : [grund(zweck, `${prefix}: ${items.join(", ")}.`)];
 }
 
 function approvalReasons({ changes, packages, texts, measured }) {
@@ -232,19 +239,34 @@ function approvalReasons({ changes, packages, texts, measured }) {
   const looser = measured.pruefungen.filter(({ urteil }) => urteil === LOCKERER);
   return [
     ...listed(
+      FREIGABE_GRUENDE.PRUEFUNGSDATEIEN,
       "Bestehende Prüfungsdateien geändert oder gelöscht",
       modified.map(({ path }) => path),
     ),
     ...listed(
+      FREIGABE_GRUENDE.LOCKERER,
       "Prüfungen werden lockerer",
       looser.map(({ titel }) => titel),
     ),
-    ...listed("Neue npm-Pakete", packages.added),
-    ...listed("Entfernte npm-Pakete", packages.removed),
-    ...listed("Geänderte Skript-Einträge in package.json", packages.scripts),
-    ...listed("Geänderte weitere Felder in package.json", packages.fields),
+    ...listed(FREIGABE_GRUENDE.NEUE_PAKETE, "Neue npm-Pakete", packages.added),
+    ...listed(FREIGABE_GRUENDE.ENTFERNTE_PAKETE, "Entfernte npm-Pakete", packages.removed),
+    ...listed(
+      FREIGABE_GRUENDE.SKRIPTE,
+      "Geänderte Skript-Einträge in package.json",
+      packages.scripts,
+    ),
+    ...listed(
+      FREIGABE_GRUENDE.PAKETFELDER,
+      "Geänderte weitere Felder in package.json",
+      packages.fields,
+    ),
     ...(texts.aenderungen.length > 0
-      ? ["Werkzeugtexte aus tools/list geändert (Vorher und Nachher unten)."]
+      ? [
+          grund(
+            FREIGABE_GRUENDE.WERKZEUGTEXTE,
+            "Werkzeugtexte aus tools/list geändert (Vorher und Nachher unten).",
+          ),
+        ]
       : []),
   ];
 }
@@ -252,9 +274,11 @@ function approvalReasons({ changes, packages, texts, measured }) {
 function blockReasons(measured) {
   return measured.pruefungen
     .filter(({ urteil, fehlalarmBelegt }) => urteil === LOCKERER && !fehlalarmBelegt)
-    .map(
-      ({ titel, id }) =>
+    .map(({ titel, id }) =>
+      grund(
+        FREIGABE_GRUENDE.OHNE_FEHLALARM,
         `Die Prüfung „${titel}“ wird lockerer, aber der PR bringt kein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/${id}/ mit, das master meldet und dieser PR nicht mehr.`,
+      ),
     );
 }
 
@@ -416,8 +440,8 @@ function statusLines({ needs, blocks, approvedBy, headSha }) {
           `Es fehlt eine Freigabe von ${APPROVERS.join(" oder ")} auf dem Stand ${headSha.slice(0, SHORT_SHA)}.`,
         ];
   return [
-    ...blocks.map((reason) => `Muss geändert werden: ${reason}`),
-    ...needs.map((reason) => `Braucht Freigabe: ${reason}`),
+    ...blocks.map(({ text }) => `Muss geändert werden: ${text}`),
+    ...needs.map(({ text }) => `Braucht Freigabe: ${text}`),
     ...(needs.length > 0 ? approval : []),
   ];
 }
@@ -436,7 +460,10 @@ async function countedApprovers(options, { needs }, headSha) {
   return {
     approvedBy: [],
     notes: [
-      `Die Freigabe auf dem Stand ${headSha.slice(0, SHORT_SHA)} zählt in der Warteschlange nicht, weil die Änderung dort anders ist.`,
+      grund(
+        FREIGABE_GRUENDE.WARTESCHLANGE,
+        `Die Freigabe auf dem Stand ${headSha.slice(0, SHORT_SHA)} zählt in der Warteschlange nicht, weil die Änderung dort anders ist.`,
+      ),
     ],
   };
 }
@@ -448,7 +475,12 @@ async function main() {
   const result = await evaluate(options);
   const headSha = pull.head.sha;
   const { approvedBy, notes } = await countedApprovers(options, result, headSha);
-  const gruende = [...statusLines({ ...result, approvedBy, headSha }), ...notes];
+  const gruende = [
+    ...statusLines({ ...result, approvedBy, headSha }),
+    ...notes.map(({ text }) => text),
+  ];
+  const waiting = result.needs.length > 0 && approvedBy.length === 0;
+  const zweck = zweckZeilen([...result.blocks, ...(waiting ? [...result.needs, ...notes] : [])]);
   const { pruefungen, ohneMessung } = result.measured;
   const findings = [
     pruefungen,
@@ -461,6 +493,7 @@ async function main() {
   const report = {
     art: result.kind,
     gruende,
+    zweck,
     strenger: result.strenger,
     ...result.measured,
     pakete: result.pakete,
@@ -472,8 +505,7 @@ async function main() {
   }
   console.log(`Freigabe-Prüfung: Art art:${result.kind}.`);
   for (const { path, fall } of result.strenger) console.log(`Strenger: ${path}: ${fall}`);
-  for (const line of gruende) console.log(line);
-  const waiting = result.needs.length > 0 && approvedBy.length === 0;
+  for (const line of [...gruende, ...zweck]) console.log(line);
   if (result.blocks.length > 0 || waiting) process.exitCode = EXIT_FAILURE;
   else console.log("Keine offene Freigabe.");
 }

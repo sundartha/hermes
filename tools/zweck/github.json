@@ -1,0 +1,79 @@
+{
+  "github/freigabe-alter-unbekannt": {
+    "liste": "G1",
+    "wozu": "Eine Paketversion wird erst nach sieben Tagen ohne Rückfrage übernommen, weil eine gekaperte Version meist in den ersten Tagen auffällt und zurückgezogen wird. Lässt sich das Alter nicht ermitteln, ist genau das nicht belegt, und ein Mensch muss die Version ansehen.",
+    "behebung": "Die Ursache aus der Zeile beheben: Nennt package-lock.json die Version nicht, das Lockfile mit npm install neu schreiben und mitcommiten; antwortet die Registry nicht, den Lauf mit einem neuen Push wiederholen.",
+    "nichtAngenommen": "Die Version an package-lock.json vorbei festlegen, das Paket in einen Abschnitt verschieben, den die Prüfung nicht liest, oder den Versionssprung in kleinere Schritte teilen, damit das Alter nicht abgefragt wird. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Bleibt das Alter nicht ermittelbar, wartet der PR auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit Paket und Version ins Issue."
+  },
+  "github/freigabe-entfernte-pakete": {
+    "liste": "G1",
+    "wozu": "Viele Prüfungen hängen an npm-Paketen (ESLint und seine Regeln, jscpd, knip, dependency-cruiser, Stryker). Fällt ein solches Paket weg, läuft die Prüfung nicht mehr oder schwächer, ohne dass eine Prüfungsdatei sich ändert; ein Mensch soll sehen, was entfällt.",
+    "behebung": "Ist das Paket wirklich ungenutzt (knip meldet es), bleibt das Entfernen, und der PR nennt, warum es weg kann. Wird es noch gebraucht, bleibt es in package.json.",
+    "nichtAngenommen": "Das Paket entfernen und die Prüfung, die es braucht, still durch eine schwächere ersetzen oder abschalten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit dem entfernten Paket und dem Grund ins Issue."
+  },
+  "github/freigabe-junge-version": {
+    "liste": "G1",
+    "wozu": "Eine Paketversion, die jünger als sieben Tage ist, kann gekapert sein: Solche Versionen fallen meist in den ersten Tagen auf und werden zurückgezogen. Ohne diese Frist liefe eine neue Version mit fremdem Code sofort in CI und Betrieb.",
+    "behebung": "Bei der älteren Version bleiben und den Wechsel nach Ablauf der sieben Tage neu pushen, oder eine ältere Version wählen, die die nötige Änderung schon enthält.",
+    "nichtAngenommen": "Die Version an package-lock.json vorbei festlegen oder den Wechsel in einen Weg verlegen, den die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Muss die junge Version sofort kommen (etwa für eine Sicherheitskorrektur), wartet der PR auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit Paket, Version und Grund ins Issue."
+  },
+  "github/freigabe-lockerer": {
+    "liste": "G1",
+    "wozu": "Eine Prüfung, die weniger meldet als auf master (weniger Treffer oder eine Rot-Probe, die durchgeht), lässt Fehler durch, die sie bisher gestoppt hat. Auch mit Fehlalarm-Beispiel soll ein Mensch sehen, dass eine Sperre schwächer wird, bevor Hermes so weiterläuft.",
+    "behebung": "Antonio liest die Messung im Kommentar „Freigabe-Prüfung: Zusammenfassung“ und das Fehlalarm-Beispiel und gibt auf dem aktuellen Stand ein Approve. Ist keine Lockerung beabsichtigt, wird die Änderung so gebaut, dass Trefferzahl und Rot-Proben gleich bleiben.",
+    "nichtAngenommen": "Die Prüfung neu als andere Datei anlegen statt die bestehende zu ändern, Rot-Proben streichen oder abschwächen, damit die Messung nichts findet, oder die Lockerung auf mehrere PRs verteilen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit der gemessenen Prüfung ins Issue."
+  },
+  "github/freigabe-neue-pakete": {
+    "liste": "G1",
+    "wozu": "Ein neues npm-Paket bringt fremden Code in CI und Betrieb. Ohne Blick eines Menschen käme ein unbekanntes, gekapertes oder schlecht gepflegtes Paket herein; die Zusammenfassung im PR nennt dafür Alter, Downloads, Lizenz und bekannte Sicherheitsmeldungen.",
+    "behebung": "Prüfen, ob ein vorhandenes Paket oder Node selbst die Aufgabe schon kann, und das neue Paket dann weglassen. Wird es gebraucht, nennt der PR, wofür, und Antonio gibt auf dem aktuellen Stand ein Approve.",
+    "nichtAngenommen": "Den Code des Pakets ins Repo kopieren, es außerhalb von package.json laden oder es in einen Abschnitt eintragen, den die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit Paket und Zweck ins Issue."
+  },
+  "github/freigabe-ohne-fehlalarm": {
+    "liste": "G2",
+    "wozu": "Eine Prüfung soll nicht lockerer werden, nur weil jemand ihre Meldung einen Fehlalarm nennt. Ohne Beleg verschwände still eine Sperre, und ein Fehler, den sie bisher gestoppt hat, käme auf master und zu den Kunden; deshalb bleibt der PR auch mit Approve rot.",
+    "behebung": "Ist keine Lockerung beabsichtigt, die Änderung so bauen, dass die Prüfung so viel meldet wie auf master und alle Rot-Proben weiter stoppt. Ist die Lockerung gewollt, weil die alte Fassung einen echten Fehlalarm meldet, gehört genau dieser Fall als Beispiel unter test/werkzeuge/fehlalarme/<id>/ in den PR: master meldet ihn, der PR nicht mehr.",
+    "nichtAngenommen": "Ein Beispiel eigens für die Messung bauen, das im echten Code nicht vorkommt, oder die Rot-Proben der Prüfung abschwächen, damit sie nicht mehr lockerer erscheint. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Mit dem Fehlalarm-Beispiel wartet der PR nur noch auf Antonios Approve. Gibt es keinen echten Fehlalarm, den du belegen kannst, hörst du auf und schreibst die Messung als Entscheidungsnotiz ins Issue."
+  },
+  "github/freigabe-paketfelder": {
+    "liste": "G1",
+    "wozu": "Felder in package.json neben Paketen und Skripten (etwa overrides, engines, type, workspaces) ändern, welche Paketversionen tatsächlich geladen werden und wie Node den Code ausführt. Ohne Blick eines Menschen ließe sich so ein Paket ersetzen oder eine Prüfung anders laufen lassen, ohne dass eine Prüfungsdatei sich ändert.",
+    "behebung": "Das Feld nur ändern, wenn der Auftrag es verlangt, und im PR nennen, was die Änderung bewirkt; dann gibt Antonio auf dem aktuellen Stand ein Approve. Sonst bleibt das Feld wie auf master.",
+    "nichtAngenommen": "Dieselbe Wirkung über eine andere Datei erreichen, die die Prüfung nicht liest (etwa .npmrc oder eine zweite package.json). Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit dem Feld und seiner Wirkung ins Issue."
+  },
+  "github/freigabe-pruefungsdateien": {
+    "liste": "G1",
+    "wozu": "Prüfungen, Basislinien, Workflows und Rollen-Sperren (alles, was in .github/CODEOWNERS steht) entscheiden, was Hermes durchlässt. Ändert ein Agent sie ohne Blick eines Menschen, liefe Hermes mit einer Prüfung weiter, die einen Fehler nicht mehr meldet.",
+    "behebung": "Antonio liest die Änderungen, die der Kommentar „Freigabe-Prüfung: Zusammenfassung“ im PR zusammenfasst, und gibt auf dem aktuellen Stand ein Approve; die Prüfung startet danach von selbst neu. Gehört die Änderung an der Prüfungsdatei nicht zum Auftrag, wird sie zurückgenommen.",
+    "nichtAngenommen": "Eine neue Datei anlegen, die die Aufgabe der bestehenden Prüfung übernimmt, während die alte unbenutzt liegen bleibt, den Pfad aus .github/CODEOWNERS streichen oder den PR trotz Rot übernehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst, schaltet keinen Auto-Merge ein und schreibt „Wartet auf Freigabe“ mit den geänderten Prüfungsdateien ins Issue. Ein neuer Push nach dem Approve verlangt ein neues Approve."
+  },
+  "github/freigabe-skripte": {
+    "liste": "G1",
+    "wozu": "Die Skripte in package.json legen fest, was Pflicht-Checks und Hooks tatsächlich ausführen (npm run lint, npm test, test:wirkung, test:mutation). Ein geändertes Skript kann eine Prüfung abschwächen oder überspringen, ohne dass eine Prüfungsdatei sich ändert.",
+    "behebung": "Das Skript nur ändern, wenn der Auftrag es verlangt, und im PR nennen, was es danach anders ausführt; dann gibt Antonio auf dem aktuellen Stand ein Approve. Sonst bleibt der Eintrag wie auf master.",
+    "nichtAngenommen": "Den Aufruf aus package.json in ein Shell-Skript oder eine andere Datei verlegen, die die Prüfung nicht vergleicht, und dort ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit dem geänderten Skript ins Issue."
+  },
+  "github/freigabe-warteschlange": {
+    "liste": "G1",
+    "wozu": "Ein Approve gilt für genau die Änderung, die Antonio gesehen hat. Weicht die Änderung in der Merge-Warteschlange davon ab (andere Patch-ID gegen master), käme sonst ein Stand auf master, den kein Mensch freigegeben hat.",
+    "behebung": "Den PR auf den aktuellen master bringen, neu pushen und den neuen Stand von Antonio freigeben lassen; dann ist die Änderung in der Warteschlange dieselbe wie im PR.",
+    "nichtAngenommen": "Den PR an der Warteschlange vorbei übernehmen oder die Änderung nach dem Approve nur in der Warteschlange anpassen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ein neuer Push startet die Freigabe-Prüfung neu; danach wartet der PR auf Antonios Approve auf dem neuen Stand, und die Paket-Sitzung schreibt „Wartet auf Freigabe“ ins Issue."
+  },
+  "github/freigabe-werkzeugtexte": {
+    "liste": "G1",
+    "wozu": "Die Werkzeugtexte aus tools/list (festgehalten in test/werkzeuge/werkzeugtexte.json) sind die Beschreibungen, nach denen die Agenten der Kunden die Werkzeuge von Hermes wählen und aufrufen. Ein geänderter Text ändert ihr Verhalten bei allen Kunden, ohne dass sich Code ändert.",
+    "behebung": "Antonio liest Vorher und Nachher im Kommentar „Freigabe-Prüfung: Zusammenfassung“ und gibt auf dem aktuellen Stand ein Approve. Gehört die Textänderung nicht zum Auftrag, wird sie zurückgenommen.",
+    "nichtAngenommen": "Den Text an einer Stelle ändern, die test/werkzeuge/werkzeugtexte.json nicht festhält, oder die festgehaltene Datei so anpassen, dass keine Änderung erscheint. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der PR wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung approvt nie selbst und schreibt „Wartet auf Freigabe“ mit den geänderten Werkzeugen ins Issue."
+  }
+}
