@@ -275,18 +275,24 @@ export function namenImWenn(text) {
   return wenn.flatMap((zeile) => [...zeile.matchAll(IN_BACKTICKS)].map(([, name]) => name));
 }
 
+function geplanteAuswege(weg, aenderungen) {
+  const geaendert = new Set(liste(aenderungen).map((stelle) => stelle?.datei));
+  return weg.filter((eintrag) => eintrag?.rolle === "eingang" && typeof eintrag.ausweg === "string" && istText(eintrag.datei) && geaendert.has(eintrag.datei)).map(({ ausweg }) => ausweg);
+}
+
 function wennBefunde(ort, kontext) {
-  const { weg } = kontext.angaben;
+  const { weg, aenderungen } = kontext.angaben;
   const eingaenge = Array.isArray(weg) ? weg.filter((eintrag) => eintrag?.rolle === "eingang" && eintrag.ausweg === undefined) : [];
   const dateien = eingaenge.map(({ datei }) => datei).filter((datei) => istText(datei) && existsSync(join(kontext.root, datei)));
   if (dateien.length === 0) return [];
-  const texte = dateien.map((datei) => quelle(kontext, datei));
+  const texte = [...dateien.map((datei) => quelle(kontext, datei)), ...geplanteAuswege(weg, aenderungen)];
   const szenario = kontext.soll.get(kontext.nummer);
   const fehlend = namenImWenn(szenario?.text).filter((name) => {
     const gesucht = [name, ROUTE.exec(name)?.[1]].filter(Boolean);
     return !texte.some((text) => gesucht.some((teil) => text.includes(teil)));
   });
-  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")})`);
+  const weiter = "; entsteht er erst neu, melde ihn als Eingang mit datei und ausweg „nicht gefunden, weil";
+  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")})${weiter} \`${name}\` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei`);
 }
 
 function nummerBefunde(nummer, angaben, kontext) {
