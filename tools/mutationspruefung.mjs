@@ -86,6 +86,7 @@ const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
+const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
 const EINRUECKUNG = 2;
@@ -683,7 +684,7 @@ async function vorherVerteilt(values) {
     console.log(zusammenZeilen(vereint).join("\n"));
     return EXIT_GRUEN;
   }
-  const stand = { basis: git(["rev-parse", "--verify", `${values.basis}^{commit}`]).trim(), tests: testsAus(values.tests) };
+  const stand = { basis: git(["rev-parse", "--verify", values.basis + NUR_COMMIT]).trim(), tests: testsAus(values.tests) };
   if (values["vorher-plan"] !== undefined) {
     const plan = await vorherPlan(stand, werkzeug, values["stueck-sekunden"] === undefined ? undefined : Number(values["stueck-sekunden"]));
     schreibeJson(values["vorher-plan"], plan);
