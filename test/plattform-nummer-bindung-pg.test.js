@@ -108,9 +108,12 @@ test("P4 (Flush-Regression, PM-11): gebundene, BEREITS released-e Zeile zweimal 
     providerNumberId: "ext_n3",
   });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
-  await store.save();
-  await store.save();
-  await store.drainFlushes();
+  const zweiFlushes = async () => {
+    await store.save();
+    await store.save();
+    await store.drainFlushes();
+  };
+  await assert.doesNotReject(zweiFlushes);
 });
 
 test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundenen Tenants -> kein Wurf, Bindung ueberlebt", async () => {

@@ -6,15 +6,17 @@ import { ausgelieferteWidgets, skriptbloecke } from "./gemeinsam/ausgelieferte-w
 
 const MOUNT_HOST = "[data-wing-canvas]";
 const ANZEIGE_WIDGET = "agent-status";
-const [SCRIPT_SOURCE] = skriptbloecke((await ausgelieferteWidgets())[ANZEIGE_WIDGET]).filter((block) =>
+const MOUNT_SKRIPTE = skriptbloecke((await ausgelieferteWidgets())[ANZEIGE_WIDGET]).filter((block) =>
   block.includes(MOUNT_HOST),
 );
+const [SCRIPT_SOURCE] = MOUNT_SKRIPTE;
 
 function makeFakeElement({ src } = {}) {
   return { style: {}, src };
 }
 
 function runInSandbox({ hasEngine = true, mountImpl, querySelectorAnswers = {} } = {}) {
+  assert.equal(MOUNT_SKRIPTE.length, 1, `${ANZEIGE_WIDGET} liefert genau einen Skriptblock, der ${MOUNT_HOST} montiert`);
   const mountCalls = [];
   const defaultMountImpl = () => {};
   const sandbox = {};

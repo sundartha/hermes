@@ -27,6 +27,7 @@ const STATIC_WIDGETS = [
 
 const EINMAL = 1;
 const WING_DRIFT_KEYFRAMES = /@keyframes\s+hermesWingDrift/g;
+const WING_PLATZHALTER = /__WING_[A-Z_]+__/;
 
 function vorkommen(text, gesucht) {
   return text.split(gesucht).length - 1;
@@ -35,7 +36,8 @@ function vorkommen(text, gesucht) {
 function pruefeWingGenauEinmal(id) {
   const html = widgetHtml(id);
   assert.equal(vorkommen(html, WING_PNG), EINMAL, "WING_PNG genau einmal (nur injiziert, keine Kopie in der Quelle)");
-  assert.equal(html.match(WING_DRIFT_KEYFRAMES).length, EINMAL, "Wing-Keyframes genau einmal");
+  assert.equal((html.match(WING_DRIFT_KEYFRAMES) ?? []).length, EINMAL, "Wing-Keyframes genau einmal");
+  assert.doesNotMatch(html, WING_PLATZHALTER, "kein Wing-Platzhalter bleibt im ausgelieferten Widget stehen");
 }
 
 test("T-wing-dedup-once-agent-status: ausgeliefertes Widget traegt WING_PNG und die Wing-Keyframes genau einmal", () => {
