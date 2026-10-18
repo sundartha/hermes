@@ -10,6 +10,7 @@ import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, phasenBefunde } from
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
+import { issueBefunde } from "./phase.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
 import { testTitel, zusicherungenGleich } from "./testtitel.mjs";
@@ -21,7 +22,6 @@ const MAX_WIEDERHOLUNGEN = 1;
 const WERKZEUGABBRUCH = new Set([GRUND.MUTATION_ABBRUCH, GRUND.AGENT_EXIT]);
 const LABEL = "entscheidung";
 const JSON_BLOCK = /```json[^\S\n]*\n((?:(?!```)[\s\S])*)```\s*$/;
-const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "abnahme"];
 const CODEBLOCK = "```";
 const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt in einem abschließenden ```json-Block.";
@@ -161,8 +161,8 @@ function vorbauBefund(plan, datei) {
 }
 
 function veroeffentliche(issue, text, root) {
-  const ziel = String(issue ?? "");
-  if (!ISSUE.test(ziel)) {
+  const ziel = String(issue);
+  if (issueBefunde({ issue }).length > 0) {
     return { pruefungen: [], hinweis: "Die Phasendatei nennt kein gültiges Issue; die Notiz steht nur im Beleg." };
   }
   const gh = env.HERMES_GH ?? "gh";

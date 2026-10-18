@@ -91,8 +91,11 @@ const BASIS = {
   "test/text.test.js": textTest(),
 };
 
+const ISSUE = 54;
+const GH_OHNE_WIRKUNG = "true";
 const PHASE = {
   phase: "probe",
+  issue: ISSUE,
   entwurf: { "src/": "Entwurf." },
   auftraege: [
     {
@@ -131,6 +134,7 @@ function starte(context, drehbuch) {
     ...isolatedEnvironment(),
     ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
     HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
+    HERMES_GH: GH_OHNE_WIRKUNG,
     HOME: werkzeug,
   };
   const basis = gitAusgabe(repo, "rev-parse", "HEAD").trim();
