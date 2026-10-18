@@ -819,8 +819,8 @@ async function bleibtGesperrt(context, changes, basisFiles = ANWEISUNGEN_FILES) 
 
 const ANWEISUNGEN_LOCKERER = /Muss geändert werden: Die Prüfung „Anweisungen“ wird lockerer/;
 
-async function bleibtLockerer(context, changes) {
-  assert.match(await bleibtGesperrt(context, changes), ANWEISUNGEN_LOCKERER);
+async function bleibtLockerer(context, changes, basisFiles = ANWEISUNGEN_FILES) {
+  assert.match(await bleibtGesperrt(context, changes, basisFiles), ANWEISUNGEN_LOCKERER);
 }
 
 test("ein Eintrag zu einer Zeile, die schon vorher in CLAUDE.md stand: die Anweisungsprüfung bleibt lockerer", async (context) => {
@@ -915,4 +915,53 @@ test("dieselben Einträge in einer anderen Basisliste: diese Prüfung bleibt loc
   );
   assert.match(stdout, /Muss geändert werden: Die Prüfung „Lessons“ wird lockerer/);
   assert.doesNotMatch(stdout, ANWEISUNGEN_LOCKERER);
+});
+
+const ANWEISUNGEN_MANIFEST = "test/werkzeuge/rotproben/anweisungen/pruefung.json";
+const NEUE_ZEILEN_MIT_EINTRAEGEN = {
+  ...MIT_NEUEN_REGELN,
+  [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
+};
+const ZUSATZ_FALL = json({ titel: "Zusatz", dateien: { "CLAUDE.md": ["Zusatz."] }, erwartet: "neue Befunde" });
+
+test("neue Zeilen samt Einträgen und ein neuer Fall im Rotproben-Ordner der Anweisungsprüfung: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
+    "test/werkzeuge/rotproben/anweisungen/zusatz.json": ZUSATZ_FALL,
+  });
+});
+
+test("neue Zeilen samt Einträgen und ein neuer Fall im Fehlalarm-Ordner der Anweisungsprüfung: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
+    "test/werkzeuge/fehlalarme/anweisungen/zusatz.json": ZUSATZ_FALL,
+  });
+});
+
+const REGELN_LISTE = "tools/basis/regeln.json";
+
+test("das Manifest der Anweisungsprüfung zeigt auf eine andere Liste: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  const manifest = {
+    ...JSON.parse(listenPruefung("Anweisungen", REGELN_LISTE)),
+    pfade: [ANWEISUNGEN_LISTE, ANWEISUNGEN_PRUEFUNG],
+  };
+  const basisFiles = {
+    ...ANWEISUNGEN_FILES,
+    [REGELN_LISTE]: findings(),
+    [ANWEISUNGEN_MANIFEST]: json(manifest),
+  };
+  const changes = {
+    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
+    [REGELN_LISTE]: findings(...claudeEintraege(NEUE_REGELN)),
+  };
+  await bleibtLockerer(context, changes, basisFiles);
+});
+
+test("ohne Manifest der Anweisungsprüfung: eine andere Prüfung über dieselbe Liste bleibt lockerer", async (context) => {
+  const basisFiles = {
+    ...Object.fromEntries(Object.entries(ANWEISUNGEN_FILES).filter(([path]) => path !== ANWEISUNGEN_MANIFEST)),
+    "test/werkzeuge/rotproben/regeln/pruefung.json": listenPruefung("Regeln", ANWEISUNGEN_LISTE),
+  };
+  const stdout = await bleibtGesperrt(context, NEUE_ZEILEN_MIT_EINTRAEGEN, basisFiles);
+  assert.match(stdout, /Muss geändert werden: Die Prüfung „Regeln“ wird lockerer/);
 });
