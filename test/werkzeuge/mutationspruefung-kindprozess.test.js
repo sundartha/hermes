@@ -25,11 +25,13 @@ const MUTANT = "17";
 const FREMD = "PLW_FREMDE_VARIABLE";
 const UNGESETZT = "-";
 const GESEHEN = /kindmutant=(\S+) fremd=(\S+)/;
+const PLATZHALTER_PORT = 1;
+const LAUFZEIT_KIND_MS = 50;
 const LESEN = `process.env[${JSON.stringify(AKTIVER_MUTANT)}] ?? "${UNGESETZT}"`;
 const KIND_SERVER = [
   `const gesehen = "kindmutant=" + (${LESEN}) + " fremd=" + (process.env.${FREMD} ?? "${UNGESETZT}");`,
-  'process.stdout.write(gesehen + "\\nlaeuft auf http://localhost:1\\n");',
-  "setTimeout(() => process.exit(0), 50);",
+  `process.stdout.write(gesehen + "\\nlaeuft auf http://localhost:${PLATZHALTER_PORT}\\n");`,
+  `setTimeout(() => process.exit(0), ${LAUFZEIT_KIND_MS});`,
   "",
 ].join("\n");
 const KIND_KONFIGURATION = [
@@ -86,26 +88,34 @@ test("ein Kind, das die gemeinsamen Testhilfen starten, sieht die Variable des a
 });
 
 const STARTWEGE = {
-  starte: "src/server.js",
-  starteMitWaechter: "test/helpers/waechter.mjs",
+  starte: '"src/server.js"',
+  starteMitWaechter: '"test/helpers/waechter.mjs"',
+  starteSkript: '"scripts/start.mjs"',
+  starteNeben: 'fileURLToPath(new URL("./neben.mjs", import.meta.url))',
+  starteInSegmenten: 'join("src", "server.js")',
+  starteUeberSkript: '"scripts/weiter.mjs"',
 };
 
-function startHilfe() {
-  return [
-    'import { spawnSync } from "node:child_process";',
-    ...Object.entries(STARTWEGE).map(
-      ([name, einstieg]) =>
-        `export const ${name} = () => spawnSync(process.execPath, ["${einstieg}"], { encoding: "utf8" }).stdout;`,
-    ),
-    "",
-  ].join("\n");
+function starthilfen() {
+  return Object.fromEntries(
+    Object.entries(STARTWEGE).map(([name, einstieg]) => [
+      `test/${name}.js`,
+      [
+        'import { spawnSync } from "node:child_process";',
+        'import { join } from "node:path";',
+        'import { fileURLToPath } from "node:url";',
+        `export const ${name} = () => spawnSync(process.execPath, [${einstieg}], { encoding: "utf8" }).stdout;`,
+        "",
+      ].join("\n"),
+    ]),
+  );
 }
 
 function kindtest(start) {
   return [
     'import assert from "node:assert/strict";',
     'import { test } from "node:test";',
-    `import { ${start} } from "./hilfe.js";`,
+    `import { ${start} } from "./${start}.js";`,
     `test("kind", () => assert.equal(${start}(), "1"));`,
     "",
   ].join("\n");
@@ -125,13 +135,16 @@ function kindtests() {
 const ANTEILE = /^Teil \d+ von \d+: .*$/gm;
 const KIND_ANTEIL = /src\/kind\.js \(Testdateien (\d+) von (\d+)\)/g;
 
-test("eine Quelldatei, die nur ein als Kind gestarteter Einstieg lädt, zählt jeden Test, der dieses Kind startet, direkt oder über ein importierendes Startskript", (context) => {
+test("eine Quelldatei, die nur ein als Kind gestarteter Einstieg lädt, zählt jeden Test, der dieses Kind startet, direkt, über ein importierendes Startskript, über ein Skript außerhalb von src/ und test/ oder über einen Pfad relativ zur Hilfsdatei", (context) => {
   const repo = probeRepository(context, {
     "package.json": '{ "type": "module" }\n',
     "src/kind.js": "export const wert = () => 1;\n",
     "src/server.js": 'import { wert } from "./kind.js";\nprocess.stdout.write(String(wert()));\n',
     "test/helpers/waechter.mjs": 'await import("../../src/server.js");\n',
-    "test/hilfe.js": startHilfe(),
+    "scripts/start.mjs": 'await import("../src/server.js");\n',
+    "test/neben.mjs": 'await import("../src/server.js");\n',
+    "scripts/weiter.mjs": 'import { spawnSync } from "node:child_process";\nspawnSync(process.execPath, ["src/server.js"], { stdio: "inherit" });\n',
+    ...starthilfen(),
     ...kindtests(),
   });
   writeFiles(repo, { "src/kind.js": 'export const wert = () => Number("1");\n' });
@@ -141,7 +154,7 @@ test("eine Quelldatei, die nur ein als Kind gestarteter Einstieg lädt, zählt j
   const anteile = [...lauf.stdout.matchAll(ANTEILE)].join("\n");
   assert.deepEqual(
     [...anteile.matchAll(KIND_ANTEIL)].map(([, anteil, von]) => `${anteil} von ${von}`),
-    ["1 von 2", "2 von 2"],
+    Object.keys(STARTWEGE).map((_start, index, alle) => `${index + 1} von ${alle.length}`),
     lauf.stdout,
   );
 });
