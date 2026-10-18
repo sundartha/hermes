@@ -5,6 +5,8 @@ import { cruise } from "dependency-cruiser";
 
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
+import { mitVorherSpeicher } from "./vorher-speicher.mjs";
+
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTSEITE = /^test\//;
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
@@ -61,7 +63,7 @@ async function nachherVerloren(getoetet, tests, werkzeug) {
 
 export async function testumbauPruefung(basis, werkzeug) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
-  const vorher = await vorherGetoetet(basis, geaendert, werkzeug);
+  const vorher = await mitVorherSpeicher({ basis, geaendert, root: cwd() }, () => vorherGetoetet(basis, geaendert, werkzeug));
   if (vorher.quellen.length === 0) {
     console.log(`grün: die betroffenen Tests (${vorher.tests.length}) importieren keine Quelldatei unter src/; es gibt keinen Mutanten zu vergleichen.`);
     return EXIT_GRUEN;

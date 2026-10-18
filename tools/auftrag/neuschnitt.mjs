@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
 import { brauchtRotenTest, ladePhase, phasenBefunde } from "./format.mjs";
-import { festhalten, git, kopf, vormerken } from "./git.mjs";
+import { festhalten, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
 import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
@@ -35,8 +35,6 @@ const ZWEITER_VERSUCH = 2;
 const EXIT_TEAM_BEFUNDE = 4;
 const PHASE_MIT_BEFUNDEN = "die Phase mit dem neuen Schnitt hat Befunde";
 const CODEBLOCK = "```";
-const NUL = "\0";
-const STATUS_SPALTEN = 3;
 
 function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
@@ -90,11 +88,6 @@ function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befun
     abschnitt("Verlauf", [CODEBLOCK, ...gestoppt.verlauf, ...(gestoppt.hinweise ?? []), CODEBLOCK]),
     ...vorher,
   ].join("\n");
-}
-
-function geaenderteDateien(root) {
-  const eintraege = git(["status", "--porcelain", "--untracked-files=all", "-z"], { cwd: root }).split(NUL);
-  return eintraege.filter(Boolean).map((eintrag) => eintrag.slice(STATUS_SPALTEN));
 }
 
 function zuruecksetzen(root, stand) {
@@ -171,7 +164,7 @@ function abdeckungBefunde(root, ordner) {
 }
 
 function geschnittenePhase({ phase, auftrag, root }, ort) {
-  const fremd = geaenderteDateien(root).filter((pfad) => pfad !== ort.datei);
+  const fremd = offenePfade(root).filter((pfad) => pfad !== ort.datei);
   if (fremd.length > 0) return { befunde: [`Der Planer darf nur ${ort.datei} ändern, nicht ${fremd.join(", ")}.`], arten: [MELDUNG.NEUSCHNITT] };
   let neu;
   try {
