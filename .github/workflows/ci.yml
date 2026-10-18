@@ -143,9 +143,14 @@ jobs:
         run: node tools/neue-kommentare.mjs --basis "$PR_BASE_SHA"
 
       - name: Syntax (.js und .mjs; .ts prüft die Typprüfung)
+        id: syntax
         run: |
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check
+
+      - name: Zweck der Syntaxprüfung
+        if: ${{ failure() && steps.syntax.outcome == 'failure' }}
+        run: node tools/zweck-zeigen.mjs lint/syntax
 
       - name: OpenAI-Doku
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}

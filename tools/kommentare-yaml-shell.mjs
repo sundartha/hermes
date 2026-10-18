@@ -3,6 +3,8 @@ import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
+
 const DATEIMUSTER = ["*.yml", "*.yaml", "*.sh", "*.command", ".githooks/*"];
 const YAML_DATEI = /\.ya?ml$/;
 const BLOCKSKALAR_KOPF = /^(\s*(?:-\s+)?)([^\s#:][^:#]*?)\s*:\s*[|>][-+0-9]*\s*(?:#.*)?$/;
@@ -32,7 +34,7 @@ const HEREDOC_ANFANG = "<";
 const HERESTRING = "<<<";
 const MAX_GIT_AUSGABE = 268_435_456;
 const WERKZEUG = "kommentare-yaml-shell";
-const EXIT_ROT = 1;
+const ZWECK = "lint/kommentare-yaml-shell";
 
 function einzug(zeile) {
   return zeile.length - zeile.trimStart().length;
@@ -240,9 +242,8 @@ function fundorte(root) {
 
 function pruefen(root) {
   const funde = fundorte(root);
-  for (const fund of funde) console.error(fund);
+  befundeMeldenUndScheitern(funde, ZWECK);
   console.log(`${funde.length} neue Befunde von ${WERKZEUG}.`);
-  if (funde.length > 0) process.exitCode = EXIT_ROT;
 }
 
 function direktGestartet() {
