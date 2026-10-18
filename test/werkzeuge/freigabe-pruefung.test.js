@@ -453,6 +453,36 @@ for (const [name, changes] of [
   });
 }
 
+const MIN_BASISVERGLEICH_WERKZEUGE = 9;
+const BASISVERGLEICH_AUFRUF = /basis-vergleich\.mjs <([^>]+)>/;
+
+function basislinienDesBasisvergleichs() {
+  const aufruf = runIn(REPO_ROOT, process.execPath, [join(REPO_ROOT, "tools/basis-vergleich.mjs")]);
+  const werkzeuge = BASISVERGLEICH_AUFRUF.exec(aufruf.stderr)?.[1].split("|") ?? [];
+  assert.ok(werkzeuge.length >= MIN_BASISVERGLEICH_WERKZEUGE, aufruf.stderr);
+  return werkzeuge.map((werkzeug) => `tools/basis/${werkzeug}.json`);
+}
+
+test("ein neuer Eintrag in einer Basislinie von basis-vergleich wartet mit den echten CODEOWNERS auf eine Freigabe", async (context) => {
+  const owners = readFileSync(join(REPO_ROOT, ".github/CODEOWNERS"), "utf8");
+  for (const basislinie of basislinienDesBasisvergleichs()) {
+    const scenario = {
+      basisFiles: { ".github/CODEOWNERS": owners, [basislinie]: ONE_FINDING },
+      changes: { [basislinie]: findings("a", "neu") },
+    };
+    const unapproved = await check(context, scenario);
+    assert.equal(unapproved.status, EXIT_FAILURE, `${basislinie}: ${unapproved.stdout}`);
+    assert.ok(
+      unapproved.stdout.includes(
+        `Braucht Freigabe: Bestehende Prüfungsdateien geändert oder gelöscht: ${basislinie}.`,
+      ),
+      unapproved.stdout,
+    );
+    const approved = await check(context, { ...scenario, approval: "aktuell" });
+    assert.equal(approved.status, EXIT_OK, `${basislinie}: ${approved.stdout}`);
+  }
+});
+
 const BASISLINIEN_PAKET_31 = ["tools/basis/quelltext-als-text.json", "tools/basis/lessons.json"];
 
 async function nurStreichenIstStrenger(context, basislinien) {
