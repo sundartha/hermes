@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { AKTIVER_MUTANT, ANGENOMMEN, AUFTRAGSWEG, BASIS, EXIT_ABBRUCH, EXIT_ROT, GRUND, NEGATIV, NULL, pruefe, quelle, schluessel, UEBERLEBT, ZUSTAND } from "./mutationspruefung-hilfen.js";
+import { AKTIVER_MUTANT, ANGENOMMEN, AUFTRAGSWEG, BASIS, EXIT_ABBRUCH, EXIT_ROT, GRUND, NEGATIV, NULL, pruefe, quelle, quelltexttest, schluessel, UEBERLEBT, ZUSTAND } from "./mutationspruefung-hilfen.js";
 import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 test("eine neue Zeile ohne Test ist grün, wenn ein Commit des Auftragswegs ihre Mutanten mit Grund gleichwertig meldet; ohne Grund oder ohne Auftragsweg bleibt sie rot", (context) => {
@@ -120,4 +120,39 @@ test("ist ein Test im Erstlauf rot, bricht die Mutationsprüfung mit Exit 2 ab u
   assert.equal(abbruch.status, EXIT_ABBRUCH, abbruch.stdout + abbruch.stderr);
   const rote = [...abbruch.stderr.matchAll(/^Abbruch: Erstlauf rot: (.+)$/gm)].map(([, rot]) => rot);
   assert.deepEqual(rote, ["test/zahl.test.js › Null > ist null, kein Wort"], abbruch.stdout + abbruch.stderr);
+});
+
+const ZWEITE_STUFE_OHNE = /^Zweite Stufe ohne (.+): im Erstlauf rot$/gm;
+
+const TOETER_UEBER_PFAD = [
+  'import assert from "node:assert/strict";',
+  'import { test } from "node:test";',
+  'import { pathToFileURL } from "node:url";',
+  'const { einordnen } = await import(pathToFileURL("src/zahl.js"));',
+  'test("kennt die Null", () => {',
+  '  assert.equal(einordnen(0), "null");',
+  '  assert.equal(einordnen(1), "positiv");',
+  "});",
+  "",
+].join("\n");
+
+test("sind alle Testdateien der zweiten Stufe schon im Erstlauf rot, nennt die Prüfung jede und die Überlebenden der ersten Stufe bleiben überlebend", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const ohne = pruefe(repo, "--basis", "HEAD");
+  assert.equal(ohne.status, EXIT_ROT, ohne.stdout + ohne.stderr);
+  writeFiles(repo, { "test/quelltext.test.js": quelltexttest("ist leer"), "test/weiterer.test.js": quelltexttest("ist auch leer") });
+  const mit = pruefe(repo, "--basis", "HEAD");
+  assert.equal(mit.status, EXIT_ROT, mit.stdout + mit.stderr);
+  assert.deepEqual(schluessel(mit.stdout, ZWEITE_STUFE_OHNE), ["test/quelltext.test.js › ist leer", "test/weiterer.test.js › ist auch leer"]);
+  assert.deepEqual(schluessel(mit.stdout, UEBERLEBT), schluessel(ohne.stdout, UEBERLEBT));
+});
+
+test("ein grüner Test der zweiten Stufe tötet weiter, wenn eine andere Testdatei dieser Stufe schon im Erstlauf rot ist", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL), "test/quelltext.test.js": quelltexttest("ist leer"), "test/toeter.test.js": TOETER_UEBER_PFAD });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(schluessel(lauf.stdout, ZWEITE_STUFE_OHNE), ["test/quelltext.test.js › ist leer"]);
+  assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), []);
 });

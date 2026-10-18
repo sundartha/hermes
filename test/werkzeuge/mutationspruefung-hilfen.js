@@ -232,3 +232,13 @@ export function lebt(prozess) {
     return false;
   }
 }
+
+export function quelltexttest(name) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { readFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    `test("${name}", () => assert.equal(readFileSync("src/zahl.js", "utf8"), ""));`,
+    "",
+  ].join("\n");
+}
