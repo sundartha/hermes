@@ -117,7 +117,7 @@ export function gekuerzt(befund) {
 }
 
 export function gehoertInAblage(befund) {
-  return befund.sicherheit && befund.schwere !== BLOCKER;
+  return befund.sicherheit;
 }
 
 function ablageEintrag(wert) {

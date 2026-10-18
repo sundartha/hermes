@@ -122,7 +122,7 @@ test("wurde eine Diff-Datei nie mit Read geöffnet, ist die Prüfung unvollstaen
 test("ein Sicherheitsbefund wird vor dem Artefakt auf Schwere und Merker gekürzt", async (context) => {
   const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("sicherheit") });
   assert.deepEqual(ergebnis.befunde[0], { sicherheit: true, schwere: "BLOCKER" });
-  assert.equal(JSON.stringify(ergebnis).includes("GEHEIM"), false);
+  assert.equal(JSON.stringify({ ...ergebnis, ablage: undefined }).includes("GEHEIM"), false);
 });
 
 test("ein Sicherheits-BLOCKER ohne lokalen Schalter geht mit Beleg in die Ablage, das Artefakt behält nur Schwere und Merker", async (context) => {
