@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
 import { paketName } from "./artefakte.mjs";
-import { BASIS, BRANCH, leseArtefakt, lesePlan } from "./entscheiden.mjs";
-import { ausgenommeneFaelle, urteilAusTeilen, zeigeAusnahmen } from "./melden.mjs";
+import { BASIS, BRANCH, artefaktText, lesePlan } from "./entscheiden.mjs";
+import { ausgenommeneFaelle, paketTeile, urteilAusTeilen, zeigeAusnahmen } from "./melden.mjs";
 import { git } from "./pfade.mjs";
 import { meldeVorpruefung, vorpruefen } from "./vorpruefen.mjs";
 import { inSpeicher } from "./zwischenspeicher.mjs";
@@ -73,7 +73,8 @@ function messeKette(stand, { nummer, pruefsumme }) {
     args: ["basis", ...daten, "--aus", join(stand.ordner, paketName(BASIS, nummer))],
     umgebung: { PLAN_PRUEFSUMME: pruefsumme },
   });
-  if (basis.exit !== EXIT_GRUEN) return false;
+  const basisSumme = basis.werte.pruefsumme ?? "";
+  if (basis.exit !== EXIT_GRUEN) return { gruen: false, basisSumme };
   const name = paketName(BASIS, nummer);
   if (stand.speicher !== undefined)
     inSpeicher(stand.speicher, readFileSync(join(stand.ordner, name, `${name}.json`), "utf8"));
@@ -88,42 +89,43 @@ function messeKette(stand, { nummer, pruefsumme }) {
       join(stand.ordner, paketName(BRANCH, nummer)),
       ...(stand.alle ? ["--alle"] : []),
     ],
-    umgebung: { PLAN_PRUEFSUMME: pruefsumme, BASIS_PRUEFSUMME: basis.werte.pruefsumme ?? "" },
+    umgebung: { PLAN_PRUEFSUMME: pruefsumme, BASIS_PRUEFSUMME: basisSumme },
   });
-  return branch.exit === EXIT_GRUEN;
+  return { gruen: branch.exit === EXIT_GRUEN, basisSumme };
+}
+
+function lokaleTexte(ordner, plan) {
+  const fehler = [];
+  const texte = new Map();
+  plan.pakete.forEach((_paket, nummer) => {
+    for (const art of [BASIS, BRANCH]) {
+      const name = paketName(art, nummer);
+      const gelesen = artefaktText(ordner, name);
+      if (gelesen.fehler) fehler.push(...gelesen.fehler);
+      else texte.set(name, gelesen.text);
+    }
+  });
+  return { fehler, texte };
 }
 
 function urteil(stand, { pruefsumme, erwartet, summen, rot }) {
   const plan = lesePlan({ ordner: stand.ordner, summe: pruefsumme, erwartet });
   if (plan.fehler) return { gruen: false, verstoesse: plan.fehler };
-  const teile = { [BASIS]: [], [BRANCH]: [] };
-  const fehler = [...rot];
-  plan.daten.pakete.forEach((_paket, nummer) => {
-    for (const art of [BASIS, BRANCH]) {
-      const name = paketName(art, nummer);
-      const summe = art === BASIS ? summen[nummer] : undefined;
-      const gelesen = leseArtefakt({
-        ordner: stand.ordner,
-        name,
-        art,
-        summe,
-        erwartet,
-      });
-      if (gelesen.fehler) fehler.push(...gelesen.fehler);
-      else teile[art].push({ ...gelesen.daten, nummer });
-    }
-  });
+  const geladen = lokaleTexte(stand.ordner, plan.daten);
+  const { fehler, teile } = paketTeile(geladen.texte, { plan: plan.daten, summen, erwartet });
   zeigeAusnahmen(ausgenommeneFaelle(teile[BASIS]));
-  return urteilAusTeilen(teile, { fehler, plan: plan.daten });
+  return urteilAusTeilen(teile, {
+    fehler: [...rot, ...geladen.fehler, ...fehler],
+    plan: plan.daten,
+  });
 }
 
 function messePakete(stand, { pakete, pruefsumme }) {
   const summen = [];
   const rot = [];
   for (const nummer of pakete) {
-    const gruen = messeKette(stand, { nummer, pruefsumme });
-    const basis = ausgabenAus(join(stand.ordner, `${paketName(BASIS, nummer)}.txt`));
-    summen.push(basis.pruefsumme ?? "");
+    const { gruen, basisSumme } = messeKette(stand, { nummer, pruefsumme });
+    summen.push(basisSumme);
     if (!gruen) rot.push(`Paket ${nummer}: ein Messschritt endete rot`);
     if (!gruen && stand.alle) console.log(`Lokal: rot in Paket ${nummer}; weiter wegen --alle.`);
     if (!gruen && !stand.alle) {

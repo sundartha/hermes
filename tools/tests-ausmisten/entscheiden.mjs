@@ -262,8 +262,12 @@ export function pruefeArtefakt({ name, art, text, summe, erwartet }) {
   return { daten };
 }
 
+export function artefaktText(ordner, name) {
+  return leseDatei(join(ordner, name), name);
+}
+
 export function leseArtefakt({ ordner, name, art, summe, erwartet }) {
-  const { text, fehler } = leseDatei(join(ordner, name), name);
+  const { text, fehler } = artefaktText(ordner, name);
   if (fehler) return { fehler };
   return pruefeArtefakt({ name, art, text, summe, erwartet });
 }
