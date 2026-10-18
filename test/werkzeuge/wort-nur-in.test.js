@@ -89,6 +89,19 @@ test("wort-nur-in: eine Zeitzonen-Quelle als Import ist in der Gate-Kette rot", 
   assert.deepEqual(await repoTreffer("src/elevenlabs/outbound.js", zeilen), []);
 });
 
+test("wort-nur-in: eine Zeitzonen-Quelle mit TypeScript-Endung ist in der Gate-Kette rot", async () => {
+  for (const endung of ["ts", "mts", "cts"]) {
+    const zeilen = [
+      `import { callTimeContext } from "../elevenlabs/time-context.${endung}";`,
+      `import { hypothese } from "../elevenlabs/nanp-area-codes.${endung}";`,
+      "export const quellen = [callTimeContext, hypothese];",
+    ];
+    for (const datei of ["src/telephony/call-finish.js", "src/telephony/call-finish.ts"]) {
+      assert.deepEqual(await repoTreffer(datei, zeilen), [`1 ${ANRUFZEIT}`, `2 ${ANRUFZEIT}`], `${datei} ${endung}`);
+    }
+  }
+});
+
 const GATE_NAHE_DATEIEN = [
   "src/telephony/outbound-gates.js",
   "src/telephony/call-finish.js",
