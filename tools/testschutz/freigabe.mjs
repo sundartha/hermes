@@ -9,7 +9,7 @@ const CODE_SPAN_PATTERN = /^`(.+)`$/;
 const LINE_BREAK_PATTERN = /\r?\n/;
 const MAX_LABEL_EVENTS = 100;
 
-const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+export const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     issue(number: $number) {
       number
@@ -61,6 +61,11 @@ function allowedNames(body) {
     .filter(Boolean);
 }
 
+export function issueApproval(issue) {
+  const problem = labelProblem(issue);
+  return { problem, names: problem === undefined ? allowedNames(issue.body) : [] };
+}
+
 export async function approval(pullRequest) {
   const { full } = repositoryName();
   const { body } = await getJson(`/repos/${full}/pulls/${pullRequest}`);
@@ -72,13 +77,11 @@ export async function approval(pullRequest) {
   const issues = await Promise.all(
     issueNumbers.map(async (number) => (await graphql(ISSUE_QUERY, number)).issue),
   );
-  const verdicts = issues.map((issue) => ({ issue, problem: labelProblem(issue) }));
+  const verdicts = issues.map((issue) => ({ issue, ...issueApproval(issue) }));
   const notes = verdicts.map(({ problem }) => problem).filter(Boolean);
-  const approved = verdicts
-    .filter(({ problem }) => problem === undefined)
-    .map(({ issue }) => issue);
-  const names = new Set(approved.flatMap(({ body: issueBody }) => allowedNames(issueBody)));
-  const approvedIssues = approved.map(({ number }) => `#${number}`);
+  const approved = verdicts.filter(({ problem }) => problem === undefined);
+  const names = new Set(approved.flatMap((verdict) => verdict.names));
+  const approvedIssues = approved.map(({ issue }) => `#${issue.number}`);
   return { names, notes, approvedIssues };
 }
 

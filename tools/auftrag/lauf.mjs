@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -6,9 +7,9 @@ import { fileURLToPath } from "node:url";
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
-import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
+import { BELEGE, GRUEN, ROT, belegPfad, belegVerzeichnis, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
-import { TESTUMBAU, brauchtRotenTest, ladePhase, reihenfolge } from "./format.mjs";
+import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -22,6 +23,7 @@ import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { ISSUE_QUERY, issueApproval, listHint } from "../testschutz/freigabe.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -404,6 +406,53 @@ function startBefunde(phasendatei, root) {
   return { phase, befunde: [...form, ...sauber, ...zweck] };
 }
 
+function entschiedenerAlterTest({ phase, auftrag, root }) {
+  try {
+    const { entscheidung, alterTest } = JSON.parse(readFileSync(belegPfad(root, phase.phase, auftrag.id), "utf8"));
+    const datei = entscheidung ? alterTest?.datei : undefined;
+    return typeof datei === "string" && istAusfuehrbarerTest(datei) ? datei : null;
+  } catch {
+    return null;
+  }
+}
+
+function phasenIssue(nummer, root) {
+  const befehl = ["api", "graphql", "-f", `query=${ISSUE_QUERY}`, "-F", "owner={owner}", "-F", "name={repo}", "-F", `number=${nummer}`];
+  const antwort = spawnSync(env.HERMES_GH ?? "gh", befehl, { cwd: root, encoding: "utf8", env });
+  try {
+    const { data } = JSON.parse(antwort.stdout);
+    return data.repository.issue ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function freigabeProblem(issue, datei) {
+  if (issue === null) return "gh lieferte kein lesbares Issue";
+  const { problem, names } = issueApproval(issue);
+  if (problem !== undefined) return problem;
+  return names.includes(datei) ? null : `${datei} steht nicht als eigener Listenpunkt ${listHint()}`;
+}
+
+function freigabe(kontext) {
+  const { phase, auftrag, root } = kontext;
+  const datei = entschiedenerAlterTest(kontext);
+  if (datei === null) return {};
+  const problem = freigabeProblem(phasenIssue(phase.issue, root), datei);
+  if (problem !== null) {
+    console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
+    return {};
+  }
+  const frei = { ...auftrag, erwarteteDateien: [...new Set([...auftrag.erwarteteDateien, datei])] };
+  const abgeleitet = { ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === auftrag.id ? frei : eintrag)) };
+  const ordner = belegVerzeichnis(root, phase.phase);
+  mkdirSync(ordner, { recursive: true });
+  const freigabedatei = join(ordner, `${auftrag.id}.freigabe.phase.json`);
+  writeFileSync(freigabedatei, JSON.stringify(abgeleitet));
+  console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
+  return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
+}
+
 export function lauf(phasendatei, root) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
@@ -417,7 +466,8 @@ export function lauf(phasendatei, root) {
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
     if (auftrag === undefined) return EXIT_GRUEN;
     const kontext = { phase: plan.phase, auftrag, root, phasendatei, plan };
-    const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde).fuehreAus());
+    const frei = freigabe(kontext);
+    const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde.auftrag.id === auftrag.id ? { ...runde, ...frei } : runde).fuehreAus());
     if (ergebnis === GRUEN) plan.fertig.add(auftrag.id);
     else if (ergebnis === NEU_GESCHNITTEN) plan.phase = ladePhase(phasendatei);
     else return EXIT_ROT;

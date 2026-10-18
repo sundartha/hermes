@@ -34,6 +34,7 @@ const GH = `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 const eingabe = process.argv.includes("-") ? readFileSync(0, "utf8") : "";
 appendFileSync(process.env.ERSATZ_GH, JSON.stringify([...process.argv.slice(2), eingabe]) + "\\n");
+if (process.argv[2] === "api") process.stdout.write(readFileSync(process.env.ERSATZ_ISSUE, "utf8"));
 `;
 
 const VERSAND = "src/versand.js";
@@ -64,7 +65,7 @@ const BAU = [{ ...GATES, antwort: MELDUNG }, GATES];
 const UMBAU = { ziel: "Gib dem Testkunden bestandene Gates", bereich: ALT, erwarteteDateien: [ALT], abnahme: ALT, entwurf: "Vorbau mit Gates." };
 const VORSCHLAG = ["```json", JSON.stringify(UMBAU), "```"].join("\n");
 
-const ERSATZ = { HERMES_CLAUDE: "claude.mjs", HERMES_GH: "gh.mjs", ERSATZ_DREHBUCH: "drehbuch.json", ERSATZ_GH: "gh.log" };
+const ERSATZ = { HERMES_CLAUDE: "claude.mjs", HERMES_GH: "gh.mjs", ERSATZ_DREHBUCH: "drehbuch.json", ERSATZ_GH: "gh.log", ERSATZ_ISSUE: "issue.json" };
 const IDENTITAET = { GIT_AUTHOR_NAME: "Probe", GIT_AUTHOR_EMAIL: PROBE, GIT_COMMITTER_NAME: "Probe", GIT_COMMITTER_EMAIL: PROBE };
 
 function umgebung(werkzeug) {
@@ -73,9 +74,13 @@ function umgebung(werkzeug) {
 }
 
 function lauf(context, drehbuch, dateien = REPO) {
-  const repo = probeRepository(context, dateien);
+  return laufIn(context, probeRepository(context, dateien), { drehbuch });
+}
+
+function laufIn(context, repo, { drehbuch, issue = {} }) {
   const phase = { phase: "probe", issue: ISSUE, entwurf: { [VERSAND]: "Entwurf." }, auftraege: [AUFTRAG] };
-  const werkzeug = probeDirectory(context, { "claude.mjs": CLAUDE, "gh.mjs": GH, "drehbuch.json": JSON.stringify(drehbuch), "phase.json": JSON.stringify(phase) });
+  const ersatz = { "claude.mjs": CLAUDE, "gh.mjs": GH, "issue.json": JSON.stringify(issue) };
+  const werkzeug = probeDirectory(context, { ...ersatz, "drehbuch.json": JSON.stringify(drehbuch), "phase.json": JSON.stringify(phase) });
   for (const name of ["claude.mjs", "gh.mjs"]) chmodSync(join(werkzeug, name), AUSFUEHRBAR);
   const einstieg = [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", join(werkzeug, "phase.json")];
   const ergebnis = spawnSync(process.execPath, einstieg, { cwd: repo, encoding: "utf8", env: umgebung(werkzeug) });
@@ -144,6 +149,75 @@ test("Vorbau: nennt die Antwort echtes Verhalten und bringt zugleich einen json-
   assert.equal(beleg("A1-umbau"), null);
   assert.match(beleg("A1-plan").befunde.join("\n"), /mehrdeutig/);
   assert.equal(log.includes(UMBAU.ziel), false);
+});
+
+const ECHTES_VERHALTEN = [{ antwort: "Verhalten: Der Test hält genau den Versand ohne Gates fest." }];
+const LABEL_ZEIT = "2026-10-01T10:00:00Z";
+const ALT_OHNE_GATES = alterTest("{}").replace("true));", "false));");
+const FREIGEGEBEN = { dateien: { ...ROTER_TEST.dateien, [ALT]: ALT_OHNE_GATES } };
+const FREMDER_TEST = /Der Test-Agent hat einen fremden Test geändert: test\/versand\.test\.js/;
+
+function freigabeIssue({ von = "Antonio20045", bearbeitet = null, liste = [ALT] } = {}) {
+  const body = ["## Absicht", "", "Versand nur mit Gates.", "", "## Tests, deren Erwartung sich ändern darf", "", ...liste.map((pfad) => `- \`${pfad}\``)].join("\n");
+  const label = { __typename: "LabeledEvent", createdAt: LABEL_ZEIT, actor: { login: von }, label: { name: "verhalten-geaendert" } };
+  return { data: { repository: { issue: { number: ISSUE, body, lastEditedAt: bearbeitet, timelineItems: { nodes: von === null ? [] : [label] } } } } };
+}
+
+function nachEntscheidung(context, { issue = freigabeIssue(), test = [FREIGEGEBEN], bau = [GATES] } = {}) {
+  const erster = lauf(context, { bau: BAU, test: [ROTER_TEST], plan: ECHTES_VERHALTEN });
+  assert.equal(erster.ergebnis.status, EXIT_ROT);
+  assert.equal(erster.beleg("A1").alterTest.datei, ALT);
+  assert.deepEqual(erster.gh.filter(([befehl]) => befehl === "api"), []);
+  return laufIn(context, erster.repo, { drehbuch: { bau, test }, issue });
+}
+
+function gesperrt(zweiter, verstoss, grund) {
+  assert.equal(zweiter.ergebnis.status, EXIT_ROT);
+  assert.match(zweiter.ergebnis.stdout, grund);
+  assert.match(JSON.stringify(zweiter.beleg("A1")), verstoss);
+  assert.equal(zweiter.log.includes(AUFTRAG.ziel), false);
+}
+
+test("Freigabe: die Entscheidung zum alten Test nennt, was am Issue einzutragen ist, damit der nächste lauf die Freigabe liest", (context) => {
+  const { beleg } = lauf(context, { bau: BAU, test: [ROTER_TEST], plan: ECHTES_VERHALTEN });
+  const { text } = beleg("A1").entscheidung;
+  assert.match(text, /Listenpunkt `test\/versand\.test\.js` \(für lauf\) und `versendet den Code` \(für die CI\) unter „Tests, deren Erwartung sich ändern darf“/);
+  assert.match(text, /Label verhalten-geaendert von Antonio20045 oder jonas986, hier Issue #54/);
+});
+
+test("Freigabe: nach dem Label einer berechtigten Person ändert der Test-Agent im nächsten lauf genau den freigegebenen alten Test und der Auftrag wird grün", (context) => {
+  const zweiter = nachEntscheidung(context);
+  assert.equal(zweiter.ergebnis.status, 0, zweiter.ergebnis.stdout + zweiter.ergebnis.stderr);
+  assert.deepEqual(zweiter.gh.filter(([befehl]) => befehl === "api").map((aufruf) => aufruf.at(-2)), [`number=${ISSUE}`]);
+  assert.equal(zweiter.log.includes(AUFTRAG.ziel), true);
+  assert.equal(readFileSync(join(zweiter.repo, ALT), "utf8"), ALT_OHNE_GATES);
+});
+
+test("Freigabe: ein Label von einer nicht berechtigten Person gibt den alten Test nicht frei", (context) => {
+  gesperrt(nachEntscheidung(context, { issue: freigabeIssue({ von: "fremd" }) }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: .*fremd gesetzt/);
+});
+
+test("Freigabe: ein Label vor der letzten Textänderung des Issues gibt den alten Test nicht frei", (context) => {
+  const issue = freigabeIssue({ bearbeitet: "2026-10-02T10:00:00Z" });
+  gesperrt(nachEntscheidung(context, { issue }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: .*nach dem Label geändert/);
+});
+
+test("Freigabe: gibt das Issue nur eine andere Testdatei frei, bleibt der gemeldete alte Test gesperrt", (context) => {
+  const issue = freigabeIssue({ liste: ["test/anderes.test.js"] });
+  gesperrt(nachEntscheidung(context, { issue }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: test\/versand\.test\.js steht nicht als eigener Listenpunkt/);
+});
+
+test("Freigabe: liefert gh kein lesbares Issue, bleibt der alte Test gesperrt", (context) => {
+  gesperrt(nachEntscheidung(context, { issue: { data: { repository: { issue: null } } } }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: gh lieferte kein lesbares Issue/);
+});
+
+test("Freigabe: ein Issue ohne Label-Ereignis gibt den alten Test nicht frei, auch wenn die Liste ihn nennt", (context) => {
+  gesperrt(nachEntscheidung(context, { issue: freigabeIssue({ von: null }) }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: Issue #54 trägt das Label verhalten-geaendert nicht/);
+});
+
+test("Freigabe: auch mit Freigabe darf der Bau-Agent den alten Test nicht ändern", (context) => {
+  const bau = [{ dateien: { ...GATES.dateien, [ALT]: ALT_OHNE_GATES } }];
+  gesperrt(nachEntscheidung(context, { test: [ROTER_TEST], bau }), /Der Bau-Agent hat einen Test geändert: test\/versand\.test\.js/, /Issue #54 gibt test\/versand\.test\.js frei/);
 });
 
 test("Vorbau: benennt der testumbau den gemeldeten Fall um, wird er verworfen und Antonio entscheidet", (context) => {
