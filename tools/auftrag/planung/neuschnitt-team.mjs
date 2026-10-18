@@ -175,7 +175,7 @@ class NeuschnittPlanung extends Planung {
     if (!istObjekt(schnitt)) return super.pruefeSchnitt(schnitt);
     this.schnitt = schnitt;
     this.lege("schnitt.json", schnitt);
-    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt), alteNie: saetze(this.alt.wasDarfNiePassieren) };
+    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt), alteNie: saetze(this.alt.wasDarfNiePassieren), ersetzt: this.alt.id };
     const { befunde, annahmen } = await this.skriptPruefung(schnitt, eingaben);
     this.schnittAnnahmen = annahmen;
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
