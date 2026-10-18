@@ -32,7 +32,6 @@ function mutationRotBis(laeufe) {
   };
 }
 const MUTATION_EINMAL_ROT = mutationRotBis(1);
-const MUTATION_NACH_BAU_ROT = mutationRotBis(2);
 const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 const ANDERS_GEAENDERT = { "src/text.js": "export function gross(eingabe) {\n  return eingabe.toUpperCase();\n}\n" };
 const VORIGE_RUNDE = "Fehlerausgabe der vorigen Runde";
@@ -133,7 +132,7 @@ test("in der Nachrunde des Test-Agenten verlangt das Skript den Absatz vom Test-
     "test-nachrunde": { "test/text.test.js": `${BASIS["test/text.test.js"]}test("wort", () => assert.equal(gross("b"), "B"));\n` },
     "test-nachrunde-antwort": absatz,
   };
-  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_NACH_BAU_ROT });
+  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_EINMAL_ROT });
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
   assert.deepEqual(lauf.beleg.agenten.map(({ rolle }) => rolle), ["bau", "bau", "test"]);
   const text = nachricht(lauf);
