@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { aufrufeIn } from "../../tools/testlaufzeit/echt-warten-statisch.mjs";
 import { hilfsdateiBefunde } from "../../tools/testlaufzeit/hilfsdatei.mjs";
+import { zeitgliederBefunde } from "../../tools/testlaufzeit/zeitglieder.mjs";
 import {
   AFFECTED_TESTS_TOOL,
   DEPENDENCY_TOOL,
@@ -13,6 +14,7 @@ import {
   commitAll,
   failingTest,
   passingTest,
+  probeDirectory,
   probeRepository,
   runIn,
 } from "./probe-repo.js";
@@ -29,6 +31,10 @@ const ALTER_TEST = "test/alt-p1-probe.test.js";
 const BEREICHE = JSON.stringify([{ bereich: "anrufe", quellen: ["^src/"], eingaenge: [], fachlogik: [] }]);
 const KONFIGURATION = ".dependency-cruiser.cjs";
 const BAUSTEIN = join(REPO_ROOT, "tools/umbenennung.mjs");
+const TESTLAUFZEIT_TOOL = join(REPO_ROOT, "tools/testlaufzeit-pruefen.mjs");
+const TS_ZEITGLIED_DATEI = "test/zeitglied.test.ts";
+const ZEITGLIEDER_KONFIGURATION =
+  'export default [{ name: "zeitglieder-in-tests", rules: { "no-restricted-globals": ["error", "setTimeout"] } }];\n';
 const OBEN = (endung, typ = "") => `import { vier } from "./mitte.${endung}";\nexport const acht${typ} = vier + vier;\n`;
 
 function auswahlProbe(context) {
@@ -170,6 +176,26 @@ test("Testlaufzeit: echtWarten in einer .ts-Testdatei wird gelesen, Laufzeit-Typ
   const text = 'import { echtWarten } from "./echt-warten.js";\nconst ms: number = 500;\nawait echtWarten(ms);\n';
   assert.equal(aufrufeIn("test/probe.test.ts", text).length, 1);
   assert.throws(() => aufrufeIn("test/probe.test.ts", "enum Art { A }\n"), /TypeScript-Syntax mit Laufzeitwirkung/);
+});
+
+test("Testlaufzeit: ein Zeitglied in einer .test.ts-Datei zählt gegen den Bestand", async (context) => {
+  const wurzel = probeDirectory(context, {
+    "package.json": JSON.stringify({ type: "module" }),
+    "eslint.config.js": ZEITGLIEDER_KONFIGURATION,
+    [TS_ZEITGLIED_DATEI]: "const ms: number = 5;\nsetTimeout(() => {}, ms);\n",
+  });
+  assert.deepEqual(await zeitgliederBefunde(wurzel, { [TS_ZEITGLIED_DATEI]: 1 }), []);
+});
+
+test("Testlaufzeit: echtWarten über 100 ms in einer flachen .ts-Hilfsdatei ist ohne Eintrag ein Befund", (context) => {
+  const repo = probeRepository(context, {
+    "tools/basis/testlaufzeit.json": JSON.stringify({ ausklingen_grenze_ms: null, ausklingen_bestand: [] }),
+    "tools/basis/echte-wartezeiten.json": "[]",
+    "tools/basis/zeitglieder-bestand.json": "{}",
+    "test/warte-helfer.ts": 'import { echtWarten } from "./echt-warten.js";\nconst ms: number = 500;\nawait echtWarten(ms);\n',
+  });
+  const lauf = runIn(repo, process.execPath, [TESTLAUFZEIT_TOOL, "--laufzeiten", "fehlt.jsonl"]);
+  assert.match(lauf.stdout, /test\/warte-helfer\.ts: echtWarten\(ms\): 500 ms/);
 });
 
 test("Testlaufzeit: Testfälle in einer .test.ts-Datei sind keine Hilfsdatei-Befunde", () => {
