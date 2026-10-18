@@ -22,12 +22,8 @@ function weekRuns(runs, now) {
 }
 
 async function jobsOrNothing(run, fetchJobs) {
-  try {
-    const jobs = await fetchJobs(run);
-    return Array.isArray(jobs) ? jobs : null;
-  } catch {
-    return null;
-  }
+  const jobs = await fetchJobs(run);
+  return Array.isArray(jobs) ? jobs : null;
 }
 
 async function answersFor(runs, fetchJobs) {
