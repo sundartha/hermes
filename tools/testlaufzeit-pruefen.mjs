@@ -10,7 +10,7 @@ import {
   tabellenZeile,
 } from "./testlaufzeit/aufteilung.mjs";
 import { aufrufeInDateien, echtWartenBefunde } from "./testlaufzeit/echt-warten-statisch.mjs";
-import { TESTDATEI_ENDUNG, hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
+import { TESTDATEI, hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
 import { ausklingenStrenger, zeitgliederStrenger } from "./testlaufzeit/nur-strenger.mjs";
 import { zeitgliederBefunde } from "./testlaufzeit/zeitglieder.mjs";
 
@@ -18,7 +18,7 @@ const BASIS_AUSKLINGEN = "tools/basis/testlaufzeit.json";
 const BASIS_ECHTE_WARTEZEITEN = "tools/basis/echte-wartezeiten.json";
 const BASIS_ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const LAUFZEITEN = ".pruefung/dateien.jsonl";
-const TESTDATEIEN = ["test/*.js", "test/*.mjs", "test/*.cjs"];
+const TESTDATEIEN = ["test/*.js", "test/*.mjs", "test/*.cjs", "test/*.ts", "test/*.mts", "test/*.cts"];
 const LANGSAMSTE = 20;
 const JSON_EINRUECKUNG = 2;
 const EXIT_OK = 0;
@@ -54,7 +54,7 @@ function neueTestdateien(basis) {
     },
   )
     .split("\n")
-    .filter((datei) => datei.endsWith(TESTDATEI_ENDUNG));
+    .filter((datei) => TESTDATEI.test(datei));
 }
 
 function streichbar(zeilen, basis) {

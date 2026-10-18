@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { umbenennungen } from "../umbenennung.mjs";
+
 const BEREICHE_DATEI = "tools/bereiche.json";
 const TEST_ORDNER = "test/";
 const PFAD_TRENNER = "/";
@@ -17,7 +19,7 @@ const TICKET_TOKEN =
   /^(?!(?:v\d+|p(?:50|75|90|95|99)|mp[34]|md5|pg\d+|([a-z])2\1)$)(?:[a-z]{1,2}\d{1,2}[ab]?|0\d|al|ks|gq|gp|cq|iel|iex|iep|oc|ww|afix|prolif|kostenv\d+)$/;
 const TICKET_PAAR =
   /(?:^|[-_.])(?:gap|sg|web|did|pay|fmt|orig|e2e|lang|prov|phase|stufe|runde|welle|sprint|spike|fix|paket|task|ticket|aufgabe)[-_.]?\d{1,3}(?=[-_.]|$)/;
-const ENDUNG = /\.(?:test\.)?(?:js|mjs|cjs|json|jsonl|xml|md)$/;
+const ENDUNG = /\.(?:test\.)?(?:js|mjs|cjs|ts|mts|cts|json|jsonl|xml|md)$/;
 
 export function bereiche(root = ".") {
   const pfad = join(root, BEREICHE_DATEI);
@@ -57,9 +59,10 @@ function meldung(pfad, erlaubt) {
   return `${pfad}: neue Testdateien liegen unter test/<bereich>/ (Bereiche: ${erlaubt.join(", ")}) und heißen nach Verhalten, z. B. test/anrufe/anruf-starten.test.js. Ticket-Nummern gehören in Commit-Text und Testtitel. Ist ein Teil des Namens ein Fachbegriff, ist das eine Änderung an einer Prüfung und braucht eine Freigabe von Antonio oder Jonas; im Zweifel den Namen nach Verhalten wählen.`;
 }
 
-export function testordnung(basis) {
+export async function testordnung(basis) {
   const erlaubt = bereiche();
-  const neu = neueDateien(basis);
+  const { nurTypen } = await umbenennungen({ von: basis, bis: "HEAD" });
+  const neu = neueDateien(basis).filter((pfad) => nurTypen(pfad) === undefined);
   const befunde = neu
     .filter((pfad) => !liegtGeordnet(pfad, erlaubt))
     .map((pfad) => meldung(pfad, erlaubt));

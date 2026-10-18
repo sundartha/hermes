@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { ESLint } from "eslint";
+import tseslint from "typescript-eslint";
 
 const BLOCKNAME = "zeitglieder-in-tests";
 const BASIS = "tools/basis/zeitglieder-bestand.json";
@@ -18,7 +19,10 @@ async function zaehleJeDatei(wurzel, dateien) {
   const eslint = new ESLint({
     cwd: wurzel,
     overrideConfigFile: true,
-    overrideConfig: { files: ["**/*.js", "**/*.mjs", "**/*.cjs"], rules },
+    overrideConfig: [
+      { files: ["**/*.js", "**/*.mjs", "**/*.cjs"], rules },
+      { files: ["**/*.ts", "**/*.mts", "**/*.cts"], languageOptions: { parser: tseslint.parser }, rules },
+    ],
   });
   const ergebnisse = await eslint.lintFiles(dateien);
   const regeln = new Set(Object.keys(rules));

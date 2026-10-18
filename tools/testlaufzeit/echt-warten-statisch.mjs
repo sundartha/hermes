@@ -3,6 +3,8 @@ import path from "node:path";
 
 import * as espree from "espree";
 
+import { laufzeitText } from "../umbenennung.mjs";
+
 const OBERGRENZE_MS = 100;
 const NAME = "echtWarten";
 const MODUL_ENDE = "echt-warten.js";
@@ -95,7 +97,9 @@ function parse(text) {
 }
 
 export function aufrufeIn(datei, text) {
-  const programm = parse(text);
+  const laufzeit = laufzeitText(datei, text);
+  if (laufzeit === undefined) throw new Error(`${datei}: TypeScript-Syntax mit Laufzeitwirkung, nicht lesbar`);
+  const programm = parse(laufzeit);
   const konstanten = konstantenVon(programm);
   const namen = lokaleNamen(programm);
   return [...alleKnoten(programm)]
