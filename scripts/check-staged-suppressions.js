@@ -36,15 +36,13 @@ function isWellFormedFindings(findings) {
 function excusesLegacy(entry) {
   if (!entry) return false;
   return (
-    isNonEmptyText(entry.reason) && isCalendarDate(entry.date) && isWellFormedFindings(entry.findings)
+    isNonEmptyText(entry.reason) &&
+    isCalendarDate(entry.date) &&
+    isWellFormedFindings(entry.findings)
   );
 }
 
-export function findSuppressedStagedFiles({
-  stagedFiles,
-  suppressions,
-  legacyExceptions = {},
-}) {
+export function findSuppressedStagedFiles({ stagedFiles, suppressions, legacyExceptions = {} }) {
   const offenders = [];
   for (const file of stagedFiles) {
     if (excusesLegacy(legacyExceptions[file])) continue;
@@ -163,16 +161,43 @@ function suppressionTally(rules) {
   return new Map(Object.entries(rules).map(([rule, entry]) => [rule, entry.count]));
 }
 
-export function findRaisedSuppressions(before, after) {
-  return increasesPerFile(before, after, suppressionTally);
+export function findRaisedSuppressions(before, after, oldPathOf = noRename) {
+  return increasesPerFile(before, after, { tallyOf: suppressionTally, oldPathOf });
 }
 
-function increasesPerFile(before, after, tallyOf) {
-  return Object.entries(after).flatMap(([file, entry]) =>
-    tallyIncreases(before[file] ? tallyOf(before[file]) : new Map(), tallyOf(entry)).map(
-      ({ key, countBefore, countAfter }) => ({ file, rule: key, countBefore, countAfter }),
-    ),
-  );
+function noRename() {
+  return undefined;
+}
+
+function sumOfCounts(left, right) {
+  if (!isCount(left)) return left;
+  if (!isCount(right)) return right;
+  return left + right;
+}
+
+function combinedTally(left, right) {
+  const sum = new Map(left);
+  for (const [key, count] of right)
+    sum.set(key, sum.has(key) ? sumOfCounts(sum.get(key), count) : count);
+  return sum;
+}
+
+function renameOrigin(file, before, oldPathOf) {
+  return before[file] ? undefined : oldPathOf(file);
+}
+
+function increasesPerFile(before, after, { tallyOf, oldPathOf = noRename }) {
+  return Object.entries(after).flatMap(([file, entry]) => {
+    const origin = renameOrigin(file, before, oldPathOf);
+    const counted = before[origin ?? file];
+    const remaining = origin !== undefined && after[origin];
+    const tallyAfter = remaining
+      ? combinedTally(tallyOf(entry), tallyOf(after[origin]))
+      : tallyOf(entry);
+    return tallyIncreases(counted ? tallyOf(counted) : new Map(), tallyAfter).map(
+      ({ key, countBefore, countAfter }) => ({ file, origin, rule: key, countBefore, countAfter }),
+    );
+  });
 }
 
 const LEGACY_ENTRY_KEY = "Altlast-Eintrag";
@@ -181,14 +206,12 @@ function pinTally(entry) {
   return tallyFromFindings(entry.findings ?? {}).set(LEGACY_ENTRY_KEY, 1);
 }
 
-function findRaisedLegacyPins(before, after) {
-  return increasesPerFile(before, after, pinTally);
+function findRaisedLegacyPins(before, after, oldPathOf) {
+  return increasesPerFile(before, after, { tallyOf: pinTally, oldPathOf });
 }
 
 function formatOffender({ file, ruleCounts, reasons = [] }) {
-  const rulesText = ruleCounts
-    .map(({ rule, count }) => `${rule}: ${count}`)
-    .join(", ");
+  const rulesText = ruleCounts.map(({ rule, count }) => `${rule}: ${count}`).join(", ");
   const reasonLines = reasons.map((reason) => `\n     ${reason}`).join("");
   return `  ${file} -> ${rulesText}${reasonLines}`;
 }
@@ -283,13 +306,14 @@ export async function makeUnfilteredLinter() {
   };
 }
 
-async function makeGitFindingsReader() {
+async function makeGitFindingsReader(oldPathOf = noRename) {
   const lintContent = await makeUnfilteredLinter();
   return async function readFindings(file) {
-    const headCode = readGitContent(`${HEAD_CONTENT_PREFIX}${file}`);
+    const headFile = oldPathOf(file) ?? file;
+    const headCode = readGitContent(`${HEAD_CONTENT_PREFIX}${headFile}`);
     const stagedCode = readGitContent(`${STAGED_CONTENT_PREFIX}${file}`);
     return {
-      before: await lintContent(headCode, file),
+      before: await lintContent(headCode, headFile),
       after: await lintContent(stagedCode, file),
     };
   };
@@ -320,8 +344,9 @@ function jsonAt(revision, relativePath) {
 function printRaisedReport(relativePath, raised) {
   console.error("");
   logLine(`Abgebrochen: in ${relativePath} steigen Zahlen:`);
-  for (const { file, rule, countBefore, countAfter } of raised) {
-    console.error(`  ${file} -> ${rule}: ${countBefore} -> ${countAfter}`);
+  for (const { file, origin, rule, countBefore, countAfter } of raised) {
+    const renamed = origin === undefined ? "" : ` (umbenannt aus ${origin})`;
+    console.error(`  ${file}${renamed} -> ${rule}: ${countBefore} -> ${countAfter}`);
   }
 }
 
@@ -330,14 +355,39 @@ const RAISED_LISTS = [
   { relativePath: LEGACY_EXCEPTIONS_REL, findRaised: findRaisedLegacyPins },
 ];
 
-function raisedCountsStatus(beforeRevision, afterRevision) {
-  const reports = RAISED_LISTS.map(({ relativePath, findRaised }) => ({
-    relativePath,
-    raised: findRaised(
-      jsonAt(beforeRevision, relativePath),
-      jsonAt(afterRevision, relativePath),
-    ),
-  })).filter(({ raised }) => raised.length > 0);
+const RENAME_MODULE = "../tools/umbenennung.mjs";
+const TYPESCRIPT_PATH = /\.[cm]?ts$/;
+
+function renameLookup(beforeRevision, afterRevision) {
+  let loaded;
+  return function oldPathLookup() {
+    loaded ??= import(new URL(RENAME_MODULE, import.meta.url))
+      .then(({ umbenennungen }) => umbenennungen({ von: beforeRevision, bis: afterRevision }))
+      .then(({ nurTypen }) => nurTypen);
+    return loaded;
+  };
+}
+
+async function oldPathsFromRenameModule(files, lookup) {
+  return files.some((file) => TYPESCRIPT_PATH.test(file)) ? lookup() : noRename;
+}
+
+async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
+  const lists = RAISED_LISTS.map((list) => ({
+    ...list,
+    before: jsonAt(beforeRevision, list.relativePath),
+    after: jsonAt(afterRevision, list.relativePath),
+  }));
+  const newFiles = lists.flatMap(({ before, after }) =>
+    Object.keys(after).filter((file) => !before[file]),
+  );
+  const oldPathOf = await oldPathsFromRenameModule(newFiles, lookup);
+  const reports = lists
+    .map(({ relativePath, findRaised, before, after }) => ({
+      relativePath,
+      raised: findRaised(before, after, oldPathOf),
+    }))
+    .filter(({ raised }) => raised.length > 0);
   if (reports.length === 0) return 0;
   for (const { relativePath, raised } of reports) printRaisedReport(relativePath, raised);
   console.error("");
@@ -348,17 +398,18 @@ function raisedCountsStatus(beforeRevision, afterRevision) {
 
 function basisStatus(basis) {
   if (!isNonEmptyText(basis)) throw new Error(`${BASIS_OPTION} braucht einen Commit`);
-  return raisedCountsStatus(basis, HEAD_REVISION);
+  return raisedCountsStatus(basis, HEAD_REVISION, renameLookup(basis, HEAD_REVISION));
 }
 
 async function runCli() {
   const args = process.argv.slice(CLI_ARGS_OFFSET);
   if (args[0] === BASIS_OPTION) return basisStatus(args[1]);
-  if (raisedCountsStatus(HEAD_REVISION, STAGED_REVISION) !== 0) return 1;
-  return stagedFilesStatus(args);
+  const lookup = renameLookup(HEAD_REVISION, STAGED_REVISION);
+  if ((await raisedCountsStatus(HEAD_REVISION, STAGED_REVISION, lookup)) !== 0) return 1;
+  return stagedFilesStatus(args, lookup);
 }
 
-async function stagedFilesStatus(stagedFiles) {
+async function stagedFilesStatus(stagedFiles, lookup) {
   if (stagedFiles.length === 0) return 0;
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = loadLegacyExceptions();
@@ -369,7 +420,15 @@ async function stagedFilesStatus(stagedFiles) {
   const changedOffenders =
     candidates.length === 0
       ? []
-      : await findChangedFindings({ candidates, readFindings: await makeGitFindingsReader() });
+      : await findChangedFindings({
+          candidates,
+          readFindings: await makeGitFindingsReader(
+            await oldPathsFromRenameModule(
+              candidates.map(({ file }) => file),
+              lookup,
+            ),
+          ),
+        });
   const pinOffenders =
     pinCandidates.length === 0
       ? []
@@ -385,8 +444,7 @@ async function stagedFilesStatus(stagedFiles) {
   return 1;
 }
 
-const isMain =
-  fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
+const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
 if (isMain) {
   try {
     process.exit(await runCli());
