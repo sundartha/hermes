@@ -60,8 +60,12 @@ function fileOrFolderFindings(state, where, paths) {
   return paths.filter((path) => !pathExists(state.files, path)).map((path) => missing(where, path));
 }
 
+function isListed(files, path) {
+  return files.includes(path);
+}
+
 function fileOnlyFindings(state, where, paths) {
-  return paths.filter((path) => !state.files.includes(path)).map((path) => missing(where, path));
+  return paths.filter((path) => !isListed(state.files, path)).map((path) => missing(where, path));
 }
 
 function globFindings(state, { where, pattern, folderToo = false, protectsAhead = false }) {
@@ -291,10 +295,6 @@ function codeList(names, hits) {
         .map((entry) => missing(`${file} ${name}`, entry));
     });
   };
-}
-
-function isListed(files, path) {
-  return files.includes(path);
 }
 
 function workflowFindings(state, folder) {
