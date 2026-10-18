@@ -29,8 +29,6 @@
     ".github/workflows/ci.yml|.github/workflows/ci.yml|58",
     ".github/workflows/ci.yml|.github/workflows/ci.yml|62",
     ".github/workflows/ci.yml|.github/workflows/ci.yml|78",
-    ".github/workflows/ci.yml|.github/workflows/pruefleiter.yml|106",
-    ".github/workflows/ci.yml|.github/workflows/pruefleiter.yml|50",
     ".github/workflows/ci.yml|.github/workflows/tests-ausmisten.yml|71",
     ".github/workflows/freigabe.yml|.github/workflows/statische-pruefung.yml|92",
     ".github/workflows/freigabe.yml|.github/workflows/warteschlange.yml|67",
