@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { neuePglite } from "./pglite-helfer.js";
+import { ohne } from "./werkzeuge/neuschnitt-probe.js";
 
 let makePgStore, jsonStore, BOOTSTRAP, dataDir;
 
@@ -202,7 +203,7 @@ function jsonCostEvidenceRoundtrip() {
 }
 
 function ohneId(zeilen) {
-  return zeilen.map(({ id: _id, ...rest }) => rest);
+  return zeilen.map((zeile) => ohne(zeile, "id"));
 }
 
 test("callCostEvidence: pg-Roundtrip erhaelt die Zeile", async () => {

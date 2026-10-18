@@ -392,7 +392,7 @@ test("T17 (E1-02/E1-03, Regression): schlaegt die Store-Mutation NACH dem Provid
   const state = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
   const e164 = findNumber(state, "n1").e164;
   const provisioner = fakeProvisioner({
-    async releaseNumber(_providerNumberId) {
+    async releaseNumber() {
       state.calls.push({ id: "c-race", tenantId: "t1", status: "active", from: e164, to: "+491700000000" });
       return Promise.resolve();
     },

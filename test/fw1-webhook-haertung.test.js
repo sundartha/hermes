@@ -42,7 +42,7 @@ const WRITE_METHODS = Object.freeze([
 function recordingStore({ known = true } = {}) {
   const calls = { writes: [], tenantExists: 0 };
   const store = {
-    tenantExists: (_tenantId) => {
+    tenantExists: () => {
       calls.tenantExists += 1;
       return known;
     },

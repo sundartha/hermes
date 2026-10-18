@@ -8,7 +8,7 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 function captureSchemas() {
   const schemas = new Map();
   const fakeServer = {
-    registerTool(name, config, _handler) {
+    registerTool(name, config) {
       schemas.set(name, config.inputSchema);
     },
     registerResource() {},

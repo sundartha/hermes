@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { describe, it } from "node:test";
 
 import { bauMessBaum, faellePfadIn, setzeZusatzFall, spawnDry, trockenAufrufe } from "./_iel-messbaum.mjs";
+import { ohne } from "./werkzeuge/neuschnitt-probe.js";
 
 const EXIT_VERWEIGERT = 2;
 const FREIER_M1_ZAEHLER = Object.freeze({ ausgeloest: 0, anrufe: [] });
@@ -37,7 +38,7 @@ describe("IEL-Messwerkzeug: die Fall-Definition ist fail-closed", () => {
   it("eine unbekannte art verweigert mit Grund", () => {
     for (const art of ["texml-erfunden", "toString", undefined]) {
       const ergebnis = laufMitAbgewandeltemFall("F-A", (fall) => {
-        const { art: _bisherigeArt, ...rest } = fall;
+        const rest = ohne(fall, "art");
         return art === undefined ? rest : { ...rest, art };
       });
       assert.equal(ergebnis.status, EXIT_VERWEIGERT, `art=${art}: ${ergebnis.stdout}\n${ergebnis.stderr}`);
@@ -49,7 +50,7 @@ describe("IEL-Messwerkzeug: die Fall-Definition ist fail-closed", () => {
   it("eine unbekannte Zaehler-Gruppe verweigert mit Grund", () => {
     for (const zaehler of ["x", "toString", undefined]) {
       const ergebnis = laufMitAbgewandeltemFall("F-A", (fall) => {
-        const { zaehler: _bisherigerZaehler, ...rest } = fall;
+        const rest = ohne(fall, "zaehler");
         return zaehler === undefined ? rest : { ...rest, zaehler };
       });
       assert.equal(ergebnis.status, EXIT_VERWEIGERT, `zaehler=${zaehler}: ${ergebnis.stdout}\n${ergebnis.stderr}`);

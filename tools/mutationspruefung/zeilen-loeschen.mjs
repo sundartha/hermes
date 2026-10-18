@@ -3,6 +3,7 @@ import { cpSync, existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } 
 import { join, resolve } from "node:path";
 import { env } from "node:process";
 
+import { omitKeys } from "../../src/utils/object.js";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../testgruppe.mjs";
 import { entscheide, unentschieden } from "./bestaetigung.mjs";
@@ -69,8 +70,7 @@ function gepruefterStand(verzeichnis) {
 }
 
 function ohneTestkontext() {
-  const { [TESTKONTEXT]: _geerbt, ...umgebung } = env;
-  return umgebung;
+  return omitKeys(env, [TESTKONTEXT]);
 }
 
 function laufstatus({ status, signal, error }) {

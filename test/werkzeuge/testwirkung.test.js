@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { ohne } from "./neuschnitt-probe.js";
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
@@ -113,7 +114,7 @@ const ATTRAPPE_VORLADEN = join(REPO_ROOT, "tools/testwirkung/ohne-pruefung.mjs")
 const EXECARGV_AUSGEBEN = "console.log(JSON.stringify(process.execArgv))";
 
 function execArgvMitVorladen(testkontext) {
-  const { NODE_TEST_CONTEXT: _geerbt, ...ohneKontext } = process.env;
+  const ohneKontext = ohne(process.env, "NODE_TEST_CONTEXT");
   const lauf = spawnSync(process.execPath, [`--import=${ATTRAPPE_VORLADEN}`, "-e", EXECARGV_AUSGEBEN], {
     encoding: "utf8",
     env: testkontext === undefined ? ohneKontext : { ...ohneKontext, NODE_TEST_CONTEXT: testkontext },

@@ -2,6 +2,7 @@
 import { createWriteStream } from "node:fs";
 import WebSocket from "ws";
 import { config, stripTrailingSlash } from "../src/config.js";
+import { omitKeys } from "../src/utils/object.js";
 
 const LOG_PREFIX = "[spike1-b]";
 const CLI_ARGS_START_INDEX = 2;
@@ -488,7 +489,7 @@ class ZweiAufrufeProbe {
 
   zugAbschliessen() {
     if (!this.aktuell) return;
-    const { toolRequestAt: _anfrageAt, toolResponseAt: _antwortAt, ...offen } = this.aktuell;
+    const offen = omitKeys(this.aktuell, ["toolRequestAt", "toolResponseAt"]);
     const ergebnis = {
       label: this.label,
       ...offen,

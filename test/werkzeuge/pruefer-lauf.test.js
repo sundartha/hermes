@@ -6,6 +6,7 @@ import { test } from "node:test";
 
 import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
 import { ANMELDUNG_GRUND, LIMIT_GRUND, pruefeCommit } from "../../tools/auftrag/pruefer-lauf.mjs";
+import { ohne } from "./neuschnitt-probe.js";
 import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import {
   SCHEIN_TOKEN,
@@ -148,8 +149,7 @@ test("das Feld urteil ändert das Ergebnis eines Commits nicht", async (context)
     await pruefeMit(context, { aufnahme: bestanden }),
   ];
   const ohneSha = ({ ergebnis }) => {
-    const { sha: _sha, patchId: _patchId, ...rest } = ergebnis;
-    return rest;
+    return ohne(ergebnis, "sha", "patchId");
   };
   assert.deepEqual(ohneSha(gruen), ohneSha(rot));
 });

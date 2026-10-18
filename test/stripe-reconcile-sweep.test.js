@@ -149,7 +149,7 @@ test("syntheticSubscriptionDeletedEvent: DELETED-Typ, Sekunden-created, doppelte
 
 test("Heilung Kuendigungsfall: Stripe=canceled + cancelAtPeriodEnd -> Suspend + Session-Kill + Telnyx-Release ueber den ECHTEN Webhook-Pfad", async () => {
   const s = seedState({ tenantId: "t_heal", subscriptionId: "sub_heal", cancelAtPeriodEnd: true });
-  const { sweepDeps, calls, prov, s: _ } = { ...makeDeps(s, { billingStatus: "canceled" }), s };
+  const { sweepDeps, calls, prov } = makeDeps(s, { billingStatus: "canceled" });
 
   const result = await runStripeSubscriptionReconcile(sweepDeps);
 
