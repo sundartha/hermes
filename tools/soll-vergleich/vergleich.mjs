@@ -97,33 +97,33 @@ export function rulesetVergleich(soll, ist, bereich = RULESET) {
   };
 }
 
-function weitererVergleich(soll, ist, vorhandeneIds) {
-  const bereich = `${RULESET} ${soll.name}`;
-  if (ist === null || !vorhandeneIds.has(soll.id)) {
-    return {
-      abweichungen: [{ bereich, feld: RULESET, soll: VORHANDEN, ist: FEHLT }],
-      nichtPruefbar: [],
-    };
-  }
-  return rulesetVergleich(soll, ist, bereich);
+function ohnePruefluecke(abweichungen) {
+  return { abweichungen, nichtPruefbar: [] };
+}
+
+function mengenVergleich(art, { soll, vorhanden, einzeln, vergleiche }) {
+  return alleNamen(soll.keys(), vorhanden.keys()).map((schluessel) => {
+    const eintrag = soll.get(schluessel);
+    const bereich = `${art} ${eintrag?.name ?? vorhanden.get(schluessel)}`;
+    if (eintrag === undefined) {
+      return ohnePruefluecke([{ bereich, feld: art, soll: NICHT_IM_SOLL, ist: VORHANDEN }]);
+    }
+    const ist = einzeln.get(schluessel) ?? null;
+    if (ist === null) return ohnePruefluecke([{ bereich, feld: art, soll: VORHANDEN, ist: FEHLT }]);
+    return vergleiche(bereich, eintrag.wert, ist);
+  });
 }
 
 export function weitereRulesetsVergleich(hauptId, soll, { vorhanden, einzeln }) {
   const vorhandeneIds = new Set(vorhanden.map(({ id }) => id));
-  const bekannt = new Set([hauptId, ...soll.map(({ id }) => id)]);
-  const ergebnisse = soll.map((eintrag, index) =>
-    weitererVergleich(eintrag, einzeln[index], vorhandeneIds),
-  );
-  const fremde = vorhanden
-    .filter(({ id }) => !bekannt.has(id))
-    .map(({ name }) => ({
-      bereich: `${RULESET} ${name}`,
-      feld: RULESET,
-      soll: NICHT_IM_SOLL,
-      ist: VORHANDEN,
-    }));
+  const ergebnisse = mengenVergleich(RULESET, {
+    soll: new Map(soll.map((eintrag) => [eintrag.id, { name: eintrag.name, wert: eintrag }])),
+    vorhanden: new Map(vorhanden.filter(({ id }) => id !== hauptId).map(({ id, name }) => [id, name])),
+    einzeln: new Map([...einzeln].map(([id, ist]) => [id, vorhandeneIds.has(id) ? ist : null])),
+    vergleiche: (bereich, eintrag, ist) => rulesetVergleich(eintrag, ist, bereich),
+  });
   return {
-    abweichungen: [...ergebnisse.flatMap(({ abweichungen }) => abweichungen), ...fremde],
+    abweichungen: ergebnisse.flatMap(({ abweichungen }) => abweichungen),
     nichtPruefbar: ergebnisse.flatMap(({ nichtPruefbar }) => nichtPruefbar),
   };
 }
@@ -199,18 +199,11 @@ export function codeownersVergleich(soll, { inhalt, fehler }) {
   ];
 }
 
-function environmentVergleich(name, soll, ist) {
-  const bereich = `${ENVIRONMENT} ${name}`;
-  if (soll === undefined) {
-    return [{ bereich, feld: ENVIRONMENT, soll: NICHT_IM_SOLL, ist: VORHANDEN }];
-  }
-  if (ist === null) return [{ bereich, feld: ENVIRONMENT, soll: VORHANDEN, ist: FEHLT }];
-  return felderVergleich(bereich, soll, ist);
-}
-
 export function environmentsVergleich(soll, { vorhanden, einzeln }) {
-  const vorgesehen = new Map(Object.entries(soll));
-  return alleNamen(vorgesehen.keys(), vorhanden).flatMap((name) =>
-    environmentVergleich(name, vorgesehen.get(name), einzeln.get(name)),
-  );
+  return mengenVergleich(ENVIRONMENT, {
+    soll: new Map(Object.entries(soll).map(([name, wert]) => [name, { name, wert }])),
+    vorhanden: new Map(vorhanden.map((name) => [name, name])),
+    einzeln,
+    vergleiche: (bereich, wert, ist) => ohnePruefluecke(felderVergleich(bereich, wert, ist)),
+  }).flatMap(({ abweichungen }) => abweichungen);
 }
