@@ -10,7 +10,7 @@ import { cruise } from "dependency-cruiser";
 
 import { omitKeys } from "../src/utils/object.js";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
-import { gleichwertigGemeldet } from "./auftrag/gleichwertig.mjs";
+import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN, gleichwertigGemeldet, MUTANT_UEBERLEBT, ohneTestdatei } from "./auftrag/gleichwertig.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
@@ -44,8 +44,6 @@ const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const UEBERLEBT = "Survived";
-const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
-const KEINE_TESTDATEI = "keine Testdatei erreicht die Datei";
 const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
@@ -54,8 +52,6 @@ const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?muta
 const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
 const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
-const ABSCHALTUNG_VERSTOSS =
-  "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
 const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
@@ -65,7 +61,6 @@ const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
 const AUFTRAGSWEG = /^Auftrag: [^\s/]+\/\S+$/m;
-const GLEICHWERTIG_ANGENOMMEN = "Hinweis: als gleichwertig angenommen";
 const KURZ = 7;
 const MS_JE_SEKUNDE = 1000;
 const MAX_GIT_AUSGABE = 268_435_456;
@@ -339,7 +334,7 @@ function testauswahl(datei, graph) {
 async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
   const auswahl = testauswahl(datei, graph);
   if (auswahl.alle.length === 0) {
-    return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} ${KEINE_TESTDATEI}`, status: "NoCoverage", art: KEINE_TESTDATEI }));
+    return zeilen.map(([von]) => ohneTestdatei(datei, von));
   }
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
@@ -487,10 +482,6 @@ function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
   return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
 }
 
-function angenommen({ schluessel, status, art }, gleichwertige) {
-  return gleichwertige.has(schluessel) && !ABGESCHALTET.has(status) && art !== KEINE_TESTDATEI;
-}
-
 function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   const angenommene = [];
   const ueberlebende = [];
@@ -500,7 +491,7 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
   for (const { hinweis } of ergebnisse.filter((eintrag) => eintrag.hinweis !== undefined)) console.log(hinweis);
-  for (const { schluessel } of ueberlebende) console.log(`Verstoß: Mutant überlebt: ${schluessel}`);
+  for (const { schluessel } of ueberlebende) console.log(`${MUTANT_UEBERLEBT}: ${schluessel}`);
   for (const stelle of zugriffe) console.log(`${ZUSTAND_VERSTOSS}: ${stelle}`);
   if (ergebnisse.length > 0) console.log(`${BESTAETIGUNG}: ${bilanz(ergebnisse)}.`);
   console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
