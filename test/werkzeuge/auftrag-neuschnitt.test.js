@@ -13,7 +13,7 @@ test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn n
   assert.deepEqual([datei("anzahl-planer"), datei("anzahl-notiz"), datei("gh.log")], ["1", "", ""]);
   const prompt = datei("prompt-planer.txt");
   assert.match(prompt, /^\n## Neuschnitt\n\nAuftrag a1 der Phase P-001-probe ist nach 2 roten Runden gestoppt\./);
-  for (const teil of ["Runde 1: Der Bau-Agent hat keine Datei geändert.", "Runde 2: Der Bau-Agent hat keine Datei geändert.", "Hinweise des Bau-Agenten:\n> Ich finde keinen Weg im Bereich.", `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/sicherheit.md`, `Phasendatei: ${PHASENDATEI}`, '"id": "a1"']) {
+  for (const teil of ["Runde 1: Der Bau-Agent hat keine Datei geändert.", "Runde 2: Der Bau-Agent hat keine Datei geändert.", "Hinweise des Bau-Agenten:\n> Ich finde keinen Weg im Bereich.", `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/design.md, ${ORDNER}/sicherheit.md`, `Phasendatei: ${PHASENDATEI}`, '"id": "a1"']) {
     assert.ok(prompt.includes(teil), teil);
   }
   const [argumente] = datei("argumente-planer.txt").split("\n").map((zeile) => JSON.parse(zeile || "[]"));

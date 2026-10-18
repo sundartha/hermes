@@ -9,7 +9,7 @@ import { PHASE_PASST_NICHT, VERSTOSS, grenzBefunde } from "../../tools/auftrag/p
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBlock, zweckIds } from "../../tools/auftrag/zweck.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { ersatzUmgebung, teamRepository } from "./neuschnitt-probe.js";
+import { DESIGN, ersatzUmgebung, teamRepository } from "./neuschnitt-probe.js";
 import { alsJson } from "./planung-probe.js";
 import { ESLINT_BIN, PRUEFLEITER_TOOL, REPO_ROOT, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
@@ -293,6 +293,7 @@ test("scheitert ein Neuschnitt an Schnitt und Abdeckung, nennt der nächste Prom
     ...BASIS,
     [`${PLAN}/pitch.md`]: `# P-001 Probe\n\n## Anforderungen\n\n### Regel R1: Zahlen werden verdoppelt.\n\n#### Szenario S1: Verdoppeln\n${S1}\n`,
     [`${PLAN}/sicherheit.md`]: "# P-001 Probe\n\n## 2. Angriffswege\nKeine Angriffswege gefunden, weil nichts Neues erreichbar ist.\n",
+    [`${PLAN}/design.md`]: DESIGN,
     [PLAN_PHASE]: `${JSON.stringify(NUR_UMBAU, null, 2)}\n`,
   });
   const { werkzeug, env: umgebung } = ersatzUmgebung(context, TEAM_OHNE_ABDECKUNG);

@@ -5,6 +5,7 @@ import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
+import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegPfad, belegVerzeichnis, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
@@ -69,8 +70,8 @@ function befundOhneZweck(ergebnis) {
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null }) {
-    this.kontext = { phase, auftrag, root };
+  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null }) {
+    this.kontext = { phase, auftrag, root, design };
     this.aufraeumen = aufraeumen;
     this.vorbau = vorbau;
     this.phasendatei = phasendatei;
@@ -411,8 +412,9 @@ function startBefunde(phasendatei, root) {
   const ohneIssue = befunde.length === 0 ? issueBefunde(phase) : [];
   const form = ohneIssue.length > 0 ? [...ohneIssue, ISSUE_ZWECK] : befunde;
   const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
+  const annahmen = form.length > 0 ? [] : annahmenBefunde(phase, root);
   const sauber = istSauber(root) ? [] : ["Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand."];
-  return { phase, befunde: [...form, ...sauber, ...zweck] };
+  return { phase, befunde: [...form, ...annahmen, ...sauber, ...zweck] };
 }
 
 function entschiedenerAlterTest({ phase, auftrag, root }) {
@@ -474,7 +476,7 @@ export function lauf(phasendatei, root) {
     const { ordnung } = reihenfolge(plan.phase.auftraege);
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
     if (auftrag === undefined) return EXIT_GRUEN;
-    const kontext = { phase: plan.phase, auftrag, root, phasendatei, plan };
+    const kontext = { phase: plan.phase, auftrag, root, design: designPfad(plan.phase), phasendatei, plan };
     const frei = freigabe(kontext);
     const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde.auftrag.id === auftrag.id ? { ...runde, ...frei } : runde).fuehreAus());
     if (ergebnis === GRUEN) plan.fertig.add(auftrag.id);
