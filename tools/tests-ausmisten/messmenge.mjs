@@ -73,7 +73,7 @@ export function erreichendeTests(datei, graph) {
   return [...erreicht].filter((pfad) => TESTDATEI.test(pfad)).sort();
 }
 
-function erwaehnende(namen, rev) {
+export function erwaehnende(namen, rev) {
   if (namen.length === 0) return [];
   const muster = [...new Set(namen)].flatMap((name) => ["-e", name]);
   const lauf = gitLauf(["grep", "-l", "-z", "-F", ...muster, rev, "--", "test/"]);

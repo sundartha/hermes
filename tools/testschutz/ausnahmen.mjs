@@ -72,7 +72,7 @@ async function renamesSince(basis) {
   return { renames: new Map([...renames, ...typesOnly]), typesOnly };
 }
 
-function syntaxTree(file, text) {
+export function syntaxTree(file, text) {
   try {
     return parse(text, { ecmaVersion: "latest", sourceType: sourceTypeOf(file) });
   } catch {
@@ -85,7 +85,7 @@ function withoutPositions(key, value) {
   return typeof value === "bigint" ? `${value}n` : value;
 }
 
-function treeText(tree, replacements = new Map()) {
+export function treeText(tree, replacements = new Map()) {
   return JSON.stringify(
     tree,
     (key, value) => replacements.get(value) ?? withoutPositions(key, value),
@@ -135,7 +135,7 @@ async function modifiedReason(context, file) {
   return same ? renameReason(followed) : undefined;
 }
 
-function encloses(outer, inner) {
+export function encloses(outer, inner) {
   return outer.range[0] <= inner.range[0] && inner.range[1] <= outer.range[1];
 }
 
