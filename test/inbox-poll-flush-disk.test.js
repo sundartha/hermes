@@ -4,6 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { seedState, seedCall } from "./helpers.js";
+import { importNachUmgebung } from "./gemeinsam/umgebung-import.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT = BOOTSTRAP_TENANT_ID;
@@ -16,9 +17,7 @@ describe("INBOX-P2 Ebene B: json-Backend, save() NUR bei marked > 0", () => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inbox-flush-"));
     const seed = seedState({ calls: [] });
     fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(seed));
-    process.env.DATA_DIR = dataDir;
-    await import("../src/config.js");
-    jsonStore = await import("../src/store/json.js");
+    [jsonStore] = await importNachUmgebung({ DATA_DIR: dataDir }, () => import("../src/store/json.js"));
     jsonStore.load();
   });
 

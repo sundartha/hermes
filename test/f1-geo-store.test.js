@@ -2,8 +2,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "./pglite-helfer.js";
 import { tempDataDir } from "./helpers.js";
-import { makePgStore } from "../src/store/pg.js";
-import { makePgTestStore } from "./pg-helpers.js";
+import { importNachUmgebung } from "./gemeinsam/umgebung-import.js";
 import {
   makeDefaultState,
   registerTenant,
@@ -37,10 +36,16 @@ async function reopen(db) {
   return store;
 }
 
+let makePgStore;
+let makePgTestStore;
 let jsonBackend;
 before(async () => {
-  process.env.DATA_DIR = tempDataDir();
-  jsonBackend = await import("../src/store/json.js");
+  [{ makePgStore }, { makePgTestStore }, jsonBackend] = await importNachUmgebung(
+    { DATA_DIR: tempDataDir() },
+    () => import("../src/store/pg.js"),
+    () => import("./pg-helpers.js"),
+    () => import("../src/store/json.js"),
+  );
 });
 
 test("defaultSettings() traegt language = null (optionales Override, P4 #8)", () => {
