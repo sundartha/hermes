@@ -4,6 +4,7 @@
   "gitignore": false,
   "absolute": false,
   "format": ["javascript", "typescript", "jsx", "tsx", "yaml", "markdown"],
+  "crossFormats": ["javascript,typescript"],
   "ignore": [
     "**/node_modules/**",
     "**/coverage/**",

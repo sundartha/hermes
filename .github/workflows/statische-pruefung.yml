@@ -50,15 +50,21 @@ jobs:
           echo "$RUNNER_TEMP/semgrep-bin" >> "$GITHUB_PATH"
 
       - name: Kopien (jscpd)
-        run: node tools/basis-vergleich.mjs jscpd
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node tools/basis-vergleich.mjs jscpd --basis "$BASIS"
 
       - name: Toter Code (knip)
         if: ${{ !cancelled() }}
-        run: node tools/basis-vergleich.mjs knip
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node tools/basis-vergleich.mjs knip --basis "$BASIS"
 
       - name: Injection-Muster (Semgrep)
         if: ${{ !cancelled() }}
-        run: node tools/basis-vergleich.mjs semgrep
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node tools/basis-vergleich.mjs semgrep --basis "$BASIS"
 
       - name: Kommentare in YAML und Shell
         if: ${{ !cancelled() }}
