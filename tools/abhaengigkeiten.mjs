@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
-import { umbenennungen } from "./umbenennung.mjs";
+import { TYPESCRIPT, umbenennungen } from "./umbenennung.mjs";
 
 const CONFIG_PATH = ".dependency-cruiser.cjs";
 const SOURCE_DIRECTORY = "src";
@@ -28,7 +28,6 @@ const FROZEN_LISTS = [
   },
 ];
 const KEY_SEPARATOR = "\0";
-const TYPESCRIPT_PATH = /\.[cm]?ts$/;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
@@ -114,9 +113,7 @@ function samePath(path) {
 
 async function oldPathOf(basis, states) {
   const grown = states.flatMap(({ known, basisKnown }) => missingFrom(known, basisKnown ?? known));
-  const renamed = grown.some(
-    ({ from, to }) => TYPESCRIPT_PATH.test(from) || TYPESCRIPT_PATH.test(to),
-  );
+  const renamed = grown.some(({ from, to }) => TYPESCRIPT.test(from) || TYPESCRIPT.test(to));
   if (!renamed) return samePath;
   const { nurTypen } = await umbenennungen({ von: basis });
   return (path) => nurTypen(path) ?? path;
