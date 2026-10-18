@@ -181,7 +181,7 @@ test("echtWarten unter anderem Namen zählt bei jeder Endung des Helfers", () =>
   for (const endung of ["js", "mjs", "cjs", "ts", "mts", "cts"]) {
     const zeilen = [
       `import { echtWarten as warte } from "./echt-warten.${endung}";`,
-      "await warte(500);",
+      `await warte(${OBERGRENZE_PLUS_EINS});`,
     ];
     assert.equal(befundeFuer(zeilen).length, 1, endung);
   }
