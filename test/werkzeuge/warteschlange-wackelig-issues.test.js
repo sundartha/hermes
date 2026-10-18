@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { gueltigerEintrag } from "../../tools/warteschlange/wackelig-issues.mjs";
 import { passingTest, probeDirectory } from "./probe-repo.js";
 import { scheinGithub } from "./pruefer/hilfen.mjs";
 import {
@@ -25,6 +26,7 @@ const OFFENES_ISSUE = 91;
 const ZU_LANG = 201;
 const EXIT_OK = 0;
 const EXIT_FEHLER = 1;
+const ENDUNGEN = ["js", "mjs", "cjs", "ts", "mts", "cts"];
 
 function beleg(eintraege) {
   return JSON.stringify({ format: 1, commit: FREMDE_SHA, lauf: null, wackelig: eintraege, rot: [] });
@@ -39,8 +41,8 @@ const UNGUELTIG = [
   { datei: DATEI, test: "x".repeat(ZU_LANG) },
 ];
 
-async function halteFest(context, { issues = [], ereignis = {}, belege }) {
-  const repo = wegwerfRepo(context, { [DATEI]: passingTest(TEST) });
+async function halteFest(context, { issues = [], ereignis = {}, belege, datei = DATEI }) {
+  const repo = wegwerfRepo(context, { [datei]: passingTest(TEST) });
   const ordner = probeDirectory(context, belege);
   const github = await scheinGithub(
     context,
@@ -131,4 +133,25 @@ test("ein Lauf aus einem anderen Workflow oder aus einem Fork schreibt nichts", 
     assert.equal(lauf.status, EXIT_FEHLER, JSON.stringify(ereignis));
     assert.deepEqual(lauf.schreibend, []);
   }
+});
+
+test("ein Eintrag gilt mit jeder Endung, die der Testläufer kennt, aber nur unter test/", (context) => {
+  const dateien = ENDUNGEN.flatMap((endung) => [`test/wackel.test.${endung}`, `src/wackel.test.${endung}`]);
+  const repo = wegwerfRepo(context, Object.fromEntries(dateien.map((datei) => [datei, passingTest(TEST)])));
+  for (const endung of ENDUNGEN) {
+    assert.equal(gueltigerEintrag({ datei: `test/wackel.test.${endung}`, test: TEST }, repo.ordner), true, endung);
+    assert.equal(gueltigerEintrag({ datei: `src/wackel.test.${endung}`, test: TEST }, repo.ordner), false, endung);
+  }
+});
+
+test("ein wackeliger Test in einer .test.ts-Datei wird wie einer in .test.js ein Issue", async (context) => {
+  const datei = "test/wackel.test.ts";
+  const lauf = await halteFest(context, {
+    datei,
+    belege: { "wackelig-teil-1/wackelig.json": beleg([{ datei, test: TEST }]) },
+  });
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.deepEqual(schreibAufrufe(lauf.schreibend), [`POST ${API_PFAD}/issues`]);
+  const [{ rumpf }] = lauf.schreibend;
+  assert.equal(rumpf.title, `Wackelig: ${datei} › ${TEST}`);
 });
