@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
 import { TYPESCRIPT } from "./umbenennung.mjs";
 
@@ -21,11 +22,13 @@ const FROZEN_LISTS = [
     path: ".dependency-cruiser-known-violations.json",
     label: "Altverstöße",
     covers: (violation) => !TEST_IMPORT_RULES.has(violation.rule.name),
+    zweck: "basis/abhaengigkeitsregeln",
   },
   {
     path: "tools/basis/test-importe.json",
     label: "Testimporte an internen Modulen",
     covers: (violation) => TEST_IMPORT_RULES.has(violation.rule.name),
+    zweck: "basis/test-importe",
   },
 ];
 const KEY_SEPARATOR = "\0";
@@ -131,6 +134,27 @@ function summary({ path, label, violations, known, basisKnown }) {
   return `${violations.length} ${label}, alle eingefroren in ${path}; ${fixed} eingefrorene Einträge sind behoben und können gestrichen werden; ${basisNote}`;
 }
 
+export const BEFUNDQUELLEN = [
+  ...FROZEN_LISTS.map(({ zweck }, index) => ({
+    zweck,
+    befunde: ({ states, comments, oldPath }) => findingsFor(states[index], { comments, oldPath }),
+  })),
+  {
+    zweck: "basis/testregel-bestaende",
+    befunde: ({ basis, oldPath }) => bestaendeNurKuerzer(basis, oldPath),
+  },
+  { zweck: "basis/testordnung", befunde: ({ order }) => order.befunde },
+];
+
+function reportFindings(sources) {
+  const findings = sources.flatMap(({ befunde }) => befunde);
+  for (const finding of findings) console.error(finding);
+  for (const { zweck, befunde } of sources) {
+    if (befunde.length > 0) console.error(zweckBlock(zweck).join("\n"));
+  }
+  return findings.length;
+}
+
 async function main() {
   const basis = optionValue("--basis");
   if (basis === undefined) {
@@ -143,21 +167,19 @@ async function main() {
   const comments = ruleComments();
   const oldPath = await oldPathOf(basis, states, bestaendeNurKuerzer(basis));
   const order = await testordnung(basis);
-  const findings = [
-    ...states.flatMap((state) => findingsFor(state, { comments, oldPath })),
-    ...bestaendeNurKuerzer(basis, oldPath),
-    ...order.befunde,
-  ];
-  for (const finding of findings) console.error(finding);
-  if (findings.length > 0) return EXIT_FINDING;
+  const context = { basis, states, comments, oldPath, order };
+  const sources = BEFUNDQUELLEN.map(({ zweck, befunde }) => ({ zweck, befunde: befunde(context) }));
+  if (reportFindings(sources) > 0) return EXIT_FINDING;
   for (const state of states) console.log(summary(state));
   console.log(order.zusammenfassung);
   return EXIT_OK;
 }
 
-try {
-  process.exitCode = await main();
-} catch (error) {
-  console.error(error.message);
-  process.exitCode = EXIT_USAGE;
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = EXIT_USAGE;
+  }
 }

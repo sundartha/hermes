@@ -1,0 +1,93 @@
+{
+  "basis/abhaengigkeitsregeln": {
+    "liste": "B7",
+    "wozu": "Telefonie-Anbieter spricht der Code nur über Ports und Registry an, den Speicher nur über src/store.js; Ordner unter src/ importieren sich nicht im Kreis, der Dienst nichts aus apps/web/, und src/server.js baut die Wächter beim Start. Sonst muss ein Anbieterwechsel oder Speicherumbau an verstreuten Stellen nachgezogen werden, und eine vergessene Stelle bricht im Betrieb.",
+    "behebung": "Über den Eingang importieren, den die Regel nennt (etwa den Adapter über src/telephony/registry.js holen), die gemeinsame Abhängigkeit zweier Ordner in einen eigenen Ordner ziehen oder den fehlenden Import in src/server.js ergänzen. Ein behobener Altverstoß wird aus .dependency-cruiser-known-violations.json gestrichen.",
+    "nichtAngenommen": "Eine bloße Durchreiche in eine erlaubte Datei legen, die nur weitergibt, was sie einbindet, den Import in eine Form bringen, die dependency-cruiser nicht sieht, eine Regel in .dependency-cruiser.cjs ändern oder einen Eintrag in .dependency-cruiser-known-violations.json ergänzen (die Liste darf nur kürzer werden). Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht der richtige Eingang eine Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an .dependency-cruiser.cjs braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/abhaengigkeiten/ und Antonios Approve."
+  },
+  "basis/anweisungen": {
+    "liste": "B5",
+    "wozu": "CLAUDE.md, AGENTS.md und die Regeldateien unter .claude/rules/ lädt jede Agenten-Sitzung automatisch. Wachsen sie nach dem Kürzen still wieder, trägt jede Sitzung die Last, und einzelne Regeln gehen in der Menge unter; deshalb sind auch dieselbe Zeile in zwei Dateien, @-Importe und ein Fachordner unter src/ ohne eigene CLAUDE.md Befunde.",
+    "behebung": "Die Regel als Prüfung (Test, Lint-Regel, Hook) umsetzen statt als Text, oder eine bestehende Zeile ersetzen, statt eine hinzuzufügen. Eine doppelte Zeile steht nur an einer Stelle, ein @-Import wird durch den nötigen Text oder eine Prüfung ersetzt.",
+    "nichtAngenommen": "Den Text in eine Datei verlegen, die die Prüfung nicht liest (etwa eine, die nur bei Bedarf geladen wird), oder Einträge in tools/basis/anweisungen.json ergänzen, ohne dass genau diese neuen Zeilen im selben PR stehen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ist eine neue Zeile nötig und lässt sie sich nicht als Prüfung umsetzen, gehört sie samt passendem Eintrag in tools/basis/anweisungen.json in denselben PR, ohne Änderung an der Prüfung selbst; dann wartet die Freigabe-Prüfung nur auf Antonios Approve, und der PR nennt die neuen Zeilen. Für einen neuen Fachordner unter src/ ist das seine eigene CLAUDE.md mit ihren Einträgen."
+  },
+  "basis/fester-importpfad": {
+    "liste": "L19",
+    "wozu": "Ein dynamischer Import mit Platzhalter im Pfad ist für die Importregel der Tests unsichtbar: Ein Test könnte so Innereien laden, die er nicht laden darf, und bräche bei deren Umbau, obwohl sich am Verhalten nichts geändert hat. tools/basis/fester-importpfad.json hält nur die alten Fälle.",
+    "behebung": "Den Pfad als festen Text schreiben, zum Beispiel import(\"../src/store/json.js?frisch\"), und über die erlaubten Eingänge des Bereichs importieren.",
+    "nichtAngenommen": "Den Pfad auf eine andere Weise zusammensetzen, die die Regel nicht erkennt, oder einen Eintrag in tools/basis/fester-importpfad.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt der Import in einem bestehenden Test außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Test ins Issue. Einen neuen Eintrag nimmt der Bestand nicht an, auch nicht mit Approve; hältst du die Regel hier für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue."
+  },
+  "basis/knip": {
+    "liste": "B2",
+    "wozu": "Unbenutzter Code, unbenutzte Exporte, Dateien und Pakete bleiben sonst liegen: Spätere Agenten halten sie für gültig, pflegen sie mit oder kopieren sie als Vorlage, und ein unbenutztes Paket bleibt ohne Nutzen in der Lieferkette.",
+    "behebung": "Den unbenutzten Code, Export, die Datei oder das Paket entfernen. Wird etwas wirklich gebraucht, den Aufruf schreiben, der es braucht, mit einem Test, der dieses Verhalten prüft.",
+    "nichtAngenommen": "Den Code nur zum Schein benutzen (etwa in einem Test einbinden, ohne ihn zu prüfen), ihn über knip.json ausblenden oder einen Eintrag in tools/basis/knip.json ergänzen; der tote Code bliebe. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht das Entfernen eine Datei außerhalb deines Bereichs oder eine Änderung an einem bestehenden Test, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Hältst du den Befund für einen Fehlalarm, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an knip.json braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/knip/ und Antonios Approve."
+  },
+  "basis/lessons": {
+    "liste": "B4",
+    "wozu": "Eine Lehre, die nur als Text in docs/lessons.md steht, setzt niemand durch: Derselbe Fehler kommt wieder, obwohl er bekannt ist, und die Datei wird zum Ersatz für Kommentare. Die Datei darf deshalb nur kürzer werden.",
+    "behebung": "Die Lehre als Test, Lint-Regel oder Hook umsetzen, der den Fehler beim nächsten Mal meldet, und den Grund in die Commit-Nachricht schreiben. Meldet die Prüfung docs/lessons.md als fehlend oder tasks/lessons.md als alten Ort, gehört die Datei zurück nach docs/lessons.md.",
+    "nichtAngenommen": "Die Lehre in eine andere Textdatei, einen Kommentar oder eine Anweisungsdatei schreiben, die die Prüfung nicht liest, oder einen Eintrag in tools/basis/lessons.json ergänzen; die Lehre bliebe Text, den nichts durchsetzt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich die Lehre nicht als Prüfung umsetzen, gehört sie mit Grund als Entscheidungsnotiz ins Issue statt in die Datei; Antonio entscheidet. Muss eine Zeile in docs/lessons.md stehen, die keine Lehre ist, und hältst du den Befund deshalb für einen Fehlalarm, braucht ihr neuer Eintrag in tools/basis/lessons.json ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/lessons/, das master meldet und der PR nicht mehr, und Antonios Approve. Braucht die Prüfung eine Datei außerhalb deines Bereichs, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue."
+  },
+  "basis/quelltext-als-text": {
+    "liste": "L12",
+    "wozu": "Ein Test, der Code- oder Doku-Dateien als Text liest, prüft, ob Wörter im Code stehen, statt was der Code tut: Er bricht bei jedem Umbau und bleibt grün, wenn das Verhalten falsch ist. tools/basis/quelltext-als-text.json hält nur die alten Lesestellen.",
+    "behebung": "Den Code aufrufen und sein Ergebnis prüfen, statt seine Datei zu lesen.",
+    "nichtAngenommen": "Den Pfad so zusammensetzen, dass die Regel ihn nicht erkennt, den Inhalt über einen Umweg lesen oder einen Eintrag in tools/basis/quelltext-als-text.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt die Lesestelle in einem bestehenden Test außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Test ins Issue. Hältst du den Befund für einen Fehlalarm, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an der Regel in tools/eslint-rules/kein-quelltext-als-text.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/quelltext-als-text/ und Antonios Approve. Ein neuer Eintrag in tools/basis/quelltext-als-text.json bleibt dagegen auch mit Approve rot: Die Rot-Probe nimmt diese Datei nicht mit, ein Fehlalarm-Beispiel kann ihn also nicht belegen."
+  },
+  "basis/selbstpruefung": {
+    "liste": "L18",
+    "wozu": "Ein Test, der zwei Werte vergleicht, die beide schon im Test feststehen, ist immer grün, egal was der Code tut; ein Fehler ginge mit scheinbar vorhandenem Test live. tools/basis/selbstpruefung.json hält nur die alten Fälle.",
+    "behebung": "Das Ergebnis des Codes gegen den erwarteten Wert prüfen.",
+    "nichtAngenommen": "Einen der festen Werte über einen Umweg erzeugen, damit er nicht mehr als fest erkannt wird, oder einen Eintrag in tools/basis/selbstpruefung.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt der Fall in einem bestehenden Test außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Test ins Issue. Einen neuen Eintrag nimmt der Bestand nicht an, auch nicht mit Approve; hältst du die Regel hier für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue."
+  },
+  "basis/semgrep": {
+    "liste": "B3",
+    "wozu": "Eingaben von außen (Anrufer, Webhooks, API-Aufrufe) dürfen nicht ungeprüft in Datenbankabfragen, HTML oder Shell-Befehle gelangen. Sonst kann ein Angreifer eigene Befehle einschleusen und Kundendaten lesen oder ändern.",
+    "behebung": "Die Eingabe vor der gefährlichen Stelle prüfen oder unschädlich machen, zum Beispiel Platzhalter in der Datenbankabfrage statt eingefügtem Text, maskierte Ausgabe statt innerHTML, Argumente als Liste statt als Shell-Zeichenkette.",
+    "nichtAngenommen": "Den Code so umstellen, dass das Muster nicht mehr greift, während die Eingabe denselben Weg nimmt, eine Regel aus tools/basis/semgrep-regeln.json streichen oder einen Eintrag in tools/basis/semgrep.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Hältst du den Befund für einen Fehlalarm, weil die Eingabe nachweislich vorher geprüft ist, gehören Fundstelle, Regel-ID und Beleg als Entscheidungsnotiz ins Issue; eine Änderung am Regelsatz braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/semgrep/ und Antonios Approve. Braucht die Behebung eine Datei außerhalb deines Bereichs, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue."
+  },
+  "basis/test-importe": {
+    "liste": "B7 (Testimporte)",
+    "wozu": "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu oder prüfen reine Fachlogik, und Werkzeugtests unter test/werkzeuge/ importieren nichts aus src/. Ein Test an Innereien bricht bei jedem Umbau, obwohl das Verhalten gleich bleibt, und prüft nicht, was Kunden erreicht.",
+    "behebung": "Den Test über einen Eingang aus tools/bereiche.json schreiben (MCP-Werkzeug, HTTP-Route, Webhook, Fassade, Port, Registry) oder die reine Fachlogik als Tabelle prüfen. Ein behobener Eintrag wird aus tools/basis/test-importe.json gestrichen.",
+    "nichtAngenommen": "Den Import über einen Platzhalter-Pfad, eine Testhilfe oder eine Durchreiche verstecken, ein internes Modul in tools/bereiche.json als Eingang eintragen, nur damit der Test durchgeht, oder einen Eintrag in tools/basis/test-importe.json ergänzen (die Liste darf nur kürzer werden). Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Fehlt für das Verhalten ein Eingang, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Bereich ins Issue. Hältst du ein Modul zu Recht für einen Eingang, gehören Modul und Grund als Entscheidungsnotiz ins Issue; eine Änderung an tools/bereiche.json braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/test-importe/ und Antonios Approve."
+  },
+  "basis/testordnung": {
+    "liste": "B9",
+    "wozu": "Neue Testdateien liegen unter test/<bereich>/ und heißen nach dem Verhalten, das sie prüfen. Unter einem Ticket-Namen findet ein Agent den passenden Test nicht, legt einen zweiten an, und bei einer Änderung wird nur einer der beiden angepasst.",
+    "behebung": "Die Datei nach dem geprüften Verhalten benennen und in den Bereich aus tools/bereiche.json legen, zu dem das Verhalten gehört; Ticket-Nummern gehören in Commit-Text und Testtitel.",
+    "nichtAngenommen": "Einen Namen wählen, der kein Ticket-Name ist, aber auch kein Verhalten nennt, die Datei in einen Bereich legen, zu dem sie nicht gehört, oder einen Bereich nur für diese Datei in tools/bereiche.json anlegen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ist ein Teil des Namens ein Fachbegriff, den die Prüfung für einen Ticket-Namen hält, gehören Name und Grund als Entscheidungsnotiz ins Issue; das ist eine Änderung an der Prüfung und braucht eine Freigabe von Antonio oder Jonas. Fehlt der passende Bereich, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Bereich ins Issue."
+  },
+  "basis/testregel-bestaende": {
+    "liste": "B8",
+    "wozu": "tools/basis/selbstpruefung.json und tools/basis/fester-importpfad.json halten nur die alten Verstöße gegen die Testregeln keine-selbstpruefung und fester-importpfad. Wird dort ein neuer Fall eingefroren, gibt es einen weiteren Test, der nichts prüft oder die Importregel umgeht, und ein Fehler geht trotz grüner Tests live.",
+    "behebung": "Den neuen Eintrag streichen und den Befund im Test beheben: das Ergebnis des Codes prüfen oder den Importpfad als festen Text schreiben.",
+    "nichtAngenommen": "Den Fund in eine Liste derselben Art verschieben, die hier nicht verglichen wird (wie tools/basis/quelltext-als-text.json), oder den Test so umschreiben, dass die Regel ihn nicht mehr erkennt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Diese beiden Listen nehmen keinen neuen Eintrag an, auch nicht mit Approve; den Befund im Test zu beheben ist der einzige Weg zu Grün. Hältst du die Regel an dieser Stelle für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue, und der PR wartet auf Antonio."
+  },
+  "basis/versionswechsel": {
+    "liste": "B1 und B3 (Versionsabgleich)",
+    "wozu": "Eine andere Version von jscpd oder Semgrep liefert andere Befunde als die, für die die Basislinie angelegt ist. Der Vergleich würde dann alte Befunde als neu melden oder neue als bekannt durchlassen.",
+    "behebung": "Mit der Version prüfen, die in der Basislinie steht; in der CI legen das Semgrep-Image in .github/workflows/statische-pruefung.yml und package-lock.json sie fest. Ist der Versionswechsel gewollt, wird die Basislinie im selben PR neu angelegt, wie die Zeile darüber sagt, und der PR bringt sonst keine neuen Befunde.",
+    "nichtAngenommen": "Die Basislinie neu anlegen, während derselbe PR zugleich Befunde neu einbringt, oder nur das Feld version von Hand ändern; die neuen Befunde würden still eingefroren. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Läuft lokal eine andere Version, gilt das Ergebnis der CI, statt die Basislinie neu anzulegen. Gehört der Versionswechsel nicht zu deinem Auftrag, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Version ins Issue; der Wechsel kommt als eigener PR mit Antonios Approve."
+  },
+  "basis/wurzel": {
+    "liste": "B6",
+    "wozu": "Der Wurzelordner ist eingefroren, damit er nicht zur Ablage wird: Notiz- und Plan-Dateien dort lesen Agenten wie Anweisungen, und sie umgingen so die Prüfung „Anweisungen nur streichen“. Markdown außer README.md und CLAUDE.md und ein Ordner tasks/ sind deshalb immer Befunde.",
+    "behebung": "Die Datei oder den Ordner in den Unterordner legen, zu dem der Inhalt gehört, zum Beispiel ein Konzept nach docs/, ein Werkzeug nach tools/, ein Skript nach scripts/.",
+    "nichtAngenommen": "Die Datei in einen Unterordner legen, zu dem sie nicht gehört, nur weil die Prüfung dort nicht hinsieht, ihre Endung ändern oder einen Eintrag in tools/basis/wurzel.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Muss die Datei in den Wurzelordner, weil ein Werkzeug sie nur dort findet (wie tsconfig.json), gehören Datei und Grund als Entscheidungsnotiz ins Issue; der neue Eintrag in tools/basis/wurzel.json braucht Antonios Approve und ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/wurzel/ wie tsconfig-in-der-wurzel.json."
+  }
+}

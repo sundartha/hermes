@@ -3,8 +3,10 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ohneZweck, zweckBlock, zweckTexteVereinen } from "../../tools/auftrag/zweck.mjs";
-import { REPO_ROOT, runIn } from "./probe-repo.js";
+import { BEFUNDQUELLEN } from "../../tools/abhaengigkeiten.mjs";
+import { MELDUNG, kenntZweck, ohneZweck, zweckBlock, zweckTexteVereinen } from "../../tools/auftrag/zweck.mjs";
+import { TOOLS, VERSIONSWECHSEL } from "../../tools/basis-vergleich.mjs";
+import { DEPENDENCY_TOOL, REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WEITERE = "tools/zweck";
 const ZEIGEN = join(REPO_ROOT, "tools/zweck-zeigen.mjs");
@@ -38,7 +40,16 @@ const VERBOTENE_WOERTER = [
   " Testimporte an internen Modulen",
 ];
 const EXIT_OK = 0;
+const EXIT_BEFUND = 1;
 const EXIT_AUFRUF = 2;
+const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
+const ABHAENGIGKEITEN = {
+  ".dependency-cruiser.cjs": readFileSync(join(REPO_ROOT, ".dependency-cruiser.cjs"), "utf8"),
+  ".dependency-cruiser-known-violations.json": "[]\n",
+  "src/store/vorrat.js": "export const vorrat = 1;\n",
+  "src/store.js": 'export { vorrat } from "./store/vorrat.js";\n',
+  "src/routes/lager.js": 'import { vorrat } from "../store.js";\nexport const lager = vorrat;\n',
+};
 
 function gelesen(pfad) {
   return JSON.parse(readFileSync(join(REPO_ROOT, pfad), "utf8"));
@@ -104,7 +115,7 @@ test("zweckBlock findet jede ID unter tools/zweck/, und ohneZweck filtert ihren 
 });
 
 test("zweck-zeigen schreibt die Blöcke der genannten IDs auf stderr", () => {
-  const ids = ["jscpd", ...weitereEintraege().map(({ id }) => id).slice(0, 1)];
+  const ids = [MELDUNG.JSCPD, ...weitereEintraege().map(({ id }) => id).slice(0, 1)];
   const lauf = zeigen(ids);
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.equal(lauf.stdout, "");
@@ -112,7 +123,7 @@ test("zweck-zeigen schreibt die Blöcke der genannten IDs auf stderr", () => {
 });
 
 test("zweck-zeigen scheitert laut an einer unbekannten ID und ohne ID", () => {
-  const unbekannt = zeigen(["jscpd", "basis/gibt-es-nicht"]);
+  const unbekannt = zeigen([MELDUNG.JSCPD, "basis/gibt-es-nicht"]);
   assert.equal(unbekannt.status, EXIT_AUFRUF);
   assert.equal(unbekannt.stdout, "");
   assert.match(unbekannt.stderr, /Kein Zweck-Text für basis\/gibt-es-nicht/);
@@ -120,4 +131,79 @@ test("zweck-zeigen scheitert laut an einer unbekannten ID und ohne ID", () => {
   const ohne = zeigen([]);
   assert.equal(ohne.status, EXIT_AUFRUF);
   assert.match(ohne.stderr, /Aufruf: node tools\/zweck-zeigen\.mjs/);
+});
+
+function nachBefunden(ausgabe, id) {
+  const zeilen = ausgabe.split("\n").filter((zeile) => zeile !== "");
+  const block = zweckBlock(id);
+  const anfang = zeilen.indexOf(block[0]);
+  assert.ok(anfang > 0, `kein Block ${id} nach einem Befund:\n${ausgabe}`);
+  assert.deepEqual(zeilen.slice(anfang, anfang + block.length), block, ausgabe);
+  return ohneZweck(zeilen);
+}
+
+test("jedes Werkzeug in tools/basis-vergleich.mjs hat einen Zweck-Text", () => {
+  for (const [name, werkzeug] of Object.entries(TOOLS)) {
+    assert.equal(typeof werkzeug.zweck, "string", `${name} hat kein Feld zweck`);
+    assert.ok(kenntZweck(werkzeug.zweck), `${name}: kein Text für ${werkzeug.zweck}`);
+  }
+  assert.ok(kenntZweck(VERSIONSWECHSEL));
+});
+
+test("jede Befundquelle von tools/abhaengigkeiten.mjs hat einen Zweck-Text", () => {
+  assert.ok(BEFUNDQUELLEN.length > 0);
+  for (const [index, quelle] of BEFUNDQUELLEN.entries()) {
+    assert.equal(typeof quelle.zweck, "string", `Befundquelle ${index} hat keine Zweck-ID`);
+    assert.ok(kenntZweck(quelle.zweck), `Befundquelle ${index}: kein Text für ${quelle.zweck}`);
+  }
+});
+
+test("tools/zweck/basis.json hat keine ID, die kein Werkzeug und keine Befundquelle nutzt", () => {
+  const genutzt = new Set([
+    ...Object.values(TOOLS).map(({ zweck }) => zweck),
+    VERSIONSWECHSEL,
+    ...BEFUNDQUELLEN.map(({ zweck }) => zweck),
+  ]);
+  const basis = Object.keys(gelesen(`${WEITERE}/basis.json`));
+  assert.deepEqual(basis.toSorted(), [...genutzt].filter((id) => id?.startsWith("basis/")).toSorted());
+});
+
+test("ein neuer Verstoß gegen eine Abhängigkeitsregel nennt nach den Befunden genau den Block dieser Befundquelle", (context) => {
+  const verzeichnis = probeRepository(context, ABHAENGIGKEITEN);
+  writeFiles(verzeichnis, { "src/routes/lager.js": 'import { vorrat } from "../store/vorrat.js";\nexport const lager = vorrat;\n' });
+  commitAll(verzeichnis, "Verstoß");
+  const lauf = runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD~1"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  const befunde = nachBefunden(lauf.stderr, "basis/abhaengigkeitsregeln");
+  assert.equal(befunde.length, 1, lauf.stderr);
+  assert.match(befunde[0], /^Neuer Verstoß: src\/routes\/lager\.js → src\/store\/vorrat\.js/);
+  for (const andere of ["basis/test-importe", "basis/testregel-bestaende", "basis/testordnung"]) {
+    assert.ok(!lauf.stderr.includes(zweckBlock(andere)[0]), andere);
+  }
+});
+
+test("ein grüner Lauf von tools/abhaengigkeiten.mjs nennt keinen Block", (context) => {
+  const verzeichnis = probeRepository(context, ABHAENGIGKEITEN);
+  const lauf = runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD"]);
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.doesNotMatch(`${lauf.stdout}${lauf.stderr}`, /Wozu:/);
+});
+
+test("ein neuer Eintrag im Wurzelordner nennt nach den Befunden den Block der Wurzelprüfung", (context) => {
+  const verzeichnis = probeRepository(context, { "README.md": "# Probe\n", "package.json": "{}\n" });
+  assert.equal(runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, "wurzel", "--basis-anlegen"]).status, EXIT_OK);
+  writeFiles(verzeichnis, { "plan.md": "# Plan\n" });
+  const lauf = runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, "wurzel"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  const befunde = nachBefunden(lauf.stderr, "basis/wurzel");
+  assert.ok(befunde.some((zeile) => zeile.includes("plan.md gehört nicht in den Wurzelordner")), lauf.stderr);
+});
+
+test("eine andere jscpd-Version als in der Basislinie bricht mit dem Block des Versionswechsels ab", (context) => {
+  const verzeichnis = probeDirectory(context, { "tools/basis/jscpd.json": '{"version":"0.0.0","befunde":[]}\n' });
+  const lauf = runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, "jscpd"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  assert.match(lauf.stderr, /^Abbruch: jscpd .* ist installiert, tools\/basis\/jscpd\.json gilt für jscpd 0\.0\.0/);
+  nachBefunden(lauf.stderr, VERSIONSWECHSEL);
+  assert.ok(!lauf.stderr.includes(zweckBlock(MELDUNG.JSCPD)[0]), lauf.stderr);
 });

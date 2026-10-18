@@ -4,13 +4,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
@@ -373,7 +374,7 @@ function keyPart(index) {
 const PATH_KEYED = { path: pfadAusSchluessel, back: pfadZurueck };
 const PER_FILE = { ...PATH_KEYED, findingPerFile: true };
 
-const TOOLS = {
+export const TOOLS = {
   jscpd: {
     findings: jscpdFindings,
     version: jscpdVersion,
@@ -384,21 +385,26 @@ const TOOLS = {
     zweck: MELDUNG.JSCPD,
     findingPerFile: true,
   },
-  knip: { findings: knipFindings, path: keyPart(1), back: knipBack },
+  knip: { findings: knipFindings, path: keyPart(1), back: knipBack, zweck: "basis/knip" },
   semgrep: {
     findings: semgrepFindings,
     version: semgrepVersion,
     path: keyPart(1),
     back: teilZurueck(1),
     findingPerFile: true,
+    zweck: "basis/semgrep",
   },
-  "quelltext-als-text": { findings: textReadingFindings, ...PER_FILE },
-  selbstpruefung: { findings: selfCheckFindings, ...PER_FILE },
-  "fester-importpfad": { findings: placeholderImportFindings, ...PER_FILE },
-  lessons: { findings: lessonsFindings, ...PER_FILE },
-  anweisungen: { findings: instructionFindings, ...PATH_KEYED },
-  wurzel: { findings: rootFindings, ...PATH_KEYED },
+  "quelltext-als-text": { findings: textReadingFindings, ...PER_FILE, zweck: "basis/quelltext-als-text" },
+  selbstpruefung: { findings: selfCheckFindings, ...PER_FILE, zweck: "basis/selbstpruefung" },
+  "fester-importpfad": { findings: placeholderImportFindings, ...PER_FILE, zweck: "basis/fester-importpfad" },
+  lessons: { findings: lessonsFindings, ...PER_FILE, zweck: "basis/lessons" },
+  anweisungen: { findings: instructionFindings, ...PATH_KEYED, zweck: "basis/anweisungen" },
+  wurzel: { findings: rootFindings, ...PATH_KEYED, zweck: "basis/wurzel" },
 };
+
+export const VERSIONSWECHSEL = "basis/versionswechsel";
+
+class VersionFailure extends Error {}
 
 function baselineFile(toolName) {
   return join(BASELINE_DIR, `${toolName}.json`);
@@ -548,7 +554,7 @@ function installedVersion(tool, root) {
 function checkVersion({ toolName, tool, root }, baseline) {
   const installed = installedVersion(tool, root);
   if (installed === baseline.version) return;
-  throw new Error(
+  throw new VersionFailure(
     `${toolName} ${installed} ist installiert, ${baselineFile(toolName)} gilt für ${toolName} ${baseline.version}. ` +
       `Nach einem Versionswechsel wird die Basislinie im selben PR neu angelegt: rm ${baselineFile(toolName)} && node tools/basis-vergleich.mjs ${toolName} --${CREATE_OPTION}`,
   );
@@ -743,11 +749,16 @@ function selectedMode(values) {
   return compare;
 }
 
-try {
-  const { toolName, values } = parseOptions();
-  const basis = values[BASIS_OPTION];
-  await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd(), basis });
-} catch (error) {
-  console.error(`Abbruch: ${error.message}`);
-  process.exitCode = EXIT_FAILURE;
+async function main() {
+  try {
+    const { toolName, values } = parseOptions();
+    const basis = values[BASIS_OPTION];
+    await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd(), basis });
+  } catch (error) {
+    console.error(`Abbruch: ${error.message}`);
+    if (error instanceof VersionFailure) console.error(zweckBlock(VERSIONSWECHSEL).join(LINE_BREAK));
+    process.exitCode = EXIT_FAILURE;
+  }
 }
+
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) await main();
