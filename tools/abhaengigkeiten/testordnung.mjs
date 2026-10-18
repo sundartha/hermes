@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { umbenennungen } from "../umbenennung.mjs";
+import { run } from "./prozess.mjs";
 
 const BEREICHE_DATEI = "tools/bereiche.json";
 const TEST_ORDNER = "test/";
@@ -11,7 +11,6 @@ const DATEI_TRENNER = "\0";
 const TOKEN_TRENNER = /[-_.]/;
 const TOKEN_VERBINDER = "-";
 const BEREICH_UND_DATEI = 2;
-const MAX_GIT_AUSGABE = 268_435_456;
 const ZUSAMMENFASSUNG =
   "neue Dateien unter test/ seit der Basis, alle unter test/<bereich>/ und ohne Ticket-Namen";
 
@@ -47,10 +46,7 @@ export function liegtGeordnet(pfad, erlaubt) {
 
 function neueDateien(basis) {
   const args = ["diff", "--no-renames", "--diff-filter=A", "--name-only", "-z", basis, "HEAD"];
-  const lauf = spawnSync("git", [...args, "--", TEST_ORDNER], {
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_AUSGABE,
-  });
+  const lauf = run("git", [...args, "--", TEST_ORDNER]);
   if (lauf.status !== 0) throw new Error(`git diff ist gescheitert: ${lauf.stderr.trim()}`);
   return lauf.stdout.split(DATEI_TRENNER).filter(Boolean);
 }
