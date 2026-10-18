@@ -9,7 +9,7 @@ const KEINE_TREFFER = "keine Treffer";
 const KEINE_DATEIEN = "keine Dateien";
 const GESPERRT = [":(exclude,glob,icase)**/.env*", ":(exclude,glob)data/**"];
 const CODE_ORDNER = ["src", "tools"];
-const CODE_ENDUNGEN = ["js", "mjs", "cjs"];
+const CODE_ENDUNGEN = ["js", "mjs", "cjs", "ts", "mts", "cts"];
 const CODE_DATEIEN = CODE_ORDNER.flatMap((ordner) => CODE_ENDUNGEN.map((endung) => `:(glob)${ordner}/**/*.${endung}`));
 
 function unsaubereAbgelehnt(pfade) {

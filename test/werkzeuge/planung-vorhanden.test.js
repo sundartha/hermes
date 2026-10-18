@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { NUTZEN, erkundungBefunde } from "../../tools/auftrag/planung/erkundung.mjs";
+import { suchTreffer } from "../../tools/auftrag/planung/suche.mjs";
 import { probeRepository } from "./probe-repo.js";
 
 const EINGANG = ["export function nimmAn(anfrage) {", "  return anfrage;", "}", ""].join("\n");
@@ -18,8 +19,9 @@ const GANZE_FUNKTION = { von: 1, bis: 3 };
 const NEUE_FUNKTION = { datei: "src/bericht.js", funktion: "gesamtKosten", neu: "funktion", neueZeilen: GESCHAETZTE_NEUE_ZEILEN };
 const TREFFER_DER_REGEL = "src/kosten.js:3";
 
-function repo(context) {
+function repo(context, weitere = {}) {
   return probeRepository(context, {
+    ...weitere,
     "src/eingang.js": EINGANG,
     "src/kosten.js": KOSTEN,
     "docs/design.md": "Die Summe prüft isSafeInteger nach der Rundungsregel.\n",
@@ -111,4 +113,25 @@ test("eine Suche, deren Begriffe außer dem neuen Namen im Code nichts finden, i
 test("ein Fund nur in Dokumenten ist kein Fund im Code: die Suche zählt ihn nicht, und ein Treffer dort ist ein Befund", (context) => {
   nurBefund(pruefe(context, { suche: ["gesamtKosten", "Rundungsregel"], treffer: [], urteil: "kein Treffer passt, weil es nur im Design steht" }), "findet im Code nichts");
   nurBefund(pruefe(context, { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, "docs/design.md:1"] }), "treffer docs/design.md:1 liegt in keiner Datei");
+});
+
+const REGEL_IN_TYPESCRIPT = ["export function rundeAb(betrag: number): number {", "  return Math.floor(betrag);", "}", ""].join("\n");
+
+function pruefeSucheIn(context, datei) {
+  const root = repo(context, { [datei]: REGEL_IN_TYPESCRIPT });
+  assert.deepEqual(suchTreffer("rundeAb", root), [`${datei}:1`]);
+  const vorhanden = { suche: ["gesamtKosten", "rundeAb"], treffer: [`${datei}:2`], urteil: "kein Treffer passt, weil rundeAb Beträge abrundet und hier summiert wird" };
+  assert.deepEqual(erkundungBefunde(bericht(vorhanden), { gruppe: ["S1"], soll: SOLL, root }).befunde, []);
+}
+
+test("die Suche findet Code in .ts-Dateien, und ein Treffer dort liegt in einer Datei mit Fund", (context) => {
+  pruefeSucheIn(context, "src/regel.ts");
+});
+
+test("die Suche findet Code in .mts-Dateien, und ein Treffer dort liegt in einer Datei mit Fund", (context) => {
+  pruefeSucheIn(context, "src/regel.mts");
+});
+
+test("die Suche findet Code in .cts-Dateien, und ein Treffer dort liegt in einer Datei mit Fund", (context) => {
+  pruefeSucheIn(context, "src/regel.cts");
 });
