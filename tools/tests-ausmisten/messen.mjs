@@ -181,9 +181,16 @@ async function messeGruppe({ datei, mutate, gruppe, erlaubt }) {
   return { ergebnisse, ausgenommen: faelle.map((fall) => ({ datei, ...fall })) };
 }
 
+function bereiche(datei, zeilen) {
+  return [...new Set(zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`))];
+}
+
 function offeneBereiche(datei, stati) {
   const offen = [...stati.values()].filter(({ status }) => rang(status) === 0);
-  return [...new Set(offen.map(({ zeilen: [von, bis] }) => `${datei}:${von}-${bis}`))];
+  return bereiche(
+    datei,
+    offen.map(({ zeilen }) => zeilen),
+  );
 }
 
 function nachTests(datei, tests, graph) {
@@ -203,7 +210,10 @@ function offen(datei, { stati, ziele, teil }) {
   if (ziele === undefined)
     return stati.size === 0 ? [ganzerTeil(datei, teil)] : offeneBereiche(datei, stati);
   const uebrig = [...ziele].filter(([schluessel]) => rang(stati.get(schluessel)?.status) === 0);
-  return [...new Set(uebrig.map(([, [von, bis]]) => `${datei}:${von}-${bis}`))];
+  return bereiche(
+    datei,
+    uebrig.map(([, zeilen]) => zeilen),
+  );
 }
 
 async function messe({ datei, testgruppen, ziele, teil, erlaubt = () => true }) {
