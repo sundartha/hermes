@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const NUMSTAT_FELDER = 3;
 const BINAER = "-";
+const STATUS_SPALTEN = 3;
 export const NUL = "\0";
 const AUFTRAG_ZEILE = "^Auftrag: ";
 const RUECKNAHME_ZEILE = "^This reverts commit ";
@@ -29,6 +30,11 @@ export function legeWorktreeAn(commit, ordner, cwd) {
 
 export function istSauber(cwd) {
   return git(["status", "--porcelain", "--untracked-files=all"], { cwd }).trim() === "";
+}
+
+export function offenePfade(cwd) {
+  const eintraege = git(["status", "--porcelain", "--untracked-files=all", "-z"], { cwd }).split(NUL);
+  return eintraege.filter(Boolean).map((eintrag) => eintrag.slice(STATUS_SPALTEN));
 }
 
 export function kopf(cwd) {

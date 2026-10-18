@@ -201,3 +201,15 @@ test("Testumbau-Mutation: verschiebt der Umbau eine Prüfung in eine Hilfe, blei
   assert.match(rot.ausgabe, new RegExp(`^Verstoß: Mutant nicht mehr getötet: src/zahl\\.js:${ZEILE_DER_NEGATIV_PRUEFUNG}:`, "m"));
   assert.match(rot.ausgabe, /die umgebauten Tests prüfen weniger als vorher/);
 });
+
+test("Testumbau-Mutation: trifft die Vorher-Seite den Speicher, ist ein Umbau trotzdem rot, wenn eine Prüfung wegfällt", (context) => {
+  const repo = zahlRepo(context);
+  writeFiles(repo, { "test/hilfe.js": HILFE, "test/zahl.test.js": zahlTest(UEBER_HILFE, POSITIV) });
+  const erst = mutation(repo);
+  const wieder = mutation(repo);
+  assert.equal(erst.status, EXIT_ROT, erst.ausgabe);
+  assert.doesNotMatch(erst.ausgabe, /Vorher-Seite aus dem Speicher/);
+  assert.match(wieder.ausgabe, /Vorher-Seite aus dem Speicher/);
+  assert.equal(wieder.status, EXIT_ROT, wieder.ausgabe);
+  assert.match(wieder.ausgabe, new RegExp(`^Verstoß: Mutant nicht mehr getötet: src/zahl\\.js:${ZEILE_DER_NEGATIV_PRUEFUNG}:`, "m"));
+});
