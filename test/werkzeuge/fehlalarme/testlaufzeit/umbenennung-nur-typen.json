@@ -1,0 +1,23 @@
+{
+  "titel": "Umbenennung .test.js→.test.ts nur mit Typen, der Zeitglieder-Eintrag wandert mit",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.js\": 1 }"],
+    "test/alt.test.js": [
+      "setTimeout(() => {}, 1);",
+      "export function warte(ms) {",
+      "  return ms;",
+      "}"
+    ]
+  },
+  "loeschen": ["test/alt.test.js"],
+  "dateien": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.ts\": 1 }"],
+    "test/alt.test.ts": [
+      "setTimeout(() => {}, 1);",
+      "export function warte(ms: number): number {",
+      "  return ms;",
+      "}"
+    ]
+  },
+  "erwartet": "ist neu oder steigt"
+}
