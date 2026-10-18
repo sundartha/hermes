@@ -104,7 +104,7 @@ function prepare(definition, context, files = []) {
   };
 }
 
-function fileText(content) {
+export function fileText(content) {
   if (!Array.isArray(content)) return content;
   const lines = content.map((line) => (Array.isArray(line) ? line.join("") : line));
   return `${lines.join("\n")}\n`;

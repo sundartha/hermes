@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ROTPROBEN_DIR, fileText } from "../pruefungen-messen.mjs";
 import { rot, technisch } from "./bericht.mjs";
 import { befehl, bereinigt, git } from "./git.mjs";
 
@@ -13,6 +14,8 @@ const PR_NUMMER = /^\d+$/;
 const TESTDATEI = /\.test\.js$/;
 const UNGESCHUETZTE_TESTS = "test/werkzeuge/";
 const DATEINAMENTRENNER = "\0";
+const PREFIXE = ["--src-prefix=a/", "--dst-prefix=b/"];
+const DIFF_MIT_UNTERSCHIED = 1;
 
 export const FAELLE = [
   {
@@ -53,6 +56,30 @@ export const FAELLE = [
     schritt: "Freigabe-Prüfung",
     pflicht: "Freigabe-Prüfung",
   },
+  {
+    fall: "ts-any",
+    vorlage: `${ROTPROBEN_DIR}/eslint/ts-any.json`,
+    workflow: "CI",
+    job: "Prüfungen",
+    schritt: "Lint",
+    pflicht: "CI",
+  },
+  {
+    fall: "ts-as",
+    vorlage: `${ROTPROBEN_DIR}/eslint/ts-as.json`,
+    workflow: "CI",
+    job: "Prüfungen",
+    schritt: "Lint",
+    pflicht: "CI",
+  },
+  {
+    fall: "ts-typfehler",
+    vorlage: `${ROTPROBEN_DIR}/typpruefung/typfehler-der-laeuft.json`,
+    workflow: "CI",
+    job: "Prüfungen",
+    schritt: "Typprüfung",
+    pflicht: "CI",
+  },
 ];
 
 class NichtErzeugbar extends Error {}
@@ -92,13 +119,43 @@ function vorlageFuer({ datei, ordner, anker }) {
   return vorlage;
 }
 
+function neuDiff(pfad) {
+  const lauf = befehl("git", ["diff", "--no-color", "--no-ext-diff", "--no-index", ...PREFIXE, "--", "/dev/null", pfad]);
+  if (lauf.status !== DIFF_MIT_UNTERSCHIED) throw new Error(`git diff ist gescheitert: ${bereinigt(lauf.stderr)}`);
+  return lauf.stdout;
+}
+
+function neueDateienPatch(vorlage) {
+  if (!existsSync(vorlage)) throw new NichtErzeugbar(`nicht erzeugbar: ${vorlage} fehlt`);
+  const { dateien, vorher, loeschen } = JSON.parse(readFileSync(vorlage, "utf8"));
+  if (vorher !== undefined || loeschen !== undefined) {
+    throw new NichtErzeugbar(`nicht erzeugbar: ${vorlage} braucht vorher oder loeschen; die Wochenprobe legt nur neue Dateien an`);
+  }
+  const pfade = Object.keys(dateien);
+  const vorhanden = pfade.find((pfad) => existsSync(pfad));
+  if (vorhanden !== undefined) throw new NichtErzeugbar(`nicht erzeugbar: ${vorhanden} gibt es schon`);
+  const angelegt = [];
+  try {
+    return pfade
+      .map((pfad) => {
+        angelegt.push(mkdirSync(dirname(pfad), { recursive: true }));
+        writeFileSync(pfad, fileText(dateien[pfad]));
+        return neuDiff(pfad);
+      })
+      .join("");
+  } finally {
+    for (const pfad of pfade) rmSync(pfad, { force: true });
+    for (const ordner of angelegt.filter(Boolean)) rmSync(ordner, { recursive: true, force: true });
+  }
+}
+
 function patchFuer(fall) {
+  if (fall.vorlage !== undefined) return neueDateienPatch(fall.vorlage);
   const datei = vorlageFuer(fall);
   if (!existsSync(datei)) throw new NichtErzeugbar(`nicht erzeugbar: ${datei} fehlt`);
   writeFileSync(datei, geaendert({ ...fall, datei }, readFileSync(datei, "utf8")));
   try {
-    const prefixe = ["--src-prefix=a/", "--dst-prefix=b/"];
-    return git(["diff", "--no-color", "--no-ext-diff", ...prefixe, "--", datei]);
+    return git(["diff", "--no-color", "--no-ext-diff", ...PREFIXE, "--", datei]);
   } finally {
     git(["checkout", "--", datei]);
   }
