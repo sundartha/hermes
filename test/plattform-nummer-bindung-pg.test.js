@@ -9,6 +9,26 @@ import { makePgTestStore } from "./pg-helpers.js";
 
 const CUSTOMER_DID = "+4915112345678";
 const ANI = "+15005550006";
+const ANI_SCHLUESSEL = { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI };
+
+function bindeAni(state) {
+  ops.bindPlatformNumber(state, { ...ANI_SCHLUESSEL, provider: PROVIDER.TELNYX, tenantId: null });
+}
+
+async function speichereGebundeneAktiveNummer(store, { id, tenantId }) {
+  const state = store.load();
+  ops.registerTenant(state, tenantId);
+  state.numbers.push({
+    id,
+    tenantId,
+    e164: CUSTOMER_DID,
+    provider: PROVIDER.TELNYX,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: `ext_${id}`,
+  });
+  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  await store.save();
+}
 
 async function reopen(db) {
   const runner = {
@@ -43,18 +63,7 @@ test("P1: NEUSTART-Round-Trip - binden, save(), Spiegel verwerfen, neu hydrieren
 
 test("P2: Ebene C wirft am Store vorbei - rohes UPDATE auf gebundene Zeile", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  ops.registerTenant(state, "t1");
-  state.numbers.push({
-    id: "n1",
-    tenantId: "t1",
-    e164: CUSTOMER_DID,
-    provider: PROVIDER.TELNYX,
-    status: NUMBER_STATUS.ACTIVE,
-    providerNumberId: "ext_n1",
-  });
-  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
-  await store.save();
+  await speichereGebundeneAktiveNummer(store, { id: "n1", tenantId: "t1" });
 
   await assert.rejects(
     () => db.query(`UPDATE number SET status='released' WHERE id='n1'`),
@@ -165,8 +174,7 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
 
 test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen; nach Unbind wieder erlaubt", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  ops.bindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  bindeAni(store.load());
   await store.save();
 
   await assert.rejects(() =>
@@ -177,8 +185,8 @@ test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen
   );
 
   const fresh = store.load();
-  ops.unbindPlatformNumber(fresh, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI });
-  ops.bindPlatformNumber(fresh, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  ops.unbindPlatformNumber(fresh, ANI_SCHLUESSEL);
+  bindeAni(fresh);
   await store.save();
 
   const openRows = (
@@ -219,13 +227,11 @@ test("P9: Bindungstabelle ist global lesbar - RLS ENABLE+FORCE, nur die globale 
 
 test("P10: Teilindex - nach Unbind und Rebind stehen die freigegebene und die neue Bindung beide in der Datenbank", async () => {
   const { store, db } = await makePgTestStore();
-  const key = { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI };
-  const bind = () => ops.bindPlatformNumber(store.load(), { ...key, provider: PROVIDER.TELNYX, tenantId: null });
-  bind();
+  bindeAni(store.load());
   await store.save();
-  ops.unbindPlatformNumber(store.load(), key);
+  ops.unbindPlatformNumber(store.load(), ANI_SCHLUESSEL);
   await store.save();
-  bind();
+  bindeAni(store.load());
   await store.save();
 
   const { rows } = await db.query(`SELECT released_at IS NULL AS open FROM platform_number_use WHERE e164=$1`, [ANI]);
@@ -234,12 +240,8 @@ test("P10: Teilindex - nach Unbind und Rebind stehen die freigegebene und die ne
 
 test("P11: Sperren (suspended) einer gebundenen Nummer wirft ebenfalls, die Zeile bleibt aktiv", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  const number = { id: "n11", tenantId: "t11", e164: CUSTOMER_DID, provider: PROVIDER.TELNYX };
-  ops.registerTenant(state, number.tenantId);
-  state.numbers.push({ ...number, providerNumberId: "ext_n11", status: NUMBER_STATUS.ACTIVE });
-  ops.bindPlatformNumber(state, { e164: number.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: number.provider, tenantId: null });
-  await store.save();
+  const number = { id: "n11", tenantId: "t11" };
+  await speichereGebundeneAktiveNummer(store, number);
 
   const err = await db.query(`UPDATE number SET status='suspended' WHERE id=$1`, [number.id]).catch((e) => e);
   assert.equal(err.code, "P0001", "der Trigger wirft");
