@@ -1,0 +1,12 @@
+{
+  "titel": "Neuer Test importiert einen Eingang, der als .ts vorliegt",
+  "vorher": {
+    "src/routes/voice.ts": ["export const wert: number = 2;"]
+  },
+  "dateien": {
+    "test/anrufe/eingang.test.js": [
+      "import { wert } from \"../../src/routes/voice.ts\";",
+      "export const genutzt = wert;"
+    ]
+  }
+}
