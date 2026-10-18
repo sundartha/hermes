@@ -88,8 +88,7 @@ function schluessel({ datei, name }) {
 }
 
 function namensmuster(tests) {
-  const namen = new Set(tests.flatMap(({ name, vorfahren }) => [name, ...vorfahren]));
-  return [...namen].map((name) => `^${maskiert(name)}$`);
+  return [...new Set(tests.flatMap(({ name, vorfahren }) => [`^${maskiert(name)}$`, ...vorfahren]))];
 }
 
 function lauf(tests, vorspann) {

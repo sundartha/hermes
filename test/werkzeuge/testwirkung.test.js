@@ -129,3 +129,37 @@ test("die Attrappe verbirgt sich in execArgv auch dann, wenn Node das Vorladen a
   const verborgen = execArgvMitVorladen("child-v8");
   assert.deepEqual(verborgen.filter((eintrag) => eintrag.includes("ohne-pruefung")), []);
 });
+
+function unterTemplateEltern(...unterfaelle) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { addiere } from "../src/rechnen.js";',
+    "for (const fall of [{ id: 1 }, { id: 2 }]) {",
+    "  test(`rechnet (${fall.id})`, async (t) => {",
+    ...unterfaelle.flatMap(([name, zeile]) => [`    await t.test(${JSON.stringify(name)}, () => {`, `      ${zeile}`, "    });"]),
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function pruefeUnterTemplateEltern(context, neuerUnterfall) {
+  const bestehend = ["addiert", "assert.equal(addiere(fall.id, 1), fall.id + 1);"];
+  const repo = probeRepository(context, { ...BASIS, "test/eltern.test.js": unterTemplateEltern(bestehend) });
+  writeFiles(repo, { "test/eltern.test.js": unterTemplateEltern(bestehend, neuerUnterfall) });
+  commitAll(repo, "Neuer Unterfall");
+  return runIn(repo, process.execPath, [WERKZEUG, "--basis", "HEAD~1"]);
+}
+
+test("ein wirksamer neuer Unterfall unter einem Elterntest mit Template-Namen läuft und ist grün", (context) => {
+  const lauf = pruefeUnterTemplateEltern(context, ["addiert null", "assert.equal(addiere(0, fall.id), fall.id);"]);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^grün: 1 neue Tests, 0 ohne wirksame Prüfung, 0 wackeln in 5 Läufen, 0 nicht gelaufen\.$/m);
+});
+
+test("ein neuer Unterfall ohne Prüfung unter einem Elterntest mit Template-Namen macht die Testwirkung rot", (context) => {
+  const lauf = pruefeUnterTemplateEltern(context, ["rechnet nur", "addiere(0, fall.id);"]);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test bleibt grün, obwohl jede Prüfung scheitert: test\/eltern\.test\.js › rechnet nur$/m);
+});
