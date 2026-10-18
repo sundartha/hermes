@@ -71,6 +71,25 @@ test("ein Umbau, der ungetestetes Verhalten entfernt, wird auf dem alten Stand v
   assert.equal(worktrees.trim().split("\n").length, 1);
 });
 
+test("auf dem alten Stand finden Tests die Pakete im node_modules ihres Repos wie auf dem neuen", (context) => {
+  const umfeld = [
+    'import assert from "node:assert/strict";',
+    'import { existsSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'import { einordnen } from "../src/zahl.js";',
+    'test("ein Werkzeug findet die Pakete im eigenen Repo", () => {',
+    '  assert.ok(existsSync("node_modules/paket-aus-node-modules/package.json"));',
+    '  assert.equal(einordnen(-1), "negativ");',
+    "});",
+    "",
+  ].join("\n");
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": quelle(NEGATIV, NULL), "test/umfeld.test.js": umfeld });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV) });
+  const alt = pruefe(repo, "--basis", "HEAD", "--alter-stand");
+  assert.equal(alt.status, EXIT_ROT, alt.stdout + alt.stderr);
+  assert.match(alt.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:3:/m);
+});
+
 test("geänderte Zeilen in Dateien, die Git als binär ansieht, prüft die Mutationsprüfung wie jede andere", (context) => {
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, {

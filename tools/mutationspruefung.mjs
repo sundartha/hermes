@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, normalize, relative } from "node:path";
 import { chdir, cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -9,7 +9,6 @@ import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
-import { legeWorktreeAn } from "./auftrag/git.mjs";
 import { gleichwertigGemeldet } from "./auftrag/gleichwertig.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
@@ -20,6 +19,7 @@ import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { entferneArbeitsordner, legeArbeitsordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
@@ -31,6 +31,13 @@ const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
 const GRAPH_WURZELN = ["src", "test"];
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
+const PFADNENNUNG = /(?:[\w.-]+\/)+[\w-]+(?:\.[\w-]+)*\.[cm]?[jt]s\b/g;
+const NENNENDE_DATEI = /^(?!src\/|tools\/).+\.[cm]?[jt]s$/;
+const LITERALFOLGE = /(["'])[^"'\n]*\1(?:\s*,\s*(["'])[^"'\n]*\2)+/g;
+const LITERAL = /(["'])([^"'\n]*)\1/g;
+const CODEPFAD = /\.[cm]?[jt]s$/;
+const FREMDE_PAKETE = "node_modules";
+const AUSSERHALB = "..";
 const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
 const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
@@ -114,13 +121,56 @@ function geaenderteZeilen(diff, seite) {
   return zeilen;
 }
 
-async function importierer() {
-  const { output } = await cruise(GRAPH_WURZELN, CRUISE_OPTIONEN);
+function eigeneDatei(pfad) {
+  return !pfad.startsWith(AUSSERHALB) && !pfad.split("/").includes(FREMDE_PAKETE) && existsSync(pfad) && statSync(pfad).isFile();
+}
+
+function segmentpfade(text) {
+  return [...text.matchAll(LITERALFOLGE)].flatMap(([folge]) => {
+    const teile = [...folge.matchAll(LITERAL)].map(([, , teil]) => teil);
+    return teile.flatMap((_teil, von) => teile.map((_rest, bis) => teile.slice(von, bis + 1).join("/")).slice(von + 1));
+  });
+}
+
+function genannteDateien(modul) {
+  const text = readFileSync(modul, "utf8");
+  const nennungen = [...[...text.matchAll(PFADNENNUNG)].map(([pfad]) => pfad), ...segmentpfade(text).filter((pfad) => CODEPFAD.test(pfad))];
+  const ziele = nennungen.flatMap((pfad) => [normalize(pfad), join(dirname(modul), pfad)]);
+  return [...new Set(ziele)].filter((ziel) => ziel !== modul && eigeneDatei(ziel));
+}
+
+async function abhaengigkeiten(wurzeln) {
+  const { output } = await cruise(wurzeln, CRUISE_OPTIONEN);
+  return new Map(
+    output.modules.map(({ source, dependencies }) => [
+      source,
+      { importe: dependencies.map(({ resolved }) => resolved), genannt: NENNENDE_DATEI.test(source) && eigeneDatei(source) ? genannteDateien(source) : [] },
+    ]),
+  );
+}
+
+function umkehren(nachQuelle, kanten) {
   const nachZiel = new Map();
-  for (const { source, dependencies } of output.modules) {
-    for (const { resolved } of dependencies) nachZiel.set(resolved, [...(nachZiel.get(resolved) ?? []), source]);
+  for (const [quelle, ziele] of nachQuelle) {
+    for (const ziel of kanten(ziele)) nachZiel.set(ziel, [...(nachZiel.get(ziel) ?? []), quelle]);
   }
   return nachZiel;
+}
+
+async function importierer() {
+  let wurzeln = GRAPH_WURZELN;
+  let nachQuelle = await abhaengigkeiten(wurzeln);
+  for (;;) {
+    const genannt = [...nachQuelle.values()].flatMap((ziele) => ziele.genannt);
+    const einstiege = [...new Set(genannt)].filter((ziel) => !nachQuelle.has(ziel) && !wurzeln.includes(ziel));
+    if (einstiege.length === 0) break;
+    wurzeln = [...wurzeln, ...einstiege];
+    nachQuelle = await abhaengigkeiten(wurzeln);
+  }
+  return {
+    importe: umkehren(nachQuelle, (ziele) => ziele.importe),
+    gesamt: umkehren(nachQuelle, (ziele) => [...ziele.importe, ...ziele.genannt]),
+  };
 }
 
 function erreichendeTests(datei, nachZiel) {
@@ -234,13 +284,14 @@ async function mutantenproben(datei, zeilen, { erste, alle }) {
   return vereine(ergebnisse, [zweite]);
 }
 
-function testauswahl(datei, nachZiel) {
-  const { direkt, alle } = erreichendeTests(datei, nachZiel);
-  return { erste: direkt.length > 0 ? direkt : alle, alle };
+function testauswahl(datei, graph) {
+  const importe = erreichendeTests(datei, graph.importe);
+  const { direkt, alle } = erreichendeTests(datei, graph.gesamt);
+  return { erste: [importe.direkt, importe.alle, direkt].find((tests) => tests.length > 0) ?? alle, alle };
 }
 
-async function pruefeDatei(datei, zeilen, { nachZiel, loeschung, anteil }) {
-  const auswahl = testauswahl(datei, nachZiel);
+async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
+  const auswahl = testauswahl(datei, graph);
   if (auswahl.alle.length === 0) {
     return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} ${KEINE_TESTDATEI}`, status: "NoCoverage", art: KEINE_TESTDATEI }));
   }
@@ -251,12 +302,11 @@ async function pruefeDatei(datei, zeilen, { nachZiel, loeschung, anteil }) {
 }
 
 function alterStand(commit) {
-  const verzeichnis = arbeitsverzeichnis("alter-stand-");
-  const entferne = legeWorktreeAn(commit, verzeichnis);
+  const verzeichnis = legeArbeitsordnerAn(arbeitsverzeichnis("alter-stand-"), commit);
   chdir(verzeichnis);
   return () => {
     chdir(WURZEL);
-    entferne();
+    entferneArbeitsordner(verzeichnis);
   };
 }
 
@@ -317,7 +367,7 @@ async function imStand(pruefung, arbeit) {
   }
 }
 
-async function messe(einheiten, { nachZiel, auswahl, seite }) {
+async function messe(einheiten, { graph, auswahl, seite }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
@@ -325,7 +375,7 @@ async function messe(einheiten, { nachZiel, auswahl, seite }) {
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
     for (const anteil of gemessen) {
-      ergebnisse.push(...(await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { nachZiel, loeschung, anteil })));
+      ergebnisse.push(...(await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { graph, loeschung, anteil })));
     }
     return ergebnisse;
   } finally {
@@ -334,8 +384,8 @@ async function messe(einheiten, { nachZiel, auswahl, seite }) {
 }
 
 function mutiere(pruefung, auswahl = null) {
-  return imStand(pruefung, (einheiten, nachZiel) =>
-    messe(einheiten, { nachZiel, seite: pruefung.seite, auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
+  return imStand(pruefung, (einheiten, graph) =>
+    messe(einheiten, { graph, seite: pruefung.seite, auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
   );
 }
 
@@ -418,9 +468,9 @@ async function pruefe(pruefung, gleichwertige) {
 async function planen(pruefungen) {
   const einheiten = [];
   for (const [pruefung, stand] of pruefungen.entries()) {
-    await imStand(stand, (bestand, nachZiel) => {
+    await imStand(stand, (bestand, graph) => {
       for (const { datei, bereiche } of bestand) {
-        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, nachZiel).erste.length);
+        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, graph).erste.length);
         einheiten.push(...Array.from({ length: von }, (_leer, index) => ({ pruefung, datei, bereiche, anteil: index + 1, von })));
       }
     });
@@ -489,8 +539,8 @@ function vereineAnteile(berichte, pruefung) {
   return [...nachSchluessel.values()];
 }
 
-async function zweiteStufe(datei, ergebnisse, { nachZiel, loeschung }) {
-  const uebrig = uebrige(testauswahl(datei, nachZiel));
+async function zweiteStufe(datei, ergebnisse, { graph, loeschung }) {
+  const uebrig = uebrige(testauswahl(datei, graph));
   const offen = ergebnisse.filter((eintrag) => eintrag.schluessel.startsWith(`${datei}:`) && ueberlebt(eintrag));
   if (uebrig.length === 0 || offen.length === 0) return ergebnisse;
   const mutanten = offen.filter(({ art }) => art !== GELOESCHT && art !== ABSCHALTKOMMENTAR);
@@ -503,11 +553,11 @@ async function zweiteStufe(datei, ergebnisse, { nachZiel, loeschung }) {
 
 function nachfassen(stand, dateien, ergebnisse) {
   if (dateien.length === 0) return ergebnisse;
-  return imStand(stand, async (_bestand, nachZiel) => {
+  return imStand(stand, async (_bestand, graph) => {
     const loeschung = stand.seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
     try {
       let vereint = ergebnisse;
-      for (const datei of dateien) vereint = await zweiteStufe(datei, vereint, { nachZiel, loeschung });
+      for (const datei of dateien) vereint = await zweiteStufe(datei, vereint, { graph, loeschung });
       return vereint;
     } finally {
       loeschung?.abbauen();
