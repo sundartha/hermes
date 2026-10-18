@@ -39,6 +39,7 @@ export const ROLLE = {
 
 export function fuehreAus(name, befehl, { cwd, env, zeitlimit, eingabe }) {
   const [programm, ...args] = befehl;
+  const beginn = performance.now();
   const lauf = spawnSync(programm, args, {
     cwd,
     env,
@@ -53,6 +54,7 @@ export function fuehreAus(name, befehl, { cwd, env, zeitlimit, eingabe }) {
     befehl: befehl.join(" "),
     exitCode: lauf.status ?? EXIT_OHNE_STATUS,
     ausgabe: [lauf.stdout, lauf.stderr, fehler].filter(Boolean).join("\n"),
+    dauer_ms: Math.round(performance.now() - beginn),
   };
 }
 
@@ -67,8 +69,8 @@ export function entscheidendeZeilen(ausgabe) {
   return auswahl.slice(0, MAX_BELEGZEILEN);
 }
 
-export function beleg({ name, befehl, exitCode, ausgabe }) {
-  return { name, befehl, exitCode, zeilen: entscheidendeZeilen(ausgabe) };
+export function beleg({ name, befehl, exitCode, ausgabe, dauer_ms }) {
+  return { name, befehl, exitCode, dauer_ms, zeilen: entscheidendeZeilen(ausgabe) };
 }
 
 export function vollerBeleg(ergebnis) {
