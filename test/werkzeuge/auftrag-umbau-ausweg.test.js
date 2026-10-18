@@ -27,11 +27,12 @@ const VORSCHLAG = JSON.stringify({
   abnahme: "test/ok.test.js",
   entwurf: "Text anlegen.",
 });
+const alsBlock = (json) => ["```json", json, "```"].join("\n");
 
 function umbauIn(context, kennung) {
   const root = probeDirectory(context, { "src/x.js": "export const X = 1;\n", "test/ok.test.js": passingTest("ok") });
   const phase = { phase: kennung, entwurf: { [AUFTRAG.bereich]: "Entwurf." }, auftraege: [AUFTRAG] };
-  const neu = umbauPhase(phase, AUFTRAG, VORSCHLAG);
+  const neu = umbauPhase(phase, AUFTRAG, alsBlock(VORSCHLAG));
   return { umbau: neu.auftraege[0], kennung: neu.phase, befunde: phasenBefunde(neu, root) };
 }
 
@@ -48,6 +49,24 @@ test("auftrag-umbau-ausweg: in Phasen ohne Pitch bleibt der Umbau gültig", (con
 
 test("auftrag-umbau-ausweg: ein Vorschlag ohne bereich legt keinen Entwurfsabschnitt „undefined“ an", () => {
   const phase = { phase: "P-001-probe", entwurf: {}, auftraege: [AUFTRAG] };
-  const neu = umbauPhase(phase, AUFTRAG, JSON.stringify({ ziel: "Lege text an", entwurf: "Text anlegen." }));
+  const neu = umbauPhase(phase, AUFTRAG, alsBlock(JSON.stringify({ ziel: "Lege text an", entwurf: "Text anlegen." })));
   assert.deepEqual(Object.keys(neu.entwurf), []);
+});
+
+test("auftrag-umbau-ausweg: ein Vorschlag zählt nur als abschließender json-Block und nie neben einer Zeile „Verhalten:“", () => {
+  const phase = { phase: "P-001-probe", entwurf: {}, auftraege: [AUFTRAG] };
+  const block = alsBlock(VORSCHLAG);
+  const faelle = [
+    [block, true],
+    [`Mein Vorschlag:\n${block}\n`, true],
+    [VORSCHLAG, false],
+    [`${block}\nNoch ein Satz danach.`, false],
+    [`Verhalten: Der Test hält das alte Verhalten fest.\n${block}`, false],
+    ["Verhalten: Der Vorbau mit `config: {}` stört nicht.", false],
+    ["Mit `{}` als Store reicht es.", false],
+  ];
+  assert.deepEqual(
+    faelle.map(([antwort]) => umbauPhase(phase, AUFTRAG, antwort) !== null),
+    faelle.map(([, erwartet]) => erwartet),
+  );
 });

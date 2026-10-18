@@ -62,6 +62,7 @@ const GATES = { dateien: { [VERSAND]: "export function versende(kunde) {\n  retu
 const MELDUNG = `Alter Test hält altes Verhalten fest: ${ALT}:versendet den Code – der Vorbau hat keine Gates`;
 const BAU = [{ ...GATES, antwort: MELDUNG }, GATES];
 const UMBAU = { ziel: "Gib dem Testkunden bestandene Gates", bereich: ALT, erwarteteDateien: [ALT], abnahme: ALT, entwurf: "Vorbau mit Gates." };
+const VORSCHLAG = ["```json", JSON.stringify(UMBAU), "```"].join("\n");
 
 const ERSATZ = { HERMES_CLAUDE: "claude.mjs", HERMES_GH: "gh.mjs", ERSATZ_DREHBUCH: "drehbuch.json", ERSATZ_GH: "gh.log" };
 const IDENTITAET = { GIT_AUTHOR_NAME: "Probe", GIT_AUTHOR_EMAIL: PROBE, GIT_COMMITTER_NAME: "Probe", GIT_COMMITTER_EMAIL: PROBE };
@@ -87,7 +88,7 @@ function lauf(context, drehbuch, dateien = REPO) {
 }
 
 function vorwegVerworfen(context, testumbau, { bau = BAU, dateien = REPO } = {}) {
-  const { ergebnis, beleg, log } = lauf(context, { bau, test: [ROTER_TEST, testumbau], plan: [{ antwort: JSON.stringify(UMBAU) }] }, dateien);
+  const { ergebnis, beleg, log } = lauf(context, { bau, test: [ROTER_TEST, testumbau], plan: [{ antwort: VORSCHLAG }] }, dateien);
   assert.equal(ergebnis.status, EXIT_ROT);
   const umbau = beleg("A1-umbau");
   assert.equal(umbau.ergebnis, "rot");
@@ -99,7 +100,7 @@ function vorwegVerworfen(context, testumbau, { bau = BAU, dateien = REPO } = {})
 
 test("Vorbau: meldet der Bau-Agent einen alten Test, dessen Vorbau kollidiert, läuft erst ein testumbau und dann der Auftrag grün", (context) => {
   const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
-  const { repo, ergebnis, beleg, log } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  const { repo, ergebnis, beleg, log } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: VORSCHLAG }] });
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.equal(beleg("A1-plan").grund, MELDUNG);
   assert.deepEqual([beleg("A1-umbau").ergebnis, beleg("A1").ergebnis], ["grün", "grün"]);
@@ -109,9 +110,9 @@ test("Vorbau: meldet der Bau-Agent einen alten Test, dessen Vorbau kollidiert, l
 
 test("Vorbau: der Beleg des Plans enthält die volle Antwort des Plan-Agenten, die Belege der übrigen Agenten nicht", (context) => {
   const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
-  const { ergebnis, beleg } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  const { ergebnis, beleg } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort: VORSCHLAG }] });
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
-  assert.deepEqual(beleg("A1-plan").agenten.map(({ volleAntwort }) => volleAntwort), [JSON.stringify(UMBAU)]);
+  assert.deepEqual(beleg("A1-plan").agenten.map(({ volleAntwort }) => volleAntwort), [VORSCHLAG]);
   const uebrige = ["A1-umbau", "A1"].flatMap((name) => [...beleg(name).agenten, ...beleg(name).nachfragen]);
   assert.deepEqual([uebrige.length > 0, uebrige.filter((agent) => "volleAntwort" in agent)], [true, []]);
 });
@@ -124,6 +125,24 @@ test("Vorbau: hält der alte Test echtes altes Verhalten fest, geht die Meldung 
   const { text } = beleg("A1").entscheidung;
   assert.match(text, /Label verhalten-geaendert am Issue mit test\/versand\.test\.js:versendet den Code/);
   assert.match(text, /Kein testumbau vorweg: Der Plan-Agent sieht echtes Verhalten: Der Test hält genau den Versand ohne Gates fest\./);
+  assert.equal(log.includes(UMBAU.ziel), false);
+});
+
+test("Vorbau: eine Verhalten-Antwort mit beiläufigen geschweiften Klammern ist kein Umbau-Vorschlag und geht ohne Testumbau zu Antonio", (context) => {
+  const plan = [{ antwort: "Verhalten: Der Test hält genau den Versand ohne Gates fest.\nDer Vorbau mit `config: {}` stört dabei nicht." }];
+  const { ergebnis, beleg } = lauf(context, { bau: BAU, test: [ROTER_TEST], plan });
+  assert.equal(ergebnis.status, EXIT_ROT);
+  assert.deepEqual(beleg("A1-plan").befunde, ["Der Plan-Agent sieht echtes Verhalten: Der Test hält genau den Versand ohne Gates fest."]);
+  assert.equal(beleg("A1-umbau"), null);
+});
+
+test("Vorbau: nennt die Antwort echtes Verhalten und bringt zugleich einen json-Block, ist sie mehrdeutig und es läuft kein Umbau", (context) => {
+  const antwort = ["Verhalten: Der Test hält genau den Versand ohne Gates fest.", VORSCHLAG].join("\n");
+  const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
+  const { ergebnis, beleg, log } = lauf(context, { bau: BAU, test: einsaetzeTestAgent, plan: [{ antwort }] });
+  assert.equal(ergebnis.status, EXIT_ROT);
+  assert.equal(beleg("A1-umbau"), null);
+  assert.match(beleg("A1-plan").befunde.join("\n"), /mehrdeutig/);
   assert.equal(log.includes(UMBAU.ziel), false);
 });
 
@@ -143,7 +162,7 @@ test("Vorbau: nach einem verworfenen testumbau zitiert die Notiz an Antonio den 
 test("Vorbau: meldet der Bau-Agent den alten Test nach einem grünen testumbau erneut, nennt die Notiz an Antonio den Grund", (context) => {
   const nie = { dateien: { [VERSAND]: "export function versende() {\n  return false;\n}\n" }, antwort: MELDUNG };
   const einsaetzeTestAgent = [ROTER_TEST, { dateien: { [ALT]: alterTest("{ gates: true }") } }, ROTER_TEST];
-  const { ergebnis, beleg } = lauf(context, { bau: [{ ...GATES, antwort: MELDUNG }, nie], test: einsaetzeTestAgent, plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  const { ergebnis, beleg } = lauf(context, { bau: [{ ...GATES, antwort: MELDUNG }, nie], test: einsaetzeTestAgent, plan: [{ antwort: VORSCHLAG }] });
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.equal(beleg("A1-umbau").ergebnis, "grün");
   assert.match(beleg("A1").entscheidung.text, /Kein testumbau vorweg: der eine testumbau dieses Auftrags ist schon gelaufen\./);
@@ -151,7 +170,7 @@ test("Vorbau: meldet der Bau-Agent den alten Test nach einem grünen testumbau e
 
 test("Vorbau: scheitert der testumbau, bekommt Antonio genau eine Notiz zum alten Test", (context) => {
   const kaputt = { dateien: { [ALT]: alterTest("null") } };
-  const { ergebnis, beleg, log, gh } = lauf(context, { bau: BAU, test: [ROTER_TEST, kaputt], plan: [{ antwort: JSON.stringify(UMBAU) }] });
+  const { ergebnis, beleg, log, gh } = lauf(context, { bau: BAU, test: [ROTER_TEST, kaputt], plan: [{ antwort: VORSCHLAG }] });
   assert.equal(ergebnis.status, EXIT_ROT);
   assert.equal(beleg("A1-umbau").ergebnis, "rot");
   assert.match(beleg("A1").entscheidung.text, /Der testumbau A1-umbau vorweg ist gescheitert \(rot\); sein Beleg heißt A1-umbau\./);

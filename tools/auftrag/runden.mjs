@@ -20,12 +20,13 @@ const MAX_RUNDEN = 2;
 const MAX_WIEDERHOLUNGEN = 1;
 const WERKZEUGABBRUCH = new Set([GRUND.MUTATION_ABBRUCH, GRUND.AGENT_EXIT]);
 const LABEL = "entscheidung";
-const JSON_OBJEKT = /\{[\s\S]*\}/;
+const JSON_BLOCK = /```json[^\S\n]*\n((?:(?!```)[\s\S])*)```\s*$/;
 const ISSUE = /^(?:\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "abnahme"];
 const CODEBLOCK = "```";
-const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt.";
+const KEIN_VORSCHLAG = "Der Plan-Agent lieferte kein lesbares JSON-Objekt in einem abschließenden ```json-Block.";
 const ECHTES_VERHALTEN = "Verhalten:";
+const MEHRDEUTIG = "Die Antwort des Plan-Agenten ist mehrdeutig: Sie hat eine Zeile „Verhalten:“ und einen abschließenden ```json-Block; das Skript liest daraus keinen Umbau.";
 const AUSWEG_SCHLUSS =
   "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ und „Alter Test hält altes Verhalten fest“ liest das Skript nur beim Bau-Agenten.";
 
@@ -73,7 +74,7 @@ function vorbauAnlass({ zeile, datei, diff = "" }) {
     aufgabe: [
       `Prüf, ob nur der Vorbau dieses alten Tests (gemeinsame Vorbereitung, Testdaten, Testhilfe) mit dem Auftrag kollidiert und nicht seine Erwartung.`,
       `Wenn ja, mach daraus genau einen ${TESTUMBAU}, der den Vorbau so umbaut, dass jeder Fall in ${datei} vor und nach dem Umbau grün ist und keine Erwartung sich ändert; abnahme ist ${datei}.`,
-      `Hält der Test genau das Verhalten fest, das der Auftrag ändert, antworte statt des JSON-Objekts nur mit einer Zeile, die mit „${ECHTES_VERHALTEN}“ beginnt und danach deinen Grund nennt; dann entscheidet Antonio.`,
+      `Hält der Test genau das Verhalten fest, das der Auftrag ändert, antworte ohne ${CODEBLOCK}json-Block nur mit einer Zeile, die mit „${ECHTES_VERHALTEN}“ beginnt und danach deinen Grund nennt; dann entscheidet Antonio.`,
     ].join(" "),
     grund: zeile,
   };
@@ -85,7 +86,7 @@ function planPrompt(phase, auftrag, anlass) {
     abschnitt(anlass.titel, anlass.zeilen),
     abschnitt("Deine Aufgabe", [
       anlass.aufgabe,
-      `Antworte nur mit einem JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf.`,
+      `Antworte mit einem abschließenden ${CODEBLOCK}json-Block, der ein JSON-Objekt mit den Feldern ${UMBAU_FELDER.join(", ")} und entwurf enthält; nach dem Block steht nichts mehr.`,
       "ziel ist eine Zeile mit höchstens 72 Zeichen, abnahme ein bestehender Test, der vor und nach dem Umbau grün ist, entwurf der Entwurfsabschnitt für den Bereich in Klartext.",
       "bereich und jeder Eintrag in erwarteteDateien sind reine relative Pfade ohne Zusatz: keine Klammern, keine Funktionsnamen, keine Erklärung.",
       `Fehlt nur eine Änderung an bestehenden Tests oder Testhilfen, liegt bereich unter test/ und erwarteteDateien nennt nur Testdateien; das Skript legt daraus einen ${TESTUMBAU} an, den der Test-Agent ausführt, ohne Produktcode zu ändern.`,
@@ -106,9 +107,23 @@ function notizPrompt(phase, auftrag, { anlass, verlauf, zweck = [] }) {
   ].join("\n");
 }
 
+function echtesVerhalten(antwort) {
+  const zeile = String(antwort ?? "")
+    .split("\n")
+    .map((teil) => teil.trim())
+    .find((teil) => teil.startsWith(ECHTES_VERHALTEN));
+  return zeile?.slice(ECHTES_VERHALTEN.length).trim();
+}
+
+function jsonBlock(antwort) {
+  return JSON_BLOCK.exec(String(antwort ?? ""))?.[1];
+}
+
 function vorschlag(antwort) {
+  const block = jsonBlock(antwort);
+  if (block === undefined || echtesVerhalten(antwort) !== undefined) return null;
   try {
-    const wert = JSON.parse(JSON_OBJEKT.exec(antwort)?.[0] ?? "");
+    const wert = JSON.parse(block);
     return wert !== null && typeof wert === "object" ? wert : null;
   } catch {
     return null;
@@ -125,19 +140,12 @@ export function umbauPhase(phase, auftrag, antwort) {
   return { ...phase, entwurf, auftraege: [umbau] };
 }
 
-function echtesVerhalten(antwort) {
-  const zeile = String(antwort ?? "")
-    .split("\n")
-    .map((teil) => teil.trim())
-    .find((teil) => teil.startsWith(ECHTES_VERHALTEN));
-  return zeile?.slice(ECHTES_VERHALTEN.length).trim();
-}
-
 function planBefunde(plan, neu, root) {
   if (plan.exitCode !== 0) return [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
   if (neu !== null) return phasenBefunde(neu, root);
   const verhalten = echtesVerhalten(plan.volleAntwort);
-  return [verhalten === undefined ? KEIN_VORSCHLAG : `Der Plan-Agent sieht echtes Verhalten: ${verhalten}`];
+  if (verhalten === undefined) return [KEIN_VORSCHLAG];
+  return [jsonBlock(plan.volleAntwort) === undefined ? `Der Plan-Agent sieht echtes Verhalten: ${verhalten}` : MEHRDEUTIG];
 }
 
 function ohneTestumbau(auftrag, alterTest, zaehler) {

@@ -245,7 +245,8 @@ test("geänderte Fälle: lauf stoppt einen Test-Agenten, der einen geplanten Tes
 });
 
 function planBeleg(context, umbau) {
-  const plan = JSON.stringify({ ziel: "Räume auf", vorbild: "src/text.js", abnahme: "test/text.test.js", entwurf: "Aufräumen.", ...umbau });
+  const felder = { ziel: "Räume auf", vorbild: "src/text.js", abnahme: "test/text.test.js", entwurf: "Aufräumen.", ...umbau };
+  const plan = ["```json", JSON.stringify(felder), "```"].join("\n");
   const drehbuch = {
     test: { "test/rechnen.test.js": ROTER_TEST },
     "bau-antwort": "Voraussetzung fehlt: Es braucht zuerst einen Umbau.",
