@@ -1,0 +1,18 @@
+{
+  "titel": "Unterdrückungen und Altlast-Pins steigen nicht, auch nicht über eine Umbenennung .js→.ts (CI-Weg)",
+  "pfade": [
+    "scripts/check-staged-suppressions.js",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/eslint-rules/knoten.js"
+  ],
+  "probe": {
+    "mitnehmen": [
+      "scripts/check-staged-suppressions.js",
+      "tools/umbenennung.mjs",
+      "tools/syntaxbaum.mjs",
+      "tools/eslint-rules/knoten.js"
+    ],
+    "befehl": ["node", "scripts/check-staged-suppressions.js", "--basis", "HEAD~1"]
+  }
+}
