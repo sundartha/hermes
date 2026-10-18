@@ -12,8 +12,10 @@ export function abfragenZaehlendeHuelle(pg, laufend) {
     return versprechen;
   };
   const gezaehlt = {
-    query: (text, params) => mitzaehlen(pg.query(text, params)),
-    exec: (sql) => mitzaehlen(pg.exec(sql)),
+    query: (...argumente) => mitzaehlen(pg.query(...argumente)),
+    exec: (...argumente) => mitzaehlen(pg.exec(...argumente)),
+    transaction: (...argumente) => mitzaehlen(pg.transaction(...argumente)),
+    sql: (...argumente) => mitzaehlen(pg.sql(...argumente)),
   };
   return new Proxy(pg, {
     get(ziel, name) {
