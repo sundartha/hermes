@@ -16,8 +16,14 @@ function stock(paths) {
   return `${JSON.stringify(paths)}\n`;
 }
 
+const ESLINT_CONFIG = 'export default [{ files: ["{src,test,tools,scripts}/**/*.{ts,mts,cts}"] }, { ignores: ["**/out/**"] }];\n';
+const TSCONFIG = (include) => `${JSON.stringify({ compilerOptions: { allowJs: true, noEmit: true }, include })}\n`;
+const ALL_ROOTS = ["src", "test", "tools", "scripts"];
+
 const BASE_FILES = {
   "README.md": "Probe\n",
+  "eslint.config.js": ESLINT_CONFIG,
+  "tsconfig.json": TSCONFIG(ALL_ROOTS),
   [STOCK_PATH]: "export const alt = 1;\n",
   [STOCK_FILE]: stock([STOCK_PATH]),
 };
@@ -40,22 +46,61 @@ test("ts-sperre: JavaScript und die TypeScript-Dateien aus dem Bestand enden gr�
   assert.equal(result.output, "");
 });
 
-test("ts-sperre: jede neue TypeScript-Datei macht rot, in jedem Ordner und jeder Schreibweise der Endung", (context) => {
+test("ts-sperre: .ts, .mts und .cts klein geschrieben unter src, test, tools und scripts enden grün", (context) => {
   for (const path of [
     "src/neu.ts",
     "test/neu.test.ts",
     "tools/neu.mts",
     "scripts/neu.cts",
-    NEW_PATH,
-    "design-system/neu.tsx",
-    "src/gross.TS",
-    "neu.d.ts",
+    "src/typen.d.ts",
+  ]) {
+    const result = runLockInNewRepo(context, { [path]: "export const neu = 1;\n" });
+    assert.equal(result.status, EXIT_GREEN, `${path}: ${result.output}`);
+    assert.equal(result.output, "");
+  }
+});
+
+test("ts-sperre: jede TypeScript-Datei, die ESLint, tsc oder der Testläufer nicht sehen, macht rot, in jedem Ordner und jeder Schreibweise", (context) => {
+  const outsidePlace = "TypeScript-Datei, die ESLint oder tsc nicht prüfen";
+  for (const [path, reason] of [
+    [NEW_PATH, outsidePlace],
+    ["lib/neu.ts", outsidePlace],
+    ["design-system/neu.tsx", outsidePlace],
+    ["src/neu.tsx", outsidePlace],
+    ["src/gross.TS", outsidePlace],
+    ["tools/gross.Mts", outsidePlace],
+    ["neu.d.ts", outsidePlace],
+    ["src/out/neu.ts", "TypeScript-Datei, die ESLint nicht prüft"],
+    ["test/neu.test.mts", "TypeScript-Testdatei, die der Testläufer nicht startet"],
+    ["test/neu.test.cts", "TypeScript-Testdatei, die der Testläufer nicht startet"],
   ]) {
     const result = runLockInNewRepo(context, { [path]: "export const neu = 1;\n" });
     assert.equal(result.status, EXIT_RED, result.output);
-    assert.ok(result.output.startsWith(`${path}: `), result.output);
+    assert.ok(result.output.startsWith(`${path}: ${reason}`), result.output);
     assert.match(result.output, /^Ausweg: /m);
   }
+});
+
+test("ts-sperre: eine .ts-Datei, die tsconfig.json nicht enthält, macht rot", (context) => {
+  const result = runLockInNewRepo(context, {
+    "tsconfig.json": TSCONFIG(["src", "test", "scripts"]),
+    "tools/neu.mts": "export const neu = 1;\n",
+  });
+  assert.equal(result.status, EXIT_RED, result.output);
+  assert.ok(result.output.startsWith("tools/neu.mts: TypeScript-Datei, die tsc nicht prüft"), result.output);
+});
+
+test("ts-sperre: ohne lesbare tsconfig.json macht jede .ts-Datei rot und nennt sie", (context) => {
+  const withoutTsconfig = Object.fromEntries(Object.entries(BASE_FILES).filter(([path]) => path !== "tsconfig.json"));
+  const result = run(probeRepository(context, { ...withoutTsconfig, "src/neu.ts": "export const neu = 1;\n" }));
+  assert.equal(result.status, EXIT_RED, result.output);
+  assert.ok(result.output.startsWith("src/neu.ts: TypeScript-Datei, bei der sich nicht feststellen lässt, ob tsc sie prüft"), result.output);
+});
+
+test("ts-sperre: ohne ladbare ESLint-Konfiguration macht jede .ts-Datei rot", (context) => {
+  const result = runLockInNewRepo(context, { "eslint.config.js": "export default [;\n", "src/neu.ts": "export const neu = 1;\n" });
+  assert.equal(result.status, EXIT_RED, result.output);
+  assert.ok(result.output.startsWith("src/neu.ts: TypeScript-Datei, bei der sich nicht feststellen lässt, ob ESLint sie prüft"), result.output);
 });
 
 test("ts-sperre: ein Eintrag unter src, test, tools oder scripts im Bestand macht rot", (context) => {

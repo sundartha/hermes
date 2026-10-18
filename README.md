@@ -182,7 +182,7 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_agent_
 ## Bewusste Prototyp-Abweichungen (vs. Produkt-PRD)
 
 - MCP-Auth: drei Modi über `MCP_AUTH` — Legacy/statisches Bearer-Token (`MCP_AUTH_TOKEN`, leer = `/mcp` nur von localhost), oder `oauth` (OAuth 2.1 Resource Server für den claude.ai-Login-Flow). Setup/Rollout siehe `PLAN-SECURITY.md`.
-- Modernes JavaScript (ESM) statt TypeScript: kein Build-Step, maximale Demo-Velocity.
+- Modernes JavaScript (ESM) und schrittweise TypeScript ohne Build-Step: Node führt `.ts` per Type-Stripping direkt aus, `npm run typecheck` prüft die Typen.
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.
 - Spracherkennung (Budget-Engine, `<Gather input="speech">`): Telnyx nutzt `transcriptionEngine="Deepgram"` + `model="deepgram/nova-3"` (neutral gewählt über `STT_PROFILE`, im Telnyx-Renderer übersetzt). Telnyx transkribiert **ohne** `transcriptionEngine` gar nicht (das Weglassen war der Inbound-Audio-Bug: Agent hörte den Angerufenen nie). **Restrisiko:** die de-DE-Reife der Telnyx-in-house-Engine ist live noch unbestätigt; falls Deutsch schlecht erkannt wird, ist `transcriptionEngine="Google"` (akzeptiert `de-DE`) der Fallback — 1-Zeilen-Änderung im Telnyx-Renderer.

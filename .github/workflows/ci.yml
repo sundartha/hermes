@@ -102,7 +102,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node tools/typabdeckung.mjs --basis "$PR_BASE_SHA"
 
-      - name: TypeScript-Sperre bis S71g
+      - name: TypeScript nur, wo ESLint und tsc es sehen
         if: ${{ !cancelled() }}
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}

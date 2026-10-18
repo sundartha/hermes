@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .ts-Datei in einem neuen Ordner neben src",
+  "dateien": {
+    "lib/probe.ts": ["export const neu = 1;"]
+  },
+  "erwartet": "lib/probe.ts: TypeScript-Datei"
+}
