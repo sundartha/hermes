@@ -4,12 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { EXIT_GRUEN, EXIT_ROT, TOR, UNTERDRUECKUNGEN, VORAB_HAKEN } from "./unterdrueckungen-probe.js";
 
-const TOR = "scripts/check-staged-suppressions.js";
-const VORAB_HAKEN = ".githooks/pre-commit";
-const UNTERDRUECKUNGEN = "eslint-suppressions.json";
-const EXIT_GRUEN = 0;
-const EXIT_ROT = 1;
 const KLEINSTER_ANSTIEG = 1;
 
 function unterdrueckungen(zahlen) {
