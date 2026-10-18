@@ -9,19 +9,19 @@ import { cruise } from "dependency-cruiser";
 import { dynamischeZiele, syntaxknoten } from "./importe.mjs";
 import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
 
-export const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
-const QUELLDATEI = /^src\/.+\.[cm]?js$/;
-const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?js$/;
+export const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
+const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
+const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
 const TESTHILFE = /^test\//;
 const WURZELN = ["src", "test"];
 const OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const KEIN_TREFFER = 1;
-const QUELLE_IN_TEXT = /["'`][^"'`\n]*?\bsrc\/([\w./-]+\.[cm]?js)(?=["'`?#])/g;
+const QUELLE_IN_TEXT = /["'`][^"'`\n]*?\bsrc\/([\w./-]+\.[cm]?[jt]s)(?=["'`?#])/g;
 const WERKZEUGPFAD = /^(?:tools|scripts)\//;
 const WERKZEUG_DATEI_IN_TEXT =
-  /(?:^|[^\w-])((?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|sh|json))\b/g;
-const SKRIPT = /\.[cm]?js$/;
-const EIGENES_MODUL = /^(?:src|test)\/.+\.[cm]?js$/;
+  /(?:^|[^\w-])((?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|mts|cts|ts|sh|json))\b/g;
+const SKRIPT = /\.[cm]?[jt]s$/;
+const EIGENES_MODUL = /^(?:src|test)\/.+\.[cm]?[jt]s$/;
 const MAX_GIT_AUSGABE = 268_435_456;
 
 export async function importgraph() {
