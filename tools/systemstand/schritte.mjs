@@ -367,12 +367,8 @@ export const PACKAGE_STEPS = [
     id: "4",
     erstesPaket: 35,
     letztesPaket: 35,
+    berichte: [instructionsReport],
     kriterien: [
-      {
-        id: "claude-md",
-        titel: `Bericht: ${INSTRUCTIONS_FILE} über ${INSTRUCTIONS_MAX_LINES} Zeilen`,
-        pruefen: instructionsReport,
-      },
       {
         id: "workflows-entfernt",
         titel: `${RETIRED_WORKFLOW_DIRECTORY}/ existiert nicht mehr`,

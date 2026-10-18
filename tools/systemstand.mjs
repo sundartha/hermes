@@ -224,16 +224,22 @@ async function evaluate(remote, records) {
   const report = [];
   for (const step of STEPS) {
     const results = step.kriterien.map((item) => criterionResult(remote, item));
+    const notes = (step.berichte ?? []).map((pruefen) => criterionResult(remote, { pruefen }));
     const { start, schaetzungTage } = records.head[step.id] ?? {};
     const known = { start: start ?? (await discoveredStart(remote, step)), schaetzungTage };
-    report.push({ ...step, ...known, kriterien: await Promise.all(results) });
+    report.push({
+      ...step,
+      ...known,
+      kriterien: await Promise.all(results),
+      berichte: await Promise.all(notes),
+    });
   }
   return report;
 }
 
 function stepReasons(step) {
   if (step.geschnitten === false) return ["noch nicht geschnitten"];
-  return [...new Set(step.kriterien.flatMap(({ gruende }) => gruende))];
+  return [...new Set([...step.kriterien, ...step.berichte].flatMap(({ gruende }) => gruende))];
 }
 
 function state(reasons) {
@@ -246,7 +252,7 @@ function overdue({ start, schaetzungTage }) {
 }
 
 function reportNote(step) {
-  const notes = step.kriterien.flatMap(({ bericht }) => bericht ?? []);
+  const notes = step.berichte.flatMap(({ bericht }) => bericht ?? []);
   return notes.length === 0 ? "" : `. Bericht: ${notes.join("; ")}`;
 }
 
