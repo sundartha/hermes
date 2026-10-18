@@ -1,0 +1,20 @@
+{
+  "titel": "Pre-commit-Haken: vorgemerkte Unterdrückungen und Befunde steigen nicht, auch nicht über git mv .js→.ts",
+  "pfade": [
+    ".githooks/pre-commit",
+    "scripts/check-staged-suppressions.js",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/eslint-rules/knoten.js"
+  ],
+  "probe": {
+    "mitnehmen": [
+      ".githooks/pre-commit",
+      "scripts/check-staged-suppressions.js",
+      "tools/umbenennung.mjs",
+      "tools/syntaxbaum.mjs",
+      "tools/eslint-rules/knoten.js"
+    ],
+    "befehl": ["sh", "-c", "git reset -q --soft HEAD~1 && sh .githooks/pre-commit"]
+  }
+}
