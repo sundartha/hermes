@@ -2,6 +2,7 @@
   "titel": "Migrationen: Squawk, Rückbau-Ordner, gemergte Migrationen und Schemaänderungen im Code",
   "pfade": [
     "tools/migrationen-pruefen.mjs",
+    "tools/migrationen-orte.mjs",
     "tools/basis/squawk.toml",
     "tools/auftrag/zweck.mjs",
     "tools/pruefungen-messen.mjs",
