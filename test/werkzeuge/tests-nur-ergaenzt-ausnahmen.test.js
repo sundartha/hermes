@@ -1,24 +1,17 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { promisify } from "node:util";
 
-import { fakeGitHub } from "../../tools/pruefungen-messen.mjs";
+import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import {
-  REPO_ROOT,
-  commitAll,
-  isolatedEnvironment,
-  probeRepository,
-  runIn,
-  writeFiles,
-} from "./probe-repo.js";
+  EXIT_OK,
+  WHOLE_FILE_DELETED,
+  assertPassedWithoutGitHub,
+  assertStopped,
+  check,
+} from "./testschutz-probe.js";
 
-const TOOL = join(REPO_ROOT, "tools/tests-nur-ergaenzt.mjs");
-const EXIT_OK = 0;
-const EXIT_FINDING = 1;
-const PULL_REQUEST = "7";
 const RECHNER = "src/rechner.js";
 const ZUSATZ = "src/zusatz.js";
 const GATE_FILE = "test/gate-text.test.js";
@@ -28,10 +21,6 @@ const TEST_IMPORT = 'import { test } from "node:test";';
 const SUMME_IMPORT = 'import { summe } from "../src/rechner.js";';
 const RECHNER_TEXT =
   'const quelltext = readFileSync(new URL("../src/rechner.js", import.meta.url), "utf8");';
-const NO_APPROVAL = /ohne Freigabe/;
-const WHOLE_FILE_DELETED = "die ganze Testdatei ist gelöscht; das ist immer gesperrt.";
-
-const execFileAsync = promisify(execFile);
 
 function text(rows) {
   return `${rows.join("\n")}\n`;
@@ -152,39 +141,6 @@ function deleteFiles(directory, files) {
 function rename(directory, from, to) {
   const result = runIn(directory, "git", ["mv", from, to]);
   assert.equal(result.status, EXIT_OK, result.stderr);
-}
-
-async function check({ directory, basis }) {
-  const server = await fakeGitHub();
-  const requests = [];
-  server.on("request", ({ method, url }) => requests.push(`${method} ${url}`));
-  const apiUrl = `http://127.0.0.1:${server.address().port}`;
-  const env = {
-    ...isolatedEnvironment(),
-    GITHUB_TOKEN: "attrappe",
-    GITHUB_REPOSITORY: "probe/hermes",
-    GITHUB_API_URL: apiUrl,
-    GITHUB_GRAPHQL_URL: `${apiUrl}/graphql`,
-  };
-  const args = [TOOL, "--basis", basis, "--pr", PULL_REQUEST];
-  try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, args, { cwd: directory, env });
-    return { status: EXIT_OK, output: `${stdout}${stderr}`, requests };
-  } catch (error) {
-    return { status: error.code, output: `${error.stdout}${error.stderr}`, requests };
-  } finally {
-    server.close();
-  }
-}
-
-function assertPassedWithoutGitHub(result) {
-  assert.equal(result.status, EXIT_OK, result.output);
-  assert.deepEqual(result.requests, []);
-}
-
-function assertStopped(result) {
-  assert.equal(result.status, EXIT_FINDING, result.output);
-  assert.match(result.output, NO_APPROVAL);
 }
 
 test("Testschutz-Ausnahme: nur entfernte Kommentare gehen ohne Frage an GitHub durch", async (context) => {
