@@ -1,0 +1,33 @@
+{
+  "titel": "Umbenennung nur mit Typen, Unterdrückung unter altem und neuem Pfad",
+  "vorher": {
+    "src/probe/zahl.js": [
+      "var grenze = 10;",
+      "",
+      "export function klein(zahl) {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": ["{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}}"],
+    "eslint-legacy-exceptions.json": [
+      "{\"src/probe/zahl.js\": {\"reason\": \"Altlast\", \"date\": \"2026-01-01\", \"findings\": {\"no-var :: Unexpected var, use let or const instead.\": 1}}}"
+    ]
+  },
+  "loeschen": ["src/probe/zahl.js"],
+  "dateien": {
+    "src/probe/zahl.ts": [
+      "var grenze: number = 10;",
+      "",
+      "export function klein(zahl: number): boolean {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": [
+      "{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}, \"src/probe/zahl.ts\": {\"no-var\": {\"count\": 1}}}"
+    ],
+    "eslint-legacy-exceptions.json": [
+      "{\"src/probe/zahl.ts\": {\"reason\": \"Altlast\", \"date\": \"2026-01-01\", \"findings\": {\"no-var :: Unexpected var, use let or const instead.\": 1}}}"
+    ]
+  },
+  "erwartet": "src/probe/zahl.ts (umbenannt aus src/probe/zahl.js) -> no-var: 1 -> 2"
+}

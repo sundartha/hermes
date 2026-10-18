@@ -1,0 +1,20 @@
+{
+  "titel": "Zahl einer .js-Datei steigt ohne Umbenennung",
+  "vorher": {
+    "src/probe/zahl.js": [
+      "var grenze = 10;",
+      "",
+      "export function klein(zahl) {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": ["{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}}"],
+    "eslint-legacy-exceptions.json": [
+      "{\"src/probe/zahl.js\": {\"reason\": \"Altlast\", \"date\": \"2026-01-01\", \"findings\": {\"no-var :: Unexpected var, use let or const instead.\": 1}}}"
+    ]
+  },
+  "dateien": {
+    "eslint-suppressions.json": ["{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 2}}}"]
+  },
+  "erwartet": "  src/probe/zahl.js -> no-var: 1 -> 2"
+}
