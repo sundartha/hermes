@@ -6,7 +6,18 @@
     "zaehlen": "stderr-zeilen"
   },
   "probe": {
-    "mitnehmen": ["eslint.config.js", "tools/basis/eslint-wirksam.json"],
+    "mitnehmen": [
+      "eslint.config.js",
+      "tools/basis/eslint-wirksam.json",
+      "src/store.js",
+      "tools/eslint-rules/index.js",
+      "tools/eslint-rules/bestand.js",
+      "tools/eslint-rules/keine-kommentare.js",
+      "tools/eslint-rules/kein-quelltext-als-text.js",
+      "tools/eslint-rules/pfad-falten.js",
+      "tools/eslint-rules/namen-ohne-begruendung.js",
+      "tools/eslint-rules/knoten.js"
+    ],
     "befehl": ["node", "{wurzel}/tools/eslint-konfig-pruefen.mjs"]
   }
 }
