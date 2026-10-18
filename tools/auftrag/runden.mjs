@@ -15,6 +15,7 @@ import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { idsDer, pflichtDer, rotePruefungen, roteRunde, zweckIdsDer } from "./rote-pruefungen.mjs";
 import { testTitel, zusicherungenGleich } from "./testtitel.mjs";
 import { GRUND, MELDUNG, PRUEFUNG, absatzZuordnung, hatAusweg, zweckBlock } from "./zweck.mjs";
+import { listHint } from "../testschutz/freigabe.mjs";
 
 export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
@@ -343,6 +344,7 @@ class Runden {
       "",
       `Die Testdatei ${datei} ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}. Den Testnamen gibt es in der Datei; ob genau dieser Fall rot ist, prüft das Skript nicht.`,
       `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`,
+      `So wirkt die Freigabe im nächsten lauf: je ein Listenpunkt \`${datei}\` (für lauf) und \`${test}\` (für die CI) ${listHint()}, hier Issue #${phase.issue}; das Label kommt nach der letzten Textänderung, eine spätere Textänderung hebt die Freigabe auf. Dann ändert nur der Test-Agent genau diese Datei, und jeder geänderte Fall muss gegen den alten Code rot sein.`,
       vorbau,
     ].join("\n");
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
