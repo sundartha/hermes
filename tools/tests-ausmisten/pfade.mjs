@@ -6,14 +6,7 @@ export const BRANCH_PRAEFIX = "ausmisten/";
 export const BEREICHE_DATEI = "tools/bereiche.json";
 export const GATE_DATEI = "tools/gate-tests.json";
 export const TESTORDNER = "test/";
-const ZAEHLER_BESTAND = "tools/basis/zeitglieder-bestand.json";
 export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
-const NUR_KUERZEN = [
-  "tools/basis/test-importe.json",
-  "tools/basis/selbstpruefung.json",
-  "tools/basis/fester-importpfad.json",
-  ZAEHLER_BESTAND,
-];
 const GESPERRTE_TESTPFADE = [
   "test/werkzeuge/",
   "test/sicherheit/",
@@ -24,30 +17,33 @@ const GESPERRTE_MODI = new Set(["120000", "160000"]);
 const STATUS_GELOESCHT = "D";
 const RAW_KOPF = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ ([A-Z])\d*$/;
 const MAX_GIT_AUSGABE = 268_435_456;
-const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
+export const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const FELDER_JE_AENDERUNG = 2;
 
-export function git(args, verzeichnis, eingabe) {
-  const lauf = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
+export function gitLauf(args, verzeichnis, eingabe) {
+  return spawnSync("git", ["-c", "core.quotePath=false", ...args], {
     cwd: verzeichnis,
     encoding: "utf8",
     input: eingabe,
     maxBuffer: MAX_GIT_AUSGABE,
   });
+}
+
+export function git(args, verzeichnis, eingabe) {
+  const lauf = gitLauf(args, verzeichnis, eingabe);
   if (lauf.status !== 0) throw new Error(`git ${args.join(" ")}: ${lauf.stderr.trim()}`);
   return lauf.stdout;
 }
 
 export function gitGelingt(args, verzeichnis) {
-  return spawnSync("git", args, { cwd: verzeichnis, stdio: "ignore" }).status === 0;
+  return gitLauf(args, verzeichnis).status === 0;
 }
-
-const QUELLMUSTER = new Map();
 
 export function leseBereiche() {
   const bereiche = JSON.parse(readFileSync(BEREICHE_DATEI, "utf8"));
-  for (const { quellen } of bereiche) {
-    for (const muster of quellen) QUELLMUSTER.set(muster, new RegExp(muster));
+  for (const eintrag of bereiche) {
+    eintrag.muster = [];
+    for (const quelle of eintrag.quellen) eintrag.muster.push(new RegExp(quelle));
   }
   return bereiche;
 }
@@ -60,9 +56,7 @@ export function bereichAusBranch(branch, bereiche) {
 }
 
 export function bereichDerDatei(datei, bereiche) {
-  return bereiche.find(({ quellen }) =>
-    quellen.some((muster) => QUELLMUSTER.get(muster)?.test(datei) === true),
-  )?.bereich;
+  return bereiche.find(({ muster }) => muster.some((regel) => regel.test(datei)))?.bereich;
 }
 
 export function quellenDesBereichs(bereich, bereiche, dateien) {
@@ -104,15 +98,13 @@ function listeGekuerzt(alt, neu) {
   return true;
 }
 
-function istObjekt(wert) {
-  return wert !== null && typeof wert === "object";
+function istEinfachesObjekt(wert) {
+  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
 }
 
 function gekuerzt(alt, neu) {
   if (Array.isArray(alt) && Array.isArray(neu)) return listeGekuerzt(alt, neu);
-  if (!istObjekt(alt) || !istObjekt(neu) || Array.isArray(alt) || Array.isArray(neu)) {
-    return isDeepStrictEqual(alt, neu);
-  }
+  if (!istEinfachesObjekt(alt) || !istEinfachesObjekt(neu)) return isDeepStrictEqual(alt, neu);
   const schluessel = Object.keys(alt);
   if (!isDeepStrictEqual(schluessel, Object.keys(neu))) return false;
   return schluessel.every((name) => gekuerzt(alt[name], neu[name]));
@@ -127,26 +119,31 @@ function alsJson(text) {
 }
 
 function zaehlerGekuerzt(alt, neu) {
-  if (!istObjekt(alt) || !istObjekt(neu) || Array.isArray(alt) || Array.isArray(neu)) return false;
+  if (!istEinfachesObjekt(alt) || !istEinfachesObjekt(neu)) return false;
   return Object.entries(neu).every(
     ([name, anzahl]) =>
       Object.hasOwn(alt, name) && Number.isInteger(anzahl) && anzahl > 0 && anzahl <= alt[name],
   );
 }
 
-function nurGekuerzt(altText, neuText, pfad) {
+const NUR_KUERZEN = new Map([
+  ["tools/basis/test-importe.json", gekuerzt],
+  ["tools/basis/selbstpruefung.json", gekuerzt],
+  ["tools/basis/fester-importpfad.json", gekuerzt],
+  ["tools/basis/zeitglieder-bestand.json", zaehlerGekuerzt],
+]);
+
+function nurGekuerzt(altText, neuText, kuerzung) {
   const [alt, neu] = [alsJson(altText), alsJson(neuText)];
   if (alt === undefined || neu === undefined || isDeepStrictEqual(alt.wert, neu.wert)) return false;
-  return pfad === ZAEHLER_BESTAND
-    ? zaehlerGekuerzt(alt.wert, neu.wert)
-    : gekuerzt(alt.wert, neu.wert);
+  return kuerzung(alt.wert, neu.wert);
 }
 
 function bestandsVerstoss({ status, pfad }, { von, bis, verzeichnis }) {
   if (status !== "M")
     return `${pfad}: Bestandsdateien dürfen weder neu entstehen noch verschwinden.`;
   const text = (commit) => git(["show", `${commit}:${pfad}`], verzeichnis);
-  if (nurGekuerzt(text(von), text(bis), pfad)) return undefined;
+  if (nurGekuerzt(text(von), text(bis), NUR_KUERZEN.get(pfad))) return undefined;
   return `${pfad}: die Bestandsdatei darf nur Einträge verlieren.`;
 }
 
@@ -189,7 +186,7 @@ function dateiVergleich(datei, { alt, neu, eigene }) {
 function unterdrueckungsVergleich({ von, bis, verzeichnis, eigene }) {
   const text = (commit) => git(["show", `${commit}:${UNTERDRUECKUNGEN}`], verzeichnis);
   const [alt, neu] = [alsJson(text(von))?.wert, alsJson(text(bis))?.wert];
-  if (!istObjekt(alt) || !istObjekt(neu) || Array.isArray(alt) || Array.isArray(neu)) {
+  if (!istEinfachesObjekt(alt) || !istEinfachesObjekt(neu)) {
     return { verstoesse: [`${UNTERDRUECKUNGEN}: die Datei ist kein JSON-Objekt.`], senkungen: [] };
   }
   const dateien = [...new Set([...Object.keys(alt), ...Object.keys(neu)])].sort();
@@ -210,7 +207,7 @@ function aenderungsVerstoss(aenderung, stand) {
   if (modi.some((modus) => GESPERRTE_MODI.has(modus))) {
     return `${pfad}: Symlinks und Submodule sind beim Ausmisten gesperrt.`;
   }
-  if (NUR_KUERZEN.includes(pfad)) return bestandsVerstoss(aenderung, stand);
+  if (NUR_KUERZEN.has(pfad)) return bestandsVerstoss(aenderung, stand);
   if (pfad === UNTERDRUECKUNGEN) {
     if (status !== "M") return `${pfad}: die Datei darf weder neu entstehen noch verschwinden.`;
     const { verstoesse } = unterdrueckungsVergleich(stand);
