@@ -44,3 +44,17 @@ test("eine als nötig gemeldete Zeile gilt nie als gleichwertig; tötet kein Tes
   assert.ok(mutationen.every(({ befehl }) => !befehl.includes("--gleichwertig")), JSON.stringify(mutationen));
   pruefeGesichert(ergebnis);
 });
+
+test("bricht die Mutationsprüfung mit rotem Erstlauf ab, nennt der Grund der Runde Testdatei und Testname", (context) => {
+  const erstlaufRot = [
+    'console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple > sieben");',
+    'console.error("Abbruch: There were failed tests in the initial test run.");',
+    "process.exitCode = 2;",
+    "",
+  ].join("\n");
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": erstlaufRot } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(beleg.grund, "mutation ist mit Exit 2 abgebrochen: Erstlauf rot: test/rechnen.test.js › verdopple > sieben");
+  assert.equal(pruefung(beleg, "mutation"), 2);
+});

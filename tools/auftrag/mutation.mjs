@@ -11,6 +11,7 @@ import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 const SKRIPT = "test:mutation";
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
+const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
 const ABLAGE = "auftrag-umbau";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
@@ -31,12 +32,17 @@ function gleichwertige(lauf) {
   return gleichwertigGemeldet(lauf.berichtszeilen.join("\n"));
 }
 
+function abbruch(name, exitCode, ausgabe) {
+  const rote = treffer(ausgabe, ERSTLAUF_ROT);
+  return rote.length > 0 ? `${name} ist mit Exit ${exitCode} abgebrochen: ${rote.join("; ")}` : `${name} ist mit Exit ${exitCode} abgebrochen.`;
+}
+
 function mutanten(lauf, name, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const befehl = ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
   const { exitCode, ausgabe } = lauf.pruefung(name, befehl);
   if (exitCode === 0) return { ende: true };
-  if (exitCode !== EXIT_UEBERLEBT) return { ende: lauf.scheitert(`${name} ist mit Exit ${exitCode} abgebrochen.`, GRUND.MUTATION_ABBRUCH) };
+  if (exitCode !== EXIT_UEBERLEBT) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
   return { ueberlebende: treffer(ausgabe, UEBERLEBT) };
 }
 
