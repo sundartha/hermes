@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { GRUPPE, gruppen } from "../../tools/mutationspruefung/gruppen.mjs";
+import { geteiltBeiZeitgrenze, GRUPPE, gruppen } from "../../tools/mutationspruefung/gruppen.mjs";
 import { aufrufzeileRot, BASIS, begleiter, BESCHREIBUNG, beschreibungstest, EXIT_ROT, laufgroessen, NEGATIV, NULL, protokolltest, pruefe, quelle, spaltenweise, testdatei, testdateien, VIELE_TESTDATEIEN } from "./mutationspruefung-hilfen.js";
 import { probeRepository, writeFiles } from "./probe-repo.js";
 
@@ -50,4 +50,32 @@ test("die Löschprobe fragt Gruppe um Gruppe, bis eine die gelöschte Zeile verl
   writeFiles(repo, begleiter(ohneProtokoll, protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);")));
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("läuft der Erstlauf einer Gruppe über die Zeitgrenze, wird sie halbiert, bis jeder Teil durchläuft; eine einzelne Datei darüber und jeder andere Fehler brechen ab", async () => {
+  const groessteDurchlaufendeGruppe = 2;
+  const gruppengroesse = 5;
+  const zeitgrenze = new Error("Zeitgrenze");
+  const ueber = (fehler) => fehler === zeitgrenze;
+  const gelaufen = [];
+  const laufen = async (tests) => {
+    gelaufen.push(tests);
+    if (tests.length > groessteDurchlaufendeGruppe) throw zeitgrenze;
+    return tests;
+  };
+  const dateien = testdateien(gruppengroesse);
+  assert.deepEqual(await geteiltBeiZeitgrenze(dateien, laufen, ueber), [dateien.slice(0, 2), [dateien[2]], dateien.slice(3)]);
+  assert.deepEqual(gelaufen, [dateien, dateien.slice(0, 3), dateien.slice(0, 2), [dateien[2]], dateien.slice(3)]);
+  const immer = async () => {
+    throw zeitgrenze;
+  };
+  await assert.rejects(geteiltBeiZeitgrenze(dateien, immer, ueber), zeitgrenze);
+  const anderer = new Error("rot");
+  let versuche = 0;
+  const rot = async () => {
+    versuche += 1;
+    throw anderer;
+  };
+  await assert.rejects(geteiltBeiZeitgrenze(dateien, rot, ueber), anderer);
+  assert.equal(versuche, 1);
 });
