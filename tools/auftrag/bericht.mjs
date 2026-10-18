@@ -14,6 +14,7 @@ const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
 const MAX_NOTIZ_ZEICHEN = 20_000;
 const LEERRAUM = /\s\S*$/;
 const ERSTE_ZUSATZNUMMER = 2;
+const RUNDEN_BELEG = /^\d+(?:\.\d+)?\.json$/;
 
 function zitierteHinweise(text) {
   return [HINWEISE_DES_BAUS, ...zitiert(text)];
@@ -82,6 +83,14 @@ function freierRundenPfad(root, { phase, auftrag }, runde) {
   let pfad = belegPfad(root, phase, name);
   for (let nummer = ERSTE_ZUSATZNUMMER; existsSync(pfad); nummer += 1) pfad = belegPfad(root, phase, `${name}.${nummer}`);
   return pfad;
+}
+
+export function belegeDesAuftrags(root, phase, kennung) {
+  const ordner = belegVerzeichnis(root, phase);
+  if (!existsSync(ordner)) return [];
+  const runde = `${kennung}.runde-`;
+  const eigen = (name) => name === `${kennung}.json` || (name.startsWith(runde) && RUNDEN_BELEG.test(name.slice(runde.length)));
+  return readdirSync(ordner).filter(eigen).map((name) => join(ordner, name));
 }
 
 function belegWert(schluessel, wert) {

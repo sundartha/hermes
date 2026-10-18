@@ -8,7 +8,7 @@ import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
-import { BELEGE, GRUEN, ROT, belegPfad, belegVerzeichnis, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
+import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
@@ -417,14 +417,19 @@ function startBefunde(phasendatei, root) {
   return { phase, befunde: [...form, ...annahmen, ...sauber, ...zweck] };
 }
 
-function entschiedenerAlterTest({ phase, auftrag, root }) {
+function entschiedenerAlterTest(pfad) {
   try {
-    const { entscheidung, alterTest } = JSON.parse(readFileSync(belegPfad(root, phase.phase, auftrag.id), "utf8"));
+    const { entscheidung, alterTest } = JSON.parse(readFileSync(pfad, "utf8"));
     const datei = entscheidung ? alterTest?.datei : undefined;
     return typeof datei === "string" && istAusfuehrbarerTest(datei) ? datei : null;
   } catch {
     return null;
   }
+}
+
+function entschiedeneAlteTests({ phase, auftrag, root }) {
+  const dateien = belegeDesAuftrags(root, phase.phase, auftrag.id).map(entschiedenerAlterTest);
+  return [...new Set(dateien.filter((datei) => datei !== null))].sort();
 }
 
 function phasenIssue(nummer, root) {
@@ -447,20 +452,22 @@ function freigabeProblem(issue, datei) {
 
 function freigabe(kontext) {
   const { phase, auftrag, root } = kontext;
-  const datei = entschiedenerAlterTest(kontext);
-  if (datei === null) return {};
-  const problem = freigabeProblem(phasenIssue(phase.issue, root), datei);
-  if (problem !== null) {
-    console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
-    return {};
-  }
-  const frei = { ...auftrag, erwarteteDateien: [...new Set([...auftrag.erwarteteDateien, datei])] };
+  const dateien = entschiedeneAlteTests(kontext);
+  if (dateien.length === 0) return {};
+  const issue = phasenIssue(phase.issue, root);
+  const freie = dateien.filter((datei) => {
+    const problem = freigabeProblem(issue, datei);
+    if (problem !== null) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
+    return problem === null;
+  });
+  if (freie.length === 0) return {};
+  const frei = { ...auftrag, erwarteteDateien: [...new Set([...auftrag.erwarteteDateien, ...freie])] };
   const abgeleitet = { ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === auftrag.id ? frei : eintrag)) };
   const ordner = belegVerzeichnis(root, phase.phase);
   mkdirSync(ordner, { recursive: true });
   const freigabedatei = join(ordner, `${auftrag.id}.freigabe.phase.json`);
   writeFileSync(freigabedatei, JSON.stringify(abgeleitet));
-  console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
+  for (const datei of freie) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
   return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
 }
 
