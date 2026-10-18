@@ -1,0 +1,10 @@
+{
+  "titel": "Kalibrierung rechnet mit dem Gate-Tarif aus der TypeScript-Fassung",
+  "dateien": {
+    "src/billing/cost-calibration.mts": [
+      "import { tariffCentsPerMin } from \"../telephony/outbound-gates.mts\";",
+      "export const tarif = tariffCentsPerMin;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-imports\""
+}

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as schlafen } from "node:timers/promises";
 
 import { verwaisteSperren } from "../../tools/auftrag/sperren.mjs";
-import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -14,6 +14,11 @@ const EXIT_ROT = 1;
 const LINT_FEHLER = "export const WERT = nichtDefiniert;\n";
 const ABFRAGE_MS = 50;
 const FRIST_MS = 60_000;
+const SPEICHER_ATTRAPPE = {
+  "src/store.js": "export const WERT = 1;\n",
+  "src/store/json.js": "export const WERT = 1;\n",
+  "src/store/pg.js": "export function makePgStore() {\n  return { WERT: 1 };\n}\n",
+};
 const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85 };
 const LIMIT_SEKUNDEN = 2;
 const VOLLER_KONTEXT = { type: "assistant", message: { usage: { input_tokens: 100_000 }, content: [] } };
@@ -211,6 +216,8 @@ test("ein Worktree mit Lint-Fehler macht den Lint-Lauf im Haupt-Checkout nicht r
   writeFileSync(join(probe.repo, ".worktreeinclude"), `${readFileSync(join(REPO_ROOT, ".worktreeinclude"), "utf8")}.env\n`);
   for (const datei of [".env", ".env.test"]) writeFileSync(join(probe.repo, datei), "GEHEIM=1\n");
   copyFileSync(join(REPO_ROOT, "eslint.config.js"), join(probe.repo, "eslint.config.js"));
+  cpSync(join(REPO_ROOT, "tools/eslint-rules"), join(probe.repo, "tools/eslint-rules"), { recursive: true });
+  writeFiles(probe.repo, SPEICHER_ATTRAPPE);
   symlinkSync(join(REPO_ROOT, "node_modules"), join(probe.repo, "node_modules"));
   const lauf = ende(phase(probe, ["l", ISSUE.lint, auftrag("L1", "src/d.js")]));
   const gestartet = join(probe.werkzeug, "start-83-L1");

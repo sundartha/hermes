@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, rmSync, symlinkSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -8,6 +8,7 @@ import { commitAll, probeRepository, REPO_ROOT, runIn, writeFiles } from "./prob
 const TOOL = join(REPO_ROOT, "tools/testlaufzeit-pruefen.mjs");
 const ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const AUSKLINGEN = "tools/basis/testlaufzeit.json";
+const REGELN = "tools/eslint-rules";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const NEU_ODER_STEIGT = "ist neu oder steigt";
@@ -28,10 +29,16 @@ function json(wert) {
   return `${JSON.stringify(wert)}\n`;
 }
 
+function regelDateien() {
+  const dateien = readdirSync(join(REPO_ROOT, REGELN));
+  return Object.fromEntries(dateien.map((datei) => [`${REGELN}/${datei}`, readFileSync(join(REPO_ROOT, REGELN, datei), "utf8")]));
+}
+
 function grundstand(dateien) {
   return {
     ".gitignore": "node_modules\n",
     "eslint.config.js": readFileSync(join(REPO_ROOT, "eslint.config.js"), "utf8"),
+    ...regelDateien(),
     "tools/basis/echte-wartezeiten.json": "[]\n",
     [AUSKLINGEN]: json({
       ausklingen_grenze_ms: BELIEBIGE_AUSKLINGGRENZE_MS,
