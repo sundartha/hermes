@@ -81,7 +81,8 @@ const ROTER_TEST = [
 ].join("\n");
 
 export const PITCH = ["# P-001 Probe", "", "## Anforderungen", "", "### Regel R1: Zahlen werden verdoppelt.", "", "#### Szenario S1: Verdoppeln", S1, "", "## Nicht-Ziele", "", VERBOT, ""].join("\n");
-export const DESIGN = ["# P-001 Probe: Design Doc", "", "## Ausgangslage und Annahmen", "| Aussage | Beleg | Wenn sie nicht stimmt |", "|---|---|---|", "| `verdopple` gibt heute die Zahl unverändert zurück | `src/rechnen.js` | – |", ""].join("\n");
+export const ANNAHME = "| `verdopple` gibt heute die Zahl unverändert zurück | `src/rechnen.js` | – |";
+export const DESIGN = ["# P-001 Probe: Design Doc", "", "## Ausgangslage und Annahmen", "| Aussage | Beleg | Wenn sie nicht stimmt |", "|---|---|---|", ANNAHME, ""].join("\n");
 export const SICHERHEIT = ["# P-001 Probe: Sicherheitsprüfung", "", "## 2. Angriffswege", "Keine Angriffswege gefunden, weil nichts Neues erreichbar ist.", "", "## 3. Lückenprüfung", ""].join("\n");
 
 export function funktion(id, aenderung = {}) {

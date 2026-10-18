@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ROTER_TEST, funktion } from "./auftrag-lauf-hilfen.js";
+import { ABSATZ_MUTATION, MIT_MUTATION, MIT_SIEBEN, ROTER_TEST, SIEBEN_TEST, funktion } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 
 const PHASE = "P-9-probe";
@@ -35,9 +35,9 @@ const DREHBUCH = {
   bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" },
 };
 
-function laufMit(context, plan, phase = PHASE) {
-  const dateien = Object.fromEntries(Object.entries(plan).map(([name, text]) => [`${ORDNER}/${name}`, text]));
-  return starte(context, { auftrag: AUFTRAG, drehbuch: DREHBUCH, dateien, phase: { phase } });
+function laufMit(context, plan, { phase = PHASE, drehbuch = DREHBUCH, dateien = {} } = {}) {
+  const imPlan = Object.fromEntries(Object.entries(plan).map(([name, text]) => [`${ORDNER}/${name}`, text]));
+  return starte(context, { auftrag: AUFTRAG, drehbuch, dateien: { ...dateien, ...imPlan }, phase: { phase } });
 }
 
 function prompt(werkzeug, rolle) {
@@ -60,7 +60,8 @@ test("Annahmen: Test- und Bau-Agent einer Phase aus einem Pitch bekommen den Abs
 test("Annahmen: fehlt einer Phase aus einem Pitch die Design-Datei oder ihr Abschnitt, startet lauf keinen Agenten und nennt Zweck, Behebung und Ausweg", (context) => {
   const ohneAbschnitt = DESIGN.replace("## Ausgangslage und Annahmen", "## Ausgangslage");
   const leer = DESIGN.replace(ANNAHMEN, "");
-  for (const plan of [{ "pitch.md": "# P-9\n" }, { "design.md": ohneAbschnitt }, { "design.md": leer }]) {
+  const doppelt = `${DESIGN}\n## Ausgangslage und Annahmen\nNoch einmal.\n`;
+  for (const plan of [{ "pitch.md": "# P-9\n" }, { "design.md": ohneAbschnitt }, { "design.md": leer }, { "design.md": doppelt }]) {
     const { werkzeug, lauf } = laufMit(context, plan);
     assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
     assert.match(lauf.stderr, new RegExp(`${ORDNER}/design\\.md`));
@@ -71,7 +72,14 @@ test("Annahmen: fehlt einer Phase aus einem Pitch die Design-Datei oder ihr Absc
 });
 
 test("Annahmen: eine Phase ohne Pitch läuft wie bisher, ohne Design-Datei und ohne Abschnitt im Prompt", (context) => {
-  const { werkzeug, lauf } = laufMit(context, {}, "probe");
+  const { werkzeug, lauf } = laufMit(context, {}, { phase: "probe" });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.equal(prompt(werkzeug, "test").includes("Annahmen"), false);
+});
+
+test("Annahmen: der Test-Agent der Mutations-Nachrunde bekommt den Abschnitt wörtlich wie im ersten Prompt", (context) => {
+  const drehbuch = { ...DREHBUCH, bau: MIT_SIEBEN, "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
+  const { werkzeug, lauf } = laufMit(context, { "design.md": DESIGN }, { drehbuch, dateien: MIT_MUTATION });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(prompt(werkzeug, "test-nachrunde").includes(`\n${ANNAHMEN}\n`), prompt(werkzeug, "test-nachrunde"));
 });

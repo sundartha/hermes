@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ohneTeam, ORDNER, phase, PHASENDATEI, RECHNEN_BESTAND, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
+import { ANNAHME, AUSFUEHRBAR, ENTWURF_RECHNEN, ersterVersuch, EXIT_ROT, funktion, neu, neuUmbau, GESTOPPT, lauf, MIT_FIX, MIT_TEXT, ohne, OHNE_FIX, ohneTeam, ORDNER, phase, PHASENDATEI, RECHNEN_BESTAND, REPO, SCHNITT, schneide, TEST, TEXT_BESTAND, umbau, UMBAU_FERTIG, UMBAU_ZWEI } from "./neuschnitt-probe.js";
 
 test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn neu und der Lauf wird ohne Entscheidungsnotiz grün", (context) => {
   const drehbuch = { test: [TEST], bau: [OHNE_FIX, OHNE_FIX, MIT_FIX], planer: [SCHNITT] };
@@ -13,6 +13,7 @@ test("ein Auftrag aus einem Pitch bleibt zweimal rot, der Planer schneidet ihn n
   assert.deepEqual([datei("anzahl-planer"), datei("anzahl-notiz"), datei("gh.log")], ["1", "", ""]);
   const prompt = datei("prompt-planer.txt");
   assert.match(prompt, /^\n## Neuschnitt\n\nAuftrag a1 der Phase P-001-probe ist nach 2 roten Runden gestoppt\./);
+  for (const rolle of ["test", "bau"]) assert.equal(datei(`prompt-${rolle}.txt`).split(ANNAHME).length - 1, Number(datei(`anzahl-${rolle}`)), rolle);
   for (const teil of ["Runde 1: Der Bau-Agent hat keine Datei geändert.", "Runde 2: Der Bau-Agent hat keine Datei geändert.", "Hinweise des Bau-Agenten:\n> Ich finde keinen Weg im Bereich.", `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/design.md, ${ORDNER}/sicherheit.md`, `Phasendatei: ${PHASENDATEI}`, '"id": "a1"']) {
     assert.ok(prompt.includes(teil), teil);
   }
