@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { istTestdatei, istUmbau, phasenBefunde } from "../format.mjs";
+import { saetze } from "../neuschnitt.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -168,7 +169,7 @@ class NeuschnittPlanung extends Planung {
     if (!istObjekt(schnitt)) return super.pruefeSchnitt(schnitt);
     this.schnitt = schnitt;
     this.lege("schnitt.json", schnitt);
-    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt) };
+    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt), alteNie: saetze(this.alt.wasDarfNiePassieren) };
     const { befunde, annahmen } = await this.skriptPruefung(schnitt, eingaben);
     this.schnittAnnahmen = annahmen;
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
