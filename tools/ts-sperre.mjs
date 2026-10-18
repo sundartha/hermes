@@ -5,14 +5,13 @@ import { parseArgs } from "node:util";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
-import { CHECKED_ROOTS, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
+import { CHECKED_ROOTS, DECLARATION_FILE, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
 
 const STOCK_FILE = "tools/basis/ts-bestand.json";
 const CHECKED_ROOT_LIST = new Intl.ListFormat("de", { type: "disjunction" }).format(CHECKED_ROOTS);
 const NUL = "\0";
 const CHECKED_EXTENSION = /\.ts$/;
 const NOT_YET_CHECKED_EXTENSION = /\.[cm]ts$/;
-const DECLARATION_FILE = /\.d\.(?:[^/]*\.)?ts$/;
 const TSCONFIG = "tsconfig.json";
 
 function stockOf(text, source) {

@@ -253,6 +253,23 @@ test("feste-pfade: als vom Compiler geprüft gilt nur eine TypeScript-Datei unte
       `${from} → ${to}: eslint.config.js Regel no-dupe-keys gilt für ${from}`,
     );
 });
+test("feste-pfade: auch eine Deklarationsdatei mit Zwischenendung oder großem D gilt nicht als vom Compiler geprüft", (context) => {
+  const config = eslintBlocks(
+    [
+      "export default [",
+      '  { name: "js", files: ["src/*.js"], rules: { "no-dupe-keys": "error" } },',
+      '  { name: "ts", files: ["src/*.ts"], rules: {} },',
+      "];",
+    ].join("\n"),
+  );
+  const files = { ...MANIFEST_BOTH, "eslint.config.js": config };
+  for (const to of ["src/b.d.css.ts", "src/b.d.x.y.ts", "src/b.D.ts"])
+    assertRed(
+      runRenamed(context, files, { renames: [["src/b.js", to]] }),
+      `src/b.js → ${to}: eslint.config.js Regel no-dupe-keys gilt für src/b.js`,
+    );
+});
+
 test("feste-pfade: mit --nur-neue bleibt ein schon im Basis-Stand vorhandener Befund still, jeder neue Befund und jeder Schutzverlust ist rot", (context) => {
   const stale = {
     "tools/gate-tests.json": json({ Probe: { module: ["src/a.js"], tests: ["test/weg.test.js"] } }),
