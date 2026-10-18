@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { ohne } from "./werkzeuge/neuschnitt-probe.js";
 
 const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
@@ -117,7 +118,7 @@ test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIR
     assert.strictEqual(call.calleeIsOwner, true, "das Boolean erscheint - gewollt (publicCall-Denylist)");
     assert.equal(call.to, OWN, "call.to traegt die Nummer LEGITIM (das gewaehlte Ziel)");
 
-    const sanitizedCalls = stateJson.calls.map(({ to: _to, from: _from, ...rest }) => rest);
+    const sanitizedCalls = stateJson.calls.map((stateCall) => ohne(stateCall, "to", "from"));
     const sanitized = JSON.stringify({ ...stateJson, calls: sanitizedCalls });
     assert.ok(!sanitized.includes(OWN), "ausserhalb von call.to/call.from erscheint die Nummer nirgends neu");
     assert.ok(

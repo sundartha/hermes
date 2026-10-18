@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
+import { omitKeys } from "../src/utils/object.js";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { gleichwertigGemeldet } from "./auftrag/gleichwertig.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
@@ -23,7 +24,7 @@ import { entferneArbeitsordner, legeArbeitsordnerAn } from "./tests-ausmisten/ar
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
-const { $schema: _schema, ...KONFIGURATION } = JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8"));
+const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
 const SANDBOXORDNER = ".mutationspruefung";
 const BANK = "regression";

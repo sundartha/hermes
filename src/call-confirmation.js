@@ -1,6 +1,7 @@
 import { createHmac, hkdfSync } from "node:crypto";
 
 import { safeEqual } from "./util.js";
+import { omitKeys } from "./utils/object.js";
 import { MS_PER_MINUTE } from "./utils/timer.js";
 
 export const CONFIRMATION_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -34,7 +35,7 @@ function sortedCanonical(value) {
 }
 
 export function canonicalCallRequest({ to, args }) {
-  const { confirmation_code: _notBound, ...bound } = args || {};
+  const bound = omitKeys(args || {}, ["confirmation_code"]);
   return JSON.stringify(sortedCanonical({ ...bound, to }));
 }
 

@@ -1,32 +1,34 @@
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
 import { findTenant, resolveCallLanguage } from "./state-ops.js";
+import { omitKeys } from "../utils/object.js";
 
-export function publicCall({
-  streamToken,
-  _finished,
-  summarySmsSentAt,
-  summaryMailSentAt,
-  telnyxConversationId,
-  callerTurns,
-  estimatedCostCents,
-  estimatedCostSpendMonthKey,
-  estimatedCostPeriodKey,
-  actualCostMicroCents,
-  costTruedAt,
-  costTruedSource,
-  costTruingAttempts,
-  inboxEntryAt,
-  inboxSeenAt,
-  fromRegistrationSource,
-  costProfile,
-  elDetectorCounts,
-  webhookAnchors,
-  elBoundAt,
-  elFallbackAt,
-  elNachlaufStartedAt,
-  ...rest
-}) {
-  return rest;
+const CALL_FIELDS_HIDDEN_FROM_VIEW = [
+  "streamToken",
+  "_finished",
+  "summarySmsSentAt",
+  "summaryMailSentAt",
+  "telnyxConversationId",
+  "callerTurns",
+  "estimatedCostCents",
+  "estimatedCostSpendMonthKey",
+  "estimatedCostPeriodKey",
+  "actualCostMicroCents",
+  "costTruedAt",
+  "costTruedSource",
+  "costTruingAttempts",
+  "inboxEntryAt",
+  "inboxSeenAt",
+  "fromRegistrationSource",
+  "costProfile",
+  "elDetectorCounts",
+  "webhookAnchors",
+  "elBoundAt",
+  "elFallbackAt",
+  "elNachlaufStartedAt",
+];
+
+export function publicCall(call) {
+  return omitKeys(call, CALL_FIELDS_HIDDEN_FROM_VIEW);
 }
 
 export function findActiveNumber(state, tenantId, provider) {

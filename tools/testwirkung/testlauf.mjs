@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { omitKeys } from "../../src/utils/object.js";
 import { TESTGRUPPE } from "../testgruppe.mjs";
 
 const TESTPARALLEL = 4;
@@ -23,8 +24,7 @@ function eintragIn(verzeichnis) {
 }
 
 function eigenstaendig() {
-  const { [TESTKONTEXT]: _geerbt, ...umgebung } = env;
-  return umgebung;
+  return omitKeys(env, [TESTKONTEXT]);
 }
 
 function aufruf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {

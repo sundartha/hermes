@@ -12,6 +12,7 @@ import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
 import * as store from "./store.js";
+import { omitKeys } from "./utils/object.js";
 import { precallResearchProvider } from "./research/registry.js";
 import { researchEgressInput } from "./research/sanitize.js";
 
@@ -139,7 +140,7 @@ function briefingInput(turn) {
 
 function withoutSelfGrantedAcceptBest(mandate) {
   if (!mandate || mandate.on_out_of_scope !== MANDATE_OUT_OF_SCOPE.ACCEPT_BEST) return mandate;
-  const { on_out_of_scope: _dropped, ...rest } = mandate;
+  const rest = omitKeys(mandate, ["on_out_of_scope"]);
   return Object.keys(rest).length ? rest : null;
 }
 

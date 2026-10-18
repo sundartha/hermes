@@ -10,26 +10,27 @@ import {
   pruefeProfil,
 } from "../src/billing/kostenarten.js";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "../src/telephony/adapters/telnyx/voice.js";
+import { ohne } from "./werkzeuge/neuschnitt-probe.js";
 
 const VOLLSTAENDIGE_ZEILE = { quelle: "x", waehrung: "USD", pflicht: true, preisquelle: "y" };
 
 test("KV2-2-a1: fehlendes quelle wirft", () => {
-  const { quelle: _quelle, ...rest } = VOLLSTAENDIGE_ZEILE;
+  const rest = ohne(VOLLSTAENDIGE_ZEILE, "quelle");
   assert.throws(() => pruefeKostenart("x", rest), /quelle fehlt/);
 });
 
 test("KV2-2-a2: fehlendes waehrung wirft", () => {
-  const { waehrung: _waehrung, ...rest } = VOLLSTAENDIGE_ZEILE;
+  const rest = ohne(VOLLSTAENDIGE_ZEILE, "waehrung");
   assert.throws(() => pruefeKostenart("x", rest), /waehrung fehlt/);
 });
 
 test("KV2-2-a3: fehlendes pflicht wirft", () => {
-  const { pflicht: _pflicht, ...rest } = VOLLSTAENDIGE_ZEILE;
+  const rest = ohne(VOLLSTAENDIGE_ZEILE, "pflicht");
   assert.throws(() => pruefeKostenart("x", rest), /pflicht fehlt/);
 });
 
 test("KV2-2-a4: fehlendes preisquelle wirft", () => {
-  const { preisquelle: _preisquelle, ...rest } = VOLLSTAENDIGE_ZEILE;
+  const rest = ohne(VOLLSTAENDIGE_ZEILE, "preisquelle");
   assert.throws(() => pruefeKostenart("x", rest), /preisquelle fehlt/);
 });
 

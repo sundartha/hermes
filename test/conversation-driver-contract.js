@@ -239,7 +239,7 @@ export async function sequentialConsultAnswersAreCorrectlyPairedCase(makeDriver)
 export async function concurrentConsultAnswersMatchByRequestIdCase(makeDriver) {
   const callId = "cdc-consult-concurrent";
   const spy = makeCallbackSpy({
-    onConsultRaised: (_request) => {
+    onConsultRaised: () => {
       const raisedFirst = spy.consults.length === 1;
       const answer = { kind: "answered", facts: [raisedFirst ? "Antwort auf Frage 1" : "Antwort auf Frage 2"] };
       return raisedFirst ? sleep(OUT_OF_ORDER_DELAY_MS).then(() => answer) : Promise.resolve(answer);

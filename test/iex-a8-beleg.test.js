@@ -14,6 +14,7 @@ import {
 } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { neuePglite } from "./pglite-helfer.js";
+import { ohne as ohneFeld } from "./werkzeuge/neuschnitt-probe.js";
 
 let beleg, ops, jsonStore, makePgStore, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;
@@ -170,10 +171,6 @@ const DID_BASIS = "+493000001111";
 function mitTrunk(aenderung) {
   const reg = passendeRegistrierung(DID_BASIS);
   return { ...reg, inbound_trunk: { ...reg.inbound_trunk, ...aenderung } };
-}
-function ohneFeld(objekt, feld) {
-  const { [feld]: _entfernt, ...rest } = objekt;
-  return rest;
 }
 function trunkOhne(feld) {
   const reg = passendeRegistrierung(DID_BASIS);
