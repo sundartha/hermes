@@ -1,8 +1,9 @@
 import { attachNamespaces, CONFIG_NAMESPACES } from "../src/config.js";
 
 export function withConfigNamespaces(flatConfig) {
-  attachNamespaces(flatConfig, CONFIG_NAMESPACES);
-  return flatConfig;
+  const config = { ...flatConfig };
+  attachNamespaces(config, CONFIG_NAMESPACES);
+  return config;
 }
 
 export function fakeTelnyxShimConfig({
