@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,7 +14,12 @@ import { API_PFAD, REPO, starteWerkzeug } from "./warteschlange/hilfen.mjs";
 const DATEN = "tools/zweck/github.json";
 const FREIGABE = "tools/freigabe-pruefung.mjs";
 const ROTPROBEN_WOCHE = "tools/rotproben-woche.mjs";
+const PFLICHT_YAML = [".github/workflows/ci.yml", ".github/actions/node-npm-ci/action.yml"];
+const SAMMELJOB = "github/ci-sammeljob";
 const GITHUB_ID = /"(github\/[a-z-]+)"/g;
+const ZWECK_ZEIGEN = /node tools\/zweck-zeigen\.mjs ((?:github\/[a-z-]+ ?)+)/g;
+const PRINTF_ANFANG = /^\s*printf '%s\\n' \\$/;
+const FORTSETZUNG = / \\$/;
 const GRUND_AUFRUF = /\b(?:grund|listed)\(\s*([^,\s]+),/g;
 const GRUND_KONSTANTE = /^FREIGABE_GRUENDE\.([A-Z_]+)$/;
 const DURCHGEREICHT = "zweck";
@@ -35,6 +41,26 @@ function dateienUnter(ordner, endung) {
     .map((eintrag) => join(eintrag.parentPath, eintrag.name).slice(REPO_ROOT.length));
 }
 
+function printfBloecke(text) {
+  const zeilen = text.split("\n");
+  return zeilen.flatMap((zeile, beginn) => {
+    if (!PRINTF_ANFANG.test(zeile)) return [];
+    const ende = zeilen.findIndex((folge, index) => index > beginn && !FORTSETZUNG.test(folge));
+    const befehl = zeilen.slice(beginn, ende + 1).join("\n");
+    return [spawnSync("bash", ["-c", befehl], { encoding: "utf8" }).stdout];
+  });
+}
+
+function blockId(ausgabe) {
+  return Object.keys(JSON.parse(quelle(DATEN))).find((id) => ausgabe === `${zweckBlock(id).join("\n")}\n`);
+}
+
+function yamlIds() {
+  const texte = [...dateienUnter(".github", ".yml")].map(quelle);
+  const aufrufe = texte.flatMap((text) => [...text.matchAll(ZWECK_ZEIGEN)].flatMap((treffer) => treffer[1].trim().split(" ")));
+  return [...aufrufe, ...texte.flatMap(printfBloecke).map(blockId)];
+}
+
 function quelltextIds() {
   return dateienUnter("tools", ".mjs").flatMap((pfad) => [...quelle(pfad).matchAll(GITHUB_ID)].map((treffer) => treffer[1]));
 }
@@ -49,10 +75,31 @@ test("jede Gründe-Art der Freigabe-Prüfung hat einen Zweck-Text, und die Prüf
   assert.deepEqual(arten.filter((art) => !genutzt.includes(art)), [], "Art ohne Grund in tools/freigabe-pruefung.mjs");
 });
 
-test("tools/zweck/github.json hat genau die IDs, die die Werkzeuge nennen", () => {
-  const genutzt = new Set(quelltextIds());
+test("tools/zweck/github.json hat genau die IDs, die Werkzeuge und Workflow-Schritte nennen", () => {
+  const genutzt = new Set([...quelltextIds(), ...yamlIds()]);
+  assert.ok(!genutzt.has(undefined), "ein printf-Block in .github/ ist kein Zweck-Block aus tools/zweck/github.json");
   for (const id of genutzt) assert.ok(kenntZweck(id), `kein Text für ${id}`);
   assert.deepEqual(Object.keys(JSON.parse(quelle(DATEN))).toSorted(), [...genutzt].toSorted());
+});
+
+test("jeder Schritt Install-Skripte der Pflicht-Checks zeigt bei Rot Zweck und Ausweg", () => {
+  for (const pfad of PFLICHT_YAML) {
+    const text = quelle(pfad);
+    const schritte = text.match(/- name: Install-Skripte\n\s+id: installskripte\n/g) ?? [];
+    assert.equal(schritte.length, text.match(/- name: Install-Skripte\n/g).length, `${pfad}: Install-Skripte ohne id`);
+    const zweck = text.match(/if: failure\(\) && steps\.installskripte\.outcome == 'failure'\n\s+(?:shell: bash\n\s+)?run: node tools\/zweck-zeigen\.mjs github\/install-skripte\n/g) ?? [];
+    assert.equal(zweck.length, schritte.length, pfad);
+  }
+});
+
+test("der Sammeljob CI zeigt Zweck und Ausweg nur, wenn sein Schritt Alle Jobs erfolgreich rot ist", () => {
+  const job = quelle(".github/workflows/ci.yml").split("\n  ci:\n")[1];
+  assert.match(job, /- name: Alle Jobs erfolgreich\n\s+id: alle\n/);
+  const [, abSammelschritt] = job.split("- name: Alle Jobs erfolgreich");
+  const nachher = abSammelschritt.split("\n      - name: ").slice(1);
+  assert.ok(nachher.length > 0);
+  for (const schritt of nachher) assert.match(schritt, /\n\s+if: failure\(\) && steps\.alle\.outcome == 'failure'\n/, schritt);
+  assert.match(nachher.at(-1), new RegExp(`run: node tools/zweck-zeigen\\.mjs ${SAMMELJOB}\\n`));
 });
 
 test("jeder Teil der Rot-Proben-Woche, der rot werden kann, hat einen Zweck-Text", () => {

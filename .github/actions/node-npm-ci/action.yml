@@ -27,8 +27,14 @@ runs:
       run: npm ci --ignore-scripts --prefix apps/web
 
     - name: Install-Skripte
+      id: installskripte
       if: inputs.install-skripte == 'true'
       shell: bash
       run: |
         set -euo pipefail
         jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+    - name: Zweck der Install-Skripte
+      if: failure() && steps.installskripte.outcome == 'failure'
+      shell: bash
+      run: node tools/zweck-zeigen.mjs github/install-skripte
