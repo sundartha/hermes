@@ -3,7 +3,10 @@
   "pfade": [
     "tools/abhaengigkeiten.mjs",
     ".dependency-cruiser.cjs",
-    ".dependency-cruiser-known-violations.json"
+    ".dependency-cruiser-known-violations.json",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/eslint-rules/knoten.js"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],

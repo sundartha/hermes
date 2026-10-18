@@ -1,0 +1,29 @@
+{
+  "titel": "Neue .ts-Datei ohne Umbenennung, Verstoß eingefroren",
+  "vorher": {
+    "src/app.js": [
+      "import { wert } from \"./store/intern.js\";",
+      "",
+      "export function kopie(faktor) {",
+      "  return wert * faktor;",
+      "}"
+    ],
+    "src/store/intern.js": ["export const wert = 1;"],
+    ".dependency-cruiser-known-violations.json": [
+      "[{\"type\": \"dependency\", \"from\": \"src/app.js\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"speicher-nur-ueber-fassade\"}}]"
+    ]
+  },
+  "dateien": {
+    "src/neu.ts": [
+      "import { wert } from \"./store/intern.js\";",
+      "",
+      "export function kopie(faktor: number) {",
+      "  return wert * faktor;",
+      "}"
+    ],
+    ".dependency-cruiser-known-violations.json": [
+      "[{\"type\": \"dependency\", \"from\": \"src/app.js\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"speicher-nur-ueber-fassade\"}}, {\"type\": \"dependency\", \"from\": \"src/neu.ts\", \"to\": \"src/store/intern.js\", \"rule\": {\"severity\": \"error\", \"name\": \"speicher-nur-ueber-fassade\"}}]"
+    ]
+  },
+  "erwartet": "neu eingefroren ist: src/neu.ts → src/store/intern.js"
+}
