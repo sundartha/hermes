@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { changedFiles } from "./betroffene-tests.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
-import { mitNeuenPfaden, umbenennungen } from "./umbenennung.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -22,7 +22,6 @@ const TOOL_TEST_GLOB = "test/werkzeuge/**/*.test.{js,ts}";
 const TEST_CONCURRENCY = 4;
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
 const DELETED = "D";
-const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const PRODUCT_PREFIXES = ["src/", "test/"];
 const TOOL_TEST_PREFIX = "test/werkzeuge/";
 const FIRST_ARGUMENT = 2;
@@ -87,25 +86,13 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
-async function changedEntries(baseRef) {
-  const mergeBase = spawnSync("git", ["merge-base", "HEAD", baseRef], { encoding: "utf8" });
-  if (mergeBase.status !== 0) return null;
-  const von = mergeBase.stdout.trim();
-  const diff = spawnSync("git", ["diff", "--name-status", "--no-renames", "-z", von], {
-    encoding: "utf8",
-  });
-  if (diff.status !== 0) return null;
-  const changes = [...diff.stdout.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({ status, path }));
-  return mitNeuenPfaden(changes, await umbenennungen({ von }));
-}
-
 function isProductChange({ status, path }) {
   const isProductPath = PRODUCT_PREFIXES.some((prefix) => path.startsWith(prefix));
   return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_PREFIX);
 }
 
 async function needsToolTests(baseRef) {
-  const changes = await changedEntries(baseRef);
+  const changes = await changedFiles(baseRef);
   return changes === null || changes.some((change) => !isProductChange(change));
 }
 

@@ -11,7 +11,7 @@ const NAME_PATTERN = /^\s*(?:-\s+)?["']?([^\s"':#]+)/;
 const FLOW_LIST_PATTERN = /^\[(.*)\]$/;
 const QUOTES_PATTERN = /^["']|["']$/g;
 const WORKFLOW_RUN = "workflow_run";
-export const WORKFLOW_RUN_PATTERN = /\bworkflow_run\b/;
+const WORKFLOW_RUN_PATTERN = /\bworkflow_run\b/;
 const WITH_WORKFLOW_RUN = new Set([WORKFLOW_RUN, "workflow_dispatch"]);
 const ENVIRONMENT_KEY_PATTERN = /^\s*["']?environment["']?\s*:/;
 const CHECKOUT_PATTERN = /\buses\s*:\s*["']?actions\/checkout@/i;
@@ -289,9 +289,12 @@ function anchorOrAlias(line) {
   return "YAML-Anker und -Aliase (&name, *name) sind in Workflow-Dateien verboten";
 }
 
+export function mentionsWorkflowRun(lines) {
+  return WORKFLOW_RUN_PATTERN.test(triggerSection(lines) ?? "");
+}
+
 function workflowRunWithOtherTriggers(lines) {
-  const mentioned = WORKFLOW_RUN_PATTERN.test(triggerSection(lines) ?? "");
-  const broken = mentioned && !startsByWorkflowRunOrDispatch(lines);
+  const broken = mentionsWorkflowRun(lines) && !startsByWorkflowRunOrDispatch(lines);
   const triggerLine = lines.findIndex((line) => TRIGGER_KEY_PATTERN.test(line));
   return (_line, index) => {
     if (!broken || index !== triggerLine) return undefined;
