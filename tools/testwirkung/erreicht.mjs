@@ -31,7 +31,7 @@ function nachTestUmgezogen(basis) {
   return umgezogen;
 }
 
-async function wieAufDerBasis(basis) {
+async function bleibenImBasisstand(basis) {
   const { paare } = await umbenennungen({ von: basis });
   return new Set([...nachTestUmgezogen(basis), ...paare.filter(({ nurTypen }) => nurTypen).map(({ alt }) => alt)]);
 }
@@ -41,7 +41,7 @@ async function neuerCodeIn(verzeichnis, basis) {
     ...namen(["diff", "--name-only", "-z", "--no-renames", basis]),
     ...namen(["ls-files", "--others", "--exclude-standard", "-z"]),
   ];
-  const bleibt = await wieAufDerBasis(basis);
+  const bleibt = await bleibenImBasisstand(basis);
   for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !bleibt.has(pfad))) {
     const ziel = join(verzeichnis, datei);
     rmSync(ziel, { force: true });
