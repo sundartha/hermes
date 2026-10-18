@@ -5,6 +5,7 @@ import { chdir, cwd } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
+import { MESSBAR } from "./entscheiden.mjs";
 import { dynamischeZiele, syntaxknoten } from "./importe.mjs";
 import {
   QUELLDATEI,
@@ -16,7 +17,6 @@ import {
 } from "./pfade.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
-const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
 const TESTHILFE = /^test\//;
 const WURZELN = ["src", "test"];
 const OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };

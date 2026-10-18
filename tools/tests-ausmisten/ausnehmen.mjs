@@ -1,7 +1,13 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 
-import { UNVERAENDERT } from "./entscheiden.mjs";
+import {
+  DATEI_GEAENDERT,
+  GEAENDERT,
+  GELOESCHT,
+  HILFSDATEI_GEAENDERT,
+  UNVERAENDERT,
+} from "./entscheiden.mjs";
 import { syntaxbaum } from "./importe.mjs";
 import { git, gitGelingt } from "./pfade.mjs";
 
@@ -112,12 +118,15 @@ export function testfaelleImText(datei, text) {
   return faelle;
 }
 
-function imTextEindeutig({ test, name }, datei) {
-  return typeof testfaelleImText(test, readFileSync(datei, "utf8"))?.get(name) === "string";
+function eindeutigerFall({ test, name }, text) {
+  const fall = testfaelleImText(test, text)?.get(name);
+  return typeof fall === "string" ? fall : undefined;
 }
 
-export const DATEI_GEAENDERT = "Datei geändert";
-export const HILFSDATEI_GEAENDERT = "Hilfsdatei geändert: ";
+function imTextEindeutig(fall, datei) {
+  return eindeutigerFall(fall, readFileSync(datei, "utf8")) !== undefined;
+}
+
 const TESTHILFE = /^test\//;
 
 function fassung(rev, test, verzeichnis) {
@@ -145,14 +154,15 @@ export function hilfsdateien(test, graphen) {
   return [...erreicht].sort();
 }
 
-function fallImBranch({ test, name }, { master, kopf, verzeichnis }) {
-  const alt = testfaelleImText(test, fassung(master, test, verzeichnis) ?? "")?.get(name);
-  if (alt === undefined || alt === null) return "nicht zuzuordnen";
+function fallImBranch(fall, { master, kopf, verzeichnis }) {
+  const { test, name } = fall;
+  const alt = eindeutigerFall(fall, fassung(master, test, verzeichnis) ?? "");
+  if (alt === undefined) return "nicht zuzuordnen";
   const neuText = fassung(kopf, test, verzeichnis);
-  if (neuText === undefined) return "gelöscht";
+  if (neuText === undefined) return GELOESCHT;
   const neu = testfaelleImText(test, neuText)?.get(name);
-  if (neu === undefined) return "gelöscht";
-  return neu === alt ? UNVERAENDERT : "geändert";
+  if (neu === undefined) return GELOESCHT;
+  return neu === alt ? UNVERAENDERT : GEAENDERT;
 }
 
 export function imBranch(fall, lauf, graphen = []) {
