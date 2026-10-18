@@ -4,10 +4,12 @@ import { dirname, join } from "node:path";
 import { cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
+
 import { geladeneDateien, gelaufeneAufrufzeilen } from "./abdeckung.mjs";
 import { TESTDATEI, dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { abschnitte, arbeitsbaumAbbauen, basisArbeitsbaum, innersterTest } from "./geaendert.mjs";
-import { git } from "./git.mjs";
+import { git, inBasis } from "./git.mjs";
 import { testlaufNebenher } from "./testlauf.mjs";
 
 const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
@@ -17,6 +19,8 @@ const TESTORDNER = "test/";
 const FELDER_JE_UMZUG = 3;
 const SKRIPT = /\.[cm]?[jt]s$/;
 const MARKIERUNG = ".testwirkung-geladen";
+const STANDARDEXPORT = "default";
+const OHNE_EXPORT = { namen: [], sterne: [] };
 
 function namen(args) {
   return git(args).split("\0").filter(Boolean);
@@ -36,8 +40,39 @@ function bleibenImBasisstand(basis, { paare }) {
   return new Set([...nachTestUmgezogen(basis), ...paare.filter(({ nurTypen }) => nurTypen).map(({ alt }) => alt)]);
 }
 
-function ersatz(datei, markierung) {
-  return `process.getBuiltinModule("node:fs").appendFileSync(${JSON.stringify(markierung)}, ${JSON.stringify(`${datei}\n`)});\n`;
+function gebundeneNamen(bindung) {
+  if (ts.isIdentifier(bindung)) return [bindung.text];
+  return bindung.elements.flatMap((element) => (ts.isOmittedExpression(element) ? [] : gebundeneNamen(element.name)));
+}
+
+function exportDerDeklaration(anweisung) {
+  const klausel = anweisung.exportClause;
+  if (anweisung.isTypeOnly) return OHNE_EXPORT;
+  if (klausel === undefined) return { namen: [], sterne: [`export * from ${JSON.stringify(anweisung.moduleSpecifier.text)};`] };
+  if (ts.isNamespaceExport(klausel)) return { namen: [klausel.name.text], sterne: [] };
+  return { namen: klausel.elements.filter(({ isTypeOnly }) => !isTypeOnly).map(({ name }) => name.text), sterne: [] };
+}
+
+function exportDerAnweisung(anweisung) {
+  if (ts.isExportAssignment(anweisung)) return anweisung.isExportEquals ? OHNE_EXPORT : { namen: [STANDARDEXPORT], sterne: [] };
+  if (ts.isExportDeclaration(anweisung)) return exportDerDeklaration(anweisung);
+  const arten = new Set((ts.canHaveModifiers(anweisung) ? (ts.getModifiers(anweisung) ?? []) : []).map(({ kind }) => kind));
+  if (!arten.has(ts.SyntaxKind.ExportKeyword)) return OHNE_EXPORT;
+  if (arten.has(ts.SyntaxKind.DefaultKeyword)) return { namen: [STANDARDEXPORT], sterne: [] };
+  if (ts.isVariableStatement(anweisung)) return { namen: anweisung.declarationList.declarations.flatMap(({ name }) => gebundeneNamen(name)), sterne: [] };
+  return { namen: anweisung.name === undefined ? [] : [anweisung.name.text], sterne: [] };
+}
+
+function exporteImBasisstand(basis, datei) {
+  const quelle = ts.createSourceFile(datei, inBasis(basis, datei) ?? "", ts.ScriptTarget.Latest);
+  const anweisungen = quelle.statements.map(exportDerAnweisung);
+  return { namen: [...new Set(anweisungen.flatMap(({ namen }) => namen))], sterne: [...new Set(anweisungen.flatMap(({ sterne }) => sterne))] };
+}
+
+function ersatz(datei, markierung, { namen, sterne }) {
+  const zeilen = [`process.getBuiltinModule("node:fs").appendFileSync(${JSON.stringify(markierung)}, ${JSON.stringify(`${datei}\n`)});`];
+  if (namen.length > 0) zeilen.push("const ersatz = undefined;", `export { ${namen.map((name) => `ersatz as ${JSON.stringify(name)}`).join(", ")} };`);
+  return `${[...zeilen, ...sterne].join("\n")}\n`;
 }
 
 function abweichendVomBasisstand(basis, umbenannt) {
@@ -59,16 +94,16 @@ function neuerCodeIn(verzeichnis, dateien) {
   }
 }
 
-function entfernteSkripteVertreten(verzeichnis, dateien) {
+function entfernteSkripteVertreten(verzeichnis, basis, dateien) {
   const entfernt = dateien.filter((datei) => !existsSync(datei) && SKRIPT.test(datei));
-  for (const datei of entfernt) writeFileSync(join(verzeichnis, datei), ersatz(datei, join(verzeichnis, MARKIERUNG)));
+  for (const datei of entfernt) writeFileSync(join(verzeichnis, datei), ersatz(datei, join(verzeichnis, MARKIERUNG), exporteImBasisstand(basis, datei)));
   return entfernt;
 }
 
 function neuerCodeMitErsatzIn(verzeichnis, basis, umbenannt) {
   const dateien = abweichendVomBasisstand(basis, umbenannt);
   neuerCodeIn(verzeichnis, dateien);
-  return entfernteSkripteVertreten(verzeichnis, dateien);
+  return entfernteSkripteVertreten(verzeichnis, basis, dateien);
 }
 
 function markierteDateien(verzeichnis) {
