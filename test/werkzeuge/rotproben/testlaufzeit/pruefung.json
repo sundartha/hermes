@@ -7,7 +7,10 @@
     "tools/basis/testlaufzeit.json",
     "tools/basis/echte-wartezeiten.json",
     "tools/basis/zeitglieder-bestand.json",
-    "test/echt-warten.js"
+    "test/echt-warten.js",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/bestand-rueckfuehrung.mjs"
   ],
   "ausnahmen": {
     "bezeichnung": "Eingefrorene direkte Zeitglieder in Tests",

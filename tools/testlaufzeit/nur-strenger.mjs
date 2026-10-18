@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 
+import { unveraendert } from "../bestand-rueckfuehrung.mjs";
+
 function stand(basis, datei) {
   try {
     const text = execFileSync("git", ["show", `${basis}:${datei}`], {
@@ -12,11 +14,11 @@ function stand(basis, datei) {
   }
 }
 
-export function ausklingenStrenger(basis, datei, jetzt) {
+export function ausklingenStrenger({ basis, zurueck = unveraendert }, datei, jetzt) {
   const vorher = basis ? stand(basis, datei) : null;
   if (vorher === null || vorher.ausklingen_grenze_ms === null) return [];
   const neu = jetzt.ausklingen_bestand.filter(
-    (eintrag) => !vorher.ausklingen_bestand.includes(eintrag),
+    (eintrag) => !vorher.ausklingen_bestand.includes(zurueck(eintrag)),
   );
   const grenzeVorher = vorher.ausklingen_grenze_ms;
   const grenzeJetzt = jetzt.ausklingen_grenze_ms;
@@ -29,10 +31,16 @@ export function ausklingenStrenger(basis, datei, jetzt) {
   ];
 }
 
-export function zeitgliederStrenger(basis, datei, jetzt) {
+export function zeitgliederStrenger({ basis, zurueck = unveraendert }, datei, jetzt) {
   const vorher = basis ? stand(basis, datei) : null;
   if (vorher === null) return [];
+  const summe = new Map();
+  for (const [eintrag, zahl] of Object.entries(jetzt)) {
+    const alt = zurueck(eintrag);
+    summe.set(alt, (summe.get(alt) ?? 0) + zahl);
+  }
+  const steigt = (alt) => !(alt in vorher) || summe.get(alt) > vorher[alt];
   return Object.entries(jetzt)
-    .filter(([eintrag, zahl]) => !(eintrag in vorher) || zahl > vorher[eintrag])
+    .filter(([eintrag]) => steigt(zurueck(eintrag)))
     .map(([eintrag]) => `${datei}: ${eintrag} ist neu oder steigt; Einträge dürfen nur sinken`);
 }

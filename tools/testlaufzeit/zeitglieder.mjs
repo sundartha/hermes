@@ -7,6 +7,7 @@ import tseslint from "typescript-eslint";
 
 const BLOCKNAME = "zeitglieder-in-tests";
 const BASIS = "tools/basis/zeitglieder-bestand.json";
+const TS_DATEIEN = ["**/*.ts", "**/*.mts", "**/*.cts"];
 
 async function regelnAusKonfiguration(wurzel) {
   const adresse = pathToFileURL(path.join(wurzel, "eslint.config.js")).href;
@@ -21,7 +22,7 @@ async function zaehleJeDatei(wurzel, dateien) {
     overrideConfigFile: true,
     overrideConfig: [
       { files: ["**/*.js", "**/*.mjs", "**/*.cjs"], rules },
-      { files: ["**/*.ts", "**/*.mts", "**/*.cts"], languageOptions: { parser: tseslint.parser }, rules },
+      { files: TS_DATEIEN, languageOptions: { parser: tseslint.parser }, rules },
     ],
   });
   const ergebnisse = await eslint.lintFiles(dateien);
@@ -29,12 +30,17 @@ async function zaehleJeDatei(wurzel, dateien) {
   return new Map(
     ergebnisse.map(({ filePath, messages }) => [
       path.relative(wurzel, filePath),
-      messages.filter(({ ruleId }) => regeln.has(ruleId)).length,
+      messages.some(({ fatal }) => fatal)
+        ? null
+        : messages.filter(({ ruleId }) => regeln.has(ruleId)).length,
     ]),
   );
 }
 
 function befundFuer(datei, eingefroren, gezaehlt) {
+  if (gezaehlt === null) {
+    return `${datei}: ESLint kann die Datei nicht lesen, die Zeitglieder lassen sich nicht zählen`;
+  }
   if (gezaehlt === undefined || gezaehlt === 0) {
     return `${BASIS}: ${datei} hat keine direkten Zeitglieder mehr, Eintrag entfernen`;
   }
