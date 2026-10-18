@@ -37,6 +37,10 @@ function testdatei({ quelle = "js", typ = "", erwartet = 2 } = {}) {
   ]);
 }
 
+function erwartungszeile(datei) {
+  return datei.split("\n").findIndex((zeile) => zeile.includes("assert.equal")) + 1;
+}
+
 function probe(context, dateien) {
   const directory = probeRepository(context, {
     [RECHNER]: text(RECHNER_TEXT),
@@ -110,9 +114,11 @@ test("Testschutz: dieser Importpfad braucht die Freigabe auch, wenn die Testdate
 
 test("Testschutz: eine geänderte .test.ts-Datei nennt den geänderten Testfall", async (context) => {
   const repo = probe(context, { [TESTDATEI_TS]: testdatei({ typ: ": number" }) });
-  writeFiles(repo.directory, { [TESTDATEI_TS]: testdatei({ typ: ": number", erwartet: 3 }) });
+  const geaendert = testdatei({ typ: ": number", erwartet: 3 });
+  writeFiles(repo.directory, { [TESTDATEI_TS]: geaendert });
   commitAll(repo.directory, "Erwartung");
   const ergebnis = await check(repo);
   assertStopped(ergebnis);
-  assert.match(ergebnis.output, /test\/rechnen\.test\.ts, Testfall „rechnet eins plus eins“, Zeilen 6: geändert oder gelöscht/);
+  const meldung = `${TESTDATEI_TS}, Testfall „rechnet eins plus eins“, Zeilen ${erwartungszeile(geaendert)}: geändert oder gelöscht`;
+  assert.ok(ergebnis.output.includes(meldung), ergebnis.output);
 });
