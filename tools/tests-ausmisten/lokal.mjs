@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
+import { ausgabenAus } from "./ausgaben.mjs";
 import { paketName } from "./artefakte.mjs";
 import { BASIS, BRANCH, artefaktText, lesePlan } from "./entscheiden.mjs";
 import { ausgenommeneFaelle, paketTeile, urteilAusTeilen, zeigeAusnahmen } from "./melden.mjs";
@@ -40,17 +41,6 @@ function ereignis(ordner, { kopf, bereich }) {
   const datei = join(ordner, "ereignis.json");
   writeFileSync(datei, JSON.stringify({ workflow_run: lauf }));
   return datei;
-}
-
-export function ausgabenAus(datei) {
-  if (!existsSync(datei)) return {};
-  const zeilen = readFileSync(datei, "utf8").split("\n").filter(Boolean);
-  return Object.fromEntries(
-    zeilen.map((zeile) => [
-      zeile.slice(0, zeile.indexOf("=")),
-      zeile.slice(zeile.indexOf("=") + 1),
-    ]),
-  );
 }
 
 function schritt(stand, { name, args, umgebung = {} }) {

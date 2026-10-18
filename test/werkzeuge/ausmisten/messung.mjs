@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { ausgabenAus as ausgaben } from "../../../tools/tests-ausmisten/lokal.mjs";
+import { ausgabenAus as ausgaben } from "../../../tools/tests-ausmisten/ausgaben.mjs";
 import { ereignisDatei } from "../pruefer/hilfen.mjs";
 import { probeDirectory } from "../probe-repo.js";
 import {

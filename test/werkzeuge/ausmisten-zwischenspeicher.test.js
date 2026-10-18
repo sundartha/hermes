@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ausgabenAus as ausgaben } from "../../tools/tests-ausmisten/lokal.mjs";
+import { ausgabenAus as ausgaben } from "../../tools/tests-ausmisten/ausgaben.mjs";
 import { basisSchluessel } from "../../tools/tests-ausmisten/zwischenspeicher.mjs";
 import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { BRANCH, DOPPELT, REPOSITORY, artefaktRouten } from "./ausmisten/hilfen.mjs";
