@@ -17,7 +17,7 @@ const ENDUNGSPAARE = new Map([
   [".mjs", ".mts"],
   [".cjs", ".cts"],
 ]);
-const TYPESCRIPT = /\.([cm]?)ts$/;
+export const TYPESCRIPT = /\.([cm]?)ts$/;
 const ENDUNG = /\.[cm]?[jt]s$/;
 const RELATIVE_QUELLE = /^\.{1,2}\//;
 const QUELLKNOTEN = new Set([
