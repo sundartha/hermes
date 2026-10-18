@@ -3,9 +3,6 @@ import { relative } from "node:path";
 import { cwd } from "node:process";
 import { parseArgs } from "node:util";
 
-import { ESLint } from "eslint";
-import ts from "typescript";
-
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
 import { CHECKED_ROOTS, TYPESCRIPT_FILE, isCommit } from "./ts-dateien.mjs";
@@ -28,14 +25,14 @@ function isInCheckedPlace(path) {
   return CHECKED_EXTENSION.test(path) && CHECKED_ROOTS.some((root) => path.startsWith(root));
 }
 
-function typecheckedFiles() {
+function typecheckedFiles(ts) {
   const { config, error } = ts.readConfigFile(TSCONFIG, ts.sys.readFile);
   if (error !== undefined) return undefined;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd());
   return new Set(parsed.fileNames.map((file) => relative(cwd(), file)));
 }
 
-async function eslintIgnored(paths) {
+async function eslintIgnored(ESLint, paths) {
   try {
     const eslint = new ESLint();
     return await Promise.all(paths.map((path) => eslint.isPathIgnored(path)));
@@ -52,9 +49,10 @@ function undecidable(paths, tool, reason) {
 
 async function placeFindings(paths) {
   if (paths.length === 0) return [];
-  const typechecked = typecheckedFiles();
+  const [{ ESLint }, { default: ts }] = await Promise.all([import("eslint"), import("typescript")]);
+  const typechecked = typecheckedFiles(ts);
   if (typechecked === undefined) return undecidable(paths, "tsc", `${TSCONFIG} fehlt oder ist nicht lesbar`);
-  const ignored = await eslintIgnored(paths);
+  const ignored = await eslintIgnored(ESLint, paths);
   if (ignored === undefined) return undecidable(paths, "ESLint", "eslint.config.js lässt sich nicht laden");
   return paths.flatMap((path, index) => {
     if (ignored[index])

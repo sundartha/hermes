@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/ts-sperre.mjs");
+const WITHOUT_PACKAGES = fileURLToPath(new URL("ausmisten/ohne-pakete.mjs", import.meta.url));
 const STOCK_FILE = "tools/basis/ts-bestand.json";
 const EXIT_GREEN = 0;
 const EXIT_RED = 1;
@@ -44,6 +46,13 @@ test("ts-sperre: JavaScript und die TypeScript-Dateien aus dem Bestand enden gr�
   });
   assert.equal(result.status, EXIT_GREEN, result.output);
   assert.equal(result.output, "");
+});
+
+test("ts-sperre: ohne TypeScript-Datei unter src, test, tools und scripts endet grün, ohne ESLint oder TypeScript zu laden", (context) => {
+  const repo = probeRepository(context, { ...BASE_FILES, "src/a.js": "export const a = 1;\n" });
+  const result = runIn(repo, process.execPath, ["--import", WITHOUT_PACKAGES, TOOL]);
+  assert.equal(result.status, EXIT_GREEN, `${result.stdout}${result.stderr}`);
+  assert.equal(`${result.stdout}${result.stderr}`, "");
 });
 
 test("ts-sperre: .ts, .mts und .cts klein geschrieben unter src, test, tools und scripts enden grün", (context) => {
