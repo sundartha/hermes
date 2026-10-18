@@ -34,40 +34,34 @@ const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-function scheduleReleaseReconcile(deps) {
-  const run = () =>
-    void runReleaseReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
-      console.error("[did-release]", e.message),
-    );
+function scheduleSweep(logTag, intervalMs, sweep) {
+  const run = () => void sweep().catch((error) => console.error(logTag, error.message));
   run();
-  setInterval(run, RELEASE_RECONCILE_INTERVAL_MS).unref();
+  setInterval(run, intervalMs).unref();
+}
+
+function scheduleReleaseReconcile(deps) {
+  scheduleSweep("[did-release]", RELEASE_RECONCILE_INTERVAL_MS, () =>
+    runReleaseReconcile({ ...deps, nowMs: Date.now() }),
+  );
 }
 
 function scheduleContractEndCleanup(deps) {
-  const run = () =>
-    void runContractEndCleanupSweep(deps).catch((e) => console.error("[contract-end]", e.message));
-  run();
-  setInterval(run, CONTRACT_END_CLEANUP_INTERVAL_MS).unref();
+  scheduleSweep("[contract-end]", CONTRACT_END_CLEANUP_INTERVAL_MS, () => runContractEndCleanupSweep(deps));
 }
 
 const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 function scheduleCancellationMailSweep(deps) {
-  const run = () =>
-    void runCancellationMailSweep(deps).catch((e) => console.error("[cancellation-mail]", e.message));
-  run();
-  setInterval(run, CANCELLATION_MAIL_SWEEP_INTERVAL_MS).unref();
+  scheduleSweep("[cancellation-mail]", CANCELLATION_MAIL_SWEEP_INTERVAL_MS, () => runCancellationMailSweep(deps));
 }
 
 const STRIPE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 function scheduleStripeReconcile(deps) {
-  const run = () =>
-    void runStripeSubscriptionReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
-      console.error("[stripe-reconcile]", e.message),
-    );
-  run();
-  setInterval(run, STRIPE_RECONCILE_INTERVAL_MS).unref();
+  scheduleSweep("[stripe-reconcile]", STRIPE_RECONCILE_INTERVAL_MS, () =>
+    runStripeSubscriptionReconcile({ ...deps, nowMs: Date.now() }),
+  );
 }
 
 export function selectMailer(

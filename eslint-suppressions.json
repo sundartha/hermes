@@ -1036,7 +1036,7 @@
   },
   "src/wiring/web-login.js": {
     "id-length": {
-      "count": 7
+      "count": 3
     },
     "max-lines-per-function": {
       "count": 1
