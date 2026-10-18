@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { Linter } from "eslint";
 
+import { laufzeitText } from "../umbenennung.mjs";
+
 const TEST_DIR = "test/";
 const CARD_DIR = "docs/funktionen/";
 const UNPROTECTED_TEST_PATHS = [":(exclude)test/testbaenke-run.mjs", ":(exclude)test/werkzeuge/"];
@@ -11,8 +13,8 @@ const TEST_FUNCTIONS = new Set(["test", "it"]);
 const SUBTEST_METHOD = "test";
 const SUBTEST_MIN_ARGUMENTS = 2;
 const FUNCTION_NODE_TYPES = new Set(["ArrowFunctionExpression", "FunctionExpression"]);
-const JAVASCRIPT_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
-const COMMONJS_EXTENSION = ".cjs";
+const JAVASCRIPT_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"]);
+const COMMONJS_EXTENSIONS = new Set([".cjs", ".cts"]);
 const STATUS_ADDED = "A";
 export const STATUS_DELETED = "D";
 const BINARY_DIFF_PATTERN = /^Binary files /m;
@@ -109,7 +111,7 @@ export function isCard(file) {
 }
 
 export function sourceTypeOf(file) {
-  return extname(file) === COMMONJS_EXTENSION ? "commonjs" : "module";
+  return COMMONJS_EXTENSIONS.has(extname(file)) ? "commonjs" : "module";
 }
 
 export function isJavaScript(file) {
@@ -117,8 +119,10 @@ export function isJavaScript(file) {
 }
 
 export function testSource(file, source) {
+  const runtimeSource = laufzeitText(file, source);
+  if (runtimeSource === undefined) return undefined;
   const linter = new Linter();
-  const messages = linter.verify(source, {
+  const messages = linter.verify(runtimeSource, {
     languageOptions: { ecmaVersion: "latest", sourceType: sourceTypeOf(file) },
   });
   if (messages.some(({ fatal }) => fatal)) return undefined;
