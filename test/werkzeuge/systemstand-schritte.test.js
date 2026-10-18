@@ -68,7 +68,7 @@ const CRITERIA = {
   "1b": ["pakete-geschlossen", "staging", "katalog-ohne-test", "rotproben", "geheimnis-liste"],
   2: ["pakete-geschlossen", "auftrag", "aufraeumen", "auswertung", "phase-pr"],
   3: ["pakete-geschlossen", "kommentar-basislinie", "tests-ohne-quelltext"],
-  4: ["pakete-geschlossen", "claude-md", "workflows-entfernt", "anweisungstexte"],
+  4: ["pakete-geschlossen", "workflows-entfernt", "anweisungstexte"],
   5: ["pakete-geschlossen", "beleg-zehn-laeufe"],
 };
 const WORKFLOW_RULES_TOOL = "tools/workflows-pruefen.mjs";
@@ -636,4 +636,18 @@ test("--pruefen kennt die neuen Kriterien und sperrt einen Rückfall; ein Stagin
 test("eine CLAUDE.md über 100 Zeilen hält Schritt 4 nicht offen und steht als Bericht in seiner Zeile", async (context) => {
   const { lines } = await systemstand(context, { files: { "CLAUDE.md": "Zeile\n".repeat(TOO_LONG_INSTRUCTIONS) } });
   assert.equal(lines["4"], "Schritt 4: erfüllt. Bericht: CLAUDE.md hat 101 Zeilen, mehr als 100");
+});
+
+test("die Länge der CLAUDE.md ist kein Kriterium von Schritt 4: das Schritt-Issue hat keine Zeile dafür und nennt den Bericht", async (context) => {
+  const result = await systemstand(context, { files: { "CLAUDE.md": "Zeile\n".repeat(TOO_LONG_INSTRUCTIONS) }, args: ["--issues"] });
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const issue = result.created.find(({ title }) => title === "Schritt 4");
+  const [line, ...rest] = issue.body.split("\n");
+  assert.equal(line, "Schritt 4: erfüllt. Bericht: CLAUDE.md hat 101 Zeilen, mehr als 100");
+  assert.doesNotMatch(rest.join("\n"), /CLAUDE\.md/);
+});
+
+test("fehlt die CLAUDE.md, bleibt Schritt 4 offen", async (context) => {
+  const { lines } = await systemstand(context, { files: { "CLAUDE.md": null } });
+  assert.match(lines["4"], /^Schritt 4: offen, weil ENOENT: .*'CLAUDE\.md'$/);
 });
