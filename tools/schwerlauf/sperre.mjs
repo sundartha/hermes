@@ -242,7 +242,7 @@ function erhaltenMeldung({ anlass }, platz, ms) {
 
 export async function sperreNehmenUndHalterEintragen(datei, anlass, optionen = {}) {
   const { aufruferBeendet = aufruferVon(process.ppid), allein = false, vorrang = false, plaetze: anzahl = plaetze() } = optionen;
-  const sperre = { datei, anlass, allein, plaetze: anzahl, kommt: `${datei}${KOMMT}${pid}${JSON_ENDUNG}` };
+  const sperre = { datei, anlass, allein, plaetze: anzahl, kommt: `${datei}${KOMMT}${pid}-${randomUUID()}${JSON_ENDUNG}` };
   trageWartendenEin(sperre, vorrang);
   const einreihen = [dirname(datei), `${basename(datei)}${WARTENDE}`, vorrang ? RANG_VORRANG : RANG_GEWOEHNLICH, basename(sperre.kommt)];
   const kind = perl(HALTEN, [allein ? ART_ALLEIN : ART_PLATZ, ...einreihen, ...sperrpfade(datei, anzahl)]);
