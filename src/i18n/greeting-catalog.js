@@ -22,17 +22,23 @@ export const ALL_GREETING_TEMPLATES = Object.freeze(
 );
 
 const HISTORISCHE_DE_ROHFASSUNGEN = Object.freeze([
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
-  "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
+  Object.freeze({
+    alt: "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
+    ziel: LOCALES.de.greetingDefault,
+  }),
+  Object.freeze({
+    alt: "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
+    ziel: LOCALES.de.greetingVariants[0],
+  }),
 ]);
 
 const GREETING_ORTHOGRAPHY_MIGRATION = Object.freeze(
   Object.assign(
     Object.create(null),
     Object.fromEntries(
-      HISTORISCHE_DE_ROHFASSUNGEN.map((alt, i) => [
+      HISTORISCHE_DE_ROHFASSUNGEN.map(({ alt, ziel }) => [
         withInboundNotice(alt, LOCALES.de.inboundNotice),
-        greetingTemplatesFor("de")[i],
+        withInboundNotice(ziel, LOCALES.de.inboundNotice),
       ]),
     ),
   ),
@@ -50,5 +56,7 @@ export function greetingForLanguage(storedGreeting, language) {
 }
 
 export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }) {
+  if (typeof storedGreeting !== "string")
+    throw new TypeError("gespeicherteBegruessungFuer: storedGreeting muss ein String sein, replaceAll braucht Text");
   return greetingForLanguage(storedGreeting, language).replaceAll("{owner}", ownerName);
 }

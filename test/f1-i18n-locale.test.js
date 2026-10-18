@@ -28,6 +28,22 @@ test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck
   assert.equal(localeFor("").language, DEFAULT_LANGUAGE);
 });
 
+test("localeFor und styleClause: Namen aus der Objekt-Kette sind weder Sprache noch Stil", () => {
+  for (const name of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+    assert.equal(localeFor(name).language, DEFAULT_LANGUAGE, `Sprache ${name}`);
+    for (const lang of SUPPORTED_LANGUAGES) {
+      const klausel = LOCALES[lang].styleClause(name);
+      assert.equal(typeof klausel, "string", `Stil ${name} (${lang}) ist kein Text`);
+      assert.equal(klausel, LOCALES[lang].styleClause(null), `Stil ${name} (${lang}) nicht neutral`);
+    }
+  }
+  assert.notEqual(
+    LOCALES.de.styleClause("warm-persoenlich"),
+    LOCALES.de.styleClause(null),
+    "ein echter Stil bleibt wirksam",
+  );
+});
+
 test("localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault) (ex WORLD-03)", () => {
   assert.equal(localeFor("xx").language, "en");
   assert.equal(localeFor(undefined).language, "en");

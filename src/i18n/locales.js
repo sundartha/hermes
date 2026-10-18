@@ -31,7 +31,7 @@ const STYLE_CLAUSES_EN = Object.freeze({
 });
 
 function makeStyleClause(clauses, neutralClause) {
-  return (styleId) => clauses[styleId] || neutralClause;
+  return (styleId) => (Object.hasOwn(clauses, styleId) ? clauses[styleId] : neutralClause);
 }
 
 const DISCLOSURE_OWNER_FALLBACK_DE = "meinem Auftraggeber";
@@ -404,5 +404,5 @@ export function languageForCountry(country) {
 }
 
 export function localeFor(language) {
-  return LOCALES[language] || LOCALES[DEFAULT_LANGUAGE];
+  return Object.hasOwn(LOCALES, language) ? LOCALES[language] : LOCALES[DEFAULT_LANGUAGE];
 }
