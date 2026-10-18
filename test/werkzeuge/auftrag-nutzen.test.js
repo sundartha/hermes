@@ -161,3 +161,60 @@ test("nutzt der Bau-Agent die vorhandene Funktion, ist die Prüfung grün und di
   assert.deepEqual(pruefung.zeilen, ["grün: 1 von 1 vorhandenen Funktionen in den neuen Zeilen genutzt."]);
   assert.equal(beleg.ergebnis, GRUEN);
 });
+
+const NACHBAU_IN = (datei) => `nachgebaut: ${datei} deklariert verdopple neu, statt src/rechnen.js:verdopple zu nutzen (für gross)`;
+
+function pruefeNachbauIn(datei) {
+  const formen = [
+    ["function verdopple(zahl: number): number {", "  return zahl * 2;", "}"],
+    ["const verdopple = (zahl: string) => zahl;"],
+    ["export function verdopple<T>(zahl: T) {}"],
+    ["class Rechner {", "  static async verdopple(zahl: number): Promise<number> {", "    return zahl * 2;", "  }", "}"],
+    ["class Rechner {", "  verdopple<T>(zahl: T): T {", "    return zahl;", "  }", "}"],
+    ["class Rechner {", "  private verdopple(zahl: number): number {", "    return zahl * 2;", "  }", "}"],
+    ["abstract class Rechner extends Basis {", "  @gemessen", "  public static override async verdopple(zahl: number): Promise<number> {", "    return zahl * 2;", "  }", "}"],
+  ];
+  for (const zeilen of formen) assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(zeilen, { datei })]), [NACHBAU_IN(datei)], zeilen.join("\n"));
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["export function verdopple(zahl: number): number {", "}"], { datei }), neueDatei(["verdopple(1);"])]), [NACHBAU_IN(datei)]);
+}
+
+function pruefeNutzungIn(datei) {
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(['import { verdopple } from "./rechnen.js";', "export const doppelt: number = verdopple(2);"], { datei })]), []);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(["export function gross(zahl: number): number {", "  return verdopple<number>(zahl) as number;", "}"], { datei })]), []);
+}
+
+test("deklariert der Bau die Funktion in einer .ts-Datei neu, ist das ein Nachbau wie in JavaScript", () => {
+  pruefeNachbauIn("src/text.ts");
+});
+
+test("deklariert der Bau die Funktion in einer .mts-Datei neu, ist das ein Nachbau wie in JavaScript", () => {
+  pruefeNachbauIn("src/text.mts");
+});
+
+test("deklariert der Bau die Funktion in einer .cts-Datei neu, ist das ein Nachbau wie in JavaScript", () => {
+  pruefeNachbauIn("src/text.cts");
+});
+
+test("ruft der Bau die Funktion nur in einer .ts-Datei auf, ist sie genutzt", () => {
+  pruefeNutzungIn("src/text.ts");
+});
+
+test("ruft der Bau die Funktion nur in einer .mts-Datei auf, ist sie genutzt", () => {
+  pruefeNutzungIn("src/text.mts");
+});
+
+test("ruft der Bau die Funktion nur in einer .cts-Datei auf, ist sie genutzt", () => {
+  pruefeNutzungIn("src/text.cts");
+});
+
+test("Typen in TypeScript zählen weder als Deklaration noch als Nutzung, der Code daneben schon", () => {
+  const nurTypen = ["interface verdopple { zahl: number }", "type Doppelt = verdopple;", "let wert: verdopple;", "class Rechner implements verdopple {", "  zahl = 1;", "}", "function gross(text: verdopple): Doppelt {}"];
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei(nurTypen, { datei: "src/text.ts" })]), [NICHT_GENUTZT]);
+  assert.deepEqual(nutzungsVerstoesse([VERDOPPLE], [neueDatei([...nurTypen, "export const doppelt = verdopple as unknown as Doppelt;"], { datei: "src/text.ts" })]), []);
+});
+
+test("eine neue .ts-Datei, die kein lesbares TypeScript ist, wird als Verstoß gemeldet statt still als nicht genutzt", () => {
+  const [unlesbar, ...rest] = nutzungsVerstoesse([VERDOPPLE], [neueDatei(["const zahl: = ;", "verdopple(2);"], { datei: "src/text.ts" })]);
+  assert.match(unlesbar, /^nicht lesbar: src\/text\.ts ist kein lesbares TypeScript \(.+\)$/);
+  assert.deepEqual(rest, [NICHT_GENUTZT]);
+});

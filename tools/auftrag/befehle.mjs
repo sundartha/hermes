@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { env } from "node:process";
 
 import { tokenize } from "espree";
+import { parser } from "typescript-eslint";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 
@@ -108,8 +109,8 @@ export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
 const HINZUGEFUEGT = /^\+(?!\+\+ )/;
 const ZIELDATEI = /^\+\+\+ b\/(.+)$/;
 const HUNK_KOPF = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-const JS_DATEI = /\.[cm]?js$/;
 const JAVASCRIPT = { ecmaVersion: "latest", sourceType: "module", loc: true };
+const TYPESCRIPT = { ...JAVASCRIPT, range: true, tokens: true };
 const BEZEICHNER = "Identifier";
 
 function vorgemerkteNeueZeilen(basis, root) {
@@ -170,9 +171,51 @@ function leereNamen() {
   return { genannt: new Set(), deklariert: new Set() };
 }
 
-function namenJeZeile(inhalt) {
+const NUR_TYP = "type";
+const TYP_DEKLARATIONEN = new Set(["TSInterfaceDeclaration", "TSTypeAliasDeclaration", "TSDeclareFunction"]);
+const TYP_SCHLUESSEL = new Set(["typeAnnotation", "returnType", "typeParameters", "typeArguments", "superTypeArguments", "implements"]);
+const TYP_ZUSICHERUNGEN = new Set(["TSAsExpression", "TSSatisfiesExpression"]);
+const TYP_MODIFIKATOREN = new Set(["public", "private", "protected", "readonly", "override", "abstract"]);
+
+function istNurTyp(knoten) {
+  return TYP_DEKLARATIONEN.has(knoten.type) || knoten.declare === true || knoten.importKind === NUR_TYP || knoten.exportKind === NUR_TYP;
+}
+
+function modifikatorBereiche(knoten) {
+  const name = knoten.key ?? knoten.parameter ?? knoten.id;
+  if (!name) return [];
+  const anfang = Math.max(knoten.range[0], ...(knoten.decorators ?? []).map(({ range }) => range[1]));
+  return [[anfang, name.range[0], TYP_MODIFIKATOREN]];
+}
+
+function typBereiche(knoten, schluessel) {
+  if (istNurTyp(knoten)) return [knoten.range];
+  const zusicherung = TYP_ZUSICHERUNGEN.has(knoten.type) ? [[knoten.expression.range[1], knoten.range[1]]] : [];
+  return [...zusicherung, ...modifikatorBereiche(knoten), ...(schluessel[knoten.type] ?? []).flatMap((name) => kinderBereiche(knoten, name, schluessel))];
+}
+
+function kinderBereiche(knoten, name, schluessel) {
+  const kinder = [knoten[name]].flat().filter(Boolean);
+  return TYP_SCHLUESSEL.has(name) ? kinder.map(({ range }) => range) : kinder.flatMap((kind) => typBereiche(kind, schluessel));
+}
+
+function typescriptTokens(inhalt) {
+  const { ast, visitorKeys } = parser.parseForESLint(inhalt, TYPESCRIPT);
+  const bereiche = typBereiche(ast, visitorKeys);
+  return ast.tokens.filter(({ range: [anfang], value }) => !bereiche.some(([von, bis, nur]) => von <= anfang && anfang < bis && (nur?.has(value) ?? true)));
+}
+
+const LESARTEN = [
+  { endung: /\.[cm]?js$/, sprache: "JavaScript", tokens: (inhalt) => tokenize(inhalt, JAVASCRIPT) },
+  { endung: /\.[cm]?ts$/, sprache: "TypeScript", tokens: typescriptTokens },
+];
+
+function lesartDer(datei) {
+  return LESARTEN.find(({ endung }) => endung.test(datei));
+}
+
+function namenJeZeile(tokens) {
   const jeZeile = new Map();
-  const tokens = tokenize(inhalt, JAVASCRIPT);
   tokens.forEach((token, index) => {
     if (token.type !== BEZEICHNER) return;
     const zeile = anfangsZeile(token);
@@ -184,7 +227,8 @@ function namenJeZeile(inhalt) {
 }
 
 function neueZeilenDer({ datei, inhalt, neu }) {
-  const namen = JS_DATEI.test(datei) ? namenJeZeile(inhalt) : new Map();
+  const lesart = lesartDer(datei);
+  const namen = lesart === undefined ? new Map() : namenJeZeile(lesart.tokens(inhalt));
   return neu.map((nummer) => ({ datei, ...(namen.get(nummer) ?? leereNamen()) }));
 }
 
@@ -195,7 +239,7 @@ function lesbareZeilen(dateien) {
     try {
       zeilen.push(...neueZeilenDer(datei));
     } catch (fehler) {
-      unlesbar.push(`nicht lesbar: ${datei.datei} ist kein lesbares JavaScript (${fehler.message})`);
+      unlesbar.push(`nicht lesbar: ${datei.datei} ist kein lesbares ${lesartDer(datei.datei).sprache} (${fehler.message})`);
     }
   }
   return { zeilen, unlesbar };
