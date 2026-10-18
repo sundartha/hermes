@@ -1,0 +1,86 @@
+{
+  "hooks/abnahme-einstellung": {
+    "liste": "H8",
+    "wozu": "Ohne HERMES_ABNAHME weiß der Hook nicht, welchen Abnahmetest der Bau-Agent zuerst ausführen muss; der Agent könnte Code nach Vermutung statt gegen das verlangte Verhalten schreiben.",
+    "behebung": "Den Agenten über tools/auftrag.mjs starten, das HERMES_ABNAHME setzt.",
+    "nichtAngenommen": "HERMES_ABNAHME selbst setzen oder unter src/ auf einem Weg schreiben, den der Hook nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Der Agent kann die Einstellung nicht selbst setzen, der Fehler liegt beim Start. Er antwortet als Letztes mit „Auftrag passt nicht: HERMES_ABNAHME fehlt“."
+  },
+  "hooks/abnahme-zuerst": {
+    "liste": "H8",
+    "wozu": "Der Bau-Agent soll gegen das verlangte Verhalten bauen. Schreibt er Code, ohne den Abnahmetest gesehen zu haben, baut er nach Vermutung, und am Ende steht Code, der am Bestellten vorbeigeht.",
+    "behebung": "Den genannten Befehl ausführen, die rote Ausgabe lesen und erst dann den Code schreiben.",
+    "nichtAngenommen": "Einen Befehl absetzen, der nur Testpfad und npm test enthält, ohne den Abnahmetest wirklich auszuführen und seine Ausgabe zu lesen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich der Abnahmetest nicht ausführen oder hältst du ihn für falsch, antwortest du als Letztes mit „Auftrag passt nicht: <Grund>“."
+  },
+  "hooks/bau-aendert-keine-tests": {
+    "liste": "H6",
+    "wozu": "Der Abnahmetest belegt, dass das bestellte Verhalten da ist. Ändert der Bau-Agent Tests, wäre „Abnahmetest grün“ kein Beleg mehr, und ein Auftrag gälte als erledigt, obwohl das Verhalten für Kunden fehlt.",
+    "behebung": "Den Produktcode so ändern, dass der Test grün wird; Tests schreibt nur der Test-Agent.",
+    "nichtAngenommen": "Im Produktcode einen Sonderfall genau für die Eingabe des Tests einbauen oder den Test über die Kommandozeile ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Hältst du den Test für falsch, änderst du nichts weiter und antwortest als Letztes mit „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“; bricht ein bestehender Test, weil der Auftrag das Verhalten absichtlich ändert, mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“."
+  },
+  "hooks/belege-schuetzen": {
+    "liste": "H9",
+    "wozu": "Unter .fortschritt/ liest das Skript ab, ob ein Auftrag grün ist. Schreibt ein Agent dort, könnte er sich selbst grün melden, und ein Auftrag gälte als erledigt, dessen Tests nie bestanden haben.",
+    "behebung": "Belege nicht anfassen; tools/auftrag.mjs schreibt sie.",
+    "nichtAngenommen": "Die Belegdatei über die Kommandozeile oder ein Skript schreiben. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Es gibt keinen legitimen Grund, dort zu schreiben. Passt ein Beleg nicht, antwortest du als Letztes mit „Auftrag passt nicht: <Grund>“."
+  },
+  "hooks/leise-befehle": {
+    "liste": "H3",
+    "wozu": "node --test schreibt die ganze Ausgabe ins Gespräch. Das Arbeitsgedächtnis läuft voll, beim automatischen Kürzen geht die Zeile mit dem roten Test verloren, und die Sitzung hält einen fehlerhaften Stand für grün.",
+    "behebung": "npm test -- <datei> oder npm run pruefleiter nutzen und lange Ausgaben in eine Datei umleiten, die du gezielt liest.",
+    "nichtAngenommen": "Den Befehl so umschreiben, dass das Suchmuster nicht greift, und die volle Ausgabe trotzdem ins Gespräch holen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: npm test und der Prüfleiter decken jeden Testlauf ab, einen Grund für node --test direkt gibt es nicht. Fehlt dir eine Möglichkeit des Testläufers, gehört sie als Entscheidungsnotiz ins Issue."
+  },
+  "hooks/lesesperre": {
+    "liste": "H2",
+    "wozu": "Eine Datei mit mehr als 1000 Zeilen am Stück zu lesen, füllt das Arbeitsgedächtnis der Sitzung: Frühere Anweisungen geraten aus dem Blick, die Sitzung bricht früher ab, und jeder Lauf kostet mehr.",
+    "behebung": "Mit Grep die Stelle suchen und nur einen Ausschnitt mit offset und limit lesen.",
+    "nichtAngenommen": "Die ganze Datei über einen anderen Befehl wie cat doch am Stück lesen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Brauchst du wirklich mehr als einen Ausschnitt, liest du die nötigen Teile nacheinander mit offset und limit; die Sperre selbst lässt sich nicht aufheben."
+  },
+  "hooks/lint-datei": {
+    "liste": "H4",
+    "wozu": "Lint-Fehler in der gerade geänderten Datei fielen sonst erst beim Commit oder in der CI auf; bis dahin baut die Sitzung auf fehlerhaftem Code weiter, und es muss mehr nachgebessert werden. Wovor die einzelne Regel schützt, steht darüber im Block ihrer Regelgruppe.",
+    "behebung": "Die gemeldeten Verstöße in der Datei beheben, bevor du weiterschreibst.",
+    "nichtAngenommen": "Die Datei über die Kommandozeile schreiben, sodass der Hook nicht läuft, oder eine Regel für die Datei abschalten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der Ausweg hängt an der Regel und steht im Block ihrer Regelgruppe darüber."
+  },
+  "hooks/nur-anhaengen": {
+    "liste": "H7",
+    "wozu": "Bestehende Tests halten Verhalten fest, das weiter gelten soll. Schreibt der Test-Agent sie beim Ergänzen um, kann er sie abschwächen, und ein Fehler, den der alte Test gefangen hätte, käme unbemerkt zu den Kunden.",
+    "behebung": "Den neuen Fall ans Ende der Datei anhängen; bestehende Zeilen ändern nur in den Testdateien, die der Auftrag in erwarteteDateien nennt.",
+    "nichtAngenommen": "Die Datei über die Kommandozeile umschreiben, den neuen Fall so anhängen, dass er einen alten außer Kraft setzt, oder eine Kopie der Datei anlegen, die den alten Test ersetzt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Hält ein bestehender Test ein Verhalten fest, das der Auftrag absichtlich ändert, änderst du ihn nicht und antwortest als Letztes mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; passt der Auftrag sonst nicht, mit „Auftrag passt nicht: <Grund>“."
+  },
+  "hooks/pre-commit-unvorgemerkt": {
+    "liste": "H14",
+    "wozu": "Der Lint-Lauf vor dem Commit prüft den Arbeitsbaum, nicht den vorgemerkten Inhalt. Hat eine vorgemerkte Datei zusätzlich unvorgemerkte Änderungen, wäre Lint grün für einen Stand, der nicht committet wird, und der Fehler fiele erst in der CI auf.",
+    "behebung": "Die Datei vollständig vormerken (git add) oder die unvorgemerkten Änderungen verwerfen und erneut committen.",
+    "nichtAngenommen": "Den Commit mit --no-verify oder mit abgeschalteten Hooks machen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Einer der beiden Wege oben geht immer, einen dritten braucht es nicht."
+  },
+  "hooks/rolle": {
+    "liste": "H5",
+    "wozu": "Im Auftragsweg schreibt der Bau-Agent den Code und der Test-Agent die Tests. Ohne bekannte Rolle kann der Hook nicht entscheiden, was gesperrt ist, und ein Agent könnte Code und die passenden Tests zugleich schreiben; ein grüner Test belegte dann nichts.",
+    "behebung": "Den Agenten über tools/auftrag.mjs starten, das HERMES_ROLLE setzt.",
+    "nichtAngenommen": "HERMES_ROLLE selbst setzen oder die Datei auf einem Weg schreiben, den der Hook nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Der Agent kann seine Rolle nicht selbst setzen, der Fehler liegt beim Start. Im Auftragsweg antwortet der Agent als Letztes mit „Auftrag passt nicht: HERMES_ROLLE fehlt“; sonst gehört der Befund als Entscheidungsnotiz ins Issue."
+  },
+  "hooks/test-aendert-keinen-produktcode": {
+    "liste": "H6",
+    "wozu": "Der Test-Agent schreibt den Test, der das bestellte Verhalten verlangt. Ändert er auch den Produktcode, prüft er seinen eigenen Code, und ein grüner Test belegt nicht mehr, dass der Bau-Agent das Verhalten gebaut hat.",
+    "behebung": "Nur Testdateien schreiben; den Code baut der Bau-Agent.",
+    "nichtAngenommen": "Den Produktcode über die Kommandozeile oder über eine Testhilfe ändern, die Produktcode ersetzt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht der Test eine Änderung am Produktcode, etwa einen Export, änderst du nichts weiter und antwortest als Letztes mit „Auftrag passt nicht: <Grund>“."
+  },
+  "hooks/worktree-pflicht": {
+    "liste": "H1",
+    "wozu": "Im Haupt-Checkout liegt Antonios Arbeitsstand. Schreibt eine Sitzung dort, geht Arbeit verloren, die noch nicht committet ist, oder sie landet in einem fremden Commit.",
+    "behebung": "Vor der ersten Datei mit EnterWorktree in eine eigene Arbeitskopie unter .claude/worktrees/<name> wechseln und dort schreiben.",
+    "nichtAngenommen": "Dieselbe Datei über die Kommandozeile statt über Edit oder Write schreiben, die der Hook als einzige sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Ein Worktree lässt sich immer anlegen, einen anderen Weg gibt es nicht. Lehnt die Rechteprüfung das Anlegen ab, hältst du an und meldest das, statt im Haupt-Checkout zu schreiben."
+  }
+}

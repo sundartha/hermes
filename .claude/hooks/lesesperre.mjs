@@ -25,7 +25,7 @@ function main() {
   if (BINARY_EXTENSIONS.has(extname(path).toLowerCase())) return;
   const lines = lineCount(path);
   if (lines <= MAX_UNBOUNDED_LINES) return;
-  block([
+  block("hooks/lesesperre", [
     `${path} hat ${lines} Zeilen und wird nicht vollständig gelesen.`,
     "Suche zuerst mit Grep nach der Stelle und lies dann einen Ausschnitt mit offset und limit.",
   ]);
