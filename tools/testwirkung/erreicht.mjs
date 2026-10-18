@@ -65,6 +65,12 @@ function entfernteSkripteVertreten(verzeichnis, dateien) {
   return entfernt;
 }
 
+function neuerCodeMitErsatzIn(verzeichnis, basis, umbenannt) {
+  const dateien = abweichendVomBasisstand(basis, umbenannt);
+  neuerCodeIn(verzeichnis, dateien);
+  return entfernteSkripteVertreten(verzeichnis, dateien);
+}
+
 function markierteDateien(verzeichnis) {
   const markierung = join(verzeichnis, MARKIERUNG);
   return existsSync(markierung) ? readFileSync(markierung, "utf8").split("\n") : [];
@@ -88,9 +94,7 @@ async function erreicht({ tests, vergleich }, seite, { verzeichnis, entfernt = [
 async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
-    const dateien = abweichendVomBasisstand(basis, auftrag.umbenannt);
-    neuerCodeIn(verzeichnis, dateien);
-    const entfernt = entfernteSkripteVertreten(verzeichnis, dateien);
+    const entfernt = neuerCodeMitErsatzIn(verzeichnis, basis, auftrag.umbenannt);
     const lauf = await erreicht(auftrag, "alt", { verzeichnis, entfernt });
     const markiert = markierteDateien(verzeichnis);
     return { ...lauf, geladen: entfernt.filter((datei) => lauf.geladen.includes(datei) || markiert.includes(datei)) };
