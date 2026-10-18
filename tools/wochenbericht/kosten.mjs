@@ -5,16 +5,27 @@ import { DAY_MS, WEEK_MS, daysInMonth, monthName, monthStart } from "./zeit.mjs"
 const BUDGET_FILE = ".github/budget.json";
 const MINUTE_MS = 60_000;
 const PERCENT = 100;
-const NOT_BILLED = new Set(["skipped"]);
+export const NOT_BILLED = new Set(["skipped"]);
 
 export function readBudget() {
   return JSON.parse(readFileSync(BUDGET_FILE, "utf8"));
 }
 
-function billedMinutes(run) {
+export function durationMs(start, end) {
+  return new Date(end) - new Date(start);
+}
+
+export function billedMinutesBetween(start, end) {
+  return Math.max(1, Math.ceil(durationMs(start, end) / MINUTE_MS));
+}
+
+export function billedMinutes(run) {
   if (run.status !== "completed" || NOT_BILLED.has(run.conclusion)) return 0;
-  const duration = new Date(run.updated_at) - new Date(run.run_started_at);
-  return Math.max(1, Math.ceil(duration / MINUTE_MS));
+  return billedMinutesBetween(run.run_started_at, run.updated_at);
+}
+
+export function tableCell(text) {
+  return text.split("|").join("\\|");
 }
 
 function rowOf(table, name) {
@@ -78,7 +89,7 @@ export function costSection(runs, budget, now) {
   const table = [
     `| Workflow | Minuten in sieben Tagen | Minuten im ${monthName(now)} |`,
     "| --- | ---: | ---: |",
-    ...rows.map(([name, row]) => `| ${name.split("|").join("\\|")} | ${row.week} | ${row.month} |`),
+    ...rows.map(([name, row]) => `| ${tableCell(name)} | ${row.week} | ${row.month} |`),
     `| **Summe** | **${weekTotal}** | **${total}** |`,
   ];
   return [

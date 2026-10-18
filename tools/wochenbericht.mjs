@@ -13,6 +13,7 @@ import {
 } from "./wochenbericht/entscheidungen.mjs";
 import { PER_PAGE, repo, repoPages } from "./wochenbericht/github.mjs";
 import { costSection, readBudget, runWindowStart } from "./wochenbericht/kosten.mjs";
+import { expensiveRunsSection } from "./wochenbericht/prueflaeufe.mjs";
 import {
   approvalSection,
   mergeSection,
@@ -102,11 +103,12 @@ function section(title, lines) {
 
 async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
   const runs = await workflowRuns(workflows, now);
-  const [approvals, merges, reverts, incentives] = await Promise.all([
+  const [approvals, merges, reverts, incentives, expensive] = await Promise.all([
     approvalSection(),
     mergeSection(now),
     revertSection(now),
     incentiveSection(now),
+    expensiveRunsSection(runs, now),
   ]);
   const lines = [
     `Stand ${germanDate(now)}, Commit ${headCommit()}. Zeitraum: die letzten sieben Tage, bei den Kosten zusätzlich der laufende Monat.`,
@@ -120,6 +122,7 @@ async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
     ...section("Übergangslisten", transitionSection(transitionLists())),
     ...section("Ausstiege, Gleichwertige und Prüfer-Issues", incentives),
     ...section("Kosten", costSection(runs, readBudget(), now)),
+    ...section("Teuerste Prüfläufe", expensive),
     ...section("Issues automatischer Läufe", [
       `${openIssues.length} offen, Obergrenze ${OPEN_ISSUE_LIMIT}.`,
       "",
