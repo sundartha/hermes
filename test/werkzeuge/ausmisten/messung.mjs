@@ -220,14 +220,14 @@ export async function messeUndMelde(context, branch, { dateien = {}, vorBranch, 
   for (const paket of pakete) {
     const kette = await messeKette(stand, paket);
     ketten.push(kette);
-    if (kette.zweig?.status !== EXIT_GRUEN) break;
+    if (kette.zweig.status !== EXIT_GRUEN) break;
   }
   const namen = pakete.flatMap((paket) => [`basis-${paket}`, `branch-${paket}`]);
   vorMelden?.(artefakte);
   bieteAn(routen, artefakte, ["plan", ...namen]);
   bieteJobsAn(routen, ketten);
   const gruen =
-    ketten.length === pakete.length && ketten.every(({ zweig }) => zweig?.status === EXIT_GRUEN);
+    ketten.length === pakete.length && ketten.every(({ zweig }) => zweig.status === EXIT_GRUEN);
   const jobs = {
     planen: { result: ergebnisVon(stand.planen), outputs: plan },
     vorpruefen: { result: "success", outputs: {} },

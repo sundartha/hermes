@@ -164,8 +164,12 @@ function githubRouten(welt) {
       () => [HTTP_OK, { workflow_runs: welt.stagingLaeufe }],
     ],
     ["GET", /^\/issues\?/, () => [welt.issuesStatus ?? HTTP_OK, welt.issues]],
-    ["PATCH", /^\/issues\/(\d+)$/, ([, nummer]) => [HTTP_OK, { number: Number(nummer) }]],
-    ["POST", /^\/issues$/, () => [HTTP_ANGELEGT, { number: NEUES_ISSUE }]],
+    [
+      "PATCH",
+      /^\/issues\/(\d+)$/,
+      ([, nummer]) => [welt.issueErsetzenStatus ?? HTTP_OK, { number: Number(nummer) }],
+    ],
+    ["POST", /^\/issues$/, () => [HTTP_ANGELEGT, welt.issueAnlage ?? { number: NEUES_ISSUE }]],
   ];
 }
 

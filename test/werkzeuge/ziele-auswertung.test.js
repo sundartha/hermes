@@ -192,6 +192,7 @@ test("ziele-auswertung: die Antwort „keiner, weil …“ ergibt ein system-Iss
   assert.match(system.body, /^- Mechanismus: keiner$/m);
   assert.match(system.body, /^> keiner, weil der Befund nur in Altcode vorkommt\.$/m);
   assert.match(system.body, /^Kein Mechanismus vorgeschlagen\. Antonio entscheidet, ob das Issue so geschlossen wird\.$/m);
+  assert.doesNotMatch(system.body, /Umsetzung wie ein Paket/);
 });
 
 test("ziele-auswertung: die Antwort „bestehende Prüfung ändern oder entfernen“ ergibt einen Vorschlag an Antonio", async (context) => {
@@ -208,4 +209,5 @@ test("ziele-auswertung: die Antwort „bestehende Prüfung ändern oder entferne
   assert.match(system.body, /^- Mechanismus: pruefung-aendern$/m);
   assert.match(system.body, /^- Dateien: `tools\/basis-vergleich\.mjs`$/m);
   assert.match(system.body, /^Vorschlag an Antonio: eine bestehende Prüfung ändern oder entfernen\. Umgesetzt wird erst nach seiner Entscheidung\.$/m);
+  assert.doesNotMatch(system.body, /Umsetzung wie ein Paket/);
 });
