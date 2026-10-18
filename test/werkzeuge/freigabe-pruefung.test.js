@@ -750,12 +750,14 @@ test("eine Basislinie, die ihre Version verliert, ohne dass das Werkzeug eine sc
 
 const ANWEISUNGEN_LISTE = "tools/basis/anweisungen.json";
 const ANWEISUNGEN_PRUEFUNG = "tools/anweisungen-pruefung.mjs";
-const ALTE_REGELN = ["# Regeln", "Erst testen, dann bauen.", "Alte Zeile ohne Eintrag."];
+const EINGETRAGENE_REGELN = ["# Regeln", "Erst testen, dann bauen."];
+const ALTE_ZEILE_OHNE_EINTRAG = "Alte Zeile ohne Eintrag.";
+const ALTE_REGELN = [...EINGETRAGENE_REGELN, ALTE_ZEILE_OHNE_EINTRAG];
 const NEUE_REGELN = ["Keine Prüfung umgehen.", "Kein Hook wird übersprungen."];
 const zeilen = (liste) => `${liste.join("\n")}\n`;
 const eintrag = (path, zeile) => `${path}|${lineFingerprint(zeile)}`;
 const claudeEintraege = (liste) => liste.map((zeile) => eintrag("CLAUDE.md", zeile));
-const ALTE_EINTRAEGE = [...claudeEintraege(ALTE_REGELN.slice(0, 2)), eintrag("AGENTS.md", "Andere Datei.")];
+const ALTE_EINTRAEGE = [...claudeEintraege(EINGETRAGENE_REGELN), eintrag("AGENTS.md", "Andere Datei.")];
 const anweisungsListe = (...neu) => findings(...ALTE_EINTRAEGE, ...neu);
 
 function listenPruefung(titel, liste) {
@@ -791,4 +793,126 @@ test("zwei neue Zeilen in CLAUDE.md und genau ihre zwei Einträge: die Anweisung
     "CLAUDE.md": zeilen([...ALTE_REGELN, ...NEUE_REGELN]),
     [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
   });
+});
+
+const KU1_REGELN = [
+  "## Keine Umgehung von Prüfungen",
+  "Kein Hook, kein Check und kein Test wird übersprungen oder abgeschwächt.",
+  "Schlägt eine Prüfung fehl, wird die Ursache behoben, nicht die Prüfung.",
+  "Geht das nicht, wird die Betreuung gefragt.",
+];
+
+test("KU1: vier neue Zeilen in CLAUDE.md und genau ihre vier Einträge brauchen nur eine Freigabe", async (context) => {
+  await nurMitFreigabe(context, {
+    "CLAUDE.md": zeilen([...ALTE_REGELN, ...KU1_REGELN]),
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(KU1_REGELN)),
+  });
+});
+
+const MIT_NEUEN_REGELN = { "CLAUDE.md": zeilen([...ALTE_REGELN, ...NEUE_REGELN]) };
+
+async function bleibtGesperrt(context, changes, basisFiles = ANWEISUNGEN_FILES) {
+  const result = await check(context, { basisFiles, changes, approval: "aktuell" });
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  return result.stdout;
+}
+
+const ANWEISUNGEN_LOCKERER = /Muss geändert werden: Die Prüfung „Anweisungen“ wird lockerer/;
+
+async function bleibtLockerer(context, changes) {
+  assert.match(await bleibtGesperrt(context, changes), ANWEISUNGEN_LOCKERER);
+}
+
+test("ein Eintrag zu einer Zeile, die schon vorher in CLAUDE.md stand: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(
+      ...claudeEintraege(NEUE_REGELN),
+      eintrag("CLAUDE.md", ALTE_ZEILE_OHNE_EINTRAG),
+    ),
+  });
+});
+
+test("ein Eintrag mehr als neue Zeilen: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(
+      ...claudeEintraege(NEUE_REGELN),
+      eintrag("CLAUDE.md", NEUE_REGELN[0]),
+    ),
+  });
+});
+
+test("ein Eintrag weniger als neue Zeilen: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(eintrag("CLAUDE.md", NEUE_REGELN[0])),
+  });
+});
+
+test("eine neue Zeile doppelt eingetragen und die andere gar nicht: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...Array(2).fill(eintrag("CLAUDE.md", NEUE_REGELN[0]))),
+  });
+});
+
+test("neue Zeilen samt Einträgen und ein weiteres Feld in der Liste: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: json({
+      befunde: [...ALTE_EINTRAEGE, ...claudeEintraege(NEUE_REGELN)],
+      version: "2",
+    }),
+  });
+});
+
+test("Einträge zu den neuen Zeilen unter einer anderen Datei: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...NEUE_REGELN.map((zeile) => eintrag("AGENTS.md", zeile))),
+  });
+});
+
+test("Einträge zu neuen Zeilen einer Datei, die keine Anweisungsdatei ist: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    "docs/notiz.md": zeilen(NEUE_REGELN),
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...NEUE_REGELN.map((zeile) => eintrag("docs/notiz.md", zeile))),
+  });
+});
+
+test("eine verschobene Zeile, die vorher an anderer Stelle in CLAUDE.md stand: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    "CLAUDE.md": zeilen([ALTE_ZEILE_OHNE_EINTRAG, ...EINGETRAGENE_REGELN]),
+    [ANWEISUNGEN_LISTE]: anweisungsListe(eintrag("CLAUDE.md", ALTE_ZEILE_OHNE_EINTRAG)),
+  });
+});
+
+test("neue Zeilen samt Einträgen, wenn der PR auch die Prüfung selbst ändert: die Anweisungsprüfung bleibt lockerer", async (context) => {
+  await bleibtLockerer(context, {
+    ...MIT_NEUEN_REGELN,
+    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
+    [ANWEISUNGEN_PRUEFUNG]: "\n\n",
+  });
+});
+
+const LESSONS_LISTE = "tools/basis/lessons.json";
+
+test("dieselben Einträge in einer anderen Basisliste: diese Prüfung bleibt lockerer", async (context) => {
+  const basisFiles = {
+    ...ANWEISUNGEN_FILES,
+    [LESSONS_LISTE]: findings(),
+    "test/werkzeuge/rotproben/lessons/pruefung.json": listenPruefung("Lessons", LESSONS_LISTE),
+  };
+  const stdout = await bleibtGesperrt(
+    context,
+    {
+      ...MIT_NEUEN_REGELN,
+      [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
+      [LESSONS_LISTE]: findings(...claudeEintraege(NEUE_REGELN)),
+    },
+    basisFiles,
+  );
+  assert.match(stdout, /Muss geändert werden: Die Prüfung „Lessons“ wird lockerer/);
+  assert.doesNotMatch(stdout, ANWEISUNGEN_LOCKERER);
 });
