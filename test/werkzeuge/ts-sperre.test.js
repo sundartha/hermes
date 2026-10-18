@@ -61,7 +61,6 @@ test("ts-sperre: .ts klein geschrieben unter src, test, tools und scripts endet 
     "test/neu.test.ts",
     "tools/neu.ts",
     "scripts/neu.ts",
-    "src/typen.d.ts",
   ]) {
     const result = runLockInNewRepo(context, { [path]: "export const neu = 1;\n" });
     assert.equal(result.status, EXIT_GREEN, `${path}: ${result.output}`);
@@ -90,6 +89,16 @@ test("ts-sperre: jede TypeScript-Datei, die ESLint, tsc, Semgrep oder knip nicht
   ]) {
     const result = runLockInNewRepo(context, { [path]: "export const neu = 1;\n" });
     assert.equal(result.status, EXIT_RED, result.output);
+    assert.ok(result.output.startsWith(`${path}: ${reason}`), result.output);
+    assert.match(result.output, /^Ausweg: /m);
+  }
+});
+
+test("ts-sperre: eine Deklarationsdatei unter src, test, tools oder scripts macht rot, weil tsc ihren Inhalt nicht prüft", (context) => {
+  const reason = "Deklarationsdatei, deren Inhalt tsc wegen skipLibCheck nicht prüft";
+  for (const path of ["src/typen.d.ts", "tools/x.d.ts", "test/typen.d.ts", "scripts/typen.d.ts", "src/stil.d.css.ts", "src/a.d.b.c.ts"]) {
+    const result = runLockInNewRepo(context, { [path]: "export declare const neu: number;\n" });
+    assert.equal(result.status, EXIT_RED, `${path}: ${result.output}`);
     assert.ok(result.output.startsWith(`${path}: ${reason}`), result.output);
     assert.match(result.output, /^Ausweg: /m);
   }

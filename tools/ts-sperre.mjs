@@ -12,6 +12,7 @@ const CHECKED_ROOT_LIST = new Intl.ListFormat("de", { type: "disjunction" }).for
 const NUL = "\0";
 const CHECKED_EXTENSION = /\.ts$/;
 const NOT_YET_CHECKED_EXTENSION = /\.[cm]ts$/;
+const DECLARATION_FILE = /\.d\.(?:[^/]*\.)?ts$/;
 const TSCONFIG = "tsconfig.json";
 
 function stockOf(text, source) {
@@ -21,13 +22,19 @@ function stockOf(text, source) {
   return stock;
 }
 
+function isUnderCheckedRoot(path) {
+  return CHECKED_ROOTS.some((root) => path.startsWith(root));
+}
+
 function isInCheckedPlace(path) {
-  return CHECKED_EXTENSION.test(path) && CHECKED_ROOTS.some((root) => path.startsWith(root));
+  return CHECKED_EXTENSION.test(path) && !DECLARATION_FILE.test(path) && isUnderCheckedRoot(path);
 }
 
 function outsidePlaceFinding(path) {
   if (NOT_YET_CHECKED_EXTENSION.test(path))
     return `${path}: TypeScript-Datei mit .mts oder .cts, die Semgrep und knip noch nicht prüfen; zugelassen ist nur .ts klein geschrieben unter ${CHECKED_ROOT_LIST}`;
+  if (DECLARATION_FILE.test(path) && isUnderCheckedRoot(path))
+    return `${path}: Deklarationsdatei, deren Inhalt tsc wegen skipLibCheck nicht prüft; die Typen gehören in eine .ts-Datei unter ${CHECKED_ROOT_LIST}, die tsc prüft`;
   return `${path}: TypeScript-Datei, die ESLint oder tsc nicht prüfen; geprüft wird nur .ts klein geschrieben unter ${CHECKED_ROOT_LIST}`;
 }
 
@@ -99,7 +106,7 @@ async function findings(basis) {
   return [
     ...tracked.filter((path) => !isInCheckedPlace(path)).map(outsidePlaceFinding),
     ...stock
-      .filter((path) => CHECKED_ROOTS.some((root) => path.startsWith(root)))
+      .filter(isUnderCheckedRoot)
       .map(
         (path) =>
           `${STOCK_FILE}: ${path} liegt unter ${CHECKED_ROOT_LIST} und darf nicht im Bestand stehen.`,
