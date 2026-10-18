@@ -316,7 +316,7 @@ function parsedJson(commit, path) {
 
 function changesInstructionCheck(basis, changes) {
   const manifest = parsedJson(basis, `${ROTPROBEN_DIR}/${INSTRUCTIONS_CHECK}/${MANIFEST_FILE}`);
-  if (manifest?.ausnahmen?.datei !== INSTRUCTION_LIST || !Array.isArray(manifest.pfade)) return true;
+  if (manifest?.ausnahmen?.datei !== INSTRUCTION_LIST) return true;
   const own = [ROTPROBEN_DIR, FEHLALARME_DIR].map((directory) => `${directory}/${INSTRUCTIONS_CHECK}/`);
   const guarded = [...own, ...manifest.pfade].filter((pattern) => pattern !== INSTRUCTION_LIST);
   return changes.some(({ path }) => guarded.some((pattern) => matches(pattern, path)));
