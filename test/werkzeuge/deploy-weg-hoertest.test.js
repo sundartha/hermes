@@ -23,11 +23,22 @@ const HTTP_FEHLER = 500;
 const BOT = "github-actions[bot]";
 const SEITE = 100;
 
-async function hoertestMit(kontext, welt = {}) {
+async function rahmenFuer(kontext, welt = {}, teile = TEILE) {
   const attrappe = await attrappeStarten(kontext, weltAnlegen(welt));
   const einstellungen = einstellungenFuer("hoertest", attrappe.basis);
   const { zeilen, ausgabe } = sammler();
-  await hoertestIssueAnlegenOderErsetzen({ einstellungen, commit: COMMIT_C, teile: TEILE, ausgabe });
+  return { attrappe, zeilen, rahmen: { einstellungen, commit: COMMIT_C, teile, ausgabe } };
+}
+
+async function hoertestMit(kontext, welt = {}, teile = TEILE) {
+  const { attrappe, zeilen, rahmen } = await rahmenFuer(kontext, welt, teile);
+  await hoertestIssueAnlegenOderErsetzen(rahmen);
+  return { text: zeilen.join("\n"), attrappe };
+}
+
+async function hoertestScheitertMit(kontext, welt) {
+  const { attrappe, zeilen, rahmen } = await rahmenFuer(kontext, welt);
+  await assert.rejects(hoertestIssueAnlegenOderErsetzen(rahmen), { name: "Abbruch", schritt: "issue_schreiben" });
   return { text: zeilen.join("\n"), attrappe };
 }
 
@@ -94,6 +105,27 @@ test("Hörtest-Issue: ein offenes Issue des Bots wird ersetzt statt ein zweites 
   );
   assert.equal(aenderungen[0].koerper.body, erwarteterText(lauf.attrappe.basis));
   assert.match(lauf.text, /Hörtest-Issue #12: Text ersetzt/);
+});
+
+test("Hörtest-Issue: meldet der Abgleich keine Teile, nennt der Text das statt einer leeren Liste", async (kontext) => {
+  const lauf = await hoertestMit(kontext, {}, []);
+  const [anlage] = anfragenAn(lauf.attrappe, "POST", /\/issues$/);
+  assert.match(anlage.koerper.body, /^Geänderte Teile des Gesprächsabdrucks:\n- \(der Abgleich hat keine Namen gemeldet\)\n\n/m);
+  assert.doesNotMatch(anlage.koerper.body, /^- anrufstart/m);
+});
+
+test("Hörtest-Issue: scheitert das Ersetzen mit 500, bricht der Lauf ab und legt kein zweites an", async (kontext) => {
+  const issue = { number: VORHANDENES_ISSUE, title: HOERTEST_TITEL, user: { login: BOT } };
+  const lauf = await hoertestScheitertMit(kontext, { issues: [issue], issueErsetzenStatus: HTTP_FEHLER });
+  assert.equal(anfragenAn(lauf.attrappe, "PATCH", /\/issues\//).length, 1);
+  assert.deepEqual(anfragenAn(lauf.attrappe, "POST", /\/issues$/), []);
+  assert.doesNotMatch(lauf.text, /Text ersetzt/);
+});
+
+test("Hörtest-Issue: antwortet das Anlegen ohne Issue-Nummer, bricht der Lauf ab und meldet nichts als angelegt", async (kontext) => {
+  const lauf = await hoertestScheitertMit(kontext, { issueAnlage: {} });
+  assert.equal(anfragenAn(lauf.attrappe, "POST", /\/issues$/).length, 1);
+  assert.doesNotMatch(lauf.text, /angelegt/);
 });
 
 test("Hörtest-Issue: ein Issue eines Menschen mit demselben Titel wird nicht angefasst", async (kontext) => {
