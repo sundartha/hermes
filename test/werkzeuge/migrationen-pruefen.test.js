@@ -174,6 +174,8 @@ test("migrationen: Schemaänderung mit Zusatzwort vor der Objektart ist im Code 
     "CREATE CONSTRAINT TRIGGER pruefen AFTER INSERT ON tenant",
     "CREATE TEMPORARY TABLE rest (id text)",
     "CREATE OR REPLACE RECURSIVE VIEW kette (id) AS SELECT 1",
+    "CREATE FOREIGN TABLE fern (id text) SERVER anderer",
+    "CREATE EVENT TRIGGER sperre ON ddl_command_start EXECUTE FUNCTION f()",
   ];
   const prose = "create the table later";
   const lines = [...statements, prose].map((text) => `export const q = "${text}";`);
