@@ -17,7 +17,7 @@ import { kostenDesAuftrags } from "./kosten.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { issueBefunde } from "./phase.mjs";
-import { beleg, fuehreAus, vollerBeleg } from "./pruefungen.mjs";
+import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
@@ -86,6 +86,7 @@ class AuftragsLauf {
     this.entscheidung = null;
     this.patch = null;
     this.basis = kopf(root);
+    this.beginn = Date.now();
     this.basisBau = this.basis;
     this.testausgabe = "";
     this.agenten = [];
@@ -107,7 +108,9 @@ class AuftragsLauf {
   }
 
   belegt(ergebnis, belegen = beleg) {
-    this.pruefungen.push(belegen(ergebnis));
+    const { phase, auftrag, root } = this.kontext;
+    const stamm = `${auftrag.id}.runde-${this.runde}.${this.beginn}.pruefung-${this.pruefungen.length + 1}`;
+    this.pruefungen.push(legeAusgabeAb(belegen(ergebnis), ergebnis, { ordner: belegVerzeichnis(root, phase.phase), stamm }));
     return ergebnis;
   }
 
@@ -237,7 +240,7 @@ class AuftragsLauf {
   festhalten(name, nachricht) {
     const lauf = festhalten(nachricht, this.kontext.root);
     const ergebnis = { name, befehl: "git commit -q -F -", exitCode: lauf.status ?? EXIT_ROT, ausgabe: `${lauf.stdout}\n${lauf.stderr}` };
-    this.pruefungen.push(beleg(ergebnis));
+    this.belegt(ergebnis);
     return ergebnis.exitCode === 0 || this.scheitert(`${name}: git commit endete mit Exit ${ergebnis.exitCode}.`);
   }
 
