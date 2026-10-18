@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
@@ -11,7 +11,7 @@ import { commitNachricht } from "./nachricht.mjs";
 import { geaenderteGegen, wendeAn } from "./patch.mjs";
 import { BOT, BOT_EMAIL } from "./prs.mjs";
 import { SCHUTZ, istTestPfad, schutzGrund, schutzLage } from "./schutz.mjs";
-import { ALTFUNKTION, BASIS, BASIS_WERKZEUGE, UNTERDRUECKUNGEN, basisVergleich, restBefunde } from "./sorten.mjs";
+import { ALTFUNKTION, BASIS, BASIS_WERKZEUGE, UNTERDRUECKUNGEN, basisVergleich, kuerzeUnterdrueckungen, restBefunde } from "./sorten.mjs";
 import { ORDNER } from "./vorpruefen.mjs";
 import { DATEI as ZIEL } from "./waehlen.mjs";
 import { eslintBefehl, fuehreAus } from "./werkzeuge.mjs";
@@ -71,9 +71,7 @@ function basisVerstoss(root, ziel, aenderungen) {
 
 function unterdrueckungenSinken(root, ziel) {
   const vorher = JSON.parse(gitAusgabe(["show", `${ziel.master}:${UNTERDRUECKUNGEN}`], root));
-  fuehreAus(eslintBefehl(["--prune-suppressions", ziel.datei]), root);
-  const nachher = JSON.parse(readFileSync(join(root, UNTERDRUECKUNGEN), "utf8"));
-  gitAusgabe(["checkout", "--", UNTERDRUECKUNGEN], root);
+  const { nachher } = kuerzeUnterdrueckungen(root, [ziel.datei]);
   return onlyLowersCounts(vorher, nachher);
 }
 

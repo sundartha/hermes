@@ -146,15 +146,20 @@ function gesenkteEintraege(vorher, nachher) {
   );
 }
 
-function unterdrueckungenVergleich(root, argumente) {
+export function kuerzeUnterdrueckungen(root, ziele, { behalten = false } = {}) {
   const pfad = join(root, UNTERDRUECKUNGEN);
-  const ergebnis = { gruen: true, behoben: [], datei: UNTERDRUECKUNGEN, ausgabe: "" };
-  if (!existsSync(pfad)) return ergebnis;
   const vorher = readFileSync(pfad, "utf8");
-  const lauf = fuehreAus(eslintBefehl([".", "--prune-suppressions"]), root);
-  const behoben = gesenkteEintraege(JSON.parse(vorher), JSON.parse(readFileSync(pfad, "utf8")));
-  if (!argumente.includes(KUERZEN)) writeFileSync(pfad, vorher);
-  return { ...ergebnis, gruen: lauf.status === EXIT_GRUEN, behoben, ausgabe: `${lauf.stdout}${lauf.stderr}`.trim() };
+  const lauf = fuehreAus(eslintBefehl([...ziele, "--prune-suppressions"]), root);
+  const nachher = readFileSync(pfad, "utf8");
+  if (!behalten) writeFileSync(pfad, vorher);
+  return { lauf, vorher: JSON.parse(vorher), nachher: JSON.parse(nachher) };
+}
+
+function unterdrueckungenVergleich(root, argumente) {
+  const ergebnis = { gruen: true, behoben: [], datei: UNTERDRUECKUNGEN, ausgabe: "" };
+  if (!existsSync(join(root, UNTERDRUECKUNGEN))) return ergebnis;
+  const { lauf, vorher, nachher } = kuerzeUnterdrueckungen(root, ["."], { behalten: argumente.includes(KUERZEN) });
+  return { ...ergebnis, gruen: lauf.status === EXIT_GRUEN, behoben: gesenkteEintraege(vorher, nachher), ausgabe: `${lauf.stdout}${lauf.stderr}`.trim() };
 }
 
 export function basisVergleich(werkzeug, root, argumente = []) {

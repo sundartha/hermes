@@ -10,6 +10,8 @@ const ABSCHNITTE = [
   "## Stolperfallen",
 ];
 const REZEPT_BLOCK = /^```json rezept\n([\s\S]*?)^```$/gm;
+const CODEZAUN = "```";
+const ABSCHNITTSKOPF = "## ";
 const PRUEFARTEN = ["gleich", "enthaelt", "typ"];
 const TYPEN = ["string", "number", "boolean", "object", "array"];
 const HUELLENFELDER = new Set([
@@ -119,9 +121,24 @@ function schrittFehler(schritt, nummer, hintergruende) {
   return [...fehler, ...erwartungsfehler];
 }
 
+function zusaetzlicheAbschnitte(text) {
+  let imCode = false;
+  const gefunden = [];
+  for (const zeile of text.split("\n")) {
+    if (zeile.startsWith(CODEZAUN)) imCode = !imCode;
+    else if (!imCode && zeile.startsWith(ABSCHNITTSKOPF)) gefunden.push(zeile);
+  }
+  return gefunden.filter((abschnitt) => !ABSCHNITTE.includes(abschnitt));
+}
+
 function formFehler(text, rezept) {
   const fehlend = ABSCHNITTE.filter((abschnitt) => !text.split("\n").includes(abschnitt));
-  const fehler = fehlend.map((abschnitt) => `Abschnitt „${abschnitt}“ fehlt`);
+  const fehler = [
+    ...fehlend.map((abschnitt) => `Abschnitt „${abschnitt}“ fehlt`),
+    ...zusaetzlicheAbschnitte(text).map(
+      (abschnitt) => `Abschnitt „${abschnitt}“ ist nicht vorgesehen`,
+    ),
+  ];
   if (!Array.isArray(rezept.flaechen) || rezept.flaechen.length === 0) {
     fehler.push("Rezept braucht eine nicht leere Liste „flaechen“");
   }
