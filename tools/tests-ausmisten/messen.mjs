@@ -1,5 +1,3 @@
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd, env } from "node:process";
@@ -18,6 +16,7 @@ import { SANDBOXORDNER, legeSandboxordnerAn } from "./arbeitsordner.mjs";
 import { rang } from "./entscheiden.mjs";
 import { TESTDATEI, erreichendeTests } from "./messmenge.mjs";
 import { GATE_DATEI, gateDateien } from "./pfade.mjs";
+import { inEigenerGruppe } from "./prozessgruppe.mjs";
 
 const SCHEMA_SCHLUESSEL = "$schema";
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../../stryker.config.json", import.meta.url));
@@ -32,8 +31,6 @@ const LAUF_SKRIPT = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
 const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
 const BERICHT_OPTION = /^--test-reporter/;
 const SANDBOX = /^sandbox-/;
-const KEIN_PROZESS = "ESRCH";
-const NUR_NOCH_ZOMBIES = "EPERM";
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
 
@@ -51,31 +48,6 @@ function eintrag({ fileName, location, mutatorName, replacement, status }) {
     status,
     zeilen: [start.line, end.line],
   };
-}
-
-function nichtsMehrZuBeenden({ code }) {
-  return code === KEIN_PROZESS || (code === NUR_NOCH_ZOMBIES && process.platform === "darwin");
-}
-
-function beendeGruppe(pid) {
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch (fehler) {
-    if (!nichtsMehrZuBeenden(fehler)) throw fehler;
-  }
-}
-
-async function inEigenerGruppe(args, optionen) {
-  const kind = spawn(process.execPath, args, { ...optionen, detached: true });
-  const aufraeumen = () => beendeGruppe(kind.pid);
-  process.once("exit", aufraeumen);
-  try {
-    const [exit] = await once(kind, "exit");
-    return exit;
-  } finally {
-    process.removeListener("exit", aufraeumen);
-    aufraeumen();
-  }
 }
 
 async function strykerImEigenenProzess(optionen) {
