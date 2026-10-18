@@ -67,18 +67,17 @@ function jobDaten(jobs) {
   return { fehler, pakete, lesbar };
 }
 
-async function festgehalteneSummen(github, nummern) {
-  const jobs = await jobsDesLaufs(github, env.GITHUB_RUN_ID);
-  const fehler = [];
-  const summen = [];
-  for (const nummer of nummern) {
-    const { summe, fehler: grund } = await festgehalteneSumme(github, { jobs, nummer });
-    summen.push(summe ?? "");
-    if (grund) fehler.push(grund);
-    const branch = jobFehler(jobs, branchJobName(nummer));
-    if (branch && !grund) fehler.push(branch);
-  }
-  return { fehler, summen };
+async function festgehalteneSummen(github, { jobs, nummern }) {
+  const festgehalten = [];
+  for (const nummer of nummern)
+    festgehalten.push({ nummer, ...(await festgehalteneSumme(github, { jobs, nummer })) });
+  return festgehalten;
+}
+
+function paketFehler(jobs, festgehalten) {
+  return festgehalten
+    .map(({ nummer, fehler }) => fehler || jobFehler(jobs, branchJobName(nummer)))
+    .filter(Boolean);
 }
 
 function paketArtefakt(texte, { name, art, summe, erwartet, dateien }) {
@@ -89,7 +88,7 @@ function paketArtefakt(texte, { name, art, summe, erwartet, dateien }) {
   return { fehler: [`Artefakt ${name} hat andere Dateien gemessen als geplant`] };
 }
 
-function paketTeile(texte, { plan, summen, erwartet }) {
+export function paketTeile(texte, { plan, summen, erwartet }) {
   const fehler = [];
   const teile = { [BASIS]: [], [BRANCH]: [] };
   plan.pakete.forEach(({ dateien }, nummer) => {
@@ -121,8 +120,9 @@ async function artefakte(github, { jobs, erwartet }) {
     ...nummern.map((nummer) => paketName(BRANCH, nummer)),
   ];
   const geladen = await ladeVorhandene(github, { laufId: env.GITHUB_RUN_ID, erwartet: namen });
-  const festgehalten = await festgehalteneSummen(github, nummern);
-  const bisher = [...geplant.fehler, ...festgehalten.fehler, ...geladen.fehler];
+  const laufJobs = await jobsDesLaufs(github, env.GITHUB_RUN_ID);
+  const festgehalten = await festgehalteneSummen(github, { jobs: laufJobs, nummern });
+  const bisher = [...geplant.fehler, ...paketFehler(laufJobs, festgehalten), ...geladen.fehler];
   if (!geladen.texte.has(PLAN)) return { fehler: bisher };
   const plan = pruefePlan({
     text: geladen.texte.get(PLAN),
@@ -134,7 +134,7 @@ async function artefakte(github, { jobs, erwartet }) {
     return { fehler: [...bisher, "Plan und Paketliste passen nicht zusammen"] };
   const { fehler, teile } = paketTeile(geladen.texte, {
     plan: plan.daten,
-    summen: festgehalten.summen,
+    summen: festgehalten.map(({ summe }) => summe ?? ""),
     erwartet,
   });
   return {
