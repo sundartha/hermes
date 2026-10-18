@@ -207,3 +207,11 @@ test("eine andere jscpd-Version als in der Basislinie bricht mit dem Block des V
   nachBefunden(lauf.stderr, VERSIONSWECHSEL);
   assert.ok(!lauf.stderr.includes(zweckBlock(MELDUNG.JSCPD)[0]), lauf.stderr);
 });
+
+test("ein Abbruch ohne Versionswechsel, etwa bei fehlender Basislinie, nennt keinen Block", (context) => {
+  const verzeichnis = probeDirectory(context, { "README.md": "# Probe\n" });
+  const lauf = runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, "wurzel"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  assert.match(lauf.stderr, /^Abbruch: tools\/basis\/wurzel\.json fehlt\./);
+  assert.doesNotMatch(lauf.stderr, /Wozu:/);
+});
