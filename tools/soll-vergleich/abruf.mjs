@@ -84,7 +84,10 @@ export async function istStand(soll) {
   const zweig = repo.default_branch ?? soll.repo_einstellungen.default_branch;
   return {
     ruleset,
-    rulesets: { vorhanden: rulesets.map(({ id, name }) => ({ id, name })), einzeln: weitere },
+    rulesets: {
+      vorhanden: rulesets.map(({ id, name }) => ({ id, name })),
+      einzeln: new Map(soll.weitere_rulesets.map(({ id }, index) => [id, weitere[index]])),
+    },
     repo,
     mitarbeiter,
     codeowners: { inhalt: await codeownersInhalt(basis, zweig), fehler },
