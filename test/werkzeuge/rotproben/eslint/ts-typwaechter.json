@@ -1,0 +1,11 @@
+{
+  "titel": "Ungeprüfter Typwächter in einer TypeScript-Datei",
+  "dateien": {
+    "src/probe/probe.ts": [
+      "export function istZahl(wert: unknown): wert is number {",
+      "  return wert !== undefined;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
+}
