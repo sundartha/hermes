@@ -67,10 +67,25 @@ export function istVomBot(eintrag) {
   return eintrag.user?.login === BOT_ACTIONS;
 }
 
+export async function botIssues(github, label, labelText) {
+  await stelleLabelSicher(github, label, labelText);
+  return (await issuesMitLabel(github, label)).filter(istVomBot);
+}
+
+export function legeIssueAn(github, { titel, text, label }) {
+  return github.sende("POST", "/issues", { title: titel, body: text, labels: [label] });
+}
+
+export async function wiederZeiten(github, issue) {
+  if (!(issue.comments > 0)) return [];
+  const vomBot = (await kommentare(github, issue.number)).filter(istVomBot);
+  return vomBot.filter(({ body }) => (body ?? "").startsWith(WIEDER)).map(({ created_at: zeit }) => zeit);
+}
+
 export async function meldeIssue(github, { bestehend, titel, text, label, lauf, schliessen = false }) {
   const vorhanden = bestehend.find((issue) => issue.title === titel);
   if (vorhanden === undefined) {
-    const neu = await github.sende("POST", "/issues", { title: titel, body: text, labels: [label] });
+    const neu = await legeIssueAn(github, { titel, text, label });
     if (schliessen) await github.sende("PATCH", `/issues/${neu.number}`, GESCHLOSSEN);
     bestehend.push(neu);
     return { nummer: neu.number, art: "neu" };
@@ -83,8 +98,7 @@ export async function meldeIssue(github, { bestehend, titel, text, label, lauf, 
 export async function meldeBefunde(github, befunde, lauf) {
   const gueltig = gueltigeBefunde(befunde);
   if (gueltig.length === 0) return [];
-  await stelleLabelSicher(github, LABEL, LABEL_TEXT);
-  const bestehend = (await issuesMitLabel(github, LABEL)).filter(istVomBot);
+  const bestehend = await botIssues(github, LABEL, LABEL_TEXT);
   const gemeldet = [];
   const titel = [...new Map(gueltig.map((eintrag) => [befundTitel(eintrag), eintrag]))];
   for (const [kopf, eintrag] of titel) {
@@ -95,11 +109,7 @@ export async function meldeBefunde(github, befunde, lauf) {
 }
 
 async function juengstesVorkommen(github, issue) {
-  const zeiten = [issue.created_at];
-  if (issue.comments > 0) {
-    const liste = (await kommentare(github, issue.number)).filter(istVomBot);
-    zeiten.push(...liste.filter(({ body }) => (body ?? "").startsWith(WIEDER)).map(({ created_at: zeit }) => zeit));
-  }
+  const zeiten = [issue.created_at, ...(await wiederZeiten(github, issue))];
   return Math.max(...zeiten.map((zeit) => Date.parse(zeit)).filter(Number.isFinite));
 }
 

@@ -1,5 +1,5 @@
-import { LABEL, LABEL_TEXT, istVomBot } from "./befunde.mjs";
-import { issuesMitLabel, stelleLabelSicher } from "./github.mjs";
+import { LABEL, LABEL_TEXT, botIssues, legeIssueAn } from "./befunde.mjs";
+import { PRUEFER } from "./rangliste.mjs";
 
 export const SAMMEL_TITEL = "Aufräumen: Rangliste und Befunde";
 const MAX_TEXT = 60_000;
@@ -7,6 +7,8 @@ const PLATZ_FUER_SCHLUSS = 200;
 const SICHERER_NAME = /^[\w./@+:-]{1,300}$/;
 const UNSICHER = "(Name mit Sonderzeichen)";
 const SHA_KURZ = 12;
+const KATALOG_ID = /^(?:[A-Z]\d{1,2}|SG-\d{2,3})$/;
+const WIEDERKEHREND = 2;
 const TABELLE = ["| Rang | Datei | Befunde | Prüfungen | Änderungen | Umfang | Brennpunkt |", "|---|---|---|---|---|---|---|"];
 
 function code(name) {
@@ -34,6 +36,15 @@ function befundZeilen({ befunde, rangliste }) {
   const dateien = rangliste.filter((eintrag) => eintrag.befunde > 0).length;
   const summe = befunde.reduce((zahl, { anzahl }) => zahl + anzahl, 0);
   return [`Befunde: ${summe} in ${dateien} Dateien (${jePruefung(befunde).join(", ") || "keine"}).`];
+}
+
+export function lintVorschlaege(befunde) {
+  const jeRegel = new Map();
+  for (const { pruefung, regel, datei } of befunde) {
+    if (pruefung === PRUEFER && KATALOG_ID.test(regel)) jeRegel.set(regel, new Set([...(jeRegel.get(regel) ?? []), datei]));
+  }
+  const wiederkehrend = [...jeRegel].filter(([, liste]) => liste.size >= WIEDERKEHREND);
+  return wiederkehrend.map(([regel, liste]) => ({ regel, dateien: liste.size })).sort((links, rechts) => rechts.dateien - links.dateien || links.regel.localeCompare(rechts.regel));
 }
 
 function vorschlagZeilen(vorschlaege) {
@@ -74,7 +85,7 @@ export function sammelText({ durchgang, ergebnis }) {
     ...zielZeilen(ergebnis),
     ...befundZeilen(durchgang),
     "",
-    ...vorschlagZeilen(durchgang.vorschlaege),
+    ...vorschlagZeilen(lintVorschlaege(durchgang.befunde)),
     "",
     "## Rangliste",
     "",
@@ -86,11 +97,10 @@ export function sammelText({ durchgang, ergebnis }) {
 }
 
 export async function schreibeSammelIssue(github, { durchgang, ergebnis }) {
-  await stelleLabelSicher(github, LABEL, LABEL_TEXT);
-  const vorhanden = (await issuesMitLabel(github, LABEL)).filter(istVomBot).find(({ title }) => title === SAMMEL_TITEL);
+  const vorhanden = (await botIssues(github, LABEL, LABEL_TEXT)).find(({ title }) => title === SAMMEL_TITEL);
   const text = sammelText({ durchgang, ergebnis });
   if (vorhanden === undefined) {
-    const neu = await github.sende("POST", "/issues", { title: SAMMEL_TITEL, body: text, labels: [LABEL] });
+    const neu = await legeIssueAn(github, { titel: SAMMEL_TITEL, text, label: LABEL });
     return { nummer: neu.number, art: "neu" };
   }
   await github.sende("PATCH", `/issues/${vorhanden.number}`, { body: text, state: "open" });

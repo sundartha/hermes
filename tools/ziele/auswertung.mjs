@@ -18,8 +18,8 @@ import {
   setzeAusgaben,
   zusammenfassung,
 } from "./ausgabe.mjs";
-import { WIEDER, istVomBot, meldeIssue } from "./befunde.mjs";
-import { issuesMitLabel, kommentare, kommentiere, letzterBearbeitenderLauf, nimmGithubZugang, stelleLabelSicher } from "./github.mjs";
+import { WIEDER, botIssues, istVomBot, meldeIssue, wiederZeiten } from "./befunde.mjs";
+import { issuesMitLabel, kommentiere, letzterBearbeitenderLauf, nimmGithubZugang } from "./github.mjs";
 import { masterSha } from "./vorpruefen.mjs";
 import { fuehreAus } from "./werkzeuge.mjs";
 
@@ -87,10 +87,8 @@ export function systemTitel(kennung) {
 
 async function vorkommenDes(github, issue, kennung) {
   const eigene = [{ kennung, zeit: issue.created_at, nummer: issue.number }];
-  if (!(issue.comments > 0)) return eigene;
-  const vomBot = (await kommentare(github, issue.number)).filter(istVomBot);
-  const wieder = vomBot.filter(({ body }) => (body ?? "").startsWith("Wieder"));
-  return [...eigene, ...wieder.map(({ created_at: zeit }) => ({ kennung, zeit, nummer: issue.number }))];
+  const wieder = await wiederZeiten(github, issue);
+  return [...eigene, ...wieder.map((zeit) => ({ kennung, zeit, nummer: issue.number }))];
 }
 
 export async function vorkommen(github) {
@@ -275,8 +273,7 @@ export async function schreibeSystemIssues({ github, zaehlung, vorschlag, lauf }
     await kommentiere(github, nummer, `${WIEDER}: kommt trotz Mechanismus wieder (${lauf}).`);
   }
   if (!zaehlung.kandidat || vorschlag?.ausgang !== WEITER) return null;
-  await stelleLabelSicher(github, SYSTEM_LABEL, "Auftrag für einen Mechanismus gegen einen wiederkehrenden Befund");
-  const bestehend = (await issuesMitLabel(github, SYSTEM_LABEL)).filter(istVomBot);
+  const bestehend = await botIssues(github, SYSTEM_LABEL, "Auftrag für einen Mechanismus gegen einen wiederkehrenden Befund");
   const titel = systemTitel(zaehlung.kandidat.kennung);
   const text = systemText(zaehlung.kandidat, vorschlag.vorschlag, lauf);
   return meldeIssue(github, { bestehend, titel, text, label: SYSTEM_LABEL, lauf });
