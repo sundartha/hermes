@@ -139,6 +139,13 @@
     "nichtAngenommen": "Eine gemergte Migration ändern, die Schemaänderung in JavaScript-Code, eine SQL-Datei außerhalb von src/db/migrations/ oder eine Rückbau-Migration verlegen, die Squawk-Einstellung ändern, eine eigene .squawk.toml oder einen Kommentar squawk-ignore anlegen, damit Squawk die Änderung nicht sieht, eine Schemaänderung in dynamischem SQL (EXECUTE) verstecken oder eine Zeitgrenze setzen, die nichts begrenzt.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: braucht eine Schemaänderung, die die Migrationsprüfung nicht zulässt, weil <Grund>“."
   },
+  "feste-pfade": {
+    "liste": "ohne Nummer",
+    "wozu": "Schutzlisten nennen Dateien über feste Pfade und Muster: Gate-Tests, geschützte Ziele, Musterdateien, CODEOWNERS, Rollen-Sperren und Haken, ESLint-Blöcke und Hausregeln, dependency-cruiser, Bereiche, Rot-Proben-Manifeste, kritische Pfade und gemeinsame Ordner des Auftragswegs, Workflow-Pfadfilter. Zeigt ein Eintrag ins Leere oder trifft eine umbenannte oder verschobene Datei nicht mehr dieselben Einträge wie vorher, verliert sie ihren Schutz still: keine Review-Pflicht, keine Sperre, keine Hausregel, kein Gate-Test, keine Rot-Probe.",
+    "behebung": "Die genannte Liste auf den neuen Pfad nachziehen, sodass die Datei wieder dieselben Einträge trifft wie vorher. Das ist Aufgabe des Owners der Liste: im Auftragsweg plant die Planung das Nachziehen als eigene Aufgabe mit Freigabe vor der Umbenennung. Ist die Datei gelöscht, gehört der Eintrag in eslint.config.js, tools/bereiche.json, .dependency-cruiser.cjs oder einem Rot-Proben-Manifest gelöscht; eine Schutzliste (tools/gate-tests.json, tools/ziele/geschuetzt.json, tools/auftrag/musterdateien.json, .github/CODEOWNERS, .claude/rollen/, .claude/settings.json) zu kürzen braucht Antonios Freigabe.",
+    "nichtAngenommen": "Ein Muster weiten, bis es wieder trifft; eine Ausnahme für umbenannte Dateien; eine Schutzliste kürzen; die Prüfung, die Paarbildung oder den Vergleich so umschreiben, dass sie den Verlust nicht mehr sieht. Das ist eine Lockerung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Im Auftragsweg als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: <Liste> muss vorher <Eintrag> für <neuer Pfad> nachziehen“ (daraus wird eine Aufgabe für den Owner davor); in einer Paket-Sitzung „Entscheidung nötig“ mit einer Entscheidungsnotiz, die Liste, Eintrag und neuen Pfad nennt."
+  },
   "jscpd": {
     "liste": "B1",
     "wozu": "Zwei Kopien derselben Logik lassen sich nur gemeinsam richtig ändern: Eine Fehlerbehebung trifft sonst nur eine der Kopien, und die andere bleibt falsch. Bei Testhilfen misst dann eine Testsammlung still etwas anderes als die andere.",

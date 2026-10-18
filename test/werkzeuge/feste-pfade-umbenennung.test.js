@@ -14,6 +14,7 @@ import {
   assertRed,
   eslintBlocks,
   json,
+  renamedRepo,
   run,
   runRenamed,
 } from "./feste-pfade-probe.js";
@@ -251,4 +252,37 @@ test("feste-pfade: als vom Compiler geprüft gilt nur eine TypeScript-Datei unte
       runRenamed(context, files, { renames: [[from, to]] }),
       `${from} → ${to}: eslint.config.js Regel no-dupe-keys gilt für ${from}`,
     );
+});
+test("feste-pfade: mit --nur-neue bleibt ein schon im Basis-Stand vorhandener Befund still, jeder neue Befund und jeder Schutzverlust ist rot", (context) => {
+  const stale = {
+    "tools/gate-tests.json": json({ Probe: { module: ["src/a.js"], tests: ["test/weg.test.js"] } }),
+  };
+  const known = probeRepository(context, { ...BASE_FILES, ...stale });
+  assertRed(run(known, "--basis", "HEAD"), `test/weg.test.js ${MISSING}`);
+  const quiet = run(known, "--basis", "HEAD", "--nur-neue");
+  assert.equal(quiet.status, EXIT_GREEN, quiet.output);
+  const repo = probeRepository(context, BASE_FILES);
+  writeFiles(repo, stale);
+  commitAll(repo, "Gate-Test ins Leere");
+  assertRed(run(repo, "--basis", "HEAD~1", "--nur-neue"), `test/weg.test.js ${MISSING}`);
+  assertRed(
+    run(
+      renamedRepo(context, { files: {}, renames: [["src/b.js", "src/b.ts"]] }),
+      "--basis",
+      "HEAD~1",
+      "--nur-neue",
+    ),
+    `${BACK}: test/werkzeuge/rotproben/probe/pruefung.json pfade trifft src/b.js, ${LOST} src/b.ts`,
+  );
+  const bare = probeRepository(context, {
+    "package.json": json({ type: "module" }),
+    "src/b.js": "export const zwei = 2;\n",
+  });
+  runIn(bare, "git", ["mv", "src/b.js", "src/b.ts"]);
+  commitAll(bare, "umbenannt");
+  assertRed(
+    run(bare, "--basis", "HEAD~1", "--nur-neue"),
+    "Basis-Stand: eslint.config.js fehlt; ohne die Liste",
+  );
+  assertRed(run(bare, "--nur-neue"), "--nur-neue braucht --basis");
 });

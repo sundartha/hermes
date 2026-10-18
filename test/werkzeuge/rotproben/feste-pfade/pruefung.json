@@ -8,7 +8,9 @@
     "tools/pruefungen-messen.mjs",
     "tools/workflows-pruefen/struktur.mjs",
     "tools/umbenennung.mjs",
-    "tools/auftrag/format.mjs"
+    "tools/auftrag/format.mjs",
+    "tools/auftrag/zweck.mjs",
+    "tools/auftrag/zweck.json"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/feste-pfade.mjs"],

@@ -55,6 +55,7 @@ export const MELDUNG = {
   TS_SPERRE: "ts-sperre",
   WERKZEUGABBRUCH: "werkzeugabbruch",
   MIGRATIONEN: "migrationen",
+  FESTE_PFADE: "feste-pfade",
   JSCPD: "jscpd",
 };
 
@@ -139,6 +140,7 @@ const ZUSTAENDIG = new Map([
   [PRUEFUNG.ABNAHME, BAU],
   [PRUEFUNG.BETROFFENE_TESTS, BAU],
   [MELDUNG.MIGRATIONEN, BAU],
+  [MELDUNG.FESTE_PFADE, BAU],
   [PRUEFUNG.MUTATION, BAU],
   [PRUEFUNG.MUTATION_NACH_BAU, BAU],
   [PRUEFUNG.COMMIT, BAU],
