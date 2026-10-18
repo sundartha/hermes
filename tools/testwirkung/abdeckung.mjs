@@ -60,3 +60,9 @@ export function gelaufeneAufrufzeilen(ordner, { verzeichnis, dateien }) {
   const jeDatei = funktionenJeDatei(ordner, verzeichnis);
   return new Map(dateien.map((datei) => [datei, gelaufeneZeilen(datei, jeDatei.get(datei) ?? [], verzeichnis)]));
 }
+
+export function geladeneDateien(ordner, { verzeichnis, dateien }) {
+  if (dateien.length === 0) return [];
+  const jeDatei = funktionenJeDatei(ordner, verzeichnis);
+  return dateien.filter((datei) => (jeDatei.get(datei) ?? []).some(([skript]) => skript[0].count > 0));
+}
