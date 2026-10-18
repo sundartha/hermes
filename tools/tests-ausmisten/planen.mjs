@@ -46,6 +46,14 @@ export async function zaehle(dateien) {
   return zahlen;
 }
 
+export function geschaetzteMinuten(sekunden) {
+  return Math.ceil(sekunden / SEKUNDEN_JE_MINUTE);
+}
+
+export function ueberSchwelle(sekunden) {
+  return sekunden > SCHWELLE_SEKUNDEN;
+}
+
 export function geschaetzteSekunden(mutanten, sekundenJeTestlauf) {
   return sekundenJeTestlauf * (1 + ANTEIL_TESTLAUF_JE_MUTANT * mutanten);
 }
@@ -88,7 +96,7 @@ export function packe(zahlen, sekundenJeTestlauf) {
   const sekunden = ({ mutanten }) => geschaetzteSekunden(mutanten, sekundenJeTestlauf);
   const absteigend = zahlen.toSorted((links, rechts) => rechts.mutanten - links.mutanten);
   for (const eintrag of absteigend) {
-    if (sekunden(eintrag) > SCHWELLE_SEKUNDEN) {
+    if (ueberSchwelle(sekunden(eintrag))) {
       geteilt.push(...schneide(eintrag, sekundenJeTestlauf));
       continue;
     }
