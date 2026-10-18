@@ -1,12 +1,13 @@
 import { join } from "node:path";
 import { ESLint } from "eslint";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 import keineKommentare from "./eslint-rules/keine-kommentare.js";
 import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
 import {
-  ausfuehren,
-  basisAusAufruf,
   dateiInhalt,
+  direktAusfuehren,
   geaenderteDateien,
   gelinteteJsDateien,
   gibtEs,
@@ -20,12 +21,13 @@ const LEHREN = "docs/lessons.md";
 const FRUEHERE_LEHREN = "tasks/lessons.md";
 const LEHREN_DATEIEN = new Set([LEHREN, FRUEHERE_LEHREN]);
 const PRUEF_PLUGIN = "neue-kommentare";
-const PRUEFREGEL = `${PRUEF_PLUGIN}/kommentar`;
+export const PRUEFREGEL = `${PRUEF_PLUGIN}/kommentar`;
 const NEUE_DATEIEN_UND_AENDERUNGEN = "AM";
 const TS_DATEIEN = ["**/*.{ts,mts,cts}"];
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = "Aufruf: node tools/neue-kommentare.mjs --basis <commit>";
+const ZWECK = "lint/neue-kommentare";
 const HINWEIS =
   "Neue Kommentare werden entfernt, nicht eingefroren: Die Basislinien nehmen keine neuen Einträge auf, auch keine früher entfernten.";
 
@@ -111,9 +113,9 @@ async function pruefen(root, basis) {
   const befunde = [];
   for (const { datei } of dateien) befunde.push(...(await befundeDerDatei(werkzeug, datei)));
   for (const befund of befunde) console.error(befund);
-  if (befunde.length > 0) console.error(HINWEIS);
+  if (befunde.length > 0) console.error([HINWEIS, ...zweckBlock(ZWECK)].join("\n"));
   console.log(`Neue Kommentare: ${befunde.length} hinzugefügte Zeilen mit Kommentar in ${dateien.length} geänderten Dateien.`);
   return befunde.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-await ausfuehren(async (root) => pruefen(root, basisAusAufruf(AUFRUF, root)));
+await direktAusfuehren(import.meta.url, { aufruf: AUFRUF, pruefen });

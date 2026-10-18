@@ -94,7 +94,7 @@ jobs:
         run: npx --no-install commitlint --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint -- --format ./tools/lint-format.mjs
 
       - name: Typprüfung
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}

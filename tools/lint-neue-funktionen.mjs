@@ -1,24 +1,26 @@
 import { join } from "node:path";
 import { ESLint, Linter } from "eslint";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 import { alleKnoten } from "./eslint-rules/knoten.js";
 import { GEBUNDENE_KNOTEN, gebundeneNamen } from "./eslint-rules/namen-ohne-begruendung.js";
 import {
   STATUS_NEU,
-  ausfuehren,
-  basisAusAufruf,
   dateiInhalt,
+  direktAusfuehren,
   geaenderteDateien,
   hunks,
   hunksGegenueber,
   nurTypenUmbenannt,
   ohneTypinformation,
 } from "./pr-aenderungen.mjs";
+import { lintZweckZeilen } from "./lint-zweck.mjs";
 import { laufzeitText } from "./umbenennung.mjs";
 
 const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs", "*.ts", "*.mts", "*.cts"];
 const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
-const STRENGE_NEBENREGELN = {
+export const STRENGE_NEBENREGELN = {
   "no-unused-expressions": "error",
   "no-unused-vars": ["error", { args: "after-used" }],
   "no-sequences": ["error", { allowInParentheses: false }],
@@ -34,6 +36,7 @@ const ZWISCHEN_ZWEI_ZEILEN = 0.5;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = "Aufruf: node tools/lint-neue-funktionen.mjs --basis <commit>";
+const ZWECK = "lint/neue-funktionen";
 
 function zeilenOhneKommentare(text, kommentare) {
   let ohne = text;
@@ -230,11 +233,17 @@ async function gelinteteDateien(root, basis) {
   return gelintet;
 }
 
+function zweckMelden(meldungen) {
+  if (meldungen.length === 0) return;
+  console.error([...lintZweckZeilen(meldungen), ...zweckBlock(ZWECK)].join("\n"));
+}
+
 function berichten(ergebnisse) {
   const gezaehlt = ergebnisse.flatMap(({ datei, meldungen }) =>
     meldungen.map(({ line, ruleId, message }) => `${datei}:${line} ${ruleId ?? "Parser"}: ${message}`),
   );
   for (const zeile of gezaehlt) console.error(zeile);
+  zweckMelden(ergebnisse.flatMap(({ meldungen }) => meldungen));
   for (const { datei, namen } of ergebnisse) {
     for (const { name, node } of namen) {
       console.log(
@@ -261,4 +270,4 @@ async function pruefen(root, basis) {
   return berichten(ergebnisse);
 }
 
-await ausfuehren(async (root) => pruefen(root, basisAusAufruf(AUFRUF, root)));
+await direktAusfuehren(import.meta.url, { aufruf: AUFRUF, pruefen });
