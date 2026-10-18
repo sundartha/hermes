@@ -1,16 +1,18 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { registerTools, MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS } from "../src/mcp-tools.js";
+import { MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS } from "../src/mcp-tools.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
 import { CONSULT_POLL_ABORT_MS } from "../src/consult/delivery.js";
 import { config } from "../src/config.js";
+import { captureToolHandlers } from "./gemeinsam/werkzeug-registrierung.js";
 import {
   EL_TERMINATION_RESULT_ATTEMPTS,
   EL_ABORT_PROVIDER_TIMEOUT_MS,
 } from "../src/elevenlabs/outbound.js";
 
 const HTTP_OK = 200;
+const pendingAborts = new Set();
 let gateway;
 before(async () => {
   gateway = http.createServer((req, res) => {
@@ -18,7 +20,9 @@ before(async () => {
       res.writeHead(HTTP_OK, { "content-type": "application/json" });
       return res.end(JSON.stringify({ preview: {}, confirmed: true }));
     }
-    return req.resume();
+    req.resume();
+    for (const abort of pendingAborts) abort();
+    pendingAborts.clear();
   });
   await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
   process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
@@ -28,34 +32,21 @@ after(async () => {
   await new Promise((resolve) => gateway.close(resolve));
 });
 
-const FAST_ABORT_MS = 50;
-let requestedMsLog;
-let originalAbortTimeout;
-
-function installFastAbortSpy() {
-  requestedMsLog = [];
-  originalAbortTimeout = AbortSignal.timeout;
+async function withHangAbortSpy(run) {
+  const requestedMsLog = [];
+  const originalAbortTimeout = AbortSignal.timeout;
   AbortSignal.timeout = (ms) => {
     requestedMsLog.push(ms);
     const controller = new AbortController();
-    setTimeout(() => controller.abort(new DOMException("Zeitablauf (Testattrappe)", "TimeoutError")), FAST_ABORT_MS);
+    pendingAborts.add(() => controller.abort(new DOMException("Zeitablauf (Testattrappe)", "TimeoutError")));
     return controller.signal;
   };
-}
-function restoreAbortSpy() {
-  AbortSignal.timeout = originalAbortTimeout;
-}
-
-function captureTools(ctx) {
-  const handlers = new Map();
-  const fakeServer = {
-    registerTool(name, _config, handler) {
-      handlers.set(name, handler);
-    },
-    registerResource() {},
-  };
-  registerTools(fakeServer, ctx);
-  return handlers;
+  try {
+    return await run(requestedMsLog);
+  } finally {
+    AbortSignal.timeout = originalAbortTimeout;
+    pendingAborts.clear();
+  }
 }
 
 const HOP_CASES = [
@@ -67,11 +58,9 @@ const HOP_CASES = [
 
 for (const { tool, args } of HOP_CASES) {
   test(`${tool}: Zeitablauf wird zu HOP_TIMEOUT (isError, MCP_HOP_TIMEOUT_MS protokolliert), in jeder Sprache`, async () => {
-    installFastAbortSpy();
-    try {
-      for (const language of ["de", "en", "fr"]) {
-        requestedMsLog.length = 0;
-        const handlers = captureTools({ identity: null, scopedTenant: `tenant_hop_${tool}`, language, consultAllowed: true });
+    for (const language of ["de", "en", "fr"]) {
+      await withHangAbortSpy(async (requestedMsLog) => {
+        const handlers = captureToolHandlers({ identity: null, scopedTenant: `tenant_hop_${tool}`, language, consultAllowed: true });
         const result = await handlers.get(tool)(args);
         assert.equal(result.isError, true, `${tool}/${language} muss isError sein`);
         assert.equal(
@@ -83,17 +72,14 @@ for (const { tool, args } of HOP_CASES) {
           requestedMsLog.includes(MCP_HOP_TIMEOUT_MS),
           `${tool}/${language}: AbortSignal.timeout muss mit MCP_HOP_TIMEOUT_MS (${MCP_HOP_TIMEOUT_MS}) aufgerufen worden sein, protokolliert: ${JSON.stringify(requestedMsLog)}`,
         );
-      }
-    } finally {
-      restoreAbortSpy();
+      });
     }
   });
 }
 
 test("Gegenprobe: await_call_event protokolliert weiter CONSULT_POLL_ABORT_MS (eigene Frist, unveraendert)", async () => {
-  installFastAbortSpy();
-  try {
-    const handlers = captureTools({ identity: null, scopedTenant: "tenant_hop_gegen1", language: "de", consultAllowed: true });
+  await withHangAbortSpy(async (requestedMsLog) => {
+    const handlers = captureToolHandlers({ identity: null, scopedTenant: "tenant_hop_gegen1", language: "de", consultAllowed: true });
     const result = await handlers.get("await_call_event")({ call_id: "c_hopfrist" });
     assert.notEqual(result.isError, true, "await_call_event darf bei Zeitablauf NICHT isError sein");
     assert.deepEqual(
@@ -101,15 +87,12 @@ test("Gegenprobe: await_call_event protokolliert weiter CONSULT_POLL_ABORT_MS (e
       [CONSULT_POLL_ABORT_MS],
       `await_call_event muss weiterhin CONSULT_POLL_ABORT_MS (${CONSULT_POLL_ABORT_MS}) verwenden, nicht MCP_HOP_TIMEOUT_MS`,
     );
-  } finally {
-    restoreAbortSpy();
-  }
+  });
 });
 
 test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eigene Frist, unveraendert)", async () => {
-  installFastAbortSpy();
-  try {
-    const handlers = captureTools({ identity: null, scopedTenant: "tenant_hop_gegen2", language: "de" });
+  await withHangAbortSpy(async (requestedMsLog) => {
+    const handlers = captureToolHandlers({ identity: null, scopedTenant: "tenant_hop_gegen2", language: "de" });
     const result = await handlers.get("place_call")({ to: "+491511234", objective: "Test" });
     assert.equal(result.isError, true, "place_call muss bei Zeitablauf weiterhin isError sein (CALL_START_UNCONFIRMED)");
     assert.equal(result.content[0].text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.CALL_START_UNCONFIRMED]);
@@ -118,9 +101,7 @@ test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eig
       [MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS],
       `place_call muss fuer den Bestaetigungs-Hop MCP_HOP_TIMEOUT_MS (${MCP_HOP_TIMEOUT_MS}) und fuer den Anrufstart weiterhin PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) verwenden`,
     );
-  } finally {
-    restoreAbortSpy();
-  }
+  });
 });
 
 test("MCP_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem laengsten begrenzten Serverweg (cancel_call auf gebundenem EL-Inbound)", () => {
