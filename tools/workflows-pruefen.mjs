@@ -3,9 +3,9 @@ import { basename, join } from "node:path";
 
 import {
   SECRETS_PATTERN,
-  WORKFLOW_RUN_PATTERN,
   indentOf,
   isContentLine,
+  mentionsWorkflowRun,
   structureRules,
   triggerSection,
   workflowNameFindings,
@@ -114,13 +114,9 @@ function runsForPullRequests(lines) {
   return section === undefined || PULL_REQUEST_TRIGGER_PATTERN.test(section);
 }
 
-function startsByWorkflowRun(lines) {
-  return WORKFLOW_RUN_PATTERN.test(triggerSection(lines) ?? "");
-}
-
 function lineRulesFor(lines, { listed, directories }) {
   const pullRequestRules = runsForPullRequests(lines) ? [secretsInPullRequestWorkflow] : [];
-  const localActionsAllowed = !listed && !startsByWorkflowRun(lines);
+  const localActionsAllowed = !listed && !mentionsWorkflowRun(lines);
   const rules = [
     ...LINE_RULES,
     actionWithoutCommitSha(directories, localActionsAllowed),
