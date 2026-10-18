@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
+import { quelltexttest } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
 import { commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
@@ -153,4 +154,16 @@ test("eine neue Datei, die keine Testdatei erreicht, ist aufgeteilt rot", (conte
   const { ganz } = gleichesUrteil(context, repo, "HEAD~1");
   assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
   assert.match(ganz.stdout, /keine Testdatei erreicht die Datei/);
+});
+
+test("eine Testdatei der zweiten Stufe, die schon im Erstlauf rot ist, lässt das Urteil aus und nennt sie, mit denselben Befunden wie im ganzen Lauf", (context) => {
+  const repo = probeRepository(context, { ...BASIS, ...fuellung(), "test/quelltext.test.js": quelltexttest("ist leer") });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const ganz = werkzeug(repo, "HEAD");
+  const { plan, urteil } = aufgeteilt(context, repo, { basis: "HEAD" });
+  assert.equal(plan.anzahl, 2);
+  assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
+  assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
+  assert.deepEqual(befunde(urteil), befunde(ganz));
+  assert.match(urteil.stdout, /^Zweite Stufe ohne test\/quelltext\.test\.js › ist leer: im Erstlauf rot$/m);
 });
