@@ -40,26 +40,34 @@ function ersatz(datei, markierung) {
   return `process.getBuiltinModule("node:fs").appendFileSync(${JSON.stringify(markierung)}, ${JSON.stringify(`${datei}\n`)});\n`;
 }
 
-function neuerCodeIn(verzeichnis, basis, umbenannt) {
+function abweichendVomBasisstand(basis, umbenannt) {
   const abweichend = [
     ...namen(["diff", "--name-only", "-z", "--no-renames", basis]),
     ...namen(["ls-files", "--others", "--exclude-standard", "-z"]),
   ];
   const bleibt = bleibenImBasisstand(basis, umbenannt);
-  const entfernt = [];
-  for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !bleibt.has(pfad))) {
+  return abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !bleibt.has(pfad));
+}
+
+function neuerCodeIn(verzeichnis, dateien) {
+  for (const datei of dateien) {
     const ziel = join(verzeichnis, datei);
-    if (!existsSync(datei) && SKRIPT.test(datei)) {
-      entfernt.push(datei);
-      writeFileSync(ziel, ersatz(datei, join(verzeichnis, MARKIERUNG)));
-      continue;
-    }
     rmSync(ziel, { force: true });
     if (!existsSync(datei)) continue;
     mkdirSync(dirname(ziel), { recursive: true });
     cpSync(datei, ziel);
   }
+}
+
+function entfernteSkripteVertreten(verzeichnis, dateien) {
+  const entfernt = dateien.filter((datei) => !existsSync(datei) && SKRIPT.test(datei));
+  for (const datei of entfernt) writeFileSync(join(verzeichnis, datei), ersatz(datei, join(verzeichnis, MARKIERUNG)));
   return entfernt;
+}
+
+function markierteDateien(verzeichnis) {
+  const markierung = join(verzeichnis, MARKIERUNG);
+  return existsSync(markierung) ? readFileSync(markierung, "utf8").split("\n") : [];
 }
 
 async function erreicht({ tests, vergleich }, seite, { verzeichnis, entfernt = [] }) {
@@ -80,10 +88,11 @@ async function erreicht({ tests, vergleich }, seite, { verzeichnis, entfernt = [
 async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
-    const entfernt = neuerCodeIn(verzeichnis, basis, auftrag.umbenannt);
+    const dateien = abweichendVomBasisstand(basis, auftrag.umbenannt);
+    neuerCodeIn(verzeichnis, dateien);
+    const entfernt = entfernteSkripteVertreten(verzeichnis, dateien);
     const lauf = await erreicht(auftrag, "alt", { verzeichnis, entfernt });
-    const markierung = join(verzeichnis, MARKIERUNG);
-    const markiert = existsSync(markierung) ? readFileSync(markierung, "utf8").split("\n") : [];
+    const markiert = markierteDateien(verzeichnis);
     return { ...lauf, geladen: entfernt.filter((datei) => lauf.geladen.includes(datei) || markiert.includes(datei)) };
   } finally {
     arbeitsbaumAbbauen(verzeichnis);
