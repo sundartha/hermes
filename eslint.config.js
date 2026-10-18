@@ -158,6 +158,10 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
   `scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`,
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
+const SPEICHER_FASSADE = {
+  fassade: "src/store.js",
+  speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
+};
 const ABLEHNUNGS_TABELLE = {
   datei: "src/i18n/mcp-denial-texts.js",
   tabelle: "MCP_DENIAL_TEXTS",
@@ -222,6 +226,11 @@ const hermesBloecke =
           name: "hermes-ablehnungsgruende",
           files: [`src/telephony/outbound-gates.${ENDUNGEN}`],
           rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
+        },
+        {
+          name: "hermes-speicher-fassade",
+          files: [QUELL_DATEIEN],
+          rules: { "hermes/speicher-fassade": ["error", SPEICHER_FASSADE] },
         },
         {
           name: "hermes-config-pfade",

@@ -8,6 +8,7 @@
   "probe": {
     "mitnehmen": [
       "eslint.config.js",
+      "src/store.js",
       "tools/eslint-rules/index.js",
       "tools/eslint-rules/bestand.js",
       "tools/eslint-rules/keine-kommentare.js",

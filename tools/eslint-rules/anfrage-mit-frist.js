@@ -1,3 +1,5 @@
+import { schluesselName, zugriffsName } from "./knoten.js";
+
 const MELDUNG =
   "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
@@ -25,11 +27,6 @@ function definitionen(scope, name) {
 
 function istGlobal(scope, name) {
   return definitionen(scope, name).length === 0;
-}
-
-function zugriffsName(zugriff) {
-  if (!zugriff.computed) return zugriff.property.name;
-  return zugriff.property.type === "Literal" ? zugriff.property.value : undefined;
 }
 
 function istZugriffAuf(knoten, objektName, namen) {
@@ -94,11 +91,6 @@ function istGlobalesFetch(scope, ausdruck, besucht = new Set()) {
   if (ausdruck.type !== "Identifier") return false;
   const variable = bindung(scope, ausdruck.name);
   return variable !== undefined && istAliasVonFetch(variable, besucht);
-}
-
-function schluesselName(eigenschaft) {
-  if (eigenschaft.type !== "Property" || eigenschaft.computed) return undefined;
-  return eigenschaft.key.type === "Identifier" ? eigenschaft.key.name : eigenschaft.key.value;
 }
 
 function enthaeltFrist(signale) {
