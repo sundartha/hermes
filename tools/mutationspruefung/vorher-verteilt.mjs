@@ -34,18 +34,23 @@ function istKnoten(wert) {
   return typeof wert?.type === "string" && wert.loc !== undefined;
 }
 
-function knotenJeZeile(baum, zeilen) {
-  const anzahl = Array.from({ length: zeilen + 1 }, () => 0);
+export function knotenIn(baum) {
+  const alle = [];
   const offen = [baum];
   while (offen.length > 0) {
     const knoten = offen.pop();
-    const { line } = knoten.loc.start;
-    if (knoten.type !== PROGRAMM) anzahl[line] += 1;
+    if (knoten.type !== PROGRAMM) alle.push(knoten);
     for (const [schluessel, wert] of Object.entries(knoten)) {
       const kinder = [wert].flat();
       if (!OHNE_KINDER.has(schluessel)) offen.push(...kinder.filter(istKnoten));
     }
   }
+  return alle;
+}
+
+function knotenJeZeile(baum, zeilen) {
+  const anzahl = Array.from({ length: zeilen + 1 }, () => 0);
+  for (const { loc } of knotenIn(baum)) anzahl[loc.start.line] += 1;
   return anzahl;
 }
 
