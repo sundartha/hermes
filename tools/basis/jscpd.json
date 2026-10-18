@@ -681,7 +681,7 @@
     "test/gp-p0-paid-without-number.test.js|test/gp-p0-paid-without-number.test.js|55",
     "test/gp-p0-paid-without-number.test.js|test/gp-p0-paid-without-number.test.js|69",
     "test/gp-p1-ablehnungsgrund.test.js|test/iex-a10-onboarding-trunk.test.js|56",
-    "test/gp-p1-ablehnungsgrund.test.js|test/provisioning-enqueue-order.test.js|55",
+    "test/gp-p1-ablehnungsgrund.test.js|test/provisioning-enqueue-order.test.js|57",
     "test/gp-p2-zahlungsmethode-eignung.test.js|test/p3-payment-webhook.test.js|103",
     "test/gp-p3-wiederanlauf-kartenwechsel.test.js|test/gp-p3-wiederanlauf-kartenwechsel.test.js|52",
     "test/gp-p3-wiederanlauf-kartenwechsel.test.js|test/gp-p3-wiederanlauf-kartenwechsel.test.js|65",
