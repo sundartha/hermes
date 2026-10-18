@@ -25,7 +25,6 @@ const PATHS = "paths";
 const RULE_KINDS = ["forbidden", "required"];
 const SIDES = ["from", "to", "module"];
 const BACK_REFERENCE = /\$\d/;
-const PREFIX_END = "/";
 const WORKFLOW_FILE = /\.ya?ml$/;
 const IN_BASIS = "Basis-Stand: ";
 const UNREADABLE = "lässt sich für den Vergleich umbenannter Dateien nicht lesen";
@@ -113,13 +112,9 @@ function cruiserProblems(config, file) {
   return config.allowed === undefined ? referring : [...referring, `${file} ${ALLOWED_UNCHECKED}`];
 }
 
-function listHits(entry, path) {
-  return entry === path || (entry.endsWith(PREFIX_END) && path.startsWith(entry));
-}
-
 function protectedKeys(groups, path, file) {
   const hit = Object.entries(groups).filter(([, entries]) =>
-    [entries].flat().some((entry) => listHits(entry, path)),
+    [entries].flat().some((entry) => imBereich(entry, path)),
   );
   return guarding(hit.map(([group]) => `${file} ${group}`));
 }
