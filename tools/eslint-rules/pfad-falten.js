@@ -1,5 +1,7 @@
 import { posix } from "node:path";
 
+import { knotenUnter } from "./knoten.js";
+
 export const VIRTUELLE_WURZEL = "/\u0001wurzel";
 export const UNBEKANNT = "\u0000";
 
@@ -32,10 +34,14 @@ function begrenzt(werte) {
   return [...gesehen.values()].slice(0, MAX_WERTE);
 }
 
-function kombiniert(links, rechts) {
-  return begrenzt(links.flatMap((anfang) => rechts.map((ende) => alsText(anfang + ende)))).map(
+function produkt(anfaenge, teil, verknuepfen) {
+  return begrenzt(anfaenge.flatMap((anfang) => teil.map((stueck) => alsText(verknuepfen(anfang, stueck))))).map(
     ({ inhalt }) => inhalt,
   );
+}
+
+function kombiniert(links, rechts) {
+  return produkt(links, rechts, (anfang, ende) => anfang + ende);
 }
 
 function listenElemente(werte) {
@@ -241,27 +247,15 @@ function mitglied(lauf, node, umgebung) {
 }
 
 function verbunden(teile) {
-  let ergebnisse = [""];
-  for (const teil of teile) {
-    ergebnisse = begrenzt(
-      ergebnisse.flatMap((anfang) => teil.map((stueck) => alsText(posix.join(anfang, stueck)))),
-    ).map(({ inhalt }) => inhalt);
-  }
-  return ergebnisse;
+  return teile.reduce((ergebnisse, teil) => produkt(ergebnisse, teil, (anfang, stueck) => posix.join(anfang, stueck)), [""]);
+}
+
+function aufloesSchritt(anfang, stueck) {
+  return stueck.startsWith(ORDNER_TRENNER) || stueck.startsWith(UNBEKANNT) ? stueck : posix.join(anfang, stueck);
 }
 
 function aufgeloest(teile) {
-  let ergebnisse = [VIRTUELLE_WURZEL];
-  for (const teil of teile) {
-    const schritt = (anfang, stueck) =>
-      stueck.startsWith(ORDNER_TRENNER) || stueck.startsWith(UNBEKANNT)
-        ? stueck
-        : posix.join(anfang, stueck);
-    ergebnisse = begrenzt(
-      ergebnisse.flatMap((anfang) => teil.map((stueck) => alsText(schritt(anfang, stueck)))),
-    ).map(({ inhalt }) => inhalt);
-  }
-  return ergebnisse;
+  return teile.reduce((ergebnisse, teil) => produkt(ergebnisse, teil, aufloesSchritt), [VIRTUELLE_WURZEL]);
 }
 
 const PFAD_AUFRUFE = new Map(Object.entries({
@@ -305,17 +299,9 @@ function pfadAufruf(lauf, { node, name }, umgebung) {
 
 function rueckgabeAusdruecke(lauf, funktion) {
   if (funktion.body.type !== "BlockStatement") return [funktion.body];
-  const gefunden = [];
-  const offen = [funktion.body];
-  while (offen.length > 0) {
-    const node = offen.pop();
-    if (node.type === "ReturnStatement" && node.argument) gefunden.push(node.argument);
-    if (node.type.includes("Function")) continue;
-    for (const schluessel of lauf.sourceCode.visitorKeys[node.type] ?? []) {
-      offen.push(...[node[schluessel]].flat().filter(Boolean));
-    }
-  }
-  return gefunden;
+  const { visitorKeys } = lauf.sourceCode;
+  const knoten = knotenUnter(funktion.body, visitorKeys, (node) => !node.type.includes("Function"));
+  return knoten.filter((node) => node.type === "ReturnStatement" && node.argument).map(({ argument }) => argument);
 }
 
 function aufrufUmgebung(lauf, funktion, argumente) {

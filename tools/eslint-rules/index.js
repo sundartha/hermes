@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as espree from "espree";
 
 import { pfadInDerWurzel } from "./bestand.js";
-import { schluesselName, zugriffsName } from "./knoten.js";
+import { knotenUnter, schluesselName, zugriffsName } from "./knoten.js";
 import keinQuelltextAlsText from "./kein-quelltext-als-text.js";
 import keineKommentare from "./keine-kommentare.js";
 import namenOhneBegruendung from "./namen-ohne-begruendung.js";
@@ -390,15 +390,9 @@ function funktionenDerDatei(baum) {
 const FUNKTIONS_KNOTEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
 function rueckgabenIn(rumpf) {
-  const gefunden = [];
-  const offen = [rumpf];
-  while (offen.length > 0) {
-    const knoten = offen.pop();
-    if (knoten.type === "ReturnStatement") gefunden.push(knoten);
-    if (FUNKTIONS_KNOTEN.has(knoten.type)) continue;
-    for (const schluessel of espree.VisitorKeys[knoten.type] ?? []) offen.push(...[knoten[schluessel]].flat().filter(Boolean));
-  }
-  return gefunden;
+  return knotenUnter(rumpf, espree.VisitorKeys, (knoten) => !FUNKTIONS_KNOTEN.has(knoten.type)).filter(
+    (knoten) => knoten.type === "ReturnStatement",
+  );
 }
 
 function rueckgabeObjekt(funktion) {

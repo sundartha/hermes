@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
 import { bestandFriertGenauEin, bestandsDatei, gemeldeteZeilen } from "./hermes-regeln-probe.js";
-import { probeDirectory } from "./probe-repo.js";
+import { probeDirectory, writeFiles } from "./probe-repo.js";
 
 const RULE = "hermes/kein-quelltext-als-text";
 const BESTAND = "tools/basis/quelltext-als-text.json";
@@ -92,15 +92,24 @@ test("kein-quelltext-als-text: apps/web/src, Temp-Ordner, Fixtures und Unbekannt
   assert.deepEqual(gemeldet(directory, zeilen), []);
 });
 
-test("kein-quelltext-als-text: eine eingefrorene Lesestelle ist frei, dieselbe ein zweites Mal nicht", (context) => {
+function mitEingefrorenerLesestelle(context) {
   const aufruf = LESEN_UEBER_URL.slice("const text = ".length, -1);
-  const directory = probeDirectory(context, {
-    [BESTAND]: bestandsDatei([befundSchluessel(DATEI, aufruf)]),
-  });
+  return probeDirectory(context, { [BESTAND]: bestandsDatei([befundSchluessel(DATEI, aufruf)]) });
+}
+
+test("kein-quelltext-als-text: eine eingefrorene Lesestelle ist frei, dieselbe ein zweites Mal nicht", (context) => {
+  const directory = mitEingefrorenerLesestelle(context);
   assert.deepEqual(gemeldet(directory, [LESEN_UEBER_URL]), []);
   const zweites = 'const zweiter = readFileSync(new URL("../src/server.js", import.meta.url), "utf8");';
   assert.deepEqual(gemeldet(directory, [LESEN_UEBER_URL, zweites]), [zweites]);
   assert.deepEqual(gemeldet(directory, [LESEN_UEBER_WURZEL]), [LESEN_UEBER_WURZEL]);
+});
+
+test("kein-quelltext-als-text: ein aus dem Bestand gestrichener Befund wird im selben Prozess wieder gemeldet", (context) => {
+  const directory = mitEingefrorenerLesestelle(context);
+  assert.deepEqual(gemeldet(directory, [LESEN_UEBER_URL]), []);
+  writeFiles(directory, { [BESTAND]: bestandsDatei([]) });
+  assert.deepEqual(gemeldet(directory, [LESEN_UEBER_URL]), [LESEN_UEBER_URL]);
 });
 
 test("kein-quelltext-als-text: die Basislinie aus basis-vergleich friert genau den Bestand ein", (context) => {

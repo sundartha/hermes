@@ -25,7 +25,9 @@ export function wortteile(name) {
 }
 
 export function enthaeltBegruendung(name) {
-  return wortteile(name).some((teil) => BEGRUENDUNGSWOERTER.has(teil));
+  const teile = wortteile(name);
+  const paare = teile.slice(1).map((teil, index) => `${teile[index]}${teil}`);
+  return [...teile, ...paare].some((teil) => BEGRUENDUNGSWOERTER.has(teil));
 }
 
 function musterNamen(muster) {
