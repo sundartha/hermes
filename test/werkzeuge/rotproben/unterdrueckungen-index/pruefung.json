@@ -1,0 +1,24 @@
+{
+  "titel": "Pre-commit-Haken zählt nur Vorgemerktes: eine nicht vorgemerkte Löschung ergibt keine Umbenennung",
+  "pfade": [
+    ".githooks/pre-commit",
+    "scripts/check-staged-suppressions.js",
+    "tools/umbenennung.mjs",
+    "tools/syntaxbaum.mjs",
+    "tools/eslint-rules/knoten.js"
+  ],
+  "probe": {
+    "mitnehmen": [
+      ".githooks/pre-commit",
+      "scripts/check-staged-suppressions.js",
+      "tools/umbenennung.mjs",
+      "tools/syntaxbaum.mjs",
+      "tools/eslint-rules/knoten.js"
+    ],
+    "befehl": [
+      "sh",
+      "-c",
+      "git reset -q --soft HEAD~1 && git diff --cached --name-only --diff-filter=D | while read -r datei; do git reset -q -- \"$datei\"; done && sh .githooks/pre-commit"
+    ]
+  }
+}

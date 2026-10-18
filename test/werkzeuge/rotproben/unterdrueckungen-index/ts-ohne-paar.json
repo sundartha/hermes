@@ -1,0 +1,39 @@
+{
+  "titel": "Neue .ts-Datei ohne Umbenennung mit eigenem Eintrag",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\", \"scripts\": { \"lint\": \"true\" } }"],
+    "eslint.config.js": [
+      "import tseslint from \"typescript-eslint\";",
+      "",
+      "export default [",
+      "  { files: [\"**/*.ts\"], languageOptions: { parser: tseslint.parser } },",
+      "  { files: [\"**/*.{js,cjs,ts}\"], rules: { \"no-var\": \"error\", \"no-warning-comments\": \"error\" } },",
+      "];"
+    ],
+    "eslint-suppressions.empty.json": ["{}"],
+    "src/probe/zahl.js": [
+      "var grenze = 10;",
+      "",
+      "export function klein(zahl) {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": ["{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}}"],
+    "eslint-legacy-exceptions.json": [
+      "{\"src/probe/zahl.js\": {\"reason\": \"Altlast\", \"date\": \"2026-01-01\", \"findings\": {\"no-var :: Unexpected var, use let or const instead.\": 1}}}"
+    ]
+  },
+  "dateien": {
+    "src/probe/neu.ts": [
+      "var grenze: number = 10;",
+      "",
+      "export function klein(zahl: number): boolean {",
+      "  return zahl < grenze;",
+      "}"
+    ],
+    "eslint-suppressions.json": [
+      "{\"src/probe/zahl.js\": {\"no-var\": {\"count\": 1}}, \"src/probe/neu.ts\": {\"no-var\": {\"count\": 1}}}"
+    ]
+  },
+  "erwartet": "  src/probe/neu.ts -> no-var: 0 -> 1"
+}
