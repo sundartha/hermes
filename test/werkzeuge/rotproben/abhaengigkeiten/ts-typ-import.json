@@ -1,0 +1,12 @@
+{
+  "titel": "Speicher-Innereien in TypeScript nur als Typ importiert",
+  "dateien": {
+    "src/app.ts": [
+      "import type { Wert } from \"./store/intern.ts\";",
+      "",
+      "export const leer: Wert = 0;"
+    ],
+    "src/store/intern.ts": ["export type Wert = number;"]
+  },
+  "erwartet": "„speicher-nur-ueber-fassade“"
+}
