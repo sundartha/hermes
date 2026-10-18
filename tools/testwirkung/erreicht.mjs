@@ -9,7 +9,6 @@ import { TESTDATEI, dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { abschnitte, arbeitsbaumAbbauen, basisArbeitsbaum, innersterTest } from "./geaendert.mjs";
 import { git } from "./git.mjs";
 import { testlaufNebenher } from "./testlauf.mjs";
-import { umbenennungen } from "../umbenennung.mjs";
 
 const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
 const ABDECKUNG = "NODE_V8_COVERAGE";
@@ -31,17 +30,16 @@ function nachTestUmgezogen(basis) {
   return umgezogen;
 }
 
-async function bleibenImBasisstand(basis) {
-  const { paare } = await umbenennungen({ von: basis });
+function bleibenImBasisstand(basis, { paare }) {
   return new Set([...nachTestUmgezogen(basis), ...paare.filter(({ nurTypen }) => nurTypen).map(({ alt }) => alt)]);
 }
 
-async function neuerCodeIn(verzeichnis, basis) {
+function neuerCodeIn(verzeichnis, basis, umbenannt) {
   const abweichend = [
     ...namen(["diff", "--name-only", "-z", "--no-renames", basis]),
     ...namen(["ls-files", "--others", "--exclude-standard", "-z"]),
   ];
-  const bleibt = await bleibenImBasisstand(basis);
+  const bleibt = bleibenImBasisstand(basis, umbenannt);
   for (const datei of abweichend.filter((pfad) => !pfad.startsWith(TESTORDNER) && !bleibt.has(pfad))) {
     const ziel = join(verzeichnis, datei);
     rmSync(ziel, { force: true });
@@ -66,7 +64,7 @@ async function erreicht({ tests, vergleich }, seite, verzeichnis) {
 async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
-    await neuerCodeIn(verzeichnis, basis);
+    neuerCodeIn(verzeichnis, basis, auftrag.umbenannt);
     return await erreicht(auftrag, "alt", verzeichnis);
   } finally {
     arbeitsbaumAbbauen(verzeichnis);

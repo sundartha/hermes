@@ -112,7 +112,7 @@ function mitHilfsdatei(vergleich) {
   return vergleich.some((datei) => !TESTDATEI.test(datei));
 }
 
-function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
+function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich, umbenannt }) {
   const aufrufmuster = (aufrufe) => aufrufe.flatMap(({ muster }) => muster);
   const geaenderte = geaenderteDateien
     .map((datei) => ({ datei, ...aufrufeVorherNachher(basis, datei) }))
@@ -121,7 +121,7 @@ function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich }) {
   const katalogtests = mitHilfsdatei(vergleich)
     ? katalog.map((test) => ({ datei: test.datei, altDatei: test.altDatei, alt: namensmuster([test]), neu: namensmuster([test]) }))
     : [];
-  return vergleicheErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich });
+  return vergleicheErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich, umbenannt });
 }
 
 function katalogeintraege(basis, katalog) {
@@ -253,7 +253,13 @@ async function main() {
   const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten));
   const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
   const eingefuegt = pruefeGeaenderte(values.basis, bestehende);
-  const auftrag = { bestehende, geaenderteDateien: [...geaendert], katalog: katalog.tests, vergleich: geaenderteSkripte(values.basis) };
+  const auftrag = {
+    bestehende,
+    geaenderteDateien: [...geaendert],
+    katalog: katalog.tests,
+    vergleich: geaenderteSkripte(values.basis),
+    umbenannt,
+  };
   const erreichbar = await erreichbarkeit(values.basis, auftrag);
   const weitergegeben = weitergabe(values.basis, auftrag);
   const gefunden = [
