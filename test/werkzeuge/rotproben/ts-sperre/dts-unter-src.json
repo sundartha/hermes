@@ -1,0 +1,7 @@
+{
+  "titel": "Neue Deklarationsdatei unter src, deren Inhalt tsc wegen skipLibCheck nicht prüft",
+  "dateien": {
+    "src/probe/typen.d.ts": ["export declare const neu: number;"]
+  },
+  "erwartet": "src/probe/typen.d.ts: Deklarationsdatei"
+}

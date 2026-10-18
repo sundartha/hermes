@@ -127,8 +127,8 @@
   },
   "ts-sperre": {
     "liste": "ohne Nummer",
-    "wozu": "Alle Prüfungen sehen TypeScript nur als .ts in Kleinbuchstaben unter src/, test/, tools/ und scripts/; eine .mts- oder .cts-Datei prüfen Semgrep und knip noch nicht, und eine .tsx-Datei, eine andere Schreibweise der Endung, eine TypeScript-Datei in einem anderen Ordner oder in einem Ordner, den eslint.config.js oder tsconfig.json ausnimmt, ginge an Lint oder Typprüfung vorbei. Außerdem erlaubt sind nur die TypeScript-Dateien, die vor S71a schon versioniert waren und in tools/basis/ts-bestand.json stehen.",
-    "behebung": "Die Datei mit der Endung .ts in Kleinbuchstaben unter src/, test/, tools/ oder scripts/ ablegen, außerhalb der Ordner, die eslint.config.js ausnimmt; Testdateien enden auf .test.ts.",
+    "wozu": "Alle Prüfungen sehen TypeScript nur als .ts in Kleinbuchstaben unter src/, test/, tools/ und scripts/; eine .mts- oder .cts-Datei prüfen Semgrep und knip noch nicht, den Inhalt einer Deklarationsdatei wie .d.ts prüft tsc wegen skipLibCheck nicht, und eine .tsx-Datei, eine andere Schreibweise der Endung, eine TypeScript-Datei in einem anderen Ordner oder in einem Ordner, den eslint.config.js oder tsconfig.json ausnimmt, ginge an Lint oder Typprüfung vorbei. Außerdem erlaubt sind nur die TypeScript-Dateien, die vor S71a schon versioniert waren und in tools/basis/ts-bestand.json stehen.",
+    "behebung": "Die Datei mit der Endung .ts in Kleinbuchstaben unter src/, test/, tools/ oder scripts/ ablegen, außerhalb der Ordner, die eslint.config.js ausnimmt, und nicht als Deklarationsdatei (.d.ts); Testdateien enden auf .test.ts.",
     "nichtAngenommen": "Die Datei in tools/basis/ts-bestand.json eintragen oder die Prüfung um Ordner oder Endungen erweitern, die ESLint, tsc, Semgrep oder knip nicht prüfen; der Bestand darf nur kürzer werden.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: braucht TypeScript außerhalb von src/, test/, tools/ und scripts/, weil <Grund>“."
   },
