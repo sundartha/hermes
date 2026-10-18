@@ -1,0 +1,8 @@
+{
+  "titel": "Speicher-Innerei in TypeScript als Typ weitergegeben",
+  "dateien": {
+    "src/app.ts": ["export type { Wert } from \"./store/intern.ts\";"],
+    "src/store/intern.ts": ["export type Wert = number;"]
+  },
+  "erwartet": "„speicher-nur-ueber-fassade“"
+}

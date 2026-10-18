@@ -1,0 +1,12 @@
+{
+  "titel": "Speicher-Innerei in TypeScript importiert und nur als Typ benutzt",
+  "dateien": {
+    "src/app.ts": [
+      "import { wert } from \"./store/intern.ts\";",
+      "",
+      "export const kopie: typeof wert = 1;"
+    ],
+    "src/store/intern.ts": ["export const wert = 1;"]
+  },
+  "erwartet": "„speicher-nur-ueber-fassade“"
+}
