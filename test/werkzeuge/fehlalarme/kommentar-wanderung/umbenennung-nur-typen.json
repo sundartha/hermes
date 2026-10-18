@@ -1,0 +1,17 @@
+{
+  "titel": "Umbenennung .js→.ts nur mit Typen, Kommentar und gleichlautende Zeichenkette standen schon da",
+  "vorher": {
+    "src/probe/abruf.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const hinweis = \"Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.\";"
+    ]
+  },
+  "loeschen": ["src/probe/abruf.js"],
+  "dateien": {
+    "src/probe/abruf.ts": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const hinweis: string = \"Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.\";"
+    ]
+  },
+  "erwartet": "wieder auf"
+}

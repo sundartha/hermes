@@ -4,7 +4,8 @@
     "tools/kommentar-wanderung.mjs",
     "tools/pr-aenderungen.mjs",
     "tools/kommentare-yaml-shell.mjs",
-    "tools/syntaxbaum.mjs"
+    "tools/syntaxbaum.mjs",
+    "tools/umbenennung.mjs"
   ],
   "probe": {
     "mitnehmen": [
