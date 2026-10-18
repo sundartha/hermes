@@ -3,8 +3,8 @@ import { dirname, join, resolve } from "node:path";
 
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { aenderungenSeit, git } from "./git.mjs";
-import { gleichwertigGemeldet, gleichwertigZeile } from "./gleichwertig.mjs";
+import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
+import { gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
 import { beleg } from "./pruefungen.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
@@ -41,14 +41,37 @@ function abbruchExit(exitCode) {
   return exitCode !== 0 && exitCode !== EXIT_UEBERLEBT;
 }
 
-function mutanten(lauf, name, argumente) {
+function mutationsBefehl(lauf, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
-  const befehl = ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
-  const erster = lauf.pruefung(name, befehl);
-  const { exitCode, ausgabe } = abbruchExit(erster.exitCode) ? lauf.pruefung(name, befehl) : erster;
+  return ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
+}
+
+function ausgewertet(lauf, name, { exitCode, ausgabe }) {
   if (exitCode === 0) return { ende: true };
   if (abbruchExit(exitCode)) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
-  return { ueberlebende: treffer(ausgabe, UEBERLEBT) };
+  return { ueberlebende: treffer(ausgabe, UEBERLEBT), ausgabe };
+}
+
+function mutanten(lauf, name, argumente) {
+  const befehl = mutationsBefehl(lauf, argumente);
+  const erster = lauf.pruefung(name, befehl);
+  return ausgewertet(lauf, name, abbruchExit(erster.exitCode) ? lauf.pruefung(name, befehl) : erster);
+}
+
+function vorgemerkterCodestand(lauf) {
+  const { root } = lauf.kontext;
+  lauf.allesVormerken();
+  return [lauf.basis, kopf(root), arbeitsstand(root)].join(" ");
+}
+
+function nachBauAbgeleitet(lauf, ausgabe) {
+  const name = PRUEFUNG.MUTATION_NACH_BAU;
+  const neu = nachbewertet(ausgabe, new Set(gleichwertige(lauf)));
+  if (neu === null) return null;
+  const hinweis = `Hinweis: ${name} nicht neu ausgeführt: Code und Tests seit ${PRUEFUNG.MUTATION} unverändert, Ergebnis daraus mit den Gleichwertig-Meldungen neu bewertet.`;
+  const befehl = mutationsBefehl(lauf, ["--basis", lauf.basis]).join(" ");
+  const ergebnis = { name, befehl, exitCode: neu.rot ? EXIT_UEBERLEBT : 0, ausgabe: [hinweis, ...neu.zeilen].join("\n"), dauer_ms: 0 };
+  return ausgewertet(lauf, name, lauf.belegt(ergebnis));
 }
 
 function bauNachrunde(ueberlebende) {
@@ -114,11 +137,12 @@ function testNachgeholt(lauf, ueberlebende, noetig) {
 
 function neueZeilen(lauf) {
   const pruefen = (name) => mutanten(lauf, name, ["--basis", lauf.basis]);
+  const vorher = vorgemerkterCodestand(lauf);
   let stand = pruefen(PRUEFUNG.MUTATION);
   if (stand.ende !== undefined) return stand.ende;
   const noetig = bauNachrundeGemeldet(lauf, stand.ueberlebende);
   if (noetig === null || !bauSchritteOhneAgentWiederholt(lauf)) return false;
-  stand = pruefen(PRUEFUNG.MUTATION_NACH_BAU);
+  stand = (vorgemerkterCodestand(lauf) === vorher ? nachBauAbgeleitet(lauf, stand.ausgabe) : null) ?? pruefen(PRUEFUNG.MUTATION_NACH_BAU);
   if (stand.ende !== undefined) return stand.ende;
   if (!testNachgeholt(lauf, stand.ueberlebende, noetig)) return false;
   stand = pruefen(PRUEFUNG.MUTATION_NACH_TEST);

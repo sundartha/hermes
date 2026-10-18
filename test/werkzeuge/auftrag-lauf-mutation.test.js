@@ -92,12 +92,14 @@ const MUTANT_OHNE_TESTDATEI = ohneTestdatei("src/rechnen.js", 2).schluessel;
 const ZAEHLENDE_MUTATION = [
   'import { appendFileSync, readFileSync } from "node:fs";',
   'appendFileSync(".git/mutation-aufrufe", "aufruf\\n");',
-  'const { mutanten, abschaltung, ueberlebt } = JSON.parse(readFileSync("mutanten.json", "utf8"));',
+  'const { mutanten, abschaltung, ueberlebt, verstoesse = [], rotOhneZeile = false } = JSON.parse(readFileSync("mutanten.json", "utf8"));',
   'const getestet = readFileSync("test/rechnen.test.js", "utf8").includes("(7)");',
   "const offen = getestet ? [] : mutanten.filter(({ mutant, annehmbar }) => !(annehmbar && process.argv.includes(mutant)));",
   'for (const { mutant, abgeschaltet } of offen) if (abgeschaltet) console.log(abschaltung + ": " + mutant);',
   'for (const { mutant } of offen) console.log(ueberlebt + ": " + mutant);',
-  "process.exitCode = offen.length > 0 ? 1 : 0;",
+  "const weitere = getestet ? [] : verstoesse;",
+  "for (const zeile of weitere) console.log(zeile);",
+  "process.exitCode = offen.length + weitere.length > 0 || (rotOhneZeile && !getestet) ? 1 : 0;",
   "",
 ].join("\n");
 
@@ -105,10 +107,10 @@ function gleichwertig(mutant) {
   return `Gleichwertig: ${mutant}, weil der Ersatz-Agent es so meldet`;
 }
 
-function mitZaehlenderMutation(context, mutanten, zusatz) {
+function mitZaehlenderMutation(context, ausgabe, zusatz) {
   const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...nachgeholt, ...zusatz };
-  const liste = JSON.stringify({ mutanten, abschaltung: ABSCHALTUNG_VERSTOSS, ueberlebt: MUTANT_UEBERLEBT });
+  const liste = JSON.stringify({ mutanten: [], ...ausgabe, abschaltung: ABSCHALTUNG_VERSTOSS, ueberlebt: MUTANT_UEBERLEBT });
   const ergebnis = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": ZAEHLENDE_MUTATION, "mutanten.json": liste } });
   const aufrufe = readFileSync(join(ergebnis.repo, ".git/mutation-aufrufe"), "utf8").split("aufruf\n").length - 1;
   const { pruefungen } = ergebnis.beleg;
@@ -117,30 +119,37 @@ function mitZaehlenderMutation(context, mutanten, zusatz) {
   return { ...ergebnis, aufrufe, nachBau, testPrompt: existsSync(promptDatei) ? readFileSync(promptDatei, "utf8") : "" };
 }
 
-const ZWEI_UEBERLEBENDE = [
-  { mutant: NEU_MUTANT, annehmbar: true },
-  { mutant: ZWEITER_MUTANT, annehmbar: true },
-];
+const ZWEI_UEBERLEBENDE = {
+  mutanten: [
+    { mutant: NEU_MUTANT, annehmbar: true },
+    { mutant: ZWEITER_MUTANT, annehmbar: true },
+  ],
+};
+const UEBERSPRUNGEN = "Hinweis: mutation nach Bau nicht neu ausgeführt";
+
+function pruefeNachBau({ lauf, aufrufe, nachBau }, { abgeleitet }) {
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe, abgeleitet ? 2 : 3);
+  assert.deepEqual(nachBau.map(({ exitCode }) => exitCode), [EXIT_ROT]);
+  const [{ zeilen }] = nachBau;
+  assert.equal(zeilen.some((zeile) => zeile.startsWith(UEBERSPRUNGEN) && zeile.includes("unverändert")), abgeleitet, JSON.stringify(nachBau));
+  return zeilen;
+}
+
 const GLEICHWERTIG_UND_NOETIG = `${ABSATZ_MUTATION}\n${gleichwertig(NEU_MUTANT)}\nNötig: ${ZWEITER_MUTANT}, weil ${NOETIG_GRUND}`;
 
 test("ändert der Bau-Agent nach überlebenden Mutanten nichts, läuft die Mutationsprüfung nach dem Bau nicht noch einmal und der Beleg nennt den Grund", (context) => {
-  const { lauf, aufrufe, nachBau, testPrompt } = mitZaehlenderMutation(context, ZWEI_UEBERLEBENDE, { "bau-nachrunde-antwort": GLEICHWERTIG_UND_NOETIG });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe, 2);
-  assert.deepEqual(nachBau.map(({ exitCode }) => exitCode), [EXIT_ROT]);
-  assert.ok(nachBau[0].zeilen.some((zeile) => zeile.startsWith("Hinweis: mutation nach Bau nicht neu ausgeführt") && zeile.includes("unverändert")), JSON.stringify(nachBau));
-  assert.ok(nachBau[0].zeilen.includes(`${GLEICHWERTIG_ANGENOMMEN}: ${NEU_MUTANT}`), JSON.stringify(nachBau));
+  const ergebnis = mitZaehlenderMutation(context, ZWEI_UEBERLEBENDE, { "bau-nachrunde-antwort": GLEICHWERTIG_UND_NOETIG });
+  const zeilen = pruefeNachBau(ergebnis, { abgeleitet: true });
+  assert.ok(zeilen.includes(`${GLEICHWERTIG_ANGENOMMEN}: ${NEU_MUTANT}`), zeilen.join("\n"));
+  const { testPrompt } = ergebnis;
   assert.ok(testPrompt.includes(`- ${ZWEITER_MUTANT}\n`));
   assert.ok(!testPrompt.includes(`- ${NEU_MUTANT}\n`));
 });
 
 test("ändert der Bau-Agent nach überlebenden Mutanten eine Datei, läuft die Mutationsprüfung nach dem Bau wie bisher", (context) => {
   const umgestellt = { "src/rechnen.js": "export function verdopple(zahl) {\n  if (zahl === 7) return 0;\n  return 2 * zahl;\n}\n" };
-  const { lauf, aufrufe, nachBau } = mitZaehlenderMutation(context, ZWEI_UEBERLEBENDE, { "bau-nachrunde": umgestellt, "bau-nachrunde-antwort": GLEICHWERTIG_UND_NOETIG });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe, 3);
-  assert.deepEqual(nachBau.map(({ exitCode }) => exitCode), [EXIT_ROT]);
-  assert.ok(!nachBau[0].zeilen.some((zeile) => zeile.includes("nicht neu ausgeführt")), JSON.stringify(nachBau));
+  pruefeNachBau(mitZaehlenderMutation(context, ZWEI_UEBERLEBENDE, { "bau-nachrunde": umgestellt, "bau-nachrunde-antwort": GLEICHWERTIG_UND_NOETIG }), { abgeleitet: false });
 });
 
 test("ohne neuen Lauf nach dem Bau gelten abgeschaltete Mutanten und Mutanten ohne Testdatei trotz Gleichwertig-Meldung weiter als überlebend", (context) => {
@@ -150,13 +159,23 @@ test("ohne neuen Lauf nach dem Bau gelten abgeschaltete Mutanten und Mutanten oh
     { mutant: ABGESCHALTETER_MUTANT, annehmbar: false, abgeschaltet: true },
   ];
   const antwort = [ABSATZ_MUTATION, ...mutanten.map(({ mutant }) => gleichwertig(mutant))].join("\n");
-  const { lauf, aufrufe, nachBau, testPrompt } = mitZaehlenderMutation(context, mutanten, { "bau-nachrunde-antwort": antwort });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe, 2);
-  assert.deepEqual(nachBau.map(({ exitCode }) => exitCode), [EXIT_ROT]);
+  const ergebnis = mitZaehlenderMutation(context, { mutanten }, { "bau-nachrunde-antwort": antwort });
+  const zeilen = pruefeNachBau(ergebnis, { abgeleitet: true });
   for (const zeile of [`${ABSCHALTUNG_VERSTOSS}: ${ABGESCHALTETER_MUTANT}`, `${MUTANT_UEBERLEBT}: ${MUTANT_OHNE_TESTDATEI}`, `${MUTANT_UEBERLEBT}: ${ABGESCHALTETER_MUTANT}`]) {
-    assert.ok(nachBau[0].zeilen.includes(zeile), `${zeile}\n${JSON.stringify(nachBau)}`);
+    assert.ok(zeilen.includes(zeile), `${zeile}\n${zeilen.join("\n")}`);
   }
+  const { testPrompt } = ergebnis;
   assert.ok(testPrompt.includes(`- ${MUTANT_OHNE_TESTDATEI}\n- ${ABGESCHALTETER_MUTANT}\n`), testPrompt);
   assert.ok(!testPrompt.includes(`- ${NEU_MUTANT}\n`));
+});
+
+const ZUSTANDSZUGRIFF = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist: src/rechnen.js:2";
+
+test("meldet der erste Durchgang nur einen Zustandszugriff, bleibt die Mutationsprüfung nach dem Bau ohne neuen Lauf rot", (context) => {
+  const zeilen = pruefeNachBau(mitZaehlenderMutation(context, { verstoesse: [ZUSTANDSZUGRIFF] }, { "bau-nachrunde-antwort": ABSATZ_MUTATION }), { abgeleitet: true });
+  assert.ok(zeilen.includes(ZUSTANDSZUGRIFF), zeilen.join("\n"));
+});
+
+test("endet der erste Durchgang rot ohne lesbare Verstoßzeile, läuft die Mutationsprüfung nach dem Bau neu", (context) => {
+  pruefeNachBau(mitZaehlenderMutation(context, { rotOhneZeile: true }, { "bau-nachrunde-antwort": ABSATZ_MUTATION }), { abgeleitet: false });
 });
