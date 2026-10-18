@@ -50,6 +50,7 @@ export const PRUEFER_OPTIONEN = new Map([
 ]);
 const ABLAGE_GRUND = "Sicherheitsbezug, nicht öffentlich";
 const ABLAGE_TITEL = "Sicherheit: ";
+const ABLAGE_TITEL_BLOCKER = `Sicherheit ${BLOCKER}: `;
 const STOP_GRUENDE = new Set([LIMIT_GRUND, ANMELDUNG_GRUND, TOKEN_GRUND]);
 const ISSUE_IM_TEXT = /\b(?:closes|fixes|resolves)\s+#(\d+)\b/i;
 const PHASEN_BRANCH = /^phase\/(\d+)-/;
@@ -332,7 +333,7 @@ async function ablegen(optionen, root, { github = githubZugang({ repo: optionen.
   const hinweise = ablageAus(leseDatei(optionen.ablage, ABLAGE_DATEI) ?? "");
   if (hinweise === null) throw new Error(`${ABLAGE_DATEI} fehlt oder ist ungültig.`);
   const issues = hinweise.map(({ sha, befund }) => ({
-    titel: `${ABLAGE_TITEL}${issueTitel(befund)}`,
+    titel: `${befund.schwere === BLOCKER ? ABLAGE_TITEL_BLOCKER : ABLAGE_TITEL}${issueTitel(befund)}`,
     sha,
     befund,
     grund: ABLAGE_GRUND,
@@ -359,7 +360,7 @@ async function lokal(optionen, root, { github = githubZugang(), programm } = {})
   const issue = await issueZumPr(github, { body: `Closes #${optionen.issue}` }, branch);
   if (issue.body === null) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
   const absicht = absichtFuerPr({ branch, issue, basis, head, root });
-  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht, blockerAblegen: true };
+  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht };
   const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
   const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
   console.log(NUR_LOKAL);

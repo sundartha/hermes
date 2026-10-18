@@ -209,11 +209,7 @@ function zaehlerDer(befunde, ergebnis) {
   return { ...jeSchwere, tokens: verbrauch(ergebnis), zuege: Number(ergebnis?.num_turns) || 0 };
 }
 
-function sicherheitsbefund(befund) {
-  return befund.sicherheit;
-}
-
-export function werteAus(lauf, { ordner, patches, token, blockerAblegen = false }) {
+export function werteAus(lauf, { ordner, patches, token }) {
   const ereignisse = lauf.zeilen.map(alsObjekt).filter(Boolean);
   const ergebnis = ereignisse.findLast((ereignis) => ereignis.type === "result") ?? null;
   const befunde = ergebnis ? befundeDerAntwort(ergebnis.structured_output) : null;
@@ -237,7 +233,7 @@ export function werteAus(lauf, { ordner, patches, token, blockerAblegen = false 
     zustand: GEPRUEFT,
     grund: "",
     befunde: befunde.map(gekuerzt),
-    ablage: befunde.filter(blockerAblegen ? sicherheitsbefund : gehoertInAblage),
+    ablage: befunde.filter(gehoertInAblage),
     zaehler,
   };
 }
@@ -259,7 +255,7 @@ async function rufeAuf(commit, kontext) {
       eingabe: auftragFuerPruefer(commit, patches),
       zeitgrenzeMs: zuegeFuer(commit) * MS_JE_ZUG,
     });
-    return werteAus(lauf, { ordner, patches, token: kontext.token, blockerAblegen: kontext.blockerAblegen });
+    return werteAus(lauf, { ordner, patches, token: kontext.token });
   } finally {
     entferne(ordner);
     entferne(home);
