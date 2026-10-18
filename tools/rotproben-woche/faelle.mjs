@@ -125,12 +125,21 @@ function neuDiff(pfad) {
   return lauf.stdout;
 }
 
-function neueDateienPatch(vorlage) {
+function neueDateienAus(vorlage) {
   if (!existsSync(vorlage)) throw new NichtErzeugbar(`nicht erzeugbar: ${vorlage} fehlt`);
   const { dateien, vorher, loeschen } = JSON.parse(readFileSync(vorlage, "utf8"));
   if (vorher !== undefined || loeschen !== undefined) {
     throw new NichtErzeugbar(`nicht erzeugbar: ${vorlage} braucht vorher oder loeschen; die Wochenprobe legt nur neue Dateien an`);
   }
+  const istDateiObjekt = typeof dateien === "object" && dateien !== null && !Array.isArray(dateien);
+  if (!istDateiObjekt || Object.keys(dateien).length === 0) {
+    throw new NichtErzeugbar(`nicht erzeugbar: ${vorlage} nennt keine Dateien`);
+  }
+  return dateien;
+}
+
+function neueDateienPatch(vorlage) {
+  const dateien = neueDateienAus(vorlage);
   const pfade = Object.keys(dateien);
   const vorhanden = pfade.find((pfad) => existsSync(pfad));
   if (vorhanden !== undefined) throw new NichtErzeugbar(`nicht erzeugbar: ${vorhanden} gibt es schon`);

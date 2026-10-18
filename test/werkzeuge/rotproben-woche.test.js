@@ -302,6 +302,14 @@ test("Rot-Proben: --nur-patches meldet laut, wenn das Manifest einer TypeScript-
   }
 });
 
+test("Rot-Proben: --nur-patches meldet laut, wenn das Manifest einer TypeScript-Probe keine Dateien nennt", async (context) => {
+  for (const dateien of [undefined, null, {}, [TS_PROBE], "src/probe/probe.ts"]) {
+    const { lauf } = await nurPatchesIn(context, { ...ANKERDATEIEN, [TS_VORLAGEN[0]]: JSON.stringify({ titel: "ohne Dateien", dateien }) });
+    assert.equal(lauf.status, EXIT_ROT);
+    assert.match(lauf.stderr, /^ts-any: nicht erzeugbar: test\/werkzeuge\/rotproben\/eslint\/ts-any\.json nennt keine Dateien$/m);
+  }
+});
+
 test("Rot-Proben: --nur-patches meldet laut, wenn das Manifest einer TypeScript-Probe fehlt", async (context) => {
   const ohneManifest = Object.fromEntries(Object.entries(ANKERDATEIEN).filter(([pfad]) => pfad !== TS_VORLAGEN[2]));
   const { lauf } = await nurPatchesIn(context, ohneManifest);
