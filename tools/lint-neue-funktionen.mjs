@@ -20,7 +20,7 @@ const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs", "*.ts", "*.mts", "*.cts"];
 const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const STRENGE_NEBENREGELN = {
   "no-unused-expressions": "error",
-  "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+  "no-unused-vars": ["error", { args: "after-used" }],
   "no-sequences": ["error", { allowInParentheses: false }],
 };
 const BESTANDS_REGELN = [{ regel: "hermes/kein-quelltext-als-text", files: ["test/**"] }];

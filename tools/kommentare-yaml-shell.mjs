@@ -13,6 +13,7 @@ const RAUTE = "#";
 const RUECKSTRICH = "\\";
 const EINFACH = "'";
 const DOPPELT = '"';
+const ANSI_ANFANG = "$'";
 const AUSDRUCK_ANFANG = "${{";
 const AUSDRUCK_ENDE = "}}";
 const PARAMETER_ANFANG = "${";
@@ -38,8 +39,9 @@ function istLeer(zeile) {
   return zeile.trim() === "";
 }
 
-function vorWortgrenze(zeile, index) {
-  return index === 0 || /\s/.test(zeile[index - 1]);
+function vorWortgrenze(zeile, index, shell) {
+  const grenze = shell ? /[\s;&|()]/ : /\s/;
+  return index === 0 || grenze.test(zeile[index - 1]);
 }
 
 function bisEnde(zeile, index, ende) {
@@ -69,7 +71,9 @@ function befehlAnfang(zeile, index, { shell, stapel }) {
 function imZitatLesen(zeile, index, zustand) {
   const zeichen = zeile[index];
   const { stapel } = zustand;
-  if (oben(stapel) === EINFACH) {
+  const zitat = oben(stapel);
+  if (zitat === ANSI_ANFANG && zeichen === RUECKSTRICH) return { weiter: index + MASKIERT };
+  if (zitat === EINFACH || zitat === ANSI_ANFANG) {
     return zeichen === EINFACH ? { weiter: index + 1, stapel: ohneOberstes(stapel) } : { weiter: index + 1 };
   }
   const sprung = gemeinsamUebersprungen(zeile, index, true) ?? befehlAnfang(zeile, index, zustand);
@@ -83,11 +87,17 @@ function parameterUebersprungen(zeile, index, shell) {
   return { weiter: bisEnde(zeile, index, PARAMETER_ENDE) };
 }
 
+function ansiAnfang(zeile, index, { shell, stapel }) {
+  if (!shell || !zeile.startsWith(ANSI_ANFANG, index)) return undefined;
+  return { weiter: index + ANSI_ANFANG.length, stapel: [...stapel, ANSI_ANFANG] };
+}
+
 function freiUebersprungen(zeile, index, zustand) {
   return (
     gemeinsamUebersprungen(zeile, index, zustand.shell) ??
     parameterUebersprungen(zeile, index, zustand.shell) ??
-    befehlAnfang(zeile, index, zustand)
+    befehlAnfang(zeile, index, zustand) ??
+    ansiAnfang(zeile, index, zustand)
   );
 }
 
@@ -97,15 +107,15 @@ function freiLesen(zeile, index, zustand) {
   if (sprung !== undefined) return sprung;
   const zeichen = zeile[index];
   if (zeichen === BEFEHL_ENDE && oben(stapel) === BEFEHL_ANFANG) {
-    return { weiter: index + 1, stapel: ohneOberstes(stapel) };
+    return { weiter: index + 1, stapel: ohneOberstes(stapel), ersetzungZu: true };
   }
   if (zeichen === EINFACH || zeichen === DOPPELT) return { weiter: index + 1, stapel: [...stapel, zeichen] };
-  if (zeichen === RAUTE && vorWortgrenze(zeile, index)) return { kommentar: zeile.slice(index + 1) };
+  if (zeichen === RAUTE && vorWortgrenze(zeile, index, zustand.shell && !zustand.nachErsetzung)) return { kommentar: zeile.slice(index + 1) };
   return { weiter: index + 1 };
 }
 
 function zeichenLesen(zeile, index, zustand) {
-  const zitiert = [EINFACH, DOPPELT].includes(oben(zustand.stapel));
+  const zitiert = [EINFACH, DOPPELT, ANSI_ANFANG].includes(oben(zustand.stapel));
   return zitiert ? imZitatLesen(zeile, index, zustand) : freiLesen(zeile, index, zustand);
 }
 
@@ -119,11 +129,13 @@ function zeileLesen(zeile, { shell, stapel: anfangsStapel }) {
   let stapel = anfangsStapel;
   let index = 0;
   let heredoc;
+  let nachErsetzung = false;
   while (index < zeile.length) {
     heredoc = heredocAb(zeile, index, { shell, stapel }) ?? heredoc;
-    const schritt = zeichenLesen(zeile, index, { shell, stapel });
+    const schritt = zeichenLesen(zeile, index, { shell, stapel, nachErsetzung });
     if (schritt.kommentar !== undefined) return { kommentar: schritt.kommentar, heredoc, stapel };
     stapel = schritt.stapel ?? stapel;
+    nachErsetzung = schritt.ersetzungZu === true;
     index = schritt.weiter;
   }
   return { heredoc, stapel };

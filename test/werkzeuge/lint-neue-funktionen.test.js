@@ -152,6 +152,13 @@ test("lint-neue-funktionen: eine unbenutzte _-Konstante und ein freistehender Te
   assert.match(lauf.output, /no-unused-expressions: Expected an assignment or function call/);
 });
 
+test("lint-neue-funktionen: ein unbenutzter _-Parameter in neuer Funktion ist rot", (context) => {
+  const zeilen = [...ALT, "", "export function neu(wert, _weilDasFrueherKaputtWar) {", "  return wert;", "}"];
+  const lauf = nachher(basisRepo(context), zeilen);
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.match(lauf.output, /no-unused-vars: '_weilDasFrueherKaputtWar' is defined but never used/);
+});
+
 test("lint-neue-funktionen: eine unbenutzte _-Konstante und ein freistehender Text in unveränderter alter Funktion bleiben grün", (context) => {
   const vorher = [...ALT, "", "export function zweite(wert) {", ...WIRKUNGSLOS, "  return wert;", "}"];
   const zeilen = ersetzt(vorher, "  return wert + 1;", "  return wert - 1;");

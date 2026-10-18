@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { Linter } from "eslint";
 
 import hermes from "../../tools/eslint-rules/index.js";
+import { maskiert } from "../../tools/testwirkung/aufrufe.mjs";
 import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, writeFiles } from "./probe-repo.js";
 
 const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
@@ -33,6 +34,13 @@ export function eslintKonfiguration(konfiguration) {
   ].join("\n");
 }
 
+function eslintMeldung(ort, regel) {
+  const [datei, zeile] = ort.split(":");
+  return new RegExp(
+    `\\/${maskiert(datei)}\\n(?:[ \\t]+.*\\n)*?[ \\t]+${zeile}:\\d+[ \\t]+error[ \\t].*${maskiert(regel)}`,
+  );
+}
+
 function laufen(directory, programm, args) {
   const run = spawnSync(process.execPath, [programm, ...args], {
     cwd: directory,
@@ -55,7 +63,7 @@ export function bestandFriertGenauEin(context, { werkzeug, konfiguration, vorher
   const lint = laufen(directory, ESLINT_BIN, ["."]);
   assert.equal(lint.status, EXIT_FINDING, lint.output);
   const [regel] = Object.keys(konfiguration.rules);
-  assert.ok(lint.output.includes(Object.keys(neu)[0]) && lint.output.includes(regel), lint.output);
+  assert.match(lint.output, eslintMeldung(ort, regel));
   const vergleich = laufen(directory, BASIS_VERGLEICH, [werkzeug]);
   assert.equal(vergleich.status, EXIT_FINDING, vergleich.output);
   assert.ok(vergleich.output.includes(ort), vergleich.output);
