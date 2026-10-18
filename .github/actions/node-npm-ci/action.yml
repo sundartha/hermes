@@ -1,0 +1,34 @@
+name: Node 22 und npm ci
+description: Richtet nach dem Checkout des Repos Node 22 ein und installiert die Pakete ohne Paket-Skripte, auf Wunsch mit apps/web und den freigegebenen Install-Skripten.
+inputs:
+  web:
+    description: Installiert zusätzlich die Pakete unter apps/web.
+    required: false
+    default: "true"
+  install-skripte:
+    description: Führt danach die freigegebenen Install-Skripte aus tools/basis/install-skripte.json aus.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Node 22
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22
+
+    - name: npm ci
+      shell: bash
+      run: npm ci --ignore-scripts
+
+    - name: npm ci für apps/web
+      if: inputs.web == 'true'
+      shell: bash
+      run: npm ci --ignore-scripts --prefix apps/web
+
+    - name: Install-Skripte
+      if: inputs.install-skripte == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
