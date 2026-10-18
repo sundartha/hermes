@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   OVERRIDE_ALLOWED_LEAF_PATHS,
   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,
+  overrideValueAtPath,
   startOutboundCall,
 } from "../src/elevenlabs/convai.js";
 import { wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
@@ -171,4 +172,15 @@ test("EL-OVERRIDE TEIL 3: die Code-Whitelist und die Besitz-Karte der Vorlage ne
     !OVERRIDE_ALLOWED_LEAF_PATHS.includes("agent.first_message"),
     "agent.first_message darf NIE in der Basis-Menge stehen - sonst koennte ein Fremd-Anruf die Offenlegung uebersteuern",
   );
+});
+
+test("EL-OVERRIDE: overrideValueAtPath liest Blaetter im Pfadformat der Whitelist, fehlende Zweige ergeben undefined", () => {
+  const override = { agent: { first_message: "Hallo", language: "de" } };
+  const faelle = [
+    ["agent.first_message", "Hallo"],
+    ["agent.language", "de"],
+    ["tts.voice_id", undefined],
+    ["agent.first_message.text", undefined],
+  ];
+  for (const [pfad, erwartet] of faelle) assert.equal(overrideValueAtPath(override, pfad), erwartet, pfad);
 });

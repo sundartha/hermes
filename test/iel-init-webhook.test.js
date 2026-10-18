@@ -484,6 +484,17 @@ test("IEX-A3-7: der Builder riegelt den fertigen Koerper erneut - der Wurf nennt
   );
 });
 
+test("IEX-A3-7b: der Riegel prueft auch die Override-Werte - ein Platzhalter in agent.first_message wird als Feld genannt", () => {
+  const zustand = baueZustand({ ownerName: PLATZHALTER_NAME });
+  let meldung = "";
+  try {
+    buildInitiationResponse({ store: baueInitStore(zustand.state), config: baueConfig(), call: zustand.call });
+  } catch (err) {
+    meldung = err.message;
+  }
+  assert.ok(meldung.includes("agent.first_message"), meldung);
+});
+
 test("IEX-A3-8: eine Sprachquelle fuer Text, agent.language und Aufloesung; ohne Namen die O4-Form", async () => {
   const unbekannt = baueZustand();
   unbekannt.call.language = "xx";

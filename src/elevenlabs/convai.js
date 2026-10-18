@@ -23,13 +23,14 @@ function assertConvaiOk(res, op) {
 
 export const OVERRIDE_ALLOWED_LEAF_PATHS = Object.freeze(["agent.language", "tts.voice_id"]);
 export const OVERRIDE_FIRST_MESSAGE_LEAF_PATHS = Object.freeze(["agent.first_message"]);
+export const OVERRIDE_ALL_LEAF_PATHS = Object.freeze([...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS]);
 const OVERRIDE_PATH_SEPARATOR = ".";
 
 function overrideOf(body) {
   return body?.conversation_initiation_client_data?.conversation_config_override;
 }
 
-function isPlainObject(wert) {
+export function isPlainObject(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
 }
 
@@ -40,14 +41,16 @@ export function overrideLeafPaths(wert, prefix) {
   );
 }
 
-function erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage }) {
-  const firstMessageErlaubt = calleeIsOwner === true || spracheWeichtAb(override, disclosureLanguage);
-  return firstMessageErlaubt
-    ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS]
-    : OVERRIDE_ALLOWED_LEAF_PATHS;
+export function overrideValueAtPath(override, pfad) {
+  return pfad.split(OVERRIDE_PATH_SEPARATOR).reduce((knoten, schluessel) => knoten?.[schluessel], override);
 }
 
-function verboteneOverridePfade(override, erlaubt) {
+function erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage }) {
+  const firstMessageErlaubt = calleeIsOwner === true || spracheWeichtAb(override, disclosureLanguage);
+  return firstMessageErlaubt ? OVERRIDE_ALL_LEAF_PATHS : OVERRIDE_ALLOWED_LEAF_PATHS;
+}
+
+export function verboteneOverridePfade(override, erlaubt) {
   if (!isPlainObject(override)) return ["(conversation_config_override ist kein Objekt)"];
   return overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad));
 }
