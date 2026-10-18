@@ -1,14 +1,12 @@
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, posix, resolve } from "node:path";
+import { posix } from "node:path";
 
 import { git } from "../pruefungen-messen.mjs";
+import { arbeitsbaumAbbauen, basisArbeitsbaum } from "../testwirkung/geaendert.mjs";
 import { umbenennungsPaare } from "../umbenennung.mjs";
 
 const NUL = "\0";
 const RENAMED = /^R\d*$/;
 const FIELDS_PER_RENAME = 3;
-const MODULES = "node_modules";
 const FIELDS_PER_CHANGE = 2;
 const DELETED = "D";
 const ADDED = "A";
@@ -65,13 +63,10 @@ export function trackedAt(basis) {
 }
 
 export async function withSnapshot(basis, use) {
-  const directory = mkdtempSync(join(tmpdir(), "feste-pfade-basis-"));
+  const directory = basisArbeitsbaum(basis);
   try {
-    git(["worktree", "add", "-q", "--detach", directory, basis]);
-    symlinkSync(resolve(MODULES), join(directory, MODULES));
     return await use(directory);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
-    git(["worktree", "prune"]);
+    arbeitsbaumAbbauen(directory);
   }
 }
