@@ -92,6 +92,39 @@ test("speicher-fassade: store.<name> ohne Export der Fassade wird gemeldet, ein 
     ["store.fehltProbe(1);", "fehltProbe"],
     ['store["auchFehlend"]();', "auchFehlend"],
     ["const { load, nochFehlend } = store;", "nochFehlend"],
+    ["store[name]();", "Dieser"],
+  ]);
+});
+
+test("speicher-fassade: ein Zugriff ohne festen Namen wird gemeldet, auch beim Aufbau in der Fassade", (context) => {
+  const directory = speicherOrdner(context);
+  const zeilen = ["const { [schluessel]: wert } = store;", "const { load, ...rest } = store;", "store[`get${art}`]();"];
+  assert.deepEqual(gemeldet(directory, "src/routes/probe.js", zeilen), [
+    ["const { [schluessel]: wert } = store;", "Dieser"],
+    ["const { load, ...rest } = store;", "Dieser"],
+    ["store[`get${art}`]();", "Dieser"],
+  ]);
+  assert.deepEqual(gemeldet(directory, FASSADE, [...FASSADE_ZEILEN, "await store[name]();"]), [
+    ["await store[name]();", "Dieser"],
+  ]);
+});
+
+test("speicher-fassade: ein Speicher hinter einer Eigenschaft store wird geprüft, der Konfig-Namensraum store nicht", (context) => {
+  const directory = speicherOrdner(context);
+  const zeilen = [
+    "deps.store.getCall(1);",
+    "deps.store.neueMethode();",
+    "this.store.auchNeu();",
+    "ctx.deps.store.tiefNeu();",
+    "const { fehltAuchHier } = deps.store;",
+    'if (config.store.storeBackend === "pg") config.store.databaseUrl;',
+    'const istPg = (cfg) => cfg.store.storeBackend === "pg";',
+  ];
+  assert.deepEqual(gemeldet(directory, "src/routes/probe.js", zeilen), [
+    ["deps.store.neueMethode();", "neueMethode"],
+    ["this.store.auchNeu();", "auchNeu"],
+    ["ctx.deps.store.tiefNeu();", "tiefNeu"],
+    ["const { fehltAuchHier } = deps.store;", "fehltAuchHier"],
   ]);
 });
 
