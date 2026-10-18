@@ -94,9 +94,12 @@ function typescriptFolder(pattern) {
   const segments = pattern.split(SEPARATOR);
   const first = segments.findIndex((segment) => WILDCARD.test(segment));
   const folder = `${segments.slice(0, first).join(SEPARATOR)}${SEPARATOR}`;
-  const middle = segments.slice(first, -1).every((segment) => segment === ANY_FOLDERS);
+  const middle = segments.slice(first, -1).join(SEPARATOR);
   const fits =
-    first > 0 && middle && typescriptOnly(segments.at(-1)) && CHECKED_ROOTS.includes(folder);
+    first > 0 &&
+    middle === ANY_FOLDERS &&
+    typescriptOnly(segments.at(-1)) &&
+    CHECKED_ROOTS.includes(folder);
   return fits ? folder : undefined;
 }
 
