@@ -14,7 +14,10 @@ const { makePgTestStore } = await import("../pg-helpers.js");
 
 const echtesFetch = globalThis.fetch;
 const WORKOS = "https://api.workos.test";
-const stub = { workosUser: null, stripeStatus: "active", stripeAbrufe: [] };
+function neuerStub({ stripeStatus = "active" } = {}) {
+  return { workosUser: null, stripeStatus, stripeAbrufe: [] };
+}
+let stub = neuerStub();
 
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
@@ -104,6 +107,7 @@ function captureConsole() {
 }
 
 async function boot(overrides = {}) {
+  stub = neuerStub(overrides.stub);
   const runner = overrides.runner ?? (await makePgliteRunner());
   const { store, state, log } = overrides.fake ?? makeStore();
   const app = express();
@@ -143,6 +147,7 @@ async function boot(overrides = {}) {
     state,
     log,
     audits,
+    stripeAbrufe: stub.stripeAbrufe,
     logs: capture.logs,
     result,
     url: `http://127.0.0.1:${srv.address().port}`,
@@ -424,11 +429,10 @@ test("Hintergrundlaeufe starten mit dem Store und melden keinen Fehler", async (
 });
 
 test("Stripe-Abgleich: ohne PAYMENT_ENABLED wird kein Abo bei Stripe abgefragt", async () => {
-  stub.stripeAbrufe.length = 0;
   const fake = makeStore({ tenants: [{ id: "t_ohne", stripeSubscriptionId: "sub_ohne", status: "active" }] });
   const w = await boot({ fake });
   try {
-    assert.deepEqual(stub.stripeAbrufe, []);
+    assert.deepEqual(w.stripeAbrufe, []);
     assert.doesNotMatch(w.logs.warn, /stripe-reconcile/);
   } finally {
     w.close();
@@ -436,16 +440,15 @@ test("Stripe-Abgleich: ohne PAYMENT_ENABLED wird kein Abo bei Stripe abgefragt",
 });
 
 test("Stripe-Abgleich: mit PAYMENT_ENABLED wird das Abo abgefragt und ein beendetes Abo geheilt", async () => {
-  stub.stripeAbrufe.length = 0;
-  stub.stripeStatus = "canceled";
   const fake = makeStore({ tenants: [{ id: "t_heil", stripeSubscriptionId: "sub_heil", status: "active" }] });
   const w = await boot({
     fake,
+    stub: { stripeStatus: "canceled" },
     deps: { config: { ...baseConfig, billing: { paymentEnabled: true, stripeWebhookSecret: "whsec_x" } } },
   });
   try {
-    assert.equal(stub.stripeAbrufe.length, 1);
-    assert.match(stub.stripeAbrufe[0], /sub_heil/);
+    assert.equal(w.stripeAbrufe.length, 1);
+    assert.match(w.stripeAbrufe[0], /sub_heil/);
     assert.doesNotMatch(w.logs.err, /stripe-reconcile/);
     assert.doesNotMatch(w.logs.warn, /Heilung fehlgeschlagen/);
     assert.match(w.logs.warn, /heile tenant=t_heil/);
@@ -458,7 +461,6 @@ test("Stripe-Abgleich: mit PAYMENT_ENABLED wird das Abo abgefragt und ein beende
       "Audit-Eintrag ueber die uebergebene audit-Funktion",
     );
   } finally {
-    stub.stripeStatus = "active";
     w.close();
   }
 });
