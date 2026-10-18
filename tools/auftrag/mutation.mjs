@@ -37,12 +37,17 @@ function abbruch(name, exitCode, ausgabe) {
   return rote.length > 0 ? `${name} ist mit Exit ${exitCode} abgebrochen: ${rote.join("; ")}` : `${name} ist mit Exit ${exitCode} abgebrochen.`;
 }
 
+function abbruchExit(exitCode) {
+  return exitCode !== 0 && exitCode !== EXIT_UEBERLEBT;
+}
+
 function mutanten(lauf, name, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const befehl = ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
-  const { exitCode, ausgabe } = lauf.pruefung(name, befehl);
+  const erster = lauf.pruefung(name, befehl);
+  const { exitCode, ausgabe } = abbruchExit(erster.exitCode) ? lauf.pruefung(name, befehl) : erster;
   if (exitCode === 0) return { ende: true };
-  if (exitCode !== EXIT_UEBERLEBT) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
+  if (abbruchExit(exitCode)) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
   return { ueberlebende: treffer(ausgabe, UEBERLEBT) };
 }
 
