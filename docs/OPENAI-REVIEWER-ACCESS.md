@@ -317,7 +317,7 @@ src/web-auth.js#claimsFromPayload | const email = payload.email_verified === tru
 src/web-auth.js#makeAccounts.upsertOnFirstLogin | throw new Error("login rejected: verified email required");
 src/web-auth.js#resolveOrCreateTenant | VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2, $3, $4, $5)
 src/billing/activation.js#activatePaidTenant | store.setKycLevel(tenant, KYC_LEVEL.CARD);
-src/billing/activation.js#activatePaidTenant | const provisioned = await provision(tenant);
+src/billing/activation.js#activatePaidTenant | const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
 src/routes/mcp.js#router.post("/mcp") | const register = scopedTenant === TENANT_REJECT ? registerNoTenantStubs : registerTools;
 src/mcp-no-tenant.js#NO_TENANT_DESCRIPTION | const NO_TENANT_DESCRIPTION = "No Hermes account is linked to this login";
 src/mcp-tools.js#uiTool("list_calls") | "list_calls",

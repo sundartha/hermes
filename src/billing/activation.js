@@ -32,6 +32,11 @@ async function syncNumberSetupFeeExemption({ store, billing, tenant }) {
   }
 }
 
+async function provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant }) {
+  await syncNumberSetupFeeExemption({ store, billing, tenant });
+  return provision(tenant);
+}
+
 async function activateAccountAndRefreshMirror({ store, accounts, tenant }) {
   await accounts.setStatus(tenant, "active");
   store.setTenantSubscription(tenant, { activationPending: false });
@@ -53,8 +58,7 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   store.clearSuspendedAt(tenant);
   const budgetPeriodStarted = stampBudgetPeriodIfPaid({ store, tenant });
   store.setTenantSubscription(tenant, { activationPending: true });
-  await syncNumberSetupFeeExemption({ store, billing, tenant });
-  const provisioned = await provision(tenant);
+  const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
   const profile = provisionPlanProfile({ store, tenant });
   if (!provisionCleared(provisioned))
     return { profile, activated: false, provisioned, budgetPeriodStarted };
