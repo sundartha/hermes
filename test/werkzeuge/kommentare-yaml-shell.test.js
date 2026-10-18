@@ -90,6 +90,29 @@ test("kommentare-yaml-shell: # in Zeichenketten, ${{ }}, URL-Ankern und Paramete
   ]);
 });
 
+test("kommentare-yaml-shell: # direkt nach ;, &, |, ( oder ) ist in Shell ein Befund, in YAML nicht", () => {
+  const shell = ["true;# a", "lauf &&# b", "lauf ||# c", "lauf |# d", "(lauf)# e", "(# f", "lauf &# g"];
+  assert.deepEqual(
+    gefunden("scripts/probe.sh", shell).map(([, text]) => text),
+    ["a", "b", "c", "d", "e", "f", "g"],
+  );
+  assert.deepEqual(gefunden("render.yaml", ["wert: a;# b", "liste: [a,b]|# c"]), []);
+});
+
+test("kommentare-yaml-shell: # direkt nach dem ) einer Befehlsersetzung gehört zum Wort", () => {
+  assert.deepEqual(gefunden("scripts/probe.sh", ["echo $(true)#x", "echo $(echo a)#b; true", "echo $(true) # c"]), [
+    ["echo $(true) # c", "c"],
+  ]);
+});
+
+test("kommentare-yaml-shell: in $'…' maskiert der Rückstrich, danach zählen Kommentare wieder", () => {
+  const zeilen = ["echo $'it\\'s # drin'", "# x", "echo $'a\\\\' # y"];
+  assert.deepEqual(gefunden("scripts/probe.sh", zeilen), [
+    ["# x", "x"],
+    ["echo $'a\\\\' # y", "y"],
+  ]);
+});
+
 test("kommentare-yaml-shell: der Inhalt von run-Blöcken wird als Shell geprüft, andere Blöcke nicht", () => {
   const zeilen = [
     "jobs:",
