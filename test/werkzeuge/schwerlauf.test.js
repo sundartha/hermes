@@ -161,6 +161,15 @@ test("ist der Aufrufer beendet, wenn die Sperre frei wird, nimmt der wartende La
   assert.equal(existsSync(`${datei}.json`), false);
 });
 
+test("zwei gleichzeitige Aufrufe aus einem Prozess erhalten bei zwei freien Plätzen je einen eigenen Platz", FRIST, async (context) => {
+  const { sperreNehmenUndHalterEintragen } = await import("../../tools/schwerlauf/sperre.mjs");
+  const datei = join(probeDirectory(context, {}), "sperre");
+  const aufrufe = ["erster Aufruf", "zweiter Aufruf"];
+
+  const schluessel = await Promise.all(aufrufe.map((anlass) => sperreNehmenUndHalterEintragen(datei, anlass, { plaetze: aufrufe.length })));
+  assert.equal(new Set(schluessel).size, aufrufe.length);
+});
+
 test("endet der Prozess, der die Sperre hält, während des Laufs, endet der Lauf rot mit Meldung", FRIST, async (context) => {
   const env = umgebung(context);
   const beenden = "require('node:child_process').spawnSync('pkill', ['-P', String(process.ppid), '-f', 'usr/bin/perl'])";

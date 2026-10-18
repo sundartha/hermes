@@ -22,7 +22,7 @@ const EXIT_FEHLER = 1;
 const EXIT_AUFRUF = 2;
 const PID_OHNE_PROZESS = 99999999;
 const SPERRDATEI_IN_ANWEISUNG = /lösche (\S+)\.$/;
-const SITZUNGEN = ["anruf", "last", "stopp", "doppelt", "abbruch", "waehrend"];
+const SITZUNGEN = ["anruf", "last", "stopp", "doppelt", "abbruch", "waehrend", "verwaist", "neustart"];
 const GERADE_IN_ARBEIT = /wird gerade gestartet oder gestoppt/;
 const SUCH_TAKT_MS = 20;
 const LOKALE_ADRESSE = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+/;
@@ -343,6 +343,44 @@ test(
     assert.match(ausgabe.fehler, /Start der Sitzung „abbruch“ gescheitert/);
     assert.deepEqual(prozesseDerGruppe(wirt), []);
     assert.equal(existsSync(sitzungsOrdner("abbruch")), false);
+  },
+);
+
+async function startHartAbbrechen(sitzung) {
+  const start = execFile(process.execPath, [HERMES_CTL, "start", "--sitzung", sitzung], {
+    cwd: REPO,
+    env: { ...process.env, TMPDIR: arbeitsordner },
+  });
+  const wirt = await wirtNummer(sitzung);
+  start.kill("SIGKILL");
+  return wirt;
+}
+
+test(
+  "bricht start hart ab, bevor der Wirt bereit ist, beendet stopp den weiterlaufenden Wirt samt seiner Gruppe",
+  TEST_FRIST,
+  async () => {
+    const wirt = await startHartAbbrechen("verwaist");
+    const stopp = await sitzungMit("verwaist")("stopp");
+    assert.deepEqual(stopp.beendet, [{ rolle: "wirt", pid: wirt }]);
+    assert.equal(lebt(wirt), false);
+    assert.deepEqual(prozesseDerGruppe(wirt), []);
+    assert.equal(existsSync(sitzungsOrdner("verwaist")), false);
+  },
+);
+
+test(
+  "bricht start hart ab, beendet ein zweites start den weiterlaufenden Wirt samt seiner Gruppe, bevor es neu startet",
+  TEST_FRIST,
+  async () => {
+    const alt = await startHartAbbrechen("neustart");
+    const ctl = sitzungMit("neustart");
+    const pids = prozessNummern(await ctl("start"));
+    assert.equal(lebt(alt), false);
+    assert.deepEqual(prozesseDerGruppe(alt), []);
+    assert.equal(pids.includes(alt), false);
+    const stopp = await ctl("stopp");
+    assert.deepEqual(stopp.beendet.map(({ pid }) => pid).sort(), pids.sort());
   },
 );
 

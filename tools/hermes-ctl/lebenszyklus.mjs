@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as warten } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import {
   HermesCtlFehler,
+  KENNUNG_WIRT,
   kindBeendet,
   REPO_WURZEL,
   ROLLE_WIRT,
@@ -27,6 +28,8 @@ const START_FRIST_MS = 90000;
 const STOPP_FRIST_MS = 20000;
 const NACH_KILL_FRIST_MS = 3000;
 const PROTOKOLL_ENDE_ZEICHEN = 2000;
+const WIRT_PID_DATEI = "wirt.pid";
+const DATEI_RECHTE = 0o600;
 
 function gruppeAbschiessen(kind) {
   try {
@@ -67,6 +70,19 @@ async function aufBereitschaftWarten(sitzung, kind) {
 
 const lebendeProzesse = (zustand) => zustand.prozesse.filter(gehoertZurSitzung);
 
+function wirtVermerken(ordner, kind) {
+  writeFileSync(join(ordner, WIRT_PID_DATEI), String(kind.pid), { mode: DATEI_RECHTE });
+}
+
+function vermerkterWirt(sitzung) {
+  const ordner = sitzungsOrdner(sitzung);
+  const datei = join(ordner, WIRT_PID_DATEI);
+  if (!existsSync(datei)) return [];
+  const pid = Number(readFileSync(datei, "utf8"));
+  const wirt = { rolle: ROLLE_WIRT, pid, kennung: `${KENNUNG_WIRT} ${ordner}` };
+  return Number.isInteger(pid) && pid > 0 && gehoertZurSitzung(wirt) ? [wirt] : [];
+}
+
 async function gesperrt(sitzung, schritt) {
   const freigeben = sitzungSperren(sitzung);
   try {
@@ -89,7 +105,7 @@ async function alleinStarten(sitzung) {
       `Beende sie mit „npm run hermes-ctl -- stopp --sitzung ${sitzung}“ oder wähle einen anderen Namen.`,
     );
   }
-  sitzungAufraeumen(sitzung);
+  await alleinStoppen(sitzung);
   const ordner = ordnerAnlegen(sitzung);
   const protokoll = openSync(join(ordner, WIRT_PROTOKOLL), "a");
   const kind = spawn(process.execPath, [WIRT, ordner], {
@@ -99,6 +115,7 @@ async function alleinStarten(sitzung) {
     stdio: ["ignore", protokoll, protokoll],
   });
   closeSync(protokoll);
+  wirtVermerken(ordner, kind);
   kind.unref();
   const zustand = await aufBereitschaftWarten(sitzung, kind);
   return { url: zustand.url, sitzung, zustandsdatei: datei };
@@ -121,13 +138,8 @@ function signalSenden(prozesse, signal) {
 }
 
 async function alleinStoppen(sitzung) {
-  const datei = zustandsDatei(sitzung);
-  const zustand = jsonLesen(datei);
-  if (zustand === null) {
-    sitzungAufraeumen(sitzung);
-    return { beendet: [] };
-  }
-  const eigene = lebendeProzesse(zustand);
+  const zustand = jsonLesen(zustandsDatei(sitzung));
+  const eigene = zustand === null ? vermerkterWirt(sitzung) : lebendeProzesse(zustand);
   const wirt = eigene.filter(({ rolle }) => rolle === ROLLE_WIRT);
   signalSenden(wirt.length > 0 ? wirt : eigene, "SIGTERM");
   const uebrig = await bisAlleBeendet(eigene, STOPP_FRIST_MS);
