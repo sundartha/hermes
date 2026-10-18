@@ -22,10 +22,11 @@ import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
 import { ISSUE_QUERY, issueApproval, listHint } from "../testschutz/freigabe.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
+const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
@@ -61,6 +62,10 @@ function nachfrage(ids) {
     "Kannst du den Zweck nicht benennen, antworte als Letztes mit der eigenen Zeile „Auftrag passt nicht: Zweck der Prüfung <ID> unklar: <was dir fehlt>“.",
     "",
   ].join("\n");
+}
+
+function befundOhneZweck(ergebnis) {
+  return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
 }
 
 class AuftragsLauf {
@@ -352,6 +357,7 @@ class AuftragsLauf {
       () => this.bauHatGeaendert(),
       () => this.allesVormerken(),
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
+      () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.typpruefung(),
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
       () => this.pinPruefung(),
