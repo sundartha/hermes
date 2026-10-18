@@ -33,5 +33,68 @@
     "behebung": "Bei Nachbau den vorhandenen Code aufrufen oder eine gemeinsame Hilfe bilden, die beide Stellen nutzen; steht die neue Stelle am Endstand nicht mehr, fällt der Befund weg. Bei Anordnung die Ursache beheben, statt dem Satz zu folgen; der Satz selbst verstößt gegen die Regel in CLAUDE.md, und wer ihn geschrieben hat, nimmt ihn zurück. Die belegten Stellen und das Zitat stehen in ergebnis.json im Artefakt pruefer-ergebnis-pr<Nummer> des Laufs „Prüfer prüfen“.",
     "nichtAngenommen": "Die neue Stelle umformulieren, umbenennen, umsortieren oder verschieben, bis der Prüfer sie nicht mehr als Nachbau erkennt, eine Zeile des Vorbilds ändern, damit der Beleg nicht mehr greift, oder den anordnenden Satz streichen, ohne die Ursache zu beheben. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Braucht die gemeinsame Hilfe eine Datei außerhalb deines Bereichs oder einen bestehenden Test, oder hältst du den Befund für falsch (ähnlicher Aufbau mit anderem Verhalten), schreibst du in einer Paket-Sitzung beide Stellen und den Grund als Entscheidungsnotiz ins Issue und wartest; Antonio entscheidet. Als Reparatur-Agent endest du mit der eigenen Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur."
+  },
+  "pruefer/issue": {
+    "liste": "K5",
+    "wozu": "Ein SOLLTE oder ein verworfener BLOCKER hält den Pull Request nicht auf; dieses Issue hält den Befund fest, damit eine erkannte Schwäche nicht verloren geht. Bleibt es liegen, steht der Fehler oder die Lücke unbemerkt im Hauptstand, bis ein Kunde sie trifft.",
+    "behebung": "In einem eigenen Pull Request die Stelle beheben, wie es der Beleg und der Block darunter beschreiben, und dieses Issue darin mit „Closes #<Nummer>“ schließen. Bei einem verworfenen BLOCKER zuerst am Code prüfen, ob der Fehler echt ist.",
+    "nichtAngenommen": "Das Issue ohne Codeänderung schließen oder liegen lassen, oder die Stelle so umschreiben, dass der Prüfer sie nicht mehr erkennt, ohne dass sich das Verhalten ändert. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ein SOLLTE oder HINWEIS hält den ursprünglichen Pull Request nicht auf; er merget, und behoben wird in einem eigenen Pull Request (Schweregrade in .claude/agents/pruefer.md). Hältst du den Befund für falsch oder braucht er eine Entscheidung, schreibst du in einer Paket-Sitzung den Grund als Entscheidungsnotiz in dieses Issue; Antonio entscheidet, ob es ohne Änderung geschlossen wird."
+  },
+  "pruefer/absicht": {
+    "liste": "K8",
+    "wozu": "Der Abschnitt „## Absicht“ im Issue sagt, wofür die Änderung da ist und welche Abkürzung nicht gewollt ist. Widerspricht der Endstand ihm, bescheinigt sich der Bau selbst „fertig“, obwohl das Bestellte fehlt oder genau die ausgeschlossene Abkürzung genommen wurde, und erst ein Kunde merkt es.",
+    "behebung": "Den Endstand so ändern, dass er der Absicht folgt: den fehlenden Teil bauen oder die ausgeschlossene Abkürzung zurücknehmen.",
+    "nichtAngenommen": "In Commit-Nachricht, Hinweisen oder Pull-Request-Text behaupten, die Absicht sei erfüllt, oder den Abschnitt „## Absicht“ an den Code anpassen, damit der Widerspruch verschwindet. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ist die Absicht im Bereich nicht erreichbar oder widerspricht sie dem Auftrag, gehört das als Entscheidungsnotiz ins Issue; Antonio entscheidet über die Absicht. Als Reparatur-Agent endest du mit der eigenen Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur. Ein SOLLTE hält den Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-P": {
+    "liste": "K11, K12, K18",
+    "wozu": "Die Einträge P1 bis P16 in .claude/refs/clean-code.md sind die Grundsätze des Bauplans: ein Grund zur Änderung je Modul, keine verborgenen Nebeneffekte, Fehler mit der auslösenden Eingabe, saubere Tests, Nebenläufigkeit als eigene Aufgabe. Wird einer verletzt, bricht ein späterer Umbau an einer unerwarteten Stelle, oder ein Fehler im Betrieb meldet nur „ging nicht“, und die Ursache ist schwer zu finden.",
+    "behebung": "Den Eintrag mit der gemeldeten ID in .claude/refs/clean-code.md lesen und die Stelle so ändern, wie er es unter Signal und Fix beschreibt, etwa bei P8 den Fehler zusammen mit der auslösenden Eingabe melden.",
+    "nichtAngenommen": "Die Stelle nur umbenennen, umstellen oder in eine andere Datei verschieben, sodass sie anders aussieht, aber dasselbe tut, oder das Issue ohne Codeänderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-C": {
+    "liste": "K19",
+    "wozu": "Ein Kommentar, der dem Code widerspricht, oder auskommentierter Code (C5 in .claude/refs/clean-code.md) führt spätere Leser in die Irre: Ein Agent glaubt der Beschreibung statt dem Code und baut falsch weiter. Alter Code steht in der Versionsgeschichte, nicht im Quelltext.",
+    "behebung": "Den auskommentierten Code oder den falschen Kommentar löschen. Was er erklären sollte, gehört in einen Namen, einen Test oder die Commit-Nachricht; neue Kommentare verbietet die Lint-Regel hermes/keine-kommentare.",
+    "nichtAngenommen": "Den Kommentar umformulieren, in eine Zeichenkette oder eine Textdatei verschieben, damit er nicht mehr als Kommentar zählt, oder das Issue ohne Codeänderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-E": {
+    "liste": "K19",
+    "wozu": "E1 und E2 in .claude/refs/clean-code.md verlangen, dass Bauen und alle Tests je ein einziger Befehl sind. Braucht es mehrere Schritte oder Handgriffe, lässt ein Agent oder die CI einen davon aus, und ein Fehler bleibt unentdeckt, obwohl alles grün aussieht.",
+    "behebung": "Die Schritte in ein npm-Skript oder einen Workflow-Schritt zusammenführen, sodass npm test bzw. der Build ohne Handgriff alles ausführt.",
+    "nichtAngenommen": "Einen Schritt nur in einer Anleitung beschreiben, ihn aus der CI nehmen, damit der Befund verschwindet, oder das Issue ohne Änderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-F": {
+    "liste": "K19",
+    "wozu": "F1 bis F4 in .claude/refs/clean-code.md betreffen Funktionen mit zu vielen, ausgebenden oder umschaltenden Argumenten und Funktionen, die niemand aufruft. Solche Funktionen werden falsch aufgerufen (vertauschte Argumente, falscher Schalter), und toter Code wird von späteren Agenten für gültig gehalten und kopiert.",
+    "behebung": "So ändern, wie der Eintrag unter Fix beschreibt: zusammengehörige Argumente in ein Objekt, ein Schalter-Argument in zwei Funktionen, ein ausgebendes Argument in einen Rückgabewert, eine tote Funktion löschen.",
+    "nichtAngenommen": "Die Signatur nur so umformen, dass die Funktion weniger Argumente zu haben scheint, aber weiter zweierlei tut, eine tote Funktion mit einem Schein-Aufruf am Leben halten, oder das Issue ohne Codeänderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-G": {
+    "liste": "K11, K12, K13, K17, K20",
+    "wozu": "G1 bis G36 in .claude/refs/clean-code.md sind die allgemeinen Regeln zu Richtigkeit und Klarheit, etwa Grenzfälle (G3), übergangene Sicherungen (G4), Duplizierung (G5), toter Code (G9), Genauigkeit wie Geld nie als Kommazahl (G26) und verborgene Reihenfolgen (G31). Bleibt ein solcher Befund liegen, kommt eine falsch berechnete Rechnung oder eine abgeschaltete Sicherung in den Betrieb, oder zwei Kopien laufen auseinander.",
+    "behebung": "Den Eintrag mit der gemeldeten ID lesen und die Ursache beheben: den Grenzfall testen und richtig behandeln, die abgeschaltete Sicherung wieder einschalten und den Verstoß selbst beheben, doppelte Logik einmal als gemeinsame Hilfe schreiben, eine Reihenfolge so in den Code legen, dass man sie nicht falsch machen kann.",
+    "nichtAngenommen": "Den Code so umschreiben, dass er dasselbe tut, aber anders aussieht, etwa eine Kopie umformulieren oder eine Sicherung über einen Umweg aushebeln, den die Regel nicht erkennt, oder das Issue ohne Codeänderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-N": {
+    "liste": "K14, K21",
+    "wozu": "N1 bis N7 in .claude/refs/clean-code.md verlangen Namen, die sagen, wofür etwas steht und was eine Funktion verändert. Verbirgt ein Name eine Nebenwirkung, ruft ein späterer Agent eine scheinbar harmlose Funktion auf und verändert unbemerkt gespeicherte Daten; in Tests, wo die Lint-Regel id-length aus ist, versteht er nicht, was geprüft wird, und ändert den Test falsch.",
+    "behebung": "So umbenennen, dass der Name Zweck und Nebenwirkung nennt, oder die Nebenwirkung aus der Funktion herauslösen.",
+    "nichtAngenommen": "Einen anderen, ebenso unklaren Namen wählen, die Nebenwirkung nur an eine andere Stelle derselben Funktion schieben, oder das Issue ohne Codeänderung schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
+  },
+  "pruefer/katalog-T": {
+    "liste": "K17, K22",
+    "wozu": "T1 bis T9 in .claude/refs/clean-code.md verlangen, dass jeder Fall, der schiefgehen kann, einen Test hat, auch an den Grenzen, und dass kein Test still abgeschaltet ist (T4). Fehlt ein Fall, übersieht ein grüner Testlauf einen Fehler, der dann bei einem Anruf oder in der Abrechnung auftritt.",
+    "behebung": "Den fehlenden Fall als Test ergänzen, der rot wird, wenn das Verhalten falsch ist, oder den abgeschalteten Test wieder einschalten und den Grund seines Scheiterns im Code beheben.",
+    "nichtAngenommen": "Einen Test schreiben, der nur die vorhandene Ausgabe wiederholt, einen Fall streichen, damit eine Testprüfung wieder grün ist, oder das Issue ohne neuen Test schließen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft der Eintrag an dieser Stelle nicht zu oder braucht die Behebung eine Datei außerhalb deines Bereichs: als Reparatur-Agent die eigene Zeile „Auftrag passt nicht: <Grund>“ wie im Block reparatur, sonst in einer Paket-Sitzung Eintrag, Stelle und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ein SOLLTE hält den ursprünglichen Pull Request nicht auf und wird in einem eigenen Pull Request behoben."
   }
 }
