@@ -1,14 +1,13 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import { gewachsen, pfadZurueck, unveraendert } from "../bestand-rueckfuehrung.mjs";
+import { run } from "./prozess.mjs";
 
 const NUR_KUERZER = [
   "tools/basis/selbstpruefung.json",
   "tools/basis/fester-importpfad.json",
   "tools/basis/quelltext-als-text.json",
 ];
-const MAX_GIT_AUSGABE = 268_435_456;
 
 function befunde(text) {
   return JSON.parse(text).befunde;
@@ -19,10 +18,7 @@ function imArbeitsbaum(pfad) {
 }
 
 function aufDerBasis(basis, pfad) {
-  const lauf = spawnSync("git", ["show", `${basis}:${pfad}`], {
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_AUSGABE,
-  });
+  const lauf = run("git", ["show", `${basis}:${pfad}`]);
   return lauf.status === 0 ? befunde(lauf.stdout) : undefined;
 }
 
