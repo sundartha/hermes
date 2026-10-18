@@ -57,7 +57,7 @@ function unitFindings(unit, names, gates) {
 }
 
 async function checkPullRequest({ basis, pullRequest }) {
-  const { open, proven } = mechanicalProofs(basis, changedExistingTestFiles(basis));
+  const { open, proven } = await mechanicalProofs(basis, changedExistingTestFiles(basis));
   for (const line of proven) console.log(line);
   const units = open.flatMap((change) => changedUnits(basis, change));
   if (units.length === 0) {

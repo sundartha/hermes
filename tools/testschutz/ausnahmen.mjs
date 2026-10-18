@@ -3,6 +3,7 @@ import { VisitorKeys, parse } from "espree";
 
 import { quelltextLesestellen } from "../eslint-rules/kein-quelltext-als-text.js";
 import { alleKnoten } from "../eslint-rules/knoten.js";
+import { umbenennungen } from "../umbenennung.mjs";
 import {
   STATUS_DELETED,
   gatesAt,
@@ -15,6 +16,7 @@ import {
 
 const STATUS_MODIFIED = "M";
 const RENAME_STATUS = "R";
+const IDENTICAL_RENAMES = "--find-renames=100%";
 const SINGLE_PATH_FIELDS = 2;
 const PAIRED_PATH_FIELDS = 3;
 const POSITION_FIELDS = new Set(["start", "end", "range", "loc"]);
@@ -39,6 +41,7 @@ const IMPORT_NODES = new Set([...STATIC_IMPORTS, DYNAMIC_IMPORT]);
 const CODE_NAMES = new Set(["require", "eval", "Function"]);
 const NODE_PREFIX = "node:";
 const COMMENTS_ONLY = "nur Kommentare oder Leerraum geändert (Syntaxbaum gleich)";
+const TYPES_ONLY = "umbenannt, nur Typen ergänzt, Laufzeitcode gleich,";
 const TEXT_TESTS_ONLY =
   "gelöscht, nur Tests, die Quelltext oder Dokumente als Text lesen (Regel 31)";
 
@@ -54,8 +57,8 @@ function fileAt(commit, file) {
   return git(["show", `${commit}:${file}`]);
 }
 
-function renamesSince(basis) {
-  const fields = git(["diff", "--find-renames", "--name-status", "-z", basis, "HEAD"]).split("\0");
+async function renamesSince(basis) {
+  const fields = git(["diff", IDENTICAL_RENAMES, "--name-status", "-z", basis, "HEAD"]).split("\0");
   const renames = new Map();
   let index = 0;
   while (index + 1 < fields.length) {
@@ -64,7 +67,9 @@ function renamesSince(basis) {
     if (isRename) renames.set(before, after);
     index += isRename ? PAIRED_PATH_FIELDS : SINGLE_PATH_FIELDS;
   }
-  return renames;
+  const { paare } = await umbenennungen({ von: basis, bis: "HEAD" });
+  const typesOnly = new Map(paare.filter(({ nurTypen }) => nurTypen).map(({ alt, neu }) => [alt, neu]));
+  return { renames: new Map([...renames, ...typesOnly]), typesOnly };
 }
 
 function syntaxTree(file, text) {
@@ -114,7 +119,7 @@ function renameReason(followed) {
   return `Importpfad folgt der Umbenennung ${pairs.join(", ")}`;
 }
 
-function modifiedReason(context, file) {
+async function modifiedReason(context, file) {
   const before = syntaxTree(file, fileAt(context.basis, file));
   const after = syntaxTree(file, fileAt("HEAD", file));
   if (before === null || after === null) return undefined;
@@ -122,7 +127,7 @@ function modifiedReason(context, file) {
   const { followed, replacements: beforeSources } = resolvedSources(
     before,
     file,
-    context.renames(),
+    (await context.renames()).renames,
   );
   const { replacements: afterSources } = resolvedSources(after, file, new Map());
   const same =
@@ -225,19 +230,26 @@ function deletedVerdict(context, file) {
   return { details: findingDetails(unlinked, executes) };
 }
 
-function verdict(context, { status, file }) {
-  if (!isJavaScript(file)) return {};
-  if (status === STATUS_MODIFIED) return { reason: modifiedReason(context, file) };
-  return status === STATUS_DELETED ? deletedVerdict(context, file) : {};
+async function deletedOrRenamedVerdict(context, file) {
+  const renamed = (await context.renames()).typesOnly.get(file);
+  if (renamed === undefined || context.gates().has(file)) return deletedVerdict(context, file);
+  return { reason: `${TYPES_ONLY} nach ${renamed} (tools/umbenennung.mjs)` };
 }
 
-export function mechanicalProofs(basis, changes) {
+async function verdict(context, { status, file }) {
+  if (!isJavaScript(file)) return {};
+  if (status === STATUS_MODIFIED) return { reason: await modifiedReason(context, file) };
+  return status === STATUS_DELETED ? deletedOrRenamedVerdict(context, file) : {};
+}
+
+export async function mechanicalProofs(basis, changes) {
   const context = {
     basis,
     renames: remembered(() => renamesSince(basis)),
     gates: remembered(() => gatesAt(basis)),
   };
-  const verdicts = changes.map((change) => ({ change, ...verdict(context, change) }));
+  const verdicts = [];
+  for (const change of changes) verdicts.push({ change, ...(await verdict(context, change)) });
   return {
     open: verdicts
       .filter(({ reason }) => reason === undefined)
