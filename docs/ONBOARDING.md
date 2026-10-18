@@ -50,6 +50,6 @@ scripts/           check-setup.js (npm run check), set-public-url.js
 - Persistenz: `store.js` auf eine echte DB heben (z. B. Render Postgres free / Supabase free)
 - Google/Outlook-Kalender statt lokalem Demo-Kalender
 - OAuth 2.1 für /mcp: Code steht (`MCP_AUTH=oauth`, Resource Server). Offen ist
-  nur noch der Betreiber-Teil — IdP-Account (WorkOS) + scharf schalten. Anleitung:
-  `PLAN-SECURITY.md` (Phase 1, OAuth). Bis dahin schützt `/mcp` die fail-closed-Default (localhost)
-  bzw. `MCP_AUTH_TOKEN`.
+  nur noch der Betreiber-Teil — IdP-Account (WorkOS) + scharf schalten. Einstellungen:
+  `MCP_AUTH` und `OAUTH_ISSUER_URL`, erklärt im Abschnitt „MCP ueber HTTP“ der `.env.example`.
+  Bis dahin schützt `/mcp` die fail-closed-Default (localhost) bzw. `MCP_AUTH_TOKEN`.

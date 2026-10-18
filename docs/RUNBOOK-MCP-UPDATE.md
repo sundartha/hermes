@@ -39,18 +39,20 @@ Werkzeug-Ergebnissen. Was davon anderswo gepinnt ist: die Annotations
 (`test/openai-t2-16-place-call-texte.test.js`) und der Kern der server-instructions
 (`test/openai-t2-17-instructions-kern.test.js`). Die Code-Verweise der Inventar-Doku
 (`docs/OPENAI-TOOL-INVENTORY.md`) zeigen auf Namen (`datei#name`), nicht auf Zeilen; Titel,
-Annotationen und Werkzeugmengen dort prueft kein Test mehr gegen den Draht. Die Beschreibungen von
-`get_call_status` und `list_action_items` pinnt der Byte-Snapshot des vollen Drahts
-(`tools/list`, `resources/list`, jedes `resources/read`, mit `MCP_UI_ENABLED`) in
-`test/openai-p8-widget-ui.test.js`, je ein Fall fuer HTTP und stdio. Den Text von
-`get_call_status` zitiert ausserdem `docs/OPENAI-POLICY-ABGLEICH.md` ("duration and the
-last transcript lines"); `test/openai-policy-abgleich-doku.test.js` prueft, dass jedes
-Werkzeug-Zitat dort woertlich im echten `tools/list` steht. Fuer jede Beschreibung gelten
-zudem die Form-Waechter in `test/p15-mcp-tool-descriptions-en.test.js` (kein deutscher
-Text, Grossschreib-Marker je Beschreibung nach Anzahl und Reihenfolge gepinnt). Gemessen:
-eine Umformulierung des `get_call_status`-Textes ohne das zitierte Stueck macht die beiden
-Byte-Snapshot-Faelle und den Policy-Abgleich rot, ein zusaetzlicher Grossschreib-Marker
-auch den Emphase-Waechter. CSP-Angaben prueft OpenAI zwar mit der
+Annotationen und Werkzeugmengen dort misst weiterhin `tools/openai-doku-pruefen.mjs` (Faelle
+"p10a Anzahl am Draht", "p10a Titel und Hinweise", "p10a Bedingung"; CI-Schritt "OpenAI-Doku" im
+Job `pruefungen`) gegen `tools/list` ueber HTTP und stdio; nur die Code-Verweise selbst prueft
+nichts mehr. Die Beschreibungen von `get_call_status` und `list_action_items` pinnt der
+Byte-Snapshot des vollen Drahts (`tools/list`, `resources/list`, jedes `resources/read`, mit
+`MCP_UI_ENABLED`) in `test/openai-p8-widget-ui.test.js`, je ein Fall fuer HTTP und stdio. Den Text
+von `get_call_status` zitiert ausserdem `docs/OPENAI-POLICY-ABGLEICH.md` ("duration and the
+last transcript lines"); dieses Zitat prueft seit dem Loeschen von
+`test/openai-policy-abgleich-doku.test.js` kein Test mehr, eine Umformulierung dort zieht man von
+Hand nach. Fuer jede Beschreibung gelten zudem die Form-Waechter in
+`test/p15-mcp-tool-descriptions-en.test.js` (kein deutscher Text, Grossschreib-Marker je
+Beschreibung nach Anzahl und Reihenfolge gepinnt). Gemessen: eine Umformulierung des
+`get_call_status`-Textes ohne das zitierte Stueck macht die beiden Byte-Snapshot-Faelle rot, ein
+zusaetzlicher Grossschreib-Marker auch den Emphase-Waechter. CSP-Angaben prueft OpenAI zwar mit der
 Werkzeugdefinition (Abschnitt 2), sie aendern aber nicht, wie ein Host ein Werkzeug
 aufruft.
 
