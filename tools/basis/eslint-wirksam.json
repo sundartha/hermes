@@ -40,6 +40,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -525,6 +540,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -1001,6 +1031,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -1479,6 +1524,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -1955,6 +2015,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -2433,6 +2508,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -2909,6 +2999,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -3387,6 +3492,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -3863,6 +3983,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -4341,6 +4476,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -4817,6 +4967,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -5295,6 +5460,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -5771,6 +5951,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -6249,6 +6444,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -6725,6 +6935,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -7203,6 +7428,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -7679,6 +7919,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -8157,6 +8412,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -8634,6 +8904,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -9110,6 +9395,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,
@@ -13518,6 +13818,21 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
       "hermes/wort-nur-in": [
         2,
         {
@@ -14398,6 +14713,21 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
       ],
       "hermes/wort-nur-in": [
         2,

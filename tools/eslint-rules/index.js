@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import * as espree from "espree";
 
 import { pfadInDerWurzel } from "./bestand.js";
+import { schluesselName, zugriffsName } from "./knoten.js";
 import keinQuelltextAlsText from "./kein-quelltext-als-text.js";
 import keineKommentare from "./keine-kommentare.js";
 import namenOhneBegruendung from "./namen-ohne-begruendung.js";
@@ -323,6 +325,186 @@ const configPfade = {
   },
 };
 
+const SPEICHER = "store";
+const EINSTELLUNGEN = { ecmaVersion: "latest", sourceType: "module" };
+const FEHLT =
+  "{{name}} ist kein Export von {{fassade}}. Im Betrieb ist der Speicher der Namensraum dieser Fassade; Tests mit dem PG- oder JSON-Speicher bleiben grün, der Betrieb wirft einen TypeError. Trag {{name}} in die Exportliste von {{fassade}} ein oder ruf einen vorhandenen Export auf.";
+const FEHLT_IN_FASSADE =
+  "{{name}} aus {{datei}} fehlt in der Exportliste von {{fassade}}. Im Betrieb ist der Speicher der Namensraum dieser Fassade; Tests mit dem PG- oder JSON-Speicher bleiben grün, der Betrieb wirft einen TypeError. Trag {{name}} in die Exportliste von {{fassade}} ein.";
+const UNLESBAR =
+  "{{datei}} lässt sich nicht auswerten ({{grund}}); ohne ihre Namen prüft diese Regel den Speicher nicht. Schreib die Namen als einfache Exporte oder als Schlüssel eines zurückgegebenen Objekts aus.";
+
+function nichtAuswertbar(grund) {
+  throw new Error(grund);
+}
+
+function geleseneDatei(wurzel, datei) {
+  const pfad = join(wurzel, datei);
+  if (!existsSync(pfad)) nichtAuswertbar("Datei fehlt");
+  try {
+    return espree.parse(readFileSync(pfad, "utf8"), EINSTELLUNGEN);
+  } catch {
+    return nichtAuswertbar("Syntaxfehler");
+  }
+}
+
+function musterName(eigenschaft) {
+  if (eigenschaft.type !== "Property" || eigenschaft.computed) nichtAuswertbar("Rest oder berechneter Schlüssel");
+  const ziel = eigenschaft.value.type === "AssignmentPattern" ? eigenschaft.value.left : eigenschaft.value;
+  if (ziel.type !== "Identifier") nichtAuswertbar("verschachteltes Muster");
+  return ziel.name;
+}
+
+function exportierteNamen(deklaration) {
+  if (deklaration.type !== "VariableDeclaration") return [deklaration.id.name];
+  return deklaration.declarations.flatMap(({ id }) => {
+    if (id.type === "Identifier") return [id.name];
+    if (id.type !== "ObjectPattern") nichtAuswertbar("verschachteltes Muster");
+    return id.properties.map(musterName);
+  });
+}
+
+function namenDerAussage(aussage) {
+  if (aussage.type === "ExportAllDeclaration") nichtAuswertbar("export *");
+  if (aussage.type !== "ExportNamedDeclaration") return [];
+  if (aussage.declaration) return exportierteNamen(aussage.declaration);
+  return aussage.specifiers.map(({ exported }) => exported.name);
+}
+
+function exporteDerDatei(wurzel, datei) {
+  return new Set(geleseneDatei(wurzel, datei).body.flatMap(namenDerAussage));
+}
+
+function funktionenDerDatei(baum) {
+  const funktionen = new Map();
+  for (const aussage of baum.body) {
+    const deklaration = aussage.type === "ExportNamedDeclaration" ? aussage.declaration : aussage;
+    if (deklaration?.type === "FunctionDeclaration") funktionen.set(deklaration.id.name, deklaration);
+  }
+  return funktionen;
+}
+
+const FUNKTIONS_KNOTEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
+function rueckgabenIn(rumpf) {
+  const gefunden = [];
+  const offen = [rumpf];
+  while (offen.length > 0) {
+    const knoten = offen.pop();
+    if (knoten.type === "ReturnStatement") gefunden.push(knoten);
+    if (FUNKTIONS_KNOTEN.has(knoten.type)) continue;
+    for (const schluessel of espree.VisitorKeys[knoten.type] ?? []) offen.push(...[knoten[schluessel]].flat().filter(Boolean));
+  }
+  return gefunden;
+}
+
+function rueckgabeObjekt(funktion) {
+  const rueckgaben = rueckgabenIn(funktion.body);
+  if (rueckgaben.length !== 1 || rueckgaben[0].argument?.type !== "ObjectExpression")
+    nichtAuswertbar(`${funktion.id.name} gibt nicht genau ein Objekt zurück`);
+  return rueckgaben[0].argument;
+}
+
+function aufgeloesterSpread(funktionen, ausdruck, offen) {
+  const name = ausdruck.type === "CallExpression" ? ausdruck.callee.name : undefined;
+  if (!funktionen.has(name) || offen.has(name)) nichtAuswertbar("Spread ohne Funktion dieser Datei");
+  return objektSchluessel(funktionen, rueckgabeObjekt(funktionen.get(name)), new Set([...offen, name]));
+}
+
+function objektSchluessel(funktionen, objekt, offen) {
+  return objekt.properties.flatMap((eigenschaft) => {
+    if (eigenschaft.type === "SpreadElement") return aufgeloesterSpread(funktionen, eigenschaft.argument, offen);
+    const name = schluesselName(eigenschaft);
+    if (name === undefined) nichtAuswertbar("berechneter Schlüssel");
+    return [String(name)];
+  });
+}
+
+function methodenDerFabrik(wurzel, datei, fabrik) {
+  const funktionen = funktionenDerDatei(geleseneDatei(wurzel, datei));
+  if (!funktionen.has(fabrik)) nichtAuswertbar(`${fabrik} fehlt`);
+  return objektSchluessel(funktionen, rueckgabeObjekt(funktionen.get(fabrik)), new Set([fabrik]));
+}
+
+function speicherNamen(wurzel, { datei, fabrik }) {
+  return fabrik === undefined ? [...exporteDerDatei(wurzel, datei)] : methodenDerFabrik(wurzel, datei, fabrik);
+}
+
+function ausgewertet(datei, auswerten) {
+  try {
+    return { wert: auswerten() };
+  } catch (fehler) {
+    return { unlesbar: { datei, grund: fehler.message } };
+  }
+}
+
+function istSpeicher(knoten) {
+  return knoten?.name === SPEICHER;
+}
+
+function istAufbauAufruf(zugriff) {
+  return zugriff.parent.type === "CallExpression" && zugriff.parent.callee === zugriff;
+}
+
+function speicherAbgleich(context, { fassade, speicher, exporte, aufbau }) {
+  return (node) => {
+    for (const quelle of speicher) {
+      const { wert, unlesbar } = ausgewertet(quelle.datei, () => speicherNamen(context.cwd, quelle));
+      if (unlesbar) context.report({ node, messageId: "unlesbar", data: unlesbar });
+      for (const name of (wert ?? []).filter((eintrag) => !exporte.has(eintrag) && !aufbau.has(eintrag)))
+        context.report({ node, messageId: "fehltInFassade", data: { name, datei: quelle.datei, fassade } });
+    }
+  };
+}
+
+const SPEICHER_QUELLE = {
+  type: "object",
+  properties: { datei: { type: "string" }, fabrik: { type: "string" } },
+  required: ["datei"],
+  additionalProperties: false,
+};
+
+const speicherFassade = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { fassade: { type: "string" }, speicher: { type: "array", items: SPEICHER_QUELLE } },
+        required: ["fassade", "speicher"],
+        additionalProperties: false,
+      },
+    ],
+    messages: { fehlt: FEHLT, fehltInFassade: FEHLT_IN_FASSADE, unlesbar: UNLESBAR },
+  },
+  create(context) {
+    const [{ fassade, speicher }] = context.options;
+    const { wert: exporte, unlesbar } = ausgewertet(fassade, () => exporteDerDatei(context.cwd, fassade));
+    if (unlesbar) return { Program: (node) => context.report({ node, messageId: "unlesbar", data: unlesbar }) };
+    const inDerFassade = pfadInDerWurzel(context.cwd, context.filename) === fassade;
+    const aufbau = new Set();
+    const pruefen = (node, name) => {
+      if (name !== undefined && !exporte.has(name))
+        context.report({ node, messageId: "fehlt", data: { name, fassade } });
+    };
+    return {
+      MemberExpression(node) {
+        if (!istSpeicher(node.object)) return;
+        if (inDerFassade && istAufbauAufruf(node)) {
+          aufbau.add(zugriffsName(node));
+          return;
+        }
+        pruefen(node, zugriffsName(node));
+      },
+      VariableDeclarator(node) {
+        if (node.id.type !== "ObjectPattern" || !istSpeicher(node.init)) return;
+        for (const eigenschaft of node.id.properties) pruefen(eigenschaft, schluesselName(eigenschaft));
+      },
+      "Program:exit": inDerFassade ? speicherAbgleich(context, { fassade, speicher, exporte, aufbau }) : () => {},
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes" },
   rules: {
@@ -334,5 +516,6 @@ export default {
     "keine-steuerung-ueber-meldung": keineSteuerungUeberMeldung,
     "erster-import": ersterImport,
     "config-pfade": configPfade,
+    "speicher-fassade": speicherFassade,
   },
 };

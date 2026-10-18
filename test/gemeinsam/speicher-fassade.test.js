@@ -37,3 +37,8 @@ test("store.js re-exportiert die Newsletter-Recipients-API (sonst TypeError zur 
     assert.equal(typeof store[name], "function", `${name} fehlt in der Fassade`);
   }
 });
+
+test("jeder Export von store.js ist im laufenden Speicher belegt", () => {
+  const leer = Object.keys(store).filter((name) => store[name] === undefined);
+  assert.deepEqual(leer, [], "diese Exporte von src/store.js sind undefined");
+});
