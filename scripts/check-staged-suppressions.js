@@ -98,15 +98,100 @@ function tallyIncreases(before, after) {
   );
 }
 
+const LENGTH_KEY_PREFIX = `max-lines-per-function${FINDING_KEY_SEPARATOR}`;
+const LINES_IN_MESSAGE = / has too many lines \((\d+)\)\./;
+const LINES_PLACEHOLDER = " has too many lines (N).";
+
+function lengthFinding(key, count) {
+  if (!isPositiveInteger(count) || !key.startsWith(LENGTH_KEY_PREFIX)) return null;
+  const match = LINES_IN_MESSAGE.exec(key);
+  if (!match) return null;
+  return {
+    identity: key.replace(LINES_IN_MESSAGE, LINES_PLACEHOLDER),
+    key,
+    lines: Number(match[1]),
+  };
+}
+
+function splitLengthFindings(tally) {
+  const counted = new Map();
+  const lengths = new Map();
+  for (const [key, count] of tally) {
+    const finding = lengthFinding(key, count);
+    if (!finding) {
+      counted.set(key, count);
+      continue;
+    }
+    const known = lengths.get(finding.identity) ?? [];
+    lengths.set(finding.identity, [...known, ...Array.from({ length: count }, () => finding)]);
+  }
+  return { counted, lengths };
+}
+
+function byLinesDescending(left, right) {
+  return right.lines - left.lines;
+}
+
+function withoutEqualLengths(findings, others) {
+  const unmatched = [...others];
+  return findings.filter(({ lines }) => {
+    const index = unmatched.findIndex((other) => other.lines === lines);
+    if (index === -1) return true;
+    unmatched.splice(index, 1);
+    return false;
+  });
+}
+
+function lengthIncreases(before, after) {
+  return [...after.values()].flatMap((found) => {
+    const pinned = before.get(found[0].identity) ?? [];
+    if (found.length > pinned.length) {
+      const [longest] = [...found].sort(byLinesDescending);
+      return [{ key: longest.key, countBefore: pinned.length, countAfter: found.length }];
+    }
+    const actual = withoutEqualLengths(found, pinned).sort(byLinesDescending);
+    const allowed = withoutEqualLengths(pinned, found).sort(byLinesDescending);
+    const shortestAllowed = allowed.slice(allowed.length - actual.length);
+    return actual.flatMap(({ key, lines }, index) =>
+      lines > shortestAllowed[index].lines
+        ? [
+            {
+              key,
+              countBefore: 1,
+              countAfter: 1,
+              allowedLines: shortestAllowed[index].lines,
+              actualLines: lines,
+            },
+          ]
+        : [],
+    );
+  });
+}
+
+function findingIncreases(before, after) {
+  const pinned = splitLengthFindings(before);
+  const found = splitLengthFindings(after);
+  return [
+    ...tallyIncreases(pinned.counted, found.counted),
+    ...lengthIncreases(pinned.lengths, found.lengths),
+  ];
+}
+
+function movementText({ countBefore, countAfter, allowedLines, actualLines }) {
+  return allowedLines === undefined
+    ? `${countBefore} -> ${countAfter}`
+    : `Pin erlaubt ${allowedLines} Zeilen, jetzt ${actualLines}`;
+}
+
 function findingOfKey(key) {
   const separatorIndex = key.indexOf(FINDING_KEY_SEPARATOR);
   if (separatorIndex === -1) return { ruleId: key };
   return { ruleId: key.slice(0, separatorIndex), message: key.slice(separatorIndex + FINDING_KEY_SEPARATOR.length) };
 }
 
-function describeDifference({ key, countBefore, countAfter }) {
-  const { ruleId, message } = findingOfKey(key);
-  return `${countBefore} -> ${countAfter}  ${ruleId}: ${message}`;
+function describeDifference(difference) {
+  const { ruleId, message } = findingOfKey(difference.key);
+  return `${movementText(difference)}  ${ruleId}: ${message}`;
 }
 
 function describeDifferences(differences) {
@@ -129,7 +214,7 @@ async function reasonsToReject(file, readFindings) {
   let differences;
   try {
     const { before, after } = await readFindings(file);
-    differences = tallyIncreases(findingTally(before), findingTally(after));
+    differences = findingIncreases(findingTally(before), findingTally(after));
   } catch (err) {
     return unverifiable(err);
   }
@@ -162,7 +247,7 @@ export async function findPinMismatches({ stagedFiles, legacyExceptions, readSta
       offenders.push({ file, ...unverifiable(err) });
       continue;
     }
-    const differences = tallyIncreases(pin, actual);
+    const differences = findingIncreases(pin, actual);
     if (differences.length === 0) continue;
     offenders.push({ file, ...rejectionFor(differences) });
   }
@@ -198,7 +283,11 @@ function renameOrigin(file, before, oldPathOf) {
   return before[file] ? undefined : oldPathOf(file);
 }
 
-function increasesPerFile(before, after, { tallyOf, oldPathOf = noRename }) {
+function increasesPerFile(
+  before,
+  after,
+  { tallyOf, increasesOf = tallyIncreases, oldPathOf = noRename },
+) {
   return Object.entries(after).flatMap(([file, entry]) => {
     const origin = renameOrigin(file, before, oldPathOf);
     const counted = before[origin ?? file];
@@ -206,8 +295,8 @@ function increasesPerFile(before, after, { tallyOf, oldPathOf = noRename }) {
     const tallyAfter = remaining
       ? combinedTally(tallyOf(entry), tallyOf(after[origin]))
       : tallyOf(entry);
-    return tallyIncreases(counted ? tallyOf(counted) : new Map(), tallyAfter).map(
-      ({ key, countBefore, countAfter }) => ({ file, origin, rule: key, countBefore, countAfter }),
+    return increasesOf(counted ? tallyOf(counted) : new Map(), tallyAfter).map(
+      ({ key, ...movement }) => ({ file, origin, rule: key, ...movement }),
     );
   });
 }
@@ -219,7 +308,11 @@ function pinTally(entry) {
 }
 
 function findRaisedLegacyPins(before, after, oldPathOf) {
-  return increasesPerFile(before, after, { tallyOf: pinTally, oldPathOf });
+  return increasesPerFile(before, after, {
+    tallyOf: pinTally,
+    increasesOf: findingIncreases,
+    oldPathOf,
+  });
 }
 
 function formatOffender({ file, ruleCounts, reasons = [] }) {
@@ -381,9 +474,9 @@ function jsonAt(revision, relativePath) {
 function printRaisedReport(relativePath, raised) {
   console.error("");
   logLine(`Abgebrochen: in ${relativePath} steigen Zahlen:`);
-  for (const { file, origin, rule, countBefore, countAfter } of raised) {
+  for (const { file, origin, rule, ...movement } of raised) {
     const renamed = origin === undefined ? "" : ` (umbenannt aus ${origin})`;
-    console.error(`  ${file}${renamed} -> ${rule}: ${countBefore} -> ${countAfter}`);
+    console.error(`  ${file}${renamed} -> ${rule}: ${movementText(movement)}`);
   }
 }
 

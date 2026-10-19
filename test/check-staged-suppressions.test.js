@@ -15,6 +15,7 @@ import {
   makeUnfilteredLinter,
   tallyDifferences,
 } from "../scripts/check-staged-suppressions.js";
+import { commitAll, probeRepository, runIn, writeFiles } from "./werkzeuge/probe-repo.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LEGACY_EXCEPTIONS_REL = "eslint-legacy-exceptions.json";
@@ -1032,5 +1033,187 @@ describe("Aufraeum-Gate am echten CLI", () => {
     const file = gatedFile();
     const { status, report } = runGate(file, stageEmptyContent(file));
     assert.equal(status, 0, `Gate hat eine reine Verringerung abgelehnt: ${report}`);
+  });
+});
+
+const LAENGEN_DATEI = "src/dummy/lang.js";
+const LAENGEN_GRENZE = "Maximum allowed is 100.";
+const PIN_ZEILEN = 172;
+const KUERZER = 169;
+const LAENGER = 175;
+const NEUE_FUNKTION_ZEILEN = 130;
+const ZWEITER_PIN_ZEILEN = 130;
+const UEBER_ZWEITEM_PIN = 170;
+const KOMPLEXITAET_PIN = 14;
+const KOMPLEXITAET_KLEINER = 12;
+
+function zuLang(name, zeilen) {
+  return meldung(
+    "max-lines-per-function",
+    `Function '${name}' has too many lines (${zeilen}). ${LAENGEN_GRENZE}`,
+    ZEILE_VORHER,
+  );
+}
+
+function zuKomplex(wert) {
+  return meldung(
+    "complexity",
+    `Function 'f' has a complexity of ${wert}. Maximum allowed is 10.`,
+    ZEILE_VORHER,
+  );
+}
+
+function pinFuer(meldungen) {
+  return {
+    [LAENGEN_DATEI]: {
+      reason: "Aufteilen der Fabrik ist ein eigener Umbau mit eigener Absicherung",
+      date: "2026-08-29",
+      findings: Object.fromEntries(findingTally(meldungen)),
+    },
+  };
+}
+
+function pinMeldung(erlaubt, jetzt) {
+  return `Pin erlaubt ${erlaubt} Zeilen, jetzt ${jetzt}`;
+}
+
+function enthaelt(text, erwartet) {
+  assert.ok(text.includes(erwartet), `erwartet „${erwartet}“ in: ${text}`);
+}
+
+function gegenPin(pin, vorgemerkt) {
+  return findPinMismatches({
+    stagedFiles: [LAENGEN_DATEI],
+    legacyExceptions: pinFuer(pin),
+    readStagedFindings: () => Promise.resolve(vorgemerkt),
+  });
+}
+
+describe("Laengen-Ratsche fuer max-lines-per-function (Attrappe)", () => {
+  it("laesst eine gekuerzte Funktion unter ihrem Pin durch", async () => {
+    const offenders = await gegenPin([zuLang("makeX", PIN_ZEILEN)], [zuLang("makeX", KUERZER)]);
+    assert.deepEqual(offenders, []);
+  });
+
+  it("lehnt eine Funktion ab, die ueber ihren Pin waechst", async () => {
+    const offenders = await gegenPin([zuLang("makeX", PIN_ZEILEN)], [zuLang("makeX", LAENGER)]);
+    assert.equal(offenders.length, 1);
+    enthaelt(begruendung(offenders), `${pinMeldung(PIN_ZEILEN, LAENGER)}  max-lines-per-function`);
+  });
+
+  it("lehnt eine neue zu lange Funktion ohne Pin ab", async () => {
+    const offenders = await gegenPin(
+      [zuLang("makeX", PIN_ZEILEN)],
+      [zuLang("makeX", KUERZER), zuLang("neueFunktion", NEUE_FUNKTION_ZEILEN)],
+    );
+    assert.equal(offenders.length, 1);
+    assert.match(
+      begruendung(offenders),
+      /0 -> 1 {2}max-lines-per-function: Function 'neueFunktion'/,
+    );
+  });
+
+  it("bindet den Pin an den Funktionsnamen", async () => {
+    const offenders = await gegenPin([zuLang("makeX", PIN_ZEILEN)], [zuLang("makeY", KUERZER)]);
+    assert.equal(offenders.length, 1);
+    assert.match(begruendung(offenders), /0 -> 1 {2}max-lines-per-function: Function 'makeY'/);
+  });
+
+  it("vergleicht bei gleichnamigen Funktionen die laengste mit dem laengsten Pin", async () => {
+    const offenders = await gegenPin(
+      [zuLang("anonym", PIN_ZEILEN), zuLang("anonym", ZWEITER_PIN_ZEILEN)],
+      [zuLang("anonym", KUERZER), zuLang("anonym", KUERZER)],
+    );
+    assert.equal(offenders.length, 1);
+    enthaelt(begruendung(offenders), pinMeldung(ZWEITER_PIN_ZEILEN, KUERZER));
+  });
+
+  it("vergleicht bei weniger gleichnamigen Funktionen gegen die kleinsten Pins", async () => {
+    const offenders = await gegenPin(
+      [zuLang("anonym", PIN_ZEILEN), zuLang("anonym", ZWEITER_PIN_ZEILEN)],
+      [zuLang("anonym", UEBER_ZWEITEM_PIN)],
+    );
+    assert.equal(offenders.length, 1);
+    enthaelt(begruendung(offenders), pinMeldung(ZWEITER_PIN_ZEILEN, UEBER_ZWEITEM_PIN));
+  });
+
+  it("laesst eine unveraenderte gleichnamige Funktion durch, wenn eine andere wegfaellt", async () => {
+    const offenders = await gegenPin(
+      [zuLang("anonym", PIN_ZEILEN), zuLang("anonym", ZWEITER_PIN_ZEILEN)],
+      [zuLang("anonym", PIN_ZEILEN)],
+    );
+    assert.deepEqual(offenders, []);
+  });
+
+  it("bleibt bei einer anderen Regel mit Zahl im Text streng", async () => {
+    const offenders = await gegenPin(
+      [zuKomplex(KOMPLEXITAET_PIN)],
+      [zuKomplex(KOMPLEXITAET_KLEINER)],
+    );
+    assert.equal(offenders.length, 1);
+    enthaelt(
+      begruendung(offenders),
+      `0 -> 1  complexity: Function 'f' has a complexity of ${KOMPLEXITAET_KLEINER}`,
+    );
+  });
+
+  it("laesst eine gekuerzte Funktion auch im Vergleich mit HEAD durch", async () => {
+    const offenders = await abgelehnt([zuLang("makeX", PIN_ZEILEN)], [zuLang("makeX", KUERZER)]);
+    assert.deepEqual(offenders, []);
+  });
+
+  it("lehnt eine gewachsene Funktion auch im Vergleich mit HEAD ab", async () => {
+    const offenders = await abgelehnt([zuLang("makeX", PIN_ZEILEN)], [zuLang("makeX", LAENGER)]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+    enthaelt(begruendung(offenders), pinMeldung(PIN_ZEILEN, LAENGER));
+  });
+});
+
+const TOR_PFAD = "scripts/check-staged-suppressions.js";
+
+function altlastText(zeilen) {
+  return `${JSON.stringify(pinFuer([zuLang("makeX", zeilen)]), null, 2)}\n`;
+}
+
+function repoMitLaengenPin(context, zeilen) {
+  return probeRepository(context, {
+    [TOR_PFAD]: readRepoFile(TOR_PFAD),
+    "package.json": `${JSON.stringify({ type: "module" })}\n`,
+    [SUPPRESSIONS_REL]: "{}\n",
+    [LEGACY_EXCEPTIONS_REL]: altlastText(zeilen),
+  });
+}
+
+function pinVormerken(repo, zeilen) {
+  writeFiles(repo, { [LEGACY_EXCEPTIONS_REL]: altlastText(zeilen) });
+  assert.equal(runIn(repo, "git", ["add", LEGACY_EXCEPTIONS_REL]).status, 0);
+}
+
+function torIm(repo, argumente = []) {
+  const lauf = runIn(repo, process.execPath, [TOR_PFAD, ...argumente]);
+  return { status: lauf.status, ausgabe: `${lauf.stdout}${lauf.stderr}` };
+}
+
+describe("Laengen-Ratsche fuer Pins in der Altlast-Liste (echtes CLI)", () => {
+  it("laesst einen gesenkten Laengen-Pin vorgemerkt und gegen die Basis durch", (context) => {
+    const repo = repoMitLaengenPin(context, PIN_ZEILEN);
+    pinVormerken(repo, KUERZER);
+    const vorgemerkt = torIm(repo);
+    assert.equal(vorgemerkt.status, 0, vorgemerkt.ausgabe);
+    commitAll(repo, "Pin gesenkt");
+    const gegenBasis = torIm(repo, ["--basis", "HEAD~1"]);
+    assert.equal(gegenBasis.status, 0, gegenBasis.ausgabe);
+  });
+
+  it("lehnt einen erhoehten Laengen-Pin vorgemerkt und gegen die Basis ab", (context) => {
+    const repo = repoMitLaengenPin(context, KUERZER);
+    pinVormerken(repo, PIN_ZEILEN);
+    const vorgemerkt = torIm(repo);
+    assert.equal(vorgemerkt.status, 1, vorgemerkt.ausgabe);
+    assert.match(vorgemerkt.ausgabe, /src\/dummy\/lang\.js -> .*'makeX'/);
+    enthaelt(vorgemerkt.ausgabe, pinMeldung(KUERZER, PIN_ZEILEN));
+    commitAll(repo, "Pin erhoeht");
+    const gegenBasis = torIm(repo, ["--basis", "HEAD~1"]);
+    assert.equal(gegenBasis.status, 1, gegenBasis.ausgabe);
   });
 });
