@@ -448,26 +448,50 @@ test("pruefen bricht ab, wenn die Ablage im hochgeladenen Ordner --aus liegen so
 
 const MINUTE = 60_000;
 const JOB_LIMIT = 360 * MINUTE;
+const RESERVE = 30 * MINUTE;
+const MINDESTBEDARF = 20 * 2 * MINUTE;
+const LETZTER_START = (JOB_LIMIT - RESERVE - MINDESTBEDARF) / MINUTE;
 
 function uhrBei(minuten) {
   return jobRestzeit({ start: 0, jetzt: () => minuten * MINUTE });
 }
 
 test("reicht die Restzeit des Prüfer-Jobs nicht für einen Commit, startet der Prüfer nicht und der Commit ist nicht_gelaufen mit eigenem Grund", async (context) => {
-  const { ergebnis, protokoll } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(350) });
+  const { ergebnis, protokoll } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(LETZTER_START + 1) });
   assert.deepEqual([ergebnis.zustand, ergebnis.grund], ["nicht_gelaufen", ZEIT_GRUND]);
   assert.equal(protokoll, null);
 });
 
 test("bei ausreichender Restzeit läuft der Commit, und seine Zeitgrenze ist nie größer als die Restzeit des Jobs", async (context) => {
-  const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(0) });
+  const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(LETZTER_START) });
   assert.equal(ergebnis.zustand, "geprueft");
-  for (const minuten of [0, 200, 260, 280]) {
+  for (const minuten of [0, 200, LETZTER_START - 10, LETZTER_START]) {
     const restzeit = uhrBei(minuten)();
     const grenze = zeitgrenzeFuer(restzeit);
     assert.ok(grenze !== null && grenze <= restzeit, `${minuten} min: ${grenze} > ${restzeit}`);
   }
   assert.ok(Number.isFinite(zeitgrenzeFuer(Infinity)));
+});
+
+test("ein Commit startet ab 20 Zügen zu je 2 Minuten Restzeit, eine Millisekunde darunter nicht", () => {
+  assert.equal(zeitgrenzeFuer(MINDESTBEDARF), MINDESTBEDARF);
+  assert.equal(zeitgrenzeFuer(MINDESTBEDARF - 1), null);
+});
+
+test("ist ein Commit für die Restzeit zu spät, bekommen auch alle späteren Commits denselben Grund", async (context) => {
+  const uhr = { minuten: 0 };
+  const restzeit = jobRestzeit({ start: 0, jetzt: () => uhr.minuten * MINUTE });
+  const gruende = [];
+  for (const minuten of [0, LETZTER_START + 1, LETZTER_START + 20]) {
+    uhr.minuten = minuten;
+    const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit });
+    gruende.push([ergebnis.zustand, ergebnis.grund]);
+  }
+  assert.deepEqual(gruende, [
+    ["geprueft", ""],
+    ["nicht_gelaufen", ZEIT_GRUND],
+    ["nicht_gelaufen", ZEIT_GRUND],
+  ]);
 });
 
 test("die Restzeit rechnet ab dem Start des Laufs gegen das Job-Limit von 360 Minuten mit Reserve für Ablage und Auswertung", () => {

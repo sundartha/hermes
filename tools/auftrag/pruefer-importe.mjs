@@ -2,12 +2,12 @@ import { posix } from "node:path";
 
 import { gitAusgabe } from "./pruefer-auswahl.mjs";
 
-export const DATEI_MODI = new Set(["100644", "100755"]);
+const DATEI_MODI = new Set(["100644", "100755"]);
 const KB = 1024;
 const MAX_DATEIEN = 40;
 const MAX_BYTES = 409_600;
 const MAX_DATEI_BYTES = 65_536;
-const BAUM_EINTRAG = /^(\d{6}) blob [0-9a-f]+ +(\d+)\t(.+)$/s;
+const BAUM_EINTRAG = /^(\d{6}) blob ([0-9a-f]+) +(\d+)\t(.+)$/s;
 const QUELLE = /\.(?:[cm]?js|ts)$/;
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(["'])(\.{1,2}\/[^"'\n]*)\1/g;
 const ENDUNGEN = ["", ".js", ".mjs", ".ts", "/index.js", "/index.mjs", "/index.ts"];
@@ -16,11 +16,16 @@ const PAKETE = "node_modules";
 function baumEintrag(eintrag) {
   const treffer = BAUM_EINTRAG.exec(eintrag);
   if (treffer === null || !DATEI_MODI.has(treffer[1])) return [];
-  return [[treffer[3], Number(treffer[2])]];
+  const [, , objekt, groesse, pfad] = treffer;
+  return [{ objekt, groesse: Number(groesse), pfad }];
+}
+
+export function dateienImBaum(sha, root) {
+  return gitAusgabe(["ls-tree", "-r", "-l", "-z", sha], root).split("\0").flatMap(baumEintrag);
 }
 
 function baumDes(sha, root) {
-  return new Map(gitAusgabe(["ls-tree", "-r", "-l", "-z", sha], root).split("\0").flatMap(baumEintrag));
+  return new Map(dateienImBaum(sha, root).map(({ pfad, groesse }) => [pfad, groesse]));
 }
 
 function imRepo(von, ziel) {

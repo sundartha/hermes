@@ -73,6 +73,27 @@ test("die direkt relativ importierten Repo-Dateien liegen unter importe/ und ste
   assert.equal(eingabe.includes("export const A = 1;"), false);
 });
 
+test("auch export from, import(), require(), Importe ohne Endung und auf einen Ordner mit index landen unter importe/", (context) => {
+  const bestand = {
+    "src/e.js": "export const E = 1;\n",
+    "src/dyn.mjs": "export const DYN = 2;\n",
+    "src/req.js": "module.exports = 3;\n",
+    "src/ohne.ts": "export const OHNE = 4;\n",
+    "src/ordner/index.js": "export const ORDNER = 5;\n",
+  };
+  const haupt = [
+    'export { E } from "./e.js";',
+    'const dyn = await import("./dyn.mjs");',
+    'const req = require("./req.js");',
+    'import { OHNE } from "./ohne";',
+    'import { ORDNER } from "./ordner";',
+    "export const ALLES = [dyn, req, OHNE, ORDNER];",
+    "",
+  ].join("\n");
+  const { importe } = ordnerFuer(context, commitMit(context, bestand, { "src/haupt.mjs": haupt }));
+  assert.deepEqual(importe, ["importe/src/dyn.mjs", "importe/src/e.js", "importe/src/ohne.ts", "importe/src/ordner/index.js", "importe/src/req.js"]);
+});
+
 test("ein Import, den ein früherer Commit des PR geändert hat, liegt im Stand nach dem geprüften Commit unter importe/, nicht im Stand der Basis", (context) => {
   const repo = probeRepo(context, BESTAND);
   const basis = repo.git(["rev-parse", "HEAD"]);
