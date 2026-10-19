@@ -323,11 +323,7 @@ test("Uebersprungener Job (Nummer schon aktiv oder weg) bucht keinen Monatsbeleg
   await orchestrator.queueProvisioning("num-weg", "t1");
   await orchestrator.runProvisioningDrainExclusive();
 
-  assert.deepEqual(
-    metering.belege.filter(([nummer]) => nummer !== undefined),
-    [],
-    "keine Nummer bekommt einen Monatsbeleg",
-  );
+  assert.deepEqual(metering.belege, [], "der Monatsbeleg wird gar nicht erst aufgerufen");
   assert.equal(jobOf(s, "num-aktiv").status, PROVISIONING_JOB_STATUS.DONE);
   assert.equal(jobOf(s, "num-weg").status, PROVISIONING_JOB_STATUS.DONE);
   assert.deepEqual(store.saves.at(-1), [
@@ -401,4 +397,33 @@ test("Queue-Job ohne Job-Spur: Kauf laeuft durch, ein Kauffehler wird mit seinem
   assert.equal(findNumber(s, "num1").status, NUMBER_STATUS.ACTIVE);
   assert.equal(queue.jobStatus(kaputt), PROVISIONING_JOB_STATUS.FAILED);
   assert.deepEqual(loggedErrors(errors), ["[provision-worker] Telnyx 500"]);
+});
+
+test("Wurf im Monatsbeleg laesst den Job der gekauften Nummer done", async (t) => {
+  const errors = silenceErrors(t);
+  const s = withNumbers(makeNumber("num1", "t1"));
+  const store = makeFakeStore(s);
+  const metering = meteringStub();
+  metering.recordNumberMonthMeter = () => {
+    throw new Error("Ledger nicht schreibbar");
+  };
+  const { orchestrator, queue } = makeOrchestrator(store, { paymentEnabled: true, metering });
+
+  await orchestrator.queueProvisioning("num1", "t1");
+  await orchestrator.runProvisioningDrainExclusive();
+
+  const job = jobOf(s, "num1");
+  assert.equal(findNumber(s, "num1").status, NUMBER_STATUS.ACTIVE, "die Nummer ist gekauft");
+  assert.equal(job.status, PROVISIONING_JOB_STATUS.DONE);
+  assert.equal(job.lastError, null, "der Kauf traegt keinen Fehlergrund");
+  assert.deepEqual(store.saves.at(-1), [PROVISIONING_JOB_STATUS.DONE]);
+  const queueId = queue.enqueue({
+    kind: PROVISION_NUMBER_JOB,
+    payload: {},
+    idempotencyKey: job.idempotencyKey,
+  });
+  assert.equal(queue.jobStatus(queueId), PROVISIONING_JOB_STATUS.DONE);
+  assert.deepEqual(loggedErrors(errors), [
+    "[provision-worker] Monatsbeleg fehlgeschlagen: Ledger nicht schreibbar",
+  ]);
 });
