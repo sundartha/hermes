@@ -20,9 +20,9 @@ const GITHUB_ID = /"(github\/[a-z-]+)"/g;
 const ZWECK_ZEIGEN = /node tools\/zweck-zeigen\.mjs ((?:github\/[a-z-]+ ?)+)/g;
 const PRINTF_ANFANG = /^\s*printf '%s\\n' \\$/;
 const FORTSETZUNG = / \\$/;
-const GRUND_AUFRUF = /\b(?:grund|listed)\(\s*([^,\s]+),/g;
+const GRUND_AUFRUF = /(?<!function )\b(?:grund|listed)\(\s*([^,\s]+),/g;
 const GRUND_KONSTANTE = /^FREIGABE_GRUENDE\.([A-Z_]+)$/;
-const DURCHGEREICHT = "zweck";
+const LISTED_PARAMETER = /\bfunction listed\((\w+),/;
 const TEIL_AUS_LAUF = /\bteile\.([a-z]+) =|alsBericht\(\{ ([a-z]+):/g;
 const TEILE_OHNE_ZWECK = ["aufgeraeumt"];
 const PR = 7;
@@ -68,7 +68,11 @@ function quelltextIds() {
 test("jede Gründe-Art der Freigabe-Prüfung hat einen Zweck-Text, und die Prüfung meldet keinen Grund ohne Art", () => {
   const arten = Object.keys(FREIGABE_GRUENDE);
   for (const art of arten) assert.ok(kenntZweck(FREIGABE_GRUENDE[art]), `${art}: kein Text für ${FREIGABE_GRUENDE[art]}`);
-  const aufrufe = [...quelle(FREIGABE).matchAll(GRUND_AUFRUF)].map((treffer) => treffer[1]).filter((argument) => argument !== DURCHGEREICHT);
+  const text = quelle(FREIGABE);
+  const durchgereicht = LISTED_PARAMETER.exec(text)[1];
+  const argumente = [...text.matchAll(GRUND_AUFRUF)].map((treffer) => treffer[1]);
+  assert.equal(argumente.filter((argument) => argument === durchgereicht).length, 1, "nur listed reicht seine Art an grund weiter");
+  const aufrufe = argumente.filter((argument) => argument !== durchgereicht);
   assert.ok(aufrufe.length >= arten.length, aufrufe.join(", "));
   const genutzt = aufrufe.map((argument) => GRUND_KONSTANTE.exec(argument)?.[1] ?? argument);
   assert.deepEqual(genutzt.filter((art) => !arten.includes(art)), [], "Grund ohne Art aus FREIGABE_GRUENDE");
