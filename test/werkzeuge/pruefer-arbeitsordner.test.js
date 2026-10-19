@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { baueArbeitsordner, entferne } from "../../tools/auftrag/pruefer-arbeitsordner.mjs";
 import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
-import { prueferBefehl, zuegeFuer } from "../../tools/auftrag/pruefer-lauf.mjs";
+import { prueferBefehl } from "../../tools/auftrag/pruefer-lauf.mjs";
 import { roteRunde, roterAbschnitt } from "../../tools/auftrag/rote-pruefungen.mjs";
 import { zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { ohneGitVariablen, probeRepo } from "./pruefer/hilfen.mjs";
@@ -109,13 +109,20 @@ test("am letzten Commit liegt der ganze PR als Diff gegen die Basis, muss gelese
   const gesamt = readFileSync(join(ordner, PR_PATCH), "utf8");
   assert.ok(gesamt.includes("+export const ZAHL = 2;") && gesamt.includes('+export const NAME = "a";'), gesamt);
   assert.ok(readFileSync(join(ordner, "auftrag.md"), "utf8").includes("Nummer 2 von 2. Er ist der letzte"));
-  assert.equal(zuegeFuer(zweiter) - zuegeFuer({ ...zweiter, letzter: false }), zuegeFuer(erster) - zuegeFuer({ ...erster, dateien: [] }));
+  assert.equal(zuegeIm(zweiter), zuegeIm(erster));
 });
 
-test("ein kritischer Commit bekommt die Grundzüge doppelt, die Züge je Datei bleiben gleich", () => {
-  const nichtKritisch = { dateien: ["src/telephony/anruf.js"], letzter: true, kritisch: false };
-  const grundzuege = zuegeFuer({ dateien: [], letzter: false, kritisch: false });
-  assert.equal(zuegeFuer({ ...nichtKritisch, kritisch: true }), zuegeFuer(nichtKritisch) + grundzuege);
+function zuegeIm(commit) {
+  const befehl = prueferBefehl(commit, "claude");
+  return befehl[befehl.indexOf("--max-turns") + 1];
+}
+
+test("jeder Commit bekommt dieselbe Zuggrenze als Schutz gegen Schleifen, egal wie viele Dateien, ob kritisch oder der letzte", () => {
+  const einfach = zuegeIm({ dateien: ["src/zahl.js"], letzter: false, kritisch: false });
+  const vieleDateien = Array.from({ length: 30 }, (_, index) => `src/datei-${index}.js`);
+  assert.equal(einfach, "80");
+  assert.equal(zuegeIm({ dateien: vieleDateien, letzter: true, kritisch: false }), einfach);
+  assert.equal(zuegeIm({ dateien: ["src/telephony/anruf.js"], letzter: false, kritisch: true }), einfach);
 });
 
 test("der Prüfer sieht unter basis/ jede versionierte Datei der Basis, Steuerdateien nur umbenannt und nichts Unversioniertes", (context) => {

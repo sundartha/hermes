@@ -25,15 +25,15 @@ import {
 export const CLI_PFAD = "tools/pruefer/node_modules/@anthropic-ai/claude-code-linux-x64/claude";
 const AGENT_DATEI = ".claude/agents/pruefer.md";
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n/;
-const GRUNDZUEGE = 10;
-const GRUNDZUEGE_KRITISCH = 20;
-const ZUEGE_JE_DATEI = 4;
+const ZUEGE_JE_COMMIT = 80;
+const MINDESTZUEGE = 20;
 const MS_JE_ZUG = 120_000;
 const EXIT_OHNE_STATUS = 1;
 const MAX_ZEILEN = 100_000;
 export const LIMIT_GRUND = "Nutzungslimit erreicht";
 export const ANMELDUNG_GRUND = "Anmeldung gescheitert (authentication_failed)";
 export const TOKEN_GRUND = "Token fehlt";
+export const ZEIT_GRUND = "Zeit des Prüfer-Jobs reicht nicht";
 const LIMIT = /limit/i;
 const ANMELDUNG = /authenticat|oauth token/i;
 const SUBTYPE = /^[a-z_]+$/;
@@ -63,9 +63,9 @@ const VERLAUF_FELDER = [
 ];
 const WERKZEUG_NAME = /^[A-Za-z_]+$/;
 
-export function zuegeFuer(commit) {
-  const grundzuege = commit.kritisch ? GRUNDZUEGE_KRITISCH : GRUNDZUEGE;
-  return grundzuege + ZUEGE_JE_DATEI * (commit.dateien.length + (commit.letzter ? 1 : 0));
+export function zeitgrenzeFuer(restzeitMs) {
+  if (restzeitMs < MINDESTZUEGE * MS_JE_ZUG) return null;
+  return Math.min(ZUEGE_JE_COMMIT * MS_JE_ZUG, restzeitMs);
 }
 
 export function effortFuer(commit) {
@@ -93,7 +93,7 @@ export function prueferBefehl(commit, programm) {
     "--effort",
     effortFuer(commit),
     "--max-turns",
-    String(zuegeFuer(commit)),
+    String(ZUEGE_JE_COMMIT),
     "--output-format",
     "stream-json",
     "--verbose",
@@ -343,7 +343,7 @@ async function rufeAuf(commit, kontext) {
       cwd: ordner,
       umgebung,
       eingabe,
-      zeitgrenzeMs: zuegeFuer(commit) * MS_JE_ZUG,
+      zeitgrenzeMs: kontext.zeitgrenzeMs,
     });
     legeVerlaufAb(commit, lauf, { aus: kontext.aus, ordner, token: kontext.token });
     return werteAus(lauf, { token: kontext.token });
@@ -372,5 +372,7 @@ export async function pruefeCommit(commit, kontext) {
     });
   }
   if (!kontext.token) return nichtGelaufen(commit, TOKEN_GRUND);
-  return eintrag(commit, await rufeAuf(commit, kontext));
+  const zeitgrenzeMs = zeitgrenzeFuer(kontext.restzeit?.() ?? Infinity);
+  if (zeitgrenzeMs === null) return nichtGelaufen(commit, ZEIT_GRUND);
+  return eintrag(commit, await rufeAuf(commit, { ...kontext, zeitgrenzeMs }));
 }
