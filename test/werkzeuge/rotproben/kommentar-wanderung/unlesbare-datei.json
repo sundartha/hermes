@@ -1,0 +1,7 @@
+{
+  "titel": "Neue .js-Datei, die der Parser nicht lesen kann",
+  "dateien": {
+    "src/rotprobe.js": ["export const wert = ;"]
+  },
+  "erwartet": "src/rotprobe.js:1 Parser:"
+}

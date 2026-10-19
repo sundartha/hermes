@@ -62,7 +62,9 @@ async function quelltext(werkzeug, datei, text) {
   const meldungen = werkzeug.linter.verify(text, {
     languageOptions: ohneTypinformation(config?.languageOptions),
   });
-  return meldungen.some(({ fatal }) => fatal) ? undefined : werkzeug.linter.getSourceCode();
+  const fatal = meldungen.filter((meldung) => meldung.fatal);
+  for (const { line, message } of fatal) werkzeug.unlesbar.add(`${datei}:${line} Parser: ${message}`);
+  return fatal.length > 0 ? undefined : werkzeug.linter.getSourceCode();
 }
 
 function jsKommentare(sourceCode) {
@@ -207,6 +209,7 @@ async function pruefen(root, basis) {
     linter: new Linter({ cwd: root }),
     js: await gelinteteJsDateien(root, dateien),
     nurTypen: await nurTypenUmbenannt(basis),
+    unlesbar: new Set(),
   };
   const umbenannt = new Set(dateien.map(({ datei }) => werkzeug.nurTypen(datei)).filter(Boolean));
   const gepaart = ({ status, datei }) => status === STATUS_GELOESCHT && umbenannt.has(datei);
@@ -216,10 +219,13 @@ async function pruefen(root, basis) {
   );
   const entfernt = [];
   for (const eintrag of quellen) entfernt.push(...(await entfernteKommentare(werkzeug, eintrag)));
-  const funde = wanderungen(entfernt, await wiederaufnahmeOrte(werkzeug, dateien));
+  const gewandert = wanderungen(entfernt, await wiederaufnahmeOrte(werkzeug, dateien));
+  const funde = [...werkzeug.unlesbar, ...gewandert];
   for (const fund of funde) console.error(fund);
   console.log(`Markdown-Zuwachs im PR: ${markdownZuwachs(werkzeug)} Zeilen (wird nur angezeigt).`);
-  console.log(`Kommentar-Wanderung: ${entfernt.length} entfernte Kommentare, ${funde.length} wieder aufgetaucht.`);
+  console.log(
+    `Kommentar-Wanderung: ${entfernt.length} entfernte Kommentare, ${gewandert.length} wieder aufgetaucht, ${werkzeug.unlesbar.size} Parser-Fehler.`,
+  );
   return funde.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
