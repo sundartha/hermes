@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import { env, execPath, pid } from "node:process";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -37,6 +38,16 @@ const JWT_LIFETIME_SECONDS = 540;
 const JWT_HEADER = { alg: "RS256", typ: "JWT" };
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVER_ERROR = 500;
+const FIRST_RETRY_PAUSE_SECONDS = 2;
+const SECOND_RETRY_PAUSE_SECONDS = 5;
+const RETRY_PAUSES_MS = [
+  FIRST_RETRY_PAUSE_SECONDS * MS_PER_SECOND,
+  SECOND_RETRY_PAUSE_SECONDS * MS_PER_SECOND,
+];
+const MAX_ATTEMPTS = RETRY_PAUSES_MS.length + 1;
+const DEFAULT_PAUSE_SCALE = 1;
 const GITHUB_API = "https://api.github.com";
 const USER_AGENT = "hermes-sitzung";
 const UPSTREAM_PREFIX = "https://github.com/sundartha/";
@@ -58,6 +69,15 @@ const SINGLE_QUOTE = /'/g;
 const ESCAPED_SINGLE_QUOTE = "'\\''";
 const EXIT_FAILURE = 1;
 
+function parsePauseScale(value) {
+  if (value === undefined) return DEFAULT_PAUSE_SCALE;
+  const scale = Number(value);
+  if (value.trim() === "" || !Number.isFinite(scale) || scale < 0) {
+    throw new Error(`--wiederholpause-faktor erwartet eine Zahl ab 0, nicht „${value}“.`);
+  }
+  return scale;
+}
+
 function parseOptions() {
   const { values } = parseArgs({
     options: {
@@ -66,6 +86,7 @@ function parseOptions() {
       auftrag: { type: "string" },
       zugang: { type: "boolean", default: false },
       ablage: { type: "string" },
+      "wiederholpause-faktor": { type: "string" },
     },
   });
   if (!MODELS.includes(values.modell)) {
@@ -79,6 +100,7 @@ function parseOptions() {
     checkOnly: values["nur-pruefen"],
     orderFile: values.auftrag,
     store: values.ablage,
+    pauseScale: parsePauseScale(values["wiederholpause-faktor"]),
   };
 }
 
@@ -174,36 +196,80 @@ function appJwt(key) {
   return `${unsigned}.${sign("sha256", Buffer.from(unsigned), key).toString("base64url")}`;
 }
 
-function githubRequest(path, { method, bearer }) {
-  return fetch(`${env[API_OVERRIDE_VARIABLE] || GITHUB_API}${path}`, {
+async function sendOnce(url, init) {
+  try {
+    return { response: await fetch(url, init) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function isTransientStatus(status) {
+  return status === HTTP_TOO_MANY_REQUESTS || status >= HTTP_SERVER_ERROR;
+}
+
+function retryPause(attempt, pauseScale) {
+  return RETRY_PAUSES_MS[attempt - 1] * pauseScale;
+}
+
+function describeNetworkError({ message, cause }) {
+  const code = cause?.code;
+  return code === undefined ? message : `${message}: ${code}`;
+}
+
+function attemptNote(attempts) {
+  return attempts > 1 ? ` nach ${attempts} Versuchen` : "";
+}
+
+async function githubRequest(path, { method, bearer, pauseScale = DEFAULT_PAUSE_SCALE }) {
+  const url = `${env[API_OVERRIDE_VARIABLE] || GITHUB_API}${path}`;
+  const init = {
     method,
     headers: {
       Authorization: `Bearer ${bearer}`,
       Accept: "application/vnd.github+json",
       "User-Agent": USER_AGENT,
     },
-  });
+  };
+  for (let attempt = 1; ; attempt += 1) {
+    const { response, error } = await sendOnce(url, init);
+    if (error === undefined && !isTransientStatus(response.status)) {
+      return { response, attempts: attempt };
+    }
+    if (attempt === MAX_ATTEMPTS) {
+      if (error === undefined) return { response, attempts: attempt };
+      throw new Error(
+        `GitHub ist nicht erreichbar nach ${attempt} Versuchen (${describeNetworkError(error)}).`,
+      );
+    }
+    await sleep(retryPause(attempt, pauseScale));
+  }
 }
 
-async function createInstallationToken(key) {
-  const response = await githubRequest(`/app/installations/${INSTALLATION_ID}/access_tokens`, {
-    method: "POST",
-    bearer: appJwt(key),
-  });
+async function createInstallationToken(key, pauseScale) {
+  const { response, attempts } = await githubRequest(
+    `/app/installations/${INSTALLATION_ID}/access_tokens`,
+    { method: "POST", bearer: appJwt(key), pauseScale },
+  );
   if (response.status !== HTTP_CREATED) {
-    throw new Error(`GitHub gibt kein Installations-Token aus (HTTP ${response.status}).`);
+    throw new Error(
+      `GitHub gibt kein Installations-Token aus (HTTP ${response.status}${attemptNote(attempts)}).`,
+    );
   }
   const { token, expires_at: expiresAt } = await response.json();
   return { token, expires_at: expiresAt };
 }
 
-async function checkInstallation(token) {
-  const response = await githubRequest("/installation/repositories?per_page=100", {
+async function checkInstallation(token, pauseScale) {
+  const { response, attempts } = await githubRequest("/installation/repositories?per_page=100", {
     method: "GET",
     bearer: token,
+    pauseScale,
   });
   if (response.status !== HTTP_OK) {
-    throw new Error(`GitHub lehnt das Installations-Token ab (HTTP ${response.status}).`);
+    throw new Error(
+      `GitHub lehnt das Installations-Token ab (HTTP ${response.status}${attemptNote(attempts)}).`,
+    );
   }
   const { total_count: totalCount, repositories } = await response.json();
   const names = repositories.map(({ full_name: fullName }) => fullName);
@@ -319,12 +385,12 @@ function startSession({ model, order, token, store }) {
   });
 }
 
-async function startMode({ model, checkOnly, orderFile }) {
+async function startMode({ model, checkOnly, orderFile, pauseScale }) {
   const branch = checkWorkspace();
   const order = orderFile === undefined ? undefined : readOrder(orderFile, branch);
   const realGh = checkOnly ? undefined : findGh();
-  const installationToken = await createInstallationToken(readPrivateKey());
-  await checkInstallation(installationToken.token);
+  const installationToken = await createInstallationToken(readPrivateKey(), pauseScale);
+  await checkInstallation(installationToken.token, pauseScale);
   if (checkOnly) {
     console.log(BOT_LOGIN);
     return;

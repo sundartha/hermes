@@ -26,6 +26,19 @@ const EXIT_KEYCHAIN_ENTRY_MISSING = 44;
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
+const HTTP_NOT_FOUND = 404;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_BAD_GATEWAY = 502;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const NETWORK_DROP = "drop";
+const MAX_ATTEMPTS = 3;
+const FIRST_PAUSE_MS = 2000;
+const SECOND_PAUSE_MS = 5000;
+const PAUSE_SCALE_PROBE = 0.1;
+const PAUSE_TOLERANCE_MS = 10;
+const PAUSE_SCALE_FLAG = "--wiederholpause-faktor";
+const NO_PAUSE = [PAUSE_SCALE_FLAG, "0"];
 const EXECUTABLE_MODE = 0o755;
 const PERMISSION_BITS = 0o777;
 const RSA_KEY_BITS = 2048;
@@ -467,6 +480,165 @@ test("sitzung: --nur-pruefen gibt nur den Login aus und startet nichts", async (
 test("sitzung: lehnt GitHub das JWT ab, endet es mit Exit 1 und startet nichts", async () => {
   const result = await runSession({ cwd: worktrees.paket.worktree, keychain: "foreign" });
   assertRefused(result, /HTTP 401/);
+});
+
+const TOKEN_REQUEST = `POST ${ACCESS_TOKENS_PATH}`;
+const REPOSITORIES_REQUEST = `GET ${REPOSITORIES_PATH}`;
+const TRANSIENT_FAILURES = [HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS, NETWORK_DROP];
+
+function answerScheduled(schedule, log) {
+  return (request, response) => {
+    const { pathname } = new URL(request.url, "http://127.0.0.1");
+    log.push({ line: `${request.method} ${pathname}`, time: Date.now() });
+    const failure = (schedule[pathname] ?? []).shift();
+    if (failure === NETWORK_DROP) {
+      request.socket.destroy();
+    } else if (failure !== undefined) {
+      sendJson(response, failure, { message: "Probe-Fehler" });
+    } else if (pathname === ACCESS_TOKENS_PATH) {
+      issueToken(response);
+    } else {
+      listRepositories(response);
+    }
+  };
+}
+
+async function startAgainstScheduledGithub(schedule, args = NO_PAUSE, scenarioOptions = {}) {
+  const log = [];
+  const github = createServer(answerScheduled(schedule, log));
+  await new Promise((resolvePromise) => github.listen(0, "127.0.0.1", resolvePromise));
+  const realApiUrl = apiUrl;
+  apiUrl = `http://127.0.0.1:${github.address().port}`;
+  try {
+    return {
+      result: await runSession({ cwd: worktrees.paket.worktree, args, ...scenarioOptions }),
+      log,
+    };
+  } finally {
+    apiUrl = realApiUrl;
+    github.close();
+  }
+}
+
+function attemptsAt(log, line) {
+  return log.filter((entry) => entry.line === line).length;
+}
+
+test("sitzung: scheitert die Token-Anfrage erst an Netz oder Serverfehler, gelingt der Start mit dem zweiten Versuch", async () => {
+  for (const failure of TRANSIENT_FAILURES) {
+    const { result, log } = await startAgainstScheduledGithub({ [ACCESS_TOKENS_PATH]: [failure] });
+    assert.equal(result.status, EXIT_OK, `${failure}: ${result.stderr}`);
+    assert.equal(attemptsAt(log, TOKEN_REQUEST), 2, String(failure));
+    assert.equal(result.launch.env.GH_TOKEN, issuedTokens.at(-1), String(failure));
+  }
+});
+
+test("sitzung: scheitert die Prüfung der Installation erst an Netz oder Serverfehler, gelingt der Start mit dem zweiten Versuch", async () => {
+  for (const failure of [HTTP_BAD_GATEWAY, NETWORK_DROP]) {
+    const { result, log } = await startAgainstScheduledGithub({
+      [REPOSITORIES_PATH]: [failure],
+    });
+    assert.equal(result.status, EXIT_OK, `${failure}: ${result.stderr}`);
+    assert.equal(attemptsAt(log, REPOSITORIES_REQUEST), 2, String(failure));
+  }
+});
+
+test("sitzung: scheitert jeder Versuch der Token-Anfrage, endet es nach 3 Versuchen mit dem letzten Status und startet nichts", async () => {
+  const { result, log } = await startAgainstScheduledGithub({
+    [ACCESS_TOKENS_PATH]: Array(MAX_ATTEMPTS).fill(HTTP_SERVICE_UNAVAILABLE),
+  });
+  assertRefused(result, /GitHub gibt kein Installations-Token aus \(HTTP 503 nach 3 Versuchen\)/);
+  assert.equal(attemptsAt(log, TOKEN_REQUEST), MAX_ATTEMPTS);
+});
+
+test("sitzung: scheitert jeder Versuch am Netz, endet es nach 3 Versuchen mit dem letzten Fehler und startet nichts", async () => {
+  const { result, log } = await startAgainstScheduledGithub({
+    [ACCESS_TOKENS_PATH]: Array(MAX_ATTEMPTS).fill(NETWORK_DROP),
+  });
+  assertRefused(result, /GitHub ist nicht erreichbar nach 3 Versuchen \(fetch failed/);
+  assert.equal(attemptsAt(log, TOKEN_REQUEST), MAX_ATTEMPTS);
+});
+
+test("sitzung: scheitert jeder Versuch der Prüfung der Installation, endet es nach 3 Versuchen und startet nichts", async () => {
+  const { result, log } = await startAgainstScheduledGithub({
+    [REPOSITORIES_PATH]: Array(MAX_ATTEMPTS).fill(HTTP_BAD_GATEWAY),
+  });
+  assertRefused(result, /GitHub lehnt das Installations-Token ab \(HTTP 502 nach 3 Versuchen\)/);
+  assert.equal(attemptsAt(log, REPOSITORIES_REQUEST), MAX_ATTEMPTS);
+});
+
+test("sitzung: eine Antwort mit 4xx außer 429 wird nicht wiederholt, es bleibt bei einem Versuch und der bisherigen Meldung", async () => {
+  for (const status of [HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_NOT_FOUND]) {
+    const { result, log } = await startAgainstScheduledGithub({ [ACCESS_TOKENS_PATH]: [status] });
+    assertRefused(
+      result,
+      new RegExp(`GitHub gibt kein Installations-Token aus \\(HTTP ${status}\\)`),
+    );
+    assert.equal(attemptsAt(log, TOKEN_REQUEST), 1, String(status));
+  }
+  const { result, log } = await startAgainstScheduledGithub({
+    [REPOSITORIES_PATH]: [HTTP_FORBIDDEN],
+  });
+  assertRefused(result, /GitHub lehnt das Installations-Token ab \(HTTP 403\)/);
+  assert.equal(attemptsAt(log, REPOSITORIES_REQUEST), 1);
+});
+
+test("sitzung: lehnt GitHub das JWT ab, fragt es genau einmal und wiederholt nicht", async () => {
+  const before = requests.length;
+  const result = await runSession({
+    cwd: worktrees.paket.worktree,
+    args: NO_PAUSE,
+    keychain: "foreign",
+  });
+  assertRefused(result, /\(HTTP 401\)/);
+  assert.equal(requests.slice(before).filter((line) => line === TOKEN_REQUEST).length, 1);
+});
+
+test("sitzung: wartet vor dem zweiten Versuch 2 s und vor dem dritten 5 s, hier auf ein Zehntel verkürzt", async () => {
+  const { result, log } = await startAgainstScheduledGithub(
+    { [ACCESS_TOKENS_PATH]: Array(MAX_ATTEMPTS - 1).fill(HTTP_SERVICE_UNAVAILABLE) },
+    [PAUSE_SCALE_FLAG, String(PAUSE_SCALE_PROBE)],
+  );
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const [first, second, third] = log.map(({ time }) => time);
+  assert.ok(second - first >= FIRST_PAUSE_MS * PAUSE_SCALE_PROBE - PAUSE_TOLERANCE_MS);
+  assert.ok(third - second >= SECOND_PAUSE_MS * PAUSE_SCALE_PROBE - PAUSE_TOLERANCE_MS);
+});
+
+test("sitzung: ohne Verkürzung wartet es vor dem zweiten Versuch die vollen 2 s", async () => {
+  const { result, log } = await startAgainstScheduledGithub(
+    { [ACCESS_TOKENS_PATH]: [HTTP_SERVICE_UNAVAILABLE] },
+    [],
+  );
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const [first, second] = log.map(({ time }) => time);
+  assert.ok(second - first >= FIRST_PAUSE_MS - PAUSE_TOLERANCE_MS, String(second - first));
+});
+
+test("sitzung: scheitert das Nachholen des Tokens in der Sitzung erst an einem Serverfehler, bekommen gh und git es mit dem zweiten Versuch", async () => {
+  const { result, log } = await startAgainstScheduledGithub(
+    { [ACCESS_TOKENS_PATH]: [undefined, HTTP_SERVICE_UNAVAILABLE] },
+    NO_PAUSE,
+    { minutes: SHORT_VALIDITY_MINUTES },
+  );
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const calls = [...result.launch.gh, ...result.launch.credentials];
+  for (const call of calls) {
+    assert.equal(call.status, EXIT_OK, call.stderr);
+  }
+  assert.equal(attemptsAt(log, TOKEN_REQUEST), 2 + calls.length);
+});
+
+test("sitzung: ein unlesbarer oder negativer Faktor endet mit Exit 1, ohne GitHub zu fragen", async () => {
+  for (const value of ["abc", "-1", ""]) {
+    const before = requests.length;
+    const result = await runSession({
+      cwd: worktrees.paket.worktree,
+      args: [`${PAUSE_SCALE_FLAG}=${value}`],
+    });
+    assertRefused(result, /--wiederholpause-faktor erwartet eine Zahl ab 0/);
+    assert.equal(requests.length, before, value);
+  }
 });
 
 test("sitzung: fehlt der Eintrag im Schlüsselbund, endet es mit Exit 1, ohne GitHub zu fragen", async () => {
