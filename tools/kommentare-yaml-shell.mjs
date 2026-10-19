@@ -20,6 +20,9 @@ const PARAMETER_ANFANG = "${";
 const PARAMETER_ENDE = "}";
 const BEFEHL_ANFANG = "$(";
 const BEFEHL_ENDE = ")";
+const KLAMMER_AUF = "(";
+const SHELL_GRENZE = /[\s;&|()]/;
+const YAML_GRENZE = /\s/;
 const ZEILENENDE = "\n";
 const ERSTE_ZEILE = 1;
 const ZEILE_NACH_STARTZEILE = 2;
@@ -37,11 +40,6 @@ function einzug(zeile) {
 
 function istLeer(zeile) {
   return zeile.trim() === "";
-}
-
-function vorWortgrenze(zeile, index, shell) {
-  const grenze = shell ? /[\s;&|()]/ : /\s/;
-  return index === 0 || grenze.test(zeile[index - 1]);
 }
 
 function bisEnde(zeile, index, ende) {
@@ -65,7 +63,7 @@ function gemeinsamUebersprungen(zeile, index, shell) {
 
 function befehlAnfang(zeile, index, { shell, stapel }) {
   if (!shell || !zeile.startsWith(BEFEHL_ANFANG, index)) return undefined;
-  return { weiter: index + BEFEHL_ANFANG.length, stapel: [...stapel, BEFEHL_ANFANG] };
+  return { weiter: index + BEFEHL_ANFANG.length, stapel: [...stapel, BEFEHL_ANFANG], grenze: true };
 }
 
 function imZitatLesen(zeile, index, zustand) {
@@ -101,17 +99,24 @@ function freiUebersprungen(zeile, index, zustand) {
   );
 }
 
+function klammerLesen(zeichen, index, stapel) {
+  const offen = oben(stapel);
+  if (zeichen === BEFEHL_ENDE && offen === BEFEHL_ANFANG) return { weiter: index + 1, stapel: ohneOberstes(stapel) };
+  if (zeichen === BEFEHL_ENDE && offen === KLAMMER_AUF) return { weiter: index + 1, stapel: ohneOberstes(stapel), grenze: true };
+  if (zeichen !== KLAMMER_AUF || ![BEFEHL_ANFANG, KLAMMER_AUF].includes(offen)) return undefined;
+  return { weiter: index + 1, stapel: [...stapel, KLAMMER_AUF], grenze: true };
+}
+
 function freiLesen(zeile, index, zustand) {
   const { stapel } = zustand;
   const sprung = freiUebersprungen(zeile, index, zustand);
   if (sprung !== undefined) return sprung;
   const zeichen = zeile[index];
-  if (zeichen === BEFEHL_ENDE && oben(stapel) === BEFEHL_ANFANG) {
-    return { weiter: index + 1, stapel: ohneOberstes(stapel), ersetzungZu: true };
-  }
+  const klammer = klammerLesen(zeichen, index, stapel);
+  if (klammer !== undefined) return klammer;
   if (zeichen === EINFACH || zeichen === DOPPELT) return { weiter: index + 1, stapel: [...stapel, zeichen] };
-  if (zeichen === RAUTE && vorWortgrenze(zeile, index, zustand.shell && !zustand.nachErsetzung)) return { kommentar: zeile.slice(index + 1) };
-  return { weiter: index + 1 };
+  if (zeichen === RAUTE && zustand.grenze) return { kommentar: zeile.slice(index + 1) };
+  return { weiter: index + 1, grenze: (zustand.shell ? SHELL_GRENZE : YAML_GRENZE).test(zeichen) };
 }
 
 function zeichenLesen(zeile, index, zustand) {
@@ -129,13 +134,13 @@ function zeileLesen(zeile, { shell, stapel: anfangsStapel }) {
   let stapel = anfangsStapel;
   let index = 0;
   let heredoc;
-  let nachErsetzung = false;
+  let grenze = true;
   while (index < zeile.length) {
     heredoc = heredocAb(zeile, index, { shell, stapel }) ?? heredoc;
-    const schritt = zeichenLesen(zeile, index, { shell, stapel, nachErsetzung });
+    const schritt = zeichenLesen(zeile, index, { shell, stapel, grenze });
     if (schritt.kommentar !== undefined) return { kommentar: schritt.kommentar, heredoc, stapel };
     stapel = schritt.stapel ?? stapel;
-    nachErsetzung = schritt.ersetzungZu === true;
+    grenze = schritt.grenze === true;
     index = schritt.weiter;
   }
   return { heredoc, stapel };
