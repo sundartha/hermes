@@ -65,6 +65,12 @@ function fileOnlyFindings(state, where, paths) {
   return paths.filter((path) => !isListed(state.files, path)).map((path) => missing(where, path));
 }
 
+function carriedFindings(state, where, paths) {
+  const carried = (path) =>
+    path.endsWith(SEPARATOR) ? hasFileBelow(state.files, path) : isListed(state.files, path);
+  return paths.filter((path) => !carried(path)).map((path) => missing(where, path));
+}
+
 function globFindings(state, { where, pattern, folderToo = false, protectsAhead = false }) {
   return missingGlobAlternatives(state.files, pattern, { folderToo })
     .filter((alternative) => !protectsAhead || alternative !== FUTURE_FOLDER)
@@ -272,7 +278,7 @@ function manifestFindings(state, manifest) {
   const { pfade = [], probe = {} } = readJson(state, manifest);
   return [
     ...pfade.flatMap((path) => manifestPathFindings(state, `${manifest} pfade`, path)),
-    ...fileOnlyFindings(state, `${manifest} probe.mitnehmen`, probe.mitnehmen ?? []),
+    ...carriedFindings(state, `${manifest} probe.mitnehmen`, probe.mitnehmen ?? []),
   ];
 }
 

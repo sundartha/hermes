@@ -29,13 +29,7 @@
   "probe": {
     "mitnehmen": [
       "eslint.config.js",
-      "tools/eslint-rules/index.js",
-      "tools/eslint-rules/bestand.js",
-      "tools/eslint-rules/keine-kommentare.js",
-      "tools/eslint-rules/kein-quelltext-als-text.js",
-      "tools/eslint-rules/pfad-falten.js",
-      "tools/eslint-rules/namen-ohne-begruendung.js",
-      "tools/eslint-rules/knoten.js"
+      "tools/eslint-rules/"
     ],
     "befehl": [
       "node",

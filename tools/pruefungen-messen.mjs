@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { env } from "node:process";
 
 export const ROTPROBEN_DIR = "test/werkzeuge/rotproben";
@@ -131,8 +131,19 @@ function commitAll(directory, message) {
   git(["commit", "-q", "--allow-empty", "-m", message], { cwd: directory, probe: true });
 }
 
+function carriedPaths(root, path) {
+  if (!path.endsWith("/")) return [path];
+  const folder = join(root, path);
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `${path}${relative(folder, join(entry.parentPath, entry.name))}`);
+}
+
 function carriedFiles(root, paths = []) {
-  const present = paths.filter((path) => existsSync(join(root, path)));
+  const present = paths
+    .flatMap((path) => carriedPaths(root, path))
+    .filter((path) => existsSync(join(root, path)));
   return Object.fromEntries(present.map((path) => [path, readFileSync(join(root, path), "utf8")]));
 }
 
