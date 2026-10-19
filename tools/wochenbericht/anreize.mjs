@@ -29,11 +29,15 @@ async function closedByChange({ number }) {
   return typeof closing?.commit_id === "string";
 }
 
-export async function incentiveSection(now) {
+export function weekCommits(now) {
+  return repoPages(`/commits?sha=master&since=${new Date(now - WEEK_MS).toISOString()}`);
+}
+
+export async function incentiveSection(now, { commits: pending = weekCommits(now) } = {}) {
   const start = new Date(now - WEEK_MS);
   const since = start.toISOString();
   const [commits, comments, reviewIssues] = await Promise.all([
-    repoPages(`/commits?sha=master&since=${since}`),
+    pending,
     repoPages(`/issues/comments?since=${since}`),
     repoPages(`/issues?labels=${REVIEW_LABEL}&state=${CLOSED}&since=${since}`),
   ]);

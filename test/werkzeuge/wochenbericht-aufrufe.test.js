@@ -11,7 +11,7 @@ const TOOL = join(REPO_ROOT, "tools/wochenbericht.mjs");
 const { probelauf: AUFNAHME } = JSON.parse(
   readFileSync(join(REPO_ROOT, "test/werkzeuge/wochenbericht-aufzeichnung.json"), "utf8"),
 );
-const OBERGRENZE = 171;
+const OBERGRENZE = 137;
 const REPO = "/repos/sundartha/hermes";
 const STANDARD_SEITE = 30;
 const KOPF = "<kopf>";
@@ -81,6 +81,19 @@ function antwortAuf(url) {
   return undefined;
 }
 
+function graphql(text) {
+  const { variables } = JSON.parse(text);
+  const passend = variables.text === `repo:sundartha/hermes ${AUFNAHME.ohneReviewSuche}`;
+  const gefunden = passend ? AUFNAHME.ohneReview.slice(0, -1) : [];
+  const knoten = gefunden.map(({ number }) => ({ number, mergedBy: { login: AUFNAHME.gemergtVon[number].replace("[bot]", "") } }));
+  return { data: { search: { nodes: knoten.slice(0, variables.first) } } };
+}
+
+function inhaltZu(anfrage, url, text) {
+  if (anfrage.method === "POST" && url.pathname === "/graphql") return graphql(text);
+  return anfrage.method === "GET" ? antwortAuf(url) : undefined;
+}
+
 function endpunkt(methode, url) {
   const namen = [...url.searchParams.keys()];
   const parameter = namen.filter((name) => !SEITEN_PARAMETER.has(name)).sort();
@@ -93,9 +106,10 @@ async function attrappe(context) {
     const url = new URL(anfrage.url, "http://localhost");
     const name = endpunkt(anfrage.method, url);
     aufrufe.set(name, (aufrufe.get(name) ?? 0) + 1);
-    anfrage.resume();
+    let text = "";
+    anfrage.on("data", (stueck) => (text += stueck));
     anfrage.on("end", () => {
-      const inhalt = anfrage.method === "GET" ? antwortAuf(url) : undefined;
+      const inhalt = inhaltZu(anfrage, url, text);
       antwort.writeHead(inhalt === undefined ? NICHT_GEFUNDEN : ERFOLG, { "content-type": "application/json" });
       antwort.end(JSON.stringify(inhalt ?? { message: "Not Found" }));
     });

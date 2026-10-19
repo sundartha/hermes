@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
 
-import { api } from "../../tools/wochenbericht/github.mjs";
+import { api, graphql } from "../../tools/wochenbericht/github.mjs";
 import { echtWarten } from "../echt-warten.js";
 
 const KURZE_FRIST_MS = 200;
@@ -85,4 +85,12 @@ test("Wochenbericht: ein schreibender Aufruf wird nach einem Netzfehler nicht wi
   const anfragen = await attrappe(context, (nummer, anfrage) => trennen(anfrage));
   await assert.rejects(api("/repos/sundartha/hermes/issues", { method: "POST", body: { title: "Bericht" } }));
   assert.deepEqual(anfragen, ["POST /repos/sundartha/hermes/issues"]);
+});
+
+test("Wochenbericht: eine GraphQL-Antwort mit Fehlern bricht ab, statt leere Daten zu liefern", async (context) => {
+  const anfragen = await attrappe(context, (nummer, anfrage, antwort) =>
+    json(antwort, 200, { data: null, errors: [{ message: "Something went wrong" }] }),
+  );
+  await assert.rejects(graphql("query { viewer { login } }", {}), /GraphQL-Abfrage mit Fehlern antwortet: Something went wrong/);
+  assert.deepEqual(anfragen, ["POST /graphql"]);
 });

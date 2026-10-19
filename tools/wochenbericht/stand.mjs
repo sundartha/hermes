@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 import { APPROVERS } from "../akteure.mjs";
-import { repo, repoPages, searchIssues } from "./github.mjs";
+import { PER_PAGE, graphql, repo, repoPages, searchIssues, searchText } from "./github.mjs";
 import { WEEK_MS, daysBetween, germanDate } from "./zeit.mjs";
 
 const SYSTEMSTAND_TOOL = "tools/systemstand.mjs";
@@ -93,21 +93,36 @@ export function redSection({ runs, streaks, now }) {
   ];
 }
 
+const MERGED_BY_QUERY = [
+  "query($text: String!, $first: Int!) {",
+  "search(query: $text, type: ISSUE, first: $first) {",
+  "nodes { ... on PullRequest { number mergedBy { login } } }",
+  "}",
+  "}",
+].join(" ");
+
 async function mergedBy(number) {
   const pull = await repo(`/pulls/${number}`);
   return pull.merged_by?.login;
 }
 
+async function mergers(items, query) {
+  if (items.length === 0) return new Map();
+  const { search } = await graphql(MERGED_BY_QUERY, { text: searchText(query), first: PER_PAGE });
+  const by = new Map(search.nodes.map((pull) => [pull.number, pull.mergedBy?.login]));
+  for (const { number } of items.filter((item) => !by.has(item.number))) {
+    by.set(number, await mergedBy(number));
+  }
+  return by;
+}
+
 export async function mergeSection(now) {
   const [since] = new Date(now - WEEK_MS).toISOString().split("T");
   const merged = await searchIssues(`is:pr is:merged merged:>=${since}`);
-  const unreviewed = await searchIssues(
-    `is:pr is:merged merged:>=${since} ${APPROVERS.map((login) => `-reviewed-by:${login}`).join(" ")}`,
-  );
-  const withoutHumans = [];
-  for (const item of unreviewed.items) {
-    if (!APPROVERS.includes(await mergedBy(item.number))) withoutHumans.push(item);
-  }
+  const query = `is:pr is:merged merged:>=${since} ${APPROVERS.map((login) => `-reviewed-by:${login}`).join(" ")}`;
+  const unreviewed = await searchIssues(query);
+  const by = await mergers(unreviewed.items, query);
+  const withoutHumans = unreviewed.items.filter((item) => !APPROVERS.includes(by.get(item.number)));
   return [
     `${withoutHumans.length} von ${merged.total_count} Merges in sieben Tagen ohne Review oder Merge durch ${APPROVERS.join(" oder ")}.`,
     "",
@@ -116,9 +131,7 @@ export async function mergeSection(now) {
   ];
 }
 
-export async function revertSection(now) {
-  const since = new Date(now - WEEK_MS).toISOString();
-  const commits = await repoPages(`/commits?sha=master&since=${since}`);
+export function revertSection(commits) {
   const reverts = commits.filter((commit) => REVERT_PATTERN.test(commit.commit.message));
   if (reverts.length === 0) return ["Keine Rücknahmen auf master in sieben Tagen.", ""];
   return [
@@ -130,9 +143,16 @@ export async function revertSection(now) {
   ];
 }
 
-async function approvalState(pull) {
-  const { workflow_runs: runs } = await repo(`/actions/runs?head_sha=${pull.head.sha}`);
-  const latest = runs.find((run) => run.name === APPROVAL_WORKFLOW);
+async function latestApproval(pull, runs) {
+  const isApproval = (run) => run.name === APPROVAL_WORKFLOW;
+  const known = runs.find((run) => run.head_sha === pull.head.sha && isApproval(run));
+  if (known !== undefined) return known;
+  const { workflow_runs: forCommit } = await repo(`/actions/runs?head_sha=${pull.head.sha}`);
+  return forCommit.find(isApproval);
+}
+
+async function approvalState(pull, runs) {
+  const latest = await latestApproval(pull, runs);
   if (latest?.conclusion !== "failure") return undefined;
   const comments = await repoPages(`/issues/${pull.number}/comments`);
   const summary = comments.find((comment) => comment.body?.startsWith(APPROVAL_MARKER))?.body ?? "";
@@ -141,11 +161,11 @@ async function approvalState(pull) {
   return reasons.map((line) => line.replace(/^-\s*/, "")).join(" ") || "Freigabe-Prüfung ist rot.";
 }
 
-export async function approvalSection() {
+export async function approvalSection(runs) {
   const pulls = await repoPages("/pulls?state=open");
   const lines = [];
   for (const pull of pulls.filter((candidate) => !candidate.draft)) {
-    const reason = await approvalState(pull);
+    const reason = await approvalState(pull, runs);
     if (reason !== undefined)
       lines.push(`- [#${pull.number} ${pull.title}](${pull.html_url}): ${reason}`);
   }
