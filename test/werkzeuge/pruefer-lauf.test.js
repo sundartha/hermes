@@ -320,9 +320,9 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
   assert.equal(gitUmgebungen.includes(SCHEIN_TOKEN), false);
 });
 
-async function pruefenMitAblage(context, ablageIn) {
+async function pruefenMitAblage(context, ablageIn, aufnahme = aufzeichnung("sicherheitshinweis")) {
   const { repo, basis, commit } = einCommit(context);
-  const ersatz = ersatzPruefer(context, { aufnahme: aufzeichnung("sicherheitshinweis") });
+  const ersatz = ersatzPruefer(context, { aufnahme });
   const pr = { number: PR_NUMMER, state: "open", head: { sha: commit.sha }, base: { sha: basis, ref: "master" }, body: "" };
   const github = await scheinGithub(
     context,
@@ -364,6 +364,71 @@ test("pruefen legt Sicherheitshinweise mit Details nur in die Ablage, das Artefa
     [[commit.sha, "SOLLTE", "GEHEIMER-BELEG-91c2"]],
   );
   assert.equal(readFileSync(ausgabe, "utf8"), "hinweise=1\n");
+});
+
+const DATEIINHALT = "DATEIINHALT-5e1b";
+const TEXTZUG_OHNE_WERKZEUG = 3;
+
+function zug(nachricht, aufruf) {
+  return { type: "assistant", message: { id: nachricht, role: "assistant", content: [aufruf] } };
+}
+
+function werkzeugAntwort(id) {
+  return { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: DATEIINHALT }] } };
+}
+
+function mitWerkzeugaufrufen(aufnahme) {
+  const { structured_output: antwort } = aufnahme.zeilen.at(-1);
+  aufnahme.zeilen.splice(
+    -1,
+    0,
+    zug("m1", { type: "tool_use", id: "g1", name: "Grep", input: { pattern: "ZAHL", path: "basis", glob: "*.js" } }),
+    werkzeugAntwort("g1"),
+    zug("m2", { type: "tool_use", id: "r1", name: "Read", input: { file_path: "auftrag.md", offset: 1, limit: 50 } }),
+    zug("m2", { type: "tool_use", id: "g2", name: "Glob", input: { pattern: "dateien/**" } }),
+    werkzeugAntwort("r1"),
+    werkzeugAntwort("g2"),
+    zug("m3", { type: "tool_use", id: "s1", name: "StructuredOutput", input: antwort }),
+  );
+  return aufnahme;
+}
+
+test("pruefen legt je Commit den Verlauf der Werkzeugaufrufe neben ergebnis.json, ohne Dateiinhalte und ohne Befundtext", async (context) => {
+  const aufnahme = mitWerkzeugaufrufen(aufzeichnung("sicherheitshinweis"));
+  const { lauf, commit, aus } = await pruefenMitAblage(context, false, aufnahme);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const text = readFileSync(join(aus, `verlauf-${commit.sha}.jsonl`), "utf8");
+  assert.deepEqual(
+    text.trimEnd().split("\n").map((zeile) => JSON.parse(zeile)),
+    [
+      { zug: 1, werkzeug: "Read", pfad: "diff/001.patch" },
+      { zug: 2, werkzeug: "Read", pfad: "pr/gesamt.patch" },
+      { zug: 4, werkzeug: "Grep", pfad: "basis", muster: "ZAHL", glob: "*.js" },
+      { zug: 5, werkzeug: "Read", pfad: "auftrag.md", ab: 1, zeilen: 50 },
+      { zug: 5, werkzeug: "Glob", muster: "dateien/**" },
+      { zug: 6, werkzeug: "StructuredOutput" },
+    ],
+  );
+  assert.equal(text.includes(`"zug":${TEXTZUG_OHNE_WERKZEUG},`), false);
+  for (const geheim of [DATEIINHALT, "GEHEIMER-BELEG-91c2", "GEHEIME-REPARATUR-91c2", ROHAUSGABE]) {
+    assert.equal(text.includes(geheim), false, geheim);
+  }
+});
+
+test("sind die Züge aufgebraucht, liegt der Verlauf trotzdem im Artefakt, und ein Aufruf mit dem Token im Pfad fehlt darin", async (context) => {
+  const aufnahme = aufzeichnung("max-zuege");
+  aufnahme.zeilen.splice(
+    -1,
+    0,
+    zug("m1", { type: "tool_use", id: "r1", name: "Read", input: { file_path: `basis/${SCHEIN_TOKEN}` } }),
+    zug("m2", { type: "tool_use", id: "r2", name: "Read", input: { file_path: "auftrag.md" } }),
+  );
+  const { commit, aus } = await pruefenMitAblage(context, false, aufnahme);
+  const ergebnis = JSON.parse(readFileSync(join(aus, "ergebnis.json"), "utf8"));
+  assert.equal(ergebnis.commits[0].grund, "Züge aufgebraucht");
+  const text = readFileSync(join(aus, `verlauf-${commit.sha}.jsonl`), "utf8");
+  assert.equal(text.includes(SCHEIN_TOKEN), false);
+  assert.ok(text.includes('"werkzeug":"Read","pfad":"auftrag.md"'), text);
 });
 
 test("pruefen bricht ab, wenn die Ablage im hochgeladenen Ordner --aus liegen soll", async (context) => {

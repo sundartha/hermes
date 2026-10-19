@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
 import { createInterface } from "node:readline";
@@ -52,6 +52,15 @@ const PFLICHT_DATEIEN = [
   "refs/sicherheitsgrenzen.md",
   "refs/clean-code.md",
 ];
+const VERLAUF_FELDER = [
+  ["file_path", "pfad"],
+  ["path", "pfad"],
+  ["pattern", "muster"],
+  ["glob", "glob"],
+  ["offset", "ab"],
+  ["limit", "zeilen"],
+];
+const WERKZEUG_NAME = /^[A-Za-z_]+$/;
 
 export function zuegeFuer(commit) {
   return GRUNDZUEGE + ZUEGE_JE_DATEI * (commit.dateien.length + (commit.letzter ? 1 : 0));
@@ -254,6 +263,60 @@ export function werteAus(lauf, { token }) {
   };
 }
 
+function imOrdner(wert, ordner) {
+  return typeof wert === "string" && wert.startsWith(`${ordner}/`) ? wert.slice(ordner.length + 1) : wert;
+}
+
+function angabenDes(eingabe, ordner) {
+  return Object.fromEntries(
+    VERLAUF_FELDER.flatMap(([feld, name]) => {
+      const wert = eingabe?.[feld];
+      const nutzbar = typeof wert === "string" || Number.isFinite(wert);
+      return nutzbar ? [[name, imOrdner(wert, ordner)]] : [];
+    }),
+  );
+}
+
+function werkzeugAufrufe(ereignis) {
+  const inhalt = ereignis.message?.content;
+  return Array.isArray(inhalt) ? inhalt.filter((teil) => teil?.type === "tool_use") : [];
+}
+
+function mitZugnummer(ereignisse) {
+  const zaehlung = { zug: 0, vorige: undefined };
+  return ereignisse
+    .filter((ereignis) => ereignis.type === "assistant")
+    .map((ereignis) => {
+      const id = ereignis.message?.id;
+      if (id === undefined || id !== zaehlung.vorige) zaehlung.zug += 1;
+      zaehlung.vorige = id;
+      return { zug: zaehlung.zug, ereignis };
+    });
+}
+
+function aufrufZeilen(ordner) {
+  return ({ zug, ereignis }) =>
+    werkzeugAufrufe(ereignis).map((aufruf) =>
+      JSON.stringify({
+        zug,
+        werkzeug: WERKZEUG_NAME.test(String(aufruf.name)) ? aufruf.name : "unbekannt",
+        ...angabenDes(aufruf.input, ordner),
+      }),
+    );
+}
+
+function verlaufZeilen(lauf, { ordner, token }) {
+  const zuege = mitZugnummer(lauf.zeilen.map(alsObjekt).filter(Boolean));
+  return zuege.flatMap(aufrufZeilen(ordner)).filter((zeile) => !token || !zeile.includes(token));
+}
+
+function legeVerlaufAb(commit, lauf, { aus, ordner, token }) {
+  if (!aus) return;
+  mkdirSync(aus, { recursive: true });
+  const zeilen = verlaufZeilen(lauf, { ordner, token });
+  writeFileSync(join(aus, `verlauf-${commit.sha}.jsonl`), zeilen.map((zeile) => `${zeile}\n`).join(""));
+}
+
 function eintrag(commit, auswertung) {
   const { sha, patchId, kritisch, letzter = false } = commit;
   return { sha, patchId, kritisch, letzter, uebernommen: false, ...auswertung };
@@ -280,6 +343,7 @@ async function rufeAuf(commit, kontext) {
       eingabe,
       zeitgrenzeMs: zuegeFuer(commit) * MS_JE_ZUG,
     });
+    legeVerlaufAb(commit, lauf, { aus: kontext.aus, ordner, token: kontext.token });
     return werteAus(lauf, { token: kontext.token });
   } finally {
     entferne(ordner);
