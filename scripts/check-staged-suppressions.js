@@ -98,11 +98,14 @@ function tallyIncreases(before, after) {
   );
 }
 
-function describeDifference({ key, countBefore, countAfter }) {
+function findingOfKey(key) {
   const separatorIndex = key.indexOf(FINDING_KEY_SEPARATOR);
-  const rule = key.slice(0, separatorIndex);
-  const message = key.slice(separatorIndex + FINDING_KEY_SEPARATOR.length);
-  return `${countBefore} -> ${countAfter}  ${rule}: ${message}`;
+  return { ruleId: key.slice(0, separatorIndex), message: key.slice(separatorIndex + FINDING_KEY_SEPARATOR.length) };
+}
+
+function describeDifference({ key, countBefore, countAfter }) {
+  const { ruleId, message } = findingOfKey(key);
+  return `${countBefore} -> ${countAfter}  ${ruleId}: ${message}`;
 }
 
 function describeDifferences(differences) {
@@ -114,11 +117,11 @@ function describeDifferences(differences) {
 }
 
 function rejectionFor(differences) {
-  return { reasons: describeDifferences(differences), keys: differences.map(({ key }) => key) };
+  return { reasons: describeDifferences(differences), findings: differences.map(({ key }) => findingOfKey(key)) };
 }
 
 function unverifiable(err) {
-  return { reasons: [`nicht pruefbar (fail-closed): ${err.message}`], keys: [] };
+  return { reasons: [`nicht pruefbar (fail-closed): ${err.message}`], findings: [] };
 }
 
 async function reasonsToReject(file, readFindings) {
@@ -277,11 +280,11 @@ const PURPOSE = {
   PIN: "lint/altlast-pin",
 };
 
-async function printPurposes(ids, keys) {
+async function printPurposes(ids, findings) {
   try {
     const { zweckBlock } = await import(PURPOSE_TEXTS);
-    const { befundAusSchluessel, lintZweckZeilen } = await import(PURPOSE_GROUPS);
-    console.error([...lintZweckZeilen(keys.map(befundAusSchluessel)), ...ids.flatMap(zweckBlock)].join("\n"));
+    const { lintZweckZeilen } = await import(PURPOSE_GROUPS);
+    console.error([...lintZweckZeilen(findings), ...ids.flatMap(zweckBlock)].join("\n"));
   } catch (err) {
     logLine(`Zweck-Texte nicht geladen: ${err.message}`);
   }
@@ -290,8 +293,8 @@ async function printPurposes(ids, keys) {
 function printOffenderPurposes(changedOffenders, pinOffenders) {
   const changed = changedOffenders.length > 0 ? [PURPOSE.CHANGED] : [];
   const pins = pinOffenders.length > 0 ? [PURPOSE.PIN] : [];
-  const keys = [...changedOffenders, ...pinOffenders].flatMap((offender) => offender.keys);
-  return printPurposes([...changed, ...pins], keys);
+  const findings = [...changedOffenders, ...pinOffenders].flatMap((offender) => offender.findings);
+  return printPurposes([...changed, ...pins], findings);
 }
 
 function readRepoFile(relativePath) {
@@ -426,7 +429,7 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
   console.error("");
   logLine("Die Listen werden nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
   logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
-  await printPurposes([PURPOSE.RAISED], reports.flatMap(({ raised }) => raised.map(({ rule }) => rule)));
+  await printPurposes([PURPOSE.RAISED], reports.flatMap(({ raised }) => raised.map(({ rule }) => ({ ruleId: rule }))));
   return 1;
 }
 

@@ -9,7 +9,7 @@ import konfiguration from "../../eslint.config.js";
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import lintFormat from "../../tools/lint-format.mjs";
 import { STRENGE_NEBENREGELN } from "../../tools/lint-neue-funktionen.mjs";
-import { NAMENSREGEL, OHNE_REGEL, befundAusSchluessel, lintGruppen, lintZweckId, lintZweckZeilen } from "../../tools/lint-zweck.mjs";
+import { NAMENSREGEL, OHNE_REGEL, lintGruppen, lintZweckId, lintZweckZeilen } from "../../tools/lint-zweck.mjs";
 import { PRUEFREGEL } from "../../tools/neue-kommentare.mjs";
 import { gelesen } from "../../tools/syntaxbaum.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
@@ -168,9 +168,8 @@ test("lintGruppen fasst Befunde je Gruppe ohne Wiederholung zusammen und überge
     { id: "lint/demeter", regeln: ["no-restricted-syntax"] },
     { id: "lint/wort-anruf-wege", regeln: [NAMENSREGEL] },
   ]);
-  assert.equal(lintZweckId(befundAusSchluessel("null :: '// eslint-disable' has no effect")), "lint/inline-abschalten");
-  assert.equal(lintZweckId(befundAusSchluessel(`no-restricted-syntax :: ${demeter}`)), "lint/demeter");
-  assert.equal(lintZweckId(befundAusSchluessel("no-restricted-syntax")), undefined);
+  assert.equal(lintZweckId({ ruleId: "null", message: "'// eslint-disable' has no effect" }), "lint/inline-abschalten");
+  assert.equal(lintZweckId({ ruleId: "no-restricted-syntax" }), undefined);
 });
 
 test("der Formatter von Lint in CI und Pre-Commit zeigt nach stylish je vorkommender Gruppe einmal Kopfzeile und Block", async () => {

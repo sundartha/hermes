@@ -5,7 +5,6 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 const ZUORDNUNG = JSON.parse(readFileSync(new URL("./zweck/zuordnung/lint-regeln.json", import.meta.url), "utf8"));
 export const NAMENSREGEL = "hermes/wort-nur-in";
 const NAMENSENDE = ":";
-const SCHLUESSEL_TRENNER = " :: ";
 const OHNE_REGEL_ID = "null";
 const OHNE_REGEL_NAME = "ohne Regel";
 export const OHNE_REGEL = { SYNTAX: "syntax", ABSCHALTKOMMENTAR: "abschaltkommentar" };
@@ -28,12 +27,6 @@ export function lintZweckId({ ruleId, message = "", fatal = false }) {
   if (ohneRegel(ruleId)) return ZUORDNUNG.ohneRegel[fatal ? OHNE_REGEL.SYNTAX : OHNE_REGEL.ABSCHALTKOMMENTAR];
   if (ruleId === NAMENSREGEL) return nachName(message);
   return ZUORDNUNG.regeln[ruleId] ?? nachMeldung(ruleId, message);
-}
-
-export function befundAusSchluessel(schluessel) {
-  const trenner = schluessel.indexOf(SCHLUESSEL_TRENNER);
-  if (trenner === -1) return { ruleId: schluessel };
-  return { ruleId: schluessel.slice(0, trenner), message: schluessel.slice(trenner + SCHLUESSEL_TRENNER.length) };
 }
 
 function regelName(ruleId) {
