@@ -56,6 +56,16 @@ test("fehlt ein Patch in der Eingabe, ist das ein Mangel", () => {
   );
 });
 
+test("fehlt auftrag.md in der Eingabe, ist das ein Mangel wie bei einem Patch", () => {
+  const auftrag = patch("auftrag.md", "# Auftragszettel\n");
+  const inhalte = [auftrag, ...zweiPatches()];
+  const eingabe = auftragFuerPruefer(COMMIT, inhalte.slice(1), KENNUNG);
+  assert.equal(
+    eingabeMangel(eingabe, inhalte, KENNUNG),
+    "nicht vollständig in der Eingabe: auftrag.md",
+  );
+});
+
 test("ein Patch, der kein gültiges UTF-8 ist, kommt nicht byte-genau in die Eingabe und ist ein Mangel", () => {
   const inhalte = [{ name: "diff/001.patch", inhalt: Buffer.from([0x2b, 0xe4, 0x0a]) }];
   const eingabe = auftragFuerPruefer(COMMIT, inhalte, KENNUNG);

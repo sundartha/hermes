@@ -147,6 +147,30 @@ test("eine Zeile mit 6000 Zeichen steht am letzten Commit ganz in der Eingabe, e
   assert.match(protokoll.eingabe, / pr\/gesamt\.patch\n/);
 });
 
+function blockAus(eingabe, name) {
+  const [, kennung] = /\n<<<([0-9a-f]{16}) /.exec(eingabe);
+  const kopf = `<<<${kennung} ${name}\n`;
+  const anfang = eingabe.indexOf(kopf);
+  if (anfang === -1) return null;
+  const inhalt = eingabe.slice(anfang + kopf.length);
+  return inhalt.slice(0, inhalt.indexOf(`\n${kennung}>>>\n`));
+}
+
+test("auftrag.md, ergebnisse.md und beide Referenzen stehen als ganze Blöcke in der Eingabe, der Prüfer muss sie nicht mit Read öffnen", async (context) => {
+  const { ergebnis, protokoll } = await pruefeMit(context, {
+    aufnahme: aufzeichnung("gueltig"),
+    liestDiffs: false,
+  });
+  assert.equal(ergebnis.zustand, "geprueft");
+  const auftrag = blockAus(protokoll.eingabe, "auftrag.md");
+  assert.ok(auftrag.startsWith("# Auftragszettel\n"), auftrag);
+  assert.ok(auftrag.includes(`## Commit ${ergebnis.sha}\n\nSetze die Zahl\n`));
+  assert.ok(blockAus(protokoll.eingabe, "ergebnisse.md").startsWith("# Ergebnisse der Prüfbefehle\n"));
+  for (const name of ["refs/sicherheitsgrenzen.md", "refs/clean-code.md"]) {
+    assert.ok(blockAus(protokoll.eingabe, name)?.length > 0, name);
+  }
+});
+
 test("steht ein Patch nicht byte-genau in der Eingabe, weil er kein gültiges UTF-8 ist, startet der Prüfer nicht und die Prüfung ist unvollstaendig", async (context) => {
   const { ergebnis, protokoll } = await pruefeMit(context, {
     aufnahme: aufzeichnung("gueltig"),
