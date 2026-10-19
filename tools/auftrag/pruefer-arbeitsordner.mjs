@@ -4,6 +4,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { gitAusgabe } from "./pruefer-auswahl.mjs";
+import { DATEI_MODI, importeDes } from "./pruefer-importe.mjs";
 import { ersetzeSteuerzeichen } from "./pruefer-schema.mjs";
 import { roteAusNachricht } from "./rote-pruefungen.mjs";
 import { kenntZweck, zweckBlock } from "./zweck.mjs";
@@ -23,11 +24,12 @@ const ROTE_RUNDEN = "## Rote Prüfungen im Auftragsweg vor diesem Commit";
 const EINRUECKUNG = "    ";
 const PR_PATCH = "pr/gesamt.patch";
 const BASIS_ORDNER = "basis";
+const IMPORTE_ORDNER = "importe";
 const BAUM_EINTRAG = /^(\d{6}) blob ([0-9a-f]+)\t(.+)$/s;
-const DATEI_MODI = new Set(["100644", "100755"]);
 const ZEILENENDE = 0x0a;
 const GROESSE_IM_KOPF = 2;
 const BASIS_UEBERSPRUNGEN = "## Nicht unter basis/ abgelegt";
+const IMPORTE_UEBERSPRUNGEN = "## Nicht unter importe/ abgelegt";
 const DIFF_OPTIONEN = ["--no-color", "--no-ext-diff", "--no-renames"];
 
 function sichererPfad(pfad) {
@@ -70,19 +72,19 @@ function zielIn(wurzel, ziel) {
   return datei.startsWith(wurzel + sep) ? datei : null;
 }
 
-function legeDateiAb(ordner, { sha, pfad, root }) {
+function legeDateiAb(ordner, { sha, pfad, root }, unterordner = "dateien") {
   const ziel = sichererPfad(pfad);
   if (ziel === null) return { ablage: null, grund: "Pfad verworfen" };
   const inhalt = inhaltNachCommit(sha, pfad, root);
   if (inhalt === null) return { ablage: null, grund: "nach dem Commit nicht vorhanden" };
-  const datei = zielIn(join(ordner, "dateien"), ziel);
+  const datei = zielIn(join(ordner, unterordner), ziel);
   if (datei === null) return { ablage: null, grund: "Pfad verworfen" };
   try {
     schreibe(datei, inhalt);
   } catch {
     return { ablage: null, grund: "nicht ablegbar" };
   }
-  return { ablage: `dateien/${ziel}`, grund: "" };
+  return { ablage: `${unterordner}/${ziel}`, grund: "" };
 }
 
 function basisEintrag(eintrag) {
@@ -130,9 +132,22 @@ function legeBasisAb(ordner, { basis, root }) {
   return dateien.flatMap((eintrag, index) => legeBasisDateiAb(eintrag, inhalte[index]));
 }
 
-function basisAbschnitt(uebersprungen) {
+function legeImporteAb(ordner, commit, root) {
+  const lies = (pfad) => inhaltNachCommit(commit.sha, pfad, root);
+  const { abzulegen, uebersprungen } = importeDes(commit, { root, lies });
+  const ergebnisse = abzulegen.map((pfad) => ({
+    pfad,
+    ...legeDateiAb(ordner, { sha: commit.sha, pfad, root }, IMPORTE_ORDNER),
+  }));
+  return {
+    importe: ergebnisse.flatMap(({ ablage }) => (ablage === null ? [] : [ablage])),
+    uebersprungen: [...ergebnisse.filter(({ ablage }) => ablage === null), ...uebersprungen],
+  };
+}
+
+function uebersprungenAbschnitt(titel, uebersprungen) {
   if (uebersprungen.length === 0) return [];
-  return [BASIS_UEBERSPRUNGEN, "", ...uebersprungen.map(({ pfad, grund }) => `- ${JSON.stringify(pfad)} (${grund})`), ""];
+  return [titel, "", ...uebersprungen.map(({ pfad, grund }) => `- ${JSON.stringify(pfad)} (${grund})`), ""];
 }
 
 function dateiZeile({ patch, pfad, ablage, grund }) {
@@ -174,7 +189,7 @@ function absichtZeilen(absicht) {
   return [`Quelle: ${absicht.quelle}`, "", absicht.text];
 }
 
-function auftragsText(commit, kontext, { eintraege, uebersprungen }) {
+function auftragsText(commit, kontext, { eintraege, uebersprungen, importe }) {
   const { auftragstext } = kontext;
   return [
     "# Auftragszettel",
@@ -195,7 +210,8 @@ function auftragsText(commit, kontext, { eintraege, uebersprungen }) {
     "",
     ...eintraege.map(dateiZeile),
     "",
-    ...basisAbschnitt(uebersprungen),
+    ...uebersprungenAbschnitt(BASIS_UEBERSPRUNGEN, uebersprungen),
+    ...uebersprungenAbschnitt(IMPORTE_UEBERSPRUNGEN, importe.uebersprungen),
     "## Commits des Pull Requests",
     "",
     ...prAbschnitt(commit, kontext),
@@ -260,9 +276,10 @@ export function baueArbeitsordner(commit, kontext) {
   }
   legeReferenzenAb(ordner);
   const uebersprungen = legeBasisAb(ordner, kontext);
-  schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, { eintraege, uebersprungen }));
+  const importe = legeImporteAb(ordner, commit, kontext.root);
+  schreibe(join(ordner, "auftrag.md"), auftragsText(commit, kontext, { eintraege, uebersprungen, importe }));
   schreibe(join(ordner, "ergebnisse.md"), ergebnisseText(commit, kontext));
-  return { ordner, patches };
+  return { ordner, patches, importe: importe.importe };
 }
 
 export function entferne(ordner) {
