@@ -15,8 +15,26 @@ export function repository() {
   return env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY;
 }
 
-export async function api(path, { method = "GET", body, accepted = [] } = {}) {
-  const response = await fetch(`${env.GITHUB_API_URL || GITHUB_API}${path}`, {
+const TIMEOUT_MS = 30_000;
+const NETWORK_ERRORS = new Set(["TypeError", "TimeoutError", "AbortError"]);
+
+async function attempt(url, init, timeoutMs) {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok || response.status === HTTP_NO_CONTENT) return { response };
+  return { response, value: await response.json() };
+}
+
+async function answer(url, init, { retry, timeoutMs }) {
+  try {
+    return await attempt(url, init, timeoutMs);
+  } catch (error) {
+    if (!retry || !NETWORK_ERRORS.has(error.name)) throw error;
+    return attempt(url, init, timeoutMs);
+  }
+}
+
+function requestInit(method, body) {
+  return {
     method,
     headers: {
       Authorization: `Bearer ${token()}`,
@@ -25,12 +43,22 @@ export async function api(path, { method = "GET", body, accepted = [] } = {}) {
       "User-Agent": "hermes-wochenbericht",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  };
+}
+
+export async function api(
+  path,
+  { method = "GET", body, accepted = [], retry = method === "GET", timeoutMs = TIMEOUT_MS } = {},
+) {
+  const url = `${env.GITHUB_API_URL || GITHUB_API}${path}`;
+  const { response, value } = await answer(url, requestInit(method, body), { retry, timeoutMs }).catch((error) => {
+    throw new Error(`die GitHub-API auf ${method} ${path} keine Antwort liefert (${error.message})`);
   });
   if (response.status === HTTP_NO_CONTENT || accepted.includes(response.status)) return null;
   if (!response.ok) {
     throw new Error(`die GitHub-API auf ${method} ${path} mit HTTP ${response.status} antwortet`);
   }
-  return response.json();
+  return value;
 }
 
 export function repo(suffix, options) {
