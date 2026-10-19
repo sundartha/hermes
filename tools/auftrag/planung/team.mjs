@@ -30,6 +30,11 @@ const FEHLERZEILEN = 5;
 const ZERLEGUNG = /^Zerlegung passt nicht:.*$/m;
 const PITCH_AENDERN = /^Pitch ändern:.*$/m;
 const JSON_BLOCK = /```json[^\S\n]*\n([\s\S]*?)\n[^\S\n]*```/g;
+const ERSTE_NETZ_WARTEZEIT_MS = 30_000;
+const ZWEITE_NETZ_WARTEZEIT_MS = 120_000;
+const NETZ_WARTEZEITEN_MS = [ERSTE_NETZ_WARTEZEIT_MS, ZWEITE_NETZ_WARTEZEIT_MS];
+const VERBINDUNGSFEHLER = /^API Error: (?:Connection dropped \(ECONNRESET\)|Can't reach the API server — check your internet or DNS \(ENOTFOUND\))$/;
+const MS_JE_SEKUNDE = 1000;
 
 export class Abbruch extends Error {}
 
@@ -230,6 +235,10 @@ function meldeAbsturz(wer, lauf) {
   throw new Abbruch(auszug === "" ? meldung : `${meldung}:\n${auszug}`);
 }
 
+function netzabbruch(lauf) {
+  return lauf.exitCode !== 0 && VERBINDUNGSFEHLER.test((lauf.volleAntwort ?? "").trim());
+}
+
 class Teilnehmer {
   constructor(rolle) {
     this.rolle = rolle;
@@ -246,13 +255,15 @@ class Teilnehmer {
 }
 
 export class Team {
-  constructor(root, ordner) {
+  constructor(root, ordner, { netzWartezeitenMs = NETZ_WARTEZEITEN_MS } = {}) {
     this.root = root;
     this.ordner = ordner;
     this.phase = basename(resolve(ordner));
     this.anfang = abdruck(root, ordner);
     this.beteiligte = [];
     this.ruecksendungen = {};
+    this.netzWartezeitenMs = netzWartezeitenMs;
+    this.netzabbrueche = [];
   }
 
   teilnehmer(rolle) {
@@ -264,14 +275,26 @@ export class Team {
   async sende(wer, nachricht) {
     const sperre = limitSperre({ root: this.root, phase: { phase: this.phase } });
     const start = rollenStart(this.root, wer.rolle);
+    let versuch = 0;
     for (;;) {
       await warteAufSperre(sperre);
       const beginn = Date.now();
       const lauf = await starteAgentParallel({ rolle: wer.rolle, root: this.root, fortsetzung: wer.sitzung }, nachricht, { ...start, kontextGrenze: null, vollstaendig: true });
       wer.merke(lauf.sitzung, Date.now() - beginn);
-      if (!lauf.limit) return lauf;
-      console.log(`${wer.rolle}: ${sperreWegenLimit(sperre, lauf.limit)}`);
+      if (lauf.limit) console.log(`${wer.rolle}: ${sperreWegenLimit(sperre, lauf.limit)}`);
+      else if (await this.nachNetzabbruch(wer, lauf, versuch)) versuch += 1;
+      else return lauf;
     }
+  }
+
+  async nachNetzabbruch(wer, lauf, versuch) {
+    const wartezeit = this.netzWartezeitenMs[versuch];
+    if (wartezeit === undefined || !netzabbruch(lauf)) return false;
+    const eintrag = { rolle: wer.rolle, sitzung: wer.sitzung, versuch: versuch + 1, zeit: new Date().toISOString(), fehler: lauf.volleAntwort.trim(), warteS: wartezeit / MS_JE_SEKUNDE };
+    this.netzabbrueche.push(eintrag);
+    console.log(`${eintrag.zeit} ${wer.rolle}: ${eintrag.fehler}; Sitzung ${wer.sitzung} wird nach ${eintrag.warteS} s fortgesetzt (Versuch ${eintrag.versuch} von ${this.netzWartezeitenMs.length}).`);
+    await warte(wartezeit);
+    return true;
   }
 
   ruecksenden(wer, befunde) {
