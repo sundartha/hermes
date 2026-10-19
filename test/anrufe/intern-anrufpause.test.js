@@ -39,7 +39,7 @@ const UNGUELTIGE_KOERPER = Object.freeze([
 const STANDIN_NAMEN = [
   "callFinish lifecycle provisioning outboundGates callQuotaDenial requestTenant requireTenant",
   "conversationWatchdog ttsStore directiveSynth voiceRender costTruing messaging consultDelivery",
-  "elevenLabsOutbound inboundBridges accountsRef auditStoreRef durableAuditFor",
+  "elevenLabsOutbound inboundBridges durableAuditFor",
 ].flatMap((zeile) => zeile.split(" "));
 
 const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "intern-anrufpause-"));

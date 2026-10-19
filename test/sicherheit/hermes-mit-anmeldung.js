@@ -14,7 +14,7 @@ const ACTIVE = "active";
 const STANDIN_DEPENDENCIES = [
   "callFinish lifecycle provisioning outboundGates callQuotaDenial requestTenant requireTenant",
   "conversationWatchdog ttsStore directiveSynth voiceRender costTruing messaging consultDelivery",
-  "elevenLabsOutbound inboundBridges accountsRef auditStoreRef durableAuditFor",
+  "elevenLabsOutbound inboundBridges durableAuditFor",
 ].flatMap((line) => line.split(" "));
 
 const standIn = new Proxy(function standIn() {}, {

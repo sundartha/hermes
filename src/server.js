@@ -222,7 +222,6 @@ const deps = {
   voiceRender,
   costTruing,
   costCrossCheck,
-  auditStoreRef,
   durableAudit,
   durableAuditFor,
   outageWatch,
@@ -234,7 +233,8 @@ const deps = {
   elevenLabsOutbound,
   inboundBridges,
   inboundTrunkSweep,
-  accountsRef,
 };
-const { app } = await buildApp(deps);
+const { app, accounts, auditStore } = await buildApp(deps);
+accountsRef.current = accounts;
+auditStoreRef.current = auditStore;
 await bootServer({ app, ...deps });

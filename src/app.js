@@ -274,8 +274,6 @@ export async function buildApp(deps) {
     elevenLabsOutbound,
     inboundBridges,
     consultDelivery,
-    accountsRef,
-    auditStoreRef,
     durableAuditFor,
     createPortalRunner = defaultCreatePortalRunner,
   } = deps;
@@ -303,8 +301,6 @@ export async function buildApp(deps) {
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
         appPath: APP_PATH,
         messaging,
-        accountsRef,
-        auditStoreRef,
       });
     });
   }
@@ -348,5 +344,5 @@ export async function buildApp(deps) {
 
   app.use(errorHandler);
 
-  return { app };
+  return { app, accounts: operatorAuth?.accounts, auditStore: operatorAuth?.auditStore };
 }

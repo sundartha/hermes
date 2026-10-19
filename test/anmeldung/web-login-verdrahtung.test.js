@@ -377,13 +377,11 @@ test("Selbstbedienung: Abrechnungsstatus ist fuer noch nicht aktivierte Tenants 
   }
 });
 
-test("wireWebLogin gibt Konten- und Audit-Zugriff an uebergebene Referenzen weiter", async () => {
-  const accountsRef = {};
-  const auditStoreRef = {};
-  const w = await boot({ deps: { accountsRef, auditStoreRef } });
+test("wireWebLogin liefert Konten- und Audit-Zugriff im Rueckgabewert", async () => {
+  const w = await boot();
   try {
-    assert.equal(typeof accountsRef.current.upsertOnFirstLogin, "function");
-    assert.equal(typeof auditStoreRef.current.record, "function");
+    assert.equal(typeof w.result.accounts.upsertOnFirstLogin, "function");
+    assert.equal(typeof w.result.auditStore.record, "function");
     assert.equal(typeof w.result.webAuthMw, "function");
     assert.equal(typeof w.result.adminMw, "function");
   } finally {
@@ -504,16 +502,14 @@ test("Hintergrundlauf-Fehler wird mit seinem Kennzeichen geloggt statt geworfen,
 });
 
 test("Konten- und Audit-Zugriff der Verdrahtung arbeiten auf der Datenbank des Logins", async () => {
-  const accountsRef = {};
-  const auditStoreRef = {};
-  const w = await boot({ deps: { config: devConfig, accountsRef, auditStoreRef } });
+  const w = await boot({ deps: { config: devConfig } });
   try {
     const { session } = await devLogin(w.url);
     assert.ok(session);
     const tenantId = tenantIdForSubject("dev-user");
-    const konto = await accountsRef.current.accountByTenant(tenantId);
+    const konto = await w.result.accounts.accountByTenant(tenantId);
     assert.equal(konto.sub, "dev-user");
-    await auditStoreRef.current.record({ tenantId, action: "pruef_eintrag", detail: "d1" });
+    await w.result.auditStore.record({ tenantId, action: "pruef_eintrag", detail: "d1" });
     const { rows } = await w.runner.withClient((c) =>
       c.query("SELECT tenant_id, detail FROM audit_log WHERE action = 'pruef_eintrag'"),
     );
