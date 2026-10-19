@@ -26,13 +26,15 @@ const JS_DATEI = /\.(?:js|mjs|cjs)$/;
 const NUTZER_DATEI = /\.(?:js|mjs|cjs|ya?ml)$|^\.githooks\//;
 const NUTZER_ORTE = ["tools", "scripts", ".githooks", ".github/workflows", ".claude/hooks"];
 const MODUL = { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: {} };
+const ZAHL_OHNE_NAMEN = 7;
+const DEMETER = "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
 const PROBE_DATEI = join(REPO_ROOT, "src/zweck-lint-probe.js");
 const PROBE_CODE = [
   "export function vier(erster, zweiter, dritter, vierter) {",
   "  return [erster, zweiter, dritter, vierter];",
   "}",
   "export function fuenf(erster, zweiter, dritter, vierter, fuenfter) {",
-  "  return [erster, zweiter, dritter, vierter, fuenfter].length * 7;",
+  `  return [erster, zweiter, dritter, vierter, fuenfter].length * ${ZAHL_OHNE_NAMEN};`,
   "}",
   "",
 ].join("\n");
@@ -152,14 +154,13 @@ test("tools/zweck/lint.json hat keine ID, die weder die Zuordnung noch ein Skrip
 });
 
 test("lintGruppen fasst Befunde je Gruppe ohne Wiederholung zusammen und übergeht Regeln ohne Zuordnung", () => {
-  const demeter = "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
   const befunde = [
     { ruleId: "max-params" },
     { ruleId: "complexity" },
     { ruleId: "max-params" },
     { ruleId: "keine/regel" },
     { ruleId: null, fatal: true, message: "Parsing error" },
-    { ruleId: "no-restricted-syntax", message: demeter },
+    { ruleId: "no-restricted-syntax", message: DEMETER },
     { ruleId: NAMENSREGEL, message: "anruf-starten: originateCall ruft nur …" },
   ];
   assert.deepEqual(lintGruppen(befunde), [
