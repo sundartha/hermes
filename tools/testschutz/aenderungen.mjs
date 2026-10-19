@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { Linter } from "eslint";
 
+import { festerText as staticTestName } from "../eslint-rules/knoten.js";
 import { laufzeitText } from "../umbenennung.mjs";
+
+export { staticTestName };
 
 const TEST_DIR = "test/";
 const CARD_DIR = "docs/funktionen/";
@@ -95,15 +98,6 @@ function isTestCall({ callee, arguments: args }) {
   if (TEST_FUNCTIONS.has(callee.object.name)) return true;
   const isSubtest = callee.property.name === SUBTEST_METHOD && args.length >= SUBTEST_MIN_ARGUMENTS;
   return isSubtest && FUNCTION_NODE_TYPES.has(args.at(-1).type);
-}
-
-export function staticTestName(argument) {
-  if (argument?.type === "Literal" && typeof argument.value === "string") return argument.value;
-  if (argument?.type === "TemplateLiteral" && argument.expressions.length === 0) {
-    const [quasi] = argument.quasis;
-    return quasi.value.cooked;
-  }
-  return undefined;
 }
 
 export function isCard(file) {

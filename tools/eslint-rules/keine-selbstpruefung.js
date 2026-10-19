@@ -1,5 +1,5 @@
-import { BESTAND_OPTION, befundSchluessel, bestandDerDatei } from "./bestand.js";
-import { alleKnoten } from "./knoten.js";
+import { BESTAND_OPTION, bestandDerDatei, knotenSchluessel } from "./bestand.js";
+import { alleKnoten, nachAnfang } from "./knoten.js";
 import { pfadFalter } from "./pfad-falten.js";
 
 const MELDUNG =
@@ -115,18 +115,10 @@ function istSelbstpruefung(lauf, aufruf) {
   return werte.length === anzahl && werte.every((wert) => konstant(lauf, wert, true));
 }
 
-function nachPosition(links, rechts) {
-  return links.range[START] - rechts.range[START];
-}
-
 export function selbstpruefungen(sourceCode, datei) {
   const lauf = { sourceCode, falter: pfadFalter(sourceCode, datei), besucht: new Set() };
   const aufrufe = alleKnoten(sourceCode).filter(({ type }) => type === "CallExpression");
-  return aufrufe.filter((aufruf) => istSelbstpruefung(lauf, aufruf)).sort(nachPosition);
-}
-
-export function selbstpruefungsSchluessel(sourceCode, datei, aufruf) {
-  return befundSchluessel(datei, sourceCode.getText(aufruf));
+  return aufrufe.filter((aufruf) => istSelbstpruefung(lauf, aufruf)).sort(nachAnfang);
 }
 
 export default {
@@ -141,7 +133,7 @@ export default {
         const { sourceCode } = context;
         const bestand = bestandDerDatei(context);
         for (const aufruf of selbstpruefungen(sourceCode, bestand.datei)) {
-          if (bestand.eingefroren(selbstpruefungsSchluessel(sourceCode, bestand.datei, aufruf))) {
+          if (bestand.eingefroren(knotenSchluessel(sourceCode, bestand.datei, aufruf))) {
             continue;
           }
           context.report({ node: aufruf, messageId: "selbstpruefung" });
