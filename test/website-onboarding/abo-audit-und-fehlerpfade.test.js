@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { once } from "node:events";
-import express from "express";
 import { makePgTestStore } from "../pg-helpers.js";
-import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
-import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SECRET = "u3-billing-web-secret-0123456789";
@@ -20,8 +17,6 @@ const CONFIG = {
   stripeBusinessPriceId: "price_business",
 };
 
-const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
-
 function billingOhneTermin() {
   return {
     createSubscription: async () => ({ subscriptionId: "sub_new", currentPeriodEnd: PERIOD_END }),
@@ -32,8 +27,6 @@ function billingOhneTermin() {
 
 async function setup({ card = true, paymentEnabled = true, subscription, billing = billingOhneTermin(), breakMailPending = false } = {}) {
   const { store, runner } = await makePgTestStore();
-  const accounts = makeAccounts(runner);
-  const sessions = makeSessions(runner);
   const auditRows = [];
   const auditStore = { record: async (eintrag) => void auditRows.push(eintrag) };
   store.load().tenants.push({
@@ -44,17 +37,12 @@ async function setup({ card = true, paymentEnabled = true, subscription, billing
     idpSubject: SUB,
   });
   if (card) store.setTenantStripe(TENANT, { customerId: "cus_u3", paymentMethodId: "pm_u3" });
-  await accounts.upsertOnFirstLogin({ sub: SUB, email: "u3@kunde.de" });
-  await accounts.setStatus(TENANT, "active");
-  const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
   if (subscription) store.setTenantSubscription(TENANT, subscription);
   if (breakMailPending) {
     store.setCancellationMailPending = () => {
       throw new Error("pending-kaputt");
     };
   }
-  const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
-  const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const audits = [];
   const unscheduled = [];
   const beobachtet = {
@@ -64,31 +52,21 @@ async function setup({ card = true, paymentEnabled = true, subscription, billing
       return billing.unscheduleCancellation(p);
     },
   };
-  const app = express();
-  app.use(express.json());
-  app.use(
-    makeSelfServiceRoutes({
-      store,
-      webAuthMw,
-      webAuthPendingMw,
-      audit: (action, req, detail) => audits.push({ action, detail }),
-      config: withConfigNamespaces({ ...CONFIG, paymentEnabled }),
-      billing: beobachtet,
-      accounts,
-      provision: async () => {},
-      auditStore,
-    }),
-  );
-  const server = app.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  return {
-    base: `http://127.0.0.1:${server.address().port}`,
-    auditRows,
-    audits,
-    unscheduled,
-    cookie: cookieFor(sessionId),
-    close: () => new Promise((r) => server.close(r)),
-  };
+  const app = await starteSelfServiceApp({
+    store,
+    runner,
+    secret: SECRET,
+    sub: SUB,
+    tenantId: TENANT,
+    email: "u3@kunde.de",
+    aktiv: true,
+    audit: (action, req, detail) => audits.push({ action, detail }),
+    config: withConfigNamespaces({ ...CONFIG, paymentEnabled }),
+    billing: beobachtet,
+    provision: async () => {},
+    auditStore,
+  });
+  return { ...app, auditRows, audits, unscheduled };
 }
 
 async function post(s, path, body) {
