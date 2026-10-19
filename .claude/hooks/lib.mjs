@@ -34,7 +34,7 @@ export function block(id, lines) {
 
 export function withoutGitVariables(environment) {
   const run = spawnSync("git", ["rev-parse", "--local-env-vars"], { encoding: "utf8" });
-  const local = new Set((run.stdout ?? "").split("\n").filter(Boolean));
+  const local = new Set(outputLines(run.stdout));
   return Object.fromEntries(
     Object.entries(environment).filter(
       ([name]) => !local.has(name) && !GIT_CONFIG_VARIABLE.test(name),
