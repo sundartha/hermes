@@ -4,27 +4,31 @@ const ZAUN = "```";
 const PLATZHALTER = /<[^<>\n]*>/g;
 const INHALT = /[\p{L}\p{N}]/u;
 const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+)$/;
+const BEFUND_FORM = /^(\S+?):(\d+) [–-] (.+)$/;
 const MELDUNG = /^(Gleichwertig|Nötig): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
 const BAU = "bau";
 const AUSSTIEG_KOPF = "Auftrag passt nicht";
 const VORAUSSETZUNG_KOPF = "Voraussetzung fehlt";
 const ALTER_TEST_KOPF = "Alter Test hält altes Verhalten fest";
+const BEFUND_KOPF = "Abnahmetest widerspricht bestehendem Code";
 const AUSWEG_BEI = "Ausweg bei Prüfung: ";
 const PRUEFUNG_TRENNER = ", ";
 const OHNE_ROTE_PRUEFUNG = "keine";
 const ALTER_TEST = "alterTest";
+const TESTBEFUND = "testbefund";
 const NACH_KOPF = /^:\s*(\S.*)$/;
 const AUSWEGE = [
   { art: AUSSTIEG, kopf: AUSSTIEG_KOPF, rollen: ["bau", "test"] },
   { art: "voraussetzung", kopf: VORAUSSETZUNG_KOPF, rollen: ["bau"] },
   { art: ALTER_TEST, kopf: ALTER_TEST_KOPF, rollen: ["bau", "test"] },
+  { art: TESTBEFUND, kopf: BEFUND_KOPF, rollen: [BAU] },
 ];
 const AUSWEG_BEI_ZEILE = new RegExp(`^${AUSWEG_BEI}(\\S.*)$`, "gm");
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
 const ZWECK_KOPF = /^Zweck ([^:\s][^:]*):(.*)$/;
-const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, "Gleichwertig", "Nötig"].join("|")}):`);
+const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, BEFUND_KOPF, "Gleichwertig", "Nötig"].join("|")}):`);
 
 function grundNach(kopf, zeile) {
   return zeile.startsWith(kopf) ? NACH_KOPF.exec(zeile.slice(kopf.length))?.[1] : undefined;
@@ -69,6 +73,18 @@ function alterTest({ grund, zeile }, rolle) {
   return { [ALTER_TEST]: { datei, rest, zeile } };
 }
 
+function testbefund({ grund, zeile }) {
+  const [, datei, nummer, begruendung] = BEFUND_FORM.exec(grund) ?? [];
+  if (begruendung === undefined || nurPlatzhalter(begruendung)) return { [AUSSTIEG]: zeile };
+  return { [TESTBEFUND]: { datei, nummer: Number(nummer), grund: begruendung, zeile } };
+}
+
+function wegDes(letzter, rolle) {
+  if (letzter.art === ALTER_TEST) return alterTest(letzter, rolle);
+  if (letzter.art === TESTBEFUND) return testbefund(letzter);
+  return { [letzter.art]: letzter.grund };
+}
+
 function meldungen(zeilen) {
   const gefunden = { Gleichwertig: [], Nötig: [] };
   for (const zeile of zeilen) {
@@ -102,8 +118,8 @@ export function zweckUnklar(ausstieg) {
 export function ausgang(text, rolle) {
   const zeilen = antwortZeilen(text);
   const letzter = zeilen.map((zeile) => auswegDer(zeile, rolle)).findLast((weg) => weg !== null);
-  const leer = { [AUSSTIEG]: null, voraussetzung: null, [ALTER_TEST]: null };
-  const weg = letzter === undefined ? {} : letzter.art === ALTER_TEST ? alterTest(letzter, rolle) : { [letzter.art]: letzter.grund };
+  const leer = { [AUSSTIEG]: null, voraussetzung: null, [ALTER_TEST]: null, [TESTBEFUND]: null };
+  const weg = letzter === undefined ? {} : wegDes(letzter, rolle);
   return { ...leer, ...weg, zeile: letzter?.zeile ?? null, ...meldungen(zeilen), zweck: zweckAbsaetze(zeilen) };
 }
 

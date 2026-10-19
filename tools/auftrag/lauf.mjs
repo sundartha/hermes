@@ -9,8 +9,9 @@ import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
+import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
-import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, ladePhase, reihenfolge } from "./format.mjs";
+import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -23,6 +24,7 @@ import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
+import { zeilenDes } from "./zeilen.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
@@ -39,6 +41,9 @@ const NICHT_GEKUERZT =
   "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
 const ZITAT = "> ";
+const BLOB = " blob ";
+const PLAENE = "plaene/";
+const ANLEITUNG = ".md";
 const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
@@ -65,12 +70,21 @@ function nachfrage(ids) {
   ].join("\n");
 }
 
+function istCodeDatei(datei) {
+  return !istTestdatei(datei) && !datei.toLowerCase().endsWith(ANLEITUNG) && !datei.startsWith(PLAENE);
+}
+
+function ausgefuehrteFaelle(root, pfad) {
+  const { faelle } = laufe(root, pfad);
+  return faelle.filter(({ name, still }) => !still && name !== pfad).map(({ name }) => name);
+}
+
 function befundOhneZweck(ergebnis) {
   return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null }) {
+  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null, befund = null }) {
     this.kontext = { phase, auftrag, root, design };
     this.aufraeumen = aufraeumen;
     this.vorbau = vorbau;
@@ -84,6 +98,9 @@ class AuftragsLauf {
     this.voraussetzung = null;
     this.ausstieg = null;
     this.alterTest = null;
+    this.testbefund = null;
+    this.befund = befund;
+    this.abnahmeFaelle = [];
     this.entscheidung = null;
     this.patch = null;
     this.basis = kopf(root);
@@ -181,6 +198,7 @@ class AuftragsLauf {
     }
     Object.assign(this.zweck[rolle], ergebnis.ausgang.zweck);
     if (ergebnis.alterTest) return this.pruefeUndBelegeAltenTest(ergebnis.alterTest);
+    if (ergebnis.ausgang.testbefund) return this.pruefeTestbefund(ergebnis.ausgang.testbefund);
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
     this.ausstieg = ergebnis.ausstieg;
@@ -189,9 +207,44 @@ class AuftragsLauf {
     return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`, GRUND.AGENT_EXIT);
   }
 
-  alterTestAlsAusstieg(alterTest) {
-    this.ausstieg = alterTest.zeile;
-    return this.scheitert(`Auftrag passt nicht: ${alterTest.zeile}`);
+  alsAusstieg({ zeile }) {
+    this.ausstieg = zeile;
+    return this.scheitert(`Auftrag passt nicht: ${zeile}`);
+  }
+
+  zeilenAnDerBasis(datei) {
+    const { root } = this.kontext;
+    if (!gibtEsIn(this.basis, datei, root)) return 0;
+    const [eintrag] = git(["ls-tree", "-z", this.basis, "--", datei], { cwd: root }).split(NUL);
+    const [art, pfad] = eintrag.split("\t");
+    if (pfad !== datei || !art.includes(BLOB)) return 0;
+    return zeilenDes(git(["show", `${this.basis}:${datei}`], { cwd: root }).trimEnd()).length;
+  }
+
+  zeigtAufBestehendenCode({ datei, nummer }) {
+    if (!brauchtRotenTest(this.kontext.auftrag) || !istCodeDatei(datei)) return false;
+    return nummer > 0 && nummer <= this.zeilenAnDerBasis(datei);
+  }
+
+  pruefeTestbefund(befund) {
+    if (!this.zeigtAufBestehendenCode(befund) || this.abnahmeFaelle.length === 0) return this.alsAusstieg(befund);
+    const { root, auftrag } = this.kontext;
+    this.testbefund = { ...befund, test: git(["show", `${this.basisBau}:${auftrag.abnahme}`], { cwd: root }), faelle: this.abnahmeFaelle };
+    return this.scheitert(befund.zeile);
+  }
+
+  merkeAbnahmeFaelle() {
+    const { root, auftrag } = this.kontext;
+    this.abnahmeFaelle = ausgefuehrteFaelle(root, auftrag.abnahme);
+    return true;
+  }
+
+  faelleErhalten() {
+    if (this.befund === null) return true;
+    const { root, auftrag } = this.kontext;
+    const ausgefuehrt = ausgefuehrteFaelle(root, auftrag.abnahme);
+    const fehlen = this.befund.faelle.filter((name) => !ausgefuehrt.includes(name));
+    return fehlen.length === 0 || this.scheitert(`Der neu geschriebene Abnahmetest lässt Fälle des verworfenen weg: ${fehlen.join(", ")}`);
   }
 
   genannterAlterTest(alterTest) {
@@ -204,7 +257,7 @@ class AuftragsLauf {
   pruefeUndBelegeAltenTest(alterTest) {
     const { root } = this.kontext;
     const genannt = this.genannterAlterTest(alterTest);
-    if (genannt === null) return this.alterTestAlsAusstieg(alterTest);
+    if (genannt === null) return this.alsAusstieg(alterTest);
     if (!this.grenzen("bau", this.basisBau)) return false;
     const lauf = this.pruefung(ALTER_TEST, ["npm", "--silent", "test", "--", genannt.datei]);
     this.alterTest = { ...genannt, rot: lauf.exitCode !== 0, diff: sichereDiff(root, this.basisBau) };
@@ -344,9 +397,11 @@ class AuftragsLauf {
       ? [
           () => this.agent("test", testAgentPrompt(this.kontext)),
           () => this.grenzen("test", this.basis),
+          () => this.faelleErhalten(),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
+          () => this.merkeAbnahmeFaelle(),
           () => bisektion(this),
         ]
       : [() => this.vorherGruen()];
@@ -387,6 +442,7 @@ class AuftragsLauf {
       voraussetzung: this.voraussetzung,
       ausstieg: this.ausstieg,
       alterTest: this.alterTest,
+      testbefund: this.testbefund,
       entscheidung: this.entscheidung,
       patch: this.patch,
       commit: this.commit,
