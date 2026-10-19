@@ -1,35 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerTools } from "../src/mcp-tools.js";
 import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { GERMAN_STOPWORDS } from "./gemeinsam/deutsch-erkennung.mjs";
+import { captureToolDescriptions } from "./gemeinsam/werkzeug-registrierung.js";
 
 const NON_EMPHASIS_TOKENS = new Set(["AI", "KYC", "XX", "JSON", "ID"]);
 const CAPS_TOKEN = /\b[A-Z]{2,}\b/g;
 
 function capsMarkersOf(text) {
   return (text.match(CAPS_TOKEN) || []).filter((t) => !NON_EMPHASIS_TOKENS.has(t));
-}
-
-function captureDescriptions(ctx = {}) {
-  const descriptions = new Map();
-  const collect = (name, description, schema) => {
-    descriptions.set(name, description || "");
-    for (const [field, node] of Object.entries(schema || {})) {
-      descriptions.set(`${name}.${field}`, node?.description || "");
-      const inner = typeof node?.unwrap === "function" ? node.unwrap() : null;
-      if (!inner?.shape) continue;
-      for (const [sub, subNode] of Object.entries(inner.shape))
-        descriptions.set(`${name}.${field}.${sub}`, subNode?.description || "");
-    }
-  };
-  const fakeServer = {
-    tool: (name, description, schema) => collect(name, description, schema),
-    registerTool: (name, config) => collect(name, config.description, config.inputSchema),
-    registerResource() {},
-  };
-  registerTools(fakeServer, ctx);
-  return descriptions;
 }
 
 const EXPECTED_MARKERS = {
@@ -85,7 +64,7 @@ const EXPECTED_MARKERS = {
 };
 
 test("O14: keine der MCP-Tool-/Feld-Beschreibungen enthaelt noch deutschen Text", () => {
-  const descriptions = captureDescriptions();
+  const descriptions = captureToolDescriptions();
   assert.ok(descriptions.size > 0, "es wurden ueberhaupt Beschreibungen eingesammelt");
   for (const [pathName, description] of descriptions)
     assert.doesNotMatch(description, GERMAN_STOPWORDS, `${pathName} ist englisch`);
@@ -99,7 +78,7 @@ test("O14: die Stopwortliste ist byte-gepinnt (Aufweichen ist verboten)", () => 
 });
 
 test("O14: die Emphase-Marker sind je Beschreibung nach Anzahl UND Reihenfolge erhalten", () => {
-  const descriptions = captureDescriptions();
+  const descriptions = captureToolDescriptions();
   assert.deepEqual(
     [...descriptions.keys()].sort(),
     Object.keys(EXPECTED_MARKERS).sort(),
@@ -110,7 +89,7 @@ test("O14: die Emphase-Marker sind je Beschreibung nach Anzahl UND Reihenfolge e
 });
 
 test("O14: die Negativ-Beispiele der Qualitaets-Kette stehen woertlich in der EN-Fassung", () => {
-  const descriptions = captureDescriptions();
+  const descriptions = captureToolDescriptions();
   const objective = descriptions.get("place_call.objective");
   assert.match(objective, /NO bare-infinitive stub like 'Book an appointment'/);
   assert.match(objective, /read out VERBATIM/);
@@ -120,7 +99,7 @@ test("O14: die Negativ-Beispiele der Qualitaets-Kette stehen woertlich in der EN
 });
 
 test("LANG-15 (SOLL, gruen nach F-2) - place_call.language nennt den Katalog, lehnt unbekannte Codes ab und bleibt von der Offenlegung getrennt", () => {
-  const text = captureDescriptions().get("place_call.language");
+  const text = captureToolDescriptions().get("place_call.language");
   assert.ok(text, "der Pfad existiert");
   for (const code of SUPPORTED_LANGUAGES) assert.ok(text.includes(code), `Katalog nennt ${code}`);
   assert.match(text, /REJECTED/);
@@ -139,18 +118,18 @@ const EXPECTED_CONSULT_MARKERS = {
 };
 
 test("O14/AL-P13: die Consult-Werkzeuge erscheinen nur mit Faehigkeit - und sind englisch", () => {
-  const withConsult = captureDescriptions({ consultAllowed: true });
+  const withConsult = captureToolDescriptions({ consultAllowed: true });
   for (const pathName of Object.keys(EXPECTED_CONSULT_MARKERS)) {
-    assert.ok(!captureDescriptions().has(pathName), `${pathName} fehlt ohne Faehigkeit`);
+    assert.ok(!captureToolDescriptions().has(pathName), `${pathName} fehlt ohne Faehigkeit`);
     assert.ok(withConsult.has(pathName), `${pathName} erscheint mit Faehigkeit`);
     assert.doesNotMatch(withConsult.get(pathName), GERMAN_STOPWORDS, `${pathName} ist englisch`);
   }
 });
 
 test("O14/AL-P13: die Emphase der Consult-Werkzeuge ist nach Anzahl UND Reihenfolge gepinnt", () => {
-  const withConsult = captureDescriptions({ consultAllowed: true });
+  const withConsult = captureToolDescriptions({ consultAllowed: true });
   for (const [pathName, expected] of Object.entries(EXPECTED_CONSULT_MARKERS))
     assert.deepEqual(capsMarkersOf(withConsult.get(pathName)), expected, pathName);
   assert.deepEqual(capsMarkersOf(withConsult.get("place_call")), EXPECTED_MARKERS.place_call);
-  assert.ok(withConsult.get("place_call").startsWith(captureDescriptions().get("place_call")));
+  assert.ok(withConsult.get("place_call").startsWith(captureToolDescriptions().get("place_call")));
 });
