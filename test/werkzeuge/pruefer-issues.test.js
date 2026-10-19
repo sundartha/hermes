@@ -25,20 +25,39 @@ const TITEL_MIT_SPAN = "Prüfer: N7 in `src/zahl.js`, Zeile 1";
 const GUELTIGE_PR = 1133;
 const TITELLIMIT = 200;
 
-function mitStatus(offen, geschlossen) {
-  return [...offen.map((title) => ({ title, state: "open" })), ...geschlossen.map((title) => ({ title, state: "closed" }))];
+function mitStatus(offen, geschlossen, { texte = new Map(), zu = new Set() } = {}) {
+  return [
+    ...offen.map((title, index) => ({
+      number: index + 1,
+      title,
+      body: texte.get(index + 1) ?? texte.get(title),
+      state: zu.has(`/issues/${index + 1}`) ? "closed" : "open",
+    })),
+    ...geschlossen.map((title, index) => ({ number: -index - 1, title, body: texte.get(title), state: "closed" })),
+  ];
 }
 
-function scheinGithub(offen = [], geschlossen = []) {
+function scheinGithub(offen = [], geschlossen = [], texte = new Map()) {
   const gesendet = [];
+  const abgefragt = [];
+  const zu = new Set();
+  const kommentare = new Map();
   return {
     gesendet,
+    abgefragt,
     hole: workflowAbfrage,
-    alle: async (pfad, liste) => liste(mitStatus(offen, geschlossen)),
+    alle: async (pfad, liste) =>
+      abgefragt.push(pfad) &&
+      liste(pfad.endsWith("/comments") ? (kommentare.get(pfad) ?? []) : mitStatus(offen, geschlossen, { texte, zu })),
     sende: async (methode, pfad, daten) => {
       gesendet.push({ methode, pfad, daten });
-      if (pfad === "/issues") offen.push(daten.title);
-      return {};
+      if (pfad.endsWith("/comments")) kommentare.set(pfad, [...(kommentare.get(pfad) ?? []), daten]);
+      if (methode === "PATCH" && daten.state === "closed") zu.add(pfad);
+      if (pfad !== "/issues") return {};
+      offen.push(daten.title);
+      texte.set(daten.title, daten.body);
+      kommentare.set(`/issues/${offen.length}/comments`, []);
+      return { number: offen.length };
     },
   };
 }
@@ -68,16 +87,16 @@ test("ein offenes Issue mit gleichem Titel verhindert ein neues, ein anderer Tit
   const issues = [
     { titel: TITEL, sha: HEAD, befund: hinweis(), grund: "" },
     {
-      titel: "Prüfer: G5 in src/text.js",
+      titel: "Prüfer: G3 in src/text.js",
       sha: HEAD,
-      befund: hinweis({ id: "G5", datei: "src/text.js" }),
+      befund: hinweis({ id: "G3", datei: "src/text.js" }),
       grund: "",
     },
   ];
-  assert.deepEqual(await legeIssuesAn(issues, github), { neu: 1, vorhanden: 1 });
+  assert.deepEqual(await legeIssuesAn(issues, github), { neu: 1, kommentare: 0, vorhanden: 1 });
   assert.deepEqual(
     github.gesendet.map(({ daten }) => [daten.title, daten.labels]),
-    [["Prüfer: G5 in src/text.js", ["pruefer"]]],
+    [["Prüfer: G3 in src/text.js", ["pruefer"]]],
   );
   const [{ daten }] = github.gesendet;
   assert.match(daten.body, /````text\nName @jemand ``` unklar\n````/);
@@ -299,9 +318,9 @@ test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gle
   github.alle = (pfad, liste) => abgefragt.push(pfad) && alle(pfad, liste);
   const issues = [
     { titel: geschlossen, sha: HEAD, pr: 7, befund: hinweis(), grund: "" },
-    { titel: "Prüfer: G5 in `src/text.js` (PR #7)", sha: HEAD, pr: 7, befund: hinweis({ id: "G5" }), grund: "" },
+    { titel: "Prüfer: G3 in `src/text.js` (PR #7)", sha: HEAD, pr: 7, befund: hinweis({ id: "G3" }), grund: "" },
   ];
-  assert.deepEqual(await legeIssuesAn(issues, github), { neu: 1, vorhanden: 1 });
+  assert.deepEqual(await legeIssuesAn(issues, github), { neu: 1, kommentare: 0, vorhanden: 1 });
   assert.deepEqual(abgefragt, ["/issues?state=all&labels=pruefer"]);
   const [{ daten }] = github.gesendet;
   assert.ok(daten.body.startsWith(`Der Prüfer hat im Pull Request #7 im Commit ${HEAD} einen Befund gemeldet`), daten.body);
@@ -323,4 +342,111 @@ test("entscheiden übernimmt nur eine positive ganze PR-Nummer und verwirft das 
   for (const pr of ["7 @jemand", "7", 0, -GUELTIGE_PR, GUELTIGE_PR + 0.5, [GUELTIGE_PR]]) {
     assert.deepEqual(await gesendetBei(pr), [[`/statuses/${HEAD}`, "error"]], JSON.stringify(pr));
   }
+});
+
+async function entscheideZweimal(context, befunde, github = scheinGithub()) {
+  setzeAusloeser(context, ciLauf());
+  const ordner = ergebnisOrdner(context, [{ sha: HEAD, patchId: "", zustand: "geprueft", befunde }], { pr: GUELTIGE_PR });
+  const zeilen = context.mock.method(console, "log", () => {});
+  const ohneStatus = () => github.gesendet.filter(({ pfad }) => pfad !== `/statuses/${HEAD}`);
+  await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+  const ersterLauf = ohneStatus();
+  await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+  const ausgabe = zeilen.mock.calls.map(({ arguments: [zeile] }) => zeile.split("; ")[1]);
+  return {
+    ersterLauf: ersterLauf.map(({ pfad, daten }) => [pfad, daten.title ?? daten.body]),
+    wiederholt: ohneStatus().slice(ersterLauf.length),
+    ausgabe,
+  };
+}
+
+test("ein Fehler bekommt ein eigenes Issue: SOLLTE ohne Verbesserungs-ID, BLOCKER mit G5; ein Sicherheitsbefund wird nicht öffentlich", async (context) => {
+  const datei = "tools/auftrag/zahl.mjs";
+  const befunde = [
+    hinweis({ id: "", datei, zeile: 1 }),
+    hinweis({ id: "G3", datei, zeile: 2 }),
+    hinweis({ id: "G5", schwere: "BLOCKER", datei, zeile: 3 }),
+    hinweis({ id: "G5", datei, zeile: 4, sicherheit: true }),
+  ];
+  const { ersterLauf, wiederholt } = await entscheideZweimal(context, befunde);
+  assert.deepEqual(ersterLauf, [
+    ["/issues", `Prüfer: Befund in \`${datei}\`, Zeile 1 (PR #${GUELTIGE_PR})`],
+    ["/issues", `Prüfer: G3 in \`${datei}\`, Zeile 2 (PR #${GUELTIGE_PR})`],
+    ["/issues", `Prüfer: G5 in \`${datei}\`, Zeile 3 (PR #${GUELTIGE_PR})`],
+  ]);
+  assert.deepEqual(wiederholt, []);
+});
+
+test("Verbesserungen werden ein Sammel-Issue je Bereich mit je einem Kommentar; ein Wiederholungslauf legt nichts Neues an", async (context) => {
+  const befunde = [
+    hinweis({ id: "G5", datei: "tools/auftrag/a.mjs", zeile: 1, beleg: "ERSTE-DOPPELUNG" }),
+    hinweis({ id: "T1", datei: "tools/auftrag/b.mjs", zeile: 2, beleg: "TESTLUECKE" }),
+  ];
+  const github = scheinGithub(["Prüfer: G3 in `src/alt.js`, Zeile 1"]);
+  const { ersterLauf, wiederholt, ausgabe } = await entscheideZweimal(context, befunde, github);
+  const [[, title], [kommentarPfad, kommentar]] = ersterLauf;
+  assert.deepEqual([ersterLauf.length, title, kommentarPfad], [2, "Prüfer-Sammlung: tools/auftrag", "/issues/2/comments"]);
+  const [{ daten }] = github.gesendet.filter(({ pfad }) => pfad === "/issues");
+  assert.deepEqual(daten.labels, ["pruefer"]);
+  assert.ok(daten.body.startsWith(`## Prüfer: G5 in \`tools/auftrag/a.mjs\`, Zeile 1 (PR #${GUELTIGE_PR})\n`), daten.body);
+  for (const teil of [`im Commit ${HEAD}`, "ERSTE-DOPPELUNG", "Umbenennen"]) assert.ok(daten.body.includes(teil), teil);
+  assert.ok(kommentar.startsWith(`## Prüfer: T1 in \`tools/auftrag/b.mjs\`, Zeile 2 (PR #${GUELTIGE_PR})\n`), kommentar);
+  assert.ok(kommentar.includes("TESTLUECKE"), kommentar);
+  assert.deepEqual(wiederholt, []);
+  assert.deepEqual(ausgabe, [
+    "Issues neu 1, Kommentare neu 1, schon vorhanden 0.",
+    "Issues neu 0, Kommentare neu 0, schon vorhanden 2.",
+  ]);
+});
+
+test("jeder Bereich hat sein Sammel-Issue, Dateien im Wurzelverzeichnis unter Wurzel; ein geschlossenes Sammel-Issue wird nicht wieder geöffnet", async (context) => {
+  const befunde = [
+    hinweis({ id: "G5", datei: "README.md" }),
+    hinweis({ id: "P11", datei: "test/werkzeuge/pruefer/hilfen.mjs" }),
+    hinweis({ id: "T5", datei: "tools/auftrag/a.mjs" }),
+  ];
+  const github = scheinGithub([], ["Prüfer-Sammlung: tools/auftrag"]);
+  const { ersterLauf } = await entscheideZweimal(context, befunde, github);
+  assert.deepEqual(ersterLauf, [
+    ["/issues", "Prüfer-Sammlung: Wurzel"],
+    ["/issues", "Prüfer-Sammlung: test/werkzeuge"],
+    ["/issues", "Prüfer-Sammlung: tools/auftrag"],
+  ]);
+  assert.ok(github.gesendet.every(({ methode }) => methode === "POST"));
+});
+
+test("ein Befund, der schon in einem geschlossenen Sammel-Issue desselben PRs steht, erscheint nicht in einem neuen", async (context) => {
+  const kopf = (zeile) => `## Prüfer: G5 in \`tools/auftrag/a.mjs\`, Zeile ${zeile} (PR #${GUELTIGE_PR})`;
+  const sammlung = "Prüfer-Sammlung: tools/auftrag";
+  const github = scheinGithub([], [sammlung], new Map([[sammlung, `${kopf(1)}\n\nalter Eintrag`]]));
+  const befunde = [1, 2].map((zeile) => hinweis({ id: "G5", datei: "tools/auftrag/a.mjs", zeile }));
+  const { ersterLauf } = await entscheideZweimal(context, befunde, github);
+  assert.deepEqual(ersterLauf.map(([pfad, text]) => [pfad, text]), [["/issues", sammlung]]);
+  const [{ daten }] = github.gesendet.filter(({ pfad }) => pfad === "/issues");
+  assert.ok(daten.body.startsWith(`${kopf(2)}\n`), daten.body);
+});
+
+test("zwei offene Sammel-Issues eines Bereichs werden zusammengeführt: fehlende Einträge kommen ins ältere, das jüngere wird geschlossen; andere Bereiche werden nicht gelesen", async (context) => {
+  const sammlung = "Prüfer-Sammlung: tools/auftrag";
+  const kopf = (zeile) => `## Prüfer: G5 in \`tools/auftrag/a.mjs\`, Zeile ${zeile} (PR #${GUELTIGE_PR})`;
+  const uebernommen = `${kopf(3)}\n\nEINTRAG-IM-JUENGEREN`;
+  const texte = new Map([
+    [1, `${kopf(1)}\n`],
+    [2, `${uebernommen}\n\n---\n\nWeitere Verbesserungsbefunde kommen als Kommentar hinzu.`],
+  ]);
+  const github = scheinGithub([sammlung, sammlung], ["Prüfer-Sammlung: src"], texte);
+  const befunde = [2, 3].map((zeile) => hinweis({ id: "G5", datei: "tools/auftrag/a.mjs", zeile }));
+  const { ersterLauf, wiederholt } = await entscheideZweimal(context, befunde, github);
+  const doppelt = "Doppelt zu #1; weitere Einträge für diesen Bereich kommen dort hinzu.";
+  assert.deepEqual(ersterLauf.slice(0, 3), [
+    ["/issues/1/comments", uebernommen],
+    ["/issues/2/comments", doppelt],
+    ["/issues/2", undefined],
+  ]);
+  const geschlossen = github.gesendet.filter(({ methode }) => methode === "PATCH").map(({ daten }) => daten);
+  assert.deepEqual(geschlossen, [{ state: "closed", state_reason: "not_planned" }]);
+  const [pfad, kommentar] = ersterLauf[3];
+  assert.ok(pfad === "/issues/1/comments" && kommentar.startsWith(`${kopf(2)}\n`), kommentar);
+  assert.deepEqual([ersterLauf.length, wiederholt], [4, []]);
+  assert.ok(!github.abgefragt.some((abfrage) => abfrage.startsWith("/issues/-")), github.abgefragt.join());
 });

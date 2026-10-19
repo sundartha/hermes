@@ -324,7 +324,7 @@ async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
   await github.sende("POST", `/statuses/${ziel}`, status);
   const issues = await legeIssuesAn(urteil.issues, github);
   console.log(
-    `Prüfer: ${urteil.state} (${urteil.description}); Issues neu ${issues.neu}, schon offen ${issues.vorhanden}.`,
+    `Prüfer: ${urteil.state} (${urteil.description}); Issues neu ${issues.neu}, Kommentare neu ${issues.kommentare}, schon vorhanden ${issues.vorhanden}.`,
   );
   return 0;
 }
