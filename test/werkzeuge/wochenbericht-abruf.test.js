@@ -73,13 +73,17 @@ test("Wochenbericht: nach zwei Netzfehlern hintereinander bricht der Abruf ab", 
   assert.equal(anfragen.length, 2);
 });
 
-for (const status of [404, 500, 503]) {
-  test(`Wochenbericht: HTTP ${status} bricht sofort ab, ohne Wiederholung`, async (context) => {
-    const anfragen = await attrappe(context, (nummer, anfrage, antwort) => json(antwort, status, { message: "nein" }));
-    await assert.rejects(api("/rate_limit"), new RegExp(`mit HTTP ${status} antwortet`));
-    assert.equal(anfragen.length, 1);
-  });
+async function brichtSofortAb(context, status) {
+  const anfragen = await attrappe(context, (nummer, anfrage, antwort) => json(antwort, status, { message: "nein" }));
+  await assert.rejects(api("/rate_limit"), new RegExp(`mit HTTP ${status} antwortet`));
+  assert.equal(anfragen.length, 1);
 }
+
+test("Wochenbericht: HTTP 404 bricht sofort ab, ohne Wiederholung", (context) => brichtSofortAb(context, 404));
+
+test("Wochenbericht: HTTP 500 bricht sofort ab, ohne Wiederholung", (context) => brichtSofortAb(context, 500));
+
+test("Wochenbericht: HTTP 503 bricht sofort ab, ohne Wiederholung", (context) => brichtSofortAb(context, 503));
 
 test("Wochenbericht: ein schreibender Aufruf wird nach einem Netzfehler nicht wiederholt", async (context) => {
   const anfragen = await attrappe(context, (nummer, anfrage) => trennen(anfrage));
@@ -93,4 +97,13 @@ test("Wochenbericht: eine GraphQL-Antwort mit Fehlern bricht ab, statt leere Dat
   );
   await assert.rejects(graphql("query { viewer { login } }", {}), /GraphQL-Abfrage mit Fehlern antwortet: Something went wrong/);
   assert.deepEqual(anfragen, ["POST /graphql"]);
+});
+
+test("Wochenbericht: eine Antwort mit kaputtem Inhalt wird als unlesbar gemeldet, nicht als Netzfehler, und nicht wiederholt", async (context) => {
+  const anfragen = await attrappe(context, (nummer, anfrage, antwort) => {
+    antwort.writeHead(200, { "content-type": "application/json" });
+    antwort.end("{kaputt");
+  });
+  await assert.rejects(api("/rate_limit"), /GET \/rate_limit eine unlesbare Antwort liefert/);
+  assert.equal(anfragen.length, 1);
 });

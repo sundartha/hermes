@@ -33,6 +33,10 @@ async function answer(url, init, { retry, timeoutMs }) {
   }
 }
 
+function failure(error) {
+  return NETWORK_ERRORS.has(error.name) ? "keine Antwort liefert" : "eine unlesbare Antwort liefert";
+}
+
 function requestInit(method, body) {
   return {
     method,
@@ -52,7 +56,7 @@ export async function api(
 ) {
   const url = `${env.GITHUB_API_URL || GITHUB_API}${path}`;
   const { response, value } = await answer(url, requestInit(method, body), { retry, timeoutMs }).catch((error) => {
-    throw new Error(`die GitHub-API auf ${method} ${path} keine Antwort liefert (${error.message})`);
+    throw new Error(`die GitHub-API auf ${method} ${path} ${failure(error)} (${error.message})`);
   });
   if (response.status === HTTP_NO_CONTENT || accepted.includes(response.status)) return null;
   if (!response.ok) {
