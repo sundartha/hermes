@@ -1036,16 +1036,10 @@
   },
   "src/wiring/web-login.js": {
     "id-length": {
-      "count": 3
-    },
-    "max-lines-per-function": {
       "count": 1
     },
     "no-magic-numbers": {
       "count": 17
-    },
-    "no-param-reassign": {
-      "count": 1
     }
   },
   "src/worker/provisioning-orchestrator.js": {

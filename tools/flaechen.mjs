@@ -20,7 +20,7 @@ const DEPENDENCY_NAMES = [
   ...["store", "audit", "callFinish", "lifecycle", "provisioning", "outboundGates"],
   ...["callQuotaDenial", "requestTenant", "requireTenant", "conversationWatchdog", "ttsStore"],
   ...["directiveSynth", "voiceRender", "costTruing", "messaging", "consultDelivery"],
-  ...["elevenLabsOutbound", "inboundBridges", "accountsRef", "auditStoreRef", "durableAuditFor"],
+  ...["elevenLabsOutbound", "inboundBridges", "durableAuditFor"],
 ];
 
 const standIn = new Proxy(function standIn() {}, {

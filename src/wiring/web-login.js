@@ -73,6 +73,19 @@ export function selectMailer(
   return _makeSmtpMailer(config);
 }
 
+function makeApplyTenantIdentity(store) {
+  return async (tenantId, identity) => {
+    try {
+      await store.withStoreLock(() => {
+        const state = store.load();
+        if (setTenantIdentityIfAbsent(state, tenantId, identity)) store.save();
+      });
+    } catch (error) {
+      console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", error.message);
+    }
+  };
+}
+
 export async function wireWebLogin({
   app,
   config,
@@ -83,16 +96,14 @@ export async function wireWebLogin({
   stripeWebhookPath,
   appPath,
   messaging,
-  accountsRef, auditStoreRef,
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
   const accounts = makeAccounts(portalRunner, {
     defaultCountry: config.provisioning.provisioningCountry,
   });
-  if (accountsRef) accountsRef.current = accounts;
   const sessions = makeSessions(portalRunner);
-  const auditStore = makeAuditStore(portalRunner); if (auditStoreRef) Object.assign(auditStoreRef, { current: auditStore });
+  const auditStore = makeAuditStore(portalRunner);
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
   scheduleReleaseReconcile({
     store,
@@ -116,17 +127,6 @@ export async function wireWebLogin({
   const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: config.auth.adminEmails });
 
-  const applyTenantIdentity = async (tenantId, identity) => {
-    try {
-      await store.withStoreLock(() => {
-        const s = store.load();
-        if (setTenantIdentityIfAbsent(s, tenantId, identity)) store.save();
-      });
-    } catch (e) {
-      console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", e.message);
-    }
-  };
-
   app.use("/auth", createRateLimiter(config.auth.loginRateLimitPerMin));
   app.use(
     makeWebAuthRoutes({
@@ -143,7 +143,7 @@ export async function wireWebLogin({
       devLoginEnabled: config.auth.devLoginEnabled,
       ensureTenant: (tid) => store.ensureTenant(tid),
       bindSub: (sub, tid) => store.bindSubToTenant(sub, tid),
-      applyTenantIdentity,
+      applyTenantIdentity: makeApplyTenantIdentity(store),
     }),
   );
 
@@ -178,30 +178,19 @@ export async function wireWebLogin({
     );
   }
 
-  app.post(
-    stripeWebhookPath,
-    makeStripeWebhookRoute({
-      config, store, audit, accounts, sessions, billing: stripeBilling, provision, messaging,
-      numberProvisioner: telnyxProvisioner,
-      workos: workosManagement,
-      auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
-    }),
-  );
+  const stripeWebhookDeps = {
+    store, accounts, sessions, audit, provision, billing: stripeBilling,
+    numberProvisioner: telnyxProvisioner,
+    workos: workosManagement,
+    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
+  };
+  app.post(stripeWebhookPath, makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 
   if (config.billing.paymentEnabled) {
-    scheduleStripeReconcile({
-      store,
-      billing: stripeBilling,
-      webhookDeps: {
-        store, accounts, sessions, audit, req: null, provision, billing: stripeBilling,
-        numberProvisioner: telnyxProvisioner,
-        workos: workosManagement,
-        auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
-      },
-    });
+    scheduleStripeReconcile({ store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
   }
 
   console.log("[boot] Web-Login aktiv");
 
-  return { webAuthMw, adminMw };
+  return { webAuthMw, adminMw, accounts, auditStore };
 }
