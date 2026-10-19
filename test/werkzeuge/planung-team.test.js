@@ -3,7 +3,8 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, utimesS
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { Team, abdruck, abdruckUnterschiede, rollenStart } from "../../tools/auftrag/planung/team.mjs";
+import { planBericht } from "../../tools/auftrag/planung/planbericht.mjs";
+import { Abbruch, Team, abdruck, abdruckUnterschiede, rollenStart } from "../../tools/auftrag/planung/team.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -300,6 +301,93 @@ test("team: scheitert der Vergleich der Bäume, bricht der Abdruck ab, statt kei
   const ort = probe(context);
   const echt = abdruck(ort, join(ort, ORDNER));
   assert.throws(() => abdruckUnterschiede(ort, { ...echt, baum: UNGUELTIGER_BAUM }, { ...echt, baum: ANDERER_UNGUELTIGER_BAUM }), /diff-tree/);
+});
+
+const VERBINDUNG_WEG = "API Error: Connection dropped (ECONNRESET)";
+const LIMIT_SPERRE_MS = 50;
+const ERSATZ_CLAUDE = `#!${process.execPath}
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const ort = dirname(process.argv[1]);
+const argumente = process.argv.slice(2);
+const wert = (schalter) => { const stelle = argumente.indexOf(schalter); return stelle === -1 ? undefined : argumente[stelle + 1]; };
+readFileSync(0, "utf8");
+const protokoll = join(ort, "aufrufe.jsonl");
+const stelle = existsSync(protokoll) ? readFileSync(protokoll, "utf8").trim().split("\\n").length : 0;
+const schritt = JSON.parse(readFileSync(join(ort, "folge.json"), "utf8"))[stelle];
+appendFileSync(protokoll, JSON.stringify({ resume: wert("--resume"), sitzung: wert("--resume") ?? wert("--session-id") }) + "\\n");
+const melde = (zeile) => process.stdout.write(JSON.stringify(zeile) + "\\n");
+if (schritt.limit) {
+  melde({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: Date.now() + ${LIMIT_SPERRE_MS} } });
+  melde({ type: "result", is_error: true, result: "limit reached" });
+  process.exit(1);
+}
+melde({ type: "assistant", message: { id: "m" + stelle, content: [{ type: "text", text: schritt.text }], usage: { input_tokens: 1 } } });
+melde({ type: "result", is_error: schritt.exit !== undefined, result: schritt.text });
+process.exit(schritt.exit ?? 0);
+`;
+
+function teamMitErsatz(context, folge) {
+  const ort = probeRepository(context, {
+    ".gitignore": ".fortschritt/\n",
+    [`${ORDNER}/pitch.md`]: "# Pitch\n",
+    ".claude/agents/erkunder.md": "---\ndescription: Probe\ntools: Read\nmodel: sonnet\neffort: low\n---\nProbe\n",
+  });
+  const ablage = probeDirectory(context, { "folge.json": JSON.stringify(folge) });
+  const programm = join(ablage, "claude");
+  writeFileSync(programm, ERSATZ_CLAUDE, { mode: AUSFUEHRBAR });
+  const vorher = process.env.HERMES_CLAUDE;
+  process.env.HERMES_CLAUDE = programm;
+  context.after(() => {
+    if (vorher === undefined) delete process.env.HERMES_CLAUDE;
+    else process.env.HERMES_CLAUDE = vorher;
+  });
+  const team = new Team(ort, join(ort, ORDNER), { netzWartezeitenMs: [0, 0] });
+  const aufrufe = () => readFileSync(join(ablage, "aufrufe.jsonl"), "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
+  return { team, wer: team.teilnehmer("erkunder"), aufrufe };
+}
+
+const JSON_ANTWORT = { text: "Bericht.\n\n```json\n{\"fertig\": true}\n```" };
+const NETZABBRUCH = { text: VERBINDUNG_WEG, exit: 1 };
+
+async function assertFortgesetzt({ team, wer, aufrufe }) {
+  const antwort = await team.frage(wer, "Erkunde.");
+  assert.deepEqual(antwort, { art: "json", wert: { fertig: true } });
+  const [erster, zweiter] = aufrufe();
+  assert.equal(zweiter.resume, erster.sitzung);
+  return erster.sitzung;
+}
+
+test("team: bricht die API-Verbindung eines Agenten einmal ab, setzt das Skript dieselbe Sitzung fort und protokolliert den Versuch", async (context) => {
+  const probe = teamMitErsatz(context, [NETZABBRUCH, JSON_ANTWORT]);
+  const { team } = probe;
+  const sitzung = await assertFortgesetzt(probe);
+  assert.equal(team.netzabbrueche.length, 1);
+  assert.deepEqual({ ...team.netzabbrueche[0], zeit: undefined }, { rolle: "erkunder", sitzung, versuch: 1, zeit: undefined, fehler: VERBINDUNG_WEG, warteS: 0 });
+  assert.ok(!Number.isNaN(Date.parse(team.netzabbrueche[0].zeit)));
+  assert.deepEqual(team.ruecksendungen, {});
+  const bericht = planBericht({ exit: 0, grund: "fertig", annahmen: [], befunde: [], beginn: Date.now() }, { root: team.root, team });
+  assert.deepEqual(bericht.netzabbrueche, team.netzabbrueche);
+});
+
+test("team: bricht die API-Verbindung dreimal ab, bricht die Planung nach zwei Fortsetzungen ab wie bisher", async (context) => {
+  const { team, wer, aufrufe } = teamMitErsatz(context, [NETZABBRUCH, NETZABBRUCH, NETZABBRUCH, JSON_ANTWORT]);
+  await assert.rejects(team.frage(wer, "Erkunde."), (fehler) => fehler instanceof Abbruch && fehler.message === "erkunder ist abgestürzt (Exit 1)");
+  assert.equal(aufrufe().length, 3);
+  assert.deepEqual(team.netzabbrueche.map(({ versuch }) => versuch), [1, 2]);
+});
+
+test("team: endet ein Agent mit Exit 1 und einem anderen Fehler, bricht die Planung sofort ab", async (context) => {
+  const { team, wer, aufrufe } = teamMitErsatz(context, [{ text: "API Error: 400 invalid_request_error", exit: 1 }, JSON_ANTWORT]);
+  await assert.rejects(team.frage(wer, "Erkunde."), (fehler) => fehler instanceof Abbruch && fehler.message === "erkunder ist abgestürzt (Exit 1)");
+  assert.equal(aufrufe().length, 1);
+  assert.deepEqual(team.netzabbrueche, []);
+});
+
+test("team: nach dem Nutzungslimit setzt das Skript dieselbe Sitzung fort, ohne einen Netzabbruch zu zählen", async (context) => {
+  const probe = teamMitErsatz(context, [{ limit: true }, JSON_ANTWORT]);
+  await assertFortgesetzt(probe);
+  assert.deepEqual(probe.team.netzabbrueche, []);
 });
 
 test("suche: nennt Treffer mit Datei und Zeile", (context) => {
