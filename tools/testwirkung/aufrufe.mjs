@@ -2,6 +2,7 @@ import { extname } from "node:path";
 
 import { Linter } from "eslint";
 
+import { festerText } from "../eslint-rules/knoten.js";
 import { javascriptPfad, laufzeitText } from "../umbenennung.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?[jt]s$/;
@@ -23,19 +24,12 @@ function istTestaufruf({ callee, arguments: argumente }) {
   return callee.property.name === UNTERTEST && argumente.length >= MIN_UNTERTEST_ARGUMENTE && FUNKTIONSARTEN.has(letztes.type);
 }
 
-function festerName(argument) {
-  if (argument?.type === "Literal") return typeof argument.value === "string" ? argument.value : undefined;
-  if (argument?.type !== "TemplateLiteral" || argument.expressions.length > 0) return undefined;
-  const [{ value }] = argument.quasis;
-  return value.cooked;
-}
-
 export function maskiert(text) {
   return text.replace(REGEX_ZEICHEN, "\\$&");
 }
 
 function namensmuster(argument) {
-  const name = festerName(argument);
+  const name = festerText(argument);
   if (name !== undefined) return `^${maskiert(name)}$`;
   if (argument?.type !== "TemplateLiteral") return BELIEBIG;
   const stuecke = argument.quasis.map(({ value }) => maskiert(value.cooked ?? ""));
@@ -44,7 +38,7 @@ function namensmuster(argument) {
 
 function bezeichnung(quelle, argument) {
   if (argument === undefined) return "";
-  return festerName(argument) ?? quelle.getText(argument);
+  return festerText(argument) ?? quelle.getText(argument);
 }
 
 function aufrufstelle({ callee }) {
@@ -59,9 +53,9 @@ function erfasse(quelle, knoten) {
     .getAncestors(knoten)
     .filter((vorfahr) => vorfahr.type === "CallExpression" && istTestaufruf(vorfahr));
   return {
-    name: festerName(erstes),
+    name: festerText(erstes),
     text: erstes === undefined ? "" : quelle.getText(erstes),
-    vorfahren: vorfahren.map((vorfahr) => festerName(vorfahr.arguments[0])).filter((name) => name !== undefined),
+    vorfahren: vorfahren.map((vorfahr) => festerText(vorfahr.arguments[0])).filter((name) => name !== undefined),
     bezeichnung: bezeichnung(quelle, erstes),
     muster: [knoten, ...vorfahren].map((aufruf) => namensmuster(aufruf.arguments[0])),
     von: knoten.loc.start.line,

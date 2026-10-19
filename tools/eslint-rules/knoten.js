@@ -1,3 +1,5 @@
+const ANFANG = 0;
+
 export function knotenUnter(start, visitorKeys, steigtAb = () => true) {
   const gefunden = [];
   const offen = [start];
@@ -24,4 +26,16 @@ export function zugriffsName(zugriff) {
 export function schluesselName(eigenschaft) {
   if (eigenschaft.type !== "Property" || eigenschaft.computed) return undefined;
   return eigenschaft.key.type === "Identifier" ? eigenschaft.key.name : eigenschaft.key.value;
+}
+
+export function festerText(knoten) {
+  if (knoten?.type === "Literal")
+    return typeof knoten.value === "string" ? knoten.value : undefined;
+  if (knoten?.type !== "TemplateLiteral" || knoten.expressions.length > 0) return undefined;
+  const [teil] = knoten.quasis;
+  return teil.value.cooked;
+}
+
+export function nachAnfang(links, rechts) {
+  return links.range[ANFANG] - rechts.range[ANFANG];
 }

@@ -15,12 +15,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
-import { pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
-import { importeMitPlatzhalter, importSchluessel } from "./eslint-rules/fester-importpfad.js";
-import {
-  lesestellenSchluessel,
-  quelltextLesestellen,
-} from "./eslint-rules/kein-quelltext-als-text.js";
+import { knotenSchluessel, pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
+import { importeMitPlatzhalter } from "./eslint-rules/fester-importpfad.js";
+import { quelltextLesestellen } from "./eslint-rules/kein-quelltext-als-text.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import { aenderungenSeit, legeWorktreeAn } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
@@ -37,10 +34,7 @@ import {
   teilZurueck,
   unveraendert,
 } from "./bestand-rueckfuehrung.mjs";
-import {
-  selbstpruefungen,
-  selbstpruefungsSchluessel,
-} from "./eslint-rules/keine-selbstpruefung.js";
+import { selbstpruefungen } from "./eslint-rules/keine-selbstpruefung.js";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -290,49 +284,19 @@ export async function eslintCollectorFindings(root, ruleName, collector) {
   return results.flatMap((result) => lintResultFindings(root, ruleId, result));
 }
 
-function textReadingKeys(context, file) {
-  const { sourceCode } = context;
-  return quelltextLesestellen(sourceCode, file).map((call) => ({
-    key: lesestellenSchluessel(sourceCode, file, call),
-    loc: call.loc,
-  }));
+function nodeKeys(nodesOf) {
+  return (context, file) => {
+    const { sourceCode } = context;
+    return nodesOf(sourceCode, file).map((node) => ({
+      key: knotenSchluessel(sourceCode, file, node),
+      loc: node.loc,
+    }));
+  };
 }
 
-function textReadingFindings(root) {
-  return eslintCollectorFindings(root, "quelltext-als-text", {
-    keysOf: textReadingKeys,
-    files: TEST_FILES,
-  });
-}
-
-function selfCheckKeys(context, file) {
-  const { sourceCode } = context;
-  return selbstpruefungen(sourceCode, file).map((call) => ({
-    key: selbstpruefungsSchluessel(sourceCode, file, call),
-    loc: call.loc,
-  }));
-}
-
-function selfCheckFindings(root) {
-  return eslintCollectorFindings(root, "selbstpruefung", {
-    keysOf: selfCheckKeys,
-    files: TEST_FILES,
-  });
-}
-
-function placeholderImportKeys(context, file) {
-  const { sourceCode } = context;
-  return importeMitPlatzhalter(sourceCode).map((expression) => ({
-    key: importSchluessel(sourceCode, file, expression),
-    loc: expression.loc,
-  }));
-}
-
-function placeholderImportFindings(root) {
-  return eslintCollectorFindings(root, "fester-importpfad", {
-    keysOf: placeholderImportKeys,
-    files: TEST_FILES,
-  });
+function testRuleFindings(ruleName, nodesOf) {
+  return (root) =>
+    eslintCollectorFindings(root, ruleName, { keysOf: nodeKeys(nodesOf), files: TEST_FILES });
 }
 
 function misplacedLessons(root) {
@@ -394,9 +358,21 @@ export const TOOLS = {
     findingPerFile: true,
     zweck: "basis/semgrep",
   },
-  "quelltext-als-text": { findings: textReadingFindings, ...PER_FILE, zweck: "basis/quelltext-als-text" },
-  selbstpruefung: { findings: selfCheckFindings, ...PER_FILE, zweck: "basis/selbstpruefung" },
-  "fester-importpfad": { findings: placeholderImportFindings, ...PER_FILE, zweck: "basis/fester-importpfad" },
+  "quelltext-als-text": {
+    findings: testRuleFindings("quelltext-als-text", quelltextLesestellen),
+    ...PER_FILE,
+    zweck: "basis/quelltext-als-text",
+  },
+  selbstpruefung: {
+    findings: testRuleFindings("selbstpruefung", selbstpruefungen),
+    ...PER_FILE,
+    zweck: "basis/selbstpruefung",
+  },
+  "fester-importpfad": {
+    findings: testRuleFindings("fester-importpfad", importeMitPlatzhalter),
+    ...PER_FILE,
+    zweck: "basis/fester-importpfad",
+  },
   lessons: { findings: lessonsFindings, ...PER_FILE, zweck: "basis/lessons" },
   anweisungen: { findings: instructionFindings, ...PATH_KEYED, zweck: "basis/anweisungen" },
   wurzel: { findings: rootFindings, ...PATH_KEYED, zweck: "basis/wurzel" },

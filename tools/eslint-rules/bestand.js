@@ -28,6 +28,10 @@ export function befundSchluessel(pfad, text) {
   return `${pfad}${SCHLUESSEL_TRENNER}${fingerabdruck(text)}`;
 }
 
+export function knotenSchluessel(sourceCode, datei, knoten) {
+  return befundSchluessel(datei, sourceCode.getText(knoten));
+}
+
 export function pfadAusSchluessel(schluessel) {
   return schluessel.slice(0, schluessel.lastIndexOf(SCHLUESSEL_TRENNER));
 }

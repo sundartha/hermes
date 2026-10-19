@@ -1,5 +1,5 @@
-import { BESTAND_OPTION, befundSchluessel, bestandDerDatei } from "./bestand.js";
-import { alleKnoten } from "./knoten.js";
+import { BESTAND_OPTION, bestandDerDatei, knotenSchluessel } from "./bestand.js";
+import { alleKnoten, nachAnfang } from "./knoten.js";
 import { UNBEKANNT, pfadFalter, pfadImRepo } from "./pfad-falten.js";
 
 const MELDUNG =
@@ -47,14 +47,10 @@ export function quelltextLesestellen(sourceCode, datei) {
   const falter = pfadFalter(sourceCode, datei);
   const aufrufe = alleKnoten(sourceCode)
     .filter((node) => node.type === "CallExpression")
-    .toSorted((links, rechts) => links.range[0] - rechts.range[0]);
+    .toSorted(nachAnfang);
   return aufrufe
     .filter((aufruf) => istLeseAufruf(falter, aufruf))
     .filter((aufruf) => falter.werte(aufruf.arguments[0]).some((wert) => istVerbotenesZiel(pfadImRepo(wert))));
-}
-
-export function lesestellenSchluessel(sourceCode, datei, aufruf) {
-  return befundSchluessel(datei, sourceCode.getText(aufruf));
 }
 
 export default {
@@ -69,7 +65,7 @@ export default {
         const { sourceCode } = context;
         const bestand = bestandDerDatei(context);
         for (const aufruf of quelltextLesestellen(sourceCode, bestand.datei)) {
-          if (bestand.eingefroren(lesestellenSchluessel(sourceCode, bestand.datei, aufruf))) continue;
+          if (bestand.eingefroren(knotenSchluessel(sourceCode, bestand.datei, aufruf))) continue;
           context.report({ node: aufruf, messageId: "quelltextAlsText" });
         }
       },
