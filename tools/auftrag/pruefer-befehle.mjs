@@ -228,7 +228,7 @@ async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
   const offen = (fertig) => alle.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
   const schreibe = (fertig) =>
     schreibeErgebnis(optionen.aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
-  const mitPr = { ...kontext, basis: kopf.basis, commits: alle };
+  const mitPr = { ...kontext, aus: optionen.aus, basis: kopf.basis, commits: alle };
   const { ergebnisse, ablage } = await pruefeAlle(alle, frueher, { kontext: mitPr, schreibe });
   const commits = belegeUmgehungen(ergebnisse, {
     root: kontext.root,
