@@ -132,6 +132,11 @@ test("der Bericht der Rot-Proben nennt nach der Tabelle je roter Art den Block i
   assert.equal(leise.urteile.length, 2);
 });
 
+test("der Bericht der Rot-Proben zählt nur seine Teile als Urteil und übergeht einen fehlenden Teil", () => {
+  const bericht = alsBericht({ push: null, menschen: rot("Mit Approve"), zusatz: rot("kein Teil") });
+  assert.deepEqual(bericht.urteile, [rot("Mit Approve")]);
+});
+
 function codeownersLauf(context, bauRegeln) {
   const verzeichnis = probeDirectory(context, {
     ".github/CODEOWNERS": OWNERS,

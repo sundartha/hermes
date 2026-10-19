@@ -6,6 +6,7 @@ export const ZWECK_JE_TEIL = {
   menschen: "github/ohne-menschen",
 };
 
+const EINZELNE_TEILE = ["push", "menschen", "aufgeraeumt"];
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_TECHNIK = 2;
@@ -58,9 +59,9 @@ function berichtZeilen({ proben, push, menschen, aufgeraeumt }) {
   ];
 }
 
-function urteileJeTeil({ proben, ...teile }) {
-  const einzeln = Object.entries(teile).filter(([, urteil]) => urteil !== undefined);
-  return [...(proben ?? []).map(({ ergebnis }) => ["proben", ergebnis]), ...einzeln];
+function urteileJeTeil({ proben = [], ...teile }) {
+  const einzeln = EINZELNE_TEILE.map((teil) => [teil, teile[teil]]);
+  return [...proben.map(({ ergebnis }) => ["proben", ergebnis]), ...einzeln].filter(([, urteil]) => urteil);
 }
 
 function zweckZeilen(urteile) {
