@@ -53,19 +53,28 @@ async function jsKommentarZeilen(werkzeug, datei) {
     filePath: join(werkzeug.root, datei),
     warnIgnored: false,
   });
-  const meldungen = (ergebnis?.messages ?? []).filter(({ ruleId }) => ruleId === PRUEFREGEL);
-  return meldungen.flatMap(zeilenVon);
+  const meldungen = ergebnis?.messages ?? [];
+  return {
+    zeilen: meldungen.filter(({ ruleId }) => ruleId === PRUEFREGEL).flatMap(zeilenVon),
+    unlesbar: meldungen
+      .filter(({ fatal }) => fatal)
+      .map(({ line, message }) => `${datei}:${line} Parser: ${message}`),
+  };
+}
+
+function lesbar(zeilen) {
+  return { zeilen, unlesbar: [] };
 }
 
 function textKommentarZeilen(werkzeug, datei) {
   const text = dateiInhalt("HEAD", datei, werkzeug.root);
-  return kommentareImText(datei, text).map(({ zeile }) => zeile);
+  return lesbar(kommentareImText(datei, text).map(({ zeile }) => zeile));
 }
 
 async function kommentarZeilen(werkzeug, datei, zeilen) {
-  if (LEHREN_DATEIEN.has(datei)) return zeilen.map(({ zeile }) => zeile);
+  if (LEHREN_DATEIEN.has(datei)) return lesbar(zeilen.map(({ zeile }) => zeile));
   if (werkzeug.js.has(datei)) return jsKommentarZeilen(werkzeug, datei);
-  return istYamlOderShell(datei) ? textKommentarZeilen(werkzeug, datei) : [];
+  return istYamlOderShell(datei) ? textKommentarZeilen(werkzeug, datei) : lesbar([]);
 }
 
 function hinzugefuegt({ basis, root, nurTypen }, datei) {
@@ -81,11 +90,13 @@ async function befundeDerDatei(werkzeug, datei) {
   const hinzu = hinzugefuegt(werkzeug, datei);
   const zeilen = hinzu.filter(({ text }) => text.trim() !== "");
   if (zeilen.length === 0) return [];
-  const mitKommentar = new Set(await kommentarZeilen(werkzeug, datei, zeilen));
+  const { zeilen: kommentiert, unlesbar } = await kommentarZeilen(werkzeug, datei, zeilen);
+  const mitKommentar = new Set(kommentiert);
   const art = LEHREN_DATEIEN.has(datei) ? `neue Zeile in ${datei}` : "neuer Kommentar";
-  return zeilen
+  const neu = zeilen
     .filter(({ zeile }) => mitKommentar.has(zeile))
     .map(({ zeile }) => `${datei}:${zeile} ${art}`);
+  return [...unlesbar, ...neu];
 }
 
 async function pruefen(root, basis) {
