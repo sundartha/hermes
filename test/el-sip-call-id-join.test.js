@@ -13,6 +13,7 @@ import {
   JOIN_SCHLUESSEL_ANRUF_2,
 } from "./fixtures/elevenlabs-conversations.js";
 import { neuePglite } from "./pglite-helfer.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const OTB_JOINT = JOIN_SCHLUESSEL_ANRUF_2.telnyxDetailRecord.sip_call_id;
 const SCL_JOINT_NICHT = JOIN_SCHLUESSEL_ANRUF_2.startAntwort.sip_call_id;
@@ -107,18 +108,6 @@ async function warteBis(pruefung) {
 }
 
 const anrufStillegen = (callId) => jsonStore.endCallRecord(callId, "completed");
-
-function mitLautemLog(fn) {
-  const original = console.error;
-  const zeilen = [];
-  console.error = (...args) => zeilen.push(args.join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = original;
-  }
-  return zeilen;
-}
 
 test("die sip_call_id der Anrufstart-Antwort wird verworfen, persistiert wird der Wert aus dem Gespraechs-Datensatz", async () => {
   const call = neuerAnruf();
@@ -233,7 +222,7 @@ test("ein Wert in fremder Form belegt den set-once-Platz nicht und wird laut gem
     tenantId: BOOTSTRAP,
   });
 
-  const zeilen = mitLautemLog(() => jsonStore.recordSipCallId(call.id, SCL_JOINT_NICHT));
+  const zeilen = fehlerausgabeVon(() => jsonStore.recordSipCallId(call.id, SCL_JOINT_NICHT));
   assert.equal(
     jsonStore.getCall(call.id).sipCallId,
     null,

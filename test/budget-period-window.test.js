@@ -12,6 +12,7 @@ import {
 } from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
 import { PRICES } from "./_prices.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const TENANT_A = "tenant_a";
 
@@ -26,16 +27,6 @@ function stateWithUsage(tenantId, overrides = {}) {
   const s = makeDefaultState();
   s.usage[tenantId] = { ...emptyUsage(), ...overrides };
   return s;
-}
-
-function captureErr(fn) {
-  const orig = console.error;
-  console.error = () => {};
-  try {
-    return fn();
-  } finally {
-    console.error = orig;
-  }
 }
 
 test("B1 nie gestempelt -> das Gate misst die LEBENSZEIT (Bestandsverhalten, Flag AUS)", () => {
@@ -129,8 +120,12 @@ test("B7 Flag AN ignoriert den Stempel (die Spend-Monat-Achse gewinnt, P4/P7 unb
 test("B8 D7 bleibt scharf: unbuchbarer Lebenszeit-Zaehler sperrt trotz gesetztem Stempel", () => {
   const s = stateWithUsage(TENANT_A, { costCents: NaN });
   stampBudgetPeriod(s, TENANT_A, PERIOD_JULY);
+  let gesperrt;
+  fehlerausgabeVon(() => {
+    gesperrt = budgetExceeded(s, TENANT_A, FLAG_OFF, NOW_ISO);
+  });
   assert.equal(
-    captureErr(() => budgetExceeded(s, TENANT_A, FLAG_OFF, NOW_ISO)),
+    gesperrt,
     true,
     "ein vergifteter Bucket darf nicht durch das Fenster fail-open werden",
   );

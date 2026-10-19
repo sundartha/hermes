@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig } from "../src/config.js";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "./helpers.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
@@ -13,22 +14,10 @@ const REQUIRED_OK = {
   numberSetupFeeCents: 100,
 };
 
-function captureErr(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs.join("\n");
-}
-
 test("PAYMENT_ENABLED + PLATFORM_SPEND_WARN_PERCENT>0 + leerer PLATFORM_ALERT_SMS_TO verweigert den Boot", () => {
   withConfigOverrides({ ...REQUIRED_OK, platformSpendWarnPercent: 80, platformAlertSmsTo: "" }, () => {
     let ok;
-    captureErr(() => {
+    fehlerausgabeVon(() => {
       ok = assertConfig();
     });
     assert.equal(
@@ -65,7 +54,7 @@ test("besetzter Kanal + Buchung + Warnschwelle 80 bootet", () => {
 
 test("die Abbruchmeldung nennt PLATFORM_ALERT_SMS_TO und die Abhilfe", () => {
   withConfigOverrides({ ...REQUIRED_OK, platformSpendWarnPercent: 80, platformAlertSmsTo: "" }, () => {
-    const logs = captureErr(() => assertConfig());
+    const logs = fehlerausgabeVon(() => assertConfig()).join("\n");
     assert.match(logs, /PLATFORM_ALERT_SMS_TO/, "der Operator muss die Stellschraube erfahren");
     assert.match(logs, /PLATFORM_SPEND_WARN_PERCENT=0/, "die Abhilfe steht in der Meldung");
   });

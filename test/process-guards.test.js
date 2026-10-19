@@ -1,21 +1,11 @@
-import { test, mock } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   installProcessGuards,
   onUnhandledRejection,
   onUncaughtException,
 } from "../src/process-guards.js";
-
-function captureErr(fn) {
-  const logs = [];
-  const stderr = mock.method(console, "error", (...teile) => logs.push(teile.map(String).join(" ")));
-  try {
-    fn();
-  } finally {
-    stderr.mock.restore();
-  }
-  return logs.join("\n");
-}
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 test("T-P0-01: installProcessGuards registriert beide Handler", () => {
   assert.ok(process.listeners("unhandledRejection").includes(onUnhandledRejection));
@@ -32,9 +22,9 @@ test("T-P0-01: installProcessGuards registriert beide Handler", () => {
 
 test("T-P0-02: onUnhandledRejection loggt und kehrt zurueck (kein throw/exit)", () => {
   let ret;
-  const out = captureErr(() => {
+  const out = fehlerausgabeVon(() => {
     ret = onUnhandledRejection(new Error("boom-rejection"));
-  });
+  }).join("\n");
   assert.equal(ret, undefined);
   assert.match(out, /\[guard\] unhandledRejection/);
   assert.match(out, /boom-rejection/);
@@ -44,9 +34,9 @@ test("T-P0-03: onUncaughtException loggt stack, nie ein Secret", () => {
   const SECRET = "postgres://user:pw@db.internal:5432/secretdb";
   const err = new Error("ECONNREFUSED beim Boot");
   let ret;
-  const out = captureErr(() => {
+  const out = fehlerausgabeVon(() => {
     ret = onUncaughtException(err);
-  });
+  }).join("\n");
   assert.equal(ret, undefined);
   assert.match(out, /\[guard\] uncaughtException/);
   assert.ok(out.includes(err.stack), "stack soll geloggt werden (Diagnose)");

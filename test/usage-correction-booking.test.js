@@ -8,21 +8,10 @@ import {
   NO_CHARGE_ANCHORS,
 } from "../src/store/state-ops.js";
 import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../src/store/defaults.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const TENANT_A = "tenant_a";
 const JULY_ISO = "2026-07-19T10:00:00.000Z";
-
-function captureErr(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs.join("\n");
-}
 
 const NEUTRAL_RATE = 1_000_000;
 
@@ -167,14 +156,14 @@ test("D7 end-to-end: bookCostCorrectionCents(NaN/1.5) verwirft, Bucket bit-ident
     seedUsage(s, TENANT_A, { costCents: 42, spendMonthKey: "2026-07", spendMonthCostCents: 30 });
     const before = { ...usageFor(s, TENANT_A) };
     let result;
-    const out = captureErr(() => {
+    const out = fehlerausgabeVon(() => {
       result = bookCostCorrectionCents(s, {
         tenantId: TENANT_A,
         deltaCents: bad,
         chargeAnchors: NO_CHARGE_ANCHORS,
         nowIso: JULY_ISO,
       });
-    });
+    }).join("\n");
     assert.equal(result.booked, false, `deltaCents=${String(bad)} darf nicht buchen`);
     assert.deepEqual(usageFor(s, TENANT_A), before, `deltaCents=${String(bad)}: Bucket bit-identisch`);
     assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
@@ -191,14 +180,14 @@ test("D7 end-to-end: applyCostCorrectionCents mit NaN-estimatedCostCents verwirf
   });
   const before = { ...usageFor(s, TENANT_A) };
   let result;
-  const out = captureErr(() => {
+  const out = fehlerausgabeVon(() => {
     result = applyCostCorrectionCents(
       s,
       TENANT_A,
       { actualCostMicroCents: 50_000_000, estimatedCostCents: NaN, providerToBucketRateMicro: 920_000, dataComplete: true },
       JULY_ISO,
     );
-  });
+  }).join("\n");
   assert.equal(result.booked, false, "NaN-Schaetzung darf nicht buchen");
   assert.deepEqual(usageFor(s, TENANT_A), before, "kein Teil-Schreibeffekt: der Korrektur-Rest bleibt bit-identisch");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
