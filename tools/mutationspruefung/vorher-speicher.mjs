@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { arch, pid, platform, version } from "node:process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 
-import { git, offenePfade } from "../auftrag/git.mjs";
+import { gemeinsamerOrdner, git, offenePfade } from "../auftrag/git.mjs";
 
 const ABLAGE = join("hermes", "testumbau-vorher");
 const SCHLUESSEL_ANZEIGE = 12;
@@ -40,8 +40,7 @@ export function vorherSchluessel(basis, geaendert, root) {
 }
 
 function ablage(root, schluessel) {
-  const gemeinsam = resolve(root, git(["rev-parse", "--git-common-dir"], { cwd: root }).trim());
-  return join(gemeinsam, ABLAGE, `${schluessel}.json`);
+  return gemeinsamerOrdner(root, ABLAGE, `${schluessel}.json`);
 }
 
 export async function mitVorherSpeicher({ basis, geaendert, root }, rechne) {

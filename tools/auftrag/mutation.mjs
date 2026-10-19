@@ -1,9 +1,9 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname } from "node:path";
 
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
+import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
 import { beleg } from "./pruefungen.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
@@ -150,8 +150,7 @@ function neueZeilen(lauf) {
 }
 
 function ablage({ root, phase, auftrag }) {
-  const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
-  return join(resolve(root, gemeinsam), ABLAGE, phase.phase, `${auftrag.id}.patch`);
+  return gemeinsamerOrdner(root, ABLAGE, phase.phase, `${auftrag.id}.patch`);
 }
 
 function sichern(lauf, basis) {
