@@ -17,6 +17,8 @@ const STANDARD_SEITE = 30;
 const KOPF = "<kopf>";
 const ERFOLG = 200;
 const NICHT_GEFUNDEN = 404;
+const BOT_ENDUNG = "[bot]";
+const FEHLT_IN_GRAPHQL = AUFNAHME.ohneReview.find(({ number }) => AUFNAHME.gemergtVon[number] === "Antonio20045").number;
 const SEITEN_PARAMETER = new Set(["page", "per_page"]);
 const BUDGET = { monatsMinuten: 3000, minutenJeLauf: { Prüfer: 15, Wochenbericht: 5 }, verzicht: ["Prüfer"] };
 const UHR = `data:text/javascript,${encodeURIComponent(
@@ -81,11 +83,15 @@ function antwortAuf(url) {
   return undefined;
 }
 
+function loginWieGraphql(login) {
+  return login.replace(BOT_ENDUNG, "");
+}
+
 function graphql(text) {
   const { variables } = JSON.parse(text);
   const passend = variables.text === `repo:sundartha/hermes ${AUFNAHME.ohneReviewSuche}`;
-  const gefunden = passend ? AUFNAHME.ohneReview.slice(0, -1) : [];
-  const knoten = gefunden.map(({ number }) => ({ number, mergedBy: { login: AUFNAHME.gemergtVon[number].replace("[bot]", "") } }));
+  const gefunden = passend ? AUFNAHME.ohneReview.filter(({ number }) => number !== FEHLT_IN_GRAPHQL) : [];
+  const knoten = gefunden.map(({ number }) => ({ number, mergedBy: { login: loginWieGraphql(AUFNAHME.gemergtVon[number]) } }));
   return { data: { search: { nodes: knoten.slice(0, variables.first) } } };
 }
 
