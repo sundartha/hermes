@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
+import { gewaehlterBefehl } from "./tests-ausmisten/aufruf.mjs";
 
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
@@ -53,7 +54,7 @@ const BEFEHLE = new Map(
 );
 
 async function main() {
-  const { values, positionals } = parseArgs({
+  const argumente = parseArgs({
     allowPositionals: true,
     options: {
       aus: { type: "string" },
@@ -69,14 +70,10 @@ async function main() {
       alle: { type: "boolean", default: false },
     },
   });
-  const [name] = positionals;
-  const bekannt = BEFEHLE.has(name) && positionals.length === 1;
-  if (!bekannt || PFLICHT[name].some((option) => values[option] === undefined)) {
-    console.error(AUFRUF);
-    return EXIT_ROT;
-  }
+  const name = gewaehlterBefehl(argumente, { pflicht: PFLICHT, aufruf: AUFRUF });
+  if (name === undefined) return EXIT_ROT;
   if (MESSENDE_BEFEHLE.has(name)) await nimmSperreAuchFuerKindprozesse(`tests-ausmisten ${name}`);
-  const ausgang = await BEFEHLE.get(name)(values);
+  const ausgang = await BEFEHLE.get(name)(argumente.values);
   return typeof ausgang === "number" ? ausgang : EXIT_GRUEN;
 }
 
