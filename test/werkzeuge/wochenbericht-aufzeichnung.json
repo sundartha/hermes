@@ -502,6 +502,7 @@
       {"number":47,"title":"Paket 22: Stundenlimit","html_url":"https://github.com/sundartha/hermes/issues/47","created_at":"2026-10-10T08:00:00Z","body":""}
     ],
     "gemergt": 41,
+    "ohneReviewSuche": "is:pr is:merged merged:>=2026-10-12 -reviewed-by:Antonio20045 -reviewed-by:jonas986",
     "ohneReview": [
       {"number":1500,"title":"Paket M1500: gemergt","html_url":"https://github.com/sundartha/hermes/pull/1500"},
       {"number":1502,"title":"Paket M1502: gemergt","html_url":"https://github.com/sundartha/hermes/pull/1502"},

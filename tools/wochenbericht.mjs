@@ -22,7 +22,7 @@ import {
   scheduledRedStreaks,
   systemstandLines,
 } from "./wochenbericht/stand.mjs";
-import { incentiveSection } from "./wochenbericht/anreize.mjs";
+import { incentiveSection, weekCommits } from "./wochenbericht/anreize.mjs";
 import { raiseEmptyLists, transitionLists, transitionSection } from "./wochenbericht/uebergang.mjs";
 import { germanDate, isoWeek } from "./wochenbericht/zeit.mjs";
 
@@ -56,15 +56,18 @@ async function workflowList() {
   return workflows;
 }
 
-async function workflowRuns(workflows, now) {
+async function windowRuns(now) {
   const start = runWindowStart(now);
-  const names = new Map(workflows.map(({ id, name }) => [id, name]));
   const runs = await repoPages("/actions/runs", {
     pick: (page) => page.workflow_runs,
     until: (run) => new Date(run.created_at) < start,
   });
-  const recent = runs.filter((run) => new Date(run.created_at) >= start);
-  return recent.map((run) => ({ ...run, name: names.get(run.workflow_id) ?? run.name }));
+  return runs.filter((run) => new Date(run.created_at) >= start);
+}
+
+function withWorkflowNames(runs, workflows) {
+  const names = new Map(workflows.map(({ id, name }) => [id, name]));
+  return runs.map((run) => ({ ...run, name: names.get(run.workflow_id) ?? run.name }));
 }
 
 async function openAutomationIssues() {
@@ -97,12 +100,12 @@ function section(title, lines) {
 }
 
 async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
-  const runs = await workflowRuns(workflows, now);
-  const [approvals, merges, reverts, incentives, expensive] = await Promise.all([
-    approvalSection(),
+  const [recent, commits] = await Promise.all([windowRuns(now), weekCommits(now)]);
+  const runs = withWorkflowNames(recent, workflows);
+  const [approvals, merges, incentives, expensive] = await Promise.all([
+    approvalSection(recent),
     mergeSection(now),
-    revertSection(now),
-    incentiveSection(now),
+    incentiveSection(now, { commits }),
     expensiveRunsSection(runs, now),
   ]);
   const lines = [
@@ -113,7 +116,7 @@ async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
     ...section("Systemstand", [...systemstandLines(), ""]),
     ...section("Rote Läufe", redSection({ runs, streaks, now })),
     ...section("Merges ohne Menschen", merges),
-    ...section("Rücknahmen", reverts),
+    ...section("Rücknahmen", revertSection(commits)),
     ...section("Übergangslisten", transitionSection(transitionLists())),
     ...section("Ausstiege, Gleichwertige und Prüfer-Issues", incentives),
     ...section("Kosten", costSection(runs, readBudget(), now)),

@@ -88,7 +88,20 @@ export async function repoPages(suffix, { pick = (page) => page, until = () => f
   }
 }
 
+export function searchText(query) {
+  return `repo:${repository()} ${query}`;
+}
+
 export function searchIssues(query) {
-  const encoded = encodeURIComponent(`repo:${repository()} ${query}`);
+  const encoded = encodeURIComponent(searchText(query));
   return api(`/search/issues?q=${encoded}&per_page=${PER_PAGE}`);
+}
+
+export async function graphql(query, variables) {
+  const answer = await api("/graphql", { method: "POST", body: { query, variables }, retry: true });
+  if (answer.errors?.length > 0) {
+    const messages = answer.errors.map(({ message }) => message).join("; ");
+    throw new Error(`die GitHub-GraphQL-Abfrage mit Fehlern antwortet: ${messages}`);
+  }
+  return answer.data;
 }
