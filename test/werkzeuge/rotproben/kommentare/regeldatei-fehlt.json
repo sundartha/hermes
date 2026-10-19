@@ -1,0 +1,8 @@
+{
+  "titel": "Fehlt die Regeldatei, bricht ESLint ab, statt ohne Kommentarregel zu laufen",
+  "loeschen": ["tools/eslint-rules/index.js"],
+  "dateien": {
+    "src/rotprobe.js": ["// neuer Kommentar", "export const wert = true;"]
+  },
+  "erwartet": "tools/eslint-rules/index.js"
+}

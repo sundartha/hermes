@@ -170,85 +170,80 @@ const ABLEHNUNGS_TABELLE = {
 export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
-const hermesRegeln = existsSync(HERMES_REGELN_DATEI)
-  ? (await import(HERMES_REGELN_DATEI.href)).default
-  : undefined;
-const hermesBloecke =
-  hermesRegeln === undefined
-    ? []
-    : [
-        {
-          name: "hermes",
-          plugins: { hermes: hermesRegeln },
-          rules: {
-            "hermes/keine-kommentare": "error",
-            "hermes/namen-ohne-begruendung": "warn",
-          },
-        },
-        {
-          name: "hermes-tests",
-          files: ["test/**"],
-          rules: {
-            "hermes/kein-quelltext-als-text": ["error", { bestand: QUELLTEXT_BESTAND }],
-          },
-        },
-        {
-          name: "hermes-wort-nur-in",
-          files: [QUELL_DATEIEN],
-          rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
-        },
-        {
-          name: "hermes-wort-nur-in-web",
-          files: ["apps/web/src/**/*.js"],
-          rules: { "hermes/wort-nur-in": ["error", ...WEB_WORT_NUR_IN] },
-        },
-        {
-          name: "hermes-wort-nur-in-wahlskripte",
-          files: [`scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`, `scripts/push-elevenlabs.${ENDUNGEN_OHNE_JS}`],
-          rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
-        },
-        {
-          name: "hermes-wort-nur-in-geheimnis-skripte",
-          files: [`scripts/iel-geheimnisse*.${ENDUNGEN_OHNE_JS}`],
-          rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
-        },
-        {
-          name: "hermes-steuerung-ueber-meldung",
-          files: [QUELL_DATEIEN],
-          rules: { "hermes/keine-steuerung-ueber-meldung": ["error", ...STEUERUNG_AUSNAHMEN] },
-        },
-        {
-          name: "hermes-erster-import",
-          files: [`src/server.${ENDUNGEN}`, `src/mcp-server.${ENDUNGEN}`],
-          rules: { "hermes/erster-import": ["error", { quelle: PROZESS_WAECHTER }] },
-        },
-        {
-          name: "hermes-ablehnungsgruende",
-          files: [`src/telephony/outbound-gates.${ENDUNGEN}`],
-          rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
-        },
-        {
-          name: "hermes-speicher-fassade",
-          files: [QUELL_DATEIEN],
-          rules: { "hermes/speicher-fassade": ["error", SPEICHER_FASSADE] },
-        },
-        {
-          name: "hermes-config-pfade",
-          files: [`scripts/**/*.${ENDUNGEN}`],
-          ignores: KONFIG_SKRIPTE_MIT_BLATT,
-          rules: {
-            "hermes/config-pfade": [
-              "error",
-              { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN, blattPflicht: false },
-            ],
-          },
-        },
-        {
-          name: "hermes-config-pfade-mit-blatt",
-          files: KONFIG_SKRIPTE_MIT_BLATT,
-          rules: { "hermes/config-pfade": ["error", { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN }] },
-        },
-      ];
+const hermesRegeln = (await import(HERMES_REGELN_DATEI.href)).default;
+const hermesBloecke = [
+  {
+    name: "hermes",
+    plugins: { hermes: hermesRegeln },
+    rules: {
+      "hermes/keine-kommentare": "error",
+      "hermes/namen-ohne-begruendung": "warn",
+    },
+  },
+  {
+    name: "hermes-tests",
+    files: ["test/**"],
+    rules: {
+      "hermes/kein-quelltext-als-text": ["error", { bestand: QUELLTEXT_BESTAND }],
+    },
+  },
+  {
+    name: "hermes-wort-nur-in",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
+  },
+  {
+    name: "hermes-wort-nur-in-web",
+    files: ["apps/web/src/**/*.js"],
+    rules: { "hermes/wort-nur-in": ["error", ...WEB_WORT_NUR_IN] },
+  },
+  {
+    name: "hermes-wort-nur-in-wahlskripte",
+    files: [`scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`, `scripts/push-elevenlabs.${ENDUNGEN_OHNE_JS}`],
+    rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
+  },
+  {
+    name: "hermes-wort-nur-in-geheimnis-skripte",
+    files: [`scripts/iel-geheimnisse*.${ENDUNGEN_OHNE_JS}`],
+    rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
+  },
+  {
+    name: "hermes-steuerung-ueber-meldung",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/keine-steuerung-ueber-meldung": ["error", ...STEUERUNG_AUSNAHMEN] },
+  },
+  {
+    name: "hermes-erster-import",
+    files: [`src/server.${ENDUNGEN}`, `src/mcp-server.${ENDUNGEN}`],
+    rules: { "hermes/erster-import": ["error", { quelle: PROZESS_WAECHTER }] },
+  },
+  {
+    name: "hermes-ablehnungsgruende",
+    files: [`src/telephony/outbound-gates.${ENDUNGEN}`],
+    rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
+  },
+  {
+    name: "hermes-speicher-fassade",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/speicher-fassade": ["error", SPEICHER_FASSADE] },
+  },
+  {
+    name: "hermes-config-pfade",
+    files: [`scripts/**/*.${ENDUNGEN}`],
+    ignores: KONFIG_SKRIPTE_MIT_BLATT,
+    rules: {
+      "hermes/config-pfade": [
+        "error",
+        { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN, blattPflicht: false },
+      ],
+    },
+  },
+  {
+    name: "hermes-config-pfade-mit-blatt",
+    files: KONFIG_SKRIPTE_MIT_BLATT,
+    rules: { "hermes/config-pfade": ["error", { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN }] },
+  },
+];
 const testRegeln = existsSync(TESTREGELN_DATEI)
   ? (await import(TESTREGELN_DATEI.href)).default
   : undefined;
