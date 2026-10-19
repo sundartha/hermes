@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { tempDataDir, startServer, startServerExpectExit } from "./helpers.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const READ_EXEC_NO_WRITE = 0o500;
 const OWNER_RWX = 0o700;
@@ -21,15 +22,10 @@ before(async () => {
 });
 
 test("T-P1-04: First-Boot (ENOENT) -> Defaults, KEIN KORRUPT-Alarm", () => {
-  const captured = [];
-  const orig = console.error;
-  console.error = (...args) => captured.push(args.join(" "));
   let state;
-  try {
+  const captured = fehlerausgabeVon(() => {
     state = store.load();
-  } finally {
-    console.error = orig;
-  }
+  });
   assert.ok(
     !captured.some((m) => /\[store\] KORRUPT/.test(m)),
     "First-Boot darf KEINE KORRUPT-Zeile loggen",

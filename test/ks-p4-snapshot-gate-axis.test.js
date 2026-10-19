@@ -15,6 +15,7 @@ import { emptyUsage } from "../src/store/defaults.js";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { PRICES } from "./_prices.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const TENANT = "ks_p4_tenant";
 const CAP_CENTS = 900;
@@ -124,28 +125,16 @@ test("T5b Gegenprobe: vergiftete Gate-Groesse bei gesundem Lebenszeit-Zaehler li
   assert.equal(snapshot.remainingCents, null);
 });
 
-function captureErr(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs.join("\n");
-}
-
 test("T6 tenantBudgetSnapshot loggt NICHT bei einem vergifteten Bucket - budgetExceeded loggt weiterhin", () => {
   const s = stateWithUsage(TENANT, {
     costCents: NaN,
     spendMonthKey: "2026-07",
     spendMonthCostCents: 50,
   });
-  const snapshotLog = captureErr(() => tenantBudgetSnapshot(s, TENANT, FLAG_ON, JULY_ISO));
+  const snapshotLog = fehlerausgabeVon(() => tenantBudgetSnapshot(s, TENANT, FLAG_ON, JULY_ISO)).join("\n");
   assert.equal(snapshotLog, "", "die Anzeige-Kante teilt den Riegel, aber nicht das Log (sonst Log-Flut bei /api/state)");
 
-  const gateLog = captureErr(() => budgetExceeded(s, TENANT, FLAG_ON, JULY_ISO));
+  const gateLog = fehlerausgabeVon(() => budgetExceeded(s, TENANT, FLAG_ON, JULY_ISO)).join("\n");
   assert.match(gateLog, /grund=usage_korrupt/, "die GATE-Kante loggt weiterhin (Gegenprobe: der Riegel selbst ist unveraendert)");
 });
 

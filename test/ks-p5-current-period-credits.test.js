@@ -20,6 +20,7 @@ import { callTariffCentsPerMin, makeMetering } from "../src/billing/metering.js"
 import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
 import { makeStubStore, fakeConfig, makeDueOutboundCall } from "./cost-truing-harness.js";
 import { PRICES } from "./_prices.js";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 
 const TENANT = "tenant_ks_p5";
 const NACHBAR_TENANT = "tenant_ks_p5_nachbar";
@@ -62,18 +63,6 @@ function seedCharged(s, tenantId, { costCents, spendMonthCostCents, periodKey = 
     budgetPeriodBaselineCents: periodBaselineCents,
   };
   return s.usage[tenantId];
-}
-
-function captureErrLines(fn) {
-  const orig = console.error;
-  const lines = [];
-  console.error = (...args) => lines.push(args.join(" "));
-  try {
-    fn();
-  } finally {
-    console.error = orig;
-  }
-  return lines;
 }
 
 function meteringStoreOn(s, nowIso) {
@@ -196,7 +185,7 @@ test("P5 0-Boden Lebenszeit: die Ueber-Gutschrift kappt auf 0 und sperrt den Ten
   setTenantBudget(s, TENANT, { budgetCents: TENANT_CAP_CENTS, hardCapCents: TENANT_CAP_CENTS });
 
   let gesperrt;
-  const lines = captureErrLines(() => {
+  const lines = fehlerausgabeVon(() => {
     gesperrt = budgetExceeded(s, TENANT, FLAG_OFF, JULY_ISO);
   });
 
