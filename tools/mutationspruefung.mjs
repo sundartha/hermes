@@ -47,7 +47,13 @@ const UEBERLEBT = "Survived";
 const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
-const ZUSTANDSBEREICH = [".", ":(exclude)tools/mutationspruefung.mjs", ":(exclude)tools/mutationspruefung/"];
+const ZUSTANDSBEREICH = [
+  ".",
+  ":(exclude)tools/mutationspruefung.mjs",
+  ":(exclude)tools/mutationspruefung/",
+  ":(exclude)test/werkzeuge/ausmisten/stryker-ersatz.mjs",
+  ":(exclude)test/werkzeuge/ausmisten/totcode.mjs",
+];
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
 const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
 const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
