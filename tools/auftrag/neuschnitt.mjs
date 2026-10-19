@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
 import { brauchtRotenTest, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
-import { festhalten, git, kopf, offenePfade, vormerken } from "./git.mjs";
+import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
@@ -255,8 +255,7 @@ function eingriffBefunde(root, stand) {
 }
 
 function ablageDes({ phase, auftrag, root }) {
-  const gemeinsam = resolve(root, git(["rev-parse", "--git-common-dir"], { cwd: root }).trim());
-  return join(gemeinsam, ABLAGE, phase.phase, auftrag.id);
+  return gemeinsamerOrdner(root, ABLAGE, phase.phase, auftrag.id);
 }
 
 function teamEingabe(kontext, ort, vorher) {

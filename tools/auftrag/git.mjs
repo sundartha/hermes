@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const NUMSTAT_FELDER = 3;
 const BINAER = "-";
@@ -17,6 +17,11 @@ export function git(args, { cwd, eingabe } = {}) {
     throw new Error(`git ${args.join(" ")} ist mit Exit ${lauf.status} gescheitert: ${lauf.stderr}`);
   }
   return lauf.stdout;
+}
+
+export function gemeinsamerOrdner(root, ...teile) {
+  const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
+  return join(resolve(root, gemeinsam), ...teile);
 }
 
 export function gibtEsIn(commit, pfad, cwd) {

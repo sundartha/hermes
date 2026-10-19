@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname } from "node:path";
 import { pid } from "node:process";
 
 import { starteAgent } from "./agenten.mjs";
 import { ausgang } from "./ausgang.mjs";
-import { git } from "./git.mjs";
+import { gemeinsamerOrdner } from "./git.mjs";
 import { UEBERGABE } from "./verlauf.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
@@ -36,8 +36,7 @@ const ALTFUNKTIONEN_AUFRAEUMEN = [
 ];
 
 function limitSperre({ root, phase }) {
-  const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
-  return join(resolve(root, gemeinsam), LIMIT_SPERREN, phase.phase);
+  return gemeinsamerOrdner(root, LIMIT_SPERREN, phase.phase);
 }
 
 function restDerSperre(sperre) {
