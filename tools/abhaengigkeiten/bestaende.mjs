@@ -9,17 +9,16 @@ const NUR_KUERZER = [
   "tools/basis/quelltext-als-text.json",
 ];
 
-function befunde(text) {
-  return JSON.parse(text).befunde;
+const alsListe = (inhalt) => inhalt;
+const befunde = ({ befunde: liste }) => liste;
+
+export function imArbeitsbaum(pfad, eintraege = alsListe) {
+  return existsSync(pfad) ? eintraege(JSON.parse(readFileSync(pfad, "utf8"))) : [];
 }
 
-function imArbeitsbaum(pfad) {
-  return existsSync(pfad) ? befunde(readFileSync(pfad, "utf8")) : [];
-}
-
-function aufDerBasis(basis, pfad) {
+export function aufDerBasis(basis, pfad, eintraege = alsListe) {
   const lauf = run("git", ["show", `${basis}:${pfad}`]);
-  return lauf.status === 0 ? befunde(lauf.stdout) : undefined;
+  return lauf.status === 0 ? eintraege(JSON.parse(lauf.stdout)) : undefined;
 }
 
 function hinzugekommen(jetzt, vorher, zurueck) {
@@ -28,9 +27,9 @@ function hinzugekommen(jetzt, vorher, zurueck) {
 }
 
 function befundeFuer(basis, pfad, zurueck) {
-  const vorher = aufDerBasis(basis, pfad);
+  const vorher = aufDerBasis(basis, pfad, befunde);
   if (vorher === undefined) return [];
-  return hinzugekommen(imArbeitsbaum(pfad), vorher, zurueck).map(
+  return hinzugekommen(imArbeitsbaum(pfad, befunde), vorher, zurueck).map(
     (eintrag) =>
       `${pfad} darf nur kürzer werden, neu oder öfter eingefroren ist: ${eintrag}. Behebe den Befund im Test, statt ihn einzufrieren.`,
   );
