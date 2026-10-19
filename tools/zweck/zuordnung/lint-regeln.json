@@ -100,6 +100,7 @@
     "hermes-tests/anfrage-mit-frist": "lint/anfrage-mit-frist",
     "hermes-tests/fester-importpfad": "lint/fester-importpfad",
     "hermes-tests/keine-selbstpruefung": "lint/selbstpruefung",
+    "hermes-tests/keine-speicher-attrappe": "lint/speicher-attrappe",
     "hermes/ablehnungsgruende": "lint/ablehnungsgruende",
     "hermes/config-pfade": "lint/config-pfade",
     "hermes/erster-import": "lint/erster-import",

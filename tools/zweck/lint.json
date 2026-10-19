@@ -223,6 +223,13 @@
     "nichtAngenommen": "Anmeldedaten, Cookies oder die Methode unter einem Namen übergeben, den die Regel nicht erkennt, oder Code auf einem anderen Weg nachladen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Bau-Agent mit der eigenen letzten Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“ aus, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt und der Auftrag kein Umbau ist; sonst steigen Bau- und Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit der Datei ins Issue, wenn die Behebung eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
   },
+  "lint/speicher-attrappe": {
+    "liste": "L-neu (keine-speicher-attrappe)",
+    "wozu": "Eine eigene withStoreLock im Test täuscht die echte Speicher-Sperre vor; der Test bleibt grün, und im Betrieb bricht der Code, sobald zwei Anfragen gleichzeitig denselben Stand schreiben.",
+    "behebung": "Den echten Teststore aus test/pg-helpers.js nehmen, dessen Sperre aus src/store/pg.js kommt.",
+    "nichtAngenommen": "Die Sperre unter einem berechneten Namen oder über einen anderen Umweg nachbauen, den die Regel nicht sieht, oder einen Eintrag in tools/basis/keine-speicher-attrappe.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Im Auftragsweg steigt der Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit dem Test ins Issue, wenn die Behebung einen bestehenden Test oder eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
+  },
   "lint/speicher-fassade": {
     "liste": "L-neu (speicher-fassade)",
     "wozu": "Im Betrieb ist der Speicher der Namensraum von src/store.js. Ruft Code eine Funktion, die nur der PG- oder JSON-Speicher kennt, bleiben die Tests grün, und der Betrieb wirft einen TypeError.",
