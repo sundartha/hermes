@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
+import { run } from "./abhaengigkeiten/prozess.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
 import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
@@ -35,16 +35,11 @@ const KEY_SEPARATOR = "\0";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
-const MAX_OUTPUT_BYTES = 268_435_456;
 const USAGE = "Aufruf: node tools/abhaengigkeiten.mjs --basis <commit>";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
-}
-
-function run(command, args) {
-  return spawnSync(command, args, { encoding: "utf8", maxBuffer: MAX_OUTPUT_BYTES });
 }
 
 function violationKey({ rule, from, to }) {
