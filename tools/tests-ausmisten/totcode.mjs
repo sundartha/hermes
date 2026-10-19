@@ -9,37 +9,26 @@ import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { gebundeneNamen } from "../eslint-rules/namen-ohne-begruendung.js";
 import { nimmSperreAuchFuerKindprozesse } from "../schwerlauf/sperre.mjs";
 import { umbenennungen } from "../umbenennung.mjs";
+import { setzeAusgaben } from "../ziele/ausgabe.mjs";
 import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
 import { gewaehlterBefehl } from "./aufruf.mjs";
-import { schreibeErgebnis, statusListe } from "./befehle.mjs";
+import { paketDes, schreibeErgebnis, statusListe } from "./befehle.mjs";
 import { MESSBAR, pruefsumme } from "./entscheiden.mjs";
 import { syntaxknoten } from "./importe.mjs";
-import { messeGegenAlte, messeGegenNeue } from "./messen.mjs";
+import { messeGegenAlte, messeGegenNeue, trockenlauf } from "./messen.mjs";
 import { TESTDATEI, erreichendeTests, graphImStand, importgraph } from "./messmenge.mjs";
 import { GATE_DATEI, aenderungen, git, gitGelingt } from "./pfade.mjs";
+import { packe, zaehle } from "./planen.mjs";
 import { inEigenerGruppe } from "./prozessgruppe.mjs";
 import { planeTotcode, transitiveHuelle } from "./totcode-menge.mjs";
-import {
-  bildeAlle,
-  dateiAbbildung,
-  entscheideTotcode,
-  zerlegeSchluessel,
-} from "./zeilenabbildung.mjs";
+import { liefereStufe } from "./totcode-untraut.mjs";
+import { ART, ergebnisInhalt, gruendeDer, leseStufe } from "./totcode-urteil.mjs";
+import { bildeAlle, dateiAbbildung, zerlegeSchluessel } from "./zeilenabbildung.mjs";
 
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
-const GRUEN = "grün";
-const ROT = "rot";
-const ART = {
-  plan: "totcode-plan",
-  basis: "totcode-basis",
-  kopf: "totcode-kopf",
-  ergebnis: "totcode-ergebnis",
-};
-const SHA = /^[0-9a-f]{40}$/;
 const PEEL_TO_COMMIT = "^{commit}";
 const NAMENSZEICHEN = /[\w$]/;
-const PRUEFSUMME = /^[0-9a-f]{64}$/;
 const GELOESCHT = "D";
 const NEU = "A";
 const PRODUKTORT = /^(?:src|scripts|tools)\//;
@@ -66,17 +55,19 @@ const UMGEZOGEN = "Code umgezogen";
 const AUFRUF = [
   "Aufruf: node tools/tests-ausmisten/totcode.mjs",
   "planen --basis <rev> --kopf <rev> --liste <datei> --aus <ordner>",
-  "| basis --daten <ordner> --aus <ordner>",
-  "| kopf --daten <ordner> --aus <ordner>",
+  "| basis --daten <ordner> --aus <ordner> [--paket <nr>]",
+  "| kopf --daten <ordner> (--aus <ordner> | --kanal <fifo>) [--paket <nr>]",
+  "| rotprobe --daten <ordner> (--aus <ordner> | --kanal <fifo>)",
   "| entscheiden --daten <ordner> --aus <ordner>",
 ].join(" ");
 const PFLICHT = {
   planen: ["basis", "kopf", "liste", "aus"],
   basis: ["daten", "aus"],
-  kopf: ["daten", "aus"],
+  kopf: ["daten"],
+  rotprobe: ["daten"],
   entscheiden: ["daten", "aus"],
 };
-const MESSENDE_BEFEHLE = new Set(["basis", "kopf"]);
+const MESSENDE_BEFEHLE = new Set(["basis", "kopf", "rotprobe"]);
 
 function vollerSha(rev) {
   return git(["rev-parse", "--verify", `${rev}${PEEL_TO_COMMIT}`]).trim();
@@ -196,6 +187,15 @@ async function geloeschteQuellen(menge, { basis, pr }) {
   );
 }
 
+async function paketeDer({ dateien, alteTests, verstoesse }, basis) {
+  if (verstoesse.length > 0 || dateien.length === 0) return [];
+  return imArbeitsordner(basis, async () => {
+    const zahlen = await zaehle(dateien);
+    const { sekunden } = await trockenlauf(alteTests);
+    return packe(zahlen, sekunden);
+  });
+}
+
 async function planen({ basis, kopf, liste, aus }) {
   const stand = { basis: vollerSha(basis), kopf: vollerSha(kopf) };
   const eintraege = leseListe(liste);
@@ -203,10 +203,12 @@ async function planen({ basis, kopf, liste, aus }) {
   const pr = prDateien(stand);
   const weg = await geloeschteQuellen(menge, { ...stand, pr });
   const umbenannt = await umbenennungsliste(stand, menge);
+  const dateien = [...menge.messmenge, ...weg];
   const diffs = Object.fromEntries(
-    [...menge.messmenge, ...weg].map((datei) => [datei, dateiDiff(datei, { ...stand, umbenannt })]),
+    dateien.map((datei) => [datei, dateiDiff(datei, { ...stand, umbenannt })]),
   );
   const verstoesse = [...menge.verstoesse, ...werkzeugVerstoesse(pr)];
+  const pakete = await paketeDer({ dateien, alteTests: menge.alteTests, verstoesse }, stand.basis);
   const plan = {
     art: ART.plan,
     ...stand,
@@ -218,8 +220,10 @@ async function planen({ basis, kopf, liste, aus }) {
     abbildung: abbildungen(diffs, { pr, umbenannt }),
     verschoben: verschobeneZeilen(diffs, stand),
     verstoesse,
+    pakete,
   };
   schreibeErgebnis(aus, "plan", plan);
+  setzeAusgaben({ pakete: JSON.stringify(pakete.map((_paket, nummer) => nummer)) });
   for (const { datei, grund } of verstoesse) console.log(`Verstoß: ${datei}: ${grund}`);
   console.log(
     `${menge.alteTests.length} alte Tests, ${menge.messmenge.length + weg.length} Dateien zum Mutieren, ${verstoesse.length} Verstöße.`,
@@ -227,34 +231,14 @@ async function planen({ basis, kopf, liste, aus }) {
   return verstoesse.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-function passtZu(inhalt, art, erwartet) {
-  if (inhalt?.art !== ART[art] || !SHA.test(inhalt.basis) || !SHA.test(inhalt.kopf)) return false;
-  return (
-    erwartet === undefined || (inhalt.basis === erwartet.basis && inhalt.kopf === erwartet.kopf)
-  );
-}
-
-function leseStufe(daten, art, erwartet) {
-  const datei = join(daten, art, `${art}.json`);
-  if (!existsSync(datei)) return { fehler: `${art}.json fehlt` };
-  const text = readFileSync(datei, "utf8");
-  const summe = env[`${art.toUpperCase()}_PRUEFSUMME`] ?? "";
-  if (!PRUEFSUMME.test(summe) || pruefsumme(text) !== summe)
-    return { fehler: `${art}.json passt nicht zur Prüfsumme` };
-  const inhalt = JSON.parse(text);
-  if (!passtZu(inhalt, art, erwartet))
-    return { fehler: `${art}.json gehört nicht zu dieser Messung` };
-  return { inhalt };
-}
-
-function gelesen(daten, art, erwartet) {
-  const { inhalt, fehler } = leseStufe(daten, art, erwartet);
+function gelesen(daten, stufe) {
+  const { inhalt, fehler } = leseStufe(daten, stufe);
   if (fehler) throw new Error(fehler);
   return inhalt;
 }
 
 function messbarerPlan(daten) {
-  const plan = gelesen(daten, "plan");
+  const plan = gelesen(daten, { art: "plan" });
   if (plan.verstoesse.length > 0) throw new Error("Der Plan hat Verstöße; nichts zu messen.");
   return plan;
 }
@@ -273,22 +257,29 @@ async function imArbeitsordner(rev, aufgabe) {
   }
 }
 
-async function basis({ daten, aus }) {
+function auswahlDes(plan, paket) {
+  if (paket === undefined)
+    return { dateien: [...plan.menge.messmenge, ...plan.geloeschteQuellen], teil: undefined };
+  return paketDes(plan, paket);
+}
+
+async function basis({ daten, aus, paket }) {
   const plan = messbarerPlan(daten);
-  const { messmenge, alteTests, gates } = plan.menge;
-  const dateien = [...messmenge, ...plan.geloeschteQuellen];
+  const { alteTests, gates } = plan.menge;
+  const auswahl = auswahlDes(plan, paket);
+  const { dateien, teil } = auswahl;
   const werte = await imArbeitsordner(plan.basis, async () => {
-    const haupt = await messeGegenAlte({ dateien, alt: alteTests, gateAlt: [] });
+    const haupt = await messeGegenAlte({ dateien, alt: alteTests, gateAlt: [], teil });
     const gateStati = {};
     const ausgenommen = [...haupt.ausgenommen];
     for (const [name, tests] of Object.entries(gates)) {
-      const lauf = await messeGegenAlte({ dateien, alt: [], gateAlt: tests });
+      const lauf = await messeGegenAlte({ dateien, alt: [], gateAlt: tests, teil });
       gateStati[name] = statusListe(lauf.gate);
       ausgenommen.push(...lauf.ausgenommen);
     }
     return { mutanten: statusListe(haupt.mutanten), gates: gateStati, ausgenommen };
   });
-  schreibeErgebnis(aus, "basis", { art: ART.basis, basis: plan.basis, kopf: plan.kopf, ...werte });
+  liefereStufe({ aus }, { art: "basis", plan, auswahl }, werte);
   return EXIT_GRUEN;
 }
 
@@ -641,83 +632,44 @@ async function rotprobe(ordner, plan) {
   };
 }
 
-async function kopf({ daten, aus }) {
+function zielDes({ aus, kanal }) {
+  if ((aus === undefined) === (kanal === undefined))
+    throw new Error("Genau eins von --aus und --kanal angeben.");
+  return { aus, kanal };
+}
+
+async function kopf({ daten, aus, kanal, paket }) {
+  const ziel = zielDes({ aus, kanal });
   const plan = messbarerPlan(daten);
-  const basisDaten = gelesen(daten, "basis", plan);
+  const auswahl = auswahlDes(plan, paket);
+  const basisDaten = gelesen(daten, { art: "basis", erwartet: plan, paket: auswahl.nummer });
   const messung = await imArbeitsordner(plan.kopf, () => kopfMessung(plan, basisDaten));
+  if (auswahl.nummer !== undefined) {
+    liefereStufe(ziel, { art: "kopf", plan, auswahl }, messung);
+    return EXIT_GRUEN;
+  }
   const probe = await imArbeitsordner(plan.kopf, (ordner) => rotprobe(ordner, plan));
-  const stand = { art: ART.kopf, basis: plan.basis, kopf: plan.kopf };
-  schreibeErgebnis(aus, "kopf", { ...stand, ...messung, rotprobe: probe });
+  liefereStufe(ziel, { art: "kopf", plan, auswahl }, { ...messung, rotprobe: probe });
+  return EXIT_GRUEN;
+}
+
+async function rotprobeSchritt({ daten, aus, kanal }) {
+  const ziel = zielDes({ aus, kanal });
+  const plan = messbarerPlan(daten);
+  const probe = await imArbeitsordner(plan.kopf, (ordner) => rotprobe(ordner, plan));
+  liefereStufe(ziel, { art: "rotprobe", plan, auswahl: {} }, probe);
   return EXIT_GRUEN;
 }
 
 function stufen(daten) {
-  const plan = leseStufe(daten, "plan");
-  const weitere = ["basis", "kopf"].map((art) => leseStufe(daten, art, plan.inhalt));
+  const plan = leseStufe(daten, { art: "plan" });
+  const weitere = ["basis", "kopf"].map((art) => leseStufe(daten, { art, erwartet: plan.inhalt }));
   const alle = [plan, ...weitere];
   return {
     plan: plan.inhalt,
     basis: weitere[0].inhalt,
     kopf: weitere[1].inhalt,
     fehler: alle.map(({ fehler }) => fehler).filter(Boolean),
-  };
-}
-
-function istVerschoben(schluessel, verschoben) {
-  const { datei, von, bis } = zerlegeSchluessel(schluessel);
-  const zeilen = new Set(verschoben[datei] ?? []);
-  const spanne = Array.from({ length: bis.zeile - von.zeile + 1 }, (_leer, i) => von.zeile + i);
-  return spanne.every((zeile) => zeilen.has(zeile));
-}
-
-function urteilsGruende(stati, kopfStati, plan) {
-  const { abbildung, verschoben } = plan;
-  const urteil = entscheideTotcode({ basis: stati, kopf: kopfStati, abbildung });
-  const verschobene = bildeAlle({ basis: stati, abbildung })
-    .entfallen.filter((schluessel) => istVerschoben(schluessel, verschoben))
-    .map(
-      (schluessel) =>
-        `Mutant gilt als entfallen, sein Code steht im PR aber an anderer Stelle neu (verschobener Code): ${schluessel}`,
-    );
-  return [...urteil.gruende, ...verschobene];
-}
-
-function gateGruende({ plan, basis: basisDaten, kopf: kopfDaten }) {
-  return Object.entries(basisDaten.gates).flatMap(([name, stati]) =>
-    urteilsGruende(stati, kopfDaten.gates[name] ?? {}, plan).map(
-      (grund) => `Gate ${name}: ${grund}`,
-    ),
-  );
-}
-
-function probeGrund({ datei, fall, grund }) {
-  return fall === undefined
-    ? `Rotprobe: ${datei}: ${grund}`
-    : `Rotprobe: ${datei}: „${fall}“: ${grund}`;
-}
-
-function gruendeDer(stand) {
-  const { plan, basis: basisDaten, kopf: kopfDaten } = stand;
-  const ausgenommen = [...basisDaten.ausgenommen, ...kopfDaten.ausgenommen];
-  return [
-    ...plan.verstoesse.map(({ datei, grund }) => `${datei}: ${grund}`),
-    ...urteilsGruende(basisDaten.mutanten, kopfDaten.mutanten, plan),
-    ...gateGruende(stand),
-    ...ausgenommen.map(
-      ({ test, name }) => `Testfall bei der Messung ausgenommen: ${test}: ${name}`,
-    ),
-    ...kopfDaten.rotprobe.verstoesse.map(probeGrund),
-  ];
-}
-
-function ergebnisInhalt(plan, gruende) {
-  return {
-    art: ART.ergebnis,
-    basis: plan?.basis ?? null,
-    kopf: plan?.kopf ?? null,
-    liste: plan?.liste ?? [],
-    urteil: gruende.length === 0 ? GRUEN : ROT,
-    gruende,
   };
 }
 
@@ -731,7 +683,9 @@ function entscheiden({ daten, aus }) {
   return gruende.length === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-const BEFEHLE = new Map(Object.entries({ planen, basis, kopf, entscheiden }));
+const BEFEHLE = new Map(
+  Object.entries({ planen, basis, kopf, rotprobe: rotprobeSchritt, entscheiden }),
+);
 
 async function main() {
   const argumente = parseArgs({
@@ -742,6 +696,8 @@ async function main() {
       liste: { type: "string" },
       daten: { type: "string" },
       aus: { type: "string" },
+      kanal: { type: "string" },
+      paket: { type: "string" },
     },
   });
   const name = gewaehlterBefehl(argumente, { pflicht: PFLICHT, aufruf: AUFRUF });
