@@ -183,6 +183,50 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
   }
 });
 
+test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider twilio -> 200, Call bleibt unberuehrt, unhandledRejection", async () => {
+  const srv = await startServer({
+    seed: seedState({
+      calls: [
+        seedCall({ id: "st_twilio_alt", provider: "twilio", status: "active" }),
+        seedCall({ id: "st_nach_twilio", provider: "telnyx", status: "active" }),
+      ],
+    }),
+  });
+  try {
+    const antwort = await postStatus(srv, "st_twilio_alt", {
+      CallStatus: "completed",
+      CallDuration: "45",
+    });
+    assert.equal(antwort.status, HTTP_OK);
+    await waitForLog(
+      srv,
+      /\[guard\] unhandledRejection: Error: Provider 'twilio' fuer Port 'webhookEvents' nicht unterstuetzt/,
+    );
+
+    const danach = await postStatus(srv, "st_nach_twilio", {
+      CallStatus: "completed",
+      CallDuration: "5",
+    });
+    assert.equal(danach.status, HTTP_OK);
+    const store = await waitForStoreState(
+      srv,
+      (zustand) => storedCall(zustand, "st_nach_twilio").status === "completed",
+    );
+
+    const twilioCall = storedCall(store, "st_twilio_alt");
+    assert.equal(twilioCall.provider, "twilio");
+    assert.equal(twilioCall.status, "active");
+    assert.equal(twilioCall.endedAt, null);
+    assert.equal(twilioCall.answeredAt, null);
+    assert.ok(
+      !srv.stdout.includes('"callId":"st_twilio_alt"'),
+      `Twilio-Altcall darf keine [voice/status]-Zeile erzeugen:\n${srv.stdout}`,
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
 const postForm = (srv, path) =>
   abrufMitFrist(`${srv.localUrl}${path}`, { method: "POST", body: new URLSearchParams({}) });
 
