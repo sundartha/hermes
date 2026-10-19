@@ -3,6 +3,7 @@ import { closedIssueNumbers, getJson, graphql, repositoryName } from "./github.m
 const BEHAVIOUR_LABEL = "verhalten-geaendert";
 const APPROVERS = ["Antonio20045", "jonas986"];
 const ALLOWED_LIST_HEADING = "Tests, deren Erwartung sich ändern darf";
+export const DEAD_CODE_LIST_HEADING = "Tests, die mit totem Code wegfallen";
 const HEADING_PATTERN = /^#{1,6}\s+(.+)$/;
 const LIST_MARKER_PATTERN = /^(?:[-*+]|\d+[.)])\s+/;
 const CODE_SPAN_PATTERN = /^`(.+)`$/;
@@ -47,11 +48,18 @@ function itemText(line) {
   return CODE_SPAN_PATTERN.exec(text)?.[1] ?? text;
 }
 
-function allowedNames(body) {
+function headedLines(body, heading) {
   const lines = (body ?? "").split(LINE_BREAK_PATTERN).map((line) => line.trim());
-  const start = lines.findIndex(
-    (line) => HEADING_PATTERN.exec(line)?.[1].trim() === ALLOWED_LIST_HEADING,
-  );
+  const start = lines.findIndex((line) => HEADING_PATTERN.exec(line)?.[1].trim() === heading);
+  return { lines, start };
+}
+
+export function hasHeading(body, heading) {
+  return headedLines(body, heading).start !== -1;
+}
+
+function allowedNames(body, heading) {
+  const { lines, start } = headedLines(body, heading);
   if (start === -1) return [];
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => HEADING_PATTERN.test(line));
@@ -61,9 +69,13 @@ function allowedNames(body) {
     .filter(Boolean);
 }
 
-export function issueApproval(issue) {
+export function issueList(issue, heading) {
   const problem = labelProblem(issue);
-  return { problem, names: problem === undefined ? allowedNames(issue.body) : [] };
+  return { problem, names: problem === undefined ? allowedNames(issue.body, heading) : [] };
+}
+
+export function issueApproval(issue) {
+  return issueList(issue, ALLOWED_LIST_HEADING);
 }
 
 export async function approval(pullRequest) {

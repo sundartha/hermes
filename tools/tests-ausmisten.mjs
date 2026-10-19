@@ -12,6 +12,8 @@ const AUFRUF = [
   "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner> [--alle]",
   "| vorpruefen --kopf <rev> --gitleaks <pfad> --aus <ordner>",
   "| melden [--pr]",
+  "| totcode-ermitteln",
+  "| totcode-melden",
   "| lokal --bereich <name> --master <rev> --gitleaks <pfad> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>] [--alle]",
 ].join(" ");
 const PFLICHT = {
@@ -20,6 +22,8 @@ const PFLICHT = {
   branch: ["plan-daten", "basis-daten", "paket", "aus"],
   vorpruefen: ["kopf", "aus"],
   melden: [],
+  "totcode-ermitteln": [],
+  "totcode-melden": [],
   lokal: ["bereich", "master"],
 };
 
@@ -50,6 +54,9 @@ const BEFEHLE = new Map(
       (await import("./tests-ausmisten/vorpruefen.mjs")).vorpruefenBefehl(werte),
     melden: async ({ pr }) => (await import("./tests-ausmisten/melden.mjs")).melden({ pr }),
     lokal: async (werte) => (await import("./tests-ausmisten/lokal.mjs")).lokal(werte),
+    "totcode-ermitteln": async () =>
+      (await import("./tests-ausmisten/totcode-ermitteln.mjs")).ermitteln(),
+    "totcode-melden": async () => (await import("./tests-ausmisten/totcode-melden.mjs")).melden(),
   }),
 );
 

@@ -26,16 +26,21 @@ export function gleichesRepo(kopfRepo, repo) {
   return Number.isInteger(repo.id) && kopfRepo.id === repo.id;
 }
 
-function nutzdatenFehler(lauf) {
+export function laufFehler(lauf, herkunft, { art, fremd }) {
   if (lauf === null) return "kein auslösender Lauf im Ereignis";
-  if (!pfadUndEreignis(lauf, EINGANG))
-    return "der auslösende Lauf ist kein Push-Lauf von ausmisten-eingang.yml";
+  if (!pfadUndEreignis(lauf, herkunft))
+    return `der auslösende Lauf ist kein ${art} von ${herkunft.datei}`;
   if (lauf.conclusion !== ERFOLG) return "der auslösende Lauf ist nicht erfolgreich";
-  if (!gleichesRepo(lauf.head_repository, lauf.repository)) {
-    return "der Branch liegt nicht in diesem Repository";
-  }
+  if (!gleichesRepo(lauf.head_repository, lauf.repository)) return fremd;
   if (!SHA.test(lauf.head_sha ?? "")) return "die Kopf-SHA ist ungültig";
   return undefined;
+}
+
+function nutzdatenFehler(lauf) {
+  return laufFehler(lauf, EINGANG, {
+    art: "Push-Lauf",
+    fremd: "der Branch liegt nicht in diesem Repository",
+  });
 }
 
 export async function ausloeser({ bereiche, github }) {
