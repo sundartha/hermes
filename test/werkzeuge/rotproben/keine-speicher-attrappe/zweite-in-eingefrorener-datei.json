@@ -1,0 +1,16 @@
+{
+  "titel": "Dieselbe Attrappe ein zweites Mal in einer Datei mit eingefrorener Stelle",
+  "vorher": {
+    "tools/basis/keine-speicher-attrappe.json": [
+      "{ \"befunde\": [\"test/rotprobe.test.js|2aeec76ad93fe643\"] }"
+    ],
+    "test/rotprobe.test.js": ["export const alt = { withStoreLock: (fn) => fn() };"]
+  },
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "export const alt = { withStoreLock: (fn) => fn() };",
+      "export const neu = { withStoreLock: (fn) => fn() };"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/keine-speicher-attrappe\""
+}

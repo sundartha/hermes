@@ -130,6 +130,7 @@ const NUR_KUERZEN = new Map([
   ["tools/basis/test-importe.json", gekuerzt],
   ["tools/basis/selbstpruefung.json", gekuerzt],
   ["tools/basis/fester-importpfad.json", gekuerzt],
+  ["tools/basis/keine-speicher-attrappe.json", gekuerzt],
   ["tools/basis/zeitglieder-bestand.json", zaehlerGekuerzt],
 ]);
 

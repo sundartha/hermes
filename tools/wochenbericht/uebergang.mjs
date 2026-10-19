@@ -35,6 +35,7 @@ const REMOVALS = new Map([
   ["tools/basis/quelltext-als-text.json", [BASELINE_CHECK("quelltext-als-text"), RULE_STOCK("hermes/kein-quelltext-als-text")]],
   ["tools/basis/selbstpruefung.json", [BASELINE_CHECK("selbstpruefung"), RULE_STOCK("hermes-tests/keine-selbstpruefung")]],
   ["tools/basis/fester-importpfad.json", [BASELINE_CHECK("fester-importpfad"), RULE_STOCK("hermes-tests/fester-importpfad")]],
+  ["tools/basis/keine-speicher-attrappe.json", [BASELINE_CHECK("keine-speicher-attrappe"), RULE_STOCK("hermes-tests/keine-speicher-attrappe")]],
   ["tools/basis/test-importe.json", ["ihr Einlesen in tools/abhaengigkeiten.mjs"]],
   ["tools/basis/lieferkette-ausnahmen.json", ["ihr Einlesen in tools/lockfile-alter.mjs"]],
   ["tools/basis/katalog-ohne-test.txt", ["ihr Einlesen in tools/katalog-pruefen.mjs und tools/testwirkung/katalog.mjs"]],

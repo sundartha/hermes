@@ -1,0 +1,7 @@
+{
+  "titel": "Neuer Test baut withStoreLock als Attrappe",
+  "dateien": {
+    "test/rotprobe.test.js": ["export const store = { withStoreLock: (fn) => fn() };"]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/keine-speicher-attrappe\""
+}

@@ -170,6 +170,7 @@ const ABLEHNUNGS_TABELLE = {
 export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
+const SPEICHER_ATTRAPPE_BESTAND = "tools/basis/keine-speicher-attrappe.json";
 const hermesRegeln = (await import(HERMES_REGELN_DATEI.href)).default;
 const hermesBloecke = [
   {
@@ -259,6 +260,7 @@ const testRegelBloecke =
             "hermes-tests/keine-selbstpruefung": ["error", { bestand: SELBSTPRUEFUNG_BESTAND }],
             "hermes-tests/fester-importpfad": ["error", { bestand: FESTER_IMPORTPFAD_BESTAND }],
             "hermes-tests/anfrage-mit-frist": "error",
+            "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
           },
         },
       ];

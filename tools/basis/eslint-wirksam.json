@@ -9846,6 +9846,12 @@
           "bestand": "tools/basis/selbstpruefung.json"
         }
       ],
+      "hermes-tests/keine-speicher-attrappe": [
+        2,
+        {
+          "bestand": "tools/basis/keine-speicher-attrappe.json"
+        }
+      ],
       "hermes/kein-quelltext-als-text": [
         2,
         {
@@ -15566,6 +15572,12 @@
           "bestand": "tools/basis/selbstpruefung.json"
         }
       ],
+      "hermes-tests/keine-speicher-attrappe": [
+        2,
+        {
+          "bestand": "tools/basis/keine-speicher-attrappe.json"
+        }
+      ],
       "hermes-typen/keine-typwaechter": [
         2,
         {
@@ -16423,6 +16435,12 @@
         2,
         {
           "bestand": "tools/basis/selbstpruefung.json"
+        }
+      ],
+      "hermes-tests/keine-speicher-attrappe": [
+        2,
+        {
+          "bestand": "tools/basis/keine-speicher-attrappe.json"
         }
       ],
       "hermes-typen/keine-typwaechter": [

@@ -24,7 +24,7 @@ const ANNAHMEN_FOLGE = "Testdaten und Code stehen auf diesen Tatsachen. Widerspr
 export const SPEICHER_REGEL = [
   "Speicher nutzt du in Abnahmetests nur über echte Store-Implementierungen: `makePgTestStore` aus `test/pg-helpers.js` oder den JSON-Store mit frischem Laden (`config.server.dataDir` auf ein Wegwerf-Verzeichnis, Neuladen von `src/store/json.js` per `import()` mit neuem Query-Anhang).",
   "Felder, die der Postgres-Store nicht als Spalte kennt, prüfst du mit dem JSON-Store.",
-  "Kein eigener Store, kein Objekt mit `load`, `save` oder `withStoreLock`, kein Ersetzen oder Überschreiben von Store-Methoden.",
+  "Kein eigener Store, kein Objekt mit `load`, `save` oder `withStoreLock`, kein Ersetzen oder Überschreiben von Store-Methoden. Eine eigene `withStoreLock` unter `test/` meldet die Lint-Regel `hermes-tests/keine-speicher-attrappe`.",
   "Ist ein Mutant mit einem echten Store nicht tötbar, baust du keine Attrappe, sondern antwortest als Letztes mit genau einer Zeile: „Auftrag passt nicht: <Mutant> ist mit echtem Speicher nicht prüfbar, weil <ein Satz>“.",
 ].join("\n");
 const EXIT_OHNE_STATUS = 1;
