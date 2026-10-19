@@ -100,6 +100,7 @@ function tallyIncreases(before, after) {
 
 function findingOfKey(key) {
   const separatorIndex = key.indexOf(FINDING_KEY_SEPARATOR);
+  if (separatorIndex === -1) return { ruleId: key };
   return { ruleId: key.slice(0, separatorIndex), message: key.slice(separatorIndex + FINDING_KEY_SEPARATOR.length) };
 }
 
@@ -429,7 +430,7 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
   console.error("");
   logLine("Die Listen werden nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
   logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
-  await printPurposes([PURPOSE.RAISED], reports.flatMap(({ raised }) => raised.map(({ rule }) => ({ ruleId: rule }))));
+  await printPurposes([PURPOSE.RAISED], reports.flatMap(({ raised }) => raised.map(({ rule }) => findingOfKey(rule))));
   return 1;
 }
 

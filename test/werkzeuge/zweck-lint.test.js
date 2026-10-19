@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ESLint } from "eslint";
@@ -12,7 +12,8 @@ import { STRENGE_NEBENREGELN } from "../../tools/lint-neue-funktionen.mjs";
 import { NAMENSREGEL, OHNE_REGEL, lintGruppen, lintZweckId, lintZweckZeilen } from "../../tools/lint-zweck.mjs";
 import { PRUEFREGEL } from "../../tools/neue-kommentare.mjs";
 import { gelesen } from "../../tools/syntaxbaum.mjs";
-import { REPO_ROOT } from "./probe-repo.js";
+import { REPO_ROOT, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { EXIT_ROT, TOR, UNTERDRUECKUNGEN } from "./unterdrueckungen-probe.js";
 
 const ZUORDNUNG = JSON.parse(readFileSync(join(REPO_ROOT, "tools/zweck/zuordnung/lint-regeln.json"), "utf8"));
 const TEXTE = JSON.parse(readFileSync(join(REPO_ROOT, "tools/zweck/lint.json"), "utf8"));
@@ -28,6 +29,7 @@ const NUTZER_ORTE = ["tools", "scripts", ".githooks", ".github/workflows", ".cla
 const MODUL = { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: {} };
 const ZAHL_OHNE_NAMEN = 7;
 const DEMETER = "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
+const ALTLAST = "eslint-legacy-exceptions.json";
 const PROBE_DATEI = join(REPO_ROOT, "src/zweck-lint-probe.js");
 const PROBE_CODE = [
   "export function vier(erster, zweiter, dritter, vierter) {",
@@ -193,3 +195,36 @@ test("der Formatter zeigt bei reinen Warnungen und ohne Befund keinen Block", as
   const sauber = await probeErgebnis("export const wert = 1;\n");
   assert.equal(await lintFormat([sauber.ergebnis], {}), "");
 });
+
+function altlastMitDemeter(anzahl) {
+  const eintrag = { reason: "Altlast", date: "2026-01-01", findings: { [`no-restricted-syntax :: ${DEMETER}`]: anzahl } };
+  return `${JSON.stringify({ "src/alt.js": eintrag })}\n`;
+}
+
+function unterdrueckteKomplexitaet(anzahl) {
+  return `${JSON.stringify({ "src/alt.js": { complexity: { count: anzahl } } })}\n`;
+}
+
+const GESTIEGEN = [
+  { liste: ALTLAST, inhalt: altlastMitDemeter, andere: UNTERDRUECKUNGEN, regel: "no-restricted-syntax", gruppe: "lint/demeter" },
+  { liste: UNTERDRUECKUNGEN, inhalt: unterdrueckteKomplexitaet, andere: ALTLAST, regel: "complexity", gruppe: "lint/funktionsgroesse" },
+];
+
+for (const { liste, inhalt, andere, regel, gruppe } of GESTIEGEN) {
+  test(`die Unterdrückungsprüfung nennt nach einer gestiegenen Zahl in ${liste} die Gruppe der Regel und danach den Block der Prüfung`, (context) => {
+    const repo = probeRepository(context, {
+      [TOR]: readFileSync(join(REPO_ROOT, TOR), "utf8"),
+      [andere]: "{}\n",
+      [liste]: inhalt(1),
+    });
+    symlinkSync(join(REPO_ROOT, "tools"), join(repo, "tools"));
+    writeFiles(repo, { [liste]: inhalt(2) });
+    runIn(repo, "git", ["add", liste]);
+    const lauf = runIn(repo, process.execPath, [TOR]);
+    assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
+    const zeilen = lauf.stderr.split("\n");
+    const kopf = `Zu ${regel} (${gruppe}):`;
+    const erwartet = [kopf, ...zweckBlock(gruppe), ...zweckBlock("lint/unterdrueckungen-steigen")];
+    assert.deepEqual(zeilen.slice(zeilen.indexOf(kopf), zeilen.indexOf(kopf) + erwartet.length), erwartet, lauf.stderr);
+  });
+}
