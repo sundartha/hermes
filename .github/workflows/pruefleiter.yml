@@ -17,6 +17,7 @@ jobs:
   vorpruefung:
     name: Prüfleiter Lint und betroffene Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -34,6 +35,7 @@ jobs:
   werkzeugtests:
     name: Prüfleiter Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +81,7 @@ jobs:
     if: always()
     needs: [vorpruefung, werkzeugtests]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
