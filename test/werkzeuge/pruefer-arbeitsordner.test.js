@@ -64,6 +64,19 @@ test("der Prüfer fragt, ob die Ursache behoben oder nur der Melder ruhiggestell
   }
 });
 
+test("der Prüfer liest außerhalb der Eingabe nur, was der Diff aufruft, importiert, ändert oder beeinflusst, und behält die Suche nach dem C1-Vorbild", () => {
+  const befehl = prueferBefehl({ dateien: ["src/telephony/anruf.js"], kritisch: true }, "claude");
+  const anweisung = befehl[befehl.indexOf("--append-system-prompt") + 1];
+  for (const teil of [
+    "Code anderer Commits und Dateien, die der Diff weder aufruft, importiert noch ändert und deren Verhalten er nicht beeinflusst, liest du nicht.",
+    "auch Aufrufer und Tests des geänderten Codes",
+    "für C1 suchst du das Vorbild auch in Dateien, die der Pull Request nicht ändert",
+    "Eine Nebenfrage ohne Bezug zu einer Zeile des Diffs ist kein Grund zum Lesen",
+  ]) {
+    assert.ok(anweisung.includes(teil), teil);
+  }
+});
+
 function zweiCommitsMitListe(context) {
   const repo = probeRepo(context);
   const basis = repo.git(["rev-parse", "HEAD"]);
