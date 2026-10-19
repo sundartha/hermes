@@ -303,3 +303,70 @@ test("feste-pfade: mit --nur-neue bleibt ein schon im Basis-Stand vorhandener Be
   );
   assertRed(run(bare, "--nur-neue"), "--nur-neue braucht --basis");
 });
+
+function cruiserOptions(options) {
+  return {
+    ".dependency-cruiser.cjs": `module.exports = { options: ${JSON.stringify(options)} };\n`,
+  };
+}
+
+test("feste-pfade: ein includeOnly, das die umbenannte Datei nicht mehr erfasst, und ein exclude, das sie neu ausnimmt, sind rot", (context) => {
+  const options = `${BACK}: .dependency-cruiser.cjs options`;
+  const included = `${options}.includeOnly trifft src/b.js, ${LOST} src/b.ts`;
+  const excluded = `${options}.exclude trifft src/b.ts, ${LOST} src/b.js`;
+  const narrowed = [
+    [{ includeOnly: { path: "^src/.*\\.js$" } }, included],
+    [{ includeOnly: "^src/.*\\.js$" }, included],
+    [{ exclude: { path: "^src/.*\\.ts$" } }, excluded],
+    [{ exclude: "^src/.*\\.ts$" }, excluded],
+  ];
+  for (const [config, expected] of narrowed)
+    assertRed(runRenamed(context, cruiserOptions(config)), expected);
+  for (const config of [{ includeOnly: "^src/" }, { exclude: { path: "^src/" } }]) {
+    const green = runRenamed(context, { ...MANIFEST_BOTH, ...cruiserOptions(config) });
+    assert.equal(green.status, EXIT_GREEN, green.output);
+  }
+});
+
+test("feste-pfade: ein Rückverweis in einem Pfad der Abhängigkeitsprüfung lässt sich je Datei nicht prüfen und ist rot", (context) => {
+  const config = [
+    "module.exports = { forbidden: [",
+    '  { name: "eins", from: { path: "^src/(.+)/" }, to: { path: "^lib/$1/" } },',
+    '  { name: "zwei", from: { pathNot: "^(src)/$1$" }, to: {} },',
+    "] };",
+  ].join("\n");
+  assertRed(
+    runRenamed(context, { ".dependency-cruiser.cjs": `${config}\n` }),
+    ".dependency-cruiser.cjs eins to: ein Rückverweis ($1) lässt sich je Datei nicht prüfen",
+    ".dependency-cruiser.cjs zwei from: ein Rückverweis ($1) lässt sich je Datei nicht prüfen",
+  );
+});
+
+test("feste-pfade: ein paths-ignore, das die umbenannte Datei neu ausnimmt, ist rot", (context) => {
+  const ignoring = (pattern) => ({
+    ".github/workflows/probe.yml": `on:\n  push:\n    paths-ignore:\n      - ${pattern}\njobs: {}\n`,
+  });
+  assertRed(
+    runRenamed(context, ignoring("src/*.ts")),
+    `${BACK}: .github/workflows/probe.yml on.push.paths-ignore trifft src/b.ts, ${LOST} src/b.js`,
+  );
+  const green = runRenamed(context, { ...MANIFEST_BOTH, ...ignoring("src/**") });
+  assert.equal(green.status, EXIT_GREEN, green.output);
+});
+
+test("feste-pfade: eine ask-Sperre, die die umbenannte Datei nicht mehr trifft, ist rot", (context) => {
+  const asking = (tool, pattern) => json({ permissions: { ask: [`${tool}(${pattern})`] } });
+  assertRed(
+    runRenamed(context, { ".claude/rollen/test.json": asking("Edit", "src/*.js") }),
+    `${BACK}: .claude/rollen/test.json ask Edit trifft src/b.js, ${LOST} src/b.ts`,
+  );
+  assertRed(
+    runRenamed(context, { ".claude/settings.json": asking("Write", "src/*.js") }),
+    `${BACK}: .claude/settings.json ask Write trifft src/b.js, ${LOST} src/b.ts`,
+  );
+  const green = runRenamed(context, {
+    ...MANIFEST_BOTH,
+    ".claude/rollen/test.json": asking("Edit", "src/**"),
+  });
+  assert.equal(green.status, EXIT_GREEN, green.output);
+});
