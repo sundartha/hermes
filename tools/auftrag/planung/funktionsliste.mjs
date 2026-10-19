@@ -5,6 +5,7 @@ import { dependentsGraph, testsReaching } from "../../testgraph.mjs";
 import { istKritisch } from "../agenten.mjs";
 import { geschuetzteMuster, istGeschuetzt } from "../format.mjs";
 import { aenderungsStellen } from "./erkundung.mjs";
+import { vonEslintGeprueft } from "./eslint-prueft.mjs";
 import { funktionsKarten } from "./karte.mjs";
 
 function mitZeilen(stelle) {
@@ -17,7 +18,9 @@ function nummernDerStellen(stellen) {
 
 export function funktionsListe(root, berichte) {
   const stellen = aenderungsStellen(berichte).filter(mitZeilen);
-  const dateien = [...new Set(stellen.map(({ datei }) => datei))].toSorted();
+  const alle = [...new Set(stellen.map(({ datei }) => datei))].toSorted();
+  if (alle.length === 0) return [];
+  const dateien = vonEslintGeprueft(root, alle);
   if (dateien.length === 0) return [];
   return funktionsKarten(root, dateien).flatMap(({ datei, funktionen }) => {
     const eigene = stellen.filter((stelle) => stelle.datei === datei);

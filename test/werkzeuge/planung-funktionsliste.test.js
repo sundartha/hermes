@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { dateiKarte, funktionsListe } from "../../tools/auftrag/planung/funktionsliste.mjs";
-import { REPO_ROOT, probeRepository } from "./probe-repo.js";
+import { REPO_ROOT, probeRepository, writeFiles } from "./probe-repo.js";
 
 const PROBE = [
   "export function aussen(wert) {",
@@ -98,6 +98,48 @@ test("Stellen mit neu oder ohne Zeilen ergeben eine leere Liste", (context) => {
     bericht("S2", { datei: "src/probe.js", funktion: "aussen" }),
   ]);
   assert.deepEqual(liste, []);
+});
+
+test("eine Shell-Datei ohne ESLint-Konfiguration bekommt keine Karte und bleibt in der Dateikarte", async (context) => {
+  const ordner = funktionsProbe(context);
+  writeFiles(ordner, {
+    "scripts/probe.sh": "#!/bin/sh\necho probe\nexit 0\n",
+    "test/probe.test.js": 'import "../src/probe.js";\n',
+  });
+  const berichte = [bericht("S1", { datei: "src/probe.js", funktion: "andere", von: 9, bis: 9 }, { datei: "scripts/probe.sh", von: 2, bis: 2 })];
+  const liste = funktionsListe(ordner, berichte);
+  assert.deepEqual(
+    liste.map(({ datei, name }) => `${datei}:${name}`),
+    ["src/probe.js:andere"],
+  );
+  const karte = await dateiKarte(ordner, berichte);
+  assert.deepEqual(
+    karte.map(({ datei, nummern }) => `${datei}:${nummern.join(",")}`),
+    ["scripts/probe.sh:S1", "src/probe.js:S1"],
+  );
+});
+
+test("eine JavaScript-Datei mit Syntaxfehler bricht die Liste weiter mit der ESLint-Meldung ab", (context) => {
+  const ordner = funktionsProbe(context);
+  writeFiles(ordner, { "src/kaputt.js": "export function kaputt( {\n" });
+  assert.throws(
+    () => funktionsListe(ordner, [bericht("S1", { datei: "src/kaputt.js", funktion: "kaputt", von: 1, bis: 1 })]),
+    /ESLint konnte src\/kaputt\.js nicht prüfen/,
+  );
+});
+
+test("eine nicht lesbare ESLint-Konfiguration bricht die Liste laut ab", (context) => {
+  const ordner = funktionsProbe(context);
+  writeFiles(ordner, { "eslint.config.js": "export default [;\n" });
+  assert.throws(
+    () => funktionsListe(ordner, [bericht("S1", { datei: "src/probe.js", funktion: "aussen", von: 2, bis: 2 })]),
+    /ESLint konnte nicht sagen, welche Dateien es prüft/,
+  );
+});
+
+test("eine Stelle außerhalb des Repos wird nicht still übersprungen", (context) => {
+  const ordner = funktionsProbe(context);
+  assert.throws(() => funktionsListe(ordner, [bericht("S1", { datei: "../draussen.js", funktion: "fremd", von: 1, bis: 1 })]), /Datei fehlt: \.\.\/draussen\.js/);
 });
 
 test("die Dateikarte nennt je Datei Tests, CODEOWNERS und Nummern aus allen Berichten, sortiert", async (context) => {
