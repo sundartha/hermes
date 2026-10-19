@@ -1,13 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import express from "express";
 import { neuePglite } from "./pglite-helfer.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makePortalStore } from "../src/store/portal.js";
-import { mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
+import { get } from "./gemeinsam/testserver-anfrage.mjs";
 
 const SECRET = "portal-route-secret-0123456789";
 
@@ -54,17 +53,6 @@ async function setup() {
   };
 }
 
-function get(url, cookie) {
-  return new Promise((resolve, reject) => {
-    mitAntwortfrist(
-      http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
-        let body = "";
-        res.on("data", (d) => (body += d));
-        res.on("end", () => resolve({ status: res.statusCode, body }));
-      }),
-    ).on("error", reject);
-  });
-}
 
 test("/api/portal/state ohne Session -> 401 (fail-closed)", async () => {
   const s = await setup();
