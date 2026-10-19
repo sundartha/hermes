@@ -9,7 +9,7 @@ import {
   reserveExceedsBudget,
   addVoiceUsageCostCents,
 } from "../src/store/state-ops.js";
-import { PRICES, tokensOf } from "./_prices.js";
+import { PRICES, TOKENS_PER_EUR, tokensOf } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
 
@@ -80,7 +80,6 @@ test("Grenzfall (T5): Reconcile mit 0 ct laesst costCents unveraendert", () => {
 
 test("Bestand: trackUsage + budgetExceeded byte-identisch (Reconcile addiert nur dazu)", () => {
   const s = makeDefaultState();
-  const TOKENS_PER_EUR = 1_000_000 / 0.93;
   trackUsage(s, TENANT_A, tokensOf(Math.floor(TOKENS_PER_EUR * 7), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "7 EUR < 8 EUR -> frei (Bestand)");
   addVoiceUsageCostCents(s, TENANT_A, 150);

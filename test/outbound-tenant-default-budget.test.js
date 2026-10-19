@@ -6,10 +6,9 @@ import {
   trackUsage,
   budgetExceeded,
 } from "../src/store/state-ops.js";
-import { PRICES, tokensOf } from "./_prices.js";
+import { PRICES, TOKENS_PER_EUR, tokensOf } from "./_prices.js";
 
 const DEFAULT_BUDGET_CENTS = 1000;
-const TOKENS_PER_EUR = 1_000_000 / 0.93;
 
 test("registerTenant seedt die per-Tenant-Default-Kostendecke (Zeile budget == hard cap)", () => {
   const s = makeDefaultState();
