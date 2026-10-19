@@ -1,4 +1,4 @@
-import { pfadAusSchluessel } from "./eslint-rules/bestand.js";
+import { gezaehlt, kontingent, pfadAusSchluessel } from "./eslint-rules/bestand.js";
 import { umbenennungen } from "./umbenennung.mjs";
 
 const TRENNER = "|";
@@ -33,21 +33,14 @@ export function paarZurueck(anzahl) {
   };
 }
 
-export function gezaehlt(eintraege) {
-  const anzahl = new Map();
-  for (const eintrag of eintraege) anzahl.set(eintrag, (anzahl.get(eintrag) ?? 0) + 1);
-  return anzahl;
-}
+export { gezaehlt };
 
 export function aufgeteilt(eintraege, erlaubt, schluesselVon) {
-  const uebrig = gezaehlt(erlaubt);
+  const frei = kontingent(gezaehlt(erlaubt));
   const innerhalb = [];
   const darueber = [];
   for (const eintrag of eintraege) {
-    const schluessel = schluesselVon(eintrag);
-    const frei = uebrig.get(schluessel) ?? 0;
-    uebrig.set(schluessel, frei - 1);
-    if (frei > 0) innerhalb.push(eintrag);
+    if (frei(schluesselVon(eintrag))) innerhalb.push(eintrag);
     else darueber.push(eintrag);
   }
   return { innerhalb, darueber };

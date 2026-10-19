@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { aufgeteilt } from "../../tools/bestand-rueckfuehrung.mjs";
 import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
 import { bestandFriertGenauEin, bestandsDatei, gemeldeteZeilen } from "./hermes-regeln-probe.js";
 import { probeDirectory, writeFiles } from "./probe-repo.js";
@@ -103,6 +104,17 @@ test("kein-quelltext-als-text: eine eingefrorene Lesestelle ist frei, dieselbe e
   const zweites = 'const zweiter = readFileSync(new URL("../src/server.js", import.meta.url), "utf8");';
   assert.deepEqual(gemeldet(directory, [LESEN_UEBER_URL, zweites]), [zweites]);
   assert.deepEqual(gemeldet(directory, [LESEN_UEBER_WURZEL]), [LESEN_UEBER_WURZEL]);
+});
+
+test("kein-quelltext-als-text: ein zweimal eingefrorener Befund ist zweimal frei, genau wie in der Rückführung der Basislinien", (context) => {
+  const schluessel = befundSchluessel(DATEI, LESEN_UEBER_URL.slice("const text = ".length, -1));
+  const directory = probeDirectory(context, { [BESTAND]: bestandsDatei([schluessel, schluessel]) });
+  const lesestellen = ["text", "zweiter", "dritter"].map((name) =>
+    LESEN_UEBER_URL.replace("const text", `const ${name}`),
+  );
+  assert.deepEqual(gemeldet(directory, lesestellen), [lesestellen[2]]);
+  const geteilt = aufgeteilt(lesestellen, [schluessel, schluessel], () => schluessel);
+  assert.deepEqual(geteilt, { innerhalb: lesestellen.slice(0, 2), darueber: [lesestellen[2]] });
 });
 
 test("kein-quelltext-als-text: ein aus dem Bestand gestrichener Befund wird im selben Prozess wieder gemeldet", (context) => {

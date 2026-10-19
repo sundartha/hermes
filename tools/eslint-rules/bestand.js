@@ -36,15 +36,24 @@ export function pfadInDerWurzel(wurzel, datei) {
   return relative(wurzel, datei).split(sep).join(POSIX_TRENNER);
 }
 
+export function gezaehlt(eintraege) {
+  const anzahl = new Map();
+  for (const eintrag of eintraege) anzahl.set(eintrag, (anzahl.get(eintrag) ?? 0) + 1);
+  return anzahl;
+}
+
+export function kontingent(anzahl) {
+  const uebrig = new Map(anzahl);
+  return (schluessel) => {
+    const frei = uebrig.get(schluessel) ?? 0;
+    uebrig.set(schluessel, frei - 1);
+    return frei > 0;
+  };
+}
+
 function nachDateiGezaehlt(befunde) {
-  const nachDatei = new Map();
-  for (const schluessel of befunde) {
-    const datei = pfadAusSchluessel(schluessel);
-    const zaehler = nachDatei.get(datei) ?? new Map();
-    zaehler.set(schluessel, (zaehler.get(schluessel) ?? 0) + 1);
-    nachDatei.set(datei, zaehler);
-  }
-  return nachDatei;
+  const nachDatei = Map.groupBy(befunde, pfadAusSchluessel);
+  return new Map([...nachDatei].map(([datei, schluessel]) => [datei, gezaehlt(schluessel)]));
 }
 
 function dateiStand(pfad) {
@@ -67,13 +76,5 @@ export function bestandDerDatei(context) {
   const [{ bestand } = {}] = context.options;
   const datei = pfadInDerWurzel(context.cwd, context.filename);
   const nachDatei = bestand === undefined ? new Map() : gelesenerBestand(resolve(context.cwd, bestand));
-  const uebrig = new Map(nachDatei.get(datei) ?? []);
-  return {
-    datei,
-    eingefroren(schluessel) {
-      const anzahl = uebrig.get(schluessel) ?? 0;
-      uebrig.set(schluessel, anzahl - 1);
-      return anzahl > 0;
-    },
-  };
+  return { datei, eingefroren: kontingent(nachDatei.get(datei) ?? []) };
 }
