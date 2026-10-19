@@ -205,26 +205,39 @@ function unterdrueckteKomplexitaet(anzahl) {
   return `${JSON.stringify({ "src/alt.js": { complexity: { count: anzahl } } })}\n`;
 }
 
-const GESTIEGEN = [
-  { liste: ALTLAST, inhalt: altlastMitDemeter, andere: UNTERDRUECKUNGEN, regel: "no-restricted-syntax", gruppe: "lint/demeter" },
-  { liste: UNTERDRUECKUNGEN, inhalt: unterdrueckteKomplexitaet, andere: ALTLAST, regel: "complexity", gruppe: "lint/funktionsgroesse" },
-];
-
-for (const { liste, inhalt, andere, regel, gruppe } of GESTIEGEN) {
-  test(`die Unterdrückungsprüfung nennt nach einer gestiegenen Zahl in ${liste} die Gruppe der Regel und danach den Block der Prüfung`, (context) => {
-    const repo = probeRepository(context, {
-      [TOR]: readFileSync(join(REPO_ROOT, TOR), "utf8"),
-      [andere]: "{}\n",
-      [liste]: inhalt(1),
-    });
-    symlinkSync(join(REPO_ROOT, "tools"), join(repo, "tools"));
-    writeFiles(repo, { [liste]: inhalt(2) });
-    runIn(repo, "git", ["add", liste]);
-    const lauf = runIn(repo, process.execPath, [TOR]);
-    assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
-    const zeilen = lauf.stderr.split("\n");
-    const kopf = `Zu ${regel} (${gruppe}):`;
-    const erwartet = [kopf, ...zweckBlock(gruppe), ...zweckBlock("lint/unterdrueckungen-steigen")];
-    assert.deepEqual(zeilen.slice(zeilen.indexOf(kopf), zeilen.indexOf(kopf) + erwartet.length), erwartet, lauf.stderr);
+function gestiegeneZahlNenntGruppe(context, { liste, inhalt, andere, regel, gruppe }) {
+  const repo = probeRepository(context, {
+    [TOR]: readFileSync(join(REPO_ROOT, TOR), "utf8"),
+    [andere]: "{}\n",
+    [liste]: inhalt(1),
   });
+  symlinkSync(join(REPO_ROOT, "tools"), join(repo, "tools"));
+  writeFiles(repo, { [liste]: inhalt(2) });
+  runIn(repo, "git", ["add", liste]);
+  const lauf = runIn(repo, process.execPath, [TOR]);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stderr);
+  const zeilen = lauf.stderr.split("\n");
+  const kopf = `Zu ${regel} (${gruppe}):`;
+  const erwartet = [kopf, ...zweckBlock(gruppe), ...zweckBlock("lint/unterdrueckungen-steigen")];
+  assert.deepEqual(zeilen.slice(zeilen.indexOf(kopf), zeilen.indexOf(kopf) + erwartet.length), erwartet, lauf.stderr);
 }
+
+test("die Unterdrückungsprüfung nennt nach einem gestiegenen Pin in eslint-legacy-exceptions.json die Gruppe der Regel und danach den Block der Prüfung", (context) => {
+  gestiegeneZahlNenntGruppe(context, {
+    liste: ALTLAST,
+    inhalt: altlastMitDemeter,
+    andere: UNTERDRUECKUNGEN,
+    regel: "no-restricted-syntax",
+    gruppe: "lint/demeter",
+  });
+});
+
+test("die Unterdrückungsprüfung nennt nach einer gestiegenen Zahl in eslint-suppressions.json die Gruppe der Regel und danach den Block der Prüfung", (context) => {
+  gestiegeneZahlNenntGruppe(context, {
+    liste: UNTERDRUECKUNGEN,
+    inhalt: unterdrueckteKomplexitaet,
+    andere: ALTLAST,
+    regel: "complexity",
+    gruppe: "lint/funktionsgroesse",
+  });
+});
