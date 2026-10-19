@@ -80,3 +80,30 @@ test("eine neue Zeile außerhalb von src/ und test/, die Strykers Zustand abfrag
   assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:1"]);
   assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), []);
 });
+
+test("die Stryker-Attrappe der Ausmist-Tests ist kein Verstoß, dieselbe Zeile in jeder anderen Testdatei schon", (context) => {
+  const ersatz = ["STRY", "KER_ERSATZ"].join("");
+  const zeile = `export const regeln = (env) => env.${ersatz};\n`;
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, {
+    "test/werkzeuge/ausmisten/stryker-ersatz.mjs": zeile,
+    "test/werkzeuge/ausmisten/totcode.mjs": zeile,
+  });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+  assert.deepEqual(schluessel(gruen.stdout, ZUSTAND), []);
+  writeFiles(repo, {
+    "test/werkzeuge/ausmisten/regeln.mjs": zeile,
+    "test/werkzeuge/ausmisten-totcode.test.js": zeile,
+    "test/werkzeuge/stryker-ersatz.mjs": zeile,
+    "test/ausmisten/totcode.mjs": zeile,
+  });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, ZUSTAND).sort(), [
+    "test/ausmisten/totcode.mjs:1",
+    "test/werkzeuge/ausmisten-totcode.test.js:1",
+    "test/werkzeuge/ausmisten/regeln.mjs:1",
+    "test/werkzeuge/stryker-ersatz.mjs:1",
+  ]);
+});
