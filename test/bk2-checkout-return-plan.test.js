@@ -1,20 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import request from "./gemeinsam/testserver-anfrage.mjs";
-import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import {
-  webAuth,
-  webAuthAllowPending,
-  makeAccounts,
-  makeSessions,
-  signValue,
-  SESSION_COOKIE_NAME,
-} from "../src/web-auth.js";
-import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { CustomerMissingError } from "../src/billing/errors.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { starteSelfServiceApp } from "./gemeinsam/self-service-app.js";
 
 const SECRET = "bk2-checkout-secret-0123456789";
 const SUB = "sub-bk2";
@@ -71,8 +62,6 @@ function fakeBilling(spy = {}, checkoutOutcome = {}, { staleCustomerHeal = false
   };
 }
 
-const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
-
 async function setup({
   paymentEnabled = true,
   subscribed = false,
@@ -81,12 +70,7 @@ async function setup({
   checkoutOutcome = {},
   staleCustomerHeal = false,
 } = {}) {
-  const { store, db } = await makePgTestStore();
-  const runner = {
-    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
-  };
-  const accounts = makeAccounts(runner);
-  const sessions = makeSessions(runner);
+  const { store, runner } = await makePgTestStore();
 
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK2", idpSubject: SUB });
@@ -102,44 +86,25 @@ async function setup({
     });
   }
 
-  await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk2@kunde.de" });
-  const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
-
-  const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
-  const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const billingSpy = {};
   const provisionSpy = [];
   const auditCalls = [];
-  const app = express();
-  app.use(express.json());
-  app.use(
-    makeSelfServiceRoutes({
-      store,
-      webAuthMw,
-      webAuthPendingMw,
-      audit: (event, _req, detail) => auditCalls.push({ event, detail }),
-      config: withConfigNamespaces({ ...CONFIG, paymentEnabled, ...configPatch }),
-      billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
-      accounts,
-      provision: async (t) => {
-        provisionSpy.push(t);
-        return { ok: true, reason: "queued" };
-      },
-    }),
-  );
-  const server = await new Promise((r) => {
-    const sv = app.listen(0, "127.0.0.1", () => r(sv));
-  });
-  return {
-    base: `http://127.0.0.1:${server.address().port}`,
+  const app = await starteSelfServiceApp({
     store,
-    accounts,
-    billingSpy,
-    provisionSpy,
-    auditCalls,
-    cookie: cookieFor(sessionId),
-    close: () => new Promise((r) => server.close(r)),
-  };
+    runner,
+    secret: SECRET,
+    sub: SUB,
+    tenantId: TENANT,
+    email: "bk2@kunde.de",
+    audit: (event, _req, detail) => auditCalls.push({ event, detail }),
+    config: withConfigNamespaces({ ...CONFIG, paymentEnabled, ...configPatch }),
+    billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
+    provision: async (t) => {
+      provisionSpy.push(t);
+      return { ok: true, reason: "queued" };
+    },
+  });
+  return { ...app, store, billingSpy, provisionSpy, auditCalls };
 }
 
 const setupCheckout = (s, plan) =>
