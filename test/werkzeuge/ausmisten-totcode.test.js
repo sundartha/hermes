@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { chdir, cwd, env, execPath } from "node:process";
 import { test } from "node:test";
 
-import { EINGANG_QUELLE, GATE_TEST } from "./ausmisten/hilfen.mjs";
+import { ausgabenAus } from "../../tools/tests-ausmisten/ausgaben.mjs";
+import { pruefsummenZeile } from "../../tools/tests-ausmisten/festgehalten.mjs";
+import {
+  BENUTZER,
+  PROTOKOLL_VORSATZ,
+  RUNNER_SYSTEM,
+  untraut,
+} from "../../tools/tests-ausmisten/totcode-untraut.mjs";
+import { EINGANG_QUELLE, GATE_TEST, ausmistenRepo, starte } from "./ausmisten/hilfen.mjs";
 import { testDatei } from "./ausmisten/messung.mjs";
 import { EXIT_GRUEN, EXIT_ROT, leseStufe, schritt, totcodeLauf } from "./ausmisten/totcode.mjs";
+import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
 const EINRUECKUNG = 2;
+const RECHTE = 0o777;
+const OKTAL = 8;
 const EINGANG_TEST = "test/post/eingang.test.js";
 const LEER_TEST = "test/post/leer.test.js";
 const LEER_HILFE = "test/hilfe/leer.js";
@@ -406,4 +420,343 @@ test("ausmisten-totcode: ein zweites fehlendes Modul außerhalb von src/ hinter 
   });
 
   erwarteEinzigenGrund(lauf, "Rotprobe", LEER_TEST, "test/hilfe/fehlt.js");
+});
+
+const SHA_LAENGE = 40;
+const SHA256_HEX_LAENGE = 64;
+const FALSCHE_PRUEFSUMME = "0".repeat(SHA256_HEX_LAENGE);
+
+function summeDer(daten, name) {
+  return createHash("sha256")
+    .update(readFileSync(join(daten, name, `${name}.json`)))
+    .digest("hex");
+}
+
+function paketSchritt(lauf, { befehl, paket, summen = {} }) {
+  const name = `${befehl}-${paket}`;
+  const args = [befehl, "--daten", lauf.daten, "--paket", paket, "--aus", join(lauf.daten, name)];
+  const umgebung = { ...lauf.umgebung, ...lauf.summen, ...summen };
+  return starte("tools/tests-ausmisten/totcode.mjs", { args, cwd: lauf.repo.ordner, umgebung });
+}
+
+test("ausmisten-totcode: mit --paket misst jeder Schritt nur sein Paket aus dem Plan, die Rotprobe ist ein eigener Schritt", async (context) => {
+  const regeln = [LEER_MUTANT, trimMutant([LEER_TEST, EINGANG_TEST])];
+  const lauf = await totcodeLauf(context, { ...TOTER_LEER_TEST, regeln });
+  assert.deepEqual(
+    lauf.plan.pakete.map(({ dateien }) => dateien),
+    [[EINGANG_QUELLE]],
+  );
+  assert.equal(ausgabenAus(join(lauf.daten, "plan.txt")).pakete, "[0]");
+
+  const basis = await paketSchritt(lauf, { befehl: "basis", paket: "0" });
+  assert.equal(basis.status, EXIT_GRUEN, basis.ausgabe);
+  const basisSumme = summeDer(lauf.daten, "basis-0");
+  assert.ok(basis.ausgabe.includes(pruefsummenZeile(0, basisSumme)), basis.ausgabe);
+  const basisTeil = leseStufe(lauf.daten, "basis-0");
+  assert.equal(basisTeil.paket, 0);
+  assert.deepEqual(basisTeil.dateien, [EINGANG_QUELLE]);
+  assert.deepEqual(basisTeil.mutanten, lauf.basis.mutanten);
+
+  const summen = { BASIS_PRUEFSUMME: basisSumme };
+  const kopf = await paketSchritt(lauf, { befehl: "kopf", paket: "0", summen });
+  assert.equal(kopf.status, EXIT_GRUEN, kopf.ausgabe);
+  const kopfSumme = summeDer(lauf.daten, "kopf-0");
+  assert.ok(kopf.ausgabe.includes(pruefsummenZeile(0, kopfSumme, "kopf")), kopf.ausgabe);
+  const kopfTeil = leseStufe(lauf.daten, "kopf-0");
+  assert.deepEqual(kopfTeil.mutanten, lauf.kopf.mutanten);
+  assert.equal(kopfTeil.rotprobe, undefined);
+
+  const probe = await schritt(lauf, ["rotprobe", "rotprobe"]);
+  assert.equal(probe.status, EXIT_GRUEN, probe.ausgabe);
+  const rotprobe = leseStufe(lauf.daten, "rotprobe");
+  assert.equal(rotprobe.art, "totcode-rotprobe");
+  assert.deepEqual(rotprobe.faelle, lauf.kopf.rotprobe.faelle);
+
+  const fremd = await paketSchritt(lauf, { befehl: "kopf", paket: "1", summen });
+  assert.equal(fremd.status, EXIT_ROT, fremd.ausgabe);
+  assert.match(fremd.ausgabe, /Paket 1 steht nicht im Plan/);
+  const falsch = await paketSchritt(lauf, {
+    befehl: "kopf",
+    paket: "0",
+    summen: { BASIS_PRUEFSUMME: FALSCHE_PRUEFSUMME },
+  });
+  assert.equal(falsch.status, EXIT_ROT, falsch.ausgabe);
+  assert.match(falsch.ausgabe, /basis-0\.json passt nicht zur Prüfsumme/);
+});
+
+function probeSystem(zusatz, schritte) {
+  return {
+    legeBenutzerAn: () => schritte.push("Benutzer angelegt"),
+    uebergib: () => schritte.push("übergeben"),
+    teileKanal: (kanal) =>
+      schritte.push(`Kanal ${(statSync(kanal).mode & RECHTE).toString(OKTAL)}`),
+    starte(befehl, { cwd: ordner, umgebung, stdio }) {
+      schritte.push({ befehl, umgebung });
+      const [programm, ...args] = befehl;
+      return spawn(programm, args, { cwd: ordner, stdio, env: { ...zusatz, ...umgebung } });
+    },
+    beendeAlle: () => schritte.push("alle beendet"),
+    raeumeAuf: (ordner) => rmSync(ordner, { recursive: true, force: true }),
+  };
+}
+
+async function untrautIn(context, { ordner, umgebung, auftrag, system }) {
+  const vorher = {
+    verzeichnis: cwd(),
+    werte: Object.keys(umgebung).map((name) => [name, env[name]]),
+  };
+  const zeilen = [];
+  const ausgabe = context.mock.method(console, "log", (zeile) => zeilen.push(zeile));
+  Object.assign(env, umgebung);
+  chdir(ordner);
+  try {
+    return { ergebnis: await untraut(auftrag, system).catch((fehler) => fehler), zeilen };
+  } finally {
+    chdir(vorher.verzeichnis);
+    for (const [name, wert] of vorher.werte)
+      if (wert === undefined) delete env[name];
+      else env[name] = wert;
+    ausgabe.mock.restore();
+  }
+}
+
+test("ausmisten-totcode: als eigener Benutzer liefert der Kopf eines Pakets sein Ergebnis nur über den Kanal, die Prüfsumme kommt erst nach dem Beenden aller Prozesse", async (context) => {
+  const regeln = [LEER_MUTANT, trimMutant([LEER_TEST, EINGANG_TEST])];
+  const lauf = await totcodeLauf(context, { ...TOTER_LEER_TEST, regeln });
+  const basis = await paketSchritt(lauf, { befehl: "basis", paket: "0" });
+  assert.equal(basis.status, EXIT_GRUEN, basis.ausgabe);
+  const aus = join(lauf.daten, "kopf-0");
+  const schritte = [];
+  const ausgabe = join(lauf.daten, "untraut.txt");
+  writeFileSync(ausgabe, "");
+  const umgebung = {
+    PLAN_PRUEFSUMME: lauf.summen.PLAN_PRUEFSUMME,
+    BASIS_PRUEFSUMME: summeDer(lauf.daten, "basis-0"),
+    GITHUB_OUTPUT: ausgabe,
+  };
+  const zusatz = { ...isolatedEnvironment(), ...lauf.umgebung };
+  const { ergebnis, zeilen } = await untrautIn(context, {
+    ordner: lauf.repo.ordner,
+    umgebung,
+    auftrag: { schritt: "kopf", daten: lauf.daten, paket: "0", aus },
+    system: probeSystem(zusatz, schritte),
+  });
+
+  assert.equal(ergebnis, EXIT_GRUEN, `${ergebnis?.stack ?? ""}\n${zeilen.join("\n")}`);
+  const kopfTeil = leseStufe(lauf.daten, "kopf-0");
+  assert.deepEqual(kopfTeil.mutanten, lauf.kopf.mutanten);
+  const summe = summeDer(lauf.daten, "kopf-0");
+  assert.equal(ausgabenAus(ausgabe).pruefsumme, summe);
+  const summenZeile = zeilen.indexOf(pruefsummenZeile(0, summe, "kopf"));
+  assert.ok(summenZeile >= 0, zeilen.join("\n"));
+  assert.ok(
+    zeilen.slice(0, summenZeile).every((zeile) => zeile.startsWith(PROTOKOLL_VORSATZ)),
+    zeilen.join("\n"),
+  );
+  const start = schritte.findIndex((eintrag) => eintrag.befehl !== undefined);
+  assert.deepEqual(schritte.slice(0, start), [
+    "Benutzer angelegt",
+    "übergeben",
+    "übergeben",
+    "Kanal 620",
+  ]);
+  assert.deepEqual(schritte.slice(start + 1), ["alle beendet"]);
+  const { befehl, umgebung: kindUmgebung } = schritte[start];
+  assert.deepEqual(befehl.slice(befehl.indexOf("--kanal") - 1, -1), ["0", "--kanal"]);
+  assert.deepEqual(
+    Object.keys(kindUmgebung).sort(),
+    ["BASIS_PRUEFSUMME", "HOME", "LANG", "NODE_ENV", "PATH", "PLAN_PRUEFSUMME", "TMPDIR"].filter(
+      (name) => name !== "LANG" || env.LANG !== undefined,
+    ),
+  );
+});
+
+const PLAN_SHA = { basis: "1".repeat(SHA_LAENGE), kopf: "2".repeat(SHA_LAENGE) };
+
+function geschriebenerPlan(context) {
+  const plan = { art: "totcode-plan", ...PLAN_SHA, pakete: [{ dateien: [EINGANG_QUELLE] }] };
+  const text = `${JSON.stringify(plan, null, EINRUECKUNG)}\n`;
+  const daten = probeDirectory(context, { "plan/plan.json": text });
+  return { daten, summe: createHash("sha256").update(text).digest("hex") };
+}
+
+function kanalSchreiber(text, { exit = 0, ausgabe = "" } = {}, schritte = []) {
+  const system = probeSystem({}, schritte);
+  system.starte = (befehl, { cwd: ordner, stdio }) => {
+    const kanal = befehl[befehl.indexOf("--kanal") + 1];
+    const skript = `process.stdout.write(process.argv[4]); require("node:fs").writeFileSync(process.argv[1], process.argv[2]); process.exit(Number(process.argv[3]));`;
+    const args = ["-e", skript, kanal, text, String(exit), ausgabe];
+    return spawn(execPath, args, { cwd: ordner, stdio });
+  };
+  return system;
+}
+
+const KOPF_ZEILE = `${JSON.stringify({ art: "totcode-kopf", ...PLAN_SHA, paket: 0, dateien: [EINGANG_QUELLE], teil: null, mutanten: {} })}\n`;
+
+test("ausmisten-totcode: eine zweite oder unlesbare Ergebniszeile, ein fremdes Ergebnis oder ein Abbruch als eigener Benutzer schreibt keine Stufe", async (context) => {
+  const repo = ausmistenRepo(context);
+  const { daten, summe } = geschriebenerPlan(context);
+  const aus = join(daten, "kopf-0");
+  const faelle = [
+    [`${KOPF_ZEILE}${KOPF_ZEILE}`, 0, /enthält 2 Zeilen, erwartet ist genau eine/],
+    ["", 0, /enthält 0 Zeilen/],
+    ["kein JSON\n", 0, /Ergebniszeile im Ergebniskanal ist unlesbar/],
+    [KOPF_ZEILE.replace('"paket":0', '"paket":1'), 0, /gehört nicht zu dieser Messung/],
+    [KOPF_ZEILE, 3, /endete mit Exit 3/],
+  ];
+  for (const [text, exit, fehler] of faelle) {
+    const schritte = [];
+    const { ergebnis, zeilen } = await untrautIn(context, {
+      ordner: repo.ordner,
+      umgebung: { PLAN_PRUEFSUMME: summe },
+      auftrag: { schritt: "kopf", daten, paket: "0", aus },
+      system: kanalSchreiber(text, { exit }, schritte),
+    });
+    assert.match(ergebnis?.message ?? "", fehler, String(ergebnis));
+    assert.ok(schritte.includes("alle beendet"), JSON.stringify(schritte));
+    assert.equal(existsSync(aus), false);
+    assert.ok(!zeilen.some((zeile) => zeile.includes("Prüfsumme")), zeilen.join("\n"));
+  }
+
+  const { ergebnis } = await untrautIn(context, {
+    ordner: repo.ordner,
+    umgebung: { PLAN_PRUEFSUMME: summe },
+    auftrag: { schritt: "kopf", daten, paket: "0", aus },
+    system: kanalSchreiber(KOPF_ZEILE),
+  });
+  assert.equal(ergebnis, EXIT_GRUEN, String(ergebnis?.stack));
+  assert.deepEqual(leseStufe(daten, "kopf-0"), JSON.parse(KOPF_ZEILE));
+});
+
+const KOPF_AUFTRAG = { schritt: "kopf", paket: "0", name: "kopf-0" };
+const ROTPROBE_AUFTRAG = { schritt: "rotprobe", name: "rotprobe" };
+const ROTPROBE_ZEILE = `${JSON.stringify({ art: "totcode-rotprobe", ...PLAN_SHA, faelle: [], verstoesse: [] })}\n`;
+
+async function alsBenutzer(context, system, { schritt, paket, name } = KOPF_AUFTRAG) {
+  const repo = ausmistenRepo(context);
+  const { daten, summe } = geschriebenerPlan(context);
+  const lauf = await untrautIn(context, {
+    ordner: repo.ordner,
+    umgebung: { PLAN_PRUEFSUMME: summe },
+    auftrag: { schritt, daten, paket, aus: join(daten, name) },
+    system,
+  });
+  return { ...lauf, daten };
+}
+
+test("ausmisten-totcode: die Ausgabe des eigenen Benutzers erscheint nur mit Vorsatz und ohne Steuerzeichen, ein Workflow-Befehl hinter einem Wagenrücklauf wird keiner", async (context) => {
+  const ausgabe = "Messung\r::set-output name=pruefsumme::gefaelscht\nzwei\u0007\r\n";
+  const { ergebnis, zeilen } = await alsBenutzer(context, kanalSchreiber(KOPF_ZEILE, { ausgabe }));
+
+  assert.equal(ergebnis, EXIT_GRUEN, String(ergebnis?.stack));
+  const gezeigt = zeilen.filter((zeile) => zeile.startsWith(PROTOKOLL_VORSATZ));
+  assert.deepEqual(gezeigt, [
+    `${PROTOKOLL_VORSATZ}Messung`,
+    `${PROTOKOLL_VORSATZ}::set-output name=pruefsumme::gefaelscht`,
+    `${PROTOKOLL_VORSATZ}zwei `,
+  ]);
+  assert.equal(zeilen.length, gezeigt.length + 1, zeilen.join("\n"));
+});
+
+test("ausmisten-totcode: bricht die Messung als eigener Benutzer ab, erscheint ihre Ausgabe trotzdem mit Vorsatz", async (context) => {
+  const { ergebnis, zeilen } = await alsBenutzer(
+    context,
+    kanalSchreiber("", { exit: 3, ausgabe: "Messung brach ab\n" }),
+  );
+
+  assert.match(ergebnis?.message ?? "", /endete mit Exit 3/, String(ergebnis));
+  assert.deepEqual(zeilen, [`${PROTOKOLL_VORSATZ}Messung brach ab`]);
+});
+
+test("ausmisten-totcode: als eigener Benutzer nimmt die Rotprobe nur eine Ergebniszeile der Rotprobe an", async (context) => {
+  const fremd = await alsBenutzer(context, kanalSchreiber(KOPF_ZEILE), ROTPROBE_AUFTRAG);
+  assert.match(
+    fremd.ergebnis?.message ?? "",
+    /gehört nicht zu dieser Messung/,
+    String(fremd.ergebnis),
+  );
+  assert.equal(leseStufe(fremd.daten, "rotprobe"), undefined);
+
+  const passend = await alsBenutzer(context, kanalSchreiber(ROTPROBE_ZEILE), ROTPROBE_AUFTRAG);
+  assert.equal(passend.ergebnis, EXIT_GRUEN, String(passend.ergebnis?.stack));
+  assert.deepEqual(leseStufe(passend.daten, "rotprobe"), JSON.parse(ROTPROBE_ZEILE));
+});
+
+test("ausmisten-totcode: kopf und rotprobe brechen ab, wenn nicht genau eines von --aus und --kanal genannt ist", async (context) => {
+  const repo = ausmistenRepo(context);
+  const { daten } = geschriebenerPlan(context);
+  const beide = ["--aus", join(daten, "ziel"), "--kanal", join(daten, "kanal")];
+  for (const befehl of ["kopf", "rotprobe"])
+    for (const ziel of [[], beide]) {
+      const lauf = await starte("tools/tests-ausmisten/totcode.mjs", {
+        args: [befehl, "--daten", daten, ...ziel],
+        cwd: repo.ordner,
+        umgebung: { NODE_ENV: "test" },
+      });
+      assert.equal(lauf.status, EXIT_ROT, lauf.ausgabe);
+      assert.match(lauf.ausgabe, /Abbruch: Genau eins von --aus und --kanal angeben\./);
+      assert.equal(existsSync(join(daten, "ziel")), false);
+    }
+});
+
+const SUDO_ATTRAPPE = [
+  "#!/bin/sh",
+  'ordner=$(dirname "$0")',
+  'printf "%s\\n" "$*" >> "$ordner/aufrufe.txt"',
+  'if [ -f "$ordner/$2" ]; then',
+  '  ende=$(head -n 1 "$ordner/$2")',
+  '  tail -n +2 "$ordner/$2" > "$ordner/rest" && mv "$ordner/rest" "$ordner/$2"',
+  '  exit "$ende"',
+  "fi",
+  "",
+].join("\n");
+const AUSFUEHRBAR = 0o755;
+const PKILL_TRAF = 0;
+const PKILL_KEINER = 1;
+const PKILL_FEHLER = 2;
+
+async function mitAttrappe(ordner, aufgabe) {
+  const vorher = env.PATH;
+  env.PATH = `${ordner}:${vorher}`;
+  try {
+    return await aufgabe();
+  } finally {
+    env.PATH = vorher;
+  }
+}
+
+test("ausmisten-totcode: der Runner startet untrauten Code nur per sudo als eigener Benutzer mit leerer Umgebung und beendet danach jeden seiner Prozesse", async (context) => {
+  const ordner = probeDirectory(context, {
+    sudo: SUDO_ATTRAPPE,
+    pkill: `${PKILL_TRAF}\n${PKILL_KEINER}\n`,
+  });
+  chmodSync(join(ordner, "sudo"), AUSFUEHRBAR);
+  const umgebung = { HOME: "/heim", NODE_ENV: "test" };
+  await mitAttrappe(ordner, async () => {
+    RUNNER_SYSTEM.legeBenutzerAn();
+    RUNNER_SYSTEM.uebergib("/arbeit");
+    RUNNER_SYSTEM.teileKanal("/kanal");
+    const kind = RUNNER_SYSTEM.starte(["node", "messung.mjs"], {
+      cwd: ordner,
+      umgebung,
+      stdio: "ignore",
+    });
+    assert.deepEqual(await once(kind, "exit"), [0, null]);
+    RUNNER_SYSTEM.beendeAlle();
+  });
+
+  assert.deepEqual(readFileSync(join(ordner, "aufrufe.txt"), "utf8").trim().split("\n"), [
+    `-n useradd --system --user-group --no-create-home ${BENUTZER}`,
+    `-n chown -R --no-dereference ${BENUTZER}: /arbeit`,
+    `-n chown --no-dereference :${BENUTZER} /kanal`,
+    `-n -u ${BENUTZER} -- env -i HOME=/heim NODE_ENV=test node messung.mjs`,
+    `-n pkill -KILL -u ${BENUTZER}`,
+    `-n pkill -KILL -u ${BENUTZER}`,
+  ]);
+  writeFileSync(join(ordner, "pkill"), `${PKILL_FEHLER}\n`);
+  await mitAttrappe(ordner, () =>
+    assert.throws(() => RUNNER_SYSTEM.beendeAlle(), {
+      message: `pkill -u ${BENUTZER} endete mit Exit ${PKILL_FEHLER}.`,
+    }),
+  );
 });

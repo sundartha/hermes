@@ -245,7 +245,7 @@ function geplant(ordner, lauf) {
   return daten;
 }
 
-function paketDes(plan, paket) {
+export function paketDes(plan, paket) {
   const nummer = Number(paket);
   if (!Number.isInteger(nummer) || nummer < 0 || nummer >= plan.pakete.length) {
     throw new Error(`Paket ${paket} steht nicht im Plan.`);
