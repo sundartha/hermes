@@ -40,6 +40,20 @@ function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
 }
 
+function befundAbschnitt(abnahme, { zeile, test }) {
+  return abschnitt("Befund des Bau-Agenten zum Abnahmetest", [
+    `Eine Runde ist verworfen; sie zählt nicht als rote Runde. Der Bau-Agent behauptet zum Abnahmetest ${abnahme}: ${zeile}`,
+    "",
+    "Für den Test-Agenten: Prüf die genannte Stelle. Stimmt sie, schreib den Abnahmetest neu und passe nur die Testdaten an. Jedes Szenario bleibt mit Gegeben, Wenn und Dann, und jeder Fall des verworfenen Tests läuft mit demselben Namen wieder, nicht als todo oder skip; fehlt einer, ist die Runde rot. Stimmt sie nicht, steig mit „Auftrag passt nicht: <Grund>“ aus.",
+    "",
+    "Das ist der verworfene Abnahmetest:",
+    "",
+    CODEBLOCK,
+    test,
+    CODEBLOCK,
+  ]);
+}
+
 function fehlerausgabe(ergebnis) {
   const { runde, grund, pruefungen, agenten, roteIds = [] } = ergebnis;
   const gezeigt = new Set();
@@ -185,11 +199,13 @@ class Runden {
     this.fehler = [];
     this.roteRunden = [];
     this.abbrueche = [];
+    this.befund = null;
   }
 
   vorgeschichte() {
-    if (this.fehler.length === 0) return "";
-    return abschnitt("Fehlerausgabe der vorigen Runde", [
+    const befund = this.befund === null ? "" : befundAbschnitt(this.kontext.auftrag.abnahme, this.befund);
+    if (this.fehler.length === 0) return befund;
+    return befund + abschnitt("Fehlerausgabe der vorigen Runde", [
       "Ein früherer Agent ist an diesem Auftrag gescheitert; sein Verlauf ist verworfen. Das ist seine Fehlerausgabe:",
       "",
       CODEBLOCK,
@@ -201,7 +217,7 @@ class Runden {
   fuehreAus() {
     for (;;) {
       const runde = this.fehler.length + 1;
-      const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte(), vorigeRunden: this.roteRunden });
+      const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte(), vorigeRunden: this.roteRunden, befund: this.befund });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
       if (ergebnis.entscheidung) return this.entscheidung(ergebnis, ergebnis.entscheidung);
       if (ergebnis.alterTest) {
@@ -221,6 +237,7 @@ class Runden {
   }
 
   rot(ergebnis) {
+    if (ergebnis.testbefund) return this.testNeuSchreiben(ergebnis);
     if (nurAbgebrochen(ergebnis)) {
       verwerfe(ergebnis.basis, this.kontext.root);
       const imSchritt = ergebnis.roteIds.includes(GRUND.MUTATION_ABBRUCH) ? [`Runde ${ergebnis.runde}: Die Mutationsprüfung ist abgebrochen und lief auf demselben Stand noch einmal.`] : [];
@@ -231,6 +248,15 @@ class Runden {
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
     if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
     verwerfe(ergebnis.basis, this.kontext.root);
+    return null;
+  }
+
+  testNeuSchreiben(ergebnis) {
+    const { zaehler, root } = this.kontext;
+    if (zaehler.testbefunde > 0) return this.ausgestiegen({ ...ergebnis, ausstieg: ergebnis.testbefund.zeile });
+    zaehler.testbefunde += 1;
+    verwerfe(ergebnis.basis, root);
+    this.befund = ergebnis.testbefund;
     return null;
   }
 
@@ -387,5 +413,5 @@ class VorbauRunden extends Runden {
 }
 
 export function fuehreRundenAus(kontext, starteRunde) {
-  return new Runden({ ...kontext, zaehler: { voraussetzungen: 0, vorbauten: 0 } }, starteRunde).fuehreAus();
+  return new Runden({ ...kontext, zaehler: { voraussetzungen: 0, vorbauten: 0, testbefunde: 0 } }, starteRunde).fuehreAus();
 }
