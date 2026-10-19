@@ -116,8 +116,13 @@ test("der Bericht der Rot-Proben nennt nach der Tabelle je roter Art den Block i
   const tabelle = zeilen.indexOf("| lint-fehler | #1 | CI / Prüfungen / Lint | durchgegangen |");
   const block = zeilen.indexOf(zweckBlock("github/rotproben")[0]);
   assert.ok(tabelle >= 0 && block > tabelle, durch.zeilen.join("\n"));
-  assert.deepEqual(zeilen.slice(block), [...zweckBlock("github/rotproben"), ...zweckBlock("github/ohne-menschen")]);
-  assert.equal(durch.zeilen.at(-2), "");
+  const blockzeilen = [...zweckBlock("github/rotproben"), ...zweckBlock("github/ohne-menschen")];
+  assert.deepEqual(zeilen.slice(block), blockzeilen);
+  assert.deepEqual(
+    durch.zeilen.slice(-2 * blockzeilen.length),
+    blockzeilen.flatMap((zeile) => ["", zeile]),
+    "jede Blockzeile steht als eigener Absatz nach einer Leerzeile",
+  );
   const leise = alsBericht({ proben: [{ ...probe, ergebnis: gruen("gestoppt") }], push: technisch("Push-Probe nicht ausgeführt") });
   assert.doesNotMatch(leise.zeilen.join("\n"), /Wozu:/);
   assert.equal(leise.urteile.length, 2);
