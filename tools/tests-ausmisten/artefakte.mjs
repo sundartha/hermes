@@ -7,10 +7,10 @@ export function paketName(art, paket) {
   return `${art}-${paket}`;
 }
 
-function gefundeneArtefakte(liste) {
+function gefundeneArtefakte(liste, muster) {
   const nachName = new Map();
   for (const artefakt of liste) {
-    if (!AUSMISTEN_NAMEN.test(artefakt.name ?? "")) continue;
+    if (!muster.test(artefakt.name ?? "")) continue;
     nachName.set(artefakt.name, [...(nachName.get(artefakt.name) ?? []), artefakt]);
   }
   return nachName;
@@ -40,8 +40,8 @@ async function artefaktListe(github, laufId) {
   return github.alle(`/actions/runs/${laufId}/artifacts`, (antwort) => antwort.artifacts);
 }
 
-export async function ladeVorhandene(github, { laufId, erwartet }) {
-  const nachName = gefundeneArtefakte(await artefaktListe(github, laufId));
+export async function ladeVorhandene(github, { laufId, erwartet, muster = AUSMISTEN_NAMEN }) {
+  const nachName = gefundeneArtefakte(await artefaktListe(github, laufId), muster);
   const fehler = namensFehler(nachName, erwartet);
   const texte = new Map();
   for (const name of erwartet.filter((kandidat) => nachName.get(kandidat)?.length === 1)) {

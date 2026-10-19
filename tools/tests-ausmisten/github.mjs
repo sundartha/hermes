@@ -17,12 +17,15 @@ export function prTitel(bereich) {
   return `Paket 37: ${KONTEXT} ${bereich}`;
 }
 
-export async function setzeStatus(github, { kopf, gruen, beschreibung, adresse }) {
+export async function setzeStatus(
+  github,
+  { kopf, gruen, beschreibung, adresse, kontext = KONTEXT },
+) {
   await github.sende("POST", `/statuses/${kopf}`, {
     state: gruen ? ERFOLG : FEHLSCHLAG,
     target_url: adresse,
     description: beschreibung,
-    context: KONTEXT,
+    context: kontext,
   });
 }
 
