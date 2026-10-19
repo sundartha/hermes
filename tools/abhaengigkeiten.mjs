@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { bestaendeNurKuerzer } from "./abhaengigkeiten/bestaende.mjs";
+import { aufDerBasis, bestaendeNurKuerzer, imArbeitsbaum } from "./abhaengigkeiten/bestaende.mjs";
 import { run } from "./abhaengigkeiten/prozess.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
@@ -70,22 +70,12 @@ function checkBasis(basis) {
   }
 }
 
-function frozenInWorktree(path) {
-  if (!existsSync(path)) return [];
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-function frozenAtBasis(basis, path) {
-  const shown = run("git", ["show", `${basis}:${path}`]);
-  return shown.status === EXIT_OK ? JSON.parse(shown.stdout) : undefined;
-}
-
 function listState(list, { violations, basis }) {
   return {
     ...list,
     violations: violations.filter(list.covers),
-    known: frozenInWorktree(list.path),
-    basisKnown: frozenAtBasis(basis, list.path),
+    known: imArbeitsbaum(list.path),
+    basisKnown: aufDerBasis(basis, list.path),
   };
 }
 

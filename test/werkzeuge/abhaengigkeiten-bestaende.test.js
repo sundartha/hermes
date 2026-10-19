@@ -13,6 +13,7 @@ import {
 } from "./probe-repo.js";
 
 const KONFIGURATION = ".dependency-cruiser.cjs";
+const ALTVERSTOESSE = ".dependency-cruiser-known-violations.json";
 const SELBSTPRUEFUNG = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD = "tools/basis/fester-importpfad.json";
 const ALT = "test/anrufe/alt.test.js|0123456789abcdef";
@@ -76,6 +77,28 @@ test("bestaende: ein Bestand, den es auf der Basis noch nicht gibt, gilt als neu
     nachher: { [SELBSTPRUEFUNG]: bestand(ALT, NEU) },
   });
   assert.equal(ergebnis.status, EXIT_OK, ergebnis.stderr);
+  assert.match(ergebnis.stdout, /^0 neue Dateien unter test\/ seit der Basis/m);
+});
+
+test("bestaende: eine Altverstoß-Liste und ein Bestand, die es auf der Basis noch nicht gibt, gelten beide als neu angelegt", (context) => {
+  const altverstoss = {
+    type: "dependency",
+    from: "src/a",
+    to: "src/b",
+    rule: { severity: "error", name: "keine-ordnerzyklen" },
+  };
+  const ergebnis = nachAenderung(context, {
+    vorher: {},
+    nachher: {
+      [ALTVERSTOESSE]: JSON.stringify([altverstoss]),
+      [SELBSTPRUEFUNG]: bestand(ALT, NEU),
+    },
+  });
+  assert.equal(ergebnis.status, EXIT_OK, ergebnis.stderr);
+  assert.match(
+    ergebnis.stdout,
+    /known-violations\.json;.*; die Basis hat noch keine eingefrorene Liste$/m,
+  );
   assert.match(ergebnis.stdout, /^0 neue Dateien unter test\/ seit der Basis/m);
 });
 
