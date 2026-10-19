@@ -14,7 +14,7 @@ import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { geteiltBeiZeitgrenze, gruppen } from "./mutationspruefung/gruppen.mjs";
+import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
@@ -72,9 +72,6 @@ const TEILANGABEN = 3;
 const BETRIEBSARTEN_HOECHSTENS = 1;
 const ERSTLAUF_ROT = "One or more tests failed in the initial test run:";
 const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
-const ERSTLAUF_GESCHEITERT = "Something went wrong in the initial test run";
-const ERSTLAUF_ZEITGRENZE = "Initial test run timed out!";
-const ERSTLAUF_FEHLER = "One or more tests resulted in an error:";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
@@ -261,11 +258,7 @@ function wellen(testgruppen) {
 }
 
 function zeitgrenzeSeit(beginn) {
-  return (fehler) => {
-    const seither = ERSTLAUF_MITSCHRIFT.slice(beginn);
-    const gemeldet = (meldung) => seither.some((zeile) => zeile.includes(meldung));
-    return fehler.message === ERSTLAUF_GESCHEITERT && gemeldet(ERSTLAUF_ZEITGRENZE) && !gemeldet(ERSTLAUF_FEHLER);
-  };
+  return (fehler) => zeitgrenzeGemeldet(fehler, ERSTLAUF_MITSCHRIFT.slice(beginn));
 }
 
 async function geteilterGruppenlauf(lauf) {

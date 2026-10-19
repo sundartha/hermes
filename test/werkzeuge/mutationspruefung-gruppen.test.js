@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { geteiltBeiZeitgrenze, GRUPPE, gruppen } from "../../tools/mutationspruefung/gruppen.mjs";
+import { geteiltBeiZeitgrenze, GRUPPE, gruppen, zeitgrenzeGemeldet } from "../../tools/mutationspruefung/gruppen.mjs";
 import { aufrufzeileRot, BASIS, begleiter, BESCHREIBUNG, beschreibungstest, EXIT_ROT, laufgroessen, NEGATIV, NULL, protokolltest, pruefe, quelle, spaltenweise, testdatei, testdateien, VIELE_TESTDATEIEN } from "./mutationspruefung-hilfen.js";
 import { probeRepository, writeFiles } from "./probe-repo.js";
 
@@ -50,6 +50,22 @@ test("die Löschprobe fragt Gruppe um Gruppe, bis eine die gelöschte Zeile verl
   writeFiles(repo, begleiter(ohneProtokoll, protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);")));
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("ein gescheiterter Erstlauf zählt nur als Zeitgrenze, wenn die Mitschrift die Zeitgrenze meldet und keinen Fehler-Status", () => {
+  const gescheitert = new Error("Something went wrong in the initial test run");
+  const zeitgrenze = "Initial test run timed out! Ran 0 tests\n";
+  const fehlerStatus = "One or more tests resulted in an error:\n\ttest/probe.test.js\n";
+  const faelle = [
+    { mitschrift: [zeitgrenze], erwartet: true },
+    { mitschrift: [fehlerStatus], erwartet: false },
+    { mitschrift: [zeitgrenze, fehlerStatus], erwartet: false },
+    { mitschrift: [], erwartet: false },
+  ];
+  for (const { mitschrift, erwartet } of faelle) {
+    assert.equal(zeitgrenzeGemeldet(gescheitert, mitschrift), erwartet, mitschrift.join(""));
+  }
+  assert.equal(zeitgrenzeGemeldet(new Error("There were failed tests in the initial test run."), [zeitgrenze]), false);
 });
 
 test("läuft der Erstlauf einer Gruppe über die Zeitgrenze, wird sie halbiert, bis jeder Teil durchläuft; eine einzelne Datei darüber und jeder andere Fehler brechen ab", async () => {
