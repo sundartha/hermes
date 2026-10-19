@@ -28,11 +28,13 @@ test("importNachUmgebung setzt die Umgebung, bevor die Lader in Reihenfolge lauf
   const reihenfolge = [];
   const geladen = await importNachUmgebung(
     { UMGEBUNG_IMPORT_NEU: "neu", UMGEBUNG_IMPORT_ALT: undefined },
-    () => {
+    async () => {
+      await new Promise((weiter) => setImmediate(weiter));
       reihenfolge.push("erster");
       return process.env.UMGEBUNG_IMPORT_NEU;
     },
     () => {
+      assert.deepEqual(reihenfolge, ["erster"], "der zweite Lader startet erst, wenn der erste fertig ist");
       reihenfolge.push("zweiter");
       return process.env.UMGEBUNG_IMPORT_ALT;
     },
