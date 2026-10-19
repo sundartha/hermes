@@ -10,6 +10,11 @@ export const PRICES = Object.freeze({
   platformSpendCapCents: 800,
 });
 
+const TOKENS_PER_MTOK = 1_000_000;
+
+export const TOKENS_PER_EUR =
+  TOKENS_PER_MTOK / (PRICES.modelPricesUsd[TEST_MODEL_CHEAP].inPerMTok * PRICES.usdToEur);
+
 export function tokensWithCache({
   uncached = 0,
   cacheWrite = 0,
