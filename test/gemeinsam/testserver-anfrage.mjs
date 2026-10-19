@@ -32,3 +32,7 @@ export default function request(method, url, { cookie, body, origin } = {}) {
     anfrage.end();
   });
 }
+
+export function get(url, cookie) {
+  return request("GET", url, { cookie });
+}
