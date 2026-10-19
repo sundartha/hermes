@@ -105,6 +105,21 @@ test("kommentare-yaml-shell: # direkt nach dem ) einer Befehlsersetzung gehört 
   ]);
 });
 
+test("kommentare-yaml-shell: # direkt nach $((…)) oder nach einem maskierten Zeichen gehört zum Wort", () => {
+  const zeilen = ["echo $((1+2))#x", "echo \\;#x", "echo \\ #x", "echo $((1+2)) # c", "echo \\; # d"];
+  assert.deepEqual(gefunden("scripts/probe.sh", zeilen), [
+    ["echo $((1+2)) # c", "c"],
+    ["echo \\; # d", "d"],
+  ]);
+});
+
+test("kommentare-yaml-shell: # direkt nach $( beginnt auch in Doppelzitaten einen Kommentar", () => {
+  assert.deepEqual(gefunden("scripts/probe.sh", ["x=$(# Liste holen", "ls)", 'y="$(# drin', 'ls)"']), [
+    ["x=$(# Liste holen", "Liste holen"],
+    ['y="$(# drin', "drin"],
+  ]);
+});
+
 test("kommentare-yaml-shell: in $'…' maskiert der Rückstrich, danach zählen Kommentare wieder", () => {
   const zeilen = ["echo $'it\\'s # drin'", "# x", "echo $'a\\\\' # y"];
   assert.deepEqual(gefunden("scripts/probe.sh", zeilen), [
