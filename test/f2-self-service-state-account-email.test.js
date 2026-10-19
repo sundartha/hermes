@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -61,23 +61,6 @@ async function setup({ routeAccounts: routeAccountsOverride, injectAccounts = tr
   };
 }
 
-function request(method, url, { cookie } = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const headers = {};
-    if (cookie) headers.Cookie = cookie;
-    const req = anfrageMitFrist(
-      { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
-      (res) => {
-        let b = "";
-        res.on("data", (d) => (b += d));
-        res.on("end", () => resolve({ status: res.statusCode, body: b }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
 const getState = (s) => request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookie });
 
 test("(a) accounts injiziert + Account mit Email -> accountEmail = die echte Konto-Adresse", async () => {

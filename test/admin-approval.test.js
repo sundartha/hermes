@@ -12,7 +12,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 
 const SECRET = "admin-test-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
@@ -53,27 +53,15 @@ async function setup() {
   };
 }
 
-function request(method, url, sessionId) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const headers = sessionId
-      ? { Cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}` }
-      : {};
-    const req = anfrageMitFrist(
-      { hostname: u.hostname, port: u.port, path: u.pathname, method, headers },
-      (res) => {
-        let body = "";
-        res.on("data", (d) => (body += d));
-        res.on("end", () => resolve({ status: res.statusCode, body }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
+function requestMitSitzung(method, url, sessionId) {
+  const cookie = sessionId
+    ? `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`
+    : undefined;
+  return request(method, url, { cookie });
 }
 
-const post = (url, sessionId) => request("POST", url, sessionId);
-const get = (url, sessionId) => request("GET", url, sessionId);
+const post = (url, sessionId) => requestMitSitzung("POST", url, sessionId);
+const get = (url, sessionId) => requestMitSitzung("GET", url, sessionId);
 
 test("Nicht-Admin (aktiver Kunde) -> 403 bei approve", async () => {
   const s = await setup();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import {
   applyStripeWebhook,
@@ -172,26 +172,9 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
 }
 
 function postSetupCheckout(ctx, plan, cookie) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(`${ctx.base}/api/self-service/billing/setup-checkout`);
-    const payload = JSON.stringify({ plan });
-    const req = anfrageMitFrist(
-      {
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname,
-        method: "POST",
-        headers: { Cookie: cookie, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
-      },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => resolve({ status: res.statusCode, body }));
-      },
-    );
-    req.on("error", reject);
-    req.write(payload);
-    req.end();
+  return request("POST", `${ctx.base}/api/self-service/billing/setup-checkout`, {
+    cookie,
+    body: { plan },
   });
 }
 

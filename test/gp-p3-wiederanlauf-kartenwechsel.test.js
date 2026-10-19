@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import {
@@ -138,31 +138,6 @@ function seedTenant(store, { failedCount, subscriber }) {
   }
   seedFailedNumbers(state, failedCount);
   store.save();
-}
-
-function request(method, url, { cookie } = {}) {
-  return new Promise((resolve, reject) => {
-    const ziel = new URL(url);
-    const headers = cookie ? { Cookie: cookie } : {};
-    const req = anfrageMitFrist(
-      {
-        hostname: ziel.hostname,
-        port: ziel.port,
-        path: ziel.pathname + ziel.search,
-        method,
-        headers,
-      },
-      (res) => {
-        let rumpf = "";
-        res.on("data", (stueck) => (rumpf += stueck));
-        res.on("end", () =>
-          resolve({ status: res.statusCode, body: rumpf, location: res.headers.location }),
-        );
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
 }
 
 const cardReturn = (lauf) =>
