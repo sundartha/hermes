@@ -8,6 +8,14 @@ export function gruppen(testdateien) {
 }
 
 const HAELFTEN = 2;
+export const ERSTLAUF_GESCHEITERT = "Something went wrong in the initial test run";
+export const ERSTLAUF_ZEITGRENZE = "Initial test run timed out!";
+export const ERSTLAUF_FEHLER = "One or more tests resulted in an error:";
+
+export function zeitgrenzeGemeldet(fehler, mitschrift) {
+  const gemeldet = (meldung) => mitschrift.some((zeile) => zeile.includes(meldung));
+  return fehler.message === ERSTLAUF_GESCHEITERT && gemeldet(ERSTLAUF_ZEITGRENZE) && !gemeldet(ERSTLAUF_FEHLER);
+}
 
 export async function geteiltBeiZeitgrenze(tests, laufen, ueberZeitgrenze) {
   try {
