@@ -1,0 +1,11 @@
+{
+  "titel": "Test weist store.withStoreLock eine Attrappe zu",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "export function attrappe(store) {",
+      "  store.withStoreLock = (fn) => fn();",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/keine-speicher-attrappe\""
+}

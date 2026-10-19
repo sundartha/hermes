@@ -18,6 +18,7 @@ import { ESLint } from "eslint";
 import { knotenSchluessel, pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
 import { importeMitPlatzhalter } from "./eslint-rules/fester-importpfad.js";
 import { quelltextLesestellen } from "./eslint-rules/kein-quelltext-als-text.js";
+import { speicherAttrappen } from "./eslint-rules/keine-speicher-attrappe.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import { aenderungenSeit, legeWorktreeAn } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
@@ -372,6 +373,11 @@ export const TOOLS = {
     findings: testRuleFindings("fester-importpfad", importeMitPlatzhalter),
     ...PER_FILE,
     zweck: "basis/fester-importpfad",
+  },
+  "keine-speicher-attrappe": {
+    findings: testRuleFindings("keine-speicher-attrappe", speicherAttrappen),
+    ...PER_FILE,
+    zweck: "basis/keine-speicher-attrappe",
   },
   lessons: { findings: lessonsFindings, ...PER_FILE, zweck: "basis/lessons" },
   anweisungen: { findings: instructionFindings, ...PATH_KEYED, zweck: "basis/anweisungen" },

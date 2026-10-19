@@ -6,6 +6,7 @@ import { run } from "./prozess.mjs";
 const NUR_KUERZER = [
   "tools/basis/selbstpruefung.json",
   "tools/basis/fester-importpfad.json",
+  "tools/basis/keine-speicher-attrappe.json",
   "tools/basis/quelltext-als-text.json",
 ];
 

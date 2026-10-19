@@ -1,0 +1,15 @@
+{
+  "titel": "Echte Speicher-Sperre im PG-Teststore",
+  "dateien": {
+    "test/pg-helpers.js": [
+      "import { makePgStore, macheSpeicherSperre } from \"../src/store/pg.js\";",
+      "",
+      "export function makePgTestStore(runner) {",
+      "  const store = makePgStore(runner);",
+      "  store.withStoreLock = macheSpeicherSperre();",
+      "  return store;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/keine-speicher-attrappe\""
+}

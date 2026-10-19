@@ -1,0 +1,37 @@
+{
+  "titel": "Keine eigene Speicher-Sperre in Tests (hermes-tests/keine-speicher-attrappe)",
+  "pfade": [
+    "eslint.config.*",
+    "tools/eslint-rules/",
+    "tools/basis/keine-speicher-attrappe.json",
+    "tools/basis-vergleich.mjs"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "keine-speicher-attrappe"],
+    "zaehlen": "zahlen",
+    "vor": [" neue Befunde", " bekannte"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Speicher-Attrappen in der Basislinie",
+    "datei": "tools/basis/keine-speicher-attrappe.json",
+    "zaehlen": "anzahl",
+    "anlegen": {
+      "befehl": [
+        "node",
+        "{wurzel}/tools/basis-vergleich.mjs",
+        "keine-speicher-attrappe",
+        "--basis-anlegen"
+      ]
+    }
+  },
+  "probe": {
+    "mitnehmen": ["eslint.config.js", "tools/eslint-rules/"],
+    "befehl": [
+      "node",
+      "{wurzel}/node_modules/eslint/bin/eslint.js",
+      "--format",
+      "json",
+      "{dateien}"
+    ]
+  }
+}
