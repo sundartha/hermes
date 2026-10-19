@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
-import { LABEL as PRUEFER_LABEL, issueTitel } from "../auftrag/pruefer-issues.mjs";
+import { LABEL as PRUEFER_LABEL, SAMMEL_PRAEFIX, issueTitel } from "../auftrag/pruefer-issues.mjs";
 import { istVomBot } from "./befunde.mjs";
 import { UNTERDRUECKUNGEN } from "./eslint-ungefiltert.mjs";
 import { issuesMitLabel } from "./github.mjs";
@@ -109,7 +109,7 @@ function zuordnung(title, jeName) {
 }
 
 async function prueferBefunde(github, dateien) {
-  const issues = (await issuesMitLabel(github, PRUEFER_LABEL, "open")).filter(istVomBot);
+  const issues = (await issuesMitLabel(github, PRUEFER_LABEL, "open")).filter((issue) => istVomBot(issue) && !issue.title.startsWith(SAMMEL_PRAEFIX));
   const jeName = dateienJeTitelName(dateien);
   const befunde = { zugeordnet: [], offen: [] };
   for (const { number, title } of issues) {

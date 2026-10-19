@@ -48,6 +48,7 @@ Schweregrade. Prüfe von oben nach unten; es gilt die erste Stufe, die zutrifft.
   - neues Verhalten ohne Test, der es festhält (Testlücke);
   - echt doppelte Logik: dieselbe fachliche Regel an zwei Stellen, die sich nur gemeinsam richtig ändern lassen (G5).
   Kein SOLLTE: ähnlicher Aufbau zweier Tests oder zweier Hilfsfunktionen ohne gemeinsame Regel (HINWEIS).
+  Ein Fehler wird ein eigenes Issue. Eine Verbesserung, also doppelte Logik (G5) oder eine Testlücke ohne Fehler (T1, T3, T5, P11), wird als Kommentar im Sammel-Issue ihres Bereichs gesammelt; trägt ein Befund keine dieser IDs, wird er ein eigenes Issue.
 - HINWEIS (wird nur notiert): alles andere, vor allem Namen (N1–N7, N4, P6), Lage und Zuschnitt des Codes (P2, G17, G30, G34), Reihenfolge von Aufrufen ohne gezeigten Fehlaufruf (G31), Zahlen in Tests (G25) und Vorschläge zum Entwurf.
   Beispiele: `providerStatus: 403` in einer Test-Attrappe ohne Konstante; ein Funktionsname, der einen Nebeneffekt nicht nennt; eine Klasse, deren Methoden in fester Reihenfolge laufen.
 Der Katalog in .claude/refs/clean-code.md ordnet nach S1–S4; für deine Antwort gilt: S1 bei Korrektheit oder Sicherheit ist BLOCKER, wenn a) bis c) erfüllt sind, sonst SOLLTE; S1 bei fehlendem Test ist SOLLTE; S2 ist SOLLTE nur bei echt doppelter Logik, sonst HINWEIS; S3 und S4 sind HINWEIS.

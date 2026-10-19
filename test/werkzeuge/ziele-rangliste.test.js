@@ -262,3 +262,9 @@ test("ziele-rangliste: eine Datei, deren Name im Titel leer bliebe, bricht die R
   assert.deepEqual(zugeordnet(durchgang), ["src/gross.js G1"]);
   assert.deepEqual(nichtZuordenbar(durchgang), []);
 });
+
+test("ziele-rangliste: ein Sammel-Issue des Prüfers gehört zu keiner Datei und zählt nicht als nicht zuordenbar", async (context) => {
+  const issues = [prueferIssue(ERSTES_PRUEFER_ISSUE, "Prüfer-Sammlung: src"), prueferIssue(ERSTES_PRUEFER_ISSUE + 1, prueferTitel("G1", "src/gross.js"))];
+  const durchgang = gelesen(await waehle(context, repoMitBrennpunkt(context), await githubAttrappe(context, { issues })), "ziel/durchgang.json");
+  assert.deepEqual([zugeordnet(durchgang), nichtZuordenbar(durchgang)], [["src/gross.js G1"], []]);
+});
