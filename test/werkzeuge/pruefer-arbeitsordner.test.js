@@ -99,6 +99,12 @@ test("am letzten Commit liegt der ganze PR als Diff gegen die Basis, muss gelese
   assert.equal(zuegeFuer(zweiter) - zuegeFuer({ ...zweiter, letzter: false }), zuegeFuer(erster) - zuegeFuer({ ...erster, dateien: [] }));
 });
 
+test("ein kritischer Commit bekommt die Grundzüge doppelt, die Züge je Datei bleiben gleich", () => {
+  const nichtKritisch = { dateien: ["src/telephony/anruf.js"], letzter: true, kritisch: false };
+  const grundzuege = zuegeFuer({ dateien: [], letzter: false, kritisch: false });
+  assert.equal(zuegeFuer({ ...nichtKritisch, kritisch: true }), zuegeFuer(nichtKritisch) + grundzuege);
+});
+
 test("der Prüfer sieht unter basis/ jede versionierte Datei der Basis, Steuerdateien nur umbenannt und nichts Unversioniertes", (context) => {
   const repo = probeRepo(context, { "src/zahl.js": "export const ZAHL = 1;\n", "src/alt.js": "export const ALT = 1;\n", "CLAUDE.md": "Regel\n", ".claude/agents/bau.md": "Rolle\n" });
   const basis = repo.git(["rev-parse", "HEAD"]);

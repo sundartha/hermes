@@ -26,6 +26,7 @@ export const CLI_PFAD = "tools/pruefer/node_modules/@anthropic-ai/claude-code-li
 const AGENT_DATEI = ".claude/agents/pruefer.md";
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n/;
 const GRUNDZUEGE = 10;
+const GRUNDZUEGE_KRITISCH = 20;
 const ZUEGE_JE_DATEI = 4;
 const MS_JE_ZUG = 120_000;
 const EXIT_OHNE_STATUS = 1;
@@ -63,7 +64,8 @@ const VERLAUF_FELDER = [
 const WERKZEUG_NAME = /^[A-Za-z_]+$/;
 
 export function zuegeFuer(commit) {
-  return GRUNDZUEGE + ZUEGE_JE_DATEI * (commit.dateien.length + (commit.letzter ? 1 : 0));
+  const grundzuege = commit.kritisch ? GRUNDZUEGE_KRITISCH : GRUNDZUEGE;
+  return grundzuege + ZUEGE_JE_DATEI * (commit.dateien.length + (commit.letzter ? 1 : 0));
 }
 
 export function effortFuer(commit) {
