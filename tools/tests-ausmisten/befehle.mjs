@@ -82,7 +82,7 @@ function erreichteDateien(dateien, { graph, gates }, werkzeug) {
   };
 }
 
-function statusListe(stati) {
+export function statusListe(stati) {
   return Object.fromEntries([...stati].map(([schluessel, { status }]) => [schluessel, status]));
 }
 
@@ -103,7 +103,7 @@ function orteDerGetoeteten({ mutanten, gate }) {
   return Object.fromEntries(getoetet.map(([schluessel, { zeilen }]) => [schluessel, zeilen]));
 }
 
-function schreibeErgebnis(aus, name, daten) {
+export function schreibeErgebnis(aus, name, daten) {
   rmSync(aus, { recursive: true, force: true });
   mkdirSync(aus, { recursive: true });
   const text = `${JSON.stringify(daten, null, EINRUECKUNG)}\n`;
