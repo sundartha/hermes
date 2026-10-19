@@ -1,0 +1,38 @@
+name: Totcode-Messung Paket
+
+on:
+  workflow_call:
+    inputs:
+      paket:
+        type: number
+        required: true
+      plan-pruefsumme:
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  basis:
+    name: Basis messen
+    permissions:
+      contents: read
+    uses: ./.github/workflows/totcode-messung-schritt.yml
+    with:
+      schritt: basis
+      minuten: 330
+      paket: ${{ format('{0}', inputs.paket) }}
+      plan-pruefsumme: ${{ inputs.plan-pruefsumme }}
+
+  kopf:
+    name: Kopf messen
+    needs: basis
+    permissions:
+      contents: read
+    uses: ./.github/workflows/totcode-messung-schritt.yml
+    with:
+      schritt: kopf
+      minuten: 330
+      paket: ${{ format('{0}', inputs.paket) }}
+      plan-pruefsumme: ${{ inputs.plan-pruefsumme }}
+      basis-pruefsumme: ${{ needs.basis.outputs.pruefsumme }}

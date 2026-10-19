@@ -1,0 +1,128 @@
+name: Totcode-Messung Schritt
+
+on:
+  workflow_call:
+    inputs:
+      schritt:
+        type: string
+        required: true
+      minuten:
+        type: number
+        required: true
+      paket:
+        type: string
+        default: ""
+      plan-pruefsumme:
+        type: string
+        default: ""
+      basis-pruefsumme:
+        type: string
+        default: ""
+      liste:
+        type: string
+        default: "[]"
+    outputs:
+      noetig:
+        value: ${{ jobs.schritt.outputs.noetig }}
+      pr:
+        value: ${{ jobs.schritt.outputs.pr }}
+      aufmaster:
+        value: ${{ jobs.schritt.outputs.aufmaster }}
+      fehler:
+        value: ${{ jobs.schritt.outputs.fehler }}
+      liste:
+        value: ${{ jobs.schritt.outputs.liste }}
+      pakete:
+        value: ${{ jobs.schritt.outputs.pakete }}
+      pruefsumme:
+        value: ${{ jobs.schritt.outputs.pruefsumme }}
+
+jobs:
+  schritt:
+    name: Schritt
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.minuten }}
+    outputs:
+      noetig: ${{ steps.schritt.outputs.noetig }}
+      pr: ${{ steps.schritt.outputs.pr }}
+      aufmaster: ${{ steps.schritt.outputs.aufmaster }}
+      fehler: ${{ steps.schritt.outputs.fehler }}
+      liste: ${{ steps.schritt.outputs.liste }}
+      pakete: ${{ steps.schritt.outputs.pakete }}
+      pruefsumme: ${{ steps.schritt.outputs.pruefsumme }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: PR-Kopf als Daten holen
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$KOPF"
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        if: inputs.schritt != 'ermitteln'
+        run: npm ci --ignore-scripts
+
+      - name: Plan laden
+        if: inputs.schritt != 'ermitteln' && inputs.schritt != 'plan'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: plan
+          path: /tmp/totcode/daten/plan
+
+      - name: Basis des Pakets laden
+        if: inputs.schritt == 'kopf'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: basis-${{ inputs.paket }}
+          path: /tmp/totcode/daten/basis-${{ inputs.paket }}
+
+      - name: Schritt ausführen
+        id: schritt
+        env:
+          GITHUB_TOKEN: ${{ inputs.schritt == 'ermitteln' && github.token || '' }}
+          SCHRITT: ${{ inputs.schritt }}
+          PAKET: ${{ inputs.paket }}
+          LISTE: ${{ inputs.liste }}
+          BASIS: ${{ github.sha }}
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+          PLAN_PRUEFSUMME: ${{ inputs.plan-pruefsumme }}
+          BASIS_PRUEFSUMME: ${{ inputs.basis-pruefsumme }}
+        run: |
+          set -euo pipefail
+          aus="/tmp/totcode/$SCHRITT${PAKET:+-$PAKET}"
+          case "$SCHRITT" in
+            ermitteln)
+              node tools/tests-ausmisten.mjs totcode-ermitteln
+              ;;
+            plan)
+              printf '%s' "$LISTE" > "$RUNNER_TEMP/liste.json"
+              node tools/tests-ausmisten/totcode.mjs planen --basis "$BASIS" --kopf "$KOPF" --liste "$RUNNER_TEMP/liste.json" --aus "$aus"
+              ;;
+            basis)
+              NODE_ENV=test node tools/tests-ausmisten/totcode.mjs basis --daten /tmp/totcode/daten --paket "$PAKET" --aus "$aus"
+              ;;
+            kopf | rotprobe)
+              node tools/tests-ausmisten/totcode-untraut.mjs "$SCHRITT" --daten /tmp/totcode/daten ${PAKET:+--paket "$PAKET"} --aus "$aus"
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+
+      - name: Ergebnis hochladen
+        if: inputs.schritt != 'ermitteln' && (success() || failure())
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ inputs.paket == '' && inputs.schritt || format('{0}-{1}', inputs.schritt, inputs.paket) }}
+          path: /tmp/totcode/${{ inputs.paket == '' && inputs.schritt || format('{0}-{1}', inputs.schritt, inputs.paket) }}
+          retention-days: 30
+          if-no-files-found: error

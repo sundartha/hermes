@@ -1,0 +1,93 @@
+name: Totcode-Messung
+run-name: Totcode-Messung ${{ github.event.workflow_run.head_sha }} ${{ github.event.workflow_run.pull_requests[0].number }}
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: totcode-messung-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  ermitteln:
+    name: Messung nötig
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'phase/') && github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    uses: ./.github/workflows/totcode-messung-schritt.yml
+    with:
+      schritt: ermitteln
+      minuten: 15
+
+  planen:
+    name: Messung planen
+    needs: ermitteln
+    if: needs.ermitteln.outputs.noetig == 'true' && needs.ermitteln.outputs.fehler == '' && needs.ermitteln.outputs.aufmaster == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/totcode-messung-schritt.yml
+    with:
+      schritt: plan
+      minuten: 60
+      liste: ${{ needs.ermitteln.outputs.liste }}
+
+  rotprobe:
+    name: Rotprobe im Kopf
+    needs: planen
+    permissions:
+      contents: read
+    uses: ./.github/workflows/totcode-messung-schritt.yml
+    with:
+      schritt: rotprobe
+      minuten: 120
+      plan-pruefsumme: ${{ needs.planen.outputs.pruefsumme }}
+
+  kette:
+    name: Paket ${{ matrix.paket }}
+    needs: planen
+    if: needs.planen.outputs.pakete != '[]'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        paket: ${{ fromJSON(needs.planen.outputs.pakete) }}
+    uses: ./.github/workflows/totcode-messung-paket.yml
+    with:
+      paket: ${{ matrix.paket }}
+      plan-pruefsumme: ${{ needs.planen.outputs.pruefsumme }}
+
+  melden:
+    name: Ergebnis melden
+    needs: [ermitteln, planen, rotprobe, kette]
+    if: ${{ !cancelled() && needs.ermitteln.outputs.noetig == 'true' }}
+    runs-on: ubuntu-latest
+    environment: wartung
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      statuses: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Status setzen und Testschutz neu starten
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ERGEBNISSE: ${{ toJSON(needs) }}
+        run: node tools/tests-ausmisten.mjs totcode-melden
