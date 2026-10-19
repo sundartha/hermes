@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -86,29 +86,6 @@ async function setup() {
   };
 }
 
-function request(method, url, { cookie, body } = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const payload = body === undefined ? null : JSON.stringify(body);
-    const headers = {};
-    if (cookie) headers.Cookie = cookie;
-    if (payload) {
-      headers["Content-Type"] = "application/json";
-      headers["Content-Length"] = Buffer.byteLength(payload);
-    }
-    const req = anfrageMitFrist(
-      { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
-      (res) => {
-        let b = "";
-        res.on("data", (d) => (b += d));
-        res.on("end", () => resolve({ status: res.statusCode, body: b }));
-      },
-    );
-    req.on("error", reject);
-    if (payload) req.write(payload);
-    req.end();
-  });
-}
 const setNumber = (s, body, cookie = s.cookieB) =>
   request("POST", `${s.base}/api/self-service/private-number`, { cookie, body });
 

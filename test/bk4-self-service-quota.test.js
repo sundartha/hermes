@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -61,26 +61,9 @@ async function setup({ paymentEnabled = true } = {}) {
   };
 }
 
-function getState(s) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(`${s.base}/api/self-service/state`);
-    const req = anfrageMitFrist(
-      {
-        hostname: u.hostname,
-        port: u.port,
-        path: u.pathname,
-        method: "GET",
-        headers: { Cookie: s.cookie },
-      },
-      (res) => {
-        let b = "";
-        res.on("data", (d) => (b += d));
-        res.on("end", () => resolve({ status: res.statusCode, body: JSON.parse(b) }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
+async function getState(s) {
+  const res = await request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookie });
+  return { status: res.status, body: JSON.parse(res.body) };
 }
 
 function seedVoice(store, tenantId, quantity) {

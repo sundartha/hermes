@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -110,37 +110,6 @@ async function setup({ csrfEnforce = true } = {}) {
     privateNumberOf,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
-}
-
-function request(method, url, { cookie, body, origin } = {}) {
-  return new Promise((resolve, reject) => {
-    const parsedUrl = new URL(url);
-    const payload = body === undefined ? null : JSON.stringify(body);
-    const headers = {};
-    if (cookie) headers.Cookie = cookie;
-    if (origin) headers.Origin = origin;
-    if (payload) {
-      headers["Content-Type"] = "application/json";
-      headers["Content-Length"] = Buffer.byteLength(payload);
-    }
-    const req = anfrageMitFrist(
-      {
-        hostname: parsedUrl.hostname,
-        port: parsedUrl.port,
-        path: parsedUrl.pathname + parsedUrl.search,
-        method,
-        headers,
-      },
-      (res) => {
-        let responseBody = "";
-        res.on("data", (chunk) => (responseBody += chunk));
-        res.on("end", () => resolve({ status: res.statusCode, body: responseBody }));
-      },
-    );
-    req.on("error", reject);
-    if (payload) req.write(payload);
-    req.end();
-  });
 }
 
 const postSettings = (ctx, body, opts = {}) =>

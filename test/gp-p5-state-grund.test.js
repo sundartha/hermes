@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -87,26 +87,9 @@ async function setup({ paymentMethodType, anzahlFailed, maxAttempts = DEFAULT_MA
   };
 }
 
-function leseState(ctx) {
-  return new Promise((resolve, reject) => {
-    const target = new URL(`${ctx.base}/api/self-service/state`);
-    const req = anfrageMitFrist(
-      {
-        hostname: target.hostname,
-        port: target.port,
-        path: target.pathname,
-        method: "GET",
-        headers: { Cookie: ctx.cookie },
-      },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => resolve({ status: res.statusCode, body: JSON.parse(body || "{}") }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
+async function leseState(ctx) {
+  const res = await request("GET", `${ctx.base}/api/self-service/state`, { cookie: ctx.cookie });
+  return { status: res.status, body: JSON.parse(res.body || "{}") };
 }
 
 test("Wallet-Zahlungsmethode -> payment_method_unsuitable", async () => {

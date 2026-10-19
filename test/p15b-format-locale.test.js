@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
+import request from "./gemeinsam/testserver-anfrage.mjs";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
@@ -72,25 +72,7 @@ async function setup() {
 }
 
 function getState(s, cookie) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(`${s.base}/api/self-service/state`);
-    const req = anfrageMitFrist(
-      {
-        hostname: u.hostname,
-        port: u.port,
-        path: u.pathname,
-        method: "GET",
-        headers: { Cookie: cookie },
-      },
-      (res) => {
-        let body = "";
-        res.on("data", (d) => (body += d));
-        res.on("end", () => resolve({ status: res.statusCode, body }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
+  return request("GET", `${s.base}/api/self-service/state`, { cookie });
 }
 
 test("P15b/C2: /api/self-service/state liefert formatLocale = localeFor(language).dateLocale", async () => {
