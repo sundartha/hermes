@@ -19,3 +19,11 @@ test("zwei Aufrufe mit derselben Konstante liefern getrennte Konfigurationen", (
   assert.equal(zweite.billing.paymentEnabled, true);
   assert.equal(gemeinsam.paymentEnabled, true);
 });
+
+test("ein Spread nach withConfigNamespaces verliert die Namensräume", () => {
+  const konfiguration = withConfigNamespaces({ paymentEnabled: true });
+  const kopie = { ...konfiguration };
+  assert.equal(konfiguration.billing.paymentEnabled, true);
+  assert.equal(kopie.paymentEnabled, true);
+  assert.equal(kopie.billing, undefined);
+});
