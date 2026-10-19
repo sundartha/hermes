@@ -46,13 +46,6 @@
     "exports|scripts/iel-mess-belege.mjs|werteMitschnittAus",
     "exports|scripts/kv2-5-telnyx-belegtypen.mjs|inferenceBilanz",
     "exports|scripts/lib/reviewer-demo-seed.mjs|planReviewerSeed",
-    "exports|src/app.js|SECURITY_TXT_BODY",
-    "exports|src/app.js|SECURITY_TXT_EXPIRES",
-    "exports|src/app.js|installGlobalMiddleware",
-    "exports|src/app.js|registerApiRoutes",
-    "exports|src/app.js|registerPathRedirects",
-    "exports|src/app.js|registerPublicRoutes",
-    "exports|src/app.js|registerStaticServing",
     "exports|src/auth.js|_resetJwksCache",
     "exports|src/billing/card-setup.js|clearTenantPaymentMethod",
     "exports|src/billing/cost-calibration.js|nearestRankWert",
@@ -93,7 +86,6 @@
     "exports|src/telephony/adapters/telnyx/webhook-events.js|parseSpeechResult",
     "exports|src/telephony/ani-ownership-recheck.js|ANI_RECHECK_TIMEOUT_MS",
     "exports|src/telephony/call-lifecycle.js|BUDGET_TERMINATION_ORIGIN",
-    "exports|src/telephony/outage-report.js|meldeBetreiberAlarm",
     "exports|src/ui/adapters/mcp-native.js|WIDGET_CALL",
     "exports|src/ui/contract.js|OPENAI_WIDGET_DOMAIN_KEY",
     "exports|src/ui/contract.js|UI_CSP",
@@ -129,7 +121,6 @@
     "files|scripts/unlock-tenant.js|scripts/unlock-tenant.js",
     "files|scripts/workflow-kosten.mjs|scripts/workflow-kosten.mjs",
     "files|src/conversation/elevenlabs-agent-config.js|src/conversation/elevenlabs-agent-config.js",
-    "files|src/mail/ports.js|src/mail/ports.js",
-    "files|src/queue/ports.js|src/queue/ports.js"
+    "files|src/mail/ports.js|src/mail/ports.js"
   ]
 }
