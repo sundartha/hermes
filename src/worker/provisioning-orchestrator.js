@@ -10,6 +10,21 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
+function jobOptionsFor(number, billingConfig) {
+  const country = number?.country;
+  const geo = searchParamsForCountry(country);
+  if (!billingConfig.paymentEnabled) return geo;
+  return {
+    ...geo,
+    holdAmountCents: holdAmountForCountry(country, billingConfig.numberSetupFeeCents),
+    currency: billingConfig.paymentCurrency,
+  };
+}
+
+function isNewPaidNumber(result, billingConfig) {
+  return Boolean(billingConfig.paymentEnabled && result.number);
+}
+
 export function makeProvisioningOrchestrator({
   store,
   config,
@@ -84,43 +99,42 @@ export function makeProvisioningOrchestrator({
     return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.jobId };
   }
 
+  async function runQueuedJob(state, queuedJob, deps) {
+    const record = state.provisioningJobs.find(
+      (j) => j.idempotencyKey === queuedJob.idempotencyKey,
+    );
+    const opts = jobOptionsFor(findNumber(state, queuedJob.payload.numberId), config.billing);
+    let result;
+    try {
+      result = await handleProvisionJob(state, queuedJob, deps, opts);
+      if (record) markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.DONE);
+      store.save();
+    } catch (err) {
+      if (record)
+        markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
+      store.save();
+      console.error("[provision-worker]", err.message);
+      throw err;
+    }
+    meterNewNumber(result);
+  }
+
+  function meterNewNumber(result) {
+    if (!isNewPaidNumber(result, config.billing)) return;
+    try {
+      metering.recordNumberMonthMeter(result.number, new Date().toISOString());
+    } catch (err) {
+      console.error("[provision-worker] Monatsbeleg fehlgeschlagen:", err.message);
+    }
+  }
+
   async function runProvisioningDrain() {
-    const s = store.load();
+    const state = store.load();
     const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
     deps.sipRegistrar = sipRegistrarWennAktiv(config);
     deps.inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(config);
-    const moneyOpts = {};
-    if (config.billing.paymentEnabled) {
-      deps.billing = billing;
-      moneyOpts.holdAmountCents = config.billing.numberSetupFeeCents;
-      moneyOpts.currency = config.billing.paymentCurrency;
-    }
-    await queue.drain(async (queuedJob) => {
-      const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
-      const number = findNumber(s, queuedJob.payload.numberId);
-      const geo = searchParamsForCountry(number?.country);
-      const holdAmountCents = config.billing.paymentEnabled
-        ? holdAmountForCountry(number?.country, config.billing.numberSetupFeeCents)
-        : undefined;
-      const opts = {
-        ...moneyOpts,
-        ...geo,
-        ...(holdAmountCents !== undefined ? { holdAmountCents } : {}),
-      };
-      try {
-        const r = await handleProvisionJob(s, queuedJob, deps, opts);
-        if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
-        if (config.billing.paymentEnabled)
-          metering.recordNumberMonthMeter(r.number, new Date().toISOString());
-        store.save();
-        return r;
-      } catch (err) {
-        if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
-        store.save();
-        console.error("[provision-worker]", err.message);
-        throw err;
-      }
-    });
+    if (config.billing.paymentEnabled) deps.billing = billing;
+    await queue.drain((queuedJob) => runQueuedJob(state, queuedJob, deps));
   }
 
   const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
