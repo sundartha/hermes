@@ -7,10 +7,15 @@
 > `openWorldHint`) and the optional `idempotentHint`.
 >
 > Counts, names, titles and annotation values were **measured against the real `tools/list`
-> output** over HTTP and over stdio, not read off the source. Code references point to names,
+> output** over HTTP and over stdio, not read off the source. Repository evidence:
+> `tools/openai-doku-pruefen.mjs` (CI step "OpenAI-Doku") parses both the prose tables and the
+> machine-readable blocks in this document and compares the tool count, the names, the titles,
+> the four annotation hints and the condition column with the `tools/list` wire in every
+> configuration listed in Table B; a mismatch fails that step. Code references point to names,
 > not to line numbers: `file#name` is the function, constant, object key or registration call
 > of that name in the file (for example `src/mcp-tools.js#uiTool("place_call")` is the
-> `uiTool("place_call", ...)` call). This document changes no behaviour.
+> `uiTool("place_call", ...)` call); nothing checks those references themselves. This document
+> changes no behaviour.
 >
 > The reasoning below describes what each tool does, and it says the same thing as the tool's
 > own `description` in `tools/list`. File#name references point into this repository.
