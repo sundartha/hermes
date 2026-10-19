@@ -1,17 +1,22 @@
 import { after } from "node:test";
 import http from "node:http";
 import pg from "pg";
-import { BASE_ENV, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
+import { BASE_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
+import { planProfileFor } from "../../src/plans.js";
 
-const BETREIBER_MAIL = "betreiber@kv2.invalid";
+export const BETREIBER_MAIL = "betreiber@kv2.invalid";
 export const LOGIN_SUB = "kv2-betreiber";
 const BREVO_VERSAND = "https://api.brevo.com/v3/smtp/email";
 const BREVO_KONTO = "https://api.brevo.com/v3/account";
 const WORKOS_BASIS = "https://workos.kv2.invalid";
 const LOKAL = "http://127.0.0.1:";
+const TELNYX_BASIS = "https://telnyx.kv2.invalid";
+const TELNYX_VERBINDUNG = "kv2-verbindung";
+const TELNYX_ANRUFSTART = `${TELNYX_BASIS}/v2/texml/calls/${TELNYX_VERBINDUNG}`;
+const HTTP_FORBIDDEN = 403;
 const UNBELEGTE_KOSTEN_CENT = 20;
 const KOSTENQUELLE_NICHT_VERFUEGBAR = "unavailable";
 const PROTOKOLL_FRIST_MS = 3000;
@@ -39,6 +44,12 @@ function umgebungSetzen(alarmPostfach) {
   process.env.MAIL_FROM = "alarm@kv2.invalid";
   process.env.PLATFORM_ALERT_MAIL_TO = alarmPostfach;
   process.env.PLATFORM_ALERT_SMS_TO = "";
+}
+
+function telnyxLehntAnrufstartAb() {
+  process.env.TELNYX_API_KEY = "KEYtest-secret";
+  process.env.TELNYX_CONNECTION_ID = TELNYX_VERBINDUNG;
+  process.env.TELNYX_API_BASE = TELNYX_BASIS;
 }
 
 async function datenbankOhneSonderrechte(storeHolen) {
@@ -91,6 +102,7 @@ function aussenweltAbfangen(testPostfach) {
       return new Response("{}", { status: 201 });
     }
     if (ziel === BREVO_KONTO) return new Response("{}", { status: 200 });
+    if (ziel === TELNYX_ANRUFSTART) return new Response("{}", { status: HTTP_FORBIDDEN });
     if (ziel === `${WORKOS_BASIS}/user_management/authenticate`) {
       const user = { id: LOGIN_SUB, email: BETREIBER_MAIL, email_verified: true };
       return new Response(JSON.stringify({ user }), { status: 200 });
@@ -139,7 +151,7 @@ export async function starteHermesMitPglite(optionen) {
   };
 }
 
-async function hermesAufbauen({ alarmPostfach }) {
+async function hermesAufbauen({ alarmPostfach, anrufstartAbgelehnt = false }) {
   const testPostfach = [];
   let server = null;
   let store = null;
@@ -148,6 +160,7 @@ async function hermesAufbauen({ alarmPostfach }) {
     server?.close();
   });
   umgebungSetzen(alarmPostfach);
+  if (anrufstartAbgelehnt) telnyxLehntAnrufstartAb();
   const db = await datenbankOhneSonderrechte(() => store);
   poolAufPglite(db);
   aussenweltAbfangen(testPostfach);
@@ -181,5 +194,17 @@ async function hermesAufbauen({ alarmPostfach }) {
     }
   }
 
-  return { db, testPostfach, anfrage, anmelden, warteAufProtokoll };
+  async function betreiberDarfAnrufen() {
+    const tenantId = store.resolveTenant(LOGIN_SUB);
+    const state = store.load();
+    const tenant = state.tenants.find((eintrag) => eintrag.id === tenantId);
+    Object.assign(tenant, { status: "active", kycLevel: "card", ownerName: "Kai Betreiber" });
+    state.profiles[tenantId] = { ...planProfileFor("starter") };
+    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null });
+    store.save();
+    await store.drainFlushes();
+    return tenantId;
+  }
+
+  return { db, testPostfach, anfrage, anmelden, warteAufProtokoll, betreiberDarfAnrufen };
 }
