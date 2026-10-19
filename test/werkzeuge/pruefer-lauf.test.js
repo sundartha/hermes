@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
-import { ANMELDUNG_GRUND, LIMIT_GRUND, pruefeCommit } from "../../tools/auftrag/pruefer-lauf.mjs";
+import { jobRestzeit } from "../../tools/auftrag/pruefer-befehle.mjs";
+import {
+  ANMELDUNG_GRUND,
+  LIMIT_GRUND,
+  ZEIT_GRUND,
+  pruefeCommit,
+  zeitgrenzeFuer,
+} from "../../tools/auftrag/pruefer-lauf.mjs";
 import { ohne } from "./neuschnitt-probe.js";
 import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import {
@@ -28,7 +35,7 @@ const ROHAUSGABE = "ROHAUSGABE-7f3a";
 const AUSFUEHRBAR = 0o755;
 const PR_NUMMER = 7;
 const ISSUE_NUMMER = 41;
-const ZUEGE_EINE_DATEI = "14";
+const ZUEGE_JE_COMMIT = "80";
 const MACOS_ZUSATZ = "__CF_";
 const LANGE_ZEILE = `export const TEXT = "${"x".repeat(6000)}";`;
 
@@ -45,7 +52,7 @@ function einCommit(context, dateien = { "src/zahl.js": "export const ZAHL = 2;\n
   return { repo, basis, commit };
 }
 
-async function pruefeMit(context, { aufnahme, liestDiffs, dateien, letzter = false }) {
+async function pruefeMit(context, { aufnahme, liestDiffs, dateien, letzter = false, restzeit }) {
   const { repo, basis, commit: gewaehlt } = einCommit(context, dateien);
   const commit = { ...gewaehlt, letzter };
   const ersatz = ersatzPruefer(context, { aufnahme, liestDiffs });
@@ -56,6 +63,7 @@ async function pruefeMit(context, { aufnahme, liestDiffs, dateien, letzter = fal
     programm: ersatz.programm,
     auftragstext: "",
     ciLauf: "",
+    restzeit,
   };
   return { ergebnis: await pruefeCommit(commit, kontext), protokoll: ersatz.protokoll() };
 }
@@ -80,7 +88,7 @@ test("eine gültige Antwort ergibt geprueft mit allen Befunden; der Prüfer beko
   for (const teil of [
     "-p --restricted --tools Read,Grep,Glob",
     "--model opus --effort medium",
-    `--max-turns ${ZUEGE_EINE_DATEI}`,
+    `--max-turns ${ZUEGE_JE_COMMIT}`,
   ]) {
     assert.ok(argumente.includes(teil), teil);
   }
@@ -436,4 +444,35 @@ test("pruefen bricht ab, wenn die Ablage im hochgeladenen Ordner --aus liegen so
   assert.notEqual(lauf.status, 0);
   assert.match(lauf.stderr, /Ablage darf nicht im Ordner --aus liegen/);
   assert.equal(existsSync(join(aus, "ergebnis.json")), false);
+});
+
+const MINUTE = 60_000;
+const JOB_LIMIT = 360 * MINUTE;
+
+function uhrBei(minuten) {
+  return jobRestzeit({ start: 0, jetzt: () => minuten * MINUTE });
+}
+
+test("reicht die Restzeit des Prüfer-Jobs nicht für einen Commit, startet der Prüfer nicht und der Commit ist nicht_gelaufen mit eigenem Grund", async (context) => {
+  const { ergebnis, protokoll } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(350) });
+  assert.deepEqual([ergebnis.zustand, ergebnis.grund], ["nicht_gelaufen", ZEIT_GRUND]);
+  assert.equal(protokoll, null);
+});
+
+test("bei ausreichender Restzeit läuft der Commit, und seine Zeitgrenze ist nie größer als die Restzeit des Jobs", async (context) => {
+  const { ergebnis } = await pruefeMit(context, { aufnahme: aufzeichnung("gueltig"), restzeit: uhrBei(0) });
+  assert.equal(ergebnis.zustand, "geprueft");
+  for (const minuten of [0, 200, 260, 280]) {
+    const restzeit = uhrBei(minuten)();
+    const grenze = zeitgrenzeFuer(restzeit);
+    assert.ok(grenze !== null && grenze <= restzeit, `${minuten} min: ${grenze} > ${restzeit}`);
+  }
+  assert.ok(Number.isFinite(zeitgrenzeFuer(Infinity)));
+});
+
+test("die Restzeit rechnet ab dem Start des Laufs gegen das Job-Limit von 360 Minuten mit Reserve für Ablage und Auswertung", () => {
+  const amStart = uhrBei(0)();
+  assert.ok(amStart > 0 && amStart < JOB_LIMIT, String(amStart));
+  assert.equal(amStart - uhrBei(100)(), 100 * MINUTE);
+  assert.ok(uhrBei(360)() < 0);
 });

@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { performance } from "node:perf_hooks";
 import { env } from "node:process";
 
 import { istIssue } from "../ziele/github.mjs";
@@ -55,6 +56,8 @@ const STOP_GRUENDE = new Set([LIMIT_GRUND, ANMELDUNG_GRUND, TOKEN_GRUND]);
 const ISSUE_IM_TEXT = /\b(?:closes|fixes|resolves)\s+#(\d+)\b/i;
 const PHASEN_BRANCH = /^phase\/(\d+)-/;
 const MAX_DATEI_BYTES = 16_777_216;
+const JOB_GRENZE_MS = 21_600_000;
+const RESERVE_MS = 1_800_000;
 const KURZ = 12;
 const OFFEN_GRUND = "Lauf vorzeitig beendet";
 const MERGE_GRUND = "Merge-Commit im PR, bitte rebasen";
@@ -137,6 +140,11 @@ async function artefakt(optionen, root, { github = githubZugang() } = {}) {
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artefakt=${name}\n`);
   console.log(`Artefakt-Name: ${name}`);
   return 0;
+}
+
+export function jobRestzeit({ start = performance.timeOrigin, jetzt = Date.now } = {}) {
+  const ende = start + JOB_GRENZE_MS - RESERVE_MS;
+  return () => ende - jetzt();
 }
 
 function uebernommen(commit, bekannt) {
@@ -228,7 +236,7 @@ async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
   const offen = (fertig) => alle.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
   const schreibe = (fertig) =>
     schreibeErgebnis(optionen.aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
-  const mitPr = { ...kontext, aus: optionen.aus, basis: kopf.basis, commits: alle };
+  const mitPr = { ...kontext, aus: optionen.aus, basis: kopf.basis, commits: alle, restzeit: jobRestzeit() };
   const { ergebnisse, ablage } = await pruefeAlle(alle, frueher, { kontext: mitPr, schreibe });
   const commits = belegeUmgehungen(ergebnisse, {
     root: kontext.root,
