@@ -113,6 +113,21 @@ test("feste-pfade: jede Liste meldet ihren fehlenden Eintrag", (context) => {
   for (const [files, expected] of cases) assertRed(runInNewRepo(context, files), expected);
 });
 
+test("feste-pfade: ein mitgenommener Ordner endet mit Schrägstrich und braucht eine versionierte Datei darunter", (context) => {
+  const manifest = "test/werkzeuge/rotproben/probe/pruefung.json";
+  const carrying = (mitnehmen) => ({
+    [manifest]: json({ pfade: ["tools/"], probe: { mitnehmen } }),
+  });
+  const green = runInNewRepo(context, carrying(["tools/eslint-rules/"]));
+  assert.equal(green.status, EXIT_GREEN, green.output);
+  for (const folder of ["tools/regeln/", "tools/eslint-rule/", "tools/eslint-rules"]) {
+    assertRed(
+      runInNewRepo(context, carrying([folder])),
+      `${manifest} probe.mitnehmen: ${folder} ${MISSING}`,
+    );
+  }
+});
+
 test("feste-pfade: ein Manifest-Muster mit mehr als einem Sternchen wird mit Manifest gemeldet und verdeckt keinen anderen Befund", (context) => {
   const manifest = "test/werkzeuge/rotproben/probe/pruefung.json";
   assertRed(
