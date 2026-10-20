@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, LAUF_FRIST_MS, ORDNER, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
 const MIO = 1_000_000;
@@ -16,6 +16,7 @@ const TOKEN = { planer: PLANER, erkunder: ERKUNDER, "pruefer-planung": WEGPRUEFE
 const ERSTE_WELLE = 3;
 const ZWEITE_WELLE = 12;
 const NACHFRAGE_NUMMERN = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "T1", "T2", "B1", "S1", "S2"];
+const FREIGABE_ZEILE = /^Planung freigegeben: .*\n/m;
 const NACHFRAGEN = NACHFRAGE_NUMMERN.map((nummer) => ({ nummern: [nummer], frage: `Wo endet der Weg von ${nummer}?` }));
 
 function zwoelfNachfragen() {
@@ -36,8 +37,14 @@ function planungsDatei({ wurzel }, name) {
   return join(wurzel, ORDNER, "planung", name);
 }
 
-test("plane --deckel: liegen gemessene Kosten und Vorschau der zweiten Welle über dem Deckel, endet plane vor ihr mit Exit 5, ohne einen ihrer Erkunder zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(15 * MIO)], ueberschrieben: zwoelfNachfragen() });
+function pitchFreigabe(wurzel, zeile) {
+  const datei = join(wurzel, ORDNER, "pitch.md");
+  writeFileSync(datei, readFileSync(datei, "utf8").replace(FREIGABE_ZEILE, zeile));
+  return wurzel;
+}
+
+test("plane ohne --deckel: liegen gemessene Kosten und Vorschau der zweiten Welle über der im Pitch freigegebenen Menge, endet plane vor ihr mit Exit 5, ohne einen ihrer Erkunder zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${15 * MIO} Token\n`), { ueberschrieben: zwoelfNachfragen() });
 
   exit(lauf, EXIT_DECKEL);
   assert.equal(aufrufe(lauf, "erkunder", "## Erkundung").length, ERSTE_WELLE);
@@ -47,12 +54,27 @@ test("plane --deckel: liegen gemessene Kosten und Vorschau der zweiten Welle üb
   assert.deepEqual(planungsBericht(lauf).deckel, { deckel: 15 * MIO, gemessen, vorschau: ZWEITE_WELLE * ERKUNDER_LAUF });
 });
 
-test("plane ohne --deckel: derselbe Lauf startet alle 12 Erkunder der zweiten Welle und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = planeMitToken(context, planOrdner(context), { ueberschrieben: zwoelfNachfragen() });
+test("plane --deckel geht vor die im Pitch freigegebene Menge: derselbe Lauf startet alle 12 Erkunder der zweiten Welle und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = pitchFreigabe(planOrdner(context), `Planung freigegeben: ${15 * MIO} Token\n`);
+  const lauf = planeMitToken(context, wurzel, { argumente: ["--deckel", String(1000 * MIO)], ueberschrieben: zwoelfNachfragen() });
 
   exit(lauf, EXIT_GRUEN);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
 });
+
+for (const [fall, zeile] of [
+  ["ohne Zeile „Planung freigegeben“", ""],
+  ["mit einer Menge, die keine ganze Zahl ist", "Planung freigegeben: 15 Mio. Token\n"],
+]) {
+  test(`plane ohne --deckel, Pitch ${fall}: plane endet mit Exit 2, nennt die Zeile und startet keinen Agenten`, { timeout: LAUF_FRIST_MS }, (context) => {
+    const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), zeile));
+
+    exit(lauf, EXIT_AUFRUF);
+    assert.match(lauf.stderr, /Planung freigegeben: <Zahl> Token/);
+    assert.equal(aufrufe(lauf, "planer").length, 0);
+    assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
+  });
+}
 
 test("plane --deckel: vor der ersten Welle gilt der Mittelwert je Erkunder-Lauf aus planung.json des vorigen Laufs", { timeout: LAUF_FRIST_MS }, (context) => {
   const wurzel = planOrdner(context);

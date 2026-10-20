@@ -762,8 +762,11 @@ function aufrufFehler(ordner, fortsetzen) {
   return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
 }
 
-function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen) {
-  return aufrufFehler(ordner, fortsetzen) ?? legeAblageAn(ordner, fortsetzen);
+function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angabe) {
+  const fehler = aufrufFehler(ordner, fortsetzen);
+  if (fehler !== null) return { fehler };
+  const { deckel, fehler: deckelFehler } = deckelAus(angabe, readFileSync(join(ordner, PITCH), "utf8"));
+  return { deckel, fehler: deckelFehler ?? legeAblageAn(ordner, fortsetzen) };
 }
 
 function ausgang(fehler) {
@@ -797,14 +800,13 @@ function berichte(planung, ergebnis) {
 function neuePlanung(root, ordner, { fortsetzen, deckel }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
-  if (deckel !== null) planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
+  planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
   return planung;
 }
 
 export async function plane(ordnerAngabe, root, { fortsetzen = false, deckel: angabe } = {}) {
   const ordner = resolve(root, ordnerAngabe);
-  const { deckel, fehler: deckelFehler } = deckelAus(angabe);
-  const fehler = deckelFehler ?? pruefeAufrufUndLegeAblageAn(ordner, fortsetzen);
+  const { deckel, fehler } = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angabe);
   if (fehler !== null) {
     console.error(fehler);
     return EXIT_AUFRUF;

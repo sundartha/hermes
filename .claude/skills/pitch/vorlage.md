@@ -1,6 +1,7 @@
 # P-<Nummer> <kurzer Titel>
 
 Status: Entwurf
+Planung freigegeben: <Zahl> Token (trägt die Sitzung bei der Freigabe ein, ganze Zahl ohne Trennzeichen)
 Design Doc: <ja | nein>, weil <Grund aus diesem Fall>
 
 ## Absicht
