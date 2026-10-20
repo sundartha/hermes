@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 
 import { ROLLEN, genutzt, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { faelle } from "./auftrag/faelle.mjs";
+import { importendungen } from "./auftrag/importendungen.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { testumbauFaelle } from "./auftrag/testumbau.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
@@ -25,6 +26,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs genutzt <phasendatei> <auftrag> --basis <commit>",
   "        node tools/auftrag.mjs faelle --basis <commit>",
   "        node tools/auftrag.mjs testumbau --basis <commit>",
+  "        node tools/auftrag.mjs importendungen --basis <commit>",
   "        node tools/auftrag.mjs phase <phasendatei>",
   "        node tools/auftrag.mjs aufraeumen",
   "        node tools/auftrag.mjs pruefer artefakt --head <sha>",
@@ -71,6 +73,7 @@ const BEFEHLE = {
   genutzt: { argumente: 2, optionen: ["basis"], fuehreAus: ([phasendatei, kennung], root, { basis }) => genutzt(phasendatei, kennung, { basis, root }) },
   faelle: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => faelle({ basis, root }) },
   testumbau: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => testumbauFaelle({ basis, root }) },
+  importendungen: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => importendungen({ basis, root }) },
   pruefer: {
     argumente: 1,
     optionen: ([art]) => PRUEFER_OPTIONEN.get(art),

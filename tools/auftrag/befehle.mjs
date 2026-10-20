@@ -10,12 +10,14 @@ import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/f
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
+import { nurTypenNachgezogen } from "./importendungen.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
 export const ROLLEN = ["test", "bau"];
+const OHNE_UMBENENNUNG = { paare: [], nachgezogen: new Set(), hinweise: [] };
 
 export function hatSkript(root, name) {
   const datei = join(root, "package.json");
@@ -89,16 +91,18 @@ export function rot(phasendatei, kennung, root) {
   return urteil.rot ? EXIT_GRUEN : EXIT_ROT;
 }
 
-export function grenzen(phasendatei, kennung, { rolle, basis, root }) {
+export async function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
   if (befunde.length > 0) {
     console.log(`${VERSTOSS}${PHASE_PASST_NICHT}`);
     return meldeBefunde(befunde);
   }
-  const aenderungen = aenderungenSeit(basis, root);
-  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root) };
+  const umbenennung = rolle === "bau" ? await nurTypenNachgezogen({ basis, root }, aenderungenSeit(basis, root).map(({ pfad }) => pfad)) : OHNE_UMBENENNUNG;
+  const { paare, nachgezogen, hinweise: umbenennungsHinweise } = umbenennung;
+  const aenderungen = aenderungenSeit(basis, root, paare);
+  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root), nachgezogen };
   const { verstoesse, hinweise, produktzeilen } = grenzBefunde(kontext, aenderungen);
-  for (const zeile of [...verstoesse, ...hinweise]) console.log(zeile);
+  for (const zeile of [...verstoesse, ...hinweise, ...umbenennungsHinweise]) console.log(zeile);
   const urteil = verstoesse.length === 0 ? "grün" : "rot";
   console.log(
     `${urteil}: ${aenderungen.length} Dateien geändert, ${produktzeilen} neue Zeilen Produktcode, Rolle ${rolle}.`,

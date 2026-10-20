@@ -120,11 +120,17 @@ function liestEigenenPfad(baum) {
   );
 }
 
+export function umschreibbareQuelle(knoten) {
+  const quelle = QUELLKNOTEN.has(knoten.type) ? knoten.source : undefined;
+  const zeichenkette = quelle?.type === "Literal" && typeof quelle.value === "string";
+  return zeichenkette && quelle.raw.slice(1, -1) === quelle.value ? quelle : undefined;
+}
+
 function angeglicheneQuellen(baum, datei, altFuer) {
   const angeglichen = [];
   for (const knoten of alleKnoten({ ast: baum, visitorKeys: VisitorKeys })) {
-    const quelle = QUELLKNOTEN.has(knoten.type) ? knoten.source : undefined;
-    if (quelle?.type !== "Literal" || typeof quelle.value !== "string") continue;
+    const quelle = umschreibbareQuelle(knoten);
+    if (quelle === undefined) continue;
     const alt = RELATIVE_QUELLE.test(quelle.value)
       ? altFuer.get(posix.join(posix.dirname(datei), quelle.value))
       : undefined;
@@ -147,24 +153,31 @@ function importendungenAngleichen(baum, datei, altFuer) {
   return baum;
 }
 
-async function nurQuellenNachgezogen(datei, { von, bis, paare, eslint }) {
-  const [vorher, nachher] = [inhalt(von, datei), inhalt(bis, datei)];
-  if (vorher === undefined || nachher === undefined || vorher === nachher) return false;
-  const laufzeit = laufzeitText(datei, nachher);
-  const baum =
-    laufzeit === undefined
-      ? undefined
-      : gelesen(laufzeit, await einstellungenFuer(javascriptPfad(datei), eslint));
-  if (baum === undefined) return false;
-  const altFuer = new Map(paare.filter(({ nurTypen }) => nurTypen).map(({ alt, neu }) => [neu, alt]));
-  const ersetzungen = angeglicheneQuellen(baum, datei, altFuer).toSorted(
+export async function laufzeitBaum({ pfad, text }, eslint) {
+  const laufzeit = laufzeitText(pfad, text);
+  return laufzeit === undefined
+    ? undefined
+    : gelesen(laufzeit, await einstellungenFuer(javascriptPfad(pfad), eslint));
+}
+
+export async function quellenAngeglichen({ pfad, text }, zielFuer, eslint) {
+  const baum = await laufzeitBaum({ pfad, text }, eslint);
+  if (baum === undefined) return undefined;
+  const ersetzungen = angeglicheneQuellen(baum, pfad, zielFuer).toSorted(
     (links, rechts) => rechts.quelle.range[0] - links.quelle.range[0],
   );
-  const angeglichen = ersetzungen.reduce(
-    (text, { quelle, raw }) => `${text.slice(0, quelle.range[0])}${raw}${text.slice(quelle.range[1])}`,
-    nachher,
+  if (ersetzungen.length === 0) return undefined;
+  return ersetzungen.reduce(
+    (stand, { quelle, raw }) => `${stand.slice(0, quelle.range[0])}${raw}${stand.slice(quelle.range[1])}`,
+    text,
   );
-  return ersetzungen.length > 0 && angeglichen === vorher;
+}
+
+export async function nurQuellenNachgezogen(datei, { von, bis, paare, eslint }) {
+  const [vorher, nachher] = [inhalt(von, datei), inhalt(bis, datei)];
+  if (vorher === undefined || nachher === undefined || vorher === nachher) return false;
+  const altFuer = new Map(paare.filter(({ nurTypen }) => nurTypen).map(({ alt, neu }) => [neu, alt]));
+  return (await quellenAngeglichen({ pfad: datei, text: nachher }, altFuer, eslint)) === vorher;
 }
 
 async function laufzeitBaeume({ alt, neu }, eslint) {

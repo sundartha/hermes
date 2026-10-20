@@ -17,6 +17,8 @@ const TESTDATEI = /(^|\/)test\/|\.test\.[cm]?js$/;
 const AUSFUEHRBARER_TEST = /\.test\.[cm]?js$/;
 const TYPDATEI_ENDUNG = ".d.ts";
 const JS_ENDUNG = /\.[cm]?js$/;
+const JS_DATEI = /\.js$/;
+const TS_ENDUNG = ".ts";
 const MAX_BETREFF = 72;
 const CODEOWNERS = ".github/CODEOWNERS";
 const VERANKERT = "/";
@@ -64,8 +66,12 @@ function bereichsVerzeichnis(bereich) {
   return bereich.endsWith("/") ? bereich : `${dirname(bereich)}/`;
 }
 
+function imBereichOderZwilling(bereich, pfad) {
+  return imBereich(bereich, pfad) || (JS_DATEI.test(bereich) && pfad === bereich.replace(JS_DATEI, TS_ENDUNG));
+}
+
 export function gehoertZumBereich(bereich, pfad) {
-  if (imBereich(bereich, pfad)) return true;
+  if (imBereichOderZwilling(bereich, pfad)) return true;
   if (pfad === `${bereichsVerzeichnis(bereich)}${FUNKTIONSKARTE}`) return true;
   if (!pfad.endsWith(TYPDATEI_ENDUNG)) return false;
   return bereich.endsWith("/")
@@ -141,7 +147,7 @@ function bereichBefunde(auftrag, kontext) {
   const erwartet = Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : null;
   if (erwartet === null) return [...befunde, "erwarteteDateien muss eine Liste sein"];
   const fremd = erwartet.filter(
-    (pfad) => !pfadIstSauber(pfad) || !(imBereich(auftrag.bereich, pfad) || istTestdatei(pfad)),
+    (pfad) => !pfadIstSauber(pfad) || !(imBereichOderZwilling(auftrag.bereich, pfad) || istTestdatei(pfad)),
   );
   return [...befunde, ...fremd.map((pfad) => `erwartete Datei ${pfad} liegt nicht im Bereich`)];
 }
