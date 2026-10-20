@@ -211,9 +211,13 @@ export function phaseFuer(wurzel, umbau) {
   return { phase: KENNUNG, entwurf, auftraege: eintraege.map((eintrag) => auftragAusSchnitt(eintrag, soll, [])) };
 }
 
-export function plane(context, { werkzeug, grund, ueberschrieben, argumente }) {
+export function plane(context, optionen) {
   const wurzel = planOrdner(context);
-  const aufruf = typeof argumente === "function" ? argumente(wurzel) : argumente;
+  const { argumente } = optionen;
+  return planeIn(context, wurzel, { ...optionen, argumente: typeof argumente === "function" ? argumente(wurzel) : argumente });
+}
+
+export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf }) {
   const ersatz = probeDirectory(context, { "antworten.json": JSON.stringify(antworten(grund, ueberschrieben)) });
   writeFileSync(join(ersatz, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(ersatz, "claude.mjs"), AUSFUEHRBAR);

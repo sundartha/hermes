@@ -21,6 +21,7 @@ import {
   zerlegungBefunde,
 } from "./antworten.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn } from "./erkundung.mjs";
+import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
@@ -44,6 +45,7 @@ export const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
 const VORLAGE_ENTWURF = "## Entwurf je Bereich";
 const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"];
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
+const GELESEN = [...new Set([...PLANER_KONTEXT, ...ERKUNDER_KONTEXT, VORLAGE])];
 const JSON_EINRUECKUNG = 2;
 const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit `datei` und `ausweg` „nicht gefunden, weil `<Name>` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei.";
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
@@ -192,14 +194,18 @@ export class Planung {
     }
   }
 
-  gliederungsNachricht() {
+  gliederungsTeile() {
     const nummern = [...this.soll.keys()];
-    return nachricht("Gliederung", [
+    return [
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Nummern", nummernText(this.soll, nummern)),
       abschnitt("Bedrohungen mit anderem Ausgang (gehören zu keinem Auftrag)", punkte([...this.andererAusgang])),
       ...PLANER_KONTEXT.map((pfad) => abschnitt(pfad, dateiText(this.root, pfad))),
-    ]);
+    ];
+  }
+
+  gliederungsNachricht() {
+    return nachricht("Gliederung", this.gliederungsTeile());
   }
 
   async gliedere() {
@@ -334,7 +340,16 @@ export class Planung {
   }
 
   legeBerichte() {
-    this.berichte.forEach((bericht, stelle) => this.lege(`erkundung-g${stelle + 1}.json`, bericht));
+    this.berichte.forEach((bericht, stelle) => this.lege(erkundungsDatei(stelle), bericht));
+  }
+
+  ausgangsstand() {
+    return ausgangsstand(this.root, this.ordner, { arbeitsbaum: this.team.anfang.baum, kontext: GELESEN });
+  }
+
+  legeFingerabdruck(stand) {
+    const zustand = { gesehen: [...this.gesehen], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler] };
+    this.lege(FINGERABDRUCK, fingerabdruck(stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
   pruefungDerBerichte() {
@@ -369,8 +384,12 @@ export class Planung {
     ];
   }
 
+  async zuschnittTeile() {
+    return [abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte)), ...(await this.lagebild()), abschnitt(VORLAGE, dateiText(this.root, VORLAGE))];
+  }
+
   async zuschnittNachricht() {
-    return nachricht("Zuschnitt", [abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte)), ...(await this.lagebild()), abschnitt(VORLAGE, dateiText(this.root, VORLAGE))]);
+    return nachricht("Zuschnitt", await this.zuschnittTeile());
   }
 
   nachfrageBefunde(nachfragen) {
@@ -630,18 +649,55 @@ export class Planung {
   }
 
   async laufe() {
+    const stand = this.ausgangsstand();
     await this.gliedere();
     await this.erkundeGruppen();
+    this.legeFingerabdruck(stand);
+    await this.planeAbSchnitt();
+  }
+
+  async planeAbSchnitt() {
     await this.schneide();
     await this.pruefe();
     await this.entwerfe();
   }
 }
 
-function aufrufFehler(ordner) {
-  if (!existsSync(join(ordner, "pitch.md")) || !existsSync(join(ordner, "sicherheit.md"))) return `${ordner} enthält kein pitch.md und sicherheit.md`;
+class Fortsetzung extends Planung {
+  uebernimmErkundung() {
+    const { gruende, erkundung } = liesFortsetzung(this.ablage, this.ausgangsstand());
+    if (gruende.length > 0) return gruende;
+    const { gliederung, berichte: gelesen, zustand } = erkundung;
+    this.gliederung = gliederung;
+    this.berichte = gelesen;
+    this.gesehen = new Set(zustand.gesehen);
+    this.wegOffen = zustand.wegOffen;
+    this.wegpruefungen = zustand.wegpruefungen;
+    this.wegZaehler = new Map(zustand.wegZaehler);
+    return [];
+  }
+
+  async zuschnittNachricht() {
+    return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...(await this.zuschnittTeile())]);
+  }
+
+  laufe() {
+    return this.planeAbSchnitt();
+  }
+}
+
+function vorhandenFehler(ordner, fortsetzen) {
   if (existsSync(join(ordner, PHASE))) return `${join(ordner, PHASE)} gibt es schon; plane überschreibt nichts`;
-  if (existsSync(join(ordner, PLANUNG))) return `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts`;
+  const abgelegt = existsSync(join(ordner, PLANUNG));
+  if (abgelegt && !fortsetzen) return `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts`;
+  if (!abgelegt && fortsetzen) return `${join(ordner, PLANUNG)} gibt es nicht; --fortsetzen braucht die abgelegte Erkundung`;
+  return null;
+}
+
+function aufrufFehler(ordner, fortsetzen) {
+  if (!existsSync(join(ordner, "pitch.md")) || !existsSync(join(ordner, "sicherheit.md"))) return `${ordner} enthält kein pitch.md und sicherheit.md`;
+  const vorhanden = vorhandenFehler(ordner, fortsetzen);
+  if (vorhanden !== null) return vorhanden;
   const absichtFehlt = pitchAbsichtBefunde(readFileSync(join(ordner, PITCH), "utf8"));
   return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
 }
@@ -674,17 +730,22 @@ function berichte(planung, ergebnis) {
   return ergebnis.exit;
 }
 
-export async function plane(ordnerAngabe, root) {
+export async function plane(ordnerAngabe, root, { fortsetzen = false } = {}) {
   const ordner = resolve(root, ordnerAngabe);
-  const fehler = aufrufFehler(ordner);
+  const fehler = aufrufFehler(ordner, fortsetzen);
   if (fehler !== null) {
     console.error(fehler);
     return EXIT_AUFRUF;
   }
   const { soll, andererAusgang, unklar } = nummernImOrdner(ordner);
-  const planung = new Planung(root, ordner);
+  const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
   planung.beginne(soll, andererAusgang);
+  const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
+  if (abweichungen.length > 0) {
+    console.error(`plane setzt nicht fort, voller Neulauf nötig:\n${punkte(abweichungen)}`);
+    return EXIT_AUFRUF;
+  }
   if (unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: unklar });
   try {
     await planung.laufe();
