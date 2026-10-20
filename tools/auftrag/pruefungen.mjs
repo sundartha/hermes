@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { BEREICHE_DATEI } from "../tests-ausmisten/pfade.mjs";
+
 import { TESTUMBAU, gehoertZumBereich, istAusfuehrbarerTest, istGeschuetzt, istTestdatei } from "./format.mjs";
 
 export const MAX_PRODUKTZEILEN = 400;
@@ -29,6 +31,9 @@ export const VERSTOSS = "Verstoß: ";
 export const GESCHUETZT = "geschützte Datei geändert";
 export const AUSSERHALB = "außerhalb des Bereichs";
 export const ZU_VIELE_ZEILEN = "neue Zeilen Produktcode";
+const NUR_PAARE = "ein Umbenennungs-Auftrag ändert nur seine nur-Typen-Paare aus erwarteteDateien und nachgezogene Importendungen";
+const TS_ZWILLING = /(?<!\.d)\.ts$/;
+const JS_ENDUNG = ".js";
 export const PHASE_PASST_NICHT = "die Phasendatei passt nicht mehr zu diesem Auftrag";
 export const ROLLE = {
   PRODUKT_IM_TEST: "Der Test-Agent hat Produktcode geändert",
@@ -121,15 +126,39 @@ function rollenVerstoss({ auftrag, rolle, bestand }, pfad) {
   return istTestdatei(pfad) ? `${ROLLE.TEST_IM_BAU}: ${pfad}` : null;
 }
 
-function dateiVerstoesse({ auftrag, rolle, muster, bestand = () => true, nachgezogen = new Set() }, pfad) {
+function istUmbenennungsAuftrag({ auftrag, rolle, bestand = () => true }) {
+  const produkt = auftrag.erwarteteDateien.filter((pfad) => !istTestdatei(pfad));
+  const zwillinge = produkt.every((pfad) => TS_ZWILLING.test(pfad) && bestand(pfad.replace(TS_ZWILLING, JS_ENDUNG)));
+  return rolle === "bau" && auftrag.art === "umbau" && produkt.length > 0 && zwillinge;
+}
+
+function umbenannteDateien({ auftrag, paare = [] }) {
+  const eigene = paare.filter(({ neu }) => auftrag.erwarteteDateien.includes(neu));
+  return new Set(eigene.flatMap(({ alt, neu }) => [alt, neu]));
+}
+
+function umbenennungsVerstoss({ auftrag, umbenannt, bereichDer }, pfad) {
+  if (!umbenannt.has(pfad)) return `${AUSSERHALB} ${auftrag.bereich}: ${pfad}; ${NUR_PAARE}`;
+  const bereich = bereichDer(pfad);
+  const gleich = bereich === bereichDer(auftrag.bereich) && (bereich !== undefined || gehoertZumBereich(auftrag.bereich, pfad));
+  if (gleich) return null;
+  return bereich === undefined
+    ? `${AUSSERHALB} ${auftrag.bereich}: ${pfad} steht in keinem Bereich laut ${BEREICHE_DATEI}`
+    : `${AUSSERHALB} ${auftrag.bereich}: ${pfad} gehört laut ${BEREICHE_DATEI} zum Bereich ${bereich}`;
+}
+
+function bereichsVerstoss(kontext, pfad) {
+  const { auftrag, rolle, umbenannt } = kontext;
+  if (umbenannt !== undefined) return umbenennungsVerstoss(kontext, pfad);
+  return rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad) ? `${AUSSERHALB} ${auftrag.bereich}: ${pfad}` : null;
+}
+
+function dateiVerstoesse(kontext, pfad) {
+  const { auftrag, rolle, muster, bestand = () => true, nachgezogen = new Set() } = kontext;
   if (istGeschuetzt(muster, pfad)) return [`${VERSTOSS}${GESCHUETZT}: ${pfad}`];
   if (nachgezogen.has(pfad)) return [];
-  const verstoss = rollenVerstoss({ auftrag, rolle, bestand }, pfad);
-  if (verstoss) return [`${VERSTOSS}${verstoss}`];
-  if (rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad)) {
-    return [`${VERSTOSS}${AUSSERHALB} ${auftrag.bereich}: ${pfad}`];
-  }
-  return [];
+  const verstoss = rollenVerstoss({ auftrag, rolle, bestand }, pfad) ?? bereichsVerstoss(kontext, pfad);
+  return verstoss ? [`${VERSTOSS}${verstoss}`] : [];
 }
 
 function abweichungen(auftrag, geaendert) {
@@ -143,7 +172,8 @@ function abweichungen(auftrag, geaendert) {
 }
 
 export function grenzBefunde(kontext, aenderungen) {
-  const verstoesse = aenderungen.flatMap(({ pfad }) => dateiVerstoesse(kontext, pfad));
+  const umbenannt = istUmbenennungsAuftrag(kontext) ? umbenannteDateien(kontext) : undefined;
+  const verstoesse = aenderungen.flatMap(({ pfad }) => dateiVerstoesse({ ...kontext, umbenannt }, pfad));
   const nachgezogen = kontext.nachgezogen ?? new Set();
   const produkt = aenderungen.filter(({ pfad }) => !istTestdatei(pfad) && !nachgezogen.has(pfad));
   const produktzeilen = produkt.reduce((summe, { zeilen }) => summe + zeilen, 0);

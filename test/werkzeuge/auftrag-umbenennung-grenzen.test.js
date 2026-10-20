@@ -3,7 +3,7 @@ import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_GRUEN = 0;
@@ -29,6 +29,7 @@ const LANG_JS = ["export function lang(wert) {", "  return wert;", "}", ...Array
 const TYPEN = Array.from({ length: TYPZEILEN }, (_leer, index) => `export type Zahl${index} = number;\n`).join("");
 const GEMEINSAM = [{ bereich: "gemeinsam", quellen: ["^src/"], eingaenge: [], fachlogik: [] }];
 
+const BEREICHE = [{ bereich: "rechnen", quellen: ["^src/rechnen\\.[jt]s$"], eingaenge: [], fachlogik: [] }, ...GEMEINSAM];
 
 const BASIS = {
   "package.json": JSON.stringify({ type: "module" }),
@@ -76,6 +77,7 @@ function vorgemerkt(repo) {
 }
 
 const ZAHL = { alt: "src/zahl.js", neu: "src/zahl.ts", text: ZAHL_TS };
+const PAAR_VERSTOSS = /^Verstoß: außerhalb des Bereichs src\/zahl\.js: src\/zahl\.ts; /m;
 const ABGELEHNT = /^Hinweis: src\/zahl\.js → src\/zahl\.ts zählt nicht als nur Typen: /m;
 const NICHTS_NACHGEZOGEN = /^grün: 0 Dateien auf die neue Endung nachgezogen\.$/m;
 
@@ -145,7 +147,8 @@ test("auftrag-umbenennung-grenzen: ein Paar mit Laufzeitänderung zählt voll, s
   });
   const lauf = grenzen(probe);
   assert.equal(lauf.status, EXIT_ROT);
-  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/zahl\.js: src\/rechnen\.js$/m);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/zahl\.js: src\/rechnen\.js; /m);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/zahl\.js: src\/zahl\.ts; /m);
   assert.match(lauf.stdout, /^Verstoß: Der Bau-Agent hat einen Test geändert: test\/zahl\.test\.js$/m);
   assert.match(lauf.stdout, /^rot: 4 Dateien geändert, 5 neue Zeilen Produktcode, Rolle bau\.$/m);
 });
@@ -155,6 +158,44 @@ test("auftrag-umbenennung-grenzen: eine Datei mit 587 Zeilen und 40 Typzeilen z�
   const lauf = grenzen(probe);
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^grün: 2 Dateien geändert, 40 neue Zeilen Produktcode, Rolle bau\.$/m);
+});
+
+test("auftrag-umbenennung-grenzen: ändert ein Umbenennungs-Auftrag zusätzlich eine andere Datei seines Ordners, ist das ein Verstoß", (context) => {
+  const probe = umbenannt(vorbereitet(context, umbau("src/", ["src/zahl.ts"])), ZAHL);
+  nachziehen(probe.repo);
+  writeFiles(probe.repo, { "src/lang.js": `${LANG_JS}export const NOCH = 1;\n` });
+  const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/: src\/lang\.js; ein Umbenennungs-Auftrag ändert nur seine nur-Typen-Paare/m);
+  assert.doesNotMatch(lauf.stdout, /^Verstoß: .*src\/(zahl\.[jt]s|rechnen\.js)/m);
+});
+
+test("auftrag-umbenennung-grenzen: benennt ein Umbenennungs-Auftrag eine Datei eines anderen Bereichs um, ist das ein Verstoß", (context) => {
+  const rechnen = { alt: "src/rechnen.js", neu: "src/rechnen.ts", text: RECHNEN.replace("summe(links, rechts)", "summe(links: string, rechts: string): number") };
+  const probe = umbenannt(vorbereitet(context, umbau("src/", ["src/rechnen.ts"]), { "tools/bereiche.json": JSON.stringify(BEREICHE) }), rechnen);
+  const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/: src\/rechnen\.ts gehört laut tools\/bereiche\.json zum Bereich rechnen$/m);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/: src\/rechnen\.js gehört laut tools\/bereiche\.json zum Bereich rechnen$/m);
+});
+
+const NUR_RECHNEN = BEREICHE.filter(({ bereich }) => bereich === "rechnen");
+
+test("auftrag-umbenennung-grenzen: steht die umbenannte Datei in keinem Bereich und liegt im Auftragsbereich, bleibt grenzen grün", (context) => {
+  const probe = umbenannt(vorbereitet(context, umbau("src/zahl.js", ["src/zahl.ts"]), { "tools/bereiche.json": JSON.stringify(NUR_RECHNEN) }), ZAHL);
+  nachziehen(probe.repo);
+  const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+});
+
+test("auftrag-umbenennung-grenzen: steht die alte Datei in einem Bereich und ihr .ts-Zwilling in keinem, ist das ein Verstoß", (context) => {
+  const nurAlteDatei = [{ bereich: "zahl", quellen: ["^src/zahl\\.js$"], eingaenge: [], fachlogik: [] }];
+  const probe = umbenannt(vorbereitet(context, umbau("src/zahl.js", ["src/zahl.ts"]), { "tools/bereiche.json": JSON.stringify(nurAlteDatei) }), ZAHL);
+  nachziehen(probe.repo);
+  const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, /^Verstoß: außerhalb des Bereichs src\/zahl\.js: src\/zahl\.ts steht in keinem Bereich laut tools\/bereiche\.json$/m);
+  assert.doesNotMatch(lauf.stdout, /^Verstoß: .*: src\/zahl\.js /m);
 });
 
 test("auftrag-umbenennung-grenzen: eine geschützte Datei bleibt geschützt, auch wenn nur ihre Importendung nachgezogen ist", (context) => {
@@ -170,6 +211,8 @@ test("auftrag-umbenennung-grenzen: zeigt noch new URL auf die alte Datei, ist da
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("src/pfad.js")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 test("auftrag-umbenennung-grenzen: bewacht existsSync mit einem Template die alte Datei, ist das Paar geändert", (context) => {
@@ -177,6 +220,8 @@ test("auftrag-umbenennung-grenzen: bewacht existsSync mit einem Template die alt
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("src/waechter.js")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 test("auftrag-umbenennung-grenzen: ruft ein Skript in package.json die alte Datei auf, ist das Paar geändert", (context) => {
@@ -184,6 +229,8 @@ test("auftrag-umbenennung-grenzen: ruft ein Skript in package.json die alte Date
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("package.json")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 test("auftrag-umbenennung-grenzen: ersetzt mock.module die alte Datei, ist das Paar geändert", (context) => {
@@ -192,6 +239,8 @@ test("auftrag-umbenennung-grenzen: ersetzt mock.module die alte Datei, ist das P
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("test/attrappe.test.js")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 test("auftrag-umbenennung-grenzen: nennt eine Konfigurationsdatei im Wurzelordner die alte Datei, ist das Paar geändert", (context) => {
@@ -199,6 +248,8 @@ test("auftrag-umbenennung-grenzen: nennt eine Konfigurationsdatei im Wurzelordne
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("probe.config.js")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 const REGLER = "export class Regler {\n  constructor(private wert: number) {}\n}\n";
@@ -207,7 +258,9 @@ const REGLER_MIT_IMPORT = 'import { zahl } from "./zahl.js";\n\nexport class Reg
 function bleibtGeaendert({ nachgezogen, lauf }, hinweis) {
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(hinweis), nachgezogen);
+  assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 }
 
 test("auftrag-umbenennung-grenzen: eine TypeScript-Datei mit Parameter-Property in apps/ hält eine nur-Typen-Umbenennung nicht auf", (context) => {
@@ -255,6 +308,8 @@ test("auftrag-umbenennung-grenzen: ein Import mit Escape in der Quelle wird nich
   assert.match(nachgezogen, NICHTS_NACHGEZOGEN);
   assert.ok(nachgezogen.includes(abgelehntHinweis("src/rechnen.js")), nachgezogen);
   assert.match(lauf.stdout, ABGELEHNT);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
 test("auftrag-umbenennung-grenzen: ein Import mit Escape bleibt beim Nachziehen Zeichen für Zeichen stehen", (context) => {
@@ -271,6 +326,18 @@ test("auftrag-umbenennung-grenzen: ein .ts-Zwilling als Symlink ist kein nur-Typ
   symlinkSync(ziel, join(probe.repo, "src/zahl.ts"));
   assert.match(nachziehen(probe.repo), NICHTS_NACHGEZOGEN);
   const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.stdout, /^Hinweis: src\/zahl\.js → src\/zahl\.ts zählt nicht als nur Typen: der \.ts-Zwilling ist ein Symlink$/m);
+  assert.match(lauf.stdout, PAAR_VERSTOSS);
 });
 
+test("auftrag-umbenennung-grenzen: fehlt tools/bereiche.json, bricht grenzen einen Umbenennungs-Auftrag mit Grund ab", (context) => {
+  const probe = vorbereitet(context, umbau("src/zahl.js", ["src/zahl.ts"]));
+  rmSync(join(probe.repo, "tools/bereiche.json"));
+  commitAll(probe.repo, "ohne Bereichsliste");
+  umbenannt(probe, ZAHL);
+  nachziehen(probe.repo);
+  const lauf = grenzen(probe);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stderr, /^Abbruch: tools\/bereiche\.json fehlt; /m);
+});

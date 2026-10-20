@@ -6,6 +6,7 @@ import { env } from "node:process";
 import { tokenize } from "espree";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
+import { BEREICHE_DATEI, bereichDerDatei, leseBereiche } from "../tests-ausmisten/pfade.mjs";
 import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
@@ -91,6 +92,16 @@ export function rot(phasendatei, kennung, root) {
   return urteil.rot ? EXIT_GRUEN : EXIT_ROT;
 }
 
+function bereichNachListe(root) {
+  if (!existsSync(join(root, BEREICHE_DATEI))) {
+    return () => {
+      throw new Error(`${BEREICHE_DATEI} fehlt; ohne die Liste lässt sich nicht prüfen, ob ein Umbenennungs-Auftrag nur Dateien seines Bereichs umbenennt.`);
+    };
+  }
+  const bereiche = leseBereiche();
+  return (pfad) => bereichDerDatei(pfad, bereiche);
+}
+
 export async function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
   if (befunde.length > 0) {
@@ -100,7 +111,7 @@ export async function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   const umbenennung = rolle === "bau" ? await nurTypenNachgezogen({ basis, root }, aenderungenSeit(basis, root).map(({ pfad }) => pfad)) : OHNE_UMBENENNUNG;
   const { paare, nachgezogen, hinweise: umbenennungsHinweise } = umbenennung;
   const aenderungen = aenderungenSeit(basis, root, paare);
-  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root), nachgezogen };
+  const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root), nachgezogen, paare, bereichDer: bereichNachListe(root) };
   const { verstoesse, hinweise, produktzeilen } = grenzBefunde(kontext, aenderungen);
   for (const zeile of [...verstoesse, ...hinweise, ...umbenennungsHinweise]) console.log(zeile);
   const urteil = verstoesse.length === 0 ? "grün" : "rot";
