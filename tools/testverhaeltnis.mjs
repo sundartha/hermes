@@ -19,7 +19,7 @@ const MEASUREMENTS = [
 const GITHUB_NOTICE = "::notice::";
 const DISPLAY_NOTE =
   "wird nur angezeigt; die Wirkung neuer Tests prüfen Mutationsprüfung und Testwirkung";
-const SOURCE_FILE_PATTERN = /\.[cm]?js$/;
+const SOURCE_FILE_PATTERN = /\.[cm]?js$|(?<!\.d)\.[cm]?ts$/;
 const LINE_COMMENT_START = "//";
 const BLOCK_COMMENT_START = "/*";
 const BLOCK_COMMENT_END = "*/";
