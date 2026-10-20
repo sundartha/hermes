@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { fortsetzungen } from "../../tools/auftrag/planung/messung.mjs";
-import { ENTWURF_HINWEIS, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planOrdner, schnittliste } from "./planung-probe.js";
+import { ENTWURF_HINWEIS, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { probeDirectory, runIn } from "./probe-repo.js";
-import { ABSTURZ_EXIT, ABSTURZ_FEHLER, AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GRUEN, gruppenPruefung, jePruefer, phaseDatei, plane, planungsBericht } from "./planung-plane-probe.js";
+import { ABSTURZ_EXIT, ABSTURZ_FEHLER, AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GRUEN, gruppenPruefung, jePruefer, phaseDatei, plane, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 test("plane: ein Entwurf ohne gemeinsamen Namen geht einmal an seinen Schreiber zurück", { timeout: LAUF_FRIST_MS }, (context) => {
   const ohneNamen = alsJson({ entwurf: "Grundlage: design.md, Lösung\nliest den Status\nFehlerfälle: keine" });
@@ -72,6 +72,29 @@ test("plane: ein vorhandener Ordner planung endet mit Exit 2 und ändert nichts"
   const lauf = runIn(wurzel, process.execPath, [AUFTRAG, "plane", ORDNER]);
   assert.equal(lauf.status, EXIT_AUFRUF);
   assert.deepEqual(readdirSync(join(wurzel, ORDNER, "planung")), []);
+  assert.equal(existsSync(join(wurzel, ".fortschritt")), false);
+});
+
+const GEWINNT_DAS_ANLEGEN = `import { createRequire, syncBuiltinESMExports } from "node:module";
+
+const fs = createRequire(import.meta.url)("node:fs");
+const anlegen = fs.mkdirSync;
+fs.mkdirSync = (pfad, ...weitere) => {
+  if (String(pfad).endsWith("/planung")) anlegen(pfad);
+  return anlegen(pfad, ...weitere);
+};
+syncBuiltinESMExports();
+`;
+
+test("plane: entsteht planung erst nach der Vorprüfung, weil ein zweiter Lauf schneller anlegt, endet es mit Exit 2 ohne Agent und ohne neue Dateien", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = planOrdner(context);
+  const vorlauf = join(probeDirectory(context, { "vorlauf.mjs": GEWINNT_DAS_ANLEGEN }), "vorlauf.mjs");
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER], knotenArgumente: ["--import", vorlauf] });
+  exit(lauf, EXIT_AUFRUF);
+  assert.match(lauf.stderr, /planung gibt es schon; plane überschreibt nichts/u);
+  assert.equal(existsSync(join(lauf.ersatz, "protokoll.jsonl")), false);
+  assert.deepEqual(readdirSync(join(wurzel, ORDNER, "planung")), []);
+  assert.equal(existsSync(phaseDatei(lauf)), false);
   assert.equal(existsSync(join(wurzel, ".fortschritt")), false);
 });
 
