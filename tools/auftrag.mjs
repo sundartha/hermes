@@ -37,10 +37,11 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
-  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/",
+  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen]",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
 ].join("\n");
+const SCHALTER = ["json", "fortsetzen"];
 const OPTIONEN = [
   "rolle",
   "basis",
@@ -81,10 +82,10 @@ const BEFEHLE = {
     fuehreAus: (keine, root, optionen) => reparatur(optionen, root),
   },
   system: { argumente: 0, fuehreAus: () => system() },
-  karte: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
-  messung: { argumente: 1, json: true, fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
+  karte: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
+  messung: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
   schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
-  plane: { argumente: 1, fuehreAus: ([ordner], root) => plane(ordner, root) },
+  plane: { argumente: 1, schalter: ["fortsetzen"], fuehreAus: ([ordner], root, { fortsetzen }) => plane(ordner, root, { fortsetzen }) },
   suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
   dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },
 };
@@ -93,7 +94,7 @@ function gelesen() {
   try {
     return parseArgs({
       allowPositionals: true,
-      options: { ...Object.fromEntries(OPTIONEN.map((name) => [name, { type: "string" }])), json: { type: "boolean" } },
+      options: { ...Object.fromEntries(OPTIONEN.map((name) => [name, { type: "string" }])), ...Object.fromEntries(SCHALTER.map((name) => [name, { type: "boolean" }])) },
     });
   } catch {
     return { positionals: [], values: {} };
@@ -117,7 +118,7 @@ function aufruf() {
   if (!Object.hasOwn(BEFEHLE, name ?? "") || !passendeZahl(befehl, argumente)) return null;
   const pflicht = pflichtOptionen(befehl, argumente);
   const fehlend = pflicht === undefined || pflicht.some((option) => values[option] === undefined);
-  if (values.json !== undefined && befehl.json !== true) return null;
+  if (SCHALTER.some((name) => values[name] !== undefined && !(befehl.schalter ?? []).includes(name))) return null;
   if (fehlend || (values.rolle !== undefined && !ROLLEN.includes(values.rolle))) return null;
   return { befehl, argumente, optionen: values };
 }
