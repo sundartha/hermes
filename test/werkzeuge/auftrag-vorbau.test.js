@@ -377,6 +377,7 @@ test("Oberste Ebene: neue und geänderte Hilfen ohne Zusicherung, fremde Importe
     ["const FAELLE = [1, 2, 3];", "const FAELLE = [1, 2, 3, 4];", false],
     ['adresse: { land: "DE" } }', 'adresse: { land: "DE", ort: "Bonn" }, tarif: "pro" }', true],
     ['import { versende } from "../src/versand.js";\n', ECHTER_UMBAU, true],
+    ['import { versende } from "../src/versand.js";\n', '$&import { pruefeGates } from "../src/gates.js";\n', true],
     ["function kunde() {", 'const LAND = "DE";\nfunction kunde() {', true],
     ["const FAELLE = [1, 2, 3];", "const FAELLE = [1];", false],
     ["gates: false", "gates: true", false],
@@ -416,6 +417,12 @@ test("Umwege und fremde Objekte: ein neuer Weg zu Modulobjekten, eine neue Verä
     [mitVorbau("versende.vorbei = true;"), false],
     [mitVorbau('({}).constructor.constructor("return 1")();'), false],
     [mitVorbau("", `${KOPF}import { runInThisContext } from "node:vm";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "./entschaerft.js";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "../test/hilfen/entschaerft.js";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "file:///tmp/entschaerft.js";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "express/../../test/hilfen/entschaerft.js";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "express/%2e%2e/%2E%2E/test/hilfen/entschaerft.js";\n`), false],
+    [mitVorbau("", `${KOPF}import { aus } from "express\\\\..\\\\..\\\\test\\\\hilfen\\\\entschaerft.js";\n`), false],
   ];
   assert.deepEqual(
     faelle.map(([neu]) => zusicherungenGleich(`${KOPF}${FALL}`, neu)),
