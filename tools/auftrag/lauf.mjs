@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
@@ -27,6 +28,7 @@ import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { zeilenDes } from "./zeilen.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { geordnet } from "../soll-vergleich/vergleich.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
@@ -35,6 +37,7 @@ const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import
 const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+const EINRUECKUNG = 2;
 export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
 export const PIN_HAKEN = ".githooks/pre-commit";
 export const PIN_FEHLT =
@@ -52,6 +55,14 @@ const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
 const ISSUE_ZWECK =
   'lauf schreibt jede Entscheidung als Kommentar an das Phasen-Issue und liest dort die Freigabe eines alten Tests. Ohne gültige Nummer liefe ein Auftrag stundenlang in eine Entscheidung, die nirgends ankommt. Ausweg: Trag die Nummer des Phasen-Issues als "issue": <Nummer> in die Phasendatei ein.';
+
+function nurEigeneGekuerzt(vorher, nachher, eigene) {
+  const dateien = new Set([...Object.keys(vorher), ...Object.keys(nachher)]);
+  return Object.fromEntries([...dateien].flatMap((datei) => {
+    const eintrag = eigene.has(datei) ? nachher[datei] : vorher[datei];
+    return eintrag === undefined ? [] : [[datei, eintrag]];
+  }));
+}
 
 function eintraege(text) {
   return Object.values(JSON.parse(text))
@@ -342,7 +353,7 @@ class AuftragsLauf {
       if (!existsSync(join(root, PIN_HAKEN))) return true;
       return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
     }
-    const vorgemerkt = git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
+    const vorgemerkt = git(["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
     return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
@@ -351,12 +362,21 @@ class AuftragsLauf {
     return eintraege(readFileSync(pfad, "utf8")) < eintraege(vorher);
   }
 
+  behalteFremde(pfad, vorher) {
+    const eigene = new Set(aenderungenSeit(this.basis, this.kontext.root).map(({ pfad: datei }) => datei));
+    const alt = JSON.parse(vorher);
+    const zusammen = nurEigeneGekuerzt(alt, JSON.parse(readFileSync(pfad, "utf8")), eigene);
+    writeFileSync(pfad, isDeepStrictEqual(zusammen, alt) ? vorher : JSON.stringify(geordnet(zusammen), null, EINRUECKUNG));
+  }
+
   unterdrueckungenKuerzen() {
     const { auftrag, root } = this.kontext;
     const pfad = join(root, UNTERDRUECKUNGEN);
     if (auftrag.art !== "umbau" || !existsSync(pfad)) return true;
     const befehl = ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"];
+    const vorher = readFileSync(pfad, "utf8");
     if (!this.gruen(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl)) return false;
+    this.behalteFremde(pfad, vorher);
     if (this.aufraeumen && !this.gekuerzt(pfad)) {
       return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl, exitCode: EXIT_ROT, ausgabe: NICHT_GEKUERZT }));
     }

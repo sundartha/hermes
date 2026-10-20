@@ -16,7 +16,7 @@ function istObjekt(wert) {
   return typeof wert === "object" && wert !== null && !Array.isArray(wert);
 }
 
-function geordnet(wert) {
+export function geordnet(wert) {
   if (Array.isArray(wert)) return wert.map(geordnet);
   if (!istObjekt(wert)) return wert;
   const namen = Object.keys(wert).sort();
