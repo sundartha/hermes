@@ -5,7 +5,7 @@ import { befundeMeldenUndScheitern } from "../../tools/auftrag/zweck.mjs";
 
 const EXIT_ROT = 1;
 
-export function befundeMitZweck({ praefix, befunde, zweck }) {
+export function befundeMitPraefixMeldenUndScheitern({ praefix, befunde, zweck }) {
   befundeMeldenUndScheitern(befunde.map((befund) => `${praefix} ${befund}`), zweck);
   return EXIT_ROT;
 }
