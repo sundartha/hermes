@@ -209,9 +209,11 @@ function bisFrei(kind, sperre, aufruferBeendet) {
   });
 }
 
-function haeltNoch(kind) {
-  const zustand = spawnSync(PS, ["-o", "stat=", "-p", String(kind.pid)], { encoding: "utf8" }).stdout.trim();
-  return zustand !== "" && !zustand.startsWith(ZOMBIE);
+function sperrverlust(kind) {
+  const nachgesehen = spawnSync(PS, ["-o", "stat=", "-p", String(kind.pid)], { encoding: "utf8" });
+  if (nachgesehen.error) return `nicht prüfbar (${PS} nicht startbar: ${nachgesehen.error.message})`;
+  const zustand = nachgesehen.stdout.trim();
+  return zustand !== "" && !zustand.startsWith(ZOMBIE) ? null : "verloren (perl beendet)";
 }
 
 function trageHalterEin({ datei, anlass, allein }, platz) {
@@ -223,8 +225,9 @@ function trageHalterEin({ datei, anlass, allein }, platz) {
 function meldeSperrverlustBeimEnde(kind, anlass) {
   kind.removeAllListeners("exit");
   process.on("exit", () => {
-    if (haeltNoch(kind)) return;
-    console.error(`Sperre für schwere Läufe während des Laufs verloren (perl beendet), der Lauf zählt als rot: ${anlass}`);
+    const verlust = sperrverlust(kind);
+    if (verlust === null) return;
+    console.error(`Sperre für schwere Läufe während des Laufs ${verlust}, der Lauf zählt als rot: ${anlass}`);
     process.exitCode = EXIT_ROT;
   });
 }

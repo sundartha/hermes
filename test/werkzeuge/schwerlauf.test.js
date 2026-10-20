@@ -333,3 +333,19 @@ test("der Pre-Push-Hook gibt keine umgelenkte Sperrdatei an den Prüfleiter weit
   assert.equal(code, 0, ausgabe);
   assert.equal(JSON.parse(ausgabe)[0], null);
 });
+
+test("lässt sich ps beim Ende des Laufs nicht starten, endet der Lauf rot und nennt den Grund", FRIST, async (context) => {
+  const nichtAusfuehrbar = join(probeDirectory(context, {}), "ps");
+  writeFileSync(nichtAusfuehrbar, "", { mode: NUR_EIGENTUEMER });
+  const umlenken = `import kindprozesse from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+const echt = kindprozesse.spawnSync;
+kindprozesse.spawnSync = (datei, ...rest) => echt(datei === "/bin/ps" ? ${JSON.stringify(nichtAusfuehrbar)} : datei, ...rest);
+syncBuiltinESMExports();`;
+  const lauf = starte(["--import", `data:text/javascript,${encodeURIComponent(umlenken)}`, SCHWERLAUF, "--", process.execPath, "-e", "0"], { env: umgebung(context) });
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, 1, lauf.stderr);
+  assert.match(lauf.stderr, /Sperre für schwere Läufe während des Laufs nicht prüfbar \(\/bin\/ps nicht startbar: spawnSync \S+ EACCES\), der Lauf zählt als rot/);
+  assert.doesNotMatch(lauf.stderr, /TypeError/);
+});
