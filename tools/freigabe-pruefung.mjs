@@ -11,17 +11,22 @@ import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs"
 import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
+  DURCHGELASSEN,
   FEHLALARME_DIR,
+  GESTOPPT,
   LOCKERER,
   MANIFEST_FILE,
   ROTPROBEN_DIR,
   fileAt,
   git,
+  listedEntries,
+  losesProbe,
+  manifests,
   matches,
   measureChecks,
 } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
-import { getJson, repositoryName } from "./testschutz/github.mjs";
+import { closedIssueNumbers, getJson, graphql, repositoryName } from "./testschutz/github.mjs";
 import {
   gleicheAenderungGegenBasis,
   holeKopf,
@@ -49,6 +54,17 @@ const STATUS_ADDED = "A";
 const GLEICH = "gleich";
 const INSTRUCTIONS_CHECK = "anweisungen";
 const INSTRUCTION_LIST = "tools/basis/anweisungen.json";
+const RELEASE_HEADING = /^##\s+Freigabe Antonio (\d{4}-\d{2}-\d{2})$/;
+const ANY_HEADING = /^ {0,3}#{1,6}\s/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const UNKNOWN_AUTHOR = "unbekannt";
+const ANNOUNCEMENT_MARKER = "<!-- freigabe-ankuendigung -->";
+const WORKFLOW_BOT = "github-actions[bot]";
+const COMMENTS_PER_PAGE = 100;
+const COMMENT_START = "<!--";
+const COMMENT_END = "-->";
+const LINE_BREAK_PATTERN = /\r?\n/;
+const NAME_CHARACTER = /[\w./|-]/;
 const KEY_SEPARATOR = "|";
 const LINE_BREAK = "\n";
 const NAME_STATUS_FIELDS = 2;
@@ -57,6 +73,16 @@ const MS_PER_DAY = 86_400_000;
 const REVIEWS_PER_PAGE = 100;
 const SHORT_SHA = 7;
 const EXIT_FAILURE = 1;
+const RELEASE_ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) { number body createdAt lastEditedAt author { login } editor { login } }
+  }
+}`;
+const PULL_TEXT_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { createdAt lastEditedAt }
+  }
+}`;
 const USAGE =
   "Aufruf: node tools/freigabe-pruefung.mjs --basis <sha> (--pr <nr> | --warteschlange <ref>) [--registry <url>] [--downloads <url>]";
 
@@ -271,18 +297,22 @@ function approvalReasons({ changes, packages, texts, measured }) {
   ];
 }
 
-function blockReasons(measured) {
-  return measured.pruefungen
-    .filter(({ urteil, fehlalarmBelegt }) => urteil === LOCKERER && !fehlalarmBelegt)
-    .map(({ titel, id }) =>
-      grund(
-        FREIGABE_GRUENDE.OHNE_FEHLALARM,
-        `Die Prüfung „${titel}“ wird lockerer, aber der PR bringt kein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/${id}/ mit, das master meldet und dieser PR nicht mehr.`,
-      ),
-    );
+function unprovenLoosenings(measured) {
+  return measured.pruefungen.filter(
+    ({ urteil, fehlalarmBelegt }) => urteil === LOCKERER && !fehlalarmBelegt,
+  );
 }
 
-async function approvers(pullRequest, headSha) {
+function blockReasons(loosenings) {
+  return loosenings.map(({ titel, id }) =>
+    grund(
+      FREIGABE_GRUENDE.OHNE_FEHLALARM,
+      `Die Prüfung „${titel}“ wird lockerer, aber der PR bringt kein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/${id}/ mit, das master meldet und dieser PR nicht mehr.`,
+    ),
+  );
+}
+
+async function approvals(pullRequest, headSha) {
   const { full } = repositoryName();
   const reviews = await getJson(
     `/repos/${full}/pulls/${pullRequest}/reviews?per_page=${REVIEWS_PER_PAGE}`,
@@ -292,9 +322,9 @@ async function approvers(pullRequest, headSha) {
     const login = review.user?.login;
     if (APPROVERS.includes(login) && review.state !== "COMMENTED") latest.set(login, review);
   }
-  return [...latest]
-    .filter(([, review]) => review.state === "APPROVED" && review.commit_id === headSha)
-    .map(([login]) => login);
+  return [...latest.values()].filter(
+    (review) => review.state === "APPROVED" && review.commit_id === headSha,
+  );
 }
 
 async function setKindLabel(pull, kind) {
@@ -338,24 +368,34 @@ function parsedJson(commit, path) {
   }
 }
 
+function changesBesideList(id, manifest, changes) {
+  const own = [ROTPROBEN_DIR, FEHLALARME_DIR].map((directory) => `${directory}/${id}/`);
+  const list = manifest.ausnahmen?.datei;
+  const guarded = [...own, ...manifest.pfade].filter((pattern) => pattern !== list);
+  return changes.some(({ path }) => guarded.some((pattern) => matches(pattern, path)));
+}
+
 function changesInstructionCheck(basis, changes) {
   const manifest = parsedJson(basis, `${ROTPROBEN_DIR}/${INSTRUCTIONS_CHECK}/${MANIFEST_FILE}`);
   if (manifest?.ausnahmen?.datei !== INSTRUCTION_LIST) return true;
-  const own = [ROTPROBEN_DIR, FEHLALARME_DIR].map((directory) => `${directory}/${INSTRUCTIONS_CHECK}/`);
-  const guarded = [...own, ...manifest.pfade].filter((pattern) => pattern !== INSTRUCTION_LIST);
-  return changes.some(({ path }) => guarded.some((pattern) => matches(pattern, path)));
+  return changesBesideList(INSTRUCTIONS_CHECK, manifest, changes);
+}
+
+function entryList(content) {
+  const befunde = listedEntries(content);
+  if (befunde === undefined) return undefined;
+  const rest = Array.isArray(content)
+    ? []
+    : Object.fromEntries(Object.entries(content).filter(([key]) => key !== "befunde"));
+  return { befunde, rest };
 }
 
 function instructionList(commit) {
   const content = parsedJson(commit, INSTRUCTION_LIST);
-  if (typeof content !== "object" || content === null || Array.isArray(content)) return undefined;
-  const { befunde, ...rest } = content;
-  const isTextList = Array.isArray(befunde) && befunde.every((entry) => typeof entry === "string");
-  return isTextList ? { befunde, rest } : undefined;
+  return Array.isArray(content) ? undefined : entryList(content);
 }
 
-function addedEntries(basis) {
-  const [old, current] = [instructionList(basis), instructionList("HEAD")];
+function addedEntries(old, current) {
   if (old === undefined || current === undefined) return undefined;
   if (!isDeepStrictEqual(old.rest, current.rest)) return undefined;
   const left = [...old.befunde];
@@ -392,8 +432,9 @@ function newInstructionEntries(basis, changes) {
 
 function onlyAddsNewInstructionLines(basis, changes) {
   if (changesInstructionCheck(basis, changes)) return false;
-  const added = addedEntries(basis);
-  if (added === undefined || added.length === 0 || new Set(added).size !== added.length) return false;
+  const added = addedEntries(instructionList(basis), instructionList("HEAD"));
+  if (added === undefined || added.length === 0 || new Set(added).size !== added.length)
+    return false;
   const expected = newInstructionEntries(basis, changes);
   return added.length === expected.size && added.every((entry) => expected.has(entry));
 }
@@ -427,7 +468,206 @@ async function evaluate({ basis, sources }) {
     ...approvalReasons({ changes, packages, texts, measured }),
     ...(await youngVersions(packages, sources)),
   ];
-  return { kind, strenger, measured, texts, pakete, needs, blocks: blockReasons(measured) };
+  return { kind, strenger, measured, texts, pakete, needs, changes };
+}
+
+function allProbesRan({ proben }) {
+  const ran = (verdict) => verdict === GESTOPPT || verdict === DURCHGELASSEN;
+  return proben.length > 0 && proben.every(({ basis, pr }) => ran(basis) && ran(pr));
+}
+
+function addedExceptions(basis, changes, result) {
+  const path = `${ROTPROBEN_DIR}/${result.id}/${MANIFEST_FILE}`;
+  const manifest = parsedJson(basis, path);
+  if (manifest === undefined || !isDeepStrictEqual(manifest, parsedJson("HEAD", path))) return [];
+  const list = manifest.ausnahmen?.datei;
+  if (list === undefined || !allProbesRan(result) || losesProbe(result)) return [];
+  if (changesBesideList(result.id, manifest, changes)) return [];
+  const [old, current] = [basis, "HEAD"].map((commit) => entryList(parsedJson(commit, list)));
+  return addedEntries(old, current) ?? [];
+}
+
+function withoutHtmlComments(text) {
+  const start = text.indexOf(COMMENT_START);
+  if (start === -1) return text;
+  const end = text.indexOf(COMMENT_END, start + COMMENT_START.length);
+  const rest = end === -1 ? "" : withoutHtmlComments(text.slice(end + COMMENT_END.length));
+  return text.slice(0, start) + rest;
+}
+
+function isReleaseHeading(line) {
+  const date = RELEASE_HEADING.exec(line)?.[1];
+  if (date === undefined) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(date);
+}
+
+function fenceAfter(open, line) {
+  const marker = FENCE.exec(line)?.[1];
+  if (open === undefined) return marker;
+  const closes = marker?.startsWith(open) === true && line.trim() === marker;
+  return closes ? undefined : open;
+}
+
+function releaseSections(body) {
+  const sections = [];
+  let current;
+  let fence;
+  for (const line of withoutHtmlComments(body ?? "").split(LINE_BREAK_PATTERN)) {
+    const inCode = fence !== undefined;
+    fence = fenceAfter(fence, line);
+    if (!inCode && fence === undefined && ANY_HEADING.test(line)) {
+      current = isReleaseHeading(line.trim()) ? [] : undefined;
+      if (current !== undefined) sections.push(current);
+    } else current?.push(line.trim());
+  }
+  return sections;
+}
+
+function standsAlone(text, at, length) {
+  const neighbours = [text[at - 1], text[at + length]];
+  return neighbours.every(
+    (character) => character === undefined || !NAME_CHARACTER.test(character),
+  );
+}
+
+function namesWord(text, word) {
+  if (typeof word !== "string" || word === "") return false;
+  for (let at = text.indexOf(word); at !== -1; at = text.indexOf(word, at + 1)) {
+    if (standsAlone(text, at, word.length)) return true;
+  }
+  return false;
+}
+
+function releasesOnLine(line, pruefung, checks) {
+  const named = checks.filter(({ id, titel }) => namesWord(line, titel) || namesWord(line, id));
+  return named.length === 1 && named[0].id === pruefung.id;
+}
+
+function namesException(lines, { pruefung, entries }, checks) {
+  const own = lines.filter((line) => releasesOnLine(line, pruefung, checks));
+  return entries.every((entry) => own.some((line) => namesWord(line, entry)));
+}
+
+function writtenBeforeApproval(texts, approvedAt) {
+  const written = texts.map((text) => text?.lastEditedAt ?? text?.createdAt);
+  if (!written.every((time) => typeof time === "string")) return false;
+  return approvedAt.some((time) => written.every((at) => time >= at));
+}
+
+async function linkedIssues(pull) {
+  return Promise.all(
+    closedIssueNumbers(pull.body).map(
+      async (number) => (await graphql(RELEASE_ISSUE_QUERY, number)).issue,
+    ),
+  );
+}
+
+async function namedExceptions(options, result, pull) {
+  const candidates = unprovenLoosenings(result.measured)
+    .map((pruefung) => ({
+      pruefung,
+      entries: addedExceptions(options.basis, result.changes, pruefung),
+    }))
+    .filter(({ entries }) => entries.length > 0);
+  if (candidates.length === 0) return [];
+  const checks = [...manifests(".")].map(([id, { titel }]) => ({ id, titel }));
+  const issues = (await linkedIssues(pull)).filter((issue) => issue !== null);
+  const named = candidates.flatMap(({ pruefung, entries }) => {
+    const naming = issues.filter(({ body }) =>
+      releaseSections(body).some((lines) => namesException(lines, { pruefung, entries }, checks)),
+    );
+    return naming.length === 0 ? [] : [{ pruefung, entries, issues: naming }];
+  });
+  if (named.length === 0) return [];
+  const pullText = (await graphql(PULL_TEXT_QUERY, pull.number)).pullRequest;
+  return named.map((exception) => ({ ...exception, pullText }));
+}
+
+function announcementLine({ pruefung, entries }) {
+  const listed = entries.map((entry) => `\`${entry}\``).join(", ");
+  return `- Prüfung „${pruefung.titel}“ (${pruefung.id}): ${listed}`;
+}
+
+function announcementText(exceptions, headSha) {
+  return [
+    ANNOUNCEMENT_MARKER,
+    "## Freigabe-Prüfung: Ankündigung",
+    "",
+    `Stand: ${headSha}`,
+    "",
+    ...exceptions.map(announcementLine),
+    "",
+    `Diese Ausnahmen ohne Fehlalarm-Beispiel gelten erst mit einem Approve von ${APPROVERS.join(" oder ")} auf diesem Stand, gegeben nach diesem Kommentar. Wird der Kommentar bearbeitet, gilt er nicht mehr.`,
+    "",
+  ].join(LINE_BREAK);
+}
+
+function announces(comment, headSha, exception) {
+  if (comment.user?.login !== WORKFLOW_BOT) return false;
+  const lines = (comment.body ?? "").split(LINE_BREAK_PATTERN);
+  return (
+    lines[0] === ANNOUNCEMENT_MARKER &&
+    lines.includes(`Stand: ${headSha}`) &&
+    lines.includes(announcementLine(exception))
+  );
+}
+
+async function announced(options, named, headSha) {
+  if (named.length === 0) return named;
+  const { full } = repositoryName();
+  const path = `/repos/${full}/issues/${options.pullRequest}/comments`;
+  const comments = await getJson(`${path}?per_page=${COMMENTS_PER_PAGE}`);
+  const withAnnouncement = named.map((exception) => ({
+    ...exception,
+    announcement: comments.find((comment) => announces(comment, headSha, exception)),
+  }));
+  const missing = withAnnouncement.filter(({ announcement }) => announcement === undefined);
+  if (!options.queueMode && missing.length > 0) {
+    await sendToGitHub("POST", path, { body: announcementText(missing, headSha) });
+  }
+  return withAnnouncement;
+}
+
+function announcementWritten(announcement) {
+  if (announcement === undefined) return undefined;
+  return { createdAt: announcement.created_at, lastEditedAt: announcement.updated_at };
+}
+
+function releasingIssue({ issues, pullText, announcement }, approvedAt) {
+  const texts = [pullText, announcementWritten(announcement)];
+  return issues.find((issue) => writtenBeforeApproval([issue, ...texts], approvedAt));
+}
+
+function notAnnouncedLine({ announcement }, approvedAt) {
+  if (approvedAt.length === 0) return [];
+  if (writtenBeforeApproval([announcementWritten(announcement)], approvedAt)) return [];
+  return [
+    "Die Ausnahme wurde vor dem Approve nicht angekündigt; die Ankündigung steht jetzt als Kommentar „Freigabe-Prüfung: Ankündigung“ im PR, ein neues Approve auf diesem Stand gibt sie frei.",
+  ];
+}
+
+function issueName({ number, author, editor }) {
+  const edited = editor?.login === undefined ? "" : `, zuletzt bearbeitet von ${editor.login}`;
+  return `#${number} (geschrieben von ${author?.login ?? UNKNOWN_AUTHOR}${edited})`;
+}
+
+function exceptionLines(named, approvedAt) {
+  return named.flatMap((exception) => {
+    const { pruefung, entries, issues } = exception;
+    const issue = releasingIssue(exception, approvedAt);
+    const lockerung = `Die Prüfung „${pruefung.titel}“ wird lockerer ohne Fehlalarm-Beispiel`;
+    if (issue !== undefined) {
+      return [
+        `Freigegebene Ausnahme laut Issue ${issueName(issue)}: ${lockerung}, freigegeben für ${entries.join(", ")}.`,
+      ];
+    }
+    const names = issues.map(issueName).join(", ");
+    return [
+      `Ausnahme nach Issue ${names}: ${lockerung} für ${entries.join(", ")}; ein Approve von ${APPROVERS.join(" oder ")} auf diesem Stand, gegeben nach der Ankündigung im PR und nach dem Anlegen und der letzten Änderung des Issues und des PR-Texts, gibt sie frei.`,
+      ...notAnnouncedLine(exception, approvedAt),
+    ];
+  });
 }
 
 function statusLines({ needs, blocks, approvedBy, headSha }) {
@@ -452,13 +692,15 @@ function sameChangeInQueue({ basis, pullRequest }, headSha) {
 }
 
 async function countedApprovers(options, { needs }, headSha) {
-  if (needs.length === 0) return { approvedBy: [], notes: [] };
-  const approvedBy = await approvers(options.pullRequest, headSha);
+  if (needs.length === 0) return { approvedBy: [], approvedAt: [], notes: [] };
+  const reviews = await approvals(options.pullRequest, headSha);
+  const approvedBy = reviews.map(({ user }) => user.login);
   if (!options.queueMode || approvedBy.length === 0 || sameChangeInQueue(options, headSha)) {
-    return { approvedBy, notes: [] };
+    return { approvedBy, approvedAt: reviews.map(({ submitted_at }) => submitted_at), notes: [] };
   }
   return {
     approvedBy: [],
+    approvedAt: [],
     notes: [
       grund(
         FREIGABE_GRUENDE.WARTESCHLANGE,
@@ -474,13 +716,21 @@ async function main() {
   const pull = await getJson(`/repos/${full}/pulls/${options.pullRequest}`);
   const result = await evaluate(options);
   const headSha = pull.head.sha;
-  const { approvedBy, notes } = await countedApprovers(options, result, headSha);
+  const { approvedBy, approvedAt, notes } = await countedApprovers(options, result, headSha);
+  const named = await announced(options, await namedExceptions(options, result, pull), headSha);
+  const released = named.filter((exception) => releasingIssue(exception, approvedAt) !== undefined);
+  const blocks = blockReasons(
+    unprovenLoosenings(result.measured).filter(
+      (pruefung) => !released.some((exception) => exception.pruefung === pruefung),
+    ),
+  );
   const gruende = [
-    ...statusLines({ ...result, approvedBy, headSha }),
+    ...exceptionLines(named, approvedAt),
+    ...statusLines({ ...result, blocks, approvedBy, headSha }),
     ...notes.map(({ text }) => text),
   ];
   const waiting = result.needs.length > 0 && approvedBy.length === 0;
-  const zweck = zweckZeilen([...result.blocks, ...(waiting ? [...result.needs, ...notes] : [])]);
+  const zweck = zweckZeilen([...blocks, ...(waiting ? [...result.needs, ...notes] : [])]);
   const { pruefungen, ohneMessung } = result.measured;
   const findings = [
     pruefungen,
@@ -506,7 +756,7 @@ async function main() {
   console.log(`Freigabe-Prüfung: Art art:${result.kind}.`);
   for (const { path, fall } of result.strenger) console.log(`Strenger: ${path}: ${fall}`);
   for (const line of [...gruende, ...zweck]) console.log(line);
-  if (result.blocks.length > 0 || waiting) process.exitCode = EXIT_FAILURE;
+  if (blocks.length > 0 || waiting) process.exitCode = EXIT_FAILURE;
   else console.log("Keine offene Freigabe.");
 }
 
