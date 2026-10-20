@@ -21,6 +21,8 @@ let gate;
 let makeCallRoutes;
 let makeGracefulShutdown;
 let registerTools;
+let captureToolHandlers;
+let captureToolDescriptions;
 let mcpServerInfo;
 let mcpRoutes;
 let validateAssistantContext;
@@ -38,7 +40,6 @@ before(async () => {
     gate,
     { makeCallRoutes },
     { makeGracefulShutdown },
-    { registerTools },
     mcpServerInfo,
     mcpRoutes,
     { validateAssistantContext },
@@ -52,12 +53,14 @@ before(async () => {
     () => import("../src/consult/gate.js"),
     () => import("../src/routes/api-calls.js"),
     () => import("../src/boot.js"),
-    () => import("../src/mcp-tools.js"),
     () => import("../src/mcp-server-info.js"),
     () => import("../src/routes/mcp.js"),
     () => import("../src/routes/_validation.js"),
     () => import("../src/claude.js"),
   );
+  const mcpTools = await import("../src/mcp-tools.js");
+  registerTools = mcpTools.registerTools;
+  ({ captureToolHandlers, captureToolDescriptions } = await import("./gemeinsam/werkzeug-registrierung.js"));
 });
 
 after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
@@ -723,17 +726,17 @@ test("AL-P13-34: Kanal aus -> Consult-Routen 404, Bestands-Routen unberuehrt", a
 });
 
 test("AL-P13-35: ohne Faehigkeit registriert registerTools die zwei Werkzeuge NICHT", () => {
-  const withoutConsult = captureToolNames({});
+  const withoutConsult = [...captureToolHandlers({}).keys()];
   assert.ok(!withoutConsult.includes("await_call_event"));
   assert.ok(!withoutConsult.includes("answer_consult"));
-  const withConsult = captureToolNames({ consultAllowed: true });
+  const withConsult = [...captureToolHandlers({ consultAllowed: true }).keys()];
   assert.ok(withConsult.includes("await_call_event"));
   assert.ok(withConsult.includes("answer_consult"));
 });
 
 test("AL-P13-36: place_call-Beschreibung ist ohne Kanal byte-identisch, mit Kanal erweitert", () => {
-  const plain = captureDescription("place_call", {});
-  const looped = captureDescription("place_call", { consultAllowed: true });
+  const plain = captureToolDescriptions({}).get("place_call");
+  const looped = captureToolDescriptions({ consultAllowed: true }).get("place_call");
   assert.ok(!plain.includes("await_call_event"), "Bestand traegt keinen Schleifen-Hinweis");
   assert.ok(looped.startsWith(plain), "der Bestandstext bleibt vorn und unveraendert");
   assert.ok(looped.includes("await_call_event"));
@@ -773,9 +776,6 @@ function captureRegistrations(ctx) {
   return registrations;
 }
 
-const captureToolNames = (ctx) => [...captureRegistrations(ctx).keys()];
-const captureDescription = (name, ctx) => captureRegistrations(ctx).get(name).description;
-
 async function startGatewayMock(routes) {
   const server = http.createServer((req, res) => {
     const match = routes.find((r) => req.url.startsWith(r.path));
@@ -804,9 +804,9 @@ async function withGateway(routes, fn) {
 
 test("AL-P13-39: await_call_event reicht consult/none unveraendert durch", async () => {
   await withGateway(
-    [{ path: "/api/calls/", status: 200, body: { event: "consult", eventId: "c0", questions: QUESTIONS } }],
+    [{ path: "/api/calls/", status: HTTP_OK, body: { event: "consult", eventId: "c0", questions: QUESTIONS } }],
     async () => {
-      const handler = captureRegistrations({ consultAllowed: true }).get("await_call_event").handler;
+      const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
       const r = await handler({ call_id: CALL_ID });
       assert.equal(r.structuredContent.event, "consult");
       assert.equal(r.structuredContent.event_id, "c0");
@@ -828,11 +828,11 @@ test("AL-P13-40: bei done kommt der Payoff aus pickTranscript - OHNE Roh-Transkr
   };
   await withGateway(
     [
-      { path: `/api/calls/${CALL_ID}/consult`, status: 200, body: { event: "done", eventId: null, questions: [] } },
-      { path: `/api/calls/${CALL_ID}`, status: 200, body: callRecord },
+      { path: `/api/calls/${CALL_ID}/consult`, status: HTTP_OK, body: { event: "done", eventId: null, questions: [] } },
+      { path: `/api/calls/${CALL_ID}`, status: HTTP_OK, body: callRecord },
     ],
     async () => {
-      const handler = captureRegistrations({ consultAllowed: true }).get("await_call_event").handler;
+      const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
       const r = await handler({ call_id: CALL_ID });
       assert.equal(r.structuredContent.event, "done");
       assert.equal(r.structuredContent.result_summary, "Termin steht");
@@ -855,7 +855,7 @@ test("AL-P13-41: ein Zeitablauf wird zu event=none, NICHT zu einem Werkzeugfehle
     throw err;
   };
   try {
-    const handler = captureRegistrations({ consultAllowed: true }).get("await_call_event").handler;
+    const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
     const r = await handler({ call_id: CALL_ID });
     assert.equal(r.structuredContent.event, "none");
     assert.ok(!r.isError, "ein Zeitablauf ist das normale Ergebnis, kein Fehler");
@@ -876,9 +876,7 @@ test("AL-P13-42: answer_consult mappt 200/400/409 auf die drei Locale-Texte", as
   ];
   for (const c of cases) {
     await withGateway([{ path: "/api/calls/", status: c.status, body: c.body }], async () => {
-      const handler = captureRegistrations({ consultAllowed: true, language: "en" }).get(
-        "answer_consult",
-      ).handler;
+      const handler = captureToolHandlers({ consultAllowed: true, language: "en" }).get("answer_consult");
       const r = await handler({ call_id: CALL_ID, event_id: "c0", answers: ["Bello"] });
       assert.equal(r.content[0].text, c.expect, `HTTP ${c.status}`);
       assert.equal(r.structuredContent.accepted, c.accepted);
@@ -893,9 +891,7 @@ test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurue
   await withGateway(
     [{ path: "/api/calls/", status: HTTP_OK, body: { accepted: true, merged_facts: 7 } }],
     async () => {
-      const handler = captureRegistrations({ consultAllowed: true, language: "en" }).get(
-        "answer_consult",
-      ).handler;
+      const handler = captureToolHandlers({ consultAllowed: true, language: "en" }).get("answer_consult");
       const result = await handler({ call_id: CALL_ID, event_id: "c0", status: "working" });
       assert.equal(result.content[0].text, mcp.consultAckAccepted);
       assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
