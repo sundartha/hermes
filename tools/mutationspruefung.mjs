@@ -11,6 +11,7 @@ import { cruise } from "dependency-cruiser";
 import { omitKeys } from "../src/utils/object.js";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN, gleichwertigGemeldet, MUTANT_UEBERLEBT, ohneTestdatei } from "./auftrag/gleichwertig.mjs";
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
@@ -57,6 +58,8 @@ const ZUSTANDSBEREICH = [
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
 const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
 const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
+const ZWECK_UEBERLEBT = "tests/mutation";
+const ZWECK_ZUSTAND = "tests/stryker-zustand";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
@@ -481,6 +484,14 @@ function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
   return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
 }
 
+function roteZwecke({ ueberlebende, zugriffe }) {
+  return [...(ueberlebende.length > 0 ? [ZWECK_UEBERLEBT] : []), ...(zugriffe.length > 0 ? [ZWECK_ZUSTAND] : [])];
+}
+
+function zeigeZweck(ids) {
+  for (const id of ids) console.log(zweckBlock(id).join("\n"));
+}
+
 function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   const angenommene = [];
   const ueberlebende = [];
@@ -494,7 +505,7 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   for (const stelle of zugriffe) console.log(`${ZUSTAND_VERSTOSS}: ${stelle}`);
   if (ergebnisse.length > 0) console.log(`${BESTAETIGUNG}: ${bilanz(ergebnisse)}.`);
   console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
-  return ueberlebende.length + zugriffe.length;
+  return roteZwecke({ ueberlebende, zugriffe });
 }
 
 async function pruefe(pruefung, gleichwertige) {
@@ -610,12 +621,20 @@ function geteilteDateien(teile, pruefung) {
 async function urteilen(pruefungen, { urteil, gleichwertige }) {
   const plan = await planen(pruefungen);
   const berichte = teilberichte(urteil, plan);
-  let ueberlebende = 0;
+  const rot = new Set();
   for (const [index, pruefung] of pruefungen.entries()) {
     const ergebnisse = await nachfassen(pruefung, geteilteDateien(plan.teile, index), vereineAnteile(berichte, index));
-    ueberlebende += bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) });
+    for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
-  return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
+  zeigeZweck(rot);
+  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
+}
+
+async function gesamtlauf(pruefungen, gleichwertige) {
+  const rot = new Set();
+  for (const pruefung of pruefungen) for (const id of await pruefe(pruefung, gleichwertige)) rot.add(id);
+  zeigeZweck(rot);
+  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
 function umbauCommits(basis) {
@@ -716,9 +735,7 @@ async function main() {
   if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan);
   if (values.teil !== undefined) return messeTeil(pruefungen, values);
   if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige });
-  let ueberlebende = 0;
-  for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, gleichwertige);
-  return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
+  return gesamtlauf(pruefungen, gleichwertige);
 }
 
 function roteTests(mitschrift) {

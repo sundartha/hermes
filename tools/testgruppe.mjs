@@ -21,6 +21,7 @@ const KEIN_PROZESS = "ESRCH";
 const PROZESSLISTE = ["-A", "-ww", "-o", "pid=,pgid=,stat=,command="];
 const PROZESSZEILE = /^ *(\d+) +(\d+) +(\S+) +(.*)$/;
 const ZOMBIE = "Z";
+const ZWECK_UEBRIG = "tests/prozess-uebrig";
 const MAX_AUSGABE = 268_435_456;
 const ERSTES_ARGUMENT = 2;
 
@@ -68,9 +69,19 @@ async function reste(gruppe) {
   return (await geleert(gruppe, AUSKLANG_MS)) ? [] : mitglieder(gruppe);
 }
 
-function melde(uebrig) {
+async function zweckZeilen() {
+  try {
+    const { zweckBlock } = await import("./auftrag/zweck.mjs");
+    return zweckBlock(ZWECK_UEBRIG);
+  } catch (fehler) {
+    return [`Die Zweck-Texte ließen sich nicht laden: ${fehler.message}`];
+  }
+}
+
+async function melde(uebrig) {
   for (const rest of uebrig)
     process.stderr.write(`Verstoß: Prozess nach dem Testlauf übrig: ${rest}\n`);
+  if (uebrig.length > 0) process.stderr.write(`${(await zweckZeilen()).join("\n")}\n`);
 }
 
 function nie() {
@@ -120,7 +131,7 @@ export function gruppenlauf(argumente, optionen) {
   const ende = beendet.then(async ({ code, signal }) => {
     const uebrig = signal === null && !zustand.abgebrochen ? await reste(gruppe) : [];
     if (zustand.abgebrochen) return nie();
-    melde(uebrig);
+    await melde(uebrig);
     await beende(gruppe);
     await geschlossen;
     entferneTempOrdner(tempOrdner);

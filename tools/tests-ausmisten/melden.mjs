@@ -2,6 +2,7 @@ import { env } from "node:process";
 import { isDeepStrictEqual } from "node:util";
 
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { laufAdresse } from "../ziele/ausgabe.mjs";
 import { PLAN, ladeVorhandene, paketName } from "./artefakte.mjs";
 import {
@@ -32,6 +33,7 @@ import { git, leseBereiche } from "./pfade.mjs";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const MAX_ROTE_BESCHREIBUNG = 100;
+export const ZWECK_AUSMISTEN = "tests/ausmisten";
 
 function jobErgebnisse() {
   try {
@@ -345,6 +347,7 @@ export async function melden({ pr }, abhaengigkeiten = standardAbhaengigkeiten()
   for (const verstoss of urteil.verstoesse) console.log(`Verstoß: ${verstoss}`);
   const text = urteil.kurz ?? beschreibung(urteil);
   console.log(`${herkunft.branch} ${herkunft.kopf}: ${text}`);
+  if (!urteil.gruen) console.log(zweckBlock(ZWECK_AUSMISTEN).join("\n"));
   if (!pr)
     await setzeStatus(github, {
       kopf: herkunft.kopf,

@@ -231,6 +231,7 @@ jobs:
           web: "false"
 
       - name: Tests
+        id: tests
         env:
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
@@ -241,6 +242,10 @@ jobs:
           --test-reporter-destination=stdout
           --test-reporter=./tools/testlaufzeit-reporter.mjs
           --test-reporter-destination=.pruefung/dateien.jsonl
+
+      - name: Zweck der Tests
+        if: failure() && steps.tests.outcome == 'failure'
+        run: node tools/zweck-zeigen.mjs tests/regression
 
       - name: Wackelige Tests hochladen
         if: always()

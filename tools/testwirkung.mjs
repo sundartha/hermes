@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { TESTDATEI, maskiert, testaufrufe } from "./testwirkung/aufrufe.mjs";
 import { vergleicheErreichtes } from "./testwirkung/erreicht.mjs";
 import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaendert.mjs";
@@ -190,14 +191,29 @@ function nurDie(ergebnisse, tests) {
   return ergebnisse.filter(({ kennung }) => gesucht.has(kennung));
 }
 
-function verstoesse(ohneNamen, ergebnisse) {
+const WIRKUNG_ZWECK = {
+  KATALOG: "tests/wirkung-katalog",
+  OHNE_WIRKUNG: "tests/wirkung-leer",
+  WACKELN: "tests/wirkung-wackeln",
+  GEAENDERT: "tests/wirkung-geaendert",
+  ERREICHT: "tests/wirkung-erreicht",
+};
+
+function neueTestsVerstoesse(ohneNamen, ergebnisse) {
   const mit = (merkmal) => ergebnisse.filter(merkmal);
+  const ohneName = ohneNamen.map((aufruf) => `Test ohne festen Namen: ${aufruf}`);
+  const leer = mit(({ leer: ohneWirkung }) => ohneWirkung).map(({ kennung }) => `Test bleibt grün, obwohl jede Prüfung scheitert: ${kennung}`);
+  const wackeln = mit(({ wackelt }) => wackelt).map(({ kennung, rot }) => `Test wackelt: ${kennung} (${rot} von ${WIEDERHOLUNGEN} Läufen rot)`);
+  const fehlen = mit(({ fehlt }) => fehlt.length > 0).map(({ kennung, fehlt }) => `Test nicht gelaufen: ${kennung} (Lauf ${fehlt.join(", ")})`);
   return [
-    ...ohneNamen.map((aufruf) => `Test ohne festen Namen: ${aufruf}`),
-    ...mit(({ leer }) => leer).map(({ kennung }) => `Test bleibt grün, obwohl jede Prüfung scheitert: ${kennung}`),
-    ...mit(({ wackelt }) => wackelt).map(({ kennung, rot }) => `Test wackelt: ${kennung} (${rot} von ${WIEDERHOLUNGEN} Läufen rot)`),
-    ...mit(({ fehlt }) => fehlt.length > 0).map(({ kennung, fehlt }) => `Test nicht gelaufen: ${kennung} (Lauf ${fehlt.join(", ")})`),
+    [WIRKUNG_ZWECK.OHNE_WIRKUNG, [...ohneName, ...leer]],
+    [WIRKUNG_ZWECK.WACKELN, wackeln],
+    [WIRKUNG_ZWECK.OHNE_WIRKUNG, fehlen],
   ];
+}
+
+function zweckeDer(gruppen) {
+  return [...new Set(gruppen.filter(([, liste]) => liste.length > 0).map(([id]) => id))];
 }
 
 function zaehlung(ergebnisse) {
@@ -261,13 +277,14 @@ async function main() {
   };
   const erreichbar = await erreichbarkeit(values.basis, auftrag);
   const weitergegeben = weitergabe(values.basis, auftrag);
-  const gefunden = [
-    ...katalog.verstoesse,
-    ...verstoesse(ohneNamen, ergebnisse),
-    ...eingefuegt.verstoesse,
-    ...erreichbar.verstoesse,
-    ...weitergegeben.verstoesse,
+  const gruppen = [
+    [WIRKUNG_ZWECK.KATALOG, katalog.verstoesse],
+    ...neueTestsVerstoesse(ohneNamen, ergebnisse),
+    [WIRKUNG_ZWECK.GEAENDERT, eingefuegt.verstoesse],
+    [WIRKUNG_ZWECK.ERREICHT, erreichbar.verstoesse],
+    [WIRKUNG_ZWECK.GEAENDERT, weitergegeben.verstoesse],
   ];
+  const gefunden = gruppen.flatMap(([, liste]) => liste);
   for (const verstoss of gefunden) console.log(`Verstoß: ${verstoss}`);
   for (const hinweis of eingefuegt.hinweise) console.log(`Hinweis: ${hinweis}`);
   const urteil = gefunden.length === 0 ? "grün" : "rot";
@@ -277,6 +294,7 @@ async function main() {
   console.log(erreichbarZeile(erreichbar));
   console.log(weitergabeZeile(weitergegeben));
   console.log(zusammenfassung(urteil, nurDie(ergebnisse, tests)));
+  for (const id of zweckeDer(gruppen)) console.log(zweckBlock(id).join("\n"));
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
 }
 

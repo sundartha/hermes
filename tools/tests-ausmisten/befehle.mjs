@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cwd, env } from "node:process";
 
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { setzeAusgaben } from "../ziele/ausgabe.mjs";
 import { paketName } from "./artefakte.mjs";
 import { imBranch } from "./ausnehmen.mjs";
@@ -37,6 +38,7 @@ const MS_JE_SEKUNDE = 1000;
 const ISSUE_ZEILE = /^Issue: #([1-9]\d{0,8})$/m;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+const ZWECK_PFADE = "tests/ausmisten-pfade";
 
 function geprueft(herkunft) {
   const master = git(["rev-parse", "HEAD"]).trim();
@@ -46,8 +48,10 @@ function geprueft(herkunft) {
       "Der Branch liegt nicht auf dem aktuellen master; erst rebasen und neu pushen.",
     );
   }
-  const verstoesse = [...pfadVerstoesse(stand), ...vorpruefung(stand)];
-  if (verstoesse.length > 0) throw new Error(`Vorprüfung rot:\n${verstoesse.join("\n")}`);
+  const pfade = pfadVerstoesse(stand);
+  const verstoesse = [...pfade, ...vorpruefung(stand)];
+  const zweck = pfade.length > 0 ? zweckBlock(ZWECK_PFADE) : [];
+  if (verstoesse.length > 0) throw new Error(["Vorprüfung rot:", ...verstoesse, ...zweck].join("\n"));
   return { ...herkunft, master };
 }
 
