@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, EXIT_PASST_NICHT, phaseDatei, plane, planeAntworten, werkzeug } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, phaseDatei, plane, planeAntworten, werkzeug } from "./planung-plane-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const FORTSETZEN = [ORDNER, "--fortsetzen"];
@@ -12,6 +12,11 @@ const ABBRUCH_IM_SCHNITT = { "planer|## Zuschnitt": [`Zerlegung passt nicht: Dan
 const MIT_NACHFRAGE = {
   "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo wird die Nummer gespeichert?" }] }), alsJson({ schnitt: schnittliste() })],
   "erkunder|## Nachfrage|S1": [bericht(["S1"])],
+};
+const NACHFRAGE_FUNDSTELLE = `${ROUTE} Zeile 10`;
+const NACHFRAGE_UND_ABBRUCH = {
+  "planer|## Zuschnitt": [MIT_NACHFRAGE["planer|## Zuschnitt"][0], ...ABBRUCH_IM_SCHNITT["planer|## Zuschnitt"]],
+  "erkunder|## Nachfrage|S1": [bericht(["S1"], { S1: { schema: { aenderung: false, fundstelle: NACHFRAGE_FUNDSTELLE } } })],
 };
 const LUECKE = { ...GRUEN_PRUEFLISTE, weglassen: ["weg:S4"] };
 const WEG_OFFEN = { "pruefer-planung|## Wegprüfung|S4": [LUECKE], "pruefer-planung|## Befunde": [LUECKE] };
@@ -74,6 +79,17 @@ test("plane --fortsetzen: nach einem Abbruch im Schnitt plant es ohne Gliederung
   assert.equal(readFileSync(planungsDatei(lauf, "wegpruefung-S1-1.json"), "utf8"), ersterWeg);
   assert.equal(existsSync(planungsDatei(lauf, "wegpruefung-S1-2.json")), true);
   assert.equal(werkzeug(lauf, AUFTRAG, "pruefe", phaseDatei(lauf)).status, EXIT_GRUEN);
+});
+
+test("plane --fortsetzen: nach einer Nachfrage und einem Abbruch im Schnitt plant es ohne Erkunder mit der Antwort der Nachfrage weiter", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = plane(context, NACHFRAGE_UND_ABBRUCH);
+  exit(vorher, EXIT_PASST_NICHT);
+  const lauf = weiter(context, vorher);
+  exit(lauf, EXIT_BEFUNDE);
+  assert.match(lauf.stderr, /Nachfragen ausgeschöpft: S1/u);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  const [erster] = eingaben(lauf, "planer", "## Zuschnitt");
+  assert.ok(erster.includes(`aenderung=false (${NACHFRAGE_FUNDSTELLE})`));
 });
 
 test("plane --fortsetzen: ein anderer Repo-Baum (HEAD^{tree}) bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {

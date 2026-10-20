@@ -9,7 +9,7 @@ import { DOKUMENTE } from "./schnitt.mjs";
 export const FINGERABDRUCK = "fingerabdruck.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
-const ZUSTAND = ["gesehen", "wegOffen", "wegpruefungen", "wegZaehler"];
+const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler"];
 const KOPF_BAUM = "HEAD^{tree}";
 
 export function erkundungsDatei(stelle) {
