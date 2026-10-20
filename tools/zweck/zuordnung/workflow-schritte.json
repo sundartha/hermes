@@ -1,0 +1,336 @@
+{
+  ".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Abhängigkeitsregeln": {
+    "zweck": [
+      "basis/abhaengigkeitsregeln",
+      "basis/test-importe",
+      "basis/testregel-bestaende",
+      "basis/testordnung"
+    ],
+    "beleg": "tools/abhaengigkeiten.mjs"
+  },
+  ".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Dateilänge (Bericht)": {
+    "meldet": "B11: Bericht in der Zusammenfassung des Laufs, endet immer mit Exit 0."
+  },
+  ".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Testverhältnis (Anzeige)": {
+    "meldet": "B12: zeigt nur an und endet nur bei einem Abbruch rot."
+  },
+  ".github/workflows/ci.yml › pruefungen › Workflows prüfen": {
+    "zweck": "github/workflows",
+    "beleg": "tools/workflows-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS": {
+    "zweck": "github/codeowners",
+    "beleg": "tools/codeowners-abgleich.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Secret-Scan": {
+    "zweck": "uebrige/secret-scan",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › pruefungen › Zweck des Secret-Scans": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › pruefungen › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/ci.yml › pruefungen › Install-Skripte": {
+    "zweck": "github/install-skripte",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › pruefungen › Zweck der Install-Skripte": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › pruefungen › Commit-Prüfung": {
+    "zweck": "uebrige/commit-pruefung",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › pruefungen › Zweck der Commit-Prüfung": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › pruefungen › Lint": {
+    "gruppen": "tools/zweck/zuordnung/lint-regeln.json",
+    "beleg": "tools/lint-format.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Typprüfung": {
+    "zweck": "typprüfung",
+    "beleg": "tools/typabdeckung.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Typabdeckung sinkt nicht": {
+    "zweck": "typprüfung",
+    "beleg": "tools/typabdeckung.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › TypeScript nur, wo ESLint und tsc es sehen": {
+    "zweck": "ts-sperre",
+    "beleg": "tools/ts-sperre.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Migrationen prüfen": {
+    "zweck": "migrationen",
+    "beleg": "tools/migrationen-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Unterdrückungen steigen nicht": {
+    "zweck": [
+      "lint/unterdrueckungen-steigen",
+      "lint/altdatei-neue-befunde",
+      "lint/altlast-pin"
+    ],
+    "beleg": "scripts/check-staged-suppressions.js"
+  },
+  ".github/workflows/ci.yml › pruefungen › Lint neuer Funktionen": {
+    "zweck": "lint/neue-funktionen",
+    "beleg": "tools/lint-neue-funktionen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Kommentar-Wanderung": {
+    "zweck": "lint/kommentar-wanderung",
+    "beleg": "tools/kommentar-wanderung.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Keine neuen Kommentare": {
+    "zweck": "lint/neue-kommentare",
+    "beleg": "tools/neue-kommentare.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Syntax (.js und .mjs; .ts prüft die Typprüfung)": {
+    "zweck": "lint/syntax",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › pruefungen › Zweck der Syntaxprüfung": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › pruefungen › OpenAI-Doku": {
+    "zweck": "uebrige/openai-doku",
+    "beleg": "tools/openai-doku-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Anbieter im Datenschutz": {
+    "zweck": "uebrige/anbieter-datenschutz",
+    "beleg": "tools/anbieter-datenschutz-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Geheimnisse in Logs": {
+    "zweck": "uebrige/log-geheimnisse",
+    "beleg": "tools/log-geheimnisse-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Rückkehr-Parameter": {
+    "zweck": "uebrige/rueckkehr-parameter",
+    "beleg": "tools/rueckkehr-parameter-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Feste Pfade": {
+    "zweck": "feste-pfade",
+    "beleg": "tools/feste-pfade.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Audit": {
+    "zweck": "uebrige/audit",
+    "beleg": "tools/audit-vergleich.mjs"
+  },
+  ".github/workflows/ci.yml › pruefungen › Gleicher Stand": {
+    "meldet": "G8: endet außer beim Abbruch ohne PR-Nummer im Ref mit Exit 0 und setzt nur die Ausgabe gleich für die Merge-Warteschlange."
+  },
+  ".github/workflows/ci.yml › pruefungen › Testwirkung": {
+    "zweck": [
+      "tests/wirkung-leer",
+      "tests/wirkung-wackeln",
+      "tests/wirkung-geaendert",
+      "tests/wirkung-erreicht",
+      "tests/wirkung-katalog"
+    ],
+    "beleg": "tools/testwirkung.mjs"
+  },
+  ".github/workflows/ci.yml › tests › Node 22, npm ci und Install-Skripte": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/ci.yml › tests › Tests": {
+    "zweck": [
+      "tests/regression",
+      "tests/prozess-uebrig"
+    ],
+    "beleg": [
+      ".github/workflows/ci.yml",
+      "tools/testgruppe.mjs"
+    ]
+  },
+  ".github/workflows/ci.yml › tests › Zweck der Tests": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › tests › Testlaufzeit": {
+    "zweck": "tests/testlaufzeit",
+    "beleg": "tools/testlaufzeit-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › tests › Bestandene Tests melden": {
+    "meldet": "T12: gibt nur die Zahl bestandener Tests an den Sammeljob weiter."
+  },
+  ".github/workflows/ci.yml › mutationsplan › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/ci.yml › mutationsplan › Gleicher Stand": {
+    "meldet": "G8: endet außer beim Abbruch ohne PR-Nummer im Ref mit Exit 0 und setzt nur die Ausgabe gleich für die Merge-Warteschlange."
+  },
+  ".github/workflows/ci.yml › mutationsplan › Mutationsplan": {
+    "aufbau": "Teilt die geänderten Zeilen auf die Jobs der Mutationsprüfung auf; ohne Urteil, rot nur bei einem Abbruch."
+  },
+  ".github/workflows/ci.yml › mutationspruefung › Node 22, npm ci und Install-Skripte": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/ci.yml › mutationspruefung › Mutationsprüfung": {
+    "aufbau": "Misst einen Teil der Mutanten und legt das Ergebnis ab; das Urteil mit Zweck-Block fällt im Job Mutationsurteil, rot nur bei einem Abbruch."
+  },
+  ".github/workflows/ci.yml › mutationsurteil › Node 22, npm ci und Install-Skripte": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": {
+    "zweck": [
+      "tests/mutation",
+      "tests/stryker-zustand"
+    ],
+    "beleg": "tools/mutationspruefung.mjs"
+  },
+  ".github/workflows/ci.yml › ci › Bestandene Tests aller Teile": {
+    "meldet": "T12: zählt die bestandenen Tests aller Teile zusammen, ohne Urteil."
+  },
+  ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": {
+    "zweck": "github/ci-sammeljob",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › ci › Zweck und Ausweg des Sammeljobs": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/freigabe.yml › freigabe › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/freigabe.yml › freigabe › gitleaks bereitstellen": {
+    "aufbau": "Lädt gitleaks in geprüfter Fassung für die Messung der Freigabe-Prüfung; prüft keine Änderung."
+  },
+  ".github/workflows/freigabe.yml › freigabe › Semgrep bereitstellen": {
+    "aufbau": "Installiert Semgrep in fester Fassung für die Messung der Freigabe-Prüfung; prüft keine Änderung."
+  },
+  ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung": {
+    "zweck": [
+      "github/freigabe-pruefungsdateien",
+      "github/freigabe-lockerer",
+      "github/freigabe-ohne-fehlalarm",
+      "github/freigabe-neue-pakete",
+      "github/freigabe-entfernte-pakete",
+      "github/freigabe-skripte",
+      "github/freigabe-paketfelder",
+      "github/freigabe-werkzeugtexte",
+      "github/freigabe-junge-version",
+      "github/freigabe-alter-unbekannt",
+      "github/freigabe-warteschlange"
+    ],
+    "beleg": "tools/freigabe-gruende.mjs"
+  },
+  ".github/workflows/lieferkette.yml › lieferkette › Mindestalter neuer Paketversionen prüfen": {
+    "zweck": "uebrige/lieferkette",
+    "beleg": "tools/lockfile-alter.mjs"
+  },
+  ".github/workflows/pruefleiter.yml › vorpruefung › Node 22, npm ci und Install-Skripte": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": {
+    "zweck": "prüfleiter",
+    "beleg": "tools/pruefleiter.mjs"
+  },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Node 22, npm ci und Install-Skripte": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": {
+    "zweck": "prüfleiter",
+    "beleg": "tools/pruefleiter.mjs"
+  },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit": {
+    "zweck": "tests/testlaufzeit",
+    "beleg": "tools/testlaufzeit-pruefen.mjs"
+  },
+  ".github/workflows/pruefleiter.yml › pruefleiter › Node 22 und npm ci": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/pruefleiter.yml › pruefleiter › Alle Teile erfolgreich und vollständig": {
+    "zweck": "prüfleiter",
+    "beleg": "tools/pruefleiter.mjs"
+  },
+  ".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › ESLint-Konfiguration, Unterordner und only prüfen": {
+    "zweck": "lint/pruefungen-pruefen",
+    "beleg": "tools/eslint-konfig-pruefen.mjs"
+  },
+  ".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › TypeScript-Konfiguration prüfen": {
+    "zweck": "uebrige/tsconfig",
+    "beleg": "tools/tsconfig-pruefen.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Semgrep bereitstellen": {
+    "aufbau": "Installiert Semgrep in fester Fassung; prüft keine Änderung."
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Kopien (jscpd)": {
+    "zweck": [
+      "jscpd",
+      "basis/versionswechsel"
+    ],
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Toter Code (knip)": {
+    "zweck": "basis/knip",
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Injection-Muster (Semgrep)": {
+    "zweck": [
+      "basis/semgrep",
+      "basis/versionswechsel"
+    ],
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Kommentare in YAML und Shell": {
+    "zweck": "lint/kommentare-yaml-shell",
+    "beleg": "tools/kommentare-yaml-shell.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Lehren nur streichen": {
+    "zweck": "basis/lessons",
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Anweisungen nur streichen": {
+    "zweck": "basis/anweisungen",
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Wurzelordner": {
+    "zweck": "basis/wurzel",
+    "beleg": "tools/basis-vergleich.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Bedrohungskatalog": {
+    "zweck": "uebrige/bedrohungskatalog",
+    "beleg": "tools/katalog-pruefen.mjs"
+  },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Funktionskarte": {
+    "zweck": "uebrige/funktionskarte",
+    "beleg": "tools/funktionskarte.mjs"
+  },
+  ".github/workflows/testschutz.yml › testschutz › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/testschutz.yml › testschutz › PR-Nummer": {
+    "aufbau": "Liest die PR-Nummer aus dem Ref der Merge-Warteschlange; rot nur bei einem Ref ohne Nummer."
+  },
+  ".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt": {
+    "zweck": "github/testschutz",
+    "beleg": "tools/tests-nur-ergaenzt.mjs"
+  },
+  ".github/workflows/testschutz.yml › neu-auswerten › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/workflows/testschutz.yml › neu-auswerten › Testschutz der verknüpften PRs neu starten": {
+    "meldet": "Startet nach einer Label-Änderung am Issue den Testschutz der verknüpften PRs neu; urteilt selbst nicht."
+  },
+  ".github/actions/node-npm-ci/action.yml › npm ci": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/actions/node-npm-ci/action.yml › npm ci für apps/web": {
+    "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+  },
+  ".github/actions/node-npm-ci/action.yml › Install-Skripte": {
+    "zweck": "github/install-skripte",
+    "beleg": ".github/actions/node-npm-ci/action.yml"
+  },
+  ".github/actions/node-npm-ci/action.yml › Zweck der Install-Skripte": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  }
+}

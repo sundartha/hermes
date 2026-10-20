@@ -52,3 +52,50 @@ export function blockDanach(zeilen, id, nach) {
   const befund = zeilen.findIndex((zeile) => nach.test(zeile));
   return { block, anfang, befund, gefunden: anfang > befund && befund >= 0 ? zeilen.slice(anfang, anfang + block.length) : [] };
 }
+
+const JOBS = /^jobs:\s*$/;
+const JOB = /^ {2}([\w-]+):\s*$/;
+const JOBNAME = /^ {4}name:\s*(.+?)\s*$/;
+const SCHRITTE = /^(\s*)steps:\s*$/;
+const EIGENSCHAFT = /^([\w-]+):\s*(.*)$/;
+const LISTENEINZUG = 2;
+
+function eigenschaftAus(text) {
+  const [, schluessel, wert] = EIGENSCHAFT.exec(text ?? "") ?? [];
+  return schluessel === undefined ? {} : { [schluessel]: wert };
+}
+
+function kopfzeile(zustand, zeile) {
+  const job = zustand.imJobs ? JOB.exec(zeile) : null;
+  if (job) return { ...zustand, job: job[1], einzug: null };
+  const name = zustand.job && zustand.einzug === null ? JOBNAME.exec(zeile) : null;
+  if (name) zustand.jobnamen.set(zustand.job, name[1]);
+  const liste = SCHRITTE.exec(zeile);
+  if (liste) return { ...zustand, einzug: liste[1].length + LISTENEINZUG };
+  return JOBS.test(zeile) ? { ...zustand, imJobs: true } : null;
+}
+
+function schrittzeile({ einzug, job }, zeile, schritte) {
+  const eintrag = new RegExp(`^ {${einzug}}- (.*)$`).exec(zeile);
+  if (eintrag) schritte.push({ job, werte: {}, roh: [] });
+  const letzter = schritte.at(-1);
+  if (letzter === undefined) return;
+  letzter.roh.push(zeile);
+  const text = eintrag?.[1] ?? new RegExp(`^ {${einzug + LISTENEINZUG}}(\\S.*)$`).exec(zeile)?.[1];
+  Object.assign(letzter.werte, eigenschaftAus(text));
+}
+
+export function workflowSchritte(pfad) {
+  let zustand = { job: null, einzug: null, imJobs: false, jobnamen: new Map() };
+  const schritte = [];
+  for (const zeile of quelltext(pfad).split("\n")) {
+    const neu = kopfzeile(zustand, zeile);
+    if (neu !== null) zustand = neu;
+    else if (zustand.einzug !== null) schrittzeile(zustand, zeile, schritte);
+  }
+  return { schritte: schritte.map((schritt) => ({ datei: pfad, ...schritt })), jobnamen: zustand.jobnamen };
+}
+
+export function jobnamenVon(pfad) {
+  return [...workflowSchritte(pfad).jobnamen.values()];
+}
