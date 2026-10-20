@@ -8,7 +8,7 @@ import { limitSperre, restDerSperre, sperreWegenLimit } from "../einsatz.mjs";
 import { BELEGE } from "../bericht.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
-import { gitLauf } from "./git.mjs";
+import { gitLauf, gitPfadeAbfragen } from "./git.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 
 const KOPF = /^---\n([\s\S]*?)\n---\n/;
@@ -93,12 +93,6 @@ function git(root, args, optionen) {
   return gitLauf(root, args, optionen).stdout;
 }
 
-function gitPfade(root) {
-  const namen = ["objects", "index", ...GIT_STEUERUNG];
-  const pfade = git(root, ["rev-parse", ...namen.flatMap((name) => ["--git-path", name])], { hooksSperren: false }).trim().split("\n");
-  return Object.fromEntries(namen.map((name, stelle) => [name, resolve(root, pfade[stelle])]));
-}
-
 function abgeschirmt(root, arbeit) {
   const verzeichnis = mkdtempSync(join(tmpdir(), "abdruck-"));
   try {
@@ -107,7 +101,7 @@ function abgeschirmt(root, arbeit) {
     mkdirSync(join(gitDir, "info"));
     writeFileSync(join(gitDir, "info/attributes"), ROHINHALT);
     writeFileSync(join(gitDir, "HEAD"), LEERER_KOPF);
-    const pfade = gitPfade(root);
+    const pfade = gitPfadeAbfragen(root, ["objects", "index", ...GIT_STEUERUNG]);
     if (existsSync(join(pfade.info, "exclude"))) copyFileSync(join(pfade.info, "exclude"), join(gitDir, "info/exclude"));
     const umgebung = { GIT_DIR: gitDir, GIT_WORK_TREE: root, GIT_OBJECT_DIRECTORY: pfade.objects, GIT_INDEX_FILE: join(verzeichnis, "index") };
     return arbeit(umgebung, pfade);

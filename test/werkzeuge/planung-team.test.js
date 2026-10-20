@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { devNull } from "node:os";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 
+import { gitLauf, gitPfadeAbfragen } from "../../tools/auftrag/planung/git.mjs";
 import { planBericht } from "../../tools/auftrag/planung/planbericht.mjs";
 import { Abbruch, Team, abdruck, abdruckUnterschiede, rollenStart } from "../../tools/auftrag/planung/team.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
@@ -188,6 +190,26 @@ test("team: der Abdruck sieht Änderungen an Git-Konfiguration, Hooks und info",
   assert.deepEqual(geaendertNach(ort, () => writeFileSync(join(ort, ".git/hooks/pre-commit"), "#!/bin/sh\n", { mode: AUSFUEHRBAR })), [".git/hooks/pre-commit"]);
   assert.deepEqual(geaendertNach(ort, () => chmodSync(join(ort, ".git/hooks/pre-push"), AUSFUEHRBAR)), [".git/hooks/pre-push"]);
   assert.deepEqual(geaendertNach(ort, () => writeFileSync(join(ort, ".git/info/exclude"), "src/\n")), [".git/info/exclude"]);
+});
+
+function probeMitEigenenHooks(context) {
+  const ort = probe(context);
+  const hooks = join(probeDirectory(context, {}), "eigene-hooks");
+  mkdirSync(hooks);
+  git(ort, "config", "core.hooksPath", hooks);
+  return { ort, hooks };
+}
+
+test("team: der Abdruck sieht Änderungen im Hooks-Ordner, den die Git-Konfiguration des Repos nennt", (context) => {
+  const { ort, hooks } = probeMitEigenenHooks(context);
+  const hook = join(hooks, "pre-commit");
+  assert.deepEqual(geaendertNach(ort, () => writeFileSync(hook, "#!/bin/sh\n", { mode: AUSFUEHRBAR })), [relative(ort, hook)]);
+});
+
+test("git: gitLauf sperrt die Hooks des Repos immer, gitPfadeAbfragen nennt den Hooks-Ort des Repos", (context) => {
+  const { ort, hooks } = probeMitEigenenHooks(context);
+  assert.equal(gitLauf(ort, ["rev-parse", "--git-path", "hooks"]).stdout.trim(), devNull);
+  assert.equal(gitPfadeAbfragen(ort, ["hooks"]).hooks, hooks);
 });
 
 function probeMitZweitemWorktree(context) {
