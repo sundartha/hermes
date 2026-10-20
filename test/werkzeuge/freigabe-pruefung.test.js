@@ -411,6 +411,47 @@ test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigen
   assert.match(comment(firstPin), /erstmals festgehalten \(1 Texte\); am Draht ändert sich nichts/);
 });
 
+const AGENTEN_KONFIG = "src/conversation/elevenlabs-agent-config";
+const konfig = (wert) => `export const wert = ${wert};\n`;
+
+async function freigabeArt(context, basisFiles, changes) {
+  const result = await check(context, { basisFiles, changes });
+  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
+  return labelsSet(result);
+}
+
+test("die nach .ts umbenannte Agenten-Konfiguration bleibt art:gespraech", async (context) => {
+  const art = await freigabeArt(
+    context,
+    { [`${AGENTEN_KONFIG}.js`]: konfig(1) },
+    { [`${AGENTEN_KONFIG}.js`]: null, [`${AGENTEN_KONFIG}.ts`]: konfig(2) },
+  );
+  assert.deepEqual(art, ["art:gespraech"]);
+});
+
+test("eine Änderung an der schon umbenannten Agenten-Konfiguration ist art:gespraech", async (context) => {
+  const art = await freigabeArt(
+    context,
+    { [`${AGENTEN_KONFIG}.ts`]: konfig(1) },
+    { [`${AGENTEN_KONFIG}.ts`]: konfig(2) },
+  );
+  assert.deepEqual(art, ["art:gespraech"]);
+});
+
+test("eine fremde .ts-Datei mit ähnlichem Namen wie die Agenten-Konfiguration ist art:code", async (context) => {
+  const art = await freigabeArt(context, { "src/app.js": konfig(1) }, { [`${AGENTEN_KONFIG}2.ts`]: konfig(2) });
+  assert.deepEqual(art, ["art:code"]);
+});
+
+test("neben der vorhandenen Agenten-Konfiguration als .js ist ihr .ts-Zwilling art:code", async (context) => {
+  const art = await freigabeArt(
+    context,
+    { [`${AGENTEN_KONFIG}.js`]: konfig(1), [`${AGENTEN_KONFIG}.ts`]: konfig(1) },
+    { [`${AGENTEN_KONFIG}.ts`]: konfig(2) },
+  );
+  assert.deepEqual(art, ["art:code"]);
+});
+
 const KNIP = "tools/basis/knip.json";
 const ESLINT = "tools/basis/eslint-wirksam.json";
 const COMPLEXITY = 10;
