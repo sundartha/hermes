@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { kenntZweck, ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../../tools/testgruppe.mjs";
-import { BASIS, NEGATIV, NULL, pruefe, quelle } from "./mutationspruefung-hilfen.js";
+import { BASIS, EXIT_ROT as MUTATION_ROT, NEGATIV, NULL, pruefe, quelle } from "./mutationspruefung-hilfen.js";
 import { REPO_ROOT, isolatedEnvironment, outputLines, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { EXIT_ROT, pruefeZwischen } from "./testwirkung-probe.js";
 import { blockDanach, nurGenutzteIds, quelltext } from "./zweck-quellen.js";
@@ -22,6 +22,7 @@ const NEUE_TESTS = "...neueTestsVerstoesse(";
 const ZWECK_KONSTANTE = /^const WIRKUNG_ZWECK = \{\n([\s\S]*?)\n\};$/m;
 const ZWECK_WERT = /"(tests\/[a-z-]+)"/g;
 const ROTER_AUSGANG = /\bEXIT_ROT\b/g;
+const DEFINITION_DES_ROTEN_AUSGANGS = 1;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
 const STARTER_HELFER = join(REPO_ROOT, "test/werkzeuge/testgruppe");
@@ -70,7 +71,7 @@ test("die Mutationsprüfung endet nur rot, wenn sie die Zweck-Blöcke ihrer rote
   const text = quelltext(MUTATION);
   const rot = [...text.matchAll(ROTER_AUSGANG)].length;
   const mitBlock = text.match(/zeigeZweck\(rot\);\n {2}return rot\.size === 0 \? EXIT_GRUEN : EXIT_ROT;/g) ?? [];
-  assert.equal(rot - 1, mitBlock.length, "jeder Ausgang EXIT_ROT folgt auf zeigeZweck");
+  assert.equal(rot - DEFINITION_DES_ROTEN_AUSGANGS, mitBlock.length, "jeder Ausgang EXIT_ROT folgt auf zeigeZweck");
   assert.match(text, /return roteZwecke\(\{ ueberlebende, zugriffe \}\);/);
   assert.match(text, /function roteZwecke\(\{ ueberlebende, zugriffe \}\) \{\n {2}return \[\.\.\.\(ueberlebende\.length > 0 \? \[ZWECK_UEBERLEBT\] : \[\]\), \.\.\.\(zugriffe\.length > 0 \? \[ZWECK_ZUSTAND\] : \[\]\)\];/);
 });
@@ -82,7 +83,7 @@ test("die Mutationsprüfung nennt nach dem roten Urteil den Block der überleben
   assert.doesNotMatch(gruen.stdout, /Wozu:/);
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
   const rot = pruefe(repo, "--basis", "HEAD");
-  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.equal(rot.status, MUTATION_ROT, rot.stdout + rot.stderr);
   const zeilen = outputLines(rot.stdout);
   const { block, gefunden } = blockDanach(zeilen, "tests/mutation", /^rot: /);
   assert.deepEqual(gefunden, block);
