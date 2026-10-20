@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 import { ladePhase } from "../format.mjs";
 import { VERLAUF, neuschnitt } from "./neuschnitt-team.mjs";
-import { EXIT_AUFRUF, liste, schreibeJson } from "./plane.mjs";
+import { EXIT_AUFRUF, liste, schreibeJsonAtomar } from "./plane.mjs";
 
 const EINGABE = "eingabe.json";
 const TEXTFELDER = ["root", "ordner", "datei", "auftragId", "anlass", "kopf"];
@@ -53,6 +53,6 @@ if (angabe === undefined) {
 } else {
   const ablage = resolve(angabe);
   const ergebnis = await starte(ablage);
-  schreibeJson(join(ablage, "ergebnis.json"), ergebnis);
+  schreibeJsonAtomar(join(ablage, "ergebnis.json"), ergebnis);
   process.exitCode = ergebnis.exitCode;
 }

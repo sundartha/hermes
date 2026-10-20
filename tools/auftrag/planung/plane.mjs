@@ -1,6 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { pid } from "node:process";
 import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
@@ -20,7 +19,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn } from "./erkundung.mjs";
+import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -68,7 +67,7 @@ function zusammengefuegt(schluessel, ergebnisse) {
   return schluessel.map((eintrag) => zeilen.get(eintrag));
 }
 
-export { liste };
+export { liste, schreibeJsonAtomar };
 
 export function json(wert) {
   return `\`\`\`json\n${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n\`\`\``;
@@ -89,12 +88,6 @@ function punkte(eintraege, leer = "keine") {
 export function dateiText(root, pfad) {
   const datei = join(root, pfad);
   return existsSync(datei) ? readFileSync(datei, "utf8") : `${pfad} gibt es nicht.`;
-}
-
-export function schreibeJson(datei, wert) {
-  const zwischen = `${datei}.${pid}.tmp`;
-  writeFileSync(zwischen, `${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n`);
-  renameSync(zwischen, datei);
 }
 
 export function prueferZeile({ schluessel, befund, fundstelle }) {
@@ -152,7 +145,7 @@ export class Planung {
   }
 
   lege(name, wert) {
-    schreibeJson(join(this.ablage, name), wert);
+    schreibeJsonAtomar(join(this.ablage, name), wert);
   }
 
   kontext() {

@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pid } from "node:process";
 
 import { TEST_FILE } from "../../testgraph.mjs";
 import { funktionenIn } from "../../ziele/funktionen.mjs";
@@ -7,6 +8,7 @@ import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from ".
 import { zeilenDes } from "../zeilen.mjs";
 import { suchTreffer } from "./suche.mjs";
 
+const JSON_EINRUECKUNG = 2;
 export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
 const PFLICHT_ROLLEN = ["eingang", "wirkung"];
 export const ANGABEN = ["weg", "aenderungen", "tests", "schema", "codeowners", "ownerEntscheidung", "eingangImTest", "widersprueche"];
@@ -33,6 +35,12 @@ export function istText(wert) {
 
 export function liste(wert) {
   return Array.isArray(wert) ? wert : [];
+}
+
+export function schreibeJsonAtomar(datei, wert) {
+  const zwischen = `${datei}.${pid}.tmp`;
+  writeFileSync(zwischen, `${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n`);
+  renameSync(zwischen, datei);
 }
 
 function istZeile(wert) {
