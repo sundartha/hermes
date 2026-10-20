@@ -129,8 +129,8 @@ function urteilen({ probeBranch = false, commits, nachstellung = null, pr = null
 }
 
 export function urteile(eingabe) {
-  const { status, issues } = urteilen(eingabe);
-  return { ...gekuerzteBeschreibung(status), issues };
+  const { state, description, issues } = urteileMitZweck(eingabe);
+  return { state, description, issues };
 }
 
 export function urteileMitZweck(eingabe) {
