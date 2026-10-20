@@ -62,6 +62,8 @@ const VERGLEICHE = new Set(["equal", "strictEqual", "deepEqual", "deepStrictEqua
 const EINGRIFFE = new Set([ZUSICHERUNG, ERWARTUNG, "mock"]);
 const HILFENRUMPF = "⟨Hilfe⟩";
 const QUELLE = /^(\.\.?\/|[\w@])[^:]*$/u;
+const PAKET = /^[\w@][^:%\\]*$/u;
+const PFADSPRUNG = /(^|\/)\.\.?(\/|$)/u;
 const ABSCHNITT = /^[\w-]+$/u;
 const PRODUKTIONSDATEI = /^[\w-]+\.m?js$/u;
 const ERLAUBT = new Map(
@@ -636,10 +638,17 @@ function importBelegung(id, init) {
   return init.type === "AwaitExpression" && init.argument.type === "ImportExpression" && erlaubteQuelle(init.argument);
 }
 
+function ohneEigenenCode(quelle) {
+  const text = String(quelle);
+  const paket = PAKET.test(text) && !PFADSPRUNG.test(text);
+  return !TESTBIBLIOTHEK.test(text) && (isBuiltin(text) || paket || ausProduktion(text));
+}
+
 function zugelasseneForm(anweisung) {
-  if (anweisung.type === "ImportDeclaration") return anweisung.specifiers.length > 0 && !TESTBIBLIOTHEK.test(String(anweisung.source.value));
+  if (anweisung.type === "ImportDeclaration") return anweisung.specifiers.length > 0 && ohneEigenenCode(anweisung.source.value);
   if (anweisung.type === "FunctionDeclaration") return true;
-  const belegung = ({ id, init }) => (id.type === "Identifier" && rein(init)) || importBelegung(id, init);
+  const neuerImport = (id, init) => importBelegung(id, init) && ohneEigenenCode(init.argument.source.value);
+  const belegung = ({ id, init }) => (id.type === "Identifier" && rein(init)) || neuerImport(id, init);
   return anweisung.type === "VariableDeclaration" && anweisung.kind === "const" && anweisung.declarations.every(belegung);
 }
 

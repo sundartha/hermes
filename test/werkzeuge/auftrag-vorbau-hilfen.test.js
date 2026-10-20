@@ -163,6 +163,8 @@ test("Hilfen im Vorbau: ein neues await import zählt als Änderung, wenn es Tes
       ["let", 'let { wert } = await import("./liste.js");'],
       ["zweite Belegung", 'const { wert } = await import("./liste.js"), LAUF = Date.now();'],
       ["bestehender Name", 'const { KUNDE: kunde, route } = await import("./liste.js");'],
+      ["Hilfsmodul neben dem Test", 'const { aus } = await import("./entschaerft.js");'],
+      ["Hilfsmodul außerhalb von src", 'const { aus } = await import("../test/hilfen/entschaerft.js");'],
     ].map(([name, zeile]) => [name, [datei(), mitImport(zeile), false]]),
   );
   assert.deepEqual(ergebnisse(faelle), erwartet(faelle));
