@@ -340,9 +340,9 @@ export class Planung {
     return ausgangsstand(this.root, this.ordner, { arbeitsbaum: this.team.anfang.baum, kontext: GELESEN });
   }
 
-  legeFingerabdruck(stand) {
-    const zustand = { gesehen: [...this.gesehen], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler] };
-    this.lege(FINGERABDRUCK, fingerabdruck(stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
+  legeFingerabdruck() {
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler] };
+    this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
   pruefungDerBerichte() {
@@ -427,6 +427,7 @@ export class Planung {
     const ergebnisse = await this.team.gruppe(laeufe);
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
     this.legeBerichte();
+    this.legeFingerabdruck();
     const antworten = offen.map((eintrag, stelle) => nachfrageAntwort(eintrag, ergebnisse[stelle], stelle));
     const ende = enden.length > 0 ? [abschnitt("Ende der Nachfragen", `Nachfragen zu ${[...new Set(enden)].join(", ")} enden; schneide mit einer Annahme.`)] : [];
     return { weiter: nachricht("Zuschnitt", [...antworten, ...ende, ...(await this.lagebild())]) };
@@ -642,10 +643,10 @@ export class Planung {
   }
 
   async laufe() {
-    const stand = this.ausgangsstand();
+    this.stand = this.ausgangsstand();
     await this.gliedere();
     await this.erkundeGruppen();
-    this.legeFingerabdruck(stand);
+    this.legeFingerabdruck();
     await this.planeAbSchnitt();
   }
 
@@ -658,12 +659,14 @@ export class Planung {
 
 class Fortsetzung extends Planung {
   uebernimmErkundung() {
-    const { gruende, erkundung } = liesFortsetzung(this.ablage, this.ausgangsstand());
+    this.stand = this.ausgangsstand();
+    const { gruende, erkundung } = liesFortsetzung(this.ablage, this.stand);
     if (gruende.length > 0) return gruende;
     const { gliederung, berichte: gelesen, zustand } = erkundung;
     this.gliederung = gliederung;
     this.berichte = gelesen;
     this.gesehen = new Set(zustand.gesehen);
+    this.ausgeschoepft = new Set(zustand.ausgeschoepft);
     this.wegOffen = zustand.wegOffen;
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
