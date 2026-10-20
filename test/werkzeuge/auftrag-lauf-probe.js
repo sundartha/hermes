@@ -11,6 +11,7 @@ const ISSUE = 54;
 const GH_OHNE_WIRKUNG = "true";
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,6 +25,7 @@ writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".t
 const antwort = drehbuch[rolle + "-antwort"] ?? "";
 const angeboten = typeof antwort === "string" ? antwort : Object.entries(antwort).find(([angebot]) => prompt.includes(angebot))[1];
 console.log(JSON.stringify({ type: "result", result: angeboten }));
+for (const [alt, neu] of drehbuch[rolle + "-umbenennen"] ?? []) execFileSync("git", ["mv", alt, neu]);
 for (const [pfad, inhalt] of Object.entries(drehbuch[rolle] ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
