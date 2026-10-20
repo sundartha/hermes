@@ -3,7 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
-import { ABSICHT } from "../format.mjs";
+import { ABSICHT, bereichSchluessel } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
@@ -118,7 +118,7 @@ function nachfrageAntwort({ frage, nummern }, { bericht, befunde }, stelle) {
 }
 
 function konfliktAusweg(nummern) {
-  return `frag nur zu ${nummern} nach, schick eine Schnittliste, die ${nummern} auf mehrere Aufträge mit erlaubtem bereich verteilt, oder antworte mit „Zerlegung passt nicht: …“`;
+  return `frag nur zu ${nummern} nach, schick eine Schnittliste, die ${nummern} auf mehrere Aufträge mit erlaubtem bereich verteilt oder, wenn ein bestehender Test die Dateien zwingend koppelt, ihre Produktdateien als Liste in einen bereich legt, oder antworte mit „Zerlegung passt nicht: …“`;
 }
 
 function konfliktBefunde(nachfragen, offen) {
@@ -131,7 +131,7 @@ function konfliktTeil(konflikte) {
   if (konflikte.length === 0) return [];
   const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
   const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
-  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
+  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich; zulässig ist dann nur eine Liste genau dieser Dateien mit bereichsgrund und koppelndem Test. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
   return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
 }
 
@@ -655,7 +655,7 @@ export class Planung {
   }
 
   entwurfNachricht(bereich, namen) {
-    const auftraege = this.schnitt.auftraege.filter((auftrag) => auftrag.bereich === bereich);
+    const auftraege = this.schnitt.auftraege.filter((auftrag) => bereichSchluessel(auftrag.bereich) === bereich);
     const nummern = auftraege.flatMap(({ prueft }) => liste(prueft));
     const berichte = this.berichte.map((bericht) => ({ ...bericht, nummern: Object.fromEntries(Object.entries(bericht.nummern).filter(([nummer]) => nummern.includes(nummer))) }));
     const ueberschriften = [...new Set(this.gruppenVon(nummern).flatMap((gruppe) => gruppe.ueberschriften))];
@@ -682,12 +682,12 @@ export class Planung {
   }
 
   namenDes(bereich) {
-    const eigene = liste(this.schnitt.gemeinsameNamen).filter((eintrag) => eintrag?.anbieter === bereich || eintrag?.nutzer === bereich);
+    const eigene = liste(this.schnitt.gemeinsameNamen).filter((eintrag) => bereichSchluessel(eintrag?.anbieter) === bereich || bereichSchluessel(eintrag?.nutzer) === bereich);
     return eigene.map(({ name }) => name);
   }
 
   async entwerfe() {
-    const bereiche = [...new Set(this.schnitt.auftraege.map(({ bereich }) => bereich))];
+    const bereiche = [...new Set(this.schnitt.auftraege.map(({ bereich }) => bereichSchluessel(bereich)))];
     const laeufe = bereiche.map((bereich) => {
       const namen = this.namenDes(bereich);
       const wer = this.team.teilnehmer("entwurf");

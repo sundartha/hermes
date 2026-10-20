@@ -15,7 +15,7 @@ Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsber
 - `umbau:<id>`: Der Umbau oder Testumbau enthält kein neues Verhalten; ein `testumbau` ändert außerdem nur Testdateien, und seine `abnahme` läuft über die umgebauten Dateien.
 - `b-nummer:<B-Nummer>`: Die Nummer steht beim Auftrag, dessen Änderung sie berühren kann.
 - `nie-saetze:<id>`: Jeder Satz in `wasDarfNiePassieren` ist eine feste Regel aus den Dokumenten und passt zu diesem Auftrag.
-- `bereichsgrund:<id>`: Der Grund verwirft Teilen und Umbau davor zu Recht.
+- `bereichsgrund:<id>`: Der Grund verwirft Teilen und Umbau davor zu Recht. Ist `bereich` eine Liste von Dateien, koppelt der Test, den der Grund nennt, wirklich jede Datei der Liste: Ohne die Änderung an einer davon wird er rot, und keine lässt sich in einem eigenen Auftrag ändern, ohne dass er rot wird.
 - `allein-gruen:<id>`: Der Auftrag kann allein seinen Abnahmetest grün machen.
 - `nicht-zusammengelegt:<id>`: Nichts ist mit anderem zusammengelegt oder weggelassen, um weniger Aufträge zu haben.
 - `ausweg:<Nummer>:<Angabe>`: Der Ausweg des Erkunders stimmt; sieh im Code nach, ob es die Stelle doch gibt.

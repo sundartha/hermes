@@ -533,10 +533,10 @@ test("Bereich: mit bereichsgrund und engstem gemeinsamem Ordner ist es grün und
   assert.deepEqual(ergebnis.annahmen, [{ auftrag: "a1", text: "bereich src/: Beide Dateien teilen sich eine Hilfe" }]);
 });
 
-test("Bereich: ist die Repo-Wurzel der einzige gemeinsame Ordner, ist es rot", (context) => {
+test("Bereich: ist die Repo-Wurzel der einzige gemeinsame Ordner, ist bereich / rot, und der Grund ohne koppelnden Test auch", (context) => {
   const b = basis(context);
   Object.assign(eigener(b, "a1"), { bereich: "/", erwarteteDateien: [DATEI_A, "lib/x.js"], bereichsgrund: "Beide gehören zusammen" });
-  erwarte(lauf(b), REGEL.bereich, "a1: der einzige gemeinsame Ordner ist die Repo-Wurzel");
+  erwarte(lauf(b), REGEL.bereich, `a1: bereich ist /, der einzige gemeinsame Ordner der Produktdateien ist die Repo-Wurzel; sie verlangen die Liste ["lib/x.js","${DATEI_A}"]`, "a1: bereichsgrund nennt keinen bestehenden Test");
 });
 
 test("Bereich: erwarteteDateien nur mit Tests ist rot", (context) => {

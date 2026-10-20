@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-import { phasenBefunde } from "../format.mjs";
+import { bereichSchluessel, istBereichsliste, phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import { istText, liste, nutzenFuer, nutzenOhneAuftrag, schreibeJsonAtomar } from "./erkundung.mjs";
@@ -18,6 +18,7 @@ export function auftragAusSchnitt(eintrag, soll, berichte) {
   if (!Array.isArray(berichte)) throw new TypeError(OHNE_BERICHTE);
   const auftrag = Object.fromEntries(FELDER.filter((feld) => eintrag[feld] !== undefined).map((feld) => [feld, eintrag[feld]]));
   if (Array.isArray(eintrag.wasDarfNiePassieren)) auftrag.wasDarfNiePassieren = eintrag.wasDarfNiePassieren.map(({ satz }) => satz);
+  if (istBereichsliste(eintrag.bereich)) auftrag.bereichsgrund = eintrag.bereichsgrund;
   auftrag.prueft = eintrag.prueft;
   if (Array.isArray(eintrag.prueft)) auftrag.szenarien = Object.fromEntries(eintrag.prueft.map((nummer) => [nummer, soll.get(nummer)?.text ?? ""]));
   const nutzen = nutzenFuer(berichte, liste(eintrag.erwarteteDateien));
@@ -63,7 +64,7 @@ function entwurfBefunde(bereiche, entwuerfe) {
 
 function namenBefunde(gemeinsameNamen, entwuerfe) {
   return liste(gemeinsameNamen).flatMap(({ name, anbieter, nutzer }) =>
-    [anbieter, nutzer].filter((bereich) => !entwurfText(entwuerfe, bereich).includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
+    [anbieter, nutzer].map(bereichSchluessel).filter((bereich) => !entwurfText(entwuerfe, bereich).includes(name)).map((bereich) => `gemeinsamer Name ${name} steht nicht wörtlich im Entwurf von ${bereich}`),
   );
 }
 
@@ -75,10 +76,10 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   if (absichtFehlt.length > 0) return { befunde: absichtFehlt };
   const { soll } = nummernImOrdner(ordner);
   const { auftraege, befunde: nutzenBefunde } = auftraegeAusSchnitt(schnitt.auftraege, soll, berichte);
-  const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereich))];
+  const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereichSchluessel(bereich)))];
   const vorab = [...nutzenBefunde, ...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };
-  const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich))]));
+  const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich))]));
   const phase = { phase: basename(resolve(ordner)), absicht: absichtAusPitch(pitch), entwurf, auftraege };
   const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
   if (befunde.length === 0) schreibeJsonAtomar(join(ordner, PHASE), phase);

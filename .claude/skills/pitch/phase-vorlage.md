@@ -13,7 +13,7 @@ Ablage: `plaene/P-<Nummer>-<kurzname>/phase.json`, im selben Ordner wie Pitch, D
       "id": "a<n>",
       "art": "<funktion oder fehlerbehebung>",
       "ziel": "<was sich ändert, eine Zeile, höchstens 72 Zeichen>",
-      "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt>",
+      "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt, oder Liste von Dateien, siehe unten>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
       "abnahme": "test/<bereich aus tools/bereiche.json>/<name>.test.js",
       "erwarteterFehler": "<kurzes Stück einer Zeile, mit der der Abnahmetest heute rot wird>",
@@ -44,6 +44,7 @@ Ablage: `plaene/P-<Nummer>-<kurzname>/phase.json`, im selben Ordner wie Pitch, D
 - `szenarien` hat genau die Nummern aus `prueft`. Bei `S<n>` und `B<n>` sind das die Zeilen unter der Überschrift des Szenarios bis zur Leerzeile; bei `T<n>` alles hinter „Szenario …:“ in derselben Zeile und die Zeilen darunter bis zur Leerzeile.
 - Gibt es nichts, was in keinem Szenario steht und trotzdem nie passieren darf, ist `wasDarfNiePassieren` die leere Liste `[]`. Ohne Vorgänger ist `abhaengigVon` die leere Liste `[]`.
 - Mehrere Aufträge mit demselben `bereich` teilen sich einen Eintrag unter `entwurf`.
+- Liegen die Dateien eines Auftrags nur unter der Repo-Wurzel gemeinsam und koppelt ein bestehender Test sie zwingend, ist `bereich` die Liste genau dieser Produktdateien, etwa `["src/routes/voice.js", "src/route-policy.js", "scripts/probe-auth.sh"]`: mindestens zwei Dateien, kein Ordner, nicht `.` oder `/`. Die Produktdateien in `erwarteteDateien` sind genau die Einträge der Liste. Dazu kommt `"bereichsgrund": "<warum die Dateien nur gemeinsam fallen, mit dem Test test/….test.js, der mindestens zwei von ihnen nennt>"`. Der Eintrag unter `entwurf` steht unter den Einträgen der Liste, sortiert und mit ` + ` verbunden, etwa `"scripts/probe-auth.sh + src/route-policy.js + src/routes/voice.js"`. Ein `testumbau` hat nie eine Liste.
 
 ## Entwurf je Bereich
 

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { BEREICHE_DATEI } from "../tests-ausmisten/pfade.mjs";
 
-import { TESTUMBAU, gehoertZumBereich, istAusfuehrbarerTest, istGeschuetzt, istTestdatei } from "./format.mjs";
+import { TESTUMBAU, bereichSchluessel, gehoertZumBereich, istAusfuehrbarerTest, istBereichsliste, istGeschuetzt, istTestdatei } from "./format.mjs";
 
 export const MAX_PRODUKTZEILEN = 400;
 export const MAX_TESTAUSGABE_ZEILEN = 60;
@@ -137,20 +137,26 @@ function umbenannteDateien({ auftrag, paare = [] }) {
   return new Set(eigene.flatMap(({ alt, neu }) => [alt, neu]));
 }
 
-function umbenennungsVerstoss({ auftrag, umbenannt, bereichDer }, pfad) {
-  if (!umbenannt.has(pfad)) return `${AUSSERHALB} ${auftrag.bereich}: ${pfad}; ${NUR_PAARE}`;
+function imUmbenennungsBereich({ auftrag, bereichDer }, pfad, bereich) {
+  if (istBereichsliste(auftrag.bereich)) return gehoertZumBereich(auftrag.bereich, pfad);
+  return bereich === bereichDer(auftrag.bereich) && (bereich !== undefined || gehoertZumBereich(auftrag.bereich, pfad));
+}
+
+function umbenennungsVerstoss(kontext, pfad) {
+  const { auftrag, umbenannt, bereichDer } = kontext;
+  const schluessel = bereichSchluessel(auftrag.bereich);
+  if (!umbenannt.has(pfad)) return `${AUSSERHALB} ${schluessel}: ${pfad}; ${NUR_PAARE}`;
   const bereich = bereichDer(pfad);
-  const gleich = bereich === bereichDer(auftrag.bereich) && (bereich !== undefined || gehoertZumBereich(auftrag.bereich, pfad));
-  if (gleich) return null;
+  if (imUmbenennungsBereich(kontext, pfad, bereich)) return null;
   return bereich === undefined
-    ? `${AUSSERHALB} ${auftrag.bereich}: ${pfad} steht in keinem Bereich laut ${BEREICHE_DATEI}`
-    : `${AUSSERHALB} ${auftrag.bereich}: ${pfad} gehört laut ${BEREICHE_DATEI} zum Bereich ${bereich}`;
+    ? `${AUSSERHALB} ${schluessel}: ${pfad} steht in keinem Bereich laut ${BEREICHE_DATEI}`
+    : `${AUSSERHALB} ${schluessel}: ${pfad} gehört laut ${BEREICHE_DATEI} zum Bereich ${bereich}`;
 }
 
 function bereichsVerstoss(kontext, pfad) {
   const { auftrag, rolle, umbenannt } = kontext;
   if (umbenannt !== undefined) return umbenennungsVerstoss(kontext, pfad);
-  return rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad) ? `${AUSSERHALB} ${auftrag.bereich}: ${pfad}` : null;
+  return rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad) ? `${AUSSERHALB} ${bereichSchluessel(auftrag.bereich)}: ${pfad}` : null;
 }
 
 function dateiVerstoesse(kontext, pfad) {
