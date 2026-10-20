@@ -37,7 +37,7 @@
   "pruefer/issue": {
     "liste": "K5",
     "wozu": "Ein SOLLTE oder ein verworfener BLOCKER hält den Pull Request nicht auf; dieses Issue hält den Befund fest, damit eine erkannte Schwäche nicht verloren geht. Bleibt es liegen, steht der Fehler oder die Lücke unbemerkt im Hauptstand, bis ein Kunde sie trifft.",
-    "behebung": "In einem eigenen Pull Request die Stelle beheben, wie es der Beleg und der Block darunter beschreiben, und dieses Issue darin mit „Closes #<Nummer>“ schließen. Bei einem verworfenen BLOCKER zuerst am Code prüfen, ob der Fehler echt ist.",
+    "behebung": "In einem eigenen Pull Request die Stelle beheben, wie es der Beleg und der Block darunter beschreiben, und dieses Issue darin mit „Closes #<Nummer>“ schließen. Eine Prüfer-Sammlung sammelt die Verbesserungsbefunde eines Bereichs in Text und Kommentaren; sie schließt erst der Pull Request, der ihren letzten offenen Eintrag behebt. Bei einem verworfenen BLOCKER zuerst am Code prüfen, ob der Fehler echt ist.",
     "nichtAngenommen": "Das Issue ohne Codeänderung schließen oder liegen lassen, oder die Stelle so umschreiben, dass der Prüfer sie nicht mehr erkennt, ohne dass sich das Verhalten ändert. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Ein SOLLTE oder HINWEIS hält den ursprünglichen Pull Request nicht auf; er merget, und behoben wird in einem eigenen Pull Request (Schweregrade in .claude/agents/pruefer.md). Hältst du den Befund für falsch oder braucht er eine Entscheidung, schreibst du in einer Paket-Sitzung den Grund als Entscheidungsnotiz in dieses Issue; Antonio entscheidet, ob es ohne Änderung geschlossen wird."
   },
