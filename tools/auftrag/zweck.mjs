@@ -86,6 +86,7 @@ export const MELDUNG = {
   WERKZEUGABBRUCH: "werkzeugabbruch",
   MIGRATIONEN: "migrationen",
   FESTE_PFADE: "feste-pfade",
+  VORBEREITUNG: "vorbereitung",
   JSCPD: "jscpd",
 };
 
@@ -171,6 +172,7 @@ const ZUSTAENDIG = new Map([
   [PRUEFUNG.BETROFFENE_TESTS, BAU],
   [MELDUNG.MIGRATIONEN, BAU],
   [MELDUNG.FESTE_PFADE, BAU],
+  [MELDUNG.VORBEREITUNG, BAU],
   [PRUEFUNG.MUTATION, BAU],
   [PRUEFUNG.MUTATION_NACH_BAU, BAU],
   [PRUEFUNG.COMMIT, BAU],

@@ -153,6 +153,13 @@
     "nichtAngenommen": "Ein Muster weiten, bis es wieder trifft; eine Ausnahme für umbenannte Dateien; eine Schutzliste kürzen; die Prüfung, die Paarbildung oder den Vergleich so umschreiben, dass sie den Verlust nicht mehr sieht. Das ist eine Lockerung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: <Liste> muss vorher <Eintrag> für <neuer Pfad> nachziehen“ (daraus wird eine Aufgabe für den Owner davor); in einer Paket-Sitzung „Entscheidung nötig“ mit einer Entscheidungsnotiz, die Liste, Eintrag und neuen Pfad nennt."
   },
+  "vorbereitung": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Umbau an einer JavaScript-Datei des Anrufbereichs (tools/auftrag/vorbereitung-bereich.json) bereitet die Umstellung auf TypeScript vor und darf das Verhalten für keine Eingabe ändern. Tests und Mutationsprüfung bemerken eine Umformung wie || → ?? nicht, denn die Mutationsprüfung mutiert nur die neuen Zeilen. Deshalb bringt die Prüfung den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt danach Gleichheit; jede Umformung dort ist für jede Eingabe gleichwertig begründet.",
+    "behebung": "Nur Umformungen aus tools/vorbereitung/katalog.json unter den dort genannten Bedingungen verwenden und alles andere an der Stelle unverändert lassen; eine nur-Typen-Umbenennung und nachgezogene Importendungen zählen nicht als Änderung.",
+    "nichtAngenommen": "Eine Umformung aus nichtImKatalog (etwa || → ??, e instanceof Error, charAt statt Index) als Vorbereitung durchbringen, die Datei aus der Liste nehmen, den Umbau als andere Art planen oder die Änderung so verteilen, dass die Prüfung sie nicht sieht. Den Katalog oder die Normalform zu erweitern braucht eine eigene Begründung für jede Eingabe und Antonios Freigabe.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“; die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript."
+  },
   "jscpd": {
     "liste": "B1",
     "wozu": "Zwei Kopien derselben Logik lassen sich nur gemeinsam richtig ändern: Eine Fehlerbehebung trifft sonst nur eine der Kopien, und die andere bleibt falsch. Bei Testhilfen misst dann eine Testsammlung still etwas anderes als die andere.",

@@ -1,0 +1,190 @@
+import assert from "node:assert/strict";
+import { readFileSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+
+import { REGELN } from "../../tools/vorbereitung/normalform.mjs";
+import { vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
+import { nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
+import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
+
+const WERKZEUG = join(REPO_ROOT, "tools/vorbereitung-pruefen.mjs");
+const KATALOG = JSON.parse(readFileSync(join(REPO_ROOT, "tools/vorbereitung/katalog.json"), "utf8"));
+const BEREICH = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/vorbereitung-bereich.json"), "utf8"));
+const EXIT_GRUEN = 0;
+const EXIT_ROT = 1;
+const EXIT_ABBRUCH = 2;
+const PFAD = "src/probe.js";
+const HILFE = ["export function ist(w) {", '  return typeof w === "string" && w !== "";', "}"];
+
+function quelle(...zeilen) {
+  return `${zeilen.join("\n")}\n`;
+}
+
+async function vergleich(vorher, nachher) {
+  return vergleicheVorbereitung({ pfad: PFAD, vorher, nachher });
+}
+
+const GLEICHWERTIG = [
+  ["vorlage-string", quelle("const N = 18;", "export const t = () => `n=${N}`;"), quelle("const N = 18;", "export const t = () => `n=${String(N)}`;")],
+  ["vorlage-string", quelle("export const t = (a, b) => `n=${a - b}`;"), quelle("export const t = (a, b) => `n=${String(a - b)}`;")],
+  ["boolean-verknuepfung", quelle("export const f = (r, fp) => Boolean(r?.a) && r.b === fp;"), quelle("export const f = (r, fp) => (r?.a ? r.b === fp : false);")],
+  ["boolean-verknuepfung", quelle("export const f = (r, b) => !!r || b;"), quelle("export const f = (r, b) => (r ? true : b);")],
+  ["laenge-optional", quelle("export const f = (p, g) => !p || !p.length || g(p);"), quelle("export const f = (p, g) => !p?.length || g(p);")],
+  ["laenge-optional", quelle("export const h = (p) => p;", "export const f = (p, g) => !p || !p.length || g(p);"), quelle("export const h = (p) => p;", "export const f = (p, g) => !p?.length || g(p);")],
+  [
+    "hilfe-einsetzen",
+    quelle(...HILFE, "export function g(u) {", "  if (!ist(u)) return null;", "  return u;", "}"),
+    quelle(...HILFE, "export function g(u) {", '  if (!(typeof u === "string" && u !== "")) return null;', "  return u;", "}"),
+  ],
+  [
+    "hilfe-einsetzen",
+    quelle(...HILFE, "export function g(a = 1) {", '  var u = "x";', "  return ist(u) && a;", "}"),
+    quelle(...HILFE, "export function g(a = 1) {", '  var u = "x";', '  return typeof u === "string" && u !== "" && a;', "}"),
+  ],
+];
+
+const NICHT_GLEICHWERTIG = [
+  ["|| wird ??", quelle("export const f = (a, d) => a || d;"), quelle("export const f = (a, d) => a ?? d;")],
+  ["Katalog-Umformung und eine geänderte Zahl", quelle("const N = 18;", "export const t = () => `n=${N}`;"), quelle("const N = 19;", "export const t = () => `n=${String(N)}`;")],
+  ["String um einen Wert, der ein Symbol sein kann", quelle("export const t = (w) => `n=${w.x}`;"), quelle("export const t = (w) => `n=${String(w.x)}`;")],
+  ["String in einem getaggten Template", quelle("export const t = (n) => tag`n=${n - 1}`;"), quelle("export const t = (n) => tag`n=${String(n - 1)}`;")],
+  ["String ist in der Datei gebunden", quelle("const String = (x) => x;", "export const t = (n) => `n=${n - 1}`;"), quelle("const String = (x) => x;", "export const t = (n) => `n=${String(n - 1)}`;")],
+  ["Boolean ohne Bedingungsausdruck weggelassen", quelle("export const f = (r, fp) => Boolean(r?.a) && r.b === fp;"), quelle("export const f = (r, fp) => r?.a && r.b === fp;")],
+  ["andere Eigenschaft als length", quelle("export const f = (p, g) => !p || !p.size || g(p);"), quelle("export const f = (p, g) => !p?.size || g(p);")],
+  ["Argument der Hilfe wird zugewiesen", quelle(...HILFE, "export function g(u) {", "  u = u.trim();", "  return ist(u);", "}"), quelle(...HILFE, "export function g(u) {", "  u = u.trim();", '  return typeof u === "string" && u !== "";', "}")],
+  ["Name ist nur in einer anderen Funktion gebunden, hier global", quelle("export const h = (p) => p;", "export const f = (g) => !p || !p.length || g;"), quelle("export const h = (p) => p;", "export const f = (g) => !p?.length || g;")],
+  ["Argument der Hilfe ist hier global", quelle(...HILFE, "export const h = (u) => u;", "export const g = () => ist(u);"), quelle(...HILFE, "export const h = (u) => u;", 'export const g = () => typeof u === "string" && u !== "";')],
+  ["eval in der Datei", quelle(...HILFE, "export const g = (u) => ist(u) && eval(u);"), quelle(...HILFE, 'export const g = (u) => typeof u === "string" && u !== "" && eval(u);')],
+  ["privates Feld #length", quelle("export class K {", "  #length = 0;", "  f(p) {", "    return !p || !p.#length;", "  }", "}"), quelle("export class K {", "  #length = 0;", "  f(p) {", "    return !p?.#length;", "  }", "}")],
+  ["Hilfe liest den Parameter nur bedingt", quelle("export function f(p) {", "  return false && p;", "}", "export const g = (y) => f(y);"), quelle("export function f(p) {", "  return false && p;", "}", "export const g = (y) => false && y;")],
+  ["String wird in der Datei zugewiesen", quelle("export const t = (n) => `n=${n - 1}`;", "export const s = () => { globalThis.x = 1; };", "String = undefined;"), quelle("export const t = (n) => `n=${String(n - 1)}`;", "export const s = () => { globalThis.x = 1; };", "String = undefined;")],
+  ["var im static-Block, hier global", quelle("export class K {", "  static {", "    var p;", "  }", "}", "export const f = (g) => !p || !p.length || g;"), quelle("export class K {", "  static {", "    var p;", "  }", "}", "export const f = (g) => !p?.length || g;")],
+  ["var im Rumpf, Hilfe im Standardwert eines Parameters", quelle(...HILFE, "export function g(a = ist(u)) {", "  var u;", "  return a;", "}"), quelle(...HILFE, 'export function g(a = typeof u === "string" && u !== "") {', "  var u;", "  return a;", "}")],
+  ["var im Rumpf, length im Standardwert eines Parameters", quelle("export function f(a = !p || !p.length) {", "  var p;", "  return a;", "}"), quelle("export function f(a = !p?.length) {", "  var p;", "  return a;", "}")],
+  ["var im Rumpf, Hilfe in einem destrukturierten Parameter", quelle(...HILFE, "export function g({ a = ist(u) }) {", "  var u;", "  return a;", "}"), quelle(...HILFE, 'export function g({ a = typeof u === "string" && u !== "" }) {', "  var u;", "  return a;", "}")],
+  ["Boolean ist in der Datei gebunden", quelle("const Boolean = (x) => x;", "export const f = (r, fp) => Boolean(r?.a) && r.b === fp;"), quelle("const Boolean = (x) => x;", "export const f = (r, fp) => (r?.a ? r.b === fp : false);")],
+  ["Boolean wird in der Datei zugewiesen", quelle("export const f = (r, fp) => Boolean(r?.a) && r.b === fp;", "Boolean = String;"), quelle("export const f = (r, fp) => (r?.a ? r.b === fp : false);", "Boolean = String;")],
+  ["Hilfe ist zweimal gebunden", quelle(...HILFE, "export const g = (u) => {", "  const ist = (w) => w;", "  return ist(u);", "};"), quelle(...HILFE, "export const g = (u) => {", "  const ist = (w) => w;", '  return typeof u === "string" && u !== "";', "};")],
+  ["Hilfe wird zugewiesen", quelle(...HILFE, "export const s = () => {", "  ist = Boolean;", "};", "export const g = (u) => ist(u);"), quelle(...HILFE, "export const s = () => {", "  ist = Boolean;", "};", 'export const g = (u) => typeof u === "string" && u !== "";')],
+  ["async-Hilfe", quelle("export async function ist(w) {", "  return w === 1;", "}", "export const g = (u) => ist(u);"), quelle("export async function ist(w) {", "  return w === 1;", "}", "export const g = (u) => u === 1;")],
+  ["Hilfe mit ==", quelle("export function ist(w) {", "  return w == 1;", "}", "export const g = (u) => ist(u);"), quelle("export function ist(w) {", "  return w == 1;", "}", "export const g = (u) => u == 1;")],
+  ["Hilfe liest length", quelle("export function ist(w) {", "  return w !== null && w.length;", "}", "export const g = (u) => ist(u);"), quelle("export function ist(w) {", "  return w !== null && w.length;", "}", "export const g = (u) => u !== null && u.length;")],
+  ["Index wird charAt", quelle('const A = "abc";', "export const f = (i) => A[i];"), quelle('const A = "abc";', "export const f = (i) => A.charAt(i);")],
+];
+
+test("vorbereitung-pruefen: der Katalog beschreibt genau die Regeln der Normalform, jede mit Begründung", () => {
+  assert.deepEqual(KATALOG.umformungen.map(({ id }) => id).toSorted(), Object.keys(REGELN).toSorted());
+  for (const eintrag of KATALOG.umformungen) {
+    for (const feld of ["vorher", "nachher", "bedingung", "grund"]) assert.ok(eintrag[feld]?.trim(), `${eintrag.id}.${feld}`);
+  }
+});
+
+test("vorbereitung-pruefen: jede Katalog-Umformung ist grün und nennt ihre Regel", async () => {
+  for (const [id, vorher, nachher] of GLEICHWERTIG) {
+    assert.deepEqual(await vergleich(vorher, nachher), { gleich: true, genutzt: [id] }, id);
+  }
+});
+
+test("vorbereitung-pruefen: Änderungen außerhalb des Katalogs sind rot und nennen die Zeile", async () => {
+  for (const [fall, vorher, nachher] of NICHT_GLEICHWERTIG) {
+    const ergebnis = await vergleich(vorher, nachher);
+    assert.equal(ergebnis.gleich, false, fall);
+    assert.match(ergebnis.befund, /^src\/probe\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/, fall);
+  }
+});
+
+test("vorbereitung-pruefen: nur Kommentare geändert ist grün ohne Regel", async () => {
+  assert.deepEqual(await vergleich(quelle("export const f = 1;"), quelle("// eins", "export const f = 1;")), { gleich: true, genutzt: [] });
+});
+
+test("vorbereitung-pruefen: eine nicht lesbare Datei ist rot", async () => {
+  assert.deepEqual(await vergleich(quelle("export const f = 1;"), quelle("export const f = ;")), { gleich: false, befund: `${PFAD}: nicht lesbar` });
+});
+
+test("vorbereitung-pruefen: über Git rot bei ?? mit Zweck, grün bei Katalog-Umformung", (context) => {
+  const [, vorher, nachher] = GLEICHWERTIG[0];
+  const repo = repoMitBasis(context, { [PFAD]: vorher, "src/b.js": quelle("export const f = (a, d) => a || d;") });
+  const gruen = nachCommitPruefen(repo, WERKZEUG, { [PFAD]: nachher });
+  assert.equal(gruen.status, EXIT_GRUEN, gruen.output);
+  assert.match(gruen.output, /^src\/probe\.js: gleichwertig \(vorlage-string\)$/m);
+  const rot = nachCommitPruefen(repo, WERKZEUG, { "src/b.js": quelle("export const f = (a, d) => a ?? d;") });
+  assert.equal(rot.status, EXIT_ROT, rot.output);
+  assert.match(rot.output, /^src\/b\.js:1: Änderung, die keine Umformung/m);
+  assert.match(rot.output, /tools\/vorbereitung\/katalog\.json/);
+});
+
+test("vorbereitung-pruefen: neue JavaScript-Datei ist rot, nur-Typen-Umbenennung zählt nicht", (context) => {
+  const repo = repoMitBasis(context, { "src/a.js": quelle("export const a = (x) => x + 1;") });
+  const neu = nachCommitPruefen(repo, WERKZEUG, { "src/neu.js": quelle("export const n = 1;") });
+  assert.equal(neu.status, EXIT_ROT, neu.output);
+  assert.match(neu.output, /^src\/neu\.js: neu; das ist keine Umformung aus dem Katalog$/m);
+  runIn(repo.directory, "git", ["rm", "-q", "src/neu.js", "src/a.js"]);
+  writeFiles(repo.directory, { "src/a.ts": quelle("export const a = (x: number): number => x + 1;") });
+  commitAll(repo.directory, "Umbenennung");
+  const lauf = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis]);
+  assert.equal(lauf.status, EXIT_GRUEN, `${lauf.stdout}${lauf.stderr}`);
+});
+
+test("vorbereitung-pruefen: nachgezogene Importendung zählt nicht, Löschen ist rot, --bis vergleicht genau bis zu diesem Commit", (context) => {
+  const repo = repoMitBasis(context, {
+    "src/a.js": quelle("export const a = (x) => x + 1;"),
+    "src/b.js": quelle('import { a } from "./a.js";', "export const b = (x, d) => a(x) || d;"),
+    "src/c.js": quelle("export const c = 1;"),
+    "src/d.js": quelle("export const d = (x, e) => x || e;"),
+  });
+  runIn(repo.directory, "git", ["rm", "-q", "src/a.js", "src/c.js"]);
+  writeFiles(repo.directory, {
+    "src/a.ts": quelle("export const a = (x: number): number => x + 1;"),
+    "src/b.js": quelle('import { a } from "./a.ts";', "export const b = (x, d) => a(x) || d;"),
+  });
+  commitAll(repo.directory, "Umbenennung");
+  const bis = runIn(repo.directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  writeFiles(repo.directory, { "src/d.js": quelle("export const d = (x, e) => x ?? e;") });
+  commitAll(repo.directory, "Danach");
+  writeFiles(repo.directory, { "src/neu.js": quelle("export const n = 1;") });
+  const lauf = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis, "--bis", bis]);
+  const ausgabe = `${lauf.stdout}${lauf.stderr}`;
+  assert.equal(lauf.status, EXIT_ROT, ausgabe);
+  assert.match(ausgabe, /^src\/c\.js: gelöscht; das ist keine Umformung aus dem Katalog$/m);
+  assert.doesNotMatch(ausgabe, /src\/(a|b|d|neu)\.js/);
+});
+
+test("vorbereitung-pruefen: ein Typwechsel zum Symlink heißt nicht gelöscht", (context) => {
+  const repo = repoMitBasis(context, { "src/a.js": quelle("export const a = 1;"), "src/b.js": quelle("export const b = 2;") });
+  runIn(repo.directory, "git", ["rm", "-q", "src/a.js"]);
+  symlinkSync("b.js", join(repo.directory, "src/a.js"));
+  commitAll(repo.directory, "Symlink");
+  const lauf = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis]);
+  assert.equal(lauf.status, EXIT_ROT, `${lauf.stdout}${lauf.stderr}`);
+  assert.match(lauf.stdout + lauf.stderr, /^src\/a\.js: Art T; das ist keine Umformung aus dem Katalog$/m);
+});
+
+test("vorbereitung-pruefen: CommonJS ist rot, ein Dateiname mit Umlaut wird geprüft", (context) => {
+  const repo = repoMitBasis(context, { "src/a.cjs": quelle("exports.a = (x, d) => x || d;"), "src/grüße.js": quelle("export const a = (x, d) => x || d;") });
+  const lauf = nachCommitPruefen(repo, WERKZEUG, { "src/a.cjs": quelle("exports.a = (x, d) => x || d; "), "src/grüße.js": quelle("export const a = (x, d) => x ?? d;") });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/a\.cjs: CommonJS läuft ohne strict mode/m);
+  assert.match(lauf.output, /^src\/grüße\.js:1: Änderung, die keine Umformung/m);
+});
+
+test("vorbereitung-pruefen: mit --bereich zählen nur die Dateien der Liste, ohne Liste oder --basis Abbruch", (context) => {
+  const repo = repoMitBasis(context, { "src/a.js": quelle("export const a = (x, d) => x || d;"), "liste.json": '["src/b.js"]\n' });
+  writeFiles(repo.directory, { "src/a.js": quelle("export const a = (x, d) => x ?? d;") });
+  commitAll(repo.directory, "Nachher");
+  const ausserhalb = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis, "--bereich", "liste.json"]);
+  assert.equal(ausserhalb.status, EXIT_GRUEN, `${ausserhalb.stdout}${ausserhalb.stderr}`);
+  const ohneListe = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis, "--bereich", "fehlt.json"]);
+  assert.equal(ohneListe.status, EXIT_ABBRUCH, `${ohneListe.stdout}${ohneListe.stderr}`);
+  assert.match(ohneListe.stderr, /^Abbruch: .*fehlt\.json/m);
+  const ohneBasis = runIn(repo.directory, process.execPath, [WERKZEUG]);
+  assert.equal(ohneBasis.status, EXIT_ABBRUCH);
+  assert.match(ohneBasis.stderr, /^Abbruch: Aufruf: .*--basis/m);
+});
+
+test("vorbereitung-pruefen: die Bereichsliste nennt nur JavaScript-Dateien unter src/, sortiert und ohne Doppel", () => {
+  assert.ok(BEREICH.length > 0);
+  assert.deepEqual(BEREICH, [...new Set(BEREICH)].toSorted());
+  for (const datei of BEREICH) assert.match(datei, /^src\/.+\.js$/);
+  assert.ok(!BEREICH.includes("src/store/state-ops.js"));
+});

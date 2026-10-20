@@ -30,6 +30,8 @@ import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
+const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
+const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
@@ -423,6 +425,7 @@ class AuftragsLauf {
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
+      () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
       () => this.pinPruefung(),

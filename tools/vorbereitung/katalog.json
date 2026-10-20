@@ -1,0 +1,67 @@
+{
+  "annahme": "Für alle Einträge gilt: Die eingebauten Objekte (String, Boolean, die Prototypen von String, Number, Boolean und BigInt) sind nicht verändert, und die Datei ist ein ES-Modul (strict mode; .cjs ist nie gleichwertig) und enthält die Namen eval und arguments nicht (beide können eine Variable ohne sichtbare Zuweisung ändern); sonst gilt kein Eintrag. Gleich heißt: für jeden Wert, der zur Laufzeit ankommt, dasselbe Ergebnis, dieselbe Ausnahme und dieselben Nebenwirkungen in derselben Reihenfolge. Die Bedingungen prüft tools/vorbereitung/normalform.mjs am Syntaxbaum; „An der Stelle gebunden“ heißt: Eine Bindung des Namens in der Datei umschließt die Stelle (Parameter: die Funktion; let, const, class: der umgebende Block; var: der Rumpf der umgebenden Funktion ohne ihre Parameterliste, denn deren Standardwerte sehen die var des Rumpfs nicht, oder der umgebende static-Block einer Klasse; import: die Datei), der Name ist dort also nicht global. „Nirgends zugewiesen“ und „nirgends gebunden“ zählen über die ganze Datei, unabhängig vom Gültigkeitsbereich; das ist strenger als nötig.",
+  "umformungen": [
+    {
+      "id": "vorlage-string",
+      "vorher": "`…${E}…`",
+      "nachher": "`…${String(E)}…`",
+      "bedingung": "E ist syntaktisch nie ein Symbol: ein Literal, ein Template-Text, ein einstelliger Operator (-, +, ~, !, typeof, void, delete), ein zweistelliger Operator, ++/--, ein String(…)-Aufruf, && oder || bzw. ?: aus solchen Ausdrücken, oder ein Name, der in der Datei genau einmal gebunden ist, und zwar als const auf oberster Ebene mit einem solchen Ausdruck. Der Name String ist in der Datei nirgends gebunden und nirgends zugewiesen.",
+      "grund": "Ein Template-Text wandelt E mit ToString um. String(E) ist laut Sprachstandard für jedes E außer einem Symbol genau ToString(E); bei einem Symbol wirft der Template-Text, String(E) liefert dagegen Text, deshalb die Bedingung. E wird in beiden Formen genau einmal ausgewertet, das Lesen des Namens String hat keine Nebenwirkung."
+    },
+    {
+      "id": "boolean-verknuepfung",
+      "vorher": "Boolean(E) && B   |   !!E && B   |   Boolean(E) || B   |   !!E || B",
+      "nachher": "E ? B : false   |   E ? B : false   |   E ? true : B   |   E ? true : B",
+      "bedingung": "Der Name Boolean ist in der Datei nirgends gebunden und nirgends zugewiesen (nur für die Form mit Boolean).",
+      "grund": "Boolean(E) und !!E sind genau ToBoolean(E). && liefert false, wenn ToBoolean(E) falsch ist, sonst B; || liefert true, wenn ToBoolean(E) wahr ist, sonst B. Der Bedingungsausdruck wertet E einmal aus, wendet ToBoolean an und wertet dann genau den einen Zweig aus, also dieselbe Reihenfolge und dasselbe Ergebnis."
+    },
+    {
+      "id": "laenge-optional",
+      "vorher": "!X || !X.length",
+      "nachher": "!X?.length",
+      "bedingung": "X ist ein Name, der an der Stelle gebunden ist (kein globaler Name, dessen Lesen einen Getter auslösen könnte); die Eigenschaft heißt wörtlich length, ohne eckige Klammern und nicht als privates Feld #length.",
+      "grund": "Ist X null oder undefined, liefern beide true. Ist X ein anderer falscher Wert (false, 0, -0, 0n, NaN, \"\"), liefert die alte Form true; X?.length ist dann undefined oder 0, also !… ebenfalls true. Ist X wahr, werten beide X.length genau einmal aus. Das zweite Lesen von X in der alten Form hat ohne Getter keine Wirkung. Für andere Eigenschaften gilt das nicht ((0).toFixed ist eine Funktion), deshalb nur length."
+    },
+    {
+      "id": "hilfe-einsetzen",
+      "vorher": "f(x) mit function f(p) { return A; }",
+      "nachher": "A, darin p durch x ersetzt",
+      "bedingung": "f ist eine Funktionsdeklaration auf oberster Ebene (auch mit export), nicht async, kein Generator, genau ein Parameter p ohne Standardwert, der Rumpf ist genau return A. A besteht nur aus p, Literalen und den Operatoren typeof, !, ===, !==, && und ||, und p wird in A als Erstes gelesen (der Weg über linke Operanden und Operanden von typeof und ! endet bei p), A liest p also auf jeden Fall. f ist in der Datei genau einmal gebunden und wird nirgends zugewiesen. Der Aufruf ist kein optionaler Aufruf und hat genau ein Argument, einen Namen x, der an der Stelle gebunden ist und in der Datei nirgends zugewiesen wird.",
+      "grund": "Diese Operatoren rufen keinen fremden Code auf und werfen nie, A ist also eine reine Rechnung über p. x wird nie zugewiesen, jedes Lesen von x liefert denselben Wert wie das eine Lesen als Argument; ist x noch nicht initialisiert, wirft der Aufruf beim Lesen des Arguments und die eingesetzte Form beim ersten Lesen von x, weil p in A als Erstes gelesen wird, geschieht davor nichts. Dadurch wird eine Prüfung wie istNichtLeererString(x) an Ort und Stelle sichtbar, und TypeScript verengt den Typ dort."
+    }
+  ],
+  "nichtImKatalog": [
+    {
+      "form": "a || d → a ?? d",
+      "grund": "Für 0, \"\", false und NaN liefert || den Wert d, ?? dagegen a."
+    },
+    {
+      "form": "e.message → e instanceof Error ? e.message : e (catch)",
+      "grund": "Für ein geworfenes Objekt mit message, das kein Error ist, oder einen Error aus einem anderen Realm ändert sich das Ergebnis."
+    },
+    {
+      "form": "s[i] → s.charAt(i), b[i] → b.readUInt8(i)",
+      "grund": "Für i außerhalb des Bereichs, negativ, NaN oder nicht ganzzahlig liefert s[i] undefined, charAt dagegen \"\" oder das Zeichen an Stelle 0, readUInt8 wirft. Ob i im Bereich liegt, ist am Syntaxbaum nicht entscheidbar."
+    },
+    {
+      "form": "Ausdruck in eine const herausziehen",
+      "grund": "Die Auswertung rückt vor andere Teile der Anweisung; jeder Getter, jedes valueOf und jeder Aufruf kann dann in anderer Reihenfolge laufen, und ein Fehler im Ausdruck wird früher geworfen. Am Syntaxbaum lässt sich das nur für Ausdrücke ohne jede Wirkung zeigen, und die braucht strenges TypeScript nicht."
+    },
+    {
+      "form": "async () => W → () => Promise.resolve(W)",
+      "grund": "Die Funktion ist danach keine AsyncFunction mehr; Code, der das prüft (util.types.isAsyncFunction, constructor.name), verhält sich anders, und ein Fehler beim Auswerten von W wirft sofort statt ein abgelehntes Promise zu liefern."
+    },
+    {
+      "form": "parseInt(x) → parseInt(String(x), 10)",
+      "grund": "Mit der Basis 10 liefert \"0x1A\" den Wert 0 statt 26; String(x) liefert bei einem Symbol Text, wo parseInt wirft."
+    },
+    {
+      "form": "String(x || \"\") → (x ?? \"\")",
+      "grund": "Für 0 und false liefert die alte Form \"\", die neue 0 bzw. false; für eine Zahl ungleich 0 fehlt danach die Umwandlung in Text."
+    },
+    {
+      "form": "Boolean(E) → E außerhalb von && und ||",
+      "grund": "Der Wert ist dann E selbst, nicht true oder false."
+    }
+  ]
+}
