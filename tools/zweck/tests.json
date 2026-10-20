@@ -1,0 +1,86 @@
+{
+  "tests/mutation": {
+    "liste": "T1, T2",
+    "wozu": "Jede neue Zeile unter src/ muss von einem Test verlangt werden. Überlebt ein Mutant (Stryker hat die Zeile verändert) oder die Löschprobe („Zeile gelöscht“: die Zeile wurde probehalber entfernt, etwa ein reiner Aufruf, für den Stryker keinen Mutanten baut), blieben alle Tests grün; geht die Zeile später kaputt, etwa die Prüfung des Zugangsschlüssels oder ein Protokolleintrag, merkt es niemand, bis ein Kunde den Fehler erlebt.",
+    "behebung": "Einen Test schreiben, der das Verhalten der Zeile verlangt, zum Beispiel dass eine Anfrage ohne Schlüssel mit 401 abgelehnt und mit Schlüssel angenommen wird, oder dass der Aufruf einen Zustand ändert, den der Test liest. Eine Zeile streichen nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher.",
+    "nichtAngenommen": "Eine gebrauchte Zeile streichen oder so umschreiben, dass Stryker an ihr keinen Mutanten mehr baut, einen Test schreiben, der nur einen Wortlaut festnagelt, oder einen Mutanten, der Verhalten ändert, als gleichwertig melden. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Die Meldung „Gleichwertig: <Mutant>, weil <Satz>“ nimmt die Prüfung nur aus Commits mit einer Zeile „Auftrag: <Phase>/<Auftrag>“ an, also nur im Auftragsweg; eine Paket-Sitzung hat diesen Weg nicht. Hältst du einen Mutanten für wirkungslos oder fehlt der Test außerhalb deines Bereichs, hörst du auf und schreibst Mutant, Eingaben und Grund als Entscheidungsnotiz ins Issue; liegt die Ursache außerhalb deines Bereichs, „Voraussetzung fehlt:“ mit Befehl und Ergebnis. Bei einem von Stryker abgeschalteten Mutanten gilt der Hinweis der Meldung: Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst anhalten und die Betreuung fragen."
+  },
+  "tests/stryker-zustand": {
+    "liste": "T3",
+    "wozu": "Ein Test darf nicht erkennen, ob gerade ein Mutant aktiv ist. Könnte er es, scheiterte er nur unter Stryker absichtlich; die Mutationsprüfung wäre grün, obwohl kein Test das Verhalten verlangt, und echte Fehler an diesen Stellen gingen unbemerkt in den Betrieb.",
+    "behebung": "Den Zugriff auf Strykers Zustand (die Umgebungsvariablen und globalen Werte, an denen Stryker den aktiven Mutanten kennzeichnet) aus der genannten Zeile entfernen; der Test prüft, was der Code tut, nicht, unter welchen Umständen er läuft.",
+    "nichtAngenommen": "Dieselbe Abfrage anders schreiben, zusammensetzen oder in eine andere Datei verlegen, damit das Suchmuster sie nicht trifft. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Für einen Zugriff auf Strykers Zustand gibt es keinen ehrlichen Grund; die Behebung ist immer möglich. Liegt die Zeile außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Datei und Zeile ins Issue."
+  },
+  "tests/wirkung-leer": {
+    "liste": "T4",
+    "wozu": "Ein neuer Test muss scheitern können. Bleibt er grün, wenn jede Prüfung in ihm scheitert, hat er keinen festen Namen oder lief er gar nicht, zählt er als Schutz, und ein Fehler im geprüften Verhalten käme trotzdem in den Betrieb.",
+    "behebung": "Im Test eine Prüfung auf das Ergebnis schreiben, die bei falschem Verhalten scheitert, zum Beispiel assert.equal(antwort.status, 401) statt nur den Aufruf; dem Test einen festen Namen als Text geben; einen Test, der nicht lief, wieder lauffähig machen.",
+    "nichtAngenommen": "Eine Prüfung einbauen, die immer wahr ist, den Test überspringen, entfernen oder so benennen, dass er nicht als neu gilt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt die Ursache außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit Test und Ausgabe ins Issue. Ist die Messung selbst falsch (Fehlalarm), gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an der Prüfung braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/testwirkung/ und Antonios Approve."
+  },
+  "tests/wirkung-wackeln": {
+    "liste": "T5",
+    "wozu": "Ein Test, der ohne Änderung mal grün und mal rot ist, hält später fremde Änderungen ohne Grund auf oder gewöhnt alle an Rot, bis ein echter Fehler übersehen wird.",
+    "behebung": "Die Ursache des Wackelns im Test beheben, zum Beispiel simulierte Zeit (mock.timers) statt echter Wartezeit, feste statt zufälliger Daten, eigene Ports und Ordner je Test.",
+    "nichtAngenommen": "Den Test umbenennen oder in eine andere Datei verschieben, damit er nicht wiederholt wird, seine Wartefrist großzügig erhöhen oder ihn überspringen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Wackelt ein Test einer Datei, die du berührst, aber nicht verursacht hast, und liegt die Ursache außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Test, Zahl der roten Läufe und Ausgabe ins Issue. Ist die Messung selbst falsch (Fehlalarm), gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an der Prüfung braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/testwirkung/ und Antonios Approve."
+  },
+  "tests/wirkung-geaendert": {
+    "liste": "T6",
+    "wozu": "Ein bestehender Test darf nicht so umgebaut werden, dass er nichts mehr prüft oder das Scheitern unveränderter Prüfungen verschluckt (etwa in try { … } catch {}); ein Fehler, den er früher gefunden hätte, ginge sonst in den Betrieb.",
+    "behebung": "Den Test so ändern, dass seine Prüfungen weiter scheitern können: keine Klammer, die jedes Scheitern abfängt, und mindestens eine Prüfung, die bei falschem Ergebnis scheitert.",
+    "nichtAngenommen": "Den alten Test unverändert lassen und einen neuen daneben stellen, der Anderes verlangt, oder den Test so verschieben, dass er nicht als geändert gilt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Soll der Test absichtlich anders prüfen, steht er unter „Tests, deren Erwartung sich ändern darf“ im verknüpften Issue, und die Paket-Sitzung bittet dort mit einer Entscheidungsnotiz um das Label verhalten-geaendert; setzen dürfen es nur Antonio und Jonas. Ist die Messung selbst falsch (Fehlalarm), gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an der Prüfung braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/testwirkung/ und Antonios Approve."
+  },
+  "tests/wirkung-erreicht": {
+    "liste": "T7",
+    "wozu": "Eine Änderung an einem Test oder an gemeinsamem Testhilfscode darf Teile eines Tests nicht still abschalten. Führt ein Test Zeilen nicht mehr aus, die er auf der Basis ausgeführt hat, schützt er weniger als vorher, und ein Fehler in diesem Teil fiele nicht mehr auf.",
+    "behebung": "Den Test so lassen, dass er die Zeilen weiter ausführt und ihr Ergebnis prüft, oder einen Teil der Testhilfe, den kein Test mehr braucht, ehrlich löschen, zusammen mit den Tests, deren Erwartung sich damit ändert.",
+    "nichtAngenommen": "Tests so umbauen, dass sie den überflüssigen Teil wieder durchlaufen, ohne sein Ergebnis zu prüfen, etwa mit einer absichtlich leeren Liste nur für den Durchlauf. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ändert sich die Erwartung bestehender Tests, weil ein Teil der Testhilfe wegfällt, stehen sie unter „Tests, deren Erwartung sich ändern darf“ im verknüpften Issue, und die Paket-Sitzung bittet dort mit einer Entscheidungsnotiz um das Label verhalten-geaendert, das nur Antonio und Jonas setzen. Ist die Messung selbst falsch (Fehlalarm), gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an der Prüfung braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/testwirkung/ und Antonios Approve."
+  },
+  "tests/wirkung-katalog": {
+    "liste": "T8",
+    "wozu": "Zu jeder Bedrohung in docs/sicherheitsgrenzen.md gehört ein Negativtest, der den Angriff vorführt und seine Abwehr verlangt. Verschwindet er, wird er umbenannt oder werden es weniger, könnte die Lücke, etwa ein Zugang ohne Schlüssel, unbemerkt wieder aufgehen.",
+    "behebung": "Den Negativtest mit der Kennung am Namensanfang behalten oder durch einen ersetzen, der den Angriff weiter vorführt und unter der Attrappe der Testwirkung scheitert.",
+    "nichtAngenommen": "Die Kennung in tools/basis/katalog-ohne-test.txt eintragen, einen zweiten, nur formalen Test mit derselben Kennung anlegen oder die Kennung aus dem Namen nehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Ausnahmeliste darf nur kürzer werden, und ein Katalogtest fällt nur mit der Bedrohung selbst weg. Hältst du einen Katalogeintrag für überholt, hörst du auf und schreibst Kennung und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
+  },
+  "tests/regression": {
+    "liste": "T9",
+    "wozu": "Bestehende Tests halten Verhalten fest, auf das sich Kunden verlassen, etwa das Anruf-Widget. Ist einer rot, auch im zweiten Lauf, hat die Änderung dieses Verhalten gebrochen; der zweite Lauf fängt nur Wackeln ab, nichts darf dadurch still grün werden.",
+    "behebung": "Den Bruch im Code beheben, bis der rote Test grün ist. Wackelt ein Test nur, die Ursache im Test beheben; die Warteschlange legt dafür ein Issue „Wackelig: …“ mit Label wackelig an.",
+    "nichtAngenommen": "Den roten Test ändern, abschwächen oder so umbenennen, dass er unter ein Überspringmuster fällt (ABNAHME- oder eine Katalogkennung), oder eine Weiche bauen, die nur für den Test das alte Verhalten liefert. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Ändert dein Paket das Verhalten absichtlich, steht der Test unter „Tests, deren Erwartung sich ändern darf“ im verknüpften Issue, und die Paket-Sitzung bittet dort mit einer Entscheidungsnotiz um das Label verhalten-geaendert, das nur Antonio und Jonas setzen. Ist der Test auch auf master rot, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Testname und Ausgabe ins Issue."
+  },
+  "tests/prozess-uebrig": {
+    "liste": "T10",
+    "wozu": "Ein Test, der ein Hilfsprogramm startet und nicht beendet, lässt es weiterlaufen; es belegt den Prüfrechner und kann spätere Testläufe verlangsamen oder stören.",
+    "behebung": "Das gestartete Hilfsprogramm am Ende des Tests beenden und auf sein Ende warten, zum Beispiel in after() kind.kill() und dann auf das Ereignis exit warten.",
+    "nichtAngenommen": "Das Hilfsprogramm so starten, dass der Starter es nicht sieht (eigene Prozessgruppe, losgelöst), oder die Meldung aus dem Testlauf filtern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Ein Test kann sein Hilfsprogramm immer beenden; die Behebung ist meist eine Zeile. Gehört der Test nicht zu deinem Bereich, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Test und Prozess ins Issue."
+  },
+  "tests/testlaufzeit": {
+    "liste": "T11",
+    "wozu": "Echte Wartezeiten, direkte Zeitglieder (setTimeout und Verwandte) und lange Ausklingzeiten machen Tests langsam und wackelig; jede Änderung bräuchte länger bis zur Übernahme, und zufällige Fehlschläge nähmen zu. Testfälle gehören in die Testdatei, nicht in eine Hilfsdatei, damit Auswahl und Messung sie sehen.",
+    "behebung": "Im Test simulierte statt echter Zeit benutzen (t.mock.timers), neue Wartezeit nur über echtWarten(ms) und so kurz wie möglich, Hilfsprogramme am Ende sofort beenden, test() aus der Hilfsdatei in die Testdatei verlegen.",
+    "nichtAngenommen": "Auf einem Weg warten, den weder diese Prüfung noch die Lint-Regel gegen Zeitglieder zählt, einen Eintrag in tools/basis/zeitglieder-bestand.json oder tools/basis/testlaufzeit.json ergänzen oder einen Test nur verschieben, damit er nicht gemessen wird. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht ein Test wirklich eine echte Wartezeit über 100 ms, nennt die Meldung den Weg: ein Eintrag mit datei, argument und hoechstwert_ms in tools/basis/echte-wartezeiten.json, dessen Grund die Paket-Sitzung im Issue nennt; er wartet wie jede Datei unter tools/basis/ auf Antonios Approve. Die Ausnahme mit Begründung aus Antonios Entscheidung vom 17.10. (Testkosten) ist am Code noch nicht gebaut; für Zeitglieder und Ausklingzeit gibt es bis dahin keinen Ausweg, dann hörst du auf und schreibst Datei, gemessene Zeit und Grund als Entscheidungsnotiz ins Issue. Eine Änderung an der Prüfung selbst braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/testlaufzeit/ und Antonios Approve."
+  },
+  "tests/ausmisten": {
+    "liste": "T14",
+    "wozu": "Beim Löschen oder Zusammenfassen von Tests darf kein Mutant wieder überleben, den die alten Tests getötet haben; sonst würde der Testbestand kleiner und schwächer, und ein echter Fehler an diesen Stellen fiele nicht mehr auf. Eine gesenkte Unterdrückung in eslint-suppressions.json braucht die Freigabe von Antonio20045.",
+    "behebung": "Nur Tests entfernen oder zusammenfassen, deren Mutanten weiter von anderen Tests getötet werden; den Test, dessen Mutanten jetzt überleben, wiederherstellen oder einen ersetzen, der sie tötet und das Verhalten benennt.",
+    "nichtAngenommen": "Viele Einzeltests durch einen breiten Formtest ersetzen, der dieselben Mutanten tötet, aber kein Verhalten mehr benennt, oder Messdateien und Paketliste anpassen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Die Meldung nennt die vorhandenen Wege: für die genannten Punkte die Freigabe von Antonio20045 auf dem Stand des Branches (Approve im PR, danach den Job „Ergebnis melden“ neu starten), bei zu vielen Paketen in kleineren Pushes ausmisten, bei einem veralteten Branch erst rebasen und neu pushen. Für einen Mutanten, der wirklich überlebt, gibt es keinen Ausweg; dann den Test behalten."
+  },
+  "tests/ausmisten-pfade": {
+    "liste": "T15",
+    "wozu": "Das Ausmisten darf Tests löschen, ohne dass der Testschutz rot wird. Deshalb darf es nur Dateien unter test/ außerhalb von test/werkzeuge/ und test/sicherheit/ berühren, keine Testbank-Skripte und keine Safety-Gate-Tests; sonst verschwänden Schutztests oder Prüfwerkzeuge unter dem Etikett Aufräumen.",
+    "behebung": "Die Änderung außerhalb der freien Testpfade aus dem Ausmisten-Branch herausnehmen und als eigenes Paket mit eigener Prüfung stellen.",
+    "nichtAngenommen": "Eine gesperrte Datei unter neuem Pfad in einem freien Testordner anlegen oder eine Bestandsdatei anders als durch Kürzen ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Im Ausmisten-Branch gibt es für diese Dateien keinen Weg; der ehrliche Weg ist ein eigenes Paket, in dem Testschutz und Freigabe-Prüfung wie sonst gelten."
+  }
+}

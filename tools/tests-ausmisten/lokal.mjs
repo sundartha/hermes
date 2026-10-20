@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
 import { ausgabenAus } from "./ausgaben.mjs";
 import { paketName } from "./artefakte.mjs";
 import { BASIS, BRANCH, artefaktText, lesePlan } from "./entscheiden.mjs";
-import { ausgenommeneFaelle, paketTeile, urteilAusTeilen, zeigeAusnahmen } from "./melden.mjs";
+import { ZWECK_AUSMISTEN, ausgenommeneFaelle, paketTeile, urteilAusTeilen, zeigeAusnahmen } from "./melden.mjs";
 import { git } from "./pfade.mjs";
 import { meldeVorpruefung, vorpruefen } from "./vorpruefen.mjs";
 import { inSpeicher } from "./zwischenspeicher.mjs";
@@ -148,7 +149,9 @@ async function messe(stand, { master, kopf, bereich }) {
   }
   for (const verstoss of ergebnis.verstoesse) console.log(`Verstoß: ${verstoss}`);
   console.log(`Lokal: ${ergebnis.gruen ? "grün" : "rot"}`);
-  return ergebnis.gruen ? EXIT_GRUEN : EXIT_ROT;
+  if (ergebnis.gruen) return EXIT_GRUEN;
+  console.log(zweckBlock(ZWECK_AUSMISTEN).join("\n"));
+  return EXIT_ROT;
 }
 
 export async function lokal(optionen) {

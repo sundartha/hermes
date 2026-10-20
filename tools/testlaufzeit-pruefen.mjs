@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
 import { ausklingBefunde, grenzeAbleiten, zeilenAus } from "./testlaufzeit/ausklingen.mjs";
 import {
@@ -24,6 +25,7 @@ const LANGSAMSTE = 20;
 const JSON_EINRUECKUNG = 2;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
+const ZWECK = "tests/testlaufzeit";
 const AUFRUF = [
   "Aufruf: node tools/testlaufzeit-pruefen.mjs [--laufzeiten <jsonl>] [--kosten <jsonl>] [--basis <commit>] [--teil <k>]",
   "        node tools/testlaufzeit-pruefen.mjs --ableiten <jsonl> [<jsonl> ...]",
@@ -116,7 +118,9 @@ async function pruefen(werte) {
   ];
   console.log(befunde.length === 0 ? "Testlaufzeit: keine Befunde" : "### Befunde");
   for (const befund of befunde) console.log(`- ${befund}`);
-  return befunde.length === 0 ? EXIT_OK : EXIT_BEFUND;
+  if (befunde.length === 0) return EXIT_OK;
+  for (const zeile of zweckBlock(ZWECK)) console.log(`\n${zeile}`);
+  return EXIT_BEFUND;
 }
 
 function ableiten(dateien) {
