@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
@@ -20,6 +20,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
+import { Kostendeckel, deckelAus, gemesseneKosten } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
@@ -38,6 +39,7 @@ export const EXIT_ABBRUCH = 1;
 export const EXIT_AUFRUF = 2;
 export const EXIT_PASST_NICHT = 3;
 export const EXIT_BEFUNDE = 4;
+export const EXIT_DECKEL = 5;
 const PLANUNG = "planung";
 const SCHON_DA = "EEXIST";
 const PHASE = "phase.json";
@@ -156,6 +158,7 @@ export class Planung {
     this.wegZaehler = new Map();
     this.wegOffen = [];
     this.abgewiesenBei = null;
+    this.kostendeckel = null;
   }
 
   beginne({ soll, andererAusgang, nurUmbau }) {
@@ -172,6 +175,27 @@ export class Planung {
 
   kontext() {
     return { root: this.root, dokumente: this.dokumente };
+  }
+
+  gemessen() {
+    return gemesseneKosten(this.root, this.team.beteiligte);
+  }
+
+  pruefeDeckel(rollen) {
+    if (this.kostendeckel === null) return 0;
+    const gemessen = this.gemessen();
+    const grund = this.kostendeckel.ueber(gemessen, rollen);
+    if (grund === null) return gemessen;
+    if (this.berichte.length > 0) this.legeFingerabdruck();
+    throw new Ende(EXIT_DECKEL, grund);
+  }
+
+  async welle(laeufe) {
+    const rollen = laeufe.map(({ rolle }) => rolle);
+    const vorher = this.pruefeDeckel(rollen);
+    const ergebnisse = await this.team.gruppe(laeufe);
+    if (this.kostendeckel !== null) this.kostendeckel.verbuche(rollen, this.gemessen() - vorher);
+    return ergebnisse;
   }
 
   async einzeln(wer, text) {
@@ -307,7 +331,7 @@ export class Planung {
 
   async wegRunde(weg, text) {
     const schluessel = weg.nummern.map((nummer) => `${WEG}${nummer}`);
-    const lauf = await this.prueferLauf(weg.pruefer, text, { schluessel, frage: (wer, inhalt) => this.team.frage(wer, inhalt) });
+    const lauf = await this.prueferLauf(weg.pruefer, text, schluessel);
     this.lege(this.naechsteWegDatei(weg.nummern[0]), lauf);
     const befunde = prueferBefunde(liste(lauf.pruefliste).filter(istObjekt));
     const offen = befunde.map((befund) => ({ nummern: [befund.schluessel.slice(WEG.length)], zeile: wegBefundZeile(befund) }));
@@ -345,7 +369,7 @@ export class Planung {
 
   async erkundeGruppen() {
     const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkunderLauf(this.erkunderNachricht("Erkundung", gruppe), gruppe.nummern));
-    const ergebnisse = await this.team.gruppe(laeufe);
+    const ergebnisse = await this.welle(laeufe);
     this.berichte = ergebnisse.map(({ bericht }) => bericht);
     for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
       merkeStellen(this.gesehen, ergebnis.bericht);
@@ -456,7 +480,7 @@ export class Planung {
       throw new Ende(EXIT_BEFUNDE, `Nachfragen ausgeschöpft: ${nummern.join(", ")}`, [`Nachfragen ausgeschöpft: ${nummern.join(", ")}`]);
     }
     const laeufe = offen.map((eintrag) => this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern: eintrag.nummern, fragen: [eintrag.frage], kopf: [eintrag.frage, ""] }), eintrag.nummern));
-    const ergebnisse = await this.team.gruppe(laeufe);
+    const ergebnisse = await this.welle(laeufe);
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
     this.legeBerichte();
     this.legeFingerabdruck();
@@ -522,10 +546,10 @@ export class Planung {
     return { pruefliste, befunde: prueflisteBefunde(pruefliste, schluessel, this.kontext()) };
   }
 
-  async prueferLauf(pruefer, text, { schluessel, frage = (wer, inhalt) => this.einzeln(wer, inhalt) }) {
-    const ergebnis = this.prueflisteDer(await frage(pruefer, text), schluessel);
+  async prueferLauf(pruefer, text, schluessel) {
+    const ergebnis = this.prueflisteDer(await this.team.frage(pruefer, text), schluessel);
     if (ergebnis.befunde.length === 0) return ergebnis;
-    return this.prueflisteDer(await frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
+    return this.prueflisteDer(await this.team.frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
   nimmPrueflisteAn(befunde, liefere, { datei, grund }) {
@@ -537,22 +561,21 @@ export class Planung {
 
   async pruefeMitFrischemPruefer(text, schluessel, ablage) {
     const pruefer = this.team.teilnehmer("pruefer-planung");
-    const { befunde, pruefliste } = await this.prueferLauf(pruefer, text, { schluessel });
+    const [{ befunde, pruefliste }] = await this.welle([{ rolle: pruefer.rolle, lauf: () => this.prueferLauf(pruefer, text, schluessel) }]);
     return { pruefer, befunde: this.nimmPrueflisteAn(befunde, () => pruefliste, ablage) };
   }
 
   async prueferTeil(teil) {
     const pruefer = this.team.teilnehmer("pruefer-planung");
     const text = await this.prueferNachricht(teil.schluessel, teil);
-    const frage = (wer, inhalt) => this.team.frage(wer, inhalt);
-    return { rolle: pruefer.rolle, lauf: async () => ({ teil, pruefer, ...(await this.prueferLauf(pruefer, text, { schluessel: teil.schluessel, frage })) }) };
+    return { rolle: pruefer.rolle, lauf: async () => ({ teil, pruefer, ...(await this.prueferLauf(pruefer, text, teil.schluessel)) }) };
   }
 
   async pruefliste() {
     const schluessel = fuerDenPitch(prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen()), { nurUmbau: this.nurUmbau });
     const laeufe = [];
     for (const teil of teilePruefliste(schluessel, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
-    const ergebnisse = await this.team.gruppe(laeufe);
+    const ergebnisse = await this.welle(laeufe);
     const unvollstaendig = ergebnisse.flatMap(({ befunde }) => befunde);
     const befunde = this.nimmPrueflisteAn(unvollstaendig, () => zusammengefuegt(schluessel, ergebnisse), { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
     this.lege("pruefliste-aufteilung.json", ergebnisse.map(({ teil, pruefer }) => ({ gruppe: teil.gruppe, sitzung: pruefer.sitzung, schluessel: teil.schluessel })));
@@ -765,22 +788,29 @@ function berichte(planung, ergebnis) {
     nachpruefungen: planung.nachpruefungen,
     wegpruefungen: planung.wegpruefungen,
   };
-  const bericht = planBericht(lauf, { root: planung.root, team: planung.team });
+  const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht() };
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
   for (const befund of ergebnis.offen) console.error(befund);
   return ergebnis.exit;
 }
 
-export async function plane(ordnerAngabe, root, { fortsetzen = false } = {}) {
+function neuePlanung(root, ordner, { fortsetzen, deckel }) {
+  const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
+  planung.beginn = Date.now();
+  if (deckel !== null) planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
+  return planung;
+}
+
+export async function plane(ordnerAngabe, root, { fortsetzen = false, deckel: angabe } = {}) {
   const ordner = resolve(root, ordnerAngabe);
-  const fehler = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen);
+  const { deckel, fehler: deckelFehler } = deckelAus(angabe);
+  const fehler = deckelFehler ?? pruefeAufrufUndLegeAblageAn(ordner, fortsetzen);
   if (fehler !== null) {
     console.error(fehler);
     return EXIT_AUFRUF;
   }
   const nummern = nummernImOrdner(ordner);
-  const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
-  planung.beginn = Date.now();
+  const planung = neuePlanung(root, ordner, { fortsetzen, deckel });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {

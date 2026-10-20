@@ -69,7 +69,7 @@ export const GRUPPEN = [
 const ANRUF_NUMMERN = new Set(GRUPPEN[2].nummern);
 
 const ERSATZ_CLAUDE = `#!${process.execPath}
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const ort = dirname(process.argv[1]);
 const argumente = process.argv.slice(2);
@@ -109,6 +109,13 @@ if (art.pruefliste) {
     ? { schluessel, ergebnis: "befund", befund: art.befunde[schluessel], fundstelle: art.fundstelle }
     : { schluessel, ergebnis: "erfüllt", fundstelle: art.fundstelle });
   text = "Geprüft.\\n\\n\`\`\`json\\n" + JSON.stringify({ pruefliste: liste }) + "\\n\`\`\`";
+}
+const tokenDatei = join(ort, "token.json");
+if (existsSync(tokenDatei)) {
+  const transkripte = join(process.env.CLAUDE_CONFIG_DIR, "projects", realpathSync(process.cwd()).replace(/[^A-Za-z0-9]/g, "-"));
+  mkdirSync(transkripte, { recursive: true });
+  const verbrauch = { input_tokens: JSON.parse(readFileSync(tokenDatei, "utf8"))[agent] ?? 0 };
+  appendFileSync(join(transkripte, (resume ?? wert("--session-id")) + ".jsonl"), JSON.stringify({ type: "assistant", message: { id: schluessel + "-" + stelle, usage: verbrauch } }) + "\\n");
 }
 melde({ type: "assistant", message: { id: "m" + start, content: [{ type: "text", text }], usage: { input_tokens: 1 } } });
 melde({ type: "result", result: text });
@@ -217,11 +224,17 @@ export function plane(context, optionen) {
   return planeIn(context, wurzel, { ...optionen, argumente: typeof argumente === "function" ? argumente(wurzel) : argumente });
 }
 
-export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf, knotenArgumente = [] }) {
+function tokenUmgebung(ersatz, token) {
+  if (token === undefined) return {};
+  writeFileSync(join(ersatz, "token.json"), JSON.stringify(token));
+  return { CLAUDE_CONFIG_DIR: join(ersatz, "konfiguration") };
+}
+
+export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf, knotenArgumente = [], token }) {
   const ersatz = probeDirectory(context, { "antworten.json": JSON.stringify(antworten(grund, ueberschrieben)) });
   writeFileSync(join(ersatz, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(ersatz, "claude.mjs"), AUSFUEHRBAR);
-  const lauf = spawnSync(process.execPath, [...knotenArgumente, werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs") }, timeout: LAUF_FRIST_MS });
+  const lauf = spawnSync(process.execPath, [...knotenArgumente, werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs"), ...tokenUmgebung(ersatz, token) }, timeout: LAUF_FRIST_MS });
   return { ...lauf, wurzel, ersatz };
 }
 
