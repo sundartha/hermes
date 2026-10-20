@@ -9,6 +9,7 @@ import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
   antwortenBefunde,
   entwurfBefunde,
+  fuerDenPitch,
   gliederungBefunde,
   istZurueckgewiesen,
   merkeStellen,
@@ -157,9 +158,10 @@ export class Planung {
     this.abgewiesenBei = null;
   }
 
-  beginne(soll, andererAusgang) {
+  beginne({ soll, andererAusgang, nurUmbau }) {
     this.soll = soll;
     this.andererAusgang = andererAusgang;
+    this.nurUmbau = nurUmbau;
     this.team = new Team(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
   }
@@ -547,7 +549,7 @@ export class Planung {
   }
 
   async pruefliste() {
-    const schluessel = prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen());
+    const schluessel = fuerDenPitch(prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen()), { nurUmbau: this.nurUmbau });
     const laeufe = [];
     for (const teil of teilePruefliste(schluessel, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
     const ergebnisse = await this.team.gruppe(laeufe);
@@ -568,7 +570,7 @@ export class Planung {
   }
 
   async nachpruefung({ befunde, vorher, nachher, antworten }) {
-    const auswahl = nachpruefSchluessel({ vorher, nachher, befunde, soll: this.soll, annahmen: this.erkunderAnnahmen() });
+    const auswahl = nachpruefSchluessel({ vorher, nachher, befunde, soll: this.soll, annahmen: this.erkunderAnnahmen(), nurUmbau: this.nurUmbau });
     const runde = this.nachpruefungen.length + 1;
     const grund = "die Prüfliste der Nachprüfung blieb nach der Rücksendung unvollständig";
     const { pruefer, befunde: neue } = await this.pruefeMitFrischemPruefer(this.nachpruefNachricht(auswahl, { nachher, antworten }), auswahl.schluessel, { datei: `nachpruefung-${runde}.json`, grund });
@@ -776,16 +778,16 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false } = {}) {
     console.error(fehler);
     return EXIT_AUFRUF;
   }
-  const { soll, andererAusgang, unklar } = nummernImOrdner(ordner);
+  const nummern = nummernImOrdner(ordner);
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
-  planung.beginne(soll, andererAusgang);
+  planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
     console.error(`plane setzt nicht fort, voller Neulauf nötig:\n${punkte(abweichungen)}`);
     return EXIT_AUFRUF;
   }
-  if (unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: unklar });
+  if (nummern.unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: nummern.unklar });
   try {
     await planung.laufe();
     return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });

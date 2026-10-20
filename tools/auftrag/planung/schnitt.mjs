@@ -221,7 +221,8 @@ function dateienAusserhalb(auftrag, kontext) {
   return [...befunde, ...new Set(texte), ...ohneEigeneDatei(auftrag, stellen)];
 }
 
-function durchstichVon({ durchstich, vorhandene }) {
+function durchstichVon({ durchstich, vorhandene, nurUmbau }) {
+  if (nurUmbau) return null;
   return durchstich ?? (vorhandene === undefined ? DURCHSTICH : null);
 }
 
@@ -547,7 +548,7 @@ export async function schnittImOrdner(ordner, { schnitt, berichte, root }) {
   const vorhanden = DOKUMENTE.filter((name) => existsSync(join(ordner, name)));
   const dokumente = Object.fromEntries(vorhanden.map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
   const { soll, unklar, nurUmbau } = nummernImOrdner(ordner);
-  const ergebnis = await schnittPruefung(schnitt, { berichte, soll, dokumente, root });
+  const ergebnis = await schnittPruefung(schnitt, { berichte, soll, dokumente, root, nurUmbau });
   return { ...ergebnis, befunde: [...mitRegel(REGEL.nummern, [...unklar, ...nurUmbauBefunde(liste(schnitt?.auftraege), nurUmbau)]), ...ergebnis.befunde] };
 }
 

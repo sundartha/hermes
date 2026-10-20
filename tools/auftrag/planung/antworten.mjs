@@ -20,6 +20,7 @@ const MIT_AUFTRAG = new Set(["durchstich", "umbau", "nie-saetze", "bereichsgrund
 const B_NUMMER = /^B/;
 const WEG = "weg";
 const OHNE_AUFTRAEGE = {};
+export const DURCHSTICH_ZEILE = "durchstich:a1";
 const SCHNITT_LISTEN = ["annahmen", "ownerAufgaben", "fehlendeSzenarien", "gemeinsameNamen"];
 const GRUNDLAGE = /^Grundlage:/;
 const FEHLERFAELLE = /^Fehlerfälle:/;
@@ -103,7 +104,7 @@ export function prueflisteSoll(schnitt, soll, annahmen) {
   const nummern = [...soll.keys()];
   return [
     ...new Set([
-      "durchstich:a1",
+      DURCHSTICH_ZEILE,
       ...nummern.map((nummer) => `weg:${nummer}`),
       ...auftraege.filter(istUmbau).map(({ id }) => `umbau:${id}`),
       ...nummern.filter((nummer) => B_NUMMER.test(nummer)).map((nummer) => `b-nummer:${nummer}`),
@@ -116,8 +117,12 @@ export function prueflisteSoll(schnitt, soll, annahmen) {
   ];
 }
 
-export function planweiteSchluessel(soll) {
-  return prueflisteSoll(OHNE_AUFTRAEGE, soll, []).filter((schluessel) => schluessel.split(":")[0] !== WEG);
+export function fuerDenPitch(schluessel, { nurUmbau = false } = {}) {
+  return nurUmbau ? schluessel.filter((zeile) => zeile !== DURCHSTICH_ZEILE) : schluessel;
+}
+
+export function planweiteSchluessel(soll, { nurUmbau = false } = {}) {
+  return fuerDenPitch(prueflisteSoll(OHNE_AUFTRAEGE, soll, []), { nurUmbau }).filter((schluessel) => schluessel.split(":")[0] !== WEG);
 }
 
 function zeilenBefunde(zeile, soll, kontext) {
@@ -209,8 +214,8 @@ function nummernDerAenderung(kennungen, alt, neu) {
   return kennungen.flatMap((id) => [alt.get(id), neu.get(id)]).flatMap((auftrag) => liste(auftrag?.prueft)).map((nummer) => `${WEG}:${nummer}`);
 }
 
-export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen }) {
-  const alle = prueflisteSoll(nachher, soll, annahmen);
+export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen, nurUmbau = false }) {
+  const alle = fuerDenPitch(prueflisteSoll(nachher, soll, annahmen), { nurUmbau });
   const alt = nachKennung(vorher);
   const neu = nachKennung(nachher);
   const geaenderte = [...neu.keys()].filter((id) => alt.has(id) && auftragGeaendert(id, vorher, nachher));
@@ -219,7 +224,7 @@ export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen }
   const anders = new Set([...geaenderte, ...dazu, ...entfernt]);
   const beruehrt = liste(nachher.auftraege).filter((auftrag) => liste(auftrag?.abhaengigVon).some((abhaengig) => anders.has(abhaengig?.id))).map(({ id }) => id);
   const zupruefen = new Set([...anders, ...beruehrt]);
-  const nachAenderung = schnittGeaendert(vorher, nachher, anders) ? planweiteSchluessel(soll) : [];
+  const nachAenderung = schnittGeaendert(vorher, nachher, anders) ? planweiteSchluessel(soll, { nurUmbau }) : [];
   const zusammengelegt = zusammengelegtMit(entfernt.map((id) => alt.get(id)), liste(nachher.auftraege));
   const befundSchluessel = befunde.map(({ schluessel }) => schluessel);
   const wege = nummernDerAenderung([...zupruefen], alt, neu);

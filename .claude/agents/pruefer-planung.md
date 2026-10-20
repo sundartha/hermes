@@ -10,7 +10,7 @@ Du hast diese Schnittliste nicht geschrieben. Du prüfst sie für eine freigegeb
 
 Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsberichte, die Annahmen (darunter jeder Ausweg der Erkunder und jede als falsch erklärte Angabe), Pitch, Design Doc, Sicherheitsprüfung und die Liste der Zeilen, die deine Prüfliste haben muss. Jede Zeile hat einen `schluessel` aus Regel und Ziel:
 
-- `durchstich:a1`: `a1` führt vom echten Eingang bis zur sichtbaren Wirkung.
+- `durchstich:a1`: `a1` führt vom echten Eingang bis zur sichtbaren Wirkung. Nennt der Pitch nur Umbau und hat kein Szenario, entfällt diese Zeile.
 - `weg:<Nummer>`: Der gemeldete Weg führt wirklich vom Eingang zur Wirkung dieser Nummer, und die Stellen passen zu ihr.
 - `umbau:<id>`: Der Umbau oder Testumbau enthält kein neues Verhalten; ein `testumbau` ändert außerdem nur Testdateien, und seine `abnahme` läuft über die umgebauten Dateien.
 - `b-nummer:<B-Nummer>`: Die Nummer steht beim Auftrag, dessen Änderung sie berühren kann.

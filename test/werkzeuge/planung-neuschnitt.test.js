@@ -355,6 +355,19 @@ test("Neuschnitt: ein Umbau als Durchstich beim Neuschnitt von a1 ist ein Befund
   assert.match(lauf.ergebnis.grund, /a1-n1 ist umbau, der Durchstich ist eine funktion/);
 });
 
+const NUR_UMBAU_PITCH = ["# P-001 Umbau", "", "## Anforderungen", "", "keine neuen, weil sich nach außen nichts zeigt", "", "## Bleibt unverändert", "", "keins, weil die bestehenden Tests das Verhalten prüfen", ""].join("\n");
+const OHNE_ANGRIFFSWEGE = ["# P-001 Umbau: Sicherheitsprüfung", "", "## 2. Angriffswege", "", "keine Angriffswege gefunden", "", "## 3. Lückenprüfung", ""].join("\n");
+
+test("Neuschnitt: beim Neuschnitt von a1 in einer Phase aus einem Pitch, der nur Umbau nennt, gibt es keinen Durchstich", (context) => {
+  const dateien = { [`${ORDNER}/pitch.md`]: NUR_UMBAU_PITCH, [`${ORDNER}/sicherheit.md`]: OHNE_ANGRIFFSWEGE };
+  const aendere = (phase) => ({ ...phase, auftraege: [{ ...phase.auftraege[0], id: "a1" }] });
+  const lauf = neuschnitt(context, { umbau: {}, dateien, aendere, eingabe: { auftragId: "a1", fertig: [] }, ueberschrieben: { ...planerAntwort(umbauSchnitt({ ...UMBAU, id: "a1-n1" })), [`entwurf|## Entwurf|${HINWEIS}`]: [ENTWURF_HINWEIS] } });
+  exit(lauf, 0);
+  assert.deepEqual(lauf.phase.auftraege.map(({ id, art }) => [id, art]), [["a1-n1", "umbau"]]);
+  const zeilen = prueflisteDer(aufrufe(lauf, "pruefer-planung", "## Prüfung")[0]);
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("- durchstich:")), []);
+});
+
 test("Neuschnitt: der neue Auftrag ersetzt den alten an seiner Stelle und in fremden abhaengigVon, ein geteilter Bereich bleibt ohne Entwurf-Schreiber", (context) => {
   const lauf = neuschnitt(context);
   exit(lauf, 0);
