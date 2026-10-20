@@ -234,7 +234,7 @@ function exceptionData(root, definition) {
   return existsSync(path) ? readJson(path) : [];
 }
 
-function listedEntries(data) {
+export function listedEntries(data) {
   const entries = Array.isArray(data) ? data : data?.befunde;
   const isList = Array.isArray(entries) && entries.every((entry) => typeof entry === "string");
   return isList ? entries : undefined;
@@ -351,9 +351,13 @@ async function isOnlyWidening(definition, { roots, basis, fake, changedFiles, ch
   );
 }
 
+export function losesProbe(result) {
+  return result.proben.some(({ basis, pr }) => basis === GESTOPPT && pr !== GESTOPPT);
+}
+
 function judge(result) {
   if (result.neu) return NEU;
-  const lostProbe = result.proben.some(({ basis, pr }) => basis === GESTOPPT && pr !== GESTOPPT);
+  const lostProbe = losesProbe(result);
   const newProbe = result.proben.some(({ basis, pr }) => basis !== GESTOPPT && pr === GESTOPPT);
   const hits = trend(result.treffer.basis, result.treffer.pr);
   const counted = trend(result.ausnahmen.basis, result.ausnahmen.pr);

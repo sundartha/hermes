@@ -3,7 +3,7 @@ name: Freigabe
 on:
   pull_request:
     branches: [master]
-    types: [opened, synchronize]
+    types: [opened, synchronize, edited]
   merge_group:
     types: [checks_requested]
 
