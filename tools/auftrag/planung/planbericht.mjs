@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { BELEGE } from "../bericht.mjs";
-import { reihenfolge } from "../format.mjs";
+import { bereichSchluessel, reihenfolge } from "../format.mjs";
 import { transkriptVerzeichnis, transkripteDerSitzung } from "../kosten.mjs";
 import { istObjekt, liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { fortsetzungen, messeDatei } from "./messung.mjs";
@@ -114,7 +114,7 @@ export function schreibePlanBericht(root, bericht) {
 
 function auftragsZeile({ id, ziel, bereich, prueft, ungueltig }) {
   if (ungueltig !== undefined) return `ungültig\t${ungueltig}`;
-  return [id, ziel, bereich, Array.isArray(prueft) ? prueft.join(", ") : prueft].join("\t");
+  return [id, ziel, bereichSchluessel(bereich), Array.isArray(prueft) ? prueft.join(", ") : prueft].join("\t");
 }
 
 function auftragsZeilen(auftraege) {

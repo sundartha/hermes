@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge, zwillingDes } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, kennungBefunde, kopplungBefunde, reihenfolge } from "../format.mjs";
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
@@ -28,7 +28,6 @@ const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
 const UEBERSCHRIFT = /^#+ (.+)/;
 const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
-const WURZEL = "/";
 const GRENZE_NEUE_ZEILEN = 400;
 const PLANUNG = "planung";
 const SCHNITT = "schnitt.json";
@@ -311,14 +310,6 @@ function schemaBefunde(auftraege, kontext) {
   return mitRegel(REGEL.schema, [...ungueltig, ...ohneNutzung, ...schemaKettenBefunde(auftraege, kontext.nachId)]);
 }
 
-function engsterOrdner(dateien) {
-  const teile = dateien.map((datei) => dirname(datei).split("/").filter((teil) => teil !== "."));
-  const [erster] = teile;
-  const laenge = erster.findIndex((teil, stelle) => teile.some((andere) => andere[stelle] !== teil));
-  const gemeinsam = laenge === -1 ? erster : erster.slice(0, laenge);
-  return `${gemeinsam.join("/")}/`;
-}
-
 const PRODUKTDATEIEN = { gehoert: (datei) => !istTestdatei(datei), einzahl: "Produktdatei", mehrzahl: "Produktdateien" };
 const TESTDATEIEN = { gehoert: istTestdatei, einzahl: "Testdatei", mehrzahl: "Testdateien" };
 
@@ -329,7 +320,7 @@ function erwarteterBereich(dateien) {
 export function bereichskonflikte(berichte) {
   const jeNummer = new Map();
   for (const { nummer, datei } of aenderungsStellen(berichte)) if (PRODUKTDATEIEN.gehoert(datei)) jeNummer.set(nummer, new Set([...(jeNummer.get(nummer) ?? []), datei]));
-  return [...jeNummer].map(([nummer, dateien]) => ({ nummer, dateien: [...dateien] })).filter(({ dateien }) => erwarteterBereich(dateien) === WURZEL);
+  return [...jeNummer].map(([nummer, dateien]) => ({ nummer, dateien: [...dateien] })).filter(({ dateien }) => istWurzel(erwarteterBereich(dateien)));
 }
 
 function fremdeDateien(auftrag, art) {
@@ -338,26 +329,29 @@ function fremdeDateien(auftrag, art) {
   return fremde.map((datei) => `${auftrag.id}: ein ${TESTUMBAU} nennt in erwarteteDateien nur Testdateien, nicht ${datei}`);
 }
 
-function alsBereich(auftrag) {
-  const zwilling = zwillingDes(auftrag.bereich);
-  return (datei) => (datei === zwilling ? auftrag.bereich : datei);
+function listeDerDateien(auftrag, art, { dateien, root }) {
+  if (art === TESTDATEIEN) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];
+  const verlangt = dateien.toSorted();
+  const gleich = istBereichsliste(auftrag.bereich) && auftrag.bereich.length === verlangt.length && auftrag.bereich.toSorted().every((eintrag, stelle) => eintrag === verlangt[stelle]);
+  const eigene = gleich ? [] : [`${auftrag.id}: bereich ist ${bereichSchluessel(auftrag.bereich)}, der einzige gemeinsame Ordner der ${art.mehrzahl} ist die Repo-Wurzel; sie verlangen die Liste ${JSON.stringify(verlangt)}`];
+  return [...eigene, ...kopplungBefunde(verlangt, auftrag.bereichsgrund, root).map((befund) => `${auftrag.id}: ${befund}`)];
 }
 
-function bereichDerDateien(auftrag, art) {
-  const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)).map(alsBereich(auftrag)))];
+function bereichDerDateien(auftrag, art, root) {
+  const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)).map(alsEintrag(auftrag.bereich)))];
   if (dateien.length === 0) return [`${auftrag.id}: erwarteteDateien nennt keine ${art.einzahl}`];
   const erwartet = erwarteterBereich(dateien);
-  if (erwartet === WURZEL) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];
+  if (istWurzel(erwartet)) return listeDerDateien(auftrag, art, { dateien, root });
   const mehrere = new Set(dateien.map((datei) => dirname(datei))).size > 1;
-  const eigene = auftrag.bereich === erwartet ? [] : [`${auftrag.id}: bereich ist ${auftrag.bereich}, die ${art.mehrzahl} verlangen ${erwartet}`];
+  const eigene = auftrag.bereich === erwartet ? [] : [`${auftrag.id}: bereich ist ${bereichSchluessel(auftrag.bereich)}, die ${art.mehrzahl} verlangen ${erwartet}`];
   const grund = mehrere && !GRUND.test(auftrag.bereichsgrund ?? "") ? [`${auftrag.id}: ${art.mehrzahl} in mehreren Ordnern brauchen bereichsgrund`] : [];
   return [...eigene, ...grund];
 }
 
-function bereichBefunde(auftraege) {
+function bereichBefunde(auftraege, { root }) {
   const befunde = auftraege.flatMap((auftrag) => {
     const art = auftrag.art === TESTUMBAU ? TESTDATEIEN : PRODUKTDATEIEN;
-    return [...fremdeDateien(auftrag, art), ...bereichDerDateien(auftrag, art)];
+    return [...fremdeDateien(auftrag, art), ...bereichDerDateien(auftrag, art, root)];
   });
   return mitRegel(REGEL.bereich, befunde);
 }
@@ -464,12 +458,12 @@ function nieBefunde(auftraege, kontext) {
 }
 
 function namenBefunde(auftraege, kontext) {
-  const imSchnitt = new Set(auftraege.map(({ bereich }) => bereich));
+  const imSchnitt = (gesucht) => auftraege.some(({ bereich }) => gleicherBereich(bereich, gesucht));
   const befunde = liste(kontext.schnitt.gemeinsameNamen).flatMap((eintrag) => {
     const { name, anbieter, nutzer } = istObjekt(eintrag) ? eintrag : {};
-    if (!istText(name) || anbieter === nutzer || !imSchnitt.has(anbieter) || !imSchnitt.has(nutzer)) return [`gemeinsamer Name ${JSON.stringify(eintrag)} braucht name und zwei verschiedene Bereiche der Schnittliste (anbieter, nutzer)`];
-    const verbunden = auftraege.some((auftrag) => auftrag.bereich === nutzer && kette(auftrag, kontext.nachId).some(({ bereich }) => bereich === anbieter));
-    return verbunden ? [] : [`${name}: kein Auftrag in ${nutzer} hängt von einem Auftrag in ${anbieter} ab`];
+    if (!istText(name) || gleicherBereich(anbieter, nutzer) || !imSchnitt(anbieter) || !imSchnitt(nutzer)) return [`gemeinsamer Name ${JSON.stringify(eintrag)} braucht name und zwei verschiedene Bereiche der Schnittliste (anbieter, nutzer)`];
+    const verbunden = auftraege.some((auftrag) => gleicherBereich(auftrag.bereich, nutzer) && kette(auftrag, kontext.nachId).some(({ bereich }) => gleicherBereich(bereich, anbieter)));
+    return verbunden ? [] : [`${name}: kein Auftrag in ${bereichSchluessel(nutzer)} hängt von einem Auftrag in ${bereichSchluessel(anbieter)} ab`];
   });
   return mitRegel(REGEL.namen, befunde);
 }
@@ -488,7 +482,7 @@ function hinweise(auftraege, stellen) {
 }
 
 function annahmenDesSchnitts(auftraege, schnitt) {
-  const bereichsgruende = auftraege.filter(({ bereichsgrund }) => istText(bereichsgrund)).map(({ id, bereich, bereichsgrund }) => ({ auftrag: id, text: `bereich ${bereich}: ${bereichsgrund}` }));
+  const bereichsgruende = auftraege.filter(({ bereichsgrund }) => istText(bereichsgrund)).map(({ id, bereich, bereichsgrund }) => ({ auftrag: id, text: `bereich ${bereichSchluessel(bereich)}: ${bereichsgrund}` }));
   const falsche = auftraege.flatMap(({ id, falscheAngaben: eintraege }) => liste(eintraege).filter(istObjekt).map(({ nummer, datei, grund, fundstelle }) => ({ auftrag: id, text: `Widerspruch zur Erkundung ${nummer} ${datei}: ${grund} (${fundstelle})` })));
   const eingaenge = auftraege.filter(({ eingang }) => istText(eingang) && eingang !== ERREICHT).map(({ id, eingang }) => ({ auftrag: id, text: `eingang ${eingang}` }));
   return [...liste(schnitt.annahmen), ...bereichsgruende, ...eingaenge, ...falsche];
@@ -521,7 +515,7 @@ export function schnittBefunde(schnitt, eingaben) {
     ...altfunktionBefunde(auftraege, kontext),
     ...umbauTestBefunde(auftraege, kontext),
     ...schemaBefunde(auftraege, kontext),
-    ...bereichBefunde(auftraege),
+    ...bereichBefunde(auftraege, kontext),
     ...aenderungsBefunde(auftraege, kontext),
     ...codeownersBefunde(auftraege, kontext),
     ...abnahmeBefunde(auftraege, kontext),

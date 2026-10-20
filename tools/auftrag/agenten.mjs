@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { REPO_WURZEL, vorhandenerPfad } from "../zwillingspfad.mjs";
 import { funktionenIn } from "../ziele/funktionen.mjs";
 import { ANNAHMEN, annahmenAus } from "./annahmen.mjs";
-import { ABSICHT, TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
+import { ABSICHT, TESTUMBAU, bereichSchluessel, bereichsEintraege, funktionskartenPfade, istTestdatei } from "./format.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
@@ -57,8 +57,12 @@ function gatePfade() {
 
 const KRITISCHE_PFADE = [...new Set([...gatePfade(), ...KRITISCH_OHNE_GATE_TEST])];
 
+function istKritischerEintrag(eintrag) {
+  return KRITISCHE_PFADE.some((pfad) => eintrag.startsWith(pfad) || pfad.startsWith(eintrag));
+}
+
 export function istKritisch(bereich) {
-  return KRITISCHE_PFADE.some((pfad) => bereich.startsWith(pfad) || pfad.startsWith(bereich));
+  return bereichsEintraege(bereich).some(istKritischerEintrag);
 }
 
 export function agentFuer(rolle, bereich) {
@@ -83,7 +87,8 @@ function absichtAbschnitt(phase) {
 }
 
 function entwurfAbschnitt(phase, auftrag) {
-  return abschnitt(`Entwurf für ${auftrag.bereich}`, phase.entwurf[auftrag.bereich]);
+  const schluessel = bereichSchluessel(auftrag.bereich);
+  return abschnitt(`Entwurf für ${schluessel}`, phase.entwurf[schluessel]);
 }
 
 export function auftragsBlock(phase, auftrag) {
@@ -181,8 +186,8 @@ export function bauPrompt({ phase, auftrag, root, design }, testausgabe) {
     ...auftragsBlock(phase, auftrag),
     ...annahmenAbschnitt(root, design),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
-    musterAbschnitt(root, auftrag.bereich, musterFuer),
-    dateiAbschnitt("Funktionskarte", root, funktionskartePfad(auftrag.bereich)),
+    ...new Set(bereichsEintraege(auftrag.bereich).map((eintrag) => musterAbschnitt(root, eintrag, musterFuer))),
+    ...funktionskartenPfade(auftrag.bereich).map((pfad) => dateiAbschnitt("Funktionskarte", root, pfad)),
     ...nutzenAbschnitt(root, auftrag),
   ].join("\n");
 }

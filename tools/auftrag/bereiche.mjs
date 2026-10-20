@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { cruise } from "dependency-cruiser";
 
-import { imBereich } from "./format.mjs";
+import { bereichsEintraege, imBereich } from "./format.mjs";
 
 export const GEMEINSAME_ORDNER = ["src/store/", "src/utils/"];
 const DIREKTE_IMPORTE = { doNotFollow: { path: "node_modules" }, maxDepth: 1, moduleSystems: ["es6", "cjs"] };
@@ -32,7 +32,7 @@ function ohneUmschlossene(liste) {
 }
 
 export async function sperrSchluessel(root, phase) {
-  const bereiche = [...new Set(phase.auftraege.map(({ bereich }) => bereich))];
+  const bereiche = [...new Set(phase.auftraege.flatMap(({ bereich }) => bereichsEintraege(bereich)))];
   const gebaut = bereiche.map((bereich) => schluessel(gemeinsamerOrdner(bereich) ?? bereich));
   const gelesen = await importierteOrdner(root, bereiche);
   const leser = gelesen.map((ordner) => `${schluessel(ordner)}/${phase.phase}`);

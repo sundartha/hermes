@@ -25,6 +25,11 @@ const VERANKERT = "/";
 const LEERRAUM = /\s+/;
 const PHASE_AUS_PITCH = /^P-/i;
 const NUMMER = /^[SBT][1-9]\d*$/;
+const WURZEL = "/";
+const LISTEN_VERBINDER = " + ";
+const MIN_LISTE = 2;
+const TESTPFAD = /(?<![\w./-])test\/[\w./-]+?\.test\.[cm]?js(?![\w.])/g;
+const PFADZEICHEN = /^[\w.-]$/;
 
 export function ladePhase(pfad) {
   return JSON.parse(readFileSync(pfad, "utf8"));
@@ -58,8 +63,36 @@ export function istTestbereich(bereich) {
   return typeof bereich === "string" && istTestdatei(bereich);
 }
 
-export function imBereich(bereich, pfad) {
+export function istBereichsliste(bereich) {
+  return Array.isArray(bereich);
+}
+
+function istDateieintrag(eintrag) {
+  return typeof eintrag === "string" && !eintrag.endsWith("/");
+}
+
+export function bereichsEintraege(bereich) {
+  return istBereichsliste(bereich) ? bereich.filter((eintrag) => typeof eintrag === "string") : [bereich];
+}
+
+function bereichsEinheiten(bereich) {
+  return istBereichsliste(bereich) ? bereich.filter(istDateieintrag) : [bereich];
+}
+
+export function bereichSchluessel(bereich) {
+  return istBereichsliste(bereich) ? bereich.map(String).toSorted().join(LISTEN_VERBINDER) : bereich;
+}
+
+export function gleicherBereich(bereich, anderer) {
+  return istBereichsliste(bereich) === istBereichsliste(anderer) && bereichSchluessel(bereich) === bereichSchluessel(anderer);
+}
+
+function imEinzelbereich(bereich, pfad) {
   return bereich.endsWith("/") ? pfad.startsWith(bereich) : pfad === bereich;
+}
+
+export function imBereich(bereich, pfad) {
+  return bereichsEinheiten(bereich).some((eintrag) => imEinzelbereich(eintrag, pfad));
 }
 
 function bereichsVerzeichnis(bereich) {
@@ -70,11 +103,16 @@ export function zwillingDes(bereich) {
   return typeof bereich === "string" && JS_DATEI.test(bereich) ? bereich.replace(JS_DATEI, TS_ENDUNG) : undefined;
 }
 
-function imBereichOderZwilling(bereich, pfad) {
-  return imBereich(bereich, pfad) || pfad === zwillingDes(bereich);
+export function alsEintrag(bereich) {
+  const eintraege = bereichsEintraege(bereich);
+  return (pfad) => eintraege.find((eintrag) => zwillingDes(eintrag) === pfad) ?? pfad;
 }
 
-export function gehoertZumBereich(bereich, pfad) {
+function imBereichOderZwilling(bereich, pfad) {
+  return imEinzelbereich(bereich, pfad) || pfad === zwillingDes(bereich);
+}
+
+function gehoertZumEinzelbereich(bereich, pfad) {
   if (imBereichOderZwilling(bereich, pfad)) return true;
   if (pfad === `${bereichsVerzeichnis(bereich)}${FUNKTIONSKARTE}`) return true;
   if (!pfad.endsWith(TYPDATEI_ENDUNG)) return false;
@@ -83,8 +121,24 @@ export function gehoertZumBereich(bereich, pfad) {
     : pfad === bereich.replace(JS_ENDUNG, TYPDATEI_ENDUNG);
 }
 
-export function funktionskartePfad(bereich) {
-  return `${bereichsVerzeichnis(bereich)}${FUNKTIONSKARTE}`;
+export function gehoertZumBereich(bereich, pfad) {
+  return bereichsEinheiten(bereich).some((eintrag) => gehoertZumEinzelbereich(eintrag, pfad));
+}
+
+export function funktionskartenPfade(bereich) {
+  return [...new Set(bereichsEintraege(bereich).map((eintrag) => `${bereichsVerzeichnis(eintrag)}${FUNKTIONSKARTE}`))];
+}
+
+export function engsterOrdner(dateien) {
+  const teile = dateien.map((datei) => dirname(datei).split("/").filter((teil) => teil !== "."));
+  const [erster] = teile;
+  const laenge = erster.findIndex((teil, stelle) => teile.some((andere) => andere[stelle] !== teil));
+  const gemeinsam = laenge === -1 ? erster : erster.slice(0, laenge);
+  return `${gemeinsam.join("/")}/`;
+}
+
+export function istWurzel(ordner) {
+  return ordner === WURZEL;
 }
 
 export function geschuetzteMuster(root) {
@@ -134,26 +188,74 @@ function testbereichBefunde(auftrag) {
   const erwartet = Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : [];
   const produkt = erwartet.filter((pfad) => !istTestdatei(pfad));
   return [
-    ...(nurTests ? [] : [`ein ${TESTUMBAU} braucht einen bereich, der nur Tests umfasst, nicht ${auftrag.bereich}`]),
+    ...(nurTests ? [] : [`ein ${TESTUMBAU} braucht einen bereich, der nur Tests umfasst, nicht ${bereichSchluessel(auftrag.bereich)}`]),
     ...produkt.map((pfad) => `ein ${TESTUMBAU} ändert keinen Produktcode; erwartete Datei ${pfad} ist keine Testdatei`),
   ];
 }
 
-function bereichBefunde(auftrag, kontext) {
-  if (!pfadIstSauber(auftrag.bereich)) return ["bereich muss ein relativer Pfad im Repo sein"];
-  const befunde = [];
-  if (istGeschuetzt(kontext.muster, auftrag.bereich)) {
-    befunde.push(`bereich ${auftrag.bereich} ist geschützt (${CODEOWNERS})`);
+function nennt(text, name) {
+  for (let stelle = text.indexOf(name); stelle !== -1; stelle = text.indexOf(name, stelle + 1)) {
+    const [davor, danach] = [text[stelle - 1] ?? "", text[stelle + name.length] ?? ""];
+    if (!PFADZEICHEN.test(davor) && !PFADZEICHEN.test(danach)) return true;
   }
-  if (textFehlt(kontext.entwurf?.[auftrag.bereich])) {
-    befunde.push(`der Phase fehlt der Entwurfsabschnitt entwurf["${auftrag.bereich}"]`);
+  return false;
+}
+
+function koppelndeTests(dateien, grund, root) {
+  const genannt = [...new Set(String(grund).match(TESTPFAD) ?? [])].filter((pfad) => pfadIstSauber(pfad) && existsSync(join(root, pfad)));
+  return genannt.filter((pfad) => {
+    const text = readFileSync(join(root, pfad), "utf8");
+    const namen = dateien.map((datei) => basename(datei));
+    const eindeutig = (datei) => namen.filter((name) => name === basename(datei)).length === 1;
+    return dateien.filter((datei) => nennt(text, datei) || (eindeutig(datei) && nennt(text, basename(datei)))).length >= MIN_LISTE;
+  });
+}
+
+export function kopplungBefunde(dateien, grund, root) {
+  if (textFehlt(grund)) return ["eine Liste als bereich braucht bereichsgrund mit dem Test test/….test.js, der ihre Dateien koppelt"];
+  if (koppelndeTests(dateien, grund, root).length > 0) return [];
+  return [`bereichsgrund nennt keinen bestehenden Test test/….test.js, der mindestens ${MIN_LISTE} Dateien der Liste nennt`];
+}
+
+function listenFormBefunde(liste) {
+  const ungueltig = liste.filter((eintrag) => !istDateieintrag(eintrag) || !pfadIstSauber(eintrag));
+  if (ungueltig.length > 0) return ungueltig.map((eintrag) => `Listeneintrag ${JSON.stringify(eintrag)} ist kein Dateipfad im Repo`);
+  const doppelt = liste.filter((eintrag, stelle) => liste.indexOf(eintrag) !== stelle);
+  if (doppelt.length > 0) return doppelt.map((eintrag) => `bereich nennt ${eintrag} doppelt`);
+  if (liste.length < MIN_LISTE) return [`eine Liste als bereich hat mindestens ${MIN_LISTE} Dateien`];
+  const ordner = engsterOrdner(liste);
+  return istWurzel(ordner) ? [] : [`die Dateien der Liste liegen gemeinsam in ${ordner}; nimm diesen Ordner als bereich`];
+}
+
+function listenBefunde(auftrag, root) {
+  const form = listenFormBefunde(auftrag.bereich);
+  return form.length > 0 ? form : kopplungBefunde(auftrag.bereich, auftrag.bereichsgrund, root);
+}
+
+function erwartetImBereich(bereich, pfad) {
+  return istBereichsliste(bereich) ? bereich.includes(alsEintrag(bereich)(pfad)) : imBereichOderZwilling(bereich, pfad);
+}
+
+function fehlendeEintraege(auftrag, erwartet) {
+  if (!istBereichsliste(auftrag.bereich)) return [];
+  const produkt = erwartet.filter((pfad) => !istTestdatei(pfad)).map(alsEintrag(auftrag.bereich));
+  return auftrag.bereich.filter((eintrag) => !produkt.includes(eintrag)).map((eintrag) => `Listeneintrag ${eintrag} fehlt unter den Produktdateien in erwarteteDateien`);
+}
+
+function bereichBefunde(auftrag, kontext) {
+  const liste = istBereichsliste(auftrag.bereich);
+  if (!liste && !pfadIstSauber(auftrag.bereich)) return ["bereich muss ein relativer Pfad im Repo sein"];
+  const schluessel = bereichSchluessel(auftrag.bereich);
+  const befunde = liste ? listenBefunde(auftrag, kontext.root) : [];
+  const geschuetzt = bereichsEintraege(auftrag.bereich).filter((eintrag) => istGeschuetzt(kontext.muster, eintrag));
+  befunde.push(...geschuetzt.map((eintrag) => `bereich ${eintrag} ist geschützt (${CODEOWNERS})`));
+  if (textFehlt(kontext.entwurf?.[schluessel])) {
+    befunde.push(`der Phase fehlt der Entwurfsabschnitt entwurf["${schluessel}"]`);
   }
   const erwartet = Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : null;
   if (erwartet === null) return [...befunde, "erwarteteDateien muss eine Liste sein"];
-  const fremd = erwartet.filter(
-    (pfad) => !pfadIstSauber(pfad) || !(imBereichOderZwilling(auftrag.bereich, pfad) || istTestdatei(pfad)),
-  );
-  return [...befunde, ...fremd.map((pfad) => `erwartete Datei ${pfad} liegt nicht im Bereich`)];
+  const fremd = erwartet.filter((pfad) => !pfadIstSauber(pfad) || !(erwartetImBereich(auftrag.bereich, pfad) || istTestdatei(pfad)));
+  return [...befunde, ...fremd.map((pfad) => `erwartete Datei ${pfad} liegt nicht im Bereich`), ...fehlendeEintraege(auftrag, erwartet)];
 }
 
 function abnahmeBefunde(auftrag, kontext) {

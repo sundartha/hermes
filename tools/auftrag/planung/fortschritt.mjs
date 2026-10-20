@@ -1,3 +1,4 @@
+import { bereichSchluessel } from "../format.mjs";
 import { liste } from "./erkundung.mjs";
 
 export const RUECKSENDUNGEN = 3;
@@ -32,7 +33,7 @@ function vorlageDes(text) {
 function inhaltDes(auftrag) {
   const nummern = liste(auftrag.prueft).toSorted();
   if (nummern.length > 0) return `Auftrag[${nummern.join(NUMMERN_TRENNER)}]`;
-  return `Auftrag[${auftrag.art}:${auftrag.bereich}:${auftrag.id}]`;
+  return `Auftrag[${auftrag.art}:${bereichSchluessel(auftrag.bereich)}:${auftrag.id}]`;
 }
 
 export function befundSchluessel(befund, schnitt, soll) {

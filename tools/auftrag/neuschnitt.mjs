@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
-import { brauchtRotenTest, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
+import { bereichSchluessel, brauchtRotenTest, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -133,7 +133,7 @@ function vorgaengerBefunde(vorher, neue) {
 }
 
 function entwurfBefunde(alt, neu, kennung) {
-  const bereiche = new Set(alt.auftraege.filter(({ id }) => id !== kennung).map(({ bereich }) => bereich));
+  const bereiche = new Set(alt.auftraege.filter(({ id }) => id !== kennung).map(({ bereich }) => bereichSchluessel(bereich)));
   return [...bereiche]
     .filter((bereich) => !isDeepStrictEqual(alt.entwurf?.[bereich], neu.entwurf?.[bereich]))
     .map((bereich) => `Der Entwurf für ${bereich} gehört auch anderen Aufträgen und bleibt, wie er ist.`);

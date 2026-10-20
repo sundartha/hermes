@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { istUmbau, phasenBefunde } from "../format.mjs";
+import { bereichSchluessel, istUmbau, phasenBefunde } from "../format.mjs";
 import { saetze } from "../neuschnitt.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
@@ -227,8 +227,8 @@ class NeuschnittPlanung extends Planung {
   }
 
   eigeneBereiche() {
-    const fremde = new Set(this.vorhandene.map(({ bereich }) => bereich));
-    const bereiche = new Set(this.schnitt.auftraege.map(({ bereich }) => bereich));
+    const fremde = new Set(this.vorhandene.map(({ bereich }) => bereichSchluessel(bereich)));
+    const bereiche = new Set(this.schnitt.auftraege.map(({ bereich }) => bereichSchluessel(bereich)));
     return [...bereiche].filter((bereich) => !fremde.has(bereich));
   }
 
@@ -243,7 +243,7 @@ class NeuschnittPlanung extends Planung {
     const ergebnisse = await this.team.gruppe(bereiche.map((bereich) => this.entwurfLauf(bereich)));
     const offen = bereiche.flatMap((bereich, stelle) => ergebnisse[stelle].befunde.map((befund) => `Entwurf ${bereich}: ${befund}`));
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, ENTWURF_OFFEN, offen);
-    const eigene = (bereich) => this.schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich);
+    const eigene = (bereich) => this.schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich);
     return Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, entwurfFuer(ergebnisse[stelle].entwurf, eigene(bereich))]));
   }
 
