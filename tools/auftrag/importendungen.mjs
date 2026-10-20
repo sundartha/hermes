@@ -9,6 +9,7 @@ import { alleKnoten } from "../eslint-rules/knoten.js";
 import { einstellungenFuer, gelesen } from "../syntaxbaum.mjs";
 import { INDEX, javascriptPfad, laufzeitBaum, nurQuellenNachgezogen, quellenAngeglichen, umbenennungen, umschreibbareQuelle } from "../umbenennung.mjs";
 
+import { listenNachUmzug } from "./bestandslisten.mjs";
 import { NUL, aenderungenSeit, git, vormerken } from "./git.mjs";
 
 const QUELLDATEI = /\.[cm]?[jt]s$/;
@@ -20,6 +21,7 @@ const GRUND = {
   symlink: "der .ts-Zwilling ist ein Symlink",
   verweis: "nennt die alte Datei noch außerhalb eines umschreibbaren Imports",
   unlesbar: "lässt sich nicht lesen, ein Verweis auf die alte Datei ist nicht auszuschließen",
+  liste: "nennt die alte Datei in einem Eintrag, den der Listenumzug nicht umschreibt",
 };
 
 function nurTypenPaare(paare) {
@@ -106,14 +108,22 @@ function lesbarerText(root, datei) {
   return inhalt.includes(BINAER) ? undefined : inhalt.toString("utf8");
 }
 
+function umzugsVorschau(root, offen) {
+  const listen = listenNachUmzug(root, new Map([...offen.values()].map(({ alt, neu }) => [alt, neu])));
+  return new Map(listen.map((liste) => [liste.pfad, liste]));
+}
+
 async function verweisePruefen(paare, { root, eslint, ohneUmschreibbare }) {
   const offen = new Map(nurTypenPaare(paare).map((paar) => [paar.alt, paar]));
+  const vorschau = umzugsVorschau(root, offen);
   for (const datei of repoDateien(root).filter((pfad) => pfad !== "" && !DOKUMENT.test(pfad))) {
-    const text = offen.size === 0 ? undefined : lesbarerText(root, datei);
+    const liste = vorschau.get(datei);
+    const text = offen.size === 0 ? undefined : (liste?.neu ?? lesbarerText(root, datei));
     if (text === undefined) continue;
     const { genannt, grund } = await genannteAlte({ datei, text, alte: [...offen.keys()] }, { eslint, ohneUmschreibbare });
+    const warum = liste === undefined ? grund : [GRUND.liste, ...liste.meldungen].join(": ");
     for (const alt of genannt) {
-      Object.assign(offen.get(alt), { nurTypen: false, grund: `${datei} ${grund}` });
+      Object.assign(offen.get(alt), { nurTypen: false, grund: `${datei} ${warum}` });
       offen.delete(alt);
     }
   }

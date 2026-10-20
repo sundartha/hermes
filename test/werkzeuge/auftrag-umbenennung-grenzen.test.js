@@ -285,8 +285,8 @@ test("auftrag-umbenennung-grenzen: nennt knip.json die alte Datei als Einstieg, 
 });
 
 test("auftrag-umbenennung-grenzen: steht die alte Datei als Schlüssel in einer JSON-Datei, ist das Paar geändert", (context) => {
-  const unterdrueckungen = JSON.stringify({ "src/zahl.js": { "no-console": { count: 1 } } });
-  bleibtGeaendert(mitVerweis(context, { "eslint-suppressions.json": unterdrueckungen }), abgelehntHinweis("eslint-suppressions.json"));
+  const zuordnung = JSON.stringify({ "src/zahl.js": { "no-console": { count: 1 } } });
+  bleibtGeaendert(mitVerweis(context, { "tools/zuordnung.json": zuordnung }), abgelehntHinweis("tools/zuordnung.json"));
 });
 
 test("auftrag-umbenennung-grenzen: nennt eine JSON-Datei die alte Datei relativ zu sich, ist das Paar geändert", (context) => {

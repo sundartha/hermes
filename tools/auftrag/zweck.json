@@ -69,6 +69,13 @@
     "nichtAngenommen": "Importe in Tests oder in Dateien außerhalb des Bereichs selbst umschreiben, oder Typen und Laufzeitänderung in einer Umbenennung mischen, damit beides zusammen durchläuft.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
   },
+  "listenumzug": {
+    "liste": "ohne Nummer",
+    "wozu": "Benennt der Bau-Agent eine Datei von .js nach .ts um und ergänzt nur Typen, schreibt das Skript die Einträge der alten Datei in den Bestandslisten (ESLint-Unterdrückungen und Altausnahmen, bekannte Abhängigkeitsverstöße, Testimporte, knip, Semgrep, Gate-Tests) auf die neue Datei um. Es kommt kein Eintrag dazu, und einen Semgrep-Eintrag zieht es nur um, wenn semgrep für die neue Datei denselben Befund meldet. Ein Listeneintrag zählt für die nur-Typen-Prüfung nur dann nicht als Verweis auf die alte Datei, wenn dieser Schritt genau ihn umschreibt; bleibt er, zählt das Paar nicht als nur Typen. Bricht der Schritt ab, nennen die Listen noch die alte Datei, und Lint, Feste Pfade und die Statische Prüfung melden das.",
+    "behebung": "Die Ausgabe des Schritts lesen und die Ursache beheben, etwa eine Liste, deren Einträge sich im Text nicht eindeutig ersetzen ließen, oder semgrep, das nicht lief.",
+    "nichtAngenommen": "Einträge einer Bestandsliste selbst umschreiben, ergänzen oder löschen, oder eine Umbenennung mit Laufzeitänderung so aufteilen, dass ihre Einträge mitwandern.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
   "geänderte fälle": {
     "liste": "ohne Nummer",
     "wozu": "Der Test-Agent ändert einen bestehenden Test nur als Verhaltensschritt: Jeder geänderte Fall ist gegen den unveränderten Produktcode rot, jeder unveränderte bleibt grün. Ein Fall, der grün bleibt, ist ein Umbau, und den prüft in dieser Rolle niemand.",
