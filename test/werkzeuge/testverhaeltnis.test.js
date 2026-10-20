@@ -56,6 +56,19 @@ test("nur JavaScript-Dateien in test/ und src/ zählen, Daten und andere Ordner 
   assert.match(result.stdout, /\(4 Testzeilen zu 2 Produktzeilen\)/);
 });
 
+test("nach .ts, .mts oder .cts umbenannte Dateien zählen wie .js-Dateien, Deklarationsdateien zählen nicht", (context) => {
+  const result = checkRatio(context, {
+    "src/umbenannt.ts": PRODUCT_WITH_TWO_CODE_LINES,
+    "src/modul.mts": PRODUCT_WITH_TWO_CODE_LINES,
+    "src/skript.cts": PRODUCT_WITH_TWO_CODE_LINES,
+    "src/umbenannt.d.ts": "export declare const a: number;\nexport declare const b: number;\n",
+    "src/modul.d.mts": "export declare const c: number;\n",
+    "src/skript.d.cts": "export declare const d: number;\n",
+  });
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  assert.match(result.stdout, /Testverhältnis 0\.50 \(4 Testzeilen zu 8 Produktzeilen\)/);
+});
+
 test("Tests unter test/werkzeuge/ zählen gegen tools/ und scripts/, nicht gegen src/", (context) => {
   const result = checkRatio(context, {
     "test/werkzeuge/pruefung.test.js": "const c = 3;\nconst d = 4;\n",
