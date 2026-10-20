@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chdir, cwd } from "node:process";
 import { test } from "node:test";
 
+import { dynamischeZiele } from "../../tools/tests-ausmisten/importe.mjs";
 import { planeTotcode } from "../../tools/tests-ausmisten/totcode-menge.mjs";
 import { removedCases } from "../../tools/testschutz/entfernt.mjs";
 import {
@@ -593,6 +594,7 @@ test("ausmisten-totcode-menge: ein dynamischer Import ohne festes, vorhandenes Z
   const oben = "test/post/oben.test.js";
   const leerzeichen = "test/post/leerzeichen.test.js";
   const vorlage = "test/post/vorlage.test.js";
+  const endung = "test/post/endung.test.js";
   const kopfteil = 'import assert from "node:assert/strict";\n';
   const repo = totesRepo(context, {
     [fest]: `${kopfteil}const modul = await import("../../src/post/eingang.js");\nassert.ok(modul);\n`,
@@ -601,15 +603,40 @@ test("ausmisten-totcode-menge: ein dynamischer Import ohne festes, vorhandenes Z
     [oben]: `${kopfteil}const modul = await import("../../../aussen.js");\nassert.ok(modul);\n`,
     [leerzeichen]: `${kopfteil}const ZIEL = "../../src/post/eingang.js";\nconst modul = await import (ZIEL);\nassert.ok(modul);\n`,
     [vorlage]: `${kopfteil}const modul = await import(\`../../src/post/eingang.js\`);\nassert.ok(modul);\n`,
+    [endung]: `${kopfteil}import { eingang } from "../../src/post/eingang.js";\nconst modul = await import("../../src/post/typ.js");\nassert.ok(modul && eingang);\n`,
+    "src/post/typ.ts": "export const typ: number = 1;\n",
   });
-  const kopf = repo.committe(OHNE_ALTES, [fest, berechnet, fehlt, oben, leerzeichen, vorlage]);
+  const kopf = repo.committe(OHNE_ALTES, [
+    fest,
+    berechnet,
+    fehlt,
+    oben,
+    leerzeichen,
+    vorlage,
+    endung,
+  ]);
 
-  const plan = await plane(repo, kopf, [fest, berechnet, fehlt, oben, leerzeichen, vorlage]);
+  const plan = await plane(repo, kopf, [
+    fest,
+    berechnet,
+    fehlt,
+    oben,
+    leerzeichen,
+    vorlage,
+    endung,
+  ]);
 
   erwarteRot(plan, berechnet, "dynamischer Import ohne sicher auflösbares Ziel");
   erwarteRot(plan, fehlt, "dynamischer Import ohne sicher auflösbares Ziel");
   erwarteRot(plan, oben, "dynamischer Import ohne sicher auflösbares Ziel");
   erwarteRot(plan, leerzeichen, "dynamischer Import ohne sicher auflösbares Ziel");
-  const festeGruende = plan.verstoesse.filter(({ datei }) => [fest, vorlage].includes(datei));
+  const festeGruende = plan.verstoesse.filter(({ datei }) =>
+    [fest, vorlage, endung].includes(datei),
+  );
   assert.deepEqual(festeGruende, []);
+  zurueck(repo);
+  assert.deepEqual(
+    imRepo(repo, () => dynamischeZiele(endung)),
+    ["src/post/typ.ts"],
+  );
 });
