@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { symlinkSync } from "node:fs";
+import { readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { MIT_PIN_PRUEFUNG } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { BASE_FILES, MANIFEST_BOTH, RENAMED_FILES } from "./feste-pfade-probe.js";
 import { REPO_ROOT, runIn } from "./probe-repo.js";
@@ -74,4 +75,16 @@ test("auftrag-lauf-umbenennung: meldet der Bau-Agent nach dem Umbenennen einen a
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.deepEqual([beleg.alterTest?.datei, beleg.alterTest?.rot], ["test/gross.test.js", false], JSON.stringify(beleg.pruefungen));
   assert.match(beleg.alterTest.diff, /^\+import \{ gross \} from "\.\.\/src\/text\.ts";$/m);
+});
+
+const FUELLFUNKTIONEN = ["eins", "zwei", "drei", "vier", "fuenf", "sechs"];
+const QUELLE_MIT_ERKANNTER_UMBENENNUNG = `export function gross(text) {\n  return text.toUpperCase();\n}\n${FUELLFUNKTIONEN.map((name) => `export function ${name}() {\n  return "${name}";\n}\n`).join("")}`;
+const MIT_PIN = { "src/text.js": QUELLE_MIT_ERKANNTER_UMBENENNUNG, "scripts/check-staged-suppressions.js": MIT_PIN_PRUEFUNG["scripts/check-staged-suppressions.js"], ".gitignore": `${BASIS[".gitignore"]}node_modules\npin-aufrufe.txt\n` };
+
+test("auftrag-lauf-umbenennung: die Pin-Prüfung bekommt eine per git mv umbenannte Datei und hält ihre neue Unterdrückung auf", (context) => {
+  const drehbuch = { "bau-umbenennen": [["src/text.js", "src/text.ts"]], bau: { "src/text.ts": `declare const _: number;\n${QUELLE_MIT_ERKANNTER_UMBENENNUNG}` } };
+  const { repo, lauf, basis, kopf } = umbenannt(context, drehbuch, MIT_PIN);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(kopf, basis);
+  assert.ok(readFileSync(join(repo, "pin-aufrufe.txt"), "utf8").includes('"src/text.ts"'));
 });
