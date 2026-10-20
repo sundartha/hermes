@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge, zwillingDes } from "../format.mjs";
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
@@ -338,8 +338,13 @@ function fremdeDateien(auftrag, art) {
   return fremde.map((datei) => `${auftrag.id}: ein ${TESTUMBAU} nennt in erwarteteDateien nur Testdateien, nicht ${datei}`);
 }
 
+function alsBereich(auftrag) {
+  const zwilling = zwillingDes(auftrag.bereich);
+  return (datei) => (datei === zwilling ? auftrag.bereich : datei);
+}
+
 function bereichDerDateien(auftrag, art) {
-  const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)))];
+  const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)).map(alsBereich(auftrag)))];
   if (dateien.length === 0) return [`${auftrag.id}: erwarteteDateien nennt keine ${art.einzahl}`];
   const erwartet = erwarteterBereich(dateien);
   if (erwartet === WURZEL) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];

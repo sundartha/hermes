@@ -66,8 +66,12 @@ function bereichsVerzeichnis(bereich) {
   return bereich.endsWith("/") ? bereich : `${dirname(bereich)}/`;
 }
 
+export function zwillingDes(bereich) {
+  return typeof bereich === "string" && JS_DATEI.test(bereich) ? bereich.replace(JS_DATEI, TS_ENDUNG) : undefined;
+}
+
 function imBereichOderZwilling(bereich, pfad) {
-  return imBereich(bereich, pfad) || (JS_DATEI.test(bereich) && pfad === bereich.replace(JS_DATEI, TS_ENDUNG));
+  return imBereich(bereich, pfad) || pfad === zwillingDes(bereich);
 }
 
 export function gehoertZumBereich(bereich, pfad) {
