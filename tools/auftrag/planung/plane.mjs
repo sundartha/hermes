@@ -26,7 +26,7 @@ import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
-import { DOKUMENTE, schnittImOrdner } from "./schnitt.mjs";
+import { DOKUMENTE, bereichskonflikte, schnittImOrdner } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
@@ -53,6 +53,7 @@ const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
+const KONFLIKTE = "Bereichskonflikte";
 
 export class Ende extends Error {
   constructor(exit, grund, befunde = []) {
@@ -113,6 +114,18 @@ function nachfrageAntwort({ frage, nummern }, { bericht, befunde }, stelle) {
   return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
 }
 
+function konfliktAusweg(nummern) {
+  return `frag nur zu ${nummern} nach, schick eine Schnittliste, die ${nummern} auf mehrere Aufträge mit erlaubtem bereich verteilt, oder antworte mit „Zerlegung passt nicht: …“`;
+}
+
+function konfliktTeil(konflikte) {
+  if (konflikte.length === 0) return [];
+  const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
+  const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
+  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist.`;
+  return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
+}
+
 export function nummernText(soll, nummern) {
   return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
 }
@@ -135,6 +148,7 @@ export class Planung {
     this.wegpruefungen = [];
     this.wegZaehler = new Map();
     this.wegOffen = [];
+    this.konfliktSchleife = null;
   }
 
   beginne(soll, andererAusgang) {
@@ -370,6 +384,7 @@ export class Planung {
   async lagebild() {
     const { funktionsliste, dateikarte } = await this.karten();
     return [
+      ...konfliktTeil(bereichskonflikte(this.sauberBerichte())),
       abschnitt("Annahmen der Erkunder", punkte(this.erkunderAnnahmen().map(annahmeText))),
       abschnitt("Offene Punkte", punkte(this.offenePunkte())),
       abschnitt("Funktionsliste", json(funktionsliste)),
@@ -392,6 +407,20 @@ export class Planung {
       if (!istText(eintrag?.frage) || nummern.length === 0) return [`Nachfrage ${stelle + 1}: braucht nummern und frage`];
       return nummern.filter((nummer) => !this.soll.has(nummer)).map((nummer) => `Nachfrage ${stelle + 1}: ${nummer} ist keine Nummer der Liste`);
     });
+  }
+
+  konfliktBefunde(nachfragen) {
+    const offen = bereichskonflikte(this.sauberBerichte()).map(({ nummer }) => nummer);
+    if (offen.length === 0) return [];
+    const nummern = offen.join(", ");
+    return nachfragen.flatMap((eintrag, stelle) => (eintrag.nummern.every((nummer) => offen.includes(nummer)) ? [] : [`Nachfrage ${stelle + 1}: Bereichskonflikt ${nummern} ist offen; ${konfliktAusweg(nummern)}`]));
+  }
+
+  sperreNachfragen(befunde) {
+    this.konfliktSchleife ??= this.schleife("bereichskonflikt");
+    const ende = this.konfliktSchleife.endeNachRunde(befunde, null, this.soll);
+    if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, befunde);
+    return { weiter: this.team.ruecksenden(this.planer, befunde) };
   }
 
   ersetze(bericht, nummern) {
@@ -418,6 +447,8 @@ export class Planung {
   async nachfragen(nachfragen) {
     const befunde = this.nachfrageBefunde(nachfragen);
     if (befunde.length > 0) return { befunde };
+    const gesperrt = this.konfliktBefunde(nachfragen);
+    if (gesperrt.length > 0) return this.sperreNachfragen(gesperrt);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) {
       const nummern = [...new Set(nachfragen.flatMap((eintrag) => eintrag.nummern))];
