@@ -69,8 +69,11 @@ jobs:
             exit 1
           fi
           echo "gitleaks $GITLEAKS_VERSION scannt $range"
+          ohne_ausnahmen="$(mktemp -d "$RUNNER_TEMP/gitleaks-ohne-ausnahmen.XXXXXX")"
+          git_verzeichnis="$(git rev-parse --absolute-git-dir)"
           "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner \
-            --exit-code 1 --log-opts="$range" .
+            --exit-code 1 --ignore-gitleaks-allow --gitleaks-ignore-path "$ohne_ausnahmen" \
+            --log-opts="$range" "$git_verzeichnis"
 
       - name: npm ci
         id: installation
