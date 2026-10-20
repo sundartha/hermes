@@ -9,7 +9,9 @@ import { AUFTRAG, EXIT_BEFUNDE, EXIT_GRUEN, planeAntworten, planungsBericht } fr
 
 const PRODUKT = "src/a.js";
 const SKRIPT = "scripts/b.sh";
-const QUELLEN = { [PRODUKT]: "export function richteEin(wert) {\n  return wert;\n}\n", [SKRIPT]: "#!/bin/sh\necho start\n" };
+const KOPPELNDER_TEST = "test/kopplung.test.js";
+const NACHBAR = "scripts/c.sh";
+const QUELLEN = { [PRODUKT]: "export function richteEin(wert) {\n  return wert;\n}\n", [SKRIPT]: "#!/bin/sh\necho start\n", [KOPPELNDER_TEST]: `// liest ${PRODUKT}, ${SKRIPT} und ${NACHBAR}\n` };
 
 function wurzelMitKonflikt(context) {
   const wurzel = planOrdner(context);
@@ -86,4 +88,49 @@ test("plane: ändert sich der offene Bereichskonflikt nach einer Nachfrage zu se
   assert.ok(befunde[0].eingabe.includes("Bereichskonflikt S1, S7 ist offen"));
   assert.ok(befunde[1].eingabe.includes("Bereichskonflikt S7 ist offen"));
   assert.deepEqual(aufrufe(lauf, "erkunder", "## Nachfrage").map(({ eingabe }) => /^#### (\S+) \(/mu.exec(eingabe)[1]), ["S1", "S7"]);
+});
+
+const KOPPELNDER_GRUND = `${KOPPELNDER_TEST} liest beide Dateien`;
+
+function mitListe(listenAuftrag) {
+  return alsJson({ schnitt: schnittliste({ erster: { bereich: [SKRIPT, PRODUKT], erwarteteDateien: [PRODUKT, SKRIPT, "test/nummern/eigene-nummer-hinterlegen.test.js"], bereichsgrund: KOPPELNDER_GRUND, ...listenAuftrag } }) });
+}
+
+function nachS4MitListe(context, listenAuftrag) {
+  return konfliktLauf(context, {
+    "planer|## Zuschnitt": [mitListe(listenAuftrag), "Zerlegung passt nicht: Probe"],
+    "planer|## Befunde": [alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo setzt nimmAnruf den Hinweis?" }] }), "Zerlegung passt nicht: Probe"],
+    "erkunder|## Nachfrage|S4": [alsJson({ nummern: { S4: angaben("S4") }, hinweise: [] })],
+  });
+}
+
+test("plane: löst die Schnittliste einen Bereichskonflikt mit einer Liste, deren bereichsgrund einen koppelnden Test nennt, startet eine Nachfrage zu einer anderen Nummer ihren Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = nachS4MitListe(context, {});
+  const nachfragen = aufrufe(lauf, "erkunder", "## Nachfrage");
+  assert.equal(nachfragen.length, 1, `die Nachfrage zu S4 hat keinen Erkunder gestartet:\n${aufrufe(lauf, "planer", "## Befunde").map(({ eingabe }) => eingabe).join("\n")}`);
+  assert.ok(nachfragen[0].eingabe.includes("#### S4 ("));
+  assert.ok(!aufrufe(lauf, "planer", "## Befunde").some(({ eingabe }) => eingabe.includes("Bereichskonflikt")), "eine Nachfrage kam als Bereichskonflikt zurück");
+  assert.equal(konfliktAbschnitt(aufrufe(lauf, "planer", "## Zuschnitt")[1]), "", "die Zuschnittnachricht nach der Nachfrage nennt den gelösten Konflikt");
+});
+
+function bleibtOffen(lauf) {
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 0);
+  const [, abgewiesen] = aufrufe(lauf, "planer", "## Befunde");
+  assert.ok(abgewiesen?.eingabe.includes("Bereichskonflikt S1 ist offen"), `die Nachfrage zu S4 kam nicht als Befund zurück:\n${abgewiesen?.eingabe}`);
+}
+
+test("plane: nennt der bereichsgrund der Liste keinen koppelnden Test, bleibt der Bereichskonflikt offen und die Nachfrage zu einer anderen Nummer geht als Befund zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  bleibtOffen(nachS4MitListe(context, { bereichsgrund: "die Dateien fallen gemeinsam" }));
+});
+
+test("plane: nennt die Liste neben den Konfliktdateien einen Ordner, bleibt der Bereichskonflikt offen und die Nachfrage zu einer anderen Nummer geht als Befund zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  bleibtOffen(nachS4MitListe(context, { bereich: [SKRIPT, PRODUKT, "src/"] }));
+});
+
+test("plane: steht die gültige Liste in einem Auftrag, der die Konfliktnummer nicht prüft, bleibt der Bereichskonflikt offen und die Nachfrage zu einer anderen Nummer geht als Befund zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  bleibtOffen(nachS4MitListe(context, { prueft: ["S7", "T2"] }));
+});
+
+test("plane: lässt die gültige Liste eine Konfliktdatei weg, bleibt der Bereichskonflikt offen und die Nachfrage zu einer anderen Nummer geht als Befund zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  bleibtOffen(nachS4MitListe(context, { bereich: [NACHBAR, PRODUKT] }));
 });
