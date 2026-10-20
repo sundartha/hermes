@@ -12,6 +12,9 @@ const SOLL = ".github/soll/einstellungen.json";
 const TRENNER = " › ";
 const LOKALE_ACTION = /^\.\/(\.github\/actions\/[\w-]+)$/;
 const ARTEN = ["zweck", "gruppen", "aufbau", "meldet"];
+const ZWECK_ZEIGEN = "tools/zweck-zeigen.mjs";
+const WORKFLOW_ENDUNG = ".yml";
+const OHNE_URTEIL = new Map([["tools/testlaufzeit-reporter.mjs", "Reporter des Testlaufs, schreibt nur Laufzeiten; das Urteil und den Block gibt der Starter aus"]]);
 const AUFGERUFEN = /\b((?:tools|scripts)\/[\w./-]+\.m?js)\b/g;
 const KONSTANTEN = [
   ["MELDUNG", MELDUNG],
@@ -98,16 +101,21 @@ function aufgerufeneDateien(schritt) {
 }
 
 function laedtBeleg(pfad, belege) {
+  if (pfad === ZWECK_ZEIGEN) return belege.some((beleg) => beleg.endsWith(WORKFLOW_ENDUNG));
   const text = quelltext(pfad);
-  return belege.some((beleg) => beleg === pfad || beleg.endsWith(".yml") || text.includes(beleg.split("/").at(-1)));
+  return belege.some((beleg) => beleg === pfad || (!beleg.endsWith(WORKFLOW_ENDUNG) && text.includes(`/${beleg.split("/").at(-1)}"`)));
 }
 
 test("jede zugeordnete Zweck-ID nennt eine Datei, die sie ausgibt, und der Schritt ruft diese Datei oder ein Werkzeug, das sie lädt", () => {
   const schritte = new Map(zuzuordnen().map((schritt) => [schluessel(schritt), schritt]));
   const mitZweck = Object.entries(zuordnung()).filter(([, eintrag]) => eintrag.zweck !== undefined || eintrag.gruppen !== undefined);
   assert.ok(mitZweck.length > 0);
+  const aufgerufen = new Set();
   for (const [name, eintrag] of mitZweck) {
     const belege = belegeGeprueft(name, eintrag);
-    for (const pfad of aufgerufeneDateien(schritte.get(name))) assert.ok(laedtBeleg(pfad, belege), `${name}: ${pfad} lädt keinen Beleg`);
+    const dateien = aufgerufeneDateien(schritte.get(name));
+    for (const datei of dateien) aufgerufen.add(datei);
+    for (const pfad of dateien.filter((datei) => !OHNE_URTEIL.has(datei))) assert.ok(laedtBeleg(pfad, belege), `${name}: ${pfad} lädt keinen Beleg`);
   }
+  for (const datei of OHNE_URTEIL.keys()) assert.ok(aufgerufen.has(datei), `${datei} steht ohne Aufruf in der Liste`);
 });
