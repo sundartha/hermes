@@ -10,7 +10,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { alsHauptprogramm, befundeMitZweck } from "./lib/pruefskript.mjs";
+import { alsHauptprogramm, befundeMitPraefixMeldenUndScheitern } from "./lib/pruefskript.mjs";
 
 const HASH_ALGO = "sha256";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -158,7 +158,7 @@ function runCli() {
     console.log(`${LOG_PREFIX} OK - Tokens synchron, Invarianten erfuellt.`);
     return 0;
   }
-  return befundeMitZweck({ praefix: LOG_PREFIX, befunde: problems, zweck: ZWECK });
+  return befundeMitPraefixMeldenUndScheitern({ praefix: LOG_PREFIX, befunde: problems, zweck: ZWECK });
 }
 
 alsHauptprogramm(import.meta.url, LOG_PREFIX, runCli);
