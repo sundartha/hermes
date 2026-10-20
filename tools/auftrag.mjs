@@ -39,7 +39,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
-  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen]",
+  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>]",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
 ].join("\n");
@@ -56,6 +56,7 @@ const OPTIONEN = [
   "nachstellung",
   "ablage",
   "repo",
+  "deckel",
 ];
 
 const BEFEHLE = {
@@ -88,7 +89,7 @@ const BEFEHLE = {
   karte: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
   messung: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
   schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
-  plane: { argumente: 1, schalter: ["fortsetzen"], fuehreAus: ([ordner], root, { fortsetzen }) => plane(ordner, root, { fortsetzen }) },
+  plane: { argumente: 1, schalter: ["fortsetzen"], fuehreAus: ([ordner], root, { fortsetzen, deckel }) => plane(ordner, root, { fortsetzen, deckel }) },
   suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
   dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },
 };
