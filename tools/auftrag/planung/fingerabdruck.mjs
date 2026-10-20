@@ -10,6 +10,7 @@ export const FINGERABDRUCK = "fingerabdruck.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
 const ZUSTAND = ["gesehen", "wegOffen", "wegpruefungen", "wegZaehler"];
+const KOPF_BAUM = "HEAD^{tree}";
 
 export function erkundungsDatei(stelle) {
   return `erkundung-g${stelle + 1}.json`;
@@ -30,7 +31,7 @@ function gelesenePfade(root, ordner, kontext) {
 }
 
 export function ausgangsstand(root, ordner, { arbeitsbaum, kontext }) {
-  const kopfBaum = gitLauf(root, ["rev-parse", "HEAD^{tree}"]).stdout.trim();
+  const kopfBaum = gitLauf(root, ["rev-parse", KOPF_BAUM]).stdout.trim();
   const dateien = Object.fromEntries(gelesenePfade(root, ordner, kontext).map((pfad) => [pfad, pruefsumme(join(root, pfad))]));
   return { kopfBaum, arbeitsbaum, dateien };
 }
@@ -56,7 +57,7 @@ function lesbar(abdruck) {
 
 function standGruende(vorher, jetzt) {
   const gruende = [];
-  if (vorher.kopfBaum !== jetzt.kopfBaum) gruende.push(`der Repo-Baum (HEAD^{tree}) ist ${jetzt.kopfBaum}, beim Ablegen der Erkundung war er ${vorher.kopfBaum}`);
+  if (vorher.kopfBaum !== jetzt.kopfBaum) gruende.push(`der Repo-Baum (${KOPF_BAUM}) ist ${jetzt.kopfBaum}, beim Ablegen der Erkundung war er ${vorher.kopfBaum}`);
   if (vorher.arbeitsbaum !== jetzt.arbeitsbaum) gruende.push("der Arbeitsbaum ohne planung/ ist ein anderer als beim Ablegen der Erkundung");
   const pfade = [...new Set([...Object.keys(vorher.dateien), ...Object.keys(jetzt.dateien)])].toSorted();
   const geaendert = pfade.filter((pfad) => vorher.dateien[pfad] !== jetzt.dateien[pfad]);
