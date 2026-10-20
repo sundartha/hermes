@@ -39,6 +39,7 @@ export const EXIT_AUFRUF = 2;
 export const EXIT_PASST_NICHT = 3;
 export const EXIT_BEFUNDE = 4;
 const PLANUNG = "planung";
+const SCHON_DA = "EEXIST";
 const PHASE = "phase.json";
 const DESIGN = "design.md";
 export const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
@@ -148,7 +149,6 @@ export class Planung {
     this.andererAusgang = andererAusgang;
     this.team = new Team(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
-    mkdirSync(this.ablage, { recursive: true });
   }
 
   lege(name, wert) {
@@ -688,10 +688,19 @@ class Fortsetzung extends Planung {
 
 function vorhandenFehler(ordner, fortsetzen) {
   if (existsSync(join(ordner, PHASE))) return `${join(ordner, PHASE)} gibt es schon; plane überschreibt nichts`;
-  const abgelegt = existsSync(join(ordner, PLANUNG));
-  if (abgelegt && !fortsetzen) return `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts`;
-  if (!abgelegt && fortsetzen) return `${join(ordner, PLANUNG)} gibt es nicht; --fortsetzen braucht die abgelegte Erkundung`;
+  if (fortsetzen && !existsSync(join(ordner, PLANUNG))) return `${join(ordner, PLANUNG)} gibt es nicht; --fortsetzen braucht die abgelegte Erkundung`;
   return null;
+}
+
+function legeAblageAn(ordner, fortsetzen) {
+  if (fortsetzen) return null;
+  try {
+    mkdirSync(join(ordner, PLANUNG));
+    return null;
+  } catch (fehler) {
+    if (fehler.code !== SCHON_DA) throw fehler;
+    return `${join(ordner, PLANUNG)} gibt es schon; plane überschreibt nichts`;
+  }
 }
 
 function aufrufFehler(ordner, fortsetzen) {
@@ -700,6 +709,10 @@ function aufrufFehler(ordner, fortsetzen) {
   if (vorhanden !== null) return vorhanden;
   const absichtFehlt = pitchAbsichtBefunde(readFileSync(join(ordner, PITCH), "utf8"));
   return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
+}
+
+function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen) {
+  return aufrufFehler(ordner, fortsetzen) ?? legeAblageAn(ordner, fortsetzen);
 }
 
 function ausgang(fehler) {
@@ -732,7 +745,7 @@ function berichte(planung, ergebnis) {
 
 export async function plane(ordnerAngabe, root, { fortsetzen = false } = {}) {
   const ordner = resolve(root, ordnerAngabe);
-  const fehler = aufrufFehler(ordner, fortsetzen);
+  const fehler = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen);
   if (fehler !== null) {
     console.error(fehler);
     return EXIT_AUFRUF;

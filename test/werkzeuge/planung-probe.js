@@ -217,11 +217,11 @@ export function plane(context, optionen) {
   return planeIn(context, wurzel, { ...optionen, argumente: typeof argumente === "function" ? argumente(wurzel) : argumente });
 }
 
-export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf }) {
+export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf, knotenArgumente = [] }) {
   const ersatz = probeDirectory(context, { "antworten.json": JSON.stringify(antworten(grund, ueberschrieben)) });
   writeFileSync(join(ersatz, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(ersatz, "claude.mjs"), AUSFUEHRBAR);
-  const lauf = spawnSync(process.execPath, [werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs") }, timeout: LAUF_FRIST_MS });
+  const lauf = spawnSync(process.execPath, [...knotenArgumente, werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs") }, timeout: LAUF_FRIST_MS });
   return { ...lauf, wurzel, ersatz };
 }
 
