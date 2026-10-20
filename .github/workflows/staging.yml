@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: staging
-  cancel-in-progress: true
+  group: staging-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   staging:
