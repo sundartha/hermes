@@ -6,7 +6,8 @@ import { test } from "node:test";
 
 import { kenntZweck, ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../../tools/testgruppe.mjs";
-import { REPO_ROOT, isolatedEnvironment, outputLines, probeDirectory, runIn } from "./probe-repo.js";
+import { BASIS, NEGATIV, NULL, pruefe, quelle } from "./mutationspruefung-hilfen.js";
+import { REPO_ROOT, isolatedEnvironment, outputLines, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { EXIT_ROT, pruefeZwischen } from "./testwirkung-probe.js";
 import { blockDanach, nurGenutzteIds, quelltext } from "./zweck-quellen.js";
 
@@ -25,6 +26,7 @@ const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
 const STARTER_HELFER = join(REPO_ROOT, "test/werkzeuge/testgruppe");
 const STARTER_FRIST = { timeout: 120_000 };
+const MUTATION_FRIST = { timeout: 170_000 };
 const LAUF_FRIST_MS = 60_000;
 const PROZESS_UEBRIG = /^Verstoß: Prozess nach dem Testlauf übrig: \d+ sleep 600$/;
 
@@ -71,6 +73,21 @@ test("die Mutationsprüfung endet nur rot, wenn sie die Zweck-Blöcke ihrer rote
   assert.equal(rot - 1, mitBlock.length, "jeder Ausgang EXIT_ROT folgt auf zeigeZweck");
   assert.match(text, /return roteZwecke\(\{ ueberlebende, zugriffe \}\);/);
   assert.match(text, /function roteZwecke\(\{ ueberlebende, zugriffe \}\) \{\n {2}return \[\.\.\.\(ueberlebende\.length > 0 \? \[ZWECK_UEBERLEBT\] : \[\]\), \.\.\.\(zugriffe\.length > 0 \? \[ZWECK_ZUSTAND\] : \[\]\)\];/);
+});
+
+test("die Mutationsprüfung nennt nach dem roten Urteil den Block der überlebenden Mutanten, ein grüner Lauf keinen", MUTATION_FRIST, (context) => {
+  const repo = probeRepository(context, BASIS);
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, EXIT_OK, gruen.stdout + gruen.stderr);
+  assert.doesNotMatch(gruen.stdout, /Wozu:/);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const zeilen = outputLines(rot.stdout);
+  const { block, gefunden } = blockDanach(zeilen, "tests/mutation", /^rot: /);
+  assert.deepEqual(gefunden, block);
+  assert.deepEqual(zeilen.slice(-block.length), block);
+  assert.ok(!zeilen.includes(zweckBlock("tests/stryker-zustand")[0]));
 });
 
 test("die Testwirkung nennt nach der Zusammenfassung den Block der Verstoßart und lässt die verankerten Zeilen unverändert", (context) => {
