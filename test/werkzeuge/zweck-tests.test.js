@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { kenntZweck, ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { REPO_ROOT, outputLines, probeDirectory, runIn } from "./probe-repo.js";
+import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../../tools/testgruppe.mjs";
+import { REPO_ROOT, isolatedEnvironment, outputLines, probeDirectory, runIn } from "./probe-repo.js";
 import { EXIT_ROT, pruefeZwischen } from "./testwirkung-probe.js";
 import { blockDanach, nurGenutzteIds, quelltext } from "./zweck-quellen.js";
 
@@ -20,6 +23,20 @@ const ZWECK_WERT = /"(tests\/[a-z-]+)"/g;
 const ROTER_AUSGANG = /\bEXIT_ROT\b/g;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
+const STARTER_HELFER = join(REPO_ROOT, "test/werkzeuge/testgruppe");
+const STARTER_FRIST = { timeout: 120_000 };
+const LAUF_FRIST_MS = 60_000;
+const PROZESS_UEBRIG = /^Verstoß: Prozess nach dem Testlauf übrig: \d+ sleep 600$/;
+
+function beendeEnkel(datei) {
+  if (!existsSync(datei)) return;
+  const { enkel } = JSON.parse(readFileSync(datei, "utf8"));
+  try {
+    process.kill(enkel, "SIGKILL");
+  } catch (fehler) {
+    if (fehler.code !== "ESRCH") throw fehler;
+  }
+}
 
 function listeAb(text, anfang) {
   const zeilen = text.split("\n");
@@ -85,6 +102,26 @@ test("die Testlaufzeit nennt nach den Befunden den Block als eigene Absätze, ei
   const gruen = runIn(REPO_ROOT, process.execPath, [LAUFZEIT, "--laufzeiten", join(ordner, "sauber.jsonl")]);
   assert.equal(gruen.status, EXIT_OK, gruen.stdout + gruen.stderr);
   assert.doesNotMatch(gruen.stdout, /Wozu:/);
+});
+
+test("der Starter nennt nach den übrigen Prozessen den Block auf stderr, ein sauberer Lauf keinen", STARTER_FRIST, (context) => {
+  const pids = join(probeDirectory(context, {}), "pids.json");
+  context.after(() => beendeEnkel(pids));
+  const starte = (helfer) =>
+    spawnSync(process.execPath, [TESTGRUPPE, "--test", join(STARTER_HELFER, helfer)], {
+      encoding: "utf8",
+      env: { ...isolatedEnvironment(), TESTGRUPPE_PIDS: pids },
+      timeout: LAUF_FRIST_MS,
+    });
+  const rot = starte("rest.mjs");
+  assert.equal(rot.status, EXIT_PROZESS_UEBRIG, rot.stderr);
+  const zeilen = outputLines(rot.stderr);
+  const block = zweckBlock("tests/prozess-uebrig");
+  assert.deepEqual(zeilen.slice(-block.length), block, rot.stderr);
+  assert.match(zeilen.at(-block.length - 1), PROZESS_UEBRIG);
+  const sauber = starte("sauber.mjs");
+  assert.equal(sauber.status, 0, sauber.stderr);
+  assert.doesNotMatch(sauber.stderr, /Wozu:/);
 });
 
 test("der CI-Schritt Tests zeigt bei Rot den Block der Regressionsbank", () => {
