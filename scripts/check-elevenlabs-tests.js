@@ -3,7 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { alsHauptprogramm, befundeMitPraefixMeldenUndScheitern } from "./lib/pruefskript.mjs";
+import { befundeMeldenUndScheitern } from "../tools/auftrag/zweck.mjs";
+import { EXIT_ROT, alsHauptprogramm } from "./lib/pruefskript.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECT_DIR_REL = "elevenlabs";
@@ -369,7 +370,8 @@ function runCli() {
     );
     return 0;
   }
-  return befundeMitPraefixMeldenUndScheitern({ praefix: LOG_PREFIX, befunde: findings, zweck: ZWECK });
+  befundeMeldenUndScheitern(findings.map((befund) => `${LOG_PREFIX} ${befund}`), ZWECK);
+  return EXIT_ROT;
 }
 
 alsHauptprogramm(import.meta.url, LOG_PREFIX, runCli);
