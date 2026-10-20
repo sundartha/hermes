@@ -43,7 +43,7 @@ export function transkripteDerSitzung(verzeichnis, sitzung) {
   return [haupt, ...weitere].filter((datei) => existsSync(datei));
 }
 
-function verbrauchJeAntwort(datei) {
+export function verbrauchJeAntwort(datei) {
   const jeAntwort = new Map();
   readFileSync(datei, "utf8")
     .split("\n")
@@ -68,8 +68,12 @@ function addiere(summe, verbrauch) {
   return neu;
 }
 
+export function summeDerVerbraeuche(verbraeuche) {
+  return verbraeuche.reduce(addiere, leer());
+}
+
 export function summeDerDateien(dateien) {
-  return dateien.flatMap(verbrauchJeAntwort).reduce(addiere, leer());
+  return summeDerVerbraeuche(dateien.flatMap(verbrauchJeAntwort));
 }
 
 export function kostenDerSitzung(root, { rolle, sitzung }) {

@@ -61,6 +61,19 @@ test("eine Antwort ohne Nachrichten-ID zählt als eigener Schritt, ein leeres Pr
   assert.throws(() => messeProtokoll(join(ordner, "leer.jsonl")), /Protokoll ohne lesbare Zeilen: .*leer\.jsonl/);
 });
 
+test("Schritte, Kontext und Token folgen einer Zählregel: eine wiederholte Nachrichten-ID behält die letzte Nutzung, eine Antwort ohne Nutzung zählt nicht", (context) => {
+  const ordner = probeDirectory(context, {
+    "s3.jsonl": zeilen([
+      antwort("m1", "2026-10-12T10:00:00.000Z", { usage: { input_tokens: 10, cache_read_input_tokens: 1000, output_tokens: 5 } }),
+      antwort("m1", "2026-10-12T10:00:01.000Z", {}),
+      antwort("m2", "2026-10-12T10:00:02.000Z", {}),
+      antwort("m3", "2026-10-12T10:00:03.000Z", { usage: { input_tokens: 4, cache_creation_input_tokens: 200, output_tokens: 1 } }),
+    ]),
+  });
+  const [haupt] = messeProtokoll(join(ordner, "s3.jsonl"));
+  assert.deepEqual([haupt.schritte, haupt.groessterKontext, haupt.token], [2, 1010, 1015 + 205]);
+});
+
 test("messung gibt dieselben Zahlen über die Befehlszeile aus und bricht bei fehlendem Protokoll ab", (context) => {
   const datei = protokoll(context);
   const json = runIn(REPO_ROOT, process.execPath, [EINSTIEG, "messung", datei, "--json"]);

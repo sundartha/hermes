@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-import { summeDerDateien, transkripteDerSitzung } from "../kosten.mjs";
+import { summeDerVerbraeuche, transkripteDerSitzung, verbrauchJeAntwort } from "../kosten.mjs";
 import { alsText, kontextGroesse } from "../verlauf.mjs";
 
 const TRANSKRIPT_ENDUNG = /\.jsonl$/;
@@ -47,18 +47,10 @@ function werkzeugergebnisse(liste) {
   return [...zeichen.values()].reduce((summe, anzahl) => summe + anzahl, 0);
 }
 
-function antworten(liste) {
-  const jeNachricht = new Map();
-  liste.forEach((satz, stelle) => {
-    if (satz.type === "assistant") jeNachricht.set(satz.message?.id ?? `zeile ${stelle}`, satz.message?.usage ?? {});
-  });
-  return [...jeNachricht.values()];
-}
-
 export function messeDatei(datei) {
   const liste = saetze(datei);
   if (liste.length === 0) throw new Error(`Protokoll ohne lesbare Zeilen: ${datei}`);
-  const verbrauch = antworten(liste);
+  const verbrauch = verbrauchJeAntwort(datei);
   const sitzung = liste.find((satz) => satz.agentId !== undefined)?.agentId ?? liste.find((satz) => satz.sessionId !== undefined)?.sessionId ?? null;
   return {
     rolle: rolleDer(datei),
@@ -66,7 +58,7 @@ export function messeDatei(datei) {
     dauerMs: dauer(liste),
     schritte: verbrauch.length,
     groessterKontext: Math.max(0, ...verbrauch.map(kontextGroesse)),
-    token: summeDerDateien([datei]).gesamt,
+    token: summeDerVerbraeuche(verbrauch).gesamt,
     werkzeugZeichen: werkzeugergebnisse(liste),
   };
 }
