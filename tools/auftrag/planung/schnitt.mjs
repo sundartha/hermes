@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, kennungBefunde, kopplungBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, kennungBefunde, kopplungBefunde, listenBefunde, reihenfolge } from "../format.mjs";
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
@@ -317,10 +317,17 @@ function erwarteterBereich(dateien) {
   return dateien.length === 1 ? dateien[0] : engsterOrdner(dateien);
 }
 
-export function bereichskonflikte(berichte) {
+function loestKonflikt(auftrag, { nummer, dateien }, root) {
+  if (!liste(auftrag.prueft).includes(nummer) || !istBereichsliste(auftrag.bereich)) return false;
+  return dateien.every((datei) => auftrag.bereich.includes(datei)) && listenBefunde(auftrag, root).length === 0;
+}
+
+export function bereichskonflikte(berichte, { schnitt, root }) {
   const jeNummer = new Map();
   for (const { nummer, datei } of aenderungsStellen(berichte)) if (PRODUKTDATEIEN.gehoert(datei)) jeNummer.set(nummer, new Set([...(jeNummer.get(nummer) ?? []), datei]));
-  return [...jeNummer].map(([nummer, dateien]) => ({ nummer, dateien: [...dateien] })).filter(({ dateien }) => istWurzel(erwarteterBereich(dateien)));
+  const auftraege = liste(schnitt?.auftraege).filter(istObjekt);
+  const konflikte = [...jeNummer].map(([nummer, dateien]) => ({ nummer, dateien: [...dateien] })).filter(({ dateien }) => istWurzel(erwarteterBereich(dateien)));
+  return konflikte.filter((konflikt) => !auftraege.some((auftrag) => loestKonflikt(auftrag, konflikt, root)));
 }
 
 function fremdeDateien(auftrag, art) {

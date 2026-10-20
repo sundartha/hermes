@@ -227,7 +227,7 @@ function listenFormBefunde(liste) {
   return istWurzel(ordner) ? [] : [`die Dateien der Liste liegen gemeinsam in ${ordner}; nimm diesen Ordner als bereich`];
 }
 
-function listenBefunde(auftrag, root) {
+export function listenBefunde(auftrag, root) {
   const form = listenFormBefunde(auftrag.bereich);
   return form.length > 0 ? form : kopplungBefunde(auftrag.bereich, auftrag.bereichsgrund, root);
 }

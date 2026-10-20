@@ -131,7 +131,7 @@ function konfliktTeil(konflikte) {
   if (konflikte.length === 0) return [];
   const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
   const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
-  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich; zulässig ist dann nur eine Liste genau dieser Dateien mit bereichsgrund und koppelndem Test. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
+  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich; zulässig ist dann nur eine Liste genau dieser Dateien mit bereichsgrund und koppelndem Test. Klär das zuerst: ${konfliktAusweg(nummern)}. Löst deine Schnittliste einen Konflikt mit einer solchen Liste, ist er nicht mehr offen. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
   return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
 }
 
@@ -412,6 +412,10 @@ export class Planung {
     return this.pruefungDerBerichte().filter(({ befunde }) => befunde.length === 0).map(({ bericht }) => bericht);
   }
 
+  offeneKonflikte() {
+    return bereichskonflikte(this.sauberBerichte(), { schnitt: this.schnitt, root: this.root });
+  }
+
   async karten() {
     const sauber = this.sauberBerichte();
     return { funktionsliste: funktionsListe(this.root, sauber), dateikarte: await dateiKarte(this.root, sauber) };
@@ -420,7 +424,7 @@ export class Planung {
   async lagebild() {
     const { funktionsliste, dateikarte } = await this.karten();
     return [
-      ...konfliktTeil(bereichskonflikte(this.sauberBerichte())),
+      ...konfliktTeil(this.offeneKonflikte()),
       abschnitt("Annahmen der Erkunder", punkte(this.erkunderAnnahmen().map(annahmeText))),
       abschnitt("Offene Punkte", punkte(this.offenePunkte())),
       abschnitt("Funktionsliste", json(funktionsliste)),
@@ -476,7 +480,7 @@ export class Planung {
   async nachfragen(nachfragen) {
     const befunde = this.nachfrageBefunde(nachfragen);
     if (befunde.length > 0) return { befunde };
-    const konflikte = bereichskonflikte(this.sauberBerichte()).map(({ nummer }) => nummer);
+    const konflikte = this.offeneKonflikte().map(({ nummer }) => nummer);
     const gesperrt = konfliktBefunde(nachfragen, konflikte);
     if (gesperrt.length > 0) return this.weiseNachfragenAbOderBeende(gesperrt, konflikte.join(", "));
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
