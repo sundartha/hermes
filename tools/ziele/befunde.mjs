@@ -1,4 +1,5 @@
 import { zweckBlock } from "../auftrag/zweck.mjs";
+import { UNTERDRUECKUNGEN } from "./eslint-ungefiltert.mjs";
 import { issuesMitLabel, kommentare, kommentiere, stelleLabelSicher } from "./github.mjs";
 
 export const LABEL = "aufraeumen";
@@ -59,11 +60,15 @@ export const ZWECK_JE_ID = {
   [IDS.agent]: "nacht/agent-antwort",
 };
 const BASIS_ZWECK = "nacht/basis-kuerzen";
-const BASISLINIEN = /^(?:tools\/basis\/[\w.-]+\.json|eslint-suppressions\.json)$/;
+const BASISLINIE_IM_ORDNER = /^tools\/basis\/[\w.-]+\.json$/;
+
+function istBasislinie(datei) {
+  return datei === UNTERDRUECKUNGEN || BASISLINIE_IM_ORDNER.test(String(datei));
+}
 
 export function zweckVon({ id, datei }) {
   if (ZWECK_JE_ID[id] === undefined) return null;
-  return BASISLINIEN.test(String(datei)) ? BASIS_ZWECK : ZWECK_JE_ID[id];
+  return istBasislinie(datei) ? BASIS_ZWECK : ZWECK_JE_ID[id];
 }
 
 export function zweckAbsaetze(befund) {
