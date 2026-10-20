@@ -1,16 +1,14 @@
-import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { pid } from "node:process";
 
 import { BELEGE } from "../bericht.mjs";
 import { reihenfolge } from "../format.mjs";
 import { transkriptVerzeichnis, transkripteDerSitzung } from "../kosten.mjs";
-import { istObjekt, liste } from "./erkundung.mjs";
+import { istObjekt, liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { fortsetzungen, messeDatei } from "./messung.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
 const MS_JE_SEKUNDE = 1000;
-const JSON_EINRUECKUNG = 2;
 const NICHT_GEMESSEN = "nicht gemessen";
 const KEINE_SCHNITTLISTE = "keine Schnittliste";
 const PLANER = "planer";
@@ -110,9 +108,7 @@ export function schreibePlanBericht(root, bericht) {
   const verzeichnis = join(root, BELEGE, bericht.phase);
   mkdirSync(verzeichnis, { recursive: true });
   const ziel = join(verzeichnis, PLANUNGSBERICHT);
-  const zwischen = `${ziel}.${pid}.tmp`;
-  writeFileSync(zwischen, `${JSON.stringify(bericht, null, JSON_EINRUECKUNG)}\n`);
-  renameSync(zwischen, ziel);
+  schreibeJsonAtomar(ziel, bericht);
   return ziel;
 }
 

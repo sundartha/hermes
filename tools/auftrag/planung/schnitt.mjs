@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
 import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
-import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText } from "./erkundung.mjs";
+import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { gleicherText, nummernImOrdner } from "./nummern.mjs";
 import { MELDUNG, zweckBlock } from "../zweck.mjs";
@@ -52,10 +52,6 @@ export const REGEL = {
   nie: "Nie-Sätze",
   namen: "Gemeinsame Namen",
 };
-
-function liste(wert) {
-  return Array.isArray(wert) ? wert : [];
-}
 
 function mitRegel(regel, befunde) {
   return befunde.map((befund) => `Regel ${regel}: ${befund}`);

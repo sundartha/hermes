@@ -11,7 +11,7 @@ import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { prueflisteSoll } from "./antworten.mjs";
 import { druckePlanBericht, planBericht } from "./planbericht.mjs";
-import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJson } from "./plane.mjs";
+import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJsonAtomar } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
 import { auftraegeAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
@@ -261,7 +261,7 @@ class NeuschnittPlanung extends Planung {
     const phase = { ...this.phase, entwurf: { ...this.phase.entwurf, ...entwuerfe }, auftraege };
     const befunde = [...nutzenBefunde, ...phasenBefunde(phase, this.root), ...befundeImOrdner(this.ordner, phase).befunde];
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, PHASE_MIT_BEFUNDEN, befunde);
-    schreibeJson(join(this.root, this.eingabe.datei), phase);
+    schreibeJsonAtomar(join(this.root, this.eingabe.datei), phase);
   }
 
   async laufe() {
@@ -292,7 +292,7 @@ class NeuschnittPlanung extends Planung {
 
   schreibeUndDruckePlanBericht(bericht) {
     const pfad = join(this.ablage, PLANBERICHT);
-    schreibeJson(pfad, bericht);
+    schreibeJsonAtomar(pfad, bericht);
     druckePlanBericht(bericht, pfad);
   }
 

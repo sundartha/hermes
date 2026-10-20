@@ -1,11 +1,10 @@
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { pid } from "node:process";
 
 import { phasenBefunde } from "../format.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
-import { istText, liste, nutzenFuer, nutzenOhneAuftrag } from "./erkundung.mjs";
+import { istText, liste, nutzenFuer, nutzenOhneAuftrag, schreibeJsonAtomar } from "./erkundung.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
@@ -13,7 +12,6 @@ const PHASE = "phase.json";
 const FELDER = ["id", "art", "ziel", "bereich", "erwarteteDateien", "abnahme", "erwarteterFehler"];
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
-const JSON_EINRUECKUNG = 2;
 const OHNE_BERICHTE = "auftragAusSchnitt braucht die Erkundungsberichte; ohne sie fiele nutzen still weg";
 
 export function auftragAusSchnitt(eintrag, soll, berichte) {
@@ -69,13 +67,6 @@ function namenBefunde(gemeinsameNamen, entwuerfe) {
   );
 }
 
-function schreibe(ordner, phase) {
-  const ziel = join(ordner, PHASE);
-  const zwischen = join(ordner, `.${PHASE}.${pid}.tmp`);
-  writeFileSync(zwischen, `${JSON.stringify(phase, null, JSON_EINRUECKUNG)}\n`);
-  renameSync(zwischen, ziel);
-}
-
 export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe, root }) {
   const pruefung = await schnittImOrdner(ordner, { schnitt, berichte, root });
   if (pruefung.befunde.length > 0) return { befunde: pruefung.befunde };
@@ -90,6 +81,6 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => eintrag.bereich === bereich))]));
   const phase = { phase: basename(resolve(ordner)), absicht: absichtAusPitch(pitch), entwurf, auftraege };
   const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
-  if (befunde.length === 0) schreibe(ordner, phase);
+  if (befunde.length === 0) schreibeJsonAtomar(join(ordner, PHASE), phase);
   return { befunde, phase };
 }
