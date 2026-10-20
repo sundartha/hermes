@@ -86,9 +86,9 @@ function requireFields(obj, specs) {
   return obj;
 }
 
-export function mapStatus(c) {
-  if (c.status === "active") return c.answeredAt ? "in_progress" : "dialing";
-  return c.status;
+function mapStatus(call) {
+  if (call.status === "active") return call.answeredAt ? "in_progress" : "dialing";
+  return call.status;
 }
 function durationS(c) {
   const start = c.startedAt;
@@ -709,7 +709,7 @@ function unconfirmedResult(loc, confirmResult) {
   return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
 }
 
-export const PLACE_CALL_REQUEST_SCHEMA = {
+const PLACE_CALL_REQUEST_SCHEMA = {
   to: z
     .string()
     .describe(
