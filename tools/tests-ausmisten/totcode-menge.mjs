@@ -1,9 +1,9 @@
-import { basename, posix } from "node:path";
+import { basename } from "node:path";
 
 import { staticTestName } from "../testschutz/aenderungen.mjs";
 import { removedCases } from "../testschutz/entfernt.mjs";
 import { MESSBAR } from "./entscheiden.mjs";
-import { syntaxknoten } from "./importe.mjs";
+import { istRelativ, syntaxknoten, vorhandenesZiel } from "./importe.mjs";
 import { TESTDATEI, erwaehnende, graphImStand, mengenVerstoesse } from "./messmenge.mjs";
 import { GATE_DATEI, TESTORDNER, aenderungen, git, gitGelingt, testpfadFrei } from "./pfade.mjs";
 
@@ -13,9 +13,6 @@ const ABSCHALTUNG = /Stryker disable/;
 const OHNE_MESSUNG_ERLAUBT = /^(?:test|node_modules)\//;
 const SKRIPT = /\.[cm]?[jt]s$/;
 const REINER_LOESCH_HUNK = /^@@ -\d+(?:,\d+)? \+\d+,0 @@/m;
-const RELATIV = /^\.{1,2}\//;
-const ANHANG = /[?#].*$/s;
-const JAVASCRIPT_ENDUNG = /\.([cm]?)js$/;
 const PAAR = /^[RC]\d*$/;
 const FELDER_JE_PAAR = 3;
 const FELDER_JE_AENDERUNG = 2;
@@ -269,10 +266,8 @@ function nurGenannteQuellen(reichweite, stand) {
 function zielAufloesbar(datei, quelle, stand) {
   const text = staticTestName(quelle);
   if (text === undefined) return false;
-  if (!RELATIV.test(text)) return true;
-  const ziel = posix.normalize(posix.join(posix.dirname(datei), text.replace(ANHANG, "")));
-  const kandidaten = [ziel, ziel.replace(JAVASCRIPT_ENDUNG, ".$1ts")];
-  return kandidaten.some((kandidat) => existiert(stand.basis, kandidat));
+  if (!istRelativ(text)) return true;
+  return vorhandenesZiel(datei, text, (kandidat) => existiert(stand.basis, kandidat)) !== undefined;
 }
 
 function offenerImport(datei, stand) {

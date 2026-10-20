@@ -161,11 +161,19 @@ function aufgeloest(knoten, bindungen, tiefe = 0) {
   }
 }
 
+export function istRelativ(pfad) {
+  return RELATIV.test(pfad);
+}
+
+export function vorhandenesZiel(datei, pfad, vorhanden) {
+  const ziel = posix.normalize(posix.join(posix.dirname(datei), vorTeil(pfad)));
+  return [ziel, ziel.replace(JAVASCRIPT_ENDUNG, ".$1ts")].find(vorhanden);
+}
+
 function zielDatei(datei, { pfad, relativ }) {
-  if (!relativ && !RELATIV.test(pfad)) return undefined;
-  const ziel = posix.normalize(posix.join(posix.dirname(datei), pfad));
-  const vorhanden = [ziel, ziel.replace(JAVASCRIPT_ENDUNG, ".$1ts")].find((kandidat) => existsSync(kandidat));
-  return NACH_OBEN.test(ziel) ? undefined : vorhanden;
+  if (!relativ && !istRelativ(pfad)) return undefined;
+  const vorhanden = vorhandenesZiel(datei, pfad, existsSync);
+  return vorhanden === undefined || NACH_OBEN.test(vorhanden) ? undefined : vorhanden;
 }
 
 export function dynamischeZiele(datei) {
