@@ -1,21 +1,11 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ESLint, Linter } from "eslint";
+import { Linter } from "eslint";
 
 import hermes from "../../tools/eslint-rules/index.js";
 import { REPO_ROOT } from "./probe-repo.js";
-
-const RULE = "hermes/wort-nur-in";
-
-const repoKonfiguration = new ESLint({ cwd: REPO_ROOT });
-
-async function zeilenMitTreffer(filePath, zeilen) {
-  const quelltext = zeilen.join("\n");
-  const [{ messages }] = await repoKonfiguration.lintText(quelltext, { filePath });
-  const eigene = messages.filter((meldung) => meldung.ruleId === RULE);
-  return eigene.map((meldung) => `${meldung.line} ${meldung.message.split(":")[0]}`);
-}
+import { RULE, repoTreffer as zeilenMitTreffer } from "./wort-nur-in-probe.js";
 
 function schluesselTreffer(art, zeilen) {
   const eintrag = { name: "zugangsdaten", nurIn: [], meldung: "Zugangsdaten" };

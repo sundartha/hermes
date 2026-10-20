@@ -1,25 +1,16 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ESLint, Linter } from "eslint";
+import { Linter } from "eslint";
 
 import hermes from "../../tools/eslint-rules/index.js";
+import { REPO_WURZEL, vorhandenerPfad } from "../../tools/zwillingspfad.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
+import { RULE, repoKonfiguration, repoTreffer } from "./wort-nur-in-probe.js";
 
-const RULE = "hermes/wort-nur-in";
 const TELNYX = "telnyx-belegabruf";
 const ANRUFZEIT = "kein-anrufzeit-gate";
 const BELEG = "trunk-beleg-felder";
-
-let repoEslint;
-
-async function repoTreffer(filePath, zeilen) {
-  repoEslint ??= new ESLint({ cwd: REPO_ROOT });
-  const [ergebnis] = await repoEslint.lintText(`${zeilen.join("\n")}\n`, { filePath });
-  return ergebnis.messages
-    .filter(({ ruleId }) => ruleId === RULE)
-    .map(({ line, message }) => `${line} ${message.split(":")[0]}`);
-}
 
 function eigeneTreffer(eintraege, filePath, zeilen) {
   const linter = new Linter({ cwd: REPO_ROOT });
@@ -108,11 +99,10 @@ const GATE_NAHE_DATEIEN = [
   "src/routes/api-calls.js",
   "src/call-duration.js",
   "src/turn-budget.js",
-];
+].map((datei) => vorhandenerPfad(datei, REPO_WURZEL));
 
 async function anrufzeitEintrag(filePath) {
-  repoEslint ??= new ESLint({ cwd: REPO_ROOT });
-  const config = await repoEslint.calculateConfigForFile(join(REPO_ROOT, filePath));
+  const config = await repoKonfiguration().calculateConfigForFile(join(REPO_ROOT, filePath));
   const [, ...eintraege] = config.rules[RULE];
   return eintraege.find(({ name }) => name === ANRUFZEIT);
 }

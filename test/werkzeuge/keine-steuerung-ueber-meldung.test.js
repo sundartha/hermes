@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ESLint } from "eslint";
 
+import { REPO_WURZEL, vorhandenerPfad } from "../../tools/zwillingspfad.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
 
 const RULE = "hermes/keine-steuerung-ueber-meldung";
 const GELDPFAD = "src/billing/metering.js";
+const AUSNAHMEN = ["src/elevenlabs/outbound.js", "src/llm/adapters/anthropic.js"].map((datei) =>
+  vorhandenerPfad(datei, REPO_WURZEL),
+);
 
 let repoEslint;
 
@@ -47,7 +51,7 @@ test("keine-steuerung-ueber-meldung: Kommentar, Zwischenaufruf mit Argument und 
 });
 
 test("keine-steuerung-ueber-meldung: die zwei begründeten Ausnahmen und Dateien außerhalb von src/ bleiben grün", async () => {
-  for (const datei of ["src/elevenlabs/outbound.js", "src/llm/adapters/anthropic.js", "scripts/probe.mjs"])
+  for (const datei of [...AUSNAHMEN, "scripts/probe.mjs"])
     assert.deepEqual(await roteZeilen(datei, STEUERUNG), [], datei);
 });
 
@@ -61,7 +65,7 @@ test("keine-steuerung-ueber-meldung: src/ ist heute frei, und es gibt genau zwei
   const [, ...ausnahmen] = config.rules[RULE];
   assert.deepEqual(
     ausnahmen.map(({ datei }) => datei),
-    ["src/elevenlabs/outbound.js", "src/llm/adapters/anthropic.js"],
+    AUSNAHMEN,
   );
   assert.ok(ausnahmen.every(({ grund }) => grund.length > 0));
 });
