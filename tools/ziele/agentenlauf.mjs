@@ -2,6 +2,7 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { IDS, befund } from "./befunde.mjs";
 import { BLOCKIERT, WEITER, ergebnisVon, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
 import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
@@ -51,6 +52,8 @@ export function auftragstext(ziel) {
     "Befunde, die nach den Fixern noch übrig sind oder deren Reste du entfernen sollst:",
     ...ziel.zielbefunde.map((text) => `- ${text}`),
     `Ändere nur ${basename(ziel.datei)}. Antworte mit dem JSON nach dem vorgegebenen Schema; datei ist ${ziel.datei}, sorte ist ${ziel.sorte}.`,
+    "",
+    ...zweckBlock(`nacht/sorte-${ziel.sorte}`),
     "",
   ].join("\n");
 }

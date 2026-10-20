@@ -10,7 +10,7 @@ import { GEAENDERT, WEITER, ergebnisVon, laufAdresse, laufNummer, leseJson, schr
 import { commitNachricht } from "./nachricht.mjs";
 import { AGENT_DATEI, AGENT_ORDNER } from "./agentenlauf.mjs";
 import { merkeVor, patchPruefsumme, vorgemerkteAenderungen } from "./patch.mjs";
-import { committeAlsBot, dateiVerstoss, gewaehlterPatch } from "./pruefen.mjs";
+import { committeAlsBot, dateiVerstoss, gewaehlterPatch, zeigeZweck } from "./pruefen.mjs";
 import { BRANCH_PRAEFIX, prTitel } from "./prs.mjs";
 import { gitSchutzLage } from "./schutz.mjs";
 import { ORDNER } from "./vorpruefen.mjs";
@@ -61,6 +61,7 @@ export async function committe({ ordner }, root) {
   const verstoss = dateiVerstoss(vorgemerkteAenderungen(root), ziel, gitSchutzLage(root));
   if (verstoss) {
     console.error(`Commit: Verstoß ${verstoss.id}: ${verstoss.text}`);
+    zeigeZweck(verstoss);
     return EXIT_ROT;
   }
   committeAlsBot(root, commitNachricht(ziel, new Date()));

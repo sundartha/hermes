@@ -1,0 +1,65 @@
+{
+  "nacht/sorte-knip": {
+    "liste": "N3, N5",
+    "wozu": "Unbenutzter Code wird von späteren Agenten für gültig gehalten, mitgepflegt oder kopiert. Das Aufräumen soll ihn wirklich entfernen; sein PR geht ohne Durchsicht eines Menschen per Auto-Merge in den Hauptstand, deshalb muss jede Änderung das Verhalten unverändert lassen.",
+    "behebung": "Funktionen, Konstanten und Typen der Zieldatei löschen, die nach dem Entfernen der genannten Exporte niemand mehr benutzt; ein Name, der von außen benutzt wird, bleibt stehen.",
+    "nichtAngenommen": "Einen Export nur umbenennen, verschieben oder anders schreiben, damit knip ihn nicht mehr meldet, während er unbenutzt bleibt, oder ein benutztes Stück löschen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich ein Befund nicht sicher beheben, änderst du nichts und antwortest mit \"geaendert\": false; der Lauf endet dann ohne PR, und die Datei bleibt bis zu ihrer nächsten Änderung im Hauptstand gesperrt."
+  },
+  "nacht/sorte-jscpd": {
+    "liste": "N3, N5",
+    "wozu": "Kopierter Code muss an jeder Stelle gleich gepflegt werden; ein Fehler wird an einer Stelle behoben und bleibt an der anderen. Das Aufräumen soll die Doppelung wirklich auflösen; sein PR geht ohne Durchsicht eines Menschen per Auto-Merge in den Hauptstand.",
+    "behebung": "Die genannten gleichen Stellen innerhalb der Zieldatei zu einer gemeinsamen Funktion oder Konstante zusammenfassen, ohne das Verhalten zu ändern: gleiche Eingaben, gleiche Ausgaben, gleiche Fehler.",
+    "nichtAngenommen": "Die Stellen nur umformulieren, umbenennen oder umsortieren, bis jscpd sie nicht mehr findet; die Doppelung bliebe in anderen Worten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich die Doppelung nicht sicher auflösen, änderst du nichts und antwortest mit \"geaendert\": false; der Lauf endet dann ohne PR, und die Datei bleibt bis zu ihrer nächsten Änderung im Hauptstand gesperrt."
+  },
+  "nacht/sorte-altfunktion": {
+    "liste": "N3, N6",
+    "wozu": "Eine alte Funktion mit Lint-Befunden ist schwer zu verstehen und fehleranfällig. Das Aufräumen soll ihre Befunde wirklich abbauen, sodass die Liste geduldeter Verstöße (eslint-suppressions.json) kürzer wird; sein PR geht ohne Durchsicht eines Menschen per Auto-Merge in den Hauptstand.",
+    "behebung": "Nur die genannte Funktion umbauen, bis ihre genannten Befunde verschwinden; nur die Struktur ändert sich, gleiche Eingaben liefern gleiche Ausgaben und gleiche Fehler, und ausgelagerte Teile haben keine neuen Befunde.",
+    "nichtAngenommen": "Die Befunde nur in eine neue Hilfsfunktion derselben Datei verschieben oder dafür an anderer Stelle der Datei einen anderen Befund beheben, damit nur die Summe sinkt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich die Funktion nicht sicher umbauen, änderst du nichts und antwortest mit \"geaendert\": false; der Lauf endet dann ohne PR, und die Datei bleibt bis zu ihrer nächsten Änderung im Hauptstand gesperrt."
+  },
+  "nacht/nur-zieldatei": {
+    "liste": "N4",
+    "wozu": "Das Aufräumen ändert genau die Zieldatei und keine andere: keinen Test, keine geschützte Datei, und es löscht keine Datei. Sonst könnte ein Umbau einen Test so anpassen, dass er die Prüfungen besteht, und per Auto-Merge ohne einen Menschen in den Hauptstand gehen.",
+    "behebung": "entfällt für den Agenten: Er bekommt technisch nur eine Kopie der Zieldatei. Die Prüfung hat den Patch verworfen; im Hauptstand ändert sich nichts.",
+    "nichtAngenommen": "Die Liste geschützter Dateien, die Umbau-Arten oder die Prüfung so ändern, dass ein Patch mit weiteren Dateien durchgeht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Die Zieldatei bleibt bis zu ihrer nächsten Änderung im Hauptstand gesperrt, und das geschlossene Issue zählt in der wöchentlichen Auswertung; kehrt der Befund wieder, schlägt sie Antonio einen Mechanismus vor."
+  },
+  "nacht/basis-kuerzen": {
+    "liste": "B13",
+    "wozu": "Das Aufräumen der Basislinien streicht nur behobene Einträge, damit derselbe Befund nicht still zurückkommt; es darf eine Basislinie nie erweitern oder umschreiben, weil der PR als „strenger“ ohne Durchsicht übernommen wird.",
+    "behebung": "entfällt: Das Kürzen macht ein Programm ohne Agent; die Prüfung hat den Patch verworfen, und die Basislinie im Hauptstand bleibt unverändert.",
+    "nichtAngenommen": "Einen Eintrag ergänzen oder ändern und das als Kürzen ausgeben. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Der nächste Lauf versucht das Kürzen erneut; bleibt der Befund, zählt er in der wöchentlichen Auswertung."
+  },
+  "nacht/neue-befunde": {
+    "liste": "N5",
+    "wozu": "Ein Umbau darf keine neuen Lint-Fehler und keine neuen Befunde von knip oder jscpd bringen; ein PR ohne Nutzen, aber mit dem Risiko neuer Fehler, käme sonst per Auto-Merge in den Hauptstand.",
+    "behebung": "entfällt für den Agenten: Er sieht diese Meldung nicht mehr. Die Prüfung hat den Patch verworfen; der Weg steht vor dem Lauf im Auftrag an den Agenten.",
+    "nichtAngenommen": "Die Prüfung im Aufräumen schwächen, damit ein Patch mit neuen Befunden durchgeht, oder die Basislinien erweitern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Die Zieldatei bleibt bis zu ihrer nächsten Änderung gesperrt, und das geschlossene Issue zählt in der wöchentlichen Auswertung."
+  },
+  "nacht/befunde-offen": {
+    "liste": "N5, N6",
+    "wozu": "Ein Umbau muss die gemeldeten Befunde der Sorte wirklich beheben; bei altfunktion muss eine Zahl der Datei in eslint-suppressions.json sinken. Bleiben sie, hätte der PR keinen Nutzen, und verschobene Verstöße zählten fälschlich als Abbau der Altlast.",
+    "behebung": "entfällt für den Agenten: Er sieht diese Meldung nicht mehr. Hat er nichts geändert, weil er die Befunde nicht sicher beheben konnte (\"geaendert\": false), endet der Lauf ebenfalls hier; das ist der vorgesehene Ausgang, kein Fehler.",
+    "nichtAngenommen": "Die Prüfung so ändern, dass eine verschobene oder umbenannte Stelle als behoben gilt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Die Zieldatei bleibt bis zu ihrer nächsten Änderung gesperrt, und das geschlossene Issue zählt in der wöchentlichen Auswertung."
+  },
+  "nacht/verhalten": {
+    "liste": "N7",
+    "wozu": "Ein angeblich reiner Umbau darf das Verhalten nicht ändern. Sind betroffene Tests rot, erreicht kein Test die Zieldatei oder ist die Mutationsprüfung rot, käme sonst ein Fehler per Auto-Merge in Code, den Kunden benutzen, ohne dass ihn jemand angesehen hat.",
+    "behebung": "entfällt für den Agenten: Er sieht diese Meldung nicht mehr, und Tests liegen außerhalb seiner Reichweite. Die Prüfung hat den Patch verworfen; eine Datei ohne erreichenden Test braucht zuerst Tests aus einem eigenen Paket.",
+    "nichtAngenommen": "Tests oder die Mutationsprüfung für das Aufräumen auslassen oder abschwächen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Die Zieldatei bleibt bis zu ihrer nächsten Änderung gesperrt, und das geschlossene Issue zählt in der wöchentlichen Auswertung."
+  },
+  "nacht/agent-antwort": {
+    "liste": "N3",
+    "wozu": "Nur eine gültige Antwort des Aufräum-Agenten im vorgegebenen Schema wird geprüft. Eine kaputte, abgeschnittene oder fremde Antwort, etwa eine halbe Datei oder ein Text mit Zugangsschlüssel, käme sonst per Auto-Merge in den Hauptstand.",
+    "behebung": "entfällt für den Agenten: Der Lauf ist vorbei. Ein wiederholter Fehler liegt am Prompt, am Schema oder am Zugang des Agenten; das klärt die wöchentliche Auswertung.",
+    "nichtAngenommen": "Das Schema lockern oder eine ungültige Antwort trotzdem übernehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Hier entscheidet kein Agent. Der Agent hatte vor dem Lauf den Weg \"geaendert\": false; der Befund zählt in der wöchentlichen Auswertung."
+  }
+}
