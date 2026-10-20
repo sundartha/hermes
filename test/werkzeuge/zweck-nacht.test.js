@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { auftragstext } from "../../tools/ziele/agentenlauf.mjs";
 import { IDS, ZWECK_JE_ID, meldeBefunde, zweckAbsaetze, zweckVon } from "../../tools/ziele/befunde.mjs";
+import { zeigeZweck } from "../../tools/ziele/pruefen.mjs";
 import { SORTEN } from "../../tools/ziele/sorten.mjs";
-import { nurGenutzteIds, quelltext } from "./zweck-quellen.js";
+import { nurGenutzteIds } from "./zweck-quellen.js";
 
 const BEREICH = "nacht";
 const OHNE_BLOCK = new Map([
@@ -71,11 +72,14 @@ test("ein Befund-Issue nennt nach dem festen Text den Block als eigene Absätze,
   assert.deepEqual(zweckAbsaetze({ id: IDS.pause, datei: "src/a.js" }), []);
 });
 
-test("Prüfung und Commit des Aufräumens nennen nach der Verstoßzeile den Block im Lauf-Log", () => {
-  for (const [datei, zeile] of [
-    ["tools/ziele/pruefen.mjs", "console.error(`Prüfung: Verstoß ${verstoss.id} in ${verstoss.datei}: ${verstoss.text}`);\n    zeigeZweck(verstoss);\n"],
-    ["tools/ziele/pr.mjs", "console.error(`Commit: Verstoß ${verstoss.id}: ${verstoss.text}`);\n    zeigeZweck(verstoss);\n"],
-  ]) {
-    assert.ok(quelltext(datei).includes(zeile), datei);
-  }
+test("die Prüfung des Aufräumens nennt im Lauf-Log den Block der Befund-ID, bei einer Basislinie den des Kürzens, ohne Text keinen", (context) => {
+  const fehler = context.mock.method(console, "error", () => {});
+  const ausgabe = (verstoss) => {
+    fehler.mock.resetCalls();
+    zeigeZweck(verstoss);
+    return fehler.mock.calls.map(({ arguments: [text] }) => text);
+  };
+  assert.deepEqual(ausgabe({ id: IDS.test, datei: "src/frei.js" }), [zweckBlock("nacht/nur-zieldatei").join("\n")]);
+  assert.deepEqual(ausgabe({ id: IDS.geschuetzt, datei: "tools/basis/jscpd.json" }), [zweckBlock("nacht/basis-kuerzen").join("\n")]);
+  assert.deepEqual(ausgabe({ id: IDS.zeit, datei: "src/zeit.js" }), []);
 });
