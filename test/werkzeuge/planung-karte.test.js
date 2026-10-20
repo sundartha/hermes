@@ -3,6 +3,7 @@ import { existsSync, symlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
 
+import { altfunktionBefunde } from "../../tools/ziele/sorten.mjs";
 import { REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -156,4 +157,13 @@ test("karte lehnt Dateien ab, die Git ignoriert, und nimmt neue, noch nicht vers
   const neu = karte(ordner, "src/neu.js");
   assert.equal(neu.status, 0, neu.stderr);
   assert.equal(neu.stdout, "src/neu.js\nneu\t1-1\t1 Zeilen\tkeine Befunde\n");
+});
+
+test("karte und die Wahl der Altfunktionen nennen eine Datei hinter einem Symlink im Repo unter demselben Pfad", (context) => {
+  const ordner = probe(context);
+  symlinkSync("probe.js", join(ordner, "src/verweis.js"));
+  writeFiles(ordner, { "eslint-suppressions.json": JSON.stringify({ "src/probe.js": { "no-var": { count: 2 } }, "src/verweis.js": { "no-var": { count: 2 } } }) });
+  const lauf = karte(ordner, "src/verweis.js", "--json");
+  assert.equal(lauf.status, 0, lauf.stderr);
+  assert.deepEqual([...altfunktionBefunde(ordner).keys()], [JSON.parse(lauf.stdout).datei]);
 });

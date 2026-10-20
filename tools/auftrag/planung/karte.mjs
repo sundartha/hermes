@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 import { ungefilterteMeldungen } from "../../ziele/eslint-ungefiltert.mjs";
-import { funktionenIn, regelnJeFunktion } from "../../ziele/funktionen.mjs";
+import { echterRepoPfad, funktionenIn, regelnJeFunktion } from "../../ziele/funktionen.mjs";
 import { pfadIstSauber } from "../format.mjs";
 import { gitLauf } from "./git.mjs";
 
@@ -22,7 +22,7 @@ function pruefbar(datei, meldungen) {
 }
 
 function karteDerDatei(wurzel, { filePath, messages, source }) {
-  const datei = relative(wurzel, realpathSync(filePath));
+  const datei = echterRepoPfad(wurzel, filePath);
   pruefbar(datei, messages);
   const funktionen = funktionenIn(datei, source ?? readFileSync(filePath, "utf8"));
   const jeFunktion = regelnJeFunktion(funktionen, messages);
@@ -34,7 +34,7 @@ function karteDerDatei(wurzel, { filePath, messages, source }) {
 }
 
 function imRepo(root, wurzel, datei) {
-  const echt = relative(wurzel, realpathSync(resolve(root, datei)));
+  const echt = echterRepoPfad(wurzel, resolve(root, datei));
   if (!(isAbsolute(datei) || pfadIstSauber(datei)) || !pfadIstSauber(echt)) {
     throw new Error(`${datei} liegt nicht im Repo oder ist nicht ohne . und .. angegeben`);
   }

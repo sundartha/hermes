@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
 import { UNTERDRUECKUNGEN, ungefilterteMeldungen } from "./eslint-ungefiltert.mjs";
-import { funktionenIn, regelnJeFunktion } from "./funktionen.mjs";
+import { echterRepoPfad, funktionenIn, regelnJeFunktion } from "./funktionen.mjs";
 import { eslintBefehl, fuehreAus, paketBefehl, werkzeugBefehl } from "./werkzeuge.mjs";
 
 export const KNIP = "knip";
@@ -106,7 +106,7 @@ function unterdrueckteDateien(root) {
 }
 
 function altfunktionEintraege(root, { filePath, messages, source }) {
-  const datei = relative(root, filePath);
+  const datei = echterRepoPfad(root, filePath);
   const funktionen = funktionenIn(datei, source ?? readFileSync(filePath, "utf8"));
   const jeFunktion = regelnJeFunktion(funktionen, messages);
   const eintraege = [...jeFunktion].map(([{ name, von }, regeln]) => ({
