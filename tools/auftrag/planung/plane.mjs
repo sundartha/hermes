@@ -118,11 +118,17 @@ function konfliktAusweg(nummern) {
   return `frag nur zu ${nummern} nach, schick eine Schnittliste, die ${nummern} auf mehrere Aufträge mit erlaubtem bereich verteilt, oder antworte mit „Zerlegung passt nicht: …“`;
 }
 
+function konfliktBefunde(nachfragen, offen) {
+  if (offen.length === 0) return [];
+  const nummern = offen.join(", ");
+  return nachfragen.flatMap((eintrag, stelle) => (eintrag.nummern.every((nummer) => offen.includes(nummer)) ? [] : [`Nachfrage ${stelle + 1}: Bereichskonflikt ${nummern} ist offen; ${konfliktAusweg(nummern)}`]));
+}
+
 function konfliktTeil(konflikte) {
   if (konflikte.length === 0) return [];
   const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
   const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
-  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist; wird eine Nachfrage wiederholt abgewiesen, endet die Planung mit Befunden.`;
+  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
   return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
 }
 
@@ -148,7 +154,7 @@ export class Planung {
     this.wegpruefungen = [];
     this.wegZaehler = new Map();
     this.wegOffen = [];
-    this.konfliktSchleife = null;
+    this.abgewiesenBei = null;
   }
 
   beginne(soll, andererAusgang) {
@@ -409,17 +415,9 @@ export class Planung {
     });
   }
 
-  konfliktBefunde(nachfragen) {
-    const offen = bereichskonflikte(this.sauberBerichte()).map(({ nummer }) => nummer);
-    if (offen.length === 0) return [];
-    const nummern = offen.join(", ");
-    return nachfragen.flatMap((eintrag, stelle) => (eintrag.nummern.every((nummer) => offen.includes(nummer)) ? [] : [`Nachfrage ${stelle + 1}: Bereichskonflikt ${nummern} ist offen; ${konfliktAusweg(nummern)}`]));
-  }
-
-  weiseNachfragenAbOderBeende(befunde) {
-    this.konfliktSchleife ??= this.schleife("bereichskonflikt");
-    const ende = this.konfliktSchleife.endeNachRunde(befunde, null, this.soll);
-    if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, befunde);
+  weiseNachfragenAbOderBeende(befunde, konflikt) {
+    if (this.abgewiesenBei === konflikt) throw new Ende(EXIT_BEFUNDE, `Bereichskonflikt ${konflikt}: zum zweiten Mal Nachfragen zu anderen Nummern`, befunde);
+    this.abgewiesenBei = konflikt;
     return { weiter: this.team.ruecksenden(this.planer, befunde) };
   }
 
@@ -447,8 +445,9 @@ export class Planung {
   async nachfragen(nachfragen) {
     const befunde = this.nachfrageBefunde(nachfragen);
     if (befunde.length > 0) return { befunde };
-    const gesperrt = this.konfliktBefunde(nachfragen);
-    if (gesperrt.length > 0) return this.weiseNachfragenAbOderBeende(gesperrt);
+    const konflikte = bereichskonflikte(this.sauberBerichte()).map(({ nummer }) => nummer);
+    const gesperrt = konfliktBefunde(nachfragen, konflikte);
+    if (gesperrt.length > 0) return this.weiseNachfragenAbOderBeende(gesperrt, konflikte.join(", "));
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) {
       const nummern = [...new Set(nachfragen.flatMap((eintrag) => eintrag.nummern))];
