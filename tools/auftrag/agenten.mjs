@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { REPO_WURZEL, vorhandenerPfad } from "../zwillingspfad.mjs";
 import { funktionenIn } from "../ziele/funktionen.mjs";
 import { ANNAHMEN, annahmenAus } from "./annahmen.mjs";
 import { ABSICHT, TESTUMBAU, funktionskartePfad, istTestdatei } from "./format.mjs";
@@ -47,7 +48,7 @@ export const KRITISCH_OHNE_GATE_TEST = [
   "src/queue/",
   "src/plans.js",
   "src/elevenlabs/",
-];
+].map((pfad) => vorhandenerPfad(pfad, REPO_WURZEL));
 
 function gatePfade() {
   const gates = Object.values(JSON.parse(readFileSync(GATE_TESTS, "utf8")));

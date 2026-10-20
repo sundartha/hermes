@@ -3,13 +3,18 @@ const path = require("node:path");
 
 const BEREICHE_DATEI = path.join(__dirname, "tools/bereiche.json");
 const BEREICHE = fs.existsSync(BEREICHE_DATEI) ? require(BEREICHE_DATEI) : [];
+const vorhanden = (datei) => fs.existsSync(path.join(__dirname, datei));
+const vorhandenesModul = (modul) => {
+  const zwilling = modul.replace(/\.js$/, ".ts");
+  return !vorhanden(modul) && vorhanden(zwilling) ? zwilling : modul;
+};
 const SERVER_PFLICHT_MODULE = [
   ["ausfall-meldung", "src/telephony/outage-report.js"],
   ["bezahlt-ohne-nummer", "src/billing/paid-without-number-watch.js"],
   ["preisdrift", "src/billing/price-drift-watch.js"],
   ["bereitstellung-wiederholen", "src/billing/provision-retry-sweep.js"],
   ["absender-besitz", "src/telephony/ani-ownership-recheck.js"],
-];
+].map(([name, modul]) => [name, vorhandenesModul(modul)]);
 const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
   ...eingaenge,
   ...fachlogik,

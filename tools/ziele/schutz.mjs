@@ -1,9 +1,11 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { istKritisch } from "../auftrag/agenten.mjs";
 import { geschuetzteMuster, istGeschuetzt, istTestdatei } from "../auftrag/format.mjs";
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
+import { vorhandenerPfad } from "../zwillingspfad.mjs";
 
 export const WURZEL_DATEI = "tools/ziele/geschuetzt.json";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
@@ -46,7 +48,9 @@ function schutzDatei(root) {
 
 export function wurzelPfade(root) {
   const { gates, gruppen } = schutzDatei(root);
-  const alle = [...gateModule(root, gates), ...Object.values(gruppen).flat()];
+  const wurzel = pathToFileURL(join(root, ORDNER_ENDE));
+  const gruppenPfade = Object.values(gruppen).flat().map((pfad) => vorhandenerPfad(pfad, wurzel));
+  const alle = [...gateModule(root, gates), ...gruppenPfade];
   return [...new Set(alle)].filter((pfad) => existsSync(join(root, pfad))).sort();
 }
 
