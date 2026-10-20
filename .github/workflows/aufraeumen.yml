@@ -124,7 +124,7 @@ jobs:
   pruefen:
     name: Änderung prüfen
     needs: [ziel, agent]
-    if: always() && needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || needs.agent.outputs.ausgang == 'weiter')
+    if: always() && needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || (needs.agent.result == 'success' && needs.agent.outputs.ausgang == 'weiter'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -175,7 +175,7 @@ jobs:
   pr:
     name: PR anlegen
     needs: [ziel, agent, pruefen]
-    if: always() && needs.pruefen.result == 'success' && needs.pruefen.outputs.ausgang == 'weiter'
+    if: always() && needs.pruefen.result == 'success' && needs.pruefen.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || (needs.agent.result == 'success' && needs.agent.outputs.ausgang == 'weiter'))
     runs-on: ubuntu-latest
     environment: wartung
     timeout-minutes: 15
