@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
 import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, istGeschuetzt, istTestdatei, istUmbau, kennungBefunde, reihenfolge } from "../format.mjs";
+import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -535,9 +536,9 @@ function annahmeText({ auftrag, nummer, text }) {
 export async function schnittImOrdner(ordner, { schnitt, berichte, root }) {
   const vorhanden = DOKUMENTE.filter((name) => existsSync(join(ordner, name)));
   const dokumente = Object.fromEntries(vorhanden.map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
-  const { soll, unklar } = nummernImOrdner(ordner);
+  const { soll, unklar, nurUmbau } = nummernImOrdner(ordner);
   const ergebnis = await schnittPruefung(schnitt, { berichte, soll, dokumente, root });
-  return { ...ergebnis, befunde: [...mitRegel(REGEL.nummern, unklar), ...ergebnis.befunde] };
+  return { ...ergebnis, befunde: [...mitRegel(REGEL.nummern, [...unklar, ...nurUmbauBefunde(liste(schnitt?.auftraege), nurUmbau)]), ...ergebnis.befunde] };
 }
 
 export async function schnittBefehl(ordner, root) {
