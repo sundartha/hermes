@@ -4,10 +4,12 @@ import { test } from "node:test";
 import { ESLint, Linter } from "eslint";
 
 import hermes from "../../tools/eslint-rules/index.js";
+import { REPO_WURZEL, vorhandenerPfad } from "../../tools/zwillingspfad.mjs";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const RULE = "hermes/ablehnungsgruende";
-const GATES = "src/telephony/outbound-gates.js";
+const GATES_JS = "src/telephony/outbound-gates.js";
+const GATES = vorhandenerPfad(GATES_JS, REPO_WURZEL);
 const ZITIERTER_GRUND = /„([^“]+)“/;
 
 let repoEslint;
@@ -82,7 +84,7 @@ test("ablehnungsgruende: fehlt die Tabelle, meldet die Regel das, statt still ni
     rules: { [RULE]: ["error", { datei: "fehlt.mjs", tabelle: "TEXTE", sprache: "en" }] },
   };
   const messages = new Linter({ cwd: directory }).verify('export const a = { grund: "x" };', config, {
-    filename: join(directory, GATES),
+    filename: join(directory, GATES_JS),
   });
   assert.deepEqual(
     messages.map(({ messageId }) => messageId),

@@ -110,7 +110,7 @@ function imKlon(klon, datei) {
 }
 
 function aendern(klon, probe) {
-  const pfad = join(klon, probe.datei);
+  const pfad = join(klon, imKlon(klon, probe.datei));
   const inhalt = readFileSync(pfad, "utf8");
   if (probe.jsonEltern) {
     const daten = JSON.parse(inhalt);
