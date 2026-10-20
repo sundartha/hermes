@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { kenntZweck, zweckBlock } from "./zweck.mjs";
 
 export const PRUEFER_ZWECK = {
@@ -12,7 +10,7 @@ export const PRUEFER_ZWECK = {
   ABSICHT: "pruefer/absicht",
 };
 export const KATALOG_PRAEFIX = "pruefer/katalog-";
-const TEXTE = new URL("../zweck/pruefer.json", import.meta.url);
+const ABSCHNITTSBUCHSTABEN = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 const KATALOG_ABSCHNITT = /^## ([A-Z]) — /gm;
 const KATALOG_EINTRAG = /^([A-Z])\d{1,2}$/;
 const ABSICHT_BELEG = "Absicht:";
@@ -31,9 +29,9 @@ export function befundZweck(befund) {
 
 export function katalogAbgleich(katalog) {
   const abschnitte = [...katalog.matchAll(KATALOG_ABSCHNITT)].map(([, abschnitt]) => `${KATALOG_PRAEFIX}${abschnitt}`);
-  const texte = Object.keys(JSON.parse(readFileSync(TEXTE, "utf8"))).filter((id) => id.startsWith(KATALOG_PRAEFIX));
+  const texte = ABSCHNITTSBUCHSTABEN.map((buchstabe) => `${KATALOG_PRAEFIX}${buchstabe}`).filter(kenntZweck);
   return {
-    ohneText: abschnitte.filter((id) => !texte.includes(id)),
+    ohneText: abschnitte.filter((id) => !kenntZweck(id)),
     ohneAbschnitt: texte.filter((id) => !abschnitte.includes(id)),
   };
 }
