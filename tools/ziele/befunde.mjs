@@ -1,3 +1,4 @@
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { issuesMitLabel, kommentare, kommentiere, stelleLabelSicher } from "./github.mjs";
 
 export const LABEL = "aufraeumen";
@@ -42,6 +43,34 @@ const FESTE_TEXTE = {
   [IDS.pause]: "Eine Rücknahme hat weder ein Reparatur- noch ein master-rot-Issue; die Sorte bleibt pausiert.",
 };
 
+const NUR_ZIELDATEI = "nacht/nur-zieldatei";
+const NEUE_BEFUNDE = "nacht/neue-befunde";
+const VERHALTEN = "nacht/verhalten";
+export const ZWECK_JE_ID = {
+  [IDS.test]: NUR_ZIELDATEI,
+  [IDS.geschuetzt]: NUR_ZIELDATEI,
+  [IDS.fremd]: NUR_ZIELDATEI,
+  [IDS.geloescht]: NUR_ZIELDATEI,
+  [IDS.lint]: NEUE_BEFUNDE,
+  [IDS.neu]: NEUE_BEFUNDE,
+  [IDS.offen]: "nacht/befunde-offen",
+  [IDS.testsRot]: VERHALTEN,
+  [IDS.mutation]: VERHALTEN,
+  [IDS.agent]: "nacht/agent-antwort",
+};
+const BASIS_ZWECK = "nacht/basis-kuerzen";
+const BASISLINIEN = /^(?:tools\/basis\/[\w.-]+\.json|eslint-suppressions\.json)$/;
+
+export function zweckVon({ id, datei }) {
+  if (ZWECK_JE_ID[id] === undefined) return null;
+  return BASISLINIEN.test(String(datei)) ? BASIS_ZWECK : ZWECK_JE_ID[id];
+}
+
+export function zweckAbsaetze(befund) {
+  const zweck = zweckVon(befund);
+  return zweck === null ? [] : zweckBlock(zweck).flatMap((zeile) => [zeile, ""]);
+}
+
 export const ROTE_IDS = new Set([IDS.test, IDS.geschuetzt, IDS.fremd, IDS.geloescht, IDS.prAnlage]);
 
 export function befund(id, datei, text) {
@@ -60,7 +89,7 @@ export function gueltigeBefunde(befunde) {
 
 function befundText({ id, datei, betroffen }, lauf) {
   const andere = betroffen ? [`- Geänderte andere Datei: \`${betroffen}\``] : [];
-  return [`- Regel-ID: ${id}`, `- Zieldatei: \`${datei}\``, ...andere, `- Lauf: ${lauf}`, "", FESTE_TEXTE[id], ""].join("\n");
+  return [`- Regel-ID: ${id}`, `- Zieldatei: \`${datei}\``, ...andere, `- Lauf: ${lauf}`, "", FESTE_TEXTE[id], "", ...zweckAbsaetze({ id, datei })].join("\n");
 }
 
 export function istVomBot(eintrag) {

@@ -2,10 +2,11 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
+import { zweckBlock } from "../auftrag/zweck.mjs";
 import { onlyLowersCounts, stricterCases } from "../freigabe-strenger.mjs";
 import { AGENT_DATEI, AGENT_ORDNER, AGENT_PATCH } from "./agentenlauf.mjs";
 import { BLOCKIERT, WEITER, ergebnisVon, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
-import { IDS, ROTE_IDS, befund } from "./befunde.mjs";
+import { IDS, ROTE_IDS, befund, zweckVon } from "./befunde.mjs";
 import { UNTERDRUECKUNGEN } from "./eslint-ungefiltert.mjs";
 import { FIXER_PATCH } from "./fixer.mjs";
 import { commitNachricht } from "./nachricht.mjs";
@@ -24,6 +25,11 @@ const GELOESCHT = "D";
 const MAX_AUSZUG = 20;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+
+export function zeigeZweck(verstoss) {
+  const zweck = zweckVon(verstoss);
+  if (zweck !== null) console.error(zweckBlock(zweck).join("\n"));
+}
 
 export function committeAlsBot(root, nachricht) {
   gitAusgabe(["-c", `user.name=${BOT}`, "-c", `user.email=${BOT_EMAIL}`, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-F", "-"], root, { eingabe: nachricht });
@@ -139,6 +145,7 @@ export async function befehl({ ordner }, root) {
     schreibeJson(ausgabe, PRUEF_DATEI, { ...ergebnisVon(BLOCKIERT, `Verstoß ${verstoss.id}`), befunde: [verstoss], dateien });
     setzeAusgaben({ ausgang: BLOCKIERT, grund: `Verstoß ${verstoss.id}` });
     console.error(`Prüfung: Verstoß ${verstoss.id} in ${verstoss.datei}: ${verstoss.text}`);
+    zeigeZweck(verstoss);
     return ROTE_IDS.has(verstoss.id) ? EXIT_ROT : EXIT_GRUEN;
   }
   schreibeJson(ausgabe, PRUEF_DATEI, { ...ergebnisVon(WEITER, ""), dateien });
