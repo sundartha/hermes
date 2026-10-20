@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUPPEN, LAUF_FRIST_MS, ORDNER, alsJson, angaben, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ORDNER, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { commitAll } from "./probe-repo.js";
 import { AUFTRAG, EXIT_BEFUNDE, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
@@ -31,8 +31,9 @@ function konfliktAbschnitt({ eingabe }) {
   return KONFLIKT_ABSCHNITT.exec(eingabe)?.[1] ?? "";
 }
 
-function konfliktLauf(context, ueberschrieben) {
-  const erkundung = { "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern, { S1: { aenderungen: KONFLIKT_AENDERUNGEN } })] };
+function konfliktLauf(context, ueberschrieben, konfliktNummern = ["S1"]) {
+  const konflikte = Object.fromEntries(konfliktNummern.map((nummer) => [nummer, { aenderungen: KONFLIKT_AENDERUNGEN }]));
+  const erkundung = { "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern, konflikte)] };
   return planeIn(context, wurzelMitKonflikt(context), { werkzeug: AUFTRAG, grund: planeAntworten(), argumente: ["plane", ORDNER], ueberschrieben: { ...erkundung, ...ueberschrieben } });
 }
 
@@ -66,4 +67,23 @@ test("plane: weist plane bei offenem Bereichskonflikt zum zweiten Mal eine Nachf
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 0);
   assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
   assert.equal(planungsBericht(lauf).grund, "Bereichskonflikt S1: zum zweiten Mal Nachfragen zu anderen Nummern");
+});
+
+test("plane: ändert sich der offene Bereichskonflikt nach einer Nachfrage zu seiner Nummer, geht die nächste abgewiesene Nachfrage wieder als Befund zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  const zuS4 = alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo setzt nimmAnruf den Hinweis?" }] });
+  const zu = (nummer) => alsJson({ nachfragen: [{ nummern: [nummer], frage: `Geht ${nummer} ohne scripts/b.sh?` }] });
+  const sauber = (nummer) => [alsJson({ nummern: { [nummer]: angaben(nummer) }, hinweise: [] })];
+  const lauf = konfliktLauf(context, {
+    "planer|## Zuschnitt": [zuS4, zuS4, alsJson({ schnitt: schnittliste() })],
+    "planer|## Befunde": [zu("S1"), zu("S7")],
+    "erkunder|## Nachfrage|S1": sauber("S1"),
+    "erkunder|## Nachfrage|S7": sauber("S7"),
+    "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN + 1 }, () => GRUEN_PRUEFLISTE),
+  }, ["S1", "S7"]);
+  exit(lauf, EXIT_GRUEN);
+  const befunde = aufrufe(lauf, "planer", "## Befunde");
+  assert.equal(befunde.length, 2);
+  assert.ok(befunde[0].eingabe.includes("Bereichskonflikt S1, S7 ist offen"));
+  assert.ok(befunde[1].eingabe.includes("Bereichskonflikt S7 ist offen"));
+  assert.deepEqual(aufrufe(lauf, "erkunder", "## Nachfrage").map(({ eingabe }) => /^#### (\S+) \(/mu.exec(eingabe)[1]), ["S1", "S7"]);
 });
