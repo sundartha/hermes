@@ -320,6 +320,16 @@ function engsterOrdner(dateien) {
 const PRODUKTDATEIEN = { gehoert: (datei) => !istTestdatei(datei), einzahl: "Produktdatei", mehrzahl: "Produktdateien" };
 const TESTDATEIEN = { gehoert: istTestdatei, einzahl: "Testdatei", mehrzahl: "Testdateien" };
 
+function erwarteterBereich(dateien) {
+  return dateien.length === 1 ? dateien[0] : engsterOrdner(dateien);
+}
+
+export function bereichskonflikte(berichte) {
+  const jeNummer = new Map();
+  for (const { nummer, datei } of aenderungsStellen(berichte)) if (PRODUKTDATEIEN.gehoert(datei)) jeNummer.set(nummer, new Set([...(jeNummer.get(nummer) ?? []), datei]));
+  return [...jeNummer].map(([nummer, dateien]) => ({ nummer, dateien: [...dateien] })).filter(({ dateien }) => erwarteterBereich(dateien) === WURZEL);
+}
+
 function fremdeDateien(auftrag, art) {
   if (art !== TESTDATEIEN) return [];
   const fremde = liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && !art.gehoert(datei));
@@ -329,7 +339,7 @@ function fremdeDateien(auftrag, art) {
 function bereichDerDateien(auftrag, art) {
   const dateien = [...new Set(liste(auftrag.erwarteteDateien).filter((datei) => istText(datei) && art.gehoert(datei)))];
   if (dateien.length === 0) return [`${auftrag.id}: erwarteteDateien nennt keine ${art.einzahl}`];
-  const erwartet = dateien.length === 1 ? dateien[0] : engsterOrdner(dateien);
+  const erwartet = erwarteterBereich(dateien);
   if (erwartet === WURZEL) return [`${auftrag.id}: der einzige gemeinsame Ordner ist die Repo-Wurzel; teil den Auftrag`];
   const mehrere = new Set(dateien.map((datei) => dirname(datei))).size > 1;
   const eigene = auftrag.bereich === erwartet ? [] : [`${auftrag.id}: bereich ist ${auftrag.bereich}, die ${art.mehrzahl} verlangen ${erwartet}`];
