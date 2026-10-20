@@ -1,0 +1,107 @@
+{
+  "uebrige/secret-scan": {
+    "liste": "U1",
+    "wozu": "Ein echter Zugangsschlüssel für Telnyx, Stripe oder ElevenLabs darf nicht in die Git-Geschichte gelangen. Dort bliebe er für jeden mit Lesezugriff sichtbar, auch nach dem Löschen; damit ließe sich auf Antonios Kosten telefonieren oder Zahlungsdaten abrufen, und der Schlüssel müsste überall ausgetauscht werden.",
+    "behebung": "Einen echten Schlüssel aus dem Code nehmen und beim Start aus den Einstellungen des Servers lesen (Umgebungsvariable); einen erfundenen Testwert aus test/gemeinsam/erfundene-geheimnisse.js holen, statt ihn selbst in den Test zu schreiben. Ein echter Schlüssel, der schon gepusht ist, gilt als offengelegt: Antonio bitten, ihn auszutauschen, und die Commits ohne ihn neu schreiben.",
+    "nichtAngenommen": "Den Namen eines Werts so ändern, dass das Suchmuster nicht greift, den Wert zur Laufzeit aus Teilen zusammensetzen, dafür sorgen, dass gitleaks den Fund übergeht, oder gitleaks.toml ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht ein Test einen erfundenen Wert, der in test/gemeinsam/erfundene-geheimnisse.js fehlt, hörst du in einer Paket-Sitzung auf und schreibst „Voraussetzung fehlt:“ mit dem Zweck des Werts ins Issue; die Datei ist geschützt und ändert sich nur mit Antonios Approve. Hältst du einen Fund für einen Fehlalarm, gehören Datei, Regel und Grund als Entscheidungsnotiz ins Issue; entscheiden kann nur Antonio."
+  },
+  "uebrige/lieferkette": {
+    "liste": "U2",
+    "wozu": "Eine frisch veröffentlichte Paketversion kann von Angreifern übernommen sein und wird oft erst nach Tagen zurückgezogen; käme sie über die Paketliste in die Prüfungen oder auf den Live-Server, könnte sie Zugangsschlüssel oder Kundendaten abgreifen. Eine geänderte npm-Einstellung (.npmrc) könnte zudem andere Quellen einschalten oder die Prüfungen abschalten.",
+    "behebung": "Eine Version nehmen, die mindestens sieben Tage alt ist, oder warten, bis die gewählte alt genug ist, etwa die Update-Gruppe von Dependabot ohne die junge Version neu erzeugen; eine Änderung an .npmrc oder npm-shrinkwrap.json zurücknehmen.",
+    "nichtAngenommen": "Die Version in tools/basis/lieferkette-ausnahmen.json eintragen, damit ihr Alter nicht zählt, oder die Paketliste so umbauen, dass die Prüfung die Änderung nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Ein neuer Eintrag in tools/basis/lieferkette-ausnahmen.json macht die Freigabe-Prüfung rot (die Prüfung wird lockerer), auch mit Antonios Approve; grün würde sie nur mit einem Fehlalarm-Beispiel, und eine bewusste Ausnahme für eine junge Version ist kein Fehlalarm. Muss eine junge Version sofort hinein, etwa für eine Sicherheitslücke, hörst du auf und schreibst Paket, Version und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ist die Registry nicht erreichbar, den Lauf später wiederholen."
+  },
+  "uebrige/audit": {
+    "liste": "U3",
+    "wozu": "Ein PR darf kein Paket mit einer neuen bekannten Sicherheitslücke der Stufe high oder critical einbringen; Hermes würde sie sonst auf dem Live-Server ausliefern, wo Angreifer sie gezielt ausnutzen können.",
+    "behebung": "Eine Version ohne die Lücke wählen: das Paket aktualisieren, das sie mitbringt, oder die Version über overrides in package.json festlegen.",
+    "nichtAngenommen": "Die Paketliste so ändern, dass npm audit die Version nicht mehr meldet, während sie weiter installiert wird, oder die Prüfung im Schritt umgehen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Prüfung kennt keine Ausnahmeliste. Gibt es keine sichere Version, hörst du auf und schreibst Paket, Meldung und den Link zur Warnung als Entscheidungsnotiz ins Issue; ob das Paket trotzdem hinein darf, entscheidet Antonio."
+  },
+  "uebrige/commit-pruefung": {
+    "liste": "U4",
+    "wozu": "Jeder Commit trägt einen Grund und seine Herkunft. Fehlen sie, kann Antonio bei einem Fehler nicht nachlesen, zu welchem Paket die Änderung gehört und warum sie gemacht wurde, und sie nicht gezielt zurücknehmen.",
+    "behebung": "Die Commit-Nachricht nach den Regeln aus commitlint.config.mjs schreiben: erste Zeile im Imperativ und höchstens 72 Zeichen, Leerzeile, ein Absatz „Warum:“ mit dem Grund, der nur für diese Änderung gilt, und die Zeile mit der Herkunft (etwa „Paket: <Name>“); fixup- und squash-Commits vor dem Push zusammenfassen.",
+    "nichtAngenommen": "Nach „Warum:“ einen Satz schreiben, der zu jeder Änderung passt, eine erfundene Herkunft angeben oder die Regeln in commitlint.config.mjs ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Form lässt sich immer erfüllen; die Commits vor dem Push mit korrigierter Nachricht neu schreiben."
+  },
+  "uebrige/bedrohungskatalog": {
+    "liste": "U7",
+    "wozu": "Jede neue Route und jedes neue MCP-Werkzeug braucht eine Zeile in docs/sicherheitsgrenzen.md mit der Bedrohung und einen Negativtest, der den Angriff wirklich abweist. Sonst ginge eine Angriffsfläche live, ohne dass jemand überlegt hat, wie man sie angreift, etwa ohne Anmeldung Anrufe auslösen oder Daten lesen.",
+    "behebung": "Für die neue Fläche eine Zeile im Katalog mit allen fünf Spalten schreiben und einen Test, dessen Name mit der Kennung beginnt und der den Angriff vorführt und seine Abwehr verlangt; die Fläche im Abschnitt Angriffsfläche eintragen.",
+    "nichtAngenommen": "Einen Test nur mit dem passenden Namen anlegen, der nichts prüft, eine Kennung in tools/basis/katalog-ohne-test.txt eintragen oder einen Punkt mit schwacher Begründung als „trifft nicht zu“ abhaken. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Trifft ein Punkt einer Abgleichsliste an dieser Stelle wirklich nicht zu, steht er mit „trifft nicht zu“ und einer Begründung, warum der Angriff hier unmöglich ist, in docs/sicherheitsabgleich.json; die Datei ist geschützt und wartet auf Antonios Approve. Für einen fehlenden Negativtest gibt es keinen Ausweg; liegt der Test außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Kennung und Fläche ins Issue."
+  },
+  "uebrige/openai-doku": {
+    "liste": "U8",
+    "wozu": "Die Doku für die Prüfer bei OpenAI muss genau die Werkzeuge nennen, die der Server wirklich anbietet. Stützt sich die App-Prüfung auf falsche Angaben, kann OpenAI die Zulassung der App ablehnen oder später entziehen.",
+    "behebung": "Die Tabellen der Prüfer-Doku an die echte Werkzeugliste anpassen oder den Server berichtigen, etwa ein neues Werkzeug in Tabelle A eintragen oder eine interne Kennung aus der Doku nehmen.",
+    "nichtAngenommen": "Einen Werkzeugnamen so schreiben, dass das Leseprogramm der Prüfung ihn nicht findet (etwa ohne Code-Schreibweise), oder einen Fall aus der Prüfung nehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Doku und Server liegen beide im Repo, Angleichen geht immer. Liegt die zu ändernde Datei außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Befund und Datei ins Issue."
+  },
+  "uebrige/anbieter-datenschutz": {
+    "liste": "U9",
+    "wozu": "Hermes darf Daten nur an KI- und Suchanbieter senden, die die Datenschutzerklärung nennt. Fehlt einer, erfahren Kunden nicht, dass ihre Gesprächs- oder Suchdaten an diesen Empfänger gehen, und können dem nicht widersprechen.",
+    "behebung": "Den Anbieter mit Zweck in die Datenschutzerklärung aufnehmen, etwa einen Abschnitt „Exa (Websuche)“; ein neuer Adapter bekommt seinen Anzeigenamen in der Karte von tools/anbieter-datenschutz-pruefen.mjs.",
+    "nichtAngenommen": "Den Namen irgendwo in den Text schreiben, ohne Zweck und Empfänger zu erklären, oder den Anbieter außerhalb der geprüften Adapter-Ordner ansprechen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Die Karte liegt unter tools/ und ändert sich nur mit Antonios Approve; braucht dein Paket sie und ist sie nicht in deinem Bereich, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Adapter und Anzeigenamen ins Issue. Ob ein Anbieter überhaupt Daten bekommen darf, entscheidet Antonio (Entscheidungsnotiz)."
+  },
+  "uebrige/log-geheimnisse": {
+    "liste": "U10",
+    "wozu": "Ein Telnyx-Schlüssel, ein Signaturkopf oder eine Telefonnummer darf nicht im Protokoll beim Hoster Render landen; jeder mit Zugang zu diesem Protokoll sähe sonst Kundendaten oder könnte mit dem Schlüssel telefonieren.",
+    "behebung": "Den Wert aus dem Log-Aufruf nehmen, auch maskiert: Die Prüfung liest den Text der Argumente jedes console-Aufrufs in den beiden geprüften Dateien, nicht die Ausgabe; schon der Name eines Schlüssels oder Kopfs, die Wörter secret, apikey und authorization oder eine Telefonnummer im Aufruf sind ein Befund. Braucht es eine Meldung, einen festen Text ohne diese Angaben ausgeben.",
+    "nichtAngenommen": "Den Wert vorher in eine Variable mit harmlosem Namen legen oder einen anderen Protokollbefehl benutzen, den die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Den Wert wegzulassen geht immer. Hältst du den Befund für einen Fehlalarm, gehören Zeile und Grund als Entscheidungsnotiz ins Issue."
+  },
+  "uebrige/rueckkehr-parameter": {
+    "liste": "U11",
+    "wozu": "Kommt ein Kunde nach dem Bezahlen bei Stripe mit einem Rückkehrwert zurück, muss die App ihm einen Text zeigen. Fehlt der Fall oder lässt er sich nicht sicher lesen, sieht der Kunde weder Bestätigung noch Fehler und weiß nicht, ob er bezahlt hat.",
+    "behebung": "In returnMessageText() einen Fall für den neuen Rückkehrwert mit einem Text für den Kunden ergänzen und die Funktion so aufrufen, wie die Meldung es verlangt (params aus new URLSearchParams(window.location.search)).",
+    "nichtAngenommen": "Die geprüfte Zeichenfolge in den Code schreiben, ohne dass daraus ein Text für den Kunden folgt, oder den Aufruf so verstecken, dass die Prüfung ihn nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Ein Text für jeden Rückkehrwert ist immer möglich. Liegt die Datei außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Befund und Datei ins Issue."
+  },
+  "uebrige/testgespraeche": {
+    "liste": "U16",
+    "wozu": "Der Telefon-Agent muss sich als KI zu erkennen geben, darf sich von Angerufenen nicht umsteuern lassen und keine Daten des Auftraggebers verraten. Besteht ein Fall nicht in allen Läufen, träfe das echte Angerufene und fiele auf Antonio als Haftenden zurück.",
+    "behebung": "Anweisungen oder Einstellungen des Agenten so ändern, dass jeder Fall in allen Läufen besteht, etwa den ersten Satz fest als KI-Kennzeichnung setzen, und die Testgespräche danach erneut laufen lassen.",
+    "nichtAngenommen": "Die Testgespräche weglassen, weniger Wiederholungen oder Fälle wählen, eine Bewertung lockern oder einen Bericht als grün melden, der rot ist. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Für einen roten Fall gibt es keinen Ausweg. Lässt er sich nicht beheben, hörst du auf und schreibst Fall, Läufe und Bericht als Entscheidungsnotiz ins Issue; ob die Änderung trotzdem live geht, entscheidet Antonio."
+  },
+  "uebrige/design-tokens": {
+    "liste": "U17",
+    "wozu": "Die Farb- und Maßwerte der Website und ihre Kopie für die Anzeigen in Chat-Apps (MCP-Widgets) müssen gleich bleiben. Laufen sie auseinander, sehen Kunden zwei Erscheinungsbilder; ein Verweis auf eine andere Datei (@import) scheitert im abgeschotteten Widget, und die Anzeige erscheint ohne Gestaltung.",
+    "behebung": "Die Kopie nachziehen, sodass beide Seiten gleich sind, und erst danach die Lock-Datei mit --write neu schreiben; ein @import im Widget durch den eingebetteten Inhalt ersetzen.",
+    "nichtAngenommen": "Die Lock-Datei mit --write neu schreiben, ohne die Kopie nachzuziehen, damit die Abweichung als gleich gilt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Nachziehen geht immer. Ist unklar, welche Seite die richtige ist, gehören beide Werte als Entscheidungsnotiz ins Issue."
+  },
+  "uebrige/elevenlabs-tests": {
+    "liste": "U18",
+    "wozu": "Ein ElevenLabs-Test mit offenem Platzhalter oder leerer Variable meldet „bestanden“, ohne etwas zu beweisen; ein Fehler im Telefon-Agenten bliebe so unentdeckt.",
+    "behebung": "Den Platzhalter durch einen echten Wert aus der Konfiguration oder einem echten Gesprächsfall ersetzen, dynamic_variables in der Testbeschreibung setzen und jede Testdefinition in der Registry führen.",
+    "nichtAngenommen": "Einen beliebigen Wert einsetzen, nur damit der Platzhalter weg ist, oder eine Definition aus der Registry oder dem Ordner nehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Behebung liegt in der Testdefinition. Fehlt der echte Wert, gehören Test und fehlende Angabe als Entscheidungsnotiz ins Issue."
+  },
+  "uebrige/elevenlabs-drift": {
+    "liste": "U19",
+    "wozu": "Der Live-Agent bei ElevenLabs darf nicht unbemerkt von der eingecheckten Vorlage abweichen (Sprachmodell, Anweisungen, Hinweis „ich bin eine KI“); sonst spräche am Telefon etwas anderes, als im Repo geprüft wurde, etwa ein Agent ohne KI-Hinweis.",
+    "behebung": "Die Vorlage auf den Live-Agenten übertragen (npm run elevenlabs:push) oder die Vorlage an eine gewollte Änderung anpassen und danach übertragen.",
+    "nichtAngenommen": "Ein Feld aus dem Teil der Vorlage nehmen, den sie festlegt, damit es nur noch als „nicht verglichen“ erscheint, oder eine Ausnahme ohne echten Grund oder mit erfundenem Datum setzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Für eine gewollte Abweichung sieht die Vorlage eine befristete Ausnahme „ausgenommen“ mit grund und seit am Besitz-Eintrag vor. Übertragen und Lesen brauchen den ElevenLabs-Schlüssel; eine Paket-Sitzung ruft den Live-Dienst nicht auf, sondern schreibt Abweichung und Vorschlag als Entscheidungsnotiz ins Issue, und Antonio entscheidet."
+  },
+  "uebrige/tsconfig": {
+    "liste": "ohne Nummer",
+    "wozu": "Die wirksame TypeScript-Einstellung entscheidet, was die Typprüfung überhaupt prüft. Eine still gelockerte Einstellung (etwa strict aus, eine Datei ausgeschlossen) ließe Typfehler durch, ohne dass eine Prüfungsdatei sichtbar lockerer wird.",
+    "behebung": "Die Änderung an tsconfig.json zurücknehmen; ist sie gewollt und nicht lockerer, schreibt node tools/tsconfig-pruefen.mjs --basis-schreiben die Kopie tools/basis/tsconfig-wirksam.json neu.",
+    "nichtAngenommen": "Die Kopie neu schreiben, um eine Lockerung zu verdecken, oder die Einstellung über eine andere Datei einschleusen, die die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Eine neu geschriebene Kopie liegt unter tools/basis/ und wartet auf Antonios Approve; die Freigabe-Prüfung zeigt dabei, ob die Einstellung lockerer wird."
+  },
+  "uebrige/funktionskarte": {
+    "liste": "ohne Nummer",
+    "wozu": "Eine Fläche (Route oder MCP-Werkzeug) gilt erst als abgedeckt, wenn eine Funktionskarte unter docs/funktionen/ sie über hermes-ctl wirklich aufruft und eine Erwartung an ihre Antwort erfüllt. Ohne Karte ginge eine Fläche live, deren Zusammenspiel niemand vorgeführt hat.",
+    "behebung": "Für die Fläche eine Karte mit einem Rezept schreiben, das sie aufruft und die Antwort prüft, oder die Karte berichtigen, deren Rezept rot ist; einen Eintrag in tools/basis/funktionskarte-offen.json streichen, sobald die Karte da ist.",
+    "nichtAngenommen": "Die Fläche in tools/basis/funktionskarte-offen.json eintragen, eine Karte ohne echte Erwartung schreiben oder eine Fläche zwei Karten zuordnen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Die Liste offener Flächen darf nur kürzer werden. Lässt sich das Rezept nicht schreiben, hörst du auf und schreibst Fläche und Grund als Entscheidungsnotiz ins Issue."
+  }
+}

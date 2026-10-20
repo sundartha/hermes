@@ -4,9 +4,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { VisitorKeys, parse } from "espree";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
+const ZWECK = "uebrige/rueckkehr-parameter";
 const SHELL_FILE = "apps/web/src/components/app/BillingIsland.astro";
 const PORTAL_PATHS_FILE = "src/portal-paths.js";
 const WEB_SOURCE_DIR = "apps/web/src";
@@ -551,4 +554,5 @@ const findings = [
   ...astroFiles(webSource).flatMap((file) => scriptLocaleFindings(root, file)),
 ];
 for (const { file, line, text } of findings) process.stdout.write(`${file}:${line} ${text}\n`);
+if (findings.length > 0) console.error(zweckBlock(ZWECK).join("\n"));
 process.exitCode = findings.length === 0 ? EXIT_OK : EXIT_FINDING;

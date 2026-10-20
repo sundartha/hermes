@@ -2,6 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { surfacesInCleanEnvironment } from "./flaechen.mjs";
 import { kartenLesen } from "./funktionskarte/karten.mjs";
 import { kartenSpielen } from "./funktionskarte/lauf.mjs";
@@ -11,6 +12,8 @@ const EXIT_SAUBER = 0;
 const EXIT_ROT = 1;
 const EXIT_AUFRUF = 2;
 const EXIT_BLOCKIERT = 3;
+const ZWECK = "uebrige/funktionskarte";
+const ROT = "rot";
 const AUFRUF =
   "Aufruf: node tools/funktionskarte.mjs pruefen [--basis <commit>] [--flaechen-datei <json>]";
 
@@ -22,6 +25,7 @@ function flaechenLesen(datei) {
 function melden(ergebnis, befunde) {
   for (const befund of befunde) console.error(befund);
   console.log(`Funktionskarte: ${ergebnis}, ${befunde.length} Befunde.`);
+  if (ergebnis === ROT) console.log(zweckBlock(ZWECK).join("\n"));
 }
 
 async function pruefen({ basis, "flaechen-datei": flaechenDatei }) {
@@ -30,7 +34,7 @@ async function pruefen({ basis, "flaechen-datei": flaechenDatei }) {
   const zuordnung = zuordnungPruefen({ wurzel: ".", karten, flaechen, basis });
   console.log(`Flächen: ${flaechen.length}, Karten: ${karten.length}.`);
   if (zuordnung.length > 0) {
-    melden("rot", zuordnung);
+    melden(ROT, zuordnung);
     return EXIT_ROT;
   }
   const ergebnisse = await kartenSpielen(karten, flaechen);
@@ -43,7 +47,7 @@ async function pruefen({ basis, "flaechen-datei": flaechenDatei }) {
     return EXIT_BLOCKIERT;
   }
   const befunde = ergebnisse.flatMap((ergebnis) => ergebnis.befunde);
-  melden(befunde.length > 0 ? "rot" : "sauber", befunde);
+  melden(befunde.length > 0 ? ROT : "sauber", befunde);
   return befunde.length > 0 ? EXIT_ROT : EXIT_SAUBER;
 }
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import {
   ROUTE_KIND,
   TOOL_KIND,
@@ -32,6 +33,7 @@ const TWO_DIGITS = 2;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
+const ZWECK = "uebrige/bedrohungskatalog";
 const COMMIT_OBJECT_TYPE = "commit";
 const NUMBERED = (format) => Array.from({ length: TOP_TEN }, (_unused, index) => format(index + 1));
 const TWO_DIGIT = (number) => String(number).padStart(TWO_DIGITS, "0");
@@ -269,7 +271,9 @@ function check(root, basis) {
   ];
   for (const line of summary({ threats, listed, surfaces, mapping })) console.log(line);
   for (const finding of findings) console.error(finding);
-  return findings.length > 0 ? EXIT_FINDING : EXIT_OK;
+  if (findings.length === 0) return EXIT_OK;
+  console.error(zweckBlock(ZWECK).join("\n"));
+  return EXIT_FINDING;
 }
 
 function writeList(root) {

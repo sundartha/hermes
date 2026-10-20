@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { alsHauptprogramm, befundeMitZweck } from "./lib/pruefskript.mjs";
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECT_DIR_REL = "elevenlabs";
 const TEST_CONFIGS_DIR_NAME = "test_configs";
@@ -24,6 +26,7 @@ const PATH_SEPARATOR = "/";
 const PARENT_DIR_SEGMENT = "..";
 const CURRENT_DIR_SEGMENT = ".";
 const LOG_PREFIX = "[check-elevenlabs-tests]";
+const ZWECK = "uebrige/elevenlabs-tests";
 
 function isDocKey(key) {
   return key.startsWith(DOC_KEY_PREFIX);
@@ -366,17 +369,7 @@ function runCli() {
     );
     return 0;
   }
-  for (const finding of findings) console.error(`${LOG_PREFIX} ${finding}`);
-  return 1;
+  return befundeMitZweck({ praefix: LOG_PREFIX, befunde: findings, zweck: ZWECK });
 }
 
-const isMain =
-  fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
-if (isMain) {
-  try {
-    process.exit(runCli());
-  } catch (err) {
-    console.error(`${LOG_PREFIX} Fehler (fail-closed): ${err.message}`);
-    process.exit(1);
-  }
-}
+alsHauptprogramm(import.meta.url, LOG_PREFIX, runCli);
