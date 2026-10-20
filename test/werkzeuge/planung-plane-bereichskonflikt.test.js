@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { GRUPPEN, LAUF_FRIST_MS, ORDNER, alsJson, angaben, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { commitAll } from "./probe-repo.js";
-import { AUFTRAG, EXIT_GRUEN, planeAntworten } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_BEFUNDE, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const PRODUKT = "src/a.js";
 const SKRIPT = "scripts/b.sh";
@@ -31,18 +31,16 @@ function konfliktAbschnitt({ eingabe }) {
   return KONFLIKT_ABSCHNITT.exec(eingabe)?.[1] ?? "";
 }
 
+function konfliktLauf(context, ueberschrieben) {
+  const erkundung = { "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern, { S1: { aenderungen: KONFLIKT_AENDERUNGEN } })] };
+  return planeIn(context, wurzelMitKonflikt(context), { werkzeug: AUFTRAG, grund: planeAntworten(), argumente: ["plane", ORDNER], ueberschrieben: { ...erkundung, ...ueberschrieben } });
+}
+
 test("plane: ein Bereichskonflikt steht in der ersten Zuschnittnachricht, und solange er offen ist, startet nur eine Nachfrage zu seiner Nummer einen Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = wurzelMitKonflikt(context);
-  const lauf = planeIn(context, wurzel, {
-    werkzeug: AUFTRAG,
-    grund: planeAntworten(),
-    argumente: ["plane", ORDNER],
-    ueberschrieben: {
-      "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern, { S1: { aenderungen: KONFLIKT_AENDERUNGEN } })],
-      "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo setzt nimmAnruf den Hinweis?" }] }), alsJson({ schnitt: schnittliste() })],
-      "planer|## Befunde": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Geht S1 ohne scripts/b.sh?" }] })],
-      "erkunder|## Nachfrage|S1": [alsJson({ nummern: { S1: angaben("S1") }, hinweise: [] })],
-    },
+  const lauf = konfliktLauf(context, {
+    "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo setzt nimmAnruf den Hinweis?" }] }), alsJson({ schnitt: schnittliste() })],
+    "planer|## Befunde": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Geht S1 ohne scripts/b.sh?" }] })],
+    "erkunder|## Nachfrage|S1": [alsJson({ nummern: { S1: angaben("S1") }, hinweise: [] })],
   });
 
   const [erster, zweiter] = aufrufe(lauf, "planer", "## Zuschnitt");
@@ -58,4 +56,13 @@ test("plane: ein Bereichskonflikt steht in der ersten Zuschnittnachricht, und so
   assert.ok(nachfragen[0].eingabe.includes("#### S1 ("));
   assert.equal(konfliktAbschnitt(zweiter), "", "nach der Nachfrage zu S1 ist der Konflikt aufgelöst");
   exit(lauf, EXIT_GRUEN);
+});
+
+test("plane: wird bei offenem Bereichskonflikt eine Nachfrage, die auch andere Nummern nennt, zum zweiten Mal abgewiesen, endet plane mit Exit 4 ohne Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gemischt = alsJson({ nachfragen: [{ nummern: ["S1", "S4"], frage: "Wie hängen S1 und S4 zusammen?" }] });
+  const lauf = konfliktLauf(context, { "planer|## Zuschnitt": [gemischt], "planer|## Befunde": [gemischt] });
+  exit(lauf, EXIT_BEFUNDE);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 0);
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
+  assert.match(planungsBericht(lauf).grund, /^bereichskonflikt: Befunde blieben nach 1 Rücksendungen offen, wiederkehrend/u);
 });

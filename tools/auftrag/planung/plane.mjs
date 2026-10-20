@@ -122,7 +122,7 @@ function konfliktTeil(konflikte) {
   if (konflikte.length === 0) return [];
   const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
   const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
-  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist.`;
+  const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich. Klär das zuerst: ${konfliktAusweg(nummern)}. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist; wird eine Nachfrage wiederholt abgewiesen, endet die Planung mit Befunden.`;
   return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
 }
 
@@ -416,7 +416,7 @@ export class Planung {
     return nachfragen.flatMap((eintrag, stelle) => (eintrag.nummern.every((nummer) => offen.includes(nummer)) ? [] : [`Nachfrage ${stelle + 1}: Bereichskonflikt ${nummern} ist offen; ${konfliktAusweg(nummern)}`]));
   }
 
-  sperreNachfragen(befunde) {
+  weiseNachfragenAbOderBeende(befunde) {
     this.konfliktSchleife ??= this.schleife("bereichskonflikt");
     const ende = this.konfliktSchleife.endeNachRunde(befunde, null, this.soll);
     if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, befunde);
@@ -448,7 +448,7 @@ export class Planung {
     const befunde = this.nachfrageBefunde(nachfragen);
     if (befunde.length > 0) return { befunde };
     const gesperrt = this.konfliktBefunde(nachfragen);
-    if (gesperrt.length > 0) return this.sperreNachfragen(gesperrt);
+    if (gesperrt.length > 0) return this.weiseNachfragenAbOderBeende(gesperrt);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) {
       const nummern = [...new Set(nachfragen.flatMap((eintrag) => eintrag.nummern))];
