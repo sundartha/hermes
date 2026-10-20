@@ -9,7 +9,7 @@ import { istObjekt, istText } from "./erkundung.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
-import { prueflisteSoll } from "./antworten.mjs";
+import { DURCHSTICH_ZEILE, prueflisteSoll } from "./antworten.mjs";
 import { druckePlanBericht, planBericht } from "./planbericht.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJsonAtomar } from "./plane.mjs";
 import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
@@ -26,7 +26,6 @@ const GLIEDERUNG = "gliederung.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
 const ERKUNDUNG_OFFEN = "die Erkundung für den Neuschnitt blieb offen";
 const DURCHSTICH = "a1";
-const DURCHSTICH_ZEILE = `durchstich:${DURCHSTICH}`;
 const PRUEFUNG_UNVOLLSTAENDIG = "die Prüfliste blieb nach der Rücksendung unvollständig";
 const ERSTE_PRUEFLISTE = "pruefliste.json";
 const PRUEFLISTE_NACH_KORREKTUR = "pruefliste-korrektur.json";
@@ -67,8 +66,9 @@ class NeuschnittPlanung extends Planung {
     return liste(this.alt.prueft);
   }
 
-  beginne(soll) {
+  beginne({ soll, nurUmbau }) {
     const eigene = this.eigeneNummern();
+    this.nurUmbau = nurUmbau;
     this.soll = new Map([...soll].filter(([nummer]) => eigene.includes(nummer)));
     this.team = new NeuschnittTeam(this.root, this.ordner);
     this.planer = this.team.teilnehmer("planer");
@@ -166,7 +166,7 @@ class NeuschnittPlanung extends Planung {
   }
 
   durchstich(schnitt) {
-    if (this.alt.id !== DURCHSTICH) return undefined;
+    if (this.nurUmbau || this.alt.id !== DURCHSTICH) return undefined;
     const neue = liste(schnitt.auftraege).filter(istObjekt);
     return (neue.find(({ art }) => art === "funktion") ?? neue[0])?.id;
   }
@@ -175,7 +175,7 @@ class NeuschnittPlanung extends Planung {
     if (!istObjekt(schnitt)) return super.pruefeSchnitt(schnitt);
     this.schnitt = schnitt;
     this.lege("schnitt.json", schnitt);
-    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, durchstich: this.durchstich(schnitt), alteNie: saetze(this.alt.wasDarfNiePassieren), ersetzt: this.alt.id };
+    const eingaben = { berichte: this.berichte, soll: this.soll, dokumente: this.dokumente, root: this.root, vorhandene: this.vorhandene, nurUmbau: this.nurUmbau, durchstich: this.durchstich(schnitt), alteNie: saetze(this.alt.wasDarfNiePassieren), ersetzt: this.alt.id };
     const { befunde, annahmen } = await this.skriptPruefung(schnitt, eingaben);
     this.schnittAnnahmen = annahmen;
     return befunde.length === 0 ? { wert: schnitt } : { befunde, schnitt };
@@ -362,8 +362,7 @@ export async function neuschnitt(ablage, eingabe, phase) {
   const alt = phase.auftraege.find(({ id }) => id === eingabe.auftragId);
   const Art = istUmbau(alt) ? UmbauNeuschnittPlanung : NeuschnittPlanung;
   const planung = new Art(eingabe.root, ordner, { ablage, eingabe, phase, alt });
-  const { soll } = nummernImOrdner(ordner);
   planung.beginn = Date.now();
-  planung.beginne(soll);
+  planung.beginne(nummernImOrdner(ordner));
   return planung.ergebnis();
 }
