@@ -1,10 +1,12 @@
-import { realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 
 import { bereichDerDatei, leseBereiche } from "../../tests-ausmisten/pfade.mjs";
 import { dependentsGraph, testsReaching } from "../../testgraph.mjs";
+import { istQuelltext } from "../../ziele/funktionen.mjs";
 import { istKritisch } from "../agenten.mjs";
-import { geschuetzteMuster, istGeschuetzt } from "../format.mjs";
-import { aenderungsStellen } from "./erkundung.mjs";
+import { geschuetzteMuster, istGeschuetzt, istTestdatei } from "../format.mjs";
+import { aenderungsStellen, istText, liste } from "./erkundung.mjs";
 import { vonEslintGeprueft } from "./eslint-prueft.mjs";
 import { funktionsKarten } from "./karte.mjs";
 
@@ -45,4 +47,24 @@ export async function dateiKarte(root, berichte) {
     kritisch: istKritisch(datei),
     tests: testsReaching(datei, graph).toSorted(),
   }));
+}
+
+function produktDateien(root, auftraege) {
+  const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
+  return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(root, datei)));
+}
+
+function ersatzbericht(root, dateien, nummer) {
+  const aenderungen = dateien.map((datei) => ({ datei, von: 1, bis: readFileSync(join(root, datei), "utf8").split("\n").length }));
+  return { gruppe: [], nummern: { [nummer]: { aenderungen } } };
+}
+
+export function umbauBericht(root, auftraege, nummer) {
+  return ersatzbericht(root, produktDateien(root, auftraege), nummer);
+}
+
+export async function umbauKarten(root, auftraege, nummer) {
+  const dateien = produktDateien(root, auftraege);
+  const funktionsliste = funktionsListe(root, [ersatzbericht(root, dateien.filter(istQuelltext), nummer)]);
+  return { funktionsliste, dateikarte: await dateiKarte(root, [ersatzbericht(root, dateien, nummer)]) };
 }

@@ -1,12 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { istTestdatei, istUmbau, phasenBefunde } from "../format.mjs";
+import { istUmbau, phasenBefunde } from "../format.mjs";
 import { saetze } from "../neuschnitt.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
-import { istQuelltext } from "../../ziele/funktionen.mjs";
-import { istObjekt, istText } from "./erkundung.mjs";
-import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
+import { istObjekt } from "./erkundung.mjs";
+import { umbauBericht, umbauKarten } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { DURCHSTICH_ZEILE, prueflisteSoll } from "./antworten.mjs";
@@ -318,33 +317,17 @@ class UmbauNeuschnittPlanung extends NeuschnittPlanung {
     return [];
   }
 
-  produktDateien(auftraege) {
-    const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
-    return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(this.root, datei)));
-  }
-
-  ersatzbericht(dateien) {
-    const aenderungen = dateien.map((datei) => ({ datei, von: 1, bis: readFileSync(join(this.root, datei), "utf8").split("\n").length }));
-    return { gruppe: [], nummern: { [this.alt.id]: { aenderungen } } };
-  }
-
-  async ersatzKarten(auftraege) {
-    const dateien = this.produktDateien(auftraege);
-    const funktionsliste = funktionsListe(this.root, [this.ersatzbericht(dateien.filter(istQuelltext))]);
-    return { funktionsliste, dateikarte: await dateiKarte(this.root, [this.ersatzbericht(dateien)]) };
-  }
-
   karten() {
-    return this.ersatzKarten([this.alt]);
+    return umbauKarten(this.root, [this.alt], this.alt.id);
   }
 
   kartenMitNeuenUmbauten(schnitt) {
     const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
-    return this.ersatzKarten([this.alt, ...umbauten]);
+    return umbauKarten(this.root, [this.alt, ...umbauten], this.alt.id);
   }
 
   erkundungsbericht() {
-    return this.ersatzbericht(this.produktDateien([this.alt]));
+    return umbauBericht(this.root, [this.alt], this.alt.id);
   }
 
   async skriptPruefung(schnitt, eingaben) {
