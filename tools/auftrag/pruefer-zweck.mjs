@@ -16,7 +16,6 @@ const TEXTE = new URL("../zweck/pruefer.json", import.meta.url);
 const KATALOG_ABSCHNITT = /^## ([A-Z]) — /gm;
 const KATALOG_EINTRAG = /^([A-Z])\d{1,2}$/;
 const ABSICHT_BELEG = "Absicht:";
-const ROTE_ZUSTAENDE = new Set(["failure", "error"]);
 
 function katalogZweck(id) {
   const abschnitt = KATALOG_EINTRAG.exec(id)?.[1];
@@ -39,8 +38,8 @@ export function katalogAbgleich(katalog) {
   };
 }
 
-export function statusZweck({ state, zweck }) {
-  return ROTE_ZUSTAENDE.has(state) && zweck ? [PRUEFER_ZWECK.STATUS, zweck] : [];
+export function statusZweck({ zweck }) {
+  return zweck ? [PRUEFER_ZWECK.STATUS, zweck] : [];
 }
 
 export function zweckZeilen(ids) {
