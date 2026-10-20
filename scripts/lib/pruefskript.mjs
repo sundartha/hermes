@@ -1,13 +1,12 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { zweckBlock } from "../../tools/auftrag/zweck.mjs";
+import { befundeMeldenUndScheitern } from "../../tools/auftrag/zweck.mjs";
 
 const EXIT_ROT = 1;
 
 export function befundeMitZweck({ praefix, befunde, zweck }) {
-  for (const befund of befunde) console.error(`${praefix} ${befund}`);
-  console.error(zweckBlock(zweck).join("\n"));
+  befundeMeldenUndScheitern(befunde.map((befund) => `${praefix} ${befund}`), zweck);
   return EXIT_ROT;
 }
 
