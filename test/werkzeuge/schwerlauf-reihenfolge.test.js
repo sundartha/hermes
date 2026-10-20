@@ -14,8 +14,9 @@ function pushRepo(context, env) {
     "package.json": JSON.stringify({
       name: "schwerlauf-reihenfolge-probe",
       private: true,
-      scripts: { lint: "true", "test:betroffen": "true", pruefleiter },
+      scripts: { lint: "true", "test:betroffen": `${JSON.stringify(process.execPath)} arbeit.js`, pruefleiter },
     }),
+    "arbeit.js": 'console.log(JSON.stringify({ name: "push", beginn: Date.now() }));',
   });
   runIn(verzeichnis, "git", ["update-ref", UPSTREAM_BASE_REF, "HEAD"]);
   return verzeichnis;
@@ -49,13 +50,14 @@ test("wird der Platz frei, bekommt ihn zuerst der wartende Push, danach die übr
 
   const wartende = (await stand(env)).split("\n").filter((zeile) => zeile.startsWith("Wartet: "));
   gehalten.kind.kill("SIGKILL");
-  assert.equal(await erstesVon({ push: push.ende, a: a.begonnen, b: b.begonnen }), "push");
-  assert.equal(push.kind.exitCode, 0, push.stdout + push.stderr);
   assert.equal(await erstesVon({ a: a.begonnen, b: b.begonnen }), "a");
   await beenden(a);
   await b.begonnen;
   await beenden(b);
+  await push.ende;
 
+  assert.equal(push.kind.exitCode, 0, push.stdout + push.stderr);
+  assert.ok(zeitenVon(push).beginn < zeitenVon(a).beginn, `Push begann ${zeitenVon(push).beginn}, A begann ${zeitenVon(a).beginn}`);
   assert.ok(zeitenVon(a).ende <= zeitenVon(b).beginn);
   assert.equal(wartende.length, 3, wartende.join("\n"));
   assert.match(wartende[0], /^Wartet: PID \d+, pruefleiter --basis upstream\/master --ohne-werkzeugtests, .*, Vorrang$/);
