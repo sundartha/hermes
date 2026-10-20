@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { zweckBlock } from "./auftrag/zweck.mjs";
+import { vorhandenerPfad } from "./zwillingspfad.mjs";
 
 const EXIT_SAUBER = 0;
 const EXIT_FUND = 1;
@@ -125,7 +126,8 @@ function befundeDerQuelle(datei, quelle) {
   );
 }
 
-function befundeDerDatei(wurzel, datei) {
+function befundeDerDatei(wurzel, eintrag) {
+  const datei = vorhandenerPfad(eintrag, wurzel);
   const ort = new URL(datei, wurzel);
   if (!existsSync(ort)) return [`${datei}:${DRIFT_ZEILE} ${DATEI_FEHLT}`];
   return befundeDerQuelle(datei, readFileSync(ort, "utf8"));

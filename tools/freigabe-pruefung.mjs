@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 
 import {
@@ -27,6 +28,7 @@ import {
 } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
 import { closedIssueNumbers, getJson, graphql, repositoryName } from "./testschutz/github.mjs";
+import { vorhandenerPfad } from "./zwillingspfad.mjs";
 import {
   gleicheAenderungGegenBasis,
   holeKopf,
@@ -45,11 +47,12 @@ const DEPENDENCY_SECTIONS = [
   "optionalDependencies",
   "peerDependencies",
 ];
+const REPOSITORY_ROOT = pathToFileURL(`${process.cwd()}/`);
 const CONVERSATION_PATTERNS = [
   "elevenlabs/",
   "src/i18n/prompts/",
   "src/conversation/elevenlabs-agent-config.js",
-];
+].map((pattern) => vorhandenerPfad(pattern, REPOSITORY_ROOT));
 const STATUS_ADDED = "A";
 const GLEICH = "gleich";
 const INSTRUCTIONS_CHECK = "anweisungen";

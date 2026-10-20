@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { vorhandenerPfad } from "../zwillingspfad.mjs";
 import { abdruckEinstellungen, abdruckSpeicher, anrufstartFaelle, eingangsFaelle } from "./abdruck-faelle.mjs";
 import { FEHLER, abbild, istEinfachesObjekt, kanonisch } from "./abdruck-wert.mjs";
 
@@ -77,7 +78,8 @@ function konsoleStumm() {
 }
 
 function modulAdresse(wurzel, pfad) {
-  return pathToFileURL(join(wurzel, pfad)).href;
+  const ordner = pathToFileURL(join(wurzel, "/"));
+  return new URL(vorhandenerPfad(pfad, ordner), ordner).href;
 }
 
 function maskiereHeute(wert) {

@@ -68,6 +68,22 @@ test("das echte Repo hat keine Log-Aufrufe mit Geheimnissen in den gescannten Da
   assert.equal(ergebnis.status, EXIT_SAUBER, ergebnis.stdout + ergebnis.stderr);
 });
 
+test("nach der Umbenennung nach .ts wird der Zwilling gescannt und sein Leck gemeldet", (context) => {
+  const ts = TELNYX_DATEI.replace(/\.js$/, ".ts");
+  const wurzel = probeDirectory(context, { [ts]: DREI_SYNTHETISCHE_LECKS, [ROUTEN_DATEI]: HARMLOSER_LOG });
+  const ergebnis = scanne(["--wurzel", wurzel]);
+  assert.equal(ergebnis.status, EXIT_FUND, ergebnis.stderr);
+  assert.ok(outputLines(ergebnis.stdout).some((befund) => befund.startsWith(`${ts}:1 `)), ergebnis.stdout);
+});
+
+test("eine fremde .ts-Datei neben der fehlenden gescannten Datei zählt nicht; die Datei fehlt weiter", (context) => {
+  const fremd = TELNYX_DATEI.replace(/\.js$/, "2.ts");
+  const wurzel = probeDirectory(context, { [fremd]: HARMLOSER_LOG, [ROUTEN_DATEI]: HARMLOSER_LOG });
+  const ergebnis = scanne(["--wurzel", wurzel]);
+  assert.equal(ergebnis.status, EXIT_FUND, ergebnis.stderr);
+  assert.ok(outputLines(ergebnis.stdout).includes(`${TELNYX_DATEI}:1 Datei fehlt`), ergebnis.stdout);
+});
+
 test("eine unbekannte Option ist ein falscher Aufruf", () => {
   assert.equal(scanne(["--unbekannt"]).status, EXIT_FALSCHER_AUFRUF);
 });

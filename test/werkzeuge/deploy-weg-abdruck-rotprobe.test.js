@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { cpSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { gespraechVergleichen } from "../../tools/deploy-weg/abdruck.mjs";
+import { vorhandenerPfad } from "../../tools/zwillingspfad.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, runIn } from "./probe-repo.js";
 
 const VORLAGE = "elevenlabs/agent_configs/outbound-agent.template.json";
@@ -12,6 +14,8 @@ const JSON_EINRUECKUNG = 2;
 const FREMDZIEL_DEUTSCH = "anrufstart/de/fremd/consult-an";
 const MISCHSPRACHE = "anrufstart/de-nach-fr/fremd/consult-aus";
 const PROBE_INHALT = [".gitignore", "package.json", "README.md", "elevenlabs", "src"];
+const STIMMEN = "src/telephony/adapters/telnyx/elevenlabs-voice";
+const STIMMEN_IMPORTEURE = ["src/elevenlabs/call-locale.js", "src/tts/directive-synth.js"];
 
 const GESPRAECHSDATEIEN = [
   { datei: VORLAGE, teil: "vorlage/prompt", jsonEltern: VORLAGE_PROMPT_ELTERN, jsonFeld: "prompt", ersatz: " Probe." },
@@ -101,6 +105,10 @@ function tempKlon(context) {
   return { klon, basis: git(klon, ["rev-parse", "HEAD"]) };
 }
 
+function imKlon(klon, datei) {
+  return vorhandenerPfad(datei, pathToFileURL(`${klon}/`));
+}
+
 function aendern(klon, probe) {
   const pfad = join(klon, probe.datei);
   const inhalt = readFileSync(pfad, "utf8");
@@ -127,6 +135,22 @@ async function vergleicheMitAenderung({ klon, basis }, probe) {
   return gespraechVergleichen({ repoDir: klon, alt: basis, neu });
 }
 
+function stimmenZwilling(quelle) {
+  return quelle.endsWith(".js") ? `${STIMMEN}.ts` : `${STIMMEN}.js`;
+}
+
+async function vergleicheMitUmbenennung({ klon, basis }, ziel) {
+  git(klon, ["checkout", "--quiet", "--detach", basis]);
+  const quelle = imKlon(klon, `${STIMMEN}.js`);
+  git(klon, ["mv", quelle, ziel(quelle)]);
+  for (const datei of STIMMEN_IMPORTEURE) {
+    const pfad = join(klon, imKlon(klon, datei));
+    writeFileSync(pfad, readFileSync(pfad, "utf8").replace(`${basename(quelle)}"`, `${basename(ziel(quelle))}"`));
+  }
+  commitAll(klon, "Umbenennung der Stimmen-Tabelle");
+  return gespraechVergleichen({ repoDir: klon, alt: basis, neu: git(klon, ["rev-parse", "HEAD"]) });
+}
+
 test("Abdruck-Rot-Probe: jede Aenderung an einer gespraechsrelevanten Datei wird gemeldet", async (kontext) => {
   const stand = tempKlon(kontext);
 
@@ -150,4 +174,12 @@ test("Abdruck-Rot-Probe: Aenderungen ohne Wirkung auf das Gespraech bleiben stum
     const ergebnis = await vergleicheMitAenderung(stand, probe);
     assert.deepEqual(ergebnis, { geaendert: false, teile: [] }, `${probe.datei}: ${ergebnis.teile.join(", ")}`);
   }
+});
+
+test("Abdruck-Rot-Probe: die zwischen .js und .ts umbenannte Stimmen-Tabelle gibt denselben Abdruck, eine fremde .ts-Datei nicht", async (kontext) => {
+  const stand = tempKlon(kontext);
+
+  assert.deepEqual(await vergleicheMitUmbenennung(stand, stimmenZwilling), { geaendert: false, teile: [] });
+  const fremd = await vergleicheMitUmbenennung(stand, () => `${STIMMEN}2.ts`);
+  assert.ok(fremd.teile.includes("fehler:neu"), fremd.teile.join(", "));
 });
