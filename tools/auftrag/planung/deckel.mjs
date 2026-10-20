@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BELEGE } from "../bericht.mjs";
-import { kostenDerSitzung } from "../kosten.mjs";
+import { kostenDesAuftrags } from "../kosten.mjs";
 import { istObjekt } from "./erkundung.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
@@ -37,8 +37,7 @@ function mittel(eintrag) {
 }
 
 export function gemesseneKosten(root, beteiligte) {
-  const sitzungen = new Set(beteiligte.map(({ sitzung }) => sitzung).filter((sitzung) => sitzung !== undefined));
-  return [...sitzungen].reduce((summe, sitzung) => summe + kostenDerSitzung(root, { sitzung }).gesamt, 0);
+  return kostenDesAuftrags(root, beteiligte.filter(({ sitzung }) => sitzung !== undefined)).summe.gesamt;
 }
 
 export class Kostendeckel {
