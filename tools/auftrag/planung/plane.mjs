@@ -247,8 +247,12 @@ export class Planung {
     return nachricht("Gliederung", this.gliederungsTeile());
   }
 
+  ohneGliederung() {
+    return this.nurUmbau && this.soll.size === 0;
+  }
+
   async gliedere() {
-    this.gliederung = await this.planerStufe(this.gliederungsNachricht(), (wert) => {
+    this.gliederung = this.ohneGliederung() ? { gruppen: [] } : await this.planerStufe(this.gliederungsNachricht(), (wert) => {
       const befunde = gliederungBefunde(wert, this.soll, this.designText);
       return befunde.length > 0 ? { befunde } : { wert };
     }, "gliederung");
@@ -429,7 +433,8 @@ export class Planung {
   }
 
   async zuschnittNachricht() {
-    return nachricht("Zuschnitt", await this.zuschnittTeile());
+    const dokumente = this.ohneGliederung() ? this.gliederungsTeile() : [];
+    return nachricht("Zuschnitt", [...dokumente, ...(await this.zuschnittTeile())]);
   }
 
   nachfrageBefunde(nachfragen) {
