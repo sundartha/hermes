@@ -16,6 +16,8 @@ const ZWECK_ZEIGEN = "tools/zweck-zeigen.mjs";
 const WORKFLOW_ENDUNG = ".yml";
 const OHNE_URTEIL = new Map([["tools/testlaufzeit-reporter.mjs", "Reporter des Testlaufs, schreibt nur Laufzeiten; das Urteil und den Block gibt der Starter aus"]]);
 const AUFGERUFEN = /\b((?:tools|scripts)\/[\w./-]+\.m?js)\b/g;
+const NPM_SKRIPT = /\bnpm run(?: -{1,2}[\w-]+)* ([\w:.-]+)|\bnpm (test)\b/g;
+const PAKET = "package.json";
 const KONSTANTEN = [
   ["MELDUNG", MELDUNG],
   ["PRUEFUNG", PRUEFUNG],
@@ -96,9 +98,36 @@ function belegeGeprueft(name, eintrag) {
   return belege;
 }
 
+function werkzeugdateienIn(text) {
+  return [...text.matchAll(AUFGERUFEN)].map(([, pfad]) => pfad).filter((pfad) => existsSync(join(REPO_ROOT, pfad)));
+}
+
 function aufgerufeneDateien(schritt) {
-  const skript = schritt.roh.join("\n");
-  return [...skript.matchAll(AUFGERUFEN)].map(([, pfad]) => pfad).filter((pfad) => existsSync(join(REPO_ROOT, pfad)));
+  return werkzeugdateienIn(schritt.roh.join("\n"));
+}
+
+function mitNpmSkripten(text, skripte, gesehen = []) {
+  const namen = [...text.matchAll(NPM_SKRIPT)].map(([, lauf, test]) => lauf ?? test);
+  const weitere = namen.filter((name) => skripte[name] !== undefined && !gesehen.includes(name));
+  return [text, ...weitere.map((name) => mitNpmSkripten(skripte[name], skripte, [...gesehen, name]))].join("\n");
+}
+
+function aufgerufeneDateienMitNpmSkripten(schritt) {
+  return werkzeugdateienIn(mitNpmSkripten(schritt.roh.join("\n"), JSON.parse(quelltext(PAKET)).scripts));
+}
+
+function eintraegeMitZweck() {
+  return Object.entries(eintraegeDerZuordnung()).filter(([, eintrag]) => eintrag.zweck !== undefined || eintrag.gruppen !== undefined);
+}
+
+function schritteNachSchluessel() {
+  return new Map(schritteDerPflichtChecks().map((schritt) => [schluessel(schritt), schritt]));
+}
+
+function schritteMitWerkzeugBeleg() {
+  const schritte = schritteNachSchluessel();
+  const geprueft = eintraegeMitZweck().map(([name, eintrag]) => ({ name, belege: alsListe(eintrag.beleg ?? []), aufrufe: aufgerufeneDateienMitNpmSkripten(schritte.get(name)) }));
+  return geprueft.filter(({ belege }) => belege.every((beleg) => !beleg.endsWith(WORKFLOW_ENDUNG)));
 }
 
 function laedtBeleg(pfad, belege) {
@@ -108,8 +137,8 @@ function laedtBeleg(pfad, belege) {
 }
 
 test("jede zugeordnete Zweck-ID nennt eine Datei, die sie ausgibt, und der Schritt ruft diese Datei oder ein Werkzeug, das sie lädt", () => {
-  const schritte = new Map(schritteDerPflichtChecks().map((schritt) => [schluessel(schritt), schritt]));
-  const mitZweck = Object.entries(eintraegeDerZuordnung()).filter(([, eintrag]) => eintrag.zweck !== undefined || eintrag.gruppen !== undefined);
+  const schritte = schritteNachSchluessel();
+  const mitZweck = eintraegeMitZweck();
   assert.ok(mitZweck.length > 0);
   const aufgerufen = new Set();
   for (const [name, eintrag] of mitZweck) {
@@ -119,4 +148,10 @@ test("jede zugeordnete Zweck-ID nennt eine Datei, die sie ausgibt, und der Schri
     for (const pfad of dateien.filter((datei) => !OHNE_URTEIL.has(datei))) assert.ok(laedtBeleg(pfad, belege), `${name}: ${pfad} lädt keinen Beleg`);
   }
   for (const datei of OHNE_URTEIL.keys()) assert.ok(aufgerufen.has(datei), `${datei} steht ohne Aufruf in der Liste`);
+});
+
+test("jeder Schritt, dessen Zweck-Block aus einer Werkzeugdatei kommt, ruft eine Datei auf, die ihn lädt, auch über ein npm-Skript aus package.json", () => {
+  const schritte = schritteMitWerkzeugBeleg();
+  assert.ok(schritte.length > 0);
+  for (const { name, belege, aufrufe: gerufen } of schritte) assert.ok(gerufen.some((pfad) => laedtBeleg(pfad, belege)), `${name}: kein nachweisbarer Aufruf einer Datei, die den Beleg lädt`);
 });
