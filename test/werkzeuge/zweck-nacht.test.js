@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
@@ -6,7 +8,9 @@ import { auftragstext } from "../../tools/ziele/agentenlauf.mjs";
 import { IDS, ZWECK_JE_ID, meldeBefunde, zweckAbsaetze, zweckVon } from "../../tools/ziele/befunde.mjs";
 import { zeigeZweck } from "../../tools/ziele/pruefen.mjs";
 import { SORTEN } from "../../tools/ziele/sorten.mjs";
-import { nurGenutzteIds } from "./zweck-quellen.js";
+import { outputLines } from "./probe-repo.js";
+import { arbeitsordner, git, githubAttrappe, quelltext, starteZiele, testFuer, umgebung, zieleRepo } from "./ziele/hilfen.mjs";
+import { blockDanach, nurGenutzteIds } from "./zweck-quellen.js";
 
 const BEREICH = "nacht";
 const OHNE_BLOCK = new Map([
@@ -17,6 +21,19 @@ const OHNE_BLOCK = new Map([
   [IDS.pause, "N2: Pause nach Rücknahme ohne Issue, Leser ist Antonio, kein Agent wählt das Ziel"],
 ]);
 const LAUF = "https://github.com/sundartha/hermes/actions/runs/1";
+const ZIELDATEI = "src/frei.js";
+const TESTDATEI = "test/frei.test.js";
+const EXIT_ROT = 1;
+
+async function pruefungEinesPatches(context, geaendert) {
+  const repo = zieleRepo(context, { [ZIELDATEI]: quelltext(["export function frei() {\n  return 1;\n}"]), [TESTDATEI]: testFuer(ZIELDATEI) });
+  for (const [pfad, inhalt] of Object.entries(geaendert)) writeFileSync(join(repo.ordner, pfad), inhalt);
+  const patch = `${git(repo.ordner, ["diff", "--binary", "HEAD"])}\n`;
+  git(repo.ordner, ["checkout", "--", "."]);
+  const ziel = { format: 1, ausgang: "weiter", grund: "", befunde: [], master: repo.sha(), sorte: "knip", datei: ZIELDATEI, zielbefunde: ["exports frei"], arten: ["exports"], agentErlaubt: true, agent: false, tests: [TESTDATEI] };
+  const ordner = arbeitsordner(context, { "ziel/ziel.json": ziel, "ziel/fixer.patch": patch });
+  return starteZiele(["pruefen", "--ordner", ordner], { cwd: repo.ordner, env: umgebung(await githubAttrappe(context)) });
+}
 
 function sortenIds() {
   return SORTEN.map((sorte) => `nacht/sorte-${sorte}`);
@@ -70,6 +87,14 @@ test("ein Befund-Issue nennt nach dem festen Text den Block als eigene Absätze,
   assert.doesNotMatch(zeit, /Wozu:/);
   assert.equal(zweckVon({ id: IDS.offen, datei: "eslint-suppressions.json" }), "nacht/basis-kuerzen");
   assert.deepEqual(zweckAbsaetze({ id: IDS.pause, datei: "src/a.js" }), []);
+});
+
+test("der Lauf der Prüfung nennt direkt nach der Verstoßzeile den Block der Befund-ID auf stderr", async (context) => {
+  const lauf = await pruefungEinesPatches(context, { [TESTDATEI]: `${testFuer(ZIELDATEI)}\n` });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  const { block, anfang, befund, gefunden } = blockDanach(outputLines(lauf.stderr), "nacht/nur-zieldatei", /^Prüfung: Verstoß AR-test in src\/frei\.js: /);
+  assert.deepEqual(gefunden, block, lauf.stderr);
+  assert.equal(anfang, befund + 1, lauf.stderr);
 });
 
 test("die Prüfung des Aufräumens nennt im Lauf-Log den Block der Befund-ID, bei einer Basislinie den des Kürzens, ohne Text keinen", (context) => {
