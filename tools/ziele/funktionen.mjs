@@ -1,4 +1,6 @@
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
+import { relative } from "node:path";
 
 const FUNKTIONSARTEN = ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"];
 const FEHLER = 2;
@@ -10,6 +12,10 @@ const MODUL = { ecmaVersion: "latest", sourceType: "module" };
 
 export function typescriptParser() {
   return ladeModul("typescript-eslint").parser;
+}
+
+export function echterRepoPfad(wurzel, datei) {
+  return relative(wurzel, realpathSync(datei));
 }
 
 export function istQuelltext(datei) {
