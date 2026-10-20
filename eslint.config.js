@@ -22,7 +22,13 @@ const TS_ENDUNGEN = "{ts,mts,cts}";
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
-const WORT_NUR_IN = [
+const WURZEL = new URL("./", import.meta.url);
+const vorhanden = (datei) => existsSync(new URL(datei, WURZEL));
+function vorhandenerPfad(datei) {
+  const zwilling = datei.replace(/\.js$/, ".ts");
+  return !vorhanden(datei) && vorhanden(zwilling) ? zwilling : datei;
+}
+const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "telnyx-belegabruf",
     nurIn: ["src/billing/cost-truing.js", "src/telephony/adapters/telnyx/voice.js"],
@@ -100,6 +106,10 @@ const WORT_NUR_IN = [
       "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
   },
 ];
+const WORT_NUR_IN = WORT_NUR_IN_EINTRAEGE.map((eintrag) => ({
+  ...eintrag,
+  nurIn: eintrag.nurIn.map(vorhandenerPfad),
+}));
 const WEB_WORT_NUR_IN = [
   {
     name: "sprachkennung",
@@ -149,7 +159,7 @@ const STEUERUNG_AUSNAHMEN = [
     grund:
       "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad.",
   },
-];
+].map((ausnahme) => ({ ...ausnahme, datei: vorhandenerPfad(ausnahme.datei) }));
 const PROZESS_WAECHTER = "./process-guards.js";
 const KONFIG_GRUPPEN = ["telnyxElevenLabs", "elevenLabsPlayTts"];
 const KONFIG_SKRIPTE_MIT_BLATT = [
