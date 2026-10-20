@@ -6,7 +6,7 @@ import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, brauchtRotenTest, geschuetzteMuster, is
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
-import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
+import { dateiKarte, funktionsListe, umbauKarten } from "./funktionsliste.mjs";
 import { gleicherText, nummernImOrdner } from "./nummern.mjs";
 import { MELDUNG, zweckBlock } from "../zweck.mjs";
 
@@ -35,6 +35,7 @@ const SCHNITT = "schnitt.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
 const EXIT_GRUEN = 0;
 const EXIT_BEFUNDE = 4;
+const UMBAU_NUMMER = "umbau";
 
 export const REGEL = {
   erkundung: "Erkundung",
@@ -526,13 +527,20 @@ export function schnittBefunde(schnitt, eingaben) {
   return { befunde, hinweise: [...hinweise(auftraege, kontext.stellen), ...widerspruchHinweis(auftraege)], annahmen: annahmenDesSchnitts(auftraege, schnitt) };
 }
 
+export function umbauPitchKarten(schnitt, root) {
+  return umbauKarten(root, liste(schnitt?.auftraege).filter(istObjekt).filter(istUmbau), UMBAU_NUMMER);
+}
+
+async function karten(schnitt, { berichte, root, nurUmbau }) {
+  if (nurUmbau) return umbauPitchKarten(schnitt, root);
+  return { funktionsliste: funktionsListe(root, berichte), dateikarte: await dateiKarte(root, berichte) };
+}
+
 export async function schnittPruefung(schnitt, eingaben) {
   const { berichte, soll, root } = eingaben;
   const vorab = erkundungsVorpruefung(berichte, { soll, root });
   if (vorab.befunde.length > 0) return { befunde: vorab.befunde, hinweise: [], annahmen: vorab.annahmen };
-  const funktionsliste = funktionsListe(root, berichte);
-  const dateikarte = await dateiKarte(root, berichte);
-  const ergebnis = schnittBefunde(schnitt, { ...eingaben, funktionsliste, dateikarte });
+  const ergebnis = schnittBefunde(schnitt, { ...eingaben, ...(await karten(schnitt, eingaben)) });
   return { ...ergebnis, annahmen: [...vorab.annahmen, ...ergebnis.annahmen] };
 }
 

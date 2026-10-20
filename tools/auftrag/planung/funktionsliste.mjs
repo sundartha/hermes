@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { bereichDerDatei, leseBereiche } from "../../tests-ausmisten/pfade.mjs";
@@ -51,7 +51,7 @@ export async function dateiKarte(root, berichte) {
 
 function produktDateien(root, auftraege) {
   const dateien = auftraege.flatMap((auftrag) => liste(auftrag.erwarteteDateien));
-  return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(root, datei)));
+  return [...new Set(dateien)].filter((datei) => istText(datei) && !istTestdatei(datei) && existsSync(join(root, datei)) && statSync(join(root, datei)).isFile());
 }
 
 function ersatzbericht(root, dateien, nummer) {

@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { fuerDenPitch, nachpruefSchluessel, planweiteSchluessel, prueflisteSoll } from "../../tools/auftrag/planung/antworten.mjs";
 import { REGEL, schnittBefunde } from "../../tools/auftrag/planung/schnitt.mjs";
-import { REPO_ROOT, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { probeMitEslint } from "./eslint-probe.js";
+import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
 
 const AUFTRAG_TOOL = join(REPO_ROOT, "tools/auftrag.mjs");
 const ORDNER = "plaene/P-003-umbau";
@@ -72,7 +73,7 @@ function durchstichBefunde(befunde) {
 }
 
 function schnittBefehl(context, auftraege) {
-  const wurzel = probeRepository(context, {
+  const wurzel = probeMitEslint(context, {
     "tools/bereiche.json": readFileSync(join(REPO_ROOT, "tools/bereiche.json"), "utf8"),
     [DATEI]: "export const verdopple = (zahl) => zahl * 2;\n",
     [ANDERE_DATEI]: "export const zaehle = (zahl) => zahl + 1;\n",
@@ -87,6 +88,8 @@ function schnittBefehl(context, auftraege) {
 
 test("durchstich-nur-umbau: der Befehl schnitt meldet bei einem reinen Umbau-Pitch mit nur Umbauten nichts zur Regel Durchstich", (context) => {
   const lauf = schnittBefehl(context, [umbau("a1"), umbau("a2", ANDERE_DATEI)]);
+  assert.equal(lauf.status, EXIT_SCHNITT_BEFUNDE, lauf.stderr + lauf.stdout);
+  assert.match(lauf.stdout, /^rot: \d+ Befunde in /m, lauf.stdout);
   assert.doesNotMatch(lauf.stderr, /^Regel Form:/m, lauf.stderr);
   assert.doesNotMatch(lauf.stderr, /^Regel Durchstich:/m, lauf.stderr);
   assert.doesNotMatch(lauf.stderr, /erlaubt nur Umbauten/);

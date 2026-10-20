@@ -27,7 +27,7 @@ import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
-import { DOKUMENTE, bereichskonflikte, schnittImOrdner } from "./schnitt.mjs";
+import { DOKUMENTE, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
@@ -505,7 +505,7 @@ export class Planung {
 
   async prueferSicht(teil) {
     if (teil.gruppe === null) {
-      const dateikarte = await dateiKarte(this.root, this.sauberBerichte());
+      const dateikarte = this.nurUmbau ? (await umbauPitchKarten(this.schnitt, this.root)).dateikarte : await dateiKarte(this.root, this.sauberBerichte());
       return { berichte: [abschnitt("Dateikarte", json(dateikarte)), abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte))] };
     }
     const { nummern } = this.gliederung.gruppen[teil.gruppe];
