@@ -4,6 +4,7 @@ import { stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { pruefeBestueckung, pruefeVariablen, pushFelder } from "./testgespraeche/bestueckung.mjs";
 import { bewerte, promptUeberschriften } from "./testgespraeche/bewertung.mjs";
 import { fuehreAus, holeAgent } from "./testgespraeche/elevenlabs.mjs";
@@ -21,6 +22,7 @@ const MS_JE_S = 1000;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_FEHLER = 2;
+const ZWECK = "uebrige/testgespraeche";
 const OPTIONEN = {
   agent: { type: "string" },
   fall: { type: "string", multiple: true, default: [] },
@@ -116,7 +118,9 @@ async function main() {
   const ergebnis = bewerte(faelle, laeufe, { wiederholungen, umgebung });
   const credits = laeufe.reduce((summe, lauf) => summe + lauf.credits, 0);
   stdout.write(bericht(ergebnis, { agent, wiederholungen, credits }));
-  return ergebnis.gruen ? EXIT_GRUEN : EXIT_ROT;
+  if (ergebnis.gruen) return EXIT_GRUEN;
+  console.error(zweckBlock(ZWECK).join("\n"));
+  return EXIT_ROT;
 }
 
 try {

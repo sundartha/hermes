@@ -10,10 +10,12 @@ import {
   schluesselFehlt,
 } from "./lib/elevenlabs-agent-lesen.mjs";
 import { nichtBesessen, vergleicheBesitz } from "./lib/elevenlabs-besitz.mjs";
+import { zweckBlock } from "../tools/auftrag/zweck.mjs";
 
 const ARG_INDEX_AGENT_ID = 2;
 const LISTEN_TRENNER = "; ";
 const LOG_PREFIX = "[check-elevenlabs-drift]";
+const ZWECK = "uebrige/elevenlabs-drift";
 
 function ausnahmeZusatz(abweichungen) {
   const anzahl = abweichungen.filter((abweichung) => abweichung.ausgenommen).length;
@@ -75,6 +77,7 @@ function melde({ ergebnis, agentId, ausserhalb }) {
   console.error(
     `${LOG_PREFIX} ROT - ${abweichungen.length} besessene Felder weichen ab${ausnahmeZusatz(abweichungen)}, ${verletzungen.length} Verbots-Verletzungen, ${nichtPruefbar.length} nicht pruefbare Stellen, ${veralteteAusnahmen.length} ueberfaellige Ausnahmen, ${fehler.length} Fehler in der Besitz-/Regel-Erklaerung | ${umfangsZeile(ergebnis)}. Der Live-Agent wurde NICHT veraendert; das Reparieren ist eine eigene Entscheidung (npm run elevenlabs:push).`,
   );
+  console.error(zweckBlock(ZWECK).join("\n"));
   return 1;
 }
 

@@ -10,6 +10,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { alsHauptprogramm, befundeMitZweck } from "./lib/pruefskript.mjs";
+
 const HASH_ALGO = "sha256";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LOCK_REL = "design-system/_shared/tokens.lock";
@@ -32,6 +34,7 @@ const IMPORT_AT_RULE = "@import";
 const JSON_INDENT = 2;
 const WRITE_FLAG = "--write";
 const LOG_PREFIX = "[check-token-sync]";
+const ZWECK = "uebrige/design-tokens";
 const LOCK_COMMENT =
   "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der " +
   "Token-Quelle (apps/web/src/styles/tokens/) + gespiegelter Katalog-Kopie " +
@@ -155,17 +158,7 @@ function runCli() {
     console.log(`${LOG_PREFIX} OK - Tokens synchron, Invarianten erfuellt.`);
     return 0;
   }
-  for (const problem of problems) console.error(`${LOG_PREFIX} ${problem}`);
-  return 1;
+  return befundeMitZweck({ praefix: LOG_PREFIX, befunde: problems, zweck: ZWECK });
 }
 
-const isMain =
-  fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
-if (isMain) {
-  try {
-    process.exit(runCli());
-  } catch (err) {
-    console.error(`${LOG_PREFIX} Fehler (fail-closed): ${err.message}`);
-    process.exit(1);
-  }
-}
+alsHauptprogramm(import.meta.url, LOG_PREFIX, runCli);

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { interneKennungen } from "../test/mcp-vertrag-pruefung.js";
 import { REVIEWER_SEED_CALLS } from "../scripts/lib/reviewer-demo-seed.mjs";
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { METADATEN_PFAD, VOLLE_KONFIGURATION, messeDraht } from "./openai-doku-draht.mjs";
 
 const REPO_WURZEL = fileURLToPath(new URL("..", import.meta.url));
@@ -24,6 +25,7 @@ const NUTZUNG = `Nutzung: node tools/openai-doku-pruefen.mjs [--${OPTION_P10A} P
 const EXIT_SAUBER = 0;
 const EXIT_BEFUND = 1;
 const EXIT_AUFRUF = 2;
+const ZWECK = "uebrige/openai-doku";
 
 const KONFIGURATIONEN = ["K1", "K2", "K3", "K4", "K5", "K6"];
 const HINWEIS_SPALTEN = ["readOnlyHint", "destructiveHint", "openWorldHint", "idempotentHint"];
@@ -482,8 +484,9 @@ function ladeDokus() {
   }
 }
 
-function beende(code, zeilen) {
+function beende(code, zeilen, zweck = []) {
   for (const zeile of zeilen) console.log(zeile);
+  for (const zeile of zweck) console.error(zeile);
   process.exit(code);
 }
 
@@ -493,7 +496,8 @@ async function hauptprogramm() {
   const draht = await messeDraht();
   const befunde = FAELLE.flatMap((fall) => fallBefunde(fall, { ...dokus, draht }));
   const zusammenfassung = `openai-doku-pruefen: ${befunde.length} Befunde in ${FAELLE.length} Faellen`;
-  return beende(befunde.length > 0 ? EXIT_BEFUND : EXIT_SAUBER, [...befunde, zusammenfassung]);
+  if (befunde.length === 0) return beende(EXIT_SAUBER, [zusammenfassung]);
+  return beende(EXIT_BEFUND, [...befunde, zusammenfassung], zweckBlock(ZWECK));
 }
 
 hauptprogramm().catch((fehler) =>

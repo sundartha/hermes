@@ -2,9 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const EXIT_SAUBER = 0;
 const EXIT_FUND = 1;
 const EXIT_FALSCHER_AUFRUF = 2;
+const ZWECK = "uebrige/log-geheimnisse";
 const AUFRUF = "Aufruf: node tools/log-geheimnisse-pruefen.mjs [--wurzel ORDNER]";
 const REPO_WURZEL = new URL("..", import.meta.url);
 const GESCANNTE_DATEIEN = Object.freeze([
@@ -146,7 +149,9 @@ function main(argumente) {
   }
   const befunde = GESCANNTE_DATEIEN.flatMap((datei) => befundeDerDatei(wurzel, datei));
   for (const befund of befunde) console.log(befund);
-  return befunde.length === 0 ? EXIT_SAUBER : EXIT_FUND;
+  if (befunde.length === 0) return EXIT_SAUBER;
+  console.error(zweckBlock(ZWECK).join("\n"));
+  return EXIT_FUND;
 }
 
 process.exitCode = main(process.argv.slice(ERSTES_ARGUMENT));

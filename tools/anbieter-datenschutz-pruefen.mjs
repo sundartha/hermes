@@ -2,9 +2,12 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const ERGEBNIS_OHNE_LUECKE = 0;
 const ERGEBNIS_MIT_LUECKE = 1;
 const ERGEBNIS_UNGUELTIGER_AUFRUF = 2;
+const ZWECK = "uebrige/anbieter-datenschutz";
 const ERSTES_EIGENES_ARGUMENT = 2;
 const BEFUND_ZEILE = 1;
 const AUFRUF_HINWEIS = "Aufruf: node tools/anbieter-datenschutz-pruefen.mjs [--wurzel ORDNER]";
@@ -91,8 +94,10 @@ function pruefe(argumente) {
   }
   if (wurzel === null) return ERGEBNIS_UNGUELTIGER_AUFRUF;
   const befunde = befundeDerWurzel(wurzel);
-  if (befunde.length > 0) console.log(befunde.join(TEXT_TRENNER));
-  return befunde.length > 0 ? ERGEBNIS_MIT_LUECKE : ERGEBNIS_OHNE_LUECKE;
+  if (befunde.length === 0) return ERGEBNIS_OHNE_LUECKE;
+  console.log(befunde.join(TEXT_TRENNER));
+  console.error(zweckBlock(ZWECK).join("\n"));
+  return ERGEBNIS_MIT_LUECKE;
 }
 
 process.exitCode = pruefe(process.argv.slice(ERSTES_EIGENES_ARGUMENT));

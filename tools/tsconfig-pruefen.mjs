@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 
+import { zweckBlock } from "./auftrag/zweck.mjs";
+
 const BASELINE_FILE = "tools/basis/tsconfig-wirksam.json";
 const CONFIG_FILE = "tsconfig.json";
 const TSC = createRequire(import.meta.url).resolve("typescript/bin/tsc");
@@ -13,6 +15,7 @@ const JSON_INDENT = 2;
 const WRITE_OPTION = "basis-schreiben";
 const WRITE_HINT = `Ist die Änderung gewollt, schreibt „node tools/tsconfig-pruefen.mjs --${WRITE_OPTION}“ die Kopie ${BASELINE_FILE} neu.`;
 const EXIT_FINDING = 1;
+const ZWECK = "uebrige/tsconfig";
 
 function byKey(entries) {
   return Object.fromEntries(entries.toSorted(([left], [right]) => (left < right ? -1 : 1)));
@@ -66,6 +69,7 @@ function report(root, actual) {
   for (const finding of findings) console.error(finding);
   if (findings.length === 0) return 0;
   console.error(WRITE_HINT);
+  console.log(zweckBlock(ZWECK).join("\n"));
   return EXIT_FINDING;
 }
 
