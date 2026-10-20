@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { workflowLines } from "./workflow-dateien.js";
 
 const TOKEN = /\s*(\|\||&&|==|!=|!|\(|\)|'[^']*'|[A-Za-z_][\w-]*(?:\.[\w-]+)*(?:\(\))?)/y;
+const EINGEBETTET = /\$\{\{\s*(.*?)\s*\}\}/g;
+const GANZ_AUSDRUCK = /^\$\{\{\s*(.*?)\s*\}\}$/;
 
 function zerlege(ausdruck) {
   const text = ausdruck.trimEnd();
@@ -83,6 +85,24 @@ function jobBedingung(datei, job) {
   return zeile.slice("    if: ".length);
 }
 
+function gruppe(datei, kontext) {
+  const zeilen = workflowLines(datei);
+  const beginn = zeilen.indexOf("concurrency:");
+  assert.notEqual(beginn, -1, `concurrency fehlt in ${datei}`);
+  const block = new Map();
+  for (const zeile of zeilen.slice(beginn + 1)) {
+    const treffer = /^ {2}([\w-]+): (.*)$/.exec(zeile);
+    if (!treffer) break;
+    block.set(treffer[1], treffer[2]);
+  }
+  const abbruch = block.get("cancel-in-progress") ?? "false";
+  const ganz = GANZ_AUSDRUCK.exec(abbruch);
+  return {
+    name: block.get("group").replace(EINGEBETTET, (_, ausdruck) => String(wert(ausdruck, kontext))),
+    abbrechen: ganz ? auswerten(ganz[1], kontext) : abbruch === "true",
+  };
+}
+
 const AUFRAEUMEN = "aufraeumen.yml";
 const ZIEL_WEITER = { result: "success", outputs: { ausgang: "weiter" } };
 const PRUEFEN_WEITER = { result: "success", outputs: { ausgang: "weiter" } };
@@ -109,4 +129,12 @@ test("aufraeumen.yml: Prüfen und PR laufen nur, wenn der Agent übersprungen wu
     }
   }
   assert.deepEqual(erhalten, erwartet);
+});
+
+test("staging.yml: ein Hand-Start teilt keine Nebenläufigkeitsgruppe mit Push-Läufen und bricht nichts ab", () => {
+  const push = gruppe("staging.yml", { github: { event_name: "push" } });
+  const hand = gruppe("staging.yml", { github: { event_name: "workflow_dispatch" } });
+  assert.notEqual(hand.name, push.name);
+  assert.equal(push.abbrechen, true);
+  assert.equal(hand.abbrechen, false);
 });
