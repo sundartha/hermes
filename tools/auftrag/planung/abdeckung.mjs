@@ -1,10 +1,16 @@
 import { basename, resolve } from "node:path";
 
+import { istUmbau } from "../format.mjs";
+import { liste } from "./erkundung.mjs";
 import { PITCH, SICHERHEIT, gleicherText, nummernImOrdner } from "./nummern.mjs";
 
 function auftraegeMitNummern(phase) {
-  const auftraege = Array.isArray(phase.auftraege) ? phase.auftraege : [];
-  return auftraege.filter((auftrag) => Array.isArray(auftrag?.prueft));
+  return liste(phase.auftraege).filter((auftrag) => Array.isArray(auftrag?.prueft));
+}
+
+export function nurUmbauBefunde(auftraege, nurUmbau) {
+  if (!nurUmbau) return [];
+  return auftraege.filter((auftrag) => !istUmbau(auftrag ?? {})).map((auftrag) => `Pitch ohne Szenarien erlaubt nur Umbauten: ${auftrag?.id}`);
 }
 
 function zuordnung(auftraege) {
@@ -42,5 +48,5 @@ export function befundeImOrdner(ordner, phase) {
   const auftraege = auftraegeMitNummern(phase);
   const name = basename(resolve(ordner));
   const kennung = phase.phase === name ? [] : [`phase muss ${name} heißen wie der Ordner, nicht ${JSON.stringify(phase.phase)}`];
-  return { anzahl: dokumente.soll.size, befunde: [...kennung, ...dokumente.unklar, ...abdeckungBefunde(dokumente.soll, zuordnung(auftraege)), ...auftragBefunde(auftraege, dokumente)] };
+  return { anzahl: dokumente.soll.size, befunde: [...kennung, ...dokumente.unklar, ...nurUmbauBefunde(liste(phase.auftraege), dokumente.nurUmbau), ...abdeckungBefunde(dokumente.soll, zuordnung(auftraege)), ...auftragBefunde(auftraege, dokumente)] };
 }

@@ -7,6 +7,10 @@ const ZEILENUMBRUCH = /\r?\n/;
 const LEERRAUM = /\s+/g;
 const UEBERSCHRIFT = /^#/;
 const ABSCHNITT = /^##\s/;
+const ANFORDERUNGEN = /^##\s+Anforderungen\s*$/;
+const BLEIBT_UNVERAENDERT = /^##\s+Bleibt unverändert\s*$/;
+const KEINE_NEUEN = /^keine neuen, weil(?![\p{L}\d])/iu;
+const KEINS = /^keins, weil(?![\p{L}\d])/iu;
 const PITCH_SZENARIO = /^#{2,6}\s+Szenario\s+([SB][1-9]\d*)\s*:/;
 const ANGRIFFSWEGE = /^##\s+2\.\s+Angriffswege\s*$/;
 const ANGRIFFSWEG = /^###\s+(T[1-9]\d*)\s*:/;
@@ -42,12 +46,19 @@ function sammle(zeilen, muster, lies) {
   return { ergebnis, doppelt: [...doppelt] };
 }
 
+function abschnittBeginntMit(zeilen, kopf, muster) {
+  const start = zeilen.findIndex((zeile) => kopf.test(zeile));
+  const erste = start === -1 ? undefined : bisZeile(zeilen.slice(start + 1), ABSCHNITT).find((zeile) => zeile.trim() !== "");
+  return erste !== undefined && muster.test(erste.trim());
+}
+
 function pitchSzenarien(text) {
   const zeilen = text.split(ZEILENUMBRUCH);
   const { ergebnis, doppelt } = sammle(zeilen, PITCH_SZENARIO, (stelle) => ({ text: blockNach(zeilen, stelle).join("\n"), quelle: PITCH }));
   const unklar = doppelt.map((nummer) => `${UNKLAR} ${nummer} steht in ${PITCH} mehrfach`);
-  if (![...ergebnis.keys()].some((nummer) => nummer.startsWith("S"))) unklar.push(`${UNKLAR} ${PITCH} hat kein Szenario ${FORM_SZENARIO}`);
-  return { szenarien: ergebnis, unklar };
+  const nurUmbau = ergebnis.size === 0 && abschnittBeginntMit(zeilen, ANFORDERUNGEN, KEINE_NEUEN) && abschnittBeginntMit(zeilen, BLEIBT_UNVERAENDERT, KEINS);
+  if (!nurUmbau && ![...ergebnis.keys()].some((nummer) => nummer.startsWith("S"))) unklar.push(`${UNKLAR} ${PITCH} hat kein Szenario ${FORM_SZENARIO}`);
+  return { szenarien: ergebnis, unklar, nurUmbau };
 }
 
 function ausgangIn(zeile) {
@@ -86,14 +97,14 @@ function bedrohungen(text) {
 }
 
 export function sollNummern(pitch, sicherheit) {
-  const { szenarien: soll, unklar: pitchUnklar } = pitchSzenarien(pitch);
+  const { szenarien: soll, unklar: pitchUnklar, nurUmbau } = pitchSzenarien(pitch);
   const { wege, unklar } = bedrohungen(sicherheit);
   const andererAusgang = new Set();
   for (const [nummer, { ausgang, text }] of wege) {
     if (ausgang === "verhindern") soll.set(nummer, { text, quelle: SICHERHEIT });
     else andererAusgang.add(nummer);
   }
-  return { soll, andererAusgang, unklar: [...pitchUnklar, ...unklar] };
+  return { soll, andererAusgang, nurUmbau, unklar: [...pitchUnklar, ...unklar] };
 }
 
 export function nummernImOrdner(ordner) {
