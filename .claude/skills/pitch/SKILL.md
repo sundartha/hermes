@@ -32,7 +32,7 @@ Der Nutzer darf nach Nummern antworten, nur einen Teil beantworten oder mit „w
 
 Lässt sich eine Frage erst beantworten, wenn der Nutzer etwas hört oder sieht, etwa wie ein Satz am Telefon klingt, schlag einen Wegwerf-Versuch vor (einen Testanruf auf Staging, ein Bild) und trag die Frage bis dahin unter „Vor dem Bau zu klären“ ein.
 
-Zur letzten Runde gehört die Frage, ob ein Design Doc entsteht, mit deiner Empfehlung und ihrem Grund aus diesem Fall, etwa weil die technische Lösung unklar ist, es mehr als einen ernsthaften Weg gibt oder sich eine Entscheidung später schwer zurücknehmen lässt. Trag die Antwort mit Grund in die Kopfzeile „Design Doc“ ein; der Architektur-Agent liest daraus, welche Entscheidung sein Dokument tragen soll.
+Zur letzten Runde gehört die Frage, ob ein Design Doc entsteht, mit deiner Empfehlung und ihrem Grund aus diesem Fall, etwa weil die technische Lösung unklar ist, es mehr als einen ernsthaften Weg gibt oder sich eine Entscheidung später schwer zurücknehmen lässt. Trag die Antwort mit Grund in die Kopfzeile „Design Doc“ ein; der Architektur-Agent liest daraus, welche Entscheidung sein Dokument tragen soll. Nennt der Pitch nur Umbau und hat kein Szenario, schreibst du bei „Design Doc: nein“ trotzdem `design.md` mit dem Abschnitt „## Ausgangslage und Annahmen“ aus `design-vorlage.md`, weil der Lauf ohne diesen Abschnitt nicht startet.
 
 Schritt 2 ist fertig, wenn jeder Abschnitt der Vorlage ohne Annahme geschrieben werden kann, keine Entscheidung mehr offen ist, von der ein anderer Abschnitt abhängt, und feststeht, ob ein Design Doc entsteht.
 
