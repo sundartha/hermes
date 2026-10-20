@@ -37,6 +37,7 @@ export const PRUEFUNG = {
   GRENZEN_BAU: "grenzen bau",
   GRENZEN_TEST: "grenzen test",
   IMPORTENDUNGEN: "importendungen",
+  LISTENUMZUG: "listenumzug",
   GEAENDERTE_FAELLE: "geänderte fälle",
   TESTUMBAU_FAELLE: "testumbau fälle",
   VORBAU_NUR_ERGAENZT: "vorbau nur ergänzt",

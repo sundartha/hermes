@@ -16,6 +16,7 @@ import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, g
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
+import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { issueBefunde } from "./phase.mjs";
@@ -271,6 +272,7 @@ class AuftragsLauf {
   }
 
   grenzen(rolle, basis) {
+    if (rolle === "bau") umzugZuruecknehmen(this.kontext.root, this.listenumzug);
     return this.gruen(GRENZ_PRUEFUNG[rolle], this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis), zweckBeleg);
   }
 
@@ -362,6 +364,12 @@ class AuftragsLauf {
     return true;
   }
 
+  listenUmziehen() {
+    const { gruen, umzug } = umzugGemerkt(this.kontext.root, () => this.gruen(PRUEFUNG.LISTENUMZUG, [execPath, LISTENUMZUG, "--basis", this.basisBau]));
+    this.listenumzug = umzug;
+    return gruen;
+  }
+
   commitNachricht() {
     const { phase, auftrag } = this.kontext;
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
@@ -421,6 +429,7 @@ class AuftragsLauf {
       () => this.importendungen(),
       () => this.grenzen("bau", this.basisBau),
       () => this.bauHatGeaendert(),
+      () => this.listenUmziehen(),
       () => this.allesVormerken(),
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
