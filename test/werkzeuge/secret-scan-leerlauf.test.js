@@ -27,16 +27,14 @@ const GIT_FEHLER = [
   "6:37AM INF scanned ~0 bytes (0) in 79.3ms",
   "6:37AM INF no leaks found",
 ].join("\n");
-const NICHTS_GELESEN = [
-  "6:37AM INF 0 commits scanned.",
-  "6:37AM INF scanned ~0 bytes (0) in 78.4ms",
-  "6:37AM INF no leaks found",
-].join("\n");
-const EIN_COMMIT_GELESEN = [
-  "6:37AM INF 1 commits scanned.",
-  "6:37AM INF scanned ~2 bytes (2 bytes) in 82.9ms",
-  "6:37AM INF no leaks found",
-].join("\n");
+const commitsGelesen = (anzahl) =>
+  [
+    `6:37AM INF ${anzahl} commits scanned.`,
+    "6:37AM INF scanned ~6 bytes (6 bytes) in 82.9ms",
+    "6:37AM INF no leaks found",
+  ].join("\n");
+const NICHTS_GELESEN = commitsGelesen(0);
+const EIN_COMMIT_GELESEN = commitsGelesen(1);
 const FUND = [
   "Finding:     AWS=REDACTED",
   "RuleID:      aws-access-token",
@@ -97,19 +95,26 @@ function scanne(context, repo, { basis, kopf, ausgabe, status = 0 }) {
   });
 }
 
-function repoMitNeuemCommit(context, neu) {
+function repoMitNeuenCommits(context, neu) {
   const repo = probeRepository(context, { "a.txt": "a\n", "b.txt": "b\n" });
   const basis = sha(repo, "HEAD");
-  neu(repo);
-  commitAll(repo, "Neu");
+  for (const schritt of [neu].flat()) {
+    schritt(repo);
+    commitAll(repo, "Neu");
+  }
   return { repo, basis, kopf: sha(repo, "HEAD") };
 }
 
 const NEUE_ZEILE = (repo) => writeFiles(repo, { "c.txt": "c\n" });
 const NUR_LOESCHEN = (repo) => runIn(repo, "git", ["rm", "-q", "b.txt"]);
+const ZEILE_IN_A = (repo) => writeFiles(repo, { "a.txt": "a\nmehr\n" });
+const ZWEI_NEUE_DATEIEN = (repo) => writeFiles(repo, { "d.txt": "d\n", "e.txt": "e\n" });
+const ZWEI_WEITERE_DATEIEN = (repo) => writeFiles(repo, { "f.txt": "f\n", "g.txt": "g\n" });
+const GEMISCHTER_BEREICH = [NEUE_ZEILE, NUR_LOESCHEN, ZEILE_IN_A];
+const MEHRERE_DATEIEN_JE_COMMIT = [ZWEI_NEUE_DATEIEN, ZWEI_WEITERE_DATEIEN];
 
 function pruefeFall(context, { neu, bereich, ausgabe, status, gruen, meldung }) {
-  const probe = repoMitNeuemCommit(context, neu);
+  const probe = repoMitNeuenCommits(context, neu);
   const { basis, kopf } = bereich ? bereich(probe) : probe;
   const lauf = scanne(context, probe.repo, { basis, kopf, ausgabe, status });
   const protokoll = `${lauf.stdout}${lauf.stderr}`;
@@ -189,5 +194,41 @@ test("secret-scan: ein Bereich, der nur löscht, ist grün mit Meldung", (contex
     ausgabe: NICHTS_GELESEN,
     gruen: true,
     meldung: /Secret-Scan: nichts zu prüfen, kein Commit in .* fügt Zeilen hinzu/,
+  });
+});
+
+test("secret-scan: ein gemischter Bereich ist grün, wenn gitleaks so viele Commits gelesen hat, wie Commits Zeilen hinzufügen", (context) => {
+  pruefeFall(context, {
+    neu: GEMISCHTER_BEREICH,
+    ausgabe: commitsGelesen(2),
+    gruen: true,
+    meldung: /scannt .* \(3 Commits, 2 mit neuen Zeilen\)/,
+  });
+});
+
+test("secret-scan: ein gemischter Bereich ist grün, wenn gitleaks alle Commits des Bereichs gelesen hat", (context) => {
+  pruefeFall(context, {
+    neu: GEMISCHTER_BEREICH,
+    ausgabe: commitsGelesen(3),
+    gruen: true,
+    meldung: /scannt .* \(3 Commits, 2 mit neuen Zeilen\)/,
+  });
+});
+
+test("secret-scan: ein gemischter Bereich, von dem gitleaks weniger Commits gelesen hat als Commits Zeilen hinzufügen, ist rot mit Meldung", (context) => {
+  pruefeFall(context, {
+    neu: GEMISCHTER_BEREICH,
+    ausgabe: commitsGelesen(1),
+    gruen: false,
+    meldung: /Secret-Scan: gitleaks hat 1 von 2 Commits mit neuen Zeilen gelesen/,
+  });
+});
+
+test("secret-scan: mehrere Dateien je Commit zählen als ein Commit, und ein gelesener Commit weniger ist rot mit Meldung", (context) => {
+  pruefeFall(context, {
+    neu: MEHRERE_DATEIEN_JE_COMMIT,
+    ausgabe: commitsGelesen(1),
+    gruen: false,
+    meldung: /Secret-Scan: gitleaks hat 1 von 2 Commits mit neuen Zeilen gelesen/,
   });
 });
