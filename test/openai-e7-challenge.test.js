@@ -95,7 +95,7 @@ test("E7-T8: der Token ist keine configHash-Achse (Boot-Hash identisch mit/ohne 
   });
 });
 
-test("E7-T9: .env.example + render.yaml + config.js sind kohaerent (Doku-Pin)", () => {
+test("E7-T9: .env.example + render.yaml sind kohaerent (Doku-Pin)", () => {
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
