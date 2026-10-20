@@ -121,8 +121,9 @@ function rollenVerstoss({ auftrag, rolle, bestand }, pfad) {
   return istTestdatei(pfad) ? `${ROLLE.TEST_IM_BAU}: ${pfad}` : null;
 }
 
-function dateiVerstoesse({ auftrag, rolle, muster, bestand = () => true }, pfad) {
+function dateiVerstoesse({ auftrag, rolle, muster, bestand = () => true, nachgezogen = new Set() }, pfad) {
   if (istGeschuetzt(muster, pfad)) return [`${VERSTOSS}${GESCHUETZT}: ${pfad}`];
+  if (nachgezogen.has(pfad)) return [];
   const verstoss = rollenVerstoss({ auftrag, rolle, bestand }, pfad);
   if (verstoss) return [`${VERSTOSS}${verstoss}`];
   if (rolle === "bau" && !gehoertZumBereich(auftrag.bereich, pfad)) {
@@ -143,7 +144,8 @@ function abweichungen(auftrag, geaendert) {
 
 export function grenzBefunde(kontext, aenderungen) {
   const verstoesse = aenderungen.flatMap(({ pfad }) => dateiVerstoesse(kontext, pfad));
-  const produkt = aenderungen.filter(({ pfad }) => !istTestdatei(pfad));
+  const nachgezogen = kontext.nachgezogen ?? new Set();
+  const produkt = aenderungen.filter(({ pfad }) => !istTestdatei(pfad) && !nachgezogen.has(pfad));
   const produktzeilen = produkt.reduce((summe, { zeilen }) => summe + zeilen, 0);
   if (produktzeilen > MAX_PRODUKTZEILEN) {
     verstoesse.push(

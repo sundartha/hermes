@@ -6,6 +6,8 @@ import { join, resolve } from "node:path";
 const NUMSTAT_FELDER = 3;
 const BINAER = "-";
 const STATUS_SPALTEN = 3;
+const STDIN = "-";
+const DIFF_UNTERSCHIEDLICH = 1;
 export const NUL = "\0";
 const AUFTRAG_ZEILE = "^Auftrag: ";
 const RUECKNAHME_ZEILE = "^This reverts commit ";
@@ -69,8 +71,20 @@ function neueDateien(cwd) {
   return pfade.filter(Boolean).map((pfad) => ({ pfad, zeilen: zeilenImText(readFileSync(join(cwd, pfad), "utf8")) }));
 }
 
-export function aenderungenSeit(basis, cwd) {
-  return [...verfolgteAenderungen(basis, cwd), ...neueDateien(cwd)];
+function zeilenGegenAlt(basis, { alt, neu }, cwd) {
+  const vorher = git(["show", `${basis}:${alt}`], { cwd });
+  const lauf = spawnSync("git", ["diff", "--no-index", "--numstat", "--", STDIN, neu], { cwd, encoding: "utf8", input: vorher });
+  if (lauf.status !== 0 && lauf.status !== DIFF_UNTERSCHIEDLICH) throw new Error(`git diff --no-index ${neu} ist mit Exit ${lauf.status} gescheitert: ${lauf.stderr}`);
+  const [hinzu] = lauf.stdout.split("\t", 1);
+  return hinzu === "" ? 0 : zeilenzahl(hinzu);
+}
+
+export function aenderungenSeit(basis, cwd, nurTypenPaare = []) {
+  const altFuer = new Map(nurTypenPaare.map(({ alt, neu }) => [neu, alt]));
+  return [...verfolgteAenderungen(basis, cwd), ...neueDateien(cwd)].map((eintrag) => {
+    const alt = altFuer.get(eintrag.pfad);
+    return alt === undefined ? eintrag : { ...eintrag, zeilen: zeilenGegenAlt(basis, { alt, neu: eintrag.pfad }, cwd) };
+  });
 }
 
 export function arbeitsstand(cwd) {
