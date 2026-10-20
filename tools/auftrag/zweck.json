@@ -62,6 +62,13 @@
     "nichtAngenommen": "Die Änderung in einer Form machen, die die Grenzprüfung nicht erkennt.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“; als Bau-Agent bei einer nötigen Änderung außerhalb des Bereichs „Voraussetzung fehlt: <Datei> muss vorher <Änderung>“."
   },
+  "importendungen": {
+    "liste": "ohne Nummer",
+    "wozu": "Benennt der Bau-Agent eine Datei von .js nach .ts um und ergänzt nur Typen, zieht das Skript die Importendungen in allen Importeuren selbst nach; der Bau-Agent fasst dafür weder Tests noch Dateien außerhalb seines Bereichs an. Bricht der Schritt ab, ist der Stand nicht nachgezogen, und die Grenzprüfung kann ihn nicht richtig messen.",
+    "behebung": "Die Ausgabe des Schritts lesen und die Ursache beheben, etwa eine Datei, die sich nach der Umbenennung nicht mehr lesen lässt.",
+    "nichtAngenommen": "Importe in Tests oder in Dateien außerhalb des Bereichs selbst umschreiben, oder Typen und Laufzeitänderung in einer Umbenennung mischen, damit beides zusammen durchläuft.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
   "geänderte fälle": {
     "liste": "ohne Nummer",
     "wozu": "Der Test-Agent ändert einen bestehenden Test nur als Verhaltensschritt: Jeder geänderte Fall ist gegen den unveränderten Produktcode rot, jeder unveränderte bleibt grün. Ein Fall, der grün bleibt, ist ein Umbau, und den prüft in dieser Rolle niemand.",

@@ -258,10 +258,14 @@ class AuftragsLauf {
     const { root } = this.kontext;
     const genannt = this.genannterAlterTest(alterTest);
     if (genannt === null) return this.alsAusstieg(alterTest);
-    if (!this.grenzen("bau", this.basisBau)) return false;
+    if (!this.importendungen() || !this.grenzen("bau", this.basisBau)) return false;
     const lauf = this.pruefung(ALTER_TEST, ["npm", "--silent", "test", "--", genannt.datei]);
     this.alterTest = { ...genannt, rot: lauf.exitCode !== 0, diff: sichereDiff(root, this.basisBau) };
     return this.scheitert(genannt.zeile);
+  }
+
+  importendungen() {
+    return this.gruen(PRUEFUNG.IMPORTENDUNGEN, [execPath, EINSTIEG, "importendungen", "--basis", this.basisBau]);
   }
 
   grenzen(rolle, basis) {
@@ -412,6 +416,7 @@ class AuftragsLauf {
     const { auftrag } = this.kontext;
     return [
       () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
+      () => this.importendungen(),
       () => this.grenzen("bau", this.basisBau),
       () => this.bauHatGeaendert(),
       () => this.allesVormerken(),

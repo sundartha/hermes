@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const NUMSTAT_FELDER = 3;
@@ -96,7 +96,10 @@ export function arbeitsstand(cwd) {
 }
 
 export function vormerken(pfade, cwd) {
-  if (pfade.length > 0) git(["add", "--", ...pfade], { cwd });
+  if (pfade.length === 0) return;
+  const imIndex = new Set(git(["ls-files", "-z", "--", ...pfade], { cwd }).split(NUL));
+  const offen = pfade.filter((pfad) => imIndex.has(pfad) || existsSync(join(cwd, pfad)));
+  if (offen.length > 0) git(["add", "--", ...offen], { cwd });
 }
 
 export function festhalten(nachricht, cwd) {
