@@ -67,29 +67,38 @@ test("plane --deckel geht vor die im Pitch freigegebene Menge: derselbe Lauf sta
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
 });
 
-for (const [fall, zeile] of [
-  ["ohne Zeile „Planung freigegeben“", ""],
-  ["mit einer Menge, die keine ganze Zahl ist", "Planung freigegeben: 15 Mio. Token\n"],
-]) {
-  test(`plane ohne --deckel, Pitch ${fall}: plane endet mit Exit 2, nennt die Zeile und startet keinen Agenten`, { timeout: LAUF_FRIST_MS }, (context) => {
-    const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), zeile));
+function ohneFreigabe(context, zeile) {
+  const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), zeile));
 
-    exit(lauf, EXIT_AUFRUF);
-    assert.match(lauf.stderr, /Planung freigegeben: <Zahl> Token/);
-    assert.equal(aufrufe(lauf, "planer").length, 0);
-    assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
-  });
+  exit(lauf, EXIT_AUFRUF);
+  assert.match(lauf.stderr, /Planung freigegeben: <Zahl> Token/);
+  assert.equal(aufrufe(lauf, "planer").length, 0);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
 }
 
-for (const angabe of ["0", "15Mio"]) {
-  test(`plane --deckel ${angabe}: plane endet mit Exit 2, nennt die Angabe und startet keinen Agenten`, { timeout: LAUF_FRIST_MS }, (context) => {
-    const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", angabe] });
+test("plane ohne --deckel, Pitch ohne Zeile „Planung freigegeben“: plane endet mit Exit 2, nennt die Zeile und startet keinen Agenten", { timeout: LAUF_FRIST_MS }, (context) => {
+  ohneFreigabe(context, "");
+});
 
-    exit(lauf, EXIT_AUFRUF);
-    assert.match(lauf.stderr, new RegExp(`--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}`));
-    assert.equal(aufrufe(lauf, "planer").length, 0);
-  });
+test("plane ohne --deckel, Pitch mit einer Menge, die keine ganze Zahl ist: plane endet mit Exit 2, nennt die Zeile und startet keinen Agenten", { timeout: LAUF_FRIST_MS }, (context) => {
+  ohneFreigabe(context, "Planung freigegeben: 15 Mio. Token\n");
+});
+
+function ungueltigerDeckel(context, angabe) {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", angabe] });
+
+  exit(lauf, EXIT_AUFRUF);
+  assert.match(lauf.stderr, new RegExp(`--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}`));
+  assert.equal(aufrufe(lauf, "planer").length, 0);
 }
+
+test("plane --deckel 0: plane endet mit Exit 2, nennt die Angabe und startet keinen Agenten", { timeout: LAUF_FRIST_MS }, (context) => {
+  ungueltigerDeckel(context, "0");
+});
+
+test("plane --deckel 15Mio: plane endet mit Exit 2, nennt die Angabe und startet keinen Agenten", { timeout: LAUF_FRIST_MS }, (context) => {
+  ungueltigerDeckel(context, "15Mio");
+});
 
 test("plane --deckel: liegt die Vorschau der Prüfliste aus dem vorigen Lauf über dem Deckel, endet plane nach der Erkundung mit Exit 5, ohne einen Prüfer der Prüfliste zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
   const wurzel = planOrdner(context);
