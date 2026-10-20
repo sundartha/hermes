@@ -17,6 +17,7 @@ import { emptyUsage } from "../src/store/defaults.js";
 import { config } from "../src/config.js";
 import { PRICES } from "./_prices.js";
 import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
+import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
@@ -35,18 +36,6 @@ function stateWithUsage(tenantId, overrides) {
 
 function sourceOf(relativePath) {
   return fs.readFileSync(new URL(relativePath, import.meta.url), "utf8");
-}
-
-async function captureErr(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs.join("\n");
 }
 
 test("T1 Prod-Symptom: veralteter Monatsschluessel (Vormonat) gibt das Kontingent frei (Flag AN)", () => {
@@ -139,9 +128,10 @@ test("T8b Log-Feld-Label (Review-Blocker Runde 1, P8/G2): das Deny-Log benennt d
     spendMonthKey: "2026-07",
     spendMonthCostCents: NaN,
   });
-  const out = await captureErr(() => {
+  const zeilen = await fehlerausgabeVonAsync(() => {
     budgetExceeded(s, TENANT_A, FLAG_ON, JULY_ISO);
   });
+  const out = zeilen.join("\n");
   assert.match(
     out,
     /feld=gateCents wert=NaN/,

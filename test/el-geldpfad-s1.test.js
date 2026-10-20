@@ -16,6 +16,7 @@ import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
 import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
+import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const CONV_ID = "conv_geldpfad";
@@ -24,18 +25,6 @@ const HTTP_SERVER_ERROR = 500;
 const SECONDS_PER_MINUTE = 60;
 
 const elConfig = () => withConfigNamespaces({ elevenLabsOutbound: ACCOUNT });
-
-async function mitFehlerLog(run) {
-  const zeilen = [];
-  const original = console.error;
-  console.error = (...args) => zeilen.push(args.join(" "));
-  try {
-    await run();
-  } finally {
-    console.error = original;
-  }
-  return zeilen;
-}
 
 function seedActiveCall({ maxDurationS, laufzeitSekunden }) {
   const state = ops.makeDefaultState();
@@ -151,7 +140,7 @@ test("S1-B: Abbruch auf ein LAUFENDES Gespraech (in-progress, Dauer 0) loescht d
   const el = makeOutbound(store);
   const angenommenVorAbbruch = call.answeredAt;
 
-  const fehlerzeilen = await mitFehlerLog(() =>
+  const fehlerzeilen = await fehlerausgabeVonAsync(() =>
     withFetch(
       async (_url, init) =>
         init.method === "GET"
@@ -205,7 +194,7 @@ test("S1-B: ein BEENDETES Gespraech mit Dauer 0 bleibt 'niemand hat abgenommen' 
   const store = storeOpsFacade(state);
   const el = makeOutbound(store);
 
-  const fehlerzeilen = await mitFehlerLog(() =>
+  const fehlerzeilen = await fehlerausgabeVonAsync(() =>
     withFetch(
       async (_url, init) =>
         init.method === "GET"

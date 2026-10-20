@@ -9,6 +9,7 @@ import {
   startOutboundCall,
 } from "../src/elevenlabs/convai.js";
 import { wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
+import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
 const ACCOUNT = Object.freeze({ apiKey: "el-test-geheim-xyz", apiBase: "http://127.0.0.1:1" });
 const CALL_ID = "call_whitelist_test_1";
@@ -39,18 +40,6 @@ function bodyWithOverride(override) {
   };
 }
 
-async function captureErrors(fn) {
-  const zeilen = [];
-  const original = console.error;
-  console.error = (...args) => zeilen.push(args.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.error = original;
-  }
-  return zeilen;
-}
-
 test("EL-OVERRIDE ROTPROBE: ein DRITTES Feld im Override-Objekt wird abgelehnt, kein Netzaufruf", async () => {
   const { fetchImpl, calls } = recordingFetch();
   const body = bodyWithOverride({
@@ -59,7 +48,7 @@ test("EL-OVERRIDE ROTPROBE: ein DRITTES Feld im Override-Objekt wird abgelehnt, 
     asr: { keywords: ["boese"] },
   });
 
-  const fehlerZeilen = await captureErrors(async () => {
+  const fehlerZeilen = await fehlerausgabeVonAsync(async () => {
     await assert.rejects(
       () => startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID }),
       /asr\.keywords/,

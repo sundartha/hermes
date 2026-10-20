@@ -13,6 +13,7 @@ import { makeCostCrossCheck } from "../src/billing/cost-cross-check.js";
 import { runSweepTick } from "../src/boot.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "./cost-truing-harness.js";
 import { captureConsole } from "./helpers.js";
+import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
 const NON_TELNYX_PROVIDER = "twilio";
 
@@ -297,18 +298,6 @@ test("KV-M4-7 erster Lauf ueberhaupt: crossCheckDueMonthKey liefert den Vormonat
   assert.equal(crossCheckDueMonthKey(state, NOW_ISO), DUE_MONTH_KEY);
 });
 
-async function captureConsoleError(fn) {
-  const lines = [];
-  const orig = console.error;
-  console.error = (...teile) => lines.push(teile.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.error = orig;
-  }
-  return lines;
-}
-
 const WERFENDE_ZWEIGE = [
   { zweig: "costCrossCheck", methode: "runMonthlyCrossCheck", logPraefix: "[cost-cross-check]", fehler: "kv-m4-8-boom" },
   { zweig: "outageWatch", methode: "runRecoverySweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-outage-boom" },
@@ -347,7 +336,7 @@ function baueSweepAttrappen() {
 test("KV-M4-8 Sweep-Isolation: ein werfender Zweig haelt keinen der uebrigen auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
   const { zweige, gerufen } = baueSweepAttrappen();
 
-  const errorLogs = await captureConsoleError(async () => {
+  const errorLogs = await fehlerausgabeVonAsync(async () => {
     assert.doesNotThrow(() => runSweepTick(zweige));
     await new Promise((resolve) => setImmediate(resolve));
   });

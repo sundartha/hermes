@@ -12,6 +12,7 @@ import {
 } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
 const superuserPool = () => ({
   connect: async () => ({
@@ -21,25 +22,14 @@ const superuserPool = () => ({
   end: async () => {},
 });
 
-async function captureErrAsync(fn) {
-  const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.error = orig;
-  }
-  return logs.join("\n");
-}
-
 test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, returnt false", async () => {
   let result;
-  const out = await captureErrAsync(async () => {
+  const zeilen = await fehlerausgabeVonAsync(async () => {
     result = await guardedBoot("Web-Login/Portal", () =>
       createPortalRunner({ pool: superuserPool() }),
     );
   });
+  const out = zeilen.join("\n");
   assert.equal(result, false);
   assert.match(out, /\[boot\] Web-Login\/Portal deaktiviert/);
 });
