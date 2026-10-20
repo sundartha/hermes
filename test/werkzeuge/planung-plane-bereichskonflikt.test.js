@@ -58,11 +58,12 @@ test("plane: ein Bereichskonflikt steht in der ersten Zuschnittnachricht, und so
   exit(lauf, EXIT_GRUEN);
 });
 
-test("plane: wird bei offenem Bereichskonflikt eine Nachfrage, die auch andere Nummern nennt, zum zweiten Mal abgewiesen, endet plane mit Exit 4 ohne Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
+test("plane: weist plane bei offenem Bereichskonflikt zum zweiten Mal eine Nachfrage ab, auch eine andere als die erste, endet es mit Exit 4 ohne Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
   const gemischt = alsJson({ nachfragen: [{ nummern: ["S1", "S4"], frage: "Wie hängen S1 und S4 zusammen?" }] });
-  const lauf = konfliktLauf(context, { "planer|## Zuschnitt": [gemischt], "planer|## Befunde": [gemischt] });
+  const andere = alsJson({ nachfragen: [{ nummern: ["S2"], frage: "Wo prüft bestaetige den Code?" }] });
+  const lauf = konfliktLauf(context, { "planer|## Zuschnitt": [gemischt], "planer|## Befunde": [andere] });
   exit(lauf, EXIT_BEFUNDE);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 0);
   assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
-  assert.match(planungsBericht(lauf).grund, /^bereichskonflikt: Befunde blieben nach 1 Rücksendungen offen, wiederkehrend/u);
+  assert.equal(planungsBericht(lauf).grund, "Bereichskonflikt S1: zum zweiten Mal Nachfragen zu anderen Nummern");
 });
