@@ -69,12 +69,37 @@ jobs:
             echo "Secret-Scan: der Anfang des Bereichs fehlt ($range)"
             exit 1
           fi
-          echo "gitleaks $GITLEAKS_VERSION scannt $range"
+          if ! anzahl="$(git rev-list --count "$range")"; then
+            echo "Secret-Scan: git kann den Bereich $range nicht lesen"
+            exit 1
+          fi
+          if [ "$anzahl" -eq 0 ]; then
+            echo "Secret-Scan: der Bereich $range enthält keinen Commit"
+            exit 1
+          fi
+          erwartet="$(git log --numstat --format=@%H "$range" \
+            | awk '/^@/ { c = $0; next } $1 ~ /^[0-9]+$/ && $1 > 0 && !(c in g) { g[c]; n++ } END { print n + 0 }')"
+          echo "gitleaks $GITLEAKS_VERSION scannt $range ($anzahl Commits, $erwartet mit neuen Zeilen)"
           ohne_ausnahmen="$(mktemp -d "$RUNNER_TEMP/gitleaks-ohne-ausnahmen.XXXXXX")"
           git_verzeichnis="$(git rev-parse --absolute-git-dir)"
-          "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner \
-            --exit-code 1 --ignore-gitleaks-allow --gitleaks-ignore-path "$ohne_ausnahmen" \
-            --log-opts="$range" "$git_verzeichnis"
+          protokoll="$(mktemp "$RUNNER_TEMP/gitleaks-protokoll.XXXXXX")"
+          {
+            "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner --no-color \
+              --exit-code 1 --ignore-gitleaks-allow --gitleaks-ignore-path "$ohne_ausnahmen" \
+              --log-opts="$range" "$git_verzeichnis"
+          } 2>&1 | tee "$protokoll"
+          if grep -q ' ERR ' "$protokoll"; then
+            echo "Secret-Scan: gitleaks meldet einen Fehler, der Bereich $range gilt als nicht gelesen"
+            exit 1
+          fi
+          gelesen="$(sed -nE 's/.* ([0-9]+) commits scanned\.$/\1/p' "$protokoll")"
+          if ! [[ "$gelesen" =~ ^[0-9]+$ ]] || [ "$gelesen" -lt "$erwartet" ]; then
+            echo "Secret-Scan: gitleaks hat ${gelesen:-keine} von $erwartet Commits mit neuen Zeilen gelesen"
+            exit 1
+          fi
+          if [ "$erwartet" -eq 0 ]; then
+            echo "Secret-Scan: nichts zu prüfen, kein Commit in $range fügt Zeilen hinzu"
+          fi
 
       - name: Zweck des Secret-Scans
         if: failure() && steps.secretscan.outcome == 'failure'
