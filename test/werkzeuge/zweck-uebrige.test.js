@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { REPO_ROOT, outputLines, probeDirectory, runIn } from "./probe-repo.js";
+import { REPO_ROOT, outputLines, probeDirectory, runIn, writeFiles } from "./probe-repo.js";
 import { dateienMitEndung, nurGenutzteIds, quelltext } from "./zweck-quellen.js";
 
 const BEREICH = "uebrige";
@@ -19,12 +19,24 @@ const EXIT_BEFUND = 1;
 const TELNYX_DATEI = "src/telephony/adapters/telnyx/voice.js";
 const ROUTEN_DATEI = "src/routes/voice.js";
 const DATENSCHUTZ_DATEI = "apps/web/src/data/legal/privacy.de.json";
+const TSCONFIG = "tsconfig.json";
+const TSCONFIG_WERKZEUG = join(REPO_ROOT, "tools/tsconfig-pruefen.mjs");
+const FUNKTIONSKARTE = join(REPO_ROOT, "tools/funktionskarte.mjs");
+
+function tsconfigMit(strict) {
+  return `${JSON.stringify({ compilerOptions: { noEmit: true, allowJs: true, strict }, include: ["src"] })}\n`;
+}
+
+function blockAmEnde(text, id) {
+  const block = zweckBlock(id);
+  const zeilen = outputLines(text);
+  assert.deepEqual(zeilen.slice(-block.length), block, text);
+  return zeilen.slice(0, -block.length);
+}
 
 function nachDenBefunden(lauf, id) {
-  const block = zweckBlock(id);
-  const zeilen = outputLines(lauf.stderr);
-  assert.deepEqual(zeilen.slice(-block.length), block, lauf.stderr);
-  return ohneZweck(zeilen);
+  blockAmEnde(lauf.stderr, id);
+  return ohneZweck(outputLines(lauf.stderr));
 }
 
 test("tools/zweck/uebrige.json hat genau die IDs, die Werkzeuge und Workflow-Schritte nennen", () => {
@@ -69,6 +81,32 @@ test("Anbieter im Datenschutz nennt nach den Befunden den Block auf stderr, ein 
   const gruen = pruefe("Anthropic und Exa");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
   assert.doesNotMatch(`${gruen.stdout}${gruen.stderr}`, /Wozu:/);
+});
+
+test("die TypeScript-Konfiguration nennt nach den Befunden auf stderr den Block auf stdout, ein unveränderter Stand nichts", (context) => {
+  const wurzel = probeDirectory(context, { [TSCONFIG]: tsconfigMit(true), "src/a.js": "export const a = 1;\n", "tools/basis/.keep": "" });
+  const pruefe = (...optionen) => runIn(wurzel, process.execPath, [TSCONFIG_WERKZEUG, ...optionen, wurzel]);
+  assert.equal(pruefe("--basis-schreiben").status, 0);
+  const gruen = pruefe();
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+  assert.equal(`${gruen.stdout}${gruen.stderr}`, "");
+  writeFiles(wurzel, { [TSCONFIG]: tsconfigMit(false) });
+  const rot = pruefe();
+  assert.equal(rot.status, EXIT_BEFUND, rot.stdout + rot.stderr);
+  assert.deepEqual(blockAmEnde(rot.stdout, "uebrige/tsconfig"), []);
+  assert.match(rot.stderr, /^tsconfig\.json: compilerOptions\.strict ist false, die Kopie sagt true$/m);
+});
+
+test("die Funktionskarte nennt bei einer Fläche ohne Karte nach der Zusammenfassung den Block auf stdout, ein sauberer Lauf keinen", (context) => {
+  const wurzel = probeDirectory(context, { "ohne-karte.json": JSON.stringify([{ art: "Werkzeug", flaeche: "get_agent_number" }]), "leer.json": "[]" });
+  const pruefe = (datei) => runIn(wurzel, process.execPath, [FUNKTIONSKARTE, "pruefen", "--flaechen-datei", datei]);
+  const rot = pruefe("ohne-karte.json");
+  assert.equal(rot.status, EXIT_BEFUND, rot.stdout + rot.stderr);
+  assert.equal(blockAmEnde(rot.stdout, "uebrige/funktionskarte").at(-1), "Funktionskarte: rot, 1 Befunde.");
+  assert.match(rot.stderr, /^get_agent_number hat keine Funktionskarte unter docs\/funktionen\/\.$/m);
+  const sauber = pruefe("leer.json");
+  assert.equal(sauber.status, 0, sauber.stdout + sauber.stderr);
+  assert.doesNotMatch(sauber.stdout, /Wozu:/);
 });
 
 test("die Schritte Secret-Scan und Commit-Prüfung zeigen bei Rot ihren Block", () => {
