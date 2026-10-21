@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { chdir, cwd } from "node:process";
 import { test } from "node:test";
 
-import { erreichendeTests, importgraph } from "../../tools/tests-ausmisten/messmenge.mjs";
+import {
+  erreichendeTests,
+  graphImStand,
+  importgraph,
+} from "../../tools/tests-ausmisten/messmenge.mjs";
 import { FREMDE_QUELLE, GRUNDDATEIEN, RECHNEN_TEST } from "./ausmisten/hilfen.mjs";
 import {
   EXIT_GRUEN,
@@ -10,7 +14,7 @@ import {
   erwarteBranchUndMeldenGruen,
   messeUndMelde,
 } from "./ausmisten/messung.mjs";
-import { probeDirectory } from "./probe-repo.js";
+import { commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
 const ZIEL = "src/rechnen.js";
 const NAHT_TEST = "test/post/naht.test.js";
@@ -183,4 +187,25 @@ test("ausmisten-dynamisch: ein gelöschter Test, der seine Datei über eine Naht
     ergebnis.melden.ausgabe,
     /Mutant auf dem Branch nicht mehr getötet: src\/fremd\/rechnen\.js:/,
   );
+});
+
+test("ausmisten-dynamisch: zwei Stände parallel liefern je ihren eigenen Graphen und lassen das Arbeitsverzeichnis stehen", async (context) => {
+  const repo = probeRepository(context, {
+    "package.json": `${JSON.stringify({ type: "module" })}\n`,
+    "src/eins.js": "export const eins = 1;\n",
+    "src/zwei.js": "export const zwei = 2;\n",
+    "test/a.test.js": 'await import("../src/eins.js");\n',
+  });
+  writeFiles(repo, { "test/a.test.js": 'import "../src/zwei.js";\n' });
+  commitAll(repo, "Zwei");
+  const vorher = cwd();
+  const [alt, neu] = await Promise.all([
+    graphImStand("HEAD~1", repo),
+    graphImStand("HEAD", repo),
+  ]);
+  assert.equal(cwd(), vorher);
+  assert.deepEqual(erreichendeTests("src/eins.js", alt), ["test/a.test.js"]);
+  assert.deepEqual(erreichendeTests("src/zwei.js", alt), []);
+  assert.deepEqual(erreichendeTests("src/zwei.js", neu), ["test/a.test.js"]);
+  assert.deepEqual(erreichendeTests("src/eins.js", neu), []);
 });
