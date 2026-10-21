@@ -11,7 +11,7 @@ import { befundeImOrdner } from "./abdeckung.mjs";
 import { DURCHSTICH_ZEILE, prueflisteSoll } from "./antworten.mjs";
 import { druckePlanBericht, planBericht } from "./planbericht.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, Ende, Planung, VORLAGE, abschnitt, ausgangOhneWurf, dateiText, json, liste, nachricht, nummernText, prueferZeile, schreibeJsonAtomar } from "./plane.mjs";
-import { DOKUMENTE, schnittBefunde, schnittPruefung } from "./schnitt.mjs";
+import { DOKUMENTE, schnittBefunde, schnittPruefung, umbauMitJsZwillingen } from "./schnitt.mjs";
 import { Team } from "./team.mjs";
 import { auftraegeAusSchnitt, entwurfFuer } from "./zusammensetzen.mjs";
 
@@ -318,12 +318,12 @@ class UmbauNeuschnittPlanung extends NeuschnittPlanung {
   }
 
   karten() {
-    return umbauKarten(this.root, [this.alt], this.alt.id);
+    return umbauKarten(this.root, [umbauMitJsZwillingen(this.alt)], this.alt.id);
   }
 
   kartenMitNeuenUmbauten(schnitt) {
     const umbauten = liste(schnitt.auftraege).filter(istObjekt).filter(istUmbau);
-    return umbauKarten(this.root, [this.alt, ...umbauten], this.alt.id);
+    return umbauKarten(this.root, [this.alt, ...umbauten].map(umbauMitJsZwillingen), this.alt.id);
   }
 
   erkundungsbericht() {
