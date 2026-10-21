@@ -16,6 +16,7 @@ const BUCHSTABEN = ["a", "b", "c", "d", "e", "f"];
 const ZEILEN_VOR_DEM_ERSTEN = 2;
 const LAUFPROTOKOLL = "laeufe";
 const SKRIPT_FRIST_MS = 120_000;
+const HAENGER_TAKT_MS = 1000;
 const ZWEITE_VERLANGT_C = 'assert.ok(zahl.protokoll.includes("c"));';
 
 function zeileVon(buchstabe) {
@@ -49,7 +50,7 @@ const ERSTER_TEST = [
   '    writeFileSync(marke, "");',
   '    assert.fail("wackelt");',
   "  }",
-  '  if (fehlend[0] === "f" && process.env.HAENGEN !== undefined) return new Promise(() => setInterval(() => {}, 1000));',
+  `  if (fehlend[0] === "f" && process.env.HAENGEN !== undefined) return new Promise(() => setInterval(() => {}, ${HAENGER_TAKT_MS}));`,
   '  if (fehlend[0] === "f") process.kill(process.ppid, "SIGKILL");',
   "});",
   "",
@@ -74,6 +75,7 @@ import { join } from "node:path";
 import { mock } from "node:test";
 import { loeschprobe } from ${JSON.stringify(MODUL)};
 const TAG_MS = 86_400_000;
+const PROTOKOLL_ABFRAGE_MS = 50;
 const { kopien, aufrufe } = JSON.parse(process.argv[1]);
 function zeitraffer(marken) {
   mock.timers.enable({ apis: ["setTimeout"] });
@@ -82,7 +84,7 @@ function zeitraffer(marken) {
   setInterval(() => {
     const haenger = existsSync(pfad) ? readFileSync(pfad, "utf8").split("\\n").filter((lauf) => lauf.endsWith(" f")).length : 0;
     for (; gerafft < haenger; gerafft += 1) mock.timers.tick(TAG_MS);
-  }, 50).unref();
+  }, PROTOKOLL_ABFRAGE_MS).unref();
 }
 const probe = loeschprobe(() => mkdtempSync(join(kopien, "loeschprobe-")));
 const ergebnisse = [];
