@@ -10,6 +10,7 @@ import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 const MS_JE_MINUTE = 60_000;
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
+const PAUSE_NACH_VERSTRICHENER_ZEIT_MINUTEN = 1;
 const BAU = "bau";
 const LESE_WERKZEUGE = ["Read", "Grep", "Glob"];
 const LESE_MODELL = "opus";
@@ -52,9 +53,15 @@ function warteAufFreigabe(sperre) {
   }
 }
 
-function sperreWegenLimit(sperre, { bis }) {
+function gemeldeteFreigabe(bis, jetzt) {
+  const angegeben = Number.isFinite(bis) && bis > 0;
+  if (!angegeben) return jetzt + WARTEZEIT_OHNE_ANGABE_MINUTEN * MS_JE_MINUTE;
+  return bis > jetzt ? bis : jetzt + PAUSE_NACH_VERSTRICHENER_ZEIT_MINUTEN * MS_JE_MINUTE;
+}
+
+function setzeLimitSperre(sperre, { bis }) {
   const jetzt = Date.now();
-  const gemeldet = bis > jetzt ? bis : jetzt + WARTEZEIT_OHNE_ANGABE_MINUTEN * MS_JE_MINUTE;
+  const gemeldet = gemeldeteFreigabe(bis, jetzt);
   const frei = Math.max(jetzt + restDerSperre(sperre), gemeldet);
   const entwurf = `${sperre}.${pid}`;
   mkdirSync(dirname(sperre), { recursive: true });
@@ -80,7 +87,7 @@ function uebergabe(vorgaenger) {
 
 function grundDerSitzung({ limit, aktion }, { auftrag, sperre }) {
   if (!limit) return aktion?.grund ?? null;
-  const grund = sperreWegenLimit(sperre, limit);
+  const grund = setzeLimitSperre(sperre, limit);
   console.log(`Auftrag ${auftrag.id}: ${grund}`);
   return grund;
 }
@@ -126,4 +133,4 @@ export function frage(kontext, prompt, { vollstaendig = false } = {}) {
   return setzeEin(kontext, prompt, { agent: kontext.rolle, argumente, vollstaendig });
 }
 
-export { limitSperre, restDerSperre, sperreWegenLimit };
+export { limitSperre, restDerSperre, setzeLimitSperre };
