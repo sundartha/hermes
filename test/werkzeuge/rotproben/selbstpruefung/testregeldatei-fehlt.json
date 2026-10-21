@@ -1,0 +1,15 @@
+{
+  "titel": "Fehlt die Testregel-Datei, bricht ESLint ab, statt ohne Selbstprüfungsregel zu laufen",
+  "loeschen": ["tools/eslint-rules/tests.js"],
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "const ERWARTET = \"x\";",
+      "test(\"vergleicht nur Testtext\", () => {",
+      "  assert.equal(ERWARTET, \"x\");",
+      "});"
+    ]
+  },
+  "erwartet": "tools/eslint-rules/tests.js"
+}
