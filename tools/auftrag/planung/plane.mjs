@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { inspect } from "node:util";
@@ -169,6 +170,7 @@ export class Planung {
     this.nachfrageWellen = 0;
     this.nachfragenBeendet = false;
     this.kostendeckel = null;
+    this.laufInWelle = new AsyncLocalStorage();
   }
 
   beginne({ soll, andererAusgang, nurUmbau }) {
@@ -197,25 +199,48 @@ export class Planung {
     return { "pruefer-planung": gemesseneLaeufe(this.root, pruefer) };
   }
 
-  pruefeDeckel(rollen) {
+  messung() {
+    return { gemessen: this.gemessen(), jeRolle: this.wegpruefKosten() };
+  }
+
+  pruefeDeckel(rollen, schritt) {
     if (this.kostendeckel === null) return 0;
-    const gemessen = this.gemessen();
-    const grund = this.kostendeckel.ueber(gemessen, rollen, this.wegpruefKosten());
-    if (grund === null) return gemessen;
+    const messung = this.messung();
+    const grund = this.kostendeckel.ueber(messung, rollen, schritt);
+    if (grund === null) return messung.gemessen;
     if (this.berichte.length > 0) this.legeFingerabdruck();
     throw new Ende(EXIT_DECKEL, grund);
   }
 
-  async welle(laeufe) {
+  pruefeSchritt(rolle, schritt) {
+    if (this.kostendeckel === null) return;
+    const grund = this.kostendeckel.imLauf(this.laufInWelle.getStore(), this.messung(), { rolle, schritt });
+    if (grund !== null) throw new Ende(EXIT_DECKEL, grund);
+  }
+
+  inWelle({ rolle, lauf }, stelle) {
+    return { rolle, lauf: () => this.laufInWelle.run(stelle, lauf).finally(() => this.kostendeckel?.endeLauf(stelle)) };
+  }
+
+  nachDeckelHalt(fehler, wegpruefungen) {
+    if (fehler instanceof Ende && fehler.exit === EXIT_DECKEL && this.berichte.length > 0) {
+      this.wegpruefungen = wegpruefungen;
+      this.legeFingerabdruck();
+    }
+    throw fehler;
+  }
+
+  async welle(laeufe, schritt) {
     const rollen = laeufe.map(({ rolle }) => rolle);
-    const vorher = this.pruefeDeckel(rollen);
-    const ergebnisse = await this.team.gruppe(laeufe);
+    const vorher = this.pruefeDeckel(rollen, schritt);
+    const wegpruefungen = [...this.wegpruefungen];
+    const ergebnisse = await this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle))).catch((fehler) => this.nachDeckelHalt(fehler, wegpruefungen));
     if (this.kostendeckel !== null) this.kostendeckel.verbuche(rollen, this.gemessen() - vorher);
     return ergebnisse;
   }
 
-  async einzeln(wer, text) {
-    const [antwort] = await this.welle([{ rolle: wer.rolle, lauf: () => this.team.frage(wer, text) }]);
+  async einzeln(wer, text, art) {
+    const [antwort] = await this.welle([{ rolle: wer.rolle, lauf: () => this.team.frage(wer, text) }], `Antwort des Planers (${art})`);
     return antwort;
   }
 
@@ -237,7 +262,7 @@ export class Planung {
     const schleife = this.schleife(art);
     let naechste = text;
     for (;;) {
-      const antwort = await this.einzeln(this.planer, naechste);
+      const antwort = await this.einzeln(this.planer, naechste, art);
       const ergebnis = antwort.art === "json" ? await verarbeite(antwort.wert) : this.ausstieg(antwort);
       if (ergebnis.weiter !== undefined) naechste = ergebnis.weiter;
       else if (liste(ergebnis.befunde).length === 0) return ergebnis.wert;
@@ -325,6 +350,7 @@ export class Planung {
   async berichtVon(wer, text, nummern) {
     const erste = this.pruefeBericht(await this.team.frage(wer, text), nummern);
     if (erste.befunde.length === 0) return erste;
+    this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
     const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, erste.befunde));
     return this.pruefeBericht(zweite, nummern);
   }
@@ -373,8 +399,10 @@ export class Planung {
     let sauber = ergebnis;
     let text = this.wegNachricht(nummern, sauber.bericht, false);
     for (let runden = 1; ; runden += 1) {
+      this.pruefeSchritt(weg.pruefer.rolle, `Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const runde = await this.wegRunde(weg, text);
       if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
+      this.pruefeSchritt(wer.rolle, `Korrektur nach der Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
       if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
       sauber = neu;
@@ -389,7 +417,7 @@ export class Planung {
 
   async erkundeGruppen() {
     const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkunderLauf(this.erkunderNachricht("Erkundung", gruppe), gruppe.nummern));
-    const ergebnisse = await this.welle(laeufe);
+    const ergebnisse = await this.welle(laeufe, "Erkundung");
     this.berichte = ergebnisse.map(({ bericht }) => bericht);
     for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
       merkeStellen(this.gesehen, ergebnis.bericht);
@@ -510,7 +538,7 @@ export class Planung {
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
     const laeufe = offen.map((eintrag) => this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern: eintrag.nummern, fragen: [eintrag.frage], kopf: [eintrag.frage, ""] }), eintrag.nummern));
-    const ergebnisse = await this.welle(laeufe);
+    const ergebnisse = await this.welle(laeufe, "Nachfrage-Welle");
     if (!klaerung) this.nachfrageWellen += 1;
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
     this.legeBerichte();
@@ -580,6 +608,7 @@ export class Planung {
   async prueferLauf(pruefer, text, schluessel) {
     const ergebnis = this.prueflisteDer(await this.team.frage(pruefer, text), schluessel);
     if (ergebnis.befunde.length === 0) return ergebnis;
+    this.pruefeSchritt(pruefer.rolle, `Rücksendung an ${pruefer.rolle}`);
     return this.prueflisteDer(await this.team.frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
@@ -592,7 +621,7 @@ export class Planung {
 
   async pruefeMitFrischemPruefer(text, schluessel, ablage) {
     const pruefer = this.team.teilnehmer("pruefer-planung");
-    const [{ befunde, pruefliste }] = await this.welle([{ rolle: pruefer.rolle, lauf: () => this.prueferLauf(pruefer, text, schluessel) }]);
+    const [{ befunde, pruefliste }] = await this.welle([{ rolle: pruefer.rolle, lauf: () => this.prueferLauf(pruefer, text, schluessel) }], "Nachprüfung");
     return { pruefer, befunde: this.nimmPrueflisteAn(befunde, () => pruefliste, ablage) };
   }
 
@@ -606,7 +635,7 @@ export class Planung {
     const schluessel = fuerDenPitch(prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen()), { nurUmbau: this.nurUmbau });
     const laeufe = [];
     for (const teil of teilePruefliste(schluessel, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
-    const ergebnisse = await this.welle(laeufe);
+    const ergebnisse = await this.welle(laeufe, "Prüfliste");
     const unvollstaendig = ergebnisse.flatMap(({ befunde }) => befunde);
     const befunde = this.nimmPrueflisteAn(unvollstaendig, () => zusammengefuegt(schluessel, ergebnisse), { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
     this.lege("pruefliste-aufteilung.json", ergebnisse.map(({ teil, pruefer }) => ({ gruppe: teil.gruppe, sitzung: pruefer.sitzung, schluessel: teil.schluessel })));
@@ -701,6 +730,7 @@ export class Planung {
     let entwurf = lies(await this.team.frage(wer, text));
     let befunde = entwurfBefunde(entwurf, namen);
     if (befunde.length > 0) {
+      this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle}`);
       entwurf = lies(await this.team.frage(wer, this.team.ruecksenden(wer, befunde)));
       befunde = entwurfBefunde(entwurf, namen);
     }
@@ -719,7 +749,7 @@ export class Planung {
       const wer = this.team.teilnehmer("entwurf");
       return { rolle: wer.rolle, lauf: () => this.schreibeEntwurf(wer, this.entwurfNachricht(bereich, namen), namen) };
     });
-    const ergebnisse = await this.welle(laeufe);
+    const ergebnisse = await this.welle(laeufe, "Entwurfs-Welle");
     const offen = ergebnisse.flatMap(({ befunde }, stelle) => befunde.map((befund) => `Entwurf ${bereiche[stelle]}: ${befund}`));
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde zu Entwürfen blieben nach der Rücksendung offen", offen);
     const entwuerfe = Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, ergebnisse[stelle].entwurf]));

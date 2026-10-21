@@ -55,6 +55,9 @@ export class Kostendeckel {
     this.vorige = vorigeKosten(root, phase);
     this.jeLauf = {};
     this.stand = {};
+    this.offen = new Map();
+    this.halt = null;
+    this.schritt = null;
   }
 
   mittelJeLauf(rolle, gemessen) {
@@ -67,11 +70,37 @@ export class Kostendeckel {
     return Math.round(rollen.reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, gemessenJeRolle[rolle]), 0));
   }
 
-  ueber(gemessen, rollen, gemessenJeRolle) {
-    const vorschau = this.vorschau(rollen, gemessenJeRolle);
-    if (gemessen + vorschau <= this.deckel) return null;
+  haelt({ gemessen, vorschau }, schritt) {
+    if (gemessen + vorschau <= this.deckel) return false;
     this.stand = { gemessen, vorschau };
-    return `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${rollen.length} Läufe (${[...new Set(rollen)].join(", ")}) wären es ${gemessen + vorschau}; plane hält vor dieser Welle an und wartet auf eine Entscheidung`;
+    this.schritt = schritt;
+    return true;
+  }
+
+  ueber({ gemessen, jeRolle }, rollen, schritt) {
+    const vorschau = this.vorschau(rollen, jeRolle);
+    if (!this.haelt({ gemessen, vorschau }, schritt)) {
+      this.offen = new Map(rollen.map((rolle, stelle) => [stelle, this.mittelJeLauf(rolle, jeRolle[rolle])]));
+      return null;
+    }
+    return `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${rollen.length} Läufe (${[...new Set(rollen)].join(", ")}) wären es ${gemessen + vorschau}; plane hält vor dem Schritt „${schritt}“ an und wartet auf eine Entscheidung`;
+  }
+
+  imLauf(stelle, { gemessen, jeRolle }, { rolle, schritt }) {
+    if (this.halt !== null) return this.halt;
+    const eigener = this.mittelJeLauf(rolle, jeRolle[rolle]);
+    const andere = [...this.offen].reduce((summe, [lauf, betrag]) => (lauf === stelle ? summe : summe + betrag), 0);
+    const vorschau = Math.round(andere + eigener);
+    if (!this.haelt({ gemessen, vorschau }, schritt)) {
+      this.offen.set(stelle, eigener);
+      return null;
+    }
+    this.halt = `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für die offenen Schritte dieser Welle wären es ${gemessen + vorschau}; plane startet den Schritt „${schritt}“ nicht, lässt die laufenden Antworten zu Ende laufen und wartet auf eine Entscheidung`;
+    return this.halt;
+  }
+
+  endeLauf(stelle) {
+    this.offen.delete(stelle);
   }
 
   verbuche(rollen, token) {
@@ -82,6 +111,7 @@ export class Kostendeckel {
   }
 
   bericht() {
-    return { deckel: { deckel: this.deckel, ...this.stand }, kostenJeLauf: { ...this.vorige, ...this.jeLauf } };
+    const schritt = this.schritt === null ? {} : { deckelSchritt: this.schritt };
+    return { deckel: { deckel: this.deckel, ...this.stand }, ...schritt, kostenJeLauf: { ...this.vorige, ...this.jeLauf } };
   }
 }
