@@ -255,25 +255,20 @@ const hermesBloecke = [
     rules: { "hermes/config-pfade": ["error", { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN }] },
   },
 ];
-const testRegeln = existsSync(TESTREGELN_DATEI)
-  ? (await import(TESTREGELN_DATEI.href)).default
-  : undefined;
-const testRegelBloecke =
-  testRegeln === undefined
-    ? []
-    : [
-        {
-          name: "hermes-testregeln",
-          files: ["test/**"],
-          plugins: { "hermes-tests": testRegeln },
-          rules: {
-            "hermes-tests/keine-selbstpruefung": ["error", { bestand: SELBSTPRUEFUNG_BESTAND }],
-            "hermes-tests/fester-importpfad": ["error", { bestand: FESTER_IMPORTPFAD_BESTAND }],
-            "hermes-tests/anfrage-mit-frist": "error",
-            "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
-          },
-        },
-      ];
+const testRegeln = (await import(TESTREGELN_DATEI.href)).default;
+const testRegelBloecke = [
+  {
+    name: "hermes-testregeln",
+    files: ["test/**"],
+    plugins: { "hermes-tests": testRegeln },
+    rules: {
+      "hermes-tests/keine-selbstpruefung": ["error", { bestand: SELBSTPRUEFUNG_BESTAND }],
+      "hermes-tests/fester-importpfad": ["error", { bestand: FESTER_IMPORTPFAD_BESTAND }],
+      "hermes-tests/anfrage-mit-frist": "error",
+      "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
+    },
+  },
+];
 
 const demeterChainSelector =
   "MemberExpression MemberExpression MemberExpression MemberExpression";
