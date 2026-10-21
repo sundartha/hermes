@@ -545,9 +545,13 @@ export function schnittBefunde(schnitt, eingaben) {
   return { befunde, hinweise: [...hinweise(auftraege, kontext.stellen), ...widerspruchHinweis(auftraege)], annahmen: annahmenDesSchnitts(auftraege, schnitt) };
 }
 
+export function umbauMitJsZwillingen(umbau) {
+  return { ...umbau, erwarteteDateien: mitJsZwillingen(liste(umbau.erwarteteDateien)) };
+}
+
 export function umbauPitchKarten(schnitt, root) {
   const umbauten = liste(schnitt?.auftraege).filter(istObjekt).filter(istUmbau);
-  return umbauKarten(root, umbauten.map((umbau) => ({ ...umbau, erwarteteDateien: mitJsZwillingen(liste(umbau.erwarteteDateien)) })), UMBAU_NUMMER);
+  return umbauKarten(root, umbauten.map(umbauMitJsZwillingen), UMBAU_NUMMER);
 }
 
 async function karten(schnitt, { berichte, root, nurUmbau }) {
