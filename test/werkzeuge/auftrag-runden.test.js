@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
+import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
 import { REPO_ROOT, isolatedEnvironment, passingTest, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
@@ -93,6 +94,7 @@ function lauf(context, { auftrag = AUFTRAG, ...drehbuch }, dateien = {}) {
       HERMES_GH: join(werkzeug, "gh.mjs"),
       ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
       ERSATZ_GH: join(werkzeug, "gh.log"),
+      ...mitErsatzSemgrep(werkzeug),
       ...Object.fromEntries(["AUTHOR", "COMMITTER"].flatMap((rolle) => [[`GIT_${rolle}_NAME`, "Probe"], [`GIT_${rolle}_EMAIL`, PROBE]])),
     },
   });

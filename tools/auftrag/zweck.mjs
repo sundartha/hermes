@@ -89,6 +89,7 @@ export const MELDUNG = {
   FESTE_PFADE: "feste-pfade",
   VORBEREITUNG: "vorbereitung",
   JSCPD: "jscpd",
+  SEMGREP_FEHLT: "semgrep-fehlt",
 };
 
 export const ALTER_TEST = "alter test";
