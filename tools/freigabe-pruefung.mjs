@@ -10,6 +10,7 @@ import {
 } from "./pr-zusammenfassung.mjs";
 import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs";
 import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
+import { pfadumzuege } from "./freigabe-pfadumzug.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
   DURCHGELASSEN,
@@ -351,9 +352,11 @@ function classify(basis) {
   const patterns = ownerPatterns(basis);
   const files = changedFiles(basis);
   const strenger = stricterCases(basis, files) ?? [];
+  const umzuege = pfadumzuege(basis, files);
+  const kindFor = (path) => (umzuege.has(path) ? "code" : kindOf(patterns, path));
   const changes = files.map((change) => ({
     ...change,
-    kind: strenger.length > 0 ? STRENGER : kindOf(patterns, change.path),
+    kind: strenger.length > 0 ? STRENGER : kindFor(change.path),
   }));
   const packages = packageChanges(basis);
   const kinds = new Set(changes.map(({ kind }) => kind));
