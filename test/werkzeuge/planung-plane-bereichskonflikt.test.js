@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ORDNER, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { commitAll } from "./probe-repo.js";
-import { AUFTRAG, EXIT_BEFUNDE, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_BEFUNDE, EXIT_GRUEN, abgelegt, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const PRODUKT = "src/a.js";
 const SKRIPT = "scripts/b.sh";
@@ -88,6 +88,46 @@ test("plane: ändert sich der offene Bereichskonflikt nach einer Nachfrage zu se
   assert.ok(befunde[0].eingabe.includes("Bereichskonflikt S1, S7 ist offen"));
   assert.ok(befunde[1].eingabe.includes("Bereichskonflikt S7 ist offen"));
   assert.deepEqual(aufrufe(lauf, "erkunder", "## Nachfrage").map(({ eingabe }) => /^#### (\S+) \(/mu.exec(eingabe)[1]), ["S1", "S7"]);
+});
+
+function frageZu(nummer) {
+  return alsJson({ nachfragen: [{ nummern: [nummer], frage: `Was braucht ${nummer} aus dem Code?` }] });
+}
+
+function erkunderZu(nummern) {
+  return Object.fromEntries(nummern.map((nummer) => [`erkunder|## Nachfrage|${nummer}`, [alsJson({ nummern: { [nummer]: angaben(nummer) }, hinweise: [] })]]));
+}
+
+function nachgefragt(lauf) {
+  return aufrufe(lauf, "erkunder", "## Nachfrage").map(({ eingabe }) => /^#### (\S+) \(/mu.exec(eingabe)[1]);
+}
+
+function eineWelleNachDerKlaerung(lauf) {
+  exit(lauf, EXIT_GRUEN);
+  assert.deepEqual(nachgefragt(lauf), ["S1", "S4"]);
+  const { eingabe } = aufrufe(lauf, "planer", "## Zuschnitt").at(-1);
+  assert.ok(eingabe.includes("### Ende der Nachfragen"), eingabe);
+  assert.equal(abgelegt(lauf, "fingerabdruck.json").zustand.nachfrageWellen, 1);
+}
+
+const NACH_DER_KLAERUNG = {
+  ...erkunderZu(["S1", "S4", "S2"]),
+  "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN + 1 }, () => GRUEN_PRUEFLISTE),
+};
+
+test("plane: eine Nachfrage nur zur Nummer des offenen Bereichskonflikts verbraucht keine Nachfrage-Welle; danach ist eine Welle erlaubt, und erst die nächste bekommt die Ansage", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = konfliktLauf(context, { ...NACH_DER_KLAERUNG, "planer|## Zuschnitt": [frageZu("S1"), frageZu("S4"), frageZu("S2"), alsJson({ schnitt: schnittliste() })] });
+  eineWelleNachDerKlaerung(lauf);
+});
+
+test("plane: eine bei offenem Bereichskonflikt als Befund abgewiesene Nachfrage verbraucht keine Nachfrage-Welle", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = konfliktLauf(context, {
+    ...NACH_DER_KLAERUNG,
+    "planer|## Zuschnitt": [frageZu("S4"), frageZu("S4"), frageZu("S2"), alsJson({ schnitt: schnittliste() })],
+    "planer|## Befunde": [frageZu("S1")],
+  });
+  assert.ok(aufrufe(lauf, "planer", "## Befunde")[0]?.eingabe.includes("Bereichskonflikt S1 ist offen"));
+  eineWelleNachDerKlaerung(lauf);
 });
 
 const KOPPELNDER_GRUND = `${KOPPELNDER_TEST} liest beide Dateien`;

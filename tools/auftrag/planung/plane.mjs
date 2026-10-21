@@ -58,6 +58,8 @@ const WEG = "weg:";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 const KONFLIKTE = "Bereichskonflikte";
+const NACHFRAGEN_ENDE = "Ende der Nachfragen";
+const WELLE_VERBRAUCHT = "Die eine Nachfrage-Welle dieses Planungslaufs ist verbraucht; es wird nicht mehr erkundet. Schneide mit einer Annahme und nenn sie unter `annahmen`, oder antworte „Zerlegung passt nicht: …“, wenn ohne die fehlende Tatsache keine Zerlegung geht. Fragst du noch einmal nach, endet die Planung mit Befunden.";
 
 export class Ende extends Error {
   constructor(exit, grund, befunde = []) {
@@ -128,6 +130,11 @@ function konfliktBefunde(nachfragen, offen) {
   return nachfragen.flatMap((eintrag, stelle) => (eintrag.nummern.every((nummer) => offen.includes(nummer)) ? [] : [`Nachfrage ${stelle + 1}: Bereichskonflikt ${nummern} ist offen; ${konfliktAusweg(nummern)}`]));
 }
 
+function nachfragenEnde(grund, nachfragen) {
+  const text = `${grund}: ${[...new Set(nachfragen.flatMap((eintrag) => eintrag.nummern))].join(", ")}`;
+  return new Ende(EXIT_BEFUNDE, text, [text]);
+}
+
 function konfliktTeil(konflikte) {
   if (konflikte.length === 0) return [];
   const nummern = konflikte.map(({ nummer }) => nummer).join(", ");
@@ -160,6 +167,7 @@ export class Planung {
     this.wegOffen = [];
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
+    this.nachfragenBeendet = false;
     this.kostendeckel = null;
   }
 
@@ -479,24 +487,30 @@ export class Planung {
     return ohneNeues;
   }
 
+  async beendeNachfragen(nachfragen) {
+    if (this.nachfragenBeendet) throw nachfragenEnde("Nachfragen nach der ersten Welle", nachfragen);
+    this.nachfragenBeendet = true;
+    return { weiter: nachricht("Zuschnitt", [abschnitt(NACHFRAGEN_ENDE, WELLE_VERBRAUCHT), ...(await this.lagebild())]) };
+  }
+
   async nachfragen(nachfragen) {
     const befunde = this.nachfrageBefunde(nachfragen);
     if (befunde.length > 0) return { befunde };
     const konflikte = this.offeneKonflikte().map(({ nummer }) => nummer);
     const gesperrt = konfliktBefunde(nachfragen, konflikte);
     if (gesperrt.length > 0) return this.weiseNachfragenAbOderBeende(gesperrt, konflikte.join(", "));
+    const klaerung = konflikte.length > 0;
+    if (!klaerung && this.nachfrageWellen >= 1) return this.beendeNachfragen(nachfragen);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
-    if (offen.length === 0) {
-      const nummern = [...new Set(nachfragen.flatMap((eintrag) => eintrag.nummern))];
-      throw new Ende(EXIT_BEFUNDE, `Nachfragen ausgeschöpft: ${nummern.join(", ")}`, [`Nachfragen ausgeschöpft: ${nummern.join(", ")}`]);
-    }
+    if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
     const laeufe = offen.map((eintrag) => this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern: eintrag.nummern, fragen: [eintrag.frage], kopf: [eintrag.frage, ""] }), eintrag.nummern));
     const ergebnisse = await this.welle(laeufe);
+    if (!klaerung) this.nachfrageWellen += 1;
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
     this.legeBerichte();
     this.legeFingerabdruck();
     const antworten = offen.map((eintrag, stelle) => nachfrageAntwort(eintrag, ergebnisse[stelle], stelle));
-    const ende = enden.length > 0 ? [abschnitt("Ende der Nachfragen", `Nachfragen zu ${[...new Set(enden)].join(", ")} enden; schneide mit einer Annahme.`)] : [];
+    const ende = enden.length > 0 ? [abschnitt(NACHFRAGEN_ENDE, `Nachfragen zu ${[...new Set(enden)].join(", ")} enden; schneide mit einer Annahme.`)] : [];
     return { weiter: nachricht("Zuschnitt", [...antworten, ...ende, ...(await this.lagebild())]) };
   }
 
