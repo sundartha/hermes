@@ -18,6 +18,7 @@ const ABDECKUNGSORDNER = "testwirkung-abdeckung-";
 const TESTORDNER = "test/";
 const FELDER_JE_UMZUG = 3;
 const SKRIPT = /\.[cm]?[jt]s$/;
+const DEKLARATIONSDATEI = /\.d\.[cm]?ts$/;
 const MARKIERUNG = ".testwirkung-geladen";
 const STANDARDEXPORT = "default";
 const OHNE_EXPORT = { namen: [], sterne: [] };
@@ -63,8 +64,17 @@ function exportDerAnweisung(anweisung) {
   return { namen: anweisung.name === undefined ? [] : [anweisung.name.text], sterne: [] };
 }
 
+function istExportGleich(anweisung) {
+  return ts.isExportAssignment(anweisung) && anweisung.isExportEquals === true;
+}
+
+function exportGleichNichtVertretbar(datei) {
+  return `Die entfernte Quelle ${datei} hat export =. Die Testwirkung kann dafür kein Ersatzmodul bauen, weil sie nicht kennt, welche Namen ein alter Test daraus importiert, und würde grün melden, ohne zu belegen, dass er die Quelle geladen hat. Stelle die Quelle in einem eigenen PR auf export default oder benannte Exporte um, bevor du sie entfernst oder umbenennst.`;
+}
+
 function exporteImBasisstand(basis, datei) {
   const quelle = ts.createSourceFile(datei, inBasis(basis, datei) ?? "", ts.ScriptTarget.Latest);
+  if (!DEKLARATIONSDATEI.test(datei) && quelle.statements.some(istExportGleich)) throw new Error(exportGleichNichtVertretbar(datei));
   const anweisungen = quelle.statements.map(exportDerAnweisung);
   return { namen: [...new Set(anweisungen.flatMap(({ namen }) => namen))], sterne: [...new Set(anweisungen.flatMap(({ sterne }) => sterne))] };
 }
