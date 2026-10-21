@@ -7,6 +7,7 @@ import { gitLauf } from "./git.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 
 export const FINGERABDRUCK = "fingerabdruck.json";
+export const NACHFRAGEN = "nachfragen.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
 const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler"];
@@ -17,7 +18,11 @@ export function erkundungsDatei(stelle) {
 }
 
 function erkundungsNamen(anzahl) {
-  return [GLIEDERUNG, ...Array.from({ length: anzahl }, (leer, stelle) => erkundungsDatei(stelle))];
+  return Array.from({ length: anzahl }, (leer, stelle) => erkundungsDatei(stelle));
+}
+
+function ablageNamen(anzahl) {
+  return [GLIEDERUNG, NACHFRAGEN, ...erkundungsNamen(anzahl)];
 }
 
 function pruefsumme(datei) {
@@ -37,7 +42,7 @@ export function ausgangsstand(root, ordner, { arbeitsbaum, kontext }) {
 }
 
 export function fingerabdruck(stand, { ablage, anzahl, zustand }) {
-  const summen = Object.fromEntries(erkundungsNamen(anzahl).map((name) => [name, pruefsumme(join(ablage, name))]));
+  const summen = Object.fromEntries(ablageNamen(anzahl).map((name) => [name, pruefsumme(join(ablage, name))]));
   return { stand, ablage: summen, zustand };
 }
 
@@ -74,13 +79,24 @@ function ablageGruende(ablage, summen) {
   });
 }
 
+function beantworteteWelle(welle) {
+  const antworten = Array.isArray(welle?.antworten) && welle.antworten.every((antwort) => istText(antwort?.frage) && Array.isArray(antwort.nummern) && istObjekt(antwort.bericht) && Array.isArray(antwort.befunde));
+  return antworten && Array.isArray(welle.enden);
+}
+
+function nachfragenAus(ablage, { nachfrageWellen }) {
+  const nachfragen = jsonAus(join(ablage, NACHFRAGEN));
+  return Array.isArray(nachfragen) && nachfragen.length >= nachfrageWellen && nachfragen.every(beantworteteWelle) ? nachfragen : undefined;
+}
+
 function erkundungAus(ablage, abdruck) {
   const gliederung = jsonAus(join(ablage, GLIEDERUNG));
   const anzahl = Array.isArray(gliederung?.gruppen) ? gliederung.gruppen.length : 0;
-  const namen = erkundungsNamen(anzahl);
-  if (anzahl === 0 || namen.join("\n") !== Object.keys(abdruck.ablage).join("\n")) return { gruende: [`${FINGERABDRUCK} nennt andere Dateien als ${GLIEDERUNG} verlangt`] };
-  const berichte = namen.slice(1).map((name) => jsonAus(join(ablage, name)));
-  return { gruende: [], erkundung: { gliederung, berichte, zustand: abdruck.zustand } };
+  if (anzahl === 0 || ablageNamen(anzahl).join("\n") !== Object.keys(abdruck.ablage).join("\n")) return { gruende: [`${FINGERABDRUCK} nennt andere Dateien als ${GLIEDERUNG} verlangt`] };
+  const nachfragen = nachfragenAus(ablage, abdruck.zustand);
+  if (nachfragen === undefined) return { gruende: [`${NACHFRAGEN} hat nicht die Form der beantworteten Nachfrage-Wellen dieses Fingerabdrucks`] };
+  const berichte = erkundungsNamen(anzahl).map((name) => jsonAus(join(ablage, name)));
+  return { gruende: [], erkundung: { gliederung, berichte, nachfragen, zustand: abdruck.zustand } };
 }
 
 export function liesFortsetzung(ablage, jetzt) {
