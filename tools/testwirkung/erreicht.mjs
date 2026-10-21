@@ -55,7 +55,7 @@ function exportDerDeklaration(anweisung) {
 }
 
 function exportDerAnweisung(anweisung) {
-  if (ts.isExportAssignment(anweisung)) return anweisung.isExportEquals ? OHNE_EXPORT : { namen: [STANDARDEXPORT], sterne: [] };
+  if (ts.isExportAssignment(anweisung)) return { namen: [STANDARDEXPORT], sterne: [] };
   if (ts.isExportDeclaration(anweisung)) return exportDerDeklaration(anweisung);
   const arten = new Set((ts.canHaveModifiers(anweisung) ? (ts.getModifiers(anweisung) ?? []) : []).map(({ kind }) => kind));
   if (!arten.has(ts.SyntaxKind.ExportKeyword)) return OHNE_EXPORT;
