@@ -10,6 +10,8 @@ const WERKZEUG = join(REPO_ROOT, "tools/freigabe-pruefung.mjs");
 const PR = 7;
 const ISSUE = 41;
 const ZWEITES_ISSUE = 42;
+const FREMDE_PR = 43;
+const PULL_REQUEST_NUMMERN = new Set([PR, FREMDE_PR]);
 const AUTOR = "sundartha-agent";
 const ANTONIO = "Antonio20045";
 const OHNE_NETZ = "http://127.0.0.1:9";
@@ -103,6 +105,32 @@ function stand(context, { nachricht, aenderung, startdateien = BASIS }) {
   return { ordner, basis, kopf: runIn(ordner, "git", ["rev-parse", "HEAD"]).stdout.trim() };
 }
 
+function graphqlAntwort({ query, variables: { number } }, { issue, pullRequest, fehler }) {
+  if (fehler !== undefined) return { errors: [{ message: fehler }] };
+  if (/\bpullRequest\(/.test(query)) return { data: { repository: { pullRequest } } };
+  const istPullRequest = PULL_REQUEST_NUMMERN.has(number);
+  if (/\bissueOrPullRequest\(/.test(query)) {
+    const knoten = istPullRequest
+      ? { ...issue, number, __typename: "PullRequest" }
+      : { ...issue, __typename: "Issue" };
+    return { data: { repository: { issueOrPullRequest: knoten } } };
+  }
+  if (istPullRequest) {
+    const message = `Could not resolve to an Issue with the number of ${number}.`;
+    return { data: { repository: { issue: null } }, errors: [{ message }] };
+  }
+  return { data: { repository: { issue } } };
+}
+
+function graphqlRoute(verbindung, fall, daten) {
+  if (fall.ohneGraphql) return [];
+  const antwort = {
+    toJSON: () =>
+      graphqlAntwort(verbindung.anfragen.at(-1).rumpf, { ...daten, fehler: fall.graphqlFehler }),
+  };
+  return [["POST /graphql", antwort]];
+}
+
 function approve(commit, login = ANTONIO) {
   return {
     user: { login },
@@ -123,7 +151,8 @@ async function scheinGithubFuer(context, fall, kopf) {
   };
   const pullRequest = { createdAt: VOR_DEM_APPROVE, lastEditedAt: fall.prBearbeitet ?? null };
   const pull = { number: PR, head: { sha: kopf }, labels: [], body: fall.prText ?? VERKNUEPFT };
-  return scheinGithub(
+  const verbindung = {};
+  const github = await scheinGithub(
     context,
     new Map([
       [`GET ${API_PFAD}/pulls/${PR}`, pull],
@@ -134,9 +163,10 @@ async function scheinGithubFuer(context, fall, kopf) {
       [`GET ${API_PFAD}/issues/${PR}/comments`, fall.kommentare ?? []],
       [`POST ${API_PFAD}/issues/${PR}/comments`, {}],
       [`POST ${API_PFAD}/issues/${PR}/labels`, {}],
-      ["POST /graphql", { data: { repository: { issue, pullRequest } } }],
+      ...graphqlRoute(verbindung, fall, { issue, pullRequest }),
     ]),
   );
+  return Object.assign(verbindung, github);
 }
 
 function starte(ordner, github, aufruf) {
@@ -186,7 +216,9 @@ async function pruefe(context, fall) {
   const github = await scheinGithubFuer(context, { ...fall, kommentare }, repo.kopf);
   const lauf = await starte(repo.ordner, github, aufruf);
   const issueAbfragen = github.anfragen
-    .filter(({ pfad, rumpf }) => pfad === "/graphql" && rumpf.query.includes("issue("))
+    .filter(
+      ({ pfad, rumpf }) => pfad === "/graphql" && /\bissue(OrPullRequest)?\(/.test(rumpf.query),
+    )
     .map(({ rumpf }) => rumpf.variables.number);
   return {
     ...lauf,
@@ -496,4 +528,789 @@ test("eine Ankündigung, die einen anderen Eintrag nennt, hebt die Sperre nicht 
     body: kommentar.body.split(EINTRAG).join(`anders-${EINTRAG}`),
   }));
   assert.ok(blockiertOhneFreigabe(lauf), lauf.stdout + lauf.stderr);
+});
+
+const FREIGABE_ZEILEN = FREIGABE_FUER_FUNDLISTE.split("\n");
+const FREIGABE_UEBERSCHRIFT = FREIGABE_ZEILEN[0];
+const FREIGABEZEILE = FREIGABE_ZEILEN.at(-1);
+const BELIEBIGER_TEXT = "Beliebiger Text, der keine Prüfung und keinen Eintrag nennt.";
+const NICHT_ANGEKUENDIGT = /Ausnahme nach Issue/;
+const GESCHUETZTES_LEERZEICHEN = "\u00A0";
+const ZAUN_MIT_LEERZEICHEN = "```" + GESCHUETZTES_LEERZEICHEN;
+const ABBRUCH = "Freigabe-Prüfung: Abbruch:";
+const FREIGABE_AUSNAHME = /Freigegebene Ausnahme/;
+
+function pruefeAbschnitt(context, ...zeilen) {
+  return pruefe(context, { issueText: [FREIGABE_UEBERSCHRIFT, "", ...zeilen].join("\n") });
+}
+
+function pruefeAbbruch(context, abweichung) {
+  return pruefe(context, {
+    issueText: FREIGABE_FUER_FUNDLISTE,
+    ankuendigung: null,
+    ...abweichung,
+  });
+}
+
+test("eine Freigabezeile in einem Codeblock unter der Freigabe-Überschrift zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Tilde-Codeblock unter der Freigabe-Überschrift zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "~~~", FREIGABEZEILE, "~~~");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Codeblock hinter einem Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Tilde-Codeblock hinter einem nummerierten Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "1. ~~~", FREIGABEZEILE, "~~~");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Codeblock macht den Rest des Abschnitts zum Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile außerhalb des Codeblocks gilt weiter, auch wenn der Abschnitt einen Codeblock mit beliebigem Text hat", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "", "```", BELIEBIGER_TEXT, "```");
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile nach einem Codeblock hinter einem Listenpunkt gilt weiter", async (context) => {
+  const eingerueckt = `  ${BELIEBIGER_TEXT}`;
+  const lauf = await pruefeAbschnitt(
+    context,
+    "- ```",
+    eingerueckt,
+    "",
+    eingerueckt,
+    "  ```",
+    "",
+    FREIGABEZEILE,
+  );
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Zaunzeile ohne Einzug beendet den Zaun hinter einem Listenpunkt und öffnet einen neuen Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", "```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("nach Text ohne Einzug im Zaun hinter einem Listenpunkt öffnet die nächste Zaunzeile ohne Einzug einen neuen Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", BELIEBIGER_TEXT, "```", "", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zaunzeile mit nur einem Leerzeichen Einzug beendet den Zaun hinter einem Listenpunkt ebenfalls", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", " ```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zaunzeile mit zwei Leerzeichen Einzug beendet den Zaun hinter einem nummerierten Listenpunkt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "1. ```", "  ```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Zaun hinter einem Listenpunkt mit zwei Leerzeichen nach dem Listenzeichen endet erst bei weniger Einzug als die Zaunzeile", async (context) => {
+  const lauf = await pruefe(context, {
+    issueText: ["## Vorlage", "", "-  ```", "  ```", FREIGABE_UEBERSCHRIFT, "", FREIGABEZEILE].join(
+      "\n",
+    ),
+  });
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zaunzeile mit vier Leerzeichen schließt den Zaun hinter einem Listenpunkt, die nächste Zaunzeile öffnet einen neuen", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", "    ```", "  ```", FREIGABEZEILE, "  ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Überschrift direkt nach dem Codeblock eines Listenpunkts beendet den Freigabe-Abschnitt", async (context) => {
+  const eingerueckt = `  ${BELIEBIGER_TEXT}`;
+  const lauf = await pruefeAbschnitt(
+    context,
+    "- ```",
+    eingerueckt,
+    "## Notizen",
+    "",
+    FREIGABEZEILE,
+  );
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabe-Überschrift direkt nach dem Codeblock eines Listenpunkts eröffnet einen Abschnitt", async (context) => {
+  const lauf = await pruefe(context, {
+    issueText: [
+      "## Vorlage",
+      "",
+      "- ```",
+      `  ${BELIEBIGER_TEXT}`,
+      FREIGABE_UEBERSCHRIFT,
+      "",
+      FREIGABEZEILE,
+    ].join("\n"),
+  });
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein Tabulator vor der schließenden Zaunzeile hinter einem Listenpunkt schließt den Zaun, der nächste Zaun öffnet einen neuen Codeblock", async (context) => {
+  const eingerueckt = `  ${FREIGABEZEILE}`;
+  const lauf = await pruefeAbschnitt(context, "- ```", "\t```", "  ```", eingerueckt, "  ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Tabulator am Ende der schließenden Zaunzeile hinter einem Listenpunkt schließt den Zaun, der nächste Zaun öffnet einen neuen Codeblock", async (context) => {
+  const eingerueckt = `  ${FREIGABEZEILE}`;
+  const lauf = await pruefeAbschnitt(context, "- ```", "     ```\t", "  ```", eingerueckt, "  ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein geschütztes Leerzeichen hinter der Zaunzeile schließt den Codeblock nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", ZAUN_MIT_LEERZEICHEN, FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("zwei Tabulatoren vor einer Zaunzeile lassen den Zaun hinter einem Listenpunkt offen", async (context) => {
+  const eingerueckt = `  ${FREIGABEZEILE}`;
+  const lauf = await pruefeAbschnitt(context, "- ```", "\t\t```", eingerueckt, "  ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Zitat mit Codeblock zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> ```", `> ${FREIGABEZEILE}`, "> ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Zitat hinter einem Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- > ```", `  > ${FREIGABEZEILE}`, "  > ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Listenpunkt innerhalb eines Zitats zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> - ```", `>   ${FREIGABEZEILE}`, ">   ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile nach einem Zitat mit Codeblock gilt weiter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> ```", "> x", "> ```", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile in einem Codeblock hinter zwei Listenzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- - ```", `    ${FREIGABEZEILE}`, "    ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Codeblock hinter einem nummerierten Listenpunkt in einem Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "1. - ```", `     ${FREIGABEZEILE}`, "     ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem Codeblock hinter einem Listenzeichen mit Tabulator zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "-\t```", `\t${FREIGABEZEILE}`, "\t```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile unter vier Leerzeichen vor dem Listenzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(
+    context,
+    "    - ```",
+    `    ${BELIEBIGER_TEXT}`,
+    `    ${FREIGABEZEILE}`,
+  );
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Listenzeichen mit fünf Leerzeichen und Zaunzeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "-     ```", "      ```", `      ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein kürzerer Zaun schließt keinen längeren Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "````", "```", FREIGABEZEILE, "````");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Tilde-Zaun schließt keinen Codeblock aus Backticks", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "~~~", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zaunzeile mit Text dahinter schließt den Codeblock nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "``` text", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zaunzeile mit mehr als drei Leerzeichen über dem Einzug des Listenpunkts schließt den Zaun nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", "      ```", `  ${FREIGABEZEILE}`, "  ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein bis zum Ende offener Zaun hinter einem Listenpunkt macht den Rest zum Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", `  ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Backtick im Infotext macht die Zeile zu Text, die nächste Zaunzeile öffnet den Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "``` a`b", "```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem pre-Block zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<pre>", FREIGABEZEILE, "</pre>");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem details-Block zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<details>", "", FREIGABEZEILE, "", "</details>");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem pre-Tag mitten in der Zeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text <pre>", FREIGABEZEILE, "</pre>");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein HTML-Block verdeckt einen Zaun, die Freigabezeile hinter dem nächsten Zaun zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<div>", "```", "", "```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile mit vier Leerzeichen Einzug nach einer Leerzeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `    ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile mit Tabulator Einzug nach einer Leerzeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `\t${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in einem eingerückten Codeblock hinter einem Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- Punkt", "", `      ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile über einer Setext-Unterstreichung zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "---");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zeile unter einer Setext-Überschrift gehört nicht zum Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, BELIEBIGER_TEXT, "===", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile vor einer waagerechten Linie gilt weiter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "", "---");
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile als Titel einer Linkdefinition zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `[Notiz]: https://example.org "${FREIGABEZEILE}"`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile im Label einer Linkdefinition über mehrere Zeilen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "[", `${FREIGABEZEILE}]: https://example.org`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile im Label einer Linkdefinition mit maskierter Klammer zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `[Notiz\\] ${FREIGABEZEILE}]: https://example.org`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile im Label einer Linkdefinition hinter einem Listenzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- [${FREIGABEZEILE}]: https://example.org`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile im Label einer Linkdefinition in einem Zitat über mehrere Zeilen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> [", `${FREIGABEZEILE}]: https://example.org`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eckige Klammern, die in der Zeile schließen, machen den Text nicht unsicher", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- [x] Notiz", "[Notiz] weiter", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein einzelnes Wagenrücklaufzeichen vor der Zaunzeile beginnt eine neue Zeile, die Freigabezeile im Codeblock zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text\r```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein einzelnes Wagenrücklaufzeichen hinter der Freigabe-Überschrift macht die Zeile dahinter nicht zur Freigabezeile", async (context) => {
+  const lauf = await pruefe(context, { issueText: `${FREIGABE_UEBERSCHRIFT}\r${FREIGABEZEILE}` });
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein einzelnes Wagenrücklaufzeichen vor der Freigabe-Überschrift macht sie nicht zur Überschrift", async (context) => {
+  const lauf = await pruefe(context, {
+    issueText: `##\r${FREIGABE_UEBERSCHRIFT}\n\n${FREIGABEZEILE}`,
+  });
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Kommentar in einem Codeblock verwirft die Freigabezeile hinter dem Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "<!--", "```", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Kommentaranfang mit überlappendem Schluss in einem Tilde-Codeblock verwirft die Freigabezeile dahinter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "~~~", "<!--->", "~~~", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Kommentar in einem Codeblock im Listenpunkt verwirft die Freigabezeile dahinter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ```", "  <!-->", "  ```", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein geschlossener Kommentar in einem Codeblock lässt die Freigabezeile dahinter gelten", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "<!-- c -->", "```", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Überschrift in einem Codeblock hinter einem Listenzeichen beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ~~~", "  ## Notizen", "  ~~~", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Überschrift in einem Codeblock hinter einer Listennummer beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "1. ```", "   # Titel", "   ```", "", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Zeile mit vier Leerzeichen Einzug in einem Codeblock hinter einem Listenzeichen ist keine Überschrift", async (context) => {
+  const lauf = await pruefeAbschnitt(
+    context,
+    "- ```",
+    "    ## Notizen",
+    "  ```",
+    "",
+    FREIGABEZEILE,
+  );
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Überschrift in einem Codeblock am Zeilenanfang beendet den Freigabe-Abschnitt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "## Notizen", "```", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein Kommentar hinter einer Zaunzeile im Codeblock schließt den Codeblock nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "```", "``` <!-- c -->", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Kommentar vor einer Zaunzeile macht sie nicht zum Zaun, die nächste Zaunzeile öffnet den Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<!-- c -->```", "```", FREIGABEZEILE, "```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile nach einem Kommentar in einer eigenen Zeile gilt weiter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<!-- c -->", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein nicht geschlossener Kommentar mitten in einer Zeile verwirft die folgende Überschrift nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text <!--", "## Andere", `--> ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Kommentar hinter einem Listenzeichen verwirft die folgende Überschrift nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "* <!--", "## Andere", `--> ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Kommentar in einem Zitat verwirft die folgende Überschrift nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> <!--", "## Andere", `--> ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein nicht geschlossener Kommentar mit Einzug im Listenpunkt verwirft die folgende Überschrift nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(
+    context,
+    "- Punkt",
+    "  <!--",
+    "## Andere",
+    `--> ${FREIGABEZEILE}`,
+  );
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Kommentar, dessen Schluss den Anfang überlappt, verwirft die folgende Überschrift nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<!-->", "## Andere", `--> ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Kommentar mitten in einer Zeile, der in der Zeile schließt, lässt die Freigabezeile gelten", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text <!-- c --> mehr", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein Kommentar mit einem Tabulator Einzug unterbricht keinen Absatz, die Setext-Unterstreichung danach macht die Zeile davor zur Überschrift", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "\t<!-- c -->", "---");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Kommentar mit vier Leerzeichen Einzug unterbricht keinen Absatz, die Setext-Unterstreichung danach macht die Zeile davor zur Überschrift", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "    <!-- c -->", "---");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile nach einem mehrzeiligen Kommentar mit Zaunzeile gilt weiter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<!--", "```", "-->", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Überschrift mit Einzug in einem Listenpunkt beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- Punkt", "    ## Notizen", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Überschrift hinter einem Listenzeichen beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- ## Notizen", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Überschrift in einem Zitat beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> ## Notizen", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine leere Überschrift beendet den Freigabe-Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "##", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine nummerierte Zeile mit Nummer ungleich 1 unterbricht keinen Absatz, die Zaunzeile danach öffnet den Codeblock", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text", "2. ```", "   ```", FREIGABEZEILE, "   ```");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Zaun mit Einzug im Listenpunkt wird von einer Zaunzeile ohne Einzug nicht geschlossen", async (context) => {
+  const lauf = await pruefeAbschnitt(
+    context,
+    "- Punkt",
+    "  ```",
+    "  x",
+    "```",
+    FREIGABEZEILE,
+    "```",
+  );
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile vor einem HTML-Tag zählt nicht, wenn danach eine Setext-Unterstreichung folgt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, FREIGABEZEILE, "</pre>", "---");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Autolink in spitzen Klammern macht den Text nicht unsicher", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "<https://example.org>", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile nach einem HTML-Tag in einem Zitat zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> <pre>", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile nach einem Zitat ohne HTML-Tag gilt weiter", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> Zitat", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile hinter einem Listenzeichen und fünf Leerzeichen ist eingerückter Code und zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `-     ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Listenzeichen, einem Tabulator und zwei Leerzeichen ist eingerückter Code und zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `-\t  ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einer Listennummer und fünf Leerzeichen ist eingerückter Code und zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `1.     ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Listenzeichen und vier Leerzeichen bleibt Text", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `-    ${FREIGABEZEILE}`);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("eine Freigabezeile im Infotext eines Zauns in einem Zitat hinter einem Listenzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- >~~~${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung in einem Zitat macht den Absatz im Zitat zur Überschrift und beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, ">Zitat", ">-", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung mit Gleichheitszeichen in einem Zitat beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "> Zitat", "> ===", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung mit vier Leerzeichen Einzug in einem Zitat beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, ">Zitat", ">    ---", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung mit vier Leerzeichen Einzug in einem Listenpunkt beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- Punkt", "    ---", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung mit Tabulator in einem Listenpunkt beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- Punkt", "\t===", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Setext-Unterstreichung mit Einzug in einem nummerierten Listenpunkt beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "1. Punkt", "     ---", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile als Text einer Überschrift mit Setext-Unterstreichung im Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- ${FREIGABEZEILE}`, "    ---");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in der überzähligen Zelle einer Tabellenzeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text", "|-", `x|${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in der überzähligen Zelle einer Tabelle mit zwei Spalten zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "a|b", "-|-", `x|y|${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in der überzähligen Zelle einer Tabelle mit Doppelpunkt in der Trennzeile zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "Text", ":-", `x|${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile in der überzähligen Zelle einer Tabelle in einem Listenpunkt zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "- Text", "  |-", `  x|${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein senkrechter Strich im Text ohne Trennzeile macht den Text nicht unsicher", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "a | b", "", FREIGABEZEILE);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein Kommentaranfang hinter einem Backslash ist kein Kommentar, der überlappende Schluss danach macht den Rest unsicher", async (context) => {
+  const lauf = await pruefeAbschnitt(context, "\\<!--<!--->", FREIGABEZEILE, "", "<!--->");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Zitatzeichen im Listenpunkt und fünf Leerzeichen ist eingerückter Code und zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `* >     ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter zwei Zitatzeichen im Listenpunkt und fünf Leerzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- >>     ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Zitatzeichen im Listenpunkt, einem Leerzeichen, einem Tabulator und einem Leerzeichen zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- > \t ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine Freigabezeile hinter einem Zitatzeichen im Listenpunkt und vier Leerzeichen bleibt Text", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `- >    ${FREIGABEZEILE}`);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+});
+
+test("ein Zitatzeichen hinter einem Listenzeichen und fünf Leerzeichen macht die Zeile zum eingerückten Code", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `-     >${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Zitatzeichen hinter einer Listennummer, einem Tabulator und drei Leerzeichen macht die Zeile zum eingerückten Code", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `1.\t   >${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein zweites Listenzeichen hinter einem Listenzeichen und fünf Leerzeichen macht die Zeile zum eingerückten Code", async (context) => {
+  const lauf = await pruefeAbschnitt(context, `-     - ${FREIGABEZEILE}`);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Listenzeichen mit Leerzeichen hinter dem Zitatzeichen unterstreicht den Absatz im Zitat, die Zeile davor zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, ">Zitat", FREIGABEZEILE, ">- ");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Listenzeichen mit Tabulator hinter dem Zitatzeichen unterstreicht den Absatz im Zitat, die Zeile davor zählt nicht", async (context) => {
+  const lauf = await pruefeAbschnitt(context, ">Zitat", FREIGABEZEILE, ">-\t");
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Listenzeichen mit Leerzeichen in einer eigenen Zitatzeile unterstreicht den Absatz im Zitat und beendet den Abschnitt", async (context) => {
+  const lauf = await pruefeAbschnitt(context, ">Zitat", "> - ", FREIGABEZEILE);
+  assert.ok(blockiert(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("ein Closes auf die Nummer eines PRs neben dem Closes auf das freigebende Issue bricht die Prüfung nicht ab", async (context) => {
+  const lauf = await pruefe(context, {
+    issueText: FREIGABE_FUER_FUNDLISTE,
+    prText: `Closes #${FREMDE_PR}\n${VERKNUEPFT}`,
+  });
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, FREIGEGEBEN);
+  assert.doesNotMatch(lauf.stdout + lauf.zusammenfassung, new RegExp(`#${FREMDE_PR}\\b`));
+});
+
+test("ein Closes allein auf die Nummer eines PRs gibt nichts frei, auch wenn dessen Text einen Freigabe-Abschnitt trägt", async (context) => {
+  const lauf = await pruefe(context, {
+    issueText: FREIGABE_FUER_FUNDLISTE,
+    prText: `Closes #${FREMDE_PR}`,
+  });
+  assert.ok(blockiertOhneFreigabe(lauf), lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.zusammenfassung, NICHT_ANGEKUENDIGT);
+});
+
+test("eine andere GraphQL-Fehlermeldung als die für PR-Nummern bricht die Prüfung weiter ab", async (context) => {
+  const message = `Could not resolve to an issue or pull request with the number of ${ISSUE}.`;
+  const lauf = await pruefeAbbruch(context, { graphqlFehler: message });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.includes(`${ABBRUCH} Die GitHub-API meldet: ${message}`), lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, FREIGABE_AUSNAHME);
+});
+
+test("ein HTTP-Fehler der GitHub-Abfrage bricht die Prüfung weiter ab", async (context) => {
+  const lauf = await pruefeAbbruch(context, { ohneGraphql: true });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.includes(`${ABBRUCH} Die GitHub-API antwortet mit HTTP 404.`), lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, FREIGABE_AUSNAHME);
 });
