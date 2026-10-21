@@ -104,12 +104,13 @@ function sperrtNeues({ state, title }) {
   return state === OFFEN || MIT_PR.test(title);
 }
 
-async function texteVon({ number, body }, github) {
+async function kommentareVon(number, github) {
   const kommentare = await github.alle(`/issues/${number}/comments`, (liste) => liste);
-  const texte = [
-    (body ?? "").split(TRENNER, 1)[0],
-    ...kommentare.map((kommentar) => kommentar.body ?? ""),
-  ];
+  return kommentare.map((kommentar) => kommentar.body ?? "");
+}
+
+async function texteVon({ number, body }, github) {
+  const texte = [(body ?? "").split(TRENNER, 1)[0], ...(await kommentareVon(number, github))];
   return texte.filter((text) => text.trim() !== "");
 }
 
