@@ -52,7 +52,9 @@ function jsonAus(datei) {
 function lesbar(abdruck) {
   if (!istObjekt(abdruck) || !istObjekt(abdruck.stand) || !istObjekt(abdruck.ablage) || !istObjekt(abdruck.zustand)) return false;
   const { kopfBaum, arbeitsbaum, dateien } = abdruck.stand;
-  return istText(kopfBaum) && istText(arbeitsbaum) && istObjekt(dateien) && ZUSTAND.every((name) => Array.isArray(abdruck.zustand[name]));
+  const { nachfrageWellen } = abdruck.zustand;
+  const wellen = Number.isInteger(nachfrageWellen) && nachfrageWellen >= 0;
+  return istText(kopfBaum) && istText(arbeitsbaum) && istObjekt(dateien) && wellen && ZUSTAND.every((name) => Array.isArray(abdruck.zustand[name]));
 }
 
 function standGruende(vorher, jetzt) {
