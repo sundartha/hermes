@@ -23,6 +23,7 @@ import {
 import { Kostendeckel, deckelAus, gemesseneKosten } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
+import { issueAus } from "./issue.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
@@ -702,7 +703,7 @@ export class Planung {
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde zu Entwürfen blieben nach der Rücksendung offen", offen);
     const entwuerfe = Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, ergebnisse[stelle].entwurf]));
     this.lege("entwuerfe.json", entwuerfe);
-    const { befunde } = await setzePhaseZusammen(this.ordner, { schnitt: this.schnitt, berichte: this.berichte, entwuerfe, root: this.root });
+    const { befunde } = await setzePhaseZusammen(this.ordner, { schnitt: this.schnitt, berichte: this.berichte, entwuerfe, root: this.root, issue: this.issue });
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Phase hat Befunde", befunde);
   }
 
@@ -771,11 +772,13 @@ function aufrufFehler(ordner, fortsetzen) {
   return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
 }
 
-function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angabe) {
+function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angaben) {
   const fehler = aufrufFehler(ordner, fortsetzen);
   if (fehler !== null) return { fehler };
-  const { deckel, fehler: deckelFehler } = deckelAus(angabe, readFileSync(join(ordner, PITCH), "utf8"));
-  return { deckel, fehler: deckelFehler ?? legeAblageAn(ordner, fortsetzen) };
+  const pitch = readFileSync(join(ordner, PITCH), "utf8");
+  const { deckel, fehler: deckelFehler } = deckelAus(angaben.deckel, pitch);
+  const { issue, fehler: issueFehler } = issueAus(angaben.issue, pitch);
+  return { deckel, issue, fehler: deckelFehler ?? issueFehler ?? legeAblageAn(ordner, fortsetzen) };
 }
 
 function ausgang(fehler) {
@@ -806,22 +809,23 @@ function berichte(planung, ergebnis) {
   return ergebnis.exit;
 }
 
-function neuePlanung(root, ordner, { fortsetzen, deckel }) {
+function neuePlanung(root, ordner, { fortsetzen, deckel, issue }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
   planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
+  planung.issue = issue;
   return planung;
 }
 
-export async function plane(ordnerAngabe, root, { fortsetzen = false, deckel: angabe } = {}) {
+export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben } = {}) {
   const ordner = resolve(root, ordnerAngabe);
-  const { deckel, fehler } = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angabe);
+  const { deckel, issue, fehler } = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angaben);
   if (fehler !== null) {
     console.error(fehler);
     return EXIT_AUFRUF;
   }
   const nummern = nummernImOrdner(ordner);
-  const planung = neuePlanung(root, ordner, { fortsetzen, deckel });
+  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {

@@ -68,7 +68,7 @@ function namenBefunde(gemeinsameNamen, entwuerfe) {
   );
 }
 
-export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe, root }) {
+export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe, root, issue }) {
   const pruefung = await schnittImOrdner(ordner, { schnitt, berichte, root });
   if (pruefung.befunde.length > 0) return { befunde: pruefung.befunde };
   const pitch = readFileSync(join(ordner, PITCH), "utf8");
@@ -80,7 +80,7 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   const vorab = [...nutzenBefunde, ...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };
   const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich))]));
-  const phase = { phase: basename(resolve(ordner)), absicht: absichtAusPitch(pitch), entwurf, auftraege };
+  const phase = { phase: basename(resolve(ordner)), ...(issue === undefined ? {} : { issue }), absicht: absichtAusPitch(pitch), entwurf, auftraege };
   const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
   if (befunde.length === 0) schreibeJsonAtomar(join(ordner, PHASE), phase);
   return { befunde, phase };
