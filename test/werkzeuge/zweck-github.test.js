@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { kenntZweck, ohneZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { FREIGABE_GRUENDE } from "../../tools/freigabe-gruende.mjs";
 import { ZWECK_JE_TEIL, alsBericht, gruen, rot, technisch } from "../../tools/rotproben-woche/bericht.mjs";
+import { freigabeImProbeRepo } from "./freigabe/hilfen.mjs";
 import { REPO_ROOT, commitAll, outputLines, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { scheinGithub } from "./pruefer/hilfen.mjs";
 import { API_PFAD, REPO, starteWerkzeug } from "./warteschlange/hilfen.mjs";
@@ -29,7 +30,6 @@ const PR = 7;
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
 const OWNERS = "/tools/ @Antonio20045 @jonas986\n";
-const OHNE_NETZ = "http://127.0.0.1:9";
 
 function quelle(pfad) {
   return readFileSync(join(REPO_ROOT, pfad), "utf8");
@@ -191,23 +191,8 @@ async function freigabeLauf(context, reviews) {
   const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
   writeFiles(verzeichnis, { "tools/pruefung.mjs": "export const streng = false;\n" });
   commitAll(verzeichnis, "Prüfung geändert");
-  const kopf = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  const github = await scheinGithub(
-    context,
-    new Map([
-      [`GET ${API_PFAD}/pulls/${PR}`, { number: PR, head: { sha: kopf }, labels: [] }],
-      [`GET ${API_PFAD}/pulls/${PR}/reviews`, reviews(kopf)],
-      [`GET ${API_PFAD}/issues/${PR}/comments`, []],
-      [`POST ${API_PFAD}/issues/${PR}/comments`, {}],
-      [`POST ${API_PFAD}/issues/${PR}/labels`, {}],
-    ]),
-  );
-  const args = [join(REPO_ROOT, FREIGABE), "--basis", basis, "--pr", String(PR), "--registry", OHNE_NETZ, "--downloads", OHNE_NETZ];
-  const lauf = await starteWerkzeug(args, {
-    cwd: verzeichnis,
-    umgebung: { GITHUB_API_URL: github.url, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO },
-  });
-  const kommentar = github.anfragen.find(({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"));
+  const lauf = await freigabeImProbeRepo(context, { verzeichnis, basis, reviews });
+  const kommentar = lauf.anfragen.find(({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"));
   return { ...lauf, kommentar: kommentar?.rumpf.body ?? "" };
 }
 
