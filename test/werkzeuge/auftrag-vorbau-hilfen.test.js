@@ -240,3 +240,17 @@ test("Hilfen im Vorbau: eine Hilfe, die eine Zusicherung über Konstanten, Aufru
   );
   assert.deepEqual(ergebnisse(faelle), erwartet(faelle));
 });
+
+test("Hilfen im Vorbau: ein Umbau, der Importe neu ergänzt, ersetzt damit keine Methode eines echten Objekts; ein neuer Import aus src, aufgerufen mit einer Konstante der Datei, bleibt erlaubt", () => {
+  const DIENST = 'import { dienst } from "../src/dienst.js";\n';
+  const DIENST_DYNAMISCH = 'const { dienst } = await import("../src/dienst.js");\n';
+  const ergaenzt = (oben, zeile, wert) => [datei(), datei({ oben, rumpf: `${ROUTE}  ${zeile}\n` }), wert];
+  const faelle = new Map([
+    ["neu ergänzt: stub aus sinon und dienst aus src", ergaenzt(`import { stub } from "sinon";\n${DIENST}`, 'stub(dienst(), "senden");', false)],
+    ["neu ergänzt: sinon als Standardimport", ergaenzt(`import sinon from "sinon";\n${DIENST}`, 'sinon.stub(dienst(), "senden");', false)],
+    ["neu ergänzt: stub mit Alias", ergaenzt(`import { stub as attrappe } from "sinon";\n${DIENST}`, 'attrappe(dienst(), "senden");', false)],
+    ["neu ergänzt: beide per await import", ergaenzt(`const { stub } = await import("sinon");\n${DIENST_DYNAMISCH}`, 'stub(dienst(), "senden");', false)],
+    ["neu ergänzt: nur dienst aus src, Aufruf mit einer Konstante der Datei", ergaenzt(DIENST, "dienst(KUNDE);", true)],
+  ]);
+  assert.deepEqual(ergebnisse(faelle), erwartet(faelle));
+});
