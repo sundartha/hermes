@@ -177,3 +177,10 @@ test("Testwirkung: das Ladesignal greift beim statischen Import im Kindprozess a
     aufruf: "kern.halbiert",
   });
 });
+
+test("Testwirkung: das Ladesignal greift beim statischen Import im Kindprozess auch bei einem Typen-Sternexport der entfernten Quelle, der keinen Laufzeitexport erzeugt", (context) => {
+  statischImKindNach(context, {
+    quelle: 'export type * from "./typen.js";\nexport function halbiert(zahl) {\n  return zahl / 2;\n}\n',
+    neu: ANDERER_LAUFZEITCODE,
+  });
+});
