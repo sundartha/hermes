@@ -9,6 +9,7 @@ export const FUNKTIONSKARTE = "FUNKTIONSKARTE.md";
 export const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
 export const ABSICHT = "Absicht";
 export const ABSICHT_HOECHSTENS = 1000;
+const UMBENENNUNG_WEG = "Umformung an der .js in einer ersten Phase, reine Umbenennung in einer zweiten Phase";
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
 const UMBAU_ARTEN = new Set(["umbau", TESTUMBAU]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
@@ -377,6 +378,28 @@ export function reihenfolge(auftraege) {
   return { ordnung, zyklus: null };
 }
 
+function erwarteteDateienVon(auftrag) {
+  return Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : [];
+}
+
+function umbenennungen(auftraege) {
+  return auftraege.filter((auftrag) => auftrag.art === "umbau").flatMap((umbau) => {
+    const dateien = erwarteteDateienVon(umbau);
+    return dateien.filter((datei) => dateien.includes(zwillingDes(datei))).map((alt) => ({ umbau, alt, neu: zwillingDes(alt) }));
+  });
+}
+
+function aendert(auftrag, { alt, neu }) {
+  return erwarteteDateienVon(auftrag).some((datei) => datei === alt || datei === neu);
+}
+
+export function umbenennungBefunde(auftraege) {
+  return umbenennungen(auftraege).flatMap((paar) => {
+    const andere = auftraege.filter((auftrag) => auftrag !== paar.umbau && aendert(auftrag, paar));
+    return andere.map(({ id }) => `${id}: ändert ${paar.alt} oder ${paar.neu}, die ${paar.umbau.id} in derselben Phase umbenennt; ${UMBENENNUNG_WEG}`);
+  });
+}
+
 export function phasenBefunde(phase, root) {
   if (phase === null || typeof phase !== "object") return ["Die Phasendatei ist kein Objekt."];
   const befunde = [];
@@ -395,6 +418,7 @@ export function phasenBefunde(phase, root) {
     kennungen: new Set(auftraege.map((auftrag) => auftrag.id)),
   };
   for (const auftrag of auftraege) befunde.push(...auftragBefunde(auftrag, kontext));
+  befunde.push(...umbenennungBefunde(auftraege));
   const { zyklus } = reihenfolge(auftraege);
   if (zyklus) befunde.push(`abhaengigVon bildet einen Kreis: ${zyklus.join(" -> ")}`);
   return befunde;

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, jsZwillingDes, kennungBefunde, kopplungBefunde, listenBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, jsZwillingDes, kennungBefunde, kopplungBefunde, listenBefunde, reihenfolge, umbenennungBefunde } from "../format.mjs";
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
@@ -52,6 +52,7 @@ export const REGEL = {
   eingang: "Eingang",
   nie: "Nie-Sätze",
   namen: "Gemeinsame Namen",
+  umbenennung: "Umbenennung",
 };
 
 function mitRegel(regel, befunde) {
@@ -276,6 +277,11 @@ function umbauTestBefunde(auftraege, { dateikarte }) {
     return tests.includes(umbau.abnahme) ? [] : [`${umbau.id}: abnahme ${umbau.abnahme} gehört laut Dateikarte zu keiner Datei des Umbaus (${dateien.join(", ")})`];
   });
   return mitRegel(REGEL.umbauTest, befunde);
+}
+
+function umbenennungImSchnitt(auftraege, { vorhandene }) {
+  const schonDa = new Set(umbenennungBefunde(vorhandene));
+  return mitRegel(REGEL.umbenennung, umbenennungBefunde([...vorhandene, ...auftraege]).filter((befund) => !schonDa.has(befund)));
 }
 
 function schemaNummern(berichte) {
@@ -526,6 +532,7 @@ export function schnittBefunde(schnitt, eingaben) {
     ...durchstichBefunde(kontext),
     ...altfunktionBefunde(auftraege, kontext),
     ...umbauTestBefunde(auftraege, kontext),
+    ...umbenennungImSchnitt(auftraege, kontext),
     ...schemaBefunde(auftraege, kontext),
     ...bereichBefunde(auftraege, kontext),
     ...aenderungsBefunde(auftraege, kontext),
