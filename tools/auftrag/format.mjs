@@ -62,6 +62,10 @@ export function istUmbau(auftrag) {
   return UMBAU_ARTEN.has(auftrag.art);
 }
 
+export function istPitchPhase(name) {
+  return PHASE_AUS_PITCH.test(String(name));
+}
+
 export function istTestbereich(bereich) {
   return typeof bereich === "string" && istTestdatei(bereich);
 }
@@ -412,7 +416,7 @@ export function phasenBefunde(phase, root) {
   befunde.push(...kennungBefunde(auftraege));
   const kontext = {
     root,
-    ausPitch: PHASE_AUS_PITCH.test(String(phase.phase)),
+    ausPitch: istPitchPhase(phase.phase),
     entwurf: phase.entwurf,
     muster: geschuetzteMuster(root),
     kennungen: new Set(auftraege.map((auftrag) => auftrag.id)),

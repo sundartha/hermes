@@ -1,17 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { istPitchPhase } from "./format.mjs";
 import { abschnitte } from "./planung/abschnitte.mjs";
 
 export const ANNAHMEN = "Ausgangslage und Annahmen";
 const KOPF = `## ${ANNAHMEN}`;
-const PITCH_PHASE = /^P-/i;
 const PLAENE = "plaene";
 const DESIGN = "design.md";
 const ZWECK = `Test- und Bau-Agent einer Phase aus einem Pitch bekommen den Abschnitt „${ANNAHMEN}“ aus dem Design Doc wörtlich, damit Abnahmetest und Code auf denselben Tatsachen stehen: Datenformate, vorhandene Bausteine, was das System schon tut. Ohne ihn legt der Test-Agent Testdaten nach eigener Vermutung an. Echte Behebung: den Abschnitt im Design Doc ergänzen. Ausweg: eine Entscheidungsnotiz im Phasen-Issue, warum diese Phase ohne Annahmen gebaut werden soll; dann entscheidet Antonio.`;
 
 export function designPfad(phase) {
-  return PITCH_PHASE.test(String(phase.phase)) ? `${PLAENE}/${phase.phase}/${DESIGN}` : null;
+  return istPitchPhase(phase.phase) ? `${PLAENE}/${phase.phase}/${DESIGN}` : null;
 }
 
 function ohneKopf(ausschnitt) {
