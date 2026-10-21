@@ -7,17 +7,18 @@ import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
-import { einstellungenFuer, gelesen } from "./syntaxbaum.mjs";
-import { inhalt, umbenennungen } from "./umbenennung.mjs";
+import { inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
 import { ersteAbweichung, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
 
-const JAVASCRIPT = /\.[cm]?js$/;
+const QUELLDATEI = /\.[cm]?[jt]s$/;
 const GEAENDERT = "M";
 const ARTEN = new Map([
   ["A", "neu"],
   ["D", "gelöscht"],
 ]);
-const COMMONJS = /\.cjs$/;
+const COMMONJS = /\.c[jt]s$/;
+const ZWEI_PHASEN =
+  "Soll eine Datei nach TypeScript, braucht das zwei Phasen: Umformung an der .js in einer ersten Phase, reine Umbenennung in einer zweiten Phase.";
 const PAAR = 2;
 const ZEILENUMBRUCH = /\n/g;
 const ERSTE_ZEILE = 1;
@@ -49,20 +50,19 @@ function zeileVon(text, knoten) {
 }
 
 export async function vergleicheVorbereitung({ pfad, vorher, nachher }, eslint = new ESLint()) {
-  const einstellungen = await einstellungenFuer(pfad, eslint);
-  const [alt, neu] = [gelesen(vorher, einstellungen), gelesen(nachher, einstellungen)];
+  const [alt, neu] = await Promise.all([vorher, nachher].map((text) => laufzeitBaum({ pfad, text }, eslint)));
   if (alt === undefined || neu === undefined) return { gleich: false, befund: `${pfad}: nicht lesbar` };
   const [links, rechts] = [normalform(alt), normalform(neu)];
   const ids = new Set([...links.genutzt.keys(), ...rechts.genutzt.keys()]);
   const genutzt = [...ids].filter((id) => links.genutzt.get(id) !== rechts.genutzt.get(id)).toSorted();
   if (vergleichstext(links.baum) === vergleichstext(rechts.baum)) return { gleich: true, genutzt };
-  const zeile = zeileVon(nachher, ersteAbweichung(links.baum, rechts.baum));
+  const zeile = zeileVon(laufzeitText(pfad, nachher), ersteAbweichung(links.baum, rechts.baum));
   return { gleich: false, befund: `${pfad}:${zeile}: Änderung, die keine Umformung aus tools/vorbereitung/katalog.json ist` };
 }
 
 async function dateiBefund({ art, datei }, { basis, bis, umbenannt, eslint }) {
   if (art !== GEAENDERT) {
-    const nurTypen = umbenannt.vorher(datei) !== undefined;
+    const nurTypen = (umbenannt.vorher(datei) ?? umbenannt.nurTypen(datei)) !== undefined;
     return nurTypen ? undefined : `${datei}: ${ARTEN.get(art) ?? `Art ${art}`}; das ist keine Umformung aus dem Katalog`;
   }
   if (await umbenannt.nurQuellenNachgezogen(datei)) return undefined;
@@ -75,12 +75,13 @@ async function dateiBefund({ art, datei }, { basis, bis, umbenannt, eslint }) {
 export async function vorbereitungsBefunde({ basis, bis, bereich }) {
   const eslint = new ESLint();
   const imBereich = bereich === undefined ? () => true : (datei) => bereich.has(datei);
-  const dateien = geaenderteDateien(basis, bis).filter(({ datei }) => JAVASCRIPT.test(datei) && imBereich(datei));
+  const dateien = geaenderteDateien(basis, bis).filter(({ datei }) => QUELLDATEI.test(datei) && imBereich(datei));
   if (dateien.length === 0) return [];
   const umbenannt = await umbenennungen({ von: basis, bis }, eslint);
   const befunde = [];
   for (const eintrag of dateien) befunde.push(await dateiBefund(eintrag, { basis, bis, umbenannt, eslint }));
-  return befunde.filter(Boolean);
+  const geloeschtOderNeu = dateien.some(({ art }, stelle) => ARTEN.has(art) && befunde[stelle] !== undefined);
+  return [...befunde.filter(Boolean), ...(geloeschtOderNeu ? [ZWEI_PHASEN] : [])];
 }
 
 async function main() {

@@ -11,11 +11,15 @@ export function repoMitBasis(context, dateien) {
   return { directory, basis };
 }
 
-export function nachCommitPruefen({ directory, basis }, werkzeug, dateien) {
+export function nachCommitAufrufen({ directory, basis }, [werkzeug, ...argumente], dateien) {
   writeFiles(directory, dateien);
   commitAll(directory, "Nachher");
-  const run = runIn(directory, process.execPath, [werkzeug, "--basis", basis]);
+  const run = runIn(directory, process.execPath, [werkzeug, "--basis", basis, ...argumente]);
   return { status: run.status, output: `${run.stdout}${run.stderr}` };
+}
+
+export function nachCommitPruefen(repo, werkzeug, dateien) {
+  return nachCommitAufrufen(repo, [werkzeug], dateien);
 }
 
 export function brichtOhneBasisAb(directory, werkzeug) {
