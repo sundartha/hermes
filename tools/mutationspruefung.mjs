@@ -341,7 +341,7 @@ async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
   if (loeschung === null) return ergebnisse;
-  return [...ergebnisse, ...loeschung.pruefe({ datei, zeilen, ergebnisse, tests })];
+  return [...ergebnisse, ...(await loeschung.pruefe({ datei, zeilen, ergebnisse, tests }))];
 }
 
 function alterStand(commit) {
@@ -595,7 +595,7 @@ async function zweiteStufe(datei, ergebnisse, { graph, loeschung }) {
   const vereint = mutanten.length === 0 ? ergebnisse : vereine(ergebnisse, [await ohneRoteErstlaeufe(datei, mutanten.map(({ zeilen }) => zeilen), uebrig)]);
   const geloescht = offen.filter(({ art }) => art === GELOESCHT);
   if (loeschung === null || geloescht.length === 0) return vereint;
-  const nachgefasst = new Map(loeschung.nachfassen({ datei, eintraege: geloescht, uebrige: uebrig }).map((eintrag) => [eintrag.schluessel, eintrag]));
+  const nachgefasst = new Map((await loeschung.nachfassen({ datei, eintraege: geloescht, uebrige: uebrig })).map((eintrag) => [eintrag.schluessel, eintrag]));
   return vereint.map((eintrag) => nachgefasst.get(eintrag.schluessel) ?? eintrag);
 }
 

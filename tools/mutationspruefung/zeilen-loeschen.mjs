@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { cpSync, existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { env } from "node:process";
@@ -11,6 +11,7 @@ import { gruppen } from "./gruppen.mjs";
 
 const BANK = "regression";
 const TESTPARALLEL = 4;
+const ARBEITSKOPIEN = 3;
 const ZEILENENDE = "\n";
 const ANWEISUNGSENDE = ";";
 const DEKLARATION = /^(?:import|export|const|let|var|function|class|async function)\b/;
@@ -26,6 +27,8 @@ const TESTKONTEXT = "NODE_TEST_CONTEXT";
 const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
 const MAX_AUSGABE = 268_435_456;
+const ZEITABLAUF_FEHLER = "Zeitgrenze des Testlaufs erreicht";
+const ABGEBROCHEN = "Löschprobe abgebrochen";
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: MAX_AUSGABE, stdio: ["ignore", "pipe", "pipe"] });
@@ -80,13 +83,26 @@ function laufstatus({ status, signal, error }) {
 }
 
 function testlauf(verzeichnis, tests) {
-  const lauf = spawnSync(process.execPath, [TESTGRUPPE, "--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
-    cwd: verzeichnis,
-    env: ohneTestkontext(),
-    stdio: "ignore",
-    timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE,
+  return new Promise((fertig) => {
+    const kind = spawn(process.execPath, [TESTGRUPPE, "--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
+      cwd: verzeichnis,
+      env: ohneTestkontext(),
+      stdio: "ignore",
+    });
+    const lage = { error: undefined };
+    const uhr = setTimeout(() => {
+      lage.error = new Error(ZEITABLAUF_FEHLER);
+      kind.kill();
+    }, ZEITGRENZE_MINUTEN * MS_JE_MINUTE);
+    const ende = (lauf) => {
+      clearTimeout(uhr);
+      fertig(laufstatus(lauf));
+    };
+    kind.on("error", (error) => {
+      if (kind.pid === undefined) ende({ status: null, signal: null, error });
+    });
+    kind.on("close", (status, signal) => ende({ status, signal, error: lage.error }));
   });
-  return laufstatus(lauf);
 }
 
 function eintrag(datei, zeile, status) {
@@ -97,59 +113,100 @@ function vorzug(bisher, neu) {
   return neu.status === UEBERLEBT && bisher.hinweis !== undefined ? bisher : neu;
 }
 
-function ohneZeile(pfad, zeile, pruefen) {
+async function ohneZeile(pfad, zeile, pruefen) {
   const original = readFileSync(pfad, "utf8");
   const zeilen = original.split(ZEILENENDE);
   zeilen[zeile - 1] = "";
   writeFileSync(pfad, zeilen.join(ZEILENENDE));
   try {
-    return pruefen();
+    return await pruefen();
   } finally {
     writeFileSync(pfad, original);
   }
 }
 
-export function loeschprobe(verzeichnisAnlegen) {
-  let verzeichnis = null;
-  const gruen = new Set();
-  const grundlauf = (tests) => {
+async function verteilt(auftraege, kopie, pruefen) {
+  const ergebnisse = [];
+  const lage = { naechster: 0, fehler: [] };
+  const abbrechbar = (stand) => ({
+    ...stand,
+    laufen: (tests) => {
+      if (lage.fehler.length > 0) throw new Error(ABGEBROCHEN);
+      return testlauf(stand.verzeichnis, tests);
+    },
+  });
+  const arbeiter = async (platz) => {
+    while (lage.fehler.length === 0 && lage.naechster < auftraege.length) {
+      const index = lage.naechster++;
+      try {
+        ergebnisse[index] = await pruefen(pruefer(abbrechbar(kopie(platz))), auftraege[index]);
+      } catch (fehler) {
+        lage.fehler.push(fehler);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(ARBEITSKOPIEN, auftraege.length) }, (_leer, platz) => arbeiter(platz)));
+  if (lage.fehler.length > 0) throw lage.fehler[0];
+  return ergebnisse;
+}
+
+function pruefer({ verzeichnis, gruen, laufen }) {
+  const grundlauf = async (tests) => {
     const kennung = tests.join(ZEILENENDE);
     if (gruen.has(kennung)) return;
-    if (testlauf(verzeichnis, tests) !== UEBERLEBT) {
+    if ((await laufen(tests)) !== UEBERLEBT) {
       throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
     }
     gruen.add(kennung);
   };
-  const gruppenprobe = (datei, zeile, gruppe) => {
-    grundlauf(gruppe);
-    const beobachte = () => {
-      const status = ohneZeile(join(verzeichnis, datei), zeile, () => testlauf(verzeichnis, gruppe));
+  const gruppenprobe = async (datei, zeile, gruppe) => {
+    await grundlauf(gruppe);
+    const beobachte = async () => {
+      const status = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe));
       return { status, toeter: status === ERKANNT ? gruppe : [] };
     };
-    const verlauf = [beobachte()];
-    while (unentschieden(verlauf)) verlauf.push(beobachte());
+    const verlauf = [await beobachte()];
+    while (unentschieden(verlauf)) verlauf.push(await beobachte());
     return entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf);
   };
-  const probe = (datei, auswahl, bisher) => {
-    verzeichnis ??= gepruefterStand(verzeichnisAnlegen());
+  return async (datei, auswahl, bisher) => {
     const [zeile] = bisher.zeilen;
     let ergebnis = bisher;
     for (const gruppe of auswahl) {
-      ergebnis = vorzug(ergebnis, gruppenprobe(datei, zeile, gruppe));
+      ergebnis = vorzug(ergebnis, await gruppenprobe(datei, zeile, gruppe));
       if (ergebnis.status !== UEBERLEBT) break;
     }
     return ergebnis;
+  };
+}
+
+export function loeschprobe(verzeichnisAnlegen) {
+  const kopien = new Map();
+  const kopie = (platz) => {
+    if (!kopien.has(platz)) kopien.set(platz, { verzeichnis: gepruefterStand(verzeichnisAnlegen()), gruen: new Set() });
+    return kopien.get(platz);
   };
   return {
     pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) => {
       const uebrige = alle.filter((test) => !erste.includes(test));
       const auswahl = [...gruppen(erste), ...gruppen(uebrige)];
-      return zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => probe(datei, auswahl, eintrag(datei, zeile, UEBERLEBT)));
+      const offen = zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => eintrag(datei, zeile, UEBERLEBT));
+      return verteilt(offen, kopie, (probe, bisher) => probe(datei, auswahl, bisher));
     },
-    nachfassen: ({ datei, eintraege, uebrige }) =>
-      eintraege.map((bisher) => probe(datei, gruppen(uebrige), bisher)),
+    nachfassen: ({ datei, eintraege, uebrige }) => {
+      const auswahl = gruppen(uebrige);
+      return verteilt(eintraege, kopie, (probe, bisher) => probe(datei, auswahl, bisher));
+    },
     abbauen: () => {
-      if (verzeichnis !== null) git(["worktree", "remove", "--force", verzeichnis]);
+      const fehler = [];
+      for (const { verzeichnis } of kopien.values()) {
+        try {
+          git(["worktree", "remove", "--force", verzeichnis]);
+        } catch (grund) {
+          fehler.push(grund);
+        }
+      }
+      if (fehler.length > 0) throw fehler[0];
     },
   };
 }
