@@ -107,13 +107,18 @@ function aufgerufeneDateien(schritt) {
 }
 
 function mitNpmSkripten(text, skripte, gesehen = []) {
-  const namen = [...text.matchAll(NPM_SKRIPT)].map(([, lauf, test]) => lauf ?? test);
-  const weitere = namen.filter((name) => skripte[name] !== undefined && !gesehen.includes(name));
-  return [text, ...weitere.map((name) => mitNpmSkripten(skripte[name], skripte, [...gesehen, name]))].join("\n");
+  return text.replace(NPM_SKRIPT, (aufruf, lauf, test) => {
+    const name = lauf ?? test;
+    return skripte[name] === undefined || gesehen.includes(name) ? aufruf : mitNpmSkripten(skripte[name], skripte, [...gesehen, name]);
+  });
+}
+
+function aufgeloesterText(schritt) {
+  return mitNpmSkripten(schritt.roh.join("\n"), JSON.parse(quelltext(PAKET)).scripts);
 }
 
 function aufgerufeneDateienMitNpmSkripten(schritt) {
-  return werkzeugdateienIn(mitNpmSkripten(schritt.roh.join("\n"), JSON.parse(quelltext(PAKET)).scripts));
+  return werkzeugdateienIn(aufgeloesterText(schritt));
 }
 
 function eintraegeMitZweck() {
