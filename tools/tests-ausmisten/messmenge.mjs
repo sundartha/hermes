@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { chdir, cwd } from "node:process";
@@ -28,13 +28,13 @@ const WERKZEUG_DATEI_IN_TEXT =
 const SKRIPT = /\.[cm]?[jt]s$/;
 const EIGENES_MODUL = /^(?:src|test)\/.+\.[cm]?[jt]s$/;
 
-export async function importgraph() {
-  const { output } = await cruise(WURZELN, OPTIONEN);
+export async function importgraph(ordner = cwd()) {
+  const { output } = await cruise(WURZELN, { ...OPTIONEN, baseDir: realpathSync(ordner) });
   const importe = new Map();
   const importierer = new Map();
   for (const { source, dependencies } of output.modules) {
     const statisch = dependencies.map(({ resolved }) => resolved);
-    const dynamisch = EIGENES_MODUL.test(source) ? dynamischeZiele(source) : [];
+    const dynamisch = EIGENES_MODUL.test(source) ? dynamischeZiele(source, ordner) : [];
     const ziele = [...new Set([...statisch, ...dynamisch])];
     importe.set(source, ziele);
     for (const ziel of ziele) importierer.set(ziel, [...(importierer.get(ziel) ?? []), source]);
@@ -42,22 +42,31 @@ export async function importgraph() {
   return { importe, importierer };
 }
 
-export async function imStand(commit, aufgabe) {
-  const vorher = cwd();
+async function imWorktree(commit, aufgabe, repo = cwd()) {
   const ordner = mkdtempSync(join(tmpdir(), "ausmisten-stand-"));
-  git(["worktree", "add", "--detach", "-q", ordner, commit], vorher);
-  chdir(ordner);
+  git(["worktree", "add", "--detach", "-q", ordner, commit], repo);
   try {
-    return await aufgabe();
+    return await aufgabe(ordner);
   } finally {
-    chdir(vorher);
-    git(["worktree", "remove", "--force", ordner], vorher);
+    git(["worktree", "remove", "--force", ordner], repo);
     rmSync(ordner, { recursive: true, force: true });
   }
 }
 
-export function graphImStand(commit) {
-  return imStand(commit, importgraph);
+export function imStand(commit, aufgabe) {
+  return imWorktree(commit, async (ordner) => {
+    const vorher = cwd();
+    chdir(ordner);
+    try {
+      return await aufgabe();
+    } finally {
+      chdir(vorher);
+    }
+  });
+}
+
+export function graphImStand(commit, repo = cwd()) {
+  return imWorktree(commit, importgraph, repo);
 }
 
 function quelldateien(graph) {

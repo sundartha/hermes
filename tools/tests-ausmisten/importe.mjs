@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { posix } from "node:path";
+import { join, posix } from "node:path";
 
 import { Linter } from "eslint";
 
@@ -170,20 +170,21 @@ export function vorhandenesZiel(datei, pfad, vorhanden) {
   return [ziel, ziel.replace(JAVASCRIPT_ENDUNG, ".$1ts")].find(vorhanden);
 }
 
-function zielDatei(datei, { pfad, relativ }) {
+function zielDatei(datei, { pfad, relativ }, ordner) {
   if (!relativ && !istRelativ(pfad)) return undefined;
-  const vorhanden = vorhandenesZiel(datei, pfad, existsSync);
+  const vorhanden = vorhandenesZiel(datei, pfad, (ziel) => existsSync(join(ordner, ziel)));
   return vorhanden === undefined || NACH_OBEN.test(vorhanden) ? undefined : vorhanden;
 }
 
-export function dynamischeZiele(datei) {
-  if (!existsSync(datei)) return [];
-  const text = readFileSync(datei, "utf8");
+export function dynamischeZiele(datei, ordner = ".") {
+  const pfad = join(ordner, datei);
+  if (!existsSync(pfad)) return [];
+  const text = readFileSync(pfad, "utf8");
   if (!text.includes(DYNAMISCHER_IMPORT)) return [];
   const knoten = syntaxknoten(datei, text) ?? [];
   const bindungen = konstanten(knoten);
   const importe = knoten.filter(({ type }) => type === "ImportExpression");
   const pfade = importe.map(({ source }) => aufgeloest(source, bindungen)).filter(Boolean);
-  const ziele = pfade.map((ziel) => zielDatei(datei, ziel)).filter(Boolean);
+  const ziele = pfade.map((ziel) => zielDatei(datei, ziel, ordner)).filter(Boolean);
   return [...new Set(ziele)].sort();
 }
