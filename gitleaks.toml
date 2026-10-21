@@ -12,3 +12,17 @@ useDefault = true
     '''\.env\.example$''',
     '''^test/gemeinsam/erfundene-geheimnisse\.js$''',
   ]
+
+[[rules]]
+  id = "generic-api-key"
+
+  [[rules.allowlists]]
+    description = "Fehlalarm, von Antonio am 22.10.2026 freigegeben: hermes.lang.v2 ist der localStorage-Name der Anzeigesprache, kein Zugangsschluessel (gleiche Konstante in apps/web/src/lib/i18n.js)"
+    condition = "AND"
+    paths = [
+      '''^apps/web/test/rueckkehr-dom-shell\.js$''',
+    ]
+    regexTarget = "line"
+    regexes = [
+      '''(?m)^const LANG_KEY = "hermes\.lang\.v2";$''',
+    ]
