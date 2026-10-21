@@ -18,6 +18,8 @@ const OHNE_URTEIL = new Map([["tools/testlaufzeit-reporter.mjs", "Reporter des T
 const AUFGERUFEN = /\b((?:tools|scripts)\/[\w./-]+\.m?js)\b/g;
 const NPM_SKRIPT = /\bnpm run(?: -{1,2}[\w-]+)* ([\w:.-]+)|\bnpm (test)\b/g;
 const PAKET = "package.json";
+const VERKNUEPFUNG = /&&|\|\|/;
+const ZEILE_GEHT_WEITER = /(\\|&&|\|\|)[ \t]*\n\s*|[ \t]*\n\s*(?=&&|\|\|)/g;
 const KONSTANTEN = [
   ["MELDUNG", MELDUNG],
   ["PRUEFUNG", PRUEFUNG],
@@ -121,6 +123,20 @@ function aufgerufeneDateienMitNpmSkripten(schritt) {
   return werkzeugdateienIn(aufgeloesterText(schritt));
 }
 
+function befehlszeilen(text) {
+  return text.replace(ZEILE_GEHT_WEITER, (_treffer, ende) => `${ende ?? ""} `).split("\n");
+}
+
+function hinterVerknuepfung(text, pfad) {
+  const zeilen = befehlszeilen(text).filter((zeile) => zeile.includes(pfad));
+  return zeilen.length > 0 && zeilen.every((zeile) => VERKNUEPFUNG.test(zeile.slice(0, zeile.indexOf(pfad))));
+}
+
+function nurHinterVerknuepfungGerufen(text, belege) {
+  const ladende = werkzeugdateienIn(text).filter((pfad) => laedtBeleg(pfad, belege));
+  return ladende.length > 0 && ladende.every((pfad) => hinterVerknuepfung(text, pfad));
+}
+
 function eintraegeMitZweck() {
   return Object.entries(eintraegeDerZuordnung()).filter(([, eintrag]) => eintrag.zweck !== undefined || eintrag.gruppen !== undefined);
 }
@@ -159,4 +175,52 @@ test("jeder Schritt, dessen Zweck-Block aus einer Werkzeugdatei kommt, ruft eine
   const schritte = schritteMitWerkzeugBeleg();
   assert.ok(schritte.length > 0);
   for (const { name, belege, aufrufe: gerufen } of schritte) assert.ok(gerufen.some((pfad) => laedtBeleg(pfad, belege)), `${name}: kein nachweisbarer Aufruf einer Datei, die den Beleg lädt`);
+});
+
+test("kein Schritt, dessen Zweck-Block aus einer Werkzeugdatei kommt, ruft sie erst hinter && oder || auf, auch über ein npm-Skript", () => {
+  const schritte = schritteNachSchluessel();
+  for (const { name, belege } of schritteMitWerkzeugBeleg()) {
+    assert.ok(!nurHinterVerknuepfungGerufen(aufgeloesterText(schritte.get(name)), belege), `${name}: die Datei, die den Zweck-Block ausgibt, steht erst hinter && oder || und läuft bei einem Fehler davor nicht`);
+  }
+});
+
+const TYPABDECKUNG = "tools/typabdeckung.mjs";
+
+test("Erkennung: ein Aufruf nach && oder ||, auch über Zeilenumbrüche, gilt als hinter einer Verknüpfung", () => {
+  const texte = [
+    "tsc --noEmit && node tools/typabdeckung.mjs",
+    "a || node tools/typabdeckung.mjs",
+    "tsc --noEmit &&\nnode tools/typabdeckung.mjs",
+    "tsc --noEmit \\\n  || node tools/typabdeckung.mjs",
+  ];
+  for (const text of texte) assert.ok(hinterVerknuepfung(text, TYPABDECKUNG), text);
+});
+
+test("Erkennung: ein Aufruf allein, vor && oder in eigener Zeile eines mehrzeiligen run gilt nicht als hinter einer Verknüpfung", () => {
+  const texte = [
+    "node tools/typabdeckung.mjs",
+    "node tools/typabdeckung.mjs && echo fertig",
+    "tsc --noEmit\nnode tools/typabdeckung.mjs",
+    "a && node tools/typabdeckung.mjs\nnode tools/typabdeckung.mjs",
+  ];
+  for (const text of texte) assert.ok(!hinterVerknuepfung(text, TYPABDECKUNG), text);
+});
+
+test("Schritt mit npm run: steht der Aufruf im Skript oder das npm run selbst hinter && oder ||, wird er als hinter einer Verknüpfung erkannt", () => {
+  const faelle = [
+    ["run: npm run typecheck", { typecheck: "tsc --noEmit && node tools/typabdeckung.mjs" }],
+    ["run: npm run typecheck", { typecheck: "tsc --noEmit || node tools/typabdeckung.mjs" }],
+    ["run: tsc --noEmit && npm run abdeckung", { abdeckung: "node tools/typabdeckung.mjs" }],
+    ["run: npm run pruefen", { pruefen: "tsc --noEmit && npm run abdeckung", abdeckung: "node tools/typabdeckung.mjs" }],
+  ];
+  for (const [text, skripte] of faelle) assert.ok(nurHinterVerknuepfungGerufen(mitNpmSkripten(text, skripte), [TYPABDECKUNG]), `${text} ${JSON.stringify(skripte)}`);
+});
+
+test("Schritt mit npm run: ruft das Skript die Datei zuerst oder allein auf, wird er nicht gemeldet", () => {
+  const faelle = [
+    ["run: npm run typecheck", { typecheck: "node tools/typabdeckung.mjs && tsc --noEmit" }],
+    ["run: npm run abdeckung && tsc --noEmit", { abdeckung: "node tools/typabdeckung.mjs" }],
+    ["run: npm run abdeckung", { abdeckung: "node tools/typabdeckung.mjs" }],
+  ];
+  for (const [text, skripte] of faelle) assert.ok(!nurHinterVerknuepfungGerufen(mitNpmSkripten(text, skripte), [TYPABDECKUNG]), `${text} ${JSON.stringify(skripte)}`);
 });
