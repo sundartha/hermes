@@ -102,6 +102,19 @@ test("ein offenes Issue mit gleichem Titel verhindert ein neues, ein anderer Tit
   assert.match(daten.body, /````text\nName @jemand ``` unklar\n````/);
 });
 
+test("ein normales Issue mit gleichem Titel bleibt ein Doppel, auch bei anderem Commit und anderem Beleg: kein Kommentar", async () => {
+  const text = issueText({ sha: HEAD, befund: hinweis(), grund: "" });
+  const github = scheinGithub([TITEL], [], new Map([[1, text]]));
+  const anderer = {
+    titel: TITEL,
+    sha: scheinSha("e"),
+    befund: hinweis({ beleg: "ANDERER-BELEG" }),
+    grund: "",
+  };
+  assert.deepEqual(await legeIssuesAn([anderer], github), { neu: 0, kommentare: 0, vorhanden: 1 });
+  assert.deepEqual(github.gesendet, []);
+});
+
 test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue nur einmal an", async (context) => {
   setzeAusloeser(context, ciLauf());
   const commit = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [hinweis()] };
@@ -237,12 +250,13 @@ test("eine Katalog-ID nach Muster und die Datei als Code-Span stehen in Titel un
   assert.ok(text.includes("- Katalog-ID: SG-07\n- Stelle: `src/zahl.js`, Zeile 1"), text);
 });
 
-async function ablegenGegen(context, ablage, { offen = [], geschlossen = [] } = {}) {
+async function ablegenGegen(context, ablage, { offen = [], geschlossen = [], texte = new Map() } = {}) {
   const server = await scheinServer(
     context,
     new Map([
-      [`GET /repos/${PRIVAT}/issues`, mitStatus(offen, geschlossen)],
+      [`GET /repos/${PRIVAT}/issues`, mitStatus(offen, geschlossen, { texte })],
       [`POST /repos/${PRIVAT}/issues`, {}],
+      ...offen.map((_, index) => [`GET /repos/${PRIVAT}/issues/${index + 1}/comments`, []]),
     ]),
   );
   const umgebung = { ...isolatedEnvironment(), GH_TOKEN: "gh-schein", GITHUB_API_URL: server.url };
@@ -266,7 +280,10 @@ test("ablegen legt Sicherheitshinweise nur im privaten Repo als Issue an, jeden 
   assert.match(rumpf.body, /GEHEIMER-BELEG/);
   assert.match(rumpf.body, /Schwere: SOLLTE \(Sicherheitsbezug, nicht öffentlich\)/);
   assert.ok(erster.pfade.every((pfad) => pfad.startsWith(`/repos/${PRIVAT}/`)));
-  const zweiter = await ablegenGegen(context, ablage, { offen: [ABLAGE_TITEL] });
+  const zweiter = await ablegenGegen(context, ablage, {
+    offen: [ABLAGE_TITEL],
+    texte: new Map([[1, rumpf.body]]),
+  });
   assert.equal(zweiter.lauf.status, 0, zweiter.lauf.stderr);
   assert.deepEqual(zweiter.neu, []);
 });
