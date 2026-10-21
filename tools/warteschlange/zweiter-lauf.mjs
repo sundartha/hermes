@@ -21,6 +21,7 @@ const GRUENDE = {
   zweimalRot: "zweimal rot",
   gate: "Safety-Gate-Test, kein zweiter Lauf",
   katalog: "Bedrohungskatalog, kein zweiter Lauf",
+  zeitgrenze: "Zeitgrenze überschritten, kein zweiter Lauf",
   ohneFundstelle: "ohne Fundstelle",
   ohneTest: "rot ohne erkennbaren Test",
   mitgesperrt: "kein zweiter Lauf wegen eines anderen roten Tests",
@@ -60,6 +61,7 @@ function enthaeltKatalogtest(pfad, root) {
 }
 
 function sperrgrund(rot, { gates, root }) {
+  if (rot.timedOut) return GRUENDE.zeitgrenze;
   if (rot.datei === null || !existsSync(join(root, rot.datei))) return GRUENDE.ohneFundstelle;
   if (gates.has(rot.datei)) return GRUENDE.gate;
   if (KATALOG_NAME.test(rot.name) || enthaeltKatalogtest(rot.datei, root)) {

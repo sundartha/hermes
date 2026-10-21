@@ -25,6 +25,12 @@ const SECOND_RUN_PROTOCOL = "regression-zweiter-lauf";
 const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
 export const FAILURE_FILE_VARIABLE = "TESTFEHLER_DATEI";
 const FAILURE_FIELDS = ["error", "expected", "actual"];
+const OPTION_PREFIX = "-";
+const FILE_LIMIT_VARIABLE = "TESTS_DATEIGRENZE_S";
+const FILE_LIMIT_SECONDS = 1200;
+const WHOLE_SECONDS = /^[1-9]\d*$/;
+const TIMEOUT_FAILURE_TYPE = "testTimeoutFailure";
+const TIMEOUT_PREFIX = "Zeitgrenze überschritten (Datei hängt oder ist zu langsam): ";
 
 const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.[jt]s$/;
 const EMPTY_PLAN_LINE = "1..0";
@@ -132,6 +138,20 @@ function isPatternOrDirectory(file) {
   return PATTERN_CHARACTERS.test(file) || statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
+function fileTimeoutFlag(environment) {
+  const requested = environment[FILE_LIMIT_VARIABLE] ?? "";
+  const seconds = WHOLE_SECONDS.test(requested)
+    ? Math.min(Number(requested), FILE_LIMIT_SECONDS)
+    : FILE_LIMIT_SECONDS;
+  return `--test-timeout=${seconds * MS_PER_SECOND}`;
+}
+
+function nodeTestArguments(mode, extraArgs, files) {
+  const options = files.filter((file) => file.startsWith(OPTION_PREFIX));
+  const paths = files.filter((file) => !file.startsWith(OPTION_PREFIX));
+  return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, fileTimeoutFlag(process.env), ...paths];
+}
+
 function runNodeTest(
   mode,
   {
@@ -146,7 +166,7 @@ function runNodeTest(
   const protocol = createWriteStream(protocolPath);
   return new Promise((resolve) => {
     const { kind: child, ende: finished } = gruppenlauf(
-      ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...files],
+      nodeTestArguments(mode, extraArgs, files),
       { stdio: ["inherit", "pipe", "pipe"], env: environment },
     );
     let buffered = "";
@@ -197,7 +217,8 @@ function detailOf(fields) {
   const actual = scalarOf(fields.actual);
   const comparison =
     expected !== null && actual !== null ? ` (erwartet ${expected}, erhalten ${actual})` : "";
-  return `${messageOf(fields.error)}${comparison}`.slice(0, MAX_DETAIL_LENGTH);
+  const prefix = scalarOf(fields.failureType) === TIMEOUT_FAILURE_TYPE ? TIMEOUT_PREFIX : "";
+  return `${prefix}${messageOf(fields.error)}${comparison}`.slice(0, MAX_DETAIL_LENGTH);
 }
 
 function fullTextOf(field) {
@@ -250,6 +271,7 @@ function resultsIn(tapText) {
         message: fullMessageOf(fields),
         type: scalarOf(fields.type),
         failureType: scalarOf(fields.failureType),
+        timedOut: scalarOf(fields.failureType) === TIMEOUT_FAILURE_TYPE,
       },
     ];
   });
@@ -366,7 +388,9 @@ async function main() {
   const { run, environment: testEnvironment, elapsedMs } = await measuredAfterLocks(
     async () => {
       if (files.some(isPatternOrDirectory)) await nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster oder Ordner)`);
-      return nimmEigeneSperreFuerTests(environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE]));
+      return nimmEigeneSperreFuerTests(
+        environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE, FILE_LIMIT_VARIABLE]),
+      );
     },
     (environment) => runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files, environment }),
   );
