@@ -2,6 +2,7 @@
 
 Status: Entwurf
 Planung freigegeben: <Zahl> Token (trägt die Sitzung bei der Freigabe ein, ganze Zahl ohne Trennzeichen)
+Issue: <Nummer> (trägt die Sitzung bei der Freigabe ein: das Issue, das der PR später mit „Closes #“ nennt)
 Design Doc: <ja | nein>, weil <Grund aus diesem Fall>
 
 ## Absicht
