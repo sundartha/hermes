@@ -13,13 +13,36 @@ const GH_OHNE_WIRKUNG = "true";
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 const argumente = process.argv.slice(2);
 const sitzung = argumente[argumente.indexOf(argumente.includes("--resume") ? "--resume" : "--session-id") + 1];
 const prompt = readFileSync(0, "utf8");
 const drehbuch = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"));
+const startProtokoll = join(dirname(process.env.ERSATZ_DREHBUCH), "starts.jsonl");
+const fruehereStarts = existsSync(startProtokoll) ? readFileSync(startProtokoll, "utf8").split("\\n").filter(Boolean).map((zeile) => JSON.parse(zeile)) : [];
+const ausfall = (drehbuch[process.env.HERMES_ROLLE + "-ausfall"] ?? [])[fruehereStarts.filter((start) => start.rolle === process.env.HERMES_ROLLE).length];
+const sperreBis = ausfall?.sperreMs ? Date.now() + ausfall.sperreMs : undefined;
+appendFileSync(startProtokoll, JSON.stringify({ rolle: process.env.HERMES_ROLLE, sitzung, fortsetzung: argumente.includes("--resume"), zeit: Date.now(), sperreBis }) + "\\n");
+if (ausfall) {
+  if (sperreBis) {
+    const sperre = join(execFileSync("git", ["rev-parse", "--git-common-dir"], { encoding: "utf8" }).trim(), "auftrag-limit", "probe");
+    mkdirSync(dirname(sperre), { recursive: true });
+    writeFileSync(sperre, String(sperreBis));
+  }
+  for (const [pfad, inhalt] of Object.entries(ausfall.dateien ?? {})) {
+    mkdirSync(dirname(pfad), { recursive: true });
+    writeFileSync(pfad, inhalt);
+  }
+  if (ausfall.festhalten) {
+    execFileSync("git", ["add", "--", ...Object.keys(ausfall.dateien)]);
+    execFileSync("git", ["commit", "-q", "-m", "Agent-Commit"]);
+  }
+  const zeilen = [...(ausfall.zeilen ?? []), { type: "result", is_error: true, result: ausfall.text }];
+  await new Promise((fertig) => process.stdout.write(zeilen.map((zeile) => JSON.stringify(zeile) + "\\n").join(""), fertig));
+  process.exit(1);
+}
 const nach = drehbuch.nach !== undefined && prompt.includes(drehbuch.nach) ? "-nach" : "";
 const rolle = process.env.HERMES_ROLLE + nach + (prompt.includes("Überlebende Mutanten") ? "-nachrunde" : "");
 writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".txt"), prompt);
