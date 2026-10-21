@@ -104,9 +104,13 @@ const MS_PER_DAY = 86_400_000;
 const REVIEWS_PER_PAGE = 100;
 const SHORT_SHA = 7;
 const EXIT_FAILURE = 1;
+const ISSUE_TYPE = "Issue";
 const RELEASE_ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
-    issue(number: $number) { number body createdAt lastEditedAt author { login } editor { login } }
+    issueOrPullRequest(number: $number) {
+      __typename
+      ... on Issue { number body createdAt lastEditedAt author { login } editor { login } }
+    }
   }
 }`;
 const PULL_TEXT_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
@@ -775,11 +779,12 @@ function writtenBeforeApproval(texts, approvedAt) {
 }
 
 async function linkedIssues(pull) {
-  return Promise.all(
+  const found = await Promise.all(
     closedIssueNumbers(pull.body).map(
-      async (number) => (await graphql(RELEASE_ISSUE_QUERY, number)).issue,
+      async (number) => (await graphql(RELEASE_ISSUE_QUERY, number)).issueOrPullRequest,
     ),
   );
+  return found.filter((node) => node?.__typename === ISSUE_TYPE);
 }
 
 async function namedExceptions(options, result, pull) {
@@ -791,7 +796,7 @@ async function namedExceptions(options, result, pull) {
     .filter(({ entries }) => entries.length > 0);
   if (candidates.length === 0) return [];
   const checks = [...manifests(".")].map(([id, { titel }]) => ({ id, titel }));
-  const issues = (await linkedIssues(pull)).filter((issue) => issue !== null);
+  const issues = await linkedIssues(pull);
   const named = candidates.flatMap(({ pruefung, entries }) => {
     const naming = issues.filter(({ body }) =>
       releaseSections(body).some((lines) => namesException(lines, { pruefung, entries }, checks)),
