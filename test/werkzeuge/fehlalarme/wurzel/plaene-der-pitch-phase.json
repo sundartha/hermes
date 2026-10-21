@@ -1,0 +1,7 @@
+{
+  "titel": "plaene/ im Wurzelordner, wo die Dokumente einer Pitch-Phase liegen",
+  "dateien": {
+    "plaene/P-900-beispiel/phase.json": ["{", "  \"phase\": \"P-900-beispiel\"", "}"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}

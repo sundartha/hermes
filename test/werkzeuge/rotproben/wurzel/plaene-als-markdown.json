@@ -1,0 +1,7 @@
+{
+  "titel": "plaene.md im Wurzelordner (Markdown dort bleibt verboten)",
+  "dateien": {
+    "plaene.md": ["# Pläne", "- Schritt eins"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}
