@@ -1,10 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, posix } from "node:path";
+import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { TOOLS } from "../basis-vergleich.mjs";
 import { gezaehlt, kontingent } from "../eslint-rules/bestand.js";
+import { abhaengigkeitenUmgezogen, schluesselUmgezogen } from "./listen-eintraege-umzug.mjs";
 
 const SEMGREP_REGELN = "tools/basis/semgrep-regeln.json";
 const ANKER = "#";
@@ -14,34 +15,6 @@ function mitAnker(wert, neuFuer) {
   const [pfad, ...anker] = wert.split(ANKER);
   const neu = neuFuer.get(pfad);
   return neu === undefined ? wert : [neu, ...anker].join(ANKER);
-}
-
-function schluesselUmgezogen(objekt, { neuFuer }) {
-  return Object.fromEntries(
-    Object.entries(objekt).map(([pfad, wert]) => {
-      const neu = neuFuer.get(pfad);
-      return [neu === undefined || Object.hasOwn(objekt, neu) ? pfad : neu, wert];
-    }),
-  );
-}
-
-function feldUmgezogen(eintrag, feld, neuFuer) {
-  const neu = neuFuer.get(eintrag[feld]);
-  return neu === undefined ? eintrag : { ...eintrag, [feld]: neu };
-}
-
-function endungNachgezogen(eintrag, { alt, neu }) {
-  const name = posix.basename(alt);
-  const quelle = eintrag.unresolvedTo;
-  if (typeof quelle !== "string" || !quelle.endsWith(`/${name}`)) return eintrag;
-  return { ...eintrag, unresolvedTo: `${quelle.slice(0, -name.length)}${posix.basename(neu)}` };
-}
-
-function abhaengigkeitenUmgezogen(liste, { neuFuer }) {
-  return liste.map((eintrag) => {
-    const umgezogen = feldUmgezogen(feldUmgezogen(eintrag, "from", neuFuer), "to", neuFuer);
-    return umgezogen.to === eintrag.to ? umgezogen : endungNachgezogen(umgezogen, { alt: eintrag.to, neu: umgezogen.to });
-  });
 }
 
 function knipUmgezogen(basis, { neuFuer }) {
