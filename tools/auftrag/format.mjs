@@ -19,6 +19,8 @@ const TYPDATEI_ENDUNG = ".d.ts";
 const JS_ENDUNG = /\.[cm]?js$/;
 const JS_DATEI = /\.js$/;
 const TS_ENDUNG = ".ts";
+const TS_DATEI = /\.ts$/;
+const JS_ENDUNG_KURZ = ".js";
 const MAX_BETREFF = 72;
 const CODEOWNERS = ".github/CODEOWNERS";
 const VERANKERT = "/";
@@ -101,6 +103,10 @@ function bereichsVerzeichnis(bereich) {
 
 export function zwillingDes(bereich) {
   return typeof bereich === "string" && JS_DATEI.test(bereich) ? bereich.replace(JS_DATEI, TS_ENDUNG) : undefined;
+}
+
+export function jsZwillingDes(pfad) {
+  return typeof pfad === "string" && TS_DATEI.test(pfad) && !pfad.endsWith(TYPDATEI_ENDUNG) ? pfad.replace(TS_DATEI, JS_ENDUNG_KURZ) : undefined;
 }
 
 export function alsEintrag(bereich) {

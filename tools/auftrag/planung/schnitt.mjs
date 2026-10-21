@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { bereiche, liegtGeordnet } from "../../abhaengigkeiten/testordnung.mjs";
-import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, kennungBefunde, kopplungBefunde, listenBefunde, reihenfolge } from "../format.mjs";
+import { ARTEN, TESTUMBAU, UMBAU_AUSWEG, alsEintrag, bereichSchluessel, brauchtRotenTest, engsterOrdner, geschuetzteMuster, gleicherBereich, istBereichsliste, istGeschuetzt, istTestdatei, istUmbau, istWurzel, jsZwillingDes, kennungBefunde, kopplungBefunde, listenBefunde, reihenfolge } from "../format.mjs";
 import { nurUmbauBefunde } from "./abdeckung.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, aenderungsStellen, erkundungBefunde, istObjekt, istText, liste } from "./erkundung.mjs";
@@ -264,10 +264,15 @@ function altfunktionBefunde(auftraege, kontext) {
   return mitRegel(REGEL.altfunktionen, befunde);
 }
 
+function mitJsZwillingen(dateien) {
+  return [...new Set(dateien.flatMap((datei) => [datei, jsZwillingDes(datei)]).filter(Boolean))];
+}
+
 function umbauTestBefunde(auftraege, { dateikarte }) {
   const befunde = auftraege.filter(({ art }) => art === "umbau").flatMap((umbau) => {
     const dateien = liste(umbau.erwarteteDateien).filter((datei) => !istTestdatei(datei));
-    const tests = dateikarte.filter(({ datei }) => dateien.includes(datei)).flatMap(({ tests: erreichend }) => erreichend);
+    const mitZwillingen = mitJsZwillingen(dateien);
+    const tests = dateikarte.filter(({ datei }) => mitZwillingen.includes(datei)).flatMap(({ tests: erreichend }) => erreichend);
     return tests.includes(umbau.abnahme) ? [] : [`${umbau.id}: abnahme ${umbau.abnahme} gehört laut Dateikarte zu keiner Datei des Umbaus (${dateien.join(", ")})`];
   });
   return mitRegel(REGEL.umbauTest, befunde);
@@ -534,7 +539,8 @@ export function schnittBefunde(schnitt, eingaben) {
 }
 
 export function umbauPitchKarten(schnitt, root) {
-  return umbauKarten(root, liste(schnitt?.auftraege).filter(istObjekt).filter(istUmbau), UMBAU_NUMMER);
+  const umbauten = liste(schnitt?.auftraege).filter(istObjekt).filter(istUmbau);
+  return umbauKarten(root, umbauten.map((umbau) => ({ ...umbau, erwarteteDateien: mitJsZwillingen(liste(umbau.erwarteteDateien)) })), UMBAU_NUMMER);
 }
 
 async function karten(schnitt, { berichte, root, nurUmbau }) {
