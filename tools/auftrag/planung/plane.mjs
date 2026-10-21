@@ -159,6 +159,7 @@ export class Planung {
     this.wegZaehler = new Map();
     this.wegOffen = [];
     this.abgewiesenBei = null;
+    this.nachfrageWellen = 0;
     this.kostendeckel = null;
   }
 
@@ -392,7 +393,7 @@ export class Planung {
   }
 
   legeFingerabdruck() {
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler] };
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], nachfrageWellen: this.nachfrageWellen };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
@@ -735,6 +736,7 @@ class Fortsetzung extends Planung {
     this.wegOffen = zustand.wegOffen;
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
+    this.nachfrageWellen = zustand.nachfrageWellen;
     return [];
   }
 
