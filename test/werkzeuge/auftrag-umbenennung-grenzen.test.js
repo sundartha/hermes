@@ -312,21 +312,37 @@ test("auftrag-umbenennung-grenzen: nennt eine JSON-Datei unter plaene/…/planun
   gehtDurch(context, { "plaene/P-900-probe/planung/auftraege.json": JSON.stringify({ text: "Umbau von src/zahl.js" }) });
 });
 
-const AEHNLICH_ABER_VERWEIS = [
-  ["plaene/P-900-probe/skript.js", 'export const PFAD = "src/zahl.js";\n'],
-  ["plaene/P-900-probe/notiz.txt", "src/zahl.js\n"],
-  ["plaene/P-900-probe/ablauf.yml", "bereich: src/zahl.js\n"],
-  ["plaene/P-900-probe/phase.JSON", PHASE_MIT_ALTER],
-  ["Plaene/P-900-probe/phase.json", PHASE_MIT_ALTER],
-  ["docs/plaene/phase.json", PHASE_MIT_ALTER],
-  ["plaene-alt/phase.json", PHASE_MIT_ALTER],
-];
-
-for (const [datei, text] of AEHNLICH_ABER_VERWEIS) {
-  test(`auftrag-umbenennung-grenzen: nennt ${datei} die alte Datei, ist das Paar geändert`, (context) => {
-    bleibtGeaendert(mitVerweis(context, { [datei]: text }), abgelehntHinweis(datei));
-  });
+function verweisVon(context, datei, text) {
+  bleibtGeaendert(mitVerweis(context, { [datei]: text }), abgelehntHinweis(datei));
 }
+
+test("auftrag-umbenennung-grenzen: nennt ein Skript unter plaene/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "plaene/P-900-probe/skript.js", 'export const PFAD = "src/zahl.js";\n');
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine Textdatei unter plaene/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "plaene/P-900-probe/notiz.txt", "src/zahl.js\n");
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine YAML-Datei unter plaene/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "plaene/P-900-probe/ablauf.yml", "bereich: src/zahl.js\n");
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine Phasendatei mit Endung .JSON die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "plaene/P-900-probe/phase.JSON", PHASE_MIT_ALTER);
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine Phasendatei unter Plaene/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "Plaene/P-900-probe/phase.json", PHASE_MIT_ALTER);
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine Phasendatei unter docs/plaene/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "docs/plaene/phase.json", PHASE_MIT_ALTER);
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine Phasendatei unter plaene-alt/ die alte Datei, ist das Paar geändert", (context) => {
+  verweisVon(context, "plaene-alt/phase.json", PHASE_MIT_ALTER);
+});
 
 test("auftrag-umbenennung-grenzen: nennen eine Phasendatei und knip.json die alte Datei, ist das Paar wegen knip.json geändert", (context) => {
   const dateien = { "plaene/P-900-probe/phase.json": PHASE_MIT_ALTER, "knip.json": JSON.stringify({ entry: ["src/zahl.js"] }) };
