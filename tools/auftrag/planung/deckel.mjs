@@ -32,12 +32,21 @@ function vorigeKosten(root, phase) {
   }
 }
 
+function istLauf(eintrag) {
+  return Number.isInteger(eintrag?.laeufe) && eintrag.laeufe > 0 && Number.isFinite(eintrag.token);
+}
+
 function mittel(eintrag) {
-  return Number.isInteger(eintrag?.laeufe) && eintrag.laeufe > 0 && Number.isFinite(eintrag.token) ? eintrag.token / eintrag.laeufe : 0;
+  return istLauf(eintrag) ? eintrag.token / eintrag.laeufe : 0;
 }
 
 export function gemesseneKosten(root, beteiligte) {
   return kostenDesAuftrags(root, beteiligte.filter(({ sitzung }) => sitzung !== undefined)).summe.gesamt;
+}
+
+export function gemesseneLaeufe(root, sitzungen) {
+  const { sitzungen: gemessen, summe } = kostenDesAuftrags(root, sitzungen);
+  return { laeufe: gemessen.length, token: summe.gesamt };
 }
 
 export class Kostendeckel {
@@ -48,12 +57,18 @@ export class Kostendeckel {
     this.stand = {};
   }
 
-  vorschau(rollen) {
-    return Math.round(rollen.reduce((summe, rolle) => summe + mittel(this.jeLauf[rolle] ?? this.vorige[rolle]), 0));
+  mittelJeLauf(rolle, gemessen) {
+    if (this.jeLauf[rolle] !== undefined) return mittel(this.jeLauf[rolle]);
+    const bekannt = [this.vorige[rolle], gemessen].filter(istLauf);
+    return bekannt.length > 0 ? Math.max(...bekannt.map(mittel)) : Math.max(0, ...Object.values(this.jeLauf).map(mittel));
   }
 
-  ueber(gemessen, rollen) {
-    const vorschau = this.vorschau(rollen);
+  vorschau(rollen, gemessenJeRolle = {}) {
+    return Math.round(rollen.reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, gemessenJeRolle[rolle]), 0));
+  }
+
+  ueber(gemessen, rollen, gemessenJeRolle) {
+    const vorschau = this.vorschau(rollen, gemessenJeRolle);
     if (gemessen + vorschau <= this.deckel) return null;
     this.stand = { gemessen, vorschau };
     return `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${rollen.length} Läufe (${[...new Set(rollen)].join(", ")}) wären es ${gemessen + vorschau}; plane hält vor dieser Welle an und wartet auf eine Entscheidung`;

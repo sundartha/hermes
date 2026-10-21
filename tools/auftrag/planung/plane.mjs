@@ -20,7 +20,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { Kostendeckel, deckelAus, gemesseneKosten } from "./deckel.mjs";
+import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -191,10 +191,16 @@ export class Planung {
     return gemesseneKosten(this.root, this.team.beteiligte);
   }
 
+  wegpruefKosten() {
+    const sitzungen = new Set(this.wegpruefungen.map(({ sitzung }) => sitzung));
+    const pruefer = this.team.beteiligte.filter(({ rolle, sitzung }) => rolle === "pruefer-planung" && sitzungen.has(sitzung));
+    return { "pruefer-planung": gemesseneLaeufe(this.root, pruefer) };
+  }
+
   pruefeDeckel(rollen) {
     if (this.kostendeckel === null) return 0;
     const gemessen = this.gemessen();
-    const grund = this.kostendeckel.ueber(gemessen, rollen);
+    const grund = this.kostendeckel.ueber(gemessen, rollen, this.wegpruefKosten());
     if (grund === null) return gemessen;
     if (this.berichte.length > 0) this.legeFingerabdruck();
     throw new Ende(EXIT_DECKEL, grund);
@@ -209,7 +215,7 @@ export class Planung {
   }
 
   async einzeln(wer, text) {
-    const [antwort] = await this.team.gruppe([{ rolle: wer.rolle, lauf: () => this.team.frage(wer, text) }]);
+    const [antwort] = await this.welle([{ rolle: wer.rolle, lauf: () => this.team.frage(wer, text) }]);
     return antwort;
   }
 
@@ -713,7 +719,7 @@ export class Planung {
       const wer = this.team.teilnehmer("entwurf");
       return { rolle: wer.rolle, lauf: () => this.schreibeEntwurf(wer, this.entwurfNachricht(bereich, namen), namen) };
     });
-    const ergebnisse = await this.team.gruppe(laeufe);
+    const ergebnisse = await this.welle(laeufe);
     const offen = ergebnisse.flatMap(({ befunde }, stelle) => befunde.map((befund) => `Entwurf ${bereiche[stelle]}: ${befund}`));
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde zu Entwürfen blieben nach der Rücksendung offen", offen);
     const entwuerfe = Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, ergebnisse[stelle].entwurf]));
