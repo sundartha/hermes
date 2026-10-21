@@ -4,23 +4,21 @@ import { join } from "node:path";
 import { BELEGE } from "../bericht.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
 import { istObjekt } from "./erkundung.mjs";
+import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
-const TOKEN = /^[1-9]\d*$/;
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
-const FREIGABE = /^Planung freigegeben:(.*)$/m;
-const FREIGABE_WERT = /^ ([1-9]\d*) Token\s*$/;
 
 function freigabeAusPitch(pitch) {
-  const zeile = FREIGABE.exec(pitch);
-  if (zeile === null) return { fehler: `pitch.md hat keine Zeile „${FREIGABE_ZEILE}“ und --deckel fehlt; ohne freigegebene Token-Menge plant plane nicht` };
-  const wert = FREIGABE_WERT.exec(zeile[1]);
-  return wert === null ? { fehler: `pitch.md: die Zeile „${zeile[0].trim()}“ braucht die Form „${FREIGABE_ZEILE}“ mit einer ganzen Zahl über 0` } : { deckel: Number(wert[1]) };
+  const gefunden = zahlZeile(pitch, { name: "Planung freigegeben", einheit: "Token" });
+  if (gefunden === undefined) return { fehler: `pitch.md hat keine Zeile „${FREIGABE_ZEILE}“ und --deckel fehlt; ohne freigegebene Token-Menge plant plane nicht` };
+  return gefunden.zahl === undefined ? { fehler: `pitch.md: die Zeile „${gefunden.zeile.trim()}“ braucht die Form „${FREIGABE_ZEILE}“ mit einer ganzen Zahl über 0` } : { deckel: gefunden.zahl };
 }
 
 export function deckelAus(angabe, pitch) {
   if (angabe === undefined) return freigabeAusPitch(pitch);
-  return TOKEN.test(angabe) ? { deckel: Number(angabe) } : { fehler: `--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}` };
+  const deckel = ganzeZahl(angabe);
+  return deckel === undefined ? { fehler: `--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}` } : { deckel };
 }
 
 function vorigeKosten(root, phase) {
