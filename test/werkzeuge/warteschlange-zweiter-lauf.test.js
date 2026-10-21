@@ -11,6 +11,8 @@ const ZWEITER_PROTOKOLL = ".pruefung/regression-zweiter-lauf-1.log";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const SHA_LAENGE = 40;
+const TEST_GRENZE_MS = 50;
+const ERSTER_LAUF_DAUER_MS = 500;
 const IM_CI = {
   GITHUB_SHA: "c".repeat(SHA_LAENGE),
   GITHUB_SERVER_URL: "https://github.com",
@@ -153,6 +155,24 @@ test("ein anders benannter Test in einer Datei mit SG-Test bekommt keinen zweite
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
   assert.deepEqual(ergebnis.wackelig.rot, [
     { datei: WACKEL_DATEI, test: WACKEL_NAME, grund: "Bedrohungskatalog, kein zweiter Lauf" },
+  ]);
+  assert.equal(ergebnis.zweiterLief, false);
+});
+
+test("ein Test, der im ersten Lauf die Zeitgrenze überschreitet, bekommt keinen zweiten Lauf", (context) => {
+  const zeitablauf = [
+    'import { existsSync, writeFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'const merker = new URL("../merker.txt", import.meta.url);',
+    "const schonEinmal = existsSync(merker);",
+    'writeFileSync(merker, "gelaufen");',
+    `test(${JSON.stringify(WACKEL_NAME)}, { timeout: ${TEST_GRENZE_MS} }, () => new Promise((fertig) => setTimeout(fertig, schonEinmal ? 0 : ${ERSTER_LAUF_DAUER_MS})));`,
+    "",
+  ].join("\n");
+  const ergebnis = lauf(context, { [WACKEL_DATEI]: zeitablauf });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.deepEqual(ergebnis.wackelig.rot, [
+    { datei: WACKEL_DATEI, test: WACKEL_NAME, grund: "Zeitgrenze überschritten, kein zweiter Lauf" },
   ]);
   assert.equal(ergebnis.zweiterLief, false);
 });

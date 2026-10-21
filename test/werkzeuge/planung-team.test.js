@@ -326,7 +326,7 @@ test("team: scheitert der Vergleich der Bäume, bricht der Abdruck ab, statt kei
 });
 
 const VERBINDUNG_WEG = "API Error: Connection dropped (ECONNRESET)";
-const LIMIT_SPERRE_MS = 50;
+const LIMIT_SPERRE_MS = 3000;
 const ERSATZ_CLAUDE = `#!${process.execPath}
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
