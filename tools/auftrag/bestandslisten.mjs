@@ -61,6 +61,14 @@ function gatesUmgezogen(gates, { neuFuer }) {
   );
 }
 
+function sortiertePfadlisteUmgezogen(liste, { neuFuer }) {
+  const umgezogen = liste.map((pfad) => {
+    const neu = neuFuer.get(pfad);
+    return neu === undefined || liste.includes(neu) ? pfad : neu;
+  });
+  return isDeepStrictEqual(umgezogen, liste) ? liste : umgezogen.toSorted();
+}
+
 const LISTEN = [
   { pfad: "eslint-suppressions.json", umziehen: schluesselUmgezogen },
   { pfad: "eslint-legacy-exceptions.json", umziehen: schluesselUmgezogen },
@@ -69,6 +77,7 @@ const LISTEN = [
   { pfad: "tools/basis/knip.json", umziehen: knipUmgezogen },
   { pfad: "tools/basis/semgrep.json", umziehen: semgrepUmgezogen },
   { pfad: "tools/gate-tests.json", umziehen: gatesUmgezogen },
+  { pfad: "tools/auftrag/vorbereitung-bereich.json", umziehen: sortiertePfadlisteUmgezogen },
 ];
 
 export const LISTENPFADE = LISTEN.map(({ pfad }) => pfad);
@@ -87,6 +96,11 @@ function textUmgezogen(text, { alt, neu }, nachher) {
     return wert === ziel ? literal : JSON.stringify(ziel);
   });
   return isDeepStrictEqual(JSON.parse(ersetzt), nachher) ? ersetzt : undefined;
+}
+
+function entfernteEintraege({ alt, neu }) {
+  const bleibt = kontingent(gezaehlt(neu));
+  return alt.filter((wert) => !bleibt(wert)).length;
 }
 
 export function lesbar(datei) {
@@ -110,7 +124,7 @@ function listeNachUmzug({ pfad, umziehen }, { root, neuFuer }) {
   const stellen = { alt: texte(vorher), neu: texte(nachher) };
   const neu = isDeepStrictEqual(vorher, nachher) ? text : textUmgezogen(text, stellen, nachher);
   if (neu === undefined) meldungen.push("die Einträge ließen sich im Text nicht eindeutig ersetzen, die Liste bleibt");
-  return { pfad, text, neu: neu ?? text, meldungen, anzahl: neu === undefined ? 0 : stellen.alt.filter((wert, stelle) => wert !== stellen.neu[stelle]).length };
+  return { pfad, text, neu: neu ?? text, meldungen, anzahl: neu === undefined ? 0 : entfernteEintraege(stellen) };
 }
 
 export function listenNachUmzug(root, neuFuer) {

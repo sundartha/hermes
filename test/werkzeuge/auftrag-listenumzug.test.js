@@ -227,3 +227,40 @@ test("auftrag-listenumzug: steht die neue Datei schon als Schlüssel in einer Li
   const probe = umbenannt(vorbereitet(context, { [UNTERDRUECKUNGEN]: beide }), TEIL_TS);
   bleibtJedeListe(probe, /eslint-suppressions\.json nennt die alte Datei in einem Eintrag, den der Listenumzug nicht umschreibt$/m);
 });
+
+const BEREICH = "tools/auftrag/vorbereitung-bereich.json";
+
+function mitBereich(context, eintraege) {
+  const probe = vorbereitet(context, { [BEREICH]: `${JSON.stringify(eintraege, null, 2)}\n` });
+  probe.vorher[BEREICH] = lies(probe, BEREICH);
+  return probe;
+}
+
+function bereich(probe) {
+  return JSON.parse(lies(probe, BEREICH));
+}
+
+test("auftrag-listenumzug: eine nur-Typen-Umbenennung zieht den Eintrag der Bereichsliste auf die neue Datei, die Anzahl bleibt, andere Einträge bleiben", (context) => {
+  const probe = umbenannt(mitBereich(context, ["src/rest.js", `src/${ALT}`, "src/zuletzt.js"]), TEIL_TS);
+  assert.match(umgezogen(probe), /tools\/auftrag\/vorbereitung-bereich\.json: 1 Pfade auf die neue Datei umgezogen\./);
+  assert.equal(lies(probe, BEREICH), probe.vorher[BEREICH].replace(ALT, NEU));
+  assert.deepEqual(bereich(probe), ["src/rest.js", `src/${NEU}`, "src/zuletzt.js"]);
+});
+
+test("auftrag-listenumzug: bei einer Umbenennung mit Laufzeitänderung bleibt die Bereichsliste", (context) => {
+  const probe = umbenannt(mitBereich(context, ["src/rest.js", `src/${ALT}`]), TEIL_MIT_LAUFZEIT);
+  umgezogen(probe);
+  assert.equal(lies(probe, BEREICH), probe.vorher[BEREICH]);
+});
+
+test("auftrag-listenumzug: gerät die Bereichsliste durch den Umzug aus der Ordnung, steht sie danach sortiert und ohne Doppel da", (context) => {
+  const probe = umbenannt(mitBereich(context, ["src/rest.js", `src/${ALT}`, "src/teil.m.js"]), TEIL_TS);
+  assert.match(umgezogen(probe), /tools\/auftrag\/vorbereitung-bereich\.json: 1 Pfade auf die neue Datei umgezogen\./);
+  assert.deepEqual(bereich(probe), ["src/rest.js", "src/teil.m.js", `src/${NEU}`]);
+});
+
+test("auftrag-listenumzug: steht die neue Datei schon in der Bereichsliste, bleibt der alte Eintrag, das Paar zählt nicht als nur Typen, und keine Liste ändert sich", (context) => {
+  const probe = umbenannt(mitBereich(context, [`src/${ALT}`, `src/${NEU}`]), TEIL_TS);
+  bleibtJedeListe(probe, /tools\/auftrag\/vorbereitung-bereich\.json nennt die alte Datei in einem Eintrag, den der Listenumzug nicht umschreibt$/m);
+  assert.equal(lies(probe, BEREICH), probe.vorher[BEREICH]);
+});

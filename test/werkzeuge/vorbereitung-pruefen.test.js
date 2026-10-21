@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -182,9 +182,14 @@ test("vorbereitung-pruefen: mit --bereich zählen nur die Dateien der Liste, ohn
   assert.match(ohneBasis.stderr, /^Abbruch: Aufruf: .*--basis/m);
 });
 
-test("vorbereitung-pruefen: die Bereichsliste nennt nur JavaScript-Dateien unter src/, sortiert und ohne Doppel", () => {
+test("vorbereitung-pruefen: die Bereichsliste nennt nur JavaScript-Dateien unter src/ oder ihre mit der Umbenennung umgezogene TypeScript-Datei, sortiert und ohne Doppel", () => {
   assert.ok(BEREICH.length > 0);
   assert.deepEqual(BEREICH, [...new Set(BEREICH)].toSorted());
-  for (const datei of BEREICH) assert.match(datei, /^src\/.+\.js$/);
-  assert.ok(!BEREICH.includes("src/store/state-ops.js"));
+  for (const datei of BEREICH) assert.match(datei, /^src\/.+\.[jt]s$/);
+  for (const datei of BEREICH.filter((eintrag) => eintrag.endsWith(".ts"))) {
+    const javascript = datei.replace(/\.ts$/, ".js");
+    assert.ok(existsSync(join(REPO_ROOT, datei)) && !existsSync(join(REPO_ROOT, javascript)), datei);
+    assert.ok(!BEREICH.includes(javascript), datei);
+  }
+  assert.ok(!BEREICH.includes("src/store/state-ops.js") && !BEREICH.includes("src/store/state-ops.ts"));
 });
