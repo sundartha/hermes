@@ -191,22 +191,45 @@ function yamlZeile(zeile) {
   return zeileLesen(zeile, { shell: false, stapel: [] }).kommentar;
 }
 
-export function yamlKommentare(zeilen) {
-  const gefunden = [];
+function blockskalare(zeilen) {
+  const bloecke = [];
   let index = 0;
   while (index < zeilen.length) {
-    const zeile = zeilen[index];
-    const kommentar = yamlZeile(zeile);
-    if (kommentar !== undefined) gefunden.push({ zeile: index + 1, text: kommentar });
+    const kopf = BLOCKSKALAR_KOPF.exec(zeilen[index]);
     index += 1;
-    const kopf = BLOCKSKALAR_KOPF.exec(zeile);
     if (kopf === null) continue;
     const ende = blockEnde(zeilen, index, kopf[1].length);
-    if (kopf[2] === SHELL_SCHLUESSEL) {
-      gefunden.push(...shellKommentare(ohneEinzug(zeilen.slice(index, ende)), index + 1));
-    }
+    const shell = kopf[2] === SHELL_SCHLUESSEL ? { anfang: index + 1, zeilen: ohneEinzug(zeilen.slice(index, ende)) } : undefined;
+    bloecke.push({ rumpf: index, ende, shell });
     index = ende;
   }
+  return bloecke;
+}
+
+export function shellBloecke(zeilen) {
+  return blockskalare(zeilen)
+    .map(({ shell }) => shell)
+    .filter((shell) => shell !== undefined);
+}
+
+function yamlZeilen(zeilen, von, bis) {
+  const gefunden = [];
+  for (let index = von; index < bis; index += 1) {
+    const kommentar = yamlZeile(zeilen[index]);
+    if (kommentar !== undefined) gefunden.push({ zeile: index + 1, text: kommentar });
+  }
+  return gefunden;
+}
+
+export function yamlKommentare(zeilen) {
+  const gefunden = [];
+  let weiter = 0;
+  for (const { rumpf, ende, shell } of blockskalare(zeilen)) {
+    gefunden.push(...yamlZeilen(zeilen, weiter, rumpf));
+    if (shell !== undefined) gefunden.push(...shellKommentare(shell.zeilen, shell.anfang));
+    weiter = ende;
+  }
+  gefunden.push(...yamlZeilen(zeilen, weiter, zeilen.length));
   return gefunden;
 }
 
