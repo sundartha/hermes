@@ -143,7 +143,8 @@ export function messmenge({ bereich, bereiche, geaendert, alt }) {
   const genannt = genannteQuellen(besucht, { rev: alt.rev, vorhanden: new Set(alleQuellen) });
   const eigene = quellenDesBereichs(bereich, bereiche, alleQuellen);
   const dateien = [...new Set([...eigene, ...quellen, ...genannt])].sort();
-  return { dateien, alt: tests, beobachtet: besucht };
+  const menge = { dateien, alt: tests, beobachtet: besucht };
+  return { ...menge, unmessbar: mengenVerstoesse({ geaendert, alt, menge }) };
 }
 
 function kette(test, graph) {

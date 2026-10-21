@@ -6,6 +6,7 @@ import {
   erreichendeTests,
   graphImStand,
   importgraph,
+  messmenge,
 } from "../../tools/tests-ausmisten/messmenge.mjs";
 import { FREMDE_QUELLE, GRUNDDATEIEN, RECHNEN_TEST } from "./ausmisten/hilfen.mjs";
 import {
@@ -208,4 +209,25 @@ test("ausmisten-dynamisch: zwei Stände parallel liefern je ihren eigenen Graphe
   assert.deepEqual(erreichendeTests("src/zwei.js", alt), []);
   assert.deepEqual(erreichendeTests("src/zwei.js", neu), ["test/a.test.js"]);
   assert.deepEqual(erreichendeTests("src/eins.js", neu), []);
+});
+
+test("ausmisten-dynamisch: die Messmenge meldet eine geänderte Hilfsdatei ohne Testnutzer ohne zweiten Aufruf als unmessbar", async (context) => {
+  const repo = probeRepository(context, {
+    "package.json": `${JSON.stringify({ type: "module" })}\n`,
+    "src/eins.js": "export const eins = 1;\n",
+    "test/a.test.js": 'import "../src/eins.js";\n',
+    "test/lose.js": "export const lose = 1;\n",
+  });
+  const vorher = cwd();
+  chdir(repo);
+  try {
+    const alt = { rev: "HEAD", graph: await graphImStand("HEAD") };
+    const menge = (geaendert) => messmenge({ bereich: "post", bereiche: [], geaendert, alt });
+    assert.deepEqual(menge(["test/a.test.js"]).unmessbar, []);
+    assert.deepEqual(menge(["test/lose.js"]).unmessbar, [
+      "test/lose.js: keine Testdatei lädt oder nennt diese Datei; ihre Änderung lässt sich nicht messen",
+    ]);
+  } finally {
+    chdir(vorher);
+  }
 });

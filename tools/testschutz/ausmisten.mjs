@@ -8,7 +8,7 @@ import {
   laufTitel,
   pfadUndEreignis,
 } from "../tests-ausmisten/herkunft.mjs";
-import { graphImStand, mengenVerstoesse, messmenge } from "../tests-ausmisten/messmenge.mjs";
+import { graphImStand, messmenge } from "../tests-ausmisten/messmenge.mjs";
 import {
   BRANCH_PRAEFIX,
   bereichAusBranch,
@@ -168,8 +168,7 @@ async function verlangeMessmenge(basis, bereich) {
   const alt = { rev: basis, graph };
   const geaendert = testaenderungen(basis, "HEAD");
   const menge = messmenge({ bereich, bereiche: leseBereiche(), geaendert, alt });
-  const unmessbar = mengenVerstoesse({ geaendert, alt, menge });
-  verlange(unmessbar.length === 0, unmessbar.join(" "));
+  verlange(menge.unmessbar.length === 0, menge.unmessbar.join(" "));
   return menge;
 }
 
