@@ -11,6 +11,7 @@ const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
 const ESLINT_KONFIGURATION = "export default [{ ignores: ['ausgelassen/**'] }];\n";
+const WORKFLOW_PFAD = ".github/workflows/probe.yml";
 
 function loeschen(directory, args) {
   const run = spawnSync(process.execPath, [SCRIPT, ...args], {
@@ -142,6 +143,57 @@ test("kommentare-loeschen: ein Shell-Skript, das Bash danach anders liest, bleib
   assert.equal(lauf.status, EXIT_FINDING, lauf.output);
   assert.equal(inhalt(directory, "scripts/notiz.sh"), heredoc);
   assert.match(lauf.output, /scripts\/notiz\.sh: Bash liest danach einen anderen Befehl, Datei bleibt unverändert/);
+});
+
+function workflow(...bloecke) {
+  const jobs = bloecke.flatMap((zeilen, nummer) => [
+    `  job${nummer}:`,
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - run: |",
+    ...zeilen.map((zeile) => `          ${zeile}`),
+  ]);
+  return ["name: probe", "jobs:", ...jobs, ""].join("\n");
+}
+
+function workflowLoeschen(context, vorher) {
+  const directory = probeRepository(context, { "eslint.config.js": ESLINT_KONFIGURATION, [WORKFLOW_PFAD]: vorher });
+  const lauf = loeschen(directory, [".github"]);
+  return { lauf, nachher: inhalt(directory, WORKFLOW_PFAD) };
+}
+
+function workflowBleibt(context, vorher) {
+  const { lauf, nachher } = workflowLoeschen(context, vorher);
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.equal(nachher, vorher);
+  return lauf;
+}
+
+function workflowWird(context, vorher, erwartet) {
+  const { lauf, nachher } = workflowLoeschen(context, vorher);
+  assert.equal(lauf.status, EXIT_OK, lauf.output);
+  assert.equal(nachher, erwartet);
+}
+
+test("kommentare-loeschen: ein Heredoc in einem run-Block, den Bash danach anders liest, lässt die Workflow-Datei unverändert und führt zu Exit 1", (context) => {
+  const lauf = workflowBleibt(context, workflow(["cat <<EOF > notiz.md", "# Überschrift", "EOF"]));
+  assert.match(lauf.output, /\.github\/workflows\/probe\.yml: Bash liest danach einen anderen Befehl, Datei bleibt unverändert/);
+});
+
+test("kommentare-loeschen: weicht nur einer von zwei run-Blöcken ab, bleibt die ganze Workflow-Datei unverändert", (context) => {
+  workflowBleibt(context, workflow(["# nur Kommentar", "echo eins"], ["cat <<EOF > notiz.md", "# Überschrift", "EOF"]));
+});
+
+test("kommentare-loeschen: ein run-Block, den Bash nicht lesen kann, lässt die Workflow-Datei unverändert und führt zu Exit 1", (context) => {
+  workflowBleibt(context, workflow(["if true; then", "  echo a # Kommentar"]));
+});
+
+test("kommentare-loeschen: Kommentare in einem run-Block verschwinden, Zeichenketten mit # bleiben", (context) => {
+  workflowWird(context, workflow(["# erklärt", 'echo "a # b" # hinten']), workflow(['echo "a # b"']));
+});
+
+test("kommentare-loeschen: ein GitHub-Ausdruck in einem run-Block bleibt, der Kommentar dahinter verschwindet", (context) => {
+  workflowWird(context, workflow(['echo "${{ github.sha }}" # hinten']), workflow(['echo "${{ github.sha }}"']));
 });
 
 test("kommentare-loeschen: ohne Ordner endet der Aufruf mit Exit 2", (context) => {
