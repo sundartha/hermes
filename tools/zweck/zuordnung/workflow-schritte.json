@@ -55,6 +55,13 @@
   },
   ".github/workflows/ci.yml › pruefungen › Typprüfung": {
     "zweck": "typprüfung",
+    "beleg": ".github/workflows/ci.yml"
+  },
+  ".github/workflows/ci.yml › pruefungen › Zweck der Typprüfung": {
+    "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+  },
+  ".github/workflows/ci.yml › pruefungen › Typabdeckung": {
+    "zweck": "typprüfung",
     "beleg": "tools/typabdeckung.mjs"
   },
   ".github/workflows/ci.yml › pruefungen › Typabdeckung sinkt nicht": {
