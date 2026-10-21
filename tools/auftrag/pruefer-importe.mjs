@@ -2,7 +2,7 @@ import { posix } from "node:path";
 
 import { gitAusgabe } from "./pruefer-auswahl.mjs";
 
-const DATEI_MODI = new Set(["100644", "100755"]);
+export const DATEI_MODI = new Set(["100644", "100755"]);
 const KB = 1024;
 const MAX_DATEIEN = 40;
 const MAX_BYTES = 409_600;

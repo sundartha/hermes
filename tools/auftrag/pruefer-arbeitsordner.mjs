@@ -7,6 +7,7 @@ import { gitAusgabe } from "./pruefer-auswahl.mjs";
 import { dateienImBaum, importeDes } from "./pruefer-importe.mjs";
 import { katalogAbgleich } from "./pruefer-zweck.mjs";
 import { ersetzeSteuerzeichen } from "./pruefer-schema.mjs";
+import { reineUmbenennungen, umbenennungsZeile } from "./pruefer-umbenennung.mjs";
 import { roteAusNachricht } from "./rote-pruefungen.mjs";
 import { kenntZweck, zweckBlock } from "./zweck.mjs";
 
@@ -65,7 +66,22 @@ function patchVon(sha, pfad, root) {
 }
 
 function prPatchVon(commit, { basis, root }) {
-  return gitAusgabe(["diff", ...DIFF_OPTIONEN, basis, commit.sha], root, { kodierung: "buffer" });
+  const { paare, uebrige } = reineUmbenennungen({ vorher: basis, nachher: commit.sha }, root);
+  if (paare.length === 0) return gitAusgabe(["diff", ...DIFF_OPTIONEN, basis, commit.sha], root, { kodierung: "buffer" });
+  const zeilen = Buffer.from(paare.map(umbenennungsZeile).join(""));
+  if (uebrige.length === 0) return zeilen;
+  const args = ["--literal-pathspecs", "diff", ...DIFF_OPTIONEN, basis, commit.sha, "--", ...uebrige];
+  return Buffer.concat([zeilen, gitAusgabe(args, root, { kodierung: "buffer" })]);
+}
+
+function patchesDes(commit, root) {
+  const dateien = new Set(commit.dateien);
+  const paare = reineUmbenennungen({ nachher: commit.sha }, root).paare.filter(({ alt, neu }) => dateien.has(alt) && dateien.has(neu));
+  const alte = new Set(paare.map(({ alt }) => alt));
+  const zeileFuer = new Map(paare.map((paar) => [paar.neu, umbenennungsZeile(paar)]));
+  return commit.dateien
+    .filter((pfad) => !alte.has(pfad))
+    .map((pfad) => ({ pfad, inhalt: zeileFuer.has(pfad) ? Buffer.from(zeileFuer.get(pfad)) : patchVon(commit.sha, pfad, root) }));
 }
 
 function zielIn(wurzel, ziel) {
@@ -275,9 +291,10 @@ export function neuerOrdner(praefix) {
 export function baueArbeitsordner(commit, kontext) {
   const referenzen = leseReferenzen();
   const ordner = neuerOrdner("pruefer-");
-  const eintraege = commit.dateien.map((pfad, index) => {
-    const patch = `diff/${nummer(index, commit.dateien.length)}.patch`;
-    schreibe(join(ordner, patch), patchVon(commit.sha, pfad, kontext.root));
+  const dateiPatches = patchesDes(commit, kontext.root);
+  const eintraege = dateiPatches.map(({ pfad, inhalt }, index) => {
+    const patch = `diff/${nummer(index, dateiPatches.length)}.patch`;
+    schreibe(join(ordner, patch), inhalt);
     return { patch, pfad, ...legeDateiAb(ordner, { sha: commit.sha, pfad, root: kontext.root }) };
   });
   const patches = eintraege.map(({ patch }) => patch);
