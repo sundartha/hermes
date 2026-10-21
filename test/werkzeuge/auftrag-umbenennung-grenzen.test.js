@@ -315,6 +315,9 @@ test("auftrag-umbenennung-grenzen: nennt eine JSON-Datei unter plaene/…/planun
 const AEHNLICH_ABER_VERWEIS = [
   ["plaene/P-900-probe/skript.js", 'export const PFAD = "src/zahl.js";\n'],
   ["plaene/P-900-probe/notiz.txt", "src/zahl.js\n"],
+  ["plaene/P-900-probe/ablauf.yml", "bereich: src/zahl.js\n"],
+  ["plaene/P-900-probe/phase.JSON", PHASE_MIT_ALTER],
+  ["Plaene/P-900-probe/phase.json", PHASE_MIT_ALTER],
   ["docs/plaene/phase.json", PHASE_MIT_ALTER],
   ["plaene-alt/phase.json", PHASE_MIT_ALTER],
 ];
