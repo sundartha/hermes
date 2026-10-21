@@ -1,0 +1,7 @@
+{
+  "titel": "Ordner tasks im Wurzelordner (bleibt verboten)",
+  "dateien": {
+    "tasks/plan.json": ["{", "  \"schritte\": []", "}"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}

@@ -1,0 +1,7 @@
+{
+  "titel": "Anderer neuer Ordner notizen im Wurzelordner",
+  "dateien": {
+    "notizen/plan.json": ["{", "  \"schritte\": []", "}"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}

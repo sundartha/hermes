@@ -1,0 +1,7 @@
+{
+  "titel": "Ordner plaene-alt im Wurzelordner (ähnlicher Name, vom Eintrag plaene nicht gedeckt)",
+  "dateien": {
+    "plaene-alt/phase.json": ["{", "  \"phase\": \"P-900-beispiel\"", "}"]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}
