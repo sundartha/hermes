@@ -1,4 +1,4 @@
-const VERBINDUNGSFEHLER = /^API Error: (?:Connection dropped \(ECONNRESET\)|Can't reach the API server — check your internet or DNS \(ENOTFOUND\))$/;
+const VERBINDUNGSFEHLER = /^API Error: (?:Connection dropped \(ECONNRESET\)|Can't reach the API server — check your internet or DNS \(ENOTFOUND\)|Connection refused — a firewall or proxy may be blocking it \(ECONNREFUSED\)|No response from API \(waited 3m, then 10m on the retry\)\. If a proxy or gateway on your network holds responses until they complete, raise API_TIMEOUT_MS or CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS to wait longer\.)$/;
 
 export function netzabbruch(lauf) {
   return lauf.exitCode !== 0 && VERBINDUNGSFEHLER.test((lauf.volleAntwort ?? "").trim());

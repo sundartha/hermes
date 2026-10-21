@@ -114,7 +114,10 @@ function kostenZeile({ gemessen, summe }) {
 
 export function druckeBeleg(beleg, pfad) {
   console.log(`Auftrag ${beleg.auftrag}: ${beleg.ergebnis}${beleg.grund ? ` (${beleg.grund})` : ""}`);
-  for (const { rolle, agent, exitCode, grund } of beleg.agenten) {
+  for (const { rolle, agent, exitCode, grund, netzabbrueche = [] } of beleg.agenten) {
+    for (const { versuch, fehler, warteS } of netzabbrueche) {
+      console.log(`  Agent ${agent} (${rolle}): Netzabbruch, Versuch ${versuch}: ${fehler}; nach ${warteS} s mit derselben Sitzung fortgesetzt`);
+    }
     console.log(`  Agent ${agent} (${rolle}): Exit ${exitCode}${grund ? ` (${grund})` : ""}`);
   }
   for (const { name, befehl, exitCode } of beleg.pruefungen) {
