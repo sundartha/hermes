@@ -14,6 +14,7 @@ import { NUL, aenderungenSeit, git, vormerken } from "./git.mjs";
 
 const QUELLDATEI = /\.[cm]?[jt]s$/;
 const DOKUMENT = /\.md$/i;
+const PLANDATEI = /^plaene\/.+\.json$/;
 const BINAER = 0;
 const PFADZEICHEN = /^[\w.-]$/;
 const EXIT_GRUEN = 0;
@@ -116,7 +117,7 @@ function umzugsVorschau(root, offen) {
 async function verweisePruefen(paare, { root, eslint, ohneUmschreibbare }) {
   const offen = new Map(nurTypenPaare(paare).map((paar) => [paar.alt, paar]));
   const vorschau = umzugsVorschau(root, offen);
-  for (const datei of repoDateien(root).filter((pfad) => pfad !== "" && !DOKUMENT.test(pfad))) {
+  for (const datei of repoDateien(root).filter((pfad) => pfad !== "" && !DOKUMENT.test(pfad) && !PLANDATEI.test(pfad))) {
     const liste = vorschau.get(datei);
     const text = offen.size === 0 ? undefined : (liste?.neu ?? lesbarerText(root, datei));
     if (text === undefined) continue;

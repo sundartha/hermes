@@ -302,6 +302,34 @@ test("auftrag-umbenennung-grenzen: nennt nur ein Markdown-Dokument die alte Date
   gehtDurch(context, { "docs/zahl.md": "Siehe `src/zahl.js`.\n" });
 });
 
+const PHASE_MIT_ALTER = JSON.stringify({ phase: "P-900-probe", auftraege: [{ id: "A1", art: "umbau", bereich: "src/zahl.js" }] });
+
+test("auftrag-umbenennung-grenzen: nennt nur eine Phasendatei unter plaene/ die alte Datei, hält das die Umbenennung nicht auf", (context) => {
+  gehtDurch(context, { "plaene/P-900-probe/phase.json": PHASE_MIT_ALTER });
+});
+
+test("auftrag-umbenennung-grenzen: nennt eine JSON-Datei unter plaene/…/planung/ die alte Datei, hält das die Umbenennung nicht auf", (context) => {
+  gehtDurch(context, { "plaene/P-900-probe/planung/auftraege.json": JSON.stringify({ text: "Umbau von src/zahl.js" }) });
+});
+
+const AEHNLICH_ABER_VERWEIS = [
+  ["plaene/P-900-probe/skript.js", 'export const PFAD = "src/zahl.js";\n'],
+  ["plaene/P-900-probe/notiz.txt", "src/zahl.js\n"],
+  ["docs/plaene/phase.json", PHASE_MIT_ALTER],
+  ["plaene-alt/phase.json", PHASE_MIT_ALTER],
+];
+
+for (const [datei, text] of AEHNLICH_ABER_VERWEIS) {
+  test(`auftrag-umbenennung-grenzen: nennt ${datei} die alte Datei, ist das Paar geändert`, (context) => {
+    bleibtGeaendert(mitVerweis(context, { [datei]: text }), abgelehntHinweis(datei));
+  });
+}
+
+test("auftrag-umbenennung-grenzen: nennen eine Phasendatei und knip.json die alte Datei, ist das Paar wegen knip.json geändert", (context) => {
+  const dateien = { "plaene/P-900-probe/phase.json": PHASE_MIT_ALTER, "knip.json": JSON.stringify({ entry: ["src/zahl.js"] }) };
+  bleibtGeaendert(mitVerweis(context, dateien), abgelehntHinweis("knip.json"));
+});
+
 test("auftrag-umbenennung-grenzen: ein Import mit Escape in der Quelle wird nicht umgeschrieben, das Paar ist geändert", (context) => {
   const mitEscape = RECHNEN.replace('"./zahl.js"', '"./zahl.js\\\n"');
   const { nachgezogen, lauf } = mitVerweis(context, { "src/rechnen.js": mitEscape });
