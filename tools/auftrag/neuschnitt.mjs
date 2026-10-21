@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
-import { bereichSchluessel, brauchtRotenTest, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
+import { bereichSchluessel, brauchtRotenTest, istPitchPhase, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -21,7 +21,6 @@ export const PLANUNG_VERSUCHE = 2;
 const PHASENDATEI = "phase.json";
 const PFLICHT = ["pitch.md", "sicherheit.md"];
 const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
-const PITCH_PHASE = /^P-/i;
 const NEUSCHNITT_TEIL = /-n[1-9]\d*(?=-|$)/g;
 const NUMMER = /^[1-9]\d*$/;
 const PITCH_AENDERN = /^Pitch ändern:\s*(\S.*)$/m;
@@ -43,7 +42,7 @@ function abschnitt(titel, zeilen) {
 }
 
 function planOrt({ phase, phasendatei, root, plan }) {
-  if (plan === undefined || !PITCH_PHASE.test(phase.phase)) return null;
+  if (plan === undefined || !istPitchPhase(phase.phase)) return null;
   const datei = relative(root, resolve(root, phasendatei));
   const ordner = dirname(datei);
   const imRepo = !datei.startsWith("..") && !isAbsolute(datei);
