@@ -38,6 +38,7 @@ const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", 
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const EINRUECKUNG = 2;
+const LEERE_LISTE_WIE_ESLINT = "{\n}";
 export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
 export const PIN_HAKEN = ".githooks/pre-commit";
 export const PIN_FEHLT =
@@ -62,6 +63,11 @@ function nurEigeneGekuerzt(vorher, nachher, eigene) {
     const eintrag = eigene.has(datei) ? nachher[datei] : vorher[datei];
     return eintrag === undefined ? [] : [[datei, eintrag]];
   }));
+}
+
+function wieEslint(unterdrueckungen) {
+  if (Object.keys(unterdrueckungen).length === 0) return LEERE_LISTE_WIE_ESLINT;
+  return JSON.stringify(geordnet(unterdrueckungen), null, EINRUECKUNG);
 }
 
 function eintraege(text) {
@@ -366,7 +372,7 @@ class AuftragsLauf {
     const eigene = new Set(aenderungenSeit(this.basis, this.kontext.root).map(({ pfad: datei }) => datei));
     const alt = JSON.parse(vorher);
     const zusammen = nurEigeneGekuerzt(alt, JSON.parse(readFileSync(pfad, "utf8")), eigene);
-    writeFileSync(pfad, isDeepStrictEqual(zusammen, alt) ? vorher : JSON.stringify(geordnet(zusammen), null, EINRUECKUNG));
+    writeFileSync(pfad, isDeepStrictEqual(zusammen, alt) ? vorher : wieEslint(zusammen));
   }
 
   unterdrueckungenKuerzen() {
