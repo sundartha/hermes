@@ -59,6 +59,7 @@ Starte den Agenten `premortem` und gib ihm nur den Pfad der Phasendatei, keine Z
 ## Teil 2 starten
 1. `node tools/auftrag.mjs pruefe <phasendatei>` muss „grün“ melden. Eine Phasendatei aus einem Pitch (`plaene/P-…/phase.json`) schreiben nur `plane` und der Neuschnitt in `lauf`; meldet `pruefe` dort etwas anderes, legst du die Ausgabe dem Nutzer vor und änderst die Phasendatei nicht. Bei jeder anderen Phasendatei behebst du die genannten Befunde, ohne einen Satz aus Entwurf, Premortem oder `wasDarfNiePassieren` zu streichen; geht das nicht, fragst du den Nutzer.
 2. Committe die Phasendatei in deinem Worktree, bei einer Phase aus einem Pitch zusammen mit dem Ordner `planung/` daneben; `lauf` startet nur auf einem sauberen Stand, und der Neuschnitt liest die Berichte der Planung.
+   Jeder Commit mit Pitch, Design Doc, Sicherheitsprüfung oder Phasendatei trägt die eigene Zeile `Auftrag: <phase>/plan` (`<phase>` ist der Ordnername unter `plaene/`) und keine Zeile `Art:`: Die Commit-Prüfung verlangt eine Herkunftszeile (Regel `herkunft` in `commitlint.config.mjs`), und `lauf` zählt einen Commit nur mit `Auftrag:` und `Art:` eines Auftrags als gebaut.
    Hat die Phasendatei das Feld `absicht`, schreibst du den Abschnitt „## Absicht“ aus `pitch.md` wörtlich als ersten Abschnitt in das Issue, das der PR mit `Closes #` nennt (bei `phase` das Issue aus der Phasendatei). Der KI-Prüfer liest die Absicht dort und hält an, wenn der Abschnitt fehlt oder vom Feld abweicht; `phase` startet dann gar nicht.
 3. Starte `node tools/auftrag.mjs lauf <phasendatei>`.
 

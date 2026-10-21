@@ -2,6 +2,7 @@
 
 Status: fertig
 Planung freigegeben: 15000000 Token
+Issue: 605
 Design Doc: ja, weil offen ist, wo der Bestätigungsstatus liegt und wie die Freischaltliste wegfällt, ohne dass heute freigeschaltete Kunden plötzlich den Hinweis für Fremde hören.
 
 ## Absicht
