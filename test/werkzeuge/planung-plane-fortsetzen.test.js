@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -9,8 +10,9 @@ import { runIn } from "./probe-repo.js";
 
 const FORTSETZEN = [ORDNER, "--fortsetzen"];
 const ABBRUCH_IM_SCHNITT = { "planer|## Zuschnitt": [`Zerlegung passt nicht: Dann widerspricht der Lösung (Fundstellen: pitch.md, ## Problem; design.md, ${LOESUNG})`] };
+const FRAGE = "Wo wird die Nummer gespeichert?";
 const MIT_NACHFRAGE = {
-  "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo wird die Nummer gespeichert?" }] }), alsJson({ schnitt: schnittliste() })],
+  "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: FRAGE }] }), alsJson({ schnitt: schnittliste() })],
   "erkunder|## Nachfrage|S1": [bericht(["S1"])],
 };
 const NACHFRAGE_FUNDSTELLE = `${ROUTE} Zeile 10`;
@@ -24,6 +26,10 @@ const ANSAGE = "### Ende der Nachfragen";
 const FINGERABDRUCK = "fingerabdruck.json";
 const GLIEDERUNG_KOPF = "## Gliederung\n\n";
 const ZUSCHNITT_KOPF = "## Zuschnitt\n\n";
+const NACHFRAGEN = "nachfragen.json";
+const ANTWORT_KOPF = "### Antwort auf deine Nachfrage 1";
+const LAGEBILD_KOPF = "### Annahmen der Erkunder";
+const SCHNITT_SOFORT = { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })] };
 
 function abgebrochen(context, zusatz = {}) {
   const lauf = plane(context, { ...ABBRUCH_IM_SCHNITT, ...zusatz });
@@ -31,8 +37,12 @@ function abgebrochen(context, zusatz = {}) {
   return lauf;
 }
 
-function weiter(context, { wurzel }, argumente = FORTSETZEN) {
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: MIT_NACHFRAGE, argumente: ["plane", ...argumente] });
+function fortsetzung(context, { wurzel }, { argumente = FORTSETZEN, ueberschrieben = MIT_NACHFRAGE } = {}) {
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
+}
+
+function weiter(context, vorher, argumente = FORTSETZEN) {
+  return fortsetzung(context, vorher, { argumente });
 }
 
 function nachfrageWellen(lauf) {
@@ -56,6 +66,14 @@ function abgelehnt(lauf, grund) {
   assert.match(lauf.stderr, grund);
   assert.equal(keinAgent(lauf), true);
   assert.equal(existsSync(phaseDatei(lauf)), false);
+}
+
+function antwortTeil(eingabe) {
+  const anfang = eingabe.indexOf(ANTWORT_KOPF);
+  assert.notEqual(anfang, -1, eingabe);
+  const ende = eingabe.indexOf(LAGEBILD_KOPF, anfang);
+  assert.notEqual(ende, -1, eingabe);
+  return eingabe.slice(anfang, ende);
 }
 
 function git({ wurzel }, ...argumente) {
@@ -98,6 +116,49 @@ test("plane --fortsetzen: nach einer Nachfrage und einem Abbruch im Schnitt plan
   assert.ok(erster.includes(`aenderung=false (${NACHFRAGE_FUNDSTELLE})`));
   assert.ok(zweiter.includes(ANSAGE), zweiter);
   assert.equal(nachfrageWellen(lauf), 1);
+});
+
+test("plane --fortsetzen: nach einem Abbruch nach der Nachfrage-Welle legt es dem Planer dieselben Nachfragen und Antworten vor und startet keinen Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context, NACHFRAGE_UND_ABBRUCH);
+  const [, nachWelle] = eingaben(vorher, "planer", "## Zuschnitt");
+  const antwort = antwortTeil(nachWelle);
+  assert.ok(antwort.includes(`Frage: ${FRAGE}`), antwort);
+  const lauf = fortsetzung(context, vorher, { ueberschrieben: SCHNITT_SOFORT });
+  exit(lauf, EXIT_GRUEN);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  const [erster, ...weitere] = eingaben(lauf, "planer", "## Zuschnitt");
+  assert.deepEqual(weitere, []);
+  assert.ok(erster.includes(antwort), erster);
+  assert.ok(erster.indexOf(ANTWORT_KOPF) < erster.indexOf("### Erkundungsberichte (verdichtet)"), erster);
+  assert.equal(nachfrageWellen(lauf), 1);
+});
+
+test("plane --fortsetzen: eine seit der Nachfrage-Welle geänderte oder fehlende Antwortdatei bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context, NACHFRAGE_UND_ABBRUCH);
+  const datei = planungsDatei(vorher, NACHFRAGEN);
+  const [welle] = JSON.parse(readFileSync(datei, "utf8"));
+  assert.equal(welle.antworten[0].frage, FRAGE);
+  writeFileSync(datei, JSON.stringify([{ ...welle, antworten: [{ ...welle.antworten[0], frage: "Wo wird die Nummer gelöscht?" }] }]));
+  abgelehnt(weiter(context, vorher), /nachfragen\.json ist seit dem Ablegen der Erkundung geändert/u);
+  rmSync(datei);
+  abgelehnt(weiter(context, vorher), /nachfragen\.json fehlt/u);
+});
+
+test("plane --fortsetzen: eine Antwortdatei mit passender Prüfsumme, aber ohne die gezählte Welle oder in fremder Form bricht ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context, NACHFRAGE_UND_ABBRUCH);
+  const abdruck = abgelegt(vorher, FINGERABDRUCK);
+  for (const inhalt of ["[]", "{}", JSON.stringify([{ antworten: [{ frage: FRAGE }], enden: [] }])]) {
+    writeFileSync(planungsDatei(vorher, NACHFRAGEN), inhalt);
+    const summe = createHash("sha256").update(inhalt).digest("hex");
+    writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, ablage: { ...abdruck.ablage, [NACHFRAGEN]: summe } }));
+    abgelehnt(weiter(context, vorher), /nachfragen\.json hat nicht die Form der beantworteten Nachfrage-Wellen dieses Fingerabdrucks/u);
+  }
+});
+
+test("plane --fortsetzen: nach einer Nachfrage-Welle lehnt eine Änderung am Code die Fortsetzung wie ohne Welle ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context, NACHFRAGE_UND_ABBRUCH);
+  appendFileSync(join(vorher.wurzel, ROUTE), "\nexport const nachtrag = 1;\n");
+  abgelehnt(weiter(context, vorher), /der Arbeitsbaum ohne planung\/ ist ein anderer als beim Ablegen der Erkundung/u);
 });
 
 test("plane --fortsetzen: ohne Nachfrage-Welle vor dem Abbruch darf das Fortsetzen eine Welle erkunden lassen und legt sie im Fingerabdruck ab", { timeout: LAUF_FRIST_MS }, (context) => {
