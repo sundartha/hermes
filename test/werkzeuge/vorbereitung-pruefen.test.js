@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { REGELN } from "../../tools/vorbereitung/normalform.mjs";
 import { vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
-import { nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
+import { nachCommitAufrufen, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/vorbereitung-pruefen.mjs");
@@ -192,4 +192,56 @@ test("vorbereitung-pruefen: die Bereichsliste nennt nur JavaScript-Dateien unter
     assert.ok(!BEREICH.includes(javascript), datei);
   }
   assert.ok(!BEREICH.includes("src/store/state-ops.js") && !BEREICH.includes("src/store/state-ops.ts"));
+});
+
+function mitBereich(repo, liste, dateien = {}) {
+  return nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { ...dateien, "liste.json": `${JSON.stringify(liste)}\n` });
+}
+
+const TYPISIERT = quelle("const N: number = 18;", "export const t = (x: string): string => `n=${N} ${x}`;");
+
+test("vorbereitung-pruefen: eine .ts im Bereich wird ohne Typen verglichen, außerhalb des Bereichs nicht", (context) => {
+  const repo = repoMitBasis(context, { "src/a.ts": TYPISIERT, "src/b.ts": quelle("export const f = (a: number, d: number): number => a || d;") });
+  const ausserhalb = mitBereich(repo, ["src/a.ts"], { "src/b.ts": quelle("export const f = (a: number, d: number): number => a ?? d;") });
+  assert.equal(ausserhalb.status, EXIT_GRUEN, ausserhalb.output);
+  const gruen = mitBereich(repo, ["src/a.ts"], { "src/a.ts": TYPISIERT.replace("${N}", "${String(N)}") });
+  assert.equal(gruen.status, EXIT_GRUEN, gruen.output);
+  assert.match(gruen.output, /^src\/a\.ts: gleichwertig \(vorlage-string\)$/m);
+  const rot = mitBereich(repo, ["src/a.ts"], { "src/a.ts": TYPISIERT.replace("`n=${N} ${x}`", '["n=" + N, x].join(" ")') });
+  assert.equal(rot.status, EXIT_ROT, rot.output);
+  assert.match(rot.output, /^src\/a\.ts:2: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m);
+});
+
+test("vorbereitung-pruefen: eine .ts im Bereich, deren Typen sich nicht entfernen lassen, ist rot statt gleichwertig", (context) => {
+  const mitEnum = (operator) => quelle("enum Stufe { Niedrig, Hoch }", `export const f = (a: number, d: number): number => a ${operator} d;`);
+  const repo = repoMitBasis(context, { "src/a.ts": mitEnum("||") });
+  const lauf = mitBereich(repo, ["src/a.ts"], { "src/a.ts": mitEnum("??") });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/a\.ts: nicht lesbar$/m);
+  assert.doesNotMatch(lauf.output, /^src\/a\.ts: gleichwertig/m);
+});
+
+test("vorbereitung-pruefen: eine .cts im Bereich ist wie eine .cjs rot, eine .mts im Bereich wird ohne Typen verglichen", (context) => {
+  const repo = repoMitBasis(context, { "src/a.cts": quelle("exports.a = (x: number, d: number): number => x || d;"), "src/b.mts": TYPISIERT });
+  const lauf = mitBereich(repo, ["src/a.cts", "src/b.mts"], {
+    "src/a.cts": quelle("exports.a = (x: number, d: number): number => x || d; "),
+    "src/b.mts": TYPISIERT.replace("${N}", "${String(N)}"),
+  });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/a\.cts: CommonJS läuft ohne strict mode/m);
+  assert.match(lauf.output, /^src\/b\.mts: gleichwertig \(vorlage-string\)$/m);
+});
+
+test("vorbereitung-pruefen: eine reine Umbenennung mit umgezogener Bereichsliste ist grün, Umbenennung mit Umformung in einem Schritt rot mit dem Weg in zwei Phasen", (context) => {
+  const javascript = quelle("const N = 18;", "export const t = (x) => `n=${N} ${x}`;");
+  const repo = repoMitBasis(context, { "src/a.js": javascript, "src/c.js": javascript });
+  runIn(repo.directory, "git", ["rm", "-q", "src/a.js"]);
+  const umbenannt = mitBereich(repo, ["src/a.ts", "src/c.js"], { "src/a.ts": TYPISIERT });
+  assert.equal(umbenannt.status, EXIT_GRUEN, umbenannt.output);
+  assert.doesNotMatch(umbenannt.output, /Phase/);
+  runIn(repo.directory, "git", ["rm", "-q", "src/c.js"]);
+  const zusammen = mitBereich(repo, ["src/a.ts", "src/c.js"], { "src/c.ts": TYPISIERT.replace("${N}", "${String(N)}") });
+  assert.equal(zusammen.status, EXIT_ROT, zusammen.output);
+  assert.match(zusammen.output, /^src\/c\.js: gelöscht; das ist keine Umformung aus dem Katalog$/m);
+  assert.match(zusammen.output, /zwei Phasen: Umformung an der \.js in einer ersten Phase, reine Umbenennung in einer zweiten Phase/);
 });
