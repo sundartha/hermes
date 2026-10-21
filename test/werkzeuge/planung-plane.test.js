@@ -72,12 +72,38 @@ test("plane: eine Nachfrage ohne neue Stelle beendet die Nachfragen zu ihren Num
   assert.ok(aufrufe(lauf, "planer", "## Zuschnitt")[1].eingabe.includes("Nachfragen zu S4 enden; schneide mit einer Annahme."));
 });
 
-test("plane: eine erneute Nachfrage zu ausgeschöpften Nummern endet mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
+test("plane: eine erneute Nachfrage zu ausgeschöpften Nummern bekommt die Ansage, und die nächste endet mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
   const nachfrage = alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo liegt der Hinweis?" }] });
-  const lauf = plane(context, { "planer|## Zuschnitt": [nachfrage, nachfrage], "erkunder|## Nachfrage|S4": [bericht(["S4"])] });
+  const lauf = plane(context, { "planer|## Zuschnitt": [nachfrage, nachfrage, nachfrage], "erkunder|## Nachfrage|S4": [bericht(["S4"])] });
   exit(lauf, EXIT_BEFUNDE);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 1);
-  assert.equal(planungsBericht(lauf).grund, "Nachfragen ausgeschöpft: S4");
+  assert.equal(planungsBericht(lauf).grund, "Nachfragen nach der ersten Welle: S4");
+});
+
+const ZU_S1 = alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo wird die Nummer gespeichert?" }] });
+const ZU_S4 = alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo liegt der Hinweis?" }] });
+const ERKUNDER_S1_S4 = { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "erkunder|## Nachfrage|S4": [bericht(["S4"])] };
+const ANSAGE = "### Ende der Nachfragen";
+
+function nachgefragt(lauf) {
+  return aufrufe(lauf, "erkunder", "## Nachfrage").map(({ eingabe }) => /^#### (\S+) \(/mu.exec(eingabe)[1]);
+}
+
+test("plane: eine zweite Nachfrage-Welle startet keinen Erkunder, der Planer bekommt die Ansage mit dem Lagebild und schneidet grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { ...ERKUNDER_S1_S4, "planer|## Zuschnitt": [ZU_S1, ZU_S4, alsJson({ schnitt: schnittliste() })] });
+  exit(lauf, EXIT_GRUEN);
+  assert.deepEqual(nachgefragt(lauf), ["S1"]);
+  const { eingabe } = aufrufe(lauf, "planer", "## Zuschnitt")[2];
+  for (const teil of [ANSAGE, "Nachfrage-Welle", "### Offene Punkte", "### Funktionsliste", "### Dateikarte"]) assert.ok(eingabe.includes(teil), `${teil} fehlt:\n${eingabe}`);
+  assert.equal(eingabe.includes("### Antwort auf deine Nachfrage"), false, eingabe);
+});
+
+test("plane: fragt der Planer nach der Ansage noch einmal nach, endet plane mit Exit 4 nach nur einem Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context, { ...ERKUNDER_S1_S4, "planer|## Zuschnitt": [ZU_S1, ZU_S4, ZU_S4] });
+  exit(lauf, EXIT_BEFUNDE);
+  assert.deepEqual(nachgefragt(lauf), ["S1"]);
+  assert.equal(planungsBericht(lauf).grund, "Nachfragen nach der ersten Welle: S4");
+  assert.equal(existsSync(phaseDatei(lauf)), false);
 });
 
 test("plane: eine Nachfrage mit neuer Stelle beendet die Nachfragen nicht", { timeout: LAUF_FRIST_MS }, (context) => {

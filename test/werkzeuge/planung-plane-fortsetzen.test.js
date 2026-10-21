@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, phaseDatei, plane, planeAntworten, werkzeug } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, phaseDatei, plane, planeAntworten, werkzeug } from "./planung-plane-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const FORTSETZEN = [ORDNER, "--fortsetzen"];
@@ -20,6 +20,8 @@ const NACHFRAGE_UND_ABBRUCH = {
 };
 const LUECKE = { ...GRUEN_PRUEFLISTE, weglassen: ["weg:S4"] };
 const WEG_OFFEN = { "pruefer-planung|## Wegprüfung|S4": [LUECKE], "pruefer-planung|## Befunde": [LUECKE] };
+const ANSAGE = "### Ende der Nachfragen";
+const FINGERABDRUCK = "fingerabdruck.json";
 const GLIEDERUNG_KOPF = "## Gliederung\n\n";
 const ZUSCHNITT_KOPF = "## Zuschnitt\n\n";
 
@@ -31,6 +33,10 @@ function abgebrochen(context, zusatz = {}) {
 
 function weiter(context, { wurzel }, argumente = FORTSETZEN) {
   return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: MIT_NACHFRAGE, argumente: ["plane", ...argumente] });
+}
+
+function nachfrageWellen(lauf) {
+  return abgelegt(lauf, FINGERABDRUCK).zustand.nachfrageWellen;
 }
 
 function planungsDatei({ wurzel }, name) {
@@ -84,12 +90,32 @@ test("plane --fortsetzen: nach einem Abbruch im Schnitt plant es ohne Gliederung
 test("plane --fortsetzen: nach einer Nachfrage und einem Abbruch im Schnitt plant es ohne Erkunder mit der Antwort der Nachfrage weiter", { timeout: LAUF_FRIST_MS }, (context) => {
   const vorher = plane(context, NACHFRAGE_UND_ABBRUCH);
   exit(vorher, EXIT_PASST_NICHT);
+  assert.equal(nachfrageWellen(vorher), 1);
   const lauf = weiter(context, vorher);
-  exit(lauf, EXIT_BEFUNDE);
-  assert.match(lauf.stderr, /Nachfragen ausgeschöpft: S1/u);
+  exit(lauf, EXIT_GRUEN);
   assert.deepEqual(aufrufe(lauf, "erkunder"), []);
-  const [erster] = eingaben(lauf, "planer", "## Zuschnitt");
+  const [erster, zweiter] = eingaben(lauf, "planer", "## Zuschnitt");
   assert.ok(erster.includes(`aenderung=false (${NACHFRAGE_FUNDSTELLE})`));
+  assert.ok(zweiter.includes(ANSAGE), zweiter);
+  assert.equal(nachfrageWellen(lauf), 1);
+});
+
+test("plane --fortsetzen: ohne Nachfrage-Welle vor dem Abbruch darf das Fortsetzen eine Welle erkunden lassen und legt sie im Fingerabdruck ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  assert.equal(nachfrageWellen(vorher), 0);
+  const lauf = weiter(context, vorher);
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 1);
+  assert.equal(nachfrageWellen(lauf), 1);
+});
+
+test("plane --fortsetzen: ein Fingerabdruck ohne nachfrageWellen oder mit einer Zahl, die keine ganze Zahl ab 0 ist, bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  const abdruck = abgelegt(vorher, FINGERABDRUCK);
+  for (const wellen of [undefined, -1, 0.5, "0"]) {
+    writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, zustand: { ...abdruck.zustand, nachfrageWellen: wellen } }));
+    abgelehnt(weiter(context, vorher), /fingerabdruck\.json hat nicht die Form eines Fingerabdrucks/u);
+  }
 });
 
 test("plane --fortsetzen: ein anderer Repo-Baum (HEAD^{tree}) bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {

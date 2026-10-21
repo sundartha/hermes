@@ -98,24 +98,25 @@ test("plane: eine Wegprüfliste, die nach der Rücksendung unvollständig bleibt
 });
 
 test("plane: eine fehlende Wegzeile bleibt nach einer sauberen Nachfrage zu einer anderen Nummer der Gruppe offen und fällt mit der sauberen Nachfrage zu ihrer Nummer weg", { timeout: LAUF_FRIST_MS }, (context) => {
-  const ohneZeile = { ...GRUEN_PRUEFLISTE, weglassen: ["weg:S7"] };
+  const ohneZeilen = { ...GRUEN_PRUEFLISTE, weglassen: ["weg:S7", "weg:S5"] };
   const fehlt = "- Weg S1, S7, T2: weg:S7: fehlt in der Prüfliste";
+  const fehltS5 = "- Weg S4, S5, B1: weg:S5: fehlt in der Prüfliste";
   const lauf = plane(context, {
-    "pruefer-planung|## Wegprüfung|S1": [ohneZeile, GRUEN_PRUEFLISTE],
-    "pruefer-planung|## Befunde": [ohneZeile],
+    "pruefer-planung|## Wegprüfung|S1": [ohneZeilen, GRUEN_PRUEFLISTE],
+    "pruefer-planung|## Wegprüfung|S4": [ohneZeilen],
+    "pruefer-planung|## Befunde": [ohneZeilen, ohneZeilen],
     "planer|## Zuschnitt": [
-      alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo beginnt der Weg?" }] }),
-      alsJson({ nachfragen: [{ nummern: ["S7"], frage: "Wo endet der Weg?" }] }),
+      alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo beginnt der Weg?" }, { nummern: ["S5"], frage: "Wo endet der Weg?" }] }),
       alsJson({ schnitt: schnittliste() }),
     ],
     "erkunder|## Nachfrage|S1": [bericht(["S1"])],
-    "erkunder|## Nachfrage|S7": [bericht(["S7"])],
+    "erkunder|## Nachfrage|S5": [bericht(["S5"])],
   });
   exit(lauf, EXIT_GRUEN);
-  const [zuschnitt, nachS1, nachS7] = aufrufe(lauf, "planer", "## Zuschnitt");
-  assert.ok(offenePunkte(zuschnitt).includes(fehlt), zuschnitt.eingabe);
-  assert.ok(offenePunkte(nachS1).includes(fehlt), nachS1.eingabe);
-  assert.equal(offenePunkte(nachS7).includes("weg:S7: fehlt in der Prüfliste"), false, nachS7.eingabe);
+  const [zuschnitt, nachNachfrage] = aufrufe(lauf, "planer", "## Zuschnitt");
+  for (const zeile of [fehlt, fehltS5]) assert.ok(offenePunkte(zuschnitt).includes(zeile), zuschnitt.eingabe);
+  assert.ok(offenePunkte(nachNachfrage).includes(fehlt), nachNachfrage.eingabe);
+  assert.equal(offenePunkte(nachNachfrage).includes("weg:S5: fehlt in der Prüfliste"), false, nachNachfrage.eingabe);
 });
 
 test("plane: eine verworfene Korrektur der Gruppe fällt mit der sauberen Nachfrage zu einer ihrer Nummern weg, der Wegfehler einer anderen Nummer bleibt", { timeout: LAUF_FRIST_MS }, (context) => {

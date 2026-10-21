@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, KENNUNG, LAUF_FRIST_MS, ORDNER, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, abgelegt, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
 const MIO = 1_000_000;
@@ -65,6 +65,32 @@ test("plane --deckel geht vor die im Pitch freigegebene Menge: derselbe Lauf sta
 
   exit(lauf, EXIT_GRUEN);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
+});
+
+function nachfrageWellen(lauf) {
+  return abgelegt(lauf, "fingerabdruck.json").zustand.nachfrageWellen;
+}
+
+function eineWelleMitZwoelfErkundern(lauf) {
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
+  assert.equal(nachfrageWellen(lauf), 1);
+}
+
+test("plane: zwölf Nachfragen in einer Antwort sind eine Nachfrage-Welle", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
+
+  eineWelleMitZwoelfErkundern(lauf);
+});
+
+test("plane --fortsetzen nach Exit 5 vor der Nachfrage-Welle: die Welle ist nicht verbraucht, und ein Fortsetzen mit größerem Deckel lässt sie erkunden", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  exit(gestoppt, EXIT_DECKEL);
+  assert.equal(nachfrageWellen(gestoppt), 0);
+
+  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
+
+  eineWelleMitZwoelfErkundern(lauf);
 });
 
 function ohneFreigabe(context, zeile) {
