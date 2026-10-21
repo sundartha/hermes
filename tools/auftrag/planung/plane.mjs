@@ -23,7 +23,7 @@ import {
 } from "./antworten.mjs";
 import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
-import { FINGERABDRUCK, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
+import { FINGERABDRUCK, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { Fortschritt } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
@@ -116,9 +116,14 @@ function offenerPrueferBefund(befund, antworten) {
   return istText(antwort) ? `${prueferZeile(befund)} | ${antwort}` : prueferZeile(befund);
 }
 
-function nachfrageAntwort({ frage, nummern }, { bericht, befunde }, stelle) {
+function nachfrageAntwort({ frage, nummern, bericht, befunde }, stelle) {
   const teile = [`Frage: ${frage}`, `Nummern: ${nummern.join(", ")}`, verdichteBerichte([bericht]), `Befunde:\n${punkte(befunde)}`];
   return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
+}
+
+function welleTeile({ antworten, enden }) {
+  const ende = enden.length > 0 ? [abschnitt(NACHFRAGEN_ENDE, `Nachfragen zu ${enden.join(", ")} enden; schneide mit einer Annahme.`)] : [];
+  return [...antworten.map(nachfrageAntwort), ...ende];
 }
 
 function konfliktAusweg(nummern) {
@@ -168,6 +173,7 @@ export class Planung {
     this.wegOffen = [];
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
+    this.beantworteteWellen = [];
     this.nachfragenBeendet = false;
     this.kostendeckel = null;
     this.laufInWelle = new AsyncLocalStorage();
@@ -435,6 +441,7 @@ export class Planung {
   }
 
   legeFingerabdruck() {
+    this.lege(NACHFRAGEN, this.beantworteteWellen);
     const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], nachfrageWellen: this.nachfrageWellen };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
@@ -541,11 +548,11 @@ export class Planung {
     const ergebnisse = await this.welle(laeufe, "Nachfrage-Welle");
     if (!klaerung) this.nachfrageWellen += 1;
     const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
+    const welle = { antworten: offen.map(({ frage, nummern }, stelle) => ({ frage, nummern, bericht: ergebnisse[stelle].bericht, befunde: ergebnisse[stelle].befunde })), enden: [...new Set(enden)] };
+    this.beantworteteWellen.push(welle);
     this.legeBerichte();
     this.legeFingerabdruck();
-    const antworten = offen.map((eintrag, stelle) => nachfrageAntwort(eintrag, ergebnisse[stelle], stelle));
-    const ende = enden.length > 0 ? [abschnitt(NACHFRAGEN_ENDE, `Nachfragen zu ${[...new Set(enden)].join(", ")} enden; schneide mit einer Annahme.`)] : [];
-    return { weiter: nachricht("Zuschnitt", [...antworten, ...ende, ...(await this.lagebild())]) };
+    return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
   }
 
   async pruefeSchnitt(schnitt) {
@@ -778,7 +785,7 @@ class Fortsetzung extends Planung {
     this.stand = this.ausgangsstand();
     const { gruende, erkundung } = liesFortsetzung(this.ablage, this.stand);
     if (gruende.length > 0) return gruende;
-    const { gliederung, berichte: gelesen, zustand } = erkundung;
+    const { gliederung, berichte: gelesen, nachfragen, zustand } = erkundung;
     this.gliederung = gliederung;
     this.berichte = gelesen;
     this.gesehen = new Set(zustand.gesehen);
@@ -787,11 +794,12 @@ class Fortsetzung extends Planung {
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
     this.nachfrageWellen = zustand.nachfrageWellen;
+    this.beantworteteWellen = nachfragen;
     return [];
   }
 
   async zuschnittNachricht() {
-    return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...(await this.zuschnittTeile())]);
+    return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...this.beantworteteWellen.flatMap(welleTeile), ...(await this.zuschnittTeile())]);
   }
 
   laufe() {
