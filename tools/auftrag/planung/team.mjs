@@ -6,6 +6,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { starteAgentParallel } from "../agenten.mjs";
 import { limitSperre, restDerSperre, setzeLimitSperre } from "../einsatz.mjs";
 import { BELEGE } from "../bericht.mjs";
+import { meldeNetzabbruch, netzabbruch } from "../netz.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
 import { gitLauf, gitPfadeAbfragen } from "./git.mjs";
@@ -33,8 +34,6 @@ const JSON_BLOCK = /```json[^\S\n]*\n([\s\S]*?)\n[^\S\n]*```/g;
 const ERSTE_NETZ_WARTEZEIT_MS = 30_000;
 const ZWEITE_NETZ_WARTEZEIT_MS = 120_000;
 const NETZ_WARTEZEITEN_MS = [ERSTE_NETZ_WARTEZEIT_MS, ZWEITE_NETZ_WARTEZEIT_MS];
-const VERBINDUNGSFEHLER = /^API Error: (?:Connection dropped \(ECONNRESET\)|Can't reach the API server — check your internet or DNS \(ENOTFOUND\))$/;
-const MS_JE_SEKUNDE = 1000;
 
 export class Abbruch extends Error {}
 
@@ -229,10 +228,6 @@ function meldeAbsturz(wer, lauf) {
   throw new Abbruch(auszug === "" ? meldung : `${meldung}:\n${auszug}`);
 }
 
-function netzabbruch(lauf) {
-  return lauf.exitCode !== 0 && VERBINDUNGSFEHLER.test((lauf.volleAntwort ?? "").trim());
-}
-
 class Teilnehmer {
   constructor(rolle) {
     this.rolle = rolle;
@@ -284,9 +279,7 @@ export class Team {
   async nachNetzabbruch(wer, lauf, versuch) {
     const wartezeit = this.netzWartezeitenMs[versuch];
     if (wartezeit === undefined || !netzabbruch(lauf)) return false;
-    const eintrag = { rolle: wer.rolle, sitzung: wer.sitzung, versuch: versuch + 1, zeit: new Date().toISOString(), fehler: lauf.volleAntwort.trim(), warteS: wartezeit / MS_JE_SEKUNDE };
-    this.netzabbrueche.push(eintrag);
-    console.log(`${eintrag.zeit} ${wer.rolle}: ${eintrag.fehler}; Sitzung ${wer.sitzung} wird nach ${eintrag.warteS} s fortgesetzt (Versuch ${eintrag.versuch} von ${this.netzWartezeitenMs.length}).`);
+    this.netzabbrueche.push(meldeNetzabbruch({ rolle: wer.rolle, sitzung: wer.sitzung, versuch: versuch + 1, versuche: this.netzWartezeitenMs.length, wartezeitMs: wartezeit, fehler: lauf.volleAntwort }));
     await warte(wartezeit);
     return true;
   }
