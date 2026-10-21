@@ -4,7 +4,7 @@ import { extname } from "node:path";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
-import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
+import { istYamlOderShell, kommentareImText, shellBloecke } from "./kommentare-yaml-shell.mjs";
 import { einstellungenFuer, gelesen, gleicherBaum } from "./syntaxbaum.mjs";
 
 const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
@@ -123,12 +123,22 @@ function shellGleich(alt, neu) {
   return vorher !== undefined && vorher === bashGelesen(neu);
 }
 
+function runBloeckeGleich(alt, neu) {
+  const vorher = shellBloecke(alt.split(ZEILENENDE));
+  const nachher = shellBloecke(neu.split(ZEILENENDE));
+  return (
+    vorher.length === nachher.length &&
+    vorher.every((block, index) => shellGleich(block.zeilen.join(ZEILENENDE), nachher[index].zeilen.join(ZEILENENDE)))
+  );
+}
+
 function yamlShellBereinigt(pfad, text) {
   const funde = kommentareImText(pfad, text);
   if (funde.length === 0) return { ergebnis: ERGEBNIS.ohne, text };
   const neu = ohneAlle(text, zeilenBereiche(text, funde));
   if (kommentareImText(pfad, neu).length > 0) return { ergebnis: ERGEBNIS.abweichend, text };
-  if (!YAML_DATEI.test(pfad) && !shellGleich(text, neu)) return { ergebnis: ERGEBNIS.bashAbweichend, text };
+  const bashGleich = YAML_DATEI.test(pfad) ? runBloeckeGleich : shellGleich;
+  if (!bashGleich(text, neu)) return { ergebnis: ERGEBNIS.bashAbweichend, text };
   return { ergebnis: ERGEBNIS.bereinigt, text: neu, anzahl: funde.length };
 }
 
