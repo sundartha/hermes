@@ -472,6 +472,59 @@ test("Umbau-Test: eine abnahme, die in der Dateikarte der Umbau-Datei steht, ist
   gruen(lauf(b));
 });
 
+const U1_JS = "src/gemeinsam/u1.js";
+const U1_TS = "src/gemeinsam/u1.ts";
+const ZWEI_PHASEN = "Umformung an der .js in einer ersten Phase, reine Umbenennung in einer zweiten Phase";
+
+function umbenennung(b) {
+  return umbau(b, "u1", { erwarteteDateien: [U1_JS, U1_TS] });
+}
+
+function aenderungAn(b, kennung, datei) {
+  return umbau(b, kennung, { bereich: U1_JS, erwarteteDateien: [datei] });
+}
+
+test("Umbau-Test: ein Umbau, der nur die neue .ts nennt, bekommt die Tests ihres .js-Zwillings aus der Dateikarte", (context) => {
+  const b = basis(context);
+  umbau(b, "u1", { erwarteteDateien: [U1_TS] });
+  b.eingaben.dateikarte = [{ datei: U1_JS, tests: ["test/gemeinsam/u1-bestehend.test.js"] }];
+  gruen(lauf(b));
+});
+
+test("Umbau-Test: steht der .js-Zwilling einer .ts nicht in der Dateikarte, ist es rot", (context) => {
+  const b = basis(context);
+  umbau(b, "u1", { erwarteteDateien: [U1_TS] });
+  b.eingaben.dateikarte = [{ datei: "src/gemeinsam/anders.js", tests: ["test/gemeinsam/u1-bestehend.test.js"] }];
+  erwarte(lauf(b), REGEL.umbauTest, `u1: abnahme test/gemeinsam/u1-bestehend.test.js gehört laut Dateikarte zu keiner Datei des Umbaus (${U1_TS})`);
+});
+
+test("Umbenennung: ändert ein späterer Auftrag die umbenannte .ts, ist es rot", (context) => {
+  const b = basis(context);
+  umbenennung(b);
+  haengtAn(aenderungAn(b, "u2", U1_TS), "u1");
+  erwarte(lauf(b), REGEL.umbenennung, `u2: ändert ${U1_JS} oder ${U1_TS}, die u1 in derselben Phase umbenennt; ${ZWEI_PHASEN}`);
+});
+
+test("Umbenennung: ändert ein früherer Auftrag die .js vor der Umbenennung, ist es rot", (context) => {
+  const b = basis(context);
+  aenderungAn(b, "u0", U1_JS);
+  haengtAn(umbenennung(b), "u0");
+  erwarte(lauf(b), REGEL.umbenennung, `u0: ändert ${U1_JS} oder ${U1_TS}, die u1 in derselben Phase umbenennt; ${ZWEI_PHASEN}`);
+});
+
+test("Umbenennung: ändert der andere Auftrag eine andere Datei, ist es grün", (context) => {
+  const b = basis(context);
+  umbenennung(b);
+  haengtAn(umbau(b, "u2"), "u1");
+  gruen(lauf(b));
+});
+
+test("Umbenennung: ein einzelner Auftrag, der umbenennt und die Laufzeit ändert, ist für den Schnitt nicht erkennbar", (context) => {
+  const b = basis(context);
+  umbenennung(b);
+  gruen(lauf(b));
+});
+
 test("Schema: meldet der Bericht eine Schemaänderung ohne schema nutzung beim Besitzer, ist es rot", (context) => {
   const b = basis(context);
   angabenVon(b, "S1").schema = { aenderung: true, fundstelle: "db/schema.sql Zeile 4" };
@@ -1144,6 +1197,18 @@ test("Vorhandene: eine Änderungsdatei, die kein vorhandener Auftrag der Kette n
 test("Vorhandene: eine abnahme, die ein vorhandener Auftrag schon hat, ist rot", (context) => {
   const b = mitVorhandenen(basis(context), vorhanden("a5", { abnahme: TEST_B }));
   erwarte(lauf(b), REGEL.abnahme, `a2: abnahme ${TEST_B} hat schon der vorhandene Auftrag a5`);
+});
+
+test("Vorhandene: ändert ein vorhandener Auftrag die Datei, die ein neuer Umbau umbenennt, ist es rot", (context) => {
+  const b = mitVorhandenen(basis(context), vorhanden("a5", { bereich: U1_JS, erwarteteDateien: [U1_TS] }));
+  umbenennung(b);
+  erwarte(lauf(b), REGEL.umbenennung, `a5: ändert ${U1_JS} oder ${U1_TS}, die u1 in derselben Phase umbenennt`);
+});
+
+test("Vorhandene: eine Umbenennung nur unter vorhandenen Aufträgen meldet der Schnitt nicht noch einmal", (context) => {
+  const umbenannt = vorhanden("a5", { art: "umbau", bereich: U1_JS, erwarteteDateien: [U1_JS, U1_TS] });
+  const b = mitVorhandenen(basis(context), umbenannt, vorhanden("a6", { bereich: U1_JS, erwarteteDateien: [U1_TS] }));
+  gruen(lauf(b));
 });
 
 function ohneA1({ schnitt, eingaben }) {

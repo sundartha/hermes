@@ -13,10 +13,12 @@ const AUFTRAG_TOOL = join(REPO_ROOT, "tools/auftrag.mjs");
 const ORDNER = "plaene/P-004-umbau";
 const RECHNEN = "src/rechnen.js";
 const RECHNEN_TS = "src/rechnen.ts";
+const NEU_TS = "src/neu.ts";
 const ZAEHLEN = "src/zaehlen.js";
 const RECHNEN_TEST = "test/rechnen/rechnen.test.js";
 const ZAEHLEN_TEST = "test/rechnen/zaehlen.test.js";
 const UMBAU_TEST = /^Regel Umbau-Test:/m;
+const UMBENENNUNG = /^Regel Umbenennung:/m;
 const SCHLUSS = /^(?:rot: \d+ Befunde|grün: die Schnittliste) /m;
 const SICHERHEIT = ["# P-004 Umbau: Sicherheitsprüfung", "", "## 2. Angriffswege", "", "keine Angriffswege gefunden", "", "## 3. Lückenprüfung", ""].join("\n");
 const ANFORDERUNGEN = "keine neuen, weil sich nach außen nichts zeigt; das Prüfbare steht unter „Bleibt unverändert“";
@@ -88,10 +90,25 @@ test("umbau-dateikarte: bei einem reinen Umbau-Pitch bleibt eine abnahme, die nu
 });
 
 test("umbau-dateikarte: eine noch nicht vorhandene Datei kommt nicht in die Dateikarte", (context) => {
-  const nurNeu = schnitt(context, [umbau("a1", { dateien: [RECHNEN_TS], abnahme: RECHNEN_TEST })]);
-  assert.deepEqual(umbauTestZeilen(nurNeu), [`Regel Umbau-Test: a1: abnahme ${RECHNEN_TEST} gehört laut Dateikarte zu keiner Datei des Umbaus (${RECHNEN_TS})`], nurNeu.stderr);
+  const nurNeu = schnitt(context, [umbau("a1", { dateien: [NEU_TS], abnahme: RECHNEN_TEST })]);
+  assert.deepEqual(umbauTestZeilen(nurNeu), [`Regel Umbau-Test: a1: abnahme ${RECHNEN_TEST} gehört laut Dateikarte zu keiner Datei des Umbaus (${NEU_TS})`], nurNeu.stderr);
   const altUndNeu = schnitt(context, [umbau("a1", { dateien: [RECHNEN, RECHNEN_TS], abnahme: RECHNEN_TEST })]);
   assert.deepEqual(umbauTestZeilen(altUndNeu), [], altUndNeu.stderr);
+});
+
+test("umbau-dateikarte: ein Umbau, der nur die neue .ts nennt, erreicht die Tests der bestehenden .js", (context) => {
+  const lauf = schnitt(context, [umbau("a1", { dateien: [RECHNEN_TS], abnahme: RECHNEN_TEST })]);
+  assert.deepEqual(umbauTestZeilen(lauf), [], lauf.stderr);
+  const fremd = schnitt(context, [umbau("a1", { dateien: [RECHNEN_TS], abnahme: ZAEHLEN_TEST })]);
+  assert.deepEqual(umbauTestZeilen(fremd), [`Regel Umbau-Test: a1: abnahme ${ZAEHLEN_TEST} gehört laut Dateikarte zu keiner Datei des Umbaus (${RECHNEN_TS})`], fremd.stderr);
+});
+
+test("umbau-dateikarte: ein Folge-Auftrag auf die umbenannte .ts erreicht die Tests der .js und ist trotzdem rot, weil er die Laufzeit der umbenannten Datei ändert", (context) => {
+  const folge = { ...umbau("a2", { dateien: [RECHNEN_TS], abnahme: RECHNEN_TEST }), abhaengigVon: [{ id: "a1", grund: "baut auf der Umbenennung auf" }] };
+  const lauf = schnitt(context, [umbau("a1", { dateien: [RECHNEN, RECHNEN_TS], abnahme: RECHNEN_TEST }), folge]);
+  assert.deepEqual(umbauTestZeilen(lauf), [], lauf.stderr);
+  const umbenennung = lauf.stderr.split("\n").filter((zeile) => UMBENENNUNG.test(zeile));
+  assert.deepEqual(umbenennung, [`Regel Umbenennung: a2: ändert ${RECHNEN} oder ${RECHNEN_TS}, die a1 in derselben Phase umbenennt; Umformung an der .js in einer ersten Phase, reine Umbenennung in einer zweiten Phase`], lauf.stderr);
 });
 
 test("umbau-dateikarte: ein Ordner unter erwarteteDateien kommt nicht in die Dateikarte und bricht den Schnitt nicht ab", (context) => {

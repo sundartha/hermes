@@ -119,3 +119,14 @@ test("auftrag-pruefe: Phasen ohne Pitch wie Fehler und einfache Änderung brauch
   const mittendrin = pruefe(context, [funktion({ prueft: undefined, szenarien: undefined })], "a-P-001");
   assert.equal(mittendrin.status, EXIT_GRUEN, mittendrin.stderr);
 });
+
+test("auftrag-pruefe: ändert ein anderer Auftrag die Datei, die ein Umbau derselben Phase umbenennt, ist die Phase rot, in zwei Phasen grün", (context) => {
+  const umbenennung = umbau({ erwarteteDateien: ["src/d.js", "src/d.ts"] });
+  const laufzeit = umbau({ id: "a2", erwarteteDateien: ["src/d.ts"], abhaengigVon: ["a1"] });
+  const lauf = pruefe(context, [umbenennung, laufzeit]);
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.match(lauf.stderr, /^a2: ändert src\/d\.js oder src\/d\.ts, die a1 in derselben Phase umbenennt; Umformung an der \.js in einer ersten Phase, reine Umbenennung in einer zweiten Phase$/m);
+  assert.equal(pruefe(context, [umbenennung]).status, EXIT_GRUEN);
+  const zweite = pruefe(context, [{ ...laufzeit, abhaengigVon: [] }]);
+  assert.equal(zweite.status, EXIT_GRUEN, zweite.stderr);
+});
