@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 
 import { starteAgentParallel } from "../agenten.mjs";
-import { limitSperre, restDerSperre, sperreWegenLimit } from "../einsatz.mjs";
+import { limitSperre, restDerSperre, setzeLimitSperre } from "../einsatz.mjs";
 import { BELEGE } from "../bericht.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
@@ -275,7 +275,7 @@ export class Team {
       const beginn = Date.now();
       const lauf = await starteAgentParallel({ rolle: wer.rolle, root: this.root, fortsetzung: wer.sitzung }, nachricht, { ...start, kontextGrenze: null, vollstaendig: true });
       wer.merke(lauf.sitzung, Date.now() - beginn);
-      if (lauf.limit) console.log(`${wer.rolle}: ${sperreWegenLimit(sperre, lauf.limit)}`);
+      if (lauf.limit) console.log(`${wer.rolle}: ${setzeLimitSperre(sperre, lauf.limit)}`);
       else if (await this.nachNetzabbruch(wer, lauf, versuch)) versuch += 1;
       else return lauf;
     }
