@@ -1,14 +1,21 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { pid } from "node:process";
+import { env, pid } from "node:process";
 
 import { starteAgent } from "./agenten.mjs";
 import { ausgang } from "./ausgang.mjs";
-import { gemeinsamerOrdner } from "./git.mjs";
+import { fingerabdruck } from "./bericht.mjs";
+import { arbeitsstand, gemeinsamerOrdner, kopf } from "./git.mjs";
+import { meldeNetzabbruch, netzabbruch } from "./netz.mjs";
 import { UEBERGABE } from "./verlauf.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 const MS_JE_MINUTE = 60_000;
+const ERSTE_NETZ_WARTEZEIT_MINUTEN = 1;
+const ZWEITE_NETZ_WARTEZEIT_MINUTEN = 5;
+const DRITTE_NETZ_WARTEZEIT_MINUTEN = 15;
+const VIERTE_NETZ_WARTEZEIT_MINUTEN = 30;
+const NETZ_WARTEZEITEN_MS = [ERSTE_NETZ_WARTEZEIT_MINUTEN, ZWEITE_NETZ_WARTEZEIT_MINUTEN, DRITTE_NETZ_WARTEZEIT_MINUTEN, VIERTE_NETZ_WARTEZEIT_MINUTEN].map((minuten) => minuten * MS_JE_MINUTE);
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
 const PAUSE_NACH_VERSTRICHENER_ZEIT_MINUTEN = 1;
 const BAU = "bau";
@@ -100,6 +107,36 @@ function alsEintrag({ volleAntwort = "", groessterKontext, ...sitzung }, start) 
   return start.vollstaendig ? { ...sitzung, volleAntwort, groessterKontext } : { ...sitzung, volleAntwort };
 }
 
+function wartezeitenBeiNetzabbruch() {
+  const angegeben = JSON.parse(env.HERMES_NETZ_WARTEZEITEN_MS ?? "null");
+  const brauchbar = Array.isArray(angegeben) && angegeben.every((ms) => Number.isInteger(ms) && ms >= 0);
+  return brauchbar ? angegeben : NETZ_WARTEZEITEN_MS;
+}
+
+function stand(root) {
+  return [arbeitsstand(root), kopf(root), fingerabdruck(root)].join();
+}
+
+function nichtsGemessen(roh, vorher, root) {
+  const ohneErgebnis = !roh.limit && !roh.aktion && !roh.groessterKontext;
+  return netzabbruch(roh) && ohneErgebnis && stand(root) === vorher;
+}
+
+function starteMitNetzWiederholung(kontext, prompt, start) {
+  const wartezeiten = wartezeitenBeiNetzabbruch();
+  const vorher = stand(kontext.root);
+  const netzabbrueche = [];
+  let roh = starteAgent(kontext, prompt, start);
+  while (netzabbrueche.length < wartezeiten.length && nichtsGemessen(roh, vorher, kontext.root)) {
+    const wartezeit = wartezeiten[netzabbrueche.length];
+    netzabbrueche.push(meldeNetzabbruch({ rolle: kontext.rolle, sitzung: roh.sitzung, versuch: netzabbrueche.length + 1, versuche: wartezeiten.length, wartezeitMs: wartezeit, fehler: roh.volleAntwort }));
+    Atomics.wait(SCHLAEFER, 0, 0, wartezeit);
+    warteAufFreigabe(limitSperre(kontext));
+    roh = starteAgent({ ...kontext, fortsetzung: roh.sitzung }, prompt, start);
+  }
+  return netzabbrueche.length > 0 ? { ...roh, netzabbrueche } : roh;
+}
+
 export function setzeEin(kontext, prompt, start = {}) {
   const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ergebnisDesBaus(kontext.auftrag)}` : prompt;
   const sperre = limitSperre(kontext);
@@ -108,7 +145,7 @@ export function setzeEin(kontext, prompt, start = {}) {
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
-    const roh = starteAgent({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
+    const roh = starteMitNetzWiederholung({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
     const sitzung = alsEintrag(roh, start);
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
