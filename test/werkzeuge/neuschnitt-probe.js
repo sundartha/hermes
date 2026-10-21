@@ -4,6 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "no
 import { dirname, join } from "node:path";
 
 import { alsJson } from "./planung-probe.js";
+import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, runIn } from "./probe-repo.js";
 
 export const AUSFUEHRBAR = 0o755;
@@ -181,7 +182,7 @@ export function ersatzUmgebung(context, drehbuch) {
   chmodSync(join(werkzeug, "gh.mjs"), AUSFUEHRBAR);
   const ersatz = Object.entries(ERSATZ).map(([name, datei]) => [name, join(werkzeug, datei)]);
   const kind = drehbuch.kind ? { HERMES_NEUSCHNITT_START: join(werkzeug, "kind.mjs") } : {};
-  return { werkzeug, env: { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...kind, ...IDENTITAET, HOME: werkzeug } };
+  return { werkzeug, env: { ...isolatedEnvironment(), ...Object.fromEntries(ersatz), ...kind, ...IDENTITAET, HOME: werkzeug, ...mitErsatzSemgrep(werkzeug) } };
 }
 
 export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATEI, umgebung = {} } = {}) {

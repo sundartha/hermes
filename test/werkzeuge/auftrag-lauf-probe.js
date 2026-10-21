@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -65,7 +66,7 @@ export const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
-export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {} }) {
+export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {}, umgebung = {} }) {
   const repo = probeRepository(context, { ...BASIS, ...dateien });
   vorbereiten(repo);
   runIn(repo, "git", ["config", "user.name", "Probe"]);
@@ -87,6 +88,8 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
       HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
       HERMES_GH: GH_OHNE_WIRKUNG,
       ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
+      ...mitErsatzSemgrep(werkzeug),
+      ...umgebung,
     },
   });
   const belegDatei = join(repo, ".fortschritt/probe/A1.json");

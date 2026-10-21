@@ -362,5 +362,12 @@
     "behebung": "Die genannte Funktion in deinen neuen Zeilen aufrufen oder importieren und die eigene Fassung der Regel streichen; fehlt der Export und liegt die Datei in deinem Bereich, den Export ergänzen.",
     "nichtAngenommen": "Den Namen nur erwähnen, ohne die Funktion zu nutzen, oder die Regel unter einem anderen Namen nachbauen.",
     "ausweg": "Lässt sich die Funktion nicht nutzen, etwa weil ihre Datei außerhalb deines Bereichs liegt und der Export fehlt oder weil sie eine andere Regel umsetzt, die eigene letzte Zeile „Auftrag passt nicht: Regel liegt in <Datei>:<Funktion>, <warum nicht nutzbar>“."
+  },
+  "semgrep-fehlt": {
+    "liste": "ohne Nummer",
+    "wozu": "Ohne semgrep zieht der Listenumzug keinen Semgrep-Eintrag um. Dann zählt keine Umbenennung .js→.ts als nur Typen, und lint bricht erst nach dem Bau mit ERR_MODULE_NOT_FOUND ab, wenn die Agenten schon gearbeitet haben. lauf prüft deshalb vor dem ersten Auftrag, ob semgrep --version läuft.",
+    "behebung": "semgrep installieren oder in den PATH bringen, in der Fassung aus tools/basis/semgrep.json, und lauf neu starten.",
+    "nichtAngenommen": "Die Prüfung abschalten, im echten Lauf ein Ersatzprogramm namens semgrep in den PATH legen, das nichts prüft, oder den Auftrag ohne lauf bauen.",
+    "ausweg": "entfällt: ohne semgrep startet kein Auftrag; Antonio entscheidet."
   }
 }
