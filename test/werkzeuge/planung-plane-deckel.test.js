@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, KENNUNG, LAUF_FRIST_MS, ORDNER, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { GRUEN_PRUEFLISTE, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, abgelegt, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
@@ -151,4 +151,144 @@ test("plane --deckel: vor der ersten Welle gilt der Mittelwert je Erkunder-Lauf 
   exit(zweiter, EXIT_DECKEL);
   assert.equal(aufrufe(zweiter, "erkunder").length, 0);
   assert.deepEqual(planungsBericht(zweiter).deckel, { deckel: DECKEL_UNTER_ERSTER_WELLE, gemessen: PLANER, vorschau: ERSTE_WELLE * ERKUNDER_LAUF });
+});
+
+const NACH_ERKUNDUNG = PLANER + ERSTE_WELLE * ERKUNDER_LAUF;
+const NACH_ZUSCHNITT = NACH_ERKUNDUNG + PLANER;
+const PRUEFLISTE_LAEUFE = ERSTE_WELLE + 1;
+const NACH_PRUEFLISTE = NACH_ZUSCHNITT + PRUEFLISTE_LAEUFE * WEGPRUEFER;
+const ENTWURF_LAEUFE = 2;
+const DECKEL_VOR_PRUEFLISTE = NACH_ZUSCHNITT + WEGPRUEFER;
+const DECKEL_VOR_ENTWURF = NACH_PRUEFLISTE + PLANER;
+const DECKEL_VOR_ZUSCHNITT = NACH_ERKUNDUNG + PLANER / 2;
+const ERKUNDER_LAUF_VORHER_KLEIN = PLANER;
+const NACHFRAGE_VORSCHAU = PLANER + ZWEITE_WELLE * ERKUNDER_LAUF_VORHER_KLEIN;
+const DECKEL_IN_DER_NACHFRAGE = NACHFRAGE_VORSCHAU + ERKUNDER / 2;
+const NACH_HALT_HOECHSTENS = DECKEL_IN_DER_NACHFRAGE + (ZWEITE_WELLE - 1) * ERKUNDER;
+
+function fortgesetztGruen(context, wurzel, ueberschrieben = {}) {
+  const lauf = planeMitToken(context, wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben });
+  exit(lauf, EXIT_GRUEN);
+  return lauf;
+}
+
+test("plane --deckel: passt die Prüfliste mit dem Mittel der Wegprüfungen dieses Laufs nicht mehr unter den Deckel, endet plane nach dem Zuschnitt mit Exit 5, ohne einen Prüfer der Prüfliste zu starten, und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_VOR_PRUEFLISTE)] });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, 0);
+  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_VOR_PRUEFLISTE, gemessen: NACH_ZUSCHNITT, vorschau: PRUEFLISTE_LAEUFE * WEGPRUEFER });
+  assert.equal(existsSync(planungsDatei(lauf, "fingerabdruck.json")), true);
+
+  const fortgesetzt = fortgesetztGruen(context, lauf.wurzel);
+  assert.equal(aufrufe(fortgesetzt, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
+});
+
+test("plane --deckel: passt die Prüfliste noch, die Entwurfs-Welle aber nicht mehr unter den Deckel, startet plane keinen Entwurf, schreibt keine phase.json und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_VOR_ENTWURF)] });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
+  assert.equal(aufrufe(lauf, "entwurf").length, 0);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "phase.json")), false);
+  assert.equal(planungsBericht(lauf).deckel.gemessen, NACH_PRUEFLISTE);
+
+  const fortgesetzt = fortgesetztGruen(context, lauf.wurzel);
+  assert.equal(aufrufe(fortgesetzt, "entwurf").length, ENTWURF_LAEUFE);
+});
+
+test("plane --deckel: würde erst die Antwort des Planers zwischen Erkundung und Prüfliste den Deckel überschreiten, endet plane vor ihr mit Exit 5", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_VOR_ZUSCHNITT)] });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "planer").length, PLANER_ANTWORTEN_BIS_NACHFRAGE - 1);
+  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_VOR_ZUSCHNITT, gemessen: NACH_ERKUNDUNG, vorschau: PLANER });
+  assert.equal(existsSync(planungsDatei(lauf, "fingerabdruck.json")), true);
+});
+
+function kleinesErkunderMittel({ wurzel }) {
+  writeFileSync(join(wurzel, ".fortschritt", KENNUNG, "planung.json"), JSON.stringify({ kostenJeLauf: { erkunder: { laeufe: 1, token: ERKUNDER_LAUF_VORHER_KLEIN } } }));
+}
+
+test("plane --fortsetzen --deckel: ist die Vorschau der Nachfrage-Welle zu klein, startet in ihr keine Wegprüfung mehr, sobald der Deckel überschritten wäre, die Welle bleibt unverbraucht und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  exit(gestoppt, EXIT_DECKEL);
+  kleinesErkunderMittel(gestoppt);
+
+  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_IN_DER_NACHFRAGE)], ueberschrieben: zwoelfNachfragen() });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
+  assert.ok(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").length < ZWEITE_WELLE);
+  assert.ok(planungsBericht(lauf).token <= NACH_HALT_HOECHSTENS);
+  assert.match(planungsBericht(lauf).deckelSchritt, /Wegprüfung/);
+  assert.equal(nachfrageWellen(lauf), 0);
+
+  eineWelleMitZwoelfErkundern(fortgesetztGruen(context, lauf.wurzel, zwoelfNachfragen()));
+});
+
+test("plane mit einem Deckel ohne Wirkung ruft jede Rolle so oft auf wie ohne Prüfung vor jedem Schritt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
+
+  exit(lauf, EXIT_GRUEN);
+  const jeRolle = Object.fromEntries(Object.keys(TOKEN).map((rolle) => [rolle, aufrufe(lauf, rolle).length]));
+  const erkunderLaeufe = ERSTE_WELLE + ZWEITE_WELLE;
+  assert.deepEqual(jeRolle, { planer: PLANER_ANTWORTEN_BIS_NACHFRAGE + 1, erkunder: erkunderLaeufe, "pruefer-planung": erkunderLaeufe + PRUEFLISTE_LAEUFE, entwurf: ENTWURF_LAEUFE });
+});
+
+const ENTWURF_VORHER_KLEIN = 1;
+const DECKEL_VOR_ZWEITER_PRUEFLISTE = NACH_PRUEFLISTE + PLANER;
+const DECKEL_VOR_RUECKSENDUNG_ERKUNDER = NACH_ZUSCHNITT + 2 * ERKUNDER_LAUF + ERKUNDER / 2;
+const DECKEL_VOR_KORREKTUR = NACH_ZUSCHNITT + ERKUNDER_LAUF + WEGPRUEFER;
+const SPAETER_MS = 3000;
+const LEERER_BERICHT = alsJson({ nummern: {}, hinweise: [] });
+
+function vorigerBericht(wurzel, kostenJeLauf) {
+  mkdirSync(join(wurzel, ".fortschritt", KENNUNG), { recursive: true });
+  writeFileSync(join(wurzel, ".fortschritt", KENNUNG, "planung.json"), JSON.stringify({ kostenJeLauf }));
+  return wurzel;
+}
+
+function nachfragenZu(nummern, antworten) {
+  return { "planer|## Zuschnitt": [alsJson({ nachfragen: nummern.map((nummer) => ({ nummern: [nummer], frage: `Wo endet ${nummer}?` })) }), alsJson({ schnitt: schnittliste() })], ...antworten };
+}
+
+function haeltVor(context, wurzel, { deckel, ueberschrieben, schritt }) {
+  const lauf = planeMitToken(context, wurzel, { argumente: ["--deckel", String(deckel)], ueberschrieben });
+  exit(lauf, EXIT_DECKEL);
+  assert.match(planungsBericht(lauf).deckelSchritt, schritt);
+  return lauf;
+}
+
+test("plane --deckel: hält vor der Rücksendung im Entwurf, wenn die Vorschau des Entwurfs aus dem vorigen Lauf zu klein war", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = vorigerBericht(planOrdner(context), { entwurf: { laeufe: 1, token: ENTWURF_VORHER_KLEIN } });
+  const lauf = haeltVor(context, wurzel, { deckel: DECKEL_VOR_ENTWURF, ueberschrieben: { [`entwurf|## Entwurf|${ROUTE}`]: [alsJson({})] }, schritt: /^Rücksendung an entwurf$/ });
+
+  assert.equal(aufrufe(lauf, "entwurf").length, ENTWURF_LAEUFE);
+  assert.equal(existsSync(planungsDatei(lauf, "fingerabdruck.json")), true);
+});
+
+test("plane --deckel: hält vor der Rücksendung an einen Prüfer der Prüfliste", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ZWEITER_PRUEFLISTE, ueberschrieben: { "pruefer-planung|## Prüfung": [alsJson({ pruefliste: [] }), GRUEN_PRUEFLISTE, GRUEN_PRUEFLISTE, GRUEN_PRUEFLISTE] }, schritt: /^Rücksendung an pruefer-planung$/ });
+
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
+});
+
+test("plane --deckel: hält in der Nachfrage-Welle vor der Rücksendung an einen Erkunder, und nach --fortsetzen stehen die Wegprüfungen der angehaltenen Welle nicht doppelt im Fingerabdruck", { timeout: LAUF_FRIST_MS }, (context) => {
+  const spaeterLeer = { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "erkunder|## Nachfrage|S2": [{ text: LEERER_BERICHT, warte: SPAETER_MS }], "erkunder|## Befunde": [bericht(["S2"])] };
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_RUECKSENDUNG_ERKUNDER, ueberschrieben: nachfragenZu(["S1", "S2"], spaeterLeer), schritt: /^Rücksendung an erkunder \(S2\)$/ });
+
+  assert.equal(aufrufe(lauf, "erkunder", "## Befunde").length, 0);
+  assert.equal(abgelegt(lauf, "fingerabdruck.json").zustand.wegpruefungen.length, ERSTE_WELLE);
+  assert.equal(nachfrageWellen(lauf), 0);
+
+  const fortgesetzt = fortgesetztGruen(context, lauf.wurzel, nachfragenZu(["S1", "S2"], spaeterLeer));
+  assert.equal(abgelegt(fortgesetzt, "fingerabdruck.json").zustand.wegpruefungen.length, ERSTE_WELLE + 2);
+});
+
+test("plane --deckel: hält in der Nachfrage-Welle vor der Korrektur des Erkunders nach einem Befund der Wegprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wegBefund = { ...GRUEN_PRUEFLISTE, befunde: { "weg:S1": "der Weg endet nicht in speichereStatus" } };
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_KORREKTUR, ueberschrieben: nachfragenZu(["S1"], { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "pruefer-planung|## Wegprüfung|S1": [GRUEN_PRUEFLISTE, wegBefund] }), schritt: /^Korrektur nach der Wegprüfung S1, Runde 1$/ });
+
+  assert.equal(aufrufe(lauf, "erkunder", "## Befunde").length, 0);
 });
