@@ -348,9 +348,12 @@ async function ablegen(optionen, root, { github = githubZugang({ repo: optionen.
     sha,
     befund,
     grund: ABLAGE_GRUND,
+    kommentarBeiDoppel: true,
   }));
   const ergebnis = await legeIssuesAn(issues, github);
-  console.log(`Ablage ${github.repo}: Issues neu ${ergebnis.neu}, schon offen ${ergebnis.vorhanden}.`);
+  console.log(
+    `Ablage ${github.repo}: Issues neu ${ergebnis.neu}, Kommentare neu ${ergebnis.kommentare}, schon offen ${ergebnis.vorhanden}.`,
+  );
   return 0;
 }
 

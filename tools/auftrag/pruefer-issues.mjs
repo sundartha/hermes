@@ -178,6 +178,43 @@ async function einzeln(issue, { titel, github }) {
   return "neu";
 }
 
+function offeneNachTitel(bekannt) {
+  const offene = new Map();
+  for (const { number, title, body } of bekannt.filter(({ state }) => state === OFFEN)) {
+    if (!offene.has(title) || number < offene.get(title).number)
+      offene.set(title, { number, body: body ?? "", texte: null });
+  }
+  return offene;
+}
+
+function enthaeltHinweis(text, { sha, befund }) {
+  const commitSteht = text.includes(`im Commit ${sha} `);
+  const belegSteht =
+    befund.beleg.trim() === "" || text.includes(`### Beleg\n\n${eingezaeunt(befund.beleg)}`);
+  return commitSteht && belegSteht;
+}
+
+async function ergaenze(issue, { offeneIssues, github }) {
+  const title = titelVon(issue.titel);
+  const text = issueText(issue);
+  const bekannt = offeneIssues.get(title);
+  if (!bekannt) {
+    const angelegt = await github.sende("POST", "/issues", { title, body: text, labels: [LABEL] });
+    offeneIssues.set(title, { number: angelegt.number, texte: [text] });
+    return "neu";
+  }
+  bekannt.texte ??= [bekannt.body, ...(await kommentareVon(bekannt.number, github))];
+  if (bekannt.texte.some((vorhanden) => enthaeltHinweis(vorhanden, issue))) return null;
+  await github.sende("POST", `/issues/${bekannt.number}/comments`, { body: text });
+  bekannt.texte.push(text);
+  return "kommentare";
+}
+
+function ablageFuer(issue) {
+  if (issue.kommentarBeiDoppel) return ergaenze;
+  return istVerbesserung(issue.befund) ? sammle : einzeln;
+}
+
 export async function legeIssuesAn(issues, github) {
   const zaehlung = { neu: 0, kommentare: 0, vorhanden: 0 };
   if (issues.length === 0) return zaehlung;
@@ -187,9 +224,11 @@ export async function legeIssuesAn(issues, github) {
     issues.filter(({ befund }) => istVerbesserung(befund)).map(({ befund }) => sammelTitel(befund)),
   );
   const { offen, geschlossen } = await fuehreSammlungenZusammen(bekannt, { gesucht, github });
+  const offeneIssues = offeneNachTitel(bekannt);
   for (const issue of issues) {
-    const ablage = istVerbesserung(issue.befund) ? sammle : einzeln;
-    zaehlung[(await ablage(issue, { titel, offen, geschlossen, github })) ?? "vorhanden"] += 1;
+    const ablage = ablageFuer(issue);
+    const kontext = { titel, offen, geschlossen, offeneIssues, github };
+    zaehlung[(await ablage(issue, kontext)) ?? "vorhanden"] += 1;
   }
   return zaehlung;
 }

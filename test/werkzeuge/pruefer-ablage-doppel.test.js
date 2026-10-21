@@ -101,6 +101,15 @@ function enthaelt(text, teile) {
   for (const teil of teile) assert.ok(text.includes(teil), `${teil} fehlt`);
 }
 
+function pruefeEinKommentar({ neueIssues, kommentare, stdout }, teile) {
+  assert.deepEqual(neueIssues, []);
+  assert.deepEqual(
+    { pfade: kommentare.map(({ pfad }) => pfad), zeile: stdout.trim() },
+    { pfade: [`${ISSUES}/1/comments`], zeile: zaehlzeile({ kommentare: 1 }) },
+  );
+  enthaelt(kommentare[0].body, teile);
+}
+
 test("ein neuer Commit mit gleichem Beleg im offenen Issue wird als Kommentar abgelegt, nicht verschluckt", async (context) => {
   const { anfang, danach } = await ergaenzt(
     context,
@@ -108,12 +117,7 @@ test("ein neuer Commit mit gleichem Beleg im offenen Issue wird als Kommentar ab
     { sha: SHA_ZWEITER, befund: befund() },
   );
   assert.deepEqual(anfang.neueIssues.map(({ title }) => title), [TITEL]);
-  assert.deepEqual(danach.neueIssues, []);
-  assert.deepEqual(
-    { kommentare: danach.kommentare.map(({ pfad }) => pfad), zeile: danach.stdout.trim() },
-    { kommentare: [`${ISSUES}/1/comments`], zeile: zaehlzeile({ kommentare: 1 }) },
-  );
-  enthaelt(danach.kommentare[0].body, [SHA_ZWEITER, "Schwere: SOLLTE", BELEG, REPARATUR]);
+  pruefeEinKommentar(danach, [SHA_ZWEITER, "Schwere: SOLLTE", BELEG, REPARATUR]);
 });
 
 test("derselbe Commit mit einem anderen Beleg wird als Kommentar abgelegt", async (context) => {
@@ -122,12 +126,7 @@ test("derselbe Commit mit einem anderen Beleg wird als Kommentar abgelegt", asyn
     { sha: SHA_ERSTER, befund: befund({ beleg: "ERSTER-GEHEIMER-BELEG" }) },
     { sha: SHA_ERSTER, befund: befund({ beleg: "ZWEITER-GEHEIMER-BELEG" }) },
   );
-  assert.deepEqual(danach.neueIssues, []);
-  assert.deepEqual(
-    { kommentare: danach.kommentare.map(({ pfad }) => pfad), zeile: danach.stdout.trim() },
-    { kommentare: [`${ISSUES}/1/comments`], zeile: zaehlzeile({ kommentare: 1 }) },
-  );
-  enthaelt(danach.kommentare[0].body, [SHA_ERSTER, "ZWEITER-GEHEIMER-BELEG", REPARATUR]);
+  pruefeEinKommentar(danach, [SHA_ERSTER, "ZWEITER-GEHEIMER-BELEG", REPARATUR]);
 });
 
 test("ein Sicherheits-BLOCKER verhält sich gleich: neuer Commit, Kommentar mit der Schwere", async (context) => {
@@ -137,9 +136,7 @@ test("ein Sicherheits-BLOCKER verhält sich gleich: neuer Commit, Kommentar mit 
     { sha: SHA_ZWEITER, befund: befund({ schwere: "BLOCKER" }) },
   );
   assert.deepEqual(anfang.neueIssues.map(({ title }) => title), [TITEL_BLOCKER]);
-  assert.deepEqual(danach.neueIssues, []);
-  assert.deepEqual(danach.kommentare.map(({ pfad }) => pfad), [`${ISSUES}/1/comments`]);
-  enthaelt(danach.kommentare[0].body, [SHA_ZWEITER, "Schwere: BLOCKER", BELEG, REPARATUR]);
+  pruefeEinKommentar(danach, [SHA_ZWEITER, "Schwere: BLOCKER", BELEG, REPARATUR]);
 });
 
 test("derselbe Commit und derselbe Beleg bleiben schon offen, auch wenn sich nur Reparatur und Reproduktion unterscheiden", async (context) => {
