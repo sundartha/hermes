@@ -30,26 +30,28 @@ async function antwortAufRueckfrage({ sprache, mergedFacts, status, answers }) {
   });
 }
 
-const FALLTABELLE = [
-  { name: "S1: Englisch, 1 Angabe in der Einzahl", sprache: "en", mergedFacts: 1, answers: ["Bello"], text: "1 detail passed on to the call." },
-  { name: "S2: Englisch, 2 Angaben in der Mehrzahl", sprache: "en", mergedFacts: 2, answers: ["Bello", "Freitag"], text: "2 details passed on to the call." },
-  { name: "S3: Deutsch, 1 Angabe in der Einzahl", sprache: "de", mergedFacts: 1, answers: ["Bello"], text: "1 Angabe an den Anruf uebergeben." },
-  { name: "S4: Deutsch, 3 Angaben in der Mehrzahl", sprache: "de", mergedFacts: 3, answers: ["Bello", "Freitag", "10 Uhr"], text: "3 Angaben an den Anruf uebergeben." },
-  { name: "S5: Französisch, 0 Angaben in der Einzahl", sprache: "fr", mergedFacts: 0, answers: ["Bello"], text: "0 information transmise à l'appel." },
-  { name: "S6: Französisch, 2 Angaben in der Mehrzahl", sprache: "fr", mergedFacts: 2, answers: ["Bello", "vendredi"], text: "2 informations transmises à l'appel." },
-];
-
-for (const fall of FALLTABELLE) {
-  test(`answer_consult final: ${fall.name}`, async () => {
-    const ergebnis = await antwortAufRueckfrage({
-      sprache: fall.sprache,
-      mergedFacts: fall.mergedFacts,
-      status: "final",
-      answers: fall.answers,
-    });
-    assert.equal(ergebnis.content[0].text, fall.text);
-  });
+async function pruefeBestaetigung({ sprache, mergedFacts, answers, text }) {
+  const ergebnis = await antwortAufRueckfrage({ sprache, mergedFacts, status: "final", answers });
+  assert.equal(ergebnis.content[0].text, text);
 }
+
+test("answer_consult final: S1: Englisch, 1 Angabe in der Einzahl", () =>
+  pruefeBestaetigung({ sprache: "en", mergedFacts: 1, answers: ["Bello"], text: "1 detail passed on to the call." }));
+
+test("answer_consult final: S2: Englisch, 2 Angaben in der Mehrzahl", () =>
+  pruefeBestaetigung({ sprache: "en", mergedFacts: 2, answers: ["Bello", "Freitag"], text: "2 details passed on to the call." }));
+
+test("answer_consult final: S3: Deutsch, 1 Angabe in der Einzahl", () =>
+  pruefeBestaetigung({ sprache: "de", mergedFacts: 1, answers: ["Bello"], text: "1 Angabe an den Anruf uebergeben." }));
+
+test("answer_consult final: S4: Deutsch, 3 Angaben in der Mehrzahl", () =>
+  pruefeBestaetigung({ sprache: "de", mergedFacts: 3, answers: ["Bello", "Freitag", "10 Uhr"], text: "3 Angaben an den Anruf uebergeben." }));
+
+test("answer_consult final: S5: Französisch, 0 Angaben in der Einzahl", () =>
+  pruefeBestaetigung({ sprache: "fr", mergedFacts: 0, answers: ["Bello"], text: "0 information transmise à l'appel." }));
+
+test("answer_consult final: S6: Französisch, 2 Angaben in der Mehrzahl", () =>
+  pruefeBestaetigung({ sprache: "fr", mergedFacts: 2, answers: ["Bello", "vendredi"], text: "2 informations transmises à l'appel." }));
 
 test("B1: answer_consult final liefert accepted true und merged_facts 2 in der strukturierten Antwort", async () => {
   const ergebnis = await antwortAufRueckfrage({
