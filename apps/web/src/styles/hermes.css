@@ -932,21 +932,6 @@ a:hover {
   }
 }
 
-/* Nur fuer Screenreader (Hinweis "oeffnet in neuem Tab" in den Claude-Links). Das
-   Handy hat dasselbe als .mh-sr (hermes-mobile-sr.css). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* "Mit Claude verbinden" (components/ConnectClaude.astro): echter Link, bewusst
    ausserhalb der animierten Fenster-Attrappen. Weisse Pille wie .btn-solid, aber
    ohne dessen Nav-Overrides (kleine Fenster verkleinern .btn-solid per !important). */
