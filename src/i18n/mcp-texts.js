@@ -111,7 +111,10 @@ export const MCP_TEXTS = Object.freeze({
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
     callAlreadyRunningHint:
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
-    consultAnswerAccepted: (count) => `${count} Angabe(n) an den Anruf uebergeben.`,
+    consultAnswerAccepted: (count) => {
+      const form = new Intl.PluralRules("de").select(count) === "one" ? `${count} Angabe an den Anruf uebergeben.` : `${count} Angaben an den Anruf uebergeben.`;
+      return form;
+    },
     consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
       "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
@@ -218,7 +221,10 @@ export const MCP_TEXTS = Object.freeze({
       "permission is granted.",
     callAlreadyRunningHint:
       "This call was already running - the running call is returned, no second call was started.",
-    consultAnswerAccepted: (count) => `${count} detail(s) passed on to the call.`,
+    consultAnswerAccepted: (count) => {
+      const form = new Intl.PluralRules("en").select(count) === "one" ? `${count} detail passed on to the call.` : `${count} details passed on to the call.`;
+      return form;
+    },
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
       "Answer rejected (format or length). The question stays open - please answer more briefly.",
@@ -326,7 +332,10 @@ export const MCP_TEXTS = Object.freeze({
       "conversation que si l'autorisation d'outil du connecteur est accordée.",
     callAlreadyRunningHint:
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
-    consultAnswerAccepted: (count) => `${count} information(s) transmise(s) à l'appel.`,
+    consultAnswerAccepted: (count) => {
+      const form = new Intl.PluralRules("fr").select(count) === "one" ? `${count} information transmise à l'appel.` : `${count} informations transmises à l'appel.`;
+      return form;
+    },
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
       "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",
