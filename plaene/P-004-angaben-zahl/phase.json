@@ -1,0 +1,49 @@
+{
+  "phase": "P-004-angaben-zahl",
+  "issue": 1883,
+  "absicht": "Der Agent eines Kunden soll nach einer angenommenen Antwort auf eine Rückfrage einen grammatisch richtigen Satz bekommen, in dem die Zahl der übergebenen Angaben richtig gebeugt ist, in Deutsch, Englisch und Französisch. Nicht gewollt ist, den übrigen Wortlaut, die strukturierte Antwort oder den Werkzeugvertrag zu ändern oder die Beugung mit einem festen Vergleich auf 1 abzukürzen. Im Zweifel bleibt der Satz so nah am heutigen wie möglich.",
+  "entwurf": {
+    "src/i18n/mcp-texts.js": "Grundlage: design.md (Pfad des Design Docs in der Nachricht nicht genannt), Abschnitt Ausgangslage und Annahmen\nBereich src/i18n/mcp-texts.js, Auftrag a1: Die Bestätigung von `answer_consult` mit `status` \"final\" beugt die Zahl der Angaben je Sprache. Das Werkzeug antwortet mit `loc.mcp.consultAnswerAccepted(mergedFacts)`; `mergedFacts` ist `merged_facts` aus der internen Antwort oder 0 (src/mcp-tools.js:1016-1019). Dieser Aufruf mit der Zahl bleibt, wie er ist (src/mcp-tools.js:1018).\nAnsatzstellen: Es gibt drei Einzeiler mit Klammer-Endungen, alle heißen `consultAnswerAccepted` und nehmen `(count)`. de Zeile 114: `(count) => `${count} Angabe(n) an den Anruf uebergeben.``. en Zeile 221: `(count) => `${count} detail(s) passed on to the call.``. fr Zeile 329: `(count) => `${count} information(s) transmise(s) à l'appel.``. Die Funktionen ändern sich an Ort und Stelle (laut Bericht je etwa 6 neue Zeilen), ohne neue Datei und ohne neue Funktion. Gemeinsame Hilfsfunktionen für die Tabellen gibt es nicht; eine neue Hilfsfunktion ist hier nicht vorgesehen.\nAufbau der Datei: `MCP_TEXTS = Object.freeze({de, ..., en, fr})` (Zeile 22, je Sprache ein eingefrorenes Objekt). Die MCP-Tabellen haben kein `language`-Feld. Das Feld `language` sitzt im Locale-Objekt (src/i18n/locales.js:126, 211, 296), und `mcp` ist dort nur `MCP_TEXTS.de|fr|en`. Der Sprachcode steht deshalb nur in der Funktion selbst, als Literal der eigenen Tabelle, zum Beispiel `new Intl.PluralRules(\"de\")`. Jede Funktion gehört fest zu ihrer Tabelle.\nRegel der Beugung: Die Kategorie kommt aus `Intl.PluralRules` der Sprache der gewählten Texttabelle, nicht aus der rohen Kontosprache und nicht aus einem festen Vergleich `count === 1`. Gemessen in Node 22 liefert `Intl.PluralRules` für 0/1/2: de other/one/other, en other/one/other, fr one/one/other. Französisch beugt 0 also in der Einzahl, Deutsch und Englisch in der Mehrzahl.\nTabellenwahl (nur Hintergrund, keine Änderung): src/routes/mcp.js:95 ermittelt die Kontosprache mit `tenantLanguage(store.load(), scopedTenant)`. src/mcp-tools.js:843 macht daraus `const loc = localeFor(language)`. `localeFor` (src/i18n/locales.js:406-408) fällt für unbekannte Sprachen auf Englisch zurück. Die gewählte Tabelle ist immer `loc.mcp`, und die Beugung passt immer zur Tabelle.\nNicht ändern: der übrige Wortlaut der Meldungen, andere Meldungen des MCP-Katalogs, Umlaute in der deutschen Tabelle, ein Sonderwortlaut für 0 („Keine Angabe“), die strukturierte Antwort (`accepted`, `merged_facts`, src/mcp-tools.js:1016-1020), das Werkzeug selbst, der `working`-Zweig mit festem Text `consultAckAccepted` und ohne Zahl (src/mcp-tools.js:1010-1014) und `docs/mcp-vertrag.json`. Die Änderung betrifft nur die Klammer-Endungen dieser einen Bestätigung. Der Wortlaut der gebeugten Texte steht in den Abschnitten nicht; er kommt aus den Szenarien des Auftrags (S1 bis S6), der Bau-Agent erfindet ihn nicht.\nTest: Der bestehende Test test/al-p13-consult-channel.test.js:869-886 und :888-901 ruft den Handler direkt auf: `captureToolHandlers({consultAllowed: true, language: \"en\"}).get(\"answer_consult\")`. `withGateway` stubbt `/api/calls/` mit `{accepted: true, merged_facts: N}`. Text und strukturierte Antwort liest der Test aus `r.content[0].text` und `r.structuredContent`. Derselbe Weg taugt für `de` und `fr`, und `merged_facts: 0` lässt sich im Stub direkt vorgeben. Der bestehende Test vergleicht mit `localeFor(\"en\").mcp.consultAnswerAccepted(2)` statt mit festem Wortlaut und würde bei falscher Beugung nicht rot; die neue Abnahme test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js braucht für S1 bis S6 feste Wortlaute. Sie ist als Datei des Auftrags erwartet; unter test/gemeinsam/ gibt es noch keine Tests für `answer_consult`. Erwarteter Fehler vor dem Bau: \"1 detail(s) passed on to the call.\". Der Eingang ist im Test erreichbar. Keine Datei in .github/CODEOWNERS betrifft src/i18n/mcp-texts.js, und die Datei steht in keiner eslint-Ausnahmeliste.\nAufträge: a1: answer_consult beugt die Zahl der Angaben in de, en und fr\nFehlerfälle: keine in diesem Bereich, weil die Textfunktionen nur eine Zahl in einen Text setzen und der Bereich weder Fehlerpfade des Werkzeugs noch die strukturierte Antwort berührt\nReihenfolge: keine Vorgänger"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "answer_consult beugt die Zahl der Angaben in de, en und fr",
+      "bereich": "src/i18n/mcp-texts.js",
+      "erwarteteDateien": [
+        "src/i18n/mcp-texts.js",
+        "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js"
+      ],
+      "abnahme": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js",
+      "erwarteterFehler": "1 detail(s) passed on to the call.",
+      "wasDarfNiePassieren": [
+        "Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs, Umlaute in der deutschen Tabelle und ein Sonderwortlaut für 0 („Keine Angabe“), weil die Probe nur die Klammer-Endungen dieser einen Bestätigung behebt.",
+        "Nicht Teil dieser Änderung: die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil sich der Werkzeugvertrag für fremde Clients nicht ändern soll.",
+        "Nicht gewollt ist, den übrigen Wortlaut, die strukturierte Antwort oder den Werkzeugvertrag zu ändern oder die Beugung mit einem festen Vergleich auf 1 abzukürzen.",
+        "Französisch beugt 0 in der Einzahl, Deutsch und Englisch in der Mehrzahl; ein fester Vergleich `count === 1` trifft Französisch bei 0 falsch: Die Kategorie kommt aus `Intl.PluralRules` der Sprache der gewählten Texttabelle, nicht der rohen Kontosprache, damit eine künftige Kontosprache ohne eigene Tabelle (etwa Portugiesisch, das 0 als Einzahl behandelt) die Regeln der Ersatztabelle bekommt; heute sind Kontosprachen auf `de`, `en`, `fr` begrenzt."
+      ],
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "B1",
+        "B2"
+      ],
+      "szenarien": {
+        "S1": "Gegeben ein Konto mit Sprache Englisch und eine offene Rückfrage, für die Hermes `merged_facts` `1` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und einer Antwort aufruft\nDann lautet der Text der Antwort „1 detail passed on to the call.“",
+        "S2": "Gegeben ein Konto mit Sprache Englisch und eine offene Rückfrage, für die Hermes `merged_facts` `2` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und zwei Antworten aufruft\nDann lautet der Text der Antwort „2 details passed on to the call.“",
+        "S3": "Gegeben ein Konto mit Sprache Deutsch und eine offene Rückfrage, für die Hermes `merged_facts` `1` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und einer Antwort aufruft\nDann lautet der Text der Antwort „1 Angabe an den Anruf uebergeben.“",
+        "S4": "Gegeben ein Konto mit Sprache Deutsch und eine offene Rückfrage, für die Hermes `merged_facts` `3` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und drei Antworten aufruft\nDann lautet der Text der Antwort „3 Angaben an den Anruf uebergeben.“",
+        "S5": "Gegeben ein Konto mit Sprache Französisch und eine offene Rückfrage, für die Hermes `merged_facts` `0` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und einer Antwort aufruft\nDann lautet der Text der Antwort „0 information transmise à l'appel.“",
+        "S6": "Gegeben ein Konto mit Sprache Französisch und eine offene Rückfrage, für die Hermes `merged_facts` `2` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und zwei Antworten aufruft\nDann lautet der Text der Antwort „2 informations transmises à l'appel.“",
+        "B1": "Gegeben ein Konto mit Sprache Englisch und eine offene Rückfrage, für die Hermes `merged_facts` `2` meldet\nWenn der Agent `answer_consult` mit `status` `\"final\"` und zwei Antworten aufruft\nDann enthält die strukturierte Antwort `accepted` `true` und `merged_facts` `2`",
+        "B2": "Gegeben ein Konto mit Sprache Englisch und eine offene Rückfrage\nWenn der Agent `answer_consult` mit `status` `\"working\"` aufruft\nDann lautet der Text der Antwort „Consult acknowledged - the answer is expected next.“"
+      },
+      "abhaengigVon": []
+    }
+  ]
+}

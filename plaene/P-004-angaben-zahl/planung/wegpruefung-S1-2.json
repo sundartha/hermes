@@ -1,0 +1,45 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/i18n/mcp-texts.js:221"
+    },
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/api-calls.js:97"
+    },
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/i18n/mcp-texts.js:114"
+    },
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/mcp-tools.js:843"
+    },
+    {
+      "schluessel": "weg:S5",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/i18n/mcp-texts.js:329"
+    },
+    {
+      "schluessel": "weg:S6",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/mcp.js:95"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/api-calls.js:97"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/mcp-tools.js:1012"
+    }
+  ],
+  "befunde": []
+}

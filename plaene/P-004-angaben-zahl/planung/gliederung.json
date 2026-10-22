@@ -1,0 +1,29 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "B1",
+        "B2"
+      ],
+      "eingang": "MCP-Werkzeug `answer_consult` über `POST /mcp` (`src/routes/mcp.js:89-95`, `src/mcp-tools.js:982-1029`); mit `status` `\"final\"` antwortet es mit `loc.mcp.consultAnswerAccepted(mergedFacts)` (`src/mcp-tools.js:1016-1019`), mit `status` `\"working\"` mit `consultAckAccepted` und `merged_facts` 0 (`src/mcp-tools.js:1010-1014`); die Texte stehen in `src/i18n/mcp-texts.js:114`, `:221`, `:329`",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie lauten die drei Funktionen `consultAnswerAccepted` in `src/i18n/mcp-texts.js` (Zeilen 114, 221, 329) heute wörtlich, wie sind die deutsche, englische und französische MCP-Tabelle in dieser Datei aufgebaut (ein Objekt je Sprache, gemeinsame Hilfsfunktionen, Export), und kennt eine Textfunktion beim Aufruf den Sprachcode ihrer eigenen Tabelle (etwa über eine Konstante oder ein Feld der Tabelle), oder müsste dieser Code erst eingeführt werden?",
+        "Wie wählt `src/routes/mcp.js:95` zusammen mit `src/i18n/locales.js:380` und `:406-408` die Texttabelle je Konto, wie kommt das Objekt `loc` in den Handler von `answer_consult` in `src/mcp-tools.js`, und trägt `loc` oder `loc.mcp` den Sprachcode der gewählten Tabelle (nicht der rohen Kontosprache)? Die Beugung soll nach `Intl.PluralRules` der Sprache der gewählten Tabelle laufen; gibt es in `src/i18n/` oder anderswo in `src/` schon eine Nutzung von `Intl.PluralRules` oder eine Hilfsfunktion zur Pluralbildung, die genutzt werden kann?",
+        "Wie erreicht der bestehende Test `test/al-p13-consult-channel.test.js` (um Zeile 873) das Werkzeug `answer_consult`: über `POST /mcp` mit einem echten Konto oder durch direkten Aufruf des Handlers? Wie legt er die Kontosprache fest und wie eine offene Rückfrage? Kann ein Test auf demselben Weg ein Konto mit Sprache `de`, `en` oder `fr` anlegen und den Textinhalt sowie die strukturierte Antwort (`accepted`, `merged_facts`) der Werkzeugantwort lesen?",
+        "Unter welchen Bedingungen liefert `mergeContextFacts` (`src/store/state-ops.js:661-671`) für eine Antwort mit einer Angabe `merged_facts` 0 (etwa weil die Angabe schon vorhanden ist oder ein Limit `KEY_FACTS_LIMITS.maxItems` erreicht ist), und lässt sich dieser Fall in einem Test über den echten Eingang `answer_consult` herstellen? Das braucht ein Szenario mit Französisch, in dem Hermes `merged_facts` 0 meldet.",
+        "Welche bestehenden Tests in `test/` (auch unter `test/werkzeuge/`, `test/gemeinsam/` und die Launch-Gates aus `npm run test:gates`), welche Dateien unter `docs/` (etwa `docs/mcp-vertrag.json`) und welche Dateien in `.github/CODEOWNERS` (etwa `test/werkzeuge/werkzeugtexte.json`) enthalten den heutigen Wortlaut der Bestätigung mit Klammer-Endungen („detail(s)“, „Angabe(n)“, „information(s) transmise(s)“) oder rufen `consultAnswerAccepted` auf, und würden sie durch die geänderte Beugung rot?",
+        "Hat eine der Funktionen, die sich ändern (die drei `consultAnswerAccepted` in `src/i18n/mcp-texts.js` und gegebenenfalls der Handler von `answer_consult` in `src/mcp-tools.js:982-1029`), Lint-Befunde, und steht `src/mcp-tools.js` in `eslint-legacy-exceptions.json` oder `eslint-suppressions.json`? Muss sich `src/mcp-tools.js` überhaupt ändern, oder reicht eine Änderung in `src/i18n/mcp-texts.js`, weil das Werkzeug die Funktion weiter mit der Zahl aufruft?",
+        "Welche Ordner unter `test/` entsprechen den Bereichen aus `tools/bereiche.json` (etwa `test/gemeinsam/`), und in welchen Bereich fällt `src/i18n/mcp-texts.js` (nach den Mustern dort `gemeinsam` über `^src/`)? Gibt es unter `test/gemeinsam/` schon Tests für das Werkzeug `answer_consult` oder für die MCP-Texttabellen?"
+      ]
+    }
+  ]
+}

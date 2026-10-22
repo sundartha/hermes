@@ -1,0 +1,39 @@
+[
+  {
+    "gruppe": 0,
+    "sitzung": "286608dd-4992-49ab-a156-f5fee69376d9",
+    "schluessel": [
+      "weg:S1",
+      "weg:S2",
+      "weg:S3",
+      "weg:S4",
+      "weg:S5",
+      "weg:S6",
+      "weg:B1",
+      "weg:B2",
+      "b-nummer:B1",
+      "b-nummer:B2",
+      "nie-saetze:a1",
+      "allein-gruen:a1",
+      "ausweg:S1:ownerEntscheidung",
+      "ausweg:S2:ownerEntscheidung",
+      "ausweg:S3:ownerEntscheidung",
+      "ausweg:S4:ownerEntscheidung",
+      "ausweg:S5:ownerEntscheidung",
+      "ausweg:S6:ownerEntscheidung",
+      "ausweg:B1:aenderungen",
+      "ausweg:B1:ownerEntscheidung",
+      "ausweg:B2:aenderungen",
+      "ausweg:B2:ownerEntscheidung"
+    ]
+  },
+  {
+    "gruppe": null,
+    "sitzung": "b791ee2f-7882-4de1-ab8b-c51595fc7f29",
+    "schluessel": [
+      "durchstich:a1",
+      "nicht-zusammengelegt:a1",
+      "gegenfrage:alle"
+    ]
+  }
+]

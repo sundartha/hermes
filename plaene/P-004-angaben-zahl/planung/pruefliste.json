@@ -1,0 +1,128 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1018"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:221"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1018"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:114"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:843"
+  },
+  {
+    "schluessel": "weg:S5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:329"
+  },
+  {
+    "schluessel": "weg:S6",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-calls.js:97"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1019"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1012"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1019"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:222"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/werkzeug-registrierung.js:27"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:221"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S5:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Premortem"
+  },
+  {
+    "schluessel": "ausweg:S6:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B1:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1019"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B2:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1010"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei keinem Auftrag stehen diese Sätze, obwohl a1 sie brechen kann. Der Bauer könnte zum Beispiel `src/mcp-tools.js` anpassen, um die Sprache durchzureichen, `count === 1` schreiben oder die Kontosprache statt der Tabellensprache nehmen. (1) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil sich der Werkzeugvertrag für fremde Clients nicht ändern soll.“ (2) pitch.md, ## Absicht: „Nicht gewollt ist, den übrigen Wortlaut, die strukturierte Antwort oder den Werkzeugvertrag zu ändern oder die Beugung mit einem festen Vergleich auf 1 abzukürzen.“ (3) pitch.md, ## Fallen: „Französisch beugt 0 in der Einzahl, Deutsch und Englisch in der Mehrzahl; ein fester Vergleich `count === 1` trifft Französisch bei 0 falsch: Die Kategorie kommt aus `Intl.PluralRules` der Sprache der gewählten Texttabelle, nicht der rohen Kontosprache, damit eine künftige Kontosprache ohne eigene Tabelle (etwa Portugiesisch, das 0 als Einzahl behandelt) die Regeln der Ersatztabelle bekommt; heute sind Kontosprachen auf `de`, `en`, `fr` begrenzt.“ Das ist auch die Regel, mit der pitch.md, ## Premortem PM1 hingenommen wird. Der Planer soll die drei Sätze in `wasDarfNiePassieren` von a1 aufnehmen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

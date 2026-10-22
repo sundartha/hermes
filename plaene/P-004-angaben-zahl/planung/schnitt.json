@@ -1,0 +1,75 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Alle Nummern laufen über denselben Eingang (`answer_consult`) und ändern nur `src/i18n/mcp-texts.js` (drei Einzeiler an Zeile 114, 221, 329, laut Bericht je etwa +6 Zeilen). Deshalb liegen sie in einem Auftrag, der zugleich der Durchstich ist; ein Teilen nach Sprache würde dieselbe Datei nacheinander in drei Aufträgen ändern."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Abnahmetest erreicht `answer_consult` wie der bestehende Test `test/al-p13-consult-channel.test.js:869-901` über `captureToolHandlers({consultAllowed: true, language: <de|en|fr>}).get(\"answer_consult\")`. `withGateway` stubbt `/api/calls/` mit `{accepted: true, merged_facts: N}`. Für S5 ist `merged_facts` 0 nur so herstellbar, über den echten Speicher nur bei vollem `context.key_facts` (`src/store/state-ops.js:661-671`)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "`src/mcp-tools.js` ändert sich nicht. Das Werkzeug ruft `loc.mcp.consultAnswerAccepted(mergedFacts)` weiter mit der Zahl auf (`src/mcp-tools.js:1018`), die strukturierte Antwort entsteht unabhängig vom Text (`src/mcp-tools.js:1019`), und die gepinnten Lint-Befunde von `registerTools` bleiben unberührt."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die MCP-Tabellen tragen kein Sprachfeld (`src/i18n/locales.js:126`, `:211`, `:296` liegen eine Ebene höher). Jede `consultAnswerAccepted` gehört aber fest zu ihrer Tabelle, und `localeFor` (`src/i18n/locales.js:406-408`) wählt die Tabelle. Deshalb genügt `Intl.PluralRules` mit dem Sprachcode der Tabelle in der Funktion selbst, und die Beugung läuft nach der Sprache der gewählten Tabelle, wie Pitch „Fallen“ es verlangt."
+    },
+    {
+      "auftrag": "a1",
+      "text": "B1 und B2 gehören zu a1: Die Änderung an der Bestätigung berührt dieselbe Antwort von `answer_consult` (Text neben `structuredContent`) und dieselbe Tabelle, in der `consultAckAccepted` steht."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "answer_consult beugt die Zahl der Angaben in de, en und fr",
+      "bereich": "src/i18n/mcp-texts.js",
+      "erwarteteDateien": [
+        "src/i18n/mcp-texts.js",
+        "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js"
+      ],
+      "abnahme": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js",
+      "erwarteterFehler": "1 detail(s) passed on to the call.",
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "B1",
+        "B2"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs, Umlaute in der deutschen Tabelle und ein Sonderwortlaut für 0 („Keine Angabe“), weil die Probe nur die Klammer-Endungen dieser einen Bestätigung behebt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil sich der Werkzeugvertrag für fremde Clients nicht ändern soll.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht gewollt ist, den übrigen Wortlaut, die strukturierte Antwort oder den Werkzeugvertrag zu ändern oder die Beugung mit einem festen Vergleich auf 1 abzukürzen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Französisch beugt 0 in der Einzahl, Deutsch und Englisch in der Mehrzahl; ein fester Vergleich `count === 1` trifft Französisch bei 0 falsch: Die Kategorie kommt aus `Intl.PluralRules` der Sprache der gewählten Texttabelle, nicht der rohen Kontosprache, damit eine künftige Kontosprache ohne eigene Tabelle (etwa Portugiesisch, das 0 als Einzahl behandelt) die Regeln der Ersatztabelle bekommt; heute sind Kontosprachen auf `de`, `en`, `fr` begrenzt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}
