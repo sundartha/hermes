@@ -4,12 +4,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { Window } from "happy-dom";
 import {
   LEGAL_SLUGS,
   LEGAL_TRANSLATION_NOTICE,
   indexLegalContent,
   legalFooterLinks,
 } from "../src/lib/legal.js";
+import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL } from "../src/lib/agent-docs.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 import { CANCEL_URL, LOGIN_URL } from "../src/lib/routes.js";
 import { homeHref } from "../src/lib/home-anchors.js";
@@ -351,4 +353,98 @@ test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Trans
   const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");
   assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
+});
+
+// "Mit Claude verbinden": die Links an allen Render-Orten der Startseite, im gebauten
+// DOM. Quelltext-Pruefungen und die wortgleichen Links: claude-connect.test.js (ohne
+// eigenen Build, damit die parallelen Build-Tests sich nicht in die Quere kommen).
+const CLAUDE_USER_BUTTONS = {
+  "Desktop-Karte": '[data-dev-card="a"] .connect-cta__btn',
+  "Tablet-Liste": ".dev-list .connect-cta__btn",
+  "Querformat-Blatt": ".dev-sheet .connect-cta__btn",
+  "Handy-Screen": ".mh-dev .mh-connect__btn",
+  "How it works (Ebene)": ".hg--layer .hg-tile:nth-child(2) .connect-cta__btn",
+  "How it works (Blatt)": ".hg--sheet .hg-tile:nth-child(2) .connect-cta__btn",
+};
+const CLAUDE_ADMIN_LINKS = {
+  "Desktop-Karte": '[data-dev-card="a"] .connect-cta__admin',
+  "Tablet-Liste": ".dev-list .connect-cta__admin",
+  "Querformat-Blatt": ".dev-sheet .connect-cta__admin",
+  "Handy-Screen": ".mh-dev .mh-connect__admin",
+};
+
+function homeDocument() {
+  const window = new Window({
+    settings: {
+      disableJavaScriptEvaluation: true,
+      disableJavaScriptFileLoading: true,
+      disableCSSFileLoading: true,
+    },
+  });
+  return new window.DOMParser().parseFromString(readDist("index.html"), "text/html");
+}
+
+function assertExternalClaudeLink(link, href, where) {
+  assert.ok(link, `${where}: Link fehlt`);
+  assert.equal(link.tagName, "A", `${where}: kein <a>`);
+  assert.equal(link.getAttribute("href"), href, `${where}: falsches Ziel`);
+  assert.equal(link.getAttribute("target"), "_blank", `${where}: target=_blank fehlt`);
+  const rel = (link.getAttribute("rel") ?? "").split(/\s+/);
+  assert.ok(rel.includes("noopener") && rel.includes("noreferrer"), `${where}: rel ohne noopener noreferrer`);
+  assert.ok(
+    ![...link.attributes].some((attr) => /^on/i.test(attr.name) || attr.name === "style"),
+    `${where}: Inline-Handler oder style (CSP)`,
+  );
+}
+
+test("Mit Claude verbinden: Nutzer-Link an allen Orten, Admin-Link an den vier Anleitungs-Orten", () => {
+  const doc = homeDocument();
+  for (const [where, selector] of Object.entries(CLAUDE_USER_BUTTONS)) {
+    assertExternalClaudeLink(doc.querySelector(selector), CLAUDE_CONNECT_URL, where);
+  }
+  for (const [where, selector] of Object.entries(CLAUDE_ADMIN_LINKS)) {
+    assertExternalClaudeLink(doc.querySelector(selector), CLAUDE_ADMIN_CONNECT_URL, `Admin, ${where}`);
+  }
+  const links = [...doc.querySelectorAll('a[href*="claude.ai"]')];
+  assert.equal(links.length, Object.keys(CLAUDE_USER_BUTTONS).length + Object.keys(CLAUDE_ADMIN_LINKS).length);
+  for (const link of links) {
+    assert.equal(link.closest(".dev-window, .hg-anim"), null, "Claude-Link steckt in einer animierten Attrappe");
+  }
+});
+
+test("Mit Claude verbinden: EN im Markup, DE je Knoten (Handy) bzw. im Woerterbuch (Buehne)", () => {
+  const doc = homeDocument();
+  const expected = {
+    connectBtn: "Add to Claude",
+    connectHint: "Opens Claude with Hermes already filled in — just click “Add”.",
+    connectAdmin: "Team or Enterprise admin? Add it for everyone",
+    copyUrlLabel: "For ChatGPT & others: copy URL",
+    connectNewTab: " (opens in new tab)",
+  };
+  for (const [key, text] of Object.entries(expected)) {
+    const nodes = [...doc.querySelectorAll(`[data-i18n="${key}"]`)];
+    assert.ok(nodes.length >= 3, `data-i18n="${key}" fehlt an Desktop, Liste oder Blatt`);
+    for (const node of nodes) assert.equal(node.textContent.trimEnd(), text.trimEnd());
+  }
+  const mobile = {
+    ".mh-connect__btn > span:first-child": ["Add to Claude", "Mit Claude verbinden"],
+    ".mh-connect__btn > .mh-sr": [" (opens in new tab)", " (öffnet in neuem Tab)"],
+    ".mh-copy__label--url": ["Copy URL", "URL kopieren"],
+    ".mh-connect__hint": [
+      "Opens Claude with Hermes already filled in — just click “Add”.",
+      "Öffnet Claude mit Hermes schon eingetragen – du klickst nur noch auf „Hinzufügen“.",
+    ],
+    ".mh-connect__admin > span:first-child": [
+      "Team or Enterprise admin? Add it for everyone",
+      "Team- oder Enterprise-Admin? Für alle hinzufügen",
+    ],
+  };
+  for (const [selector, [en, de]] of Object.entries(mobile)) {
+    const node = doc.querySelector(`.mh-dev ${selector}`);
+    assert.ok(node, `Handy: ${selector} fehlt`);
+    assert.equal(node.textContent.trimEnd(), en.trimEnd());
+    assert.equal(node.getAttribute("data-mh-de"), de);
+  }
+  const html = doc.documentElement.outerHTML;
+  assert.ok(!html.includes('class="dev-connect"'), "Attrappen-Knopf 'Connect' ist zurueck");
 });

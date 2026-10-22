@@ -27,6 +27,7 @@ import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 // Vorranghinweis, lib/legal.js), auf Deutsch die verbindliche Fassung. Beide stehen
 // im HTML, sichtbar ist die zur Seitensprache passende ([data-lang-only]).
 import HowtoSteps from "../components/HowtoSteps.astro";
+import ConnectClaude from "../components/ConnectClaude.astro";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 // Handy scrollt seit 2026-09-26 wie der Desktop (Owner-Entscheidung, revidiert
@@ -294,11 +295,11 @@ const infoTabs = [
                     <span class="dev-field dev-field--2">
                       <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
                       <span class="dev-field__url">{MCP_URL}</span>
-                      <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button>
+                      <button class="dev-copy dev-copy--url" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button>
                     </span>
-                    <span class="dev-connect" data-i18n="devConnectBtn">Connect</span>
                   </span>
                 </span>
+                <ConnectClaude />
               </div>
 
               <div class="dev-card" data-dev-card="b">
@@ -346,8 +347,9 @@ const infoTabs = [
                  drei Wegen - jeweils das, was man kopiert, und ein Copy-Knopf. -->
             <div class="dev-list">
               <div class="dev-list__row">
-                <span class="dev-list__head"><span class="dev-list__num">01</span><span class="dev-list__title" data-i18n="devWayATitle">Add it as a connector</span><button class="dev-list__copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button></span>
-                <span class="dev-list__code"><span>{MCP_URL}</span></span>
+                <span class="dev-list__head"><span class="dev-list__num">01</span><span class="dev-list__title" data-i18n="devWayATitle">Add it as a connector</span></span>
+                <ConnectClaude />
+                <span class="dev-list__head dev-list__head--url"><span class="dev-list__code"><span>{MCP_URL}</span></span><button class="dev-list__copy" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button></span>
               </div>
               <div class="dev-list__row">
                 <span class="dev-list__head"><span class="dev-list__num">02</span><span class="dev-list__title" data-i18n="devWayB">In the terminal</span><button class="dev-list__copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button></span>
@@ -520,12 +522,12 @@ const infoTabs = [
               <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
               <span class="dev-field__row">
                 <span class="dev-field__url">{MCP_URL}</span>
-                <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button>
+                <button class="dev-copy dev-copy--url" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button>
               </span>
             </span>
-            <span class="dev-connect" data-i18n="devConnectBtn">Connect</span>
           </span>
         </span>
+        <ConnectClaude />
       </div>
 
       <div class="sheet__card">

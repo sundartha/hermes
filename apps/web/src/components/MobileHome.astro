@@ -29,7 +29,7 @@ import "../styles/hermes-mobile-sr.css";
 import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 import { PLAN_BENEFITS, planBenefitsText } from "../lib/plan-benefits.js";
-import { SITE_AGENT_LINE } from "../lib/agent-docs.js";
+import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL, SITE_AGENT_LINE } from "../lib/agent-docs.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import { codeTokens } from "../lib/mobile-code.js";
 import BiText from "./site/BiText.astro";
@@ -77,7 +77,12 @@ const T = {
       { tab: "Terminal", title: "With a single command" },
       { tab: "Your AI", title: "Just ask your AI" },
     ],
+    connect: "Add to Claude",
+    connectHint: "Opens Claude with Hermes already filled in — just click “Add”.",
+    connectAdmin: "Team or Enterprise admin? Add it for everyone",
+    newTab: " (opens in new tab)",
     copy: "Copy",
+    copyUrl: "Copy URL",
     copied: "Copied",
     devFoot: "Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.",
     privacy: "Privacy",
@@ -120,7 +125,12 @@ const T = {
       { tab: "Terminal", title: "Mit einem einzigen Befehl" },
       { tab: "Deine KI", title: "Frag einfach deine KI" },
     ],
+    connect: "Mit Claude verbinden",
+    connectHint: "Öffnet Claude mit Hermes schon eingetragen – du klickst nur noch auf „Hinzufügen“.",
+    connectAdmin: "Team- oder Enterprise-Admin? Für alle hinzufügen",
+    newTab: " (öffnet in neuem Tab)",
     copy: "Kopieren",
+    copyUrl: "URL kopieren",
     copied: "Kopiert",
     devFoot: `Streamable HTTP, OAuth beim ersten Verbinden. Funktioniert mit Claude, Codex und jedem MCP-${WJ}Client.`,
     privacy: "Datenschutz",
@@ -389,9 +399,18 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
             <button class="mh-toggle__opt" type="button" role="tab" data-mh-way={index} aria-selected={String(index === 0)} data-mh-de={T.de.ways[index].tab}>{way.tab}</button>
           ))}
         </div>
-        <button class="mh-pill mh-copy" type="button" data-mh-copy aria-live="polite" data-copy-label-en={T.en.copy} data-copy-label-de={T.de.copy} data-copied-en={T.en.copied} data-copied-de={T.de.copied}>
+        <!-- Nur beim Weg "Connector" (data-way="0", CSS): echter Link in Claudes
+             Connector-Dialog, Name und URL schon eingetragen. "Copy" bleibt der Weg
+             fuer ChatGPT und andere Clients und wird dort zur zweiten Aktion. -->
+        <div class="mh-connect">
+          <a class="mh-pill mh-connect__btn" href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-mh-de={T.de.connect}>{T.en.connect}</span><span class="mh-sr" data-mh-de={T.de.newTab}>{T.en.newTab}</span></a>
+          <p class="mh-connect__hint" data-mh-de={T.de.connectHint}>{T.en.connectHint}</p>
+          <a class="mh-connect__admin" href={CLAUDE_ADMIN_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-mh-de={T.de.connectAdmin}>{T.en.connectAdmin}</span><span class="mh-sr" data-mh-de={T.de.newTab}>{T.en.newTab}</span></a>
+        </div>
+        <button class="mh-pill mh-copy" type="button" data-mh-copy aria-live="polite" data-copy-label-en={T.en.copy} data-copy-label-de={T.de.copy} data-copy-url-label-en={T.en.copyUrl} data-copy-url-label-de={T.de.copyUrl} data-copied-en={T.en.copied} data-copied-de={T.de.copied}>
           <span class="mh-copy__roll" aria-hidden="true">
             <span class="mh-copy__label" data-mh-de={T.de.copy}>{T.en.copy}</span>
+            <span class="mh-copy__label mh-copy__label--url" data-mh-de={T.de.copyUrl}>{T.en.copyUrl}</span>
             <span class="mh-copy__label mh-copy__label--done" data-mh-de={`✓  ${T.de.copied}`}>{`✓  ${T.en.copied}`}</span>
           </span>
           <span class="mh-sr" data-mh-copy-sr>{T.en.copy}</span>
