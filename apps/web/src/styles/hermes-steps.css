@@ -603,7 +603,7 @@
   border-radius: 7px;
   border: 0;
   background: rgba(255, 255, 255, 0.16);
-  font: 600 11.5px/1 var(--sans);
+  font: 600 12px/1 var(--sans);
   color: #fff;
   transition: background 0.18s;
 }

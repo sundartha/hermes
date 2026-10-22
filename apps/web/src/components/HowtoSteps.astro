@@ -11,7 +11,9 @@
 // Sprache: serverseitig in der Sprache der Seite (lang="en" auf der Startseite,
 // Default "de" fuer /so-funktionierts); die Startseite tauscht zur Laufzeit ueber
 // data-i18n (hermes-scroll.js, Keys step1Title ... und hgB11 ... hgB33).
+// Schritt 2 traegt zusaetzlich den Knopf "Mit Claude verbinden" (ConnectClaude, compact).
 import "../styles/hermes-steps.css";
+import ConnectClaude from "./ConnectClaude.astro";
 
 const { lang = "de", variant = "layer" } = Astro.props;
 
@@ -54,6 +56,7 @@ const bars = Array.from({ length: 24 }, (_, i) => i);
             <li class="hg-list__item" data-i18n={`hgB${i + 1}${j + 1}`}>{b}</li>
           ))}
         </ul>
+        {i === 1 && <ConnectClaude lang={lang} compact />}
       </span>
 
       {i === 0 && (

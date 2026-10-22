@@ -297,6 +297,25 @@
   .dev-list__row + .dev-list__row {
     border-top: 1px solid rgba(207, 228, 250, 0.14);
   }
+  /* Zeile 01 fuehrt den Knopf "Mit Claude verbinden": sie nimmt ihre
+     Inhaltshoehe, die beiden anderen teilen sich den Rest. */
+  .dev-list__row:first-child {
+    flex: 1 0 auto;
+  }
+  .dev-list .connect-cta {
+    align-items: flex-start;
+    margin-top: 10px;
+    text-align: left;
+  }
+  /* Adresse links, Kopierknopf ("Fuer ChatGPT & andere") rechts. */
+  .dev-list__head--url {
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .dev-list__head--url .dev-list__code {
+    min-width: 0;
+    margin-top: 0;
+  }
   /* Kopf je Zeile: Nummer, Titel, rechts der Copy-Knopf - darunter hat der
      Inhalt die volle Breite der Karte. */
   .dev-list__head {
@@ -403,6 +422,9 @@
   .dev-list {
     margin-top: 18px !important;
   }
+  .dev-list .connect-cta__hint {
+    display: none;
+  }
   .price-grid > .plan {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -465,5 +487,13 @@
   }
   .dev-list__row {
     padding: 14px 22px;
+  }
+}
+
+/* Touch: der Kopierknopf in der Entwickler-Liste bekommt echte 44px Hoehe. */
+@media (pointer: coarse) {
+  .dev-list__copy {
+    min-height: 44px;
+    min-width: 64px;
   }
 }

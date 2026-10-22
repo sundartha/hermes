@@ -1217,6 +1217,85 @@
   grid-area: 1 / 1;
 }
 
+/* "Mit Claude verbinden" (nur Weg "Connector"): die weisse Pille ist die
+   Hauptaktion, darunter Hinweis und Admin-Link. Bei den Wegen Terminal und
+   "Your AI" gibt es sie nicht (hermes-mobile.js setzt data-way am Screen). */
+.mh-connect {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.mh .mh-dev:not([data-way="0"]) .mh-connect {
+  display: none;
+}
+.mh-connect__hint {
+  margin: 0;
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(207, 228, 250, 0.78);
+  text-wrap: balance;
+}
+.mh .mh-connect__admin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  max-width: 320px;
+  padding: 0 8px;
+  font:
+    400 13px/1.3 "Space Grotesk",
+    sans-serif;
+  color: rgba(207, 228, 250, 0.9);
+  text-align: center;
+  text-decoration: underline;
+  text-decoration-color: rgba(207, 228, 250, 0.4);
+  text-underline-offset: 3px;
+}
+.mh .mh-connect__admin:hover {
+  color: #fff;
+  text-decoration-color: #fff;
+}
+/* Beim Weg "Connector" wird "Copy" zur zweiten Aktion (ChatGPT und andere
+   Clients): Glas statt weiss, 44px. */
+.mh .mh-dev[data-way="0"] .mh-copy,
+.mh .mh-dev[data-way="0"] .mh-copy:hover {
+  height: 44px;
+  background: rgba(207, 228, 250, 0.14);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(207, 228, 250, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.mh .mh-dev[data-way="0"][data-copied="1"] .mh-copy {
+  color: #8ff0c0;
+}
+/* ... und sagt dort "Copy URL" statt nur "Copy" (kein Kontext mehr, wenn Hinweis
+   und Fussnote auf niedrigen Bildschirmen entfallen). Die Rolle "Copy -> Copied"
+   laeuft mit dem URL-Label wie mit dem ersten. */
+.mh-copy__label--url {
+  opacity: 0;
+}
+.mh .mh-dev[data-way="0"] .mh-copy__label:first-child {
+  opacity: 0;
+}
+.mh .mh-dev[data-way="0"] .mh-copy__label--url {
+  opacity: 1;
+}
+.mh .mh-dev[data-way="0"][data-copied="1"] .mh-copy__label--url {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+/* iPhone SE: die Aktionen brauchen den Platz der Fussnote und des Hinweises. */
+@media (max-height: 699.98px) {
+  .mh-connect__hint,
+  .mh .mh-dev[data-way="0"] .mh-foot {
+    display: none;
+  }
+}
+
 /* ------------------------------------------------- Screen 5: Abschluss */
 
 /* Aufsteigender Faden ueber der Headline. */

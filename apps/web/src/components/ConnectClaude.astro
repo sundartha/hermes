@@ -1,0 +1,42 @@
+---
+// "Mit Claude verbinden": ein echter Link auf Claudes Connector-Dialog, in dem
+// Name und Server-URL schon eingetragen sind (lib/agent-docs.js, CLAUDE_CONNECT_URL).
+// Der Nutzer klickt dort nur noch "Hinzufuegen". Darunter, klein: derselbe Link fuer
+// Team-/Enterprise-Owner (Admin-Einstellungen, fuer alle Mitglieder).
+//
+// Steht immer AUSSERHALB der animierten Fenster-Attrappen (.dev-layer:not(.play) *
+// schaltet dort jede Animation ab) und ist reines Markup: kein Skript, kein
+// Inline-Handler (CSP). Handy (< 768 px) hat eigenes Markup in MobileHome.astro.
+//
+// Sprache wie HowtoSteps: serverseitig in `lang`, die Startseite tauscht zur Laufzeit
+// ueber data-i18n (hermes-scroll.js, Keys connectBtn, connectHint, connectAdmin,
+// connectNewTab). Beide Links oeffnen einen neuen Tab: der Hinweis dafuer steht als
+// .sr-only-Span im Link (Screenreader), der Linktext selbst in einem eigenen Span,
+// damit der Sprachwechsel (innerHTML je data-i18n-Knoten) den Hinweis nicht ueberschreibt.
+// compact = nur der Knopf (Schritt 2 von "How it works").
+import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL } from "../lib/agent-docs.js";
+
+const { lang = "en", compact = false } = Astro.props;
+
+const T = {
+  en: {
+    btn: "Add to Claude",
+    hint: "Opens Claude with Hermes already filled in — just click “Add”.",
+    admin: "Team or Enterprise admin? Add it for everyone",
+    newTab: " (opens in new tab)",
+  },
+  de: {
+    btn: "Mit Claude verbinden",
+    hint: "Öffnet Claude mit Hermes schon eingetragen – du klickst nur noch auf „Hinzufügen“.",
+    admin: "Team- oder Enterprise-Admin? Für alle hinzufügen",
+    newTab: " (öffnet in neuem Tab)",
+  },
+};
+const t = T[lang] ?? T.en;
+---
+
+<div class:list={["connect-cta", { "connect-cta--compact": compact }]}>
+  <a class="connect-cta__btn" href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectBtn">{t.btn}</span><span class="sr-only" data-i18n="connectNewTab">{t.newTab}</span></a>
+  {!compact && <p class="connect-cta__hint" data-i18n="connectHint">{t.hint}</p>}
+  {!compact && <a class="connect-cta__admin" href={CLAUDE_ADMIN_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectAdmin">{t.admin}</span><span class="sr-only" data-i18n="connectNewTab">{t.newTab}</span></a>}
+</div>
