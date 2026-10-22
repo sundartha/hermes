@@ -1,0 +1,77 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1018"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:221"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-calls.js:97"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:114"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:843"
+  },
+  {
+    "schluessel": "weg:S5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/state-ops.js:667"
+  },
+  {
+    "schluessel": "weg:S6",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:329"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1019"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1012"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1019"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/mcp-tools.js:1012"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/werkzeug-registrierung.js:27"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:114"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

@@ -1,0 +1,636 @@
+{
+  "gruppe": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "B1",
+    "B2"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 221,
+          "bis": 221
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 221,
+          "bis": 221,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:221 (reine Textfunktion, kein Speicherfeld betroffen)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 221,
+          "bis": 221
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 221,
+          "bis": 221,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:221"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 114,
+          "bis": 114
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 114,
+          "bis": 114,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:114"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 114,
+          "bis": 114
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 114,
+          "bis": 114,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:114"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S5": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 329,
+          "bis": 329
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 329,
+          "bis": 329,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:329"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S6": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/mcp.js",
+          "funktion": "makeMcpRoutes",
+          "von": 94,
+          "bis": 95
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 843,
+          "bis": 843
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/i18n/locales.js",
+          "funktion": "localeFor",
+          "von": 406,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 329,
+          "bis": 329
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/i18n/mcp-texts.js",
+          "funktion": "consultAnswerAccepted",
+          "von": 329,
+          "bis": 329,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/i18n/mcp-texts.js:329"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "makeCallRoutes",
+          "von": 391,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "answerConsultFinal",
+          "von": 81,
+          "bis": 98
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "answerConsult",
+          "von": 694,
+          "bis": 707
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "mergeContextFacts",
+          "von": 661,
+          "bis": 671
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 1016,
+          "bis": 1020
+        }
+      ],
+      "aenderungen": "keine Änderung, weil die strukturierte Antwort `accepted` und `merged_facts` in src/mcp-tools.js:1019 unabhängig vom Text gebildet wird und unverändert bleiben soll",
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/mcp-tools.js:1019"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 982,
+          "bis": 1029
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 1010,
+          "bis": 1014
+        }
+      ],
+      "aenderungen": "keine Änderung, weil der working-Zweig den festen Text `consultAckAccepted` (src/mcp-tools.js:1012) ohne Zahl liefert und unverändert bleibt",
+      "tests": [
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/mcp-tools.js:1010-1014"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Die drei Textfunktionen heißen alle consultAnswerAccepted und sind Einzeiler mit Klammer-Endungen. de (Zeile 114): `(count) => `${count} Angabe(n) an den Anruf uebergeben.``. en (Zeile 221): `(count) => `${count} detail(s) passed on to the call.``. fr (Zeile 329): `(count) => `${count} information(s) transmise(s) à l'appel.``.",
+    "Aufbau von src/i18n/mcp-texts.js: Die Datei exportiert `MCP_TEXTS = Object.freeze({de, ..., en, fr})` (Zeile 22, je Sprache ein eingefrorenes Objekt) und `MCP_ERROR_CODE`. Gemeinsame Hilfsfunktionen für die Tabellen gibt es nicht. Eine Textfunktion kennt den Sprachcode ihrer Tabelle nicht: Die MCP-Tabellen haben kein `language`-Feld. Das Feld `language: \"de\"|\"fr\"|\"en\"` (src/i18n/locales.js:126, 211, 296) sitzt eine Ebene höher im Locale-Objekt, und `mcp` ist dort nur `MCP_TEXTS.de|fr|en` (locales.js:168, 253, 336). Der Code steht also jeweils nur in der Funktion selbst, zum Beispiel als Literal in `new Intl.PluralRules(\"de\")`. Das genügt: Jede Funktion gehört fest zu ihrer Tabelle, und die Tabelle richtet sich nach `localeFor`.",
+    "Tabellenwahl: src/routes/mcp.js:95 ermittelt die Kontosprache mit `tenantLanguage(store.load(), scopedTenant)` und reicht sie an `registerTools` weiter. src/mcp-tools.js:843 macht daraus `const loc = localeFor(language)`. `localeFor` (locales.js:406-408) fällt für unbekannte Sprachen auf die Standardsprache zurück, laut Design Doc Englisch. Die gewählte Tabelle ist damit immer `loc.mcp`, und die Beugung in der Funktion passt immer zur Tabelle.",
+    "Der Weg des Zahlenwerts: Das Werkzeug ruft per `call(\"POST\", /api/calls/${call_id}/consult/answer)` (src/mcp-tools.js:1009) die interne Route src/routes/api-calls.js:391-408 auf, die an `answerConsultFinal` (:81-98) übergibt. Dort laufen `store.answerConsult` (state-ops.js:694-707) und darin `mergeContextFacts` (state-ops.js:661-671). `answerConsultFinal` antwortet mit `res.json({accepted: true, merged_facts})` (api-calls.js:97), und src/mcp-tools.js:1016 liest den Wert dort wieder aus.",
+    "Eine vorhandene Pluralbildung gibt es nicht: Die Suche nach `PluralRules` in src/ und tools/ findet nichts. Die Suche nach den Klammer-Endungen findet nur die drei Funktionen selbst, und der feste Vergleich auf 1 aus der Absicht kommt im Code bisher nicht vor. Die Funktionen ändern sich an Ort und Stelle, ohne neue Datei und ohne neue Funktion.",
+    "Test: test/al-p13-consult-channel.test.js:869-886 und :888-901 erreichen `answer_consult` nicht über `POST /mcp`. Sie rufen den Handler direkt auf: `captureToolHandlers({consultAllowed: true, language: \"en\"}).get(\"answer_consult\")`, und `withGateway` stubbt `/api/calls/` mit `{accepted: true, merged_facts: N}`. Die Sprache wird per Option `language` gesetzt, Text und strukturierte Antwort liest der Test aus `r.content[0].text` und `r.structuredContent`. Dieselbe Hilfe taugt für `de` und `fr`, und `merged_facts: 0` lässt sich mit dem Gateway-Stub direkt vorgeben. Der Test nutzt `localeFor(\"en\").mcp.consultAnswerAccepted(2)` als Erwartung und bleibt grün, würde aber auch bei einer falschen Beugung nicht rot. Für S1 bis S6 bräuchte es feste Wortlaute. Die Sprachen de und fr prüft heute kein Test.",
+    "`merged_facts` 0 bei einer Antwort mit einer Angabe: `mergeContextFacts` (src/store/state-ops.js:661-671) liefert 0, wenn `facts` leer ist (Zeile 663) oder wenn `KEY_FACTS_LIMITS.maxItems` schon erreicht ist (`room <= 0`, Zeile 667). Eine schon vorhandene Angabe wird nicht entfernt; es gibt dort keine Dublettenprüfung. Über den echten Eingang ist das nur herzustellen, wenn die Rückfrage-Antwort auf ein Gespräch trifft, dessen `context.key_facts` voll ist. Im Handler-Test genügt der Gateway-Stub mit `merged_facts: 0`.",
+    "Andere Stellen mit dem Wortlaut: Die Suche nach `detail(s)`, `Angabe(n)` und `information(s)` findet in test/ und docs/ nichts. `consultAnswerAccepted` kommt nur in test/al-p13-consult-channel.test.js:873 vor, per Funktionsaufruf und nicht als fester Text. Nichts in docs/ und kein Test würde durch die neue Beugung rot. Die Treffer in `test/werkzeuge/werkzeugtexte.json` und `docs/mcp-vertrag.json` habe ich nicht gesondert geprüft, die Suche in test/ und docs/ findet dort aber nichts. Keine Datei in .github/CODEOWNERS betrifft src/i18n/mcp-texts.js. Die Pfade /test/werkzeuge/ und /test/werkzeuge/werkzeugtexte.json stehen dort, werden aber nicht geändert.",
+    "Lint: Die drei Funktionen und mcp-texts.js haben laut `karte` keine Lint-Befunde, und die Datei steht nicht in den eslint-Ausnahmelisten. src/mcp-tools.js steht in eslint-legacy-exceptions.json (Zeile 127) mit einem gepinnten Zeilen-Befund für `registerTools`. Es braucht keine Änderung dort: Das Werkzeug ruft die Funktion weiter mit der Zahl auf (src/mcp-tools.js:1018), und die Pins bleiben unverändert.",
+    "Bereich: src/i18n/mcp-texts.js fällt nach tools/bereiche.json in `gemeinsam` (Muster `^src/`, keine Eingangs- und keine Fachlogik-Zeile). Unter test/gemeinsam/ gibt es keine Tests für `answer_consult` oder die MCP-Texttabellen, nur Hilfsdateien und Konfigurations-Tests. Weitere Tests mit den MCP-Texten liegen direkt unter test/, etwa test/mcp-tools-language.test.js (importiert MCP_TEXTS) und test/openai-p4-ergebnisstruktur-instructions.test.js. Beide habe ich nicht auf den `consultAnswerAccepted`-Text gelesen, die Suche nach dem Wortlaut hat dort keinen Treffer."
+  ]
+}
