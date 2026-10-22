@@ -27,11 +27,6 @@ const VSCODE_CONFIG = { name: SERVER_NAME, type: "http", url: MCP_URL };
 export const CURSOR_INSTALL_URL = `cursor://anysphere.cursor-deeplink/mcp/install?name=${SERVER_NAME}&config=${btoa(JSON.stringify(CURSOR_CONFIG))}`;
 export const VSCODE_INSTALL_URL = `vscode:mcp/install?${encodeURIComponent(JSON.stringify(VSCODE_CONFIG))}`;
 
-// Claudes dokumentierter Deep-Link (claude.com/docs/connectors/building/directory-vs-custom):
-// oeffnet "Eigenen Connector hinzufuegen" mit Name und URL schon eingetragen, der
-// Nutzer klickt nur noch "Hinzufuegen". Zweiter Link gleicher Parameter fuer
-// Team-/Enterprise-Owner (Admin-Einstellungen, gilt fuer die ganze Organisation).
-// Sichtbar auf der Startseite, anders als Cursor/VS Code (agent-ready.test.js).
 export const CLAUDE_CONNECTOR_NAME = "Hermes";
 function claudeConnectUrl(page) {
   const query = `modal=add-custom-connector&connectorName=${encodeURIComponent(CLAUDE_CONNECTOR_NAME)}&connectorUrl=${encodeURIComponent(MCP_URL)}`;

@@ -355,9 +355,6 @@ test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Trans
   assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
 });
 
-// "Mit Claude verbinden": die Links an allen Render-Orten der Startseite, im gebauten
-// DOM. Quelltext-Pruefungen und die wortgleichen Links: claude-connect.test.js (ohne
-// eigenen Build, damit die parallelen Build-Tests sich nicht in die Quere kommen).
 const CLAUDE_USER_BUTTONS = {
   "Desktop-Karte": '[data-dev-card="a"] .connect-cta__btn',
   "Tablet-Liste": ".dev-list .connect-cta__btn",
@@ -372,6 +369,7 @@ const CLAUDE_ADMIN_LINKS = {
   "Querformat-Blatt": ".dev-sheet .connect-cta__admin",
   "Handy-Screen": ".mh-dev .mh-connect__admin",
 };
+const CLAUDE_I18N_STAGE_TREES = ["Desktop-Karte", "Tablet-Liste", "Querformat-Blatt"];
 
 function homeDocument() {
   const window = new Window({
@@ -423,7 +421,7 @@ test("Mit Claude verbinden: EN im Markup, DE je Knoten (Handy) bzw. im Woerterbu
   };
   for (const [key, text] of Object.entries(expected)) {
     const nodes = [...doc.querySelectorAll(`[data-i18n="${key}"]`)];
-    assert.ok(nodes.length >= 3, `data-i18n="${key}" fehlt an Desktop, Liste oder Blatt`);
+    assert.ok(nodes.length >= CLAUDE_I18N_STAGE_TREES.length, `data-i18n="${key}" fehlt an Desktop, Liste oder Blatt`);
     for (const node of nodes) assert.equal(node.textContent.trimEnd(), text.trimEnd());
   }
   const mobile = {

@@ -555,7 +555,6 @@ function startTyping(delay) {
 function setCopied(on) {
   clearTimeout(copiedTimer);
   el.dev.setAttribute("data-copied", on ? "1" : "0");
-  // Beim Weg "Connector" heisst der Knopf "Copy URL" (sichtbar, s. MobileHome.astro).
   const idle = state.way === 0 ? "data-copy-url-label" : "data-copy-label";
   el.copySr.textContent = el.copy.getAttribute(langAttr(on ? "data-copied" : idle));
   if (on) copiedTimer = setTimeout(() => setCopied(false), COPIED_MS);

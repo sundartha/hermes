@@ -5,14 +5,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL, MCP_URL } from "../src/lib/agent-docs.js";
 
-// "Mit Claude verbinden": Deep-Link auf Claudes Dialog "Eigenen Connector hinzufuegen"
-// (claude.com/docs/connectors/building/directory-vs-custom). Die Links sind
-// wortgetreu festgeschrieben, damit eine Aenderung an Parametern oder Encoding auffaellt.
-//
-// Diese Datei liest nur Quelltext (kein eigener astro build): die Build-Tests starten
-// parallel und raeumen sich gegenseitig .astro/.prerender weg, ein weiterer Build
-// macht sie flaky. Das gebaute DOM (alle Render-Orte, target/rel, EN-Texte, data-mh-de)
-// prueft pages.test.js "Mit Claude verbinden: ..." auf dem dort ohnehin gebauten dist.
 const USER_URL =
   "https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=Hermes&connectorUrl=https%3A%2F%2Fapp.sundartha.com%2Fmcp";
 const ADMIN_URL =
@@ -43,7 +35,6 @@ function readSrc(relativePath) {
   return readFileSync(join(WEB_ROOT, "src", relativePath), "utf8");
 }
 
-// Ausschnitt von `from` bis `to` (erstes Vorkommen nach `from`), mit Klartext-Fehler.
 function between(source, from, to) {
   const start = source.indexOf(from);
   assert.ok(start >= 0, `Marker fehlt: ${from}`);
