@@ -369,7 +369,11 @@ const CLAUDE_ADMIN_LINKS = {
   "Querformat-Blatt": ".dev-sheet .connect-cta__admin",
   "Handy-Screen": ".mh-dev .mh-connect__admin",
 };
-const CLAUDE_I18N_STAGE_TREES = ["Desktop-Karte", "Tablet-Liste", "Querformat-Blatt"];
+const CLAUDE_I18N_STAGE_TREES = {
+  "Desktop-Karte": '[data-dev-card="a"]',
+  "Tablet-Liste": ".dev-list",
+  "Querformat-Blatt": ".dev-sheet",
+};
 
 function homeDocument() {
   const window = new Window({
@@ -420,8 +424,10 @@ test("Mit Claude verbinden: EN im Markup, DE je Knoten (Handy) bzw. im Woerterbu
     connectNewTab: " (opens in new tab)",
   };
   for (const [key, text] of Object.entries(expected)) {
+    for (const [place, tree] of Object.entries(CLAUDE_I18N_STAGE_TREES)) {
+      assert.ok(doc.querySelector(`${tree} [data-i18n="${key}"]`), `${place}: data-i18n="${key}" fehlt`);
+    }
     const nodes = [...doc.querySelectorAll(`[data-i18n="${key}"]`)];
-    assert.ok(nodes.length >= CLAUDE_I18N_STAGE_TREES.length, `data-i18n="${key}" fehlt an Desktop, Liste oder Blatt`);
     for (const node of nodes) assert.equal(node.textContent.trimEnd(), text.trimEnd());
   }
   const mobile = {

@@ -11,10 +11,11 @@
 // Sprache wie HowtoSteps: serverseitig in `lang`, die Startseite tauscht zur Laufzeit
 // ueber data-i18n (hermes-scroll.js, Keys connectBtn, connectHint, connectAdmin,
 // connectNewTab). Beide Links oeffnen einen neuen Tab: der Hinweis dafuer steht als
-// .sr-only-Span im Link (Screenreader), der Linktext selbst in einem eigenen Span,
+// .mh-sr-Span im Link (Screenreader, hermes-mobile-sr.css), der Linktext selbst in einem eigenen Span,
 // damit der Sprachwechsel (innerHTML je data-i18n-Knoten) den Hinweis nicht ueberschreibt.
 // compact = nur der Knopf (Schritt 2 von "How it works").
 import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL } from "../lib/agent-docs.js";
+import "../styles/hermes-mobile-sr.css";
 
 const { lang = "en", compact = false } = Astro.props;
 
@@ -36,7 +37,7 @@ const t = T[lang] ?? T.en;
 ---
 
 <div class:list={["connect-cta", { "connect-cta--compact": compact }]}>
-  <a class="connect-cta__btn" href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectBtn">{t.btn}</span><span class="sr-only" data-i18n="connectNewTab">{t.newTab}</span></a>
+  <a class="connect-cta__btn" href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectBtn">{t.btn}</span><span class="mh-sr" data-i18n="connectNewTab">{t.newTab}</span></a>
   {!compact && <p class="connect-cta__hint" data-i18n="connectHint">{t.hint}</p>}
-  {!compact && <a class="connect-cta__admin" href={CLAUDE_ADMIN_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectAdmin">{t.admin}</span><span class="sr-only" data-i18n="connectNewTab">{t.newTab}</span></a>}
+  {!compact && <a class="connect-cta__admin" href={CLAUDE_ADMIN_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-i18n="connectAdmin">{t.admin}</span><span class="mh-sr" data-i18n="connectNewTab">{t.newTab}</span></a>}
 </div>
