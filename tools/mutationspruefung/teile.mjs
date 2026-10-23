@@ -25,13 +25,8 @@ export function pruefsumme(teile, kopf) {
 }
 
 export function anteilig({ erste, alle }, { anteil, von }) {
-  if (von === 1) return { erste, alle };
-  const eigene = erste.filter((_test, index) => index % von === anteil - 1);
-  return { erste: eigene, alle: eigene };
-}
-
-export function uebrige({ erste, alle }) {
-  return alle.filter((test) => !erste.includes(test));
+  const eigene = alle.filter((_test, index) => index % von === anteil - 1);
+  return { erste: erste.filter((test) => eigene.includes(test)), alle: eigene };
 }
 
 export function matrix(teile) {

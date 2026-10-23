@@ -16,12 +16,12 @@ import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
-import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, uebrige } from "./mutationspruefung/teile.mjs";
+import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
-import { GELOESCHT, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -305,6 +305,7 @@ async function durchgang(datei, zeilen, tests) {
 }
 
 async function mutantenproben(datei, zeilen, { erste, alle }) {
+  if (erste.length === 0) return ohneRoteErstlaeufe(datei, zeilen, alle);
   const ergebnisse = await durchgang(datei, zeilen, erste);
   const offen = ergebnisse.filter(ueberlebt);
   const uebrige = alle.filter((test) => !erste.includes(test));
@@ -518,7 +519,7 @@ async function planen(pruefungen) {
   for (const [pruefung, stand] of pruefungen.entries()) {
     await imStand(stand, (bestand, graph) => {
       for (const { datei, bereiche } of bestand) {
-        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, graph).erste.length);
+        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, graph).alle.length);
         einheiten.push(...Array.from({ length: von }, (_leer, index) => ({ pruefung, datei, bereiche, anteil: index + 1, von })));
       }
     });
@@ -587,43 +588,12 @@ function vereineAnteile(berichte, pruefung) {
   return [...nachSchluessel.values()];
 }
 
-async function zweiteStufe(datei, ergebnisse, { graph, loeschung }) {
-  const uebrig = uebrige(testauswahl(datei, graph));
-  const offen = ergebnisse.filter((eintrag) => eintrag.schluessel.startsWith(`${datei}:`) && ueberlebt(eintrag));
-  if (uebrig.length === 0 || offen.length === 0) return ergebnisse;
-  const mutanten = offen.filter(({ art }) => art !== GELOESCHT && art !== ABSCHALTKOMMENTAR);
-  const vereint = mutanten.length === 0 ? ergebnisse : vereine(ergebnisse, [await ohneRoteErstlaeufe(datei, mutanten.map(({ zeilen }) => zeilen), uebrig)]);
-  const geloescht = offen.filter(({ art }) => art === GELOESCHT);
-  if (loeschung === null || geloescht.length === 0) return vereint;
-  const nachgefasst = new Map((await loeschung.nachfassen({ datei, eintraege: geloescht, uebrige: uebrig })).map((eintrag) => [eintrag.schluessel, eintrag]));
-  return vereint.map((eintrag) => nachgefasst.get(eintrag.schluessel) ?? eintrag);
-}
-
-function nachfassen(stand, dateien, ergebnisse) {
-  if (dateien.length === 0) return ergebnisse;
-  return imStand(stand, async (_bestand, graph) => {
-    const loeschung = stand.seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
-    try {
-      let vereint = ergebnisse;
-      for (const datei of dateien) vereint = await zweiteStufe(datei, vereint, { graph, loeschung });
-      return vereint;
-    } finally {
-      loeschung?.abbauen();
-    }
-  });
-}
-
-function geteilteDateien(teile, pruefung) {
-  const einheiten = teile.flat().filter((einheit) => einheit.pruefung === pruefung && einheit.anteil === 1 && einheit.von > 1);
-  return einheiten.map(({ datei }) => datei);
-}
-
 async function urteilen(pruefungen, { urteil, gleichwertige }) {
   const plan = await planen(pruefungen);
   const berichte = teilberichte(urteil, plan);
   const rot = new Set();
   for (const [index, pruefung] of pruefungen.entries()) {
-    const ergebnisse = await nachfassen(pruefung, geteilteDateien(plan.teile, index), vereineAnteile(berichte, index));
+    const ergebnisse = vereineAnteile(berichte, index);
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
   zeigeZweck(rot);
