@@ -44,7 +44,8 @@ function vorbauNurErgaenzt(lauf) {
   const ausgabe = gleich
     ? `${datei} ergänzt den alten Test nur.`
     : `Der Testumbau ändert in ${datei} Bestehendes. Erlaubt ist nur Ergänzen: eine neue Hilfe, ein neuer Import oder ein ergänzter Wert einer bestehenden Belegung; bestehende Hilfen, Fälle und Zusicherungen bleiben, wie sie sind.`;
-  return lauf.gruenOderScheitert(lauf.belegt({ name: PRUEFUNG.VORBAU_NUR_ERGAENZT, befehl: `zusicherungenGleich ${lauf.basis}:${datei} ${datei}`, exitCode: gleich ? EXIT_GRUEN : EXIT_ROT, ausgabe }));
+  const ergebnis = { name: PRUEFUNG.VORBAU_NUR_ERGAENZT, befehl: `zusicherungenGleich ${lauf.basis}:${datei} ${datei}`, exitCode: gleich ? EXIT_GRUEN : EXIT_ROT, ausgabe };
+  return lauf.gruenOderScheitert(lauf.belegt(PRUEFUNG.VORBAU_NUR_ERGAENZT, () => ergebnis));
 }
 
 function mutationNichtSchlechter(lauf) {

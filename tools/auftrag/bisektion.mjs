@@ -6,7 +6,7 @@ import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { git } from "./git.mjs";
-import { beleg, fuehreAus } from "./pruefungen.mjs";
+import { fuehreAus } from "./pruefungen.mjs";
 
 const SCHRITT = fileURLToPath(new URL("bisektion-schritt.mjs", import.meta.url));
 const MAX_RUECKSPRUENGE = 7;
@@ -59,8 +59,7 @@ function suche(lauf, { verzeichnis, baum }) {
     return true;
   }
   git(["bisect", "start", lauf.basis, gut], { cwd: baum });
-  const ergebnis = fuehreAus("bisect", ["git", "bisect", "run", ...schritt], { cwd: baum, env });
-  lauf.pruefungen.push(beleg(ergebnis));
+  const ergebnis = lauf.belegt("bisect", () => fuehreAus("bisect", ["git", "bisect", "run", ...schritt], { cwd: baum, env }));
   if (ergebnis.exitCode === 0) ursprung(lauf, baum, git(["rev-parse", "refs/bisect/bad"], { cwd: baum }).trim());
   return true;
 }

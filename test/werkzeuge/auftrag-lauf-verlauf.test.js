@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { funktion, MIT_SIEBEN, pruefung, ROTER_TEST } from "./auftrag-lauf-hilfen.js";
-import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { fehlerNachRichtigemStand, funktion, MIT_SIEBEN, pruefung, ROTER_TEST } from "./auftrag-lauf-hilfen.js";
+import { UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { commitAll, runIn, writeFiles } from "./probe-repo.js";
 
 test("ein schon gebauter Auftrag wird übersprungen, ein neu geschnittener oder zurückgenommener nicht", (context) => {
@@ -35,12 +35,7 @@ test("ein schon gebauter Auftrag wird übersprungen, ein neu geschnittener oder 
 });
 
 test("bei einer Fehlerbehebung bekommt der Bau-Agent den Commit, den git bisect als Ursprung findet", (context) => {
-  const vorbereiten = (repo) => {
-    writeFiles(repo, { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" });
-    commitAll(repo, "Verdopple richtig");
-    writeFiles(repo, { "src/rechnen.js": BASIS["src/rechnen.js"] });
-    commitAll(repo, "Runde anders");
-  };
+  const vorbereiten = fehlerNachRichtigemStand;
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": MIT_SIEBEN["src/rechnen.js"] } };
   const auftrag = { ...funktion("2 !== 4"), art: "fehlerbehebung" };
   const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag, drehbuch, vorbereiten });

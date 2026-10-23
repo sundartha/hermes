@@ -3,6 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
+import { commitAll, writeFiles } from "./probe-repo.js";
 
 export const ZEILEN_UEBER_GRENZE = 401;
 export const GELOESCHTE_ZEILEN = 360;
@@ -21,6 +22,15 @@ export const ROTER_TEST = [
   'test("verdoppelt", () => assert.equal(verdopple(2), 4));',
   "",
 ].join("\n");
+
+export const VERDOPPELT = "export function verdopple(zahl) {\n  return zahl * 2;\n}\n";
+
+export function fehlerNachRichtigemStand(repo) {
+  writeFiles(repo, { "src/rechnen.js": VERDOPPELT });
+  commitAll(repo, "Verdopple richtig");
+  writeFiles(repo, { "src/rechnen.js": BASIS["src/rechnen.js"] });
+  commitAll(repo, "Runde anders");
+}
 
 export function funktion(erwarteterFehler) {
   return {
