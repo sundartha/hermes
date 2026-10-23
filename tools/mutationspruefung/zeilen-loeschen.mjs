@@ -172,7 +172,8 @@ function pruefer({ verzeichnis, gruen, laufen }) {
   return async (datei, auswahl, bisher) => {
     const [zeile] = bisher.zeilen;
     let ergebnis = bisher;
-    for (const gruppe of auswahl) {
+    for (const [nummer, gruppe] of auswahl.entries()) {
+      console.error(`Löschprobe ${datei}:${zeile}: Gruppe ${nummer + 1} von ${auswahl.length} mit ${gruppe.length} Testdateien`);
       ergebnis = vorzug(ergebnis, await gruppenprobe(datei, zeile, gruppe));
       if (ergebnis.status !== UEBERLEBT) break;
     }
