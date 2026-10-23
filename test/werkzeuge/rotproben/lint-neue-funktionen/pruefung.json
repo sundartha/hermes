@@ -5,7 +5,8 @@
     "tools/pr-aenderungen.mjs",
     "tools/eslint-rules/",
     "tools/umbenennung.mjs",
-    "tools/syntaxbaum.mjs"
+    "tools/syntaxbaum.mjs",
+    "tools/quelllage.mjs"
   ],
   "probe": {
     "mitnehmen": [
