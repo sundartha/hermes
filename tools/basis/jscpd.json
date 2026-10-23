@@ -26,7 +26,6 @@
     ".github/workflows/auswertung.yml|.github/workflows/rotproben.yml|118",
     ".github/workflows/ci.yml|.github/workflows/ci.yml|116",
     ".github/workflows/ci.yml|.github/workflows/ci.yml|78",
-    ".github/workflows/ci.yml|.github/workflows/pruefleiter.yml|51",
     ".github/workflows/freigabe.yml|.github/workflows/statische-pruefung.yml|92",
     ".github/workflows/freigabe.yml|.github/workflows/warteschlange.yml|67",
     ".github/workflows/notfall.yml|.github/workflows/notfall.yml|51",
