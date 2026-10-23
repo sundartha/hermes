@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -26,6 +25,23 @@ const ZEIGEN_AUFRUF = /zweck-zeigen\.mjs((?: [a-z]+\/[a-z-]+)+)/g;
 const JS_DATEI = /\.(?:js|mjs|cjs)$/;
 const NUTZER_DATEI = /\.(?:js|mjs|cjs|ya?ml)$|^\.githooks\//;
 const NUTZER_ORTE = ["tools", "scripts", ".githooks", ".github/workflows", ".claude/hooks"];
+const IGNORIERTER_ORDNER = ".mutationspruefung";
+const VERSIONIERT = {
+  "tools/werkzeug.mjs": "export const wert = 1;\n",
+  "scripts/lauf.js": "export const wert = 2;\n",
+  ".githooks/pre-push": "#!/bin/sh\n",
+  ".github/workflows/ci.yml": "name: ci\n",
+  ".claude/hooks/hook.cjs": "module.exports = 3;\n",
+  "tools/notiz.md": "Keine Nutzer-Datei\n",
+};
+const UNVERSIONIERT = { "tools/neu.mjs": "export const wert = 4;\n" };
+const VERSIONIERTE_NUTZER_DATEIEN = [
+  ".claude/hooks/hook.cjs",
+  ".githooks/pre-push",
+  ".github/workflows/ci.yml",
+  "scripts/lauf.js",
+  "tools/werkzeug.mjs",
+];
 const MODUL = { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: {} };
 const ZAHL_OHNE_NAMEN = 7;
 const DEMETER = "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
@@ -83,9 +99,16 @@ function zugeordneteIds() {
   ];
 }
 
-function versionierteDateien() {
-  const liste = execFileSync("git", ["ls-files", "-z", "--", ...NUTZER_ORTE], { cwd: REPO_ROOT, encoding: "utf8" });
-  return liste.split("\0").filter((datei) => NUTZER_DATEI.test(datei));
+function versionierteDateien(ordner = REPO_ROOT) {
+  const lauf = runIn(ordner, "git", ["ls-files", "-z", "--full-name", "--", ...NUTZER_ORTE.map((ort) => `:/${ort}`)]);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const dateien = lauf.stdout.split("\0").filter((datei) => NUTZER_DATEI.test(datei));
+  assert.ok(dateien.length > 0, `git ls-files findet in ${ordner} keine versionierte Datei unter ${NUTZER_ORTE.join(", ")}`);
+  return dateien;
+}
+
+function inIgnoriertemOrdner(dateien) {
+  return Object.fromEntries(Object.entries(dateien).map(([pfad, inhalt]) => [join(IGNORIERTER_ORDNER, pfad), inhalt]));
 }
 
 function literale(baum) {
@@ -153,6 +176,20 @@ test("tools/zweck/lint.json hat keine ID, die weder die Zuordnung noch ein Skrip
   const genutzt = new Set([...zugeordneteIds(), ...versionierteDateien().flatMap(idsInDatei)]);
   for (const id of genutzt) assert.ok(kenntZweck(id), `${id} wird genutzt, hat aber keinen Text`);
   assert.deepEqual(Object.keys(TEXTE).filter((id) => !genutzt.has(id)), []);
+});
+
+test("versionierteDateien nennt aus einem ignorierten Ordner im Checkout dieselben versionierten Dateien wie im Checkout, mit Pfaden ab der Wurzel", (context) => {
+  const repo = probeRepository(context, VERSIONIERT);
+  writeFiles(repo, UNVERSIONIERT);
+  writeFiles(repo, { [`${IGNORIERTER_ORDNER}/.gitignore`]: "*\n", ...inIgnoriertemOrdner({ ...VERSIONIERT, ...UNVERSIONIERT }) });
+  assert.deepEqual(versionierteDateien(repo).toSorted(), VERSIONIERTE_NUTZER_DATEIEN);
+  assert.deepEqual(versionierteDateien(join(repo, IGNORIERTER_ORDNER)).toSorted(), VERSIONIERTE_NUTZER_DATEIEN);
+});
+
+test("versionierteDateien scheitert laut, wenn Git unter den Nutzer-Orten keine versionierte Datei findet", (context) => {
+  const repo = probeRepository(context, { "README.md": "Nur ein Text\n" });
+  writeFiles(repo, UNVERSIONIERT);
+  assert.throws(() => versionierteDateien(repo), /keine versionierte Datei/);
 });
 
 test("lintGruppen fasst Befunde je Gruppe ohne Wiederholung zusammen und übergeht Regeln ohne Zuordnung", () => {
