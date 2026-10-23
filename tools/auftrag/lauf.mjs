@@ -7,13 +7,14 @@ import { isDeepStrictEqual } from "node:util";
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
-import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
+import { EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -21,6 +22,7 @@ import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { issueBefunde } from "./phase.mjs";
+import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen, phasenbasis } from "./phasenende.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
@@ -331,8 +333,13 @@ class AuftragsLauf {
     return true;
   }
 
+  commitlint(nachricht) {
+    const ergebnis = pruefeNachricht(nachricht, this.kontext.root);
+    return this.gruenOderScheitert(this.belegt(ergebnis));
+  }
+
   festschreiben(name, nachricht) {
-    if (!this.festhalten(name, nachricht)) return false;
+    if (!this.commitlint(nachricht) || !this.festhalten(name, nachricht)) return false;
     this.basis = kopf(this.kontext.root);
     this.basisBau = this.basis;
     return true;
@@ -425,8 +432,10 @@ class AuftragsLauf {
   }
 
   abschliessen() {
+    const nachricht = this.commitNachricht();
+    if (!this.commitlint(nachricht)) return false;
     weichZuruecksetzen(this.basis, this.kontext.root);
-    if (!this.festhalten(PRUEFUNG.COMMIT, this.commitNachricht())) return false;
+    if (!this.festhalten(PRUEFUNG.COMMIT, nachricht)) return false;
     this.commit = kopf(this.kontext.root);
     return true;
   }
@@ -555,18 +564,24 @@ function freigabe(kontext) {
   return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
 }
 
-export function lauf(phasendatei, root) {
+function phasenende({ fertig, vorher, amPhasenende }, root) {
+  if (!amPhasenende) return ciLokalNichtGelaufen(root, TEILLAUF);
+  return fertig.size > vorher ? ciLokalAmPhasenende(root, phasenbasis(root)) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
+}
+
+export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
     for (const befund of befunde) console.error(befund);
     return EXIT_ROT;
   }
-  const plan = { phase, fertig: gebauteAuftraege(phase, root) };
+  const fertig = gebauteAuftraege(phase, root);
+  const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
   for (const kennung of plan.fertig) console.log(`Auftrag ${kennung}: schon gebaut, übersprungen.`);
   for (;;) {
     const { ordnung } = reihenfolge(plan.phase.auftraege);
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
-    if (auftrag === undefined) return EXIT_GRUEN;
+    if (auftrag === undefined) return phasenende(plan, root);
     const kontext = { phase: plan.phase, auftrag, root, design: designPfad(plan.phase), phasendatei, plan };
     const frei = freigabe(kontext);
     const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde.auftrag.id === auftrag.id ? { ...runde, ...frei } : runde).fuehreAus());

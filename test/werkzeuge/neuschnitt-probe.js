@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 
 import { alsJson } from "./planung-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, runIn } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
 export const AUSFUEHRBAR = 0o755;
 export const EXIT_ROT = 1;
@@ -113,7 +113,7 @@ function gruenerTest(datei, name, pruefung) {
 }
 
 export const REPO = {
-  "package.json": JSON.stringify({ type: "module", scripts: { test: "node --test --test-reporter=tap", lint: "node -e 0", "test:betroffen": "node -e 0 --" } }),
+  "package.json": JSON.stringify({ type: "module", scripts: { test: "node --test --test-reporter=tap", lint: "node -e 0", "test:betroffen": "node -e 0 --", "ci:lokal": "node -e 0 --" } }),
   ".gitignore": ".fortschritt/\n",
   "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl;\n}\n",
   "src/text.js": "export function gross(text) {\n  return text.toUpperCase();\n}\n",
@@ -186,7 +186,7 @@ export function ersatzUmgebung(context, drehbuch) {
 }
 
 export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATEI, umgebung = {} } = {}) {
-  const repo = teamRepository(context, Object.fromEntries(Object.entries({ ...REPO, ...dateien }).filter(([, inhalt]) => inhalt !== undefined)));
+  const repo = mitUpstreamMaster(teamRepository(context, Object.fromEntries(Object.entries({ ...REPO, ...dateien }).filter(([, inhalt]) => inhalt !== undefined))));
   const { werkzeug, env: ersatz } = ersatzUmgebung(context, { ...TEAM, ...drehbuch });
   const env = { ...ersatz, ...umgebung, HOME: werkzeug };
   const ergebnis = spawnSync(process.execPath, [join(REPO_ROOT, "tools/auftrag.mjs"), "lauf", phasendatei], { cwd: repo, encoding: "utf8", env });

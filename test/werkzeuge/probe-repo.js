@@ -64,6 +64,11 @@ export function commitAll(directory, message) {
   git(directory, [...PROBE_AUTHOR, ...PROBE_COMMIT_SETTINGS, "commit", "-q", "-m", message]);
 }
 
+export function mitUpstreamMaster(directory) {
+  git(directory, ["update-ref", "refs/remotes/upstream/master", "HEAD"]);
+  return directory;
+}
+
 export function probeRepository(context, files) {
   const directory = probeDirectory(context, files);
   git(directory, ["init", "-q"]);

@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { exitCodes } from "./auftrag-lauf-hilfen.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -85,6 +85,7 @@ const BASIS = {
       lint: "node -e 0",
       "test:betroffen": "node -e 0 --",
       "test:mutation": "node mutation.mjs",
+      "ci:lokal": "node -e 0 --",
     },
   }),
   ".gitignore": ".fortschritt/\n",
@@ -124,7 +125,7 @@ function gitAusgabe(repo, ...argumente) {
 }
 
 function starte(context, drehbuch) {
-  const repo = probeRepository(context, BASIS);
+  const repo = mitUpstreamMaster(probeRepository(context, BASIS));
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {

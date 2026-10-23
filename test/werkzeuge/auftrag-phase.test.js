@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { setTimeout as schlafen } from "node:timers/promises";
 
 import { verwaisteSperren } from "../../tools/auftrag/sperren.mjs";
-import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
+import { CI_LOKAL_ROT, ciLokalAufrufe, mitCiLokal, mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -20,7 +21,7 @@ const SPEICHER_ATTRAPPE = {
   "src/store/json.js": "export const WERT = 1;\n",
   "src/store/pg.js": "export function makePgStore() {\n  return { WERT: 1 };\n}\n",
 };
-const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85 };
+const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85, ciGruen: 86, ciRot: 87 };
 const LIMIT_SEKUNDEN = 2;
 const VOLLER_KONTEXT = { type: "assistant", message: { usage: { input_tokens: 100_000 }, content: [] } };
 
@@ -56,7 +57,7 @@ const BASIS = {
   "package.json": JSON.stringify({
     name: "probe",
     type: "module",
-    scripts: { test: "node --test", lint: "node -e 0", "test:betroffen": "node -e 0 --", pruefleiter: "node -e 0 --" },
+    scripts: { test: "node --test", lint: "node -e 0", "test:betroffen": "node -e 0 --", pruefleiter: "node -e 0 --", "ci:lokal": "node -e 0 --" },
   }),
   "package-lock.json": JSON.stringify({ name: "probe", lockfileVersion: 3, requires: true, packages: { "": { name: "probe" } } }),
   ".gitignore": ".fortschritt/\n.claude/worktrees/\nnode_modules/\n.env\n.env.test\n",
@@ -70,10 +71,10 @@ function auftrag(id, bereich, dateien = [bereich]) {
   return { id, art: "umbau", ziel: `Baue ${id}`, bereich, erwarteteDateien: dateien, vorbild: "src/d.js", abnahme: "test/ok.test.js" };
 }
 
-function aufbau(context, drehbuch) {
+function aufbau(context, drehbuch, dateien = {}) {
   const remote = probeDirectory(context, {});
   runIn(remote, "git", ["init", "-q", "--bare"]);
-  const repo = probeRepository(context, BASIS);
+  const repo = probeRepository(context, { ...BASIS, ...dateien });
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   runIn(repo, "git", ["remote", "add", "upstream", remote]);
@@ -232,6 +233,28 @@ test("ein Worktree mit Lint-Fehler macht den Lint-Lauf im Haupt-Checkout nicht r
   assert.equal(lint().status, EXIT_ROT);
   writeFileSync(join(probe.werkzeug, "start-geprueft"), "");
   assert.equal((await lauf).code, 0);
+});
+
+test("phase fährt ci-lokal einmal nach dem letzten Auftrag auf dem Phasen-Branch gegen master, nicht in jedem Auftrag", async (context) => {
+  const drehbuch = { "86-C1": { dateien: { "src/d.js": "export const WERT = 2;\n" } }, "86-C2": { dateien: { "src/c.js": "export const KOPIE = 2;\n" } } };
+  const probe = aufbau(context, drehbuch, mitCiLokal(BASIS["package.json"], 0));
+  const master = runIn(probe.repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  const { code, ausgabe } = await ende(phase(probe, ["c", ISSUE.ciGruen, auftrag("C1", "src/d.js"), auftrag("C2", "src/c.js")]));
+  assert.equal(code, 0, ausgabe);
+  assert.deepEqual(ciLokalAufrufe(probe.werkzeug), [["--basis", master, "--mit-teuren"]]);
+  assert.equal(runIn(probe.remote, "git", ["rev-list", "--count", "master..phase/86-c"]).stdout.trim(), "2");
+});
+
+test("ist ci-lokal am Ende der Phase rot, lädt phase nichts hoch, behält den Phasen-Branch lokal mit dem Auftrag und nennt die roten Schritte mit Zweck", async (context) => {
+  const probe = aufbau(context, { "87-D1": { dateien: { "src/d.js": "export const WERT = 2;\n" } } }, mitCiLokal(BASIS["package.json"], 1));
+  const { code, ausgabe } = await ende(phase(probe, ["d", ISSUE.ciRot, auftrag("D1", "src/d.js")]));
+  assert.equal(code, EXIT_ROT, ausgabe);
+  assert.ok(ausgabe.includes(CI_LOKAL_ROT), ausgabe);
+  assert.ok(ausgabe.includes(zweckBlock(MELDUNG.CI_LOKAL).join("\n")), ausgabe);
+  assert.equal(ciLokalAufrufe(probe.werkzeug).length, 1);
+  assert.deepEqual(liste(probe.remote, ["for-each-ref", "refs/heads/phase/", "refs/sperren/"]), []);
+  assert.ok(ausgabe.includes("phase/87-d bleibt lokal"), ausgabe);
+  assert.equal(runIn(probe.repo, "git", ["rev-list", "--count", "HEAD..phase/87-d"]).stdout.trim(), "1");
 });
 
 test("systemstand meldet eine Sperre, deren Phasen-Issue geschlossen ist", async () => {

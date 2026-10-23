@@ -7,12 +7,13 @@ import { isDeepStrictEqual } from "node:util";
 
 import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
+import { pruefeNachricht } from "./commitlint.mjs";
 import { bereichSchluessel, brauchtRotenTest, istPitchPhase, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
 import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
-import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
+import { MELDUNG, PRUEFUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 import { listHint } from "../testschutz/freigabe.mjs";
 
 export const NEU_GESCHNITTEN = "neu geschnitten";
@@ -222,8 +223,11 @@ function commitNachricht({ phase, auftrag }, gestoppt, neu) {
 }
 
 function uebernimm(kontext, ort, { gestoppt, neu }) {
+  const nachricht = commitNachricht(kontext, gestoppt, neu);
+  const pruefung = pruefeNachricht(nachricht, kontext.root);
+  if (pruefung.exitCode !== 0) return { befunde: [`commitlint lehnt die Nachricht des Neuschnitts ab:\n${pruefung.ausgabe.trimEnd()}`], arten: [PRUEFUNG.COMMITLINT] };
   vormerken([ort.datei], kontext.root);
-  const lauf = festhalten(commitNachricht(kontext, gestoppt, neu), kontext.root);
+  const lauf = festhalten(nachricht, kontext.root);
   if (lauf.status === 0) return { neu };
   return { befunde: [`git commit des Neuschnitts endete mit Exit ${lauf.status}: ${lauf.stderr.trim()}`] };
 }
