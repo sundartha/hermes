@@ -42,6 +42,7 @@ const FREMDE_PAKETE = "node_modules";
 const AUSSERHALB = "..";
 const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
 const DIFF_KOPF = "diff --git ";
+const GEAENDERTE_DATEIEN = ["diff", "--name-only", "-z", "--no-renames"];
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const UEBERLEBT = "Survived";
@@ -331,7 +332,8 @@ async function ohneRoteErstlaeufe(datei, zeilen, tests) {
 function testauswahl(datei, graph) {
   const importe = erreichendeTests(datei, graph.importe);
   const { direkt, alle } = erreichendeTests(datei, graph.gesamt);
-  return { erste: [importe.direkt, importe.alle, direkt].find((tests) => tests.length > 0) ?? alle, alle };
+  const erste = [importe.direkt, importe.alle, direkt].find((tests) => tests.length > 0) ?? alle;
+  return { erste: alle.filter((test) => erste.includes(test) || graph.geaendert.has(test)), alle };
 }
 
 async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
@@ -401,12 +403,18 @@ async function bestandteile({ von, bis, seite }) {
     .filter(({ bereiche, abgeschaltet }) => bereiche !== undefined || abgeschaltet.length > 0);
 }
 
+function geaenderteTests({ von, bis }) {
+  const dateien = git([...GEAENDERTE_DATEIEN, von, ...(bis ? [bis] : []), "--", "test/"]).split("\0");
+  return new Set(dateien.filter((pfad) => TESTDATEI.test(pfad)));
+}
+
 async function imStand(pruefung, arbeit) {
   const einheiten = await bestandteile(pruefung);
   if (einheiten.every(({ bereiche }) => bereiche === undefined)) return arbeit(einheiten, null);
+  const geaendert = geaenderteTests(pruefung);
   const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
-    return await arbeit(einheiten, await importierer());
+    return await arbeit(einheiten, { ...(await importierer()), geaendert });
   } finally {
     zurueck?.();
   }
