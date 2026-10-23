@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
 export const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
-const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
+export const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
 export const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
 export const FRIST = { timeout: 30_000 };
 export const EIN_PLATZ_FREI = /^Platz 1: frei\nAllein: frei\nWartet: niemand$/m;
