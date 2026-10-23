@@ -1,6 +1,10 @@
 import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.js";
 import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.js";
 
+function countedText(lang, singular, plural) {
+  return (count) => `${count} ${new Intl.PluralRules(lang).select(count) === "one" ? singular : plural}`;
+}
+
 export const MCP_ERROR_CODE = Object.freeze({
   UPSTREAM_INVALID: "upstream_invalid",
   UPSTREAM_INCOMPLETE: "upstream_incomplete",
@@ -111,10 +115,7 @@ export const MCP_TEXTS = Object.freeze({
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
     callAlreadyRunningHint:
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
-    consultAnswerAccepted: (count) => {
-      const form = new Intl.PluralRules("de").select(count) === "one" ? `${count} Angabe an den Anruf uebergeben.` : `${count} Angaben an den Anruf uebergeben.`;
-      return form;
-    },
+    consultAnswerAccepted: countedText("de", "Angabe an den Anruf uebergeben.", "Angaben an den Anruf uebergeben."),
     consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
       "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
@@ -221,10 +222,7 @@ export const MCP_TEXTS = Object.freeze({
       "permission is granted.",
     callAlreadyRunningHint:
       "This call was already running - the running call is returned, no second call was started.",
-    consultAnswerAccepted: (count) => {
-      const form = new Intl.PluralRules("en").select(count) === "one" ? `${count} detail passed on to the call.` : `${count} details passed on to the call.`;
-      return form;
-    },
+    consultAnswerAccepted: countedText("en", "detail passed on to the call.", "details passed on to the call."),
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
       "Answer rejected (format or length). The question stays open - please answer more briefly.",
@@ -332,10 +330,7 @@ export const MCP_TEXTS = Object.freeze({
       "conversation que si l'autorisation d'outil du connecteur est accordée.",
     callAlreadyRunningHint:
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
-    consultAnswerAccepted: (count) => {
-      const form = new Intl.PluralRules("fr").select(count) === "one" ? `${count} information transmise à l'appel.` : `${count} informations transmises à l'appel.`;
-      return form;
-    },
+    consultAnswerAccepted: countedText("fr", "information transmise à l'appel.", "informations transmises à l'appel."),
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
       "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",
