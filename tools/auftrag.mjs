@@ -21,6 +21,7 @@ const EXIT_AUFRUF = 2;
 const AUFRUF = [
   "Aufruf: node tools/auftrag.mjs pruefe <phasendatei>",
   "        node tools/auftrag.mjs lauf <phasendatei>",
+  "        node tools/auftrag.mjs teillauf <phasendatei>",
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs genutzt <phasendatei> <auftrag> --basis <commit>",
@@ -63,6 +64,7 @@ const OPTIONEN = [
 const BEFEHLE = {
   pruefe: { argumente: 1, fuehreAus: ([phasendatei], root) => pruefe(phasendatei, root) },
   lauf: { argumente: 1, fuehreAus: ([phasendatei], root) => lauf(phasendatei, root) },
+  teillauf: { argumente: 1, fuehreAus: ([phasendatei], root) => lauf(phasendatei, root, { amPhasenende: false }) },
   phase: { argumente: 1, fuehreAus: ([phasendatei], root) => phase(phasendatei, root) },
   aufraeumen: { argumente: 0, fuehreAus: (keine, root) => aufraeumen(root) },
   rot: { argumente: 2, fuehreAus: ([phasendatei, kennung], root) => rot(phasendatei, kennung, root) },

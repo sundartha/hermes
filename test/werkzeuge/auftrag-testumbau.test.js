@@ -157,7 +157,7 @@ function testumbauLauf(context, drehbuch) {
 test("Testumbau-Lauf: der Test-Agent baut um, das Skript prüft vorher und nachher und committet als testumbau ohne Bau-Agenten", (context) => {
   const { lauf, werkzeug, beleg, repo } = testumbauLauf(context, { test: { "test/text.test.js": UMGEBAUT } });
   assert.equal(lauf.status, 0, `${lauf.stdout}${lauf.stderr}`);
-  assert.deepEqual(beleg.pruefungen.map(({ name }) => name), ["abnahme vorher", "grenzen test", "testumbau fälle", "lint", "abnahme", "commit"]);
+  assert.deepEqual(beleg.pruefungen.map(({ name }) => name), ["abnahme vorher", "grenzen test", "testumbau fälle", "lint", "abnahme", "commitlint", "commit"]);
   assert.match(readFileSync(join(werkzeug, "prompt-test.txt"), "utf8"), /## Testumbau/);
   assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
   assert.match(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout, /^Art: testumbau$/m);

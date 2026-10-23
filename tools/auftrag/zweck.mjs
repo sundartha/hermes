@@ -59,6 +59,7 @@ export const PRUEFUNG = {
   ZWISCHENSTAND: "zwischenstand",
   TESTS_ALTER_STAND: "tests alter Stand",
   COMMIT: "commit",
+  COMMITLINT: "commitlint",
 };
 
 export const GRUND = {
@@ -92,6 +93,7 @@ export const MELDUNG = {
   SEMGREP_FEHLT: "semgrep-fehlt",
   PAKETE_FEHLEN: "pakete-fehlen",
   POSTGRES_FEHLT: "postgres-fehlt",
+  CI_LOKAL: "ci-lokal",
 };
 
 export const ALTER_TEST = "alter test";

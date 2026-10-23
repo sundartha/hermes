@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { PRUEFUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
+
 import { ersterVersuch, EXIT_ROT, funktion, lauf, MIT_TEXT, neu, neuUmbau, OHNE_FIX, ohneTeam, ORDNER, phase, PHASENDATEI, PITCH, REPO, S1, schneide, SCHNITT, TEST, VERBOT } from "./neuschnitt-probe.js";
 
 test("ein Neuschnitt, der den Szenariotext in der Phasendatei ändert, wird abgelehnt und endet nach dem zweiten Versuch als Entscheidungsnotiz", (context) => {
@@ -56,4 +58,20 @@ test("lässt der Kindlauf eine unlesbare Phasendatei, einen geänderten Szenario
       erwartet: [`rot: 2 Befunde in ${ORDNER}.`, "S1 gehört keinem Auftrag", "a1-n1: B1 steht weder in pitch.md noch unter „2. Angriffswege“ in sicherheit.md"],
     },
   ]);
+});
+
+test("lehnt commitlint die Nachricht eines Neuschnitts ab, committet lauf nichts und gibt dem Planer den Befund mit Zweck", (context) => {
+  const lang = `a1-${"x".repeat(50)}`;
+  const nachfolger = `${lang}-n1`;
+  const schnitt = schneide([neu(nachfolger, { ziel: "Verdopple Zahlen in rechnen.js" })], `${nachfolger}: Verdopple Zahlen in rechnen.js`);
+  const drehbuch = { test: [TEST], bau: [OHNE_FIX], planer: [schnitt], notiz: [{ antwort: "1. Pitch prüfen" }] };
+  const { ergebnis, beleg, git, datei } = lauf(context, drehbuch, { dateien: { [PHASENDATEI]: phase([funktion(lang)]) } });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  const [versuch] = beleg(`${lang}-neuschnitt`).versuche;
+  assert.match(versuch.befunde[0], /^commitlint lehnt die Nachricht des Neuschnitts ab:\n[\s\S]*header-max-length/);
+  assert.doesNotMatch(git("log", "--format=%s"), /Schneide den Auftrag/);
+  assert.equal(git("show", `HEAD:${PHASENDATEI}`), phase([funktion(lang)]));
+  const prompt = datei("prompt-planer.txt");
+  assert.match(prompt, /## Befunde zu deinem vorigen Neuschnitt[\s\S]*commitlint lehnt die Nachricht des Neuschnitts ab/);
+  assert.ok(prompt.includes(zweckBlock(PRUEFUNG.COMMITLINT).join("\n")), prompt);
 });

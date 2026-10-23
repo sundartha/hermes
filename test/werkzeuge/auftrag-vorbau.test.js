@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { zusicherungenGleich } from "../../tools/auftrag/testtitel.mjs";
 
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
 const EXIT_ROT = 1;
@@ -47,7 +47,7 @@ const REPO = {
   ".gitignore": ".fortschritt/\n",
   [VERSAND]: "export function versende(kunde) {\n  return kunde !== null;\n}\n",
   [ALT]: alterTest("{}"),
-  "package.json": JSON.stringify({ type: "module", scripts: { lint: "node -e 0", "test:betroffen": "node -e 0 --", test: "node --test" } }),
+  "package.json": JSON.stringify({ type: "module", scripts: { lint: "node -e 0", "test:betroffen": "node -e 0 --", "ci:lokal": "node -e 0 --", test: "node --test" } }),
 };
 const AUFTRAG = {
   id: "A1",
@@ -79,6 +79,7 @@ function lauf(context, drehbuch, dateien = REPO) {
 }
 
 function laufIn(context, repo, { drehbuch, issue = {} }) {
+  mitUpstreamMaster(repo);
   const phase = { phase: "probe", issue: ISSUE, entwurf: { [VERSAND]: "Entwurf." }, auftraege: [AUFTRAG] };
   const ersatz = { "claude.mjs": CLAUDE, "gh.mjs": GH, "issue.json": JSON.stringify(issue) };
   const werkzeug = probeDirectory(context, { ...ersatz, "drehbuch.json": JSON.stringify(drehbuch), "phase.json": JSON.stringify(phase) });

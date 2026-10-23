@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, isolatedEnvironment, passingTest, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, passingTest, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
 const EXIT_ROT = 1;
@@ -52,7 +52,7 @@ const REPO = {
   ".gitignore": ".fortschritt/\n",
   "src/zahl.js": "export const ZAHL = 1;\n",
   "test/zahl.test.js": passingTest("zahl"),
-  "package.json": JSON.stringify({ type: "module", scripts: { lint: "node -e 0", "test:betroffen": "node -e 0 --", test: "node --test" } }),
+  "package.json": JSON.stringify({ type: "module", scripts: { lint: "node -e 0", "test:betroffen": "node -e 0 --", "ci:lokal": "node -e 0 --", test: "node --test" } }),
 };
 
 const ZAHL = "src/zahl.js";
@@ -63,7 +63,7 @@ const MIT_ALTFUNKTION = {
   [ZAHL]: "const alt = 1;\nexport const ZAHL = 1;\n",
   "package.json": JSON.stringify({
     type: "module",
-    scripts: { lint: `node ${JSON.stringify(ESLINT)} . --pass-on-unpruned-suppressions`, "test:betroffen": "node -e 0 --", test: "node --test" },
+    scripts: { lint: `node ${JSON.stringify(ESLINT)} . --pass-on-unpruned-suppressions`, "test:betroffen": "node -e 0 --", "ci:lokal": "node -e 0 --", test: "node --test" },
   }),
 };
 const AUFTRAG = { id: "A1", art: "umbau", ziel: "Räume zahl auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
@@ -75,7 +75,7 @@ const aufruf = (name, input) => ({ type: "assistant", message: { content: [{ typ
 const rueckgabe = (id, content) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content }] } });
 
 function lauf(context, { auftrag = AUFTRAG, ...drehbuch }, dateien = {}) {
-  const repo = probeRepository(context, { ...REPO, ...dateien });
+  const repo = mitUpstreamMaster(probeRepository(context, { ...REPO, ...dateien }));
   const phase = { phase: "probe", issue: ISSUE, entwurf: { [auftrag.bereich]: "Entwurf." }, auftraege: [auftrag] };
   const werkzeug = probeDirectory(context, {
     "claude.mjs": CLAUDE,

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -63,7 +63,7 @@ writeFileSync(join(projekt, sitzung + ".jsonl"), [zeile("a"), zeile("a"), zeile(
 export const BASIS = {
   "package.json": JSON.stringify({
     type: "module",
-    scripts: { test: "node --test --test-reporter=tap", lint: "node -e 0", "test:betroffen": "node -e 0 --" },
+    scripts: { test: "node --test --test-reporter=tap", lint: "node -e 0", "test:betroffen": "node -e 0 --", "ci:lokal": "node -e 0 --" },
   }),
   ".gitignore": ".fortschritt/\n",
   ".github/CODEOWNERS": "/src/geschuetzt.js @probe\n",
@@ -89,9 +89,10 @@ export const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
-export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {}, umgebung = {} }) {
+export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {}, umgebung = {}, mitUpstream = true, befehl = "lauf" }) {
   const repo = probeRepository(context, { ...BASIS, ...dateien });
   vorbereiten(repo);
+  if (mitUpstream) mitUpstreamMaster(repo);
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {});
@@ -102,7 +103,7 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
   chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
   const kopf = () => runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
   const basis = kopf();
-  const lauf = spawnSync(process.execPath, [EINSTIEG, "lauf", join(werkzeug, "phase.json")], {
+  const lauf = spawnSync(process.execPath, [EINSTIEG, befehl, join(werkzeug, "phase.json")], {
     cwd: repo,
     encoding: "utf8",
     env: {

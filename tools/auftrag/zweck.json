@@ -383,5 +383,19 @@
     "behebung": "Postgres in der Hauptversion aus tools/basis/squawk.toml starten, HERMES_TEST_POSTGRES_URL=postgres://<nutzer>@localhost:<port>/postgres setzen und neu starten.",
     "nichtAngenommen": "Die Prüfung abschalten, die Variable auf einen Server setzen, den die Tests nicht nutzen können, oder den Auftrag ohne lauf bauen.",
     "ausweg": "entfällt: ohne Postgres startet kein Agent; Antonio entscheidet."
+  },
+  "commitlint": {
+    "liste": "ohne Nummer",
+    "wozu": "Die CI prüft jede Commit-Nachricht mit commitlint. lauf schreibt die Nachricht des Auftrags und des Neuschnitts selbst aus der Phasendatei; fiele sie erst in der CI durch, kostete das eine volle CI-Runde und einen Eingriff von Hand. lauf prüft sie deshalb vor dem Commit mit denselben Regeln aus commitlint.config.mjs.",
+    "behebung": "Das Feld der Phasendatei korrigieren, aus dem die beanstandete Zeile stammt (meist ziel oder paket), und lauf neu starten.",
+    "nichtAngenommen": "Die Regeln in commitlint.config.mjs ändern, die Nachricht nach dem Commit von Hand umschreiben oder den Auftrag ohne lauf committen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: die Phasendatei lässt sich immer so schreiben, dass die Nachricht die Regeln erfüllt."
+  },
+  "ci-lokal": {
+    "liste": "ohne Nummer",
+    "wozu": "Die Pflicht-Checks laufen erst nach dem Push und kosten je Runde viele Minuten. Am Ende der Phase fährt lauf oder phase deshalb alle Prüfungen aus tools/ci-lokal.json über die ganze Phase, mit test:wirkung, gegen dieselbe Basis wie der PR. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
+    "behebung": "Den Befund des roten Schritts beheben, committen und node tools/ci-lokal.mjs --basis <Basis aus der Meldung> --mit-teuren laufen lassen, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
+    "nichtAngenommen": "Einen Schritt aus tools/ci-lokal.json streichen oder unter nurCi verschieben, damit er nicht mehr läuft, ein Ersatzprogramm in den PATH legen, das nichts prüft, oder trotz Rot pushen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Hältst du einen Schritt lokal für falsch, gehören Schritt, Ausgabe und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
   }
 }
