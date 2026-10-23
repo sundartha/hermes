@@ -53,12 +53,12 @@ test("eine nicht mutierte Datei behält in Strykers Arbeitskopie ihre Zeilennumm
   assert.match(lauf.stdout, /^grün: \d+ Mutanten in den neuen Zeilen/m);
 });
 
-const LOESCHPROBE = /^Löschprobe src\/zahl\.js:3: Gruppe (\d+ von \d+) /gm;
+const LOESCHPROBE = /^Löschprobe src\/zahl\.js:3: Gruppe (\d+ von \d+ mit \d+) Testdateien$/gm;
 
 test("die Löschprobe meldet für jede gelöschte Zeile jede Gruppe, die sie prüft, mit Nummer und Zahl der Gruppen", (context) => {
   const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)), ...begleiter(protokolltest("assert.ok(Array.isArray(zahl.protokoll));")) });
   writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
   const rot = pruefe(repo, "--basis", "HEAD");
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
-  assert.deepEqual(schluessel(rot.stderr, LOESCHPROBE), ["1 von 2", "2 von 2"]);
+  assert.deepEqual(schluessel(rot.stderr, LOESCHPROBE), ["1 von 2 mit 13", "2 von 2 mit 13"]);
 });
