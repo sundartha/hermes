@@ -9,9 +9,18 @@ const QUELLORDNER = ["tools", "scripts"];
 const QUELLENDUNGEN = [".mjs", ".js"];
 const WORKFLOWORDNER = ".github";
 const WORKFLOWENDUNG = ".yml";
+const ZUORDNUNG = "tools/zweck/zuordnung/workflow-schritte.json";
 
 export function quelltext(pfad) {
   return readFileSync(join(REPO_ROOT, pfad), "utf8");
+}
+
+export function eintraegeDerZuordnung() {
+  return JSON.parse(quelltext(ZUORDNUNG));
+}
+
+export function urteilt(eintrag) {
+  return eintrag.zweck !== undefined || eintrag.gruppen !== undefined;
 }
 
 export function dateienMitEndung(ordner, endungen) {
