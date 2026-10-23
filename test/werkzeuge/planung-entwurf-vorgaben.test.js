@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { bauPrompt } from "../../tools/auftrag/agenten.mjs";
 import { designPfad } from "../../tools/auftrag/annahmen.mjs";
 import { AUFTRAG, EXIT_GRUEN, jePruefer, phaseDatei, plane } from "./planung-plane-probe.js";
-import { ENTWURF_HINWEIS, GRUEN_PRUEFLISTE, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { ENTWURF_HINWEIS, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane as planeMit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const EIGENE = "a1 speichert den Code nur gehasht, weil design.md es so festlegt";
 const FREMDE = "a3 liest den Status nur einmal je Anruf, weil der Anruf sonst wartet";
@@ -101,4 +102,40 @@ test("entwurf-vorgaben: beim Umbau-Weg ohne Nummern bekommen Entwurf-Nachricht, 
   assert.ok(phaseVon(lauf).entwurf[HINWEIS].includes(`Annahme ${umbau.id}: ${UMBAU_ANNAHME}`));
   const prompt = bauPromptFuer(lauf, umbau.id);
   for (const text of [UMBAU_ANNAHME, UMBAU_FALLE, UMBAU_NICHT_ZIEL]) assert.ok(prompt.includes(text), prompt);
+});
+
+const NEUSCHNITT_START = join(REPO_ROOT, "tools/auftrag/planung/neuschnitt-start.mjs");
+const NUMMERN_DES_ANRUF_AUFTRAGS_A3 = GRUPPEN.find(({ eingang }) => eingang === "place_call").nummern;
+const NEU_GESCHNITTEN = auftrag("a3-n1", HINWEIS, { prueft: NUMMERN_DES_ANRUF_AUFTRAGS_A3, abnahme: "test/anrufe/hinweis-neu.test.js", abhaengigVon: [{ id: "a2", grund: "liest den Status bestaetigt" }] });
+const NEU_EIGENE = "a3-n1 setzt den Hinweis nur nach bestätigter Nummer, weil der Pitch das in Fallen entscheidet";
+const NEU_FREMDE = "a1 prüft den Code nur einmal, weil design.md keinen zweiten Versuch vorsieht";
+const NEUSCHNITT_ANNAHMEN = [{ auftrag: NEU_GESCHNITTEN.id, text: NEU_EIGENE }, { text: PLANWEITE }, { auftrag: "a1", text: NEU_FREMDE }];
+
+function neuschnittMit(context, schnitt) {
+  const ablage = probeDirectory(context, {});
+  const argumente = (wurzel) => {
+    const datei = `${ORDNER}/phase.json`;
+    writeFileSync(join(wurzel, datei), JSON.stringify(phaseFuer(wurzel)));
+    const verlauf = ["bau: a3 nach drei Versuchen gescheitert"];
+    const eingabe = { root: wurzel, ordner: ORDNER, datei, auftragId: "a3", fertig: ["a1"], anlass: "a3 wurde nicht grün.", kopf: `\n## Verlauf\n\n${verlauf[0]}`, verlauf, hinweise: [] };
+    writeFileSync(join(ablage, "eingabe.json"), JSON.stringify(eingabe));
+    return [ablage];
+  };
+  const grund = {
+    "erkunder|## Nachfrage": [bericht(NUMMERN_DES_ANRUF_AUFTRAGS_A3)],
+    "pruefer-planung|## Wegprüfung": [GRUEN_PRUEFLISTE],
+    "planer|": [alsJson({ schnitt, aenderung: "a3 wird kleiner geschnitten." })],
+    "pruefer-planung|## Prüfung": [GRUEN_PRUEFLISTE],
+    "entwurf|## Entwurf": [ENTWURF_HINWEIS],
+  };
+  return planeMit(context, { werkzeug: NEUSCHNITT_START, grund, argumente });
+}
+
+test("entwurf-vorgaben: der Neuschnitt setzt in den neuen Entwurf die Annahmen der eigenen Aufträge und die planweiten, nicht die eines fremden Auftrags", { timeout: LAUF_FRIST_MS }, (context) => {
+  const schnitt = { annahmen: NEUSCHNITT_ANNAHMEN, fehlendeSzenarien: [], ownerAufgaben: [], gemeinsameNamen: [], auftraege: [NEU_GESCHNITTEN] };
+  const lauf = neuschnittMit(context, schnitt);
+  exit(lauf, EXIT_GRUEN);
+  const entwurf = phaseVon(lauf).entwurf[HINWEIS];
+  assert.ok(entwurf.includes(`Annahme a3-n1: ${NEU_EIGENE}`) && entwurf.includes(`Annahme der Planung: ${PLANWEITE}`), entwurf);
+  assert.equal(entwurf.includes(NEU_FREMDE), false, entwurf);
 });
