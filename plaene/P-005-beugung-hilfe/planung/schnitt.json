@@ -1,0 +1,50 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "u1",
+      "text": "Pitch und Nummernliste nennen kein S<n>, B<n> oder T<n>, und die Sicherheitsprüfung findet keine Angriffswege. Deshalb entfällt der Durchstich a1, und der Auftrag hat keine Nummer (pitch.md, ## Anforderungen; sicherheit.md, ## 2. Angriffswege)."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Abnahmetest ist test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js. Laut design.md (## Ausgangslage und Annahmen, Beleg :38-67) steht er beim Start der Phase im Repo und ist grün. Er prüft über answer_consult den Wortlaut aller drei Sprachen (S1–S6, B1, B2 aus P-004). Ein Erkundungsbericht dazu liegt nicht vor; ich nehme den Beleg aus dem Design Doc als zutreffend an."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Auch test/al-p13-consult-channel.test.js:873 muss unverändert grün bleiben. Er vergleicht mit consultAnswerAccepted(2). Das geht nur, wenn jeder der drei Tabelleneinträge eine Funktion der Zahl bleibt (design.md, ## Ausgangslage und Annahmen). Das muss im Entwurf stehen."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Die Funktionsliste ist leer. Ich nehme deshalb an, dass die drei consultAnswerAccepted-Funktionen in src/i18n/mcp-texts.js keine Lint-Befunde haben und kein Aufräum-Umbau davor nötig ist. design.md bestätigt, dass die Datei weder in eslint-legacy-exceptions.json noch in eslint-suppressions.json steht."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Geschätzter Umfang: unter 30 geänderte Zeilen Produktcode, nur in src/i18n/mcp-texts.js. Diese Datei steht nicht in .github/CODEOWNERS, also gibt es keine Owner-Aufgabe."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Die Vorgaben aus pitch.md, ## Fallen und ## Nicht-Ziele prüft kein bestehender Test, und ein umbau trägt kein wasDarfNiePassieren. Sie müssen deshalb im Entwurf des Bereichs stehen. Aus ## Fallen: festes Kürzel \"de\"/\"en\"/\"fr\" je Tabelle; Intl.PluralRules erst beim Aufruf anlegen; keine Platzhalter und keine Zusammensetzung aus Zahl + Wort; Hilfe nicht exportiert; die Umschrift „uebergeben“ bleibt; die Wahl genau zwischen \"one\" und dem Rest; keine Zwischenvariable form. Aus ## Nicht-Ziele wörtlich: „Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs oder anderer Textdateien, weil es heute keine zweite gebeugte Meldung gibt; sie nutzen die Hilfe erst, wenn eine entsteht.“ Diese Meldungen stehen in derselben Datei; nur die drei consultAnswerAccepted-Einträge rufen die Hilfe auf. Ebenfalls wörtlich: „Nicht Teil dieser Änderung: Umlaute in der deutschen Tabelle, ein Sonderwortlaut für 0, die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil der Umbau nur die Struktur der drei Bestätigungstexte betrifft.“ Ein Sonderwortlaut für 0 in de oder en bliebe grün, weil der Abnahmetest die 0 nur auf Französisch prüft (S5)."
+    }
+  ],
+  "fehlendeSzenarien": [
+    {
+      "text": "Wird Intl.PluralRules in der Hilfe schon beim Laden von src/i18n/mcp-texts.js angelegt statt beim Aufruf (PM1), bleibt jeder bestehende Test grün, weil \"de\", \"en\" und \"fr\" beim Anlegen nicht werfen (design.md, ## Ausgangslage und Annahmen). Kein Test bemerkt also, wenn der Umbau das im Pitch ausgeschlossene Vorab-Anlegen einführt.",
+      "empfehlung": "In dieser Phase nichts ergänzen, weil der Pitch neue Tests ausdrücklich ausschließt (pitch.md, ## Nicht-Ziele). Die Regel steht im Entwurf und wird in der Durchsicht geprüft. Braucht es eine dauerhafte Absicherung, sollte der Owner dafür eine eigene Änderung mit Test freigeben."
+    }
+  ],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "Gemeinsame Beugungs-Hilfe für consultAnswerAccepted (de, en, fr)",
+      "bereich": "src/i18n/mcp-texts.js",
+      "erwarteteDateien": [
+        "src/i18n/mcp-texts.js"
+      ],
+      "abnahme": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "phase": "P-005-beugung-hilfe",
+  "issue": 1890,
+  "absicht": "Die Einzahl/Mehrzahl-Wahl der Bestätigung von `answer_consult` soll an genau einer Stelle stehen: eine gemeinsame kleine Hilfe nimmt Sprache, Einzahl-Text und Mehrzahl-Text, und die deutsche, englische und französische Tabelle nutzen sie, statt dieselbe Wahl dreimal mit eigener Zwischenvariable auszuschreiben. Nicht gewollt ist, den ausgegebenen Wortlaut, die Sprache, nach der gebeugt wird, die strukturierte Antwort oder bestehende Tests zu ändern, und ebenso wenig, die Wiederholung nur so umzuformen, dass keine Prüfung sie mehr meldet. Im Zweifel gilt: jede Sprache gibt byte-gleich aus wie vorher, und die Wahl steht einmal.",
+  "entwurf": {
+    "src/i18n/mcp-texts.js": "Grundlage: kein Design Doc, Pitch „Grobe Lösung“\nZu bauen ist in src/i18n/mcp-texts.js eine gemeinsame Beugungs-Hilfe für consultAnswerAccepted in den Sprachen de, en und fr. Das ist ein Umbau: Die bestehenden Tests bleiben unverändert grün, und der Auftrag schreibt keinen neuen Test vor.\nDie Abnahme ist test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js. Der Test heißt danach, dass die Rückfrage-Bestätigung die Angabenzahl beugt.\nEs liegen weder Design-Doc-Abschnitte noch Erkundungsberichte noch gemeinsame Namen vor. Stellen im Code, Datenformen und Funktionsnamen der Hilfe stehen deshalb hier nicht. Der Bau-Agent entnimmt sie dem bestehenden Code der Datei und dem Abnahmetest. Der Auftrag berührt nur diese eine Datei.\nAufträge: u1: Gemeinsame Beugungs-Hilfe für consultAnswerAccepted (de, en, fr)\nFehlerfälle: keine in diesem Bereich, weil der Auftrag ein Umbau ist, der das bestehende Verhalten nicht ändert, und weder Pitch noch Design Doc einen Fehlerfall dafür nennen\nReihenfolge: keine Vorgänger"
+  },
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "Gemeinsame Beugungs-Hilfe für consultAnswerAccepted (de, en, fr)",
+      "bereich": "src/i18n/mcp-texts.js",
+      "erwarteteDateien": [
+        "src/i18n/mcp-texts.js"
+      ],
+      "abnahme": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:114"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js:38"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Ergebnis"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Die Annahme zu u1 zählt die Vorgaben für den Entwurf auf, aber zwei Nicht-Ziele aus pitch.md, ## Nicht-Ziele fehlen. Beide kann u1 innerhalb seines Bereichs src/i18n/mcp-texts.js brechen, und kein Test meldet das. (1) „Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs oder anderer Textdateien, weil es heute keine zweite gebeugte Meldung gibt; sie nutzen die Hilfe erst, wenn eine entsteht.“ Die anderen Meldungen des MCP-Katalogs stehen in derselben Datei, ein Bauer könnte sie auf die Hilfe umstellen. (2) Der Teil „ein Sonderwortlaut für 0“ aus „Nicht Teil dieser Änderung: Umlaute in der deutschen Tabelle, ein Sonderwortlaut für 0, die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil der Umbau nur die Struktur der drei Bestätigungstexte betrifft.“ Der Abnahmetest prüft die 0 nur auf Französisch (S5). Ein Sonderwortlaut für 0 in de oder en bliebe deshalb grün. Der Planer soll beide Sätze in die Annahme mit den Vorgaben für den Entwurf von u1 aufnehmen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]
