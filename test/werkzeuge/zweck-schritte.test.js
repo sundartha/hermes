@@ -5,9 +5,8 @@ import { test } from "node:test";
 
 import { GRUND, MELDUNG, PRUEFUNG, kenntZweck } from "../../tools/auftrag/zweck.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
-import { dateienMitEndung, jobnamenVon, quelltext, workflowSchritte } from "./zweck-quellen.js";
+import { dateienMitEndung, eintraegeDerZuordnung, jobnamenVon, quelltext, urteilt, workflowSchritte } from "./zweck-quellen.js";
 
-const ZUORDNUNG = "tools/zweck/zuordnung/workflow-schritte.json";
 const SOLL = ".github/soll/einstellungen.json";
 const TRENNER = " › ";
 const LOKALE_ACTION = /^\.\/(\.github\/actions\/[\w-]+)$/;
@@ -53,10 +52,6 @@ function schritteDerPflichtChecks() {
   const schritte = pflichtWorkflows().flatMap((pfad) => workflowSchritte(pfad).schritte);
   const inActions = lokaleActions(schritte).flatMap((pfad) => workflowSchritte(pfad).schritte);
   return [...schritte, ...inActions].filter(({ werte }) => werte.run !== undefined || LOKALE_ACTION.test(werte.uses ?? ""));
-}
-
-function eintraegeDerZuordnung() {
-  return JSON.parse(quelltext(ZUORDNUNG));
 }
 
 function alsListe(wert) {
@@ -138,7 +133,7 @@ function nurHinterVerknuepfungGerufen(text, belege) {
 }
 
 function eintraegeMitZweck() {
-  return Object.entries(eintraegeDerZuordnung()).filter(([, eintrag]) => eintrag.zweck !== undefined || eintrag.gruppen !== undefined);
+  return Object.entries(eintraegeDerZuordnung()).filter(([, eintrag]) => urteilt(eintrag));
 }
 
 function schritteNachSchluessel() {
