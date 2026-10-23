@@ -37,7 +37,10 @@ export function git(args, root) {
 
 export function basisAusAufruf(aufruf, root) {
   const { values } = parseArgs({ options: { basis: { type: "string" } } });
-  const { basis } = values;
+  return gepruefteBasis(values.basis, aufruf, root);
+}
+
+export function gepruefteBasis(basis, aufruf, root) {
   if (basis === undefined || basis.trim() === "") {
     throw new Abbruch(`--basis fehlt oder ist leer. ${aufruf}`);
   }

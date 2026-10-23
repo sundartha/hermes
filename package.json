@@ -38,6 +38,7 @@
     "test:mutation": "NODE_ENV=test node tools/mutationspruefung.mjs",
     "test:wirkung": "NODE_ENV=test node tools/testwirkung.mjs",
     "pruefleiter": "node tools/pruefleiter.mjs",
+    "ci:lokal": "node tools/ci-lokal.mjs",
     "hermes-ctl": "node tools/hermes-ctl.mjs",
     "systemstand": "node tools/systemstand.mjs",
     "lint": "eslint . --pass-on-unpruned-suppressions",

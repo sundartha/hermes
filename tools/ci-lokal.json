@@ -1,0 +1,72 @@
+{
+  "schritte": [
+    { "name": "workflows", "befehl": "node tools/workflows-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Workflows prüfen"] },
+    { "name": "codeowners", "befehl": "node tools/codeowners-abgleich.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS"] },
+    { "name": "commitlint", "befehl": "npx --no-install commitlint --from \"$BASIS\" --to HEAD --verbose", "ci": [".github/workflows/ci.yml › pruefungen › Commit-Prüfung"] },
+    { "name": "lint", "befehl": "npm run lint -- --format ./tools/lint-format.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Lint"] },
+    { "name": "tsc", "befehl": "npx --no-install tsc --noEmit", "ci": [".github/workflows/ci.yml › pruefungen › Typprüfung"] },
+    { "name": "typabdeckung", "befehl": "node tools/typabdeckung.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Typabdeckung"] },
+    { "name": "typabdeckung-basis", "befehl": "node tools/typabdeckung.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Typabdeckung sinkt nicht"] },
+    { "name": "ts-sperre", "befehl": "node tools/ts-sperre.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › TypeScript nur, wo ESLint und tsc es sehen"] },
+    { "name": "migrationen", "befehl": "node tools/migrationen-pruefen.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Migrationen prüfen"] },
+    { "name": "suppressions", "befehl": "node scripts/check-staged-suppressions.js --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Unterdrückungen steigen nicht"] },
+    { "name": "lint-neue-funktionen", "befehl": "node tools/lint-neue-funktionen.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Lint neuer Funktionen"] },
+    { "name": "kommentar-wanderung", "befehl": "node tools/kommentar-wanderung.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Kommentar-Wanderung"] },
+    { "name": "neue-kommentare", "befehl": "node tools/neue-kommentare.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Keine neuen Kommentare"] },
+    {
+      "name": "syntax",
+      "befehl": "find src scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | xargs -0 -n1 node --check",
+      "ci": [".github/workflows/ci.yml › pruefungen › Syntax (.js und .mjs; .ts prüft die Typprüfung)"]
+    },
+    { "name": "openai-doku", "befehl": "node tools/openai-doku-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › OpenAI-Doku"] },
+    { "name": "anbieter-datenschutz", "befehl": "node tools/anbieter-datenschutz-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Anbieter im Datenschutz"] },
+    { "name": "log-geheimnisse", "befehl": "node tools/log-geheimnisse-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Geheimnisse in Logs"] },
+    { "name": "rueckkehr-parameter", "befehl": "node tools/rueckkehr-parameter-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Rückkehr-Parameter"] },
+    { "name": "feste-pfade", "befehl": "node tools/feste-pfade.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Feste Pfade"] },
+    { "name": "audit", "befehl": "node tools/audit-vergleich.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Audit"] },
+    { "name": "jscpd", "befehl": "node tools/basis-vergleich.mjs jscpd --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Kopien (jscpd)"] },
+    { "name": "knip", "befehl": "node tools/basis-vergleich.mjs knip --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Toter Code (knip)"] },
+    {
+      "name": "semgrep",
+      "werkzeug": "semgrep",
+      "befehl": "node tools/basis-vergleich.mjs semgrep --basis \"$BASIS\"",
+      "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Injection-Muster (Semgrep)"]
+    },
+    { "name": "kommentare-yaml", "befehl": "node tools/kommentare-yaml-shell.mjs", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Kommentare in YAML und Shell"] },
+    { "name": "lessons", "befehl": "node tools/basis-vergleich.mjs lessons", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Lehren nur streichen"] },
+    { "name": "anweisungen", "befehl": "node tools/basis-vergleich.mjs anweisungen", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Anweisungen nur streichen"] },
+    { "name": "wurzel", "befehl": "node tools/basis-vergleich.mjs wurzel", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Wurzelordner"] },
+    { "name": "katalog", "befehl": "node tools/katalog-pruefen.mjs --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Bedrohungskatalog"] },
+    { "name": "funktionskarte", "befehl": "node tools/funktionskarte.mjs pruefen --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Funktionskarte"] },
+    {
+      "name": "eslint-konfig",
+      "befehl": "node tools/eslint-konfig-pruefen.mjs",
+      "ci": [".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › ESLint-Konfiguration, Unterordner und only prüfen"]
+    },
+    { "name": "tsconfig", "befehl": "node tools/tsconfig-pruefen.mjs", "ci": [".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › TypeScript-Konfiguration prüfen"] },
+    { "name": "abhaengigkeiten", "befehl": "node tools/abhaengigkeiten.mjs --basis \"$BASIS\"", "ci": [".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Abhängigkeitsregeln"] },
+    { "name": "lockfile-alter", "befehl": "node tools/lockfile-alter.mjs --basis \"$BASIS\"", "ci": [".github/workflows/lieferkette.yml › lieferkette › Mindestalter neuer Paketversionen prüfen"] },
+    {
+      "name": "test:wirkung",
+      "werkzeug": "postgres",
+      "teuer": true,
+      "befehl": "npm run test:wirkung -- --basis \"$BASIS\"",
+      "ci": [".github/workflows/ci.yml › pruefungen › Testwirkung"]
+    }
+  ],
+  "nurCi": {
+    ".github/workflows/ci.yml › pruefungen › Secret-Scan": "Die Sicherungen des CI-Schritts (leerer Bereich, ERR-Zeilen, gelesene gegen erwartete Commits) liegen nur in ci.yml; eine lokale Kopie wäre ein zweiter, schwächerer Scan. Gemeinsames Skript für CI und ci-lokal ist ein Folgepaket.",
+    ".github/workflows/ci.yml › pruefungen › Install-Skripte": "Baut die Pakete aus tools/basis/install-skripte.json im frischen Checkout nach npm ci --ignore-scripts; das ist Aufbau der CI-Maschine. Lokal liegen die Pakete schon gebaut, der Vorab-Check prüft, dass sie da sind.",
+    ".github/actions/node-npm-ci/action.yml › Install-Skripte": "Derselbe Aufbau wie der Schritt Install-Skripte im Job Prüfungen, für die anderen Jobs.",
+    ".github/workflows/ci.yml › tests › Tests": "Volle Suite in vier Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
+    ".github/workflows/ci.yml › tests › Testlaufzeit": "Liest die Laufzeiten der vollen Suite aus dem Schritt Tests; ohne volle Suite gibt es nichts zu messen.",
+    ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": "Mutationsprüfung über den ganzen PR, teuer; lauf prüft Mutanten je Auftrag selbst.",
+    ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": "Sammelt die Ergebnisse der anderen GitHub-Jobs; lokal ist das der Exit von ci-lokal.",
+    ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung": "Liest PR, Review und Label auf GitHub; lokal gibt es keinen PR.",
+    ".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt": "Liest die PR-Nummer und die Freigaben im Issue auf GitHub; lokal gibt es keinen PR.",
+    ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": "Fährt lint und die betroffenen Tests über den ganzen PR, im Zweifel die volle Suite; lauf fährt beides je Auftrag, ci-lokal fährt lint.",
+    ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": "Alle Werkzeugtests in Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
+    ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit": "Liest die Laufzeiten der Werkzeugtests aus dem Schritt davor.",
+    ".github/workflows/pruefleiter.yml › pruefleiter › Alle Teile erfolgreich und vollständig": "Sammelt die Berichte der Teile des Prüfleiters auf GitHub."
+  }
+}
