@@ -3,16 +3,27 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { arch, pid, platform, version } from "node:process";
 import { dirname, join } from "node:path";
 
-import { gemeinsamerOrdner, git, offenePfade } from "../auftrag/git.mjs";
+import { gemeinsamerOrdner, git } from "../auftrag/git.mjs";
 
 const ABLAGE = join("hermes", "testumbau-vorher");
 const SCHLUESSEL_ANZEIGE = 12;
 const GELOESCHT = "fehlt";
+const NUL = "\0";
+const PFADE_AUS_DEM_NEUEN_STAND = [
+  "tools",
+  "stryker.config.json",
+  "package.json",
+  "package-lock.json",
+  "src/utils/object.js",
+  "test/testbaenke-run.mjs",
+  "test/i18n-catalog-run.mjs",
+  "test/abnahme-ausgewandert.json",
+];
+const INSTALLIERTE_MODULE = "node_modules/.package-lock.json";
 
-function ungespeicherteDateien(root, geaendert) {
-  const erlaubt = new Set(geaendert);
-  const offen = offenePfade(root);
-  return offen.every((pfad) => erlaubt.has(pfad)) ? offen : null;
+export function werkzeugEingaben(root) {
+  const liste = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...PFADE_AUS_DEM_NEUEN_STAND], { cwd: root });
+  return [...new Set([...liste.split(NUL).filter(Boolean), INSTALLIERTE_MODULE])].sort();
 }
 
 function inhaltsHash(root, pfad) {
@@ -24,15 +35,12 @@ function inhaltsHash(root, pfad) {
 }
 
 export function vorherSchluessel(basis, geaendert, root) {
-  const offen = ungespeicherteDateien(root, geaendert);
-  if (offen === null) return null;
-  const ungespeichert = offen.map((pfad) => [pfad, inhaltsHash(root, pfad)]);
-  if (ungespeichert.some(([, hash]) => hash === null)) return null;
+  const werkzeug = werkzeugEingaben(root).map((pfad) => [pfad, inhaltsHash(root, pfad)]);
+  if (werkzeug.some(([, hash]) => hash === null)) return null;
   const teile = {
     basis: git(["rev-parse", `${basis}:`], { cwd: root }).trim(),
     geaendert: [...geaendert].sort(),
-    kopf: git(["rev-parse", "HEAD^{tree}"], { cwd: root }).trim(),
-    ungespeichert,
+    werkzeug,
     node: version,
     plattform: `${platform}-${arch}`,
   };
@@ -46,9 +54,7 @@ function ablage(root, schluessel) {
 export async function mitVorherSpeicher({ basis, geaendert, root }, rechne) {
   const schluessel = vorherSchluessel(basis, geaendert, root);
   if (schluessel === null) {
-    console.log(
-      "Vorher-Speicher aus: ungespeicherte Änderungen lassen sich nicht in den Schlüssel nehmen.",
-    );
+    console.log("Vorher-Speicher aus: eine Eingabe des Werkzeugs ist keine gewöhnliche Datei und lässt sich nicht in den Schlüssel nehmen.");
     return rechne();
   }
   const datei = ablage(root, schluessel);

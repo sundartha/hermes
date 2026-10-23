@@ -3,11 +3,14 @@ import { mkdirSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
+import { cruise } from "dependency-cruiser";
+
 import {
   mitVorherSpeicher,
   vorherSchluessel,
+  werkzeugEingaben,
 } from "../../tools/mutationspruefung/vorher-speicher.mjs";
-import { commitAll, probeRepository, runIn } from "./probe-repo.js";
+import { commitAll, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 
 const ERGEBNIS = {
   tests: ["test/a.test.js"],
@@ -16,6 +19,9 @@ const ERGEBNIS = {
 };
 const GEAENDERT = ["test/a.test.js"];
 const BANK_DATEI = "test/testbaenke-run.mjs";
+const MODULSTAND = "node_modules/.package-lock.json";
+const WERKZEUG = "tools/mutationspruefung.mjs";
+const EIGENE_DATEI = /^(?:tools|src|test)\/|^[^/]+\.json$/;
 const ERSTER_LAUF = 1;
 const GLEICHER_STAND = 0;
 const NEUER_STAND = 1;
@@ -30,6 +36,8 @@ function stand(context) {
     "package.json": "{}\n",
     "package-lock.json": "{}\n",
     "stryker.config.json": "{}\n",
+    ".gitignore": "node_modules/\n",
+    [MODULSTAND]: "{}\n",
   });
 }
 
@@ -120,11 +128,10 @@ test("Vorher-Speicher: eine andere Menge geänderter Testdateien trifft nicht", 
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
 });
 
-test("Vorher-Speicher: ungespeicherte Änderungen am Werkzeug schalten den Speicher ab", async (context) => {
+test("Vorher-Speicher: eine ungespeicherte Änderung am Werkzeug trifft nicht, auch bei gleicher Basis", async (context) => {
   const root = stand(context);
-  const basis = kopf(root);
-  writeFileSync(join(root, "tools/werkzeug.mjs"), "export const w = 2;\n");
-  const { anzahl } = await zweimal(root, basis, { aendern: () => basis });
+  const werkzeug = () => writeFileSync(join(root, "tools/werkzeug.mjs"), "export const w = 2;\n");
+  const anzahl = await nacheinander(root, GEAENDERT, [() => {}, werkzeug]);
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
 });
 
@@ -141,11 +148,9 @@ test("Vorher-Speicher: eine geänderte stryker.config.json am Kopf trifft nicht,
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
 });
 
-test("Vorher-Speicher: ungespeicherte Änderungen außerhalb der geänderten Testdateien schalten den Speicher ab", async (context) => {
+test("Vorher-Speicher: eine ungespeicherte Änderung an test/testbaenke-run.mjs trifft nicht, auch außerhalb der geänderten Testdateien", async (context) => {
   const root = stand(context);
-  const basis = kopf(root);
-  writeFileSync(join(root, BANK_DATEI), "export const neu = 1;\n");
-  const { anzahl } = await zweimal(root, basis, { aendern: () => basis });
+  const anzahl = await nacheinander(root, GEAENDERT, [() => {}, schreibeBank(root, "neu")]);
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
 });
 
@@ -164,7 +169,7 @@ function schreibeBank(root, fassung) {
   return () => writeFileSync(join(root, BANK_DATEI), `export const muster = '${fassung}';\n`);
 }
 
-test("Vorher-Speicher: ein anderer ungespeicherter Inhalt einer geänderten Testdatei trifft nicht", async (context) => {
+test("Vorher-Speicher: ein anderer ungespeicherter Inhalt von test/testbaenke-run.mjs trifft nicht, auch unter den geänderten Testdateien", async (context) => {
   const root = stand(context);
   const anzahl = await nacheinander(
     root,
@@ -174,14 +179,14 @@ test("Vorher-Speicher: ein anderer ungespeicherter Inhalt einer geänderten Test
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
 });
 
-test("Vorher-Speicher: derselbe ungespeicherte Inhalt einer geänderten Testdatei trifft", async (context) => {
+test("Vorher-Speicher: derselbe ungespeicherte Inhalt von test/testbaenke-run.mjs trifft", async (context) => {
   const root = stand(context);
   const fassung = schreibeBank(root, "fassung-a");
   const anzahl = await nacheinander(root, [BANK_DATEI, ...GEAENDERT], [fassung, fassung]);
   assert.equal(anzahl, ERSTER_LAUF + GLEICHER_STAND);
 });
 
-test("Vorher-Speicher: eine ungespeichert gelöschte Testdatei trifft beim gleichen Stand und nicht bei neuem Inhalt", async (context) => {
+test("Vorher-Speicher: eine ungespeichert gelöschte Werkzeugdatei trifft beim gleichen Stand und nicht bei neuem Inhalt", async (context) => {
   const root = stand(context);
   const loeschen = () => unlinkSync(join(root, BANK_DATEI));
   const anzahl = await nacheinander(
@@ -192,15 +197,51 @@ test("Vorher-Speicher: eine ungespeichert gelöschte Testdatei trifft beim gleic
   assert.equal(anzahl, ERSTER_LAUF + GLEICHER_STAND + NEUER_STAND);
 });
 
-test("Vorher-Speicher: eine ungespeicherte Verknüpfung unter den geänderten Testdateien schaltet den Speicher ab", async (context) => {
+test("Vorher-Speicher: eine ungespeicherte Verknüpfung unter den Werkzeugdateien schaltet den Speicher ab", async (context) => {
   const root = stand(context);
-  const verknuepfen = () => symlinkSync("a.test.js", join(root, "test/b.test.js"));
-  const anzahl = await nacheinander(
-    root,
-    ["test/b.test.js", ...GEAENDERT],
-    [verknuepfen, () => {}],
-  );
+  const verknuepfen = () => symlinkSync("werkzeug.mjs", join(root, "tools/verknuepft.mjs"));
+  const anzahl = await nacheinander(root, GEAENDERT, [verknuepfen, () => {}]);
   assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
+});
+
+function schreibeTest(root, fassung) {
+  return () => writeFileSync(join(root, "test/a.test.js"), `import '../src/a.js';\nexport const fassung = '${fassung}';\n`);
+}
+
+test("Vorher-Speicher: neue Fassungen einer geänderten Testdatei treffen, ungespeichert wie eingecheckt", async (context) => {
+  const root = stand(context);
+  const anzahl = await nacheinander(root, GEAENDERT, [
+    schreibeTest(root, "fassung-a"),
+    schreibeTest(root, "fassung-b"),
+    () => {
+      schreibeTest(root, "fassung-c")();
+      commitAll(root, "Fassung c");
+    },
+  ]);
+  assert.equal(anzahl, ERSTER_LAUF + GLEICHER_STAND + GLEICHER_STAND);
+});
+
+test("Vorher-Speicher: eine ungespeicherte Änderung an einer Quelldatei außerhalb der Werkzeugdateien trifft", async (context) => {
+  const root = stand(context);
+  const quelle = (wert) => () => writeFileSync(join(root, "src/a.js"), `export const a = ${wert};\n`);
+  const anzahl = await nacheinander(root, GEAENDERT, [quelle(2), quelle(3)]);
+  assert.equal(anzahl, ERSTER_LAUF + GLEICHER_STAND);
+});
+
+test("Vorher-Speicher: anders installierte Module treffen nicht, auch bei gleicher Basis und gleicher Lockdatei", async (context) => {
+  const root = stand(context);
+  const module = () => writeFileSync(join(root, MODULSTAND), '{"neu": true}\n');
+  const anzahl = await nacheinander(root, GEAENDERT, [() => {}, module]);
+  assert.equal(anzahl, ERSTER_LAUF + NEUER_STAND);
+});
+
+test("Vorher-Speicher: jede eigene Datei, die das Werkzeug lädt, gehört zu den Eingaben des Schlüssels", async () => {
+  const { output } = await cruise([WERKZEUG], { baseDir: REPO_ROOT, doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] });
+  const geladen = output.modules.map(({ source }) => source).filter((pfad) => EIGENE_DATEI.test(pfad));
+  const eingaben = new Set(werkzeugEingaben(REPO_ROOT));
+  assert.deepEqual(geladen.filter((pfad) => !eingaben.has(pfad)), []);
+  assert.ok(geladen.includes(WERKZEUG));
+  assert.ok(eingaben.has("stryker.config.json"));
 });
 
 function zwischendatei(root, basis) {
