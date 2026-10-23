@@ -7,16 +7,23 @@ const ERSTE_ZEILE = 3;
 const ZWEITE_ZEILE = 4;
 const DRITTE_ZEILE = 5;
 const SCHLUESSEL = "src/zahl.js:3:7 ConditionalExpression → true";
+const SPALTE_VON = 7;
+const SPALTE_BIS = 15;
 const ZEILEN = [ERSTE_ZEILE, ERSTE_ZEILE];
-const MUTANT = { schluessel: SCHLUESSEL, zeilen: ZEILEN };
-const ZWEITER = { schluessel: "src/zahl.js:4:7 ConditionalExpression → true", zeilen: [ZWEITE_ZEILE, ZWEITE_ZEILE] };
-const DRITTER = { schluessel: "src/zahl.js:5:7 ConditionalExpression → true", zeilen: [DRITTE_ZEILE, DRITTE_ZEILE] };
+const LAGE = lageIn(ERSTE_ZEILE);
+const MUTANT = { schluessel: SCHLUESSEL, zeilen: ZEILEN, lage: LAGE };
+const ZWEITER = { schluessel: "src/zahl.js:4:7 ConditionalExpression → true", zeilen: [ZWEITE_ZEILE, ZWEITE_ZEILE], lage: lageIn(ZWEITE_ZEILE) };
+const DRITTER = { schluessel: "src/zahl.js:5:7 ConditionalExpression → true", zeilen: [DRITTE_ZEILE, DRITTE_ZEILE], lage: lageIn(DRITTE_ZEILE) };
 const DATEI = "test/a.test.js";
 const ANDERE = "test/b.test.js";
 const NICHT_BESTAETIGT = "Hinweis: im Bestätigungslauf nicht bestätigt, Mutant zählt als überlebt";
 const NUR_HAENGER = `Hinweis: nur durch Zeitablauf oder Absturz erkannt, in beiden Läufen; nicht bestätigt getötet: ${SCHLUESSEL}`;
 const ABBRUECHE = ["Timeout", "RuntimeError", "CompileError"];
 const GRUENE = ["Survived", "NoCoverage"];
+
+function lageIn(zeile) {
+  return { start: { line: zeile, column: SPALTE_VON }, end: { line: zeile, column: SPALTE_BIS } };
+}
 
 function eintrag(status, toeter = [], mutant = MUTANT) {
   return { ...mutant, status, art: "ConditionalExpression", toeter };
@@ -44,7 +51,7 @@ function nichtBestaetigt(laeufe) {
 test("ein roter Test, der im Bestätigungslauf nur mit seiner Datei wieder rot wird, ist bestätigt getötet", async () => {
   const erster = eintrag("Killed", [DATEI]);
   const { ergebnis, aufrufe } = await bestaetigung(erster, [eintrag("Killed", [DATEI])]);
-  assert.deepEqual(aufrufe, [{ zeilen: [ZEILEN], tests: [DATEI] }]);
+  assert.deepEqual(aufrufe, [{ zeilen: [LAGE], tests: [DATEI] }]);
   assert.equal(bestaetigt(ergebnis), true);
   assert.equal(ergebnis.status, "Killed");
   assert.equal(ergebnis.hinweis, undefined);
@@ -72,7 +79,7 @@ test("ein Zeitablauf oder Absturz, der sich im Bestätigungslauf wiederholt, ist
   for (const erster of ABBRUECHE) {
     for (const zweiter of ABBRUECHE) {
       const { ergebnis, aufrufe } = await bestaetigung(eintrag(erster), [eintrag(zweiter)]);
-      assert.deepEqual(aufrufe, [{ zeilen: [ZEILEN], tests: undefined }]);
+      assert.deepEqual(aufrufe, [{ zeilen: [LAGE], tests: undefined }]);
       assert.equal(ergebnis.status, erster);
       assert.equal(bestaetigt(ergebnis), false);
       assert.equal(ergebnis.hinweis, NUR_HAENGER);
@@ -92,8 +99,8 @@ test("ein Zeitablauf, nach dem der Bestätigungslauf grün ist oder nichts liefe
 test("wird ein Zeitablauf im Bestätigungslauf zum roten Test, entscheidet ein dritter Lauf nur mit dieser Datei", async () => {
   const bestaetigter = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("Killed", [DATEI])]);
   assert.deepEqual(bestaetigter.aufrufe, [
-    { zeilen: [ZEILEN], tests: undefined },
-    { zeilen: [ZEILEN], tests: [DATEI] },
+    { zeilen: [LAGE], tests: undefined },
+    { zeilen: [LAGE], tests: [DATEI] },
   ]);
   assert.equal(bestaetigt(bestaetigter.ergebnis), true);
   const gruener = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("Survived")]);
@@ -123,9 +130,9 @@ test("je tötende Datei läuft ein eigener Bestätigungslauf nur mit ihr, alle A
   );
   const bestaetigte = await bestaetige(ergebnisse, nachlauf);
   assert.deepEqual(aufrufe, [
-    { zeilen: [ZEILEN], tests: [DATEI] },
-    { zeilen: [ZWEITER.zeilen], tests: [ANDERE] },
-    { zeilen: [DRITTER.zeilen], tests: undefined },
+    { zeilen: [LAGE], tests: [DATEI] },
+    { zeilen: [ZWEITER.lage], tests: [ANDERE] },
+    { zeilen: [DRITTER.lage], tests: undefined },
   ]);
   assert.deepEqual(bestaetigte.map(({ status }) => status), ["Killed", "Killed", "Timeout"]);
   assert.equal(bilanz(bestaetigte), "2 bestätigt getötet, 1 nur durch Zeitablauf oder Absturz erkannt");
@@ -141,7 +148,7 @@ async function gruppenbestaetigung(gruppe, ...antworten) {
 }
 
 function laeufe(...tests) {
-  return tests.map((auswahl) => ({ zeilen: [ZEILEN], tests: auswahl }));
+  return tests.map((auswahl) => ({ zeilen: [LAGE], tests: auswahl }));
 }
 
 test("wird ein Töter nicht bestätigt, tötet ein anderer Test aus der Gruppe den Mutanten zweimal und nennt den Wackler", async () => {

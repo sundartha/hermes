@@ -58,11 +58,20 @@ export function vorherGetoetet(basis, geaendert, werkzeug) {
   });
 }
 
+function brichAbOhneLage(getoetet) {
+  const fehlend = getoetet.filter(({ lage }) => lage === undefined);
+  if (fehlend.length === 0) return;
+  throw new Error(
+    `die Vorher-Seite nennt für ${fehlend.length} getötete Mutanten keine Lage (älteres Werkzeug, z. B. ${fehlend[0].schluessel}); die Vorher-Seite ist neu zu rechnen`,
+  );
+}
+
 async function nachherVerloren(getoetet, tests, werkzeug) {
+  brichAbOhneLage(getoetet);
   const verloren = [];
   for (const datei of [...new Set(getoetet.map((eintrag) => eintrag.datei))]) {
     const vorher = getoetet.filter((eintrag) => eintrag.datei === datei);
-    const nachher = tests.length === 0 ? [] : await werkzeug.durchgang(datei, vorher.map(({ zeilen }) => zeilen), tests);
+    const nachher = tests.length === 0 ? [] : await werkzeug.durchgang(datei, vorher.map(({ lage }) => lage), tests);
     const weiter = new Set(nachher.filter((eintrag) => !werkzeug.ueberlebt(eintrag)).map(({ schluessel }) => schluessel));
     verloren.push(...vorher.filter(({ schluessel }) => !weiter.has(schluessel)));
   }
