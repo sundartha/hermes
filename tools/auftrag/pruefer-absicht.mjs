@@ -72,10 +72,8 @@ export function vorgabenFuerPr({ fork = false, ...stand }) {
   if (fork) return { keine: AUS_FORK };
   const gefunden = stand.basis && stand.head ? geaendertePhasen(stand).flatMap((eintrag) => vorgabenDer(eintrag, stand)) : [];
   if (gefunden.length === 0) return { keine: OHNE_VORGABEN };
-  return {
-    text: gefunden.map(({ vorgaben }) => vorgaben).join("\n\n"),
-    quelle: `${gefunden.map(({ pitch }) => pitch).join(", ")} am Stand des Pull Requests`,
-  };
+  const pitche = gefunden.map(({ pitch }) => pitch).join(", ");
+  return { text: gefunden.map(({ vorgaben }) => vorgaben).join("\n\n"), quelle: `${pitche} am Stand des Pull Requests` };
 }
 
 export function abbruchOhneAbsicht(absicht) {
