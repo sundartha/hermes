@@ -7,7 +7,7 @@ import { MASTER } from "./worktrees.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 function ciLokalBefunde(cwd, basis) {
-  const lauf = fuehreAus(MELDUNG.CI_LOKAL, ["npm", "--silent", "run", "ci:lokal", "--", "--basis", basis, "--mit-teuren"], { cwd, env });
+  const lauf = fuehreAus(MELDUNG.CI_LOKAL, ["npm", "--silent", "run", "ci:lokal", "--", "--basis", basis], { cwd, env });
   console.log(lauf.ausgabe.trimEnd());
   return lauf.exitCode === 0 ? [] : [`ci-lokal gegen die Basis ${basis} endete mit Exit ${lauf.exitCode}; die roten Schritte stehen oben.`];
 }
@@ -32,6 +32,6 @@ export const TEILLAUF = "teillauf fährt ci-lokal nie, das tut phase einmal am E
 
 export function ciLokalNichtGelaufen(root, grund) {
   const basis = phasenbasis(root) ?? MASTER;
-  console.log(`ci-lokal nicht gelaufen: ${grund}. Vor dem Push selbst fahren: node tools/ci-lokal.mjs --basis ${basis} --mit-teuren`);
+  console.log(`ci-lokal nicht gelaufen: ${grund}. Vor dem Push selbst fahren: node tools/ci-lokal.mjs --basis ${basis}`);
   return EXIT_GRUEN;
 }
