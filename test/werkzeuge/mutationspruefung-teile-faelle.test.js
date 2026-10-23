@@ -201,3 +201,19 @@ test("eine Datei mit einer direkten und vielen indirekt erreichenden Testdateien
   assert.ok(verstoesse.length > 0, ganz.stdout);
   assert.ok(verstoesse.every((zeile) => zeile.startsWith("Verstoß: Mutant überlebt: src/zahl.js:6:")), ganz.stdout);
 });
+
+test("eine geänderte Testdatei, die die Datei nur indirekt erreicht, wird zuerst gefragt; tötet sie alles, startet keine andere indirekte Testdatei", (context) => {
+  const ordner = probeDirectory(context, {});
+  const [geaendert, andere] = [join(ordner, "geaendert.txt"), join(ordner, "andere.txt")];
+  const repo = probeRepository(context, {
+    ...BASIS,
+    ...HILFE,
+    "test/andere.test.js": indirekterTest(andere, SCHWACH),
+    "test/indirekt.test.js": indirekterTest(geaendert, SCHWACH),
+  });
+  writeFiles(repo, { "src/zahl.js": quelle(PROTOKOLL, NEGATIV, NULL), "test/indirekt.test.js": indirekterTest(geaendert) });
+  const lauf = werkzeug(repo, "HEAD");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(existsSync(geaendert), true, lauf.stdout);
+  assert.equal(existsSync(andere), false, lauf.stdout);
+});
