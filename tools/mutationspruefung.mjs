@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { dirname, join, normalize, relative } from "node:path";
-import { chdir, cwd } from "node:process";
+import { chdir, cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -12,7 +13,7 @@ import { omitKeys } from "../src/utils/object.js";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN, gleichwertigGemeldet, MUTANT_UEBERLEBT, ohneTestdatei } from "./auftrag/gleichwertig.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
-import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
+import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
@@ -66,7 +67,6 @@ const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
 const BESTAETIGUNG = "Bestätigung";
-const GLEICHZEITIG = KONFIGURATION.concurrency;
 const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
@@ -261,9 +261,14 @@ function vereine(ergebnisse, laeufe) {
   return ergebnisse.map((eintrag) => staerker(eintrag, nachSchluessel.get(eintrag.schluessel)));
 }
 
+function gleichzeitig() {
+  return env.CI ? KONFIGURATION.concurrency : Math.max(KONFIGURATION.concurrency, Math.floor(availableParallelism() / plaetze()));
+}
+
 function wellen(testgruppen) {
-  return Array.from({ length: Math.ceil(testgruppen.length / GLEICHZEITIG) }, (_leer, welle) =>
-    testgruppen.slice(welle * GLEICHZEITIG, (welle + 1) * GLEICHZEITIG),
+  const breite = gleichzeitig();
+  return Array.from({ length: Math.ceil(testgruppen.length / breite) }, (_leer, welle) =>
+    testgruppen.slice(welle * breite, (welle + 1) * breite),
   );
 }
 
@@ -287,7 +292,7 @@ async function geteilterGruppenlauf(lauf) {
 }
 
 async function welle(datei, zeilen, testgruppen) {
-  const concurrency = Math.max(1, Math.floor(GLEICHZEITIG / testgruppen.length));
+  const concurrency = Math.max(1, Math.floor(gleichzeitig() / testgruppen.length));
   const laeufe = await Promise.allSettled(testgruppen.map((tests) => geteilterGruppenlauf({ datei, zeilen, tests, concurrency })));
   const fehlschlag = laeufe.find(({ status }) => status === ABGELEHNT);
   if (fehlschlag) throw fehlschlag.reason;
