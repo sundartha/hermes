@@ -1,0 +1,35 @@
+{
+  "stand": {
+    "kopfBaum": "1c5c2c46e6d67891b5f2f46a39460f615ce788e8",
+    "arbeitsbaum": "42601c5965835890928679acfa9b8ce3b2fc906b",
+    "dateien": {
+      ".claude/agents/entwurf.md": "4b624cda3bb772a809d08986998d81ae76d7d3a943c56f3e27e2f452156bd00d",
+      ".claude/agents/erkunder.md": "78f23f45156e85dd5d0ef3e6fdb43344180260c251ed143f9ac6ea6b6890c9bc",
+      ".claude/agents/planer.md": "b7e1d207dcf035d1b8015ae40330963f58917e9ccd1dcd7984450030fa1651c0",
+      ".claude/agents/pruefer-planung.md": "b3b579b78524f848bada7516aa6c902d3f5ba5efbede6c90465db0f0747df1e0",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "297e5cf6cf4c09981c94ea9249a9193963b09d6396cbf808154f9187b4424176",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "297e5cf6cf4c09981c94ea9249a9193963b09d6396cbf808154f9187b4424176",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "09843d98224739272168781c2a0ed26234dde95a3cdf1812263bbf4df64f86ee",
+      "plaene/P-006-saetze-hilfe/design.md": "bc019eb3736309bc63229c54c7bb4eec2afc9801d95dcf27bed68a4934c2373a",
+      "plaene/P-006-saetze-hilfe/pitch.md": "463d403710baa22058799ad85a124a7d4ab783f712b205da3efb793c7eb41180",
+      "plaene/P-006-saetze-hilfe/sicherheit.md": "18ce5766e7e11aa054dcd9d6473394f04a62c70419d0bbd4765fb4829bfcde3f",
+      "tools/bereiche.json": "57b2b8f1c7ed8b01f41c13599edb6a4a897ad382b9b981302a5ef728200b7ef9"
+    }
+  },
+  "ablage": {
+    "gliederung.json": "5e71b4f11b3f493dbd33a6aa2553e1c1195ef09213caf42795510bbf6411e0b6",
+    "nachfragen.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "zustand": {
+    "gesehen": [],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [],
+    "wegZaehler": [],
+    "nachfrageWellen": 0
+  }
+}
