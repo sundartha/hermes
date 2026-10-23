@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { setTimeout as schlafen } from "node:timers/promises";
 
 import { verwaisteSperren } from "../../tools/auftrag/sperren.mjs";
-import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -87,7 +87,7 @@ function phase({ repo, werkzeug }, [name, issue, ...auftraege]) {
   const datei = join(werkzeug, `${name}.json`);
   const entwurf = Object.fromEntries(auftraege.map(({ bereich }) => [bereich, "Entwurf."]));
   writeFileSync(datei, JSON.stringify({ phase: name, issue, entwurf, auftraege }));
-  const umgebung = { HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), HERMES_SPERRE_WARTEN_MS: "100", ...mitErsatzSemgrep(werkzeug) };
+  const umgebung = { HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), HERMES_SPERRE_WARTEN_MS: "100", ...mitErsatzWerkzeugen(werkzeug) };
   const env = { ...isolatedEnvironment(), ...umgebung, ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json") };
   return spawn(process.execPath, [EINSTIEG, "phase", datei], { cwd: repo, env });
 }

@@ -369,5 +369,19 @@
     "behebung": "semgrep installieren oder in den PATH bringen, in der Fassung aus tools/basis/semgrep.json, und lauf neu starten.",
     "nichtAngenommen": "Die Prüfung abschalten, im echten Lauf ein Ersatzprogramm namens semgrep in den PATH legen, das nichts prüft, oder den Auftrag ohne lauf bauen.",
     "ausweg": "entfällt: ohne semgrep startet kein Auftrag; Antonio entscheidet."
+  },
+  "pakete-fehlen": {
+    "liste": "ohne Nummer",
+    "wozu": "Ohne die Pakete aus package.json brechen lint, tsc, die Abnahme und die Tests erst ab, wenn die Agenten schon gearbeitet haben. plane und lauf prüfen deshalb vor dem ersten Agenten, ob jedes Paket in node_modules liegt.",
+    "behebung": "Im Worktree npm ci ausführen und plane oder lauf neu starten.",
+    "nichtAngenommen": "Die Prüfung abschalten, leere Ordner in node_modules anlegen oder den Auftrag ohne lauf bauen.",
+    "ausweg": "entfällt: ohne die Pakete startet kein Agent; Antonio entscheidet."
+  },
+  "postgres-fehlt": {
+    "liste": "ohne Nummer",
+    "wozu": "test:wirkung läuft in der CI gegen echtes Postgres; die Tests lesen die Adresse aus HERMES_TEST_POSTGRES_URL und überspringen sich still, wenn sie fehlt. Lokal hieße das: ci-lokal am Ende der Phase ist grün, obwohl die Postgres-Tests nie liefen. plane und lauf prüfen deshalb vor dem ersten Agenten, ob die Variable gesetzt ist und pg_isready den Server erreicht.",
+    "behebung": "Postgres in der Hauptversion aus tools/basis/squawk.toml starten, HERMES_TEST_POSTGRES_URL=postgres://<nutzer>@localhost:<port>/postgres setzen und neu starten.",
+    "nichtAngenommen": "Die Prüfung abschalten, die Variable auf einen Server setzen, den die Tests nicht nutzen können, oder den Auftrag ohne lauf bauen.",
+    "ausweg": "entfällt: ohne Postgres startet kein Agent; Antonio entscheidet."
   }
 }

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -111,7 +111,7 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
       HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
       HERMES_GH: GH_OHNE_WIRKUNG,
       ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
-      ...mitErsatzSemgrep(werkzeug),
+      ...mitErsatzWerkzeugen(werkzeug),
       ...umgebung,
     },
   });

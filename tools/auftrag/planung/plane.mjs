@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { inspect } from "node:util";
 
 import { STILLSTAND } from "../verlauf.mjs";
+import { werkzeugBefunde } from "../werkzeuge.mjs";
 import { ABSICHT, bereichSchluessel } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
@@ -879,6 +880,11 @@ function neuePlanung(root, ordner, { fortsetzen, deckel, issue }) {
 
 export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben } = {}) {
   const ordner = resolve(root, ordnerAngabe);
+  const werkzeug = werkzeugBefunde(root);
+  if (werkzeug.length > 0) {
+    console.error(werkzeug.join("\n"));
+    return EXIT_AUFRUF;
+  }
   const { deckel, issue, fehler } = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angaben);
   if (fehler !== null) {
     console.error(fehler);

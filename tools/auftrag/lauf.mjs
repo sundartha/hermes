@@ -26,9 +26,9 @@ import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
+import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
-import { TOOLS } from "../basis-vergleich.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
@@ -508,16 +508,6 @@ function gebauteAuftraege(phase, root) {
   return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));
 }
 
-function semgrepBefunde(root) {
-  try {
-    TOOLS.semgrep.version(root);
-    return [];
-  } catch (fehler) {
-    const grund = fehler.message.split("\n")[0];
-    return [`semgrep läuft nicht; ohne ihn zählt kein Paar als nur Typen und lint bricht ab (${grund}).`, ...zweckBlock(MELDUNG.SEMGREP_FEHLT)];
-  }
-}
-
 function startBefunde(phasendatei, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
   const ohneIssue = befunde.length === 0 ? issueBefunde(phase) : [];
@@ -525,7 +515,7 @@ function startBefunde(phasendatei, root) {
   const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
   const annahmen = form.length > 0 ? [] : annahmenBefunde(phase, root);
   const sauber = istSauber(root) ? [] : ["Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand."];
-  const werkzeug = form.length > 0 ? [] : semgrepBefunde(root);
+  const werkzeug = form.length > 0 ? [] : werkzeugBefunde(root);
   return { phase, befunde: [...form, ...annahmen, ...sauber, ...zweck, ...werkzeug] };
 }
 
