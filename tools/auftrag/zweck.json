@@ -379,7 +379,7 @@
   },
   "postgres-fehlt": {
     "liste": "ohne Nummer",
-    "wozu": "test:wirkung läuft in der CI gegen echtes Postgres; die Tests lesen die Adresse aus HERMES_TEST_POSTGRES_URL und überspringen sich still, wenn sie fehlt. Lokal hieße das: ci-lokal am Ende der Phase ist grün, obwohl die Postgres-Tests nie liefen. plane und lauf prüfen deshalb vor dem ersten Agenten, ob die Variable gesetzt ist und pg_isready den Server erreicht.",
+    "wozu": "Die Postgres-Tests laufen in der CI gegen echtes Postgres; lokal lesen sie die Adresse aus HERMES_TEST_POSTGRES_URL und überspringen sich still, wenn sie fehlt. Ein lokaler Testlauf wäre dann grün, obwohl die Postgres-Tests nie liefen. plane und lauf prüfen deshalb vor dem ersten Agenten, ob die Variable gesetzt ist und pg_isready den Server erreicht.",
     "behebung": "Postgres in der Hauptversion aus tools/basis/squawk.toml starten, HERMES_TEST_POSTGRES_URL=postgres://<nutzer>@localhost:<port>/postgres setzen und neu starten.",
     "nichtAngenommen": "Die Prüfung abschalten, die Variable auf einen Server setzen, den die Tests nicht nutzen können, oder den Auftrag ohne lauf bauen.",
     "ausweg": "entfällt: ohne Postgres startet kein Agent; Antonio entscheidet."
@@ -393,8 +393,8 @@
   },
   "ci-lokal": {
     "liste": "ohne Nummer",
-    "wozu": "Die Pflicht-Checks laufen erst nach dem Push und kosten je Runde viele Minuten. Am Ende der Phase fährt lauf oder phase deshalb alle Prüfungen aus tools/ci-lokal.json über die ganze Phase, mit test:wirkung, gegen dieselbe Basis wie der PR. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
-    "behebung": "Den Befund des roten Schritts beheben, committen und node tools/ci-lokal.mjs --basis <Basis aus der Meldung> --mit-teuren laufen lassen, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
+    "wozu": "Die Pflicht-Checks laufen erst nach dem Push und kosten je Runde viele Minuten. Am Ende der Phase fährt lauf oder phase deshalb alle günstigen Prüfungen aus tools/ci-lokal.json über die ganze Phase gegen dieselbe Basis wie der PR; die teuren wie test:wirkung laufen nur auf GitHub. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
+    "behebung": "Den Befund des roten Schritts beheben, committen und node tools/ci-lokal.mjs --basis <Basis aus der Meldung> laufen lassen, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
     "nichtAngenommen": "Einen Schritt aus tools/ci-lokal.json streichen oder unter nurCi verschieben, damit er nicht mehr läuft, ein Ersatzprogramm in den PATH legen, das nichts prüft, oder trotz Rot pushen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hältst du einen Schritt lokal für falsch, gehören Schritt, Ausgabe und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
   }

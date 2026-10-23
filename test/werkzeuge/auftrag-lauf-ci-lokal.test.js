@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { funktion, ROTER_TEST } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { CI_LOKAL_ROT, ciLokalAufrufe, mitCiLokal } from "./ersatz-werkzeuge.js";
-import { commitAll, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
 
 const DREHBUCH = {
   test: { "test/rechnen.test.js": ROTER_TEST },
@@ -20,10 +22,10 @@ function betreffeSeit(repo, basis) {
   return runIn(repo, "git", ["log", "--format=%s", `${basis}..HEAD`]).stdout.split("\n").filter(Boolean);
 }
 
-test("nach dem letzten Auftrag der Phase fährt lauf ci-lokal einmal gegen die Basis des PRs mit den teuren Schritten", (context) => {
+test("nach dem letzten Auftrag der Phase fährt lauf ci-lokal einmal gegen die Basis des PRs ohne die teuren Schritte", (context) => {
   const { werkzeug, lauf, basis } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien: ciLokal(0) });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.deepEqual(ciLokalAufrufe(werkzeug), [["--basis", basis, "--mit-teuren"]]);
+  assert.deepEqual(ciLokalAufrufe(werkzeug), [["--basis", basis]]);
   assert.match(lauf.stdout, /^ci-lokal: grün$/m);
 });
 
@@ -47,7 +49,7 @@ test("baut lauf nichts, weil jeder Auftrag schon gebaut ist, fährt es ci-lokal 
   assert.match(lauf.stdout, /Auftrag A1: schon gebaut, übersprungen\./);
   assert.deepEqual(ciLokalAufrufe(werkzeug), []);
   assert.ok(lauf.stdout.includes("ci-lokal nicht gelaufen"), lauf.stdout);
-  assert.ok(lauf.stdout.includes(`node tools/ci-lokal.mjs --basis ${basis} --mit-teuren`), lauf.stdout);
+  assert.ok(lauf.stdout.includes(`node tools/ci-lokal.mjs --basis ${basis}`), lauf.stdout);
 });
 
 test("lehnt commitlint die Nachricht des Auftrags ab, committet lauf nicht und fährt ci-lokal nicht", (context) => {
@@ -74,5 +76,17 @@ test("teillauf baut den Auftrag, fährt ci-lokal nicht und sagt das mit dem Befe
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(ciLokalAufrufe(werkzeug), []);
   assert.ok(lauf.stdout.includes("ci-lokal nicht gelaufen: teillauf fährt ci-lokal nie"), lauf.stdout);
-  assert.ok(lauf.stdout.includes(`node tools/ci-lokal.mjs --basis ${basis} --mit-teuren`), lauf.stdout);
+  assert.ok(lauf.stdout.includes(`node tools/ci-lokal.mjs --basis ${basis}`), lauf.stdout);
+});
+
+test("am Phasenende führt lauf den günstigen Schritt der echten ci-lokal-Liste aus und den teuren nicht", (context) => {
+  const paket = JSON.parse(BASIS["package.json"]);
+  const scripts = { ...paket.scripts, "ci:lokal": `node ${JSON.stringify(join(REPO_ROOT, "tools/ci-lokal.mjs"))}` };
+  const liste = { schritte: [{ name: "guenstig", befehl: "touch \"$HOME/guenstig.txt\"" }, { name: "teuer", teuer: true, befehl: "touch \"$HOME/teuer.txt\"" }], nurCi: {} };
+  const dateien = { "package.json": JSON.stringify({ ...paket, scripts }), "tools/ci-lokal.json": JSON.stringify(liste) };
+  const { werkzeug, lauf } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(existsSync(join(werkzeug, "guenstig.txt")), lauf.stdout);
+  assert.equal(existsSync(join(werkzeug, "teuer.txt")), false, lauf.stdout);
+  assert.match(lauf.stdout, /^teuer nicht gelaufen \(teuer, nur mit --mit-teuren\)$/m);
 });

@@ -241,7 +241,7 @@ test("phase fährt ci-lokal einmal nach dem letzten Auftrag auf dem Phasen-Branc
   const master = runIn(probe.repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
   const { code, ausgabe } = await ende(phase(probe, ["c", ISSUE.ciGruen, auftrag("C1", "src/d.js"), auftrag("C2", "src/c.js")]));
   assert.equal(code, 0, ausgabe);
-  assert.deepEqual(ciLokalAufrufe(probe.werkzeug), [["--basis", master, "--mit-teuren"]]);
+  assert.deepEqual(ciLokalAufrufe(probe.werkzeug), [["--basis", master]]);
   assert.equal(runIn(probe.remote, "git", ["rev-list", "--count", "master..phase/86-c"]).stdout.trim(), "2");
 });
 
