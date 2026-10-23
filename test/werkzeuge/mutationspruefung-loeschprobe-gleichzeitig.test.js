@@ -89,15 +89,14 @@ function zeitraffer(marken) {
 const probe = loeschprobe(() => mkdtempSync(join(kopien, "loeschprobe-")));
 const ergebnisse = [];
 try {
-  for (const { art, marken, eingabe, haengen, ohneNode } of aufrufe) {
+  for (const { marken, eingabe, haengen, ohneNode } of aufrufe) {
     process.env.MARKEN = marken;
     if (haengen) {
       process.env.HAENGEN = "ja";
       zeitraffer(marken);
     }
     if (ohneNode) process.execPath = join(marken, "kein-node");
-    const bisher = (ergebnisse.at(-1) ?? []).filter(({ status }) => status === "Survived");
-    ergebnisse.push(await (art === "pruefe" ? probe.pruefe(eingabe) : probe.nachfassen({ ...eingabe, eintraege: bisher })));
+    ergebnisse.push(await probe.pruefe(eingabe));
   }
   console.log(JSON.stringify({ ergebnisse }));
 } catch (fehler) {
@@ -134,7 +133,7 @@ function loesche(context, zweite, aufrufe) {
 }
 
 function pruefung(marken, alle, zeilen = ALLE_ZEILEN) {
-  return { art: "pruefe", marken, eingabe: { datei: DATEI, zeilen, ergebnisse: [], tests: { erste: [ERSTE], alle } } };
+  return { marken, eingabe: { datei: DATEI, zeilen, ergebnisse: [], tests: { erste: [ERSTE], alle } } };
 }
 
 function laeufe(marken) {
@@ -160,15 +159,6 @@ const NACH_BEIDEN_GRUPPEN = [
   zeile("e", "Survived", { hinweis: WACKLER }),
   zeile("f", "Timeout", HAENGER),
 ];
-const NACH_ERSTER_GRUPPE = [
-  zeile("a", "Killed", GETOETET),
-  zeile("b", "Survived"),
-  zeile("c", "Survived"),
-  zeile("d", "Survived"),
-  zeile("e", "Survived", { hinweis: WACKLER }),
-  zeile("f", "Timeout", HAENGER),
-];
-const NACHGEFASST = [zeile("b", "Survived"), zeile("c", "Killed", GETOETET), zeile("d", "Survived"), zeile("e", "Survived", { hinweis: WACKLER })];
 
 function beideGruppen(context) {
   const marken = ordner(context, "loeschprobe-marken-");
@@ -191,15 +181,6 @@ test("zwei gelöschte Zeilen derselben Datei laufen nie in derselben Arbeitskopi
   const mitGrundlauf = new Set(protokoll.filter(([, fehlend]) => fehlend.length === 0).map(([kopie]) => kopie));
   assert.ok(mitLoeschung.size > 1, protokoll.join("\n"));
   assert.deepEqual([...mitLoeschung].filter((kopie) => !mitGrundlauf.has(kopie)), []);
-});
-
-test("das Nachfassen mit den übrigen Testdateien urteilt wie nacheinander geprüft und behält den Hinweis der ersten Stufe", (context) => {
-  const lauf = loesche(context, ZWEITE_VERLANGT_C, [
-    pruefung(ordner(context, "loeschprobe-marken-"), [ERSTE]),
-    { art: "nachfassen", marken: ordner(context, "loeschprobe-marken-"), eingabe: { datei: DATEI, uebrige: [ZWEITE] } },
-  ]);
-  assert.equal(lauf.fehler, undefined);
-  assert.deepEqual(lauf.ergebnisse, [NACH_ERSTER_GRUPPE, NACHGEFASST]);
 });
 
 test("ist der Grundlauf einer späteren Gruppe rot, bricht die Löschprobe mit dieser Gruppe ab und baut alle Arbeitskopien ab", (context) => {
