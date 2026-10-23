@@ -125,3 +125,18 @@ test("der Prüfer prüft den Endstand gegen die Absicht; ein Widerspruch ist nur
     assert.ok(anweisung.includes(teil), teil);
   }
 });
+
+test("ein Bruch einer Falle, eines Nicht-Ziels oder eines Satzes unter wasDarfNiePassieren ist mindestens SOLLTE, auch bei gleichem Verhalten, und nie HINWEIS", () => {
+  const befehl = prueferBefehl({ dateien: ["src/zahl.js"], kritisch: false }, "claude");
+  const anweisung = befehl[befehl.indexOf("--append-system-prompt") + 1];
+  for (const teil of [
+    "Eingaben: die Absicht, der Auftragszettel, die Fallen und Nicht-Ziele aus dem Pitch,",
+    "Sie sind freigegebene Entscheidungen und eine Vorgabe wie die Absicht, kein Befund, und ersetzen keinen Beleg.",
+    "Tut die Änderung, was eine Falle oder ein Nicht-Ziel ausschließt, oder bricht sie einen Satz unter `wasDarfNiePassieren`, ist das mindestens SOLLTE, auch wenn das Verhalten gleich bleibt und alle Tests grün sind; BLOCKER ist es nur, wenn a) bis c) erfüllt sind.",
+    "`beleg` beginnt mit „Pitch:“ und nennt den gebrochenen Satz wörtlich.",
+    "  - ein Bruch einer Falle, eines Nicht-Ziels oder eines Satzes unter `wasDarfNiePassieren`, auch bei gleichem Verhalten.",
+    "- HINWEIS (wird nur notiert): alles andere außer dem Bruch einer Falle, eines Nicht-Ziels oder eines Satzes unter `wasDarfNiePassieren`, der nie HINWEIS ist;",
+  ]) {
+    assert.ok(anweisung.includes(teil), teil);
+  }
+});
