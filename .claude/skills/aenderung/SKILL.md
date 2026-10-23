@@ -51,6 +51,7 @@ In Teil 2 schreibt der Test-Agent zuerst den roten Test über den echten Eingang
 2. **Premortem** (unten), dann **Teil 2** (unten).
 
 ### 3d. Größere Änderung
+Bevor du den Pitch schreibst, lässt du `node tools/auftrag.mjs karte <Datei>` für jede Datei laufen, die die Änderung voraussichtlich ändert. Trifft die Änderung eine Funktion mit Lint-Befunden, verlangt die Planung einen Umbau davor, der die ganze Funktion lintfrei macht: Nenn ihn im Pitch unter „Altfunktionen“ als eigenen Teil oder wähl mit dem Nutzer einen anderen Schnitt oder Kandidaten. Ohne diese Entscheidung im Pitch startet `plane` keinen Agenten (Exit 6).
 Nutze den Skill `pitch`. Liefert einer der Agenten `architektur`, `sicherheit` oder `angreifer` kein Ergebnis, setzt du keinen anderen Agenten an seine Stelle, schreibst das Dokument nicht selbst und setzt keinen Status auf „freigegeben“; du sagst es dem Nutzer.
 
 ## Premortem (Fehler und einfache Änderung)

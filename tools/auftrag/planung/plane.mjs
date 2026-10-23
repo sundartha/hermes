@@ -5,9 +5,11 @@ import { inspect } from "node:util";
 
 import { vorgabenAusPitch } from "../annahmen.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
+import { MELDUNG, zweckBlock } from "../zweck.mjs";
 import { werkzeugBefunde } from "../werkzeuge.mjs";
 import { ABSICHT, bereichSchluessel } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
+import { altfunktionenVorab } from "./altfunktionen-vorab.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
   antwortenBefunde,
@@ -44,6 +46,7 @@ export const EXIT_AUFRUF = 2;
 export const EXIT_PASST_NICHT = 3;
 export const EXIT_BEFUNDE = 4;
 export const EXIT_DECKEL = 5;
+export const EXIT_ALTFUNKTIONEN = 6;
 const PLANUNG = "planung";
 const SCHON_DA = "EEXIST";
 const PHASE = "phase.json";
@@ -155,12 +158,16 @@ export function nummernText(soll, nummern) {
   return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
 }
 
+function dokumenteIm(ordner) {
+  return Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
+}
+
 export class Planung {
   constructor(root, ordner) {
     this.root = root;
     this.ordner = ordner;
     this.ablage = join(ordner, PLANUNG);
-    this.dokumente = Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
+    this.dokumente = dokumenteIm(ordner);
     this.designText = this.dokumente[DESIGN];
     this.berichte = [];
     this.gesehen = new Set();
@@ -836,13 +843,25 @@ function aufrufFehler(ordner, fortsetzen) {
   return absichtFehlt.length > 0 ? absichtFehlt.join("\n") : null;
 }
 
-function pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angaben) {
+function altfunktionenHalt(root, ordner) {
+  const { form, offen } = altfunktionenVorab(root, dokumenteIm(ordner));
+  const zweck = zweckBlock(MELDUNG.ALTFUNKTIONEN_VORAB).join("\n");
+  if (form.length > 0) return { exit: EXIT_AUFRUF, fehler: [...form, zweck].join("\n") };
+  if (offen.length === 0) return null;
+  const kopf = `plane hält vor dem ersten Agenten: ${offen.length} Altfunktion(en) ohne Entscheidung unter „## Altfunktionen“ im Pitch`;
+  return { exit: EXIT_ALTFUNKTIONEN, fehler: [kopf, ...offen, zweck].join("\n") };
+}
+
+function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }) {
   const fehler = aufrufFehler(ordner, fortsetzen);
   if (fehler !== null) return { fehler };
   const pitch = readFileSync(join(ordner, PITCH), "utf8");
   const { deckel, fehler: deckelFehler } = deckelAus(angaben.deckel, pitch);
   const { issue, fehler: issueFehler } = issueAus(angaben.issue, pitch);
-  return { deckel, issue, fehler: deckelFehler ?? issueFehler ?? legeAblageAn(ordner, fortsetzen) };
+  const kopfFehler = deckelFehler ?? issueFehler;
+  if (kopfFehler !== undefined) return { fehler: kopfFehler };
+  const halt = fortsetzen ? null : altfunktionenHalt(root, ordner);
+  return halt ?? { deckel, issue, fehler: legeAblageAn(ordner, fortsetzen) };
 }
 
 function ausgang(fehler) {
@@ -888,10 +907,10 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
     console.error(werkzeug.join("\n"));
     return EXIT_AUFRUF;
   }
-  const { deckel, issue, fehler } = pruefeAufrufUndLegeAblageAn(ordner, fortsetzen, angaben);
+  const { deckel, issue, fehler, exit = EXIT_AUFRUF } = pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
   if (fehler !== null) {
     console.error(fehler);
-    return EXIT_AUFRUF;
+    return exit;
   }
   const nummern = nummernImOrdner(ordner);
   const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue });

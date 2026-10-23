@@ -23,6 +23,11 @@ Nach dieser Änderung <wer> <was, von außen sichtbar oder mit konkretem Wert me
 - <Technische Falle, die vor dem Bau bekannt ist>: <getroffene Entscheidung>
 (oder: keine bekannt)
 
+## Altfunktionen
+- Umbau: `<Datei>:<Funktion>`
+- nicht berührt: `<Datei>:<Funktion>`, weil <wo die Änderung stattdessen liegt>
+(oder: keine, weil <welche Dateien mit karte geprüft sind und dass die Änderung dort keine Funktion mit Lint-Befunden trifft>)
+
 ## Anforderungen
 
 ### Regel R1: <eine Regel in einem Satz>

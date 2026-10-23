@@ -94,6 +94,7 @@ export const MELDUNG = {
   PAKETE_FEHLEN: "pakete-fehlen",
   POSTGRES_FEHLT: "postgres-fehlt",
   CI_LOKAL: "ci-lokal",
+  ALTFUNKTIONEN_VORAB: "altfunktionen-vorab",
 };
 
 export const ALTER_TEST = "alter test";

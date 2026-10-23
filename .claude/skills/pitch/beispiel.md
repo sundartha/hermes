@@ -20,6 +20,9 @@ Trägt ein Kunde seine eigene Nummer ein, schickt Hermes eine SMS mit einem sech
 ## Fallen
 - Heute freigeschaltete Konten würden mit dem Wegfall der Liste sofort den Hinweis für Fremde hören: Wie der Übergang läuft, entscheidet das Design Doc.
 
+## Altfunktionen
+keine, weil `src/routes/api-onboard.js` und `src/callee-is-owner.js` mit karte geprüft sind und die Änderung dort keine Funktion mit Lint-Befunden trifft
+
 ## Anforderungen
 
 ### Regel R1: Eine eigene Nummer gilt erst als bestätigt, wenn der Kunde den Code innerhalb von 10 Minuten richtig eingibt.
