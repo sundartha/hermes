@@ -5,7 +5,6 @@ import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
-import { beleg } from "./pruefungen.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -71,7 +70,7 @@ function nachBauAbgeleitet(lauf, ausgabe) {
   const hinweis = `Hinweis: ${name} nicht neu ausgeführt: Code und Tests seit ${PRUEFUNG.MUTATION} unverändert, Ergebnis daraus mit den Gleichwertig-Meldungen neu bewertet.`;
   const befehl = mutationsBefehl(lauf, ["--basis", lauf.basis]).join(" ");
   const ergebnis = { name, befehl, exitCode: neu.rot ? EXIT_UEBERLEBT : 0, ausgabe: [hinweis, ...neu.zeilen].join("\n"), dauer_ms: 0 };
-  return ausgewertet(lauf, name, lauf.belegt(ergebnis));
+  return ausgewertet(lauf, name, lauf.belegt(name, () => ergebnis));
 }
 
 function bauNachrunde(ueberlebende) {
@@ -186,7 +185,7 @@ function testsFesthalten(lauf, ueberlebende) {
 function spieleUnveraendertenPatchEin(lauf, { datei, inhalt }) {
   const befehl = ["git", "apply", "--index", datei];
   if (readFileSync(datei, "utf8") === inhalt) return lauf.pruefung(PRUEFUNG.UMBAU_EINSPIELEN, befehl).exitCode === 0;
-  lauf.pruefungen.push(beleg({ name: PRUEFUNG.UMBAU_EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
+  lauf.belegt(PRUEFUNG.UMBAU_EINSPIELEN, () => ({ name: PRUEFUNG.UMBAU_EINSPIELEN, befehl, exitCode: 1, ausgabe: `Der Patch in ${datei} wurde seit dem Sichern verändert.` }));
   return false;
 }
 

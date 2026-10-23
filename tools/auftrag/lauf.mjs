@@ -8,7 +8,7 @@ import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
-import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
+import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, nachSekunden, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
@@ -102,6 +102,15 @@ function ausgefuehrteFaelle(root, pfad) {
   return faelle.filter(({ name, still }) => !still && name !== pfad).map(({ name }) => name);
 }
 
+function gemessen(name, wo, ausfuehren) {
+  console.error(`lauf: ${name} läuft (${wo})`);
+  const beginn = performance.now();
+  const ergebnis = ausfuehren();
+  const dauer = ergebnis.dauer_ms ?? Math.round(performance.now() - beginn);
+  console.error(`lauf: ${name} ${ergebnis.exitCode === 0 ? GRUEN : ROT} ${nachSekunden(dauer)}`);
+  return { ...ergebnis, dauer_ms: dauer };
+}
+
 function befundOhneZweck(ergebnis) {
   return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
 }
@@ -148,15 +157,16 @@ class AuftragsLauf {
     return false;
   }
 
-  belegt(ergebnis, belegen = beleg) {
+  belegt(name, ausfuehren, belegen = beleg) {
     const { phase, auftrag, root } = this.kontext;
+    const ergebnis = gemessen(name, `Auftrag ${auftrag.id}`, ausfuehren);
     const stamm = `${auftrag.id}.runde-${this.runde}.${this.beginn}.pruefung-${this.pruefungen.length + 1}`;
     this.pruefungen.push(legeAusgabeAb(belegen(ergebnis), ergebnis, { ordner: belegVerzeichnis(root, phase.phase), stamm }));
     return ergebnis;
   }
 
   pruefung(name, befehl, belegen) {
-    return this.belegt(fuehreAus(name, befehl, { cwd: this.kontext.root, env }), belegen);
+    return this.belegt(name, () => fuehreAus(name, befehl, { cwd: this.kontext.root, env }), belegen);
   }
 
   gruenOderScheitert({ name, exitCode }) {
@@ -320,9 +330,10 @@ class AuftragsLauf {
   }
 
   festhalten(name, nachricht) {
-    const lauf = festhalten(nachricht, this.kontext.root);
-    const ergebnis = { name, befehl: "git commit -q -F -", exitCode: lauf.status ?? EXIT_ROT, ausgabe: `${lauf.stdout}\n${lauf.stderr}` };
-    this.belegt(ergebnis);
+    const ergebnis = this.belegt(name, () => {
+      const lauf = festhalten(nachricht, this.kontext.root);
+      return { name, befehl: "git commit -q -F -", exitCode: lauf.status ?? EXIT_ROT, ausgabe: `${lauf.stdout}\n${lauf.stderr}` };
+    });
     return ergebnis.exitCode === 0 || this.scheitert(`${name}: git commit endete mit Exit ${ergebnis.exitCode}.`);
   }
 
@@ -334,8 +345,7 @@ class AuftragsLauf {
   }
 
   commitlint(nachricht) {
-    const ergebnis = pruefeNachricht(nachricht, this.kontext.root);
-    return this.gruenOderScheitert(this.belegt(ergebnis));
+    return this.gruenOderScheitert(this.belegt(PRUEFUNG.COMMITLINT, () => pruefeNachricht(nachricht, this.kontext.root)));
   }
 
   festschreiben(name, nachricht) {
@@ -365,7 +375,7 @@ class AuftragsLauf {
     const { root } = this.kontext;
     if (!existsSync(join(root, PIN_PRUEFUNG))) {
       if (!existsSync(join(root, PIN_HAKEN))) return true;
-      return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT }));
+      return this.gruenOderScheitert(this.belegt(PRUEFUNG.PIN, () => ({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT })));
     }
     const vorgemerkt = git(["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
     return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
@@ -392,7 +402,7 @@ class AuftragsLauf {
     if (!this.gruen(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl)) return false;
     this.behalteFremde(pfad, vorher);
     if (this.aufraeumen && !this.gekuerzt(pfad)) {
-      return this.gruenOderScheitert(this.belegt({ name: PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl, exitCode: EXIT_ROT, ausgabe: NICHT_GEKUERZT }));
+      return this.gruenOderScheitert(this.belegt(PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, () => ({ name: PRUEFUNG.UNTERDRUECKUNGEN_KUERZEN, befehl, exitCode: EXIT_ROT, ausgabe: NICHT_GEKUERZT })));
     }
     vormerken([UNTERDRUECKUNGEN], root);
     return true;
@@ -564,9 +574,13 @@ function freigabe(kontext) {
   return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
 }
 
-function phasenende({ fertig, vorher, amPhasenende }, root) {
+function ciLokal(phase, root) {
+  return gemessen(MELDUNG.CI_LOKAL, `Phase ${phase.phase}`, () => ({ exitCode: ciLokalAmPhasenende(root, phasenbasis(root)) })).exitCode;
+}
+
+function phasenende({ phase, fertig, vorher, amPhasenende }, root) {
   if (!amPhasenende) return ciLokalNichtGelaufen(root, TEILLAUF);
-  return fertig.size > vorher ? ciLokalAmPhasenende(root, phasenbasis(root)) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
+  return fertig.size > vorher ? ciLokal(phase, root) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
 }
 
 export function lauf(phasendatei, root, { amPhasenende = true } = {}) {

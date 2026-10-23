@@ -7,6 +7,7 @@ import { zitiert } from "./zeilen.mjs";
 export const BELEGE = ".fortschritt";
 export const GRUEN = "grün";
 export const ROT = "rot";
+const SEKUNDE_MS = 1000;
 const JSON_EINRUECKUNG = 2;
 const MIO = 1_000_000;
 const NACHKOMMA = 1;
@@ -112,6 +113,10 @@ function kostenZeile({ gemessen, summe }) {
   return `Kosten: ${millionen} Mio. Token in ${summe.turns} Antworten, davon Cache-Reads ${(summe.cacheRead / MIO).toFixed(NACHKOMMA)} Mio.`;
 }
 
+export function nachSekunden(dauer) {
+  return `nach ${Math.round(dauer / SEKUNDE_MS)} s`;
+}
+
 export function druckeBeleg(beleg, pfad) {
   console.log(`Auftrag ${beleg.auftrag}: ${beleg.ergebnis}${beleg.grund ? ` (${beleg.grund})` : ""}`);
   for (const { rolle, agent, exitCode, grund, netzabbrueche = [] } of beleg.agenten) {
@@ -120,8 +125,8 @@ export function druckeBeleg(beleg, pfad) {
     }
     console.log(`  Agent ${agent} (${rolle}): Exit ${exitCode}${grund ? ` (${grund})` : ""}`);
   }
-  for (const { name, befehl, exitCode } of beleg.pruefungen) {
-    console.log(`  ${exitCode === 0 ? "✓" : "✗"} ${name}: Exit ${exitCode}  ${befehl}`);
+  for (const { name, befehl, exitCode, dauer_ms: dauer } of beleg.pruefungen) {
+    console.log(`  ${exitCode === 0 ? "✓" : "✗"} ${name}: Exit ${exitCode} ${nachSekunden(dauer)}  ${befehl}`);
   }
   if (beleg.kosten) console.log(`  ${kostenZeile(beleg.kosten)}`);
   console.log(`  Beleg: ${pfad}`);
