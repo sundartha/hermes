@@ -6,6 +6,7 @@ import { befundeImOrdner } from "./abdeckung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import { istText, liste, nutzenFuer, nutzenOhneAuftrag, schreibeJsonAtomar } from "./erkundung.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
+import { annahmeText } from "./planbericht.mjs";
 import { schnittImOrdner } from "./schnitt.mjs";
 
 const PHASE = "phase.json";
@@ -44,11 +45,17 @@ function reihenfolgeZeile(eigene) {
   return `Reihenfolge: ${gruende.length > 0 ? gruende.join("; ") : "keine Vorgänger"}`;
 }
 
-export function entwurfFuer(text, eigene) {
+export function eigeneAnnahmen(annahmen, eigene) {
+  const kennungen = new Set(eigene.map(({ id }) => id));
+  return liste(annahmen).filter(({ auftrag, nummer }) => (auftrag === undefined ? nummer === undefined : kennungen.has(auftrag)));
+}
+
+export function entwurfFuer(text, eigene, annahmen) {
   const zeilen = text.trimEnd().split("\n");
   const fehlerfaelle = zeilen.findIndex((zeile) => FEHLERFAELLE.test(zeile));
   const stelle = fehlerfaelle === -1 ? zeilen.length : fehlerfaelle;
-  return [...zeilen.slice(0, stelle), auftraegeZeile(eigene), ...zeilen.slice(stelle), reihenfolgeZeile(eigene)].join("\n");
+  const annahmeZeilen = eigeneAnnahmen(annahmen, eigene).map(annahmeText);
+  return [...zeilen.slice(0, stelle), ...annahmeZeilen, auftraegeZeile(eigene), ...zeilen.slice(stelle), reihenfolgeZeile(eigene)].join("\n");
 }
 
 function entwurfText(entwuerfe, bereich) {
@@ -79,7 +86,7 @@ export async function setzePhaseZusammen(ordner, { schnitt, berichte, entwuerfe,
   const bereiche = [...new Set(schnitt.auftraege.map(({ bereich }) => bereichSchluessel(bereich)))];
   const vorab = [...nutzenBefunde, ...entwurfBefunde(bereiche, entwuerfe), ...namenBefunde(schnitt.gemeinsameNamen, entwuerfe)];
   if (vorab.length > 0) return { befunde: vorab };
-  const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich))]));
+  const entwurf = Object.fromEntries(bereiche.map((bereich) => [bereich, entwurfFuer(entwuerfe[bereich], schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich), pruefung.annahmen)]));
   const phase = { phase: basename(resolve(ordner)), ...(issue === undefined ? {} : { issue }), absicht: absichtAusPitch(pitch), entwurf, auftraege };
   const befunde = [...phasenBefunde(phase, root), ...befundeImOrdner(ordner, phase).befunde];
   if (befunde.length === 0) schreibeJsonAtomar(join(ordner, PHASE), phase);

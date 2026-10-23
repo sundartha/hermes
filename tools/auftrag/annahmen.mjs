@@ -8,10 +8,25 @@ export const ANNAHMEN = "Ausgangslage und Annahmen";
 const KOPF = `## ${ANNAHMEN}`;
 const PLAENE = "plaene";
 const DESIGN = "design.md";
+const PITCH = "pitch.md";
+const VORGABEN = ["## Fallen", "## Nicht-Ziele"];
 const ZWECK = `Test- und Bau-Agent einer Phase aus einem Pitch bekommen den Abschnitt „${ANNAHMEN}“ aus dem Design Doc wörtlich, damit Abnahmetest und Code auf denselben Tatsachen stehen: Datenformate, vorhandene Bausteine, was das System schon tut. Ohne ihn legt der Test-Agent Testdaten nach eigener Vermutung an. Echte Behebung: den Abschnitt im Design Doc ergänzen. Ausweg: eine Entscheidungsnotiz im Phasen-Issue, warum diese Phase ohne Annahmen gebaut werden soll; dann entscheidet Antonio.`;
 
+function planDatei(phase, name) {
+  return istPitchPhase(phase.phase) ? `${PLAENE}/${phase.phase}/${name}` : null;
+}
+
 export function designPfad(phase) {
-  return istPitchPhase(phase.phase) ? `${PLAENE}/${phase.phase}/${DESIGN}` : null;
+  return planDatei(phase, DESIGN);
+}
+
+export function pitchPfad(phase) {
+  return planDatei(phase, PITCH);
+}
+
+export function vorgabenAusPitch(text) {
+  const { abschnitte: gefunden } = abschnitte(text, VORGABEN);
+  return [...gefunden.values()].join("\n\n");
 }
 
 function ohneKopf(ausschnitt) {
