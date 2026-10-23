@@ -193,10 +193,6 @@ export function loeschprobe(verzeichnisAnlegen) {
       const offen = zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => eintrag(datei, zeile, UEBERLEBT));
       return verteilt(offen, kopie, (probe, bisher) => probe(datei, auswahl, bisher));
     },
-    nachfassen: ({ datei, eintraege, uebrige }) => {
-      const auswahl = gruppen(uebrige);
-      return verteilt(eintraege, kopie, (probe, bisher) => probe(datei, auswahl, bisher));
-    },
     abbauen: () => {
       const fehler = [];
       for (const { verzeichnis } of kopien.values()) {
