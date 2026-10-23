@@ -1,0 +1,28 @@
+[
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:5"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js:38"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/i18n/mcp-texts.js:4"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Fehlender Satz aus pitch.md, „## Nicht-Ziele“, dritter Punkt: „Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs oder anderer Textdateien, Umlaute in der deutschen Tabelle, ein Sonderwortlaut für 0, die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil der Umbau nur die Form der drei Bestätigungstexte betrifft.“ Durch Bereich und erwarteteDateien sind Werkzeug, strukturierte Antwort und docs/mcp-vertrag.json ausgeschlossen. Die Umlaute decken der Siebte und den Sonderwortlaut für 0 der Sechste Punkt der festen Vorgaben bei u1 ab. Die anderen Meldungen des MCP-Katalogs stehen aber in src/i18n/mcp-texts.js, also genau in der Datei, die u1 ändert, und keine Vorgabe bei u1 nennt sie. Der Planer soll bei u1 festhalten, dass außer countedText und den drei Einträgen consultAnswerAccepted (:118, :225, :333) keine Meldung der Datei geändert wird.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

@@ -1,0 +1,44 @@
+{
+  "annahmen": [
+    {
+      "text": "Der Pitch beschreibt nur einen Umbau und hat kein Szenario; die Nummernliste ist leer (pitch.md, „## Anforderungen“, „## Bleibt unverändert“; sicherheit.md, „## 2. Angriffswege“). Regel 1 und die Zeile durchstich:a1 entfallen, kein Auftrag trägt eine Nummer."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Funktionsliste und Dateikarte sind leer, und design.md, „## Ausgangslage und Annahmen“ hält fest, dass src/i18n/mcp-texts.js in keiner Lint-Ausnahmeliste steht. Daher plane ich keine Altfunktionen und keinen Aufräum-Umbau davor."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Hilfe und die drei Tabelleneinträge (src/i18n/mcp-texts.js:4-6, :118, :225, :333) müssen in einem Schritt umgestellt werden. Eine Hilfe mit einer Übergangsform für beide Argumentformen würde Zahl und Wort weiter selbst zusammensetzen und ist durch pitch.md, „## Fallen“ ausgeschlossen. Deshalb gibt es einen einzigen Umbau in einer Datei, deutlich unter 200 Zeilen."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Abnahme ist der bestehende Test test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js (S1–S6, B1, B2 aus P-004, design.md, „## Ausgangslage und Annahmen“). Zusätzlich muss test/al-p13-consult-channel.test.js unverändert grün bleiben, der consultAnswerAccepted(2) aufruft; dazu muss der Tabelleneintrag eine Funktion der Zahl bleiben."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Feste Vorgaben für den Bau, weil ein Umbau keine wasDarfNiePassieren-Liste trägt: Erstens erzeugt keine Funktion in der Datei aus einem Wort einen Satz mit Zahl, auch keine Fabrik wie (wort) => (count) => `${count} ${wort}` (pitch.md, „## Fallen“, PM1). Zweitens steht jeder der 6 Sätze ausgeschrieben als eigene Funktion der Zahl in seiner Tabelle und setzt die Zahl über `${count}` selbst ein. Drittens bleibt der Parametername mindestens 2 Zeichen lang, etwa count statt n (eslint.config.js:522). Viertens bleibt countedText(lang, singular, plural) nach Name, Parameterliste, Ort und Nicht-Export gleich. Fünftens wird Intl.PluralRules erst beim Aufruf angelegt. Sechstens wählt die Hilfe nur zwischen \"one\" und dem Rest, ohne Sonderwortlaut für 0. Siebtens bleiben die festen Kürzel \"de\", \"en\", \"fr\" und die Umschrift der deutschen Tabelle erhalten. Die Hilfe fügt nichts an die Sätze an."
+    },
+    {
+      "auftrag": "u1",
+      "text": "In src/i18n/mcp-texts.js ändern sich nur die Hilfe countedText (:4-6) und die drei Einträge consultAnswerAccepted (:118 de, :225 en, :333 fr). Keine andere Meldung des MCP-Katalogs in dieser Datei wird geändert, umbenannt, umsortiert oder umformuliert. Grundlage ist pitch.md, „## Nicht-Ziele“, dritter Punkt: „Nicht Teil dieser Änderung: andere Meldungen des MCP-Katalogs oder anderer Textdateien, Umlaute in der deutschen Tabelle, ein Sonderwortlaut für 0, die strukturierte Antwort (`accepted`, `merged_facts`), das Werkzeug selbst und `docs/mcp-vertrag.json`, weil der Umbau nur die Form der drei Bestätigungstexte betrifft.“"
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "Nur countedText und consultAnswerAccepted: Sätze als Funktion der Zahl",
+      "bereich": "src/i18n/mcp-texts.js",
+      "erwarteteDateien": [
+        "src/i18n/mcp-texts.js"
+      ],
+      "abnahme": "test/gemeinsam/rueckfrage-bestaetigung-beugt-angabenzahl.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    }
+  ]
+}
