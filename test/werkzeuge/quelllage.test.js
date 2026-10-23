@@ -13,24 +13,51 @@ function bereich(von, bis) {
 
 const AUSSEN = bereich([3, 4], [6, 2]);
 
-const FAELLE = [
-  { fall: "innen liegt ganz in der Mitte", innen: bereich([4, 0], [5, 9]), erwartet: true },
-  { fall: "innen ist derselbe Bereich", innen: bereich([3, 4], [6, 2]), erwartet: true },
-  { fall: "innen ist ein Punkt auf dem Anfang von außen", innen: bereich([3, 4], [3, 4]), erwartet: true },
-  { fall: "innen ist ein Punkt auf dem Ende von außen", innen: bereich([6, 2], [6, 2]), erwartet: true },
-  { fall: "innen beginnt in derselben Zeile eine Spalte früher", innen: bereich([3, 3], [4, 0]), erwartet: false },
-  { fall: "innen beginnt in derselben Zeile eine Spalte später", innen: bereich([3, 5], [4, 0]), erwartet: true },
-  { fall: "innen endet in derselben Zeile eine Spalte später", innen: bereich([4, 0], [6, 3]), erwartet: false },
-  { fall: "innen endet in derselben Zeile eine Spalte früher", innen: bereich([4, 0], [6, 1]), erwartet: true },
-  { fall: "innen beginnt in einer früheren Zeile", innen: bereich([2, 9], [4, 0]), erwartet: false },
-  { fall: "innen endet in einer späteren Zeile", innen: bereich([4, 0], [7, 0]), erwartet: false },
-  { fall: "innen liegt ganz vor außen", innen: bereich([1, 0], [2, 0]), erwartet: false },
-  { fall: "innen liegt ganz hinter außen", innen: bereich([8, 0], [9, 0]), erwartet: false },
-  { fall: "außen liegt innerhalb von innen", innen: bereich([1, 0], [9, 0]), erwartet: false },
-];
-
-for (const { fall, innen, erwartet } of FAELLE) {
-  test(`quelllage: ${fall}`, () => {
-    assert.equal(enthaelt(AUSSEN, innen), erwartet);
-  });
+function pruefeAlle(faelle, erwartet) {
+  for (const [fall, innen] of Object.entries(faelle)) {
+    assert.equal(enthaelt(AUSSEN, innen), erwartet, fall);
+  }
 }
+
+test("quelllage: ein Bereich in der Mitte, auf den Grenzen oder gleich außen ist enthalten", () => {
+  pruefeAlle(
+    {
+      "ganz in der Mitte": bereich([4, 0], [5, 9]),
+      "derselbe Bereich": bereich([3, 4], [6, 2]),
+      "Punkt auf dem Anfang von außen": bereich([3, 4], [3, 4]),
+      "Punkt auf dem Ende von außen": bereich([6, 2], [6, 2]),
+      "Anfang eine Spalte nach außen-Anfang": bereich([3, 5], [4, 0]),
+      "Ende eine Spalte vor außen-Ende": bereich([4, 0], [6, 1]),
+    },
+    true,
+  );
+});
+
+test("quelllage: ein Bereich, der vor dem Anfang von außen beginnt, ist nicht enthalten", () => {
+  pruefeAlle(
+    {
+      "eine Spalte früher in derselben Zeile": bereich([3, 3], [4, 0]),
+      "eine Zeile früher bei größerer Spalte": bereich([2, 9], [4, 0]),
+      "ganz davor": bereich([1, 0], [2, 0]),
+      "umschließt außen ganz": bereich([1, 0], [9, 0]),
+    },
+    false,
+  );
+});
+
+test("quelllage: ein Bereich, der hinter dem Ende von außen endet, ist nicht enthalten", () => {
+  pruefeAlle(
+    {
+      "eine Spalte später in derselben Zeile": bereich([4, 0], [6, 3]),
+      "eine Zeile später bei kleinerer Spalte": bereich([4, 0], [7, 0]),
+      "ganz dahinter": bereich([8, 0], [9, 0]),
+    },
+    false,
+  );
+});
+
+test("quelllage: enthält außen den inneren Bereich, gilt das nicht umgekehrt", () => {
+  const innen = bereich([4, 0], [5, 9]);
+  assert.equal(enthaelt(AUSSEN, innen), true);
+  assert.equal(enthaelt(innen, AUSSEN), false);
+});
