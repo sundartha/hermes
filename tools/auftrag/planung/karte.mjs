@@ -41,10 +41,14 @@ function imRepo(root, wurzel, datei) {
   return echt;
 }
 
-function keineIgnorierten(root, dateien) {
+export function ignorierteDateien(root, dateien) {
   const eingabe = dateien.map((datei) => `${datei}\0`).join("");
   const { stdout } = gitLauf(root, ["check-ignore", "-z", "--stdin"], { erlaubt: [EXIT_GRUEN, GIT_OHNE_TREFFER], eingabe });
-  const ignoriert = stdout.split("\0").filter(Boolean);
+  return stdout.split("\0").filter(Boolean);
+}
+
+function keineIgnorierten(root, dateien) {
+  const ignoriert = ignorierteDateien(root, dateien);
   if (ignoriert.length > 0) throw new Error(`karte nimmt keine Datei, die Git ignoriert: ${ignoriert.join(", ")}`);
 }
 
@@ -65,7 +69,7 @@ export function funktionsKarten(root, dateien) {
   });
 }
 
-function befundText(befunde) {
+export function befundText(befunde) {
   const teile = Object.entries(befunde).map(([regel, anzahl]) => `${regel} ${anzahl}`);
   return teile.length > 0 ? teile.join(", ") : "keine Befunde";
 }

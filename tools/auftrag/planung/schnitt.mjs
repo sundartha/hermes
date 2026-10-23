@@ -244,7 +244,7 @@ function aenderungsBefunde(auftraege, kontext) {
   return mitRegel(REGEL.aenderungen, uebrige.flatMap((auftrag) => dateienAusserhalb(auftrag, kontext)));
 }
 
-function istAltfunktion(funktion) {
+export function istAltfunktion(funktion) {
   return Object.keys(funktion.befunde ?? {}).length > 0;
 }
 
