@@ -1,11 +1,12 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { constants, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, readFileSync, readdirSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import process, { cwd, env, pid } from "node:process";
 import { createInterface } from "node:readline";
 
+import { kindBeendet } from "../hermes-ctl/sitzung.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
 
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
@@ -37,8 +38,9 @@ const MELDEABSTAND_MINUTEN = 5;
 const WARTEN_IST_RICHTIG =
   "Sie verhindert, dass schwere Läufe sich gegenseitig ausbremsen und unter Last falsch rot werden. Warten ist richtig: den Halter nicht beenden, die Sperre nicht umlenken.";
 const PERL = "/usr/bin/perl";
-const PS = "/bin/ps";
-const ZOMBIE = "Z";
+const LEBENSZEICHEN = "\n";
+const EINGABE_VON_BEENDETEM_PERL = "EPIPE";
+const VERLOREN = "verloren (perl beendet)";
 const HALTEN = [
   "use Fcntl qw(:flock); use Time::HiRes (); $| = 1; my $eltern = getppid(); my ($art, $ordner, $vorne, $rang, $kommt, @pfade) = @ARGV;",
   'my @f = map { open(my $h, ">>", $_) or die "Sperrdatei $_: $!\\n"; $h } @pfade;',
@@ -209,11 +211,17 @@ function bisFrei(kind, sperre, aufruferBeendet) {
   });
 }
 
+function verlustNachSchreibprobe(kind) {
+  try {
+    writeSync(kind.stdin._handle.fd, LEBENSZEICHEN);
+    return null;
+  } catch (fehler) {
+    return fehler.code === EINGABE_VON_BEENDETEM_PERL ? VERLOREN : `nicht prüfbar (Eingabe von perl nicht beschreibbar: ${fehler.message})`;
+  }
+}
+
 function sperrverlust(kind) {
-  const nachgesehen = spawnSync(PS, ["-o", "stat=", "-p", String(kind.pid)], { encoding: "utf8" });
-  if (nachgesehen.error) return `nicht prüfbar (${PS} nicht startbar: ${nachgesehen.error.message})`;
-  const zustand = nachgesehen.stdout.trim();
-  return zustand !== "" && !zustand.startsWith(ZOMBIE) ? null : "verloren (perl beendet)";
+  return kindBeendet(kind) ? VERLOREN : verlustNachSchreibprobe(kind);
 }
 
 function trageHalterEin({ datei, anlass, allein }, platz) {

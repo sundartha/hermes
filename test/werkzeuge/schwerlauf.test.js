@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { once } from "node:events";
 
 import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository } from "./probe-repo.js";
-import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
+import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, SPERRE, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 import { echtWarten } from "../echt-warten.js";
 
 const PRUEFABSTAND_MS = 100;
@@ -17,6 +17,10 @@ const INNERE_FRIST_MS = 10_000;
 const PERL = "/usr/bin/perl";
 const NUR_EIGENTUEMER = 0o600;
 const RECHTE_BITS = 0o777;
+const LEERLAUF_MS = 1000;
+const BIS_DER_GETOETETE_HALTER_ENDET_MS = 1000;
+const HALTER_TOETEN = 'process.kill(halter.pid, "SIGKILL");';
+const SPERRE_VERLOREN = /^Sperre für schwere Läufe während des Laufs verloren \(perl beendet\), der Lauf zählt als rot: Halter im Test$/m;
 const ANDERES_NACHSEHEN = 'use Fcntl qw(:flock); open(my $f, ">>", $ARGV[0]) or die; flock($f, LOCK_SH) or die; $| = 1; print "schaut\\n"; 1 while sysread(STDIN, my $rest, 4096);';
 
 async function nacheinander(laeufe) {
@@ -334,18 +338,59 @@ test("der Pre-Push-Hook gibt keine umgelenkte Sperrdatei an den Prüfleiter weit
   assert.equal(JSON.parse(ausgabe)[0], null);
 });
 
-test("lässt sich ps beim Ende des Laufs nicht starten, endet der Lauf rot und nennt den Grund", FRIST, async (context) => {
+function ohnePs(context) {
   const nichtAusfuehrbar = join(probeDirectory(context, {}), "ps");
   writeFileSync(nichtAusfuehrbar, "", { mode: NUR_EIGENTUEMER });
   const umlenken = `import kindprozesse from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-const echt = kindprozesse.spawnSync;
-kindprozesse.spawnSync = (datei, ...rest) => echt(datei === "/bin/ps" ? ${JSON.stringify(nichtAusfuehrbar)} : datei, ...rest);
+const { spawn, spawnSync } = kindprozesse;
+const ohnePs = (datei) => (datei === "/bin/ps" ? ${JSON.stringify(nichtAusfuehrbar)} : datei);
+kindprozesse.spawnSync = (datei, ...rest) => spawnSync(ohnePs(datei), ...rest);
+kindprozesse.spawn = (datei, ...rest) => {
+  const kind = spawn(ohnePs(datei), ...rest);
+  if (datei === ${JSON.stringify(PERL)}) globalThis.halterImTest = kind;
+  return kind;
+};
 syncBuiltinESMExports();`;
-  const lauf = starte(["--import", `data:text/javascript,${encodeURIComponent(umlenken)}`, SCHWERLAUF, "--", process.execPath, "-e", "0"], { env: umgebung(context) });
+  return ["--import", `data:text/javascript,${encodeURIComponent(umlenken)}`];
+}
+
+test("lässt sich ps nicht starten, endet ein Lauf mit gehaltener Sperre grün", FRIST, async (context) => {
+  const lauf = starte([...ohnePs(context), SCHWERLAUF, "--", process.execPath, "-e", "0"], { env: umgebung(context) });
+  await lauf.ende;
+
+  assert.equal(lauf.kind.exitCode, 0, lauf.stderr);
+  assert.equal(lauf.stderr, "");
+});
+
+async function rotNachHalten(context, danach) {
+  const skript = `import { once } from "node:events";
+import { nimmSperreAuchFuerKindprozesse } from ${JSON.stringify(SPERRE)};
+await nimmSperreAuchFuerKindprozesse("Halter im Test");
+const halter = globalThis.halterImTest;
+${danach}`;
+  const lauf = starte([...ohnePs(context), "--input-type=module", "-e", skript], { env: umgebung(context) });
   await lauf.ende;
 
   assert.equal(lauf.kind.exitCode, 1, lauf.stderr);
-  assert.match(lauf.stderr, /Sperre für schwere Läufe während des Laufs nicht prüfbar \(\/bin\/ps nicht startbar: spawnSync \S+ EACCES\), der Lauf zählt als rot/);
-  assert.doesNotMatch(lauf.stderr, /TypeError/);
+  return lauf.stderr;
+}
+
+test("stirbt der Halter während des Laufs und ist abgeholt, endet der Lauf auch ohne ps rot", FRIST, async (context) => {
+  const abholen = `const wach = setInterval(() => {}, ${LEERLAUF_MS}); await once(halter, "exit"); clearInterval(wach);`;
+
+  assert.match(await rotNachHalten(context, `${HALTER_TOETEN} ${abholen}`), SPERRE_VERLOREN);
+});
+
+test("stirbt der Halter kurz vor dem Ende und ist noch nicht abgeholt, endet der Lauf auch ohne ps rot", FRIST, async (context) => {
+  const endeOhneAbholen = `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${BIS_DER_GETOETETE_HALTER_ENDET_MS}); process.exit(0);`;
+
+  assert.match(await rotNachHalten(context, `${HALTER_TOETEN} ${endeOhneAbholen}`), SPERRE_VERLOREN);
+});
+
+test("lässt sich die Eingabe des Halters beim Ende nicht beschreiben, endet der Lauf rot und nennt den Grund", FRIST, async (context) => {
+  assert.match(
+    await rotNachHalten(context, "halter.stdin.destroy(); process.exit(0);"),
+    /^Sperre für schwere Läufe während des Laufs nicht prüfbar \(Eingabe von perl nicht beschreibbar: .+\), der Lauf zählt als rot: Halter im Test$/m,
+  );
 });
