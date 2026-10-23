@@ -42,10 +42,11 @@ function ohneBefunde() {
   return mitBefunden([]);
 }
 
-function paketBranch(context, { letzterLeer }) {
+function paketBranch(context, { letzterLeer, phase }) {
   const repo = probeRepo(context);
   repo.git(["branch", "-M", "master"]);
   repo.git(["checkout", "-q", "-b", "paket/EF5-probe"]);
+  if (phase) repo.committe(phase, "Lege die Phase an\n");
   repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, NACHRICHT);
   repo.committe({ "src/name.js": "export const NAME = 'b';\n" }, NACHRICHT);
   if (letzterLeer) repo.git([...PROBE_GIT, "commit", "-q", "--allow-empty", "-m", NACHRICHT]);
@@ -78,8 +79,8 @@ function issueRouten({ issueLesbar = true, issueText = PAKET_ISSUE }) {
   return issueLesbar ? [[`GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`, { title: "Paket EF5", body: issueText }]] : [];
 }
 
-async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, unterordner = "", ersatz: eigenerErsatz, letzterLeer = false, ...issue }) {
-  const repo = paketBranch(context, { letzterLeer });
+async function starte(context, { aufnahme, token = SCHEIN_TOKEN, argumente, unterordner = "", ersatz: eigenerErsatz, letzterLeer = false, phase, ...issue }) {
+  const repo = paketBranch(context, { letzterLeer, phase });
   const ersatz = eigenerErsatz ?? ersatzPruefer(context, { aufnahme });
   const github = await scheinGithub(context, new Map(issueRouten(issue)));
   const ablage = join(probeDirectory(context, {}), "nicht-oeffentlich");
@@ -236,4 +237,31 @@ test("lokal mit einem Paket-Issue ohne Abschnitt „Absicht“ endet mit 3 und s
     [...new Set(lauf.ergebnis.commits.map(({ zustand, grund }) => `${zustand}: ${grund}`))],
     [`nicht_gelaufen: Absicht fehlt: Issue #${ISSUE_NUMMER}: Paket-PR und Phase mit Absicht brauchen im Issue den Abschnitt „## Absicht“`],
   );
+});
+
+const PHASE = "P-009-probe";
+const FALLE = "- Zahl und Wort nie zu einem Satz zusammensetzen, auch wenn die Ausgabe gleich bleibt.";
+const NICHT_ZIEL = "- Kein neuer Text für Französisch.";
+const NUR_IM_PITCH = "Das Problem steht nur im Pitch und nicht im Auftragszettel.";
+const PITCH = ["# Pitch", "", "## Problem", "", NUR_IM_PITCH, "", "## Fallen", "", FALLE, "", "## Nicht-Ziele", "", NICHT_ZIEL, ""].join("\n");
+const VORGABEN = "## Fallen und Nicht-Ziele aus dem Pitch";
+
+function auftragszettelDesLetztenCommits(protokoll) {
+  const anfang = protokoll.eingabe.indexOf("# Auftragszettel");
+  return protokoll.eingabe.slice(anfang, protokoll.eingabe.indexOf("## Commits des Pull Requests", anfang));
+}
+
+test("bringt der PR eine Phase aus einem Pitch, stehen Fallen und Nicht-Ziele wörtlich im Auftragszettel des Prüfers, der Rest des Pitches nicht", async (context) => {
+  const phase = { [`plaene/${PHASE}/pitch.md`]: PITCH, [`plaene/${PHASE}/phase.json`]: JSON.stringify({ phase: PHASE, auftraege: [] }) };
+  const lauf = await starte(context, { aufnahme: ohneBefunde(), phase });
+  assert.equal(lauf.status, 0, lauf.ausgabe);
+  const zettel = auftragszettelDesLetztenCommits(lauf.protokoll);
+  assert.ok(zettel.includes(`${VORGABEN}\n\nQuelle: plaene/${PHASE}/pitch.md am Stand des Pull Requests\n\n## Fallen\n\n${FALLE}\n\n## Nicht-Ziele\n\n${NICHT_ZIEL}\n`), zettel);
+  assert.equal(zettel.includes(NUR_IM_PITCH), false, zettel);
+});
+
+test("ohne Phase aus einem Pitch sagt der Auftragszettel, dass es keine Fallen und Nicht-Ziele gibt, statt den Abschnitt wegzulassen", async (context) => {
+  const lauf = await starte(context, { aufnahme: ohneBefunde() });
+  assert.equal(lauf.status, 0, lauf.ausgabe);
+  assert.ok(auftragszettelDesLetztenCommits(lauf.protokoll).includes(`${VORGABEN}\n\nkeine Angabe; `));
 });

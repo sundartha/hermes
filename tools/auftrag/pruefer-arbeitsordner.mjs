@@ -13,7 +13,7 @@ import { kenntZweck, zweckBlock } from "./zweck.mjs";
 
 export const WERKZEUG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const KEIN_AUFTRAGSZETTEL = "kein Auftragszettel gefunden";
-const KEINE_ABSICHT = "keine Angabe";
+const KEINE_ANGABE = "keine Angabe";
 const KATALOG = "clean-code.md";
 const REFERENZEN = new Map([
   [KATALOG, ".claude/refs/clean-code.md"],
@@ -198,9 +198,9 @@ function prAbschnitt(commit, { commits = [] }) {
   ];
 }
 
-function absichtZeilen(absicht) {
-  if (absicht?.text === undefined) return [absicht?.keine ?? KEINE_ABSICHT];
-  return [`Quelle: ${absicht.quelle}`, "", absicht.text];
+function vorgabeZeilen(vorgabe) {
+  if (vorgabe?.text === undefined) return [vorgabe?.keine ?? KEINE_ANGABE];
+  return [`Quelle: ${vorgabe.quelle}`, "", vorgabe.text];
 }
 
 function auftragsText(commit, kontext, { eintraege, uebersprungen, importe }) {
@@ -210,7 +210,7 @@ function auftragsText(commit, kontext, { eintraege, uebersprungen, importe }) {
     "",
     "## Absicht",
     "",
-    ...absichtZeilen(kontext.absicht),
+    ...vorgabeZeilen(kontext.absicht),
     "",
     `## Commit ${commit.sha}`,
     "",
@@ -219,6 +219,10 @@ function auftragsText(commit, kontext, { eintraege, uebersprungen, importe }) {
     "## Auftrag",
     "",
     (auftragstext || KEIN_AUFTRAGSZETTEL).trimEnd(),
+    "",
+    "## Fallen und Nicht-Ziele aus dem Pitch",
+    "",
+    ...vorgabeZeilen(kontext.vorgaben),
     "",
     "## Geänderte Dateien",
     "",
