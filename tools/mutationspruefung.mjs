@@ -305,27 +305,27 @@ async function durchgang(datei, zeilen, tests) {
   return ergebnisse;
 }
 
-async function mutantenproben(datei, zeilen, { erste, alle }) {
-  if (erste.length === 0) return ohneRoteErstlaeufe(datei, zeilen, alle);
-  const ergebnisse = await durchgang(datei, zeilen, erste);
+async function mutantenproben(datei, zeilen, { erste, alle, nachsichtig }) {
+  if (erste.every((test) => nachsichtig.includes(test))) return ohneRoteErstlaeufe(datei, zeilen, { tests: alle });
+  const ergebnisse = await ohneRoteErstlaeufe(datei, zeilen, { tests: erste, nachsichtig });
   const offen = ergebnisse.filter(ueberlebt);
   const uebrige = alle.filter((test) => !erste.includes(test));
   if (offen.length === 0 || uebrige.length === 0) return ergebnisse;
-  const zweite = await ohneRoteErstlaeufe(datei, offen.map((eintrag) => eintrag.zeilen), uebrige);
+  const zweite = await ohneRoteErstlaeufe(datei, offen.map((eintrag) => eintrag.zeilen), { tests: uebrige });
   return vereine(ergebnisse, [zweite]);
 }
 
-async function ohneRoteErstlaeufe(datei, zeilen, tests) {
+async function ohneRoteErstlaeufe(datei, zeilen, { tests, nachsichtig = tests }) {
   if (tests.length === 0) return [];
   const beginn = ERSTLAUF_MITSCHRIFT.length;
   try {
     return await durchgang(datei, zeilen, tests);
   } catch (fehler) {
     const rote = fehler.message === ERSTLAUF_ABBRUCH ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)) : [];
-    if (rote.length === 0 || !rote.every((rot) => tests.includes(rot.datei))) throw fehler;
+    if (rote.length === 0 || !rote.every((rot) => nachsichtig.includes(rot.datei))) throw fehler;
     ERSTLAUF_MITSCHRIFT.splice(beginn);
     for (const rot of rote) console.log(`Zweite Stufe ohne ${rot.datei} › ${rot.test}: im Erstlauf rot`);
-    return ohneRoteErstlaeufe(datei, zeilen, tests.filter((test) => !rote.some((rot) => rot.datei === test)));
+    return ohneRoteErstlaeufe(datei, zeilen, { tests: tests.filter((test) => !rote.some((rot) => rot.datei === test)), nachsichtig });
   }
 }
 
@@ -333,7 +333,8 @@ function testauswahl(datei, graph) {
   const importe = erreichendeTests(datei, graph.importe);
   const { direkt, alle } = erreichendeTests(datei, graph.gesamt);
   const erste = [importe.direkt, importe.alle, direkt].find((tests) => tests.length > 0) ?? alle;
-  return { erste: alle.filter((test) => erste.includes(test) || graph.geaendert.has(test)), alle };
+  const nachsichtig = alle.filter((test) => !erste.includes(test) && graph.geaendert.has(test));
+  return { erste: alle.filter((test) => erste.includes(test) || nachsichtig.includes(test)), alle, nachsichtig };
 }
 
 async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {

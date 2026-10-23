@@ -24,9 +24,9 @@ export function pruefsumme(teile, kopf) {
   return createHash("sha256").update(JSON.stringify({ kopf, teile })).digest("hex");
 }
 
-export function anteilig({ erste, alle }, { anteil, von }) {
+export function anteilig({ erste, alle, nachsichtig }, { anteil, von }) {
   const eigene = alle.filter((_test, index) => index % von === anteil - 1);
-  return { erste: erste.filter((test) => eigene.includes(test)), alle: eigene };
+  return { erste: erste.filter((test) => eigene.includes(test)), alle: eigene, nachsichtig };
 }
 
 export function matrix(teile) {

@@ -217,3 +217,16 @@ test("eine geänderte Testdatei, die die Datei nur indirekt erreicht, wird zuers
   assert.equal(existsSync(geaendert), true, lauf.stdout);
   assert.equal(existsSync(andere), false, lauf.stdout);
 });
+
+test("eine geänderte Testdatei, die die Datei nur indirekt erreicht und im Erstlauf rot ist, wird ausgelassen und genannt, mit denselben Befunden wie unverändert", (context) => {
+  const marke = join(probeDirectory(context, {}), "mutationspruefung-rot.txt");
+  const rot = indirekterTest(marke, ['assert.equal(einordnen(5), "fünf");']);
+  const unveraendert = probeRepository(context, { ...BASIS, ...HILFE, "test/indirekt.test.js": rot });
+  const geaendert = probeRepository(context, { ...BASIS, ...HILFE, "test/indirekt.test.js": indirekterTest(marke, SCHWACH) });
+  writeFiles(unveraendert, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  writeFiles(geaendert, { "src/zahl.js": quelle(NEGATIV, NULL), "test/indirekt.test.js": rot });
+  const [vorher, nachher] = [werkzeug(unveraendert, "HEAD"), werkzeug(geaendert, "HEAD")];
+  assert.equal(nachher.status, EXIT_ROT, nachher.stdout + nachher.stderr);
+  assert.match(nachher.stdout, /^Zweite Stufe ohne test\/indirekt\.test\.js › probe: im Erstlauf rot$/m);
+  assert.deepEqual(befunde(nachher), befunde(vorher));
+});
