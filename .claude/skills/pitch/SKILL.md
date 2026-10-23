@@ -28,6 +28,8 @@ Entscheidungen legst du dem Nutzer vor, auch technische. Fakten, die im Code, in
 
 Frag in Runden. Eine Runde enthält alle Entscheidungen, die du jetzt stellen kannst, ohne eine noch offene Antwort zu erraten; eine Frage, deren Antwort von einer anderen offenen Frage abhängt, kommt in die nächste Runde. Nummeriere die Fragen, gib zu jeder deine Empfehlung mit einem Satz Begründung und formuliere sie so, dass „ja“ die Empfehlung annimmt.
 
+Bevor du eine Runde sendest, schreibst du sie mit ihren nummerierten Fragen und Empfehlungen unter „## Runde <n>“ in `plaene/P-<Nummer>-<kurzname>/fragerunden.md`; nach der Antwort trägst du dort zu jeder Nummer die Antwort des Nutzers ein, damit keine Runde nur im Chat steht. Einen vertraulichen Befund schreibst du nicht hinein, weil die Datei mit dem Pitch ins öffentliche Repo kommt.
+
 Der Nutzer darf nach Nummern antworten, nur einen Teil beantworten oder mit „wie empfohlen“ alle Empfehlungen einer Runde annehmen. Was er offen lässt, stellst du in der nächsten Runde erneut oder trägst es unter „Vor dem Bau zu klären“ ein. Möchte er einzelne Fragen, fragst du einzeln.
 
 Lässt sich eine Frage erst beantworten, wenn der Nutzer etwas hört oder sieht, etwa wie ein Satz am Telefon klingt, schlag einen Wegwerf-Versuch vor (einen Testanruf auf Staging, ein Bild) und trag die Frage bis dahin unter „Vor dem Bau zu klären“ ein.
@@ -47,6 +49,7 @@ Schritt 2 ist fertig, wenn jeder Abschnitt der Vorlage ohne Annahme geschrieben 
 - Unter „Fallen“ stehen technische Stolpersteine, die schon vor dem Bau bekannt sind, je mit der Entscheidung, wie ihr damit umgeht. Gibt es keine, steht dort „keine bekannt“.
 - Statt Wörtern, die man nicht testen kann, etwa „schnell“, „möglichst“, „ggf.“ oder „usw.“, schreibst du den Wert oder die vollständige Liste.
 - Die grobe Lösung beschreibt, wie es sich für den anfühlt, der die Änderung bemerkt, und welche Teile zusammenspielen. Dateinamen, Code und Aufträge gehören nicht hinein; die entstehen später.
+- Für jedes Szenario unter „Anforderungen“ belegst du, dass sein Dann heute auf `master` nicht eintritt: mit der Fundstelle `Datei:Zeile`, die zeigt, was heute stattdessen passiert, oder mit einem Wegwerf-Versuch. Den Beleg trägst du als eine Zeile je Szenario unter „## Vorher-Rot“ in `fragerunden.md` ein, etwa „S1: heute `<Wert>` statt `<Wert aus dem Dann>`, `<Datei:Zeile>`“. Tritt das Dann heute schon ein, führst du das Szenario unter „Bleibt unverändert“ oder streichst es, weil sein Test vor dem Bau schon grün wäre und nichts beweist. Das gilt auch für jedes Szenario, das in Schritt 4 oder 5 dazukommt oder umgeschrieben wird.
 
 ### 4. Premortem
 Starte den Agenten `premortem` und gib ihm nur den Pfad der Pitch-Datei, keine Zusammenfassung des Gesprächs, damit seine Gründe unabhängig bleiben. Trag jeden seiner Gründe in die Premortem-Tabelle ein und gib ihm genau einen Ausgang (meldet er „keine Gründe gefunden, weil …“, steht dieser Satz unter der leeren Tabelle): ein neues Szenario, ein Nicht-Ziel oder „hingenommen:“ mit Begründung. Ob ein Risiko hingenommen wird, entscheidet der Nutzer: Leg ihm alle Gründe, für die du „hingenommen“ vorschlägst, in einer nummerierten Runde vor, jeden mit deiner Empfehlung.
