@@ -16,6 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
+import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
@@ -27,6 +28,7 @@ import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxo
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
+const GENAU_PLUGIN = fileURLToPath(new URL("./mutationspruefung/genau.mjs", import.meta.url));
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
 const BANK = "regression";
@@ -198,23 +200,29 @@ function mutant({ fileName, location, mutatorName, replacement, status, killedBy
   const { line, column } = location.start;
   const ersatz = (replacement ?? "").replace(LEERRAUM, " ");
   const schluessel = `${datei}:${line}:${column} ${mutatorName} → ${ersatz}`;
-  return { schluessel, status, zeilen: [line, location.end.line], art: mutatorName, toeter: killedBy ?? [] };
+  return { schluessel, status, zeilen: [line, location.end.line], lage: location, art: mutatorName, toeter: killedBy ?? [] };
+}
+
+function muster(datei, bereich) {
+  return Array.isArray(bereich) ? `${datei}:${bereich[0]}-${bereich[1]}` : spaltenbereich(datei, bereich);
 }
 
 async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
   const beginn = Date.now();
+  const genau = zeilen.every((bereich) => !Array.isArray(bereich));
   const optionen = {
     ...KONFIGURATION,
-    mutate: zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`),
+    ...(genau ? { appendPlugins: [GENAU_PLUGIN], ignorers: [GENAU] } : {}),
+    mutate: zeilen.map((bereich) => muster(datei, bereich)),
     tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
     tempDirName: SANDBOXORDNER,
   };
-  const ergebnisse = (await new Stryker(optionen).runMutationTest()).map(mutant);
+  const ergebnisse = (await new Stryker(optionen).runMutationTest()).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
   const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
   console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
   return ergebnisse;
@@ -235,7 +243,7 @@ async function ersterLauf(lauf) {
   if (zeitueber.length === 0) return ergebnisse;
   const wiederholt = await stryker({
     ...lauf,
-    zeilen: zeitueber.map((eintrag) => eintrag.zeilen),
+    zeilen: zeitueber.map((eintrag) => eintrag.lage),
     faktor: ZEITFAKTOR_WIEDERHOLUNG,
   });
   return ersetze(ergebnisse, wiederholt, zeitueber);

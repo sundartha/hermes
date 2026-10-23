@@ -118,7 +118,7 @@ function nachTests(auftraege) {
 
 async function wiederhole(auftraege, nachlauf) {
   for (const gleiche of nachTests(auftraege)) {
-    const neu = await nachlauf({ zeilen: gleiche.map(({ eintrag }) => eintrag.zeilen), tests: gleiche[0].tests });
+    const neu = await nachlauf({ zeilen: gleiche.map(({ eintrag }) => eintrag.lage), tests: gleiche[0].tests });
     const nachSchluessel = new Map(neu.map((eintrag) => [eintrag.schluessel, eintrag]));
     for (const { eintrag, ablegen } of gleiche) ablegen(nachSchluessel.get(eintrag.schluessel) ?? OHNE_ERGEBNIS);
   }
