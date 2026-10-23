@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { REPO_WURZEL, vorhandenerPfad } from "../zwillingspfad.mjs";
 import { funktionenIn } from "../ziele/funktionen.mjs";
-import { ANNAHMEN, annahmenAus } from "./annahmen.mjs";
+import { ANNAHMEN, annahmenAus, pitchPfad, vorgabenAusPitch } from "./annahmen.mjs";
 import { ABSICHT, TESTUMBAU, bereichSchluessel, bereichsEintraege, funktionskartenPfade, istTestdatei } from "./format.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
@@ -22,6 +22,7 @@ const NUTZEN_REGEL = [
   "Nach deinem Bau prüft das Skript, dass du jede dieser Funktionen in deinen neuen Zeilen aufrufst oder importierst; nur erwähnen (in einem Kommentar oder Text) zählt nicht, und eine eigene Deklaration desselben Namens in einer anderen Datei ist ein Nachbau.",
 ].join("\n");
 const ANNAHMEN_FOLGE = "Testdaten und Code stehen auf diesen Tatsachen. Widerspricht eine davon dem Auftrag oder dem Code, den du liest, steigst du mit „Auftrag passt nicht: <Grund>“ aus.";
+const VORGABEN_FOLGE = "Das sind freigegebene Entscheidungen; dein Code hält sie ein, auch wo kein Test sie prüft. Widerspricht eine davon dem Auftrag oder dem Entwurf, steigst du mit „Auftrag passt nicht: <Grund>“ aus.";
 export const SPEICHER_REGEL = [
   "Speicher nutzt du in Abnahmetests nur über echte Store-Implementierungen: `makePgTestStore` aus `test/pg-helpers.js` oder den JSON-Store mit frischem Laden (`config.server.dataDir` auf ein Wegwerf-Verzeichnis, Neuladen von `src/store/json.js` per `import()` mit neuem Query-Anhang).",
   "Felder, die der Postgres-Store nicht als Spalte kennt, prüfst du mit dem JSON-Store.",
@@ -161,6 +162,14 @@ function annahmenAbschnitt(root, design) {
   return [abschnitt("Annahmen aus dem Design", [herkunft, ANNAHMEN_FOLGE, "", text].join("\n"))];
 }
 
+function vorgabenAbschnitt(root, phase) {
+  const pitch = pitchPfad(phase);
+  if (pitch === null || !existsSync(join(root, pitch))) return [];
+  const text = vorgabenAusPitch(readFileSync(join(root, pitch), "utf8"));
+  if (text === "") return [];
+  return [abschnitt("Fallen und Nicht-Ziele aus dem Pitch", [`Die Abschnitte „Fallen“ und „Nicht-Ziele“ aus ${pitch}, wörtlich.`, VORGABEN_FOLGE, "", text].join("\n"))];
+}
+
 export function testAgentPrompt({ phase, auftrag, root, design }) {
   return [testPrompt(phase, auftrag, root), ...annahmenAbschnitt(root, design), testMusterAbschnitt(root, auftrag), abschnitt("Speicher in Abnahmetests", SPEICHER_REGEL)].join("\n");
 }
@@ -185,6 +194,7 @@ export function bauPrompt({ phase, auftrag, root, design }, testausgabe) {
   return [
     ...auftragsBlock(phase, auftrag),
     ...annahmenAbschnitt(root, design),
+    ...vorgabenAbschnitt(root, phase),
     abschnitt(titel, block(gekuerzteTestausgabe(testausgabe))),
     ...new Set(bereichsEintraege(auftrag.bereich).map((eintrag) => musterAbschnitt(root, eintrag, musterFuer))),
     ...funktionskartenPfade(auftrag.bereich).map((pfad) => dateiAbschnitt("Funktionskarte", root, pfad)),

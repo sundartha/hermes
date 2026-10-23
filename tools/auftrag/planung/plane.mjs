@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { inspect } from "node:util";
 
+import { vorgabenAusPitch } from "../annahmen.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { werkzeugBefunde } from "../werkzeuge.mjs";
 import { ABSICHT, bereichSchluessel } from "../format.mjs";
@@ -35,7 +36,7 @@ import { DOKUMENTE, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from 
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
-import { setzePhaseZusammen } from "./zusammensetzen.mjs";
+import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
 export const EXIT_GRUEN = 0;
 export const EXIT_ABBRUCH = 1;
@@ -729,6 +730,8 @@ export class Planung {
       abschnitt("Erkundungsberichte", json(berichte.filter((bericht) => Object.keys(bericht.nummern).length > 0))),
       abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften)),
       abschnitt("Gemeinsame Namen", punkte(namen)),
+      abschnitt("Annahmen der Planung zu diesen Aufträgen", punkte(eigeneAnnahmen(this.alleAnnahmen(), auftraege).map(annahmeText))),
+      abschnitt("Fallen und Nicht-Ziele des Pitches", vorgabenAusPitch(this.dokumente[PITCH] ?? "") || "keine"),
       abschnitt("Entwurf je Bereich (phase-vorlage.md)", vorlage),
     ]);
   }

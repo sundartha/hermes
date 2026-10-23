@@ -244,7 +244,7 @@ class NeuschnittPlanung extends Planung {
     const offen = bereiche.flatMap((bereich, stelle) => ergebnisse[stelle].befunde.map((befund) => `Entwurf ${bereich}: ${befund}`));
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, ENTWURF_OFFEN, offen);
     const eigene = (bereich) => this.schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich);
-    return Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, entwurfFuer(ergebnisse[stelle].entwurf, eigene(bereich))]));
+    return Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, entwurfFuer(ergebnisse[stelle].entwurf, eigene(bereich), this.alleAnnahmen())]));
   }
 
   ohneAlten(auftrag, neue) {
