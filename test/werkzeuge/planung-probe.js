@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { auftragAusSchnitt, entwurfFuer } from "../../tools/auftrag/planung/zusammensetzen.mjs";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository } from "./probe-repo.js";
 
 const SKILL = join(REPO_ROOT, ".claude/skills/pitch");
@@ -230,11 +231,11 @@ function tokenUmgebung(ersatz, token) {
   return { CLAUDE_CONFIG_DIR: join(ersatz, "konfiguration") };
 }
 
-export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf, knotenArgumente = [], token }) {
+export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argumente: aufruf, knotenArgumente = [], token, umgebung = {} }) {
   const ersatz = probeDirectory(context, { "antworten.json": JSON.stringify(antworten(grund, ueberschrieben)) });
   writeFileSync(join(ersatz, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(ersatz, "claude.mjs"), AUSFUEHRBAR);
-  const lauf = spawnSync(process.execPath, [...knotenArgumente, werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs"), ...tokenUmgebung(ersatz, token) }, timeout: LAUF_FRIST_MS });
+  const lauf = spawnSync(process.execPath, [...knotenArgumente, werkzeug, ...aufruf], { cwd: wurzel, encoding: "utf8", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs"), ...mitErsatzWerkzeugen(ersatz), ...tokenUmgebung(ersatz, token), ...umgebung }, timeout: LAUF_FRIST_MS });
   return { ...lauf, wurzel, ersatz };
 }
 

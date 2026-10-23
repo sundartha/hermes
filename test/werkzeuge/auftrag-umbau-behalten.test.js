@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { exitCodes } from "./auftrag-lauf-hilfen.js";
-import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -138,7 +138,7 @@ function starte(context, drehbuch) {
     HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
     HERMES_GH: GH_OHNE_WIRKUNG,
     HOME: werkzeug,
-    ...mitErsatzSemgrep(werkzeug),
+    ...mitErsatzWerkzeugen(werkzeug),
   };
   const basis = gitAusgabe(repo, "rev-parse", "HEAD").trim();
   const lauf = spawnSync(process.execPath, [EINSTIEG, "lauf", join(werkzeug, "phase.json")], {

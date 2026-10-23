@@ -90,6 +90,8 @@ export const MELDUNG = {
   VORBEREITUNG: "vorbereitung",
   JSCPD: "jscpd",
   SEMGREP_FEHLT: "semgrep-fehlt",
+  PAKETE_FEHLEN: "pakete-fehlen",
+  POSTGRES_FEHLT: "postgres-fehlt",
 };
 
 export const ALTER_TEST = "alter test";

@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { zusicherungenGleich } from "../../tools/auftrag/testtitel.mjs";
 
-import { mitErsatzSemgrep } from "./ersatz-semgrep.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
@@ -71,7 +71,7 @@ const IDENTITAET = { GIT_AUTHOR_NAME: "Probe", GIT_AUTHOR_EMAIL: PROBE, GIT_COMM
 
 function umgebung(werkzeug) {
   const ersatz = Object.entries(ERSATZ).map(([name, datei]) => [name, join(werkzeug, datei)]);
-  return { ...isolatedEnvironment(), HOME: werkzeug, ...Object.fromEntries(ersatz), ...IDENTITAET, ...mitErsatzSemgrep(werkzeug) };
+  return { ...isolatedEnvironment(), HOME: werkzeug, ...Object.fromEntries(ersatz), ...IDENTITAET, ...mitErsatzWerkzeugen(werkzeug) };
 }
 
 function lauf(context, drehbuch, dateien = REPO) {
