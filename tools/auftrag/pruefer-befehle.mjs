@@ -13,7 +13,7 @@ import { env } from "node:process";
 
 import { istIssue } from "../ziele/github.mjs";
 import { stelleNach } from "./nachstellen.mjs";
-import { abbruchOhneAbsicht, absichtFuerPr } from "./pruefer-absicht.mjs";
+import { abbruchOhneAbsicht, absichtFuerPr, vorgabenFuerPr } from "./pruefer-absicht.mjs";
 import { gitAusgabe, istEigenesRepo, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
 import { artefaktName, bekanntesErgebnis, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
@@ -263,13 +263,15 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
   const frueher = await gedaechtnis(github, pr.number, auswahl);
   const issue = await issueZumPr(github, pr, branch);
+  const fork = Boolean(prRepo) && !istEigenesRepo(prRepo);
   const kontext = {
     root,
     token,
     programm,
     ciLauf: ausloeser.html_url ?? "",
     auftragstext: auftragstext(issue),
-    absicht: absichtFuerPr({ branch, issue, fork: Boolean(prRepo) && !istEigenesRepo(prRepo), basis, head, root }),
+    absicht: absichtFuerPr({ branch, issue, fork, basis, head, root }),
+    vorgaben: vorgabenFuerPr({ fork, basis, head, root }),
   };
   const kopf = {
     format: FORMAT,
@@ -374,7 +376,8 @@ async function lokal(optionen, root, { github = githubZugang(), programm } = {})
   const issue = await issueZumPr(github, { body: `Closes #${optionen.issue}` }, branch);
   if (issue.body === null) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
   const absicht = absichtFuerPr({ branch, issue, basis, head, root });
-  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht };
+  const vorgaben = vorgabenFuerPr({ basis, head, root });
+  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht, vorgaben };
   const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
   const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
   console.log(NUR_LOKAL);

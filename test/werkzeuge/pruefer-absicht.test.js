@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { abbruchOhneAbsicht, absichtFuerPr } from "../../tools/auftrag/pruefer-absicht.mjs";
+import { abbruchOhneAbsicht, absichtFuerPr, vorgabenFuerPr } from "../../tools/auftrag/pruefer-absicht.mjs";
 import { baueArbeitsordner, entferne } from "../../tools/auftrag/pruefer-arbeitsordner.mjs";
 import { zuPruefendeCommits } from "../../tools/auftrag/pruefer-auswahl.mjs";
 import { prueferBefehl } from "../../tools/auftrag/pruefer-lauf.mjs";
@@ -32,11 +32,10 @@ function mitAbsicht(absicht) {
   return issue(`## Absicht\n\n${absicht}\n\n## Ziel\n\nZahl 2\n`);
 }
 
-function phasenPr(context, { feld }) {
+function phasenPr(context, { feld, pitch = "# Pitch\n\n## Absicht\n\nEine Absicht im PR, die der Prüfer nie als Vorgabe nimmt.\n" }) {
   const repo = probeRepo(context);
   const basis = repo.git(["rev-parse", "HEAD"]);
   const phase = { phase: PHASE, ...(feld === undefined ? {} : { absicht: feld }), auftraege: [] };
-  const pitch = "# Pitch\n\n## Absicht\n\nEine Absicht im PR, die der Prüfer nie als Vorgabe nimmt.\n";
   const head = repo.committe({ [`${ORDNER}/pitch.md`]: pitch, [`${ORDNER}/phase.json`]: JSON.stringify(phase) }, "Lege die Phase an\n");
   return { branch: PHASEN_BRANCH, basis, head, root: repo.ordner };
 }
@@ -74,6 +73,14 @@ test("ein PR, der weder Paket ist noch eine Phase mit Absicht bringt, läuft ohn
 
 test("ein Fork-PR bekommt nie eine Absicht als Vorgabe, auch mit Branch paket/ und Issue-Abschnitt", () => {
   assert.deepEqual(absichtFuerPr({ branch: PAKET_BRANCH, issue: mitAbsicht(ABSICHT), fork: true }), { keine: "keine Angabe; der Pull Request kommt aus einem Fork" });
+});
+
+test("ein Fork-PR und ein Pitch ohne Fallen und Nicht-Ziele bringen dem Prüfer keine Vorgaben, ein eigener PR mit beiden Abschnitten schon", (context) => {
+  const falle = "## Fallen\n\n- Zahl und Wort nie zusammensetzen.";
+  const pr = phasenPr(context, { feld: ABSICHT, pitch: `# Pitch\n\n${falle}\n\n## Nicht-Ziele\n\n- Kein Französisch.\n` });
+  assert.deepEqual(vorgabenFuerPr({ ...pr, fork: true }), { keine: "keine Angabe; der Pull Request kommt aus einem Fork" });
+  assert.ok(vorgabenFuerPr(pr).text.startsWith(falle));
+  assert.match(vorgabenFuerPr(phasenPr(context, { feld: ABSICHT })).keine, /^keine Angabe; der Pull Request bringt keine Phase aus einem Pitch/);
 });
 
 test("nur eine fehlende Pflicht-Absicht hält den Prüfer an, „keine Angabe“ und eine vorhandene Absicht nicht", () => {
