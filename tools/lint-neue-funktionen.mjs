@@ -16,6 +16,7 @@ import {
   ohneTypinformation,
 } from "./pr-aenderungen.mjs";
 import { lintZweckZeilen } from "./lint-zweck.mjs";
+import { enthaelt } from "./quelllage.mjs";
 import { laufzeitText } from "./umbenennung.mjs";
 
 const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs", "*.ts", "*.mts", "*.cts"];
@@ -98,16 +99,12 @@ export function geaenderteStellen(hunkListe, alt, neu) {
   };
 }
 
-function vorOderGleich(links, rechts) {
-  return links.line < rechts.line || (links.line === rechts.line && links.column <= rechts.column);
-}
-
 function innerste(funktionen) {
   return funktionen.toSorted((links, rechts) => rechts.range[0] - links.range[0])[0];
 }
 
 function umschliesst({ loc }, anfang, ende) {
-  return vorOderGleich(loc.start, anfang) && vorOderGleich(ende, loc.end);
+  return enthaelt(loc, { start: anfang, end: ende });
 }
 
 function innersteFunktion(funktionen, stelle) {
