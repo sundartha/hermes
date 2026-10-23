@@ -89,7 +89,10 @@ test("in mehreren Anteilen bleiben gelöschte Zeile, Kommentar Stryker disable u
   assert.ok(verstoesse.some((zeile) => zeile.startsWith("Verstoß: Mutant überlebt: src/zahl.js:6:")), ganz.stdout);
 });
 
-function indirekterTest(marke) {
+const HILFE = { "test/hilfe.js": 'export { einordnen, protokoll } from "../src/zahl.js";\n' };
+const VERLANGT_NULL = ['assert.equal(einordnen(0), "null");', "assert.deepEqual(protokoll, [0]);"];
+
+function indirekterTest(marke, pruefungen = VERLANGT_NULL) {
   return [
     'import assert from "node:assert/strict";',
     'import { appendFileSync } from "node:fs";',
@@ -97,29 +100,33 @@ function indirekterTest(marke) {
     'import { einordnen, protokoll } from "./hilfe.js";',
     `appendFileSync(${JSON.stringify(marke)}, "lauf\\n");`,
     'test("probe", () => {',
-    '  assert.equal(einordnen(0), "null");',
-    "  assert.deepEqual(protokoll, [0]);",
+    ...pruefungen.map((pruefung) => `  ${pruefung}`),
     "});",
     "",
   ].join("\n");
 }
 
-test("was nur eine indirekt erreichende Testdatei tötet, misst bei Anteilen erst das Urteil, und zwar wie im ganzen Lauf", (context) => {
+test("was nur eine indirekt erreichende Testdatei tötet, misst bei Anteilen der Teil mit dieser Testdatei, und das Urteil gleicht dem ganzen Lauf", (context) => {
   const marke = join(probeDirectory(context, {}), "mutationspruefung-indirekt.txt");
   const repo = probeRepository(context, {
     ...BASIS,
     ...fuellung(),
-    "test/hilfe.js": 'export { einordnen, protokoll } from "../src/zahl.js";\n',
+    ...HILFE,
     "test/indirekt.test.js": indirekterTest(marke),
   });
   writeFiles(repo, { "src/zahl.js": quelle(PROTOKOLL, NEGATIV, NULL) });
+  const markenzeilen = () => (existsSync(marke) ? readFileSync(marke, "utf8") : "");
+  let vorDemUrteil;
   const { plan, laeufe, urteil } = aufgeteilt(context, repo, {
     basis: "HEAD",
-    zwischen: () => assert.equal(existsSync(marke), false, "ein Teil hat die indirekte Testdatei gestartet"),
+    zwischen: () => {
+      vorDemUrteil = markenzeilen();
+    },
   });
+  assert.notEqual(vorDemUrteil, "", "kein Teil hat die indirekte Testdatei gestartet");
+  assert.equal(markenzeilen(), vorDemUrteil, "das Urteil hat die indirekte Testdatei gestartet");
   assert.equal(plan.anzahl, 2);
-  assert.ok(laeufe.every((lauf) => / [1-9]\d* in diesen Testdateien nicht getötet/.test(lauf.stdout)), laeufe.map((lauf) => lauf.stdout).join("\n"));
-  assert.equal(existsSync(marke), true);
+  assert.ok(laeufe.some((lauf) => / [1-9]\d* in diesen Testdateien nicht getötet/.test(lauf.stdout)), laeufe.map((lauf) => lauf.stdout).join("\n"));
   assert.equal(urteil.status, 0, urteil.stdout + urteil.stderr);
   const ganz = werkzeug(repo, "HEAD");
   assert.equal(ganz.status, 0, ganz.stdout + ganz.stderr);
@@ -156,14 +163,41 @@ test("eine neue Datei, die keine Testdatei erreicht, ist aufgeteilt rot", (conte
   assert.match(ganz.stdout, /keine Testdatei erreicht die Datei/);
 });
 
-test("eine Testdatei der zweiten Stufe, die schon im Erstlauf rot ist, lässt das Urteil aus und nennt sie, mit denselben Befunden wie im ganzen Lauf", (context) => {
+const OHNE_QUELLTEXT = /^Zweite Stufe ohne test\/quelltext\.test\.js › ist leer: im Erstlauf rot$/m;
+
+test("eine Testdatei der zweiten Stufe, die schon im Erstlauf rot ist, lässt der Teil mit dieser Testdatei aus und nennt sie, mit denselben Befunden wie im ganzen Lauf", (context) => {
   const repo = probeRepository(context, { ...BASIS, ...fuellung(), "test/quelltext.test.js": quelltexttest("ist leer") });
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
   const ganz = werkzeug(repo, "HEAD");
-  const { plan, urteil } = aufgeteilt(context, repo, { basis: "HEAD" });
+  const { plan, laeufe, urteil } = aufgeteilt(context, repo, { basis: "HEAD" });
   assert.equal(plan.anzahl, 2);
   assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
   assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
   assert.deepEqual(befunde(urteil), befunde(ganz));
-  assert.match(urteil.stdout, /^Zweite Stufe ohne test\/quelltext\.test\.js › ist leer: im Erstlauf rot$/m);
+  assert.equal(laeufe.filter((lauf) => OHNE_QUELLTEXT.test(lauf.stdout)).length, 1, laeufe.map((lauf) => lauf.stdout).join("\n"));
+  assert.doesNotMatch(urteil.stdout, OHNE_QUELLTEXT);
+});
+
+const ZEHN = '  if (zahl === 10) return "zehn";';
+const SCHWACH = ['assert.equal(typeof einordnen, "function");'];
+
+function indirekteFuellung(marke) {
+  return Object.fromEntries(
+    Array.from({ length: TESTDATEIEN_JE_ANTEIL }, (_leer, index) => [
+      `test/indirekt-${String(index).padStart(3, "0")}.test.js`,
+      indirekterTest(marke, SCHWACH),
+    ]),
+  );
+}
+
+test("eine Datei mit einer direkten und vielen indirekt erreichenden Testdateien wird nach allen geteilt, und die Teile urteilen wie der ganze Lauf", (context) => {
+  const marke = join(probeDirectory(context, {}), "mutationspruefung-fuellung.txt");
+  const repo = probeRepository(context, { ...BASIS, ...HILFE, ...indirekteFuellung(marke), "test/indirekt.test.js": indirekterTest(marke) });
+  writeFiles(repo, { "src/zahl.js": quelle(PROTOKOLL, NEGATIV, NULL, ZEHN) });
+  const { ganz, plan } = gleichesUrteil(context, repo);
+  assert.ok(plan.anzahl > 1, JSON.stringify(plan));
+  assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
+  const verstoesse = befunde(ganz).filter((zeile) => zeile.startsWith("Verstoß: Mutant überlebt: "));
+  assert.ok(verstoesse.length > 0, ganz.stdout);
+  assert.ok(verstoesse.every((zeile) => zeile.startsWith("Verstoß: Mutant überlebt: src/zahl.js:6:")), ganz.stdout);
 });
