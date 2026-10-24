@@ -5,6 +5,7 @@ import { cruise } from "dependency-cruiser";
 
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
+import { nurHaenger } from "./bestaetigung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
@@ -66,16 +67,34 @@ function brichAbOhneLage(getoetet) {
   );
 }
 
+async function schluesselNachLage(eintraege, { tests, werkzeug }, auswahl) {
+  const treffer = new Set();
+  if (tests.length === 0) return treffer;
+  for (const datei of new Set(eintraege.map((eintrag) => eintrag.datei))) {
+    const dort = eintraege.filter((eintrag) => eintrag.datei === datei);
+    for (const eintrag of await werkzeug.durchgang(datei, dort.map(({ lage }) => lage), tests)) {
+      if (auswahl(eintrag)) treffer.add(eintrag.schluessel);
+    }
+  }
+  return treffer;
+}
+
 async function nachherVerloren(getoetet, tests, werkzeug) {
   brichAbOhneLage(getoetet);
-  const verloren = [];
-  for (const datei of [...new Set(getoetet.map((eintrag) => eintrag.datei))]) {
-    const vorher = getoetet.filter((eintrag) => eintrag.datei === datei);
-    const nachher = tests.length === 0 ? [] : await werkzeug.durchgang(datei, vorher.map(({ lage }) => lage), tests);
-    const weiter = new Set(nachher.filter((eintrag) => !werkzeug.ueberlebt(eintrag)).map(({ schluessel }) => schluessel));
-    verloren.push(...vorher.filter(({ schluessel }) => !weiter.has(schluessel)));
-  }
-  return verloren;
+  const weiter = await schluesselNachLage(getoetet, { tests, werkzeug }, (eintrag) => !werkzeug.ueberlebt(eintrag));
+  return getoetet.filter(({ schluessel }) => !weiter.has(schluessel));
+}
+
+async function vorherNieGetoetet(verloren, vorherStand, werkzeug) {
+  if (verloren.length === 0 || !verloren.every(nurHaenger)) return [];
+  const ueberlebt = await imVorherStand(vorherStand, werkzeug, ({ tests }) => schluesselNachLage(verloren, { tests, werkzeug }, werkzeug.ueberlebt));
+  return verloren.filter(({ schluessel }) => ueberlebt.has(schluessel));
+}
+
+function gruenZeile(umfang, getoetet, entfallen) {
+  if (entfallen === 0) return `grün: ${umfang} werden nach dem Testumbau weiter getötet.`;
+  const weiter = getoetet - entfallen;
+  return `grün: ${weiter} von ${umfang} werden nach dem Testumbau weiter getötet; ${entfallen} waren vorher nur Hänger und überleben in der Neuberechnung.`;
 }
 
 export async function testumbauPruefung(basis, werkzeug) {
@@ -86,11 +105,14 @@ export async function testumbauPruefung(basis, werkzeug) {
     return EXIT_GRUEN;
   }
   const tests = await betroffeneTests(geaendert, cwd());
-  const verloren = await nachherVerloren(vorher.getoetet, tests, werkzeug);
+  const nachher = await nachherVerloren(vorher.getoetet, tests, werkzeug);
+  const entfallen = await vorherNieGetoetet(nachher, { basis, tests: geaendert }, werkzeug);
+  for (const { schluessel } of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);
+  const verloren = nachher.filter((eintrag) => !entfallen.includes(eintrag));
   for (const { schluessel } of verloren) console.log(`Verstoß: Mutant nicht mehr getötet: ${schluessel}`);
   const umfang = `${vorher.getoetet.length} vorher getötete Mutanten in ${vorher.quellen.length} Quelldateien (${vorher.quellen.join(", ")})`;
   if (verloren.length === 0) {
-    console.log(`grün: ${umfang} werden nach dem Testumbau weiter getötet.`);
+    console.log(gruenZeile(umfang, vorher.getoetet.length, entfallen.length));
     return EXIT_GRUEN;
   }
   console.log(`rot: ${verloren.length} von ${umfang} überleben nach dem Testumbau; die umgebauten Tests prüfen weniger als vorher.`);

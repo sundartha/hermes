@@ -67,6 +67,10 @@ export function bestaetigt({ bestaetigung }) {
   return bestaetigung === BESTAETIGT;
 }
 
+export function nurHaenger({ bestaetigung }) {
+  return bestaetigung === HAENGER;
+}
+
 function anzahl(ergebnisse, art) {
   return ergebnisse.filter(({ bestaetigung }) => bestaetigung === art).length;
 }
