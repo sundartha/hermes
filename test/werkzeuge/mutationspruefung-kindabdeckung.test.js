@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, readdirSync, readFileSync } from "node:fs";
+import { cpSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -20,6 +20,7 @@ const WORT = 'import { leise } from "../src/wort.js";';
 const RUF = 'import { ruf } from "../src/ruf.js";';
 const STAND = { static: { 1: 1 }, perTest: { erster: { 1: 2, 2: 1 } } };
 const NICHT_IM_ORDNER = "ENOTDIR";
+const UEBERSPRUNGEN = /^src\/zahl\.js: Kind-Abdeckung ohne Testdatei dieses Probelaufs übersprungen: (\d+)$/gm;
 
 function kind(einfuhr, ausdruck, ende) {
   return [einfuhr, ende, `process.stdout.write(${ausdruck} + "\\n");`, BIS_ZUM_ENDE, ""].join("\n");
@@ -53,6 +54,36 @@ function kindtest(skript, erwartet, signal) {
     `  kind.kill(${JSON.stringify(signal)});`,
     "  await beendet;",
     `  assert.equal(String(ausgabe).trim(), ${JSON.stringify(erwartet)});`,
+    "});",
+    "",
+  ].join("\n");
+}
+
+function verwaisttest() {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { spawnSync } from "node:child_process";',
+    'import { mkdtempSync, rmSync, writeFileSync } from "node:fs";',
+    'import { tmpdir } from "node:os";',
+    'import { join } from "node:path";',
+    'import { test } from "node:test";',
+    'import { fileURLToPath } from "node:url";',
+    ZAHL,
+    'const helfer = new URL("./helpers.js", import.meta.url).href;',
+    'const enkel = fileURLToPath(new URL("./enkel-zahl.mjs", import.meta.url));',
+    'test("das Enkelkind läuft über einen Zwischenprozess, den der Test danach wegräumt", () => {',
+    '  const ort = mkdtempSync(join(tmpdir(), "verwaist-"));',
+    '  const zwischen = join(ort, "zwischen.mjs");',
+    "  writeFileSync(zwischen, [",
+    '    \'import { spawnSync } from "node:child_process";\',',
+    '    "import { kindUmgebung } from " + JSON.stringify(helfer) + ";",',
+    '    "const lauf = spawnSync(process.execPath, [" + JSON.stringify(enkel) + "], { env: kindUmgebung(), stdio: \\"inherit\\" });",',
+    "    \"process.exit(lauf.status);\",",
+    '  ].join("\\n"));',
+    '  const lauf = spawnSync(process.execPath, [zwischen], { env: process.env, stdio: "inherit" });',
+    "  rmSync(ort, { recursive: true, force: true });",
+    "  assert.equal(lauf.status, 0);",
+    '  assert.equal(einordnen(0), "null");',
     "});",
     "",
   ].join("\n");
@@ -95,13 +126,40 @@ test("Mutanten, die nur vom Test gestartete und per Signal beendete Kind- oder E
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
 });
 
-test("Die abgelegte Abdeckung eines Kindes zählt für seine Testdatei, und eine Abdeckung ohne Testdatei des Probelaufs bricht ab und nennt die Datei", (context) => {
-  const ort = probeDirectory(context, { "a.test.js": "", "b.test.js": "", "fremd.test.js": "", "ablage/leer.txt": "" });
-  const [a, b, fremd, ordner] = ["a.test.js", "b.test.js", "fremd.test.js", "ablage"].map((name) => join(ort, name));
-  ablage({ datei: join(ordner, "kind.json"), testdatei: a, abdeckung: () => STAND })();
-  assert.deepEqual(mitKindern({ [a]: { 3: 1 }, [b]: {} }, ordner), { [a]: { 1: 3, 2: 1, 3: 1 }, [b]: {} });
-  ablage({ datei: join(ordner, "fremd.json"), testdatei: fremd, abdeckung: () => STAND })();
-  assert.throws(() => mitKindern({ [a]: {}, [b]: {} }, ordner), (fehler) => fehler.message.includes(fremd));
+test("Die abgelegte Abdeckung eines Kindes zählt für seine Testdatei, und eine Abdeckung mit fremder oder schon gelöschter Testdatei wird übersprungen und gezählt, statt abzubrechen", (context) => {
+  const ort = probeDirectory(context, { "a.test.js": "", "b.test.js": "", "fremd.test.js": "", "weg/zwischen.mjs": "", "ablage/leer.txt": "" });
+  const [a, b, fremd, weg, ordner] = ["a.test.js", "b.test.js", "fremd.test.js", "weg", "ablage"].map((name) => join(ort, name));
+  const geloescht = join(weg, "zwischen.mjs");
+  const ablegen = (name, testdatei) => ablage({ datei: join(ordner, name), testdatei, abdeckung: () => STAND })();
+  ablegen("kind.json", a);
+  ablegen("fremd.json", fremd);
+  ablegen("geloescht.json", geloescht);
+  rmSync(weg, { recursive: true });
+  const { perTest, ohneTestdatei } = mitKindern({ [a]: { 3: 1 }, [b]: {} }, ordner);
+  assert.deepEqual(perTest, { [a]: { 1: 3, 2: 1, 3: 1 }, [b]: {} });
+  assert.deepEqual(ohneTestdatei.toSorted(), [fremd, geloescht].toSorted());
+});
+
+test("Eine Kind-Abdeckung, deren Testdatei sich aus einem anderen Grund als Fehlen nicht auflösen lässt, bricht das Einsammeln weiter ab", (context) => {
+  const ort = probeDirectory(context, { "a.test.js": "", "ablage/leer.txt": "" });
+  const [a, ordner] = ["a.test.js", "ablage"].map((name) => join(ort, name));
+  ablage({ datei: join(ordner, "kind.json"), testdatei: join(a, "zwischen.mjs"), abdeckung: () => STAND })();
+  assert.throws(() => mitKindern({ [a]: {} }, ordner), { code: NICHT_IM_ORDNER });
+});
+
+test("Ein Test, dessen Enkelprozess über einen danach gelöschten Zwischenprozess ohne Testdatei-Angabe läuft, bricht die Mutationsprüfung nicht ab, und die Ausgabe zählt die übersprungene Kind-Abdeckung", (context) => {
+  const repo = probeRepository(context, {
+    ...BASIS,
+    [STARTWEG]: startweg(),
+    "test/enkel-zahl.mjs": [ZAHL, "einordnen(0);", ""].join("\n"),
+    "test/verwaist.test.js": verwaisttest(),
+  });
+  cpSync(join(REPO_ROOT, WERKZEUGORDNER), join(repo, WERKZEUGORDNER), { recursive: true });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), [], lauf.stdout);
+  assert.ok(schluessel(lauf.stdout, UEBERSPRUNGEN).includes("1"), lauf.stdout);
 });
 
 test("Ein Kind, dessen Ablageordner schon weggeräumt ist, legt nichts ab und läuft weiter, jede andere Störung beim Ablegen bricht ab", (context) => {

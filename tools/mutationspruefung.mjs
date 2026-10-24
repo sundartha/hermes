@@ -17,7 +17,7 @@ import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
-import { KINDABDECKUNG } from "./mutationspruefung/kindabdeckung.mjs";
+import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
@@ -218,8 +218,10 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
   legeSandboxordnerAn(cwd());
   const beginn = Date.now();
   const genau = zeilen.every((bereich) => !Array.isArray(bereich));
+  const kindbericht = kindabdeckungsBericht();
   const optionen = {
     ...KONFIGURATION,
+    ...kindbericht.option,
     testRunner: KINDABDECKUNG,
     appendPlugins: [KINDABDECKUNG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
     ...(genau ? { ignorers: [GENAU] } : {}),
@@ -233,6 +235,8 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
   const ergebnisse = (await new Stryker(optionen).runMutationTest()).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
   const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
   console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
+  const uebersprungen = kindbericht.ohneTestdatei();
+  if (uebersprungen > 0) console.log(`${datei}: Kind-Abdeckung ohne Testdatei dieses Probelaufs übersprungen: ${uebersprungen}`);
   return ergebnisse;
 }
 

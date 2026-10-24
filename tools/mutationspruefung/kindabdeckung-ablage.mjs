@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 const ABLAGE = /\.json$/;
 const ENTWURF = ".teil";
-const ORDNER_WEG = "ENOENT";
+const WEG = "ENOENT";
 
 function hinzu(summe, zaehler) {
   const neu = { ...summe };
@@ -21,19 +21,29 @@ export function ablage({ datei, testdatei, abdeckung }) {
       writeFileSync(entwurf, JSON.stringify({ testdatei, abdeckung: summe }));
       renameSync(entwurf, datei);
     } catch (fehler) {
-      if (fehler.code !== ORDNER_WEG) throw fehler;
+      if (fehler.code !== WEG) throw fehler;
     }
   };
+}
+
+function aufgeloest(testdatei) {
+  try {
+    return realpathSync(testdatei);
+  } catch (fehler) {
+    if (fehler.code !== WEG) throw fehler;
+    return undefined;
+  }
 }
 
 export function mitKindern(perTest, ordner) {
   const nachPfad = new Map(Object.keys(perTest).map((testdatei) => [realpathSync(testdatei), testdatei]));
   const ergaenzt = { ...perTest };
+  const ohneTestdatei = [];
   for (const datei of readdirSync(ordner).filter((name) => ABLAGE.test(name))) {
     const { testdatei, abdeckung } = JSON.parse(readFileSync(join(ordner, datei), "utf8"));
-    const ziel = nachPfad.get(realpathSync(testdatei));
-    if (ziel === undefined) throw new Error(`Kind-Abdeckung ohne Testdatei dieses Probelaufs: ${testdatei}`);
-    ergaenzt[ziel] = hinzu(ergaenzt[ziel], abdeckung);
+    const ziel = nachPfad.get(aufgeloest(testdatei));
+    if (ziel === undefined) ohneTestdatei.push(testdatei);
+    else ergaenzt[ziel] = hinzu(ergaenzt[ziel], abdeckung);
   }
-  return ergaenzt;
+  return { perTest: ergaenzt, ohneTestdatei };
 }
