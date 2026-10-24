@@ -20,6 +20,13 @@
     "nichtAngenommen": "Im Produktcode einen Sonderfall genau für die Eingabe des Tests einbauen oder den Test über die Kommandozeile ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hältst du den Test für falsch, änderst du nichts weiter und antwortest als Letztes mit „Auftrag passt nicht: der Abnahmetest erwartet <X>, das Szenario verlangt <Y>“; bricht ein bestehender Test, weil der Auftrag das Verhalten absichtlich ändert, mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“."
   },
+  "hooks/bash-schreibschutz": {
+    "liste": "H6 und H9",
+    "wozu": "Die Schutz-Hooks der Agenten sehen nur Edit und Write. Schreibt ein Agent über die Kommandozeile, prüft sie niemand, und ein Formfehler wie eine liegengebliebene Sicherungsdatei von sed -i macht erst die Prüfung nach dem Agenten rot und kostet eine ganze Runde. Eine Liste verbotener Befehle wird nie vollständig; deshalb läuft nur durch, was auf einer gemessenen Liste lesender und prüfender Befehle steht.",
+    "behebung": "Die Datei mit Edit oder Write ändern; die Kommandozeile nur für die erlaubten Prüf- und Lesebefehle nutzen, etwa npm test, npm run lint, git status, git diff, git log, git show, grep, sed -n, cat, head, tail, npx eslint oder npx prettier --check, und lange Ausgaben über eine Pipe kürzen oder in eine Datei unter /tmp außerhalb des Repos umleiten.",
+    "nichtAngenommen": "Denselben Schreibzugriff in eine Form bringen, die der Hook durchlässt, etwa über einen Interpreter, ein eigenes Skript, ein npm-Skript, eine Variable oder einen umgeschriebenen Befehl. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Sperrt der Hook einen Prüf- oder Lesebefehl, der nichts schreibt, schreibst du ihn in eine erlaubte Form, etwa Dateinamen wörtlich statt aus einer Befehlsersetzung oder einen absoluten Pfad statt cd außerhalb des Repos; geht das nicht, antwortest du als Letztes mit „Auftrag passt nicht: <Befehl> steht nicht auf der Erlaubtliste“."
+  },
   "hooks/belege-schuetzen": {
     "liste": "H9",
     "wozu": "Unter .fortschritt/ liest das Skript ab, ob ein Auftrag grün ist. Schreibt ein Agent dort, könnte er sich selbst grün melden, und ein Auftrag gälte als erledigt, dessen Tests nie bestanden haben.",
