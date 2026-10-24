@@ -12,6 +12,7 @@ import { bereichSchluessel, brauchtRotenTest, istPitchPhase, istTestdatei, ladeP
 import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
+import { TEIL_DECKEL, deckelAus } from "./planung/deckel.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
 import { MELDUNG, PRUEFUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 import { listHint } from "../testschutz/freigabe.mjs";
@@ -20,7 +21,8 @@ export const NEU_GESCHNITTEN = "neu geschnitten";
 export const NEUSCHNITTE_JE_AUFTRAG = 1;
 export const PLANUNG_VERSUCHE = 2;
 const PHASENDATEI = "phase.json";
-const PFLICHT = ["pitch.md", "sicherheit.md"];
+const PITCH = "pitch.md";
+const PFLICHT = [PITCH, "sicherheit.md"];
 const DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
 const NEUSCHNITT_TEIL = /-n[1-9]\d*(?=-|$)/g;
 const NUMMER = /^[1-9]\d*$/;
@@ -35,6 +37,7 @@ const ERGEBNIS = "ergebnis.json";
 const ERSTER_VERSUCH = 1;
 const ZWEITER_VERSUCH = 2;
 const EXIT_TEAM_BEFUNDE = 4;
+const EXIT_TEAM_DECKEL = 5;
 const PHASE_MIT_BEFUNDEN = "die Phase mit dem neuen Schnitt hat Befunde";
 const CODEBLOCK = "```";
 
@@ -84,6 +87,7 @@ function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befun
       `Freigegebene Dokumente: ${dokumente.join(", ")}`,
       `Schon übernommen: ${fertig.length > 0 ? fertig.join(", ") : "keiner"}`,
       `Die neuen Aufträge heißen ${auftrag.id}-n1, ${auftrag.id}-n2 und so weiter.`,
+      "Die Abnahmedatei und die Änderungsdateien der Szenarien bleiben, wie sie sind; die neuen Aufträge übernehmen sie, statt sie umzubenennen.",
     ]),
     testPrompt(phase, auftrag),
     ...zweckAbschnitt(gestoppt, arten),
@@ -274,6 +278,7 @@ function teamEingabe(kontext, ort, vorher) {
     kopf: neuschnittPrompt(kontext, ort, vorher),
     verlauf: gestoppt.verlauf,
     hinweise: gestoppt.hinweise ?? [],
+    deckel: vorher.deckel,
   };
 }
 
@@ -313,7 +318,8 @@ function planeNeu(kontext, ort, vorher) {
     if (!ergebnis.neu) zuruecksetzen(root, stand.kopf);
   }
   const arten = ergebnis.befunde && ergebnis.arten === undefined ? { arten: teamArten(lauf) } : {};
-  return { ...ergebnis, ...arten, planung: lauf.planung, sitzungen: lauf.sitzungen ?? [] };
+  const deckel = lauf.exitCode === EXIT_TEAM_DECKEL ? { deckel: lauf.grund } : {};
+  return { ...ergebnis, ...arten, ...deckel, planung: lauf.planung, sitzungen: lauf.sitzungen ?? [] };
 }
 
 function pitchFrage({ phase, auftrag }, gestoppt, versuch) {
@@ -327,10 +333,15 @@ function versuchsZeilen(versuch, nummer) {
   return [`Neuschnitt ${nummer}: abgelehnt`, ...versuch.befunde];
 }
 
-function ohneErfolg(gestoppt, versuche) {
-  const satz = versuche.at(-1).passtNicht === undefined
+function ohneErfolgSatz(letzter) {
+  if (letzter.deckel !== undefined) return `Der Neuschnitt hat am Kostendeckel angehalten; ein weiterer Versuch lief nicht. ${letzter.deckel}`;
+  return letzter.passtNicht === undefined
     ? "Der Planer hat den Auftrag nicht so neu geschnitten, dass pruefe und die Abdeckungsprüfung grün sind."
     : "Der Planer meldet, dass sich der Auftrag mit den freigegebenen Dokumenten nicht neu schneiden lässt.";
+}
+
+function ohneErfolg(gestoppt, versuche) {
+  const satz = ohneErfolgSatz(versuche.at(-1));
   return { ...gestoppt, kopf: `${gestoppt.kopf}\n\n${satz}`, verlauf: [...gestoppt.verlauf, ...versuche.flatMap((versuch, index) => versuchsZeilen(versuch, index + 1))] };
 }
 
@@ -339,13 +350,28 @@ function grenzeErreicht(gestoppt) {
   return { ...gestoppt, kopf: `${gestoppt.kopf}\n\n${satz}` };
 }
 
+function freigabeDesNeuschnitts(root, ort) {
+  return deckelAus(undefined, readFileSync(join(root, ort.ordner, PITCH), "utf8")).deckel ?? TEIL_DECKEL;
+}
+
+function verbraucht(root, liste) {
+  return kostenDesAuftrags(root, liste.flatMap(({ sitzungen }) => sitzungen)).summe.gesamt;
+}
+
+function endetDieVersuche(versuch) {
+  return Boolean(versuch.neu) || [versuch.frage, versuch.passtNicht, versuch.deckel].some((feld) => feld !== undefined);
+}
+
 function versuche(kontext, ort, gestoppt) {
+  const freigabe = freigabeDesNeuschnitts(kontext.root, ort);
   const liste = [];
   while (liste.length < PLANUNG_VERSUCHE) {
     const vorher = liste.at(-1);
-    const versuch = planeNeu(kontext, ort, { gestoppt, befunde: vorher?.befunde ?? [], arten: vorher?.arten ?? [] });
+    const bisher = verbraucht(kontext.root, liste);
+    if (bisher >= freigabe) return [...liste.slice(0, -1), { ...vorher, deckel: `Deckel ${freigabe} Token: die Versuche davor haben ${bisher} verbraucht; der nächste Versuch startet nicht.` }];
+    const versuch = planeNeu(kontext, ort, { gestoppt, befunde: vorher?.befunde ?? [], arten: vorher?.arten ?? [], deckel: freigabe - bisher });
     liste.push(versuch);
-    if (versuch.neu || versuch.frage !== undefined || versuch.passtNicht !== undefined) break;
+    if (endetDieVersuche(versuch)) break;
   }
   return liste;
 }

@@ -56,7 +56,7 @@ test("Pitch- und Zerlegungszeilen zählen nur am Zeilenanfang und ein Umbau ohne
   const ohneAbdeckung = ["schnitt fehlt: die Antwort enthält kein JSON in der verlangten Form"];
   assert.deepEqual(versuche.map((versuch) => ohne(versuch, "planung")), [{ befunde: ohneAbdeckung }, { befunde: [OHNE_EMPFEHLUNG] }]);
   const [erster, zweiter] = prompts(datei("prompt-planer.txt"));
-  const kopf = [GESTOPPT, "", `Phasendatei: ${PHASENDATEI}`, `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/design.md, ${ORDNER}/sicherheit.md`, "Schon übernommen: keiner", "Die neuen Aufträge heißen a1-n1, a1-n2 und so weiter.", "", "## Auftrag", ""].join("\n");
+  const kopf = [GESTOPPT, "", `Phasendatei: ${PHASENDATEI}`, `Freigegebene Dokumente: ${ORDNER}/pitch.md, ${ORDNER}/design.md, ${ORDNER}/sicherheit.md`, "Schon übernommen: keiner", "Die neuen Aufträge heißen a1-n1, a1-n2 und so weiter.", "Die Abnahmedatei und die Änderungsdateien der Szenarien bleiben, wie sie sind; die neuen Aufträge übernehmen sie, statt sie umzubenennen.", "", "## Auftrag", ""].join("\n");
   assert.ok(erster.startsWith(kopf), erster);
   assert.ok(erster.includes("\n## Verlauf\n\n```\nRunde 1: "), erster);
   assert.ok(erster.endsWith("> Ich finde keinen Weg im Bereich.\n```\n"), erster);
