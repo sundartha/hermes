@@ -69,6 +69,8 @@ Antwort mit der Schnittliste (`schema` und `bereichsgrund` nur, wenn sie gelten;
 }}
 ```
 
+Nennt eine Annahme eine Stelle als `<Datei>:<Zeile>` oder `<Datei>:<von>-<bis>`, nennt sie auch in Backticks einen Namen aus dem Bericht, der in genau diesen Zeilen steht (etwa die Funktion, deren Kopf in den Zeilen liegt), weil das Skript jede Zeilenangabe einer Annahme an diesem Namen im Code prüft.
+
 ## Befunde
 
 Betreffen die Befunde deine Gliederung, antworte mit der ganzen korrigierten Gliederung im Format aus „Gliederung“.
