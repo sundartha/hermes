@@ -28,6 +28,11 @@ Nach dieser Änderung <wer> <was, von außen sichtbar oder mit konkretem Wert me
 - nicht berührt: `<Datei>:<Funktion>`, weil <wo die Änderung stattdessen liegt>
 (oder: keine, weil <welche Dateien mit karte geprüft sind und dass die Änderung dort keine Funktion mit Lint-Befunden trifft>)
 
+## Löschen
+(nur wenn die Änderung Code entfernt)
+- `<Datei>:<Funktion>`
+- `<Datei>:/<route>`
+
 ## Anforderungen
 
 ### Regel R1: <eine Regel in einem Satz>
