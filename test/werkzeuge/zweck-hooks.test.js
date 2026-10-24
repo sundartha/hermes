@@ -6,13 +6,12 @@ import { test } from "node:test";
 
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { gelesen } from "../../tools/syntaxbaum.mjs";
-import { BLOCKING_EXIT_CODE, HOOKS_DIRECTORY, REPO_ROOT, probeDirectory, runHook } from "./probe-repo.js";
+import { BLOCKING_EXIT_CODE, HOOKS_DIRECTORY, REPO_ROOT, hookScript, probeDirectory, runHook } from "./probe-repo.js";
 
 const TEXTE = JSON.parse(readFileSync(join(REPO_ROOT, "tools/zweck/hooks.json"), "utf8"));
 const PRAEFIX = "hooks/";
 const EINSTELLUNGEN = [".claude/settings.json", ...readdirSync(join(REPO_ROOT, ".claude/rollen")).map((name) => `.claude/rollen/${name}`)];
 const GIT_HOOKS = readdirSync(join(REPO_ROOT, ".githooks")).map((name) => `.githooks/${name}`);
-const SKRIPT_PFAD = /\.claude\/hooks\/([\w-]+\.(?:mjs|sh))/;
 const ZEIGEN_AUFRUF = /zweck-zeigen\.mjs((?: [a-z]+\/[a-z-]+)+)/g;
 const SPERRENDER_EXIT = /\bexit [1-9]/;
 const LOKALER_IMPORT = /^\.\/[\w-]+\.mjs$/;
@@ -32,7 +31,7 @@ function eingetrageneSkripte() {
       .flat()
       .flatMap(({ hooks }) => hooks.map(({ command }) => command)),
   );
-  return [...new Set(befehle.map((befehl) => SKRIPT_PFAD.exec(befehl)?.[1] ?? befehl))];
+  return [...new Set(befehle.map(hookScript))];
 }
 
 function knoten(baum) {

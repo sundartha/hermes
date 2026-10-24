@@ -110,6 +110,11 @@ export function failingTest(name, expected, importPath) {
 
 export const HOOKS_DIRECTORY = join(REPO_ROOT, ".claude/hooks");
 export const BLOCKING_EXIT_CODE = 2;
+const HOOK_SCRIPT_PATH = /\.claude\/hooks\/([\w-]+\.(?:mjs|sh))/;
+
+export function hookScript(command) {
+  return HOOK_SCRIPT_PATH.exec(command)?.[1] ?? command;
+}
 
 export function runHook(hook, { cwd, input, environment = {} }) {
   const interpreter = hook.endsWith(".sh") ? "bash" : process.execPath;
