@@ -1,0 +1,92 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:548"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:16"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:22"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/utils/text.js:5"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:548"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:209"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:15"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:16"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:22"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/call-memory.js:15"
+  },
+  {
+    "schluessel": "ausweg:S1:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/al-p12-call-memory.test.js:154"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

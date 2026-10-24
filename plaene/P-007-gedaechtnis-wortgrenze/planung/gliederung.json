@@ -1,0 +1,26 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S2",
+        "S3",
+        "B1",
+        "B2"
+      ],
+      "eingang": "MCP-Werkzeug `place_call` (Outbound, Telnyx-Engine, Konto mit `allowCallMemory: true`), danach Telnyx-Webhook mit der Äußerung des Angerufenen; der Prompt an den Sprachmodell-Anbieter entsteht in `src/claude.js` (`:36`, `:55-58`, Gedächtnisblock `:208-213`) aus den Zeilen von `memoryLine`/`budgetedMemoryLines` in `src/call-memory.js` und ist im Test über die Anthropic-Attrappe in `test/helpers.js` (`:12`, `:43`, `:48`) sichtbar",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie sieht `memoryLine` in `src/call-memory.js` (laut Design Doc etwa Zeilen 15-23) heute genau aus: In welcher Reihenfolge werden Ergebnis und Fakten mit `singleLine` (Zeilen 10-13) gefaltet, mit `.slice(0, MEMORY_MAX_OUTCOME_CHARS)` (100, Zeile 6/16) und `.slice(0, MEMORY_MAX_ENTRY_CHARS)` (200, Zeile 22) gekürzt, und mit welchem Trenner werden Ergebnis und Fakten zu einer Zeile verbunden (der Pitch erwartet „; “ zwischen Ergebnis und jedem Fakt)? Was passiert bei leerem Ergebnis oder ohne Fakten?",
+        "Wie verhält sich `clampAtWordBoundary(text, maxChars)` in `src/utils/text.js:1-6` genau: Gibt sie bei Kürzung den Text bis vor das letzte Leerzeichen innerhalb der ersten `maxChars` Zeichen zurück (ohne das Leerzeichen), kürzt sie ohne Leerzeichen hart auf `maxChars`, und was liefert sie, wenn das letzte Leerzeichen an Position 0 liegt? Wird sie als benannter Export importiert, und darf `src/call-memory.js` laut `.dependency-cruiser.cjs` aus `src/utils/` importieren (gibt es dort schon einen Import)?",
+        "Welche Tests in `test/al-p12-call-memory.test.js` (Faltung AL-P12-11 ab Zeile 152, Budget AL-P12-12, Prompt AL-P12-13 bis -15, bis Zeile 235) prüfen den genauen Inhalt oder die genaue Länge einer heute hart gekürzten Zeile (etwa eine Zeile von genau 100 oder 200 Zeichen ohne „…“ oder ein Wortstück am Ende)? Würde einer davon rot, wenn eine Angabe über ihrer Grenze an der Wortgrenze auf Grenze minus 1 gekürzt und mit „…“ (U+2026) versehen wird? Bitte je Test Name und Zeilen nennen.",
+        "Wie erreicht ein Test heute den echten Eingang bis zum Prompt: Welche Hilfen in `test/helpers.js` (Anthropic-Attrappe Zeilen 12, 43, 48) und in `test/al-p12-call-memory.test.js` legen ein Konto mit `allowCallMemory: true` und Telnyx-Engine an, speichern einen früheren Outbound-Anruf an eine Nummer mit Ergebniskarte (Ergebnis und Fakten), lösen einen neuen Anruf über `place_call` aus und schicken eine Äußerung des Angerufenen über den Telnyx-Webhook (`POST /voice/turn`, Signaturprüfung im Test)? Kommt dabei die Anweisung an den Sprachmodell-Anbieter als Text in der Attrappe an, sodass ein Test die Gedächtniszeile darin finden kann?",
+        "Verändert das Speichern der Ergebniskarte (`normalizeCallResult` in `src/call-result.js`, harte Kürzung auf 200 Zeichen in Zeilen 10-15, Pfad `src/claude.js:718-751`) die Eingaben der Szenarien: ein Ergebnis von 101 Zeichen, eines von 140 Zeichen ohne Leerzeichen (`https://beispiel.de/` + 120-mal `a`), eines von genau 100 Zeichen, drei Fakten von 69, 52 und 36 Zeichen? Gibt es dort Trimmen, eine Höchstzahl an Fakten oder eine andere Umformung, die vor `memoryLine` greift?",
+        "Liest außer `budgetedMemoryLines` (`src/call-memory.js:25-31`) und `callMemorySection` (`src/claude.js:208-213`) noch eine andere Stelle in `src/` die Ausgabe von `memoryLine`, und rechnet `budgetedMemoryLines` mit der Länge der Zeilen (Budget 600) so, dass eine um „…“ ergänzte Zeile anders behandelt würde?",
+        "Hat `memoryLine` in `src/call-memory.js` Lint-Befunde (Design Doc sagt: keine), und gibt es unter `test/anrufe/` schon Tests, die als Ordner für einen neuen Abnahmetest des Bereichs `anrufe` dienen?"
+      ]
+    }
+  ]
+}
