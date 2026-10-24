@@ -224,8 +224,8 @@ async function warteAufSperre(sperre) {
   }
 }
 
-export function befundNachricht(befunde) {
-  return ["## Befunde", "", ...befunde.map((befund) => `- ${befund}`), ""].join("\n");
+export function befundNachricht(befunde, anhang = []) {
+  return ["## Befunde", "", ...befunde.map((befund) => `- ${befund}`), "", ...anhang].join("\n");
 }
 
 function meldeAbsturz(wer, lauf) {
@@ -292,9 +292,9 @@ export class Team {
     return true;
   }
 
-  ruecksenden(wer, befunde) {
+  ruecksenden(wer, befunde, anhang = []) {
     this.ruecksendungen[wer.rolle] = (this.ruecksendungen[wer.rolle] ?? 0) + 1;
-    return befundNachricht(befunde);
+    return befundNachricht(befunde, anhang);
   }
 
   async frage(wer, nachricht) {
