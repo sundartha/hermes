@@ -11,6 +11,7 @@ import { messung } from "./auftrag/planung/messung.mjs";
 import { plane } from "./auftrag/planung/plane.mjs";
 import { schnittBefehl } from "./auftrag/planung/schnitt.mjs";
 import { dateien, suche } from "./auftrag/planung/suche.mjs";
+import { umfangBefehl } from "./auftrag/planung/umfang.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
@@ -42,6 +43,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
+  "        node tools/auftrag.mjs umfang plaene/P-<Nummer>-<kurzname>/   (misst Nummern, belegte Dateien, Funktionen und Tests des Pitches als JSON; startet nichts, schreibt nichts)",
   "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>] [--issue <Nummer>]",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
@@ -100,6 +102,7 @@ const BEFEHLE = {
   karte: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => karte(datei, root, { json }) },
   messung: { argumente: 1, schalter: ["json"], fuehreAus: ([datei], root, { json }) => messung(datei, { json }) },
   schnitt: { argumente: 1, fuehreAus: ([ordner], root) => schnittBefehl(ordner, root) },
+  umfang: { argumente: 1, fuehreAus: ([ordner], root) => umfangBefehl(ordner, root) },
   plane: { argumente: 1, schalter: ["fortsetzen"], fuehreAus: ([ordner], root, { fortsetzen, deckel, issue }) => plane(ordner, root, { fortsetzen, deckel, issue }) },
   suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
   dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },

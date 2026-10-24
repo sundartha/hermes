@@ -87,6 +87,7 @@ export function planBericht(lauf, { root, team }) {
     phase: team.phase,
     exit: lauf.exit,
     grund: lauf.grund,
+    umfang: lauf.umfang,
     auftraege: auftraegeDes(lauf.schnitt),
     annahmen: lauf.annahmen.map(annahmeText),
     fehlendeSzenarien: liste(lauf.schnitt?.fehlendeSzenarien),

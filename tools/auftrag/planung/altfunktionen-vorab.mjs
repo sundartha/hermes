@@ -77,18 +77,18 @@ function istDatei(root, datei) {
   return pfadIstSauber(datei) && existsSync(join(root, datei)) && statSync(join(root, datei)).isFile();
 }
 
-function pruefbareDateien(root, dateien) {
+export function pruefbareDateien(root, dateien) {
   const vorhanden = [...new Set(dateien)].filter((datei) => istDatei(root, datei)).toSorted();
   if (vorhanden.length === 0) return [];
   const ignoriert = new Set(ignorierteDateien(root, vorhanden));
   return vorhanden.filter((datei) => !ignoriert.has(datei));
 }
 
-function genannteAltfunktionen(root, stellen) {
+export function genannteFunktionen(root, stellen) {
   const dateien = new Set(pruefbareDateien(root, stellen.map(({ datei }) => datei)));
   const aenderungen = Object.groupBy(stellen.filter(({ datei }) => dateien.has(datei)), ({ quelle }) => quelle);
   const bericht = { nummern: Object.fromEntries(Object.entries(aenderungen).map(([quelle, eigene]) => [quelle, { aenderungen: eigene }])) };
-  return funktionsListe(root, [bericht]).filter(istAltfunktion);
+  return funktionsListe(root, [bericht]);
 }
 
 function gleich(eintrag, funktion) {
@@ -128,5 +128,5 @@ export function altfunktionenVorab(root, dokumente) {
   const { eintraege, fehler } = altfunktionenAusPitch(dokumente["pitch.md"] ?? "");
   if (fehler.length > 0) return { form: fehler, offen: [] };
   const stellen = genannteStellen(dokumente);
-  return { form: [], offen: [...unbenannte(genannteAltfunktionen(root, stellen), eintraege, stellen), ...falscheEintraege(root, eintraege)] };
+  return { form: [], offen: [...unbenannte(genannteFunktionen(root, stellen).filter(istAltfunktion), eintraege, stellen), ...falscheEintraege(root, eintraege)] };
 }
