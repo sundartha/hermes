@@ -63,6 +63,7 @@ const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du i
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
+const WEG_ANGEHALTEN = "die Wegprüfung blieb unvollständig, weil plane am Kostendeckel anhielt";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 const KONFLIKTE = "Bereichskonflikte";
@@ -178,6 +179,8 @@ export class Planung {
     this.wegpruefungen = [];
     this.wegZaehler = new Map();
     this.wegOffen = [];
+    this.wegAusstehend = [];
+    this.bezahlteStaende = new Map();
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
     this.beantworteteWellen = [];
@@ -363,6 +366,7 @@ export class Planung {
   async berichtVon(wer, text, nummern) {
     const erste = this.pruefeBericht(await this.team.frage(wer, text), nummern);
     if (erste.befunde.length === 0) return erste;
+    this.merkeBezahlt(nummern, { ergebnis: erste });
     this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
     const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, erste.befunde));
     return this.pruefeBericht(zweite, nummern);
@@ -371,6 +375,21 @@ export class Planung {
   async erkunde(wer, text, nummern) {
     const ergebnis = await this.berichtVon(wer, text, nummern);
     return ergebnis.befunde.length === 0 ? this.wegPruefung(wer, ergebnis, nummern) : ergebnis;
+  }
+
+  merkeBezahlt(nummern, stand) {
+    const schluessel = nummern.join(", ");
+    this.bezahlteStaende.set(schluessel, { ...this.bezahlteStaende.get(schluessel), ...stand });
+  }
+
+  bezahlterStandOderWirf(fehler, nummern) {
+    const stand = this.bezahlteStaende.get(nummern.join(", "));
+    if (!(fehler instanceof Ende) || fehler.exit !== EXIT_DECKEL || stand === undefined) throw fehler;
+    if (stand.weg === undefined) return stand.ergebnis;
+    const { weg, runden, sauber, offen, sauberGeprueft } = stand.weg;
+    const halt = [...offen, gruppenWegZeile(nummern, WEG_ANGEHALTEN)];
+    const ergebnis = runden === 0 ? { ...sauber, weg: { nummern, offen: halt } } : this.verbucheWegpruefung({ ...weg, runden }, sauber, halt);
+    return sauberGeprueft ? ergebnis : { ...ergebnis, wegAusstehend: nummern };
   }
 
   wegNachricht(nummern, bericht, nachKorrektur) {
@@ -411,14 +430,17 @@ export class Planung {
     const weg = { pruefer: this.team.teilnehmer("pruefer-planung"), schleife: this.schleife("weg"), nummern };
     let sauber = ergebnis;
     let text = this.wegNachricht(nummern, sauber.bericht, false);
+    this.merkeBezahlt(nummern, { weg: { weg, runden: 0, sauber, offen: [], sauberGeprueft: false } });
     for (let runden = 1; ; runden += 1) {
       this.pruefeSchritt(weg.pruefer.rolle, `Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const runde = await this.wegRunde(weg, text);
       if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
+      this.merkeBezahlt(nummern, { weg: { weg, runden, sauber, offen: runde.offen, sauberGeprueft: true } });
       this.pruefeSchritt(wer.rolle, `Korrektur nach der Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
       if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
       sauber = neu;
+      this.merkeBezahlt(nummern, { weg: { weg, runden, sauber, offen: runde.offen, sauberGeprueft: false } });
       text = this.wegNachricht(nummern, sauber.bericht, true);
     }
   }
@@ -428,10 +450,17 @@ export class Planung {
     return { rolle: wer.rolle, lauf: () => this.erkunde(wer, text, nummern) };
   }
 
+  erkundungsLaufMitBezahltemStand(gruppe) {
+    const wer = this.team.teilnehmer("erkunder");
+    const text = this.erkunderNachricht("Erkundung", gruppe);
+    return { rolle: wer.rolle, lauf: () => this.erkunde(wer, text, gruppe.nummern).catch((fehler) => this.bezahlterStandOderWirf(fehler, gruppe.nummern)) };
+  }
+
   async erkundeGruppen() {
-    const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkunderLauf(this.erkunderNachricht("Erkundung", gruppe), gruppe.nummern));
+    const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkundungsLaufMitBezahltemStand(gruppe));
     const ergebnisse = await this.welle(laeufe, "Erkundung");
     this.berichte = ergebnisse.map(({ bericht }) => bericht);
+    this.wegAusstehend = ergebnisse.flatMap(({ wegAusstehend }) => (wegAusstehend === undefined ? [] : [wegAusstehend]));
     for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
       merkeStellen(this.gesehen, ergebnis.bericht);
       this.uebernimmWeg(ergebnis);
@@ -449,7 +478,7 @@ export class Planung {
 
   legeFingerabdruck() {
     this.lege(NACHFRAGEN, this.beantworteteWellen);
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], nachfrageWellen: this.nachfrageWellen };
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, nachfrageWellen: this.nachfrageWellen };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
@@ -780,6 +809,8 @@ export class Planung {
     await this.gliedere();
     await this.erkundeGruppen();
     this.legeFingerabdruck();
+    const halt = this.kostendeckel?.halt ?? null;
+    if (halt !== null) throw new Ende(EXIT_DECKEL, halt);
     await this.planeAbSchnitt();
   }
 
@@ -803,6 +834,7 @@ class Fortsetzung extends Planung {
     this.wegOffen = zustand.wegOffen;
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
+    this.wegAusstehend = zustand.wegAusstehend;
     this.nachfrageWellen = zustand.nachfrageWellen;
     this.beantworteteWellen = nachfragen;
     return [];
@@ -812,8 +844,24 @@ class Fortsetzung extends Planung {
     return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...this.beantworteteWellen.flatMap(welleTeile), ...(await this.zuschnittTeile())]);
   }
 
-  laufe() {
-    return this.planeAbSchnitt();
+  async laufe() {
+    await this.pruefeAusstehendeWege();
+    await this.planeAbSchnitt();
+  }
+
+  ausstehenderWeg(nummern) {
+    const weg = { pruefer: this.team.teilnehmer("pruefer-planung"), schleife: this.schleife("weg"), nummern };
+    const sauber = { bericht: this.berichte.find(({ gruppe }) => gruppe.join(", ") === nummern.join(", ")) };
+    const lauf = async () => this.verbucheWegpruefung({ ...weg, runden: 1 }, sauber, (await this.wegRunde(weg, this.wegNachricht(nummern, sauber.bericht, false))).offen);
+    return { rolle: weg.pruefer.rolle, lauf };
+  }
+
+  async pruefeAusstehendeWege() {
+    if (this.wegAusstehend.length === 0) return;
+    const ergebnisse = await this.welle(this.wegAusstehend.map((nummern) => this.ausstehenderWeg(nummern)), "Wegprüfung nach dem Deckel-Halt");
+    for (const ergebnis of ergebnisse) this.uebernimmWeg(ergebnis);
+    this.wegAusstehend = [];
+    this.legeFingerabdruck();
   }
 }
 
