@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from "n
 import { basename, dirname, join, relative } from "node:path";
 
 import { vorgaengerBefunde } from "../teil-vorgaenger.mjs";
-import { deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
+import { TEIL_DECKEL, deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
 import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
 import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT } from "./nachricht.mjs";
@@ -195,7 +195,8 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   if (vorher.exit !== undefined) return vorher;
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
-  return reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
+  const reserviert = reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
+  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien) } : reserviert;
 }
 
 function teilStart(root, ordner, { fortsetzen, deckel }) {
@@ -205,6 +206,13 @@ function teilStart(root, ordner, { fortsetzen, deckel }) {
   const ergebnis = pruefeTeil(root, ordner, { teil, herkunft, deckel });
   if (ergebnis.exit !== undefined && !fortsetzen) rmdirSync(join(ordner, PLANUNG));
   return ergebnis;
+}
+
+function abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel }) {
+  return teilung.teile.map((eintrag) => {
+    const herkunft = herkunftDes(teilung, eintrag, ordner);
+    return { eintrag, herkunft, dokumente: teilTexte(eltern, { eintrag, teilDeckel, herkunft }) };
+  });
 }
 
 function schreibeOrdner(ziel, dokumente) {
@@ -221,10 +229,7 @@ function schreibeTeile(root, ordner, geteilt) {
   const eltern = texte(ordner);
   const topf = topfAus(topfBuch(root, basename(ordner)), { elternPitch: eltern[PITCH], teilung });
   if (topf.exit !== undefined) return topf;
-  const neu = teilung.teile.map((eintrag) => {
-    const herkunft = herkunftDes(teilung, eintrag, ordner);
-    return { eintrag, herkunft, dokumente: teilTexte(eltern, { eintrag, teilDeckel: topf.topf.teilDeckel, herkunft }) };
-  });
+  const neu = abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: topf.topf.teilDeckel });
   const befunde = neu.flatMap(({ eintrag, herkunft, dokumente }, stelle) => teilBefunde({ eltern, teil: dokumente, eintrag, herkunft, name: relative(root, ordner) }, relative(root, ziele[stelle])));
   if (befunde.length > 0) return { exit: EXIT_BEFUNDE, fehler: ["plane schreibt keinen Teil-Ordner, weil die abgeleiteten Teile Befunde haben:", ...befunde].join("\n") };
   neu.forEach(({ dokumente }, stelle) => schreibeOrdner(ziele[stelle], dokumente));
@@ -233,10 +238,18 @@ function schreibeTeile(root, ordner, geteilt) {
   return { exit: EXIT_GETEILT, fehler: [geteilt.fehler, kopf, ...ziele.map((ziel) => relative(root, ziel))].join("\n") };
 }
 
-export async function teile(root, ordner, { fortsetzen, umfang, deckel }) {
+export function ableitungsBefunde(ordner) {
+  const eltern = texte(ordner);
+  return (teilung) => abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: TEIL_DECKEL }).flatMap(({ eintrag, dokumente }) => nummernBefunde(dokumente, eintrag).map((befund) => `${eintrag.kuerzel}: ${befund}`));
+}
+
+export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
   const teil = teilStart(root, ordner, { fortsetzen, deckel });
-  if (teil !== undefined) return teil;
-  if (fortsetzen) return null;
-  const geteilt = await teilungHalt(root, ordner, { umfang, deckel });
-  return geteilt?.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
+  if (teil?.exit !== undefined) return teil;
+  if (teil !== undefined) return { deckel: teil.deckel, teil: true, umfang: await messe(teil.dateien) };
+  const umfang = await messe();
+  if (fortsetzen) return { umfang };
+  const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });
+  if (geteilt === null) return { umfang };
+  return geteilt.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
 }

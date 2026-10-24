@@ -898,10 +898,10 @@ async function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }
   if (kopfFehler !== undefined) return { fehler: kopfFehler };
   const halt = fortsetzen ? null : altfunktionenHalt(root, ordner);
   if (halt !== null) return halt;
-  const gemessen = await umfang(root, ordner);
   const ablage = legeAblageAn(ordner, fortsetzen);
-  const teilung = ablage === null ? await teile(root, ordner, { fortsetzen, umfang: gemessen, deckel }) : null;
-  return { deckel, issue, umfang: gemessen, fehler: ablage, ...teilung };
+  const messe = (dateien) => umfang(root, ordner, { dateien });
+  const teilung = ablage === null ? await teile(root, ordner, { fortsetzen, messe, deckel }) : null;
+  return { deckel, issue, fehler: ablage, ...teilung };
 }
 
 function ausgang(fehler) {
