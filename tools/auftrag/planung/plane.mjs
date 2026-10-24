@@ -30,6 +30,7 @@ import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWe
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
+import { mitKettenBefunden } from "./kette.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
@@ -364,7 +365,7 @@ export class Planung {
   }
 
   async berichtVon(wer, text, nummern) {
-    const erste = this.pruefeBericht(await this.team.frage(wer, text), nummern);
+    const erste = await mitKettenBefunden(this.root, this.pruefeBericht(await this.team.frage(wer, text), nummern));
     if (erste.befunde.length === 0) return erste;
     this.merkeBezahlt(nummern, { ergebnis: erste });
     this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
