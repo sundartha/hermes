@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 
 import { ladePhase } from "../format.mjs";
 import { VERLAUF, neuschnitt } from "./neuschnitt-team.mjs";
-import { EXIT_AUFRUF, liste, schreibeJsonAtomar } from "./plane.mjs";
+import { EXIT_AUFRUF } from "./nachricht.mjs";
+import { liste, schreibeJsonAtomar } from "./plane.mjs";
 
 const EINGABE = "eingabe.json";
 const TEXTFELDER = ["root", "ordner", "datei", "auftragId", "anlass", "kopf"];

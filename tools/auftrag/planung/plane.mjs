@@ -32,6 +32,7 @@ import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fi
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { mitKettenBefunden } from "./kette.mjs";
+import { EXIT_ABBRUCH, EXIT_ALTFUNKTIONEN, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GRUEN, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
@@ -44,23 +45,14 @@ import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
-export const EXIT_GRUEN = 0;
-export const EXIT_ABBRUCH = 1;
-export const EXIT_AUFRUF = 2;
-export const EXIT_PASST_NICHT = 3;
-export const EXIT_BEFUNDE = 4;
-export const EXIT_DECKEL = 5;
-export const EXIT_ALTFUNKTIONEN = 6;
 const PLANUNG = "planung";
 const SCHON_DA = "EEXIST";
 const PHASE = "phase.json";
 const DESIGN = "design.md";
 export const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
 const VORLAGE_ENTWURF = "## Entwurf je Bereich";
-const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"];
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const GELESEN = [...new Set([...PLANER_KONTEXT, ...ERKUNDER_KONTEXT, VORLAGE])];
-const JSON_EINRUECKUNG = 2;
 const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit `datei` und `ausweg` „nicht gefunden, weil `<Name>` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei.";
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
@@ -87,25 +79,8 @@ function zusammengefuegt(schluessel, ergebnisse) {
 
 export { liste, schreibeJsonAtomar };
 
-export function json(wert) {
-  return `\`\`\`json\n${JSON.stringify(wert, null, JSON_EINRUECKUNG)}\n\`\`\``;
-}
-
-export function abschnitt(titel, inhalt) {
-  return `### ${titel}\n\n${String(inhalt).trimEnd()}\n`;
-}
-
-export function nachricht(ueberschrift, teile) {
-  return [`## ${ueberschrift}`, "", ...teile].join("\n");
-}
-
 function punkte(eintraege, leer = "keine") {
   return eintraege.length === 0 ? leer : eintraege.map((eintrag) => `- ${eintrag}`).join("\n");
-}
-
-export function dateiText(root, pfad) {
-  const datei = join(root, pfad);
-  return existsSync(datei) ? readFileSync(datei, "utf8") : `${pfad} gibt es nicht.`;
 }
 
 export function prueferZeile({ schluessel, befund, fundstelle }) {
@@ -157,10 +132,6 @@ function konfliktTeil(konflikte) {
   const zeilen = konflikte.map(({ nummer, dateien }) => `${nummer}: ${dateien.join(", ")}`);
   const regel = `Die Produktdateien dieser Nummern haben als engsten gemeinsamen Ordner nur die Repo-Wurzel, und die Repo-Wurzel ist nie ein bereich; zulässig ist dann nur eine Liste genau dieser Dateien mit bereichsgrund und koppelndem Test. Klär das zuerst: ${konfliktAusweg(nummern)}. Löst deine Schnittliste einen Konflikt mit einer solchen Liste, ist er nicht mehr offen. Andere Nachfragen nimmt das Skript erst an, wenn kein Konflikt mehr offen ist. Weist es, solange derselbe Konflikt offen ist, zum zweiten Mal eine Nachfrage ab, endet die Planung mit Befunden.`;
   return [abschnitt(KONFLIKTE, `${regel}\n\n${punkte(zeilen)}`)];
-}
-
-export function nummernText(soll, nummern) {
-  return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
 }
 
 export class Planung {
