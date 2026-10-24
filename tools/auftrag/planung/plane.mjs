@@ -37,6 +37,7 @@ import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from
 import { DOKUMENTE, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
+import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
@@ -156,10 +157,6 @@ function konfliktTeil(konflikte) {
 
 export function nummernText(soll, nummern) {
   return nummern.map((nummer) => `#### ${nummer} (${soll.get(nummer)?.quelle})\n\n${soll.get(nummer)?.text}\n`).join("\n");
-}
-
-function dokumenteIm(ordner) {
-  return Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
 }
 
 export class Planung {
@@ -852,7 +849,7 @@ function altfunktionenHalt(root, ordner) {
   return { exit: EXIT_ALTFUNKTIONEN, fehler: [kopf, ...offen, zweck].join("\n") };
 }
 
-function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }) {
+async function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }) {
   const fehler = aufrufFehler(ordner, fortsetzen);
   if (fehler !== null) return { fehler };
   const pitch = readFileSync(join(ordner, PITCH), "utf8");
@@ -861,7 +858,9 @@ function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }) {
   const kopfFehler = deckelFehler ?? issueFehler;
   if (kopfFehler !== undefined) return { fehler: kopfFehler };
   const halt = fortsetzen ? null : altfunktionenHalt(root, ordner);
-  return halt ?? { deckel, issue, fehler: legeAblageAn(ordner, fortsetzen) };
+  if (halt !== null) return halt;
+  const gemessen = await umfang(root, ordner);
+  return { deckel, issue, umfang: gemessen, fehler: legeAblageAn(ordner, fortsetzen) };
 }
 
 function ausgang(fehler) {
@@ -879,6 +878,7 @@ function berichte(planung, ergebnis) {
   const lauf = {
     ...ergebnis,
     beginn: planung.beginn,
+    umfang: planung.umfang,
     schnitt: planung.schnitt,
     annahmen: planung.alleAnnahmen(),
     befunde: { ...planung.befunde, offen: ergebnis.offen },
@@ -892,9 +892,10 @@ function berichte(planung, ergebnis) {
   return ergebnis.exit;
 }
 
-function neuePlanung(root, ordner, { fortsetzen, deckel, issue }) {
+function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
+  planung.umfang = gemessen;
   planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
   planung.issue = issue;
   return planung;
@@ -907,13 +908,13 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
     console.error(werkzeug.join("\n"));
     return EXIT_AUFRUF;
   }
-  const { deckel, issue, fehler, exit = EXIT_AUFRUF } = pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
+  const { deckel, issue, umfang: gemessen, fehler, exit = EXIT_AUFRUF } = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
   if (fehler !== null) {
     console.error(fehler);
     return exit;
   }
   const nummern = nummernImOrdner(ordner);
-  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue });
+  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
