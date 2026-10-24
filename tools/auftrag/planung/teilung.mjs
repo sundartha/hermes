@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { istTestdatei, reihenfolge } from "../format.mjs";
 import { ueberschneiden } from "../sperren.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
+import { ALTFUNKTIONEN, altfunktionenAusPitch } from "./altfunktionen-vorab.mjs";
 import { teilungBefunde, zerlegungBefunde } from "./antworten.mjs";
 import { gemesseneKosten } from "./deckel.mjs";
 import { schreibeJsonAtomar } from "./erkundung.mjs";
 import { RUECKSENDUNGEN } from "./fortschritt.mjs";
-import { nummernImOrdner } from "./nummern.mjs";
+import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
@@ -21,6 +22,7 @@ const SZENARIO = /^[SB]/u;
 const BEDROHUNG = /^T/u;
 const ORDNER_ENDE = "/";
 const OHNE_VORGAENGER = "–";
+const UMBAU = "Umbau";
 const PITCH_NICHT_HIER = "„Pitch ändern“ gibt es bei der Teilung nicht; antworte mit der Teilung oder mit „Zerlegung passt nicht: …“";
 const ZUORDNUNG = [
   { feld: "nummern", muster: SZENARIO, fremd: "kein Szenario S oder B des Pitches" },
@@ -58,11 +60,15 @@ function codeDateien(dateien, loeschen) {
   return dateien.filter((datei) => !istTestdatei(datei) && !loeschen.has(datei));
 }
 
+function zaehler(genannt) {
+  return (wert) => genannt.filter((eintrag) => eintrag === wert).length;
+}
+
 function zuordnungBefunde(teile, soll) {
   return ZUORDNUNG.flatMap(({ feld, muster, fremd }) => {
     const eigene = [...soll.keys()].filter((nummer) => muster.test(nummer));
     const genannt = teile.flatMap((teil) => teil[feld]);
-    const zahl = (nummer) => genannt.filter((eintrag) => eintrag === nummer).length;
+    const zahl = zaehler(genannt);
     const falsch = eigene.filter((nummer) => zahl(nummer) !== 1).map((nummer) => regel(`${nummer} steht ${zahl(nummer)}-mal unter ${feld} statt genau einmal`));
     const fremde = [...new Set(genannt.filter((nummer) => !eigene.includes(nummer)))].map((nummer) => regel(`${nummer} unter ${feld} ist ${fremd}`));
     return [...falsch, ...fremde];
@@ -132,9 +138,21 @@ function ueberschneidungsBefunde(teile, nach) {
 }
 
 function loeschBefunde(teile, loeschen) {
-  const genannt = teile.flatMap(({ dateien }) => dateien);
-  const zahl = (datei) => genannt.filter((eintrag) => eintrag === datei).length;
+  const zahl = zaehler(teile.flatMap(({ dateien }) => dateien));
   return [...loeschen].filter((datei) => zahl(datei) !== 1).map((datei) => regel(`${datei} aus der Löschmenge steht ${zahl(datei)}-mal unter dateien statt genau einmal`));
+}
+
+function umbauAltfunktionen(pitch) {
+  return altfunktionenAusPitch(pitch ?? "").eintraege.filter(({ art }) => art === UMBAU).map(({ datei, funktion }) => ({ datei, name: `${datei}:${funktion}` }));
+}
+
+function umbauBefunde(teile, altfunktionen) {
+  const genannt = teile.flatMap(({ umbau = [] }) => umbau);
+  const zahl = zaehler(genannt);
+  const falsch = altfunktionen.filter(({ name }) => zahl(name) !== 1).map(({ name }) => regel(`${name} aus „${ALTFUNKTIONEN}“ steht ${zahl(name)}-mal unter umbau statt genau einmal`));
+  const fremde = [...new Set(genannt)].filter((name) => !altfunktionen.some((alt) => alt.name === name)).map((name) => regel(`${name} unter umbau ist keine Umbau-Altfunktion unter „${ALTFUNKTIONEN}“ im Pitch`));
+  const ohneDatei = teile.flatMap(({ kuerzel, umbau = [], dateien }) => altfunktionen.filter(({ name, datei }) => umbau.includes(name) && !dateien.includes(datei)).map(({ name, datei }) => regel(`${kuerzel} nennt ${name} unter umbau, hat ${datei} aber nicht unter dateien`)));
+  return [...falsch, ...fremde, ...ohneDatei];
 }
 
 function abdeckungBefunde(teile, belegt) {
@@ -142,7 +160,7 @@ function abdeckungBefunde(teile, belegt) {
   return belegt.filter((datei) => !genannt.some((eintrag) => beruehrt(eintrag, datei))).map((datei) => regel(`${datei} ist im Pitch belegt und steht in keinem Teil unter dateien`));
 }
 
-function schnittBefunde(teile, { soll, umfang, root, gliederung }) {
+function schnittBefunde(teile, { soll, umfang, umbau, root, gliederung }) {
   const nach = new Map(teile.map(({ kuerzel, abhaengigVon }) => [kuerzel, abhaengigVon]));
   const vorgaenger = [...vorgaengerBefunde(teile, nach), ...kreisBefunde(teile)];
   const loeschen = loeschDateien(umfang);
@@ -150,6 +168,7 @@ function schnittBefunde(teile, { soll, umfang, root, gliederung }) {
     ...zuordnungBefunde(teile, soll),
     ...teile.flatMap((teil) => teilBefunde(teil, { root, loeschen, gliederung })),
     ...loeschBefunde(teile, loeschen),
+    ...umbauBefunde(teile, umbau),
     ...abdeckungBefunde(teile, umfang.codeDateien),
     ...vorgaenger,
     ...(vorgaenger.length === 0 ? ueberschneidungsBefunde(teile, nach) : []),
@@ -176,6 +195,7 @@ class Teilung {
     this.ueber = ueber;
     this.ableitung = ableitung;
     this.dokumente = dokumenteIm(ordner);
+    this.umbau = umbauAltfunktionen(this.dokumente[PITCH]);
     this.team = team;
     this.planer = planer;
     this.gliederung = gliederung;
@@ -224,7 +244,7 @@ class Teilung {
     this.lege(ANTWORT, antwort.wert);
     const form = teilungBefunde(antwort.wert);
     if (form.length > 0) return { befunde: form };
-    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, root: this.root, gliederung: this.gliederung });
+    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, umbau: this.umbau, root: this.root, gliederung: this.gliederung });
     return { befunde: schnitt.length > 0 ? schnitt : this.ableitung(antwort.wert).map(regel) };
   }
 

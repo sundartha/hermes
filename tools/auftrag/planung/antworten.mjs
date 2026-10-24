@@ -109,6 +109,7 @@ function teilFormBefunde(teil, stelle) {
   if (!istKennung(teil.name)) befunde.push(`${ort}: name ist keine Kennung aus Buchstaben, Ziffern und Bindestrichen`);
   if (typeof teil.nurUmbau !== "boolean") befunde.push(`${ort}: nurUmbau ist kein Wahrheitswert`);
   if (!istText(teil.grund)) befunde.push(`${ort}: grund fehlt`);
+  if (teil.umbau !== undefined && !istTextListe(teil.umbau)) befunde.push(`${ort}: umbau ist keine Liste von Texten`);
   if (istTextListe(teil.dateien)) befunde.push(...teil.dateien.filter((datei) => !pfadIstSauber(datei)).map((datei) => `${ort}: ${datei} unter dateien ist kein relativer Pfad im Repo ohne ., .. und \\`));
   return befunde;
 }
