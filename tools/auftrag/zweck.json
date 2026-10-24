@@ -394,7 +394,7 @@
   "ci-lokal": {
     "liste": "ohne Nummer",
     "wozu": "Die Pflicht-Checks laufen erst nach dem Push und kosten je Runde viele Minuten. Am Ende der Phase fährt lauf oder phase deshalb alle günstigen Prüfungen aus tools/ci-lokal.json über die ganze Phase gegen dieselbe Basis wie der PR; die teuren wie test:wirkung laufen nur auf GitHub. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
-    "behebung": "Den Befund des roten Schritts beheben, committen und node tools/ci-lokal.mjs --basis <Basis aus der Meldung> laufen lassen, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
+    "behebung": "Den Befund des roten Schritts beheben, committen und SCHWERLAUF_VORRANG=push node tools/ci-lokal.mjs --basis <Basis aus der Meldung> laufen lassen, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
     "nichtAngenommen": "Einen Schritt aus tools/ci-lokal.json streichen oder unter nurCi verschieben, damit er nicht mehr läuft, ein Ersatzprogramm in den PATH legen, das nichts prüft, oder trotz Rot pushen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hältst du einen Schritt lokal für falsch, gehören Schritt, Ausgabe und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
   },
