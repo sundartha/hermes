@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
 import { EXIT_GRUEN, offenePunkte, plane, planungsBericht, prueflisteZeilen, WARTEN_MS, WEG_ZEILE, WEGFEHLER, wegfehlerLaufMitKorrektur, wegpruefungen } from "./planung-plane-probe.js";
 
+const ERSTE_GRUPPE = GRUPPEN[0].nummern.join(", ");
+
 test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrigierte Bericht erreicht den Planer, und weg bleibt in der Endprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
   const hinweis = "S7 endet in speichereStatus";
   const lauf = wegfehlerLaufMitKorrektur(context, hinweis);
@@ -94,12 +96,12 @@ test("plane: eine Wegprüfliste, die nach der Rücksendung unvollständig bleibt
   const lauf = plane(context, { "pruefer-planung|## Wegprüfung|S1": [ohneZeile], "pruefer-planung|## Befunde": [ohneZeile] });
   exit(lauf, EXIT_GRUEN);
   const [zuschnitt] = aufrufe(lauf, "planer", "## Zuschnitt");
-  assert.ok(offenePunkte(zuschnitt).includes("- Weg S1, S7, T2: weg:S7: fehlt in der Prüfliste"), zuschnitt.eingabe);
+  assert.ok(offenePunkte(zuschnitt).includes(`- Weg ${ERSTE_GRUPPE}: weg:S7: fehlt in der Prüfliste`), zuschnitt.eingabe);
 });
 
 test("plane: eine fehlende Wegzeile bleibt nach einer sauberen Nachfrage zu einer anderen Nummer der Gruppe offen und fällt mit der sauberen Nachfrage zu ihrer Nummer weg", { timeout: LAUF_FRIST_MS }, (context) => {
   const ohneZeilen = { ...GRUEN_PRUEFLISTE, weglassen: ["weg:S7", "weg:S5"] };
-  const fehlt = "- Weg S1, S7, T2: weg:S7: fehlt in der Prüfliste";
+  const fehlt = `- Weg ${ERSTE_GRUPPE}: weg:S7: fehlt in der Prüfliste`;
   const fehltS5 = "- Weg S4, S5, B1: weg:S5: fehlt in der Prüfliste";
   const lauf = plane(context, {
     "pruefer-planung|## Wegprüfung|S1": [ohneZeilen, GRUEN_PRUEFLISTE],
@@ -140,7 +142,7 @@ test("plane: ein Wegbefund in einer unvollständigen Wegprüfliste steht unter O
   exit(lauf, EXIT_GRUEN);
   const wegbefund = `Weg T2: der Weg endet nicht im Speicher (Fundstelle: ${FUNDSTELLE})`;
   const [zuschnitt] = aufrufe(lauf, "planer", "## Zuschnitt");
-  for (const zeile of ["Weg S1, S7, T2: weg:S7: fehlt in der Prüfliste", wegbefund]) assert.ok(offenePunkte(zuschnitt).includes(`- ${zeile}`), zuschnitt.eingabe);
+  for (const zeile of [`Weg ${ERSTE_GRUPPE}: weg:S7: fehlt in der Prüfliste`, wegbefund]) assert.ok(offenePunkte(zuschnitt).includes(`- ${zeile}`), zuschnitt.eingabe);
   const { offen } = planungsBericht(lauf).wegpruefungen.find(({ nummern }) => nummern[0] === "S1");
   assert.ok(offen.includes(wegbefund), JSON.stringify(offen));
 });

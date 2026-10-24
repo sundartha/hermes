@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { ABSICHT_HOECHSTENS } from "../../tools/auftrag/format.mjs";
 import { Planung } from "../../tools/auftrag/planung/plane.mjs";
-import { LAUF_FRIST_MS, ORDNER, aufrufe, exit, plane, planOrdner } from "./planung-probe.js";
+import { GRUPPEN, LAUF_FRIST_MS, ORDNER, aufrufe, exit, plane, planOrdner } from "./planung-probe.js";
 import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, planeAntworten } from "./planung-plane-probe.js";
 
 const ABSICHT = [
@@ -14,7 +14,7 @@ const ABSICHT = [
   "Eine zweite Nummernliste neben `nummern.json` – auch nicht „nur für Tests“.",
 ].join("\n");
 const ABSICHT_ABSCHNITT = /^## Absicht\n[^#]*/m;
-const ERKUNDER_GRUPPEN = 3;
+const ERKUNDER_GRUPPEN = GRUPPEN.length;
 
 function pitchMit(wurzel, absicht) {
   const datei = join(wurzel, ORDNER, "pitch.md");

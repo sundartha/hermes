@@ -13,13 +13,13 @@ const DECKEL_FREIGABE = 15 * MIO;
 const DECKEL_OHNE_WIRKUNG = 1000 * MIO;
 const PLANER_ANTWORTEN_BIS_NACHFRAGE = 2;
 const PRUEFER_LAUF_VORHER = 100 * MIO;
-const DECKEL_UNTER_ERSTER_WELLE = 4 * MIO;
 const PLANER = 100_000;
 const ERKUNDER = MIO;
 const WEGPRUEFER = 340_000;
 const ERKUNDER_LAUF = ERKUNDER + WEGPRUEFER;
 const TOKEN = { planer: PLANER, erkunder: ERKUNDER, "pruefer-planung": WEGPRUEFER, entwurf: PLANER };
-const ERSTE_WELLE = 3;
+const ERSTE_WELLE = GRUPPEN.length;
+const DECKEL_UNTER_ERSTER_WELLE = PLANER + ERSTE_WELLE * ERKUNDER_LAUF - 1;
 const ZWEITE_WELLE = 12;
 const NACHFRAGE_NUMMERN = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "T1", "T2", "B1", "S1", "S2"];
 const FREIGABE_ZEILE = /^Planung freigegeben: .*\n/m;
@@ -270,7 +270,7 @@ test("plane --deckel: hält vor der Rücksendung im Entwurf, wenn die Vorschau d
 });
 
 test("plane --deckel: hält vor der Rücksendung an einen Prüfer der Prüfliste", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ZWEITER_PRUEFLISTE, ueberschrieben: { "pruefer-planung|## Prüfung": [alsJson({ pruefliste: [] }), GRUEN_PRUEFLISTE, GRUEN_PRUEFLISTE, GRUEN_PRUEFLISTE] }, schritt: /^Rücksendung an pruefer-planung$/ });
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ZWEITER_PRUEFLISTE, ueberschrieben: { "pruefer-planung|## Prüfung": [alsJson({ pruefliste: [] }), ...jePruefer(GRUEN_PRUEFLISTE).slice(1)] }, schritt: /^Rücksendung an pruefer-planung$/ });
 
   assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
 });

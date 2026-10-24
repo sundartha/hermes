@@ -64,12 +64,12 @@ const PROBE_QUELLEN = {
   "package.json": JSON.stringify({ type: "module" }),
   ".gitignore": "node_modules\n.fortschritt/\n",
 };
+const HINTERLEGEN_NUMMERN = ["S1", "S7", "T2"];
 export const GRUPPEN = [
-  { nummern: ["S1", "S7", "T2"], eingang: "POST /api/self-service/private-number", ueberschriften: [LOESUNG], fragen: ["Wo wird die Nummer gespeichert?"] },
-  { nummern: ["S2", "S3", "S6", "T1"], eingang: "POST /api/self-service/private-number/confirm", ueberschriften: [LOESUNG], fragen: [] },
+  { nummern: [...HINTERLEGEN_NUMMERN, "S2", "S3", "S6", "T1"], eingang: "POST /api/self-service/private-number und /confirm", ueberschriften: [LOESUNG], fragen: ["Wo wird die Nummer gespeichert?"] },
   { nummern: ["S4", "S5", "B1"], eingang: "place_call", ueberschriften: ["## Fehlerfälle"], fragen: [] },
 ];
-const ANRUF_NUMMERN = new Set(GRUPPEN[2].nummern);
+const ANRUF_NUMMERN = new Set(GRUPPEN[1].nummern);
 
 const ERSATZ_CLAUDE = `#!${process.execPath}
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -150,7 +150,7 @@ export function stelle(rolle, datei, ort) {
 
 function angabenVon(nummer) {
   const anruf = ANRUF_NUMMERN.has(nummer);
-  const eingang = anruf ? stelle("eingang", HINWEIS, { funktion: "nimmAnruf", von: 1, bis: 4 }) : stelle("eingang", ROUTE, GRUPPEN[0].nummern.includes(nummer) ? { funktion: "hinterlege", von: 2, bis: 4 } : { funktion: "bestaetige", von: 5, bis: 7 });
+  const eingang = anruf ? stelle("eingang", HINWEIS, { funktion: "nimmAnruf", von: 1, bis: 4 }) : stelle("eingang", ROUTE, HINTERLEGEN_NUMMERN.includes(nummer) ? { funktion: "hinterlege", von: 2, bis: 4 } : { funktion: "bestaetige", von: 5, bis: 7 });
   const wirkung = anruf ? stelle("wirkung", HINWEIS, { funktion: "setzeHinweis", von: 6, bis: 9 }) : stelle("wirkung", ROUTE, { funktion: "speichereStatus", von: 10, bis: 14 });
   const { rolle, ...aenderung } = wirkung;
   return {

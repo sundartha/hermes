@@ -383,8 +383,8 @@ test("Neuschnitt: der neue Auftrag ersetzt den alten an seiner Stelle und in fre
 });
 
 test("Neuschnitt: ein Bereich, den bisher nur der alte Auftrag nutzte, bekommt einen neuen Entwurf", (context) => {
-  const ersatz = auftrag("a3-n1", HINWEIS, { prueft: GRUPPEN[2].nummern, abnahme: "test/anrufe/hinweis-neu.test.js", abhaengigVon: [{ id: "a2", grund: "liest den Status bestaetigt" }] });
-  const ueberschrieben = { "erkunder|## Nachfrage": [bericht(GRUPPEN[2].nummern)], ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege: [ersatz] }) })), "entwurf|## Entwurf": [ENTWURF_HINWEIS] };
+  const ersatz = auftrag("a3-n1", HINWEIS, { prueft: GRUPPEN[1].nummern, abnahme: "test/anrufe/hinweis-neu.test.js", abhaengigVon: [{ id: "a2", grund: "liest den Status bestaetigt" }] });
+  const ueberschrieben = { "erkunder|## Nachfrage": [bericht(GRUPPEN[1].nummern)], ...planerAntwort(alsJson({ schnitt: neuerSchnitt({ auftraege: [ersatz] }) })), "entwurf|## Entwurf": [ENTWURF_HINWEIS] };
   const lauf = neuschnitt(context, { eingabe: { auftragId: "a3" }, ueberschrieben });
   exit(lauf, 0);
   assert.equal(aufrufe(lauf, "entwurf").length, 1);

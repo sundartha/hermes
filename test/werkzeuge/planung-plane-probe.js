@@ -19,8 +19,7 @@ export function planeAntworten() {
   return {
     "planer|## Gliederung": [alsJson({ gruppen: GRUPPEN })],
     "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern)],
-    "erkunder|## Erkundung|S2": [bericht(GRUPPEN[1].nummern)],
-    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern)],
+    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[1].nummern)],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })],
     "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN }, () => GRUEN_PRUEFLISTE),
     "pruefer-planung|## Prüfung": jePruefer(GRUEN_PRUEFLISTE),

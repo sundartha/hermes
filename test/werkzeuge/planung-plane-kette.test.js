@@ -24,7 +24,7 @@ export function speichereAuftrag(auftrag) {
 const EINGANG = stelle("eingang", KETTE, { funktion: "nimmAuftrag", von: 1, bis: 4 });
 const MITTE = stelle("logik", KETTE, { funktion: "pruefeAuftrag", von: 6, bis: 8 });
 const WIRKUNG = stelle("wirkung", KETTE, { funktion: "speichereAuftrag", von: 10, bis: 12 });
-const ANRUF_NUMMERN = GRUPPEN[2].nummern;
+const ANRUF_NUMMERN = GRUPPEN[1].nummern;
 
 function mitWeg(weg) {
   return bericht(ANRUF_NUMMERN, Object.fromEntries(ANRUF_NUMMERN.map((nummer) => [nummer, { weg }])));
