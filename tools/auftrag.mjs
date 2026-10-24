@@ -15,6 +15,7 @@ import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
 import { system } from "./auftrag/system.mjs";
+import { zeigePrompt } from "./auftrag/zeige-prompt.mjs";
 
 const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
@@ -25,6 +26,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs genutzt <phasendatei> <auftrag> --basis <commit>",
+  "        node tools/auftrag.mjs zeige-prompt <phasendatei> <auftrag> --rolle <test|bau> [--testausgabe <datei>]   (gibt den Prompt aus, den der Agent im Lauf bekommt, ohne Zusätze aus Bisektion und späteren Runden; startet nichts, schreibt nichts)",
   "        node tools/auftrag.mjs faelle --basis <commit>",
   "        node tools/auftrag.mjs testumbau --basis <commit>",
   "        node tools/auftrag.mjs importendungen --basis <commit>",
@@ -59,6 +61,7 @@ const OPTIONEN = [
   "repo",
   "deckel",
   "issue",
+  "testausgabe",
 ];
 
 const BEFEHLE = {
@@ -75,6 +78,11 @@ const BEFEHLE = {
       grenzen(phasendatei, kennung, { rolle, basis, root }),
   },
   genutzt: { argumente: 2, optionen: ["basis"], fuehreAus: ([phasendatei, kennung], root, { basis }) => genutzt(phasendatei, kennung, { basis, root }) },
+  "zeige-prompt": {
+    argumente: 2,
+    optionen: ["rolle"],
+    fuehreAus: ([phasendatei, kennung], root, { rolle, testausgabe }) => zeigePrompt(phasendatei, kennung, { rolle, testausgabe, root }),
+  },
   faelle: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => faelle({ basis, root }) },
   testumbau: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => testumbauFaelle({ basis, root }) },
   importendungen: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => importendungen({ basis, root }) },

@@ -583,6 +583,10 @@ function phasenende({ phase, fertig, vorher, amPhasenende }, root) {
   return fertig.size > vorher ? ciLokal(phase, root) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
 }
 
+export function auftragsKontext(phase, auftrag, root) {
+  return { phase, auftrag, root, design: designPfad(phase) };
+}
+
 export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
@@ -596,7 +600,7 @@ export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
     const { ordnung } = reihenfolge(plan.phase.auftraege);
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
     if (auftrag === undefined) return phasenende(plan, root);
-    const kontext = { phase: plan.phase, auftrag, root, design: designPfad(plan.phase), phasendatei, plan };
+    const kontext = { ...auftragsKontext(plan.phase, auftrag, root), phasendatei, plan };
     const frei = freigabe(kontext);
     const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde.auftrag.id === auftrag.id ? { ...runde, ...frei } : runde).fuehreAus());
     if (ergebnis === GRUEN) plan.fertig.add(auftrag.id);
