@@ -198,9 +198,11 @@ const VORSICHT = {
     `import { dyn } from "./dyn.js";`,
     `import { k } from "./kaputt-ziel.js";`,
     `import { b1 } from "./b.js";`,
+    `import { vorlage } from "./vorlage.js";`,
+    `import { werkzeug } from "./werkzeug.js";`,
     "",
     "export function alt() {",
-    "  return [n(), s(), dyn(), k(), b1()];",
+    "  return [n(), s(), dyn(), k(), b1(), vorlage(), werkzeug()];",
     "}",
     "",
   ].join("\n"),
@@ -208,6 +210,13 @@ const VORSICHT = {
   "src/seite.js": `export function s() {\n  return 2;\n}\n`,
   "src/dyn.js": `export function dyn() {\n  return 3;\n}\n`,
   "src/kaputt-ziel.js": `export function k() {\n  return 4;\n}\n`,
+  "src/vorlage.js": `export function vorlage() {\n  return 8;\n}\n`,
+  "src/werkzeug.js": `export function werkzeug() {\n  return 9;\n}\n`,
+  "src/spaet.js": "const geladen = await import(`./vorlage.js`);\nconsole.log(geladen);\n",
+  "src/doppelt.js": `export function d1() {\n  return 10;\n}\n`,
+  "src/teil.js": "import { d1 } from \"./doppelt.js\";\n\nexport function weg() {\n  return d1();\n}\n\nexport function bleibt() {\n  return import(`./doppelt.js`);\n}\n",
+  "src/teil-nutzer.js": `import { bleibt } from "./teil.js";\n\nconsole.log(bleibt());\n`,
+  "tools/messung.mjs": `import { werkzeug } from "../src/werkzeug.js";\n\nconsole.log(werkzeug());\n`,
   "src/b.js": `export function b1() {\n  return 5;\n}\n\nexport function b2() {\n  return 6;\n}\n\nexport function b3() {\n  return 7;\n}\n`,
   "src/haupt.js": `import * as ns from "./ns.js";\nimport "./seite.js";\nimport { b2 } from "./b.js";\n\nconst dyn = await import("./dyn.js");\nconsole.log(ns, dyn, b2());\n`,
   "src/kaputt.js": `import { k } from "./kaputt-ziel.js";\n\nk(;\n`,
@@ -216,8 +225,8 @@ const VORSICHT = {
   ".gitignore": "node_modules\n",
 };
 
-test("umfang lässt in der Löschmenge Dateien stehen, die ein Namensraum-, Nebenwirkungs- oder dynamischer Import oder ein nicht lesbarer Importeur hält, und einen Export, den vorher nur Tests nutzten", { timeout: LAUF_FRIST_MS }, (context) => {
-  const loeschmenge = loeschmengeIn(context, VORSICHT, ["src/alt.js:alt"]);
+test("umfang lässt in der Löschmenge Dateien stehen, die ein Namensraum-, Nebenwirkungs- oder dynamischer Import, ein Import aus einer Vorlage ohne Platzhalter, auch neben einem statischen Import, ein Werkzeug unter tools/ oder ein nicht lesbarer Importeur hält, und einen Export, den vorher nur Tests nutzten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const loeschmenge = loeschmengeIn(context, VORSICHT, ["src/alt.js:alt", "src/teil.js:weg"]);
 
-  assert.deepEqual(loeschmenge, { dateien: ["src/alt.js"], exporte: ["src/b.js:b1"], reste: [], tests: [], fehlend: [] });
+  assert.deepEqual(loeschmenge, { dateien: ["src/alt.js"], exporte: ["src/b.js:b1"], reste: ["src/teil.js:d1"], tests: [], fehlend: [] });
 });
