@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { genannteStellen } from "../../tools/auftrag/planung/altfunktionen-vorab.mjs";
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten, teilEintrag as teil } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten, planungsBericht, teilEintrag as teil } from "./planung-plane-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 
@@ -315,6 +315,15 @@ test("übersteigt die Teilung den Deckel, endet plane mit Exit 5 ohne Rücksendu
   ohneErkundung(lauf);
   assert.deepEqual(aufrufe(lauf, "planer", BEFUNDE), []);
   assert.ok(lauf.stderr.includes("Deckel 100 Token"), lauf.stderr);
+});
+
+test("übersteigt die Teilung den Deckel, nennen Meldung und Planbericht die Überschreitung in Token und Prozent", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeGross(context, { teilung: ALLES_IN_EINEM, argumente: ["--deckel", "400"], token: { planer: 500 } });
+
+  exit(lauf, EXIT_DECKEL);
+  const { grund, deckel } = planungsBericht(lauf);
+  assert.equal(deckel.ueberschritten, 100);
+  for (const angabe of ["gemessen 500", "100 Token", "25,0 %"]) assert.ok(grund.includes(angabe), grund);
 });
 
 test("ein Paket unter der Grenze plant ohne Teilung wie bisher: Gliederung, Erkunder, Schnitt und phase.json", { timeout: LAUF_FRIST_MS }, (context) => {
