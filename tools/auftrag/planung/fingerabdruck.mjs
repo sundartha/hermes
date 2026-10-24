@@ -4,10 +4,11 @@ import { join, relative, resolve } from "node:path";
 
 import { istObjekt, istText } from "./erkundung.mjs";
 import { gitLauf } from "./git.mjs";
-import { DOKUMENTE } from "./schnitt.mjs";
+import { DOKUMENTE, SCHNITT } from "./schnitt.mjs";
 
 export const FINGERABDRUCK = "fingerabdruck.json";
 export const NACHFRAGEN = "nachfragen.json";
+export const GEPRUEFT = "geprueft.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
 const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend"];
@@ -106,4 +107,26 @@ export function liesFortsetzung(ablage, jetzt) {
   if (!lesbar(abdruck)) return { gruende: [`${datei} hat nicht die Form eines Fingerabdrucks`] };
   const gruende = [...standGruende(abdruck.stand, jetzt), ...ablageGruende(ablage, abdruck.ablage)];
   return gruende.length > 0 ? { gruende } : erkundungAus(ablage, abdruck);
+}
+
+function pruefungsEingaben(ablage) {
+  return { erkundung: pruefsumme(join(ablage, FINGERABDRUCK)), schnitt: pruefsumme(join(ablage, SCHNITT)) };
+}
+
+export function geprueft(ablage, ergebnis) {
+  return { ...pruefungsEingaben(ablage), ...ergebnis };
+}
+
+function befundListen(befunde) {
+  return istObjekt(befunde) && Array.isArray(befunde.korrigiert) && Array.isArray(befunde.zurueckgewiesen);
+}
+
+export function liesGeprueft(ablage) {
+  const abdruck = jsonAus(join(ablage, GEPRUEFT));
+  const jetzt = pruefungsEingaben(ablage);
+  if (!istObjekt(abdruck) || jetzt.erkundung === null || jetzt.schnitt === null) return undefined;
+  if (abdruck.erkundung !== jetzt.erkundung || abdruck.schnitt !== jetzt.schnitt) return undefined;
+  const schnitt = jsonAus(join(ablage, SCHNITT));
+  if (!istObjekt(schnitt) || !befundListen(abdruck.befunde) || !Array.isArray(abdruck.nachpruefungen)) return undefined;
+  return { schnitt, befunde: abdruck.befunde, nachpruefungen: abdruck.nachpruefungen };
 }

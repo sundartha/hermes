@@ -27,7 +27,7 @@ import {
 } from "./antworten.mjs";
 import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
-import { FINGERABDRUCK, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
+import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
@@ -35,7 +35,7 @@ import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
-import { DOKUMENTE, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
+import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { dokumenteIm, umfang } from "./umfang.mjs";
@@ -594,7 +594,7 @@ export class Planung {
   async pruefeSchnitt(antwort) {
     if (!istObjekt(antwort)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
     const schnitt = mitNieSaetzenDerVorgaben(antwort, this.dokumente[PITCH], this.soll);
-    this.lege("schnitt.json", schnitt);
+    this.lege(SCHNITT, schnitt);
     this.schnitt = schnitt;
     const ergebnis = await schnittImOrdner(this.ordner, { schnitt, berichte: this.berichte, root: this.root });
     this.schnittAnnahmen = ergebnis.annahmen;
@@ -817,6 +817,8 @@ export class Planung {
   async planeAbSchnitt() {
     await this.schneide();
     await this.pruefe();
+    const { korrigiert, zurueckgewiesen } = this.befunde;
+    this.lege(GEPRUEFT, geprueft(this.ablage, { befunde: { korrigiert, zurueckgewiesen }, nachpruefungen: this.nachpruefungen }));
     await this.entwerfe();
   }
 }
@@ -862,6 +864,17 @@ class Fortsetzung extends Planung {
     for (const ergebnis of ergebnisse) this.uebernimmWeg(ergebnis);
     this.wegAusstehend = [];
     this.legeFingerabdruck();
+  }
+
+  async planeAbSchnitt() {
+    const vorher = liesGeprueft(this.ablage);
+    const ergebnis = vorher === undefined ? undefined : await schnittImOrdner(this.ordner, { schnitt: vorher.schnitt, berichte: this.berichte, root: this.root });
+    if (ergebnis === undefined || ergebnis.befunde.length > 0) return super.planeAbSchnitt();
+    this.schnitt = vorher.schnitt;
+    this.schnittAnnahmen = ergebnis.annahmen;
+    this.befunde = { ...this.befunde, ...vorher.befunde };
+    this.nachpruefungen = vorher.nachpruefungen;
+    return this.entwerfe();
   }
 }
 
