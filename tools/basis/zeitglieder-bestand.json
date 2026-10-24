@@ -24,7 +24,6 @@
   "test/fixtures/mock-conversation-driver.js": 1,
   "test/graceful-shutdown.test.js": 1,
   "test/helpers.js": 5,
-  "test/helpers/server-mit-elternwaechter.mjs": 1,
   "test/ie2-geld-wache.test.js": 3,
   "test/ie7-play-tts-streaming.test.js": 1,
   "test/iel-b10-geheimnisse.test.js": 1,
