@@ -21,6 +21,7 @@ const FREI = /^frei (\d+)$/;
 const WARTET = "wartet";
 const BELEGT = "belegt";
 const ALLEIN = 0;
+const PUSH_PLATZ = "push";
 const ART_ALLEIN = "allein";
 const ART_PLATZ = "platz";
 const WARTENDE = ".wartet-";
@@ -91,8 +92,8 @@ function nummern(anzahl) {
   return Array.from({ length: anzahl }, (_leer, index) => index + 1);
 }
 
-function sperrpfade(datei, anzahl) {
-  return [`${datei}.tor`, datei, ...nummern(anzahl).map((platz) => platzdatei(datei, platz))];
+function sperrpfade(datei, plaetzeDesAntrags) {
+  return [`${datei}.tor`, datei, ...plaetzeDesAntrags.map((platz) => platzdatei(datei, platz))];
 }
 
 function gelesen(pfad) {
@@ -127,7 +128,7 @@ function halterZeile(datei, platz) {
 }
 
 function lebendeHalter(datei, anzahl) {
-  return [ALLEIN, ...nummern(anzahl)].map((platz) => lebenderEintrag(halterdatei(datei, platz))).filter(Boolean);
+  return [ALLEIN, ...nummern(anzahl), PUSH_PLATZ].map((platz) => lebenderEintrag(halterdatei(datei, platz))).filter(Boolean);
 }
 
 function innerhalbDesHalters(datei, anzahl) {
@@ -246,18 +247,33 @@ function loeseHalterVomEventLoop(kind) {
   kind.unref();
 }
 
+function platzName(platz) {
+  return platz === PUSH_PLATZ ? "Push-Platz" : `Platz ${platz}`;
+}
+
 function erhaltenMeldung({ anlass }, platz, ms) {
-  const wo = platz === ALLEIN ? "alle Plätze" : `Platz ${platz}`;
+  const wo = platz === ALLEIN ? "alle Plätze" : platzName(platz);
   return `Schwerer Lauf: Sperre erhalten nach ${Math.round(ms / MS_PRO_SEKUNDE)} s (${wo}, ${anlass}).`;
+}
+
+function antragFuer({ allein, vorrang, anzahl }) {
+  if (allein) return { art: ART_ALLEIN, plaetze: nummern(anzahl) };
+  return { art: ART_PLATZ, plaetze: vorrang ? [PUSH_PLATZ] : nummern(anzahl) };
+}
+
+function platzVon(antrag, nummer) {
+  return nummer === ALLEIN ? ALLEIN : antrag.plaetze[nummer - 1];
 }
 
 export async function sperreNehmenUndHalterEintragen(datei, anlass, optionen = {}) {
   const { aufruferBeendet = aufruferVon(process.ppid), allein = false, vorrang = false, plaetze: anzahl = plaetze() } = optionen;
   const sperre = { datei, anlass, allein, plaetze: anzahl, kommt: `${datei}${KOMMT}${pid}-${randomUUID()}${JSON_ENDUNG}` };
+  const antrag = antragFuer({ allein, vorrang, anzahl });
   trageWartendenEin(sperre, vorrang);
   const einreihen = [dirname(datei), `${basename(datei)}${WARTENDE}`, vorrang ? RANG_VORRANG : RANG_GEWOEHNLICH, basename(sperre.kommt)];
-  const kind = perl(HALTEN, [allein ? ART_ALLEIN : ART_PLATZ, ...einreihen, ...sperrpfade(datei, anzahl)]);
-  const { platz, gewartet, ms } = await bisFrei(kind, sperre, aufruferBeendet);
+  const kind = perl(HALTEN, [antrag.art, ...einreihen, ...sperrpfade(datei, antrag.plaetze)]);
+  const { platz: nummer, gewartet, ms } = await bisFrei(kind, sperre, aufruferBeendet);
+  const platz = platzVon(antrag, nummer);
   let schluessel;
   try {
     schluessel = trageHalterEin(sperre, platz);
@@ -302,10 +318,14 @@ function wartende(datei) {
   return namen.map((name) => lebenderEintrag(join(dirname(datei), name))).filter(Boolean);
 }
 
+function standPlaetze(anzahl) {
+  return [...nummern(anzahl), PUSH_PLATZ];
+}
+
 function standZeilen(datei, anzahl, zustaende) {
   const [haupt, ...belegung] = zustaende;
-  const platzZeilen = belegung.map((zustand, index) =>
-    zustand === BELEGT ? `Platz ${index + 1}: belegt von ${halterZeile(datei, index + 1)}` : `Platz ${index + 1}: frei`,
+  const platzZeilen = standPlaetze(anzahl).map((platz, index) =>
+    belegung[index] === BELEGT ? `${platzName(platz)}: belegt von ${halterZeile(datei, platz)}` : `${platzName(platz)}: frei`,
   );
   const allein = haupt === BELEGT ? `Allein: belegt von ${halterZeile(datei, ALLEIN)}` : "Allein: frei";
   const warten = wartende(datei).map((wartend) => `Wartet: ${beschreibe(wartend)}${wartend.allein ? ", allein" : ""}${wartend.vorrang ? ", Vorrang" : ""}`);
@@ -315,13 +335,14 @@ function standZeilen(datei, anzahl, zustaende) {
 export function stand() {
   const datei = sperrdatei();
   const anzahl = plaetze();
-  const kind = perl(NACHSEHEN, sperrpfade(datei, anzahl).slice(1));
+  const pfade = sperrpfade(datei, standPlaetze(anzahl)).slice(1);
+  const kind = perl(NACHSEHEN, pfade);
   const zustaende = [];
   return new Promise((ergebnis, abgelehnt) => {
     kind.on("error", abgelehnt);
     createInterface({ input: kind.stdout }).on("line", (zeile) => zustaende.push(zeile));
     kind.on("close", (code) => {
-      if (code === 0 && zustaende.length === anzahl + 1) ergebnis(standZeilen(datei, anzahl, zustaende).join("\n"));
+      if (code === 0 && zustaende.length === pfade.length) ergebnis(standZeilen(datei, anzahl, zustaende).join("\n"));
       else abgelehnt(new Error(`Stand nicht lesbar: perl endete mit Exit ${code}`));
     });
   });

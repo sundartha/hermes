@@ -11,7 +11,7 @@ export const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
 export const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
 export const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
 export const FRIST = { timeout: 30_000 };
-export const EIN_PLATZ_FREI = /^Platz 1: frei\nAllein: frei\nWartet: niemand$/m;
+export const EIN_PLATZ_FREI = /^Platz 1: frei\nPush-Platz: frei\nAllein: frei\nWartet: niemand$/m;
 
 export function umgebung(context, plaetze = 1) {
   const env = {
@@ -64,12 +64,12 @@ setInterval(() => {}, 1000);`;
   return lauf;
 }
 
-function arbeit(name) {
+export function arbeit(name) {
   return `const beginn = Date.now(); console.log("begonnen"); process.stdin.resume().on("end", () => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })));`;
 }
 
-export function starteArbeit(context, name, { env, optionen = [] }) {
-  const lauf = starte([SCHWERLAUF, ...optionen, "--", process.execPath, "-e", arbeit(name)], { env, stdin: "pipe" });
+export function starteSteuerbar(context, args, optionen) {
+  const lauf = starte(args, { ...optionen, stdin: "pipe" });
   lauf.begonnen = zeile(lauf.kind.stdout, /^begonnen$/).then(() => "begonnen");
   lauf.wartend = zeile(lauf.kind.stderr, WARTET).then(() => "wartet");
   context.after(() => {
@@ -77,6 +77,10 @@ export function starteArbeit(context, name, { env, optionen = [] }) {
     lauf.kind.kill("SIGKILL");
   });
   return lauf;
+}
+
+export function starteArbeit(context, name, { env, optionen = [] }) {
+  return starteSteuerbar(context, [SCHWERLAUF, ...optionen, "--", process.execPath, "-e", arbeit(name)], { env });
 }
 
 export function zeitenVon(lauf) {
