@@ -23,6 +23,8 @@ const SZENARIEN_ANDERSWO = "dieser Teil baut nur um; die Szenarien des Eltern-Pi
 const SATZ_ANFORDERUNGEN = `keine neuen, weil ${SZENARIEN_ANDERSWO}`;
 const SATZ_BLEIBT = `keins, weil ${SZENARIEN_ANDERSWO}`;
 const SATZ_ANGRIFFSWEGE = "Für diesen Teil keine Angriffswege gefunden: die Angriffswege des Eltern-Ordners mit Ausgang verhindern stehen in den anderen Teilen.";
+const KEIN_PFADZEICHEN = /[^\w./-]+/u;
+const PFADRAND = /^\.\/|\.+$/gu;
 
 function abschnitte(text) {
   const ergebnis = [];
@@ -185,6 +187,22 @@ function liesTeilung(elternOrdner) {
   }
 }
 
+function fremdeDateien(teilung, eintrag, elternOrdner) {
+  const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
+  return andere.flatMap((anderer) => liste(anderer?.dateien).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+}
+
+function genanntePfade(text) {
+  return new Set(text.split(KEIN_PFADZEICHEN).map((wort) => wort.replace(PFADRAND, "")));
+}
+
+export function fremdeDateienBefunde(fremd, gruppen) {
+  return gruppen.flatMap(({ nummern, text }) => {
+    const genannt = genanntePfade(text);
+    return fremd.filter(({ datei }) => genannt.has(datei)).map(({ datei, teil }) => `Gruppe ${nummern.join(", ")}: die Design-Abschnitte der Gruppe nennen ${datei}, laut ${TEILE} eine Datei des Teils ${teil}`);
+  });
+}
+
 function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   if (herkunft.fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: herkunft.fehler };
   const elternOrdner = join(dirname(ordner), herkunft.eltern);
@@ -202,7 +220,7 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
   const reserviert = reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
-  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien) } : reserviert;
+  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien), fremd: fremdeDateien(teilung, eintrag, elternOrdner) } : reserviert;
 }
 
 function teilStart(root, ordner, { fortsetzen, deckel }) {
@@ -252,7 +270,7 @@ export function ableitungsBefunde(ordner) {
 export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
   const teil = teilStart(root, ordner, { fortsetzen, deckel });
   if (teil?.exit !== undefined) return teil;
-  if (teil !== undefined) return { deckel: teil.deckel, teil: true, umfang: await messe(teil.dateien) };
+  if (teil !== undefined) return { deckel: teil.deckel, teil: true, fremd: teil.fremd, umfang: await messe(teil.dateien) };
   const umfang = await messe();
   if (fortsetzen) return { umfang };
   const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });
