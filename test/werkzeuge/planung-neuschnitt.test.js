@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { ENTWURF_HINWEIS, ENTWURF_ROUTE, ENTWURF_TEXT, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane, schnittliste } from "./planung-probe.js";
+import { BESTEHENDER_TEST, ENTWURF_HINWEIS, ENTWURF_ROUTE, ENTWURF_TEXT, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, INDIREKTER_TEST, ORDNER, ROUTE, UEBER_ZWISCHENDATEI, alsJson, aufrufe, auftrag, bericht, exit, hinweisInDerDateikarte, phaseFuer, plane, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 
@@ -538,4 +538,13 @@ test("Neuschnitt: eine Schemaänderung laut Bericht bleibt ohne schema vertraegl
   const ohneZyklus = schemaLauf(context, { vorgaenger: ["a1"], schema: "vertraeglich" });
   exit(ohneZyklus, 4);
   assert.match(ohneZyklus.ergebnis.grund, /S2: Schemaänderung laut Bericht, a2-n1 braucht schema nutzung/);
+});
+
+test("Neuschnitt: der Prüfer eines Umbaus sieht in der Dateikarte des Neuschnitts die Zahl aller Tests und nur die direkten", (context) => {
+  const lauf = neuschnitt(context, { umbau: {}, dateien: UEBER_ZWISCHENDATEI, eingabe: { auftragId: UMBAU.id }, ueberschrieben: planerAntwort(umbauSchnitt(NEUER_UMBAU)) });
+  exit(lauf, 0);
+  const [pruefer] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  const neuschnittTeil = pruefer.eingabe.slice(pruefer.eingabe.indexOf("### Neuschnitt"), pruefer.eingabe.indexOf("### Schnittliste"));
+  assert.deepEqual(hinweisInDerDateikarte(neuschnittTeil), { testsGesamt: 2, tests: [BESTEHENDER_TEST] });
+  assert.equal(neuschnittTeil.includes(INDIREKTER_TEST), false, neuschnittTeil);
 });

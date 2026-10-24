@@ -16,7 +16,9 @@ export const KENNUNG = "P-001-eigene-nummer";
 export const ORDNER = `plaene/${KENNUNG}`;
 export const ROUTE = "src/routes/api-onboard.js";
 export const HINWEIS = "src/callee-is-owner.js";
-const BESTEHENDER_TEST = "test/anrufe/anrufreserve.test.js";
+export const BESTEHENDER_TEST = "test/anrufe/anrufreserve.test.js";
+export const INDIREKTER_TEST = "test/anrufe/indirekt.test.js";
+const DATEIKARTE = "### Dateikarte\n\n```json\n";
 export const FUNDSTELLE = `${ROUTE}:1`;
 export const LOESUNG = "## Lösung";
 export const LAUF_FRIST_MS = 240_000;
@@ -125,6 +127,18 @@ if (existsSync(tokenDatei)) {
 melde({ type: "assistant", message: { id: "m" + start, content: [{ type: "text", text }], usage: { input_tokens: 1 } } });
 melde({ type: "result", result: text });
 `;
+
+export const UEBER_ZWISCHENDATEI = {
+  "test/anrufe/zwischen.js": `import { nimmAnruf } from "../../${HINWEIS}";\n\nexport const zwischen = nimmAnruf;\n`,
+  [INDIREKTER_TEST]: 'import { zwischen } from "./zwischen.js";\n\nzwischen("x");\n',
+};
+
+export function hinweisInDerDateikarte(eingabe) {
+  const [, ab] = eingabe.split(DATEIKARTE);
+  assert.ok(ab, `die Nachricht enthält keine Dateikarte:\n${eingabe}`);
+  const { testsGesamt, tests } = JSON.parse(ab.split("\n```")[0]).find(({ datei }) => datei === HINWEIS);
+  return { testsGesamt, tests };
+}
 
 export function alsJson(wert) {
   return `Antwort.\n\n\`\`\`json\n${JSON.stringify(wert, null, 2)}\n\`\`\``;
