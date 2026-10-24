@@ -1,0 +1,118 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Der Import von `clampAtWordBoundary` aus `./utils/text.js` in `src/call-memory.js` ist nach `.dependency-cruiser.cjs` erlaubt. Der Erkunder hat die Datei nicht gelesen, aber dieselbe Hilfe wird schon aus `src/claude.js`, `src/consult/question.js`, `src/thinking-signal.js` und `src/research/lookup-guard.js` importiert (design.md, ## Ausgangslage und Annahmen)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "`memoryLine` in `src/call-memory.js:15-23` hat keine Lint-Befunde. Das stützt sich auf die Funktionsliste (befunde leer) und auf design.md; deshalb gibt es keinen Umbau davor."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Änderung bleibt in `memoryLine` (`src/call-memory.js:15-23`), etwa 12 Zeilen. Dazu kommt eine Importzeile im Kopf der Datei. `budgetedMemoryLines` und `callMemorySection` bleiben unverändert, weil sie nicht mit Längen rechnen (Erkunderhinweis)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Alle fünf Nummern nehmen denselben Eingang (`place_call`, dann `POST /voice/turn`) und ändern dieselbe Funktion `memoryLine`. Deshalb prüft sie ein Abnahmetest. Der Durchstich a1 ist zugleich die ganze Änderung, weil sie unter 200 Zeilen bleibt."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Gedächtniszeile an der Wortgrenze kürzen und mit „…“ markieren",
+      "bereich": "src/call-memory.js",
+      "erwarteteDateien": [
+        "src/call-memory.js",
+        "test/anrufe/gedaechtnis-kuerzung.test.js"
+      ],
+      "abnahme": "test/anrufe/gedaechtnis-kuerzung.test.js",
+      "erwarteterFehler": "Dienstag um 15:30…",
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "B1",
+        "B2"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Die Hilfe `clampAtWordBoundary` sucht nur nach dem Leerzeichen `\" \"`, nicht nach Tabs oder Zeilenumbrüchen: Die Zeile wird wie heute zuerst auf ein Leerzeichen je Lücke gefaltet und erst danach gekürzt; die Reihenfolge Falten, dann Kürzen bleibt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Ob gekürzt wird, entscheidet allein die Länge der Angabe gegenüber ihrer Grenze (länger als 100 bzw. 200 Zeichen), nicht ein Vergleich mit dem Ergebnis der Hilfe: Eine Angabe von genau 100 bzw. 200 Zeichen passt und bekommt kein „…“; würde man die Hilfe mit der Grenze minus 1 aufrufen und am geänderten Text erkennen, ob gekürzt wurde, bekäme gerade sie fälschlich ein „…“.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Wird das Ergebnis bei 100 Zeichen gekürzt und danach die ganze Zeile bei 200, bekommt die Zeile nur am eigenen Schnitt ein „…“; das „…“ des Ergebnisses bleibt mitten in der Zeile stehen, wenn der Schnitt der Zeile dahinter liegt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Ein Trenner vor dem Schnitt („angeben;“) bleibt stehen, das „…“ folgt direkt dahinter; es wird nichts nachgeputzt (Runde 1, Frage 5, ohne das Kürzungszeichen).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Grenzen 100, 200, 600 Zeichen und 3 Anrufe zu ändern.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Die Hilfe wird auch von der Rückfrage an den Auftraggeber, dem Denk-Signal, der Eröffnung und der Recherche benutzt (5 Aufrufstellen in 4 Dateien): Sie bleibt unverändert; keine neue Kürzungshilfe neben ihr, kein zweiter Weg zur Wortgrenze. Das Gedächtnis ruft sie mit der Grenze minus 1 auf und hängt „…“ an.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Das Zeichen ist genau „…“ (U+2026, ein Zeichen), nicht drei Punkte, damit eine gekürzte Angabe mit ihm genau 100 bzw. 200 Zeichen lang ist und die Summe von 600 Zeichen hält.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "`clampAtWordBoundary` schaut nur auf die ersten `maxChars` Zeichen: Endet ein ganzes Wort genau auf dem letzten erlaubten Zeichen und folgt ein Leerzeichen, fällt dieses Wort trotzdem weg (PM2). Das wird hingenommen; die Hilfe bleibt unverändert, und es gibt keine eigene Prüfung des Zeichens hinter der Grenze neben ihr.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Grenzen sind exportierte Werte (`MEMORY_MAX_CALLS`, `MEMORY_MAX_ENTRY_CHARS`, `MEMORY_MAX_CHARS`) und werden von anderen Stellen gelesen: Namen, Werte und Export bleiben, ebenso die Hälfte für das Ergebnis.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die bestehenden Tests in `test/al-p12-call-memory.test.js` (Faltung, Budget, Reihenfolge, Byte-Gleichheit bei ausgeschaltetem Gedächtnis) bleiben unverändert grün.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: das Gesprächsgedächtnis in den ElevenLabs-Outbound zu bringen, weil dieser Pfad es heute gar nicht liest; das ist ein eigenes Vorhaben (Runde 1, Frage 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: an der Grenze einer Angabe statt an der Wortgrenze zu kürzen; eine Angabe mit eigenem Leerzeichen (etwa „0151 23456789“) kann weiter an einem inneren Leerzeichen gekürzt werden, dann aber mit „…“, weil „Fakten ganz oder gar nicht“ eine zweite Regel mit eigenem Szenario wäre (Runde 2, Frage 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: `clampAtWordBoundary` zu ändern oder eine neue Kürzungshilfe zu bauen, weil Rückfrage, Denk-Signal, Eröffnung und Recherche dieselbe Hilfe nutzen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die harte Kürzung auf 200 Zeichen beim Speichern der Ergebniskarte (`src/call-result.js:10-15`); ein schon beim Speichern gekürzter einzelner Fakt ohne Ergebnis kommt weiter unverändert und ohne „…“ ins Gedächtnis, weil die Behebung gespeicherte Daten und ihre anderen Leser ändern würde (PM1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}

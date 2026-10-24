@@ -1,0 +1,548 @@
+{
+  "gruppe": [
+    "S1",
+    "S2",
+    "S3",
+    "B1",
+    "B2"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 900,
+          "bis": 930
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "counterpartyMemory",
+          "von": 918,
+          "bis": 927
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "memoryEntryOf",
+          "von": 929,
+          "bis": 933
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "budgetedMemoryLines",
+          "von": 25,
+          "bis": 31
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "callMemorySection",
+          "von": 208,
+          "bis": 213
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "assignmentBlock",
+          "von": 64,
+          "bis": 71
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "outboundSituation",
+          "von": 73,
+          "bis": 78
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "systemPrompt",
+          "von": 162,
+          "bis": 178
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 545,
+          "bis": 561
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23,
+          "neueZeilen": 12
+        },
+        {
+          "datei": "test/anrufe/gedaechtnis-kuerzung.test.js",
+          "neu": "datei",
+          "neueZeilen": 90,
+          "vorhanden": {
+            "suche": [
+              "gedaechtnis-kuerzung",
+              "MEMORY_MAX_ENTRY_CHARS"
+            ],
+            "treffer": [
+              "src/call-memory.js:3"
+            ],
+            "urteil": "kein Treffer passt, weil es unter test/anrufe/ keinen Test zur Kürzung der Gedächtniszeile gibt; nur test/al-p12-call-memory.test.js prüft das Gedächtnis, und der darf laut Absicht nicht umgeschrieben werden"
+          }
+        }
+      ],
+      "tests": [
+        "test/al-p12-call-memory.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/call-result.js:28-54 (die Ergebniskarte ist ein JSON-Feld am Anruf; kein Spaltenschema betroffen)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Dokumente keine Owner-Entscheidung verlangen; die Grenzen 100, 200, 600 und 3 bleiben laut Absicht unverändert",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 900,
+          "bis": 930
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "counterpartyMemory",
+          "von": 918,
+          "bis": 927
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "memoryEntryOf",
+          "von": 929,
+          "bis": 933
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "budgetedMemoryLines",
+          "von": 25,
+          "bis": 31
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "callMemorySection",
+          "von": 208,
+          "bis": 213
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "assignmentBlock",
+          "von": 64,
+          "bis": 71
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "outboundSituation",
+          "von": 73,
+          "bis": 78
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "systemPrompt",
+          "von": 162,
+          "bis": 178
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 545,
+          "bis": 561
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23,
+          "neueZeilen": 12
+        }
+      ],
+      "tests": [
+        "test/al-p12-call-memory.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/call-result.js:28-54"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Dokumente keine Owner-Entscheidung verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 900,
+          "bis": 930
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "counterpartyMemory",
+          "von": 918,
+          "bis": 927
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "memoryEntryOf",
+          "von": 929,
+          "bis": 933
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "budgetedMemoryLines",
+          "von": 25,
+          "bis": 31
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "callMemorySection",
+          "von": 208,
+          "bis": 213
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "assignmentBlock",
+          "von": 64,
+          "bis": 71
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "outboundSituation",
+          "von": 73,
+          "bis": 78
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "systemPrompt",
+          "von": 162,
+          "bis": 178
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 545,
+          "bis": 561
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23,
+          "neueZeilen": 12
+        }
+      ],
+      "tests": [
+        "test/al-p12-call-memory.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/call-result.js:28-54"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Dokumente keine Owner-Entscheidung verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 900,
+          "bis": 930
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "counterpartyMemory",
+          "von": 918,
+          "bis": 927
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "memoryEntryOf",
+          "von": 929,
+          "bis": 933
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "budgetedMemoryLines",
+          "von": 25,
+          "bis": 31
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "callMemorySection",
+          "von": 208,
+          "bis": 213
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "assignmentBlock",
+          "von": 64,
+          "bis": 71
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "outboundSituation",
+          "von": 73,
+          "bis": 78
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "systemPrompt",
+          "von": 162,
+          "bis": 178
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 545,
+          "bis": 561
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23,
+          "neueZeilen": 12
+        }
+      ],
+      "tests": [
+        "test/al-p12-call-memory.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/call-result.js:28-54"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Dokumente keine Owner-Entscheidung verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/mcp-tools.js",
+          "funktion": "registerTools",
+          "von": 900,
+          "bis": 930
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "counterpartyMemory",
+          "von": 918,
+          "bis": 927
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "memoryEntryOf",
+          "von": 929,
+          "bis": 933
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/call-memory.js",
+          "funktion": "budgetedMemoryLines",
+          "von": 25,
+          "bis": 31
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "callMemorySection",
+          "von": 208,
+          "bis": 213
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "assignmentBlock",
+          "von": 64,
+          "bis": 71
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "outboundSituation",
+          "von": 73,
+          "bis": 78
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "systemPrompt",
+          "von": 162,
+          "bis": 178
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 545,
+          "bis": 561
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/call-memory.js",
+          "funktion": "memoryLine",
+          "von": 15,
+          "bis": 23,
+          "neueZeilen": 12
+        }
+      ],
+      "tests": [
+        "test/al-p12-call-memory.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/call-result.js:28-54"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Dokumente keine Owner-Entscheidung verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Der Weg ist jetzt für alle Nummern gleich: POST /voice/turn (src/routes/voice.js:373-408) → agentTurn (src/claude.js:545-561, system: systemPrompt(call)) → systemPrompt (:162-178) → outboundSituation (:73-78) → assignmentBlock (:64-71) → callMemorySection (:208-213) → budgetedMemoryLines (src/call-memory.js:25-31) → memoryLine (:15-23). Diese Kette stammt aus dem Befund des Prüfers; die Funktionsrümpfe habe ich nicht neu gelesen.",
+    "memoryLine heute (src/call-memory.js:15-23): Das Ergebnis wird mit singleLine gefaltet und auf 100 gekürzt (Z.16). Die Fakten werden einzeln gefaltet, Leeres fällt weg, und sie werden mit \"; \" zu einem Teil verbunden (Z.17, 20). Ohne Teile gibt die Funktion null zurück (Z.21). Sonst wird die ganze Zeile mit \"; \" verbunden und hart auf 200 gekürzt (Z.22).",
+    "clampAtWordBoundary (src/utils/text.js:1-6): Passt der Text, kommt er unverändert zurück. Sonst wird er bis vor das letzte Leerzeichen innerhalb der ersten maxChars Zeichen gekürzt, ohne das Leerzeichen. Ohne Leerzeichen oder bei einem Leerzeichen an Position 0 wird hart auf maxChars gekürzt. Sie hängt nie \"…\" an, und die Absicht verbietet, sie zu ändern. Die Grenze minus 1 und das \"…\" gehören deshalb in memoryLine. Dort kann memoryLine auf clampAtWordBoundary aufbauen und braucht keine neue Kürzungshilfe. src/call-memory.js hat bisher keinen Import; ein Import aus ./utils/text.js ist eine zusätzliche Zeile im Kopf der Datei außerhalb jeder Funktion. Ob .dependency-cruiser.cjs das zulässt, habe ich nicht gelesen.",
+    "Zahlenprobe: S1 ergibt Kürzung auf 99 Zeichen, bis vor \" U\" und mit \"…\" 98 Zeichen (\"…15:30…\"). S2 ergibt auf 199 gekürzt 196 Zeichen. S3 hat kein Leerzeichen, daher harter Schnitt auf 99 plus \"…\" = 100. B1 und B2 (genau 100 Zeichen) passen unter die Grenze und bleiben byte-gleich ohne \"…\". Zu beachten: Die Kürzung des Ergebnisses (Z.16) und die der ganzen Zeile (Z.22) sind zwei getrennte Stellen. Das Ergebnis kann also \"…; Fakt\" ergeben, und die Gesamtzeile kann zusätzlich gekürzt werden.",
+    "Bestehende Tests (test/al-p12-call-memory.test.js): AL-P12-11 (Z.153-161), AL-P12-12 (Z.163-174) und AL-P12-13/-14 (Z.210-237) bleiben nach meiner Lektüre von Z.150-239 grün. AL-P12-12 nutzt 500 mal \"x\" ohne Leerzeichen und prüft nur Summe <= 600 und das Vorkommen von \"Fakt\". Kein Test prüft die genaue Länge einer hart gekürzten Zeile. Den Rest der Datei habe ich nicht auf Kürzung geprüft.",
+    "Speichern der Ergebniskarte: normalizeCallResult (src/call-result.js:28-54) trimmt und kürzt Ergebnis und jeden Fakt auf höchstens 200 Zeichen und lässt höchstens 3 Fakten zu (Z.10-26). Die Eingaben der Szenarien liegen darunter und bleiben unverändert. memoryEntryOf (src/store/state-ops.js:929-933) reicht Ergebnis und Fakten ohne Umformung weiter. counterpartyMemory (918-927) filtert nach Mandant, Outbound und Nummer, verlangt allowCallMemory === true und schneidet auf 3 Anrufe.",
+    "Leser: memoryLine wird nur von budgetedMemoryLines (src/call-memory.js:28) und vom Test (test/al-p12-call-memory.test.js:154) aufgerufen. budgetedMemoryLines hat als Leser nur callMemorySection (src/claude.js:209) und rechnet nicht mit Längen. Eine um \"…\" ergänzte Zeile bleibt unter 200 und wird nicht anders behandelt.",
+    "Lint: Die Angabe 'keine Befunde' für src/call-memory.js stammt aus dem Design Doc; ich habe `karte` darauf nicht ausgeführt. Unter test/anrufe/ liegen 30 Dateien, darunter anrufstart-telnyx.test.js, sprach-webhooks.test.js, routen-server.js und attrappen-server.js. Ein neuer Abnahmetest gehört dorthin. Der Eingang place_call ist in src/mcp-tools.js ab :565 (Beschreibung) und :900 (Registrierung) definiert, der Handler ruft placeCallHopCall (:842) und placeCallHop (:232-247)."
+  ]
+}

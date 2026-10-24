@@ -1,0 +1,113 @@
+{
+  "stand": {
+    "kopfBaum": "df109e6a73477ad5cca259964f29cf61cb67589a",
+    "arbeitsbaum": "2e26b160f2d3cfa541e569646cdc6fc55a056f75",
+    "dateien": {
+      ".claude/agents/entwurf.md": "4b624cda3bb772a809d08986998d81ae76d7d3a943c56f3e27e2f452156bd00d",
+      ".claude/agents/erkunder.md": "78f23f45156e85dd5d0ef3e6fdb43344180260c251ed143f9ac6ea6b6890c9bc",
+      ".claude/agents/planer.md": "fb2447159226bfa274b6e62668fcdff83d721961221113706d3e7fe493ea449c",
+      ".claude/agents/pruefer-planung.md": "b3b579b78524f848bada7516aa6c902d3f5ba5efbede6c90465db0f0747df1e0",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "297e5cf6cf4c09981c94ea9249a9193963b09d6396cbf808154f9187b4424176",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "297e5cf6cf4c09981c94ea9249a9193963b09d6396cbf808154f9187b4424176",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "09843d98224739272168781c2a0ed26234dde95a3cdf1812263bbf4df64f86ee",
+      "plaene/P-007-gedaechtnis-wortgrenze/design.md": "45daf9a8e3e878b71833715d75e058ed4abeb81b856f74ef99b60b40f34105ad",
+      "plaene/P-007-gedaechtnis-wortgrenze/pitch.md": "d073c85d81cc5b66d7ed04206010316a5a36f609b1beca01b7ffec086243492d",
+      "plaene/P-007-gedaechtnis-wortgrenze/sicherheit.md": "05e5ba43901f85ab56bdec4df2e653194cd7aaf67e356963ddf253d3d2d21e9b",
+      "tools/bereiche.json": "57b2b8f1c7ed8b01f41c13599edb6a4a897ad382b9b981302a5ef728200b7ef9"
+    }
+  },
+  "ablage": {
+    "gliederung.json": "156df0336f02476ac29357a348f479aa80d13418f10b51d62a569658a25a64e6",
+    "nachfragen.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "erkundung-g1.json": "9c08bffca63ad609e7bace56617b0a8b7b71e57d90dc6903cfbb58e841e7b3e6"
+  },
+  "zustand": {
+    "gesehen": [
+      "S1\u0000src/mcp-tools.js\u0000registerTools",
+      "S1\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "S1\u0000src/store/state-ops.js\u0000counterpartyMemory",
+      "S1\u0000src/store/state-ops.js\u0000memoryEntryOf",
+      "S1\u0000src/call-memory.js\u0000memoryLine",
+      "S1\u0000src/call-memory.js\u0000budgetedMemoryLines",
+      "S1\u0000src/claude.js\u0000callMemorySection",
+      "S1\u0000src/claude.js\u0000assignmentBlock",
+      "S1\u0000src/claude.js\u0000outboundSituation",
+      "S1\u0000src/claude.js\u0000systemPrompt",
+      "S1\u0000src/claude.js\u0000agentTurn",
+      "S1\u0000test/anrufe/gedaechtnis-kuerzung.test.js\u0000",
+      "S2\u0000src/mcp-tools.js\u0000registerTools",
+      "S2\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "S2\u0000src/store/state-ops.js\u0000counterpartyMemory",
+      "S2\u0000src/store/state-ops.js\u0000memoryEntryOf",
+      "S2\u0000src/call-memory.js\u0000memoryLine",
+      "S2\u0000src/call-memory.js\u0000budgetedMemoryLines",
+      "S2\u0000src/claude.js\u0000callMemorySection",
+      "S2\u0000src/claude.js\u0000assignmentBlock",
+      "S2\u0000src/claude.js\u0000outboundSituation",
+      "S2\u0000src/claude.js\u0000systemPrompt",
+      "S2\u0000src/claude.js\u0000agentTurn",
+      "S3\u0000src/mcp-tools.js\u0000registerTools",
+      "S3\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "S3\u0000src/store/state-ops.js\u0000counterpartyMemory",
+      "S3\u0000src/store/state-ops.js\u0000memoryEntryOf",
+      "S3\u0000src/call-memory.js\u0000memoryLine",
+      "S3\u0000src/call-memory.js\u0000budgetedMemoryLines",
+      "S3\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "S3\u0000src/claude.js\u0000callMemorySection",
+      "S3\u0000src/claude.js\u0000assignmentBlock",
+      "S3\u0000src/claude.js\u0000outboundSituation",
+      "S3\u0000src/claude.js\u0000systemPrompt",
+      "S3\u0000src/claude.js\u0000agentTurn",
+      "B1\u0000src/mcp-tools.js\u0000registerTools",
+      "B1\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "B1\u0000src/store/state-ops.js\u0000counterpartyMemory",
+      "B1\u0000src/store/state-ops.js\u0000memoryEntryOf",
+      "B1\u0000src/call-memory.js\u0000memoryLine",
+      "B1\u0000src/call-memory.js\u0000budgetedMemoryLines",
+      "B1\u0000src/claude.js\u0000callMemorySection",
+      "B1\u0000src/claude.js\u0000assignmentBlock",
+      "B1\u0000src/claude.js\u0000outboundSituation",
+      "B1\u0000src/claude.js\u0000systemPrompt",
+      "B1\u0000src/claude.js\u0000agentTurn",
+      "B2\u0000src/mcp-tools.js\u0000registerTools",
+      "B2\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "B2\u0000src/store/state-ops.js\u0000counterpartyMemory",
+      "B2\u0000src/store/state-ops.js\u0000memoryEntryOf",
+      "B2\u0000src/call-memory.js\u0000memoryLine",
+      "B2\u0000src/call-memory.js\u0000budgetedMemoryLines",
+      "B2\u0000src/claude.js\u0000callMemorySection",
+      "B2\u0000src/claude.js\u0000assignmentBlock",
+      "B2\u0000src/claude.js\u0000outboundSituation",
+      "B2\u0000src/claude.js\u0000systemPrompt",
+      "B2\u0000src/claude.js\u0000agentTurn"
+    ],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S1",
+          "S2",
+          "S3",
+          "B1",
+          "B2"
+        ],
+        "sitzung": "40b3a7bc-b426-4e2c-969e-041fac60b0ec",
+        "runden": 2,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S1",
+        2
+      ]
+    ],
+    "wegAusstehend": [],
+    "nachfrageWellen": 0
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/claude.js:548"
+    },
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/claude.js:548"
+    },
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "befund",
+      "befund": "Der Weg ist lückenhaft und endet vor der Wirkung. memoryLine wird nicht von callMemorySection aufgerufen, sondern von budgetedMemoryLines (src/call-memory.js:25-31, Aufruf src/claude.js:209); dieses Glied fehlt. Als Wirkung steht callMemorySection (src/claude.js:208-213); das baut nur einen Textblock und ist nicht die Anweisung an den Anbieter. Zwischen dem Eingang /voice/turn und callMemorySection fehlt die Verbindung: agentTurn (src/claude.js:545-561, system: systemPrompt(call) und completeRound), dann systemPrompt (:166) → outboundSituation (:77) → assignmentBlock (:70). Der Erkunder soll budgetedMemoryLines als logik und agentTurn als wirkung ergänzen, wie bei S1/S2. clampAtWordBoundary liegt heute nicht auf dem Weg, erst nach der geplanten Änderung.",
+      "fundstelle": "src/claude.js:209"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "befund",
+      "befund": "Der Weg ist lückenhaft und endet vor der Wirkung. memoryLine wird nur über budgetedMemoryLines (src/call-memory.js:25-31, Aufruf src/claude.js:209) erreicht; dieses Glied fehlt. Die gemeldete Wirkung callMemorySection (src/claude.js:208-213) erreicht den Anbieter nicht. Es fehlen agentTurn (src/claude.js:545-561) und die Kette systemPrompt (:166) → outboundSituation (:77) → assignmentBlock (:70), die /voice/turn mit dem Gedächtnisblock verbindet. Der Erkunder soll beides ergänzen, wie bei S1/S2.",
+      "fundstelle": "src/claude.js:209"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "befund",
+      "befund": "Der Weg ist lückenhaft und endet vor der Wirkung. memoryLine wird nur über budgetedMemoryLines (src/call-memory.js:25-31, Aufruf src/claude.js:209) erreicht; dieses Glied fehlt. Die gemeldete Wirkung callMemorySection (src/claude.js:208-213) erreicht den Anbieter nicht. Es fehlen agentTurn (src/claude.js:545-561) und die Kette systemPrompt (:166) → outboundSituation (:77) → assignmentBlock (:70), die /voice/turn mit dem Gedächtnisblock verbindet. Der Erkunder soll beides ergänzen, wie bei S1/S2.",
+      "fundstelle": "src/claude.js:209"
+    }
+  ],
+  "befunde": []
+}
