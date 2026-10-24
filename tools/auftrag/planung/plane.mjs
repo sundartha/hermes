@@ -42,7 +42,7 @@ import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarte
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, schreibeTeile, teile } from "./teilordner.mjs";
-import { laufeTeilung } from "./teilung.mjs";
+import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
 import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
@@ -309,7 +309,7 @@ export class Planung {
   }
 
   gruppenVon(nummern) {
-    return this.gliederung.gruppen.filter((gruppe) => gruppe.nummern.some((nummer) => nummern.includes(nummer)));
+    return gruppenMit(this.gliederung.gruppen, nummern);
   }
 
   designAbschnitte(ueberschriften) {
@@ -815,11 +815,12 @@ export class Planung {
   }
 
   async nachsteuern() {
-    const ueber = this.teilDeckelUeber();
-    if (ueber === null) return;
+    const teilDeckel = this.teilDeckelUeber();
+    const ueber = [...gruppenZahlUeber(this.gliederung.gruppen.length), ...(teilDeckel === null ? [] : [teilDeckel])];
+    if (ueber.length === 0) return;
     this.pruefeDeckel([["planer"]], "Teilung nach der Gliederung");
     const { deckel } = this.kostendeckel;
-    const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber: [ueber], ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung };
+    const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung };
     const geteilt = await laufeTeilung(this.root, this.ordner, angaben);
     const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(this.root, this.ordner, { ...geteilt, freigabe: deckel }) : geteilt;
     throw new Ende(ergebnis.exit, ergebnis.fehler);

@@ -64,7 +64,7 @@ const PROBE_QUELLEN = {
   "package.json": JSON.stringify({ type: "module" }),
   ".gitignore": "node_modules\n.fortschritt/\n",
 };
-const HINTERLEGEN_NUMMERN = ["S1", "S7", "T2"];
+export const HINTERLEGEN_NUMMERN = ["S1", "S7", "T2"];
 export const GRUPPEN = [
   { nummern: [...HINTERLEGEN_NUMMERN, "S2", "S3", "S6", "T1"], eingang: "POST /api/self-service/private-number und /confirm", ueberschriften: [LOESUNG], fragen: ["Wo wird die Nummer gespeichert?"] },
   { nummern: ["S4", "S5", "B1"], eingang: "place_call", ueberschriften: ["## Fehlerfälle"], fragen: [] },
