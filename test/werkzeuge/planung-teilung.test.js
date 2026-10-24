@@ -20,12 +20,18 @@ const P006_DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
 const P006_CODE_DATEIEN = 9;
 const HINWEIS_ZEILE = 7;
 const ALTFUNKTIONEN_KEINE = "\n## Altfunktionen\nkeine, weil die Fixture nur den Planungsweg vor dem ersten Agenten prüft\n";
+const ALTFUNKTION = `${HINWEIS}:setzeHinweis`;
+const ALT_QUELLE = "export function setzeHinweis(nummer) {\n  var text = nummer;\n  return text;\n}\n";
+const ALTFUNKTIONEN_ZEILE = /^## Altfunktionen\n.*$/mu;
+const FREMDER_UMBAU = `${HINWEIS}:nimmAnruf`;
 
 const HINTERLEGEN = teil("t1", "eigene-nummer-hinterlegen", { nummern: ERSTER, tWege: ["T1", "T2"], dateien: [ROUTE] });
 const HINWEIS_TEIL = teil("t2", "hinweis-beim-anruf", { nummern: ZWEITER, dateien: [HINWEIS], abhaengigVon: ["t1"] });
 const GUELTIG = alsJson({ teile: [HINWEIS_TEIL, HINTERLEGEN] });
 const ALLES_IN_EINEM = alsJson({ teile: [teil("t1", "alles", { nummern: [...ERSTER, ...ZWEITER], tWege: ["T1", "T2"], dateien: [ROUTE, HINWEIS] })] });
 const UEBERLAPPEND = alsJson({ teile: [HINTERLEGEN, { ...HINWEIS_TEIL, dateien: [ROUTE, HINWEIS], abhaengigVon: [] }] });
+const MIT_UMBAU = { ...HINWEIS_TEIL, umbau: [ALTFUNKTION] };
+const UMBAU_ZUGEORDNET = alsJson({ teile: [MIT_UMBAU, HINTERLEGEN] });
 
 function zwoelfNummern(wurzel) {
   const szenarien = DAZU.map((nummer) => `\n### Szenario ${nummer}: Anruf an eine fremde Nummer ${nummer}\nGegeben ein Kunde ohne eigene Nummer\nWenn sein Agent mit \`place_call\` eine fremde Nummer anruft\nDann ist der erste Satz der Text aus \`LOCALES.de.disclosure\`\n`);
@@ -49,9 +55,16 @@ function codeDateienBelegen(wurzel, dateien) {
   appendFileSync(join(wurzel, ORDNER, "design.md"), `\n${dateien.map((datei) => `Ändert sich: \`${datei}:1\``).join("\n")}\n`);
 }
 
-function planeGross(context, { teilung, befunde = [], argumente = [], token, beleg, loeschen = [] } = {}) {
+function umbauImPitch(wurzel) {
+  writeFileSync(join(wurzel, HINWEIS), ALT_QUELLE);
+  const pitch = join(wurzel, ORDNER, "pitch.md");
+  writeFileSync(pitch, readFileSync(pitch, "utf8").replace(ALTFUNKTIONEN_ZEILE, `## Altfunktionen\n- Umbau: \`${ALTFUNKTION}\``));
+}
+
+function planeGross(context, { teilung, befunde = [], argumente = [], token, beleg, loeschen = [], umbau = false } = {}) {
   const wurzel = planOrdner(context);
   zwoelfNummern(wurzel);
+  if (umbau) umbauImPitch(wurzel);
   if (loeschen.length > 0) loeschDateien(wurzel, loeschen);
   if (beleg !== undefined) appendFileSync(join(wurzel, ORDNER, "design.md"), `\nBeleg für den Hinweis: \`${beleg}\`\n`);
   const ueberschrieben = { [`planer|${TEILUNG}`]: [teilung], [`planer|${BEFUNDE}`]: befunde };
@@ -153,6 +166,37 @@ test("jede Datei der Löschmenge steht genau einmal unter dateien und zählt nic
   assert.ok(text.includes(`Regel Teilung: ${rest} aus der Löschmenge steht 0-mal unter dateien statt genau einmal`), text);
   assert.equal(abgelegt(lauf, TEILE).ruecksendungen, 1);
   assert.deepEqual(abgelegt(lauf, TEILE).umfang.loeschmenge.dateien, [rest, weg]);
+});
+
+test("eine Teilung, die eine Umbau-Altfunktion keinem Teil zuordnet, wird abgewiesen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeGross(context, { teilung: GUELTIG, befunde: [UMBAU_ZUGEORDNET], umbau: true });
+
+  exit(lauf, EXIT_GETEILT);
+  ohneErkundung(lauf);
+  assert.ok(ruecksendung(lauf).includes(`Regel Teilung: ${ALTFUNKTION} aus „## Altfunktionen“ steht 0-mal unter umbau statt genau einmal`), ruecksendung(lauf));
+  assert.equal(abgelegt(lauf, TEILE).ruecksendungen, 1);
+});
+
+test("eine Teilung, die eine Umbau-Altfunktion zwei Teilen zuordnet, wird abgewiesen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const doppelt = alsJson({ teile: [{ ...HINTERLEGEN, umbau: [ALTFUNKTION, FREMDER_UMBAU] }, MIT_UMBAU] });
+  const lauf = planeGross(context, { teilung: doppelt, befunde: [UMBAU_ZUGEORDNET], umbau: true });
+
+  exit(lauf, EXIT_GETEILT);
+  const text = ruecksendung(lauf);
+  assert.ok(text.includes(`Regel Teilung: ${ALTFUNKTION} aus „## Altfunktionen“ steht 2-mal unter umbau statt genau einmal`), text);
+  assert.ok(text.includes(`Regel Teilung: t1 nennt ${ALTFUNKTION} unter umbau, hat ${HINWEIS} aber nicht unter dateien`), text);
+  assert.ok(text.includes(`Regel Teilung: ${FREMDER_UMBAU} unter umbau ist keine Umbau-Altfunktion unter „## Altfunktionen“ im Pitch`), text);
+  assert.equal(abgelegt(lauf, TEILE).ruecksendungen, 1);
+});
+
+test("eine Teilung, die jede Umbau-Altfunktion genau einem Teil zuordnet, der ihre Datei unter dateien hat, wird angenommen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeGross(context, { teilung: UMBAU_ZUGEORDNET, umbau: true });
+
+  exit(lauf, EXIT_GETEILT);
+  ohneErkundung(lauf);
+  assert.deepEqual(aufrufe(lauf, "planer", BEFUNDE), []);
+  const geteilt = abgelegt(lauf, TEILE);
+  assert.deepEqual(geteilt.teile.map(({ kuerzel, umbau }) => ({ kuerzel, umbau })), [{ kuerzel: "t1", umbau: undefined }, { kuerzel: "t2", umbau: [ALTFUNKTION] }]);
 });
 
 test("ein Paket unter der Grenze, dessen Code-Dateien erst mit der Löschmenge über 10 liegen, plant ohne Teilung", { timeout: LAUF_FRIST_MS }, (context) => {
