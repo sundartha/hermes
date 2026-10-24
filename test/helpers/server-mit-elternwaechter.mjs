@@ -1,13 +1,5 @@
-const PRUEFINTERVALL_MS = 2000;
-const INIT_PPID = process.ppid;
-const WAISEN_PPID = 1;
+import { starteElternwaechter } from "../gemeinsam/elternwaechter.mjs";
 
-const waechter = setInterval(() => {
-  if (process.ppid === INIT_PPID && process.ppid !== WAISEN_PPID) return;
-  clearInterval(waechter);
-  process.exit(0);
-}, PRUEFINTERVALL_MS);
-
-waechter.unref();
+starteElternwaechter();
 
 await import("../../src/server.js");
