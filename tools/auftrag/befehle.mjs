@@ -55,14 +55,14 @@ export function gueltigePhase(phasendatei, root) {
   return { phase, befunde: phasenBefunde(phase, root) };
 }
 
-function gueltigerAuftrag(phasendatei, kennung, root) {
+export function gueltigerAuftrag(phasendatei, kennung, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
   if (befunde.length > 0) return { befunde };
   const auftrag = phase.auftraege.find(({ id }) => id === kennung);
   return auftrag ? { phase, auftrag, befunde } : { befunde: [`Die Phase hat keinen Auftrag ${kennung}.`] };
 }
 
-function meldeBefunde(befunde) {
+export function meldeBefunde(befunde) {
   for (const befund of befunde) console.error(befund);
   return EXIT_ROT;
 }
