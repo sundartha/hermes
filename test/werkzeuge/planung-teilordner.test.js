@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, planeAntworten } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
@@ -51,32 +51,12 @@ function text(wurzel, ordner, name) {
   return readFileSync(join(wurzel, ordner, name), "utf8");
 }
 
-function ersetze(datei, alt, neu) {
-  const vorher = readFileSync(datei, "utf8");
-  assert.ok(vorher.includes(alt), vorher);
-  writeFileSync(datei, vorher.replace(alt, neu));
-}
-
-function mitIssue(wurzel, ordner, issue) {
-  ersetze(join(wurzel, ordner, "pitch.md"), "Issue: offen", `Issue: ${issue}`);
-}
-
 function verbraucht(context, wurzel, { ordner, token }) {
   const antworten = { "planer|## Gliederung": [OHNE_JSON], "planer|## Zuschnitt": [OHNE_JSON] };
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: antworten, argumente: ["plane", ordner], token: { planer: token } });
   assert.ok(aufrufe(lauf, "planer").length > 0, lauf.stderr);
 }
 
-function t1Gemergt(wurzel) {
-  const nachricht = `Baue t1\n\nAuftrag: ${HINTERLEGEN.slice("plaene/".length)}/a1\nArt: funktion`;
-  const commit = runIn(wurzel, "git", ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-q", "--allow-empty", "-m", nachricht]);
-  assert.equal(commit.status, 0, commit.stderr);
-  mitUpstreamMaster(wurzel);
-}
-
-function bericht(wurzel, ordner) {
-  return JSON.parse(readFileSync(join(wurzel, ".fortschritt", ordner.slice("plaene/".length), "planung.json"), "utf8"));
-}
 
 function imHintergrund(context, { wurzel, ersatz }, argumente) {
   writeFileSync(join(ersatz, "antworten.json"), JSON.stringify({ "planer|## Gliederung": [{ warte: HAENGT_MS }], "planer|## Zuschnitt": [{ warte: HAENGT_MS }] }));
@@ -116,7 +96,7 @@ function plantMitDeckel(context, wurzel, { ordner, deckel }) {
 
   exit(lauf, EXIT_ABBRUCH);
   assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
-  assert.equal(bericht(wurzel, ordner).deckel.deckel, deckel);
+  assert.equal(planungsBericht({ wurzel }, ordner).deckel.deckel, deckel);
 }
 
 function ohneAgent(lauf) {
@@ -232,7 +212,7 @@ test("ein Teil plant mit dem kleineren Deckel aus Rest-Topf und Teil-Pitch", { t
   mitIssue(wurzel, HINTERLEGEN, 76);
   verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 300 });
   mitIssue(wurzel, HINWEIS_ORDNER, 79);
-  t1Gemergt(wurzel);
+  vorgaengerGemergt(wurzel, HINTERLEGEN);
 
   plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: FREIGABE - TEILUNG_TOKEN - 300 });
 });
@@ -309,7 +289,7 @@ test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile 
   exit(teilung, EXIT_GETEILT);
   mitIssue(wurzel, HINTERLEGEN, 87);
   mitIssue(wurzel, HINWEIS_ORDNER, 88);
-  t1Gemergt(wurzel);
+  vorgaengerGemergt(wurzel, HINTERLEGEN);
   const beende = imHintergrund(context, { wurzel, ersatz }, [HINTERLEGEN, "--deckel", "1000"]);
   await planerGestartet(ersatz);
 
@@ -317,7 +297,7 @@ test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile 
   beende();
 
   exit(lauf, EXIT_ABBRUCH);
-  assert.equal(bericht(wurzel, HINWEIS_ORDNER).deckel.deckel, GROSSE_FREIGABE - TEILUNG_TOKEN - 1000);
+  assert.equal(planungsBericht({ wurzel }, HINWEIS_ORDNER).deckel.deckel, GROSSE_FREIGABE - TEILUNG_TOKEN - 1000);
 });
 
 test("zwei Worktrees desselben Klons rechnen mit demselben Topf", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -330,7 +310,7 @@ test("zwei Worktrees desselben Klons rechnen mit demselben Topf", { timeout: LAU
   mitIssue(wurzel, HINTERLEGEN, 89);
   verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 700 });
   mitIssue(zweiter, HINWEIS_ORDNER, 90);
-  t1Gemergt(zweiter);
+  vorgaengerGemergt(zweiter, HINTERLEGEN);
 
   plantMitDeckel(context, zweiter, { ordner: HINWEIS_ORDNER, deckel: GROSSE_FREIGABE - TEILUNG_TOKEN - 700 });
 });
@@ -346,7 +326,7 @@ test("eine Laufdatei, die ein paralleler Lauf zwischen Auflisten und Lesen freig
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
   mitIssue(wurzel, HINWEIS_ORDNER, 91);
-  t1Gemergt(wurzel);
+  vorgaengerGemergt(wurzel, HINTERLEGEN);
   symlinkSync(join(wurzel, "freigegeben.json"), join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"));
 
   plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });

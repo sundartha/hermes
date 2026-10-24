@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
-import { ENTWURF_HINWEIS, ENTWURF_ROUTE, FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, KENNUNG, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, auftrag, bericht, exit, plane as planeLauf, schnittliste } from "./planung-probe.js";
-import { REPO_ROOT, runIn } from "./probe-repo.js";
+import { ENTWURF_HINWEIS, ENTWURF_ROUTE, FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, auftrag, bericht, exit, plane as planeLauf, schnittliste } from "./planung-probe.js";
+import { REPO_ROOT, mitUpstreamMaster, runIn } from "./probe-repo.js";
 
 export const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
 export const EXIT_GRUEN = 0;
@@ -37,8 +38,25 @@ export function phaseDatei({ wurzel }) {
   return join(wurzel, ORDNER, "phase.json");
 }
 
-export function planungsBericht({ wurzel }) {
-  return JSON.parse(readFileSync(join(wurzel, ".fortschritt", KENNUNG, "planung.json"), "utf8"));
+export function planungsBericht({ wurzel }, ordner = ORDNER) {
+  return JSON.parse(readFileSync(join(wurzel, ".fortschritt", basename(ordner), "planung.json"), "utf8"));
+}
+
+export function ersetze(datei, alt, neu) {
+  const vorher = readFileSync(datei, "utf8");
+  assert.ok(vorher.includes(alt), vorher);
+  writeFileSync(datei, vorher.replace(alt, neu));
+}
+
+export function mitIssue(wurzel, ordner, issue) {
+  ersetze(join(wurzel, ordner, "pitch.md"), "Issue: offen", `Issue: ${issue}`);
+}
+
+export function vorgaengerGemergt(wurzel, ordner) {
+  const nachricht = `Baue ${basename(ordner)}\n\nAuftrag: ${basename(ordner)}/a1\nArt: funktion`;
+  const commit = runIn(wurzel, "git", ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-q", "--allow-empty", "-m", nachricht]);
+  assert.equal(commit.status, 0, commit.stderr);
+  mitUpstreamMaster(wurzel);
 }
 
 export function werkzeug({ wurzel }, ...argumente) {
