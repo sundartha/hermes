@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, abgelegt, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
@@ -312,3 +312,76 @@ test("plane --deckel: hat der Erkunder keine frühere Messung und keine gemessen
   assert.equal(aufrufe(lauf, "erkunder").length, 0);
   assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_KNAPP_UNTER_ERSTER_WELLE_ZUM_PLANER_MITTEL, gemessen: PLANER, vorschau: ERSTE_WELLE * PLANER });
 });
+
+const ALLE_NUMMERN = GRUPPEN.flatMap(({ nummern }) => nummern);
+const EINE_GRUPPE = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN[0], nummern: ALLE_NUMMERN }] })], "erkunder|## Erkundung|S1": [bericht(ALLE_NUMMERN)] };
+const WEG_BEFUND = "der Weg endet nicht in speichereStatus";
+const MIT_WEGBEFUND = { ...EINE_GRUPPE, "pruefer-planung|## Wegprüfung|S1": [{ ...GRUEN_PRUEFLISTE, befunde: { "weg:S1": WEG_BEFUND } }] };
+const DECKEL_IN_DER_ERKUNDUNG = PLANER + ERKUNDER + WEGPRUEFER;
+const HALT_ZEILE = `Weg ${ALLE_NUMMERN.join(", ")}: die Wegprüfung blieb unvollständig, weil plane am Kostendeckel anhielt`;
+
+function zuschnittNachUebernahme(lauf, wegpruefungen = 0) {
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").length, wegpruefungen);
+  const [zuschnitt] = aufrufe(lauf, "planer", "## Zuschnitt");
+  return zuschnitt.eingabe;
+}
+
+test("plane --fortsetzen nach Exit 5 in der Korrektur nach der Wegprüfung übernimmt die bezahlte Erkundung samt offenem Wegbefund und startet keinen Erkunder und keine Wegprüfung neu", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = haeltVor(context, planOrdner(context), { deckel: DECKEL_IN_DER_ERKUNDUNG, ueberschrieben: MIT_WEGBEFUND, schritt: /^Korrektur nach der Wegprüfung S1, / });
+  assert.equal(aufrufe(gestoppt, "erkunder", "## Befunde").length, 0);
+  assert.equal(existsSync(planungsDatei(gestoppt, "fingerabdruck.json")), true);
+  assert.equal(existsSync(planungsDatei(gestoppt, "erkundung-g1.json")), true);
+
+  const zuschnitt = zuschnittNachUebernahme(fortgesetztGruen(context, gestoppt.wurzel, EINE_GRUPPE));
+
+  assert.ok(zuschnitt.includes(`Weg S1: ${WEG_BEFUND}`), zuschnitt);
+  assert.ok(zuschnitt.includes(HALT_ZEILE), zuschnitt);
+});
+
+const DECKEL_VOR_WEGPRUEFUNG = PLANER + ERKUNDER;
+
+function inDerErkundungGestoppt(context, { ueberschrieben, schritt }) {
+  const gestoppt = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_WEGPRUEFUNG, ueberschrieben, schritt });
+  assert.equal(aufrufe(gestoppt, "erkunder").length, 1);
+  assert.deepEqual(aufrufe(gestoppt, "pruefer-planung"), []);
+  assert.equal(existsSync(planungsDatei(gestoppt, "fingerabdruck.json")), true);
+  return gestoppt;
+}
+
+test("plane --fortsetzen nach Exit 5 vor der ersten Runde der Wegprüfung übernimmt den Bericht, startet aber dessen Wegprüfung, bevor es schneidet", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = inDerErkundungGestoppt(context, { ueberschrieben: EINE_GRUPPE, schritt: /^Wegprüfung S1, .*, Runde 1$/ });
+  assert.deepEqual(abgelegt(gestoppt, "fingerabdruck.json").zustand.wegAusstehend, [ALLE_NUMMERN]);
+
+  const lauf = fortgesetztGruen(context, gestoppt.wurzel, MIT_WEGBEFUND);
+
+  const zuschnitt = zuschnittNachUebernahme(lauf, 1);
+  assert.ok(zuschnitt.includes(`Weg S1: ${WEG_BEFUND}`), zuschnitt);
+  assert.ok(!zuschnitt.includes(HALT_ZEILE), zuschnitt);
+  assert.deepEqual(abgelegt(lauf, "fingerabdruck.json").zustand.wegAusstehend, []);
+});
+
+const DECKEL_VOR_ZWEITER_WEGRUNDE = PLANER + 2 * ERKUNDER + WEGPRUEFER;
+
+test("plane --fortsetzen nach Exit 5 vor der zweiten Runde der Wegprüfung prüft den korrigierten Bericht, bevor es schneidet", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ZWEITER_WEGRUNDE, ueberschrieben: { ...MIT_WEGBEFUND, "erkunder|## Befunde": [bericht(ALLE_NUMMERN)] }, schritt: /^Wegprüfung S1, .*, Runde 2$/ });
+  assert.equal(aufrufe(gestoppt, "erkunder", "## Befunde").length, 1);
+  assert.deepEqual(abgelegt(gestoppt, "fingerabdruck.json").zustand.wegAusstehend, [ALLE_NUMMERN]);
+
+  const zuschnitt = zuschnittNachUebernahme(fortgesetztGruen(context, gestoppt.wurzel, EINE_GRUPPE), 1);
+
+  assert.ok(!zuschnitt.includes(`Weg S1: ${WEG_BEFUND}`), zuschnitt);
+  assert.ok(!zuschnitt.includes(HALT_ZEILE), zuschnitt);
+});
+
+test("plane --fortsetzen nach Exit 5 vor der Rücksendung an den Erkunder übernimmt dessen ersten Bericht samt Befunden als offene Punkte", { timeout: LAUF_FRIST_MS }, (context) => {
+  const leer = { ...EINE_GRUPPE, "erkunder|## Erkundung|S1": [LEERER_BERICHT] };
+  const gestoppt = inDerErkundungGestoppt(context, { ueberschrieben: leer, schritt: /^Rücksendung an erkunder \(S1, / });
+  assert.deepEqual(abgelegt(gestoppt, "erkundung-g1.json").nummern, {});
+
+  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: EINE_GRUPPE });
+
+  const zuschnitt = zuschnittNachUebernahme(lauf);
+  assert.ok(zuschnitt.includes(`Bericht ${ALLE_NUMMERN.join(", ")}: `), zuschnitt);
+});
+

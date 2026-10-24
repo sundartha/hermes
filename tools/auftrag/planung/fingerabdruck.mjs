@@ -10,7 +10,7 @@ export const FINGERABDRUCK = "fingerabdruck.json";
 export const NACHFRAGEN = "nachfragen.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
-const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler"];
+const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend"];
 const KOPF_BAUM = "HEAD^{tree}";
 
 export function erkundungsDatei(stelle) {
