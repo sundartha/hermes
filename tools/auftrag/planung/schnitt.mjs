@@ -30,7 +30,7 @@ const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
 const GRENZE_NEUE_ZEILEN = 400;
 const PLANUNG = "planung";
-const SCHNITT = "schnitt.json";
+export const SCHNITT = "schnitt.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
 const EXIT_GRUEN = 0;
 const EXIT_BEFUNDE = 4;

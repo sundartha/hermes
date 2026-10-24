@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUEN_PRUEFLISTE, GRUPPEN, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, abgelegt, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
+import { A2_BEFUND, AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, MIT_NUMMER, abgelegt, antwortMit, jePruefer, phaseDatei, planeAntworten, planungsBericht, werkzeug } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
 const MIO = 1_000_000;
@@ -385,3 +386,75 @@ test("plane --fortsetzen nach Exit 5 vor der Rücksendung an den Erkunder übern
   assert.ok(zuschnitt.includes(`Bericht ${ALLE_NUMMERN.join(", ")}: `), zuschnitt);
 });
 
+function vorDemEntwurfGestoppt(context) {
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ENTWURF, ueberschrieben: {}, schritt: /^Entwurfs-Welle$/ });
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
+  return lauf;
+}
+
+function entworfenNachFortsetzung(context, { wurzel }) {
+  const lauf = fortgesetztGruen(context, wurzel);
+  assert.equal(aufrufe(lauf, "entwurf").length, ENTWURF_LAEUFE);
+  assert.equal(werkzeug(lauf, AUFTRAG, "pruefe", phaseDatei(lauf)).status, EXIT_GRUEN);
+  return lauf;
+}
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle übernimmt den befundfrei geprüften Schnitt und startet weder Planer noch Prüfer neu", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = entworfenNachFortsetzung(context, vorDemEntwurfGestoppt(context));
+
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
+});
+
+function umformatiert(gestoppt, name) {
+  const datei = planungsDatei(gestoppt, name);
+  writeFileSync(datei, JSON.stringify(JSON.parse(readFileSync(datei, "utf8"))));
+}
+
+function beanstandeterSchnittMitPassenderPruefsumme(gestoppt) {
+  const schnitt = JSON.stringify({ ...abgelegt(gestoppt, "schnitt.json"), auftraege: [] });
+  writeFileSync(planungsDatei(gestoppt, "schnitt.json"), schnitt);
+  const geprueft = { ...abgelegt(gestoppt, "geprueft.json"), schnitt: createHash("sha256").update(schnitt).digest("hex") };
+  writeFileSync(planungsDatei(gestoppt, "geprueft.json"), JSON.stringify(geprueft));
+}
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle bringt die übernommenen korrigierten Befunde und Nachprüfungen in den Planungsbericht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const mitKorrektur = { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(MIT_NUMMER)] };
+  const gestoppt = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_ENTWURF + PLANER + WEGPRUEFER, ueberschrieben: mitKorrektur, schritt: /^Entwurfs-Welle$/ });
+  const vorher = planungsBericht(gestoppt);
+  assert.equal(vorher.befunde.korrigiert.length, 1);
+  assert.equal(vorher.nachpruefungen.length, 1);
+
+  const lauf = entworfenNachFortsetzung(context, gestoppt);
+
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
+  const { befunde, nachpruefungen } = planungsBericht(lauf);
+  assert.deepEqual([befunde.korrigiert, befunde.zurueckgewiesen, nachpruefungen], [vorher.befunde.korrigiert, vorher.befunde.zurueckgewiesen, vorher.nachpruefungen]);
+});
+
+function neuGeschnittenNach(context, aendere) {
+  const gestoppt = vorDemEntwurfGestoppt(context);
+  aendere(gestoppt);
+
+  const lauf = entworfenNachFortsetzung(context, gestoppt);
+
+  assert.equal(aufrufe(lauf, "planer", "## Zuschnitt").length, 1);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
+}
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft neu, wenn planung/schnitt.json seit der Prüfung geändert ist", { timeout: LAUF_FRIST_MS }, (context) => {
+  neuGeschnittenNach(context, (gestoppt) => umformatiert(gestoppt, "schnitt.json"));
+});
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft neu, wenn planung/fingerabdruck.json seit der Prüfung geändert ist", { timeout: LAUF_FRIST_MS }, (context) => {
+  neuGeschnittenNach(context, (gestoppt) => umformatiert(gestoppt, "fingerabdruck.json"));
+});
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft neu, wenn planung/geprueft.json fehlt", { timeout: LAUF_FRIST_MS }, (context) => {
+  neuGeschnittenNach(context, (gestoppt) => rmSync(planungsDatei(gestoppt, "geprueft.json")));
+});
+
+test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft neu, wenn die Skriptprüfung den Schnitt trotz passender Prüfsumme beanstandet", { timeout: LAUF_FRIST_MS }, (context) => {
+  neuGeschnittenNach(context, beanstandeterSchnittMitPassenderPruefsumme);
+});
