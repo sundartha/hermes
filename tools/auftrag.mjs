@@ -7,6 +7,7 @@ import { importendungen } from "./auftrag/importendungen.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { testumbauFaelle } from "./auftrag/testumbau.mjs";
 import { karte } from "./auftrag/planung/karte.mjs";
+import { kette } from "./auftrag/planung/kette-befehl.mjs";
 import { messung } from "./auftrag/planung/messung.mjs";
 import { plane } from "./auftrag/planung/plane.mjs";
 import { schnittBefehl } from "./auftrag/planung/schnitt.mjs";
@@ -47,6 +48,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>] [--issue <Nummer>]",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
+  "        node tools/auftrag.mjs kette <datei:funktion> <datei:funktion>   (gibt die belegte Aufrufkette zwischen zwei Funktionen unter src/ mit Datei und Zeilen aus, sonst „kein Pfad belegt“ mit Exit 1; schreibt nichts)",
 ].join("\n");
 const SCHALTER = ["json", "fortsetzen"];
 const OPTIONEN = [
@@ -106,6 +108,7 @@ const BEFEHLE = {
   plane: { argumente: 1, schalter: ["fortsetzen"], fuehreAus: ([ordner], root, { fortsetzen, deckel, issue }) => plane(ordner, root, { fortsetzen, deckel, issue }) },
   suche: { mindestens: 1, fuehreAus: (argumente, root) => suche(argumente, root) },
   dateien: { mindestens: 0, fuehreAus: (pfade, root) => dateien(pfade, root) },
+  kette: { argumente: 2, fuehreAus: (stellen, root) => kette(stellen, root) },
 };
 
 function gelesen() {
