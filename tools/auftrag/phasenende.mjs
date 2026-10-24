@@ -32,6 +32,6 @@ export const TEILLAUF = "teillauf fährt ci-lokal nie, das tut phase einmal am E
 
 export function ciLokalNichtGelaufen(root, grund) {
   const basis = phasenbasis(root) ?? MASTER;
-  console.log(`ci-lokal nicht gelaufen: ${grund}. Vor dem Push selbst fahren: node tools/ci-lokal.mjs --basis ${basis}`);
+  console.log(`ci-lokal nicht gelaufen: ${grund}. Vor dem Push selbst fahren: SCHWERLAUF_VORRANG=push node tools/ci-lokal.mjs --basis ${basis}`);
   return EXIT_GRUEN;
 }

@@ -1,14 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { env } from "node:process";
+import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 
 import { werkzeugBefunde } from "./auftrag/werkzeuge.mjs";
 import { ausfuehren, gepruefteBasis, git } from "./pr-aenderungen.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 
 const LISTE = "tools/ci-lokal.json";
-const AUFRUF = "Aufruf: node tools/ci-lokal.mjs --basis <commit> [--mit-teuren]";
+const AUFRUF = "Aufruf: [SCHWERLAUF_VORRANG=push] node tools/ci-lokal.mjs --basis <commit> [--mit-teuren]";
+const ERSTES_ARGUMENT = 2;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const LETZTE_ZEILEN = 15;
@@ -64,5 +66,7 @@ function pruefen(root, { basis, mitTeuren }) {
 
 await ausfuehren(async (root) => {
   const { values } = parseArgs({ options: { basis: { type: "string" }, "mit-teuren": { type: "boolean", default: false } } });
-  return pruefen(root, { basis: git(["rev-parse", "--verify", gepruefteBasis(values.basis, AUFRUF, root)], root).trim(), mitTeuren: values["mit-teuren"] });
+  const basis = git(["rev-parse", "--verify", gepruefteBasis(values.basis, AUFRUF, root)], root).trim();
+  await nimmSperreAuchFuerKindprozesse(["ci-lokal", ...argv.slice(ERSTES_ARGUMENT)].join(" "), { vorrangFuerPush: true });
+  return pruefen(root, { basis, mitTeuren: values["mit-teuren"] });
 });
