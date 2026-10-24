@@ -4,21 +4,11 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { AUFTRAG, planeAntworten, UEBERGREIFENDER_PRUEFER } from "./planung-plane-probe.js";
-import { aufrufe, exit, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, planeIn, planOrdner } from "./planung-probe.js";
+import { aufrufe, BESTEHENDER_TEST, exit, GRUPPEN, hinweisInDerDateikarte, INDIREKTER_TEST, LAUF_FRIST_MS, ORDNER, planeIn, planOrdner, UEBER_ZWISCHENDATEI } from "./planung-probe.js";
 import { commitAll, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 import { dateiKarte, nachrichtenKarte } from "../../tools/auftrag/planung/funktionsliste.mjs";
 
-const DATEIKARTE = "### Dateikarte\n\n```json\n";
-const DIREKT = "test/anrufe/anrufreserve.test.js";
-const INDIREKT = "test/anrufe/indirekt.test.js";
-const ZWISCHEN = "test/anrufe/zwischen.js";
 const EXIT_GRUEN = 0;
-
-function karteAus(eingabe) {
-  const [, ab] = eingabe.split(DATEIKARTE);
-  assert.ok(ab, `die Nachricht enthält keine Dateikarte:\n${eingabe}`);
-  return JSON.parse(ab.split("\n```")[0]);
-}
 
 function nachrichtenProbe(context) {
   const wurzel = probeRepository(context, {
@@ -49,20 +39,16 @@ test("die Nachrichtenform der Dateikarte nennt die Zahl aller erreichenden Tests
 
 test("plane: Planer und übergreifender Prüfer sehen in der Dateikarte die Zahl aller Tests und nur die direkten", { timeout: LAUF_FRIST_MS }, (context) => {
   const wurzel = planOrdner(context);
-  writeFiles(wurzel, {
-    [ZWISCHEN]: `import { nimmAnruf } from "../../${HINWEIS}";\n\nexport const zwischen = nimmAnruf;\n`,
-    [INDIREKT]: 'import { zwischen } from "./zwischen.js";\n\nzwischen("x");\n',
-  });
+  writeFiles(wurzel, UEBER_ZWISCHENDATEI);
   commitAll(wurzel, "indirekter Test");
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER] });
   exit(lauf, EXIT_GRUEN);
   const [zuschnitt] = aufrufe(lauf, "planer", "## Zuschnitt");
   const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
   assert.equal(pruefungen.length, GRUPPEN.length + UEBERGREIFENDER_PRUEFER);
-  const uebergreifend = pruefungen.find(({ eingabe }) => eingabe.includes(DATEIKARTE));
+  const uebergreifend = pruefungen.find(({ eingabe }) => eingabe.includes("### Dateikarte"));
   for (const { eingabe } of [zuschnitt, uebergreifend]) {
-    const hinweis = karteAus(eingabe).find(({ datei }) => datei === HINWEIS);
-    assert.deepEqual({ testsGesamt: hinweis.testsGesamt, tests: hinweis.tests }, { testsGesamt: 2, tests: [DIREKT] });
-    assert.equal(eingabe.includes(INDIREKT), false, eingabe);
+    assert.deepEqual(hinweisInDerDateikarte(eingabe), { testsGesamt: 2, tests: [BESTEHENDER_TEST] });
+    assert.equal(eingabe.includes(INDIREKTER_TEST), false, eingabe);
   }
 });
