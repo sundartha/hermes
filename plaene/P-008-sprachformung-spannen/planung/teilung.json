@@ -1,0 +1,72 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "sprachformung-unterstrich",
+      "nummern": [
+        "S4",
+        "S5",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B10"
+      ],
+      "tWege": [
+        "T2"
+      ],
+      "dateien": [
+        "src/speech-shape.js",
+        "src/thinking-signal.js",
+        "src/claude.js",
+        "src/restricted-data.js",
+        "src/mcp-tools.js",
+        "src/log-maske.js",
+        "src/i18n/prompts/de.js",
+        "eslint.config.js",
+        ".dependency-cruiser.cjs",
+        "eslint-suppressions.json",
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Der Pitch verlangt zuerst den verhaltensgleichen, lintfreien Umbau von shapedCore (Fallen, Altfunktionen); er kommt mit der Unterstrichregel R2 und den Szenarien, die Umbau und R2 brechen können (B1, B3, B5, B7, B10 mit T2), in einen Teil, damit B7 aus Premortem Nr. 6 den Umbau sofort schützt; die Dateien außer speech-shape.js, eslint-suppressions.json und den Testdateien stehen nur als Belege des Umfangs darin und werden nicht geändert."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "sprachformung-spannen",
+      "nummern": [
+        "S1",
+        "S2",
+        "S3",
+        "B2",
+        "B4",
+        "B6",
+        "B8",
+        "B9"
+      ],
+      "tWege": [
+        "T1",
+        "T3"
+      ],
+      "dateien": [
+        "src/speech-shape.js",
+        "src/speech-chunker.js",
+        "src/routes/voice.js",
+        "src/elevenlabs/inbound-path-decision.js",
+        "src/telephony/adapters/telnyx/render.js",
+        "src/telephony/voice-render.js",
+        "src/tts/synth.js",
+        "src/util.js",
+        "tools/katalog-pruefen.mjs",
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Die Spannenregel R1 kommt in einen eigenen Teil mit allen Szenarien, die sie brechen kann und die kein bestehender Test schützt (B2, B4, B6, B8, B9), dazu Kettenbedingung (T1) und Laufzeitgrenze (T3, SG-27 in docs/sicherheitsgrenzen.md); damit geht keine Phase ohne den Kartenschutz live, und der Teil hängt von t1 ab, weil beide src/speech-shape.js ändern und R1 auf der umgebauten Formung aufsetzt; die Dateien außer speech-shape.js und docs/sicherheitsgrenzen.md stehen nur als Belege des Umfangs darin und werden nicht geändert."
+    }
+  ]
+}
