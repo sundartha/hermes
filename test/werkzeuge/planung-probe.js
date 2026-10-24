@@ -23,6 +23,7 @@ export const FUNDSTELLE = `${ROUTE}:1`;
 export const LOESUNG = "## Lösung";
 export const LAUF_FRIST_MS = 240_000;
 const AUSFUEHRBAR = 0o755;
+const ALTFUNKTIONEN_ZEILE = /^## Altfunktionen\n.*$/mu;
 
 const ROUTE_QUELLE = `export function registriere(router) {
   router.post("/api/self-service/private-number", function hinterlege(anfrage) {
@@ -138,6 +139,10 @@ export function hinweisInDerDateikarte(eingabe) {
   assert.ok(ab, `die Nachricht enthält keine Dateikarte:\n${eingabe}`);
   const { testsGesamt, tests } = JSON.parse(ab.split("\n```")[0]).find(({ datei }) => datei === HINWEIS);
   return { testsGesamt, tests };
+}
+
+export function mitUmbauZeilen(pitch, namen) {
+  return pitch.replace(ALTFUNKTIONEN_ZEILE, `## Altfunktionen\n${namen.map((name) => `- Umbau: \`${name}\``).join("\n")}`);
 }
 
 export function alsJson(wert) {

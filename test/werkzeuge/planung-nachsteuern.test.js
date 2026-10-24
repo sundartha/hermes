@@ -3,9 +3,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, pruefeTeilungOhneErkundung, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
-import { GRUEN_PRUEFLISTE, GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planOrdner, planeIn } from "./planung-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, pruefeTeilungOhneErkundung, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, probeDirectory, runIn } from "./probe-repo.js";
+import { RUECKSENDUNGEN } from "../../tools/auftrag/planung/fortschritt.mjs";
 
 const EXIT_DECKEL = 5;
 const ELTERN = "P-001-eigene-nummer";
@@ -33,13 +34,16 @@ const STELLE_QUELLE = "export const stelle = 1;\n";
 const TOTE_DATEIEN = ["src/stellen/alt-1.js", "src/stellen/alt-2.js"];
 const FEHLENDER_EINSTIEG = "src/fehlt.js:weg";
 const ERSTE_WELLE = GRUPPEN.length;
+const ALT_QUELLE = "export function alt() {\n  var wert = 1;\n  return wert;\n}\n";
+const EIGENER_UMBAU = `${ELF[0]}:alt`;
+const FREMDER_UMBAU = `${ELF[5]}:alt`;
 
 const ELTERN_TEILE = [
   eintrag("t1", "eigene-nummer-hinterlegen", { nummern: ["S1", "S2", "S3", "S6", "S7"], tWege: ["T1", "T2"], dateien: [ROUTE, ...ELF.slice(0, 5)] }),
   eintrag("t2", "hinweis-beim-anruf", { nummern: ["S4", "S5", "B1"], dateien: [HINWEIS, ...ELF.slice(5)], abhaengigVon: ["t1"] }),
 ];
 
-function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe }) {
+function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe, umbau }) {
   const elf = Object.fromEntries(ELF.map((datei) => [datei, STELLE_QUELLE]));
   for (const [datei, inhalt] of Object.entries({ ...elf, ...quellen })) {
     mkdirSync(dirname(join(wurzel, datei)), { recursive: true });
@@ -49,14 +53,15 @@ function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe }) {
   appendFileSync(join(wurzel, ORDNER, "design.md"), `\n${STELLEN}\n\n${geaendert.map((stelle) => `Ändert sich: \`${stelle}\``).join("\n")}\n`);
   const pitch = join(wurzel, ORDNER, "pitch.md");
   const loeschAbschnitt = einstiege.length === 0 ? "" : `\n## Löschen\n\n${einstiege.map((einstieg) => `- \`${einstieg}\``).join("\n")}\n`;
-  const freigegeben = readFileSync(pitch, "utf8").replace("Status: fertig", "Status: freigegeben");
+  const text = readFileSync(pitch, "utf8");
+  const freigegeben = (umbau.length === 0 ? text : mitUmbauZeilen(text, umbau)).replace("Status: fertig", "Status: freigegeben");
   const mitFreigabe = freigabe === undefined ? freigegeben : freigegeben.replace(/^Planung freigegeben: \d+ Token$/mu, `Planung freigegeben: ${freigabe} Token`);
   writeFileSync(pitch, mitFreigabe + loeschAbschnitt);
 }
 
-function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [], freigabe } = {}) {
+function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [], freigabe, umbau = [] } = {}) {
   const wurzel = planOrdner(context);
-  elfStellen(wurzel, { quellen, einstiege, stellen, freigabe });
+  elfStellen(wurzel, { quellen, einstiege, stellen, freigabe, umbau });
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [teilung], "planer|## Befunde": befunde }, argumente: ["plane", ORDNER] });
   return { ...lauf, wurzel };
 }
@@ -193,10 +198,74 @@ const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN
 const ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL = { erkunder: { laeufe: 1, token: TEIL_DECKEL } };
 const PLANER_TEURER_ALS_DER_TEIL_DECKEL = { planer: { laeufe: 1, token: TEIL_DECKEL + 1 } };
 const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
-const UNTER_TEILE_VON_T1 = alsJson({ teile: [
+const UNTER_TEILE = [
   eintrag("t1", "hinterlegen", { nummern: ["S1", "S7"], tWege: ["T2"], dateien: [ROUTE, ...ELF.slice(0, 2)] }),
   eintrag("t2", "bestaetigen", { nummern: ["S2", "S3", "S6"], tWege: ["T1"], dateien: ELF.slice(2, 5) }),
-] });
+];
+const UNTER_TEILE_VON_T1 = alsJson({ teile: UNTER_TEILE });
+const ELTERN_TEILE_MIT_UMBAU = [{ ...ELTERN_TEILE[0], umbau: [EIGENER_UMBAU] }, { ...ELTERN_TEILE[1], umbau: [FREMDER_UMBAU] }];
+
+function teilMitEigenemUndFremdemUmbau(context) {
+  const quellen = { [ELF[0]]: ALT_QUELLE, [ELF[5]]: ALT_QUELLE };
+  const { wurzel, ...teilung } = geteilt(context, { teilung: alsJson({ teile: ELTERN_TEILE_MIT_UMBAU }), quellen, umbau: [EIGENER_UMBAU, FREMDER_UMBAU] });
+  exit(teilung, EXIT_GETEILT);
+  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
+  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
+  return wurzel;
+}
+
+test("die Unter-Teilung eines Teils ordnet nur die Umbauten aus dessen Eintrag in der Eltern-teile.json zu", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = teilMitEigenemUndFremdemUmbau(context);
+  const nurEigener = alsJson({ teile: [{ ...UNTER_TEILE[0], umbau: [EIGENER_UMBAU] }, UNTER_TEILE[1]] });
+
+  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [nurEigener] } });
+
+  exit(lauf, EXIT_GETEILT);
+  const [frage] = aufrufe(lauf, "planer", "## Teilung");
+  const [, abUmbau = ""] = frage.eingabe.split("### Umbau dieses Teils\n");
+  const [umbauAbschnitt] = abUmbau.split("\n### ");
+  assert.ok(umbauAbschnitt.includes(EIGENER_UMBAU) && !umbauAbschnitt.includes(FREMDER_UMBAU), umbauAbschnitt);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Befunde"), []);
+  const unterTeile = JSON.parse(readFileSync(join(wurzel, HINTERLEGEN, "planung", "teile.json"), "utf8")).teile;
+  assert.deepEqual(unterTeile.map(({ kuerzel, umbau }) => ({ kuerzel, umbau })), [{ kuerzel: "t1", umbau: [EIGENER_UMBAU] }, { kuerzel: "t2", umbau: undefined }]);
+  assert.equal(existsSync(join(wurzel, "plaene/P-001-t1-t1-hinterlegen/pitch.md")), true);
+});
+
+function unterTeilungMitBefund(context, unterTeilung, wurzel = teilMitEigenemUndFremdemUmbau(context)) {
+  const immerGleich = Array.from({ length: RUECKSENDUNGEN }, () => unterTeilung);
+
+  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [unterTeilung], "planer|## Befunde": immerGleich } });
+
+  exit(lauf, EXIT_BEFUNDE);
+  assert.equal(existsSync(join(wurzel, "plaene/P-001-t1-t1-hinterlegen")), false);
+  return planungsBericht({ wurzel }, HINTERLEGEN).grund;
+}
+
+test("die Unter-Teilung eines Teils, die eine eigene Umbau-Zeile keinem Unter-Teil zuordnet, endet mit Befund", { timeout: LAUF_FRIST_MS }, (context) => {
+  const grund = unterTeilungMitBefund(context, UNTER_TEILE_VON_T1);
+
+  assert.ok(grund.includes(`Regel Teilung: ${EIGENER_UMBAU} aus umbau dieses Teils in der Eltern-teile.json steht 0-mal unter umbau statt genau einmal`), grund);
+});
+
+test("die Unter-Teilung eines Teils, die eine fremde Umbau-Zeile zuordnet oder eine eigene ohne ihre Datei, endet mit Befund", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vertauscht = alsJson({ teile: [{ ...UNTER_TEILE[0], umbau: [FREMDER_UMBAU] }, { ...UNTER_TEILE[1], umbau: [EIGENER_UMBAU] }] });
+
+  const grund = unterTeilungMitBefund(context, vertauscht);
+
+  assert.ok(grund.includes(`Regel Teilung: ${FREMDER_UMBAU} unter umbau ist keine Umbau-Altfunktion unter umbau dieses Teils in der Eltern-teile.json`), grund);
+  assert.ok(grund.includes(`Regel Teilung: t2 nennt ${EIGENER_UMBAU} unter umbau, hat ${ELF[0]} aber nicht unter dateien`), grund);
+});
+
+test("die Unter-Teilung eines Teils aus einer Eltern-teile.json ohne umbau-Felder verlangt wie bisher alle Umbau-Zeilen des Pitches", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = teilMitEigenemUndFremdemUmbau(context);
+  const elternTeile = join(wurzel, ORDNER, "planung", "teile.json");
+  writeFileSync(elternTeile, JSON.stringify({ ...JSON.parse(readFileSync(elternTeile, "utf8")), teile: ELTERN_TEILE }));
+  const nurEigener = alsJson({ teile: [{ ...UNTER_TEILE[0], umbau: [EIGENER_UMBAU] }, UNTER_TEILE[1]] });
+
+  const grund = unterTeilungMitBefund(context, nurEigener, wurzel);
+
+  assert.ok(grund.includes(`Regel Teilung: ${FREMDER_UMBAU} aus „## Altfunktionen“ steht 0-mal unter umbau statt genau einmal`), grund);
+});
 
 test("liegt die Vorschau der Erkundung mit dem Startwert aus einem anderen Worktree über dem Teil-Deckel, teilt sich ein Teil mit 2 Gruppen, statt mit Exit 5 zu enden, und reicht seinen Deckel an die Unter-Teile weiter", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
