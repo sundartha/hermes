@@ -154,13 +154,14 @@ function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, ste
 }
 
 class Teilung {
-  constructor(root, ordner, { soll, umfang, deckel, ueber }) {
+  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung }) {
     this.root = root;
     this.ordner = ordner;
     this.soll = soll;
     this.umfang = umfang;
     this.deckel = deckel;
     this.ueber = ueber;
+    this.ableitung = ableitung;
     this.dokumente = dokumenteIm(ordner);
     this.team = new Team(root, ordner);
     this.planer = this.team.teilnehmer("planer");
@@ -206,7 +207,9 @@ class Teilung {
     }
     this.lege(ANTWORT, antwort.wert);
     const form = teilungBefunde(antwort.wert);
-    return { befunde: form.length > 0 ? form : schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, root: this.root }) };
+    if (form.length > 0) return { befunde: form };
+    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, root: this.root });
+    return { befunde: schnitt.length > 0 ? schnitt : this.ableitung(antwort.wert).map(regel) };
   }
 
   geteilt(teile, ruecksendungen) {
@@ -233,13 +236,13 @@ class Teilung {
   }
 }
 
-export async function teilungHalt(root, ordner, { umfang, deckel }) {
+export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
   const { soll, unklar } = nummernImOrdner(ordner);
   if (unklar.length > 0) return null;
   const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: codeDateien(umfang.codeDateien, loeschDateien(umfang)).length });
   if (ueber.length === 0) return null;
   try {
-    return await new Teilung(root, ordner, { soll, umfang, deckel, ueber }).laufe();
+    return await new Teilung(root, ordner, { soll, umfang, deckel, ueber, ableitung }).laufe();
   } catch (fehler) {
     if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, fehler: fehler.message };
     throw fehler;

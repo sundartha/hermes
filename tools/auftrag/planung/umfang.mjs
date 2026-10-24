@@ -33,10 +33,21 @@ function kilobyte(dokumente) {
   return Math.round((bytes / BYTE_JE_KB) * ZEHNTEL) / ZEHNTEL;
 }
 
-export async function umfang(root, ordner) {
+function stelleIn(dateien) {
+  return (stelle) => dateien.includes(stelle.slice(0, stelle.lastIndexOf(":")));
+}
+
+async function loeschmengeIn(root, einstiege, dateien) {
+  const menge = await loeschmenge(root, einstiege);
+  if (dateien === undefined) return menge;
+  return { ...menge, dateien: menge.dateien.filter((datei) => dateien.includes(datei)), exporte: menge.exporte.filter(stelleIn(dateien)), reste: menge.reste.filter(stelleIn(dateien)) };
+}
+
+export async function umfang(root, ordner, { dateien } = {}) {
   const dokumente = dokumenteIm(ordner);
-  const stellen = genannteStellen(dokumente);
-  const belegt = pruefbareDateien(root, stellen.map(({ datei }) => datei));
+  const genannt = genannteStellen(dokumente);
+  const stellen = dateien === undefined ? genannt : genannt.filter(({ datei }) => dateien.includes(datei));
+  const belegt = pruefbareDateien(root, dateien ?? stellen.map(({ datei }) => datei));
   const codeDateien = belegt.filter((datei) => !istTestdatei(datei));
   const funktionen = genannteFunktionen(root, stellen);
   const einstiege = loeschEinstiege(dokumente[PITCH] ?? "");
@@ -48,7 +59,7 @@ export async function umfang(root, ordner) {
     altfunktionen: funktionen.filter(istAltfunktion).length,
     testsAnDateien: await testsAn(root, codeDateien),
     dokumentKB: kilobyte(dokumente),
-    ...(einstiege && { loeschmenge: await loeschmenge(root, einstiege) }),
+    ...(einstiege && { loeschmenge: await loeschmengeIn(root, einstiege, dateien) }),
   };
 }
 

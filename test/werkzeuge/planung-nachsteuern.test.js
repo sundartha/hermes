@@ -30,6 +30,9 @@ const PLANER = 100_000;
 const PLANER_JE_AUFRUF = 1000;
 const PLANER_AUFRUFE_BIS_TEILUNG = 2;
 const NEBENROLLE_JE_AUFRUF = 10;
+const STELLE_QUELLE = "export const stelle = 1;\n";
+const TOTE_DATEIEN = ["src/stellen/alt-1.js", "src/stellen/alt-2.js"];
+const FEHLENDER_EINSTIEG = "src/fehlt.js:weg";
 const ERSTE_WELLE = GRUPPEN.length;
 
 function eintrag(kuerzel, name, { nummern, tWege = [], dateien, abhaengigVon = [] }) {
@@ -41,20 +44,23 @@ const ELTERN_TEILE = [
   eintrag("t2", "hinweis-beim-anruf", { nummern: ["S4", "S5", "B1"], dateien: [HINWEIS, ...ELF.slice(5)], abhaengigVon: ["t1"] }),
 ];
 
-function elfStellen(wurzel) {
-  for (const datei of ELF) {
+function elfStellen(wurzel, { quellen, einstiege, stellen }) {
+  const elf = Object.fromEntries(ELF.map((datei) => [datei, STELLE_QUELLE]));
+  for (const [datei, inhalt] of Object.entries({ ...elf, ...quellen })) {
     mkdirSync(dirname(join(wurzel, datei)), { recursive: true });
-    writeFileSync(join(wurzel, datei), "export const stelle = 1;\n");
+    writeFileSync(join(wurzel, datei), inhalt);
   }
-  appendFileSync(join(wurzel, ORDNER, "design.md"), `\n${STELLEN}\n\n${ELF.map((datei) => `Ändert sich: \`${datei}:1\``).join("\n")}\n`);
+  const geaendert = [...ELF.map((datei) => `${datei}:1`), ...stellen];
+  appendFileSync(join(wurzel, ORDNER, "design.md"), `\n${STELLEN}\n\n${geaendert.map((stelle) => `Ändert sich: \`${stelle}\``).join("\n")}\n`);
   const pitch = join(wurzel, ORDNER, "pitch.md");
-  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Status: fertig", "Status: freigegeben"));
+  const loeschAbschnitt = einstiege.length === 0 ? "" : `\n## Löschen\n\n${einstiege.map((einstieg) => `- \`${einstieg}\``).join("\n")}\n`;
+  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Status: fertig", "Status: freigegeben") + loeschAbschnitt);
 }
 
-function geteilt(context, teilungen = [alsJson({ teile: ELTERN_TEILE })]) {
+function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [] } = {}) {
   const wurzel = planOrdner(context);
-  elfStellen(wurzel);
-  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": teilungen }, argumente: ["plane", ORDNER] });
+  elfStellen(wurzel, { quellen, einstiege, stellen });
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [teilung], "planer|## Befunde": befunde }, argumente: ["plane", ORDNER] });
   return { ...lauf, wurzel };
 }
 
@@ -116,7 +122,7 @@ test("ein Schritt mit Erkunder und Wegprüfer bucht jede Rolle mit ihren eigenen
 
 test("ein Teil nur mit B-Szenarien wird in der Teilung zurückgeschickt", { timeout: LAUF_FRIST_MS }, (context) => {
   const nurB = alsJson({ teile: [{ ...ELTERN_TEILE[0], nummern: ["S1", "S2", "S3", "S4", "S5", "S6", "S7"] }, { ...ELTERN_TEILE[1], nummern: ["B1"] }] });
-  const lauf = geteilt(context, [nurB, alsJson({ teile: ELTERN_TEILE })]);
+  const lauf = geteilt(context, { teilung: nurB, befunde: [alsJson({ teile: ELTERN_TEILE })] });
 
   exit(lauf, EXIT_GETEILT);
   const [ruecksendung] = aufrufe(lauf, "planer", "## Befunde");
@@ -130,6 +136,52 @@ test("umfang eines Teils zählt nur seine Dateien", { timeout: LAUF_FRIST_MS }, 
   const umfang = umfangDesHinweisTeils(context, geteilt(context));
 
   assert.deepEqual(umfang.codeDateien, [HINWEIS, ...ELF.slice(5)].toSorted());
+});
+
+test("die Löschmenge eines Teils zählt nur die Dateien dieses Teils", { timeout: LAUF_FRIST_MS }, (context) => {
+  const mitToten = ELTERN_TEILE.map((teil, stelle) => ({ ...teil, dateien: [...teil.dateien, TOTE_DATEIEN[stelle]] }));
+  const tote = Object.fromEntries(TOTE_DATEIEN.map((datei) => [datei, STELLE_QUELLE]));
+  const umfang = umfangDesHinweisTeils(context, geteilt(context, { teilung: alsJson({ teile: mitToten }), quellen: tote, einstiege: TOTE_DATEIEN.map((datei) => `${datei}:stelle`) }));
+
+  assert.deepEqual(umfang.loeschmenge.dateien, [TOTE_DATEIEN[1]]);
+});
+
+function kette(nummer) {
+  const ordner = `src/kette-${nummer}`;
+  return {
+    [`${ordner}/a.js`]: `import { b1 } from "./b.js";\n\nexport function a() {\n  return b1();\n}\n`,
+    [`${ordner}/b.js`]: `import { c } from "./c.js";\n\nexport function b1() {\n  return c();\n}\n\nexport function b2() {\n  return 2;\n}\n`,
+    [`${ordner}/c.js`]: `export function c() {\n  return 3;\n}\n`,
+    [`${ordner}/d.js`]: `import { b2 } from "./b.js";\n\nconsole.log(b2());\n`,
+    [`test/kette-${nummer}.test.js`]: `import { a } from "../${ordner}/a.js";\n\na();\n`,
+  };
+}
+
+const GENANNTE_FUNKTIONEN_JE_KETTE = 1;
+
+function ketteImTeil(nummer) {
+  return ["a.js", "b.js", "c.js"].map((datei) => `src/kette-${nummer}/${datei}`);
+}
+
+test("die Löschmenge eines Teils zählt Exporte, Reste und Funktionen nur aus seinen Dateien und behält betroffene Tests und fehlende Einstiege vollständig", { timeout: LAUF_FRIST_MS }, (context) => {
+  const mitKetten = ELTERN_TEILE.map((teil, stelle) => ({ ...teil, dateien: [...teil.dateien, ...ketteImTeil(stelle + 1)] }));
+  const einstiege = ["src/kette-1/a.js:a", "src/kette-2/a.js:a", FEHLENDER_EINSTIEG];
+  const teilung = geteilt(context, { teilung: alsJson({ teile: mitKetten }), quellen: { ...kette(1), ...kette(2) }, einstiege, stellen: ["src/kette-1/b.js:3", "src/kette-2/b.js:3"] });
+
+  const umfang = umfangDesHinweisTeils(context, teilung);
+  mitIssue(teilung.wurzel, HINTERLEGEN, TEIL_ISSUE);
+  exit(planeTeil(context, teilung.wurzel, { ordner: HINTERLEGEN }), EXIT_ABBRUCH);
+
+  const geschwister = planungsBericht(teilung, HINTERLEGEN).umfang;
+  assert.deepEqual([geschwister.loeschmenge.exporte, geschwister.loeschmenge.reste], [["src/kette-1/b.js:b1"], ["src/kette-1/b.js:c"]]);
+  assert.deepEqual(umfang.loeschmenge, {
+    dateien: ["src/kette-2/a.js", "src/kette-2/c.js"],
+    exporte: ["src/kette-2/b.js:b1"],
+    reste: ["src/kette-2/b.js:c"],
+    tests: [{ datei: "test/kette-1.test.js", art: "löschen" }, { datei: "test/kette-2.test.js", art: "löschen" }],
+    fehlend: [FEHLENDER_EINSTIEG],
+  });
+  assert.deepEqual([umfang.funktionen, geschwister.funktionen], [GENANNTE_FUNKTIONEN_JE_KETTE, GENANNTE_FUNKTIONEN_JE_KETTE]);
 });
 
 function zweiterWorktree(context, wurzel) {
