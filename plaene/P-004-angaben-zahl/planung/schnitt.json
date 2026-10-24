@@ -10,11 +10,11 @@
     },
     {
       "auftrag": "a1",
-      "text": "`src/mcp-tools.js` ändert sich nicht. Das Werkzeug ruft `loc.mcp.consultAnswerAccepted(mergedFacts)` weiter mit der Zahl auf (`src/mcp-tools.js:1018`), die strukturierte Antwort entsteht unabhängig vom Text (`src/mcp-tools.js:1019`), und die gepinnten Lint-Befunde von `registerTools` bleiben unberührt."
+      "text": "`src/mcp-tools.js` ändert sich nicht. Das Werkzeug ruft `loc.mcp.consultAnswerAccepted(mergedFacts)` weiter mit der Zahl auf (`src/mcp-tools.js:1018`), die strukturierte Antwort (`structuredContent`) entsteht unabhängig vom Text (`src/mcp-tools.js:1019`), und die gepinnten Lint-Befunde von `registerTools` bleiben unberührt."
     },
     {
       "auftrag": "a1",
-      "text": "Die MCP-Tabellen tragen kein Sprachfeld (`src/i18n/locales.js:126`, `:211`, `:296` liegen eine Ebene höher). Jede `consultAnswerAccepted` gehört aber fest zu ihrer Tabelle, und `localeFor` (`src/i18n/locales.js:406-408`) wählt die Tabelle. Deshalb genügt `Intl.PluralRules` mit dem Sprachcode der Tabelle in der Funktion selbst, und die Beugung läuft nach der Sprache der gewählten Tabelle, wie Pitch „Fallen“ es verlangt."
+      "text": "Die MCP-Tabellen tragen kein Sprachfeld (das Feld `language` in `src/i18n/locales.js:126`, `:211`, `:296` liegt eine Ebene höher). Jede `consultAnswerAccepted` gehört aber fest zu ihrer Tabelle, und `localeFor` (`src/i18n/locales.js:406-408`) wählt die Tabelle. Deshalb genügt `Intl.PluralRules` mit dem Sprachcode der Tabelle in der Funktion selbst, und die Beugung läuft nach der Sprache der gewählten Tabelle, wie Pitch „Fallen“ es verlangt."
     },
     {
       "auftrag": "a1",
