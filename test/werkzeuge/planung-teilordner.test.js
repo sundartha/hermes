@@ -137,6 +137,37 @@ test("der Kopf eines Teil-Pitches nennt Status, offenes Issue, den Teil-Deckel a
   assert.deepEqual(topf, { freigabe: FREIGABE, vorschnitt: TEILUNG_TOKEN, teile: 0, rest: TEIL_DECKEL, teilDeckel: TEIL_DECKEL });
 });
 
+test("die erste Teilung mit Exit 7 schreibt planung.json mit gemessenen Token je Rolle und Exit 7", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = geteilt(context);
+
+  exit(lauf, EXIT_GETEILT);
+  const plan = planungsBericht(lauf);
+  assert.equal(plan.exit, EXIT_GETEILT);
+  assert.deepEqual(plan.beteiligte.map(({ rolle, token }) => ({ rolle, token })), [{ rolle: "planer", token: TEILUNG_TOKEN }]);
+  assert.equal(plan.token, abgelegt(lauf, "teile.json").token);
+});
+
+test("die Ausgabe der ersten Teilung nennt Freigabe, Vorschnitt-Kosten, Rest-Topf und Zahl der Teile", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = geteilt(context);
+
+  exit(lauf, EXIT_GETEILT);
+  const bericht = lauf.stdout.split(`Planung ${ELTERN}: Exit ${EXIT_GETEILT}`)[1] ?? "";
+  const topf = bericht.split("\n").find((zeile) => zeile.startsWith("Topf:")) ?? "";
+  for (const angabe of [`Freigabe ${FREIGABE} Token`, `Vorschnitt gemessen ${TEILUNG_TOKEN} Token`, `Rest ${TEIL_DECKEL} Token`, `${TEIL_ORDNER.length} Teile`]) assert.ok(topf.includes(angabe), `${angabe}\n\n${lauf.stdout}`);
+});
+
+test("hält die erste Teilung am Deckel mit Exit 5, schreibt sie planung.json mit gemessenen Token und Exit 5 und behält ihre Meldung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const freigabe = TEILUNG_TOKEN - 1;
+  const lauf = geteilt(context, { freigabe });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.ok(lauf.stderr.includes(`Deckel ${freigabe} Token: gemessen ${TEILUNG_TOKEN}`), lauf.stderr);
+  for (const ordner of TEIL_ORDNER) assert.ok(!existsSync(join(lauf.wurzel, ordner)), ordner);
+  const plan = planungsBericht(lauf);
+  assert.equal(plan.exit, EXIT_DECKEL);
+  assert.deepEqual(plan.beteiligte.map(({ rolle, token }) => ({ rolle, token })), [{ rolle: "planer", token: TEILUNG_TOKEN }]);
+});
+
 test("ein Teil eines nicht freigegebenen Eltern-Pitches übernimmt dessen Status, statt eine Freigabe zu behaupten", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = geteilt(context, { status: "Status: fertig (nicht freigegeben)" });
 
