@@ -41,6 +41,7 @@ import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
+import { teilungHalt } from "./teilung.mjs";
 import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
@@ -898,7 +899,9 @@ async function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }
   const halt = fortsetzen ? null : altfunktionenHalt(root, ordner);
   if (halt !== null) return halt;
   const gemessen = await umfang(root, ordner);
-  return { deckel, issue, umfang: gemessen, fehler: legeAblageAn(ordner, fortsetzen) };
+  const ablage = legeAblageAn(ordner, fortsetzen);
+  const teilung = fortsetzen || ablage !== null ? null : await teilungHalt(root, ordner, { umfang: gemessen, deckel });
+  return teilung ?? { deckel, issue, umfang: gemessen, fehler: ablage };
 }
 
 function ausgang(fehler) {

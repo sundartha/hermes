@@ -8,6 +8,7 @@ export const EXIT_PASST_NICHT = 3;
 export const EXIT_BEFUNDE = 4;
 export const EXIT_DECKEL = 5;
 export const EXIT_ALTFUNKTIONEN = 6;
+export const EXIT_GETEILT = 7;
 export const PLANER_KONTEXT = ["CLAUDE.md", ".github/CODEOWNERS", "tools/bereiche.json"];
 const JSON_EINRUECKUNG = 2;
 

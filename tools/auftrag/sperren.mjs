@@ -37,7 +37,7 @@ function schiebe(cwd, aenderungen) {
   return spawnSync("git", ["push", "-q", "--atomic", ...leases, REMOTE, ...ziele], { cwd, encoding: "utf8" });
 }
 
-function ueberschneiden(links, rechts) {
+export function ueberschneiden(links, rechts) {
   return links === rechts || links.startsWith(`${rechts}/`) || rechts.startsWith(`${links}/`);
 }
 

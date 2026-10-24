@@ -404,6 +404,10 @@ export function umbenennungBefunde(auftraege) {
   });
 }
 
+export function istKennung(wert) {
+  return typeof wert === "string" && KENNUNG.test(wert);
+}
+
 export function phasenBefunde(phase, root) {
   if (phase === null || typeof phase !== "object") return ["Die Phasendatei ist kein Objekt."];
   const befunde = [];
