@@ -26,7 +26,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe } from "./deckel.mjs";
+import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe, verbucheLauf } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -929,6 +929,7 @@ function berichte(planung, ergebnis) {
   };
   const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht() };
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
+  verbucheLauf(planung.root, planung.team.beteiligte);
   for (const befund of ergebnis.offen) console.error(befund);
   return ergebnis.exit;
 }
