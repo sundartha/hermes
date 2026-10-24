@@ -6,7 +6,7 @@ import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { auswegBei, nenntAltenTest, zweckUnklar } from "./ausgang.mjs";
 import { frage } from "./einsatz.mjs";
-import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, phasenBefunde } from "./format.mjs";
+import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, istVertraulich, phasenBefunde } from "./format.mjs";
 import { git } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
@@ -175,7 +175,9 @@ function vorbauBefund(plan, datei) {
   return art === TESTUMBAU && abnahme === datei ? null : `kein ${TESTUMBAU} mit abnahme ${datei}`;
 }
 
-function veroeffentliche(issue, text, root) {
+function veroeffentliche(phase, text, root) {
+  if (istVertraulich(phase)) return { pruefungen: [], hinweis: "Die Phase ist vertraulich; die Notiz steht nur im Beleg." };
+  const { issue } = phase;
   const ziel = String(issue);
   if (issueBefunde({ issue }).length > 0) {
     return { pruefungen: [], hinweis: "Die Phasendatei nennt kein gültiges Issue; die Notiz steht nur im Beleg." };
@@ -190,6 +192,17 @@ function veroeffentliche(issue, text, root) {
     ? `Die Notiz steht als Kommentar im Issue ${ziel}.`
     : "Die Notiz ließ sich nicht vollständig ins Issue schreiben; sie steht im Beleg.";
   return { pruefungen, hinweis };
+}
+
+function freigabeWeg(phase, auftrag, { datei, test }) {
+  const diff = `Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`;
+  if (istVertraulich(phase)) {
+    return [`Die Phase ist vertraulich; lauf gibt hier keinen alten Test frei. Der Auftrag bleibt stehen, und der Stand geht als Text ins Advisory. ${diff}`];
+  }
+  return [
+    `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. ${diff}`,
+    `So wirkt die Freigabe im nächsten lauf: je ein Listenpunkt \`${datei}\` (für lauf) und \`${test}\` (für die CI) ${listHint()}, hier Issue #${phase.issue}; das Label kommt nach der letzten Textänderung, eine spätere Textänderung hebt die Freigabe auf. Dann ändert nur der Test-Agent genau diese Datei, und jeder geänderte Fall muss gegen den alten Code rot sein.`,
+  ];
 }
 
 class Runden {
@@ -362,7 +375,7 @@ class Runden {
   legeAltenTestAntonioVor(ergebnis, vorbau) {
     verwerfe(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
-    const { zeile, datei, test, rot } = ergebnis.alterTest;
+    const { zeile, datei, rot } = ergebnis.alterTest;
     const kopf = [
       `Der Bau-Agent hat den Auftrag ${auftrag.id} der Phase ${phase.phase} angehalten: Ein alter Test hält das Verhalten fest, das der Auftrag ändert.`,
       "",
@@ -370,8 +383,7 @@ class Runden {
       auswegBei([PRUEFUNG.BETROFFENE_TESTS]),
       "",
       `Die Testdatei ${datei} ist mit der Änderung des Agenten rot: ${rot ? "ja" : "nein"}. Den Testnamen gibt es in der Datei; ob genau dieser Fall rot ist, prüft das Skript nicht.`,
-      `Für eine Freigabe: Label verhalten-geaendert am Issue mit ${datei}:${test}. Der Diff des Agenten steht im Beleg ${BELEGE}/${phase.phase}/${auftrag.id}.json, Feld alterTest.diff.`,
-      `So wirkt die Freigabe im nächsten lauf: je ein Listenpunkt \`${datei}\` (für lauf) und \`${test}\` (für die CI) ${listHint()}, hier Issue #${phase.issue}; das Label kommt nach der letzten Textänderung, eine spätere Textänderung hebt die Freigabe auf. Dann ändert nur der Test-Agent genau diese Datei, und jeder geänderte Fall muss gegen den alten Code rot sein.`,
+      ...freigabeWeg(phase, auftrag, ergebnis.alterTest),
       vorbau,
     ].join("\n");
     const hinweise = hinweiseDesBaus(ergebnis.agenten);
@@ -398,7 +410,7 @@ class Runden {
     const hinweise = hinweiseFuerNotiz(ergebnis.agenten);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");
     const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notizText, "", ...hinweise, ...(hinweise.length > 0 ? [""] : [])].join("\n");
-    const veroeffentlicht = veroeffentliche(phase.issue, text, root);
+    const veroeffentlicht = veroeffentliche(phase, text, root);
     schreibeBeleg(root, { ...ergebnis, runden: this.fehler, entscheidung: { text, agenten: notiz.sitzungen, ...veroeffentlicht } });
     console.log(`Auftrag ${auftrag.id}: Entscheidung nötig. ${veroeffentlicht.hinweis}`);
     return ROT;
