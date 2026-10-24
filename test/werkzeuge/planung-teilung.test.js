@@ -4,12 +4,11 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { genannteStellen } from "../../tools/auftrag/planung/altfunktionen-vorab.mjs";
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten, teilEintrag as teil } from "./planung-plane-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
-const EXIT_GETEILT = 7;
 const TEILUNG = "## Teilung";
 const BEFUNDE = "## Befunde";
 const TEILE = "teile.json";
@@ -21,10 +20,6 @@ const P006_DOKUMENTE = ["pitch.md", "design.md", "sicherheit.md"];
 const P006_CODE_DATEIEN = 9;
 const HINWEIS_ZEILE = 7;
 const ALTFUNKTIONEN_KEINE = "\n## Altfunktionen\nkeine, weil die Fixture nur den Planungsweg vor dem ersten Agenten prüft\n";
-
-function teil(kuerzel, name, { nummern, tWege = [], dateien, abhaengigVon = [], nurUmbau = false }) {
-  return { kuerzel, name, nummern, tWege, dateien, nurUmbau, abhaengigVon, grund: `${name} hat einen eigenen Eingang` };
-}
 
 const HINTERLEGEN = teil("t1", "eigene-nummer-hinterlegen", { nummern: ERSTER, tWege: ["T1", "T2"], dateien: [ROUTE] });
 const HINWEIS_TEIL = teil("t2", "hinweis-beim-anruf", { nummern: ZWEITER, dateien: [HINWEIS], abhaengigVon: ["t1"] });

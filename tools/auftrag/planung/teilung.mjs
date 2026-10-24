@@ -12,7 +12,7 @@ import { nummernImOrdner } from "./nummern.mjs";
 import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
-import { GRENZE_CODE_DATEIEN, GRENZE_SZENARIEN, dokumenteIm } from "./umfang.mjs";
+import { GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, dokumenteIm } from "./umfang.mjs";
 
 const TEILE = "teile.json";
 const ANTWORT = "teilung.json";
@@ -38,6 +38,18 @@ function ueberDerGrenze({ szenarien, codeDateien }) {
   return ueber;
 }
 
+export function gruppenZahlUeber(anzahl) {
+  return anzahl > GRENZE_GRUPPEN ? [`${anzahl} Gruppen, Grenze ${GRENZE_GRUPPEN}`] : [];
+}
+
+export function gruppenMit(gruppen, nummern) {
+  return gruppen.filter((gruppe) => gruppe.nummern.some((nummer) => nummern.includes(nummer)));
+}
+
+function gruppenDes({ nummern, tWege }, gliederung) {
+  return gliederung === null ? 0 : gruppenMit(gliederung.gruppen, [...nummern, ...tWege]).length;
+}
+
 function loeschDateien(umfang) {
   return new Set(umfang.loeschmenge?.dateien ?? []);
 }
@@ -61,12 +73,13 @@ function istOrdner(root, datei) {
   return datei.endsWith(ORDNER_ENDE) || (existsSync(join(root, datei)) && statSync(join(root, datei)).isDirectory());
 }
 
-function teilBefunde(teil, { root, loeschen }) {
+function teilBefunde(teil, { root, loeschen, gliederung }) {
   const { kuerzel, nummern, tWege, dateien, nurUmbau } = teil;
   const befunde = dateien.filter((datei) => istOrdner(root, datei)).map((datei) => regel(`${kuerzel} nennt unter dateien den Ordner ${datei}; nenn die Dateien einzeln`));
-  const gemessen = { szenarien: nummern.length, codeDateien: codeDateien(dateien, loeschen).length };
+  const gemessen = { szenarien: nummern.length, codeDateien: codeDateien(dateien, loeschen).length, gruppen: gruppenDes(teil, gliederung) };
   if (gemessen.szenarien > GRENZE_SZENARIEN) befunde.push(regel(`${kuerzel} hat ${gemessen.szenarien} Szenarien S/B unter nummern, die Grenze ist ${GRENZE_SZENARIEN}`));
   if (gemessen.codeDateien > GRENZE_CODE_DATEIEN) befunde.push(regel(`${kuerzel} hat ${gemessen.codeDateien} Code-Dateien, die Grenze ist ${GRENZE_CODE_DATEIEN}`));
+  if (gemessen.gruppen > GRENZE_GRUPPEN) befunde.push(regel(`${kuerzel} hat Nummern aus ${gemessen.gruppen} Gruppen der Gliederung, die Grenze ist ${GRENZE_GRUPPEN}`));
   const mitNummern = nummern.length + tWege.length > 0;
   if (nurUmbau && mitNummern) befunde.push(regel(`${kuerzel} ist nurUmbau und nennt Nummern`));
   if (!nurUmbau && !mitNummern) befunde.push(regel(`${kuerzel} hat keine Nummer und ist nicht nurUmbau`));
@@ -129,13 +142,13 @@ function abdeckungBefunde(teile, belegt) {
   return belegt.filter((datei) => !genannt.some((eintrag) => beruehrt(eintrag, datei))).map((datei) => regel(`${datei} ist im Pitch belegt und steht in keinem Teil unter dateien`));
 }
 
-function schnittBefunde(teile, { soll, umfang, root }) {
+function schnittBefunde(teile, { soll, umfang, root, gliederung }) {
   const nach = new Map(teile.map(({ kuerzel, abhaengigVon }) => [kuerzel, abhaengigVon]));
   const vorgaenger = [...vorgaengerBefunde(teile, nach), ...kreisBefunde(teile)];
   const loeschen = loeschDateien(umfang);
   return [
     ...zuordnungBefunde(teile, soll),
-    ...teile.flatMap((teil) => teilBefunde(teil, { root, loeschen })),
+    ...teile.flatMap((teil) => teilBefunde(teil, { root, loeschen, gliederung })),
     ...loeschBefunde(teile, loeschen),
     ...abdeckungBefunde(teile, umfang.codeDateien),
     ...vorgaenger,
@@ -173,7 +186,8 @@ class Teilung {
   }
 
   nachricht() {
-    const grenze = `Je Teil höchstens ${GRENZE_SZENARIEN} Szenarien S/B unter \`nummern\` und höchstens ${GRENZE_CODE_DATEIEN} Code-Dateien unter \`dateien\`; Bedrohungen T, Testdateien und Dateien der Löschmenge zählen nicht; jede Datei der Löschmenge steht in genau einem Teil. Das Paket liegt darüber: ${this.ueber.join("; ")}.`;
+    const gruppen = this.gliederung === null ? "" : ` Die Nummern eines Teils unter \`nummern\` und \`tWege\` stammen aus höchstens ${GRENZE_GRUPPEN} Gruppen der Gliederung.`;
+    const grenze = `Je Teil höchstens ${GRENZE_SZENARIEN} Szenarien S/B unter \`nummern\` und höchstens ${GRENZE_CODE_DATEIEN} Code-Dateien unter \`dateien\`; Bedrohungen T, Testdateien und Dateien der Löschmenge zählen nicht; jede Datei der Löschmenge steht in genau einem Teil. Das Paket liegt darüber: ${this.ueber.join("; ")}.${gruppen}`;
     return nachricht("Teilung", [
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Nummern", nummernText(this.soll, this.nummern(SZENARIO)) || "keine"),
@@ -210,14 +224,14 @@ class Teilung {
     this.lege(ANTWORT, antwort.wert);
     const form = teilungBefunde(antwort.wert);
     if (form.length > 0) return { befunde: form };
-    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, root: this.root });
+    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, root: this.root, gliederung: this.gliederung });
     return { befunde: schnitt.length > 0 ? schnitt : this.ableitung(antwort.wert).map(regel) };
   }
 
   geteilt(teile, ruecksendungen) {
     const folge = mergeReihenfolge(teile);
     const datei = join(this.ordner, PLANUNG, TEILE);
-    const grenze = { szenarien: GRENZE_SZENARIEN, codeDateien: GRENZE_CODE_DATEIEN };
+    const grenze = { szenarien: GRENZE_SZENARIEN, codeDateien: GRENZE_CODE_DATEIEN, gruppen: GRENZE_GRUPPEN };
     this.lege(TEILE, { grenze, ueber: this.ueber, umfang: this.umfang, ruecksendungen, token: gemesseneKosten(this.root, this.team.beteiligte), teile: folge });
     console.log(["Teile in Merge-Reihenfolge:", ...folge.map((teil, stelle) => teilZeile(teil, stelle, loeschDateien(this.umfang)))].join("\n"));
     return { exit: EXIT_GETEILT, fehler: `plane hält vor dem ersten Erkunder: der Umfang liegt über der Grenze (${this.ueber.join("; ")}); ${folge.length} Teile in ${datei}` };

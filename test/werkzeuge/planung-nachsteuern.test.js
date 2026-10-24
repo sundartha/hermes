@@ -3,12 +3,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
-import { GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planOrdner, planeIn } from "./planung-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, pruefeTeilungOhneErkundung, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, probeDirectory, runIn } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
-const EXIT_GETEILT = 7;
 const ELTERN = "P-001-eigene-nummer";
 const HINTERLEGEN = "plaene/P-001-t1-eigene-nummer-hinterlegen";
 const HINWEIS_ORDNER = "plaene/P-001-t2-hinweis-beim-anruf";
@@ -34,10 +33,6 @@ const STELLE_QUELLE = "export const stelle = 1;\n";
 const TOTE_DATEIEN = ["src/stellen/alt-1.js", "src/stellen/alt-2.js"];
 const FEHLENDER_EINSTIEG = "src/fehlt.js:weg";
 const ERSTE_WELLE = GRUPPEN.length;
-
-function eintrag(kuerzel, name, { nummern, tWege = [], dateien, abhaengigVon = [] }) {
-  return { kuerzel, name, nummern, tWege, dateien, nurUmbau: false, abhaengigVon, grund: `${name} hat einen eigenen Eingang` };
-}
 
 const ELTERN_TEILE = [
   eintrag("t1", "eigene-nummer-hinterlegen", { nummern: ["S1", "S2", "S3", "S6", "S7"], tWege: ["T1", "T2"], dateien: [ROUTE, ...ELF.slice(0, 5)] }),
@@ -194,7 +189,7 @@ function zweiterWorktree(context, wurzel) {
   return zweiter;
 }
 
-const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN[0], nummern: ["S1", "S7", "T2"] }, { ...GRUPPEN[0], nummern: ["S2", "S3", "S6", "T1"] }] })] };
+const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN[0], nummern: HINTERLEGEN_NUMMERN }, { ...GRUPPEN[0], nummern: GRUPPEN[0].nummern.filter((nummer) => !HINTERLEGEN_NUMMERN.includes(nummer)) }] })] };
 const ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL = { erkunder: { laeufe: 1, token: TEIL_DECKEL } };
 const PLANER_TEURER_ALS_DER_TEIL_DECKEL = { planer: { laeufe: 1, token: TEIL_DECKEL + 1 } };
 const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
@@ -211,10 +206,7 @@ test("liegt die Vorschau der Erkundung mit dem Startwert aus einem anderen Workt
 
   const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } });
 
-  exit(lauf, EXIT_GETEILT);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
-  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
-  assert.ok(aufrufe(lauf, "planer", "## Teilung")[0].eingabe.includes(`über dem Teil-Deckel ${TEIL_DECKEL}`), lauf.stderr);
+  assert.ok(pruefeTeilungOhneErkundung(lauf).includes(`über dem Teil-Deckel ${TEIL_DECKEL}`), lauf.stderr);
   const verbraucht = PLANER_AUFRUFE_BIS_TEILUNG * PLANER_JE_AUFRUF;
   const pitch = readFileSync(join(wurzel, "plaene/P-001-t1-t1-hinterlegen/pitch.md"), "utf8");
   assert.ok(pitch.split("\n").includes(`Planung freigegeben: ${TEIL_DECKEL - verbraucht} Token`), pitch);
