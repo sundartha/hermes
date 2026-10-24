@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { realpathSync } from "node:fs";
+import { realpathSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { aufrufKette, erreicht, kettenBefunde } from "../../tools/auftrag/planung/kette.mjs";
 import { dependentsGraph } from "../../tools/testgraph.mjs";
-import { probeDirectory } from "./probe-repo.js";
+import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
+
+const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
+const EXIT_GRUEN = 0;
+const EXIT_KEIN_PFAD = 1;
+const EXIT_AUFRUF = 2;
+const KEIN_PFAD = "kein Pfad belegt\n";
 
 const CLAUDE = "src/claude.js";
 const GEDAECHTNIS = "src/call-memory.js";
@@ -105,6 +112,10 @@ function namen(kette) {
   return kette?.zwischen.map(({ funktion }) => funktion) ?? null;
 }
 
+function kette(ort, ...argumente) {
+  return runIn(ort, process.execPath, [AUFTRAG, "kette", ...argumente]);
+}
+
 async function probe(context) {
   const root = realpathSync(probeDirectory(context, QUELLEN));
   return { root, graph: await dependentsGraph(root) };
@@ -158,4 +169,50 @@ test("kette: ein Bericht mit Lücke bekommt einen Befund mit den ungemeldeten Zw
   assert.equal(befunde.length, 2, befunde.join("\n"));
   assert.equal(befunde[0], `S1: zwischen systemPrompt (${CLAUDE}) und memoryLine (${GEDAECHTNIS}) liegen ungemeldet outboundSituation (${CLAUDE}:18-21), assignmentBlock (${CLAUDE}:13-16), callMemorySection (${CLAUDE}:32-36), budgetedMemoryLines (${GEDAECHTNIS}:18-24); nenn sie als Stellen des Wegs`);
   assert.ok(befunde[1].startsWith(`S4: zwischen systemPrompt (${CLAUDE}) und memoryLine (${GEDAECHTNIS}) liegen ungemeldet outboundSituation (${CLAUDE}:18-21);`), befunde[1]);
+});
+
+test("kette-befehl: gibt die P-007-Kette zwischen systemPrompt und memoryLine mit Datei und Zeilen in Aufrufrichtung aus, in beiden Reihenfolgen", (context) => {
+  const ort = probeDirectory(context, QUELLEN);
+  const erwartet = [
+    "Aufrufkette, Aufrufer zuerst:",
+    `${CLAUDE}:27-30 systemPrompt`,
+    `${CLAUDE}:18-21 outboundSituation`,
+    `${CLAUDE}:13-16 assignmentBlock`,
+    `${CLAUDE}:32-36 callMemorySection`,
+    `${GEDAECHTNIS}:18-24 budgetedMemoryLines`,
+    `${GEDAECHTNIS}:10-16 memoryLine`,
+    "",
+  ].join("\n");
+  for (const [von, nach] of [[`${CLAUDE}:systemPrompt`, `${GEDAECHTNIS}:memoryLine`], [`${GEDAECHTNIS}:memoryLine`, `${CLAUDE}:systemPrompt`]]) {
+    const lauf = kette(ort, von, nach);
+    assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+    assert.equal(lauf.stdout, erwartet, `${von} ${nach}`);
+  }
+});
+
+test("kette-befehl: zwei unverbundene Funktionen ergeben „kein Pfad belegt“ mit Exit ungleich 0, auch über einen HTTP-Sprung und für eine fehlende Funktion", (context) => {
+  const ort = probeDirectory(context, QUELLEN);
+  const faelle = [
+    [`${EINGANG}:start`, `${ZIEL}:ziel`],
+    [`${WERKZEUGE}:placeCallHop`, `${ANRUFE}:placeCall`],
+    [`${CLAUDE}:systemPrompt`, `${SPEICHER}:counterpartyMemory`],
+    [`${CLAUDE}:systemPrompt`, `${GEDAECHTNIS}:gibtEsNicht`],
+  ];
+  for (const [von, nach] of faelle) {
+    const lauf = kette(ort, von, nach);
+    assert.equal(lauf.status, EXIT_KEIN_PFAD, `${von} ${nach}: ${lauf.stdout}${lauf.stderr}`);
+    assert.equal(lauf.stdout, KEIN_PFAD, `${von} ${nach}`);
+  }
+});
+
+test("kette-befehl: eine Stelle ohne Funktion, außerhalb von src, mit .., ohne JavaScript-Endung oder über einen Link nach draußen endet mit Exit 2 und gibt keine Kette aus", (context) => {
+  const ort = probeDirectory(context, { ...QUELLEN, "src/.env": "GEHEIM=1\n", "draussen.js": "export function weg() {\n  return 1;\n}\n" });
+  symlinkSync(join(ort, "draussen.js"), join(ort, "src/link.js"));
+  const ziel = `${GEDAECHTNIS}:memoryLine`;
+  for (const stelle of [CLAUDE, `${CLAUDE}:`, "draussen.js:weg", "src/../draussen.js:weg", "src/.env:GEHEIM", "src/link.js:weg", `/${CLAUDE}:systemPrompt`]) {
+    const lauf = kette(ort, stelle, ziel);
+    assert.equal(lauf.status, EXIT_AUFRUF, `${stelle}: ${lauf.stdout}${lauf.stderr}`);
+    assert.equal(lauf.stdout, "", stelle);
+    assert.match(lauf.stderr, /^Abbruch: kette nimmt nur /, stelle);
+  }
 });

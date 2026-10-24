@@ -163,11 +163,17 @@ function alsStelle({ datei, funktion: { name, von, bis } }) {
   return { datei, funktion: name, von, bis };
 }
 
-function ketteIn(kontext, von, nach) {
+function endenIn(kontext, von, nach) {
   if (![von, nach].every(({ datei }) => datei.startsWith(QUELLORDNER))) return null;
   const start = funktionDer(kontext, von);
   const ende = funktionDer(kontext, nach);
-  if (start === undefined || ende === undefined) return null;
+  return start === undefined || ende === undefined ? null : { start, ende };
+}
+
+function ketteIn(kontext, von, nach) {
+  const enden = endenIn(kontext, von, nach);
+  if (enden === null) return null;
+  const { start, ende } = enden;
   if (nenntName(kontext, start, nach.funktion) || nenntName(kontext, ende, von.funktion)) return { zwischen: [] };
   const hin = gerichtet(kontext, start, ende);
   const glieder = hin ?? gerichtet(kontext, ende, start)?.toReversed();
@@ -180,6 +186,17 @@ function neuerKontext(root, graph) {
 
 export function aufrufKette(root, graph, { von, nach }) {
   return ketteIn(neuerKontext(root, graph), von, nach);
+}
+
+export function belegteKette(root, graph, { von, nach }) {
+  const kontext = neuerKontext(root, graph);
+  const enden = endenIn(kontext, von, nach);
+  if (enden === null) return null;
+  const { start, ende } = enden;
+  const hin = gerichtet(kontext, start, ende);
+  if (hin !== null) return [start, ...hin, ende].map(alsStelle);
+  const her = gerichtet(kontext, ende, start);
+  return her === null ? null : [ende, ...her, start].map(alsStelle);
 }
 
 function istCodeStelle(eintrag) {
@@ -210,7 +227,7 @@ export function kettenBefunde(root, graph, bericht) {
   return Object.entries(bericht?.nummern ?? {}).flatMap(([nummer, angaben]) => wegLuecken(kontext, nummer, liste(angaben?.weg)));
 }
 
-function modulGraph(root) {
+export function modulGraph(root) {
   if (!GRAPHEN.has(root)) GRAPHEN.set(root, dependentsGraph(realpathSync(root)));
   return GRAPHEN.get(root);
 }
