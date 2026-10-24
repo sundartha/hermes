@@ -102,6 +102,10 @@ if (art.limit) {
   melde({ type: "result", is_error: true, result: "limit reached" });
   process.exit(1);
 }
+for (let runde = 0; art.stillstand && runde < 3; runde += 1) {
+  melde({ type: "assistant", message: { content: [{ type: "tool_use", id: "wiederholt", name: "Bash", input: { command: "ls" } }] } });
+  melde({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "wiederholt", content: "gleich" }] } });
+}
 let text = art.text;
 if (art.pruefliste) {
   const quelle = eingabe.includes(marke) ? eingabe : readFileSync(sitzungsListe, "utf8");
