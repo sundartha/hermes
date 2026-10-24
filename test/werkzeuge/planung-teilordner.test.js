@@ -27,15 +27,15 @@ const TEILE = alsJson({ teile: [
   { kuerzel: "t3", name: "umbau-davor", nummern: [], tWege: [], dateien: ["src/umbau.js"], nurUmbau: true, abhaengigVon: [], grund: "reiner Umbau ohne Nummer" },
 ] });
 
-function neunSzenarien(wurzel, freigabe) {
+function neunSzenarien(wurzel, { freigabe, status }) {
   const pitch = join(wurzel, ORDNER, "pitch.md");
-  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Planung freigegeben: 15000000 Token", `Planung freigegeben: ${freigabe} Token`));
+  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Planung freigegeben: 15000000 Token", `Planung freigegeben: ${freigabe} Token`).replace("Status: fertig", status));
   appendFileSync(pitch, "\n### Szenario B2: Anruf ohne hinterlegte Nummer\nGegeben ein Kunde ohne eigene Nummer\nWenn sein Agent mit `place_call` eine Nummer anruft\nDann beginnt der Anruf mit dem Hinweis für Fremde\n");
 }
 
-function geteilt(context, { freigabe = FREIGABE, vorher = () => {} } = {}) {
+function geteilt(context, { freigabe = FREIGABE, status = "Status: freigegeben", vorher = () => {} } = {}) {
   const wurzel = planOrdner(context);
-  neunSzenarien(wurzel, freigabe);
+  neunSzenarien(wurzel, { freigabe, status });
   vorher(wurzel);
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [TEILE] }, argumente: ["plane", ORDNER], token: { planer: TEILUNG_TOKEN } });
   return lauf;
@@ -101,6 +101,15 @@ test("der Kopf eines Teil-Pitches nennt Status, offenes Issue, den Teil-Deckel a
   for (const ordner of TEIL_ORDNER) assert.equal(text(lauf.wurzel, ordner, "design.md"), text(lauf.wurzel, ORDNER, "design.md"));
   const topf = abgelegt(lauf, "teile.json").topf;
   assert.deepEqual(topf, { freigabe: FREIGABE, vorschnitt: TEILUNG_TOKEN, teile: 0, rest: TEIL_DECKEL, teilDeckel: TEIL_DECKEL });
+});
+
+test("ein Teil eines nicht freigegebenen Eltern-Pitches übernimmt dessen Status, statt eine Freigabe zu behaupten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = geteilt(context, { status: "Status: fertig (nicht freigegeben)" });
+
+  exit(lauf, EXIT_GETEILT);
+  const zeilen = text(lauf.wurzel, HINTERLEGEN, "pitch.md").split("\n");
+  assert.ok(zeilen.includes("Status: fertig (nicht freigegeben)"), zeilen.join("\n"));
+  assert.equal(zeilen.includes("Status: freigegeben"), false);
 });
 
 test("der Abdeckungs-Check ist für jeden Teil-Ordner grün", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -193,4 +202,17 @@ test("gibt es einen Teil-Ordner schon, hält plane mit Exit 2 an und schreibt ke
   exit(lauf, EXIT_AUFRUF);
   assert.ok(lauf.stderr.includes(`${HINWEIS_ORDNER} gibt es schon`), lauf.stderr);
   assert.equal(existsSync(join(lauf.wurzel, HINTERLEGEN)), false);
+});
+
+test("eine Zeile „Teil von“, die keinen Ordner neben dem Teil nennt, ergibt Exit 2, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINTERLEGEN, 80);
+  ersetze(join(wurzel, HINTERLEGEN, "pitch.md"), `Teil von: ${ELTERN}; nach: –`, "Teil von: ../plaene/P-001-eigene-nummer; nach: –");
+
+  const lauf = planeTeil(context, wurzel, HINTERLEGEN);
+
+  exit(lauf, EXIT_AUFRUF);
+  ohneAgent(lauf);
+  assert.ok(lauf.stderr.includes("braucht die Form „Teil von: <Eltern-Ordner>; nach:"), lauf.stderr);
 });

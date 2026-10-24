@@ -1,14 +1,15 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BELEGE } from "../bericht.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
-import { istObjekt } from "./erkundung.mjs";
+import { istObjekt, liste } from "./erkundung.mjs";
 import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
 import { werkzeugeDerRolle } from "./team.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
+export const TEIL_DECKEL = 3_000_000;
 
 function freigabeAusPitch(pitch) {
   const gefunden = zahlZeile(pitch, { name: "Planung freigegeben", einheit: "Token" });
@@ -46,6 +47,31 @@ export function gemesseneKosten(root, beteiligte) {
 export function gemesseneLaeufe(root, sitzungen) {
   const { sitzungen: gemessen, summe } = kostenDesAuftrags(root, sitzungen);
   return { laeufe: gemessen.length, token: summe.gesamt };
+}
+
+function istGelaufen(beteiligter) {
+  return (beteiligter?.sitzung ?? null) !== null;
+}
+
+function teilKosten(root, teil) {
+  const datei = join(root, BELEGE, teil, PLANUNGSBERICHT);
+  if (!existsSync(datei)) return 0;
+  try {
+    const gelaufen = liste(JSON.parse(readFileSync(datei, "utf8")).beteiligte).filter(istGelaufen);
+    return gelaufen.every(({ token }) => Number.isFinite(token)) ? gelaufen.reduce((summe, { token }) => summe + token, 0) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function restTopf(root, { freigabe, vorschnitt, teile }) {
+  const kosten = teile.map((teil) => ({ teil, token: teilKosten(root, teil) }));
+  const offen = kosten.filter(({ token }) => token === null).map(({ teil }) => join(BELEGE, teil, PLANUNGSBERICHT));
+  if (offen.length > 0) return { fehler: `Rest-Topf nicht messbar: ${offen.join(", ")} nennt nicht für jede gelaufene Sitzung die Token; plane hält an, statt zu schätzen` };
+  const verbraucht = kosten.reduce((summe, { token }) => summe + token, 0);
+  const rest = freigabe - vorschnitt - verbraucht;
+  const topf = { freigabe, vorschnitt, teile: verbraucht, rest, teilDeckel: Math.max(0, Math.min(TEIL_DECKEL, rest)) };
+  return { topf, rechnung: `Freigabe ${freigabe} − Vorschnitt ${vorschnitt} − Teile ${verbraucht} = ${rest}` };
 }
 
 export class Kostendeckel {
