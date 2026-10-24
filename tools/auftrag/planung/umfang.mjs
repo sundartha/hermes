@@ -14,6 +14,8 @@ const BYTE_JE_KB = 1024;
 const ZEHNTEL = 10;
 const JSON_EINRUECKUNG = 2;
 const QUELLE = "umfang";
+export const GRENZE_SZENARIEN = 8;
+export const GRENZE_CODE_DATEIEN = 10;
 
 export function dokumenteIm(ordner) {
   return Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));

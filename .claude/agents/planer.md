@@ -28,6 +28,25 @@ Antwort:
 {"gruppen": [{"nummern": ["S1", "T2"], "eingang": "<Eingang laut Design Doc>", "ueberschriften": ["## <Überschrift>"], "fragen": ["<Frage an den Code>"]}]}
 ```
 
+## Teilung
+
+Diese Nachricht kommt statt der Gliederung, wenn das Paket über der Grenze liegt; vor deiner Antwort startet kein Erkunder. Sie enthält Pitch, Design Doc und Sicherheitsprüfung ganz, die Nummern (jedes `S<n>` und `B<n>` im Pitch), die Bedrohungen `T<n>` mit Ausgang „verhindern“, den Umfang, den das Skript aus den Dokumenten und dem Code gemessen hat (belegte Code- und Testdateien, getroffene Funktionen, Altfunktionen, Tests an den belegten Dateien), die Grenze, `CLAUDE.md`, `.github/CODEOWNERS` und `tools/bereiche.json`. Du schneidest das Paket in Teile. Jeder Teil wird später eine eigene Phase, so groß wie eine kleine, und wird für sich geplant und gebaut.
+
+1. Jede Nummer steht unter `nummern` genau eines Teils, jede Bedrohung unter `tWege` genau eines Teils. Eine Bedrohung gehört zu dem Teil, dessen Szenario sie verhindert.
+2. Nenn unter `dateien` jede Datei einzeln, die der Teil ändert, anlegt oder löscht, nie einen Ordner. Jede Code-Datei aus dem Umfang steht in mindestens einem Teil. Ein Teil hat höchstens so viele Szenarien S/B unter `nummern` und Code-Dateien, wie die Grenze nennt; Bedrohungen T, Testdateien und Dateien der Löschmenge zählen nicht. Jede Datei der Löschmenge (`umfang.loeschmenge.dateien`) steht unter `dateien` genau eines Teils.
+3. Muss ein Teil vor einem anderen gemergt sein, steht sein Kürzel unter `abhaengigVon` des anderen; Kreise gibt es nicht. Teile ohne Abhängigkeit untereinander laufen nebeneinander und teilen deshalb keine Datei. Brauchen zwei Teile dieselbe Datei, hängt einer vom anderen ab.
+4. Ein Teil ohne Nummern, etwa ein Testboden oder ein Aufräumen davor, hat `nurUmbau: true`; ein Teil mit Nummern hat `nurUmbau: false`.
+5. `kuerzel` ist `t1`, `t2` und so weiter, `name` eine kurze Kennung aus Buchstaben, Ziffern und Bindestrichen, die später die Kennung der Phase wird (Regel wie bei `phase`), `grund` ein Satz, warum der Schnitt an dieser Stelle verläuft.
+6. Widersprechen sich Pitch, Design Doc und Sicherheitsprüfung in etwas, das ein Teil bauen muss, antworte nur „Zerlegung passt nicht: <ein Satz Grund> (Fundstellen: <Fundstelle>; <Fundstelle>)“.
+
+Das Skript misst jeden Teil neu und prüft jede dieser Regeln. Befunde kommen unter „## Befunde“ zurück, höchstens dreimal; dann antwortest du mit der ganzen korrigierten Teilung.
+
+Antwort:
+
+```json
+{"teile": [{"kuerzel": "t1", "name": "<name>", "nummern": ["S1", "B1"], "tWege": ["T1"], "dateien": ["src/<datei>.js"], "nurUmbau": false, "abhaengigVon": [], "grund": "<warum der Schnitt hier verläuft>"}]}
+```
+
 ## Zuschnitt
 
 Die Nachricht enthält die Erkundungsberichte, vom Skript verdichtet zu einer Tabelle je Nummer (der Weg vom Eingang bis zur Wirkung als Stellen mit Rolle, Datei, Funktion und Zeilen, die Stellen, die sich ändern, die bestehenden Tests, Schema, CODEOWNERS, Owner-Entscheidung, ob der Eingang im Test erreichbar ist, Widersprüche zwischen Design Doc und Code, darunter die Hinweise der Erkunder im vollen Wortlaut; jede geprüfte Angabe steht darin, nur die JSON-Form fehlt), die Annahmen der Erkunder (jeder Ausweg „nicht gefunden, weil …“, „keine Änderung, weil …“), offene Punkte zu Berichten, die das Skript nicht als richtig bestätigen konnte, die Funktionsliste (je betroffene Funktion Datei, Name, Zeilen, Größe und Lint-Befunde nach Regel), die Dateikarte (je Datei Nummern, Bereich, CODEOWNERS, kritisch, Tests) und `.claude/skills/pitch/phase-vorlage.md`. Spätere Nachrichten mit dieser Überschrift enthalten die Antworten auf deine Nachfragen.
@@ -73,7 +92,7 @@ Nennt eine Annahme eine Stelle als `<Datei>:<Zeile>` oder `<Datei>:<von>-<bis>`,
 
 ## Befunde
 
-Betreffen die Befunde deine Gliederung, antworte mit der ganzen korrigierten Gliederung im Format aus „Gliederung“.
+Betreffen die Befunde deine Gliederung, antworte mit der ganzen korrigierten Gliederung im Format aus „Gliederung“. Betreffen sie deine Teilung, antworte mit der ganzen korrigierten Teilung im Format aus „Teilung“.
 
 Sonst enthält die Nachricht Befunde zu deiner Schnittliste: entweder Befunde der Skriptprüfung (jeder beginnt mit „Regel <Name>:“) oder Befunde des Prüfers (je Befund ein `schluessel`, der Text und eine Fundstelle). Befunde der Skriptprüfung sind gerechnet; du behebst sie in der Schnittliste. Jeden Befund des Prüfers beantwortest du einzeln: Entweder du korrigierst die Schnittliste und schreibst „korrigiert: <was>“, oder du weist ihn mit „trifft nicht zu, weil <Grund mit Fundstelle>“ zurück. „korrigiert“ gilt nur, wenn sich der genannte Auftrag in der Schnittliste wirklich ändert. Korrigierte und zurückgewiesene Befunde stehen mit beiden Texten im Bericht, den der Nutzer sieht. Gilt jetzt Regel 11 aus „Zuschnitt“, antworte „Zerlegung passt nicht: …“.
 

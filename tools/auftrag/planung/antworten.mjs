@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { istUmbau, pfadIstSauber } from "../format.mjs";
+import { istKennung, istUmbau, pfadIstSauber } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { GRUND, istObjekt, istText, liste } from "./erkundung.mjs";
 
@@ -26,6 +26,8 @@ const GRUNDLAGE = /^Grundlage:/;
 const FEHLERFAELLE = /^Fehlerfälle:/;
 const BERECHNETE_ZEILE = /^(Aufträge|Reihenfolge):/m;
 const LETZTER_ZEILENUMBRUCH = /\n$/;
+const KUERZEL = /^t[1-9]\d*$/u;
+const TEIL_LISTEN = ["nummern", "tWege", "dateien", "abhaengigVon"];
 
 function dokumentStelleBefund(fundstelle, [, name, ueberschrift], dokumente) {
   const text = dokumente[name];
@@ -97,6 +99,30 @@ export function gliederungBefunde(gliederung, soll, designText) {
   }
   const fremd = [...anzahl.keys()].filter((nummer) => !soll.has(nummer));
   return [...befunde, ...fremd.map((nummer) => `${nummer} ist keine Nummer der Liste`)];
+}
+
+function teilFormBefunde(teil, stelle) {
+  const ort = `Teil ${stelle + 1}`;
+  if (!istObjekt(teil)) return [`${ort}: ist kein Objekt`];
+  const befunde = TEIL_LISTEN.filter((feld) => !istTextListe(teil[feld])).map((feld) => `${ort}: ${feld} ist keine Liste von Texten`);
+  if (!KUERZEL.test(String(teil.kuerzel))) befunde.unshift(`${ort}: kuerzel braucht die Form t<n>`);
+  if (!istKennung(teil.name)) befunde.push(`${ort}: name ist keine Kennung aus Buchstaben, Ziffern und Bindestrichen`);
+  if (typeof teil.nurUmbau !== "boolean") befunde.push(`${ort}: nurUmbau ist kein Wahrheitswert`);
+  if (!istText(teil.grund)) befunde.push(`${ort}: grund fehlt`);
+  if (istTextListe(teil.dateien)) befunde.push(...teil.dateien.filter((datei) => !pfadIstSauber(datei)).map((datei) => `${ort}: ${datei} unter dateien ist kein relativer Pfad im Repo ohne ., .. und \\`));
+  return befunde;
+}
+
+function doppelteBefunde(teile, feld) {
+  const werte = teile.map((teil) => teil?.[feld]);
+  const doppelt = [...new Set(werte.filter((eintrag, stelle) => werte.indexOf(eintrag) !== stelle))];
+  return doppelt.map((eintrag) => `${feld} ${eintrag} steht in mehreren Teilen`);
+}
+
+export function teilungBefunde(wert) {
+  const teile = wert?.teile;
+  if (!Array.isArray(teile) || teile.length === 0) return ["teile fehlt: eine Liste von Teilen"];
+  return [...teile.flatMap(teilFormBefunde), ...doppelteBefunde(teile, "kuerzel"), ...doppelteBefunde(teile, "name")];
 }
 
 export function prueflisteSoll(schnitt, soll, annahmen) {
