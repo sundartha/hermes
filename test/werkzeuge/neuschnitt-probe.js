@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { alsJson } from "./planung-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
@@ -53,16 +54,23 @@ process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: a
 process.exitCode = einsatz.exit ?? 0;
 `;
 
+const KOSTEN = pathToFileURL(join(REPO_ROOT, "tools/auftrag/kosten.mjs")).href;
 const KIND = `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { transkriptVerzeichnis } from ${JSON.stringify(KOSTEN)};
 const zaehler = join(dirname(process.env.ERSATZ_DREHBUCH), "anzahl-kind");
 const nummer = existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
 writeFileSync(zaehler, String(nummer + 1));
 const liste = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8")).kind;
-const { ergebnis = { exitCode: 0, antwort: "neu geschnitten", sitzungen: [] }, ...dateien } = liste[Math.min(nummer, liste.length - 1)];
+const { ergebnis = { exitCode: 0, antwort: "neu geschnitten", sitzungen: [] }, verbrauch, ...dateien } = liste[Math.min(nummer, liste.length - 1)];
 for (const [pfad, inhalt] of Object.entries(dateien)) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
+}
+const transkripte = transkriptVerzeichnis(process.cwd());
+for (const { sitzung } of verbrauch === undefined ? [] : ergebnis.sitzungen) {
+  mkdirSync(transkripte, { recursive: true });
+  writeFileSync(join(transkripte, sitzung + ".jsonl"), JSON.stringify({ message: { id: sitzung, usage: { input_tokens: verbrauch } } }));
 }
 writeFileSync(join(process.argv[2], "ergebnis.json"), JSON.stringify(ergebnis));
 `;
