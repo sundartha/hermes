@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Fortschritt } from "../../tools/auftrag/planung/fortschritt.mjs";
+import { Fortschritt, RUECKSENDUNGEN } from "../../tools/auftrag/planung/fortschritt.mjs";
 
 const SOLL = new Map([["S1", {}], ["S2", {}], ["S3", {}], ["S4", {}], ["B1", {}]]);
 
@@ -125,4 +125,23 @@ test("fortschritt: nach der Grenze an Rücksendungen endet die Schleife, auch we
   assert.deepEqual(ergebnis.slice(0, 3), [null, null, null]);
   assert.equal(ergebnis[3].grund, "zuschnitt: Befunde blieben nach 3 Rücksendungen offen, nach 3 Rücksendungen");
   assert.equal(new Fortschritt("neuschnitt", 0).endeNachRunde(["Regel Form: es gibt keine Gliederung"], SCHNITT, SOLL).grund, "neuschnitt: Befunde blieben nach 0 Rücksendungen offen, nach 0 Rücksendungen");
+});
+
+test("fortschritt: ein Befund derselben Regel zum selben Auftrag, der nur Sätze zitiert, die keine Runde davor zitierte, ist neu; zitiert er einen schon genannten Satz wieder, kehrt er wieder", () => {
+  const pitch = ["## Fallen", "- Das Zeichen ist genau „…“ (U+2026, ein Zeichen), nicht drei Punkte.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: `clampAtWordBoundary` zu ändern.", "- Nicht Teil dieser Änderung: die Grenzen 100, 200, 600 Zeichen und 3 Anrufe zu ändern."].join("\n");
+  const schleife = new Fortschritt("pruefung", RUECKSENDUNGEN, [pitch]);
+  const gegenfrage = (text) => ({ schluessel: "gegenfrage:alle", ergebnis: "befund", befund: text, fundstelle: "pitch.md" });
+  const zeichen = "„Das Zeichen ist genau „…“ (U+2026, ein Zeichen), nicht drei Punkte.“";
+  const hilfe = "„Nicht Teil dieser Änderung: `clampAtWordBoundary` zu ändern.“";
+  const grenzen = "„Nicht Teil dieser Änderung: die Grenzen 100, 200, 600 Zeichen und 3 Anrufe zu ändern.“";
+  assert.equal(schleife.endeNachRunde([gegenfrage(`Bei a1 fehlen in wasDarfNiePassieren: (1) pitch.md, ## Fallen: ${zeichen} (2) pitch.md, ## Nicht-Ziele: ${hilfe}`), { schluessel: "weg:S1", ergebnis: "befund", befund: "Weg falsch" }], SCHNITT, SOLL), null);
+  assert.equal(schleife.endeNachRunde([gegenfrage(`Die Sätze der vorigen Prüfung stehen jetzt bei a1. Es fehlt noch pitch.md, ## Nicht-Ziele: ${grenzen}`)], SCHNITT, SOLL), null);
+  assert.match(schleife.endeNachRunde([gegenfrage(`Bei a1 fehlt weiter ${grenzen}`)], SCHNITT, SOLL).grund, /wiederkehrend/u);
+});
+
+test("fortschritt: ersetzt der Planer einen Nie-Satz, der in keiner Quelle steht, durch einen anderen solchen Satz, kehrt der Befund derselben Regel zum selben Auftrag wieder", () => {
+  const schleife = new Fortschritt("zuschnitt", RUECKSENDUNGEN, ["## Fallen\n- Der Code wird nur gehasht gespeichert."]);
+  const falsch = (satz) => `Regel Nie-Sätze: a1 wasDarfNiePassieren: „${satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in pitch.md, ## Fallen`;
+  assert.equal(schleife.endeNachRunde([falsch("Der Code wird nie im Klartext gespeichert."), "Regel Form: es gibt keine Gliederung"], SCHNITT, SOLL), null);
+  assert.match(schleife.endeNachRunde([falsch("Der Code bleibt immer gehasht.")], SCHNITT, SOLL).grund, /wiederkehrend/u);
 });

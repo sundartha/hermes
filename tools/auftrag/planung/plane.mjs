@@ -29,7 +29,8 @@ import { Kostendeckel, deckelAus, gemesseneKosten, gemesseneLaeufe } from "./dec
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, liesFortsetzung } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
-import { Fortschritt } from "./fortschritt.mjs";
+import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
+import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
@@ -265,7 +266,7 @@ export class Planung {
   }
 
   schleife(art) {
-    const schleife = new Fortschritt(art);
+    const schleife = new Fortschritt(art, RUECKSENDUNGEN, DOKUMENTE.map((name) => this.dokumente[name] ?? ""));
     this.schleifen.push(schleife);
     return schleife;
   }
@@ -561,8 +562,9 @@ export class Planung {
     return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
   }
 
-  async pruefeSchnitt(schnitt) {
-    if (!istObjekt(schnitt)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
+  async pruefeSchnitt(antwort) {
+    if (!istObjekt(antwort)) return { befunde: [`schnitt fehlt: ${KEIN_JSON}`] };
+    const schnitt = mitNieSaetzenDerVorgaben(antwort, this.dokumente[PITCH], this.soll);
     this.lege("schnitt.json", schnitt);
     this.schnitt = schnitt;
     const ergebnis = await schnittImOrdner(this.ordner, { schnitt, berichte: this.berichte, root: this.root });
