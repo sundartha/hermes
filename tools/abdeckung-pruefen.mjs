@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { befundeImOrdner } from "./auftrag/planung/abdeckung.mjs";
 import { phasenAbsichtBefunde } from "./auftrag/planung/absicht.mjs";
 import { PITCH, SICHERHEIT } from "./auftrag/planung/nummern.mjs";
+import { zeilenbelegBefunde } from "./auftrag/planung/zeilenbeleg.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 
 const EXIT_GRUEN = 0;
@@ -48,6 +49,7 @@ function pruefe(argumente) {
   const { phase } = geladen;
   const { anzahl, befunde } = phase ? befundeImOrdner(ordner, phase) : { anzahl: 0, befunde: geladen.befunde };
   if (phase) befunde.unshift(...phasenAbsichtBefunde(readFileSync(join(ordner, PITCH), "utf8"), phase));
+  befunde.push(...zeilenbelegBefunde(ordner, process.cwd()));
   for (const befund of befunde) console.error(befund);
   if (befunde.length > 0) {
     console.log(`rot: ${befunde.length} Befunde in ${ordner}.`);

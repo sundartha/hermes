@@ -10,7 +10,7 @@ import { istAltfunktion } from "./schnitt.mjs";
 
 export const ALTFUNKTIONEN = "## Altfunktionen";
 const ZEILENUMBRUCH = /\r?\n/;
-const STELLE = /(?<![\w./-])((?:[\w.-]+\/)*[\w.-]+\.[cm]?[jt]sx?):(\d+)(?:-(\d+))?/g;
+export const STELLE = /(?<![\w./-])((?:[\w.-]+\/)*[\w.-]+\.[cm]?[jt]sx?):(\d+)(?:-(\d+))?/g;
 const FOLGE = /^`?\s*(?:,|und)\s*`?:(\d+)(?:-(\d+))?/;
 const EINTRAG = /^-\s+(Umbau|nicht berührt):\s+`([^`:]+):([^`]+)`(?:,\s+weil\s+(\S.*))?$/u;
 const KEINE = /^keine, weil\s+\S/u;

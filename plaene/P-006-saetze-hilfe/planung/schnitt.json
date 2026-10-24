@@ -9,7 +9,7 @@
     },
     {
       "auftrag": "u1",
-      "text": "Hilfe und die drei Tabelleneinträge (src/i18n/mcp-texts.js:4-6, :118, :225, :333) müssen in einem Schritt umgestellt werden. Eine Hilfe mit einer Übergangsform für beide Argumentformen würde Zahl und Wort weiter selbst zusammensetzen und ist durch pitch.md, „## Fallen“ ausgeschlossen. Deshalb gibt es einen einzigen Umbau in einer Datei, deutlich unter 200 Zeilen."
+      "text": "Die Hilfe `countedText` und die drei Tabelleneinträge `consultAnswerAccepted` (src/i18n/mcp-texts.js:4-6, :118, :225, :333) müssen in einem Schritt umgestellt werden. Eine Hilfe mit einer Übergangsform für beide Argumentformen würde Zahl und Wort weiter selbst zusammensetzen und ist durch pitch.md, „## Fallen“ ausgeschlossen. Deshalb gibt es einen einzigen Umbau in einer Datei, deutlich unter 200 Zeilen."
     },
     {
       "auftrag": "u1",
@@ -17,7 +17,7 @@
     },
     {
       "auftrag": "u1",
-      "text": "Feste Vorgaben für den Bau, weil ein Umbau keine wasDarfNiePassieren-Liste trägt: Erstens erzeugt keine Funktion in der Datei aus einem Wort einen Satz mit Zahl, auch keine Fabrik wie (wort) => (count) => `${count} ${wort}` (pitch.md, „## Fallen“, PM1). Zweitens steht jeder der 6 Sätze ausgeschrieben als eigene Funktion der Zahl in seiner Tabelle und setzt die Zahl über `${count}` selbst ein. Drittens bleibt der Parametername mindestens 2 Zeichen lang, etwa count statt n (eslint.config.js:522). Viertens bleibt countedText(lang, singular, plural) nach Name, Parameterliste, Ort und Nicht-Export gleich. Fünftens wird Intl.PluralRules erst beim Aufruf angelegt. Sechstens wählt die Hilfe nur zwischen \"one\" und dem Rest, ohne Sonderwortlaut für 0. Siebtens bleiben die festen Kürzel \"de\", \"en\", \"fr\" und die Umschrift der deutschen Tabelle erhalten. Die Hilfe fügt nichts an die Sätze an."
+      "text": "Feste Vorgaben für den Bau, weil ein Umbau keine wasDarfNiePassieren-Liste trägt: Erstens erzeugt keine Funktion in der Datei aus einem Wort einen Satz mit Zahl, auch keine Fabrik wie (wort) => (count) => `${count} ${wort}` (pitch.md, „## Fallen“, PM1). Zweitens steht jeder der 6 Sätze ausgeschrieben als eigene Funktion der Zahl in seiner Tabelle und setzt die Zahl über `${count}` selbst ein. Drittens bleibt der Parametername mindestens 2 Zeichen lang, etwa count statt n (`id-length`, eslint.config.js:549). Viertens bleibt countedText(lang, singular, plural) nach Name, Parameterliste, Ort und Nicht-Export gleich. Fünftens wird Intl.PluralRules erst beim Aufruf angelegt. Sechstens wählt die Hilfe nur zwischen \"one\" und dem Rest, ohne Sonderwortlaut für 0. Siebtens bleiben die festen Kürzel \"de\", \"en\", \"fr\" und die Umschrift der deutschen Tabelle erhalten. Die Hilfe fügt nichts an die Sätze an."
     },
     {
       "auftrag": "u1",
