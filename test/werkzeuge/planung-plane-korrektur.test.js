@@ -129,3 +129,28 @@ test("plane: der Erkunder bekommt das Gerüst und die Namen aus dem Wenn", { tim
   assert.ok(namen.includes("- S1: `POST /api/self-service/private-number`\n"), namen);
   assert.ok(namen.includes("- T2: `POST /api/self-service/private-number`\n"), namen);
 });
+
+const ZWEI_BEFUNDE = { ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": "a2 braucht den Code aus a1", "nie-saetze:a3": "a3 nennt keinen Nie-Satz" } };
+const ZWEI_ANTWORTEN = [...A2_ANTWORT, { schluessel: "nie-saetze:a3", antwort: `trifft nicht zu, weil a3 den Status selbst setzt (${ROUTE}:5)` }];
+
+function korrekturInZweiRunden(context) {
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(ZWEI_BEFUNDE), "planer|## Befunde": [antwortMit(OHNE_NUMMER, ZWEI_ANTWORTEN), antwortMit(MIT_NUMMER, ZWEI_ANTWORTEN)] });
+  exit(lauf, EXIT_GRUEN);
+  return lauf;
+}
+
+test("die zweite Rücksendung der Korrektur nennt die offenen Befunde des Prüfers", { timeout: LAUF_FRIST_MS }, (context) => {
+  const [, zweite] = aufrufe(korrekturInZweiRunden(context), "planer", "## Befunde");
+  assert.ok(zweite.eingabe.includes("a14: funktion ohne Nummer"), zweite.eingabe);
+  for (const [schluessel, befund] of Object.entries(ZWEI_BEFUNDE.befunde)) assert.ok(zweite.eingabe.includes(`${schluessel}: ${befund}`), `${schluessel} fehlt in\n${zweite.eingabe}`);
+});
+
+test("eine vollständige zweite Antwort der Korrektur führt zur Nachprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = korrekturInZweiRunden(context);
+  const ruecksendungen = aufrufe(lauf, "planer", "## Befunde");
+  assert.equal(ruecksendungen.length, 2);
+  for (const { eingabe } of ruecksendungen) assert.equal(eingabe.includes("ohne Antwort des Planers"), false, eingabe);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Nachprüfung").length, 1);
+  const { korrigiert, zurueckgewiesen } = planungsBericht(lauf).befunde;
+  assert.deepEqual([korrigiert.map(({ schluessel }) => schluessel), zurueckgewiesen.map(({ schluessel }) => schluessel)], [["allein-gruen:a2"], ["nie-saetze:a3"]]);
+});
