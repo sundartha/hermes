@@ -13,6 +13,7 @@ Entscheidung: <ein Satz, was technisch entschieden wird>
 ## Ausgangslage und Annahmen
 | Aussage | Beleg | Wenn sie nicht stimmt |
 |---|---|---|
+| Vorhandene Hilfe: <was das Repo für diese Änderung schon kann, oder „nichts gefunden“> | `<Suchbefehl>`: <Ergebnis> | – |
 | <Fakt über den heutigen Code oder einen Anbieter> | `<Datei>` oder <Link> | – |
 | <Annahme> | ungeprüft; prüfen durch: <Weg> | <Folge> |
 
