@@ -190,3 +190,34 @@ test("umfang rechnet die Löschmenge einer Route bis zu den Resten in der bleibe
     fehlend: ["src/routen.js:/gibt-es-nicht", "src/fehlt.js:weg"],
   });
 });
+
+const VORSICHT = {
+  "src/alt.js": [
+    `import { n } from "./ns.js";`,
+    `import { s } from "./seite.js";`,
+    `import { dyn } from "./dyn.js";`,
+    `import { k } from "./kaputt-ziel.js";`,
+    `import { b1 } from "./b.js";`,
+    "",
+    "export function alt() {",
+    "  return [n(), s(), dyn(), k(), b1()];",
+    "}",
+    "",
+  ].join("\n"),
+  "src/ns.js": `export function n() {\n  return 1;\n}\n`,
+  "src/seite.js": `export function s() {\n  return 2;\n}\n`,
+  "src/dyn.js": `export function dyn() {\n  return 3;\n}\n`,
+  "src/kaputt-ziel.js": `export function k() {\n  return 4;\n}\n`,
+  "src/b.js": `export function b1() {\n  return 5;\n}\n\nexport function b2() {\n  return 6;\n}\n\nexport function b3() {\n  return 7;\n}\n`,
+  "src/haupt.js": `import * as ns from "./ns.js";\nimport "./seite.js";\nimport { b2 } from "./b.js";\n\nconst dyn = await import("./dyn.js");\nconsole.log(ns, dyn, b2());\n`,
+  "src/kaputt.js": `import { k } from "./kaputt-ziel.js";\n\nk(;\n`,
+  "test/b3.test.js": `import { b3 } from "../src/b.js";\n\nb3();\n`,
+  "package.json": JSON.stringify({ type: "module" }),
+  ".gitignore": "node_modules\n",
+};
+
+test("umfang lässt in der Löschmenge Dateien stehen, die ein Namensraum-, Nebenwirkungs- oder dynamischer Import oder ein nicht lesbarer Importeur hält, und einen Export, den vorher nur Tests nutzten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const loeschmenge = loeschmengeIn(context, VORSICHT, ["src/alt.js:alt"]);
+
+  assert.deepEqual(loeschmenge, { dateien: ["src/alt.js"], exporte: ["src/b.js:b1"], reste: [], tests: [], fehlend: [] });
+});
