@@ -292,3 +292,23 @@ test("plane --deckel: hält in der Nachfrage-Welle vor der Korrektur des Erkunde
 
   assert.equal(aufrufe(lauf, "erkunder", "## Befunde").length, 0);
 });
+
+const DECKEL_FUER_ENTWURF_WIE_PLANER = NACH_PRUEFLISTE + ENTWURF_LAEUFE * PLANER;
+
+test("plane --deckel: ohne frühere Messung des Entwurfs schätzt plane die Entwurfs-Welle mit dem Mittel des Planers, der wie der Entwurf kein Werkzeug hat, nicht mit dem des teuersten Erkunders, und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_FUER_ENTWURF_WIE_PLANER)] });
+
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(aufrufe(lauf, "entwurf").length, ENTWURF_LAEUFE);
+  assert.equal(planungsBericht(lauf).token, DECKEL_FUER_ENTWURF_WIE_PLANER);
+});
+
+const DECKEL_KNAPP_UNTER_ERSTER_WELLE_ZUM_PLANER_MITTEL = PLANER + ERSTE_WELLE * PLANER - 1;
+
+test("plane --deckel: hat der Erkunder keine frühere Messung und keine gemessene Rolle seine Werkzeuge, schätzt plane die erste Welle mit dem höchsten Mittel aller gemessenen Rollen und hält vor ihr an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_KNAPP_UNTER_ERSTER_WELLE_ZUM_PLANER_MITTEL)] });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "erkunder").length, 0);
+  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_KNAPP_UNTER_ERSTER_WELLE_ZUM_PLANER_MITTEL, gemessen: PLANER, vorschau: ERSTE_WELLE * PLANER });
+});

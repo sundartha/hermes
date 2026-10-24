@@ -68,9 +68,17 @@ function werkzeuge(wert = "") {
   return LEERE_LISTE.test(wert) || wert === "" ? [] : wert.split(LISTEN_TRENNER);
 }
 
-export function rollenStart(root, rolle) {
+function rollenKopf(root, rolle) {
   const datei = join(".claude/agents", `${rolle}.md`);
-  const { felder, rumpf } = kopfFelder(readFileSync(join(root, datei), "utf8"), datei);
+  return kopfFelder(readFileSync(join(root, datei), "utf8"), datei);
+}
+
+export function werkzeugeDerRolle(root, rolle) {
+  return werkzeuge(rollenKopf(root, rolle).felder.tools);
+}
+
+export function rollenStart(root, rolle) {
+  const { felder, rumpf } = rollenKopf(root, rolle);
   const tools = werkzeuge(felder.tools);
   const definition = { [rolle]: { description: felder.description, prompt: rumpf, tools, model: felder.model } };
   const argumente = [
