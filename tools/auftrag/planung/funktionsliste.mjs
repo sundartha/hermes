@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { bereichDerDatei, leseBereiche } from "../../tests-ausmisten/pfade.mjs";
-import { dependentsGraph, testsReaching } from "../../testgraph.mjs";
+import { TEST_FILE, dependentsGraph, testsReaching } from "../../testgraph.mjs";
 import { istQuelltext } from "../../ziele/funktionen.mjs";
 import { istKritisch } from "../agenten.mjs";
 import { geschuetzteMuster, istGeschuetzt, istTestdatei } from "../format.mjs";
@@ -47,6 +47,17 @@ export async function dateiKarte(root, berichte) {
     kritisch: istKritisch(datei),
     tests: testsReaching(datei, graph).toSorted(),
   }));
+}
+
+function direkteTests(datei, graph) {
+  const importierende = (graph.get(datei) ?? []).map(({ source }) => source).filter((pfad) => TEST_FILE.test(pfad));
+  return [...new Set(importierende)].toSorted();
+}
+
+export async function nachrichtenKarte(root, karte) {
+  if (karte.length === 0) return [];
+  const graph = await dependentsGraph(realpathSync(root));
+  return karte.map(({ tests, ...eintrag }) => ({ ...eintrag, testsGesamt: tests.length, tests: direkteTests(eintrag.datei, graph) }));
 }
 
 function produktDateien(root, auftraege) {

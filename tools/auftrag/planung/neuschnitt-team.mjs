@@ -5,7 +5,7 @@ import { bereichSchluessel, istUmbau, phasenBefunde } from "../format.mjs";
 import { saetze } from "../neuschnitt.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
-import { umbauBericht, umbauKarten } from "./funktionsliste.mjs";
+import { nachrichtenKarte, umbauBericht, umbauKarten } from "./funktionsliste.mjs";
 import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { DURCHSTICH_ZEILE, prueflisteSoll } from "./antworten.mjs";
@@ -337,7 +337,7 @@ class UmbauNeuschnittPlanung extends NeuschnittPlanung {
 
   async kartenAbschnitte(schnitt) {
     const { funktionsliste, dateikarte } = await this.kartenMitNeuenUmbauten(schnitt);
-    return [abschnitt("Funktionsliste", json(funktionsliste)), abschnitt("Dateikarte", json(dateikarte))];
+    return [abschnitt("Funktionsliste", json(funktionsliste)), abschnitt("Dateikarte", json(await nachrichtenKarte(this.root, dateikarte)))];
   }
 }
 
