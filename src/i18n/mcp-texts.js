@@ -2,7 +2,7 @@ import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-te
 import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.js";
 
 function countedText(lang, singular, plural) {
-  return (count) => `${count} ${new Intl.PluralRules(lang).select(count) === "one" ? singular : plural}`;
+  return (count) => (new Intl.PluralRules(lang).select(count) === "one" ? singular(count) : plural(count));
 }
 
 export const MCP_ERROR_CODE = Object.freeze({
@@ -115,7 +115,11 @@ export const MCP_TEXTS = Object.freeze({
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
     callAlreadyRunningHint:
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
-    consultAnswerAccepted: countedText("de", "Angabe an den Anruf uebergeben.", "Angaben an den Anruf uebergeben."),
+    consultAnswerAccepted: countedText(
+      "de",
+      (count) => `${count} Angabe an den Anruf uebergeben.`,
+      (count) => `${count} Angaben an den Anruf uebergeben.`,
+    ),
     consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
       "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
@@ -222,7 +226,11 @@ export const MCP_TEXTS = Object.freeze({
       "permission is granted.",
     callAlreadyRunningHint:
       "This call was already running - the running call is returned, no second call was started.",
-    consultAnswerAccepted: countedText("en", "detail passed on to the call.", "details passed on to the call."),
+    consultAnswerAccepted: countedText(
+      "en",
+      (count) => `${count} detail passed on to the call.`,
+      (count) => `${count} details passed on to the call.`,
+    ),
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
       "Answer rejected (format or length). The question stays open - please answer more briefly.",
@@ -330,7 +338,11 @@ export const MCP_TEXTS = Object.freeze({
       "conversation que si l'autorisation d'outil du connecteur est accordée.",
     callAlreadyRunningHint:
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
-    consultAnswerAccepted: countedText("fr", "information transmise à l'appel.", "informations transmises à l'appel."),
+    consultAnswerAccepted: countedText(
+      "fr",
+      (count) => `${count} information transmise à l'appel.`,
+      (count) => `${count} informations transmises à l'appel.`,
+    ),
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
       "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",
