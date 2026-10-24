@@ -1,0 +1,44 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S4",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B10",
+        "T2"
+      ],
+      "eingang": "Modellausgabe zu Hermes auf dem Telnyx-Rückfallweg: die ganze Antwort eines Gesprächszugs geht über `shapeForSpeech` (Aufruf `src/claude.js:673`), das `shapedCore` in `src/speech-shape.js` ruft, danach `,;:` am Ende entfernt und einen Punkt anhängt, und dann als `<Say>` an die Sprachausgabe",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie steht `shapedCore` in `src/speech-shape.js:1-10` heute genau im Code? Gefragt sind jede `.replace`-Zeile mit ihrem regulären Ausdruck und ihren Flags, die Reihenfolge der Ersetzungen und der Rückgabewert. Laut Design Doc gilt diese Reihenfolge: Listenzeichen am Zeilenanfang mit `[ \\t]*`, dann `[*_#`]` entfernen, dann `\\s+-\\s+` → „, “, dann Leerraum falten, dann `trim`. Ist `shapedCore` exportiert, und gibt es außer `shapeForSpeech` und `shapeChunkForSpeech` weitere Aufrufer?",
+        "Wie sieht `shapeForSpeech` in `src/speech-shape.js:12-21` genau aus, also das Entfernen von `,;:` am Ende und das Anhängen des Punkts? Ist es exportiert, und unter welchem Namen importieren es die Tests?",
+        "Welche bestehenden Tests erreichen `shapeForSpeech` oder `shapedCore`, mit Pfad und Zeilen? Genannt sind `test/shape-for-speech.test.js:16-22` und `test/anrufe/sprechausgabe.test.js:59-62`. Welche Eingabe/Ergebnis-Paare prüfen sie? Prüft einer von ihnen schon heute die Eingaben der Nummern dieser Gruppe: „Alles klar - ich buche“, „_Wichtig_: morgen“, „__fett__ bitte“, die eingerückte Liste „Uhrzeiten:\\n  - 9\\n  - 18“ oder „Karte 4111_1111_1111_1111“? Und sind diese Tests heute grün?",
+        "Ein verhaltensgleicher Umbau soll die beiden Befunde `no-restricted-syntax` (Demeter G36) an `shapedCore` beseitigen. Diese sind in `eslint-suppressions.json:774` mit Zähler 2 unterdrückt, und die Datei steht in `.github/CODEOWNERS`. Muss danach `eslint-suppressions.json` geändert werden, etwa durch Senken oder Streichen des Zählers, oder ist eine Prüfung (Lint, Hook, CI) rot, wenn der Eintrag stehen bleibt und die Unterdrückung überzählig ist? Welcher Befehl oder welches Skript prüft das, und wo steht es (Datei:Zeile)?",
+        "Gelten für reguläre Ausdrücke in `src/` Lint- oder Semgrep-Regeln, die eine Umsetzung von R2 behindern könnten? R2 lässt einen Unterstrich stehen, wenn direkt davor und direkt danach ein Unicode-Buchstabe oder eine Unicode-Ziffer steht, außer auf beiden Seiten steht eine Ziffer; nötig sind dafür das Flag `u`, `\\p{L}`/`\\p{N}` und Lookbehind/Lookahead. Gemeint sind Regeln in `eslint.config.js` (etwa Regex-Komplexität, `prefer-named-capture-group`, verbotene Lookbehinds, Regeln gegen Unicode-Property-Escapes) und in der Semgrep-Konfiguration. Bitte mit Fundstelle.",
+        "Gibt es einen Testweg, der den Telnyx-Rückfallweg (`POST /voice/turn`, `src/routes/voice.js` bis `agentTurn` in `src/claude.js`) mit einer Modell-Attrappe erreicht, die einen frei gewählten Antworttext liefert, und den Text an die Sprachausgabe (`<Say>`) sichtbar macht? Falls ja: in welcher Testhilfe unter `test/`? Der Pitch verlangt Abnahmetests als Tabelle reiner Fachlogik, die nur `src/speech-shape.js` importieren; die Antwort entscheidet, ob der Eingang im Test erreichbar ist.",
+        "Die Sicherheitsprüfung (Abschnitt 5, angenommen) verlangt eine neue Vertrauensannahme zu SG-13 in `docs/sicherheitsgrenzen.md` mit dem Negativtest B10. Wie stehen SG-13 und Vertrauensannahmen heute in `docs/sicherheitsgrenzen.md`? Verlangt `tools/katalog-pruefen.mjs` (`:24`, `:110`) für eine Vertrauensannahme einen Test mit bestimmtem Namen oder eine bestimmte Spalte, so dass ein Abnahmetest zu B10 einen Namen mit festem Anfang tragen muss? Beide Dateien stehen in `.github/CODEOWNERS`.",
+        "Welche Funktionen in `src/speech-shape.js` haben heute Lint-Befunde, unterdrückt oder nicht, mit Regel und Zeilen? Das gilt außer `shapedCore` auch für `shapeForSpeech` und `shapeChunkForSpeech`."
+      ]
+    },
+    {
+      "nummern": [
+        "S5"
+      ],
+      "eingang": "Formung eines gestreamten Antwort-Häppchens auf dem Streaming-Weg von `agentTurn`: `src/speech-chunker.js:33` ruft `shapeChunkForSpeech` in `src/speech-shape.js`, das dieselbe Formung `shapedCore` nutzt, aber keinen Schlusspunkt anhängt; heute schaltet kein Live-Aufrufer diesen Weg ein (`src/routes/voice.js:396`)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie sieht `shapeChunkForSpeech` in `src/speech-shape.js` genau aus (Zeilen, Rückgabe)? Hängt es etwas an oder entfernt es etwas, außer `shapedCore` zu rufen? Ist es exportiert, und unter welchem Namen?",
+        "Was macht `src/speech-chunker.js` um Zeile 33 mit dem Ergebnis von `shapeChunkForSpeech`, bevor das Häppchen an den Rückruf `onSpeechChunk` geht? Wird leerer Text verworfen, wird Leerraum angehängt oder abgeschnitten? Gefragt ist, ob „Kennung grüß_gott_2“ als Häppchen unverändert ankommt, wenn `shapeChunkForSpeech` diesen Text liefert. Das Schneiden geschieht laut Design Doc nur hinter `.!?…` mit folgendem Leerraum (`src/speech-chunker.js:5`, `:14-24`).",
+        "Welche bestehenden Tests erreichen `shapeChunkForSpeech` oder `src/speech-chunker.js`, mit Pfad und Zeilen, und welche Eingabe/Ergebnis-Paare prüfen sie? Prüft einer einen Unterstrich mitten im Wort oder Text mit Umlaut oder ß? Sind diese Tests heute grün?",
+        "Gibt es im Repo eine Stelle, die Text vor der Formung Unicode-normalisiert (`normalize`, NFC/NFD), etwa in `src/speech-chunker.js` oder in `src/speech-shape.js`? Davon hängt ab, ob „grüß“ als Buchstabenfolge erkannt wird."
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 Status: freigegeben
 Issue: 1976
-Planung freigegeben: 2363346 Token
+Planung freigegeben: 2200000 Token
 Teil von: P-008-sprachformung-spannen; nach: –
 Design Doc: nein, weil die Änderung in einer Funktion (`src/speech-shape.js:shapedCore`) auf einem Weg liegt, kein Anbieteraufruf und kein Werkzeugvertrag sich ändert und der Rückweg ein Code-Rollback ist
 
