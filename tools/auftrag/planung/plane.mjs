@@ -33,7 +33,7 @@ import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { mitKettenBefunden } from "./kette.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
-import { dateiKarte, funktionsListe } from "./funktionsliste.mjs";
+import { dateiKarte, funktionsListe, nachrichtenKarte } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
@@ -518,7 +518,7 @@ export class Planung {
       abschnitt("Annahmen der Erkunder", punkte(this.erkunderAnnahmen().map(annahmeText))),
       abschnitt("Offene Punkte", punkte(this.offenePunkte())),
       abschnitt("Funktionsliste", json(funktionsliste)),
-      abschnitt("Dateikarte", json(dateikarte)),
+      abschnitt("Dateikarte", json(await nachrichtenKarte(this.root, dateikarte))),
     ];
   }
 
@@ -637,7 +637,7 @@ export class Planung {
   async prueferSicht(teil) {
     if (teil.gruppe === null) {
       const dateikarte = this.nurUmbau ? (await umbauPitchKarten(this.schnitt, this.root)).dateikarte : await dateiKarte(this.root, this.sauberBerichte());
-      return { berichte: [abschnitt("Dateikarte", json(dateikarte)), abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte))] };
+      return { berichte: [abschnitt("Dateikarte", json(await nachrichtenKarte(this.root, dateikarte))), abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte))] };
     }
     const { nummern } = this.gliederung.gruppen[teil.gruppe];
     return { nummern, berichte: [abschnitt("Erkundungsbericht deiner Gruppe", json(this.berichte[teil.gruppe]))], auszug: [this.berichte[teil.gruppe]] };
