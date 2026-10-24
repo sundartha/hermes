@@ -100,6 +100,10 @@ function gruppenWegZeile(nummern, text) {
   return { nummern: eigene.length > 0 ? eigene : nummern, zeile: `Weg ${nummern.join(", ")}: ${text}` };
 }
 
+function offeneBefundeDesPruefers(befunde) {
+  return abschnitt("Befunde des Prüfers, die du weiter beantwortest", `Zu jedem dieser Befunde gehört in deiner Antwort wieder genau eine Antwort unter \`antworten\`, auch wenn du ihn schon beantwortet hast.\n\n${punkte(befunde.map(prueferZeile))}`);
+}
+
 function offenerPrueferBefund(befund, antworten) {
   const antwort = antworten.find((eintrag) => eintrag?.schluessel === befund.schluessel)?.antwort;
   return istText(antwort) ? `${prueferZeile(befund)} | ${antwort}` : prueferZeile(befund);
@@ -266,7 +270,7 @@ export class Planung {
     return schleife;
   }
 
-  async planerStufe(text, verarbeite, art) {
+  async planerStufe(text, verarbeite, { art, anhang = [] } = {}) {
     const schleife = this.schleife(art);
     let naechste = text;
     for (;;) {
@@ -277,7 +281,7 @@ export class Planung {
       else {
         const ende = schleife.endeNachRunde(ergebnis.befunde, ergebnis.schnitt, this.soll);
         if (ende !== null) throw new Ende(EXIT_BEFUNDE, ende.grund, ergebnis.befunde);
-        naechste = this.team.ruecksenden(this.planer, ergebnis.befunde);
+        naechste = this.team.ruecksenden(this.planer, ergebnis.befunde, anhang);
       }
     }
   }
@@ -304,7 +308,7 @@ export class Planung {
     this.gliederung = this.ohneGliederung() ? { gruppen: [] } : await this.planerStufe(this.gliederungsNachricht(), (wert) => {
       const befunde = gliederungBefunde(wert, this.soll, this.designText);
       return befunde.length > 0 ? { befunde } : { wert };
-    }, "gliederung");
+    }, { art: "gliederung" });
     this.lege("gliederung.json", this.gliederung);
   }
 
@@ -612,7 +616,7 @@ export class Planung {
       if (Array.isArray(wert.nachfragen)) return this.nachfragen(wert.nachfragen);
       const { schnitt, befunde } = this.schnittAusAntwort(wert);
       return befunde.length > 0 ? { befunde, schnitt: this.schnitt } : this.pruefeSchnitt(schnitt);
-    }, "zuschnitt");
+    }, { art: "zuschnitt" });
   }
 
   alleAnnahmen() {
@@ -732,7 +736,7 @@ export class Planung {
       return this.beantworte(befunde, wert, vorher);
     };
     try {
-      return await this.planerStufe(this.team.ruecksenden(this.planer, befunde.map(prueferZeile)), verarbeite, "korrektur");
+      return await this.planerStufe(this.team.ruecksenden(this.planer, befunde.map(prueferZeile)), verarbeite, { art: "korrektur", anhang: [offeneBefundeDesPruefers(befunde)] });
     } catch (fehler) {
       if (fehler instanceof Ende) fehler.befunde.push(...befunde.map((befund) => offenerPrueferBefund(befund, letzte)));
       throw fehler;
