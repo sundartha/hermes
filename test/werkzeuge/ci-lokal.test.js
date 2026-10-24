@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, commitAll, isolatedEnvironment, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, repoMitCiLokalListe, runIn } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/ci-lokal.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -22,13 +22,6 @@ const ROT = {
 const TEUER = { name: "teuer", teuer: true, befehl: "touch teuer.txt" };
 const BRAUCHT_POSTGRES = { name: "wirkung", werkzeug: "postgres", befehl: "touch wirkung.txt" };
 
-function repoMitListe(context, schritte) {
-  const repo = probeRepository(context, { "tools/ci-lokal.json": JSON.stringify({ schritte, nurCi: {} }) });
-  writeFiles(repo, { "neu.txt": "neu\n" });
-  commitAll(repo, "Neu");
-  return repo;
-}
-
 function ciLokal(repo, argumente, umgebung = {}) {
   const lauf = spawnSync(process.execPath, [WERKZEUG, ...argumente], {
     cwd: repo,
@@ -43,7 +36,7 @@ function vorletzterCommit(repo) {
 }
 
 test("ci-lokal gibt jedem Schritt die Basis als SHA in BASIS und meldet je Schritt grün mit Dauer", (context) => {
-  const repo = repoMitListe(context, [SCHREIBT_BASIS]);
+  const repo = repoMitCiLokalListe(context, [SCHREIBT_BASIS]);
   const lauf = ciLokal(repo, ["--basis", "HEAD~1"]);
   assert.equal(lauf.status, 0, lauf.ausgabe);
   assert.equal(readFileSync(join(repo, "basis.txt"), "utf8"), vorletzterCommit(repo));
@@ -52,7 +45,7 @@ test("ci-lokal gibt jedem Schritt die Basis als SHA in BASIS und meldet je Schri
 });
 
 test("ci-lokal läuft nach einem roten Schritt weiter, zeigt dessen letzte Zeilen und endet rot mit der Liste", (context) => {
-  const repo = repoMitListe(context, [ROT, SCHREIBT_BASIS]);
+  const repo = repoMitCiLokalListe(context, [ROT, SCHREIBT_BASIS]);
   const lauf = ciLokal(repo, ["--basis", "HEAD~1"]);
   assert.equal(lauf.status, EXIT_ROT, lauf.ausgabe);
   assert.match(lauf.stdout, /^zaehlt rot \d+(\.\d+)?s$/m);
@@ -66,7 +59,7 @@ test("ci-lokal läuft nach einem roten Schritt weiter, zeigt dessen letzte Zeile
 });
 
 test("ci-lokal fährt einen teuren Schritt nur mit --mit-teuren und nennt ihn sonst als nicht gelaufen", (context) => {
-  const repo = repoMitListe(context, [TEUER]);
+  const repo = repoMitCiLokalListe(context, [TEUER]);
   const ohne = ciLokal(repo, ["--basis", "HEAD~1"]);
   assert.equal(ohne.status, 0, ohne.ausgabe);
   assert.ok(!existsSync(join(repo, "teuer.txt")));
@@ -78,7 +71,7 @@ test("ci-lokal fährt einen teuren Schritt nur mit --mit-teuren und nennt ihn so
 });
 
 test("ci-lokal meldet einen Schritt rot mit Grund und Zweck, wenn sein Werkzeug fehlt, und startet ihn nicht", (context) => {
-  const repo = repoMitListe(context, [BRAUCHT_POSTGRES]);
+  const repo = repoMitCiLokalListe(context, [BRAUCHT_POSTGRES]);
   const umgebung = mitErsatzWerkzeugen(repo);
   writeFileSync(join(repo, "ersatz-bin", "pg_isready"), "#!/bin/sh\necho kaputt >&2\nexit 1\n", { mode: AUSFUEHRBAR });
   const lauf = ciLokal(repo, ["--basis", "HEAD~1"], umgebung);
@@ -91,7 +84,7 @@ test("ci-lokal meldet einen Schritt rot mit Grund und Zweck, wenn sein Werkzeug 
 });
 
 test("ci-lokal bricht ohne Schritt ab, wenn die Basis kein Commit ist oder fehlt", (context) => {
-  const repo = repoMitListe(context, [SCHREIBT_BASIS]);
+  const repo = repoMitCiLokalListe(context, [SCHREIBT_BASIS]);
   const falsch = ciLokal(repo, ["--basis", "gibt-es-nicht"]);
   assert.equal(falsch.status, EXIT_ABBRUCH, falsch.ausgabe);
   assert.match(falsch.stderr, /Die Basis gibt-es-nicht ist kein Commit/);

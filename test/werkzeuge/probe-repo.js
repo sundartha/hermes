@@ -76,6 +76,13 @@ export function probeRepository(context, files) {
   return directory;
 }
 
+export function repoMitCiLokalListe(context, schritte) {
+  const repo = probeRepository(context, { "tools/ci-lokal.json": JSON.stringify({ schritte, nurCi: {} }) });
+  writeFiles(repo, { "neu.txt": "neu\n" });
+  commitAll(repo, "Neu");
+  return repo;
+}
+
 export function outputLines(text) {
   return text.split("\n").filter((line) => line.trim() !== "");
 }
