@@ -54,7 +54,7 @@ test("plane: ein Nutzungslimit setzt dieselbe Sitzung mit derselben Nachricht fo
 });
 
 test("plane: ein Agent, der eine Datei ändert, bricht mit Exit 1 ab", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = plane(context, { "erkunder|## Erkundung|S2": [{ text: bericht(GRUPPEN[1].nummern), schreibe: ROUTE }] });
+  const lauf = plane(context, { "erkunder|## Erkundung|S1": [{ text: bericht(GRUPPEN[0].nummern), schreibe: ROUTE }] });
   exit(lauf, EXIT_ABBRUCH);
   assert.equal(planungsBericht(lauf).grund, `erkunder haben ${ROUTE} geändert`);
   assert.equal(aufrufe(lauf, "planer", "## Zuschnitt").length, 0);
@@ -129,7 +129,7 @@ test("plane: planung.json enthält Ausweg, falsche Angabe, zurückgewiesenen Bef
   const prueferText = "a2 braucht den Code aus a1";
   const antwort = `trifft nicht zu, weil a2 nur die Bestätigung prüft (${ROUTE}:5)`;
   const lauf = plane(context, {
-    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[2].nummern, { S5: { tests: ausweg } })],
+    "erkunder|## Erkundung|S4": [bericht(GRUPPEN[1].nummern, { S5: { tests: ausweg } })],
     "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }) })],
     "pruefer-planung|## Prüfung": jePruefer({ ...GRUEN_PRUEFLISTE, befunde: { "allein-gruen:a2": prueferText } }),
     "planer|## Befunde": [alsJson({ schnitt: schnittliste({ umbau: { altfunktionen }, erster: { falscheAngaben: [falsch] } }), antworten: [{ schluessel: "allein-gruen:a2", antwort }] })],

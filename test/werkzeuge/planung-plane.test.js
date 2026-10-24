@@ -12,7 +12,7 @@ test("plane: feste Antworten aller Rollen ergeben Exit 0 und eine phase.json, di
   exit(lauf, EXIT_GRUEN);
   assert.equal(werkzeug(lauf, AUFTRAG, "pruefe", phaseDatei(lauf)).status, EXIT_GRUEN);
   assert.equal(werkzeug(lauf, join(REPO_ROOT, "tools/abdeckung-pruefen.mjs"), join(lauf.wurzel, ORDNER)).status, EXIT_GRUEN);
-  assert.deepEqual(readdirSync(join(lauf.wurzel, ORDNER, "planung")).toSorted(), ["entwuerfe.json", "erkundung-g1.json", "erkundung-g2.json", "erkundung-g3.json", "fingerabdruck.json", "geprueft.json", "gliederung.json", "nachfragen.json", "pruefliste-aufteilung.json", "pruefliste.json", "schnitt.json", "wegpruefung-S1-1.json", "wegpruefung-S2-1.json", "wegpruefung-S4-1.json"]);
+  assert.deepEqual(readdirSync(join(lauf.wurzel, ORDNER, "planung")).toSorted(), ["entwuerfe.json", "erkundung-g1.json", "erkundung-g2.json", "fingerabdruck.json", "geprueft.json", "gliederung.json", "nachfragen.json", "pruefliste-aufteilung.json", "pruefliste.json", "schnitt.json", "wegpruefung-S1-1.json", "wegpruefung-S4-1.json"]);
   assert.deepEqual(planungsBericht(lauf).auftraege.map(({ id }) => id), ["a0", "a1", "a2", "a3"]);
 });
 
@@ -33,7 +33,7 @@ test("plane: „Zerlegung passt nicht“ ohne gültige Fundstellen geht einmal a
 });
 
 test("plane: eine Gliederung mit doppelter Nummer geht einmal an den Planer zurück, danach wird grün geplant", { timeout: LAUF_FRIST_MS }, (context) => {
-  const doppelt = [{ ...GRUPPEN[0], nummern: ["S1", "S7", "T2", "S4"] }, GRUPPEN[1], GRUPPEN[2]];
+  const doppelt = [{ ...GRUPPEN[0], nummern: [...GRUPPEN[0].nummern, "S4"] }, GRUPPEN[1]];
   const lauf = plane(context, { "planer|## Gliederung": [alsJson({ gruppen: doppelt })], "planer|## Befunde": [alsJson({ gruppen: GRUPPEN })] });
   exit(lauf, EXIT_GRUEN);
   assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 1);
@@ -116,7 +116,7 @@ test("plane: eine Nachfrage mit neuer Stelle beendet die Nachfragen nicht", { ti
 
 test("plane: zwei Erkunder laufen gleichzeitig", { timeout: LAUF_FRIST_MS }, (context) => {
   const langsam = (nummern) => [{ text: bericht(nummern), warte: WARTEN_MS }];
-  const lauf = plane(context, { "erkunder|## Erkundung|S1": langsam(GRUPPEN[0].nummern), "erkunder|## Erkundung|S2": langsam(GRUPPEN[1].nummern) });
+  const lauf = plane(context, { "erkunder|## Erkundung|S1": langsam(GRUPPEN[0].nummern), "erkunder|## Erkundung|S4": langsam(GRUPPEN[1].nummern) });
   exit(lauf, EXIT_GRUEN);
   const langsame = aufrufe(lauf, "erkunder", "## Erkundung").filter(({ start, ende }) => ende - start >= WARTEN_MS);
   const [erster, zweiter] = langsame.toSorted((links, rechts) => links.start - rechts.start);

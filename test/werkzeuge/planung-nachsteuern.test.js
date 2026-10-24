@@ -194,7 +194,7 @@ function zweiterWorktree(context, wurzel) {
   return zweiter;
 }
 
-const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[0], GRUPPEN[1]] })] };
+const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN[0], nummern: ["S1", "S7", "T2"] }, { ...GRUPPEN[0], nummern: ["S2", "S3", "S6", "T1"] }] })] };
 const ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL = { erkunder: { laeufe: 1, token: TEIL_DECKEL } };
 const PLANER_TEURER_ALS_DER_TEIL_DECKEL = { planer: { laeufe: 1, token: TEIL_DECKEL + 1 } };
 const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
@@ -232,7 +232,7 @@ test("liegt die Vorschau der Erkundung eines Teils mit 1 Gruppe über dem Teil-D
   mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
   vorgaengerGemergt(wurzel, HINTERLEGEN);
 
-  const lauf = planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER, antworten: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[2]] })] } });
+  const lauf = planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER, antworten: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[1]] })] } });
 
   exit(lauf, EXIT_DECKEL);
   assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), []);
