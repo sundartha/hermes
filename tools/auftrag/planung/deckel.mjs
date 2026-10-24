@@ -5,6 +5,7 @@ import { BELEGE } from "../bericht.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
 import { istObjekt } from "./erkundung.mjs";
 import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
+import { werkzeugeDerRolle } from "./team.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
@@ -49,7 +50,9 @@ export function gemesseneLaeufe(root, sitzungen) {
 
 export class Kostendeckel {
   constructor(root, phase, deckel) {
+    this.root = root;
     this.deckel = deckel;
+    this.werkzeuge = {};
     this.vorige = vorigeKosten(root, phase);
     this.jeLauf = {};
     this.stand = {};
@@ -61,7 +64,19 @@ export class Kostendeckel {
   mittelJeLauf(rolle, gemessen) {
     if (this.jeLauf[rolle] !== undefined) return mittel(this.jeLauf[rolle]);
     const bekannt = [this.vorige[rolle], gemessen].filter(istLauf);
-    return bekannt.length > 0 ? Math.max(...bekannt.map(mittel)) : Math.max(0, ...Object.values(this.jeLauf).map(mittel));
+    if (bekannt.length > 0) return Math.max(...bekannt.map(mittel));
+    const gemesseneRollen = Object.keys(this.jeLauf);
+    const gleicheWerkzeuge = gemesseneRollen.filter((andere) => this.ausstattung(andere) === this.ausstattung(rolle));
+    return this.hoechstesMittel(gleicheWerkzeuge.length > 0 ? gleicheWerkzeuge : gemesseneRollen);
+  }
+
+  hoechstesMittel(rollen) {
+    return Math.max(0, ...rollen.map((rolle) => mittel(this.jeLauf[rolle])));
+  }
+
+  ausstattung(rolle) {
+    this.werkzeuge[rolle] ??= werkzeugeDerRolle(this.root, rolle).toSorted().join(",");
+    return this.werkzeuge[rolle];
   }
 
   vorschau(rollen, gemessenJeRolle = {}) {
