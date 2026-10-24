@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 
-import { AUSSERHALB, GESCHUETZT, PHASE_PASST_NICHT, ROLLE, VERSTOSS, ZU_VIELE_ZEILEN, beleg } from "./pruefungen.mjs";
+import { AUSSERHALB, GESCHUETZT, PHASE_PASST_NICHT, ROLLE, VERSTOSS, ZU_VIELE_ZEILEN, beleg, vollerBeleg } from "./pruefungen.mjs";
 
 const AUFTRAGSWEG = "tools/auftrag/zweck.json";
 const WEITERE = "tools/zweck/";
@@ -44,6 +44,7 @@ export const PRUEFUNG = {
   MUTATION_TESTUMBAU: "mutation testumbau",
   ROT: "rot",
   ABNAHME_VORHER: "abnahme vorher",
+  ABHAENGIGKEITEN: "abhängigkeiten",
   TYPPRUEFUNG: "typprüfung",
   LINT: "lint",
   PIN: "pin-prüfung",
@@ -180,6 +181,7 @@ const ZUSTAENDIG = new Map([
   [MELDUNG.MIGRATIONEN, BAU],
   [MELDUNG.FESTE_PFADE, BAU],
   [MELDUNG.VORBEREITUNG, BAU],
+  [PRUEFUNG.ABHAENGIGKEITEN, LETZTER_AGENT],
   [PRUEFUNG.MUTATION, BAU],
   [PRUEFUNG.MUTATION_NACH_BAU, BAU],
   [PRUEFUNG.COMMIT, BAU],
@@ -227,4 +229,15 @@ const BLOCKZEILEN = new Set(Object.keys(TEXTE).flatMap(zweckBlock));
 
 export function ohneZweck(zeilen) {
   return zeilen.filter((zeile) => !BLOCKZEILEN.has(zeile));
+}
+
+export function befundOhneZweck(ergebnis) {
+  return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
+}
+
+export function vollerBelegMitZweckAusBloecken(ergebnis) {
+  const belegt = befundOhneZweck(ergebnis);
+  const vorhanden = new Set(ergebnis.ausgabe.split("\n"));
+  const ids = Object.keys(TEXTE).filter((id) => zweckBlock(id).every((zeile) => vorhanden.has(zeile)));
+  return ergebnis.exitCode === 0 || ids.length === 0 ? belegt : { ...belegt, zweck: ids };
 }

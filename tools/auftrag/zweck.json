@@ -139,6 +139,13 @@
     "nichtAngenommen": "Typen aufweichen, bis die Prüfung schweigt, oder einen Wert durch eine Umwandlung „typisieren“.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
   },
+  "abhängigkeiten": {
+    "liste": "B7",
+    "wozu": "lauf fährt nach dem Test-Agenten und nach dem Bau-Agenten dieselbe Prüfung der Abhängigkeitsregeln wie ci-lokal am Phasenende (node tools/abhaengigkeiten.mjs gegen die Basis des Auftrags). So erfährt der Agent einen neuen Verstoß in der Runde, in der er ihn macht, statt dass die Phase erst nach Mutation und Commit rot wird. Den Grund und die echte Behebung der einzelnen Regel nennt ihr Block in der Ausgabe.",
+    "behebung": "Den gemeldeten Verstoß so beheben, wie es der Block der Regel nennt; fehlt der Block, steht die Ursache in der Ausgabe der Prüfung.",
+    "nichtAngenommen": "Eine Regel in .dependency-cruiser.cjs ändern, einen Eintrag in .dependency-cruiser-known-violations.json oder tools/basis/test-importe.json ergänzen oder den Import in eine Form bringen, die dependency-cruiser nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
+  },
   "ts-sperre": {
     "liste": "ohne Nummer",
     "wozu": "Alle Prüfungen sehen TypeScript nur als .ts in Kleinbuchstaben unter src/, test/, tools/ und scripts/; eine .mts- oder .cts-Datei prüfen Semgrep und knip noch nicht, den Inhalt einer Deklarationsdatei wie .d.ts prüft tsc wegen skipLibCheck nicht, und eine .tsx-Datei, eine andere Schreibweise der Endung, eine TypeScript-Datei in einem anderen Ordner oder in einem Ordner, den eslint.config.js oder tsconfig.json ausnimmt, ginge an Lint oder Typprüfung vorbei. Außerdem erlaubt sind nur die TypeScript-Dateien, die vor S71a schon versioniert waren und in tools/basis/ts-bestand.json stehen.",
