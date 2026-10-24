@@ -7,10 +7,8 @@ import { once } from "node:events";
 
 import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository } from "./probe-repo.js";
 import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, SPERRE, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
-import { echtWarten } from "../echt-warten.js";
+import { bisBeendet, lebt } from "./mutationspruefung-hilfen.js";
 
-const PRUEFABSTAND_MS = 100;
-const PRUEFUNGEN_BIS_AUFGABE = 50;
 const WARTEZEIT_AUF_SPERRE_MS = 3_600_000;
 const LAUFZEIT_NACH_FREIGABE_MS = 2000;
 const INNERE_FRIST_MS = 10_000;
@@ -118,20 +116,6 @@ test("ein fremder Halter-Schlüssel öffnet die Sperre nicht", FRIST, async (con
   assert.equal(lauf.kind.exitCode, null);
   assert.equal(lauf.stdout, "");
 });
-
-function lebt(prozess) {
-  try {
-    process.kill(prozess, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function bisBeendet(prozess) {
-  for (let versuch = 0; versuch < PRUEFUNGEN_BIS_AUFGABE && lebt(prozess); versuch += 1) await echtWarten(PRUEFABSTAND_MS);
-  return !lebt(prozess);
-}
 
 test("wird der Aufrufer eines wartenden Laufs beendet, startet der Lauf auch nach dem Freiwerden nicht", FRIST, async (context) => {
   const env = umgebung(context);

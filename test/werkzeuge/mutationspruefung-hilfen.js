@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 
 import { GRUPPE } from "../../tools/mutationspruefung/gruppen.mjs";
+import { echtWarten } from "../echt-warten.js";
 import { REPO_ROOT, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
+const PRUEFABSTAND_MS = 100;
+const PRUEFUNGEN_BIS_AUFGABE = 50;
 export const EXIT_ROT = 1;
 export const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 export const ANGENOMMEN = /^Hinweis: als gleichwertig angenommen: (.+)$/gm;
@@ -231,6 +234,11 @@ export function lebt(prozess) {
   } catch {
     return false;
   }
+}
+
+export async function bisBeendet(prozess) {
+  for (let versuch = 0; versuch < PRUEFUNGEN_BIS_AUFGABE && lebt(prozess); versuch += 1) await echtWarten(PRUEFABSTAND_MS);
+  return !lebt(prozess);
 }
 
 export function quelltexttest(name) {
