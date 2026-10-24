@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { genannteStellen } from "../../tools/auftrag/planung/altfunktionen-vorab.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten, teilEintrag as teil } from "./planung-plane-probe.js";
-import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
+import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
@@ -22,7 +22,6 @@ const HINWEIS_ZEILE = 7;
 const ALTFUNKTIONEN_KEINE = "\n## Altfunktionen\nkeine, weil die Fixture nur den Planungsweg vor dem ersten Agenten prüft\n";
 const ALTFUNKTION = `${HINWEIS}:setzeHinweis`;
 const ALT_QUELLE = "export function setzeHinweis(nummer) {\n  var text = nummer;\n  return text;\n}\n";
-const ALTFUNKTIONEN_ZEILE = /^## Altfunktionen\n.*$/mu;
 const FREMDER_UMBAU = `${HINWEIS}:nimmAnruf`;
 
 const HINTERLEGEN = teil("t1", "eigene-nummer-hinterlegen", { nummern: ERSTER, tWege: ["T1", "T2"], dateien: [ROUTE] });
@@ -58,7 +57,7 @@ function codeDateienBelegen(wurzel, dateien) {
 function umbauImPitch(wurzel) {
   writeFileSync(join(wurzel, HINWEIS), ALT_QUELLE);
   const pitch = join(wurzel, ORDNER, "pitch.md");
-  writeFileSync(pitch, readFileSync(pitch, "utf8").replace(ALTFUNKTIONEN_ZEILE, `## Altfunktionen\n- Umbau: \`${ALTFUNKTION}\``));
+  writeFileSync(pitch, mitUmbauZeilen(readFileSync(pitch, "utf8"), [ALTFUNKTION]));
 }
 
 function planeGross(context, { teilung, befunde = [], argumente = [], token, beleg, loeschen = [], umbau = false } = {}) {
