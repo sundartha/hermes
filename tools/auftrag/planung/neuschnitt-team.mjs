@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { bereichSchluessel, istUmbau, phasenBefunde } from "../format.mjs";
 import { saetze } from "../neuschnitt.mjs";
@@ -9,6 +9,7 @@ import { nachrichtenKarte, umbauBericht, umbauKarten } from "./funktionsliste.mj
 import { nummernImOrdner } from "./nummern.mjs";
 import { befundeImOrdner } from "./abdeckung.mjs";
 import { DURCHSTICH_ZEILE, prueflisteSoll } from "./antworten.mjs";
+import { Kostendeckel, TEIL_DECKEL } from "./deckel.mjs";
 import { druckePlanBericht, planBericht } from "./planbericht.mjs";
 import { EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { Ende, Planung, VORLAGE, ausgangOhneWurf, liste, prueferZeile, schreibeJsonAtomar } from "./plane.mjs";
@@ -60,6 +61,7 @@ class NeuschnittPlanung extends Planung {
     this.phase = phase;
     this.alt = alt;
     this.vorhandene = phase.auftraege.filter((auftrag) => auftrag !== this.alt);
+    this.kostendeckel = new Kostendeckel(root, basename(ordner), eingabe.deckel ?? TEIL_DECKEL);
   }
 
   eigeneNummern() {
@@ -86,7 +88,7 @@ class NeuschnittPlanung extends Planung {
     const nummern = [...this.soll.keys()];
     const kopf = [this.kopfTeile().phasenKopf, abschnitt("Anlass", anlass), abschnitt("Verlauf", verlauf.join("\n")), abschnitt("Hinweise", hinweise.join("\n"))];
     const fragen = [`Woran ist ${auftragId} gescheitert, und welche Stellen müssen sich für diese Nummern ändern?`];
-    const [ergebnis] = await this.team.gruppe([this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf }), nummern)]);
+    const [ergebnis] = await this.welle([this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf }), nummern)], "Erkundung des Neuschnitts");
     this.berichte = [ergebnis.bericht];
     if (ergebnis.befunde.length === 0) this.uebernimmWeg(ergebnis);
     this.legeBerichte();
@@ -241,7 +243,7 @@ class NeuschnittPlanung extends Planung {
 
   async entwerfe() {
     const bereiche = this.eigeneBereiche();
-    const ergebnisse = await this.team.gruppe(bereiche.map((bereich) => this.entwurfLauf(bereich)));
+    const ergebnisse = await this.welle(bereiche.map((bereich) => this.entwurfLauf(bereich)), "Entwurfs-Welle des Neuschnitts");
     const offen = bereiche.flatMap((bereich, stelle) => ergebnisse[stelle].befunde.map((befund) => `Entwurf ${bereich}: ${befund}`));
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, ENTWURF_OFFEN, offen);
     const eigene = (bereich) => this.schnitt.auftraege.filter((eintrag) => bereichSchluessel(eintrag.bereich) === bereich);

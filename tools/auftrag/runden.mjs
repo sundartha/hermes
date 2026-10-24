@@ -21,6 +21,8 @@ export const ENTWURFSPRUEFUNG = "entwurfsprüfung";
 const MAX_RUNDEN = 2;
 const MAX_WIEDERHOLUNGEN = 1;
 const WERKZEUGABBRUCH = new Set([GRUND.MUTATION_ABBRUCH, GRUND.AGENT_EXIT]);
+const FORMPRUEFUNGEN = new Set([PRUEFUNG.GRENZEN_BAU, PRUEFUNG.GRENZEN_TEST, PRUEFUNG.IMPORTENDUNGEN, PRUEFUNG.ABHAENGIGKEITEN, PRUEFUNG.LINT, PRUEFUNG.PIN]);
+const FORMGRUENDE = new Set([GRUND.ZWECK_ABSATZ]);
 const LABEL = "entscheidung";
 const JSON_BLOCK = /```json[^\S\n]*\n((?:(?!```)[\s\S])*)```\s*$/;
 const UMBAU_FELDER = ["ziel", "bereich", "erwarteteDateien", "abnahme"];
@@ -71,6 +73,15 @@ function fehlerausgabe(ergebnis) {
 
 function nurAbgebrochen({ roteIds = [] }) {
   return roteIds.length > 0 && roteIds.every((id) => WERKZEUGABBRUCH.has(id));
+}
+
+function formRot({ schritte, ohneSchritt }) {
+  return [...schritte.map(({ name }) => name), ...ohneSchritt.map(({ id }) => id)];
+}
+
+function nurFormRot(runde) {
+  const rot = formRot(runde);
+  return rot.length > 0 && rot.every((name) => FORMPRUEFUNGEN.has(name) || FORMGRUENDE.has(name));
 }
 
 function voraussetzungsAnlass(satz) {
@@ -259,7 +270,7 @@ class Runden {
     }
     this.fehler.push(fehlerausgabe(ergebnis));
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
-    if (this.fehler.length === MAX_RUNDEN) return this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
+    if (this.fehler.length === MAX_RUNDEN) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
     verwerfe(ergebnis.basis, this.kontext.root);
     return null;
   }
@@ -351,6 +362,13 @@ class Runden {
     const { phase, auftrag } = this.kontext;
     const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
     return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler, zweck: zweckBlock(MELDUNG.STOPP) };
+  }
+
+  nurFormGestoppt() {
+    const gestoppt = this.gestoppt();
+    const namen = [...new Set(this.roteRunden.flatMap(formRot))];
+    const satz = `Alle ${MAX_RUNDEN} roten Runden waren nur an Formprüfungen der Agenten rot (${namen.join(", ")}). Das belegt keinen Fehler im Zuschnitt; deshalb lief kein Neuschnitt.`;
+    return { ...gestoppt, kopf: `${gestoppt.kopf}\n\n${satz}`, anlass: `${gestoppt.anlass} ${satz}` };
   }
 
   zurueckInDenEntwurf(ergebnis, grund, zweck = []) {
