@@ -1,4 +1,4 @@
-export const ANTWORTFRIST_MS = 15_000;
+export const ANTWORTFRIST_MS = 5_000;
 
 function keineAntwort() {
   return new Error(`keine Antwort nach ${ANTWORTFRIST_MS} ms`);
