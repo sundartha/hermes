@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase } from "./befehle.mjs";
 import { sperrSchluessel } from "./bereiche.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
-import { reihenfolge } from "./format.mjs";
+import { istVertraulich, reihenfolge } from "./format.mjs";
 import { git, kopf } from "./git.mjs";
 import { ciLokalAmPhasenende } from "./phasenende.mjs";
 import { issueAbsichtBefunde } from "./planung/absicht.mjs";
@@ -35,6 +35,8 @@ const FERTIG = "fertig";
 const UEBERNOMMEN = "übernommen";
 const ABBRUCH_SIGNALE = ["SIGINT", "SIGTERM"];
 const KURZ_SHA = 7;
+const VERTRAULICH =
+  "Die Phase ist vertraulich; phase braucht ein öffentliches Issue und lädt einen Branch hoch. Starte sie mit node tools/auftrag.mjs lauf <phasendatei>.";
 
 function warten() {
   return schlafen(Number(env.HERMES_SPERRE_WARTEN_MS ?? WARTEN_MS));
@@ -212,6 +214,10 @@ export function issueBefunde(phase) {
   return Number.isInteger(phase.issue) && phase.issue > 0 ? [] : ["issue muss die Nummer des Phasen-Issues sein."];
 }
 
+function startIssueBefunde(phase) {
+  return istVertraulich(phase) ? [VERTRAULICH] : issueBefunde(phase);
+}
+
 function issueText(issue, root) {
   const gh = env.HERMES_GH ?? "gh";
   const lauf = spawnSync(gh, ["issue", "view", String(issue), "--json", "body", "--jq", ".body"], { cwd: root, encoding: "utf8" });
@@ -231,7 +237,7 @@ async function bauePhase(ort, lauf) {
 
 export async function phase(phasendatei, root) {
   const { phase: beschreibung, befunde } = gueltigePhase(phasendatei, root);
-  const vorab = befunde.length > 0 ? befunde : issueBefunde(beschreibung);
+  const vorab = befunde.length > 0 ? befunde : startIssueBefunde(beschreibung);
   const alle = vorab.length > 0 ? vorab : [...absichtImIssueBefunde(beschreibung, root), ...teilVorgaengerBefunde(beschreibung, root)];
   for (const befund of alle) console.error(befund);
   if (alle.length > 0) return EXIT_ROT;

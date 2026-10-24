@@ -27,6 +27,7 @@ const CODEOWNERS = ".github/CODEOWNERS";
 const VERANKERT = "/";
 const LEERRAUM = /\s+/;
 const PHASE_AUS_PITCH = /^P-/i;
+const PHASE_EINES_FEHLERS = /^F-\d/;
 const NUMMER = /^[SBT][1-9]\d*$/;
 const WURZEL = "/";
 const LISTEN_VERBINDER = " + ";
@@ -44,6 +45,18 @@ export function absichtBefunde(absicht) {
   }
   if (absicht.length > ABSICHT_HOECHSTENS) return [`${ABSICHT} hat ${absicht.length} Zeichen, höchstens ${ABSICHT_HOECHSTENS} (2 bis 4 Sätze)`];
   return [];
+}
+
+export function istVertraulich(phase) {
+  return phase.vertraulich === true;
+}
+
+function vertraulichBefunde(phase) {
+  if (!Object.hasOwn(phase, "vertraulich")) return [];
+  if (!istVertraulich(phase)) return ["vertraulich darf nur true sein; eine gewöhnliche Phase nennt stattdessen ihr issue"];
+  const befunde = PHASE_EINES_FEHLERS.test(String(phase.phase)) ? [] : ["vertraulich gilt nur für die Phase eines Fehlers (F-<Nummer>-<kurzname>)"];
+  const zugleich = "issue und vertraulich zugleich: eine vertrauliche Phase hat kein öffentliches Issue; entferne eins der beiden Felder";
+  return Object.hasOwn(phase, "issue") ? [...befunde, zugleich] : befunde;
 }
 
 export function brauchtRotenTest(auftrag) {
@@ -415,6 +428,7 @@ export function phasenBefunde(phase, root) {
     befunde.push("phase muss eine Kennung aus Buchstaben, Ziffern und Bindestrichen sein");
   }
   if (Object.hasOwn(phase, "absicht")) befunde.push(...absichtBefunde(phase.absicht));
+  befunde.push(...vertraulichBefunde(phase));
   const auftraege = Array.isArray(phase.auftraege) ? phase.auftraege : [];
   if (auftraege.length === 0) return [...befunde, "auftraege muss mindestens einen Auftrag enthalten"];
   befunde.push(...kennungBefunde(auftraege));

@@ -12,7 +12,7 @@ import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, f
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
-import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, ladePhase, reihenfolge } from "./format.mjs";
+import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
@@ -60,6 +60,7 @@ const ANLEITUNG = ".md";
 const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
+const OHNE_FREIGABE = "die Phase ist vertraulich; ohne öffentliches Issue gibt lauf keinen alten Test frei.";
 const ISSUE_ZWECK =
   'lauf schreibt jede Entscheidung als Kommentar an das Phasen-Issue und liest dort die Freigabe eines alten Tests. Ohne gültige Nummer liefe ein Auftrag stundenlang in eine Entscheidung, die nirgends ankommt. Ausweg: Trag die Nummer des Phasen-Issues als "issue": <Nummer> in die Phasendatei ein.';
 
@@ -539,7 +540,7 @@ function gebauteAuftraege(phase, root) {
 
 function startBefunde(phasendatei, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
-  const ohneIssue = befunde.length === 0 ? issueBefunde(phase) : [];
+  const ohneIssue = befunde.length === 0 && !istVertraulich(phase) ? issueBefunde(phase) : [];
   const form = ohneIssue.length > 0 ? [...ohneIssue, ISSUE_ZWECK] : befunde;
   const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
   const annahmen = form.length > 0 ? [] : [...annahmenBefunde(phase, root), ...teilVorgaengerBefunde(phase, root)];
@@ -567,6 +568,10 @@ function freigabe(kontext) {
   const { phase, auftrag, root } = kontext;
   const dateien = entschiedeneAlteTests(kontext);
   if (dateien.length === 0) return {};
+  if (istVertraulich(phase)) {
+    for (const datei of dateien) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${OHNE_FREIGABE}`);
+    return {};
+  }
   const issue = phasenIssue(phase.issue, root);
   const freie = dateien.filter((datei) => {
     const problem = freigabeProblem(issue, datei);
