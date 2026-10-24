@@ -3,14 +3,14 @@ import { join } from "node:path";
 
 import { cruise } from "dependency-cruiser";
 
-import { schluesselName } from "../../eslint-rules/knoten.js";
+import { festerText, schluesselName } from "../../eslint-rules/knoten.js";
 import { besucheSyntaxbaum } from "../../ziele/funktionen.mjs";
 import { istTestdatei } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 
 export const LOESCHEN = "## Löschen";
 const EINSTIEG = /`([^`\s:]+):([^`]+)`/g;
-const NUTZER_WURZELN = ["src", "scripts", "test", "tools/hermes-ctl.mjs", "tools/hermes-ctl"];
+const NUTZER_WURZELN = ["src", "scripts", "test", "tools"];
 const GRAPH = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const ROUTEN_METHODEN = new Set(["all", "delete", "get", "patch", "post", "put", "use"]);
 const NIE_GELOESCHT = new Set(["Parameter", "CatchClause", "ImplicitGlobalVariable"]);
@@ -80,7 +80,8 @@ function importAngaben(knoten) {
 function nachgeladen(aufruf) {
   const [erstes] = aufruf.type === "ImportExpression" ? [aufruf.source] : aufruf.arguments;
   const istRequire = aufruf.type === "ImportExpression" || aufruf.callee.name === "require";
-  return istRequire && erstes?.type === "Literal" ? [{ quelle: erstes.value, name: ALLES, knoten: aufruf }] : [];
+  const quelle = istRequire ? festerText(erstes) : undefined;
+  return quelle === undefined ? [] : [{ quelle, name: ALLES, knoten: aufruf }];
 }
 
 function modulBindung(knoten) {
@@ -239,7 +240,7 @@ function setzeEinstieg(lage, { datei, ziel }) {
   if (variable === undefined) return false;
   lage.einstiege.add(variable);
   stirbt(lage, datei, variable);
-  for (const [name, lokal] of analyse.exporte) if (variable.modul && lokal === ziel) lage.erzwungen.add(`${datei}:${name}`);
+  for (const name of exportNamenVon(analyse.exporte, variable)) lage.erzwungen.add(`${datei}:${name}`);
   return true;
 }
 
