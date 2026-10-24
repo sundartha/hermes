@@ -5,10 +5,17 @@ import { BELEGE } from "../bericht.mjs";
 import { gemeinsamerOrdner } from "../git.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
 import { istObjekt, schreibeJsonAtomar } from "./erkundung.mjs";
+import { gitLauf } from "./git.mjs";
 import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
 import { werkzeugeDerRolle } from "./team.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
+const PLANUNGSBERICHTE = /^planung(?:-[^/]+)?\.json$/u;
+const JE_ROLLE = "je Rolle";
+const ERKUNDER = "erkunder";
+export const WEGPRUEFER = "wegpruefer";
+const AGENT_DER_ROLLE = { [WEGPRUEFER]: "pruefer-planung" };
+const WORKTREE = "worktree ";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
 export const TEIL_DECKEL = 3_000_000;
 
@@ -24,13 +31,17 @@ export function deckelAus(angabe, pitch) {
   return deckel === undefined ? { fehler: `--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}` } : { deckel };
 }
 
-function vorigeKosten(root, phase) {
+function liesKosten(datei) {
   try {
-    const kosten = JSON.parse(readFileSync(join(root, BELEGE, phase, PLANUNGSBERICHT), "utf8")).kostenJeLauf;
-    return istObjekt(kosten) ? kosten : {};
+    const bericht = JSON.parse(readFileSync(datei, "utf8"));
+    return { kosten: istObjekt(bericht?.kostenJeLauf) ? bericht.kostenJeLauf : {}, jeRolle: bericht?.kostenGebucht === JE_ROLLE };
   } catch {
-    return {};
+    return { kosten: {}, jeRolle: false };
   }
+}
+
+function vorigeKosten(root, phase) {
+  return liesKosten(join(root, BELEGE, phase, PLANUNGSBERICHT));
 }
 
 function istLauf(eintrag) {
@@ -39,6 +50,28 @@ function istLauf(eintrag) {
 
 function mittel(eintrag) {
   return istLauf(eintrag) ? eintrag.token / eintrag.laeufe : 0;
+}
+
+function worktrees(root) {
+  const zeilen = gitLauf(root, ["worktree", "list", "--porcelain"]).stdout.split("\n");
+  return zeilen.filter((zeile) => zeile.startsWith(WORKTREE)).map((zeile) => zeile.slice(WORKTREE.length));
+}
+
+function berichteAndererPhasen(baum, phase) {
+  const belege = join(baum, BELEGE);
+  if (!existsSync(belege)) return [];
+  const ordner = readdirSync(belege, { withFileTypes: true }).filter((eintrag) => eintrag.isDirectory() && eintrag.name !== phase);
+  return ordner.flatMap(({ name }) => readdirSync(join(belege, name)).filter((datei) => PLANUNGSBERICHTE.test(datei)).map((datei) => join(belege, name, datei)));
+}
+
+function andereMittel(root, phase) {
+  const hoechste = {};
+  for (const datei of worktrees(root).flatMap((baum) => berichteAndererPhasen(baum, phase))) {
+    const { kosten, jeRolle } = liesKosten(datei);
+    const zaehlen = Object.entries(kosten).filter(([rolle, eintrag]) => istLauf(eintrag) && (jeRolle || rolle !== ERKUNDER));
+    for (const [rolle, eintrag] of zaehlen) hoechste[rolle] = Math.max(hoechste[rolle] ?? 0, mittel(eintrag));
+  }
+  return hoechste;
 }
 
 export function gemesseneKosten(root, beteiligte) {
@@ -73,8 +106,8 @@ function laeufe(buch) {
   return namen.map((name) => ({ name, lauf: liesLauf(join(buch, name)) })).filter(({ lauf }) => lauf !== null).map(({ name, lauf }) => ({ name, ...lauf }));
 }
 
-function laufKosten({ token, deckel }) {
-  if (Number.isFinite(token)) return token;
+function laufKosten({ token, deckel, weitergegeben }) {
+  if (Number.isFinite(token)) return Math.max(token, Number.isFinite(weitergegeben) ? weitergegeben : 0);
   return Number.isFinite(deckel) ? deckel : null;
 }
 
@@ -108,9 +141,14 @@ export function gibReservierungFrei() {
   EIGENER_LAUF.datei = null;
 }
 
-export function verbucheLauf(root, beteiligte) {
+export function verbucheLauf(root, beteiligte, { weitergegeben = false } = {}) {
   if (EIGENER_LAUF.datei === null) return;
-  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...liesLauf(EIGENER_LAUF.datei), token: gemesseneKosten(root, beteiligte) });
+  const lauf = liesLauf(EIGENER_LAUF.datei);
+  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...lauf, token: gemesseneKosten(root, beteiligte), ...(weitergegeben && { weitergegeben: lauf.deckel }) });
+}
+
+function vorBekanntem(links, rechts) {
+  return rechts.mittel - links.mittel || Number(links.ganz) - Number(rechts.ganz);
 }
 
 export class Kostendeckel {
@@ -118,7 +156,10 @@ export class Kostendeckel {
     this.root = root;
     this.deckel = deckel;
     this.werkzeuge = {};
-    this.vorige = vorigeKosten(root, phase);
+    const vorige = vorigeKosten(root, phase);
+    this.vorige = vorige.kosten;
+    this.vorigeJeRolle = vorige.jeRolle;
+    this.andere = andereMittel(root, phase);
     this.jeLauf = {};
     this.stand = {};
     this.offen = new Map();
@@ -126,10 +167,23 @@ export class Kostendeckel {
     this.schritt = null;
   }
 
+  wert(rolle, gemessen) {
+    if (this.jeLauf[rolle] !== undefined) return { mittel: mittel(this.jeLauf[rolle]), ganz: false };
+    const vorige = istLauf(this.vorige[rolle]) ? [{ mittel: mittel(this.vorige[rolle]), ganz: rolle === ERKUNDER && !this.vorigeJeRolle }] : [];
+    const dieserLauf = istLauf(gemessen) ? [{ mittel: mittel(gemessen), ganz: false }] : [];
+    const andere = this.andere[rolle] === undefined ? [] : [{ mittel: this.andere[rolle], ganz: false }];
+    return [...vorige, ...dieserLauf, ...andere].toSorted(vorBekanntem)[0];
+  }
+
   mittelJeLauf(rolle, gemessen) {
-    if (this.jeLauf[rolle] !== undefined) return mittel(this.jeLauf[rolle]);
-    const bekannt = [this.vorige[rolle], gemessen].filter(istLauf);
-    if (bekannt.length > 0) return Math.max(...bekannt.map(mittel));
+    return this.wert(rolle, gemessen)?.mittel ?? this.ersatz(rolle);
+  }
+
+  ersatz(rolle) {
+    if (rolle === WEGPRUEFER) {
+      const erkunder = this.wert(ERKUNDER);
+      return Math.max(this.mittelJeLauf(AGENT_DER_ROLLE[rolle]), erkunder === undefined || erkunder.ganz ? 0 : erkunder.mittel);
+    }
     const gemesseneRollen = Object.keys(this.jeLauf);
     const gleicheWerkzeuge = gemesseneRollen.filter((andere) => this.ausstattung(andere) === this.ausstattung(rolle));
     return this.hoechstesMittel(gleicheWerkzeuge.length > 0 ? gleicheWerkzeuge : gemesseneRollen);
@@ -140,12 +194,22 @@ export class Kostendeckel {
   }
 
   ausstattung(rolle) {
-    this.werkzeuge[rolle] ??= werkzeugeDerRolle(this.root, rolle).toSorted().join(",");
+    this.werkzeuge[rolle] ??= werkzeugeDerRolle(this.root, AGENT_DER_ROLLE[rolle] ?? rolle).toSorted().join(",");
     return this.werkzeuge[rolle];
   }
 
-  vorschau(rollen, gemessenJeRolle = {}) {
-    return Math.round(rollen.reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, gemessenJeRolle[rolle]), 0));
+  imErkunderEnthalten(rollen, jeRolle) {
+    if (!rollen.includes(ERKUNDER) || this.wert(WEGPRUEFER, jeRolle[WEGPRUEFER]) !== undefined) return false;
+    return this.wert(ERKUNDER, jeRolle[ERKUNDER])?.ganz ?? true;
+  }
+
+  schrittVorschau(rollen, jeRolle) {
+    const ohne = this.imErkunderEnthalten(rollen, jeRolle) ? WEGPRUEFER : null;
+    return rollen.filter((rolle) => rolle !== ohne).reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, jeRolle[rolle]), 0);
+  }
+
+  vorschau(schritte, jeRolle = {}) {
+    return Math.round(schritte.reduce((summe, rollen) => summe + this.schrittVorschau(rollen, jeRolle), 0));
   }
 
   haelt({ gemessen, vorschau }, schritt) {
@@ -155,13 +219,13 @@ export class Kostendeckel {
     return true;
   }
 
-  ueber({ gemessen, jeRolle }, rollen, schritt) {
-    const vorschau = this.vorschau(rollen, jeRolle);
+  ueber({ gemessen, jeRolle }, schritte, schritt) {
+    const vorschau = this.vorschau(schritte, jeRolle);
     if (!this.haelt({ gemessen, vorschau }, schritt)) {
-      this.offen = new Map(rollen.map((rolle, stelle) => [stelle, this.mittelJeLauf(rolle, jeRolle[rolle])]));
+      this.offen = new Map(schritte.map((rollen, stelle) => [stelle, this.schrittVorschau(rollen, jeRolle)]));
       return null;
     }
-    return `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${rollen.length} Läufe (${[...new Set(rollen)].join(", ")}) wären es ${gemessen + vorschau}; plane hält vor dem Schritt „${schritt}“ an und wartet auf eine Entscheidung`;
+    return `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${schritte.length} Läufe (${[...new Set(schritte.flat())].join(", ")}) wären es ${gemessen + vorschau}; plane hält vor dem Schritt „${schritt}“ an und wartet auf eine Entscheidung`;
   }
 
   imLauf(stelle, { gemessen, jeRolle }, { rolle, schritt }) {
@@ -181,15 +245,20 @@ export class Kostendeckel {
     this.offen.delete(stelle);
   }
 
-  verbuche(rollen, token) {
-    for (const rolle of rollen) {
+  verbuche(schritte, kosten) {
+    const rollen = schritte.flat();
+    const vorkommen = Map.groupBy(rollen, (rolle) => rolle);
+    const eigene = [...vorkommen.keys()].reduce((summe, rolle) => summe + (kosten[rolle] ?? 0), 0);
+    const rest = Object.values(kosten).reduce((summe, token) => summe + token, 0) - eigene;
+    for (const [rolle, { length: laeufe }] of vorkommen) {
       const bisher = this.jeLauf[rolle] ?? { laeufe: 0, token: 0 };
-      this.jeLauf[rolle] = { laeufe: bisher.laeufe + 1, token: bisher.token + token / rollen.length };
+      this.jeLauf[rolle] = { laeufe: bisher.laeufe + laeufe, token: bisher.token + (kosten[rolle] ?? 0) + (rest * laeufe) / rollen.length };
     }
   }
 
   bericht() {
     const schritt = this.schritt === null ? {} : { deckelSchritt: this.schritt };
-    return { deckel: { deckel: this.deckel, ...this.stand }, ...schritt, kostenJeLauf: { ...this.vorige, ...this.jeLauf } };
+    const ohneKennzeichnung = !this.vorigeJeRolle && this.vorige[ERKUNDER] !== undefined && this.jeLauf[ERKUNDER] === undefined;
+    return { deckel: { deckel: this.deckel, ...this.stand }, ...schritt, kostenJeLauf: { ...this.vorige, ...this.jeLauf }, ...(!ohneKennzeichnung && { kostenGebucht: JE_ROLLE }) };
   }
 }

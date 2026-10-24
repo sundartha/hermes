@@ -154,7 +154,7 @@ function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, ste
 }
 
 class Teilung {
-  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung }) {
+  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung, team = new Team(root, ordner), planer = team.teilnehmer("planer"), gliederung = null }) {
     this.root = root;
     this.ordner = ordner;
     this.soll = soll;
@@ -163,8 +163,9 @@ class Teilung {
     this.ueber = ueber;
     this.ableitung = ableitung;
     this.dokumente = dokumenteIm(ordner);
-    this.team = new Team(root, ordner);
-    this.planer = this.team.teilnehmer("planer");
+    this.team = team;
+    this.planer = planer;
+    this.gliederung = gliederung;
   }
 
   nummern(muster) {
@@ -177,6 +178,7 @@ class Teilung {
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Nummern", nummernText(this.soll, this.nummern(SZENARIO)) || "keine"),
       abschnitt("Bedrohungen mit Ausgang verhindern", nummernText(this.soll, this.nummern(BEDROHUNG)) || "keine"),
+      ...(this.gliederung === null ? [] : [abschnitt("Gliederung", json(this.gliederung))]),
       abschnitt("Umfang", json(this.umfang)),
       abschnitt("Grenze", grenze),
       ...PLANER_KONTEXT.map((pfad) => abschnitt(pfad, dateiText(this.root, pfad))),
@@ -236,15 +238,19 @@ class Teilung {
   }
 }
 
+export async function laufeTeilung(root, ordner, angaben) {
+  try {
+    return await new Teilung(root, ordner, angaben).laufe();
+  } catch (fehler) {
+    if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, fehler: fehler.message };
+    throw fehler;
+  }
+}
+
 export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
   const { soll, unklar } = nummernImOrdner(ordner);
   if (unklar.length > 0) return null;
   const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: codeDateien(umfang.codeDateien, loeschDateien(umfang)).length });
   if (ueber.length === 0) return null;
-  try {
-    return await new Teilung(root, ordner, { soll, umfang, deckel, ueber, ableitung }).laufe();
-  } catch (fehler) {
-    if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, fehler: fehler.message };
-    throw fehler;
-  }
+  return laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung });
 }

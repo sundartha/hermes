@@ -16,7 +16,7 @@ const TEILE = "teile.json";
 const NACH_ZEILEN = /(?<=\n)/u;
 const UEBERSCHRIFT = /^(#{1,6})\s/u;
 const ABSCHNITT = 2;
-const PHASENNUMMER = /^P-\d+/u;
+const TEILNUMMER = /^P-\d+(?:-t\d+(?=-|$))*/u;
 const STATUS = "Status:";
 const EIGENER_KOPF = [STATUS, "Issue:", "Planung freigegeben:", "Teil von:"];
 const SZENARIEN_ANDERSWO = "dieser Teil baut nur um; die Szenarien des Eltern-Pitches stehen in den anderen Teilen";
@@ -138,7 +138,7 @@ function texte(ordner) {
 
 function teilOrdnerName(elternOrdner, { kuerzel, name }) {
   const eltern = basename(elternOrdner);
-  return `${PHASENNUMMER.exec(eltern)?.[0] ?? eltern}-${kuerzel}-${name}`;
+  return `${TEILNUMMER.exec(eltern)?.[0] ?? eltern}-${kuerzel}-${name}`;
 }
 
 function herkunftDes(teilung, eintrag, elternOrdner) {
@@ -150,10 +150,16 @@ function leererTopf(buch, rechnung) {
   return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im Eltern-Pitch eine neue Menge freigegeben ist. Ein Lauf ohne gemessenen Verbrauch zählt mit seinem Deckel; frei wird er nur, wenn ein Mensch nach Blick in die Transkripte seine Datei in ${buch} löscht` };
 }
 
-function topfAus(buch, { elternPitch, teilung, ohne }) {
-  const { deckel: freigabe, fehler } = deckelAus(undefined, elternPitch);
+function freigabeDesTopfs(pitchFreigabe, { teilung, obergrenze }) {
+  const vorige = Number.isFinite(teilung.topf?.freigabe) ? teilung.topf.freigabe : Infinity;
+  return Math.min(pitchFreigabe, obergrenze, vorige);
+}
+
+function topfAus(buch, { elternPitch, teilung, ohne, freigabe: obergrenze = Infinity }) {
+  const { deckel: pitchFreigabe, fehler } = deckelAus(undefined, elternPitch);
   if (fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `Eltern-Ordner: ${fehler}; der Rest-Topf der Teile rechnet mit dieser Freigabe` };
   if (!Number.isFinite(teilung.token) || teilung.token < 0) return { exit: EXIT_DECKEL, fehler: `${TEILE} nennt den Verbrauch der Teilung nicht als Zahl; plane hält an, statt zu schätzen` };
+  const freigabe = freigabeDesTopfs(pitchFreigabe, { teilung, obergrenze });
   const { topf, rechnung, fehler: messfehler } = restTopf(buch, { freigabe, vorschnitt: teilung.token, ohne });
   if (messfehler !== undefined) return { exit: EXIT_DECKEL, fehler: messfehler };
   return topf.teilDeckel <= 0 ? leererTopf(buch, rechnung) : { topf, rechnung };
@@ -220,14 +226,14 @@ function schreibeOrdner(ziel, dokumente) {
   for (const [datei, inhalt] of Object.entries(dokumente)) writeFileSync(join(ziel, datei), inhalt);
 }
 
-function schreibeTeile(root, ordner, geteilt) {
+export function schreibeTeile(root, ordner, geteilt) {
   const datei = join(ordner, PLANUNG, TEILE);
   const teilung = JSON.parse(readFileSync(datei, "utf8"));
   const ziele = teilung.teile.map((eintrag) => join(dirname(ordner), teilOrdnerName(ordner, eintrag)));
   const vorhanden = ziele.filter((ziel) => existsSync(ziel)).map((ziel) => `${relative(root, ziel)} gibt es schon; plane überschreibt keinen Teil-Ordner`);
   if (vorhanden.length > 0) return { exit: EXIT_AUFRUF, fehler: vorhanden.join("\n") };
   const eltern = texte(ordner);
-  const topf = topfAus(topfBuch(root, basename(ordner)), { elternPitch: eltern[PITCH], teilung });
+  const topf = topfAus(topfBuch(root, basename(ordner)), { elternPitch: eltern[PITCH], teilung, freigabe: geteilt.freigabe });
   if (topf.exit !== undefined) return topf;
   const neu = abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: topf.topf.teilDeckel });
   const befunde = neu.flatMap(({ eintrag, herkunft, dokumente }, stelle) => teilBefunde({ eltern, teil: dokumente, eintrag, herkunft, name: relative(root, ordner) }, relative(root, ziele[stelle])));
