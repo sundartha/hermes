@@ -17,6 +17,7 @@ const NEU_TS = "src/neu.ts";
 const ZAEHLEN = "src/zaehlen.js";
 const RECHNEN_TEST = "test/rechnen/rechnen.test.js";
 const ZAEHLEN_TEST = "test/rechnen/zaehlen.test.js";
+const INDIREKT_TEST = "test/rechnen/indirekt.test.js";
 const UMBAU_TEST = /^Regel Umbau-Test:/m;
 const UMBENENNUNG = /^Regel Umbenennung:/m;
 const SCHLUSS = /^(?:rot: \d+ Befunde|grün: die Schnittliste) /m;
@@ -39,7 +40,7 @@ function schnittListe(auftraege) {
   return { annahmen: [], fehlendeSzenarien: [], ownerAufgaben: [], gemeinsameNamen: [], auftraege };
 }
 
-function probe(context, auftraege, { pitchtext = pitch(BLEIBT), berichte = [] } = {}) {
+function probe(context, auftraege, { pitchtext = pitch(BLEIBT), berichte = [], dateien = {} } = {}) {
   const wurzel = probeMitEslint(context, {
     "tools/bereiche.json": readFileSync(join(REPO_ROOT, "tools/bereiche.json"), "utf8"),
     "src/eingang.js": EINGANG,
@@ -51,6 +52,7 @@ function probe(context, auftraege, { pitchtext = pitch(BLEIBT), berichte = [] } 
     [ZAEHLEN_TEST]: 'import "../../src/zaehlen.js";\n',
     [`${ORDNER}/pitch.md`]: pitchtext,
     [`${ORDNER}/sicherheit.md`]: SICHERHEIT,
+    ...dateien,
   });
   mkdirSync(join(wurzel, ORDNER, "planung"));
   writeFileSync(join(wurzel, ORDNER, "planung/schnitt.json"), JSON.stringify(schnittListe(auftraege)));
@@ -138,4 +140,10 @@ test("umbau-dateikarte: bei einem reinen Umbau-Pitch sehen die Planungsprüfer d
   const nurUmbau = await dateikarteDerPruefer(context, auftraege);
   assert.deepEqual(nurUmbau.map(({ datei, tests }) => ({ datei, tests })), [{ datei: RECHNEN, tests: [RECHNEN_TEST] }]);
   assert.deepEqual(await dateikarteDerPruefer(context, auftraege, { pitchtext: pitch(`${BLEIBT}\n\n${SZENARIO}`) }), []);
+});
+
+test("umbau-dateikarte: eine abnahme, die die Datei des Umbaus nur über eine Testhilfe erreicht, passt weiter", (context) => {
+  const dateien = { "test/rechnen/hilfe.js": 'export * from "../../src/rechnen.js";\n', [INDIREKT_TEST]: 'import "./hilfe.js";\n' };
+  const lauf = schnitt(context, [umbau("a1", { dateien: [RECHNEN], abnahme: INDIREKT_TEST })], { dateien });
+  assert.deepEqual(umbauTestZeilen(lauf), [], lauf.stderr);
 });
