@@ -1,0 +1,51 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "sprachformung-umbau",
+      "nummern": [],
+      "tWege": [],
+      "dateien": [
+        "src/speech-shape.js",
+        "eslint-suppressions.json",
+        "eslint.config.js",
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "nurUmbau": true,
+      "abhaengigVon": [],
+      "grund": "Der Pitch verlangt vor der Änderung einen verhaltensgleichen, lintfreien Umbau von `shapedCore` (Fallen, Demeter G36 mit 2 unterdrückten Befunden in `eslint-suppressions.json:774`). Dieser Umbau lässt sich mit den bestehenden grünen Tests der Formung allein abnehmen, ohne neues Verhalten."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "sprachformung-unterstrich-regel",
+      "nummern": [
+        "S4",
+        "S5",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B10"
+      ],
+      "tWege": [
+        "T2"
+      ],
+      "dateien": [
+        "src/speech-shape.js",
+        "src/claude.js",
+        "src/thinking-signal.js",
+        "src/i18n/prompts/de.js",
+        "src/mcp-tools.js",
+        "src/restricted-data.js",
+        "src/log-maske.js",
+        ".dependency-cruiser.cjs"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "R2 für beide Formungswege bleibt in einem Teil, weil S4 und S5 dieselbe gemeinsame Formung treffen und ein abgetrenntes S5 nach S4 nicht mehr rot werden könnte. B1, B3, B5, B7 und B10/T2 schützen genau das Verhalten, das diese Änderung am Unterstrich und an der Ersetzungskette brechen kann. Der Teil teilt `src/speech-shape.js` mit t1 und baut deshalb auf dessen Umbau auf."
+    }
+  ]
+}
