@@ -458,3 +458,90 @@ test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft
 test("plane --fortsetzen nach Exit 5 vor der Entwurfs-Welle schneidet und prüft neu, wenn die Skriptprüfung den Schnitt trotz passender Prüfsumme beanstandet", { timeout: LAUF_FRIST_MS }, (context) => {
   neuGeschnittenNach(context, beanstandeterSchnittMitPassenderPruefsumme);
 });
+
+const UEBERZOGEN_IN_DER_ERKUNDUNG = 190_000;
+const DECKEL_UNTER_DER_ERKUNDUNG = DECKEL_IN_DER_ERKUNDUNG - UEBERZOGEN_IN_DER_ERKUNDUNG;
+const NACH_ENTWURF = NACH_PRUEFLISTE + ENTWURF_LAEUFE * PLANER;
+const DECKEL_IN_DER_RUECKSENDUNG_IM_ENTWURF = NACH_ENTWURF + PLANER / 2;
+const UNGUELTIGER_ENTWURF = { [`entwurf|## Entwurf|${ROUTE}`]: [alsJson({})], "entwurf|## Befunde": [alsJson({})] };
+
+function nenntUeberschreitung(lauf, { deckel, gemessen, prozent }) {
+  const { grund, deckel: stand } = planungsBericht(lauf);
+  const ueberschritten = gemessen - deckel;
+  assert.equal(stand.ueberschritten, ueberschritten);
+  for (const angabe of [`${deckel}`, `${gemessen}`, `${ueberschritten} Token`, prozent]) assert.ok(grund.includes(angabe), grund);
+  return { grund, stand };
+}
+
+function nenntUeberschreitungOhneVorschau(lauf, angaben) {
+  const { grund, stand } = nenntUeberschreitung(lauf, angaben);
+  assert.deepEqual(stand, { deckel: angaben.deckel, gemessen: angaben.gemessen, ueberschritten: stand.ueberschritten });
+  return grund;
+}
+
+function ueberDemDeckelErkundet(context) {
+  const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_UNTER_DER_ERKUNDUNG)], ueberschrieben: EINE_GRUPPE });
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").length, 1);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Zuschnitt"), []);
+  assert.equal(planungsBericht(lauf).deckelSchritt, "Erkundung");
+  nenntUeberschreitungOhneVorschau(lauf, { deckel: DECKEL_UNTER_DER_ERKUNDUNG, gemessen: DECKEL_IN_DER_ERKUNDUNG, prozent: "15,2 %" });
+  assert.equal(existsSync(planungsDatei(lauf, "fingerabdruck.json")), true);
+  return lauf;
+}
+
+test("plane --deckel: endet mit Exit 5, wenn eine Welle teurer war als die Vorschau und der Deckel überschritten ist", { timeout: LAUF_FRIST_MS }, (context) => {
+  ueberDemDeckelErkundet(context);
+});
+
+function mitKleinemEntwurfsMittel(context) {
+  return vorigerBericht(planOrdner(context), { entwurf: { laeufe: 1, token: ENTWURF_VORHER_KLEIN } });
+}
+
+test("plane --deckel: ein sonst grüner Lauf über dem Deckel endet mit Exit 5 statt 0", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, mitKleinemEntwurfsMittel(context), { argumente: ["--deckel", String(DECKEL_VOR_ENTWURF)] });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "entwurf").length, ENTWURF_LAEUFE);
+  assert.equal(planungsBericht(lauf).deckelSchritt, "Entwurfs-Welle");
+  nenntUeberschreitungOhneVorschau(lauf, { deckel: DECKEL_VOR_ENTWURF, gemessen: NACH_ENTWURF, prozent: "2,5 %" });
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "phase.json")), false);
+});
+
+test("plane --deckel: offene Befunde über dem Deckel enden mit Exit 5 und die Meldung nennt die offenen Befunde", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, mitKleinemEntwurfsMittel(context), { argumente: ["--deckel", String(DECKEL_IN_DER_RUECKSENDUNG_IM_ENTWURF)], ueberschrieben: UNGUELTIGER_ENTWURF });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "entwurf", "## Befunde").length, 1);
+  const grund = nenntUeberschreitungOhneVorschau(lauf, { deckel: DECKEL_IN_DER_RUECKSENDUNG_IM_ENTWURF, gemessen: NACH_ENTWURF + PLANER, prozent: "1,2 %" });
+  const { offen } = planungsBericht(lauf).befunde;
+  assert.ok(offen.length > 0);
+  for (const befund of offen) assert.ok(befund.startsWith(`Entwurf ${ROUTE}: `) && grund.includes(befund), grund);
+});
+
+test("plane --deckel: nach Exit 5 wegen Überschreitung setzt --fortsetzen mit den bezahlten Ergebnissen fort", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = ueberDemDeckelErkundet(context);
+
+  const lauf = fortgesetztGruen(context, gestoppt.wurzel, EINE_GRUPPE);
+
+  zuschnittNachUebernahme(lauf);
+});
+
+test("plane --deckel: genau auf dem Deckel endet ein grüner Lauf mit Exit 0", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitToken(context, mitKleinemEntwurfsMittel(context), { argumente: ["--deckel", String(NACH_ENTWURF)] });
+
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(planungsBericht(lauf).token, NACH_ENTWURF);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "phase.json")), true);
+});
+
+const ZWEITE_GRUPPE_SPAETER = { "erkunder|## Erkundung|S4": [{ text: bericht(GRUPPEN[1].nummern), warte: SPAETER_MS }] };
+const DECKEL_IN_DER_ZWEITEN_WEGPRUEFUNG = 2 * MIO;
+const NACH_ZWEITEM_ERKUNDER = PLANER + ERSTE_WELLE * ERKUNDER + WEGPRUEFER;
+
+test("plane --deckel: hält plane mitten in einer Welle an und liegen die zu Ende gelaufenen Antworten über dem Deckel, nennt die Meldung die Überschreitung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_IN_DER_ZWEITEN_WEGPRUEFUNG, ueberschrieben: ZWEITE_GRUPPE_SPAETER, schritt: /^Wegprüfung S4, S5, B1, Runde 1$/ });
+
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").length, 1);
+  nenntUeberschreitung(lauf, { deckel: DECKEL_IN_DER_ZWEITEN_WEGPRUEFUNG, gemessen: NACH_ZWEITEM_ERKUNDER, prozent: "22,0 %" });
+});
