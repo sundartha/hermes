@@ -23,6 +23,10 @@ const BEDROHUNG = /^T/u;
 const ORDNER_ENDE = "/";
 const OHNE_VORGAENGER = "–";
 const UMBAU = "Umbau";
+const FUNKTION_TRENNER = ":";
+const UMBAU_DES_TEILS = "Umbau dieses Teils";
+const UMBAU_AUS_PITCH = { herkunft: `aus „${ALTFUNKTIONEN}“`, ort: `unter „${ALTFUNKTIONEN}“ im Pitch` };
+const UMBAU_AUS_TEIL = { herkunft: `aus umbau dieses Teils in der Eltern-${TEILE}`, ort: `unter umbau dieses Teils in der Eltern-${TEILE}` };
 const PITCH_NICHT_HIER = "„Pitch ändern“ gibt es bei der Teilung nicht; antworte mit der Teilung oder mit „Zerlegung passt nicht: …“";
 const ZUORDNUNG = [
   { feld: "nummern", muster: SZENARIO, fremd: "kein Szenario S oder B des Pitches" },
@@ -143,14 +147,18 @@ function loeschBefunde(teile, loeschen) {
 }
 
 function umbauAltfunktionen(pitch) {
-  return altfunktionenAusPitch(pitch ?? "").eintraege.filter(({ art }) => art === UMBAU).map(({ datei, funktion }) => ({ datei, name: `${datei}:${funktion}` }));
+  return altfunktionenAusPitch(pitch ?? "").eintraege.filter(({ art }) => art === UMBAU).map(({ datei, funktion }) => ({ datei, name: `${datei}${FUNKTION_TRENNER}${funktion}` }));
 }
 
-function umbauBefunde(teile, altfunktionen) {
+function altfunktionenAusNamen(namen) {
+  return namen.map((name) => ({ datei: name.slice(0, name.indexOf(FUNKTION_TRENNER)), name }));
+}
+
+function umbauBefunde(teile, { altfunktionen, quelle }) {
   const genannt = teile.flatMap(({ umbau = [] }) => umbau);
   const zahl = zaehler(genannt);
-  const falsch = altfunktionen.filter(({ name }) => zahl(name) !== 1).map(({ name }) => regel(`${name} aus „${ALTFUNKTIONEN}“ steht ${zahl(name)}-mal unter umbau statt genau einmal`));
-  const fremde = [...new Set(genannt)].filter((name) => !altfunktionen.some((alt) => alt.name === name)).map((name) => regel(`${name} unter umbau ist keine Umbau-Altfunktion unter „${ALTFUNKTIONEN}“ im Pitch`));
+  const falsch = altfunktionen.filter(({ name }) => zahl(name) !== 1).map(({ name }) => regel(`${name} ${quelle.herkunft} steht ${zahl(name)}-mal unter umbau statt genau einmal`));
+  const fremde = [...new Set(genannt)].filter((name) => !altfunktionen.some((alt) => alt.name === name)).map((name) => regel(`${name} unter umbau ist keine Umbau-Altfunktion ${quelle.ort}`));
   const ohneDatei = teile.flatMap(({ kuerzel, umbau = [], dateien }) => altfunktionen.filter(({ name, datei }) => umbau.includes(name) && !dateien.includes(datei)).map(({ name, datei }) => regel(`${kuerzel} nennt ${name} unter umbau, hat ${datei} aber nicht unter dateien`)));
   return [...falsch, ...fremde, ...ohneDatei];
 }
@@ -186,7 +194,7 @@ function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, ste
 }
 
 class Teilung {
-  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung, team = new Team(root, ordner), planer = team.teilnehmer("planer"), gliederung = null }) {
+  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung, team = new Team(root, ordner), planer = team.teilnehmer("planer"), gliederung = null, umbau }) {
     this.root = root;
     this.ordner = ordner;
     this.soll = soll;
@@ -195,7 +203,8 @@ class Teilung {
     this.ueber = ueber;
     this.ableitung = ableitung;
     this.dokumente = dokumenteIm(ordner);
-    this.umbau = umbauAltfunktionen(this.dokumente[PITCH]);
+    this.umbauDesTeils = umbau;
+    this.umbauRegel = umbau === undefined ? { altfunktionen: umbauAltfunktionen(this.dokumente[PITCH]), quelle: UMBAU_AUS_PITCH } : { altfunktionen: altfunktionenAusNamen(umbau), quelle: UMBAU_AUS_TEIL };
     this.team = team;
     this.planer = planer;
     this.gliederung = gliederung;
@@ -203,6 +212,12 @@ class Teilung {
 
   nummern(muster) {
     return [...this.soll.keys()].filter((nummer) => muster.test(nummer));
+  }
+
+  umbauAbschnitt() {
+    if (this.umbauDesTeils === undefined) return [];
+    const namen = this.umbauDesTeils.map((name) => `- \`${name}\``).join("\n") || "keine";
+    return [abschnitt(UMBAU_DES_TEILS, `Hier gilt statt der Umbau-Zeilen unter „${ALTFUNKTIONEN}“ im Pitch nur diese Liste aus der Eltern-${TEILE}; jede steht unter \`umbau\` genau eines Teils, der ihre Datei unter \`dateien\` hat:\n${namen}`)];
   }
 
   nachricht() {
@@ -213,6 +228,7 @@ class Teilung {
       abschnitt("Nummern", nummernText(this.soll, this.nummern(SZENARIO)) || "keine"),
       abschnitt("Bedrohungen mit Ausgang verhindern", nummernText(this.soll, this.nummern(BEDROHUNG)) || "keine"),
       ...(this.gliederung === null ? [] : [abschnitt("Gliederung", json(this.gliederung))]),
+      ...this.umbauAbschnitt(),
       abschnitt("Umfang", json(this.umfang)),
       abschnitt("Grenze", grenze),
       ...PLANER_KONTEXT.map((pfad) => abschnitt(pfad, dateiText(this.root, pfad))),
@@ -244,7 +260,7 @@ class Teilung {
     this.lege(ANTWORT, antwort.wert);
     const form = teilungBefunde(antwort.wert);
     if (form.length > 0) return { befunde: form };
-    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, umbau: this.umbau, root: this.root, gliederung: this.gliederung });
+    const schnitt = schnittBefunde(antwort.wert.teile, { soll: this.soll, umfang: this.umfang, umbau: this.umbauRegel, root: this.root, gliederung: this.gliederung });
     return { befunde: schnitt.length > 0 ? schnitt : this.ableitung(antwort.wert).map(regel) };
   }
 
