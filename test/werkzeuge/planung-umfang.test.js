@@ -54,8 +54,8 @@ function design() {
   return DESIGN_KOPF + "x".repeat(DOKUMENT_KB * KB - belegt);
 }
 
-function paketRepo(context, dokumente) {
-  const wurzel = probeRepository(context, { ...QUELLEN, ...Object.fromEntries(Object.entries(dokumente).map(([name, text]) => [`${PAKET}/${name}`, text])) });
+function paketRepo(context, dokumente, quellen = QUELLEN) {
+  const wurzel = probeRepository(context, { ...quellen, ...Object.fromEntries(Object.entries(dokumente).map(([name, text]) => [`${PAKET}/${name}`, text])) });
   symlinkSync(join(REPO_ROOT, "node_modules"), join(wurzel, "node_modules"));
   return wurzel;
 }
@@ -106,4 +106,87 @@ test("plane schreibt den Umfang des Pitches in planung.json, gleich der Ausgabe 
   exit(gemessen, EXIT_GRUEN);
   assert.deepEqual(umfang, JSON.parse(gemessen.stdout));
   assert.ok(umfang.codeDateien.includes(HINWEIS), JSON.stringify(umfang));
+});
+
+const KETTE = {
+  "src/a.js": `import { b1 } from "./b.js";\n\nexport function a() {\n  return b1();\n}\n`,
+  "src/b.js": `import { c } from "./c.js";\n\nexport function b1() {\n  return c();\n}\n\nexport function b2() {\n  return 2;\n}\n`,
+  "src/c.js": `export function c() {\n  return 3;\n}\n`,
+  "src/d.js": `import { b2 } from "./b.js";\n\nconsole.log(b2());\n`,
+  "test/a.test.js": `import { a } from "../src/a.js";\n\na();\n`,
+  "test/c.test.js": `import { c } from "../src/c.js";\n\nc();\n`,
+  "test/b.test.js": `import { b1, b2 } from "../src/b.js";\n\nb1();\nb2();\n`,
+  "test/b-spaet.test.js": `const b = await import("../src/b.js");\n\nb.b1();\n`,
+  "test/b-raum.test.js": `import * as b from "../src/b.js";\n\nb.b2();\n`,
+  "test/b-gemischt.test.js": `let b;\nb = await import("../src/b.js");\nb.b1();\nconst { b2 } = await import("../src/b.js");\nb2();\n`,
+  "package.json": JSON.stringify({ type: "module" }),
+  ".gitignore": "node_modules\n",
+};
+
+function loeschPitch(einstiege) {
+  return `# Probe\n\n## Löschen\n\n${einstiege.map((einstieg) => `- \`${einstieg}\``).join("\n")}\n`;
+}
+
+function loeschmengeIn(context, quellen, einstiege) {
+  const wurzel = paketRepo(context, { "pitch.md": loeschPitch(einstiege), "sicherheit.md": SICHERHEIT }, quellen);
+  const lauf = umfangIn(wurzel, PAKET);
+  exit(lauf, EXIT_GRUEN);
+  return JSON.parse(lauf.stdout).loeschmenge;
+}
+
+test("umfang rechnet zu einem Abschnitt Löschen die Dateien und Exporte, die mit dem Einstieg ihren letzten Nutzer verlieren, behält eine Datei, die ein anderer mitnutzt, und nennt je Test, ob er wegfällt oder angepasst werden muss", { timeout: LAUF_FRIST_MS }, (context) => {
+  const loeschmenge = loeschmengeIn(context, KETTE, ["src/a.js:a"]);
+
+  assert.deepEqual(loeschmenge, {
+    dateien: ["src/a.js", "src/c.js"],
+    exporte: ["src/b.js:b1"],
+    reste: ["src/b.js:c"],
+    tests: [
+      { datei: "test/a.test.js", art: "löschen" },
+      { datei: "test/b-gemischt.test.js", art: "anpassen" },
+      { datei: "test/b-spaet.test.js", art: "löschen" },
+      { datei: "test/b.test.js", art: "anpassen" },
+      { datei: "test/c.test.js", art: "löschen" },
+    ],
+    fehlend: [],
+  });
+});
+
+const ROUTEN = {
+  "src/routen.js": [
+    `import { Router } from "express";`,
+    `import { altText } from "./alt.js";`,
+    `import { neuText } from "./neu.js";`,
+    "",
+    `const ALT_PRAEFIX = "[alt]";`,
+    "",
+    "export function routen() {",
+    "  const router = Router();",
+    "  function antworteAlt(res) {",
+    "    res.send(`${ALT_PRAEFIX} ${altText()}`);",
+    "  }",
+    `  router.post("/alt", (req, res) => antworteAlt(res));`,
+    `  router.post("/neu", (req, res) => res.send(neuText()));`,
+    "  return router;",
+    "}",
+    "",
+  ].join("\n"),
+  "src/alt.js": `export function altText() {\n  return "alt";\n}\n`,
+  "src/neu.js": `export function neuText() {\n  return "neu";\n}\n`,
+  "src/server.js": `import { routen } from "./routen.js";\n\nrouten();\n`,
+  "test/alt.test.js": `import { altText } from "../src/alt.js";\n\naltText();\n`,
+  "package.json": JSON.stringify({ type: "module" }),
+  ".gitignore": "node_modules\n",
+};
+
+test("umfang rechnet die Löschmenge einer Route bis zu den Resten in der bleibenden Datei und nennt einen Einstieg, den es nicht gibt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const loeschmenge = loeschmengeIn(context, ROUTEN, ["src/routen.js:/alt", "src/routen.js:/gibt-es-nicht", "src/fehlt.js:weg"]);
+
+  assert.deepEqual(loeschmenge, {
+    dateien: ["src/alt.js"],
+    exporte: [],
+    reste: ["src/routen.js:ALT_PRAEFIX", "src/routen.js:altText", "src/routen.js:antworteAlt"],
+    tests: [{ datei: "test/alt.test.js", art: "löschen" }],
+    fehlend: ["src/routen.js:/gibt-es-nicht", "src/fehlt.js:weg"],
+  });
 });

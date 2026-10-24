@@ -33,17 +33,20 @@ function funktionsname(knoten) {
   return benannt ?? `anonym ab Zeile ${knoten.loc.start.line}`;
 }
 
-export function funktionenIn(datei, quelltext) {
-  const gefunden = [];
-  const sammle = (knoten) => gefunden.push({ name: funktionsname(knoten), von: knoten.loc.start.line, bis: knoten.loc.end.line, start: knoten.range[0] });
-  const regel = { create: () => Object.fromEntries(FUNKTIONSARTEN.map((art) => [art, sammle])) };
+export function besucheSyntaxbaum(datei, quelltext, besucher) {
   const konfiguration = {
     ...sprachangaben(datei),
-    plugins: { ziele: { rules: { funktionen: regel } } },
-    rules: { "ziele/funktionen": "error" },
+    plugins: { ziele: { rules: { besuch: { create: besucher } } } },
+    rules: { "ziele/besuch": "error" },
   };
   const { Linter } = ladeModul("eslint");
   new Linter().verify(quelltext, konfiguration, { filename: datei });
+}
+
+export function funktionenIn(datei, quelltext) {
+  const gefunden = [];
+  const sammle = (knoten) => gefunden.push({ name: funktionsname(knoten), von: knoten.loc.start.line, bis: knoten.loc.end.line, start: knoten.range[0] });
+  besucheSyntaxbaum(datei, quelltext, () => Object.fromEntries(FUNKTIONSARTEN.map((art) => [art, sammle])));
   return gefunden;
 }
 

@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { istTestdatei } from "../format.mjs";
 import { genannteFunktionen, genannteStellen, pruefbareDateien } from "./altfunktionen-vorab.mjs";
 import { dateiKarte } from "./funktionsliste.mjs";
+import { loeschEinstiege, loeschmenge } from "./loeschmenge.mjs";
 import { PITCH, SICHERHEIT, nummernImOrdner } from "./nummern.mjs";
 import { DOKUMENTE, istAltfunktion } from "./schnitt.mjs";
 
@@ -36,6 +37,7 @@ export async function umfang(root, ordner) {
   const belegt = pruefbareDateien(root, stellen.map(({ datei }) => datei));
   const codeDateien = belegt.filter((datei) => !istTestdatei(datei));
   const funktionen = genannteFunktionen(root, stellen);
+  const einstiege = loeschEinstiege(dokumente[PITCH] ?? "");
   return {
     nummern: nummernImOrdner(ordner).soll.size,
     codeDateien,
@@ -44,6 +46,7 @@ export async function umfang(root, ordner) {
     altfunktionen: funktionen.filter(istAltfunktion).length,
     testsAnDateien: await testsAn(root, codeDateien),
     dokumentKB: kilobyte(dokumente),
+    ...(einstiege && { loeschmenge: await loeschmenge(root, einstiege) }),
   };
 }
 
