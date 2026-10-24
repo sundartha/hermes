@@ -67,9 +67,16 @@ export function bestaetigt({ bestaetigung }) {
   return bestaetigung === BESTAETIGT;
 }
 
+function anzahl(ergebnisse, art) {
+  return ergebnisse.filter(({ bestaetigung }) => bestaetigung === art).length;
+}
+
+export function haengerAnzahl(ergebnisse) {
+  return anzahl(ergebnisse, HAENGER);
+}
+
 export function bilanz(ergebnisse) {
-  const anzahl = (art) => ergebnisse.filter(({ bestaetigung }) => bestaetigung === art).length;
-  return `${anzahl(BESTAETIGT)} bestätigt getötet, ${anzahl(HAENGER)} nur durch Zeitablauf oder Absturz erkannt`;
+  return `${anzahl(ergebnisse, BESTAETIGT)} bestätigt getötet, ${haengerAnzahl(ergebnisse)} nur durch Zeitablauf oder Absturz erkannt`;
 }
 
 function wackelHinweis({ schluessel }, beobachtungen) {

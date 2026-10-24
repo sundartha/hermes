@@ -22,6 +22,7 @@ import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from ".
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
+import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
@@ -65,7 +66,6 @@ const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZWECK_UEBERLEBT = "tests/mutation";
 const ZWECK_ZUSTAND = "tests/stryker-zustand";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
-const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
 const BESTAETIGUNG = "Bestätigung";
@@ -75,6 +75,10 @@ const UMBAU_ZEILE = "^Art: umbau$";
 const AUFTRAGSWEG = /^Auftrag: [^\s/]+\/\S+$/m;
 const KURZ = 7;
 const MS_JE_SEKUNDE = 1000;
+const ZEITGRENZEN = {
+  erste: KONFIGURATION.timeoutMS / MS_JE_SEKUNDE,
+  wiederholung: (KONFIGURATION.timeoutMS * ZEITFAKTOR_WIEDERHOLUNG) / MS_JE_SEKUNDE,
+};
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
@@ -315,6 +319,7 @@ async function durchgang(datei, zeilen, tests) {
     const laeufe = await welle(datei, offen, testgruppen);
     ergebnisse = vereine(ergebnisse ?? laeufe[0], laeufe);
   }
+  console.log(zeitablaufZeile(datei, ergebnisse, ZEITGRENZEN));
   return ergebnisse;
 }
 
