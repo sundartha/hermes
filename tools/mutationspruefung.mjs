@@ -17,6 +17,7 @@ import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
+import { KINDABDECKUNG } from "./mutationspruefung/kindabdeckung.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
@@ -30,6 +31,7 @@ import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
 const GENAU_PLUGIN = fileURLToPath(new URL("./mutationspruefung/genau.mjs", import.meta.url));
+const KINDABDECKUNG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/kindabdeckung.mjs", import.meta.url));
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
 const BANK = "regression";
@@ -218,7 +220,9 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
   const genau = zeilen.every((bereich) => !Array.isArray(bereich));
   const optionen = {
     ...KONFIGURATION,
-    ...(genau ? { appendPlugins: [GENAU_PLUGIN], ignorers: [GENAU] } : {}),
+    testRunner: KINDABDECKUNG,
+    appendPlugins: [KINDABDECKUNG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
+    ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
