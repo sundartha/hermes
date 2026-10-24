@@ -41,7 +41,7 @@ import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
-import { ableitungsBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
+import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
 import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
@@ -168,6 +168,7 @@ export class Planung {
     this.nachfragenBeendet = false;
     this.kostendeckel = null;
     this.teil = false;
+    this.fremd = [];
     this.wegpruefer = new Set();
     this.laufInWelle = new AsyncLocalStorage();
   }
@@ -818,6 +819,13 @@ export class Planung {
     return `Erkundung von ${gruppen.length} Gruppen: gemessen ${gemessen}, mit der Vorschau ${vorschau} wären es ${gemessen + vorschau}, über dem Teil-Deckel ${deckel}`;
   }
 
+  pruefeFremdeDateien() {
+    if (!this.teil) return;
+    const gruppen = this.gliederung.gruppen.map(({ nummern, ueberschriften }) => ({ nummern, text: this.designAbschnitte(ueberschriften) }));
+    const befunde = fremdeDateienBefunde(this.fremd, gruppen);
+    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "der Schnitt der Teilung ist unvollständig: das Design Doc nennt für eine Gruppe Dateien eines anderen Teils; plane startet keinen Erkunder und teilt nicht", befunde);
+  }
+
   async nachsteuern() {
     const teilDeckel = this.teilDeckelUeber();
     const ueber = [...gruppenZahlUeber(this.gliederung.gruppen.length), ...(teilDeckel === null ? [] : [teilDeckel])];
@@ -833,6 +841,7 @@ export class Planung {
   async laufe() {
     this.stand = this.ausgangsstand();
     await this.gliedere();
+    this.pruefeFremdeDateien();
     await this.nachsteuern();
     await this.erkundeGruppen();
     this.legeFingerabdruck();
@@ -986,13 +995,14 @@ function berichte(planung, ergebnis) {
   return ergebnis.exit;
 }
 
-function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil }) {
+function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd = [] }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
   planung.umfang = gemessen;
   planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
   planung.issue = issue;
   planung.teil = teil === true;
+  planung.fremd = fremd;
   return planung;
 }
 
@@ -1021,9 +1031,9 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   const beginn = Date.now();
   const vorab = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
   if (vorab.fehler !== null) return endeVorDerPlanung(root, ordner, { vorab, beginn });
-  const { deckel, issue, umfang: gemessen, teil } = vorab;
+  const { deckel, issue, umfang: gemessen, teil, fremd } = vorab;
   const nummern = nummernImOrdner(ordner);
-  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil });
+  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
