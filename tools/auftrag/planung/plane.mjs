@@ -26,7 +26,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, verbucheLauf } from "./deckel.mjs";
+import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, verbucheLauf } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -996,10 +996,15 @@ function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen
   return planung;
 }
 
+function endeOhneAgent(exit) {
+  gibReservierungFrei();
+  return exit;
+}
+
 function endeVorDerPlanung(root, ordner, { vorab, beginn }) {
   const { team, fehler, exit = EXIT_AUFRUF, deckel, issue, umfang: gemessen } = vorab;
   console.error(fehler);
-  if (team === undefined) return exit;
+  if (team === undefined) return endeOhneAgent(exit);
   const planung = neuePlanung(root, ordner, { fortsetzen: false, deckel, issue, umfang: gemessen });
   planung.team = team;
   planung.beginn = beginn;
@@ -1023,7 +1028,7 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
     console.error(`plane setzt nicht fort, voller Neulauf nötig:\n${punkte(abweichungen)}`);
-    return EXIT_AUFRUF;
+    return endeOhneAgent(EXIT_AUFRUF);
   }
   if (nummern.unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: nummern.unklar });
   try {
