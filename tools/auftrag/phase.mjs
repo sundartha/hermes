@@ -14,6 +14,7 @@ import { ciLokalAmPhasenende } from "./phasenende.mjs";
 import { issueAbsichtBefunde } from "./planung/absicht.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { REMOTE, belegteSperren, eigeneSperren, erwerben, freigeben } from "./sperren.mjs";
+import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
 import {
   MASTER,
   entferneAuftrag,
@@ -231,7 +232,7 @@ async function bauePhase(ort, lauf) {
 export async function phase(phasendatei, root) {
   const { phase: beschreibung, befunde } = gueltigePhase(phasendatei, root);
   const vorab = befunde.length > 0 ? befunde : issueBefunde(beschreibung);
-  const alle = vorab.length > 0 ? vorab : absichtImIssueBefunde(beschreibung, root);
+  const alle = vorab.length > 0 ? vorab : [...absichtImIssueBefunde(beschreibung, root), ...teilVorgaengerBefunde(beschreibung, root)];
   for (const befund of alle) console.error(befund);
   if (alle.length > 0) return EXIT_ROT;
   mkdirSync(belegVerzeichnis(root, beschreibung.phase), { recursive: true });
