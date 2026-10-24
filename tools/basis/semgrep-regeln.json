@@ -14505,6 +14505,9 @@
       },
       "languages": ["javascript", "typescript"],
       "severity": "WARNING",
+      "paths": {
+        "exclude": ["tools/auftrag/"]
+      },
       "patterns": [
         {
           "pattern-either": [

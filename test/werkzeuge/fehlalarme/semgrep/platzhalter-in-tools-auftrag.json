@@ -1,0 +1,18 @@
+{
+  "titel": "Platzhalter in Spitzklammern in einer Kommandozeilen-Meldung unter tools/auftrag",
+  "dateien": {
+    "tools/auftrag/planung/altfunktionen-vorab.mjs": [
+      "const ALTFUNKTIONEN = \"## Altfunktionen\";",
+      "const NICHT_BERUEHRT = \"nicht berührt\";",
+      "",
+      "function eintragAus(zeile) {",
+      "  const treffer = EINTRAG.exec(zeile);",
+      "  if (treffer === null) return { fehler: `pitch.md, ${ALTFUNKTIONEN}: die Zeile „${zeile}“ hat nicht die Form ${FORM}` };",
+      "  const [, art, datei, funktion, grund] = treffer;",
+      "  if (art === NICHT_BERUEHRT && grund === undefined) return { fehler: `pitch.md, ${ALTFUNKTIONEN}: „${zeile}“ braucht „, weil <wo die Änderung stattdessen liegt>“` };",
+      "  return { eintrag: { art, datei, funktion: funktion.trim() } };",
+      "}"
+    ]
+  },
+  "erwartet": "html-in-template-string"
+}
