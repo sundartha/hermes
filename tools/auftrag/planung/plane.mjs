@@ -9,6 +9,7 @@ import { MELDUNG, zweckBlock } from "../zweck.mjs";
 import { werkzeugBefunde } from "../werkzeuge.mjs";
 import { ABSICHT, bereichSchluessel } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
+import { CODE_AUSZUG, codeAuszug } from "./auszug.mjs";
 import { altfunktionenVorab } from "./altfunktionen-vorab.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
@@ -398,6 +399,7 @@ export class Planung {
       abschnitt("Nummern", nummernText(this.soll, nummern)),
       ...(nachKorrektur ? [] : this.designTeile(nummern)),
       abschnitt(nachKorrektur ? "Korrigierter Erkundungsbericht" : "Erkundungsbericht", json(bericht)),
+      abschnitt(CODE_AUSZUG, codeAuszug(this.root, [bericht])),
       abschnitt("Zeilen deiner Prüfliste", punkte(nummern.map((nummer) => `${WEG}${nummer}`))),
     ]);
   }
@@ -621,10 +623,11 @@ export class Planung {
     return this.schnittAnnahmen ?? this.erkunderAnnahmen();
   }
 
-  pruefGrundlage(schluessel, { nummern = [...this.soll.keys()], berichte = [abschnitt("Erkundungsberichte", json(this.berichte))] } = {}) {
+  pruefGrundlage(schluessel, { nummern = [...this.soll.keys()], berichte = [abschnitt("Erkundungsberichte", json(this.berichte))], auszug = this.berichte } = {}) {
     return [
       abschnitt("Nummern", nummernText(this.soll, nummern)),
       ...berichte,
+      abschnitt(CODE_AUSZUG, codeAuszug(this.root, auszug)),
       abschnitt("Annahmen", punkte(this.alleAnnahmen().map(annahmeText))),
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Zeilen deiner Prüfliste", punkte(schluessel)),
@@ -637,7 +640,7 @@ export class Planung {
       return { berichte: [abschnitt("Dateikarte", json(dateikarte)), abschnitt("Erkundungsberichte (verdichtet)", verdichteBerichte(this.berichte))] };
     }
     const { nummern } = this.gliederung.gruppen[teil.gruppe];
-    return { nummern, berichte: [abschnitt("Erkundungsbericht deiner Gruppe", json(this.berichte[teil.gruppe]))] };
+    return { nummern, berichte: [abschnitt("Erkundungsbericht deiner Gruppe", json(this.berichte[teil.gruppe]))], auszug: [this.berichte[teil.gruppe]] };
   }
 
   async prueferNachricht(schluessel, teil) {
