@@ -41,7 +41,7 @@ import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
-import { ableitungsBefunde, schreibeTeile, teile } from "./teilordner.mjs";
+import { ableitungsBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
 import { dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
@@ -978,7 +978,8 @@ function berichte(planung, ergebnis) {
     nachpruefungen: planung.nachpruefungen,
     wegpruefungen: planung.wegpruefungen,
   };
-  const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht() };
+  const geteilt = ergebnis.exit === EXIT_GETEILT ? teilungsBericht(planung.ordner) : {};
+  const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht(), ...geteilt };
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
   verbucheLauf(planung.root, planung.team.beteiligte, { weitergegeben: ergebnis.exit === EXIT_GETEILT });
   for (const befund of ergebnis.offen) console.error(befund);
@@ -995,6 +996,16 @@ function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen
   return planung;
 }
 
+function endeVorDerPlanung(root, ordner, { vorab, beginn }) {
+  const { team, fehler, exit = EXIT_AUFRUF, deckel, issue, umfang: gemessen } = vorab;
+  console.error(fehler);
+  if (team === undefined) return exit;
+  const planung = neuePlanung(root, ordner, { fortsetzen: false, deckel, issue, umfang: gemessen });
+  planung.team = team;
+  planung.beginn = beginn;
+  return berichte(planung, { exit, grund: fehler, offen: [] });
+}
+
 export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben } = {}) {
   const ordner = resolve(root, ordnerAngabe);
   const werkzeug = werkzeugBefunde(root);
@@ -1002,11 +1013,10 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
     console.error(werkzeug.join("\n"));
     return EXIT_AUFRUF;
   }
-  const { deckel, issue, umfang: gemessen, teil, fehler, exit = EXIT_AUFRUF } = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
-  if (fehler !== null) {
-    console.error(fehler);
-    return exit;
-  }
+  const beginn = Date.now();
+  const vorab = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
+  if (vorab.fehler !== null) return endeVorDerPlanung(root, ordner, { vorab, beginn });
+  const { deckel, issue, umfang: gemessen, teil } = vorab;
   const nummern = nummernImOrdner(ordner);
   const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil });
   planung.beginne(nummern);

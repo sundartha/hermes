@@ -286,5 +286,6 @@ export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
   if (unklar.length > 0) return null;
   const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: codeDateien(umfang.codeDateien, loeschDateien(umfang)).length });
   if (ueber.length === 0) return null;
-  return laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung });
+  const team = new Team(root, ordner);
+  return { ...(await laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung, team })), team };
 }

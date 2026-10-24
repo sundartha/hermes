@@ -257,5 +257,11 @@ export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
   if (fortsetzen) return { umfang };
   const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });
   if (geteilt === null) return { umfang };
-  return geteilt.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
+  const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
+  return { ...ergebnis, umfang, team: geteilt.team };
+}
+
+export function teilungsBericht(ordner) {
+  const teilung = liesTeilung(ordner);
+  return teilung?.topf === undefined ? {} : { teilung: { anzahl: teilung.teile.length, topf: teilung.topf } };
 }
