@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 
+import { vorgaengerBefunde } from "../teil-vorgaenger.mjs";
 import { deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
 import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
@@ -192,6 +193,8 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const quelle = { elternPitch: eltern[PITCH], teilung };
   const vorher = topfAus(buch, quelle);
   if (vorher.exit !== undefined) return vorher;
+  const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
+  if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
   return reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
 }
 

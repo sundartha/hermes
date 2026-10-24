@@ -10,7 +10,7 @@ import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, planeAntworten } from "./planung-plane-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
-import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, runIn } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
 const EXIT_GETEILT = 7;
@@ -65,6 +65,13 @@ function verbraucht(context, wurzel, { ordner, token }) {
   const antworten = { "planer|## Gliederung": [OHNE_JSON], "planer|## Zuschnitt": [OHNE_JSON] };
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: antworten, argumente: ["plane", ordner], token: { planer: token } });
   assert.ok(aufrufe(lauf, "planer").length > 0, lauf.stderr);
+}
+
+function t1Gemergt(wurzel) {
+  const nachricht = `Baue t1\n\nAuftrag: ${HINTERLEGEN.slice("plaene/".length)}/a1\nArt: funktion`;
+  const commit = runIn(wurzel, "git", ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-q", "--allow-empty", "-m", nachricht]);
+  assert.equal(commit.status, 0, commit.stderr);
+  mitUpstreamMaster(wurzel);
 }
 
 function bericht(wurzel, ordner) {
@@ -225,8 +232,23 @@ test("ein Teil plant mit dem kleineren Deckel aus Rest-Topf und Teil-Pitch", { t
   mitIssue(wurzel, HINTERLEGEN, 76);
   verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 300 });
   mitIssue(wurzel, HINWEIS_ORDNER, 79);
+  t1Gemergt(wurzel);
 
   plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: FREIGABE - TEILUNG_TOKEN - 300 });
+});
+
+test("ein Teil, dessen Vorgänger auf upstream/master nicht gemergt ist, ergibt Exit 2, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINWEIS_ORDNER, 93);
+  mitUpstreamMaster(wurzel);
+
+  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
+
+  exit(lauf, EXIT_AUFRUF);
+  ohneAgent(lauf);
+  assert.ok(lauf.stderr.includes("Vorgänger P-001-t1-eigene-nummer-hinterlegen ist auf upstream/master"), lauf.stderr);
+  assert.equal(existsSync(join(wurzel, HINWEIS_ORDNER, "planung")), false);
 });
 
 test("ein Teil mit Issue: offen ergibt Exit 2, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -287,6 +309,7 @@ test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile 
   exit(teilung, EXIT_GETEILT);
   mitIssue(wurzel, HINTERLEGEN, 87);
   mitIssue(wurzel, HINWEIS_ORDNER, 88);
+  t1Gemergt(wurzel);
   const beende = imHintergrund(context, { wurzel, ersatz }, [HINTERLEGEN, "--deckel", "1000"]);
   await planerGestartet(ersatz);
 
@@ -307,6 +330,7 @@ test("zwei Worktrees desselben Klons rechnen mit demselben Topf", { timeout: LAU
   mitIssue(wurzel, HINTERLEGEN, 89);
   verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 700 });
   mitIssue(zweiter, HINWEIS_ORDNER, 90);
+  t1Gemergt(zweiter);
 
   plantMitDeckel(context, zweiter, { ordner: HINWEIS_ORDNER, deckel: GROSSE_FREIGABE - TEILUNG_TOKEN - 700 });
 });
@@ -322,6 +346,7 @@ test("eine Laufdatei, die ein paralleler Lauf zwischen Auflisten und Lesen freig
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
   mitIssue(wurzel, HINWEIS_ORDNER, 91);
+  t1Gemergt(wurzel);
   symlinkSync(join(wurzel, "freigegeben.json"), join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"));
 
   plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });

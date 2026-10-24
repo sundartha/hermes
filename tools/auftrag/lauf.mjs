@@ -25,6 +25,7 @@ import { issueBefunde } from "./phase.mjs";
 import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen, phasenbasis } from "./phasenende.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
+import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
@@ -532,7 +533,7 @@ function startBefunde(phasendatei, root) {
   const ohneIssue = befunde.length === 0 ? issueBefunde(phase) : [];
   const form = ohneIssue.length > 0 ? [...ohneIssue, ISSUE_ZWECK] : befunde;
   const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
-  const annahmen = form.length > 0 ? [] : annahmenBefunde(phase, root);
+  const annahmen = form.length > 0 ? [] : [...annahmenBefunde(phase, root), ...teilVorgaengerBefunde(phase, root)];
   const sauber = istSauber(root) ? [] : ["Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand."];
   const werkzeug = form.length > 0 ? [] : werkzeugBefunde(root);
   return { phase, befunde: [...form, ...annahmen, ...sauber, ...zweck, ...werkzeug] };
