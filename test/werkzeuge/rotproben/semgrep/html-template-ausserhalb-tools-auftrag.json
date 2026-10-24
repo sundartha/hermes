@@ -1,0 +1,9 @@
+{
+  "titel": "HTML-Template mit Interpolation außerhalb von tools/auftrag wird weiter gemeldet",
+  "dateien": {
+    "src/karte.mjs": [
+      "export const karte = (x) => `<div>${x}</div>`;"
+    ]
+  },
+  "erwartet": "html-in-template-string"
+}
