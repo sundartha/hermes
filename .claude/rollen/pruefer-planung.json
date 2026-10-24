@@ -3,7 +3,8 @@
     "allow": [
       "Bash(node tools/auftrag.mjs karte:*)",
       "Bash(node tools/auftrag.mjs suche:*)",
-      "Bash(node tools/auftrag.mjs dateien:*)"
+      "Bash(node tools/auftrag.mjs dateien:*)",
+      "Bash(node tools/auftrag.mjs kette:*)"
     ],
     "deny": [
       "Read(.env*)", "Read(data/**)", "Edit", "Write",
