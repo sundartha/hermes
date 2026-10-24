@@ -14,7 +14,7 @@ export async function dependentsGraph(baseDir = cwd()) {
   return Map.groupBy(edges, (edge) => edge.resolved);
 }
 
-export function testsReaching(start, dependents) {
+export function reachingFiles(start, dependents) {
   const seen = new Set([start]);
   const queue = [start];
   while (queue.length > 0) {
@@ -23,5 +23,9 @@ export function testsReaching(start, dependents) {
     for (const source of unseen) seen.add(source);
     queue.push(...unseen);
   }
-  return [...seen].filter((file) => TEST_FILE.test(file));
+  return seen;
+}
+
+export function testsReaching(start, dependents) {
+  return [...reachingFiles(start, dependents)].filter((file) => TEST_FILE.test(file));
 }
