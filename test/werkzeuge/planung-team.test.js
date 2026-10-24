@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
@@ -13,7 +13,9 @@ const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
 const OHNE_WERKZEUG = ["planer", "entwurf"];
 const NUR_LESEN = ["erkunder", "pruefer-planung"];
 const VERBOTENE_WERKZEUGE = ["Agent", "Write", "Edit"];
-const FREIGABEN = ["Bash(node tools/auftrag.mjs karte:*)", "Bash(node tools/auftrag.mjs suche:*)", "Bash(node tools/auftrag.mjs dateien:*)"];
+const FREIGABEN = ["Bash(node tools/auftrag.mjs karte:*)", "Bash(node tools/auftrag.mjs suche:*)", "Bash(node tools/auftrag.mjs dateien:*)", "Bash(node tools/auftrag.mjs kette:*)"];
+const KETTE_AUFRUF = "node tools/auftrag.mjs kette src/a.js:a src/b.js:b";
+const BASH_REGEL = /^Bash\((.*)\)$/s;
 const SPERREN = ["Read(.env*)", "Read(data/**)", "Edit", "Write", "Bash(rm:*)", "Bash(mv:*)", "Bash(cp:*)", "Bash(touch:*)", "Bash(mkdir:*)", "Bash(rmdir:*)", "Bash(sed:*)"];
 const ORDNER = "plaene/P-009-probe";
 const EXIT_GRUEN = 0;
@@ -41,6 +43,26 @@ function definition(rolle) {
 function einstellungen(rolle) {
   const { argumente } = rollenStart(REPO_ROOT, rolle);
   return JSON.parse(readFileSync(join(REPO_ROOT, wertNach(argumente, "--settings")), "utf8"));
+}
+
+function passtMuster(muster, text) {
+  const [erster, ...teile] = muster.split("*");
+  if (teile.length === 0) return text === erster;
+  const letzter = teile.pop();
+  let stelle = erster.length;
+  if (!text.startsWith(erster)) return false;
+  for (const teil of teile) {
+    const gefunden = text.indexOf(teil, stelle);
+    if (gefunden === -1) return false;
+    stelle = gefunden + teil.length;
+  }
+  return text.length - letzter.length >= stelle && text.endsWith(letzter);
+}
+
+function erlaubtKette(regel) {
+  if (regel === "Bash") return true;
+  const treffer = BASH_REGEL.exec(regel);
+  return treffer !== null && passtMuster(treffer[1].replace(/:\*$/, "*"), KETTE_AUFRUF);
 }
 
 function probe(context) {
@@ -109,9 +131,36 @@ test("team: keine Rolle des Planungsteams bekommt Agent, Write oder Edit", () =>
   }
 });
 
-test("team: Erkunder und Prüfer dürfen in Bash nur karte, suche und dateien", () => {
+test("team: Erkunder und Prüfer dürfen in Bash nur karte, suche, dateien und kette", () => {
   for (const rolle of NUR_LESEN) assert.deepEqual(einstellungen(rolle).permissions.allow, FREIGABEN);
   for (const rolle of OHNE_WERKZEUG) assert.equal(einstellungen(rolle).permissions.allow, undefined);
+});
+
+test("team: kette ist für Erkunder und Prüfer freigeschaltet und für keine andere Rolle", () => {
+  const rollen = readdirSync(join(REPO_ROOT, ".claude/rollen")).filter((datei) => datei.endsWith(".json"));
+  const mitKette = rollen.filter((datei) => {
+    const { permissions } = JSON.parse(readFileSync(join(REPO_ROOT, ".claude/rollen", datei), "utf8"));
+    return (permissions?.allow ?? []).some(erlaubtKette);
+  });
+  assert.ok(rollen.length > NUR_LESEN.length, rollen.join(", "));
+  assert.deepEqual(mitKette.toSorted(), NUR_LESEN.map((rolle) => `${rolle}.json`).toSorted());
+});
+
+test("team: die Erkennung im Rollentest wertet nacktes Bash, Präfix- und Sternregeln als Freischaltung von kette", () => {
+  const faelle = [
+    ["Bash", true],
+    ["Bash(*)", true],
+    ["Bash(node:*)", true],
+    ["Bash(node *)", true],
+    ["Bash(node tools/auftrag.mjs *)", true],
+    ["Bash(node tools/auftrag.mjs kette:*)", true],
+    ["Bash(node tools/auftrag.mjs * src/b.js:b)", true],
+    ["Bash(node tools/auftrag.mjs karte:*)", false],
+    ["Bash(node tools/auftrag.mjs * --json)", false],
+    ["Bash(rm:*)", false],
+    ["Read(*)", false],
+  ];
+  for (const [regel, erwartet] of faelle) assert.equal(erlaubtKette(regel), erwartet, regel);
 });
 
 test("team: jede Rolle sperrt .env, data, Edit, Write und die Dateibefehle und schaltet die Sandbox ein", () => {
