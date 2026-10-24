@@ -142,6 +142,7 @@ export function setzeReservierung(deckel) {
 }
 
 export function gibReservierungFrei() {
+  if (EIGENER_LAUF.datei === null) return;
   unlinkSync(EIGENER_LAUF.datei);
   EIGENER_LAUF.datei = null;
 }
