@@ -18,9 +18,14 @@ const AGENT_DER_ROLLE = { [WEGPRUEFER]: "pruefer-planung" };
 const WORKTREE = "worktree ";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
 export const TEIL_DECKEL = 3_000_000;
+const FREIGABE = { name: "Planung freigegeben", einheit: "Token" };
+
+export function freigabeZeileFehlt(pitch) {
+  return zahlZeile(pitch, FREIGABE) === undefined;
+}
 
 function freigabeAusPitch(pitch) {
-  const gefunden = zahlZeile(pitch, { name: "Planung freigegeben", einheit: "Token" });
+  const gefunden = zahlZeile(pitch, FREIGABE);
   if (gefunden === undefined) return { fehler: `pitch.md hat keine Zeile „${FREIGABE_ZEILE}“ und --deckel fehlt; ohne freigegebene Token-Menge plant plane nicht` };
   return gefunden.zahl === undefined ? { fehler: `pitch.md: die Zeile „${gefunden.zeile.trim()}“ braucht die Form „${FREIGABE_ZEILE}“ mit einer ganzen Zahl über 0` } : { deckel: gefunden.zahl };
 }
