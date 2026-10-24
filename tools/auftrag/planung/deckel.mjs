@@ -19,6 +19,7 @@ const WORKTREE = "worktree ";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
 export const TEIL_DECKEL = 3_000_000;
 const FREIGABE = { name: "Planung freigegeben", einheit: "Token" };
+const PROZENT = 100;
 
 export function freigabeZeileFehlt(pitch) {
   return zahlZeile(pitch, FREIGABE) === undefined;
@@ -153,6 +154,10 @@ export function verbucheLauf(root, beteiligte, { weitergegeben = false } = {}) {
   schreibeJsonAtomar(EIGENER_LAUF.datei, { ...lauf, token: gemesseneKosten(root, beteiligte), ...(weitergegeben && { weitergegeben: lauf.deckel }) });
 }
 
+function prozent(teil, ganzes) {
+  return `${((teil * PROZENT) / ganzes).toFixed(1).replace(".", ",")} %`;
+}
+
 function vorBekanntem(links, rechts) {
   return rechts.mittel - links.mittel || Number(links.ganz) - Number(rechts.ganz);
 }
@@ -245,6 +250,22 @@ export class Kostendeckel {
     }
     this.halt = `Deckel ${this.deckel} Token: gemessen ${gemessen}, mit der Vorschau ${vorschau} für die offenen Schritte dieser Welle wären es ${gemessen + vorschau}; plane startet den Schritt „${schritt}“ nicht, lässt die laufenden Antworten zu Ende laufen und wartet auf eine Entscheidung`;
     return this.halt;
+  }
+
+  halteUeberschreitungFest(gemessen, schritt) {
+    if (gemessen <= this.deckel) return false;
+    if (this.schritt === null) {
+      this.stand = { gemessen };
+      this.schritt = schritt;
+    }
+    this.stand = { ...this.stand, ueberschritten: gemessen - this.deckel };
+    return true;
+  }
+
+  ueberschritten(gemessen, schritt) {
+    if (!this.halteUeberschreitungFest(gemessen, schritt)) return null;
+    const { ueberschritten } = this.stand;
+    return `Deckel ${this.deckel} Token überschritten: gemessen ${gemessen}, ${ueberschritten} Token (${prozent(ueberschritten, this.deckel)}) über dem Deckel beim Schritt „${this.schritt}“; plane startet keinen Agenten mehr und wartet auf eine Entscheidung`;
   }
 
   endeLauf(stelle) {

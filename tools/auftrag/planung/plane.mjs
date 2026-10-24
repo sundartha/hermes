@@ -213,12 +213,34 @@ export class Planung {
     return { gemessen: this.gemessen(), jeRolle: this.wegpruefKosten() };
   }
 
-  pruefeDeckel(schritte, schritt) {
-    if (this.kostendeckel === null) return;
-    const grund = this.kostendeckel.ueber(this.messung(), schritte, schritt);
-    if (grund === null) return;
+  ueberschreitung(schritt) {
+    return this.kostendeckel?.ueberschritten(this.gemessen(), schritt) ?? null;
+  }
+
+  haltAmDeckel(grund) {
     if (this.berichte.length > 0) this.legeFingerabdruck();
     throw new Ende(EXIT_DECKEL, grund);
+  }
+
+  pruefeUeberschreitung(schritt) {
+    const grund = this.ueberschreitung(schritt);
+    if (grund !== null) this.haltAmDeckel(grund);
+  }
+
+  pruefeDeckel(schritte, schritt) {
+    if (this.kostendeckel === null) return;
+    this.pruefeUeberschreitung(schritt);
+    const grund = this.kostendeckel.ueber(this.messung(), schritte, schritt);
+    if (grund !== null) this.haltAmDeckel(grund);
+  }
+
+  ausgangAmDeckel(ergebnis) {
+    if (ergebnis.exit === EXIT_AUFRUF) return ergebnis;
+    const grund = this.ueberschreitung(`Ausgang mit Exit ${ergebnis.exit}`);
+    if (grund === null || ergebnis.grund === grund) return ergebnis;
+    if (ergebnis.exit === EXIT_DECKEL) return { ...ergebnis, grund: `${ergebnis.grund}; ${grund}` };
+    const offen = ergebnis.offen.length > 0 ? [`offen: ${ergebnis.offen.join("; ")}`] : [];
+    return { exit: EXIT_DECKEL, grund: [grund, `ohne den Deckel Exit ${ergebnis.exit}: ${ergebnis.grund}`, ...offen].join("; "), offen: ergebnis.offen };
   }
 
   pruefeSchritt(rolle, schritt) {
@@ -248,6 +270,7 @@ export class Planung {
     if (this.kostendeckel !== null) {
       const nachher = this.kostenJeRolle();
       this.kostendeckel.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])));
+      this.kostendeckel.halteUeberschreitungFest(this.gemessen(), schritt);
     }
     return ergebnisse;
   }
@@ -805,6 +828,7 @@ export class Planung {
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde zu Entwürfen blieben nach der Rücksendung offen", offen);
     const entwuerfe = Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, ergebnisse[stelle].entwurf]));
     this.lege("entwuerfe.json", entwuerfe);
+    this.pruefeUeberschreitung("Entwurfs-Welle");
     const { befunde } = await setzePhaseZusammen(this.ordner, { schnitt: this.schnitt, berichte: this.berichte, entwuerfe, root: this.root, issue: this.issue });
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Phase hat Befunde", befunde);
   }
@@ -1019,7 +1043,7 @@ function endeVorDerPlanung(root, ordner, { vorab, beginn }) {
   const planung = neuePlanung(root, ordner, { fortsetzen: false, deckel, issue, umfang: gemessen });
   planung.team = team;
   planung.beginn = beginn;
-  return berichte(planung, { exit, grund: fehler, offen: [] });
+  return berichte(planung, planung.ausgangAmDeckel({ exit, grund: fehler, offen: [] }));
 }
 
 export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben } = {}) {
@@ -1044,9 +1068,9 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   if (nummern.unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: nummern.unklar });
   try {
     await planung.laufe();
-    return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });
+    return berichte(planung, planung.ausgangAmDeckel({ exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] }));
   } catch (abbruch) {
-    return berichte(planung, ausgangOhneWurf(abbruch));
+    return berichte(planung, planung.ausgangAmDeckel(ausgangOhneWurf(abbruch)));
   }
 }
 
