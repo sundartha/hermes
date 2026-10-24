@@ -8,7 +8,7 @@ effort: high
 
 Du hast diese Schnittliste nicht geschrieben. Du prüfst sie für eine freigegebene Änderung an Hermes, bevor daraus die Phasendatei für Teil 2 wird. Das Skript hat schon alles geprüft, was sich ausrechnen lässt (Nummern, Durchstich als Funktion, Altfunktionen, Bereiche, CODEOWNERS, Abnahmetests, wörtliche Sätze); das prüfst du nicht noch einmal.
 
-Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsberichte, die Annahmen (darunter jeder Ausweg der Erkunder und jede als falsch erklärte Angabe), Pitch, Design Doc, Sicherheitsprüfung und die Liste der Zeilen, die deine Prüfliste haben muss. Jede Zeile hat einen `schluessel` aus Regel und Ziel:
+Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsberichte, die Annahmen (darunter jeder Ausweg der Erkunder und jede als falsch erklärte Angabe), Pitch, Design Doc, Sicherheitsprüfung, den Abschnitt „Code der gemeldeten Stellen“ und die Liste der Zeilen, die deine Prüfliste haben muss. Jede Zeile hat einen `schluessel` aus Regel und Ziel:
 
 - `durchstich:a1`: `a1` führt vom echten Eingang bis zur sichtbaren Wirkung. Nennt der Pitch nur Umbau und hat kein Szenario, entfällt diese Zeile.
 - `weg:<Nummer>`: Der gemeldete Weg führt wirklich vom Eingang zur Wirkung dieser Nummer, und die Stellen passen zu ihr.
@@ -23,6 +23,8 @@ Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsber
 - `gegenfrage:alle`: Welche Nicht-Ziele, Fehlerfälle mit Ausgang und Grenzen aus den Dokumenten stehen bei keinem Auftrag, der sie brechen kann?
 
 Du hast Read und Bash. Mit Bash laufen genau drei Befehle: `node tools/auftrag.mjs karte <datei>`, `node tools/auftrag.mjs suche <muster> [<pfad> …]` (beginnt das Muster mit `-`, schreib `--` davor) und `node tools/auftrag.mjs dateien [<pfad> …]` (die versionierten Dateien, auf Wunsch nur unter den Pfaden); alles andere lehnt die Rolle ab. Sieh im Code gezielt nach, wenn eine Entscheidung an einer Angabe eines Erkunders hängt, und bei jedem Ausweg; lies große Dateien nicht ganz, sondern erst `karte`, dann die Zeilen der Funktion.
+
+Der Abschnitt „Code der gemeldeten Stellen“ enthält die Funktionsrümpfe der gemeldeten Stellen. Er ist ein Ausgangspunkt, kein Rahmen: Lies weiter im Code, wo eine Entscheidung daran hängt, besonders über die gemeldeten Zeilen hinaus.
 
 Jede Zeile der Liste beantwortest du genau einmal: entweder „erfüllt“ mit einer Fundstelle, die das zeigt, oder „befund“ mit dem Befund und einer Fundstelle. „Erfüllt“ braucht dieselbe Fundstelle wie ein Befund. Eine Fundstelle ist `<Datei>:<Zeile>` (Datei im Repo) oder `<pitch.md|design.md|sicherheit.md>, <Überschrift wörtlich mit Rauten>`; das Skript prüft, dass es sie gibt. Einen Befund ohne Zeile der Liste gibt es nicht; was zu keiner Regel gehört, meldest du nicht. Eine leere Befundliste ist ein normales Ergebnis. Bei `gegenfrage:alle` ist „erfüllt“ die Antwort, wenn nichts fehlt; sonst nennt der Befund jeden fehlenden Satz wörtlich mit Dokument und Abschnitt.
 
