@@ -167,16 +167,21 @@ function exportLebt(lage, datei, name) {
   return importe.length === 0 || importe.some(({ lebt }) => lebt);
 }
 
+function exportNamenVon(exporte, variable) {
+  return variable.modul ? exporte.filter(([, lokal]) => lokal === variable.name).map(([name]) => name) : [];
+}
+
+function fremdeBezuege(variable) {
+  return variable.bezuege.filter((bezug) => !variable.knoten.some((knoten) => enthaelt(knoten, bezug)));
+}
+
 function variableLebt(lage, datei, variable) {
-  const eigen = (bezug) => variable.knoten.some((knoten) => enthaelt(knoten, bezug));
-  if (variable.bezuege.some((bezug) => !eigen(bezug) && !entfernt(lage, datei, bezug))) return true;
-  const exporte = lage.analyse(datei).exporte.filter(([, lokal]) => variable.modul && lokal === variable.name);
-  return exporte.some(([name]) => exportLebt(lage, datei, name));
+  if (fremdeBezuege(variable).some((bezug) => !entfernt(lage, datei, bezug))) return true;
+  return exportNamenVon(lage.analyse(datei).exporte, variable).some((name) => exportLebt(lage, datei, name));
 }
 
 function warLebendig(lage, datei, variable) {
-  const exportiert = variable.modul && lage.analyse(datei).exporte.some(([, lokal]) => lokal === variable.name);
-  return exportiert || variable.bezuege.some((bezug) => !variable.knoten.some((knoten) => enthaelt(knoten, bezug)));
+  return exportNamenVon(lage.analyse(datei).exporte, variable).length > 0 || fremdeBezuege(variable).length > 0;
 }
 
 function anweisungWeg(lage, datei, anweisung) {
@@ -278,7 +283,7 @@ function toteExporte(lage) {
 
 function reste(lage) {
   return bleibendeDateien(lage).flatMap(([datei, { variablen, exporte }]) => {
-    const exportiert = (variable) => variable.modul && exporte.some(([, lokal]) => lokal === variable.name);
+    const exportiert = (variable) => exportNamenVon(exporte, variable).length > 0;
     const umschlossen = (knoten) => lage.wegIn(datei).some((weg) => weg !== knoten && enthaelt(weg, knoten));
     const eigenstaendig = (variable) => !variable.knoten.every(umschlossen);
     const rest = variablen.filter((variable) => lage.toteVariablen.has(variable) && !lage.einstiege.has(variable) && !exportiert(variable) && eigenstaendig(variable));
