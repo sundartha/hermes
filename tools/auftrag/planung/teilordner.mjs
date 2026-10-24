@@ -187,6 +187,10 @@ function liesTeilung(elternOrdner) {
   }
 }
 
+function umbauDesEintrags(teilung, eintrag) {
+  return teilung.teile.some((kandidat) => Array.isArray(kandidat?.umbau)) ? liste(eintrag.umbau) : undefined;
+}
+
 function fremdeDateien(teilung, eintrag, elternOrdner) {
   const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
   return andere.flatMap((anderer) => liste(anderer?.dateien).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
@@ -220,7 +224,7 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
   const reserviert = reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
-  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien), fremd: fremdeDateien(teilung, eintrag, elternOrdner) } : reserviert;
+  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd: fremdeDateien(teilung, eintrag, elternOrdner) } : reserviert;
 }
 
 function teilStart(root, ordner, { fortsetzen, deckel }) {
@@ -270,7 +274,7 @@ export function ableitungsBefunde(ordner) {
 export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
   const teil = teilStart(root, ordner, { fortsetzen, deckel });
   if (teil?.exit !== undefined) return teil;
-  if (teil !== undefined) return { deckel: teil.deckel, teil: true, fremd: teil.fremd, umfang: await messe(teil.dateien) };
+  if (teil !== undefined) return { deckel: teil.deckel, teil: true, fremd: teil.fremd, umbau: teil.umbau, umfang: await messe(teil.dateien) };
   const umfang = await messe();
   if (fortsetzen) return { umfang };
   const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });

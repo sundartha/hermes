@@ -832,7 +832,7 @@ export class Planung {
     if (ueber.length === 0) return;
     this.pruefeDeckel([["planer"]], "Teilung nach der Gliederung");
     const { deckel } = this.kostendeckel;
-    const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung };
+    const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung, umbau: this.umbau };
     const geteilt = await laufeTeilung(this.root, this.ordner, angaben);
     const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(this.root, this.ordner, { ...geteilt, freigabe: deckel }) : geteilt;
     throw new Ende(ergebnis.exit, ergebnis.fehler);
@@ -995,7 +995,7 @@ function berichte(planung, ergebnis) {
   return ergebnis.exit;
 }
 
-function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd = [] }) {
+function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd = [], umbau }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
   planung.umfang = gemessen;
@@ -1003,6 +1003,7 @@ function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen
   planung.issue = issue;
   planung.teil = teil === true;
   planung.fremd = fremd;
+  planung.umbau = umbau;
   return planung;
 }
 
@@ -1031,9 +1032,9 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   const beginn = Date.now();
   const vorab = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
   if (vorab.fehler !== null) return endeVorDerPlanung(root, ordner, { vorab, beginn });
-  const { deckel, issue, umfang: gemessen, teil, fremd } = vorab;
+  const { deckel, issue, umfang: gemessen, teil, fremd, umbau } = vorab;
   const nummern = nummernImOrdner(ordner);
-  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd });
+  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd, umbau });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
