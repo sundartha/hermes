@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { deckelAus } from "../../tools/auftrag/planung/deckel.mjs";
+import { deckelAus, freigabeZeileFehlt } from "../../tools/auftrag/planung/deckel.mjs";
 import { issueAus } from "../../tools/auftrag/planung/issue.mjs";
 
 const FREIGABE_FORM = "Planung freigegeben: <Zahl> Token";
@@ -237,4 +237,15 @@ test("issueAus: --issue mit Leerzeichen am Ende ist ein Fehler", () => {
 
 test("issueAus: --issue leer ist ein Fehler", () => {
   assert.deepEqual(issueAus("", ISSUE_IM_PITCH), issueAngabeFehler(""));
+});
+
+test("freigabeZeileFehlt ist nur ohne Zeile „Planung freigegeben“ wahr, nicht bei einer fehlerhaften oder gültigen", () => {
+  const faelle = [
+    [OHNE_ZEILE, true],
+    [imKopf("Planung freigegeben: abc Token"), false],
+    [imKopf("Planung freigegeben:20000000 Token"), false],
+    [FREIGABE_IM_PITCH, false],
+    [hinterAbschnitt("Planung freigegeben: 20000000 Token"), false],
+  ];
+  assert.deepEqual(faelle.map(([pitch]) => freigabeZeileFehlt(pitch)), faelle.map(([, fehlt]) => fehlt));
 });

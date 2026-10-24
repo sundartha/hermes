@@ -7,8 +7,10 @@ const LINT_ROT = JSON.stringify({ ...JSON.parse(REPO["package.json"]), scripts: 
 const AUSSERHALB = { dateien: { "src/text.js": "export function gross(text) {\n  return text.toLowerCase();\n}\n" }, antwort: "Fertig." };
 const AUSSTIEG = { antwort: "Ich höre auf.\nAuftrag passt nicht: Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt." };
 const NOTIZ = { antwort: "1. Agenten-Form prüfen" };
-const JE_LAUF = { laeufe: 1, token: 1000 };
-const VORIGE_KOSTEN = JSON.stringify({ kostenJeLauf: { erkunder: JE_LAUF, planer: JE_LAUF, "pruefer-planung": JE_LAUF, entwurf: JE_LAUF } });
+const EXIT_SCHNITT_ABGELEHNT = 4;
+const KLEINER_DECKEL = 1;
+const FRUEHERER_LAUF_UEBER_DEM_DECKEL = { laeufe: 1, token: 1000 * KLEINER_DECKEL };
+const VORIGE_KOSTEN = JSON.stringify({ kostenJeLauf: { erkunder: FRUEHERER_LAUF_UEBER_DEM_DECKEL, planer: FRUEHERER_LAUF_UEBER_DEM_DECKEL, "pruefer-planung": FRUEHERER_LAUF_UEBER_DEM_DECKEL, entwurf: FRUEHERER_LAUF_UEBER_DEM_DECKEL } });
 
 test("zwei an Formprüfungen rote Runden führen zur Entscheidungsnotiz ohne Neuschnitt", (context) => {
   const drehbuch = { test: [TEST], bau: [MIT_FIX], planer: [SCHNITT], notiz: [NOTIZ] };
@@ -33,7 +35,7 @@ test("eine rote Runde mit Auftrag passt nicht führt weiter zum Neuschnitt", (co
 });
 
 test("der Neuschnitt hält an, wenn sein Kostendeckel erreicht ist", (context) => {
-  const pitch = PITCH.replace("\n\n## Anforderungen", "\n\nPlanung freigegeben: 1 Token\n\n## Anforderungen");
+  const pitch = PITCH.replace("\n\n## Anforderungen", `\n\nPlanung freigegeben: ${KLEINER_DECKEL} Token\n\n## Anforderungen`);
   const dateien = { [`${ORDNER}/pitch.md`]: pitch, ".fortschritt/P-001-probe/planung.json": VORIGE_KOSTEN };
   const drehbuch = { test: [TEST], planer: [SCHNITT], notiz: [NOTIZ] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien });
@@ -43,16 +45,26 @@ test("der Neuschnitt hält an, wenn sein Kostendeckel erreicht ist", (context) =
   assert.equal(versuche.length, 1, JSON.stringify(versuche));
   const notiz = datei("gh.log");
   assert.match(notiz, /"issue","comment"/);
-  assert.match(notiz, /Deckel 1 Token/);
+  assert.match(notiz, new RegExp(`Deckel ${KLEINER_DECKEL} Token`));
 });
 
 test("hat der erste Versuch des Neuschnitts die freigegebenen Token verbraucht, startet kein zweiter Versuch", (context) => {
   const pitch = PITCH.replace("\n\n## Anforderungen", "\n\nPlanung freigegeben: 5 Token\n\n## Anforderungen");
-  const abgelehnt = { ergebnis: { exitCode: 4, grund: "die Skriptprüfung hat den neuen Schnitt abgelehnt", sitzungen: [{ rolle: "planer", sitzung: "verbraucht-1" }] }, verbrauch: 5 };
+  const abgelehnt = { ergebnis: { exitCode: EXIT_SCHNITT_ABGELEHNT, grund: "die Skriptprüfung hat den neuen Schnitt abgelehnt", sitzungen: [{ rolle: "planer", sitzung: "verbraucht-1" }] }, verbrauch: 5 };
   const drehbuch = { test: [TEST], kind: [abgelehnt], notiz: [NOTIZ] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { [`${ORDNER}/pitch.md`]: pitch } });
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
   assert.equal(datei("anzahl-kind"), "1");
   assert.equal(beleg("a1-neuschnitt").versuche.length, 1);
   assert.match(datei("gh.log"), /Deckel 5 Token/);
+});
+
+test("eine fehlerhafte Zeile Planung freigegeben im Pitch hält den Neuschnitt vor dem ersten Versuch an", (context) => {
+  const pitch = PITCH.replace("\n\n## Anforderungen", "\n\nPlanung freigegeben: viele Token\n\n## Anforderungen");
+  const drehbuch = { test: [TEST], kind: [{}], notiz: [NOTIZ] };
+  const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { [`${ORDNER}/pitch.md`]: pitch } });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(datei("anzahl-kind"), "");
+  assert.equal(beleg("a1-neuschnitt"), null);
+  assert.match(datei("gh.log"), /Planung freigegeben: viele Token/);
 });
