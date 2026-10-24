@@ -31,12 +31,14 @@ import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, ohneZweck, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
+const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
+const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
 const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -110,10 +112,6 @@ function gemessen(name, wo, ausfuehren) {
   const dauer = ergebnis.dauer_ms ?? Math.round(performance.now() - beginn);
   console.error(`lauf: ${name} ${ergebnis.exitCode === 0 ? GRUEN : ROT} ${nachSekunden(dauer)}`);
   return { ...ergebnis, dauer_ms: dauer };
-}
-
-function befundOhneZweck(ergebnis) {
-  return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
 }
 
 class AuftragsLauf {
@@ -372,6 +370,15 @@ class AuftragsLauf {
     return true;
   }
 
+  abhaengigkeiten() {
+    if (existsSync(join(this.kontext.root, ABHAENGIGKEITSREGELN))) {
+      return this.gruen(PRUEFUNG.ABHAENGIGKEITEN, [execPath, ABHAENGIGKEITEN, "--basis", this.basis], vollerBelegMitZweckAusBloecken);
+    }
+    const hinweis = `Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`;
+    if (!this.hinweise.includes(hinweis)) this.hinweise.push(hinweis);
+    return true;
+  }
+
   pinPruefung() {
     const { root } = this.kontext;
     if (!existsSync(join(root, PIN_PRUEFUNG))) {
@@ -460,6 +467,7 @@ class AuftragsLauf {
           () => this.grenzen("test", this.basis),
           () => this.faelleErhalten(),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
+          () => this.abhaengigkeiten(),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
           () => this.merkeAbnahmeFaelle(),
@@ -481,6 +489,7 @@ class AuftragsLauf {
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
+      () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
