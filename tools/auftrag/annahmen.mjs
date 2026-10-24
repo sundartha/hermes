@@ -9,7 +9,7 @@ const KOPF = `## ${ANNAHMEN}`;
 const PLAENE = "plaene";
 const DESIGN = "design.md";
 const PITCH = "pitch.md";
-const VORGABEN = ["## Fallen", "## Nicht-Ziele"];
+export const VORGABEN = ["## Fallen", "## Nicht-Ziele"];
 const ZWECK = `Test- und Bau-Agent einer Phase aus einem Pitch bekommen den Abschnitt „${ANNAHMEN}“ aus dem Design Doc wörtlich, damit Abnahmetest und Code auf denselben Tatsachen stehen: Datenformate, vorhandene Bausteine, was das System schon tut. Ohne ihn legt der Test-Agent Testdaten nach eigener Vermutung an. Echte Behebung: den Abschnitt im Design Doc ergänzen. Ausweg: eine Entscheidungsnotiz im Phasen-Issue, warum diese Phase ohne Annahmen gebaut werden soll; dann entscheidet Antonio.`;
 
 function planDatei(phase, name) {

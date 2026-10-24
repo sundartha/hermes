@@ -1,5 +1,6 @@
 import { bereichSchluessel } from "../format.mjs";
 import { liste } from "./erkundung.mjs";
+import { gleicherText } from "./nummern.mjs";
 
 export const RUECKSENDUNGEN = 3;
 
@@ -11,6 +12,8 @@ const OHNE_REGEL = "Text";
 const SCHLUESSEL_TRENNER = ":";
 const NUMMERN_TRENNER = "+";
 const WORT = /[\w-]+/gu;
+const ZITAT = /„([^“]*)“/gu;
+const MEHRERE_WOERTER = /\s/u;
 
 function woerterDes(text) {
   return new Set(text.match(WORT) ?? []);
@@ -26,6 +29,10 @@ function textDes(befund) {
   return `${befund?.schluessel}: ${befund?.befund}`;
 }
 
+function zitierteSaetze(text) {
+  return [...text.matchAll(ZITAT)].map(([, zitat]) => gleicherText(zitat)).filter((zitat) => MEHRERE_WOERTER.test(zitat));
+}
+
 function vorlageDes(text) {
   return text.split(" ").map((teil) => (WERT_IM_TEXT.test(teil) ? PLATZHALTER : teil)).join(" ");
 }
@@ -37,6 +44,10 @@ function inhaltDes(auftrag) {
 }
 
 export function befundSchluessel(befund, schnitt, soll) {
+  return { ...regelUndZiel(befund, schnitt, soll), zitate: zitierteSaetze(textDes(befund)) };
+}
+
+function regelUndZiel(befund, schnitt, soll) {
   const text = textDes(befund);
   const regel = regelDes(befund);
   const woerter = woerterDes(text);
@@ -53,16 +64,28 @@ export function befundSchluessel(befund, schnitt, soll) {
 }
 
 export class Fortschritt {
-  constructor(art, grenze = RUECKSENDUNGEN) {
+  constructor(art, grenze = RUECKSENDUNGEN, quellen = []) {
     this.art = art;
     this.grenze = grenze;
+    this.quellen = quellen.map(gleicherText);
     this.runden = [];
-    this.gesehen = new Set();
+    this.gesehen = new Map();
     this.ende = null;
   }
 
+  mitQuellsaetzen(schluessel) {
+    return { ...schluessel, zitate: schluessel.zitate.filter((zitat) => this.quellen.some((quelle) => quelle.includes(zitat))) };
+  }
+
+  kehrtWieder({ roh, inhalt, zitate }) {
+    return [roh, inhalt].some((schluessel) => {
+      const frueher = this.gesehen.get(schluessel);
+      return frueher !== undefined && (zitate.length === 0 || zitate.some((zitat) => frueher.has(zitat)));
+    });
+  }
+
   ursache(schluessel, zahl) {
-    const wieder = [...new Set(schluessel.filter(({ roh, inhalt }) => this.gesehen.has(roh) || this.gesehen.has(inhalt)).map(({ roh }) => roh))];
+    const wieder = [...new Set(schluessel.filter((eintrag) => this.kehrtWieder(eintrag)).map(({ roh }) => roh))];
     if (wieder.length > 0) return `wiederkehrend: ${wieder.join("; ")}`;
     const davor = this.runden.at(-1);
     if (davor !== undefined && zahl >= davor.zahl) return `die Zahl der Befunde sank nicht (${davor.zahl} → ${zahl})`;
@@ -70,7 +93,7 @@ export class Fortschritt {
   }
 
   endeNachRunde(befunde, schnitt, soll) {
-    const schluessel = befunde.map((befund) => befundSchluessel(befund, schnitt, soll));
+    const schluessel = befunde.map((befund) => this.mitQuellsaetzen(befundSchluessel(befund, schnitt, soll)));
     const ursache = this.ursache(schluessel, befunde.length);
     const ruecksendungen = this.runden.length;
     this.runden.push({ zahl: befunde.length, schluessel: schluessel.map(({ roh }) => roh) });
@@ -78,9 +101,8 @@ export class Fortschritt {
       this.ende = ursache;
       return { grund: `${this.art}: Befunde blieben nach ${ruecksendungen} Rücksendungen offen, ${ursache}` };
     }
-    for (const { roh, inhalt } of schluessel) {
-      this.gesehen.add(roh);
-      this.gesehen.add(inhalt);
+    for (const { roh, inhalt, zitate } of schluessel) {
+      for (const eigener of [roh, inhalt]) this.gesehen.set(eigener, new Set([...(this.gesehen.get(eigener) ?? []), ...zitate]));
     }
     return null;
   }

@@ -24,7 +24,7 @@ const NAMENSTEIL = /[/._]/;
 const PFAD_TRENNER = "/";
 const WORT_RAND = /^[„“"'`([]+|[„“"'`)\],;:.!?]+$/g;
 const LEERRAUM = /\s+/;
-const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
+export const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
 const UEBERSCHRIFT = /^#+ (.+)/;
 const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
@@ -452,6 +452,11 @@ function saetzeIn(abschnitt) {
   return new Set(zeilen.flatMap((zeile) => [zeile, ...zeile.split(SATZENDE)]).map(gleicherText).filter(Boolean));
 }
 
+export function szenarioMitSatz(satz, soll) {
+  const gesucht = gleicherText(satz);
+  return [...soll].find(([, { text }]) => gleicherText(text).includes(gesucht))?.[0];
+}
+
 function satzBefund(ort, eintrag, kontext) {
   if (!istObjekt(eintrag) || !istText(eintrag.satz) || !istText(eintrag.abschnitt)) return `${ort}: jeder Eintrag braucht satz, quelle und abschnitt`;
   const text = DOKUMENTE.includes(eintrag.quelle) ? kontext.dokumente[eintrag.quelle] : undefined;
@@ -461,8 +466,8 @@ function satzBefund(ort, eintrag, kontext) {
   const satz = gleicherText(eintrag.satz);
   const uebernommen = liste(kontext.alteNie).some((alt) => gleicherText(alt) === satz);
   if (!uebernommen && !saetzeIn(gefunden.get(eintrag.abschnitt)).has(satz)) return `${ort}: „${eintrag.satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in ${eintrag.quelle}, ${eintrag.abschnitt}`;
-  const szenario = [...kontext.soll].find(([, { text: szenarioText }]) => gleicherText(szenarioText).includes(satz));
-  return szenario ? `${ort}: „${eintrag.satz}“ steht im Szenario ${szenario[0]}` : null;
+  const szenario = szenarioMitSatz(satz, kontext.soll);
+  return szenario === undefined ? null : `${ort}: „${eintrag.satz}“ steht im Szenario ${szenario}`;
 }
 
 function nieBefunde(auftraege, kontext) {
