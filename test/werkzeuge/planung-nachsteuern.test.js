@@ -44,7 +44,7 @@ const ELTERN_TEILE = [
   eintrag("t2", "hinweis-beim-anruf", { nummern: ["S4", "S5", "B1"], dateien: [HINWEIS, ...ELF.slice(5)], abhaengigVon: ["t1"] }),
 ];
 
-function elfStellen(wurzel, { quellen, einstiege, stellen }) {
+function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe }) {
   const elf = Object.fromEntries(ELF.map((datei) => [datei, STELLE_QUELLE]));
   for (const [datei, inhalt] of Object.entries({ ...elf, ...quellen })) {
     mkdirSync(dirname(join(wurzel, datei)), { recursive: true });
@@ -54,19 +54,21 @@ function elfStellen(wurzel, { quellen, einstiege, stellen }) {
   appendFileSync(join(wurzel, ORDNER, "design.md"), `\n${STELLEN}\n\n${geaendert.map((stelle) => `Ändert sich: \`${stelle}\``).join("\n")}\n`);
   const pitch = join(wurzel, ORDNER, "pitch.md");
   const loeschAbschnitt = einstiege.length === 0 ? "" : `\n## Löschen\n\n${einstiege.map((einstieg) => `- \`${einstieg}\``).join("\n")}\n`;
-  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Status: fertig", "Status: freigegeben") + loeschAbschnitt);
+  const freigegeben = readFileSync(pitch, "utf8").replace("Status: fertig", "Status: freigegeben");
+  const mitFreigabe = freigabe === undefined ? freigegeben : freigegeben.replace(/^Planung freigegeben: \d+ Token$/mu, `Planung freigegeben: ${freigabe} Token`);
+  writeFileSync(pitch, mitFreigabe + loeschAbschnitt);
 }
 
-function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [] } = {}) {
+function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [], freigabe } = {}) {
   const wurzel = planOrdner(context);
-  elfStellen(wurzel, { quellen, einstiege, stellen });
+  elfStellen(wurzel, { quellen, einstiege, stellen, freigabe });
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [teilung], "planer|## Befunde": befunde }, argumente: ["plane", ORDNER] });
   return { ...lauf, wurzel };
 }
 
-function anderePhase(wurzel, kosten) {
+function anderePhase(wurzel, kosten, datei = "planung.json") {
   mkdirSync(join(wurzel, ".fortschritt", "P-009-andere"), { recursive: true });
-  writeFileSync(join(wurzel, ".fortschritt", "P-009-andere", "planung.json"), JSON.stringify(kosten));
+  writeFileSync(join(wurzel, ".fortschritt", "P-009-andere", datei), JSON.stringify(kosten));
 }
 
 function planeTeil(context, wurzel, { ordner, antworten = {}, token = { planer: PLANER_JE_AUFRUF } }) {
@@ -195,18 +197,19 @@ function zweiterWorktree(context, wurzel) {
 const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[0], GRUPPEN[1]] })] };
 const ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL = { erkunder: { laeufe: 1, token: TEIL_DECKEL } };
 const PLANER_TEURER_ALS_DER_TEIL_DECKEL = { planer: { laeufe: 1, token: TEIL_DECKEL + 1 } };
+const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
+const UNTER_TEILE_VON_T1 = alsJson({ teile: [
+  eintrag("t1", "hinterlegen", { nummern: ["S1", "S7"], tWege: ["T2"], dateien: [ROUTE, ...ELF.slice(0, 2)] }),
+  eintrag("t2", "bestaetigen", { nummern: ["S2", "S3", "S6"], tWege: ["T1"], dateien: ELF.slice(2, 5) }),
+] });
 
 test("liegt die Vorschau der Erkundung mit dem Startwert aus einem anderen Worktree über dem Teil-Deckel, teilt sich ein Teil mit 2 Gruppen, statt mit Exit 5 zu enden, und reicht seinen Deckel an die Unter-Teile weiter", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
   anderePhase(zweiterWorktree(context, wurzel), { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
   mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  const unter = alsJson({ teile: [
-    eintrag("t1", "hinterlegen", { nummern: ["S1", "S7"], tWege: ["T2"], dateien: [ROUTE, ...ELF.slice(0, 2)] }),
-    eintrag("t2", "bestaetigen", { nummern: ["S2", "S3", "S6"], tWege: ["T1"], dateien: ELF.slice(2, 5) }),
-  ] });
 
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [unter] } });
+  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } });
 
   exit(lauf, EXIT_GETEILT);
   assert.deepEqual(aufrufe(lauf, "erkunder"), []);
@@ -236,6 +239,21 @@ test("liegt die Vorschau der Erkundung eines Teils mit 1 Gruppe über dem Teil-D
   assert.deepEqual(aufrufe(lauf, "erkunder"), []);
 });
 
+test("reicht der Deckel nach der Gliederung nicht mehr für den Planer der Teilung, endet plane mit Exit 5, ohne die Teilung zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
+  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
+  const nurGliederung = PLANER_AUFRUFE_BIS_TEILUNG * PLANER_JE_AUFRUF - 1;
+
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: ZWEI_GRUPPEN, argumente: ["plane", HINTERLEGEN, "--deckel", String(nurGliederung)], token: { planer: PLANER_JE_AUFRUF } });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), []);
+  assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
+  assert.equal(planungsBericht({ wurzel }, HINTERLEGEN).deckelSchritt, "Teilung nach der Gliederung");
+});
+
 test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für den Erkunder nicht", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
@@ -248,14 +266,40 @@ test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für de
   assert.equal(aufrufe(lauf, "erkunder").length, 2, lauf.stderr);
 });
 
-test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für den Planer", { timeout: LAUF_FRIST_MS }, (context) => {
+function mitPlanerStartwert(context, datei) {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { kostenJeLauf: PLANER_TEURER_ALS_DER_TEIL_DECKEL });
+  anderePhase(wurzel, { kostenJeLauf: PLANER_TEURER_ALS_DER_TEIL_DECKEL }, datei);
   mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
+  return planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: ZWEI_GRUPPEN });
+}
 
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: ZWEI_GRUPPEN });
+test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für den Planer", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = mitPlanerStartwert(context, "planung.json");
 
   exit(lauf, EXIT_DECKEL);
   assert.deepEqual(aufrufe(lauf, "planer"), []);
+});
+
+test("eine planung-*.json einer anderen Phase zählt als Startwert wie eine planung.json", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = mitPlanerStartwert(context, "planung-0955.json");
+
+  exit(lauf, EXIT_DECKEL);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+});
+
+test("ein weitergeteilter Teil zieht seinen weitergegebenen Deckel vom Rest-Topf seiner Geschwister ab, wenn der Deckel größer ist als sein Verbrauch", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context, { freigabe: FREIGABE_UNTER_ZWEI_TEIL_DECKELN });
+  exit(teilung, EXIT_GETEILT);
+  const { topf } = abgelegt({ wurzel }, "teile.json");
+  assert.equal(topf.freigabe, FREIGABE_UNTER_ZWEI_TEIL_DECKELN);
+  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
+  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
+  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
+  mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
+  vorgaengerGemergt(wurzel, HINTERLEGEN);
+
+  planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER });
+
+  assert.equal(planungsBericht({ wurzel }, HINWEIS_ORDNER).deckel.deckel, topf.freigabe - topf.vorschnitt - TEIL_DECKEL);
 });
