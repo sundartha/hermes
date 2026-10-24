@@ -88,7 +88,7 @@
   },
   "apps/web/src/scripts/hermes-demo.js": {
     "no-magic-numbers": {
-      "count": 7
+      "count": 3
     }
   },
   "apps/web/test/api.test.js": {
@@ -478,9 +478,6 @@
     "max-lines-per-function": {
       "count": 1
     },
-    "no-magic-numbers": {
-      "count": 2
-    },
     "no-param-reassign": {
       "count": 9
     }
@@ -563,7 +560,7 @@
   },
   "src/db/migrate.js": {
     "id-length": {
-      "count": 2
+      "count": 1
     }
   },
   "src/i18n/greeting-catalog.js": {
@@ -627,7 +624,7 @@
   },
   "src/mcp-tools.js": {
     "id-length": {
-      "count": 22
+      "count": 21
     },
     "max-lines-per-function": {
       "count": 1
@@ -671,11 +668,6 @@
   "src/precall-briefing.js": {
     "id-length": {
       "count": 1
-    }
-  },
-  "src/queue/adapters/memory/queue.js": {
-    "no-magic-numbers": {
-      "count": 4
     }
   },
   "src/research/adapters/exa-search.js": {
@@ -1044,12 +1036,9 @@
   },
   "src/worker/provisioning-orchestrator.js": {
     "id-length": {
-      "count": 10
+      "count": 8
     },
     "max-lines-per-function": {
-      "count": 1
-    },
-    "no-negated-condition": {
       "count": 1
     }
   },
@@ -1454,11 +1443,6 @@
     },
     "no-restricted-syntax": {
       "count": 2
-    }
-  },
-  "test/p15-mcp-tool-descriptions-en.test.js": {
-    "complexity": {
-      "count": 1
     }
   },
   "test/p5-onboarding-funnel.test.js": {
