@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 
-import { deckelAus, restTopf } from "./deckel.mjs";
+import { deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
 import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
 import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT } from "./nachricht.mjs";
@@ -145,14 +145,28 @@ function herkunftDes(teilung, eintrag, elternOrdner) {
   return { eltern: basename(elternOrdner), nach: liste(eintrag.abhaengigVon).map((kuerzel) => ordner.get(kuerzel)) };
 }
 
-function topfAus(root, { elternOrdner, elternPitch, teilung }) {
+function leererTopf(buch, rechnung) {
+  return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im Eltern-Pitch eine neue Menge freigegeben ist. Ein Lauf ohne gemessenen Verbrauch zählt mit seinem Deckel; frei wird er nur, wenn ein Mensch nach Blick in die Transkripte seine Datei in ${buch} löscht` };
+}
+
+function topfAus(buch, { elternPitch, teilung, ohne }) {
   const { deckel: freigabe, fehler } = deckelAus(undefined, elternPitch);
   if (fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `Eltern-Ordner: ${fehler}; der Rest-Topf der Teile rechnet mit dieser Freigabe` };
   if (!Number.isFinite(teilung.token) || teilung.token < 0) return { exit: EXIT_DECKEL, fehler: `${TEILE} nennt den Verbrauch der Teilung nicht als Zahl; plane hält an, statt zu schätzen` };
-  const { topf, rechnung, fehler: messfehler } = restTopf(root, { freigabe, vorschnitt: teilung.token, teile: teilung.teile.map((eintrag) => teilOrdnerName(elternOrdner, eintrag)) });
+  const { topf, rechnung, fehler: messfehler } = restTopf(buch, { freigabe, vorschnitt: teilung.token, ohne });
   if (messfehler !== undefined) return { exit: EXIT_DECKEL, fehler: messfehler };
-  if (topf.teilDeckel <= 0) return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im Eltern-Pitch eine neue Menge freigegeben ist` };
-  return { topf, rechnung };
+  return topf.teilDeckel <= 0 ? leererTopf(buch, rechnung) : { topf, rechnung };
+}
+
+function reserviereTeil(buch, { teil, deckel, root, quelle }) {
+  const name = reserviere(buch, { teil, deckel, worktree: root });
+  const nachher = topfAus(buch, { ...quelle, ohne: name });
+  if (nachher.exit !== undefined) {
+    gibReservierungFrei();
+    return nachher;
+  }
+  if (nachher.topf.teilDeckel < deckel) setzeReservierung(nachher.topf.teilDeckel);
+  return { deckel: Math.min(deckel, nachher.topf.teilDeckel) };
 }
 
 function liesTeilung(elternOrdner) {
@@ -174,8 +188,11 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const eltern = texte(elternOrdner);
   const befunde = teilBefunde({ eltern, teil, eintrag, herkunft: herkunftDes(teilung, eintrag, elternOrdner), name }, relative(root, ordner));
   if (befunde.length > 0) return { exit: EXIT_BEFUNDE, fehler: [`plane plant den Teil nicht, weil er vom Eltern-Ordner ${name} abweicht:`, ...befunde].join("\n") };
-  const topf = topfAus(root, { elternOrdner, elternPitch: eltern[PITCH], teilung });
-  return topf.exit === undefined ? { deckel: Math.min(deckel, topf.topf.teilDeckel) } : topf;
+  const buch = topfBuch(root, herkunft.eltern);
+  const quelle = { elternPitch: eltern[PITCH], teilung };
+  const vorher = topfAus(buch, quelle);
+  if (vorher.exit !== undefined) return vorher;
+  return reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
 }
 
 function teilStart(root, ordner, { fortsetzen, deckel }) {
@@ -199,7 +216,7 @@ function schreibeTeile(root, ordner, geteilt) {
   const vorhanden = ziele.filter((ziel) => existsSync(ziel)).map((ziel) => `${relative(root, ziel)} gibt es schon; plane überschreibt keinen Teil-Ordner`);
   if (vorhanden.length > 0) return { exit: EXIT_AUFRUF, fehler: vorhanden.join("\n") };
   const eltern = texte(ordner);
-  const topf = topfAus(root, { elternOrdner: ordner, elternPitch: eltern[PITCH], teilung });
+  const topf = topfAus(topfBuch(root, basename(ordner)), { elternPitch: eltern[PITCH], teilung });
   if (topf.exit !== undefined) return topf;
   const neu = teilung.teile.map((eintrag) => {
     const herkunft = herkunftDes(teilung, eintrag, ordner);

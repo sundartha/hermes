@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BELEGE } from "../bericht.mjs";
+import { gemeinsamerOrdner } from "../git.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
-import { istObjekt, liste } from "./erkundung.mjs";
+import { istObjekt, schreibeJsonAtomar } from "./erkundung.mjs";
 import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
 import { werkzeugeDerRolle } from "./team.mjs";
 
@@ -49,29 +50,67 @@ export function gemesseneLaeufe(root, sitzungen) {
   return { laeufe: gemessen.length, token: summe.gesamt };
 }
 
-function istGelaufen(beteiligter) {
-  return (beteiligter?.sitzung ?? null) !== null;
+const TOPF_BUCH = "hermes-topf";
+const LAUF_ENDUNG = ".json";
+const ENTWURF = ".entwurf";
+const EIGENER_LAUF = { datei: null };
+
+export function topfBuch(root, eltern) {
+  return gemeinsamerOrdner(root, TOPF_BUCH, eltern);
 }
 
-function teilKosten(root, teil) {
-  const datei = join(root, BELEGE, teil, PLANUNGSBERICHT);
-  if (!existsSync(datei)) return 0;
+function liesLauf(datei) {
   try {
-    const gelaufen = liste(JSON.parse(readFileSync(datei, "utf8")).beteiligte).filter(istGelaufen);
-    return gelaufen.every(({ token }) => Number.isFinite(token)) ? gelaufen.reduce((summe, { token }) => summe + token, 0) : null;
-  } catch {
-    return null;
+    return JSON.parse(readFileSync(datei, "utf8"));
+  } catch (fehler) {
+    return fehler.code === "ENOENT" ? null : {};
   }
 }
 
-export function restTopf(root, { freigabe, vorschnitt, teile }) {
-  const kosten = teile.map((teil) => ({ teil, token: teilKosten(root, teil) }));
-  const offen = kosten.filter(({ token }) => token === null).map(({ teil }) => join(BELEGE, teil, PLANUNGSBERICHT));
-  if (offen.length > 0) return { fehler: `Rest-Topf nicht messbar: ${offen.join(", ")} nennt nicht für jede gelaufene Sitzung die Token; plane hält an, statt zu schätzen` };
-  const verbraucht = kosten.reduce((summe, { token }) => summe + token, 0);
+function laeufe(buch) {
+  if (!existsSync(buch)) return [];
+  const namen = readdirSync(buch).filter((name) => name.endsWith(LAUF_ENDUNG) && !name.startsWith("."));
+  return namen.map((name) => ({ name, lauf: liesLauf(join(buch, name)) })).filter(({ lauf }) => lauf !== null).map(({ name, lauf }) => ({ name, ...lauf }));
+}
+
+function laufKosten({ token, deckel }) {
+  if (Number.isFinite(token)) return token;
+  return Number.isFinite(deckel) ? deckel : null;
+}
+
+export function restTopf(buch, { freigabe, vorschnitt, ohne }) {
+  const andere = laeufe(buch).filter(({ name }) => name !== ohne);
+  const offen = andere.filter((lauf) => laufKosten(lauf) === null).map(({ name }) => join(buch, name));
+  if (offen.length > 0) return { fehler: `Rest-Topf nicht messbar: ${offen.join(", ")} nennt weder Verbrauch noch Deckel; plane hält an, statt zu schätzen` };
+  const verbraucht = andere.reduce((summe, lauf) => summe + laufKosten(lauf), 0);
   const rest = freigabe - vorschnitt - verbraucht;
   const topf = { freigabe, vorschnitt, teile: verbraucht, rest, teilDeckel: Math.max(0, Math.min(TEIL_DECKEL, rest)) };
   return { topf, rechnung: `Freigabe ${freigabe} − Vorschnitt ${vorschnitt} − Teile ${verbraucht} = ${rest}` };
+}
+
+export function reserviere(buch, { teil, deckel, worktree }) {
+  mkdirSync(buch, { recursive: true });
+  const name = `${teil}-${Date.now()}-${process.pid}${LAUF_ENDUNG}`;
+  const entwurf = join(buch, `.${name}${ENTWURF}`);
+  writeFileSync(entwurf, JSON.stringify({ teil, beginn: new Date().toISOString(), deckel, worktree }));
+  linkSync(entwurf, join(buch, name));
+  unlinkSync(entwurf);
+  EIGENER_LAUF.datei = join(buch, name);
+  return name;
+}
+
+export function setzeReservierung(deckel) {
+  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...liesLauf(EIGENER_LAUF.datei), deckel });
+}
+
+export function gibReservierungFrei() {
+  unlinkSync(EIGENER_LAUF.datei);
+  EIGENER_LAUF.datei = null;
+}
+
+export function verbucheLauf(root, beteiligte) {
+  if (EIGENER_LAUF.datei === null) return;
+  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...liesLauf(EIGENER_LAUF.datei), token: gemesseneKosten(root, beteiligte) });
 }
 
 export class Kostendeckel {

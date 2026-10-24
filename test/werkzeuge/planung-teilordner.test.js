@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -7,7 +8,9 @@ import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, planeAntworten } from "./planung-plane-probe.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
+import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, runIn } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
 const EXIT_GETEILT = 7;
@@ -19,6 +22,9 @@ const TEIL_ORDNER = [HINTERLEGEN, HINWEIS_ORDNER, UMBAU_ORDNER];
 const FREIGABE = 2000;
 const TEILUNG_TOKEN = 500;
 const TEIL_DECKEL = FREIGABE - TEILUNG_TOKEN;
+const GROSSE_FREIGABE = 5000;
+const OHNE_JSON = "Ich antworte ohne JSON.";
+const HAENGT_MS = 30_000;
 const ANGRIFFSWEG_T3 = /### T3:[\s\S]*?(?=## 3\. Lückenprüfung)/u;
 
 const TEILE = alsJson({ teile: [
@@ -55,14 +61,55 @@ function mitIssue(wurzel, ordner, issue) {
   ersetze(join(wurzel, ordner, "pitch.md"), "Issue: offen", `Issue: ${issue}`);
 }
 
-function verbraucht(wurzel, ordner, token) {
-  const ziel = join(wurzel, ".fortschritt", ordner.slice("plaene/".length));
-  mkdirSync(ziel, { recursive: true });
-  writeFileSync(join(ziel, "planung.json"), JSON.stringify({ beteiligte: [{ rolle: "planer", sitzung: "frueher", token }], token }));
+function verbraucht(context, wurzel, { ordner, token }) {
+  const antworten = { "planer|## Gliederung": [OHNE_JSON], "planer|## Zuschnitt": [OHNE_JSON] };
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: antworten, argumente: ["plane", ordner], token: { planer: token } });
+  assert.ok(aufrufe(lauf, "planer").length > 0, lauf.stderr);
+}
+
+function bericht(wurzel, ordner) {
+  return JSON.parse(readFileSync(join(wurzel, ".fortschritt", ordner.slice("plaene/".length), "planung.json"), "utf8"));
+}
+
+function imHintergrund(context, { wurzel, ersatz }, argumente) {
+  writeFileSync(join(ersatz, "antworten.json"), JSON.stringify({ "planer|## Gliederung": [{ warte: HAENGT_MS }], "planer|## Zuschnitt": [{ warte: HAENGT_MS }] }));
+  const kind = spawn(process.execPath, [AUFTRAG, "plane", ...argumente], { cwd: wurzel, detached: true, stdio: "ignore", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs"), ...mitErsatzWerkzeugen(ersatz) } });
+  const beende = () => {
+    try {
+      return process.kill(-kind.pid, "SIGTERM");
+    } catch {
+      return false;
+    }
+  };
+  context.after(beende);
+  return beende;
+}
+
+function planerGestartet(ersatz) {
+  const gestartet = () => readdirSync(ersatz).some((name) => name.startsWith("zug-planer") && !name.includes("Teilung"));
+  return new Promise((fertig) => {
+    const wache = watch(ersatz, () => {
+      if (!gestartet()) return;
+      wache.close();
+      fertig();
+    });
+    if (gestartet()) {
+      wache.close();
+      fertig();
+    }
+  });
 }
 
 function planeTeil(context, wurzel, ordner) {
   return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: {}, argumente: ["plane", ordner] });
+}
+
+function plantMitDeckel(context, wurzel, { ordner, deckel }) {
+  const lauf = planeTeil(context, wurzel, ordner);
+
+  exit(lauf, EXIT_ABBRUCH);
+  assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
+  assert.equal(bericht(wurzel, ordner).deckel.deckel, deckel);
 }
 
 function ohneAgent(lauf) {
@@ -152,7 +199,8 @@ test("ein veränderter Abschnitt ohne Nummer in einem Teil-Pitch ergibt einen Be
 test("ein leerer Topf ergibt Exit 5, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
-  verbraucht(wurzel, HINTERLEGEN, 1600);
+  mitIssue(wurzel, HINTERLEGEN, 77);
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 1600 });
   mitIssue(wurzel, HINWEIS_ORDNER, 78);
 
   const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
@@ -174,15 +222,11 @@ test("ist schon die Teilung so teuer, dass der Topf leer ist, endet plane mit Ex
 test("ein Teil plant mit dem kleineren Deckel aus Rest-Topf und Teil-Pitch", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
-  verbraucht(wurzel, HINTERLEGEN, 300);
+  mitIssue(wurzel, HINTERLEGEN, 76);
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 300 });
   mitIssue(wurzel, HINWEIS_ORDNER, 79);
 
-  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
-
-  exit(lauf, EXIT_ABBRUCH);
-  assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
-  const bericht = JSON.parse(readFileSync(join(wurzel, ".fortschritt", "P-001-t2-hinweis-beim-anruf", "planung.json"), "utf8"));
-  assert.equal(bericht.deckel.deckel, FREIGABE - TEILUNG_TOKEN - 300);
+  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: FREIGABE - TEILUNG_TOKEN - 300 });
 });
 
 test("ein Teil mit Issue: offen ergibt Exit 2, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -215,4 +259,83 @@ test("eine Zeile „Teil von“, die keinen Ordner neben dem Teil nennt, ergibt 
   exit(lauf, EXIT_AUFRUF);
   ohneAgent(lauf);
   assert.ok(lauf.stderr.includes("braucht die Form „Teil von: <Eltern-Ordner>; nach:"), lauf.stderr);
+});
+
+test("der Topf zählt jeden Lauf eines Teils, auch eine Fortsetzung und einen abgebrochenen Lauf", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINTERLEGEN, 85);
+  mitIssue(wurzel, HINWEIS_ORDNER, 86);
+  const [erster, zweiter] = [300, 200];
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: erster });
+  rmSync(join(wurzel, HINTERLEGEN, "planung"), { recursive: true });
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: zweiter });
+  const deckelDerFortsetzung = GROSSE_FREIGABE - TEILUNG_TOKEN - erster - zweiter;
+  const fortsetzung = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: {}, argumente: ["plane", HINTERLEGEN, "--fortsetzen"] });
+  exit(fortsetzung, EXIT_AUFRUF);
+  assert.ok(fortsetzung.stderr.includes("voller Neulauf nötig"), fortsetzung.stderr);
+
+  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
+
+  exit(lauf, EXIT_DECKEL);
+  ohneAgent(lauf);
+  assert.ok(lauf.stderr.includes(`Freigabe ${GROSSE_FREIGABE} − Vorschnitt ${TEILUNG_TOKEN} − Teile ${erster + zweiter + deckelDerFortsetzung} = 0`), lauf.stderr);
+});
+
+test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile zusammen nie über die Freigabe kommen", { timeout: LAUF_FRIST_MS }, async (context) => {
+  const { wurzel, ersatz, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINTERLEGEN, 87);
+  mitIssue(wurzel, HINWEIS_ORDNER, 88);
+  const beende = imHintergrund(context, { wurzel, ersatz }, [HINTERLEGEN, "--deckel", "1000"]);
+  await planerGestartet(ersatz);
+
+  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
+  beende();
+
+  exit(lauf, EXIT_ABBRUCH);
+  assert.equal(bericht(wurzel, HINWEIS_ORDNER).deckel.deckel, GROSSE_FREIGABE - TEILUNG_TOKEN - 1000);
+});
+
+test("zwei Worktrees desselben Klons rechnen mit demselben Topf", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
+  exit(teilung, EXIT_GETEILT);
+  commitAll(wurzel, "Teil-Ordner");
+  const zweiter = join(probeDirectory(context, {}), "zweiter");
+  assert.equal(runIn(wurzel, "git", ["worktree", "add", "--detach", "-q", zweiter]).status, 0);
+  symlinkSync(join(REPO_ROOT, "node_modules"), join(zweiter, "node_modules"));
+  mitIssue(wurzel, HINTERLEGEN, 89);
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 700 });
+  mitIssue(zweiter, HINWEIS_ORDNER, 90);
+
+  plantMitDeckel(context, zweiter, { ordner: HINWEIS_ORDNER, deckel: GROSSE_FREIGABE - TEILUNG_TOKEN - 700 });
+});
+
+function topfBuchIn(wurzel) {
+  const gemeinsam = runIn(wurzel, "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim();
+  const buch = join(gemeinsam, "hermes-topf", ELTERN);
+  mkdirSync(buch, { recursive: true });
+  return buch;
+}
+
+test("eine Laufdatei, die ein paralleler Lauf zwischen Auflisten und Lesen freigibt, zählt nicht und hält plane nicht an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINWEIS_ORDNER, 91);
+  symlinkSync(join(wurzel, "freigegeben.json"), join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"));
+
+  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });
+});
+
+test("eine unlesbare Laufdatei im Topf-Buch macht den Topf nicht messbar und ergibt Exit 5, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINWEIS_ORDNER, 92);
+  writeFileSync(join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"), "{ halb");
+
+  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
+
+  exit(lauf, EXIT_DECKEL);
+  ohneAgent(lauf);
+  assert.ok(lauf.stderr.includes("Rest-Topf nicht messbar"), lauf.stderr);
 });
