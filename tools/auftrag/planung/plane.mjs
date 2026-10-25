@@ -26,7 +26,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
+import { ERKUNDUNG, Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, ohneGliederung, schliesseVerbrauch, verbucheLauf, weiterTeilbar } from "./deckel.mjs";
 import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGE_AUSSTEHEND, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesAusstehendeNachfrage, liesFortsetzung, liesGeprueft, nachfrageSumme } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -44,7 +44,7 @@ import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
-import { GEAENDERTE_DATEIEN, dokumenteIm, umfang } from "./umfang.mjs";
+import { GEAENDERTE_DATEIEN, dokumenteIm, gruppenUeberGrenze, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
@@ -59,8 +59,6 @@ const GELESEN = [...new Set([...PLANER_KONTEXT, ...ERKUNDER_KONTEXT, VORLAGE])];
 const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit `datei` und `ausweg` „nicht gefunden, weil `<Name>` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei.";
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
-const ERKUNDUNG = ["erkunder", WEGPRUEFER];
-const TEILBAR_AB_GRUPPEN = 2;
 const WEG = "weg:";
 const WEG_ANGEHALTEN = "die Wegprüfung blieb unvollständig, weil plane am Kostendeckel anhielt";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
@@ -400,7 +398,7 @@ export class Planung {
   }
 
   ohneGliederung() {
-    return this.nurUmbau && this.soll.size === 0;
+    return ohneGliederung(this);
   }
 
   async gliedere() {
@@ -972,7 +970,7 @@ export class Planung {
 
   teilDeckelUeber() {
     const { gruppen } = this.gliederung;
-    if (!this.teil || gruppen.length < TEILBAR_AB_GRUPPEN) return null;
+    if (!weiterTeilbar(this.teil, gruppen.length)) return null;
     const { gemessen, jeRolle } = this.messung();
     const { deckel } = this.kostendeckel;
     const vorschau = this.kostendeckel.vorschau(gruppen.map(() => ERKUNDUNG), jeRolle);
@@ -1011,7 +1009,13 @@ export class Planung {
     throw new Ende(ergebnis.exit, ergebnis.fehler);
   }
 
+  pruefeMindestvorschau() {
+    const grund = this.kostendeckel.vorDemErstenAgenten({ soll: this.soll, nurUmbau: this.nurUmbau, teil: this.teil, gruppenUeberGrenze });
+    if (grund !== null) throw new Ende(EXIT_DECKEL, grund);
+  }
+
   async laufe() {
+    this.pruefeMindestvorschau();
     this.stand = this.ausgangsstand();
     await this.gliedere();
     this.pruefeFremdeDateien();
