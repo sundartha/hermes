@@ -217,7 +217,7 @@ test("plane --fortsetzen --deckel: ist die Vorschau der Nachfrage-Welle zu klein
   exit(gestoppt, EXIT_DECKEL);
   kleinesErkunderMittel(gestoppt);
 
-  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_IN_DER_NACHFRAGE)], ueberschrieben: zwoelfNachfragen() });
+  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(VORLAUF_BIS_NACHFRAGE + DECKEL_IN_DER_NACHFRAGE)], ueberschrieben: zwoelfNachfragen() });
 
   exit(lauf, EXIT_DECKEL);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);

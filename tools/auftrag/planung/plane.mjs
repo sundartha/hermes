@@ -26,7 +26,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, verbucheLauf } from "./deckel.mjs";
+import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
 import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -221,6 +221,14 @@ export class Planung {
     return gemesseneKosten(this.root, this.team.beteiligte);
   }
 
+  oeffneBuchungMitVorverbrauch(fortsetzen) {
+    const { vorverbrauch, fehler } = fortsetzen ? liesVorverbrauch(this.root, basename(this.ordner)) : { vorverbrauch: 0 };
+    if (fehler !== undefined) return fehler;
+    this.kostendeckel.vorverbrauch = vorverbrauch;
+    oeffneVerbrauch(this.root, basename(this.ordner), vorverbrauch);
+    return null;
+  }
+
   wegpruefKosten() {
     const sitzungen = new Set(this.wegpruefungen.map(({ sitzung }) => sitzung));
     const pruefer = this.team.beteiligte.filter(({ rolle, sitzung }) => rolle === "pruefer-planung" && sitzungen.has(sitzung));
@@ -290,17 +298,23 @@ export class Planung {
     throw fehler;
   }
 
+  verbucheWelle(schritte, vorher, geworfen = false) {
+    if (this.kostendeckel === null) return;
+    const nachher = this.kostenJeRolle();
+    this.kostendeckel.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])), { geworfen });
+  }
+
   async welle(laeufe, schritt) {
     const schritte = laeufe.map(({ rolle, kosten = [rolle] }) => kosten);
     this.pruefeDeckel(schritte, schritt);
     const vorher = this.kostendeckel === null ? {} : this.kostenJeRolle();
     const wegpruefungen = [...this.wegpruefungen];
-    const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle)))).catch((fehler) => this.nachDeckelHalt(fehler, wegpruefungen));
-    if (this.kostendeckel !== null) {
-      const nachher = this.kostenJeRolle();
-      this.kostendeckel.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])));
-      this.kostendeckel.halteUeberschreitungFest(this.gemessen(), schritt);
-    }
+    const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle)))).catch((fehler) => {
+      this.verbucheWelle(schritte, vorher, true);
+      return this.nachDeckelHalt(fehler, wegpruefungen);
+    });
+    this.verbucheWelle(schritte, vorher);
+    this.kostendeckel?.halteUeberschreitungFest(this.gemessen(), schritt);
     return ergebnisse;
   }
 
@@ -1068,6 +1082,7 @@ function berichte(planung, ergebnis) {
   const geteilt = ergebnis.exit === EXIT_GETEILT ? teilungsBericht(planung.ordner) : {};
   const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht(), ...geteilt };
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
+  if (planung.kostendeckel !== null && existsSync(planung.ablage)) schliesseVerbrauch(planung.root, basename(planung.ordner), { vorverbrauch: planung.kostendeckel.vorverbrauch, lauf: gemesseneKosten(planung.root, planung.team.beteiligte) });
   verbucheLauf(planung.root, planung.team.beteiligte, { weitergegeben: ergebnis.exit === EXIT_GETEILT });
   for (const befund of ergebnis.offen) console.error(befund);
   return ergebnis.exit;
@@ -1119,6 +1134,11 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   if (abweichungen.length > 0) {
     console.error(`plane setzt nicht fort, voller Neulauf nötig:\n${punkte(abweichungen)}`);
     return endeOhneAgent(EXIT_AUFRUF);
+  }
+  const vorverbrauchFehler = planung.oeffneBuchungMitVorverbrauch(fortsetzen);
+  if (vorverbrauchFehler !== null) {
+    console.error(vorverbrauchFehler);
+    return endeOhneAgent(EXIT_DECKEL);
   }
   if (nummern.unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: nummern.unklar });
   try {
