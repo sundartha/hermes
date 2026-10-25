@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { auftragAusSchnitt, entwurfFuer } from "../../tools/auftrag/planung/zusammensetzen.mjs";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { NACHRICHTEN_MODUS, NOTFRIST_MS, nachrichtenImTranskript } from "./nachrichten-ersatz.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository } from "./probe-repo.js";
 
 const SKILL = join(REPO_ROOT, ".claude/skills/pitch");
@@ -24,9 +25,7 @@ export const LOESUNG = "## Lösung";
 export const LAUF_FRIST_MS = 240_000;
 const AUSFUEHRBAR = 0o755;
 const ALTFUNKTIONEN_ZEILE = /^## Altfunktionen\n.*$/mu;
-export const BIS_ZUM_ABBRUCH = "bis zum Abbruch";
-export const MIT_DEM_ERGEBNIS = "mit dem Ergebnis";
-const NOTFRIST_MS = 60_000;
+export { BIS_ZUM_ABBRUCH, MIT_DEM_ERGEBNIS } from "./nachrichten-ersatz.js";
 const TAKT_MS = 20;
 
 const ROUTE_QUELLE = `export function registriere(router) {
@@ -77,7 +76,7 @@ export const GRUPPEN = [
 const ANRUF_NUMMERN = new Set(GRUPPEN[1].nummern);
 
 const ERSATZ_CLAUDE = `#!${process.execPath}
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const ort = dirname(process.argv[1]);
 const argumente = process.argv.slice(2);
@@ -132,12 +131,8 @@ if (art.pruefliste) {
 const tokenDatei = join(ort, "token.json");
 const tokenWerte = existsSync(tokenDatei) ? JSON.parse(readFileSync(tokenDatei, "utf8")) : null;
 const tokenWert = tokenWerte?.[agent + "|" + ueberschrift + "|" + merkmal] ?? tokenWerte?.[agent + "|" + ueberschrift] ?? tokenWerte?.[agent];
-const transkript = () => {
-  const transkripte = join(process.env.CLAUDE_CONFIG_DIR, "projects", realpathSync(process.cwd()).replace(/[^A-Za-z0-9]/g, "-"));
-  mkdirSync(transkripte, { recursive: true });
-  return join(transkripte, (resume ?? wert("--session-id")) + ".jsonl");
-};
-const pause = (ms) => new Promise((fertig) => setTimeout(fertig, ms));
+${NACHRICHTEN_MODUS}
+const transkript = () => transkriptDatei(process.env.CLAUDE_CONFIG_DIR, resume ?? wert("--session-id"));
 const beendet = (datei) => { try { process.kill(Number(readFileSync(datei, "utf8")), 0); return false; } catch (fehler) { return fehler.code === "ESRCH"; } };
 const waechterVon = (anderer) => readdirSync(ort).filter((name) => name.startsWith(zug(anderer))).map((name) => join(ort, name, "waechter"));
 const nachDemEndeVon = async (anderer) => {
@@ -147,20 +142,7 @@ const nachDemEndeVon = async (anderer) => {
   }
 };
 if (Array.isArray(tokenWert)) {
-  let nummer = 0;
-  for (const groesse of tokenWert) {
-    if (groesse === ${JSON.stringify(BIS_ZUM_ABBRUCH)}) await pause(${NOTFRIST_MS});
-    else if (groesse === ${JSON.stringify(MIT_DEM_ERGEBNIS)}) zurueckgehalten = "";
-    else if (groesse?.nachDemEndeVon) await nachDemEndeVon(groesse.nachDemEndeVon);
-    else {
-      const id = schluessel + "-" + stelle + "-" + nummer;
-      const usage = { input_tokens: groesse };
-      appendFileSync(transkript(), JSON.stringify({ type: "assistant", message: { id, usage } }) + "\\n");
-      melde({ type: "assistant", message: { id, content: [{ type: "thinking", thinking: "denkt" }], usage } });
-      melde({ type: "assistant", message: { id, content: [{ type: "text", text }], usage } });
-      nummer += 1;
-    }
-  }
+  await schreibeNachrichten(tokenWert, { kennung: schluessel + "-" + stelle, transkript, melde, text, mitDemErgebnis: () => { zurueckgehalten = ""; }, warteAuf: nachDemEndeVon });
 } else {
   if (tokenWerte !== null) appendFileSync(transkript(), JSON.stringify({ type: "assistant", message: { id: schluessel + "-" + stelle, usage: { input_tokens: tokenWert ?? 0 } } }) + "\\n");
   melde({ type: "assistant", message: { id: "m" + start, content: [{ type: "text", text }], usage: { input_tokens: 1 } } });
@@ -307,19 +289,8 @@ function protokoll({ ersatz }) {
   return existsSync(datei) ? readFileSync(datei, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile)) : [];
 }
 
-function transkriptZeilen({ ersatz, wurzel }) {
-  const verzeichnis = join(ersatz, "konfiguration", "projects", realpathSync(wurzel).replace(/[^A-Za-z0-9]/g, "-"));
-  if (!existsSync(verzeichnis)) return [];
-  return readdirSync(verzeichnis).flatMap((datei) => readFileSync(join(verzeichnis, datei), "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile)));
-}
-
-export function nachrichtenJeAufruf(lauf, schluessel) {
-  const jeAufruf = new Map();
-  for (const { message } of transkriptZeilen(lauf)) {
-    const [aufruf, nummer] = message.id.startsWith(`${schluessel}-`) ? message.id.slice(schluessel.length + 1).split("-") : [];
-    if (nummer !== undefined) jeAufruf.set(aufruf, (jeAufruf.get(aufruf) ?? 0) + 1);
-  }
-  return [...jeAufruf.values()];
+export function nachrichtenJeAufruf({ ersatz, wurzel }, schluessel) {
+  return nachrichtenImTranskript(join(ersatz, "konfiguration"), wurzel, schluessel);
 }
 
 export function aufrufe(lauf, agent, ueberschrift) {
