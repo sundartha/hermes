@@ -12,7 +12,7 @@ import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
-import { GEAENDERTE_DATEIEN, GRENZE_BELEG_DATEIEN, GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, ORDNER_ENDE, dokumenteIm, istOrdner } from "./umfang.mjs";
+import { GEAENDERTE_DATEIEN, GRENZE_BELEG_DATEIEN, GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, ORDNER_ENDE, dokumenteIm, gruppenUeberGrenze, istOrdner } from "./umfang.mjs";
 
 const TEILE = "teile.json";
 const ANTWORT = "teilung.json";
@@ -43,7 +43,7 @@ function ueberDerGrenze({ szenarien, codeDateien }) {
 }
 
 export function gruppenZahlUeber(anzahl) {
-  return anzahl > GRENZE_GRUPPEN ? [`${anzahl} Gruppen, Grenze ${GRENZE_GRUPPEN}`] : [];
+  return gruppenUeberGrenze(anzahl) ? [`${anzahl} Gruppen, Grenze ${GRENZE_GRUPPEN}`] : [];
 }
 
 export function gruppenMit(gruppen, nummern) {

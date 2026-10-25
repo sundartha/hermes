@@ -25,6 +25,10 @@ export const GRENZE_CODE_DATEIEN = 10;
 export const GRENZE_GRUPPEN = 2;
 export const GRENZE_BELEG_DATEIEN = 25;
 
+export function gruppenUeberGrenze(anzahl) {
+  return anzahl > GRENZE_GRUPPEN;
+}
+
 export function dokumenteIm(ordner) {
   return Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
 }

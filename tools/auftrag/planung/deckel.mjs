@@ -14,6 +14,11 @@ const PLANUNGSBERICHTE = /^planung(?:-[^/]+)?\.json$/u;
 const JE_ROLLE = "je Rolle";
 const ERKUNDER = "erkunder";
 export const WEGPRUEFER = "wegpruefer";
+export const ERKUNDUNG = [ERKUNDER, WEGPRUEFER];
+const GLIEDERUNG = ["planer"];
+const TEILBAR_AB_GRUPPEN = 2;
+const MINDEST_SCHRITT = "Gliederung";
+const ERSATZ = "Ersatz";
 const AGENT_DER_ROLLE = { [WEGPRUEFER]: "pruefer-planung" };
 const WORKTREE = "worktree ";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
@@ -203,6 +208,27 @@ function vorverbrauchText(vorverbrauch) {
   return vorverbrauch > 0 ? `Vorverbrauch ${vorverbrauch}, ` : "";
 }
 
+export function ohneGliederung({ soll, nurUmbau }) {
+  return nurUmbau && soll.size === 0;
+}
+
+export function weiterTeilbar(teil, gruppen) {
+  return teil && gruppen >= TEILBAR_AB_GRUPPEN;
+}
+
+function teilungNachGliederung({ soll, teil, gruppenUeberGrenze }) {
+  return gruppenUeberGrenze(soll.size) || weiterTeilbar(teil, soll.size);
+}
+
+function mindestweg(lauf) {
+  if (ohneGliederung(lauf)) return [];
+  return teilungNachGliederung(lauf) ? [GLIEDERUNG] : [GLIEDERUNG, ERKUNDUNG];
+}
+
+export function rollenText(rollen) {
+  return rollen.map(({ rolle, token, herkunft }) => `${rolle} ${token} (${herkunft})`).join(", ");
+}
+
 export class Kostendeckel {
   constructor(root, phase, deckel) {
     this.root = root;
@@ -243,10 +269,7 @@ export class Kostendeckel {
   }
 
   ersatz(rolle) {
-    if (rolle === WEGPRUEFER) {
-      const erkunder = this.wert(ERKUNDER);
-      return Math.max(this.mittelJeLauf(AGENT_DER_ROLLE[rolle]), erkunder === undefined || erkunder.ganz ? 0 : erkunder.mittel);
-    }
+    if (rolle === WEGPRUEFER) return this.wegpruefErsatz().mittel;
     const gemesseneRollen = Object.keys(this.jeLauf);
     const gleicheWerkzeuge = gemesseneRollen.filter((andere) => this.ausstattung(andere) === this.ausstattung(rolle));
     return this.hoechstesMittel(gleicheWerkzeuge.length > 0 ? gleicheWerkzeuge : gemesseneRollen);
@@ -266,13 +289,46 @@ export class Kostendeckel {
     return this.wert(ERKUNDER, jeRolle[ERKUNDER])?.ganz ?? true;
   }
 
-  schrittVorschau(rollen, jeRolle) {
+  gezaehlteRollen(rollen, jeRolle) {
     const ohne = this.imErkunderEnthalten(rollen, jeRolle) ? WEGPRUEFER : null;
-    return rollen.filter((rolle) => rolle !== ohne).reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, jeRolle[rolle]), 0);
+    return rollen.filter((rolle) => rolle !== ohne);
+  }
+
+  schrittVorschau(rollen, jeRolle) {
+    return this.gezaehlteRollen(rollen, jeRolle).reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, jeRolle[rolle]), 0);
   }
 
   vorschau(schritte, jeRolle = {}) {
     return Math.round(schritte.reduce((summe, rollen) => summe + this.schrittVorschau(rollen, jeRolle), 0));
+  }
+
+  herkunft(rolle) {
+    const wert = this.wert(rolle);
+    if (wert === undefined) return rolle === WEGPRUEFER ? `${ERSATZ} wie ${this.ersatzQuelle()}` : "keine Messung";
+    return istLauf(this.vorige[rolle]) && wert.mittel === mittel(this.vorige[rolle]) ? "eigene Messung" : "fremde Phase";
+  }
+
+  wegpruefErsatz() {
+    const pruefer = { quelle: AGENT_DER_ROLLE[WEGPRUEFER], mittel: this.mittelJeLauf(AGENT_DER_ROLLE[WEGPRUEFER]) };
+    const erkunder = this.wert(ERKUNDER);
+    return erkunder !== undefined && !erkunder.ganz && erkunder.mittel >= pruefer.mittel ? { quelle: ERKUNDER, mittel: erkunder.mittel } : pruefer;
+  }
+
+  ersatzQuelle() {
+    const { quelle } = this.wegpruefErsatz();
+    return `${quelle}, ${this.herkunft(quelle)}`;
+  }
+
+  mindestvorschau(lauf) {
+    const schritte = mindestweg(lauf);
+    const rollen = schritte.flatMap((schritt) => this.gezaehlteRollen(schritt, {})).map((rolle) => ({ rolle, token: Math.round(this.mittelJeLauf(rolle)), herkunft: this.herkunft(rolle) }));
+    return { token: this.vorschau(schritte), rollen };
+  }
+
+  vorDemErstenAgenten(lauf) {
+    const { token, rollen } = this.mindestvorschau(lauf);
+    if (!this.haelt({ gemessen: 0, vorschau: token }, MINDEST_SCHRITT)) return null;
+    return `Deckel ${this.deckel} Token: schon die Mindestvorschau ${token} für den kürzesten Weg bis zum Schnitt (${rollenText(rollen)}) liegt darüber; plane hält vor dem ersten Agenten an und wartet auf eine Entscheidung. Den Mindestdeckel zeigt node tools/auftrag.mjs umfang <Ordner>`;
   }
 
   haelt({ gemessen, vorschau }, schritt) {
