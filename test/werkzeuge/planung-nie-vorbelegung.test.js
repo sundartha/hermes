@@ -47,3 +47,18 @@ test("Nie-Sätze vorbelegen: ein Listenpunkt, der wörtlich in einem Szenario st
 test("Nie-Sätze vorbelegen: ein einziger Auftrag ohne roten Test bleibt unverändert", () => {
   assert.deepEqual(vorbelegt([{ id: "a1", art: "umbau", wasDarfNiePassieren: [] }]), [{ id: "a1", art: "umbau", wasDarfNiePassieren: [] }]);
 });
+
+function vorbelegteSaetze(zeilen) {
+  const [auftrag] = mitNieSaetzenDerVorgaben({ auftraege: [{ id: "a1", art: "funktion", wasDarfNiePassieren: [] }] }, zeilen.join("\n"), new Map()).auftraege;
+  return auftrag.wasDarfNiePassieren.map(({ satz }) => satz);
+}
+
+test("Nie-Vorbelegung: ein mehrzeiliger Listenpunkt wird nicht als Bruchstück vorbelegt", () => {
+  const pitch = ["## Fallen", "- Der Status bleibt bei einem SMS-Fehler offen,", "  bis der Kunde neu bestätigt.", "- Die Liste bleibt bis zum Umzug bestehen.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: ein zweiter Kanal,", "der erst später kommt."];
+  assert.deepEqual(vorbelegteSaetze(pitch), ["Die Liste bleibt bis zum Umzug bestehen."]);
+});
+
+test("Nie-Vorbelegung: die nächste Zeile mit Listenzeichen beginnt einen neuen Punkt", () => {
+  const pitch = ["## Fallen", "- Der Status bleibt offen.", "  - Die SMS geht nur einmal raus.", "1. Die Liste bleibt bestehen.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: ein zweiter Kanal."];
+  assert.deepEqual(vorbelegteSaetze(pitch), ["Der Status bleibt offen.", "Die SMS geht nur einmal raus.", "Die Liste bleibt bestehen.", "Nicht Teil dieser Änderung: ein zweiter Kanal."]);
+});
