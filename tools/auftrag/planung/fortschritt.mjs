@@ -86,17 +86,15 @@ export class Fortschritt {
     });
   }
 
-  ursache(schluessel, zahl) {
+  ursache(schluessel) {
     const wieder = [...new Set(schluessel.filter((eintrag) => this.kehrtWieder(eintrag)).map(({ roh }) => roh))];
     if (wieder.length > 0) return `wiederkehrend: ${wieder.join("; ")}`;
-    const davor = this.runden.at(-1);
-    if (davor !== undefined && zahl >= davor.zahl) return `die Zahl der Befunde sank nicht (${davor.zahl} → ${zahl})`;
     return this.runden.length >= this.grenze ? `nach ${this.grenze} Rücksendungen` : null;
   }
 
   endeNachRunde(befunde, schnitt, soll) {
     const schluessel = befunde.map((befund) => this.mitQuellsaetzen(befundSchluessel(befund, schnitt, soll)));
-    const ursache = this.ursache(schluessel, befunde.length);
+    const ursache = this.ursache(schluessel);
     const ruecksendungen = this.runden.length;
     this.runden.push({ zahl: befunde.length, schluessel: schluessel.map(({ roh }) => roh) });
     if (ursache !== null) {

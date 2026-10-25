@@ -42,14 +42,15 @@ test("fortschritt: ein Befund, der nach einer späteren Runde wiederkommt, beend
   assert.deepEqual(schleife.bericht().runden.map(({ zahl }) => zahl), [3, 2, 1]);
 });
 
-test("fortschritt: gleich viele Befunde beenden die Schleife", () => {
+test("fortschritt: gleich viele Befunde, die alle neu sind, beenden die Schleife nicht", () => {
   const schleife = new Fortschritt("zuschnitt");
   const [erste, zweite] = runden(schleife, [
     ["Regel Abnahmetest: a1 hat keinen Test", "Regel Bereich: a2 liegt in zwei Ordnern"],
     ["Regel Eingang: a3 nennt keinen Eingang", "Regel Nie-Sätze: a14 hat keinen Nie-Satz"],
   ]);
   assert.equal(erste, null);
-  assert.equal(zweite.grund, "zuschnitt: Befunde blieben nach 1 Rücksendungen offen, die Zahl der Befunde sank nicht (2 → 2)");
+  assert.equal(zweite, null);
+  assert.equal(schleife.bericht().ende, null);
 });
 
 test("fortschritt: mehr Befunde, die alle neu sind, beenden die Schleife nicht", () => {
