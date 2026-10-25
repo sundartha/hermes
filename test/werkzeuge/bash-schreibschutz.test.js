@@ -345,3 +345,28 @@ test("eine Ausnahme im Hook oder eine kaputte Eingabe sperrt den Befehl", (conte
     erlaubt: [{ stdin: '{"tool_input":{"command":"ls"}}' }],
   });
 });
+
+test("die Sperre einer Ersetzung nennt die Schreibweise ohne Ersetzung", (context) => {
+  const repo = probeRepository(context, DATEIEN);
+  const befehle = ["npm test -- test/a.test.js > $TMPDIR/lauf.txt 2>&1", 'grep -v "^$" src/a.js', "for f in src/a.js; do grep -n a $f; done", 'cd "$PWD"'];
+  const hinweise = [/fester Pfad unter \/tmp/, /einfache Anführungszeichen/, /wörtlich/, /\$\?/];
+  for (const rolle of ROLLEN) {
+    for (const befehl of befehle) {
+      const { gesperrt } = bash(repo, rolle, befehl);
+      assert.ok(gesperrt, `${rolle} darf nicht: ${befehl}`);
+      for (const hinweis of hinweise) assert.match(gesperrt.stderr, hinweis, befehl);
+    }
+  }
+});
+
+test("die Schreibweisen ohne Ersetzung aus der Sperrmeldung laufen durch", (context) => {
+  assertFaelle(context, {
+    gesperrt: [],
+    erlaubt: [
+      "npm test -- test/a.test.js > /tmp/bss-f1-lauf.txt 2>&1; echo exit=$?",
+      "grep -v '^\\s*$' src/a.js",
+      'grep -v "^\\s*\\$" src/a.js',
+      "grep -n a src/a.js test/a.test.js",
+    ],
+  });
+});
