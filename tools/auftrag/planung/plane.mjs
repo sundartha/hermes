@@ -426,11 +426,14 @@ export class Planung {
     return absicht === undefined ? [] : [abschnitt(ABSICHT, absicht)];
   }
 
-  erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [] }) {
+  erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [], mitBericht = false }) {
+    const berichte = this.berichte.filter(({ gruppe }) => gruppe.some((nummer) => nummern.includes(nummer))).map((bericht) => berichtZu(bericht, nummern));
+    const bisher = "Diese Angaben hat die Erkundung bereits mit Fundstellen belegt. Deine Nachfrage klärt nur die Fragen des Planers und wiederholt die Erkundung nicht. Jede Aussage in deinem Bericht belegst du weiter mit Fundstelle, auch wenn sie hier schon steht.";
     return nachricht(ueberschrift, [
       ...kopf,
       ...this.absichtTeil(),
       abschnitt("Deine Nummern", nummernText(this.soll, nummern)),
+      ...(mitBericht ? [abschnitt("Bisheriger Bericht der Erkundung zu deinen Nummern", `${bisher}\n\n${verdichteBerichte(berichte)}`)] : []),
       ...this.designTeile(nummern),
       abschnitt("Fragen des Planers", punkte(fragen)),
       abschnitt("Gerüst deines Berichts", json(berichtsGeruest(nummern))),
@@ -698,7 +701,7 @@ export class Planung {
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
     const nummern = nummernVon(offen);
     const fragen = offen.map((eintrag) => `${eintrag.nummern.join(", ")}: ${eintrag.frage}`);
-    const text = this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf: [...fragen, ""] });
+    const text = this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf: [...fragen, ""], mitBericht: true });
     const [ergebnis] = await this.welle([this.erkunderLauf(text, nummern, (wer) => this.erkundeNachfragen(wer, text, offen))], "Nachfrage-Welle");
     if (!klaerung) this.nachfrageWellen += 1;
     const enden = this.verbucheNachfrage(offen, ergebnis);
