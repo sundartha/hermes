@@ -1003,6 +1003,31 @@ test("Nie-Sätze: ein ganzer Satz aus einer Zeile mit zwei Sätzen ist grün", (
   gruen(lauf(b));
 });
 
+const MEHRZEILIG = ["Der Agent ruft nie ohne Freigabe an,", "auch nicht nachts."];
+
+function mitMehrzeiligemPunkt(context, satz) {
+  const b = basis(context);
+  b.eingaben.dokumente = { "pitch.md": ["# Pitch", "", "## Nicht-Ziele", "", `- ${MEHRZEILIG[0]}`, `  ${MEHRZEILIG[1]}`, `- ${NIE_B}`].join("\n") };
+  eigener(b, "a1").wasDarfNiePassieren[0].satz = satz;
+  return lauf(b);
+}
+
+function abgelehnt(ergebnis, satz) {
+  erwarte(ergebnis, REGEL.nie, `a1 wasDarfNiePassieren: „${satz}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in pitch.md, ## Nicht-Ziele`);
+}
+
+test("schnitt: ein Nie-Satz aus einem ganzen Listenpunkt über zwei Zeilen wird angenommen", (context) => {
+  gruen(mitMehrzeiligemPunkt(context, MEHRZEILIG.join(" ")));
+});
+
+test("schnitt: die erste Zeile eines mehrzeiligen Listenpunkts allein wird als Nie-Satz abgelehnt", (context) => {
+  abgelehnt(mitMehrzeiligemPunkt(context, MEHRZEILIG[0]), MEHRZEILIG[0]);
+});
+
+test("schnitt: eine Folgezeile eines mehrzeiligen Listenpunkts allein wird als Nie-Satz abgelehnt", (context) => {
+  abgelehnt(mitMehrzeiligemPunkt(context, MEHRZEILIG[1]), MEHRZEILIG[1]);
+});
+
 test("Nie-Sätze: Sätze aus design.md und sicherheit.md sind grün", (context) => {
   const b = basis(context);
   b.eingaben.dokumente = {

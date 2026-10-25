@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { mitNieSaetzenDerVorgaben } from "../../tools/auftrag/planung/nie-vorbelegung.mjs";
-import { abgelegt, plane } from "./planung-plane-probe.js";
-import { LAUF_FRIST_MS, ROUTE, alsJson, auftrag, schnittliste } from "./planung-probe.js";
+import { AUFTRAG, abgelegt, ersetze, plane, planeAntworten } from "./planung-plane-probe.js";
+import { LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, auftrag, aufrufe, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 
 const ALLE_NUMMERN = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "B1", "T1", "T2"];
 const FALLE = "Heute freigeschaltete Konten würden mit dem Wegfall der Liste sofort den Hinweis für Fremde hören: Wie der Übergang läuft, entscheidet das Design Doc.";
@@ -23,6 +24,17 @@ test("plane: schneidet der Planer genau einen Auftrag, stehen bei ihm alle Sätz
   const lauf = plane(context, { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste({ auftraege: [einziger], gemeinsameNamen: [] }) })] });
 
   assert.deepEqual(nieSaetzeImSchnitt(lauf), [["a1", [nieSatz(ZWEITE_NUMMER, "## Nicht-Ziele"), nieSatz(FALLE, "## Fallen"), nieSatz(ANRUF_STATT_SMS, "## Nicht-Ziele")]]]);
+});
+
+test("plane: ein mehrzeiliger Listenpunkt aus Fallen wird als ganzer Nie-Satz vorbelegt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = planOrdner(context);
+  const [vorne, hinten] = FALLE.split(": ");
+  ersetze(join(wurzel, ORDNER, "pitch.md"), `- ${FALLE}`, `- ${vorne}:\n  ${hinten}`);
+  const einziger = auftrag("a1", ROUTE, { prueft: ALLE_NUMMERN, abnahme: "test/nummern/eigene-nummer-hinterlegen.test.js", abhaengigVon: [], wasDarfNiePassieren: [] });
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste({ auftraege: [einziger], gemeinsameNamen: [] }) })] }, argumente: ["plane", ORDNER] });
+
+  assert.deepEqual(aufrufe(lauf, "planer", "## Befunde").filter(({ eingabe }) => eingabe.includes("Regel Nie-Sätze")), []);
+  assert.deepEqual(nieSaetzeImSchnitt(lauf), [["a1", [nieSatz(FALLE, "## Fallen"), nieSatz(ANRUF_STATT_SMS, "## Nicht-Ziele"), nieSatz(ZWEITE_NUMMER, "## Nicht-Ziele")]]]);
 });
 
 test("plane: schneidet der Planer mehrere Aufträge, belegt plane keine Nie-Sätze vor", { timeout: LAUF_FRIST_MS }, (context) => {
