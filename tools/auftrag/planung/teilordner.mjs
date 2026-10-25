@@ -148,28 +148,112 @@ function herkunftDes(teilung, eintrag, elternOrdner) {
   return { eltern: basename(elternOrdner), nach: liste(eintrag.abhaengigVon).map((kuerzel) => ordner.get(kuerzel)) };
 }
 
-function leererTopf(buch, rechnung) {
-  return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im Eltern-Pitch eine neue Menge freigegeben ist. Ein Lauf ohne gemessenen Verbrauch zählt mit seinem Deckel; frei wird er nur, wenn ein Mensch nach Blick in die Transkripte seine Datei in ${buch} löscht` };
+function leererTopf(buch, { rechnung, oberster }) {
+  return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im obersten Pitch ${oberster} eine neue Menge freigegeben ist. Ein Lauf ohne gemessenen Verbrauch zählt mit seinem Deckel; frei wird er nur, wenn ein Mensch nach Blick in die Transkripte seine Datei in ${buch} löscht` };
 }
 
-function freigabeDesTopfs(pitchFreigabe, { teilung, obergrenze }) {
-  const vorige = Number.isFinite(teilung.topf?.freigabe) ? teilung.topf.freigabe : Infinity;
-  return Math.min(pitchFreigabe, obergrenze, vorige);
+function nichtMessbar(fehler) {
+  return { exit: EXIT_DECKEL, fehler };
 }
 
-function topfAus(buch, { elternPitch, teilung, ohne, freigabe: obergrenze = Infinity }) {
-  const { deckel: pitchFreigabe, fehler } = deckelAus(undefined, elternPitch);
-  if (fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `Eltern-Ordner: ${fehler}; der Rest-Topf der Teile rechnet mit dieser Freigabe` };
-  if (!Number.isFinite(teilung.token) || teilung.token < 0) return { exit: EXIT_DECKEL, fehler: `${TEILE} nennt den Verbrauch der Teilung nicht als Zahl; plane hält an, statt zu schätzen` };
-  const freigabe = freigabeDesTopfs(pitchFreigabe, { teilung, obergrenze });
-  const { topf, rechnung, fehler: messfehler } = restTopf(buch, { freigabe, vorschnitt: teilung.token, ohne });
-  if (messfehler !== undefined) return { exit: EXIT_DECKEL, fehler: messfehler };
-  return topf.teilDeckel <= 0 ? leererTopf(buch, rechnung) : { topf, rechnung };
+function teileDatei(root, ordner) {
+  return join(relative(root, ordner), PLANUNG, TEILE);
+}
+
+function mitWeitergegebenerMenge(root, { ordner, teilung }) {
+  const freigabe = teilung?.topf?.freigabe;
+  return Number.isFinite(freigabe) ? { ordner, teilung, freigabe } : nichtMessbar(`${teileDatei(root, ordner)} nennt keine weitergegebene Menge; plane hält an, statt zu schätzen`);
+}
+
+function ueberzugDes(root, ordner, umgebung) {
+  const gebucht = restTopf(topfBuch(root, basename(ordner)), { freigabe: 0, vorschnitt: 0, ohne: umgebung.ohne });
+  if (gebucht.fehler !== undefined) return nichtMessbar(gebucht.fehler);
+  if (gebucht.topf.teile === 0) return { ueberzug: 0 };
+  if (umgebung.besucht.has(ordner)) return { exit: EXIT_AUFRUF, fehler: `${teileDatei(root, ordner)} führt sich selbst als Teil; plane hält an, statt zu schätzen` };
+  const stufe = umgebung.bekannt?.ordner === ordner ? umgebung.bekannt : mitWeitergegebenerMenge(root, { ordner, teilung: liesTeilung(ordner) });
+  if (stufe.exit !== undefined) return stufe;
+  const eigen = eigenerTopf(root, stufe, umgebung);
+  return eigen.exit === undefined ? { ueberzug: Math.max(0, -eigen.topf.rest) } : eigen;
+}
+
+function ueberzugDerTeile(root, { ordner, teilung }, umgebung) {
+  let summe = 0;
+  for (const eintrag of teilung.teile) {
+    const ergebnis = ueberzugDes(root, join(dirname(ordner), teilOrdnerName(ordner, eintrag ?? {})), umgebung);
+    if (ergebnis.exit !== undefined) return ergebnis;
+    summe += ergebnis.ueberzug;
+  }
+  return { summe };
+}
+
+function eigenerTopf(root, stufe, umgebung) {
+  const { ordner, teilung, freigabe } = stufe;
+  if (!Number.isFinite(teilung.token) || teilung.token < 0) return nichtMessbar(`${teileDatei(root, ordner)} nennt den Verbrauch der Teilung nicht als Zahl; plane hält an, statt zu schätzen`);
+  const buch = topfBuch(root, basename(ordner));
+  const { topf, rechnung, fehler } = restTopf(buch, { freigabe, vorschnitt: teilung.token, ohne: umgebung.ohne });
+  if (fehler !== undefined) return nichtMessbar(fehler);
+  const ueberzug = ueberzugDerTeile(root, stufe, { ...umgebung, besucht: new Set([...umgebung.besucht, ordner]) });
+  if (ueberzug.exit !== undefined) return ueberzug;
+  if (ueberzug.summe === 0) return { buch, topf, rechnung };
+  const rest = topf.rest - ueberzug.summe;
+  return { buch, topf: { ...topf, teile: topf.teile + ueberzug.summe, rest }, rechnung: `${rechnung} − Überzug weitergeteilter Teile ${ueberzug.summe} = ${rest}` };
+}
+
+function kette(root, ordner, { pitch, teilung }) {
+  const stufen = [];
+  let stufe = { ordner, pitch, teilung };
+  while (true) {
+    const herkunft = teilVon(stufe.pitch);
+    if (herkunft === undefined) return { stufen, oberster: stufe };
+    if (herkunft.fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `${relative(root, stufe.ordner)}: ${herkunft.fehler}` };
+    stufen.push(stufe);
+    const eltern = join(dirname(stufe.ordner), herkunft.eltern);
+    if (stufen.some((frueher) => frueher.ordner === eltern)) return { exit: EXIT_AUFRUF, fehler: `${relative(root, eltern)}: die Zeilen „Teil von“ führen im Kreis; plane hält an, statt zu schätzen` };
+    stufe = { ordner: eltern, pitch: texte(eltern)[PITCH], teilung: liesTeilung(eltern) };
+    if (stufe.pitch === undefined || stufe.teilung === null) return { exit: EXIT_AUFRUF, fehler: `${relative(root, eltern)} hat kein ${PITCH} oder kein ${join(PLANUNG, TEILE)} mit Teilen; der Rest-Topf rechnet bis zum obersten Pitch` };
+  }
+}
+
+function neueMenge(freigabe, oberster) {
+  const gespeichert = oberster.teilung.topf?.freigabe;
+  return Number.isFinite(gespeichert) ? Math.max(0, freigabe - gespeichert) : 0;
+}
+
+function abwaerts(root, { wurzel, stufen, neu }, umgebung) {
+  let stand = { ...wurzel, gesamt: wurzel.topf.rest };
+  let offen = neu;
+  for (const stufe of stufen.toReversed()) {
+    const eigen = eigenerTopf(root, stufe, umgebung);
+    if (eigen.exit !== undefined) return eigen;
+    offen = Math.max(0, offen - Math.max(0, -eigen.topf.rest));
+    const extra = Math.max(0, Math.min(offen, stand.gesamt));
+    const gesamt = Math.max(0, eigen.topf.rest) + extra;
+    stand = { ...eigen, gesamt, rechnung: `${eigen.rechnung}; dazu aus der neuen Freigabe im obersten Pitch ${extra} = ${gesamt}` };
+  }
+  return stand;
+}
+
+function topfAus(root, { ordner, pitch, teilung, ohne, obergrenze = Infinity }) {
+  const gefunden = kette(root, ordner, { pitch, teilung });
+  if (gefunden.exit !== undefined) return gefunden;
+  const { stufen, oberster } = gefunden;
+  const { deckel: freigabe, fehler } = deckelAus(undefined, oberster.pitch);
+  if (fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `Oberster Pitch ${relative(root, oberster.ordner)}: ${fehler}; der Rest-Topf der Teile rechnet mit dieser Freigabe` };
+  const unten = stufen.map((stufe, stelle) => (stelle === 0 && Number.isFinite(obergrenze) ? { ...stufe, freigabe: obergrenze } : mitWeitergegebenerMenge(root, stufe)));
+  const ohneMenge = unten.find((stufe) => stufe.exit !== undefined);
+  if (ohneMenge !== undefined) return ohneMenge;
+  const umgebung = { ohne, besucht: new Set(), bekannt: Number.isFinite(obergrenze) ? { ordner, teilung, freigabe: obergrenze } : null };
+  const wurzel = eigenerTopf(root, { ...oberster, freigabe: unten.length === 0 ? Math.min(freigabe, obergrenze) : freigabe }, umgebung);
+  if (wurzel.exit !== undefined) return wurzel;
+  const stand = abwaerts(root, { wurzel, stufen: unten, neu: neueMenge(freigabe, oberster) }, umgebung);
+  if (stand.exit !== undefined) return stand;
+  const topf = { ...stand.topf, teilDeckel: Math.max(0, Math.min(TEIL_DECKEL, stand.gesamt)) };
+  return topf.teilDeckel <= 0 ? leererTopf(stand.buch, { rechnung: stand.rechnung, oberster: join(relative(root, oberster.ordner), PITCH) }) : { topf, rechnung: stand.rechnung };
 }
 
 function reserviereTeil(buch, { teil, deckel, root, quelle }) {
   const name = reserviere(buch, { teil, deckel, worktree: root });
-  const nachher = topfAus(buch, { ...quelle, ohne: name });
+  const nachher = topfAus(root, { ...quelle, ohne: name });
   if (nachher.exit !== undefined) {
     gibReservierungFrei();
     return nachher;
@@ -218,8 +302,8 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const befunde = teilBefunde({ eltern, teil, eintrag, herkunft: herkunftDes(teilung, eintrag, elternOrdner), name }, relative(root, ordner));
   if (befunde.length > 0) return { exit: EXIT_BEFUNDE, fehler: [`plane plant den Teil nicht, weil er vom Eltern-Ordner ${name} abweicht:`, ...befunde].join("\n") };
   const buch = topfBuch(root, herkunft.eltern);
-  const quelle = { elternPitch: eltern[PITCH], teilung };
-  const vorher = topfAus(buch, quelle);
+  const quelle = { ordner: elternOrdner, pitch: eltern[PITCH], teilung };
+  const vorher = topfAus(root, quelle);
   if (vorher.exit !== undefined) return vorher;
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
@@ -255,7 +339,7 @@ export function schreibeTeile(root, ordner, geteilt) {
   const vorhanden = ziele.filter((ziel) => existsSync(ziel)).map((ziel) => `${relative(root, ziel)} gibt es schon; plane überschreibt keinen Teil-Ordner`);
   if (vorhanden.length > 0) return { exit: EXIT_AUFRUF, fehler: vorhanden.join("\n") };
   const eltern = texte(ordner);
-  const topf = topfAus(topfBuch(root, basename(ordner)), { elternPitch: eltern[PITCH], teilung, freigabe: geteilt.freigabe });
+  const topf = topfAus(root, { ordner, pitch: eltern[PITCH], teilung, obergrenze: geteilt.freigabe });
   if (topf.exit !== undefined) return topf;
   const neu = abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: topf.topf.teilDeckel });
   const befunde = neu.flatMap(({ eintrag, herkunft, dokumente }, stelle) => teilBefunde({ eltern, teil: dokumente, eintrag, herkunft, name: relative(root, ordner) }, relative(root, ziele[stelle])));
