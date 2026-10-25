@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { alsJson } from "./planung-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { NACHRICHTEN_MODUS, nachrichtenImTranskript } from "./nachrichten-ersatz.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
 export const AUSFUEHRBAR = 0o755;
@@ -50,6 +51,10 @@ const zeilen = (eingabe.split("### Zeilen deiner Prüfliste")[1] ?? "").split("\
 const pruefliste = zeilen.map((schluessel) => ({ schluessel, ergebnis: "erfüllt", fundstelle: "src/rechnen.js:1", ...(einsatz.befunde?.[schluessel] ? { ergebnis: "befund", befund: einsatz.befunde[schluessel] } : {}) }));
 const antwort = einsatz.pruefliste ? "Geprüft.\\n\\n\`\`\`json\\n" + JSON.stringify({ pruefliste }) + "\\n\`\`\`" : einsatz.antwort ?? "fertig";
 for (const zeile of einsatz.zeilen ?? []) process.stdout.write(JSON.stringify(zeile) + "\\n");
+${NACHRICHTEN_MODUS}
+const sitzung = process.argv[process.argv.findIndex((wert) => wert === "--session-id" || wert === "--resume") + 1];
+const melde = (zeile) => process.stdout.write(JSON.stringify(zeile) + "\\n");
+await schreibeNachrichten(einsatz.nachrichten ?? [], { kennung: rolle + "-" + nummer, transkript: () => transkriptDatei(join(process.env.HOME, ".claude"), sitzung), melde, text: antwort });
 process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: antwort }) + "\\n");
 process.exitCode = einsatz.exit ?? 0;
 `;
@@ -150,6 +155,10 @@ function erkundung(weitere = []) {
   return { antwort: alsJson({ nummern: { S1: { ...weg, ...SCHEMA, eingangImTest: "erreichbar", widersprueche: [] } }, hinweise: [] }) };
 }
 
+export function erkunderMitNachrichten(nachrichten) {
+  return { ...erkundung(), nachrichten };
+}
+
 export const MIT_TEXT = erkundung([{ datei: "src/text.js", funktion: "gross", von: 1, bis: 3, neueZeilen: 0 }]);
 
 const TEAM = { erkunder: [erkundung()], "pruefer-planung": [{ pruefliste: true }], entwurf: [{ antwort: alsJson({ entwurf: ENTWURF_RECHNEN }) }] };
@@ -201,7 +210,7 @@ export function lauf(context, drehbuch, { dateien = {}, phasendatei = PHASENDATE
   const lies = (pfad) => (existsSync(pfad) ? readFileSync(pfad, "utf8") : "");
   const beleg = (name) => JSON.parse(lies(join(repo, ".fortschritt/P-001-probe", `${name}.json`)) || "null");
   const git = (...argumente) => runIn(repo, "git", argumente).stdout;
-  return { repo, ergebnis, beleg, git, datei: (name) => lies(join(werkzeug, name)) };
+  return { repo, werkzeug, ergebnis, beleg, git, datei: (name) => lies(join(werkzeug, name)) };
 }
 
 export function umbau(id, aenderung = {}) {
@@ -247,4 +256,8 @@ export function ohneTeam(context, faelle) {
     befundeWie(befunde, erwartet);
     assert.deepEqual(["planer", "erkunder", "kind"].map((rolle) => datei(`anzahl-${rolle}`)), ["", "", "2"]);
   }
+}
+
+export function nachrichtenJeAufruf({ werkzeug, repo }, rolle) {
+  return nachrichtenImTranskript(join(werkzeug, ".claude"), repo, rolle);
 }
