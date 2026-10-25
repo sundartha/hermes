@@ -245,7 +245,7 @@ export function starteAgent(kontext, prompt, start = {}) {
 
 export function starteAgentParallel(kontext, prompt, start = {}) {
   const { kopf, umgebung, daten } = vorbereitung(kontext, prompt, start);
-  const kind = spawn(execPath, [WAECHTER], { cwd: kontext.root, env: umgebung });
+  const kind = spawn(execPath, [WAECHTER], { cwd: kontext.root, env: umgebung, stdio: ["pipe", "pipe", "pipe", "ipc"] });
   const ausgabe = { stdout: "", stderr: "" };
   for (const kanal of ["stdout", "stderr"]) {
     kind[kanal].setEncoding("utf8");
@@ -253,8 +253,15 @@ export function starteAgentParallel(kontext, prompt, start = {}) {
       ausgabe[kanal] += stueck;
     });
   }
+  kind.on("message", (meldung) => {
+    if (Number.isFinite(meldung?.nachricht) && Number.isFinite(meldung.zuvor)) start.beiNachricht?.(meldung.nachricht, meldung.zuvor);
+  });
   kind.stdin.end(daten);
-  return new Promise((fertig) => {
+  const ergebnis = new Promise((fertig) => {
     kind.on("close", (status) => fertig({ ...kopf, ...auswertung({ ...ausgabe, status }) }));
   });
+  const beende = (grund) => {
+    if (kind.connected) kind.send({ art: "beende", grund }, () => {});
+  };
+  return Object.assign(ergebnis, { beende });
 }

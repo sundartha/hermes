@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
+import { summeDerVerbraeuche } from "./kosten.mjs";
+
 export const STILLSTAND = "stillstand";
 export const UEBERGABE = "übergabe";
+export const DECKEL = "deckel";
 export const KONTEXT_GRENZE = 100_000;
 const WIEDERHOLUNGEN_BIS_STILLSTAND = 3;
 const MAX_ANTWORT_ZEICHEN = 1000;
@@ -53,8 +56,11 @@ const BEHANDLER = new Map([
 ]);
 
 export class Verlauf {
-  constructor({ kontextGrenze = KONTEXT_GRENZE } = {}) {
+  constructor({ kontextGrenze = KONTEXT_GRENZE, beiNachricht = null } = {}) {
     this.kontextGrenze = kontextGrenze;
+    this.beiNachricht = beiNachricht;
+    this.nachrichten = new Map();
+    this.abgeschlossen = false;
     this.groessterKontext = 0;
     this.werkzeuge = new Map();
     this.aufrufe = new Map();
@@ -71,6 +77,7 @@ export class Verlauf {
   }
 
   antwort({ message: nachricht, parent_tool_use_id: eltern }) {
+    this.meldeVerbrauch(nachricht);
     for (const teil of teile(nachricht)) {
       if (teil.type === "tool_use") this.merke(teil);
       if (teil.type === "text") this.letzterText = teil.text;
@@ -80,6 +87,16 @@ export class Verlauf {
     this.groessterKontext = Math.max(this.groessterKontext, kontext);
     if (this.kontextGrenze === null || kontext < this.kontextGrenze) return null;
     return { art: UEBERGABE, grund: `Übergabe: Der Kontext erreichte ${kontext} Token, die Grenze liegt bei ${this.kontextGrenze}.` };
+  }
+
+  meldeVerbrauch(nachricht) {
+    const verbrauch = nachricht?.usage;
+    if (this.beiNachricht === null || verbrauch === null || typeof verbrauch !== "object") return;
+    const groesse = summeDerVerbraeuche([verbrauch]).gesamt;
+    const zuvor = this.nachrichten.get(nachricht.id);
+    if (zuvor !== undefined && groesse <= zuvor) return;
+    if (nachricht.id !== undefined) this.nachrichten.set(nachricht.id, groesse);
+    this.beiNachricht(groesse, zuvor ?? 0);
   }
 
   merke({ id, name, input }) {
@@ -110,6 +127,7 @@ export class Verlauf {
   }
 
   schluss({ result: text, is_error: fehler }) {
+    this.abgeschlossen = true;
     if (typeof text === "string") this.ergebnis = text;
     if (fehler) this.pruefeLimit(text);
     return null;
