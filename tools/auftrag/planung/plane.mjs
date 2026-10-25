@@ -39,7 +39,7 @@ import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
-import { Abbruch, Team } from "./team.mjs";
+import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
@@ -74,6 +74,19 @@ export class Ende extends Error {
     this.exit = exit;
     this.befunde = befunde;
   }
+}
+
+function amDeckel(fehler) {
+  return (fehler instanceof Ende && fehler.exit === EXIT_DECKEL) || fehler instanceof Deckelabbruch;
+}
+
+function ausstehendOderWirf(fehler, nummern) {
+  if (!(fehler instanceof Deckelabbruch)) throw fehler;
+  return { bericht: { gruppe: nummern, nummern: {}, hinweise: [] }, befunde: [], annahmen: [], ausstehend: nummern };
+}
+
+function vorhandene(ergebnisse, feld) {
+  return ergebnisse.flatMap((ergebnis) => (ergebnis[feld] === undefined ? [] : [ergebnis[feld]]));
 }
 
 function zusammengefuegt(schluessel, ergebnisse) {
@@ -161,6 +174,7 @@ export class Planung {
     this.wegZaehler = new Map();
     this.wegOffen = [];
     this.wegAusstehend = [];
+    this.erkundungAusstehend = [];
     this.bezahlteStaende = new Map();
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
@@ -178,7 +192,17 @@ export class Planung {
     this.andererAusgang = andererAusgang;
     this.nurUmbau = nurUmbau;
     this.team = new Team(this.root, this.ordner);
+    this.team.wache = this.wache();
     this.planer = this.team.teilnehmer("planer");
+  }
+
+  wache() {
+    return this.kostendeckel?.wache({ stelle: () => this.laufInWelle.getStore(), rolle: (wer) => this.kostenrolle(wer) }) ?? null;
+  }
+
+  gezaehlt(schritt, arbeit) {
+    if (this.kostendeckel === null) return arbeit();
+    return this.kostendeckel.gezaehlt({ gemessen: () => this.gemessen(), schritt }, arbeit);
   }
 
   lege(name, wert) {
@@ -230,14 +254,15 @@ export class Planung {
   pruefeDeckel(schritte, schritt) {
     if (this.kostendeckel === null) return;
     this.pruefeUeberschreitung(schritt);
+    if (this.kostendeckel.liveAbbruch !== null) this.haltAmDeckel(this.kostendeckel.halt);
     const grund = this.kostendeckel.ueber(this.messung(), schritte, schritt);
     if (grund !== null) this.haltAmDeckel(grund);
   }
 
   ausgangAmDeckel(ergebnis) {
     if (ergebnis.exit === EXIT_AUFRUF) return ergebnis;
-    const grund = this.ueberschreitung(`Ausgang mit Exit ${ergebnis.exit}`);
-    if (grund === null || ergebnis.grund === grund) return ergebnis;
+    const grund = this.ueberschreitung(`Ausgang mit Exit ${ergebnis.exit}`) ?? this.kostendeckel?.liveAbbruch ?? null;
+    if (grund === null || ergebnis.grund?.includes(grund)) return ergebnis;
     if (ergebnis.exit === EXIT_DECKEL) return { ...ergebnis, grund: `${ergebnis.grund}; ${grund}` };
     const offen = ergebnis.offen.length > 0 ? [`offen: ${ergebnis.offen.join("; ")}`] : [];
     return { exit: EXIT_DECKEL, grund: [grund, `ohne den Deckel Exit ${ergebnis.exit}: ${ergebnis.grund}`, ...offen].join("; "), offen: ergebnis.offen };
@@ -254,7 +279,7 @@ export class Planung {
   }
 
   nachDeckelHalt(fehler, wegpruefungen) {
-    if (fehler instanceof Ende && fehler.exit === EXIT_DECKEL && this.berichte.length > 0) {
+    if (amDeckel(fehler) && this.berichte.length > 0) {
       this.wegpruefungen = wegpruefungen;
       this.legeFingerabdruck();
     }
@@ -266,7 +291,7 @@ export class Planung {
     this.pruefeDeckel(schritte, schritt);
     const vorher = this.kostendeckel === null ? {} : this.kostenJeRolle();
     const wegpruefungen = [...this.wegpruefungen];
-    const ergebnisse = await this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle))).catch((fehler) => this.nachDeckelHalt(fehler, wegpruefungen));
+    const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle)))).catch((fehler) => this.nachDeckelHalt(fehler, wegpruefungen));
     if (this.kostendeckel !== null) {
       const nachher = this.kostenJeRolle();
       this.kostendeckel.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])));
@@ -404,7 +429,8 @@ export class Planung {
 
   bezahlterStandOderWirf(fehler, nummern) {
     const stand = this.bezahlteStaende.get(nummern.join(", "));
-    if (!(fehler instanceof Ende) || fehler.exit !== EXIT_DECKEL || stand === undefined) throw fehler;
+    if (!amDeckel(fehler)) throw fehler;
+    if (stand === undefined) return ausstehendOderWirf(fehler, nummern);
     if (stand.weg === undefined) return stand.ergebnis;
     const { weg, runden, sauber, offen, sauberGeprueft } = stand.weg;
     const halt = [...offen, gruppenWegZeile(nummern, WEG_ANGEHALTEN)];
@@ -485,10 +511,16 @@ export class Planung {
 
   async erkundeGruppen() {
     const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkundungsLaufMitBezahltemStand(gruppe));
-    const ergebnisse = await this.welle(laeufe, "Erkundung");
-    this.berichte = ergebnisse.map(({ bericht }) => bericht);
-    this.wegAusstehend = ergebnisse.flatMap(({ wegAusstehend }) => (wegAusstehend === undefined ? [] : [wegAusstehend]));
-    for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
+    this.nimmErkundungAn(this.gliederung.gruppen.map((_gruppe, stelle) => stelle), await this.welle(laeufe, "Erkundung"));
+  }
+
+  nimmErkundungAn(stellen, ergebnisse) {
+    ergebnisse.forEach(({ bericht }, stelle) => {
+      this.berichte[stellen[stelle]] = bericht;
+    });
+    this.erkundungAusstehend = vorhandene(ergebnisse, "ausstehend");
+    this.wegAusstehend = [...this.wegAusstehend, ...vorhandene(ergebnisse, "wegAusstehend")];
+    for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0 && ergebnis.ausstehend === undefined) {
       merkeStellen(this.gesehen, ergebnis.bericht);
       this.uebernimmWeg(ergebnis);
     }
@@ -505,12 +537,13 @@ export class Planung {
 
   legeFingerabdruck() {
     this.lege(NACHFRAGEN, this.beantworteteWellen);
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, nachfrageWellen: this.nachfrageWellen };
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
   pruefungDerBerichte() {
-    return this.berichte.map((bericht) => ({ bericht, ...erkundungBefunde(bericht, { gruppe: bericht.gruppe, soll: this.soll, root: this.root }) }));
+    const ausstehend = new Set(this.erkundungAusstehend.map((nummern) => nummern.join(", ")));
+    return this.berichte.filter(({ gruppe }) => !ausstehend.has(gruppe.join(", "))).map((bericht) => ({ bericht, ...erkundungBefunde(bericht, { gruppe: bericht.gruppe, soll: this.soll, root: this.root }) }));
   }
 
   erkunderAnnahmen() {
@@ -857,7 +890,7 @@ export class Planung {
     this.pruefeDeckel([["planer"]], "Teilung nach der Gliederung");
     const { deckel } = this.kostendeckel;
     const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung, umbau: this.umbau };
-    const geteilt = await laufeTeilung(this.root, this.ordner, angaben);
+    const geteilt = await this.gezaehlt("Teilung nach der Gliederung", () => laufeTeilung(this.root, this.ordner, angaben));
     const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(this.root, this.ordner, { ...geteilt, freigabe: deckel }) : geteilt;
     throw new Ende(ergebnis.exit, ergebnis.fehler);
   }
@@ -869,9 +902,13 @@ export class Planung {
     await this.nachsteuern();
     await this.erkundeGruppen();
     this.legeFingerabdruck();
+    this.pruefeHalt();
+    await this.planeAbSchnitt();
+  }
+
+  pruefeHalt() {
     const halt = this.kostendeckel?.halt ?? null;
     if (halt !== null) throw new Ende(EXIT_DECKEL, halt);
-    await this.planeAbSchnitt();
   }
 
   async planeAbSchnitt() {
@@ -897,6 +934,7 @@ class Fortsetzung extends Planung {
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
     this.wegAusstehend = zustand.wegAusstehend;
+    this.erkundungAusstehend = zustand.erkundungAusstehend;
     this.nachfrageWellen = zustand.nachfrageWellen;
     this.beantworteteWellen = nachfragen;
     return [];
@@ -907,8 +945,19 @@ class Fortsetzung extends Planung {
   }
 
   async laufe() {
+    await this.erkundeAusstehende();
     await this.pruefeAusstehendeWege();
     await this.planeAbSchnitt();
+  }
+
+  async erkundeAusstehende() {
+    if (this.erkundungAusstehend.length === 0) return;
+    const ausstehend = new Set(this.erkundungAusstehend.map((nummern) => nummern.join(", ")));
+    const stellen = this.gliederung.gruppen.flatMap((gruppe, stelle) => (ausstehend.has(gruppe.nummern.join(", ")) ? [stelle] : []));
+    const laeufe = stellen.map((stelle) => this.erkundungsLaufMitBezahltemStand(this.gliederung.gruppen[stelle]));
+    this.nimmErkundungAn(stellen, await this.welle(laeufe, "Erkundung nach dem Deckel-Halt"));
+    this.legeFingerabdruck();
+    this.pruefeHalt();
   }
 
   ausstehenderWeg(nummern) {
@@ -990,12 +1039,13 @@ async function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }
 
 function ausgang(fehler) {
   if (fehler instanceof Ende) return { exit: fehler.exit, grund: fehler.message, offen: fehler.befunde };
+  if (fehler instanceof Deckelabbruch) return { exit: EXIT_DECKEL, grund: fehler.message, offen: [] };
   if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, grund: fehler.message, offen: [] };
   throw fehler;
 }
 
 export function ausgangOhneWurf(fehler) {
-  if (fehler instanceof Ende || fehler instanceof Abbruch) return ausgang(fehler);
+  if (fehler instanceof Ende || fehler instanceof Abbruch || fehler instanceof Deckelabbruch) return ausgang(fehler);
   return { exit: EXIT_ABBRUCH, grund: `unerwarteter Fehler: ${inspect(fehler)}`, offen: [] };
 }
 
@@ -1042,6 +1092,7 @@ function endeVorDerPlanung(root, ordner, { vorab, beginn }) {
   if (team === undefined) return endeOhneAgent(exit);
   const planung = neuePlanung(root, ordner, { fortsetzen: false, deckel, issue, umfang: gemessen });
   planung.team = team;
+  planung.kostendeckel = team.wache.kostendeckel;
   planung.beginn = beginn;
   return berichte(planung, planung.ausgangAmDeckel({ exit, grund: fehler, offen: [] }));
 }

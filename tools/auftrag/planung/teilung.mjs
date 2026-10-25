@@ -1,18 +1,18 @@
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { istTestdatei, reihenfolge } from "../format.mjs";
 import { ueberschneiden } from "../sperren.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { ALTFUNKTIONEN, altfunktionenAusPitch } from "./altfunktionen-vorab.mjs";
 import { teilungBefunde, zerlegungBefunde } from "./antworten.mjs";
-import { gemesseneKosten } from "./deckel.mjs";
+import { Kostendeckel, gemesseneKosten } from "./deckel.mjs";
 import { schreibeJsonAtomar } from "./erkundung.mjs";
 import { RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
-import { Abbruch, Team } from "./team.mjs";
+import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
 import { GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, dokumenteIm } from "./umfang.mjs";
 
 const TEILE = "teile.json";
@@ -293,6 +293,7 @@ export async function laufeTeilung(root, ordner, angaben) {
     return await new Teilung(root, ordner, angaben).laufe();
   } catch (fehler) {
     if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, fehler: fehler.message };
+    if (fehler instanceof Deckelabbruch) return { exit: EXIT_DECKEL, fehler: fehler.message };
     throw fehler;
   }
 }
@@ -303,5 +304,8 @@ export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
   const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: codeDateien(umfang.codeDateien, loeschDateien(umfang)).length });
   if (ueber.length === 0) return null;
   const team = new Team(root, ordner);
-  return { ...(await laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung, team })), team };
+  const kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
+  team.wache = kostendeckel.wache({ stelle: () => undefined, rolle: ({ rolle }) => rolle });
+  const zaehlung = { gemessen: () => gemesseneKosten(root, team.beteiligte), schritt: "Teilung vor der Planung" };
+  return { ...(await kostendeckel.gezaehlt(zaehlung, () => laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung, team }))), team };
 }
