@@ -67,7 +67,7 @@ function vorbelegteSaetze(zeilen) {
 
 test("Nie-Vorbelegung: ein mehrzeiliger Listenpunkt wird nicht als Bruchstück vorbelegt", () => {
   const pitch = ["## Fallen", "- Der Status bleibt bei einem SMS-Fehler offen,", "  bis der Kunde neu bestätigt.", "- Die Liste bleibt bis zum Umzug bestehen.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: ein zweiter Kanal,", "der erst später kommt."];
-  assert.deepEqual(vorbelegteSaetze(pitch), ["Die Liste bleibt bis zum Umzug bestehen."]);
+  assert.deepEqual(vorbelegteSaetze(pitch), ["Der Status bleibt bei einem SMS-Fehler offen, bis der Kunde neu bestätigt.", "Die Liste bleibt bis zum Umzug bestehen.", "Nicht Teil dieser Änderung: ein zweiter Kanal, der erst später kommt."]);
 });
 
 test("Nie-Vorbelegung: die nächste Zeile mit Listenzeichen beginnt einen neuen Punkt", () => {
