@@ -7,7 +7,7 @@ import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
 import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT } from "./nachricht.mjs";
 import { ANFORDERUNGEN, ANGRIFFSWEG, ANGRIFFSWEGE, BLEIBT_UNVERAENDERT, PITCH, PITCH_SZENARIO, SICHERHEIT, sollNummern } from "./nummern.mjs";
-import { teilungHalt } from "./teilung.mjs";
+import { belegHalt, teilungHalt } from "./teilung.mjs";
 
 const DESIGN = "design.md";
 const DOKUMENTE = [PITCH, SICHERHEIT, DESIGN];
@@ -277,7 +277,9 @@ function umbauDesEintrags(teilung, eintrag) {
 
 function fremdeDateien(teilung, eintrag, elternOrdner) {
   const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
-  return andere.flatMap((anderer) => liste(anderer?.dateien).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+  const belege = new Set(liste(teilung.umfang?.belegDateien));
+  const geaendert = (datei) => !belege.has(datei);
+  return andere.flatMap((anderer) => liste(anderer?.dateien).filter(geaendert).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
 }
 
 function genanntePfade(text) {
@@ -361,6 +363,11 @@ export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
   if (teil !== undefined) return { deckel: teil.deckel, teil: true, fremd: teil.fremd, umbau: teil.umbau, umfang: await messe(teil.dateien) };
   const umfang = await messe();
   if (fortsetzen) return { umfang };
+  const belege = belegHalt(umfang);
+  if (belege !== null) {
+    rmdirSync(join(ordner, PLANUNG));
+    return { ...belege, umfang };
+  }
   const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });
   if (geteilt === null) return { umfang };
   const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
