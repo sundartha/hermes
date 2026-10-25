@@ -114,6 +114,53 @@ test("plane: eine Nachfrage mit neuer Stelle beendet die Nachfragen nicht", { ti
   assert.equal(aufrufe(lauf, "planer", "## Zuschnitt")[1].eingabe.includes("enden; schneide mit einer Annahme"), false);
 });
 
+const ZU_S1_UND_S4 = alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo wird die Nummer gespeichert?" }, { nummern: ["S4"], frage: "Wo liegt der Hinweis?" }] });
+
+function gebuendelt(context, antwort, weitere = {}) {
+  return plane(context, { "planer|## Zuschnitt": [ZU_S1_UND_S4, alsJson({ schnitt: schnittliste() })], "erkunder|## Nachfrage|S1": [antwort], ...weitere });
+}
+
+function antwortAuf(eingabe, nachfrageNummer) {
+  const [, danach = ""] = eingabe.split(`### Antwort auf deine Nachfrage ${nachfrageNummer}\n`);
+  return danach.split("\n### ")[0];
+}
+
+test("plane: alle offenen Nachfragen einer Antwort gehen an einen einzigen Erkunder-Lauf", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = gebuendelt(context, bericht(["S1", "S4"]));
+  const laeufe = aufrufe(lauf, "erkunder", "## Nachfrage");
+  assert.equal(laeufe.length, 1);
+  exit(lauf, EXIT_GRUEN);
+  for (const teil of ["#### S1 (", "#### S4 (", "Wo wird die Nummer gespeichert?", "Wo liegt der Hinweis?"]) assert.ok(laeufe[0].eingabe.includes(teil), `${teil} fehlt:\n${laeufe[0].eingabe}`);
+});
+
+test("plane: die Antwort des gebündelten Nachfrage-Erkunders wird je Nachfrage auf ihre Nummern gebucht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = gebuendelt(context, bericht(["S1", "S4"]));
+  exit(lauf, EXIT_GRUEN);
+  const { eingabe } = aufrufe(lauf, "planer", "## Zuschnitt")[1];
+  const [erste, zweite] = [antwortAuf(eingabe, 1), antwortAuf(eingabe, 2)];
+  assert.ok(erste.includes("Nummern: S1\n") && erste.includes("#### S1\n") && !erste.includes("#### S4\n"), eingabe);
+  assert.ok(zweite.includes("Nummern: S4\n") && zweite.includes("#### S4\n") && !zweite.includes("#### S1\n"), eingabe);
+});
+
+test("plane: im gebündelten Nachfrage-Lauf endet eine Nummer ohne neue Stelle, eine Nummer mit neuer Stelle nicht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const neu = { S4: { weg: [stelle("eingang", HINWEIS, { funktion: "nimmAnruf", von: 1, bis: 4 }), stelle("wirkung", ROUTE, { funktion: "speichereStatus", von: 10, bis: 14 })] } };
+  const lauf = gebuendelt(context, bericht(["S1", "S4"], neu));
+  exit(lauf, EXIT_GRUEN);
+  const { eingabe } = aufrufe(lauf, "planer", "## Zuschnitt")[1];
+  assert.ok(eingabe.includes("Nachfragen zu S1 enden; schneide mit einer Annahme."), eingabe);
+});
+
+test("plane: ein Befund zu einer Nummer des gebündelten Nachfrage-Laufs verhindert nicht die Buchung der anderen Nachfrage", { timeout: LAUF_FRIST_MS }, (context) => {
+  const neu = [{ datei: ROUTE, funktion: "speichereStatus", von: 10, bis: 14, neueZeilen: 3 }, { datei: ROUTE, funktion: "bestaetige", von: 5, bis: 7, neueZeilen: 2 }];
+  const mitBefund = bericht(["S1", "S4"], { S1: { aenderungen: neu }, S4: { aenderungen: [{ datei: ROUTE, funktion: "gibtEsNicht", von: 10, bis: 14, neueZeilen: 3 }] } });
+  const lauf = gebuendelt(context, mitBefund, { "erkunder|## Befunde": [mitBefund] });
+  exit(lauf, EXIT_GRUEN);
+  const { eingabe } = aufrufe(lauf, "planer", "## Zuschnitt")[1];
+  assert.ok(eingabe.includes("Nachfragen zu S4 enden; schneide mit einer Annahme."), eingabe);
+  assert.equal(antwortAuf(eingabe, 1).includes("gibtEsNicht"), false, eingabe);
+  assert.ok(antwortAuf(eingabe, 2).includes("gibtEsNicht"), eingabe);
+});
+
 test("plane: zwei Erkunder laufen gleichzeitig", { timeout: LAUF_FRIST_MS }, (context) => {
   const langsam = (nummern) => [{ text: bericht(nummern), warte: WARTEN_MS }];
   const lauf = plane(context, { "erkunder|## Erkundung|S1": langsam(GRUPPEN[0].nummern), "erkunder|## Erkundung|S4": langsam(GRUPPEN[1].nummern) });
