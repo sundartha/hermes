@@ -224,7 +224,7 @@ function issueText(issue, root) {
   return lauf.status === 0 ? lauf.stdout : null;
 }
 
-function absichtImIssueBefunde(phase, root) {
+export function absichtImIssueBefunde(phase, root) {
   return issueAbsichtBefunde(phase, () => issueText(phase.issue, root));
 }
 

@@ -21,7 +21,7 @@ import { kostenDesAuftrags } from "./kosten.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
-import { issueBefunde } from "./phase.mjs";
+import { absichtImIssueBefunde, issueBefunde } from "./phase.mjs";
 import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen, phasenbasis } from "./phasenende.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
@@ -543,7 +543,8 @@ function startBefunde(phasendatei, root) {
   const ohneIssue = befunde.length === 0 && !istVertraulich(phase) ? issueBefunde(phase) : [];
   const form = ohneIssue.length > 0 ? [...ohneIssue, ISSUE_ZWECK] : befunde;
   const zweck = form.length > 0 ? zweckBlock(MELDUNG.PHASENDATEI) : [];
-  const annahmen = form.length > 0 ? [] : [...annahmenBefunde(phase, root), ...teilVorgaengerBefunde(phase, root)];
+  const absicht = form.length > 0 || istVertraulich(phase) ? [] : absichtImIssueBefunde(phase, root);
+  const annahmen = form.length > 0 ? [] : [...absicht, ...annahmenBefunde(phase, root), ...teilVorgaengerBefunde(phase, root)];
   const sauber = istSauber(root) ? [] : ["Der Arbeitsbaum hat Änderungen; lauf startet nur auf einem sauberen Stand."];
   const werkzeug = form.length > 0 ? [] : werkzeugBefunde(root);
   return { phase, befunde: [...form, ...annahmen, ...sauber, ...zweck, ...werkzeug] };
