@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { ENTWURF_HINWEIS, ENTWURF_ROUTE, FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, auftrag, bericht, exit, plane as planeLauf, schnittliste } from "./planung-probe.js";
-import { REPO_ROOT, mitUpstreamMaster, runIn } from "./probe-repo.js";
+import { ENTWURF_HINWEIS, ENTWURF_ROUTE, FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LOESUNG, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, angaben, aufrufe, auftrag, bericht, exit, plane as planeLauf, planeIn, schnittliste } from "./planung-probe.js";
+import { REPO_ROOT, commitPaths, mitUpstreamMaster, runIn } from "./probe-repo.js";
 
 export const AUFTRAG = join(REPO_ROOT, "tools/auftrag.mjs");
 export const EXIT_GRUEN = 0;
@@ -44,6 +44,33 @@ export function pruefeTeilungOhneErkundung(lauf) {
 
 export function plane(context, ueberschrieben = {}, argumente = [ORDNER]) {
   return planeLauf(context, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
+}
+
+export const ABBRUCH_IM_SCHNITT = { "planer|## Zuschnitt": [`Zerlegung passt nicht: Dann widerspricht der Lösung (Fundstellen: pitch.md, ## Problem; design.md, ${LOESUNG})`] };
+
+export const SCHNITT_SOFORT = { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })] };
+
+const WERKZEUG_DATEI = "tools/nachtrag.mjs";
+
+export function abgebrochen(context, zusatz = {}) {
+  const lauf = plane(context, { ...ABBRUCH_IM_SCHNITT, ...zusatz });
+  exit(lauf, EXIT_PASST_NICHT);
+  return lauf;
+}
+
+export const FORTSETZEN = [ORDNER, "--fortsetzen"];
+
+export function fortsetzung(context, { wurzel }, { argumente = FORTSETZEN, ueberschrieben = SCHNITT_SOFORT } = {}) {
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
+}
+
+export function planungsDatei({ wurzel }, name) {
+  return join(wurzel, ORDNER, "planung", name);
+}
+
+export function aendereWerkzeug({ wurzel }, { committet }) {
+  writeFileSync(join(wurzel, WERKZEUG_DATEI), "export const nachtrag = 1;\n");
+  if (committet) commitPaths(wurzel, [WERKZEUG_DATEI], "Werkzeug");
 }
 
 export function phaseDatei({ wurzel }) {
