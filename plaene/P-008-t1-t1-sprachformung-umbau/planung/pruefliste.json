@@ -1,0 +1,28 @@
+[
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/sprechausgabe.test.js:4"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/sprechausgabe.test.js:115"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:1"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei u1 (bereich: ganze Datei src/speech-shape.js, schreibt alle Suchmuster neu) fehlen diese Sätze, die u1 brechen kann: (1) pitch.md, ## Fallen: „Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).“ Das ist eine Grenze für Rechenzeit; die Annahme „Er ändert kein Verhalten“ deckt sie nicht ab, und kein bestehender Test misst sie. (2) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ Diese Zeilen stehen in derselben Datei wie der Umbau. (3) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: die Gedankenstriche „–“ (U+2013) und „—“ (U+2014), weil sie heute unverändert durchgehen und ihre Aussprache eine eigene Entscheidung ist.“ Der Umbau berührt die Strich-Regel in src/speech-shape.js:6, und kein Test prüft diese Zeichen. Der Planer soll die drei Sätze bei u1 aufnehmen, etwa unter wasDarfNiePassieren.",
+    "fundstelle": "pitch.md, ## Fallen"
+  }
+]
