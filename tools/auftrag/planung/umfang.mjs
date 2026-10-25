@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { istTestdatei } from "../format.mjs";
-import { genannteFunktionen, genannteStellen, pruefbareDateien } from "./altfunktionen-vorab.mjs";
+import { istTestdatei, pfadIstSauber } from "../format.mjs";
+import { abschnitte } from "./abschnitte.mjs";
+import { altfunktionenAusPitch, genannteFunktionen, genannteStellen, pruefbareDateien } from "./altfunktionen-vorab.mjs";
 import { dateiKarte } from "./funktionsliste.mjs";
 import { loeschEinstiege, loeschmenge } from "./loeschmenge.mjs";
 import { PITCH, SICHERHEIT, nummernImOrdner } from "./nummern.mjs";
@@ -14,9 +15,15 @@ const BYTE_JE_KB = 1024;
 const ZEHNTEL = 10;
 const JSON_EINRUECKUNG = 2;
 const QUELLE = "umfang";
+const ZEILENUMBRUCH = /\r?\n/u;
+const LISTENZEILE = /^-\s+`([^`\s]+)`$/u;
+export const ORDNER_ENDE = "/";
+const UMBAU = "Umbau";
+export const GEAENDERTE_DATEIEN = "## Geänderte Dateien";
 export const GRENZE_SZENARIEN = 8;
 export const GRENZE_CODE_DATEIEN = 10;
 export const GRENZE_GRUPPEN = 2;
+export const GRENZE_BELEG_DATEIEN = 25;
 
 export function dokumenteIm(ordner) {
   return Object.fromEntries(DOKUMENTE.filter((name) => existsSync(join(ordner, name))).map((name) => [name, readFileSync(join(ordner, name), "utf8")]));
@@ -44,6 +51,28 @@ async function loeschmengeIn(root, einstiege, dateien) {
   return { ...menge, dateien: menge.dateien.filter((datei) => dateien.includes(datei)), exporte: menge.exporte.filter(stelleIn(dateien)), reste: menge.reste.filter(stelleIn(dateien)) };
 }
 
+export function istOrdner(root, datei) {
+  return datei.endsWith(ORDNER_ENDE) || (existsSync(join(root, datei)) && statSync(join(root, datei)).isDirectory());
+}
+
+function istListenDatei(root, datei) {
+  return pfadIstSauber(datei) && !istOrdner(root, datei);
+}
+
+function geaenderteImPitch(root, pitch) {
+  const ausschnitt = abschnitte(pitch, [GEAENDERTE_DATEIEN]).abschnitte.get(GEAENDERTE_DATEIEN);
+  if (ausschnitt === undefined) return undefined;
+  const [, ...zeilen] = ausschnitt.split(ZEILENUMBRUCH);
+  const dateien = zeilen.filter((zeile) => zeile.trim() !== "").map((zeile) => LISTENZEILE.exec(zeile.trim())?.[1]);
+  return dateien.length > 0 && dateien.every((datei) => datei !== undefined && istListenDatei(root, datei)) ? dateien : undefined;
+}
+
+function nachAenderung(pitch, { liste, codeDateien, dateien, loeschen }) {
+  const umbau = altfunktionenAusPitch(pitch).eintraege.filter(({ art }) => art === UMBAU).map(({ datei }) => datei);
+  const geaenderteDateien = [...new Set([...liste, ...umbau])].filter((datei) => dateien === undefined || dateien.includes(datei)).toSorted();
+  return { geaenderteDateien, belegDateien: codeDateien.filter((datei) => !geaenderteDateien.includes(datei) && !loeschen.includes(datei)) };
+}
+
 export async function umfang(root, ordner, { dateien } = {}) {
   const dokumente = dokumenteIm(ordner);
   const genannt = genannteStellen(dokumente);
@@ -51,7 +80,10 @@ export async function umfang(root, ordner, { dateien } = {}) {
   const belegt = pruefbareDateien(root, dateien ?? stellen.map(({ datei }) => datei));
   const codeDateien = belegt.filter((datei) => !istTestdatei(datei));
   const funktionen = genannteFunktionen(root, stellen);
-  const einstiege = loeschEinstiege(dokumente[PITCH] ?? "");
+  const pitch = dokumente[PITCH] ?? "";
+  const einstiege = loeschEinstiege(pitch);
+  const geloescht = einstiege && (await loeschmengeIn(root, einstiege, dateien));
+  const liste = geaenderteImPitch(root, pitch);
   return {
     nummern: nummernImOrdner(ordner).soll.size,
     codeDateien,
@@ -60,7 +92,8 @@ export async function umfang(root, ordner, { dateien } = {}) {
     altfunktionen: funktionen.filter(istAltfunktion).length,
     testsAnDateien: await testsAn(root, codeDateien),
     dokumentKB: kilobyte(dokumente),
-    ...(einstiege && { loeschmenge: await loeschmengeIn(root, einstiege, dateien) }),
+    ...(einstiege && { loeschmenge: geloescht }),
+    ...(liste && nachAenderung(pitch, { liste, codeDateien, dateien, loeschen: geloescht?.dateien ?? [] })),
   };
 }
 

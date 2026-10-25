@@ -1,4 +1,3 @@
-import { existsSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { istTestdatei, reihenfolge } from "../format.mjs";
@@ -13,14 +12,13 @@ import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
-import { GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, dokumenteIm } from "./umfang.mjs";
+import { GEAENDERTE_DATEIEN, GRENZE_BELEG_DATEIEN, GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, ORDNER_ENDE, dokumenteIm, istOrdner } from "./umfang.mjs";
 
 const TEILE = "teile.json";
 const ANTWORT = "teilung.json";
 const PLANUNG = "planung";
 const SZENARIO = /^[SB]/u;
 const BEDROHUNG = /^T/u;
-const ORDNER_ENDE = "/";
 const OHNE_VORGAENGER = "–";
 const UMBAU = "Umbau";
 const FUNKTION_TRENNER = ":";
@@ -64,6 +62,33 @@ function codeDateien(dateien, loeschen) {
   return dateien.filter((datei) => !istTestdatei(datei) && !loeschen.has(datei));
 }
 
+function geaendertIm(umfang) {
+  if (umfang.geaenderteDateien === undefined) return () => true;
+  const geaendert = new Set(umfang.geaenderteDateien);
+  return (datei) => geaendert.has(datei);
+}
+
+function geaenderteCodeDateien(umfang) {
+  return codeDateien(umfang.geaenderteDateien ?? umfang.codeDateien, loeschDateien(umfang));
+}
+
+function loeschStellen(umfang) {
+  const { dateien = [], exporte = [], reste = [] } = umfang.loeschmenge ?? {};
+  return new Set([...dateien, ...[...exporte, ...reste].map((stelle) => stelle.slice(0, stelle.lastIndexOf(FUNKTION_TRENNER)))]);
+}
+
+function zaehlungIm(umfang) {
+  return { loeschen: loeschDateien(umfang), geaendert: geaendertIm(umfang), geloescht: loeschStellen(umfang) };
+}
+
+function geaenderteCodeDateienImTeil(dateien, { loeschen, geaendert }) {
+  return codeDateien(dateien, loeschen).filter(geaendert);
+}
+
+function ohneArbeit({ nurUmbau, umbau = [], dateien }, { geaendert, geloescht }) {
+  return nurUmbau && umbau.length === 0 && !dateien.some((datei) => geloescht.has(datei) || geaendert(datei));
+}
+
 function zaehler(genannt) {
   return (wert) => genannt.filter((eintrag) => eintrag === wert).length;
 }
@@ -79,20 +104,17 @@ function zuordnungBefunde(teile, soll) {
   });
 }
 
-function istOrdner(root, datei) {
-  return datei.endsWith(ORDNER_ENDE) || (existsSync(join(root, datei)) && statSync(join(root, datei)).isDirectory());
-}
-
-function teilBefunde(teil, { root, loeschen, gliederung }) {
+function teilBefunde(teil, { root, zaehlung, gliederung }) {
   const { kuerzel, nummern, tWege, dateien, nurUmbau } = teil;
   const befunde = dateien.filter((datei) => istOrdner(root, datei)).map((datei) => regel(`${kuerzel} nennt unter dateien den Ordner ${datei}; nenn die Dateien einzeln`));
-  const gemessen = { szenarien: nummern.length, codeDateien: codeDateien(dateien, loeschen).length, gruppen: gruppenDes(teil, gliederung) };
+  const gemessen = { szenarien: nummern.length, codeDateien: geaenderteCodeDateienImTeil(dateien, zaehlung).length, gruppen: gruppenDes(teil, gliederung) };
   if (gemessen.szenarien > GRENZE_SZENARIEN) befunde.push(regel(`${kuerzel} hat ${gemessen.szenarien} Szenarien S/B unter nummern, die Grenze ist ${GRENZE_SZENARIEN}`));
   if (gemessen.codeDateien > GRENZE_CODE_DATEIEN) befunde.push(regel(`${kuerzel} hat ${gemessen.codeDateien} Code-Dateien, die Grenze ist ${GRENZE_CODE_DATEIEN}`));
   if (gemessen.gruppen > GRENZE_GRUPPEN) befunde.push(regel(`${kuerzel} hat Nummern aus ${gemessen.gruppen} Gruppen der Gliederung, die Grenze ist ${GRENZE_GRUPPEN}`));
   const mitNummern = nummern.length + tWege.length > 0;
   if (nurUmbau && mitNummern) befunde.push(regel(`${kuerzel} ist nurUmbau und nennt Nummern`));
   if (!nurUmbau && !mitNummern) befunde.push(regel(`${kuerzel} hat keine Nummer und ist nicht nurUmbau`));
+  if (!mitNummern && ohneArbeit(teil, zaehlung)) befunde.push(regel(`${kuerzel} hat keine Nummer, keinen Umbau, keine Löschung und keine im Pitch als geändert genannte Datei`));
   return befunde;
 }
 
@@ -163,21 +185,24 @@ function umbauBefunde(teile, { altfunktionen, quelle }) {
   return [...falsch, ...fremde, ...ohneDatei];
 }
 
-function abdeckungBefunde(teile, belegt) {
+function abdeckungBefunde(teile, umfang) {
   const genannt = teile.flatMap(({ dateien }) => dateien);
-  return belegt.filter((datei) => !genannt.some((eintrag) => beruehrt(eintrag, datei))).map((datei) => regel(`${datei} ist im Pitch belegt und steht in keinem Teil unter dateien`));
+  const fehlt = (datei) => !genannt.some((eintrag) => beruehrt(eintrag, datei));
+  const belegt = umfang.codeDateien.filter(fehlt).map((datei) => regel(`${datei} ist im Pitch belegt und steht in keinem Teil unter dateien`));
+  const nurGenannt = geaenderteCodeDateien(umfang).filter((datei) => !umfang.codeDateien.includes(datei) && fehlt(datei));
+  return [...belegt, ...nurGenannt.map((datei) => regel(`${datei} steht im Pitch unter „${GEAENDERTE_DATEIEN}“ und in keinem Teil unter dateien`))];
 }
 
 function schnittBefunde(teile, { soll, umfang, umbau, root, gliederung }) {
   const nach = new Map(teile.map(({ kuerzel, abhaengigVon }) => [kuerzel, abhaengigVon]));
   const vorgaenger = [...vorgaengerBefunde(teile, nach), ...kreisBefunde(teile)];
-  const loeschen = loeschDateien(umfang);
+  const zaehlung = zaehlungIm(umfang);
   return [
     ...zuordnungBefunde(teile, soll),
-    ...teile.flatMap((teil) => teilBefunde(teil, { root, loeschen, gliederung })),
-    ...loeschBefunde(teile, loeschen),
+    ...teile.flatMap((teil) => teilBefunde(teil, { root, zaehlung, gliederung })),
+    ...loeschBefunde(teile, zaehlung.loeschen),
     ...umbauBefunde(teile, umbau),
-    ...abdeckungBefunde(teile, umfang.codeDateien),
+    ...abdeckungBefunde(teile, umfang),
     ...vorgaenger,
     ...(vorgaenger.length === 0 ? ueberschneidungsBefunde(teile, nach) : []),
   ];
@@ -188,9 +213,9 @@ function mergeReihenfolge(teile) {
   return nachReihenfolge(teile).ordnung.map(({ id }) => nachKuerzel.get(id));
 }
 
-function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, stelle, loeschen) {
+function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, stelle, zaehlung) {
   const inhalt = [...nummern, ...tWege].join(", ") || "nur Umbau";
-  return `${stelle + 1}. ${kuerzel} ${name} (nach: ${abhaengigVon.join(", ") || OHNE_VORGAENGER}): ${inhalt}; ${codeDateien(dateien, loeschen).length} Code-Datei(en)`;
+  return `${stelle + 1}. ${kuerzel} ${name} (nach: ${abhaengigVon.join(", ") || OHNE_VORGAENGER}): ${inhalt}; ${geaenderteCodeDateienImTeil(dateien, zaehlung).length} Code-Datei(en)`;
 }
 
 class Teilung {
@@ -222,7 +247,9 @@ class Teilung {
 
   nachricht() {
     const gruppen = this.gliederung === null ? "" : ` Die Nummern eines Teils unter \`nummern\` und \`tWege\` stammen aus höchstens ${GRENZE_GRUPPEN} Gruppen der Gliederung.`;
-    const grenze = `Je Teil höchstens ${GRENZE_SZENARIEN} Szenarien S/B unter \`nummern\` und höchstens ${GRENZE_CODE_DATEIEN} Code-Dateien unter \`dateien\`; Bedrohungen T, Testdateien und Dateien der Löschmenge zählen nicht; jede Datei der Löschmenge steht in genau einem Teil. Das Paket liegt darüber: ${this.ueber.join("; ")}.${gruppen}`;
+    const geaendert = this.umfang.geaenderteDateien === undefined ? "" : ` Gegen die Grenze zählen nur Code-Dateien unter \`geaenderteDateien\` im Umfang; die Dateien unter \`belegDateien\` zählen nicht, stehen aber trotzdem in einem Teil unter \`dateien\`.`;
+    const arbeit = " Ein Teil ohne Nummer braucht einen Eintrag unter `umbau`, eine Datei der Löschmenge oder eine geänderte Datei.";
+    const grenze = `Je Teil höchstens ${GRENZE_SZENARIEN} Szenarien S/B unter \`nummern\` und höchstens ${GRENZE_CODE_DATEIEN} Code-Dateien unter \`dateien\`; Bedrohungen T, Testdateien und Dateien der Löschmenge zählen nicht; jede Datei der Löschmenge steht in genau einem Teil.${geaendert}${arbeit} Das Paket liegt darüber: ${this.ueber.join("; ")}.${gruppen}`;
     return nachricht("Teilung", [
       ...DOKUMENTE.map((name) => abschnitt(name, this.dokumente[name] ?? `${name} gibt es nicht.`)),
       abschnitt("Nummern", nummernText(this.soll, this.nummern(SZENARIO)) || "keine"),
@@ -269,7 +296,7 @@ class Teilung {
     const datei = join(this.ordner, PLANUNG, TEILE);
     const grenze = { szenarien: GRENZE_SZENARIEN, codeDateien: GRENZE_CODE_DATEIEN, gruppen: GRENZE_GRUPPEN };
     this.lege(TEILE, { grenze, ueber: this.ueber, umfang: this.umfang, ruecksendungen, token: gemesseneKosten(this.root, this.team.beteiligte), teile: folge });
-    console.log(["Teile in Merge-Reihenfolge:", ...folge.map((teil, stelle) => teilZeile(teil, stelle, loeschDateien(this.umfang)))].join("\n"));
+    console.log(["Teile in Merge-Reihenfolge:", ...folge.map((teil, stelle) => teilZeile(teil, stelle, zaehlungIm(this.umfang)))].join("\n"));
     return { exit: EXIT_GETEILT, fehler: `plane hält vor dem ersten Erkunder: der Umfang liegt über der Grenze (${this.ueber.join("; ")}); ${folge.length} Teile in ${datei}` };
   }
 
@@ -298,10 +325,16 @@ export async function laufeTeilung(root, ordner, angaben) {
   }
 }
 
+export function belegHalt(umfang) {
+  const belege = umfang.belegDateien?.length ?? 0;
+  if (belege <= GRENZE_BELEG_DATEIEN) return null;
+  return { exit: EXIT_BEFUNDE, fehler: `plane hält vor dem ersten Agenten an und teilt nicht: ${belege} Beleg-Dateien, Grenze ${GRENZE_BELEG_DATEIEN}. Beleg-Dateien sind belegte Code-Dateien, die der Pitch nicht unter „${GEAENDERTE_DATEIEN}“ nennt; eine Teilung würde nur Belege verteilen, das braucht eine Entscheidung` };
+}
+
 export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
   const { soll, unklar } = nummernImOrdner(ordner);
   if (unklar.length > 0) return null;
-  const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: codeDateien(umfang.codeDateien, loeschDateien(umfang)).length });
+  const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: geaenderteCodeDateien(umfang).length });
   if (ueber.length === 0) return null;
   const team = new Team(root, ordner);
   const kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
