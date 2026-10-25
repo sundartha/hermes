@@ -7,7 +7,7 @@ import { vorgabenAusPitch } from "../annahmen.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { MELDUNG, zweckBlock } from "../zweck.mjs";
 import { werkzeugBefunde } from "../werkzeuge.mjs";
-import { ABSICHT, bereichSchluessel } from "../format.mjs";
+import { ABSICHT, bereichSchluessel, istTestdatei } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { CODE_AUSZUG, codeAuszug } from "./auszug.mjs";
 import { altfunktionenVorab } from "./altfunktionen-vorab.mjs";
@@ -27,7 +27,7 @@ import {
   zerlegungBefunde,
 } from "./antworten.mjs";
 import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
-import { berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
+import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
@@ -43,7 +43,7 @@ import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
-import { dokumenteIm, umfang } from "./umfang.mjs";
+import { GEAENDERTE_DATEIEN, dokumenteIm, umfang } from "./umfang.mjs";
 import { verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
@@ -708,6 +708,7 @@ export class Planung {
     const welle = { antworten: nachfrageAntworten(offen, ergebnis), enden };
     this.beantworteteWellen.push(welle);
     this.legeBerichte();
+    this.pruefeGeaenderteDateien();
     this.legeFingerabdruck();
     return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
   }
@@ -944,6 +945,18 @@ export class Planung {
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "der Schnitt der Teilung ist unvollständig: das Design Doc nennt für eine Gruppe Dateien eines anderen Teils; plane startet keinen Erkunder und teilt nicht", befunde);
   }
 
+  pruefeGeaenderteDateien() {
+    const { geaenderteDateien, loeschmenge } = this.umfang;
+    if (geaenderteDateien === undefined) return;
+    const erklaert = new Set([...geaenderteDateien, ...(loeschmenge?.dateien ?? [])]);
+    const fremd = Object.groupBy(aenderungsStellen(this.berichte).filter(({ datei }) => !istTestdatei(datei) && !erklaert.has(datei)), ({ datei }) => datei);
+    const befunde = Object.entries(fremd).map(([datei, stellen]) => {
+      const nummern = [...new Set(stellen.map(({ nummer }) => nummer))].join(", ");
+      return `${datei} ändert die Erkundung (${nummern}), die Datei steht aber nicht unter „${GEAENDERTE_DATEIEN}“ im Pitch`;
+    });
+    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, `die Erkundung ändert Dateien, die der Pitch nicht unter „${GEAENDERTE_DATEIEN}“ nennt; plane schneidet nicht. Nimm sie in den Abschnitt auf und plane neu`, befunde);
+  }
+
   async nachsteuern() {
     const teilDeckel = this.teilDeckelUeber();
     const ueber = [...gruppenZahlUeber(this.gliederung.gruppen.length), ...(teilDeckel === null ? [] : [teilDeckel])];
@@ -973,6 +986,7 @@ export class Planung {
   }
 
   async planeAbSchnitt() {
+    this.pruefeGeaenderteDateien();
     await this.schneide();
     await this.pruefe();
     const { korrigiert, zurueckgewiesen } = this.befunde;
