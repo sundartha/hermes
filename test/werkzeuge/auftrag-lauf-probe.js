@@ -89,6 +89,21 @@ export const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
+export function ghSkript(ordner, skript) {
+  const programm = join(ordner, "gh.mjs");
+  writeFileSync(programm, `#!/usr/bin/env node\n${skript}\n`);
+  chmodSync(programm, AUSFUEHRBAR);
+  return { HERMES_GH: programm };
+}
+
+export function issueMitAbsicht(absicht) {
+  return `console.log(${JSON.stringify(`## Absicht\n\n${absicht}\n\n## Ziel\n`)});`;
+}
+
+function ghMitAbsichtDerPhase(werkzeug, phase) {
+  return Object.hasOwn(phase, "absicht") ? ghSkript(werkzeug, issueMitAbsicht(phase.absicht)) : {};
+}
+
 export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {}, phase: zusatz = {}, umgebung = {}, mitUpstream = true, befehl = "lauf" }) {
   const repo = probeRepository(context, { ...BASIS, ...dateien });
   vorbereiten(repo);
@@ -111,6 +126,7 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
       HOME: werkzeug,
       HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
       HERMES_GH: GH_OHNE_WIRKUNG,
+      ...ghMitAbsichtDerPhase(werkzeug, phase),
       ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
       ...mitErsatzWerkzeugen(werkzeug),
       ...umgebung,
