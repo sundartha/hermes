@@ -28,7 +28,7 @@ import {
 } from "./antworten.mjs";
 import { Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
 import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
-import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
+import { FINGERABDRUCK, GEPRUEFT, NACHFRAGE_AUSSTEHEND, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesAusstehendeNachfrage, liesFortsetzung, liesGeprueft, nachfrageSumme } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { kettenBefunde, mitKettenBefunden, modulGraph } from "./kette.mjs";
@@ -67,6 +67,8 @@ const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; sch
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 const KONFLIKTE = "Bereichskonflikte";
 const NACHFRAGEN_ENDE = "Ende der Nachfragen";
+const BEZAHLTER_BERICHT = "Diesen Bericht hat ein Erkunder auf die Nachfrage unten geschickt; vor der Rücksendung hielt plane am Kostendeckel an. Die Befunde oben gehören zu diesem Bericht. Antworte mit dem korrigierten Bericht in der Form des Gerüsts unten.";
+const NACHFRAGE_NEU = "die abgelegte Nachfrage fehlt oder passt nicht zum Fingerabdruck; die Nachfrage-Welle wird neu gemacht";
 const WELLE_VERBRAUCHT = "Die eine Nachfrage-Welle dieses Planungslaufs ist verbraucht; es wird nicht mehr erkundet. Schneide mit einer Annahme und nenn sie unter `annahmen`, oder antworte „Zerlegung passt nicht: …“, wenn ohne die fehlende Tatsache keine Zerlegung geht. Fragst du noch einmal nach, endet die Planung mit Befunden.";
 
 export class Ende extends Error {
@@ -203,6 +205,7 @@ export class Planung {
     this.wegOffen = [];
     this.wegAusstehend = [];
     this.erkundungAusstehend = [];
+    this.nachfrageAusstehend = null;
     this.bezahlteStaende = new Map();
     this.ruecksendeBefunde = [];
     this.abgewiesenBei = null;
@@ -458,13 +461,21 @@ export class Planung {
     return { bericht, ...erkundungBefunde(bericht, { gruppe: nummern, soll: this.soll, root: this.root }) };
   }
 
-  async berichtVon(wer, text, nummern) {
+  berichtVon(wer, text, nummern) {
+    return this.berichtMitRuecksendung(wer, { text, nummern }, (erste) => this.merkeBezahlt(nummern, { ergebnis: erste }));
+  }
+
+  async berichtMitRuecksendung(wer, { text, nummern }, merkeBezahlt) {
     const erste = await mitKettenBefunden(this.root, this.pruefeBericht(await this.team.frage(wer, text), nummern));
     if (erste.befunde.length === 0) return erste;
-    this.merkeBezahlt(nummern, { ergebnis: erste });
+    merkeBezahlt(erste);
     this.merkeRuecksendung(wer.rolle, nummern, erste.befunde);
     this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
-    const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, erste.befunde));
+    return this.berichtNachRuecksendung(wer, { befunde: erste.befunde, nummern });
+  }
+
+  async berichtNachRuecksendung(wer, { befunde, nummern, anhang = [] }) {
+    const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, befunde, anhang));
     return this.pruefeBericht(zweite, nummern);
   }
 
@@ -560,9 +571,15 @@ export class Planung {
     return { rolle: wer.rolle, kosten: ERKUNDUNG, lauf: () => erkunde(wer) };
   }
 
-  async erkundeNachfragen(wer, text, offen) {
+  async erkundeNachfragen(wer, text, { offen, klaerung }) {
+    const merkeBezahlt = ({ bericht, befunde }) => {
+      this.nachfrageAusstehend = { offen, klaerung, bericht, befunde };
+    };
+    return this.bucheNachfrageBericht(wer, await this.berichtMitRuecksendung(wer, { text, nummern: nummernVon(offen) }, merkeBezahlt), offen);
+  }
+
+  async bucheNachfrageBericht(wer, ergebnis, offen) {
     const nummern = nummernVon(offen);
-    const ergebnis = await this.berichtVon(wer, text, nummern);
     const gebucht = nummern.filter((nummer) => offen.some((eintrag) => eintrag.nummern.includes(nummer) && buchbar(eintrag, ergebnis, nummern)));
     const roh = { ...ergebnis, roh: ergebnis.bericht, gebucht };
     if (gebucht.length === 0) return roh;
@@ -604,7 +621,9 @@ export class Planung {
 
   legeFingerabdruck() {
     this.lege(NACHFRAGEN, this.beantworteteWellen);
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen, wegAbnahmen: liste(this.wegAbnahmen) };
+    if (this.nachfrageAusstehend !== null) this.lege(NACHFRAGE_AUSSTEHEND, this.nachfrageAusstehend);
+    const nachfrageAusstehend = this.nachfrageAusstehend === null ? null : nachfrageSumme(this.ablage);
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen, wegAbnahmen: liste(this.wegAbnahmen), nachfrageAusstehend };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
@@ -708,18 +727,28 @@ export class Planung {
     if (!klaerung && this.nachfrageWellen >= 1) return this.beendeNachfragen(nachfragen);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
-    const nummern = nummernVon(offen);
+    const nachfrage = { offen, klaerung };
+    const text = this.nachfrageNachricht(offen);
+    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummernVon(offen), (wer) => this.erkundeNachfragen(wer, text, nachfrage))], "Nachfrage-Welle");
+    const welle = this.nimmNachfrageAn(nachfrage, ergebnis);
+    return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
+  }
+
+  nachfrageNachricht(offen) {
     const fragen = offen.map((eintrag) => `${eintrag.nummern.join(", ")}: ${eintrag.frage}`);
-    const text = this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf: [...fragen, ""], mitBericht: true });
-    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummern, (wer) => this.erkundeNachfragen(wer, text, offen))], "Nachfrage-Welle");
+    return this.erkunderNachricht("Nachfrage", { nummern: nummernVon(offen), fragen, kopf: [...fragen, ""], mitBericht: true });
+  }
+
+  nimmNachfrageAn({ offen, klaerung }, ergebnis) {
     if (!klaerung) this.nachfrageWellen += 1;
     const enden = this.verbucheNachfrage(offen, ergebnis);
     const welle = { antworten: nachfrageAntworten(offen, ergebnis), enden };
     this.beantworteteWellen.push(welle);
+    this.nachfrageAusstehend = null;
     this.legeBerichte();
     this.pruefeGeaenderteDateien();
     this.legeFingerabdruck();
-    return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
+    return welle;
   }
 
   async pruefeSchnitt(antwort) {
@@ -1027,7 +1056,13 @@ class Fortsetzung extends Planung {
     this.beantworteteWellen = nachfragen;
     this.wegAbnahmen = liste(zustand.wegAbnahmen);
     this.werkzeugGeaendert = erkundung.werkzeugGeaendert === true;
+    this.uebernimmAusstehendeNachfrage(zustand);
     return [];
+  }
+
+  uebernimmAusstehendeNachfrage(zustand) {
+    this.nachfrageAusstehend = liesAusstehendeNachfrage(this.ablage, zustand);
+    if (istText(zustand.nachfrageAusstehend) && this.nachfrageAusstehend === null) console.log(NACHFRAGE_NEU);
   }
 
   async zuschnittNachricht() {
@@ -1038,7 +1073,24 @@ class Fortsetzung extends Planung {
     await this.pruefeKetteNachWerkzeug();
     await this.erkundeAusstehende();
     await this.pruefeAusstehendeWege();
+    await this.frageAusstehendeNach();
     await this.planeAbSchnitt();
+  }
+
+  ausstehenderNachfrageLauf({ offen, bericht, befunde }) {
+    const nummern = nummernVon(offen);
+    const text = this.nachfrageNachricht(offen);
+    const anhang = [abschnitt("Bisheriger Bericht auf diese Nachfrage", `${BEZAHLTER_BERICHT}\n\n${json(bericht)}`), text];
+    return this.erkunderLauf(text, nummern, async (wer) => {
+      this.merkeRuecksendung(wer.rolle, nummern, befunde);
+      return this.bucheNachfrageBericht(wer, await this.berichtNachRuecksendung(wer, { befunde, nummern, anhang }), offen);
+    });
+  }
+
+  async frageAusstehendeNach() {
+    if (this.nachfrageAusstehend === null) return;
+    const [ergebnis] = await this.welle([this.ausstehenderNachfrageLauf(this.nachfrageAusstehend)], "Nachfrage-Welle nach dem Deckel-Halt");
+    this.nimmNachfrageAn(this.nachfrageAusstehend, ergebnis);
   }
 
   async pruefeKetteNachWerkzeug() {
