@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
-import { EXIT_GRUEN, offenePunkte, plane, planungsBericht, prueflisteZeilen, WARTEN_MS, WEG_ZEILE, WEGFEHLER, wegfehlerLaufMitKorrektur, wegpruefungen } from "./planung-plane-probe.js";
+import { EXIT_GRUEN, offenePunkte, plane, planungsBericht, prueflisteZeilen, WEG_ZEILE, WEGFEHLER, wegfehlerLaufMitKorrektur, wegpruefungen } from "./planung-plane-probe.js";
 
 const ERSTE_GRUPPE = GRUPPEN[0].nummern.join(", ");
 
@@ -72,22 +72,20 @@ test("plane: nach einer Nachfrage mit sauberer Wegprüfung steht der alte Wegfeh
   assert.deepEqual(planungsBericht(lauf).wegpruefungen.find(({ nummern }) => nummern[0] === "S1").offen, [WEG_ZEILE]);
 });
 
-test("plane: nennen zwei Nachfragen dieselbe Nummer, gehört der offene Wegfehler zum übernommenen Bericht, auch wenn die frühere Wegprüfung zuletzt endet", { timeout: LAUF_FRIST_MS }, (context) => {
+test("plane: nennen zwei Nachfragen dieselbe Nummer, geht sie einmal an den gebündelten Erkunder, und ein sauberer Weg nimmt den alten Wegfehler von S7 weg", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = plane(context, {
+    "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, WEGFEHLER],
+    "erkunder|## Befunde": [bericht(GRUPPEN[0].nummern)],
     "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S7"], frage: "Wo endet der Weg?" }, { nummern: ["S1", "S7"], frage: "Wo beginnt der Weg?" }] }), alsJson({ schnitt: schnittliste() })],
-    "erkunder|## Nachfrage|S7": [bericht(["S7"])],
-    "erkunder|## Nachfrage|S1": [bericht(["S1", "S7"])],
-    "erkunder|## Befunde": [bericht(["S7"])],
-    "pruefer-planung|## Wegprüfung|S7": [WEGFEHLER, { ...WEGFEHLER, warte: WARTEN_MS }],
-    "pruefer-planung|## Wegprüfung|S1": [GRUEN_PRUEFLISTE, GRUEN_PRUEFLISTE],
+    "erkunder|## Nachfrage|S7": [bericht(["S7", "S1"])],
   });
   exit(lauf, EXIT_GRUEN);
-  const erstAbS7 = wegpruefungen(lauf, "S7").filter(({ eingabe }) => !eingabe.includes("#### S1 ("));
-  const frueher = erstAbS7.at(-1);
-  const spaeter = wegpruefungen(lauf, "S1").at(-1);
-  assert.equal(erstAbS7.length, 2);
-  assert.ok(frueher.ende > spaeter.ende, `die Wegprüfung der früheren Nachfrage endet nicht zuletzt: ${frueher.ende}, ${spaeter.ende}`);
-  const [, nachNachfrage] = aufrufe(lauf, "planer", "## Zuschnitt");
+  const nachfragen = aufrufe(lauf, "erkunder", "## Nachfrage");
+  const [{ eingabe }] = nachfragen;
+  assert.equal(nachfragen.length, 1);
+  assert.equal(eingabe.split("#### S7 (").length, 2, eingabe);
+  const [zuschnitt, nachNachfrage] = aufrufe(lauf, "planer", "## Zuschnitt");
+  assert.ok(offenePunkte(zuschnitt).includes(`- ${WEG_ZEILE}`), zuschnitt.eingabe);
   assert.equal(offenePunkte(nachNachfrage).includes("Weg S7"), false, nachNachfrage.eingabe);
 });
 
@@ -111,8 +109,7 @@ test("plane: eine fehlende Wegzeile bleibt nach einer sauberen Nachfrage zu eine
       alsJson({ nachfragen: [{ nummern: ["S1"], frage: "Wo beginnt der Weg?" }, { nummern: ["S5"], frage: "Wo endet der Weg?" }] }),
       alsJson({ schnitt: schnittliste() }),
     ],
-    "erkunder|## Nachfrage|S1": [bericht(["S1"])],
-    "erkunder|## Nachfrage|S5": [bericht(["S5"])],
+    "erkunder|## Nachfrage|S1": [bericht(["S1", "S5"])],
   });
   exit(lauf, EXIT_GRUEN);
   const [zuschnitt, nachNachfrage] = aufrufe(lauf, "planer", "## Zuschnitt");
