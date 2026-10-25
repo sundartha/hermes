@@ -24,8 +24,8 @@ const NAMENSTEIL = /[/._]/;
 const PFAD_TRENNER = "/";
 const WORT_RAND = /^[„“"'`([]+|[„“"'`)\],;:.!?]+$/g;
 const LEERRAUM = /\s+/;
-export const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
-export const UEBERSCHRIFT = /^#+ (.+)/;
+const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
+const UEBERSCHRIFT = /^#+ (.+)/;
 const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
 const GRENZE_NEUE_ZEILEN = 400;
@@ -447,8 +447,26 @@ function varianten(zeile) {
   return titel === undefined ? [zeile.replace(LISTENZEICHEN, "")] : [zeile, ETIKETT.exec(titel)?.[1] ?? titel];
 }
 
+function istFolgezeile(zeile) {
+  return istText(zeile) && !LISTENZEICHEN.test(zeile) && !UEBERSCHRIFT.test(gleicherText(zeile));
+}
+
+function ganzeZeilen(abschnitt) {
+  const zeilen = [];
+  for (const zeile of abschnitt.split("\n")) {
+    const davor = zeilen.at(-1);
+    if (davor !== undefined && LISTENZEICHEN.test(davor) && istFolgezeile(zeile)) zeilen[zeilen.length - 1] = `${davor.trimEnd()} ${zeile.trim()}`;
+    else zeilen.push(zeile);
+  }
+  return zeilen;
+}
+
+export function listenpunkteIn(abschnitt) {
+  return ganzeZeilen(abschnitt).filter((zeile) => LISTENZEICHEN.test(zeile)).map((zeile) => zeile.replace(LISTENZEICHEN, "").trim()).filter(Boolean);
+}
+
 export function saetzeIn(abschnitt) {
-  const zeilen = abschnitt.split("\n").flatMap(varianten);
+  const zeilen = ganzeZeilen(abschnitt).flatMap(varianten);
   return new Set(zeilen.flatMap((zeile) => [zeile, ...zeile.split(SATZENDE)]).map(gleicherText).filter(Boolean));
 }
 
