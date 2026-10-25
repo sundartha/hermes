@@ -1,7 +1,6 @@
 import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
-import { env } from "node:process";
 
 import { block, isInside, readInput, realPath, repositoryRoot, startDirectory } from "./lib.mjs";
 
@@ -9,30 +8,18 @@ const UMLEITUNG = /^(?:&>>?|<<<|<<-|<<|<>|<&|>>|>&|>\||[<>])/;
 const UND_ODER = /^(?:&>|&&|\|\||\|&|[&|])/;
 const PROZESS_ERSETZUNG = /^[<>]\(/;
 const MASKIERUNG = /^\\[\s\S]?/;
-const ANSI_ZITAT = /^\$'(?:\\.|[^\\'])*'/;
-const ERSETZUNG_ANFANG = ["$((", "$[", "${", "$(", "`", "\\"];
-const ERSETZUNG_SCHLUSS = new Map([["$((", "))"], ["$[", "]"], ["${", "}"], ["$(", ")"], ["`", "`"]]);
 const LESEND = new Set(["<", "<&", "<<<", "<<", "<<-"]);
 const HEREDOC = new Set(["<<", "<<-"]);
 const DUPLIKAT = new Set([">&", "<&"]);
 const DESKRIPTOR = /^(?:\d+|-)$/;
 const FD_WORT = /^(?:\d+|\{\w+\})$/;
 const MUSTER = new Set(["*", "?", "[", "{"]);
-const VARIABLE = /^[A-Za-z_]\w*|^\{([A-Za-z_]\w*)\}/;
-const SONDERPARAMETER = /^[0-9@*#?$!-]/;
 const BEDINGT_VORHER = new Set(["&&", "||", "|"]);
 const BEDINGT_NACHHER = new Set(["|", "&"]);
 const ERSETZUNG_GESPERRT =
   "Ersetzung in Bash ist für Test- und Bau-Agent gesperrt; ohne Ersetzung schreiben: Temp-Datei als fester Pfad unter /tmp statt $TMPDIR, " +
   "$ in Mustern in einfache Anführungszeichen, Pfade und Dateien wörtlich statt aus Variable oder Schleife (mehrere Dateien in einem Aufruf), Exit-Code nur mit $?";
 const EXIT_CODE = "$?";
-const ARITHMETIK = /^[\d\s+\-*/%()<>=!&|^~?:,]*$/;
-const PARAMETER = /^#?(?:[A-Za-z_]\w*|\d+|[@*#?$!-])(?:\[([^\]]*)\])?/;
-const INDEX = /^(?:\d+|@|\*)$/;
-const BINDUNG = /^:?[=?]/;
-const STANDARDWERT = /^:[-+]/;
-const TEILSTRING_ZAHL = String.raw`\s*(?:\(\s*-?\d+\s*\)|-?\d+)\s*`;
-const TEILSTRING = new RegExp(`^:${TEILSTRING_ZAHL}(?::${TEILSTRING_ZAHL})?$`);
 const SCHRITTE = new Map([
   ["\\", (zerleger) => zerleger.maskierung()],
   ["'", (zerleger) => zerleger.einfach()],
@@ -52,34 +39,14 @@ const SCHRITTE = new Map([
   [">", (zerleger) => zerleger.pfeil()],
 ]);
 
-function arithmetikFund(inhalt) {
-  return ARITHMETIK.test(inhalt) ? null : `Arithmetik ${inhalt} mit Namen oder Ersetzung`;
-}
-
-function parameterFund(inhalt) {
-  if (inhalt.startsWith("!") && inhalt !== "!") return `indirekte Ersetzung \${${inhalt}}`;
-  const kopf = PARAMETER.exec(inhalt);
-  if (kopf === null) return `Ersetzung \${${inhalt}}`;
-  if (kopf[1] !== undefined && !INDEX.test(kopf[1])) return `Index [${kopf[1]}] ohne feste Zahl`;
-  const rest = inhalt.slice(kopf[0].length);
-  if (BINDUNG.test(rest)) return `Zuweisung in \${${inhalt}}`;
-  if (!rest.startsWith(":") || STANDARDWERT.test(rest)) return null;
-  return TEILSTRING.test(rest) ? null : `Teilstring ${rest} ohne feste Zahlen`;
-}
-
-function variablenName(folgend) {
-  const treffer = VARIABLE.exec(folgend);
-  return treffer?.[1] ?? treffer?.[0] ?? null;
-}
-
 function neuesWort() {
-  return { text: "", dyn: false, dynAb: -1, glob: false, zitiert: false, variable: null, ersetzungen: 0 };
+  return { text: "", dyn: false, dynAb: -1, glob: false, zitiert: false };
 }
 
 class Zerleger {
   constructor(text) {
     Object.assign(this, { text, i: 0, befehle: [], woerter: [], umleitungen: [], wort: null, wartet: null });
-    Object.assign(this, { heredocs: [], tiefe: 0, klammer: 0, vorher: "", inDoppelt: false, fehler: null });
+    Object.assign(this, { heredocs: [], tiefe: 0, klammer: 0, vorher: "", fehler: null });
     this.lies(null);
     this.befehlEnde("\n");
   }
@@ -101,11 +68,10 @@ class Zerleger {
     this.fehler ??= fehler;
   }
 
-  dynamisch(variable = null) {
+  dynamisch() {
     const offen = this.aktuell();
-    if (offen.dynAb === -1) Object.assign(offen, { dynAb: offen.text.length, variable });
+    if (offen.dynAb === -1) offen.dynAb = offen.text.length;
     offen.dyn = true;
-    offen.ersetzungen += 1;
   }
 
   wortEnde() {
@@ -138,87 +104,21 @@ class Zerleger {
   }
 
   unterBefehl(ende) {
-    const { woerter, umleitungen, wort, wartet, klammer, vorher, tiefe, inDoppelt } = this;
+    const { woerter, umleitungen, wort, wartet, klammer, vorher, tiefe } = this;
     Object.assign(this, { woerter: [], umleitungen: [], wort: null, wartet: null, klammer: 0, vorher: "", tiefe: tiefe + 1 });
-    this.inDoppelt = false;
     this.lies(ende);
     this.befehlEnde(ende);
-    Object.assign(this, { woerter, umleitungen, wort, wartet, klammer, vorher, tiefe, inDoppelt });
-  }
-
-  bisSchluss(schluss) {
-    let tiefe = 0;
-    while (this.i < this.text.length && this.fehler === null) {
-      if (tiefe === 0 && this.text.startsWith(schluss, this.i)) {
-        this.i += schluss.length;
-        return;
-      }
-      if (this.ersetzung()) continue;
-      if (`'"`.includes(this.text[this.i])) return this.melde(`Anführungszeichen in ${schluss === "}" ? "${…}" : "einer Arithmetik"}`);
-      tiefe += "([{".includes(this.text[this.i]) - ")]}".includes(this.text[this.i]);
-      this.i += 1;
-    }
-    this.melde(`${schluss} ohne Ende`);
-  }
-
-  ersetzung() {
-    const art = ERSETZUNG_ANFANG.find((anfang) => this.text.startsWith(anfang, this.i));
-    if (art === undefined) return false;
-    if (art === "\\") {
-      this.i += MASKIERUNG.exec(this.rest)[0].length;
-      return true;
-    }
-    this.i += art.length;
-    if (art === "$(" || art === "`") this.unterBefehl(ERSETZUNG_SCHLUSS.get(art));
-    else this.klammerInhalt(art);
-    return true;
-  }
-
-  klammerInhalt(art) {
-    const [start, schluss] = [this.i, ERSETZUNG_SCHLUSS.get(art)];
-    this.bisSchluss(schluss);
-    const inhalt = this.text.slice(start, this.i - schluss.length);
-    const fund = art === "${" ? parameterFund(inhalt) : arithmetikFund(inhalt);
-    if (fund !== null) this.melde(fund);
-  }
-
-  ersetzungSperren() {
-    if (!this.text.startsWith(EXIT_CODE, this.i)) this.melde(ERSETZUNG_GESPERRT);
+    Object.assign(this, { woerter, umleitungen, wort, wartet, klammer, vorher, tiefe });
   }
 
   dollar() {
-    this.ersetzungSperren();
-    const folgend = this.text.slice(this.i + 1);
-    if (this.dollarZitat(folgend)) return;
-    const name = variablenName(folgend);
-    if (/^[([{]/.test(folgend)) {
-      this.dynamisch(name);
-      this.ersetzung();
-    } else if (name === null && !SONDERPARAMETER.test(folgend)) this.zeichen("$");
-    else {
-      this.dynamisch(name);
-      this.i += 1 + (name?.length ?? 1);
-    }
-  }
-
-  dollarZitat(folgend) {
-    if (this.inDoppelt || !/^['"]/.test(folgend)) return false;
-    if (folgend.startsWith("'")) this.ansi();
-    else this.i += 1;
-    return true;
-  }
-
-  ansi() {
+    if (!this.text.startsWith(EXIT_CODE, this.i)) return this.melde(ERSETZUNG_GESPERRT);
     this.dynamisch();
-    const treffer = ANSI_ZITAT.exec(this.rest);
-    if (treffer === null) this.melde("Anführungszeichen ohne Ende");
-    this.i += treffer?.[0].length ?? this.rest.length;
+    this.i += EXIT_CODE.length;
   }
 
   backtick() {
-    this.ersetzungSperren();
-    this.dynamisch();
-    this.ersetzung();
+    this.melde(ERSETZUNG_GESPERRT);
   }
 
   maskierung() {
@@ -251,9 +151,7 @@ class Zerleger {
   doppelt() {
     this.aktuell().zitiert = true;
     this.i += 1;
-    this.inDoppelt = true;
     while (this.i < this.text.length && this.text[this.i] !== '"' && this.fehler === null) this.doppeltZeichen();
-    this.inDoppelt = false;
     if (this.text[this.i] !== '"') this.melde("Anführungszeichen ohne Ende");
     this.i += 1;
   }
@@ -272,8 +170,8 @@ class Zerleger {
   koerper({ start, ende, weiter, zitiert }) {
     this.i = start;
     while (!zitiert && this.i < ende && this.fehler === null) {
-      if ("$`".includes(this.text[this.i])) this.ersetzungSperren();
-      if (!this.ersetzung()) this.i += 1;
+      if ("$`".includes(this.text[this.i]) && !this.text.startsWith(EXIT_CODE, this.i)) this.melde(ERSETZUNG_GESPERRT);
+      this.i += this.text[this.i] === "\\" ? MASKIERUNG.exec(this.rest)[0].length : 1;
     }
     this.i = weiter;
   }
@@ -363,8 +261,6 @@ const SCHLUESSELWORT = new Set(["!", "{", "}", "then", "do", "else", "elif", "if
 const ZUWEISUNG = /^([A-Za-z_]\w*)\+?=/;
 const NAME = /^[A-Za-z_]\w*$/;
 const EIGENER_NAME = /^(?:[A-Z]|(?!npm_)[a-z_][a-z0-9_]*)$/;
-const RISKANTER_ANFANG = /^[-*?[{$~]/;
-const ABSOLUTE_VARIABLEN = new Set(["TMPDIR", "PWD"]);
 const GIT_LESEND = new Set(["status", "diff", "log", "show", "grep", "ls-files", "rev-parse", "blame", "merge-base", "cat-file"]);
 const GIT_SCHREIBOPTION = /^(?:--ou|--ext|--op|-O)/;
 const GIT_GREP_KURZ = new Set("nilcwvEFhH");
@@ -421,13 +317,9 @@ const BASIS_VERGLEICH = regeln({ lang: ["--je-ordner"], langWert: [["--basis", F
 const NPX = new Map([["eslint", ESLINT], ["prettier", PRETTIER], ["jscpd", JSCPD]]);
 const NODE_SKRIPTE = new Map([["tools/basis-vergleich.mjs", BASIS_VERGLEICH], ["tools/lint-neue-funktionen.mjs", null], [".claude/hooks/lint-datei.mjs", null]]);
 
-function kannOptionSein(arg, werte) {
+function kannOptionSein(arg) {
   if (!arg.dyn && arg.text === "-") return false;
-  if (arg.dynAb !== 0) return arg.text.startsWith("-");
-  if (arg.ersetzungen === 1 && ABSOLUTE_VARIABLEN.has(arg.variable)) return false;
-  const liste = arg.variable === null || arg.ersetzungen !== 1 ? null : werte.get(arg.variable);
-  if (!liste) return true;
-  return liste.some((wert) => wert === null || wert.split(/\s+/).some((teil) => RISKANTER_ANFANG.test(teil)));
+  return arg.dynAb === 0 || arg.text.startsWith("-");
 }
 
 function offeneOption(arg) {
@@ -435,8 +327,8 @@ function offeneOption(arg) {
 }
 
 class Optionen {
-  constructor(args, spec, werte) {
-    Object.assign(this, { args, spec, werte, i: 0, operanden: [], genutzt: new Set(), ende: false, fund: null });
+  constructor(args, spec) {
+    Object.assign(this, { args, spec, i: 0, operanden: [], genutzt: new Set(), ende: false, fund: null });
     for (; this.i < args.length && this.fund === null; this.i += 1) this.fund = this.argumentFund() ?? null;
   }
 
@@ -480,8 +372,8 @@ class Optionen {
 
   argumentFund() {
     const arg = this.args[this.i];
-    if (this.ende || !kannOptionSein(arg, this.werte)) return this.operand(arg);
-    if (offeneOption(arg)) return `Option ${arg.text || arg.variable || "…"} aus einer Ersetzung oder einem Muster`;
+    if (this.ende || !kannOptionSein(arg)) return this.operand(arg);
+    if (offeneOption(arg)) return `Option ${arg.text || "…"} aus einer Ersetzung oder einem Muster`;
     if (arg.text !== "--") return arg.text.startsWith("--") ? this.langFund(arg) : this.kurzFund(arg);
     this.ende = true;
     return null;
@@ -490,7 +382,7 @@ class Optionen {
 
 function mitRegeln(spec, weiter = () => null) {
   return (args, kontext) => {
-    const gelesen = new Optionen(args, spec, kontext.werte);
+    const gelesen = new Optionen(args, spec);
     return gelesen.fund ?? weiter(gelesen, kontext);
   };
 }
@@ -500,10 +392,9 @@ function istOrdner(pfad) {
 }
 
 function ordnerZiele(arg, kontext) {
-  const pwd = arg.variable === "PWD" && arg.ersetzungen === 1 && arg.text === "";
   const fest = !arg.dyn && !arg.glob && !arg.text.startsWith("-");
-  if (!pwd && !fest) return `Ordner ${arg.text || "aus einer Variablen"} ohne festes Ziel`;
-  const ziele = [...kontext.orte].map((ort) => realPath(resolve(ort, pwd ? "." : arg.text)));
+  if (!fest) return `Ordner ${arg.text || "aus einer Variablen"} ohne festes Ziel`;
+  const ziele = [...kontext.orte].map((ort) => realPath(resolve(ort, arg.text)));
   const fremd = ziele.find((ziel) => !istOrdner(ziel) || !isInside(ziel, kontext.wurzel));
   return fremd === undefined ? ziele : `Ordner ${fremd} liegt nicht im Repo`;
 }
@@ -516,8 +407,8 @@ function cd(args, kontext) {
   return null;
 }
 
-function gitOptionFund(args, werte) {
-  const fund = args.find((arg) => kannOptionSein(arg, werte) && (offeneOption(arg) || GIT_SCHREIBOPTION.test(arg.text)));
+function gitOptionFund(args) {
+  const fund = args.find((arg) => kannOptionSein(arg) && (offeneOption(arg) || GIT_SCHREIBOPTION.test(arg.text)));
   return fund ? `git-Option ${fund.text || "aus einer Variablen"}` : null;
 }
 
@@ -539,18 +430,18 @@ function git(args, kontext) {
   if (fund) return fund;
   const [unter, ...rest] = args.slice(stelle);
   if (!unter || unter.dyn) return "git ohne lesenden Unterbefehl";
-  if (unter.text === "stash") return gitStash(rest, kontext.werte);
+  if (unter.text === "stash") return gitStash(rest);
   if (!GIT_LESEND.has(unter.text)) return `git ${unter.text} ist kein lesender Unterbefehl`;
-  return gitOptionFund(rest, kontext.werte) ?? (unter.text === "grep" ? gitGrepFund(rest, kontext.werte) : null);
+  return gitOptionFund(rest) ?? (unter.text === "grep" ? gitGrepFund(rest) : null);
 }
 
-function gitStash([aktion, ...rest], werte) {
-  return aktion?.text === "list" && !aktion.dyn ? gitOptionFund(rest, werte) : "git stash schreibt";
+function gitStash([aktion, ...rest]) {
+  return aktion?.text === "list" && !aktion.dyn ? gitOptionFund(rest) : "git stash schreibt";
 }
 
-function gitGrepFund(args, werte) {
+function gitGrepFund(args) {
   const fremd = (arg) => /^-[^-]/.test(arg.text) && [...arg.text.slice(1)].some((buchstabe) => !GIT_GREP_KURZ.has(buchstabe));
-  const fund = args.find((arg) => kannOptionSein(arg, werte) && fremd(arg));
+  const fund = args.find((arg) => kannOptionSein(arg) && fremd(arg));
   return fund ? `git grep ${fund.text}` : null;
 }
 
@@ -564,7 +455,7 @@ function echtImRepo(pfad, kontext) {
 }
 
 function testPfadFund(arg, kontext) {
-  if (kannOptionSein(arg, kontext.werte)) return `Option ${arg.text || "aus einer Variablen"}`;
+  if (kannOptionSein(arg)) return `Option ${arg.text || "aus einer Variablen"}`;
   return relativOhneAufstieg(arg) && echtImRepo(arg.text, kontext) ? null : `Pfad ${arg.text || "aus einer Variablen"}`;
 }
 
@@ -593,20 +484,20 @@ function npm(args, kontext) {
   return regel ? regel(rest, kontext) : `npm ${unter?.text ?? ""} steht nicht auf der Erlaubtliste`;
 }
 
-function npx([werkzeug, ...args], kontext) {
+function npx([werkzeug, ...args]) {
   const spec = werkzeug && !werkzeug.dyn ? NPX.get(werkzeug.text) : undefined;
-  return spec ? new Optionen(args, spec, kontext.werte).fund : `npx ${werkzeug?.text ?? ""} steht nicht auf der Erlaubtliste`;
+  return spec ? new Optionen(args, spec).fund : `npx ${werkzeug?.text ?? ""} steht nicht auf der Erlaubtliste`;
 }
 
 function node([skript, ...args], kontext) {
   if (!skript || skript.dyn) return "node ohne erlaubtes Prüfskript";
   if (["--version", "-v"].includes(skript.text) && args.length === 0) return null;
-  if (["--check", "-c"].includes(skript.text)) return args.some((arg) => kannOptionSein(arg, kontext.werte)) ? "node --check nur mit Dateien" : null;
+  if (["--check", "-c"].includes(skript.text)) return args.some((arg) => kannOptionSein(arg)) ? "node --check nur mit Dateien" : null;
   const erlaubt = new Map([...NODE_SKRIPTE].map(([pfad, spec]) => [resolve(kontext.wurzel, pfad), spec]));
   const ziele = [...kontext.orte].map((ort) => realPath(resolve(ort, skript.text)));
   if (!ziele.every((ziel) => erlaubt.has(ziel))) return `node ${skript.text} ist kein erlaubtes Prüfskript`;
   const specs = ziele.map((ziel) => erlaubt.get(ziel)).filter(Boolean);
-  return specs.map((spec) => new Optionen(args, spec, kontext.werte).fund).find(Boolean) ?? null;
+  return specs.map((spec) => new Optionen(args, spec).fund).find(Boolean) ?? null;
 }
 
 function sed(gelesen) {
@@ -630,13 +521,13 @@ function vNameOk(vorher, name) {
   return offeneOption(vorher) && !offeneOption(name) && !name.text.includes("[");
 }
 
-function testAufruf(args, { werte }) {
-  const stelle = args.findIndex((arg, i) => (offeneOption(arg) ? kannOptionSein(arg, werte) : arg.text === "-v") && !vNameOk(arg, args[i + 1]));
+function testAufruf(args) {
+  const stelle = args.findIndex((arg, i) => (offeneOption(arg) ? kannOptionSein(arg) : arg.text === "-v") && !vNameOk(arg, args[i + 1]));
   return stelle === -1 ? null : `test -v ${args[stelle + 1].text || "mit einem Namen aus einer Variablen"}`;
 }
 
-function find(args, kontext) {
-  const fund = args.find((arg) => kannOptionSein(arg, kontext.werte) && (offeneOption(arg) || FIND_SCHREIBEND.has(arg.text)));
+function find(args) {
+  const fund = args.find((arg) => kannOptionSein(arg) && (offeneOption(arg) || FIND_SCHREIBEND.has(arg.text)));
   return fund ? `find ${fund.text || "mit Variable"}` : null;
 }
 
@@ -690,20 +581,6 @@ function forFund([, variable]) {
   return variable && EIGENE_BINDUNG(variable) ? null : `for-Schleife über ${variable?.text || "keinen eigenen Namen"}`;
 }
 
-function sammleWerte(befehle, werte) {
-  const merke = (name, wert) => werte.set(name, werte.get(name) === null ? null : [...(werte.get(name) ?? []), wert]);
-  for (const { woerter } of befehle) {
-    const rest = woerter.slice(ohneSchluesselwort(woerter));
-    const [, variable, schluessel, ...liste] = rest;
-    if (istFor(rest) && schluessel?.text === "in") liste.forEach((arg) => merke(variable.text, arg.dynAb === 0 ? null : arg.text));
-    else if (istFor(rest) && variable) werte.set(variable.text, null);
-    for (const arg of rest.filter((zuweisung) => ZUWEISUNG.test(zuweisung.text))) {
-      const [treffer, name] = ZUWEISUNG.exec(arg.text);
-      merke(name, arg.dyn ? null : arg.text.slice(treffer.length));
-    }
-  }
-}
-
 function tempDatei(pfad, wurzel) {
   if (!isAbsolute(pfad)) return false;
   const echt = realPath(pfad);
@@ -712,8 +589,6 @@ function tempDatei(pfad, wurzel) {
 }
 
 function zielPfad(ziel) {
-  const temp = ziel.variable === "TMPDIR" && ziel.ersetzungen === 1 && ziel.dynAb === 0 && !ziel.glob;
-  if (temp) return (env.TMPDIR ?? tmpdir()) + ziel.text;
   return ziel.dyn || ziel.glob ? null : ziel.text;
 }
 
@@ -728,7 +603,6 @@ class Pruefung {
   constructor(input) {
     this.wurzel = realPath(repositoryRoot(startDirectory(input)));
     this.orte = new Set([realPath(startDirectory(input))]);
-    this.werte = new Map();
     this.unsicher = false;
   }
 
@@ -740,11 +614,10 @@ class Pruefung {
     if (rest.length === 0) return null;
     const zuweisung = zuweisungFund(rest);
     if (zuweisung !== null || ZUWEISUNG.test(rest[0].text)) return zuweisung;
-    return programmFund(rest, { wurzel: this.wurzel, orte: this.orte, werte: this.werte, bedingt: bedingt || this.unsicher });
+    return programmFund(rest, { wurzel: this.wurzel, orte: this.orte, bedingt: bedingt || this.unsicher });
   }
 
   fund(befehle) {
-    sammleWerte(befehle, this.werte);
     for (const befehl of befehle) {
       const umleitung = befehl.umleitungen.map((eintrag) => umleitungFund(eintrag, this.wurzel)).find(Boolean);
       const fund = umleitung ?? this.aufrufFund(befehl);
