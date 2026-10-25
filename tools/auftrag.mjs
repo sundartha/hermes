@@ -44,7 +44,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs karte <datei> [--json]",
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
-  "        node tools/auftrag.mjs umfang plaene/P-<Nummer>-<kurzname>/   (misst Nummern, belegte Dateien, Funktionen und Tests des Pitches als JSON, mit „## Löschen“ im Pitch auch die Löschmenge; startet nichts, schreibt nichts)",
+  "        node tools/auftrag.mjs umfang plaene/P-<Nummer>-<kurzname>/   (misst Nummern, belegte Dateien, Funktionen und Tests des Pitches als JSON, mit „## Löschen“ im Pitch auch die Löschmenge, dazu den Mindestdeckel, den plane vor dem ersten Agenten verlangt; startet nichts, schreibt nichts)",
   "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>] [--issue <Nummer>]   (mit --fortsetzen ist --deckel das Gesamtbudget der Planung einschließlich früherer Läufe)",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",

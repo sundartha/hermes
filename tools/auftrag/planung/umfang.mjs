@@ -1,10 +1,12 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { istTestdatei, pfadIstSauber } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { altfunktionenAusPitch, genannteFunktionen, genannteStellen, pruefbareDateien } from "./altfunktionen-vorab.mjs";
+import { Kostendeckel, rollenText } from "./deckel.mjs";
 import { dateiKarte } from "./funktionsliste.mjs";
+import { teilVon } from "./kopfzeile.mjs";
 import { loeschEinstiege, loeschmenge } from "./loeschmenge.mjs";
 import { PITCH, SICHERHEIT, nummernImOrdner } from "./nummern.mjs";
 import { DOKUMENTE, istAltfunktion } from "./schnitt.mjs";
@@ -101,6 +103,12 @@ export async function umfang(root, ordner, { dateien } = {}) {
   };
 }
 
+function mindestdeckelIm(root, ordner) {
+  const { soll, nurUmbau } = nummernImOrdner(ordner);
+  const teil = teilVon(readFileSync(join(ordner, PITCH), "utf8")) !== undefined;
+  return new Kostendeckel(root, basename(ordner)).mindestvorschau({ soll, nurUmbau, teil, gruppenUeberGrenze });
+}
+
 export async function umfangBefehl(ordnerAngabe, root) {
   const ordner = resolve(root, ordnerAngabe);
   const fehlend = [PITCH, SICHERHEIT].filter((name) => !existsSync(join(ordner, name)));
@@ -108,6 +116,8 @@ export async function umfangBefehl(ordnerAngabe, root) {
     console.error(`${ordner} enthält kein ${fehlend.join(" und kein ")}`);
     return EXIT_AUFRUF;
   }
-  console.log(JSON.stringify(await umfang(root, ordner), null, JSON_EINRUECKUNG));
+  const mindestdeckel = mindestdeckelIm(root, ordner);
+  console.log(JSON.stringify({ ...(await umfang(root, ordner)), mindestdeckel }, null, JSON_EINRUECKUNG));
+  console.error(`Mindestdeckel für plane: ${mindestdeckel.token} Token (${rollenText(mindestdeckel.rollen)})`);
   return EXIT_GRUEN;
 }
