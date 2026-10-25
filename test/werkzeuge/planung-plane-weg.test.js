@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
-import { EXIT_GRUEN, offenePunkte, plane, planungsBericht, prueflisteZeilen, WEG_ZEILE, WEGFEHLER, wegfehlerLaufMitKorrektur, wegpruefungen } from "./planung-plane-probe.js";
+import { EXIT_GRUEN, abgelegt, offenePunkte, plane, planungsBericht, prueflisteZeilen, WEG_ZEILE, WEGFEHLER, wegfehlerLaufMitKorrektur, wegpruefungen } from "./planung-plane-probe.js";
 
 const ERSTE_GRUPPE = GRUPPEN[0].nummern.join(", ");
 
-test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrigierte Bericht erreicht den Planer, und weg bleibt in der Endprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
+test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrigierte Bericht erreicht den Planer, und weg gilt in der Endprüfung als abgenommen", { timeout: LAUF_FRIST_MS }, (context) => {
   const hinweis = "S7 endet in speichereStatus";
   const lauf = wegfehlerLaufMitKorrektur(context, hinweis);
   const [rueckgabe, ...weitere] = aufrufe(lauf, "erkunder", "## Befunde");
@@ -19,7 +19,11 @@ test("plane: die Wegprüfung schickt einen Wegfehler an den Erkunder, der korrig
   assert.ok(zuschnitt.eingabe.includes(`hinweis: ${hinweis}`), zuschnitt.eingabe);
   assert.equal(offenePunkte(zuschnitt).includes("Weg S7"), false);
   const zeilen = aufrufe(lauf, "pruefer-planung", "## Prüfung").flatMap(prueflisteZeilen);
-  for (const nummer of GRUPPEN.flatMap((gruppe) => gruppe.nummern)) assert.ok(zeilen.includes(`weg:${nummer}`), `weg:${nummer} fehlt in der Endprüfung`);
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("weg:")), []);
+  const pruefliste = abgelegt(lauf, "pruefliste.json");
+  for (const nummer of GRUPPEN.flatMap((gruppe) => gruppe.nummern)) {
+    assert.deepEqual(pruefliste.find(({ schluessel }) => schluessel === `weg:${nummer}`), { schluessel: `weg:${nummer}`, ergebnis: "erfüllt", fundstelle: FUNDSTELLE });
+  }
 });
 
 test("plane: die erste Wegprüfung bekommt Design Doc und Erkundungsbericht, die nach einer Korrektur nur den korrigierten Bericht", { timeout: LAUF_FRIST_MS }, (context) => {
