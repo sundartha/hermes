@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, GRUPPEN, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
+import { BIS_ZUM_ABBRUCH, GRUEN_PRUEFLISTE, GRUPPEN, KENNUNG, LAUF_FRIST_MS, ORDNER, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { A2_BEFUND, AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, MIT_NUMMER, abgelegt, antwortMit, jePruefer, phaseDatei, planeAntworten, planungsBericht, werkzeug } from "./planung-plane-probe.js";
 
 const EXIT_DECKEL = 5;
@@ -166,6 +166,7 @@ const ERKUNDER_LAUF_VORHER_KLEIN = PLANER;
 const NACHFRAGE_VORSCHAU = PLANER + ZWEITE_WELLE * ERKUNDER_LAUF_VORHER_KLEIN;
 const DECKEL_IN_DER_NACHFRAGE = NACHFRAGE_VORSCHAU + ERKUNDER / 2;
 const NACH_HALT_HOECHSTENS = DECKEL_IN_DER_NACHFRAGE + (ZWEITE_WELLE - 1) * ERKUNDER;
+const VORLAUF_BIS_NACHFRAGE = PLANER_ANTWORTEN_BIS_NACHFRAGE * PLANER + ERSTE_WELLE * ERKUNDER_LAUF;
 
 function fortgesetztGruen(context, wurzel, ueberschrieben = {}) {
   const lauf = planeMitToken(context, wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben });
@@ -544,4 +545,90 @@ test("plane --deckel: hält plane mitten in einer Welle an und liegen die zu End
 
   assert.equal(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").length, 1);
   nenntUeberschreitung(lauf, { deckel: DECKEL_IN_DER_ZWEITEN_WEGPRUEFUNG, gemessen: NACH_ZWEITEM_ERKUNDER, prozent: "22,0 %" });
+});
+
+const VOR_DEM_ZUSCHNITT = VORLAUF_BIS_NACHFRAGE + PLANER / 2;
+
+function vorDerNachfrageGestoppt(context) {
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  exit(gestoppt, EXIT_DECKEL);
+  return gestoppt;
+}
+
+test("plane --fortsetzen --deckel: der Verbrauch früherer Läufe derselben Planung zählt gegen den Deckel", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = vorDerNachfrageGestoppt(context);
+
+  const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(VOR_DEM_ZUSCHNITT)], ueberschrieben: zwoelfNachfragen() });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+  const { deckel, grund } = planungsBericht(lauf);
+  assert.deepEqual(deckel, { deckel: VOR_DEM_ZUSCHNITT, vorverbrauch: VORLAUF_BIS_NACHFRAGE, gemessen: 0, vorschau: PLANER });
+  for (const angabe of [`Deckel ${VOR_DEM_ZUSCHNITT} Token`, `Vorverbrauch ${VORLAUF_BIS_NACHFRAGE}`, "gemessen 0"]) assert.ok(grund.includes(angabe), grund);
+});
+
+const STROM_GRUND = 10_000;
+const STROM_DECKEL = 135_000;
+const STROM_NACHFRAGE = [20_000, 30_000, 40_000, BIS_ZUM_ABBRUCH, 50_000];
+const STROM_TOKEN = { planer: STROM_GRUND, erkunder: STROM_GRUND, "pruefer-planung": STROM_GRUND, entwurf: STROM_GRUND, "erkunder|## Nachfrage|S1": STROM_NACHFRAGE };
+const NACHFRAGE_S1 = nachfragenZu(["S1"], { "erkunder|## Nachfrage|S1": [bericht(["S1"])] });
+
+function planeMitStrom(context, wurzel, argumente) {
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: NACHFRAGE_S1, argumente: ["plane", ORDNER, ...argumente], token: STROM_TOKEN });
+}
+
+function inDerNachfrageAbgebrochen(context) {
+  const lauf = planeMitStrom(context, planOrdner(context), ["--deckel", String(STROM_DECKEL)]);
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 1);
+  assert.match(planungsBericht(lauf).grund, /bricht die laufenden Agenten beim Schritt „Nachfrage-Welle“ ab/);
+  return lauf;
+}
+
+test("plane --fortsetzen --deckel: ein am Deckel abgebrochener Lauf zählt beim Fortsetzen mit", { timeout: LAUF_FRIST_MS }, (context) => {
+  const abgebrochen = inDerNachfrageAbgebrochen(context);
+  const vorverbrauch = planungsBericht(abgebrochen).token;
+
+  const lauf = planeMitStrom(context, abgebrochen.wurzel, ["--fortsetzen", "--deckel", String(vorverbrauch + 1)]);
+
+  exit(lauf, EXIT_DECKEL);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+  assert.equal(planungsBericht(lauf).deckel.vorverbrauch, vorverbrauch);
+});
+
+test("plane: ein am Deckel abgebrochener Erkunder steht mit seinem gemessenen Verbrauch in planung.json", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = inDerNachfrageAbgebrochen(context);
+
+  const { wellen, kostenAbgebrochen } = planungsBericht(lauf);
+  const nachfrage = wellen.find(({ schritt }) => schritt === "Nachfrage-Welle");
+  assert.ok(nachfrage.gemessen > 0, JSON.stringify(wellen));
+  assert.deepEqual(kostenAbgebrochen, { erkunder: { laeufe: 1, token: nachfrage.gemessen } });
+});
+
+const FERTIG_S2 = 5_000;
+const ABGEBROCHEN_S1 = 60_000;
+const ZWEI_NACHFRAGEN = nachfragenZu(["S1", "S2"], { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "erkunder|## Nachfrage|S2": [bericht(["S2"])] });
+const S1_NACH_S2 = { ...STROM_TOKEN, "erkunder|## Nachfrage|S2": [FERTIG_S2], "erkunder|## Nachfrage|S1": [{ nachDemEndeVon: "erkunder|## Nachfrage|S2" }, ABGEBROCHEN_S1, BIS_ZUM_ABBRUCH] };
+
+test("plane: bricht der Deckel in einer Welle nur einen von zwei Erkundern ab, steht genau dessen gemessener Verbrauch unter kostenAbgebrochen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: ZWEI_NACHFRAGEN, argumente: ["plane", ORDNER, "--deckel", String(STROM_DECKEL)], token: S1_NACH_S2 });
+
+  exit(lauf, EXIT_DECKEL);
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 2);
+  assert.deepEqual(planungsBericht(lauf).kostenAbgebrochen?.erkunder, { laeufe: 1, token: ABGEBROCHEN_S1 });
+});
+
+test("plane --fortsetzen: ist der Vorverbrauch nicht bestimmbar, hält plane mit Meldung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gestoppt = vorDerNachfrageGestoppt(context);
+  const buchung = join(gestoppt.wurzel, ".fortschritt", KENNUNG, "verbrauch.json");
+  assert.equal(JSON.parse(readFileSync(buchung, "utf8")).gesamt, VORLAUF_BIS_NACHFRAGE);
+
+  for (const verderbe of [() => writeFileSync(buchung, JSON.stringify({ vorverbrauch: 0 })), () => writeFileSync(buchung, "kein JSON"), () => rmSync(buchung)]) {
+    verderbe();
+    const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
+
+    exit(lauf, EXIT_DECKEL);
+    assert.deepEqual(aufrufe(lauf, "planer"), []);
+    for (const angabe of ["Vorverbrauch nicht bestimmbar", buchung, "voller Neulauf", "gesamt"]) assert.ok(lauf.stderr.includes(angabe), lauf.stderr);
+  }
 });
