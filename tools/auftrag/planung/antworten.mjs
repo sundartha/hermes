@@ -190,10 +190,14 @@ function auftragGeaendert(id, alt, neu) {
   return alsText(auftragIn(alt, id)) !== alsText(auftragIn(neu, id));
 }
 
+function annahmenDes(schnitt, id) {
+  return liste(schnitt?.annahmen).filter((annahme) => annahme?.auftrag === id);
+}
+
 function geaendert(schluessel, alt, neu) {
   const id = auftragDes(schluessel);
   if (id === null) return alsText(alt) !== alsText(neu);
-  return auftragGeaendert(id, alt, neu);
+  return auftragGeaendert(id, alt, neu) || alsText(annahmenDes(alt, id)) !== alsText(annahmenDes(neu, id));
 }
 
 function antwortBefund(schluessel, antwort, schnitte) {
