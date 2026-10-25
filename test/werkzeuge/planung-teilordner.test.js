@@ -9,6 +9,7 @@ import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { hebeFreigabe } from "./planung-freigabe-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
@@ -23,6 +24,9 @@ const FREIGABE = 2000;
 const TEILUNG_TOKEN = 500;
 const TEIL_DECKEL = FREIGABE - TEILUNG_TOKEN;
 const GROSSE_FREIGABE = 5000;
+const UEBER_DEM_TOPF = TEIL_DECKEL + 100;
+const ISSUE_HINTERLEGEN = 98;
+const ISSUE_HINWEIS = 99;
 const OHNE_JSON = "Ich antworte ohne JSON.";
 const HAENGT_MS = 30_000;
 const ANGRIFFSWEG_T3 = /### T3:[\s\S]*?(?=## 3\. Lückenprüfung)/u;
@@ -438,4 +442,20 @@ test("eine unlesbare Laufdatei im Topf-Buch macht den Topf nicht messbar und erg
   exit(lauf, EXIT_DECKEL);
   ohneAgent(lauf);
   assert.ok(lauf.stderr.includes("Rest-Topf nicht messbar"), lauf.stderr);
+});
+
+test("teilordner: eine höhere Freigabe im obersten Pitch hebt den Rest-Topf der Teile", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { wurzel, ...teilung } = geteilt(context);
+  exit(teilung, EXIT_GETEILT);
+  mitIssue(wurzel, HINTERLEGEN, ISSUE_HINTERLEGEN);
+  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: UEBER_DEM_TOPF });
+  mitIssue(wurzel, HINWEIS_ORDNER, ISSUE_HINWEIS);
+  vorgaengerGemergt(wurzel, HINTERLEGEN);
+  const leer = planeTeil(context, wurzel, HINWEIS_ORDNER);
+  exit(leer, EXIT_DECKEL);
+  assert.ok(leer.stderr.includes(`${ORDNER}/pitch.md`), leer.stderr);
+
+  hebeFreigabe(wurzel, ORDNER, { von: FREIGABE, auf: GROSSE_FREIGABE });
+
+  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });
 });
