@@ -127,6 +127,33 @@ function nachfrageAntwort({ frage, nummern, bericht, befunde }, stelle) {
   return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
 }
 
+function berichtZu(bericht, nummern) {
+  const eigene = nummern.filter((nummer) => Object.hasOwn(bericht.nummern, nummer));
+  return { ...bericht, gruppe: nummern, nummern: Object.fromEntries(eigene.map((nummer) => [nummer, bericht.nummern[nummer]])) };
+}
+
+function nummernVon(offen) {
+  return [...new Set(offen.flatMap((eintrag) => eintrag.nummern))];
+}
+
+function befundeZu(befunde, nummern, alle) {
+  return befunde.filter((befund) => {
+    const zu = alle.find((nummer) => befund.startsWith(`${nummer}:`) || befund.startsWith(`${nummer} `));
+    return zu === undefined || nummern.includes(zu);
+  });
+}
+
+function buchbar(eintrag, { bericht, befunde }, alle) {
+  return befundeZu(befunde, eintrag.nummern, alle).length === 0 && eintrag.nummern.every((nummer) => Object.hasOwn(bericht.nummern, nummer));
+}
+
+function nachfrageAntworten(offen, ergebnis) {
+  return offen.map(({ frage, nummern }) => {
+    const bericht = nummern.every((nummer) => ergebnis.gebucht.includes(nummer)) ? ergebnis.bericht : ergebnis.roh;
+    return { frage, nummern, bericht: berichtZu(bericht, nummern), befunde: befundeZu(ergebnis.befunde, nummern, nummernVon(offen)) };
+  });
+}
+
 function welleTeile({ antworten, enden }) {
   const ende = enden.length > 0 ? [abschnitt(NACHFRAGEN_ENDE, `Nachfragen zu ${enden.join(", ")} enden; schneide mit einer Annahme.`)] : [];
   return [...antworten.map(nachfrageAntwort), ...ende];
@@ -516,9 +543,19 @@ export class Planung {
     }
   }
 
-  erkunderLauf(text, nummern) {
+  erkunderLauf(text, nummern, erkunde = (wer) => this.erkunde(wer, text, nummern)) {
     const wer = this.team.teilnehmer("erkunder");
-    return { rolle: wer.rolle, kosten: ERKUNDUNG, lauf: () => this.erkunde(wer, text, nummern) };
+    return { rolle: wer.rolle, kosten: ERKUNDUNG, lauf: () => erkunde(wer) };
+  }
+
+  async erkundeNachfragen(wer, text, offen) {
+    const nummern = nummernVon(offen);
+    const ergebnis = await this.berichtVon(wer, text, nummern);
+    const gebucht = nummern.filter((nummer) => offen.some((eintrag) => eintrag.nummern.includes(nummer) && buchbar(eintrag, ergebnis, nummern)));
+    const roh = { ...ergebnis, roh: ergebnis.bericht, gebucht };
+    if (gebucht.length === 0) return roh;
+    const sauber = await this.wegPruefung(wer, { ...ergebnis, bericht: berichtZu(ergebnis.bericht, gebucht), befunde: [] }, gebucht);
+    return { ...roh, ...sauber, befunde: ergebnis.befunde };
   }
 
   erkundungsLaufMitBezahltemStand(gruppe) {
@@ -629,15 +666,16 @@ export class Planung {
     });
   }
 
-  verbucheNachfrage({ nummern }, ergebnis) {
-    const { bericht, befunde } = ergebnis;
-    const neu = befunde.length === 0 ? neueStellen(this.gesehen, bericht, nummern) : [];
-    if (befunde.length === 0) {
+  verbucheNachfrage(offen, { bericht, gebucht, weg }) {
+    const nummern = nummernVon(offen);
+    const neu = neueStellen(this.gesehen, bericht, gebucht);
+    if (gebucht.length > 0) {
       merkeStellen(this.gesehen, bericht);
-      this.ersetze(bericht, nummern);
-      this.uebernimmWeg(ergebnis);
+      this.ersetze(bericht, gebucht);
+      this.uebernimmWeg({ weg });
     }
-    const ohneNeues = nummern.filter((nummer) => !neu.some((stelle) => stelle.startsWith(`${nummer}\0`)));
+    const mitBefund = offen.filter((eintrag) => !eintrag.nummern.every((nummer) => gebucht.includes(nummer))).flatMap((eintrag) => eintrag.nummern);
+    const ohneNeues = nummern.filter((nummer) => mitBefund.includes(nummer) || !neu.some((stelle) => stelle.startsWith(`${nummer}\0`)));
     for (const nummer of ohneNeues) this.ausgeschoepft.add(nummer);
     return ohneNeues;
   }
@@ -658,11 +696,13 @@ export class Planung {
     if (!klaerung && this.nachfrageWellen >= 1) return this.beendeNachfragen(nachfragen);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
-    const laeufe = offen.map((eintrag) => this.erkunderLauf(this.erkunderNachricht("Nachfrage", { nummern: eintrag.nummern, fragen: [eintrag.frage], kopf: [eintrag.frage, ""] }), eintrag.nummern));
-    const ergebnisse = await this.welle(laeufe, "Nachfrage-Welle");
+    const nummern = nummernVon(offen);
+    const fragen = offen.map((eintrag) => `${eintrag.nummern.join(", ")}: ${eintrag.frage}`);
+    const text = this.erkunderNachricht("Nachfrage", { nummern, fragen, kopf: [...fragen, ""] });
+    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummern, (wer) => this.erkundeNachfragen(wer, text, offen))], "Nachfrage-Welle");
     if (!klaerung) this.nachfrageWellen += 1;
-    const enden = offen.flatMap((eintrag, stelle) => this.verbucheNachfrage(eintrag, ergebnisse[stelle]));
-    const welle = { antworten: offen.map(({ frage, nummern }, stelle) => ({ frage, nummern, bericht: ergebnisse[stelle].bericht, befunde: ergebnisse[stelle].befunde })), enden: [...new Set(enden)] };
+    const enden = this.verbucheNachfrage(offen, ergebnis);
+    const welle = { antworten: nachfrageAntworten(offen, ergebnis), enden };
     this.beantworteteWellen.push(welle);
     this.legeBerichte();
     this.legeFingerabdruck();

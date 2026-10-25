@@ -20,16 +20,15 @@ const ERKUNDER_LAUF = ERKUNDER + WEGPRUEFER;
 const TOKEN = { planer: PLANER, erkunder: ERKUNDER, "pruefer-planung": WEGPRUEFER, entwurf: PLANER };
 const ERSTE_WELLE = GRUPPEN.length;
 const DECKEL_UNTER_ERSTER_WELLE = PLANER + ERSTE_WELLE * ERKUNDER_LAUF - 1;
-const ZWEITE_WELLE = 12;
+const ZWEITE_WELLE = 1;
+const FREIGABE_UNTER_NACHFRAGE = PLANER_ANTWORTEN_BIS_NACHFRAGE * PLANER + (ERSTE_WELLE + ZWEITE_WELLE) * ERKUNDER_LAUF - 1;
 const NACHFRAGE_NUMMERN = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "T1", "T2", "B1", "S1", "S2"];
 const FREIGABE_ZEILE = /^Planung freigegeben: .*\n/m;
 const NACHFRAGEN = NACHFRAGE_NUMMERN.map((nummer) => ({ nummern: [nummer], frage: `Wo endet der Weg von ${nummer}?` }));
 
 function zwoelfNachfragen() {
-  const antworten = {};
-  for (const nummer of NACHFRAGE_NUMMERN) (antworten[`erkunder|## Nachfrage|${nummer}`] ??= []).push(bericht([nummer]));
   return {
-    ...antworten,
+    "erkunder|## Nachfrage|S1": [bericht([...new Set(NACHFRAGE_NUMMERN)])],
     "planer|## Zuschnitt": [alsJson({ nachfragen: NACHFRAGEN }), alsJson({ schnitt: schnittliste() })],
     "pruefer-planung|## Wegprüfung": Array.from({ length: WEGPRUEFUNGEN + ZWEITE_WELLE }, () => GRUEN_PRUEFLISTE),
   };
@@ -50,18 +49,18 @@ function pitchFreigabe(wurzel, zeile) {
 }
 
 test("plane ohne --deckel: liegen gemessene Kosten und Vorschau der zweiten Welle über der im Pitch freigegebenen Menge, endet plane vor ihr mit Exit 5, ohne einen ihrer Erkunder zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  const lauf = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${FREIGABE_UNTER_NACHFRAGE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
 
   exit(lauf, EXIT_DECKEL);
   assert.equal(aufrufe(lauf, "erkunder", "## Erkundung").length, ERSTE_WELLE);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 0);
   assert.equal(existsSync(planungsDatei(lauf, "fingerabdruck.json")), true);
   const gemessen = PLANER_ANTWORTEN_BIS_NACHFRAGE * PLANER + ERSTE_WELLE * ERKUNDER_LAUF;
-  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_FREIGABE, gemessen, vorschau: ZWEITE_WELLE * ERKUNDER_LAUF });
+  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: FREIGABE_UNTER_NACHFRAGE, gemessen, vorschau: ZWEITE_WELLE * ERKUNDER_LAUF });
 });
 
-test("plane --deckel geht vor die im Pitch freigegebene Menge: derselbe Lauf startet alle 12 Erkunder der zweiten Welle und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`);
+test("plane --deckel geht vor die im Pitch freigegebene Menge: derselbe Lauf startet den Erkunder der zweiten Welle und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const wurzel = pitchFreigabe(planOrdner(context), `Planung freigegeben: ${FREIGABE_UNTER_NACHFRAGE} Token\n`);
   const lauf = planeMitToken(context, wurzel, { argumente: ["--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
 
   exit(lauf, EXIT_GRUEN);
@@ -72,7 +71,7 @@ function nachfrageWellen(lauf) {
   return abgelegt(lauf, "fingerabdruck.json").zustand.nachfrageWellen;
 }
 
-function eineWelleMitZwoelfErkundern(lauf) {
+function eineWelleMitEinemErkunder(lauf) {
   exit(lauf, EXIT_GRUEN);
   assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, ZWEITE_WELLE);
   assert.equal(nachfrageWellen(lauf), 1);
@@ -81,17 +80,17 @@ function eineWelleMitZwoelfErkundern(lauf) {
 test("plane: zwölf Nachfragen in einer Antwort sind eine Nachfrage-Welle", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = planeMitToken(context, planOrdner(context), { argumente: ["--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
 
-  eineWelleMitZwoelfErkundern(lauf);
+  eineWelleMitEinemErkunder(lauf);
 });
 
 test("plane --fortsetzen nach Exit 5 vor der Nachfrage-Welle: die Welle ist nicht verbraucht, und ein Fortsetzen mit größerem Deckel lässt sie erkunden", { timeout: LAUF_FRIST_MS }, (context) => {
-  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${FREIGABE_UNTER_NACHFRAGE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
   exit(gestoppt, EXIT_DECKEL);
   assert.equal(nachfrageWellen(gestoppt), 0);
 
   const lauf = planeMitToken(context, gestoppt.wurzel, { argumente: ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)], ueberschrieben: zwoelfNachfragen() });
 
-  eineWelleMitZwoelfErkundern(lauf);
+  eineWelleMitEinemErkunder(lauf);
 });
 
 function ohneFreigabe(context, zeile) {
@@ -165,7 +164,7 @@ const DECKEL_VOR_ZUSCHNITT = NACH_ERKUNDUNG + PLANER / 2;
 const ERKUNDER_LAUF_VORHER_KLEIN = PLANER;
 const NACHFRAGE_VORSCHAU = PLANER + ZWEITE_WELLE * ERKUNDER_LAUF_VORHER_KLEIN;
 const DECKEL_IN_DER_NACHFRAGE = NACHFRAGE_VORSCHAU + ERKUNDER / 2;
-const NACH_HALT_HOECHSTENS = DECKEL_IN_DER_NACHFRAGE + (ZWEITE_WELLE - 1) * ERKUNDER;
+const NACH_HALT_HOECHSTENS = PLANER + ZWEITE_WELLE * ERKUNDER;
 const VORLAUF_BIS_NACHFRAGE = PLANER_ANTWORTEN_BIS_NACHFRAGE * PLANER + ERSTE_WELLE * ERKUNDER_LAUF;
 
 function fortgesetztGruen(context, wurzel, ueberschrieben = {}) {
@@ -213,7 +212,7 @@ function kleinesErkunderMittel({ wurzel }) {
 }
 
 test("plane --fortsetzen --deckel: ist die Vorschau der Nachfrage-Welle zu klein, startet in ihr keine Wegprüfung mehr, sobald der Deckel überschritten wäre, die Welle bleibt unverbraucht und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
-  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${FREIGABE_UNTER_NACHFRAGE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
   exit(gestoppt, EXIT_DECKEL);
   kleinesErkunderMittel(gestoppt);
 
@@ -226,7 +225,7 @@ test("plane --fortsetzen --deckel: ist die Vorschau der Nachfrage-Welle zu klein
   assert.match(planungsBericht(lauf).deckelSchritt, /Wegprüfung/);
   assert.equal(nachfrageWellen(lauf), 0);
 
-  eineWelleMitZwoelfErkundern(fortgesetztGruen(context, lauf.wurzel, zwoelfNachfragen()));
+  eineWelleMitEinemErkunder(fortgesetztGruen(context, lauf.wurzel, zwoelfNachfragen()));
 });
 
 test("plane mit einem Deckel ohne Wirkung ruft jede Rolle so oft auf wie ohne Prüfung vor jedem Schritt", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -240,7 +239,7 @@ test("plane mit einem Deckel ohne Wirkung ruft jede Rolle so oft auf wie ohne Pr
 
 const ENTWURF_VORHER_KLEIN = 1;
 const DECKEL_VOR_ZWEITER_PRUEFLISTE = NACH_PRUEFLISTE + PLANER;
-const DECKEL_VOR_RUECKSENDUNG_ERKUNDER = NACH_ZUSCHNITT + 2 * ERKUNDER_LAUF + ERKUNDER / 2;
+const DECKEL_VOR_RUECKSENDUNG_ERKUNDER = NACH_ZUSCHNITT + ERKUNDER + ERKUNDER / 2;
 const DECKEL_VOR_KORREKTUR = NACH_ZUSCHNITT + ERKUNDER_LAUF + WEGPRUEFER;
 const SPAETER_MS = 3000;
 const LEERER_BERICHT = alsJson({ nummern: {}, hinweise: [] });
@@ -277,15 +276,15 @@ test("plane --deckel: hält vor der Rücksendung an einen Prüfer der Prüfliste
 });
 
 test("plane --deckel: hält in der Nachfrage-Welle vor der Rücksendung an einen Erkunder, und nach --fortsetzen stehen die Wegprüfungen der angehaltenen Welle nicht doppelt im Fingerabdruck", { timeout: LAUF_FRIST_MS }, (context) => {
-  const spaeterLeer = { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "erkunder|## Nachfrage|S2": [{ text: LEERER_BERICHT, warte: SPAETER_MS }], "erkunder|## Befunde": [bericht(["S2"])] };
-  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_RUECKSENDUNG_ERKUNDER, ueberschrieben: nachfragenZu(["S1", "S2"], spaeterLeer), schritt: /^Rücksendung an erkunder \(S2\)$/ });
+  const leer = { "erkunder|## Nachfrage|S1": [LEERER_BERICHT], "erkunder|## Befunde": [bericht(["S1", "S2"])] };
+  const lauf = haeltVor(context, planOrdner(context), { deckel: DECKEL_VOR_RUECKSENDUNG_ERKUNDER, ueberschrieben: nachfragenZu(["S1", "S2"], leer), schritt: /^Rücksendung an erkunder \(S1, S2\)$/ });
 
   assert.equal(aufrufe(lauf, "erkunder", "## Befunde").length, 0);
   assert.equal(abgelegt(lauf, "fingerabdruck.json").zustand.wegpruefungen.length, ERSTE_WELLE);
   assert.equal(nachfrageWellen(lauf), 0);
 
-  const fortgesetzt = fortgesetztGruen(context, lauf.wurzel, nachfragenZu(["S1", "S2"], spaeterLeer));
-  assert.equal(abgelegt(fortgesetzt, "fingerabdruck.json").zustand.wegpruefungen.length, ERSTE_WELLE + 2);
+  const fortgesetzt = fortgesetztGruen(context, lauf.wurzel, nachfragenZu(["S1", "S2"], leer));
+  assert.equal(abgelegt(fortgesetzt, "fingerabdruck.json").zustand.wegpruefungen.length, ERSTE_WELLE + ZWEITE_WELLE);
 });
 
 test("plane --deckel: hält in der Nachfrage-Welle vor der Korrektur des Erkunders nach einem Befund der Wegprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -550,7 +549,7 @@ test("plane --deckel: hält plane mitten in einer Welle an und liegen die zu End
 const VOR_DEM_ZUSCHNITT = VORLAUF_BIS_NACHFRAGE + PLANER / 2;
 
 function vorDerNachfrageGestoppt(context) {
-  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${DECKEL_FREIGABE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
+  const gestoppt = planeMitToken(context, pitchFreigabe(planOrdner(context), `Planung freigegeben: ${FREIGABE_UNTER_NACHFRAGE} Token\n`), { ueberschrieben: zwoelfNachfragen() });
   exit(gestoppt, EXIT_DECKEL);
   return gestoppt;
 }
@@ -605,16 +604,17 @@ test("plane: ein am Deckel abgebrochener Erkunder steht mit seinem gemessenen Ve
   assert.deepEqual(kostenAbgebrochen, { erkunder: { laeufe: 1, token: nachfrage.gemessen } });
 });
 
-const FERTIG_S2 = 5_000;
+const FERTIG_S4 = 5_000;
 const ABGEBROCHEN_S1 = 60_000;
-const ZWEI_NACHFRAGEN = nachfragenZu(["S1", "S2"], { "erkunder|## Nachfrage|S1": [bericht(["S1"])], "erkunder|## Nachfrage|S2": [bericht(["S2"])] });
-const S1_NACH_S2 = { ...STROM_TOKEN, "erkunder|## Nachfrage|S2": [FERTIG_S2], "erkunder|## Nachfrage|S1": [{ nachDemEndeVon: "erkunder|## Nachfrage|S2" }, ABGEBROCHEN_S1, BIS_ZUM_ABBRUCH] };
+const DECKEL_BEIM_ABBRUCH_VON_S1 = STROM_GRUND + FERTIG_S4 + STROM_GRUND + ABGEBROCHEN_S1;
+const S1_NACH_S4 = { ...STROM_TOKEN, "erkunder|## Erkundung|S4": [FERTIG_S4], "erkunder|## Erkundung|S1": [{ nachDemEndeVon: "erkunder|## Erkundung|S4" }, ABGEBROCHEN_S1, BIS_ZUM_ABBRUCH] };
 
 test("plane: bricht der Deckel in einer Welle nur einen von zwei Erkundern ab, steht genau dessen gemessener Verbrauch unter kostenAbgebrochen", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: ZWEI_NACHFRAGEN, argumente: ["plane", ORDNER, "--deckel", String(STROM_DECKEL)], token: S1_NACH_S2 });
+  const wurzel = vorigerBericht(planOrdner(context), { erkunder: { laeufe: 1, token: STROM_GRUND }, "pruefer-planung": { laeufe: 1, token: STROM_GRUND } });
+  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER, "--deckel", String(DECKEL_BEIM_ABBRUCH_VON_S1)], token: S1_NACH_S4 });
 
   exit(lauf, EXIT_DECKEL);
-  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 2);
+  assert.equal(aufrufe(lauf, "erkunder", "## Erkundung").length, 2);
   assert.deepEqual(planungsBericht(lauf).kostenAbgebrochen?.erkunder, { laeufe: 1, token: ABGEBROCHEN_S1 });
 });
 
