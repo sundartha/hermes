@@ -41,11 +41,11 @@ test("plane: endet die Korrektur mit Exit 4, stehen die Befunde des Prüfers mit
   assert.deepEqual([korrigiert, zurueckgewiesen], [[], []]);
 });
 
-test("plane: eine Korrektur ohne weniger Befunde endet mit Exit 4",{ timeout: LAUF_FRIST_MS }, (context) => {
+test("plane: kehren die neuen Befunde der Korrektur in der nächsten Runde wieder, endet die Korrektur mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
   const anderer = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", [])] });
-  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(anderer)] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(anderer), antwortMit(anderer)] });
   exit(lauf, EXIT_BEFUNDE);
-  assert.match(planungsBericht(lauf).grund, /sank nicht/u);
+  assert.match(planungsBericht(lauf).grund, /wiederkehrend/u);
 });
 
 test("plane: steigen die Befunde nach der Korrektur, sind aber alle neu, geht die Korrektur weiter und endet grün", { timeout: LAUF_FRIST_MS }, (context) => {
