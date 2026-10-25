@@ -70,12 +70,13 @@ class NeuschnittPlanung extends Planung {
 
   beginne({ soll, nurUmbau }) {
     const eigene = this.eigeneNummern();
-    this.nurUmbau = nurUmbau;
-    this.soll = new Map([...soll].filter(([nummer]) => eigene.includes(nummer)));
-    this.team = new NeuschnittTeam(this.root, this.ordner);
-    this.planer = this.team.teilnehmer("planer");
+    super.beginne({ soll: new Map([...soll].filter(([nummer]) => eigene.includes(nummer))), nurUmbau });
     const gliederung = join(this.ordner, ERSTE_PLANUNG, GLIEDERUNG);
     this.gliederung = existsSync(gliederung) ? leseJson(gliederung) : { gruppen: [] };
+  }
+
+  neuesTeam() {
+    return new NeuschnittTeam(this.root, this.ordner);
   }
 
   designAbschnitte(ueberschriften) {

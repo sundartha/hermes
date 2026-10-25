@@ -191,9 +191,13 @@ export class Planung {
     this.soll = soll;
     this.andererAusgang = andererAusgang;
     this.nurUmbau = nurUmbau;
-    this.team = new Team(this.root, this.ordner);
+    this.team = this.neuesTeam();
     this.team.wache = this.wache();
     this.planer = this.team.teilnehmer("planer");
+  }
+
+  neuesTeam() {
+    return new Team(this.root, this.ordner);
   }
 
   wache() {
