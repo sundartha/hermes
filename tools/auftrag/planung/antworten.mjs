@@ -16,7 +16,23 @@ const ERFUELLT = "erfüllt";
 const BEFUND = "befund";
 const TRIFFT_NICHT_ZU = /^trifft nicht zu, weil(.*)$/su;
 const KORRIGIERT = /^korrigiert:\s*\S/u;
-const MIT_AUFTRAG = new Set(["durchstich", "umbau", "nie-saetze", "bereichsgrund", "allein-gruen", "nicht-zusammengelegt", "falsche-angabe"]);
+const FELDER_DES_AUFTRAGS = ["art", "ziel", "bereich", "bereichsgrund", "erwarteteDateien", "abnahme", "erwarteterFehler", "prueft", "wasDarfNiePassieren", "abhaengigVon", "eingang", "falscheAngaben", "altfunktionen", "schema"];
+
+function felderAusser(...ohne) {
+  return FELDER_DES_AUFTRAGS.filter((feld) => !ohne.includes(feld));
+}
+
+const GELESENE_FELDER = new Map([
+  ["durchstich", felderAusser("wasDarfNiePassieren", "bereichsgrund")],
+  ["umbau", felderAusser("wasDarfNiePassieren", "bereichsgrund", "falscheAngaben")],
+  ["nie-saetze", FELDER_DES_AUFTRAGS],
+  ["bereichsgrund", FELDER_DES_AUFTRAGS],
+  ["allein-gruen", FELDER_DES_AUFTRAGS],
+  ["nicht-zusammengelegt", FELDER_DES_AUFTRAGS],
+  ["falsche-angabe", ["falscheAngaben"]],
+]);
+const MIT_AUFTRAG = new Set(GELESENE_FELDER.keys());
+const WEG_FELDER = ["prueft", "falscheAngaben"];
 const B_NUMMER = /^B/;
 const WEG = "weg";
 const OHNE_AUFTRAEGE = {};
@@ -245,6 +261,32 @@ function nummernDerAenderung(kennungen, alt, neu) {
   return kennungen.flatMap((id) => [alt.get(id), neu.get(id)]).flatMap((auftrag) => liste(auftrag?.prueft)).map((nummer) => `${WEG}:${nummer}`);
 }
 
+function geaenderteFelder(vorher, nachher) {
+  const felder = new Set([...Object.keys(vorher ?? {}), ...Object.keys(nachher ?? {})]);
+  return [...felder].filter((feld) => alsText(vorher?.[feld]) !== alsText(nachher?.[feld]));
+}
+
+function liestGeaendertes(gelesen, felder) {
+  return felder.some((feld) => gelesen.includes(feld));
+}
+
+function zeileNachFeldern(schluessel, felderJeAuftrag) {
+  const felder = felderJeAuftrag.get(auftragDes(schluessel));
+  return felder !== undefined && liestGeaendertes(GELESENE_FELDER.get(schluessel.split(":")[0]), felder);
+}
+
+function nachFeldern(geaenderte, alt, neu) {
+  const felderJeAuftrag = new Map(geaenderte.map((id) => [id, geaenderteFelder(alt.get(id), neu.get(id))]));
+  const unbelegt = geaenderte.filter((id) => felderJeAuftrag.get(id).some((feld) => !FELDER_DES_AUFTRAGS.includes(feld)));
+  for (const id of unbelegt) felderJeAuftrag.delete(id);
+  return { felderJeAuftrag, unbelegt };
+}
+
+function wegeNachFeldern(felderJeAuftrag, alt, neu) {
+  const kennungen = [...felderJeAuftrag].filter(([, felder]) => liestGeaendertes(WEG_FELDER, felder)).map(([id]) => id);
+  return nummernDerAenderung(kennungen, alt, neu);
+}
+
 export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen, nurUmbau = false }) {
   const alle = fuerDenPitch(prueflisteSoll(nachher, soll, annahmen), { nurUmbau });
   const alt = nachKennung(vorher);
@@ -254,14 +296,15 @@ export function nachpruefSchluessel({ vorher, nachher, befunde, soll, annahmen, 
   const entfernt = [...alt.keys()].filter((id) => !neu.has(id));
   const anders = new Set([...geaenderte, ...dazu, ...entfernt]);
   const beruehrt = liste(nachher.auftraege).filter((auftrag) => liste(auftrag?.abhaengigVon).some((abhaengig) => anders.has(abhaengig?.id))).map(({ id }) => id);
-  const zupruefen = new Set([...anders, ...beruehrt]);
+  const { felderJeAuftrag, unbelegt } = nachFeldern(geaenderte, alt, neu);
+  const zupruefen = new Set([...unbelegt, ...dazu, ...entfernt, ...beruehrt]);
   const nachAenderung = schnittGeaendert(vorher, nachher, anders) ? planweiteSchluessel(soll, { nurUmbau }) : [];
   const zusammengelegt = zusammengelegtMit(entfernt.map((id) => alt.get(id)), liste(nachher.auftraege));
   const befundSchluessel = befunde.map(({ schluessel }) => schluessel);
-  const wege = nummernDerAenderung([...zupruefen], alt, neu);
+  const wege = [...nummernDerAenderung([...zupruefen], alt, neu), ...wegeNachFeldern(felderJeAuftrag, alt, neu)];
   const gewaehlt = new Set([...nachAenderung, ...zusammengelegt, ...wege, ...befundSchluessel]);
   return {
-    schluessel: alle.filter((schluessel) => zupruefen.has(auftragDes(schluessel)) || gewaehlt.has(schluessel)),
+    schluessel: alle.filter((schluessel) => zupruefen.has(auftragDes(schluessel)) || zeileNachFeldern(schluessel, felderJeAuftrag) || gewaehlt.has(schluessel)),
     entfallen: befundSchluessel.filter((schluessel) => !alle.includes(schluessel)),
     geaendert: geaenderte,
     neu: dazu,

@@ -278,7 +278,7 @@ test("nachprüfung: die Nachprüfung prüft genau die geänderten, neuen und ber
   const [a1, a2, a3, a4] = VOR_DER_KORREKTUR.auftraege;
   const nachher = { ...VOR_DER_KORREKTUR, auftraege: [{ ...a1, ziel: "anders" }, a2, a3, a4, auftrag("a5", { prueft: [], erwarteteDateien: ["src/e.js"] })] };
   const ergebnis = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher, befunde: [befundZu("weg:S2")], soll: NACHPRUEF_SOLL, annahmen: [] });
-  assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "weg:S1", "weg:S2", "b-nummer:B1", ...zeilenDes("a1", "a2", "a5"), "gegenfrage:alle"]);
+  assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "weg:S2", "b-nummer:B1", ...zeilenDes("a1", "a2", "a5"), "gegenfrage:alle"]);
   assert.deepEqual([ergebnis.geaendert, ergebnis.neu, ergebnis.entfernt, ergebnis.entfallen], [["a1"], ["a5"], [], []]);
 });
 
