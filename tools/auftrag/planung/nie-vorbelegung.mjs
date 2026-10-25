@@ -3,11 +3,16 @@ import { brauchtRotenTest } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { istObjekt, istText, liste } from "./erkundung.mjs";
 import { PITCH, gleicherText } from "./nummern.mjs";
-import { LISTENZEICHEN, szenarioMitSatz } from "./schnitt.mjs";
+import { LISTENZEICHEN, UEBERSCHRIFT, szenarioMitSatz } from "./schnitt.mjs";
+
+function istFolgezeile(zeile) {
+  return istText(zeile) && !LISTENZEICHEN.test(zeile) && !UEBERSCHRIFT.test(gleicherText(zeile));
+}
 
 function listenpunkteDes(pitch, abschnitt) {
   const zeilen = (abschnitte(pitch, [abschnitt]).abschnitte.get(abschnitt) ?? "").split("\n");
-  return zeilen.filter((zeile) => LISTENZEICHEN.test(zeile)).map((zeile) => zeile.replace(LISTENZEICHEN, "").trim()).filter(Boolean);
+  const einzeilig = zeilen.filter((zeile, stelle) => LISTENZEICHEN.test(zeile) && !istFolgezeile(zeilen[stelle + 1]));
+  return einzeilig.map((zeile) => zeile.replace(LISTENZEICHEN, "").trim()).filter(Boolean);
 }
 
 function einzigerAuftragMitTest(schnitt) {
