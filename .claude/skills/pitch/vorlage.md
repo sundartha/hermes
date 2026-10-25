@@ -23,6 +23,10 @@ Nach dieser Änderung <wer> <was, von außen sichtbar oder mit konkretem Wert me
 - <Technische Falle, die vor dem Bau bekannt ist>: <getroffene Entscheidung>
 (oder: keine bekannt)
 
+## Geänderte Dateien
+- `<Datei>`
+(jede Datei, die die Änderung ändert, anlegt oder als Test berührt; je Zeile genau eine Datei in Backticks)
+
 ## Altfunktionen
 - Umbau: `<Datei>:<Funktion>`
 - nicht berührt: `<Datei>:<Funktion>`, weil <wo die Änderung stattdessen liegt>
