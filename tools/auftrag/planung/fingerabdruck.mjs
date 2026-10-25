@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import { stringsIn } from "../../feste-pfade/lesen.mjs";
 import { istObjekt, istText } from "./erkundung.mjs";
 import { gitLauf } from "./git.mjs";
 import { DOKUMENTE, SCHNITT } from "./schnitt.mjs";
@@ -13,6 +14,8 @@ const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
 const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend", "erkundungAusstehend"];
 const KOPF_BAUM = "HEAD^{tree}";
+const WERKZEUG = "tools";
+const BAUM = "tree";
 
 export function erkundungsDatei(stelle) {
   return `erkundung-g${stelle + 1}.json`;
@@ -36,10 +39,26 @@ function gelesenePfade(root, ordner, kontext) {
   return [...new Set([...dokumente, ...kontext, ...rollen])].toSorted();
 }
 
+function baumEintrag(zeile) {
+  const [kopf, name] = zeile.split("\t");
+  const [, typ, objekt] = kopf.split(" ");
+  return { zeile, name, typ, objekt };
+}
+
+function baumTeile(root, baum) {
+  const { stdout } = gitLauf(root, ["ls-tree", "-z", baum]);
+  const eintraege = stdout.split("\0").filter(Boolean).map(baumEintrag);
+  const werkzeug = eintraege.find(({ name, typ }) => name === WERKZEUG && typ === BAUM);
+  const rest = eintraege.filter((eintrag) => eintrag !== werkzeug).map(({ zeile }) => zeile).join("\0");
+  return { rest: createHash("sha256").update(rest).digest("hex"), werkzeug: werkzeug?.objekt ?? null };
+}
+
 export function ausgangsstand(root, ordner, { arbeitsbaum, kontext }) {
   const kopfBaum = gitLauf(root, ["rev-parse", KOPF_BAUM]).stdout.trim();
   const dateien = Object.fromEntries(gelesenePfade(root, ordner, kontext).map((pfad) => [pfad, pruefsumme(join(root, pfad))]));
-  return { kopfBaum, arbeitsbaum, dateien };
+  const kopf = baumTeile(root, kopfBaum);
+  const arbeit = baumTeile(root, arbeitsbaum);
+  return { kopfBaum, arbeitsbaum, dateien, kopfOhneWerkzeug: kopf.rest, arbeitsbaumOhneWerkzeug: arbeit.rest, werkzeugBaum: arbeit.werkzeug };
 }
 
 export function fingerabdruck(stand, { ablage, anzahl, zustand }) {
@@ -63,10 +82,24 @@ function lesbar(abdruck) {
   return istText(kopfBaum) && istText(arbeitsbaum) && istObjekt(dateien) && wellen && ZUSTAND.every((name) => Array.isArray(abdruck.zustand[name]));
 }
 
-function standGruende(vorher, jetzt) {
+function ohneWerkzeugGetrennt(stand) {
+  return istText(stand.kopfOhneWerkzeug) && istText(stand.arbeitsbaumOhneWerkzeug);
+}
+
+function baumGruende(vorher, jetzt) {
+  const getrennt = ohneWerkzeugGetrennt(vorher);
   const gruende = [];
-  if (vorher.kopfBaum !== jetzt.kopfBaum) gruende.push(`der Repo-Baum (${KOPF_BAUM}) ist ${jetzt.kopfBaum}, beim Ablegen der Erkundung war er ${vorher.kopfBaum}`);
-  if (vorher.arbeitsbaum !== jetzt.arbeitsbaum) gruende.push("der Arbeitsbaum ohne planung/ ist ein anderer als beim Ablegen der Erkundung");
+  if (getrennt ? vorher.kopfOhneWerkzeug !== jetzt.kopfOhneWerkzeug : vorher.kopfBaum !== jetzt.kopfBaum) gruende.push(`der Repo-Baum (${KOPF_BAUM}) ist ${jetzt.kopfBaum}, beim Ablegen der Erkundung war er ${vorher.kopfBaum}`);
+  if (getrennt ? vorher.arbeitsbaumOhneWerkzeug !== jetzt.arbeitsbaumOhneWerkzeug : vorher.arbeitsbaum !== jetzt.arbeitsbaum) gruende.push("der Arbeitsbaum ohne planung/ ist ein anderer als beim Ablegen der Erkundung");
+  return gruende;
+}
+
+function werkzeugGeaendert(vorher, jetzt) {
+  return vorher.kopfBaum !== jetzt.kopfBaum || vorher.arbeitsbaum !== jetzt.arbeitsbaum;
+}
+
+function standGruende(vorher, jetzt) {
+  const gruende = baumGruende(vorher, jetzt);
   const pfade = [...new Set([...Object.keys(vorher.dateien), ...Object.keys(jetzt.dateien)])].toSorted();
   const geaendert = pfade.filter((pfad) => vorher.dateien[pfad] !== jetzt.dateien[pfad]);
   return [...gruende, ...geaendert.map((pfad) => `${pfad} ist seit dem Ablegen der Erkundung geändert`)];
@@ -100,13 +133,25 @@ function erkundungAus(ablage, abdruck) {
   return { gruende: [], erkundung: { gliederung, berichte, nachfragen, zustand: abdruck.zustand } };
 }
 
+function werkzeugFundstellen(ablage, { berichte, nachfragen }) {
+  const quellen = [...erkundungsNamen(berichte.length).map((name, stelle) => [name, berichte[stelle]]), [NACHFRAGEN, nachfragen], [SCHNITT, jsonAus(join(ablage, SCHNITT))]];
+  return quellen.flatMap(([name, wert]) => {
+    const pfad = stringsIn(wert).find((text) => text.includes(`${WERKZEUG}/`));
+    return pfad === undefined ? [] : [`der Baum ${WERKZEUG}/ ist seit dem Ablegen der Erkundung geändert, und ${name} nennt ${pfad}; eine Planung, die das Werkzeug selbst betrifft, setzt plane nach einer Änderung am Werkzeug nicht fort`];
+  });
+}
+
 export function liesFortsetzung(ablage, jetzt) {
   const datei = join(ablage, FINGERABDRUCK);
   if (!existsSync(datei)) return { gruende: [`${datei} fehlt; ohne Fingerabdruck der Erkundung setzt plane nicht fort`] };
   const abdruck = jsonAus(datei);
   if (!lesbar(abdruck)) return { gruende: [`${datei} hat nicht die Form eines Fingerabdrucks`] };
   const gruende = [...standGruende(abdruck.stand, jetzt), ...ablageGruende(ablage, abdruck.ablage)];
-  return gruende.length > 0 ? { gruende } : erkundungAus(ablage, abdruck);
+  if (gruende.length > 0) return { gruende };
+  const gelesen = erkundungAus(ablage, abdruck);
+  if (gelesen.gruende.length > 0 || !werkzeugGeaendert(abdruck.stand, jetzt)) return gelesen;
+  const amWerkzeug = werkzeugFundstellen(ablage, gelesen.erkundung);
+  return amWerkzeug.length > 0 ? { gruende: amWerkzeug } : { ...gelesen, erkundung: { ...gelesen.erkundung, werkzeugGeaendert: true } };
 }
 
 function pruefungsEingaben(ablage) {

@@ -31,7 +31,7 @@ import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istTex
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
-import { mitKettenBefunden } from "./kette.mjs";
+import { kettenBefunde, mitKettenBefunden, modulGraph } from "./kette.mjs";
 import { EXIT_ABBRUCH, EXIT_ALTFUNKTIONEN, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe, nachrichtenKarte } from "./funktionsliste.mjs";
@@ -1012,6 +1012,7 @@ class Fortsetzung extends Planung {
     this.erkundungAusstehend = zustand.erkundungAusstehend;
     this.nachfrageWellen = zustand.nachfrageWellen;
     this.beantworteteWellen = nachfragen;
+    this.werkzeugGeaendert = erkundung.werkzeugGeaendert === true;
     return [];
   }
 
@@ -1020,9 +1021,17 @@ class Fortsetzung extends Planung {
   }
 
   async laufe() {
+    await this.pruefeKetteNachWerkzeug();
     await this.erkundeAusstehende();
     await this.pruefeAusstehendeWege();
     await this.planeAbSchnitt();
+  }
+
+  async pruefeKetteNachWerkzeug() {
+    if (!this.werkzeugGeaendert) return;
+    const graph = await modulGraph(this.root);
+    const befunde = this.sauberBerichte().flatMap((bericht) => kettenBefunde(this.root, graph, bericht));
+    if (befunde.length > 0) throw new Ende(EXIT_AUFRUF, "plane setzt nicht fort, voller Neulauf nötig: das Werkzeug unter tools/ ist geändert, und die Kettenprüfung über die gespeicherten Berichte hat Befunde", befunde);
   }
 
   async erkundeAusstehende() {
