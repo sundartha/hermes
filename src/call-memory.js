@@ -1,3 +1,5 @@
+import { clampAtWordBoundary } from "./utils/text.js";
+
 export const MEMORY_MAX_CALLS = 3;
 
 export const MEMORY_MAX_ENTRY_CHARS = 200;
@@ -12,14 +14,21 @@ function singleLine(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+const MEMORY_CUT_MARK = "…";
+
+function clampMarked(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  return clampAtWordBoundary(text, maxChars - 1) + MEMORY_CUT_MARK;
+}
+
 export function memoryLine(entry) {
-  const outcome = singleLine(entry?.outcome).slice(0, MEMORY_MAX_OUTCOME_CHARS);
+  const outcome = clampMarked(singleLine(entry?.outcome), MEMORY_MAX_OUTCOME_CHARS);
   const facts = Array.isArray(entry?.facts) ? entry.facts.map(singleLine).filter(Boolean) : [];
   const parts = [];
   if (outcome) parts.push(outcome);
   if (facts.length) parts.push(facts.join(MEMORY_PART_SEPARATOR));
   if (!parts.length) return null;
-  return parts.join(MEMORY_PART_SEPARATOR).slice(0, MEMORY_MAX_ENTRY_CHARS);
+  return clampMarked(parts.join(MEMORY_PART_SEPARATOR), MEMORY_MAX_ENTRY_CHARS);
 }
 
 export function budgetedMemoryLines(entries) {
