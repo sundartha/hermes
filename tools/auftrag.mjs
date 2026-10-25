@@ -45,7 +45,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs messung <protokoll.jsonl> [--json]",
   "        node tools/auftrag.mjs schnitt plaene/P-<Nummer>-<kurzname>/",
   "        node tools/auftrag.mjs umfang plaene/P-<Nummer>-<kurzname>/   (misst Nummern, belegte Dateien, Funktionen und Tests des Pitches als JSON, mit „## Löschen“ im Pitch auch die Löschmenge; startet nichts, schreibt nichts)",
-  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>] [--issue <Nummer>]",
+  "        node tools/auftrag.mjs plane plaene/P-<Nummer>-<kurzname>/ [--fortsetzen] [--deckel <Token>] [--issue <Nummer>]   (mit --fortsetzen ist --deckel das Gesamtbudget der Planung einschließlich früherer Läufe)",
   "        node tools/auftrag.mjs suche [--] <muster> [<pfad> …]",
   "        node tools/auftrag.mjs dateien [--] [<pfad> …]",
   "        node tools/auftrag.mjs kette <datei:funktion> <datei:funktion>   (gibt die belegte Aufrufkette zwischen zwei Funktionen unter src/ mit Datei und Zeilen aus, sonst „kein Pfad belegt“ mit Exit 1; schreibt nichts)",
