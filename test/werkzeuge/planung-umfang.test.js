@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, planeAntworten, planungsBericht } from "./planung-plane-probe.js";
-import { HINWEIS, LAUF_FRIST_MS, ORDNER, exit, plane } from "./planung-probe.js";
+import { HINWEIS, LAUF_FRIST_MS, ORDNER, exit, geaenderteDateien, plane } from "./planung-probe.js";
 import { REPO_ROOT, isolatedEnvironment, probeRepository } from "./probe-repo.js";
 
 const PAKET = "plaene/P-009-probe";
@@ -79,6 +79,31 @@ test("umfang zählt Nummern, belegte Code- und Testdateien, getroffene Funktione
     testsAnDateien: ["test/grund.test.js", "test/hinweis.test.js"],
     dokumentKB: DOKUMENT_KB,
   });
+});
+
+function umfangMitAbschnitt(context, abschnitt) {
+  const wurzel = paketRepo(context, { "pitch.md": PITCH + abschnitt, "sicherheit.md": SICHERHEIT, "design.md": DESIGN_KOPF });
+  const lauf = umfangIn(wurzel, PAKET);
+  exit(lauf, EXIT_GRUEN);
+  return JSON.parse(lauf.stdout);
+}
+
+test("umfang trennt geänderte Code-Dateien aus dem Abschnitt Geänderte Dateien von reinen Beleg-Dateien", { timeout: LAUF_FRIST_MS }, (context) => {
+  const gemessen = umfangMitAbschnitt(context, geaenderteDateien(["src/hinweis.js", "src/neu.js", "test/hinweis.test.js"]));
+
+  assert.deepEqual(gemessen.codeDateien, ["src/grund.js", "src/hinweis.js"]);
+  assert.deepEqual(gemessen.geaenderteDateien, ["src/hinweis.js", "src/neu.js", "test/hinweis.test.js"]);
+  assert.deepEqual(gemessen.belegDateien, ["src/grund.js"]);
+});
+
+test("umfang zählt bei einem Ordner oder einer Zeile ohne Dateiform unter Geänderte Dateien jede belegte Code-Datei als geändert", { timeout: LAUF_FRIST_MS }, (context) => {
+  for (const abschnitt of [geaenderteDateien(["src/hinweis.js", "src/"]), `${geaenderteDateien(["src/hinweis.js"])}keine, weil nur belegt wird\n`]) {
+    const gemessen = umfangMitAbschnitt(context, abschnitt);
+
+    assert.deepEqual(gemessen.codeDateien, ["src/grund.js", "src/hinweis.js"], abschnitt);
+    assert.equal(gemessen.geaenderteDateien, undefined, abschnitt);
+    assert.equal(gemessen.belegDateien, undefined, abschnitt);
+  }
 });
 
 test("umfang ohne sicherheit.md endet mit Exit 2, nennt die fehlende Datei und gibt kein JSON aus", { timeout: LAUF_FRIST_MS }, (context) => {

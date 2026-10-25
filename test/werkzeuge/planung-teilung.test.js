@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { genannteStellen } from "../../tools/auftrag/planung/altfunktionen-vorab.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, planeAntworten, planungsBericht, teilEintrag as teil } from "./planung-plane-probe.js";
-import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
+import { BESTEHENDER_TEST, GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitGeaendertenDateien, mitUmbauZeilen, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
@@ -113,6 +113,116 @@ test("ein Paket mit 8 Szenarien, aber 11 belegten Code-Dateien wird vor dem erst
   ohneErkundung(lauf);
   assert.deepEqual(abgelegt(lauf, TEILE).ueber, ["11 Code-Dateien, Grenze 10"]);
   assert.deepEqual(abgelegt(lauf, TEILE).teile.map(({ kuerzel }) => kuerzel), ["t1", "t2", "t3"]);
+});
+
+function belegDateien(anzahl) {
+  return Array.from({ length: anzahl }, (_, stelle) => `src/beleg/datei-${stelle + 1}.js`);
+}
+
+function planeMitListe(context, { belege, geaendert = [ROUTE, HINWEIS], zwoelf = false, teilung = [], befunde = [], antworten = {}, vorher = () => {} }) {
+  const wurzel = planOrdner(context);
+  if (zwoelf) zwoelfNummern(wurzel);
+  vorher(wurzel);
+  codeDateienBelegen(wurzel, belege);
+  mitGeaendertenDateien(wurzel, geaendert);
+  const ueberschrieben = { [`planer|${TEILUNG}`]: teilung, [`planer|${BEFUNDE}`]: befunde, ...antworten };
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER] });
+}
+
+test("ein Paket mit 25 nur belegten und zwei im Pitch als geändert genannten Code-Dateien plant ohne Teilung", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitListe(context, { belege: belegDateien(25) });
+
+  assert.deepEqual(aufrufe(lauf, "planer", TEILUNG), [], lauf.stderr);
+  assert.equal(aufrufe(lauf, "planer", "## Gliederung").length, 1, lauf.stderr);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung", TEILE)), false);
+});
+
+const ROUTE_AENDERUNG = { datei: ROUTE, funktion: "speichereStatus", von: 10, bis: 14, neueZeilen: 3 };
+const HINWEIS_AENDERUNG = { datei: HINWEIS, funktion: "setzeHinweis", von: 6, bis: 9, neueZeilen: 3 };
+
+function mitAenderungen(nummern, aenderungen) {
+  return bericht(nummern, Object.fromEntries(nummern.map((nummer) => [nummer, { aenderungen }])));
+}
+
+function haeltAnHinweisAn(context, antworten = {}) {
+  const lauf = planeMitListe(context, { belege: [], geaendert: [ROUTE], antworten });
+  exit(lauf, EXIT_BEFUNDE);
+  const befund = lauf.stderr.split("\n").find((zeile) => zeile.includes(HINWEIS)) ?? "";
+  assert.ok(befund.includes("Geänderte Dateien"), lauf.stderr);
+  return lauf;
+}
+
+test("eine Erkundung, die eine Datei außerhalb der Liste ändert, hält plane mit Befund an und nennt die Datei", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = haeltAnHinweisAn(context);
+
+  assert.equal(aufrufe(lauf, "erkunder").length, GRUPPEN.length, lauf.stderr);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Zuschnitt"), [], lauf.stderr);
+});
+
+
+test("eine Nachfrage-Welle, die eine Datei außerhalb der Liste ändert, hält plane vor dem nächsten Zuschnitt an und nennt die Datei", { timeout: LAUF_FRIST_MS }, (context) => {
+  const antworten = {
+    "erkunder|## Erkundung|S4": [mitAenderungen(GRUPPEN[1].nummern, [ROUTE_AENDERUNG])],
+    "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo liegt der Hinweis?" }] }), alsJson({ schnitt: schnittliste() })],
+    "erkunder|## Nachfrage|S4": [bericht(["S4"])],
+  };
+  const lauf = haeltAnHinweisAn(context, antworten);
+
+  assert.equal(aufrufe(lauf, "erkunder", "## Nachfrage").length, 1, lauf.stderr);
+  assert.equal(aufrufe(lauf, "planer", "## Zuschnitt").length, 1, lauf.stderr);
+});
+
+function schneidetNachDerErkundung(context, optionen) {
+  const lauf = planeMitListe(context, { belege: [], ...optionen });
+  assert.ok(aufrufe(lauf, "planer", "## Zuschnitt").length > 0, lauf.stderr);
+  return lauf;
+}
+
+test("eine Erkundung, die zusätzlich eine Testdatei außerhalb der Liste ändert, hält plane nicht vor dem Zuschnitt an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const testdatei = { datei: BESTEHENDER_TEST, art: "aufruf", von: 3, bis: 3, neueZeilen: 1 };
+  const lauf = schneidetNachDerErkundung(context, { antworten: { "erkunder|## Erkundung|S4": [mitAenderungen(GRUPPEN[1].nummern, [HINWEIS_AENDERUNG, testdatei])] } });
+
+  assert.equal(lauf.stderr.includes("Geänderte Dateien"), false, lauf.stderr);
+});
+
+test("eine Erkundung, die eine Datei der Löschmenge ändert, die nicht in der Liste steht, hält plane nicht vor dem Zuschnitt an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const geloescht = { datei: "src/alt/eins.js", funktion: "weg", von: 1, bis: 3, neueZeilen: 0 };
+  const antworten = { "erkunder|## Erkundung|S1": [mitAenderungen(GRUPPEN[0].nummern, [ROUTE_AENDERUNG, geloescht])] };
+  const lauf = schneidetNachDerErkundung(context, { antworten, vorher: (wurzel) => loeschDateien(wurzel, ["eins"]) });
+
+  assert.equal(lauf.stderr.includes("Geänderte Dateien"), false, lauf.stderr);
+});
+
+test("über 25 Beleg-Dateien hält plane vor dem ersten Agenten an und teilt nicht", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = planeMitListe(context, { belege: belegDateien(26), zwoelf: true, teilung: [GUELTIG] });
+
+  exit(lauf, EXIT_BEFUNDE);
+  assert.deepEqual(aufrufe(lauf, "planer"), [], lauf.stderr);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
+  assert.ok(lauf.stderr.includes("26 Beleg-Dateien, Grenze 25"), lauf.stderr);
+});
+
+test("ein Teil mit mehr als 10 belegten, aber höchstens 10 geänderten Code-Dateien wird ohne Befund angenommen", { timeout: LAUF_FRIST_MS }, (context) => {
+  const belege = belegDateien(11);
+  const lauf = planeMitListe(context, { belege, zwoelf: true, teilung: [alsJson({ teile: [HINTERLEGEN, { ...HINWEIS_TEIL, dateien: [HINWEIS, ...belege] }] })] });
+
+  exit(lauf, EXIT_GETEILT);
+  ohneErkundung(lauf);
+  assert.deepEqual(aufrufe(lauf, "planer", BEFUNDE), []);
+  assert.deepEqual(abgelegt(lauf, TEILE).teile[1].dateien, [HINWEIS, ...belege]);
+});
+
+test("ein Teil ohne Nummer, ohne Umbau, ohne Löschung und ohne geänderte Datei geht mit Befund an den Planer zurück", { timeout: LAUF_FRIST_MS }, (context) => {
+  const belege = belegDateien(2);
+  const leer = alsJson({ teile: [HINTERLEGEN, HINWEIS_TEIL, teil("t3", "nur-belege", { nummern: [], dateien: belege, nurUmbau: true })] });
+  const gueltig = alsJson({ teile: [HINTERLEGEN, { ...HINWEIS_TEIL, dateien: [HINWEIS, ...belege] }] });
+  const lauf = planeMitListe(context, { belege, zwoelf: true, teilung: [leer], befunde: [gueltig] });
+
+  exit(lauf, EXIT_GETEILT);
+  ohneErkundung(lauf);
+  assert.ok(ruecksendung(lauf).includes("Regel Teilung: t3 hat keine Nummer, keinen Umbau, keine Löschung und keine im Pitch als geändert genannte Datei"), ruecksendung(lauf));
+  assert.equal(abgelegt(lauf, TEILE).ruecksendungen, 1);
 });
 
 test("ein Teil mit mehr als 8 Nummern geht mit Befund an den Planer zurück, und erst der gültige Schnitt endet mit Exit 7", { timeout: LAUF_FRIST_MS }, (context) => {
