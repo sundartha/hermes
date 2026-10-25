@@ -10,6 +10,7 @@ import { DOKUMENTE, SCHNITT } from "./schnitt.mjs";
 export const FINGERABDRUCK = "fingerabdruck.json";
 export const NACHFRAGEN = "nachfragen.json";
 export const GEPRUEFT = "geprueft.json";
+export const NACHFRAGE_AUSSTEHEND = "nachfrage-ausstehend.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
 const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend", "erkundungAusstehend"];
@@ -152,6 +153,25 @@ export function liesFortsetzung(ablage, jetzt) {
   if (gelesen.gruende.length > 0 || !werkzeugGeaendert(abdruck.stand, jetzt)) return gelesen;
   const amWerkzeug = werkzeugFundstellen(ablage, gelesen.erkundung);
   return amWerkzeug.length > 0 ? { gruende: amWerkzeug } : { ...gelesen, erkundung: { ...gelesen.erkundung, werkzeugGeaendert: true } };
+}
+
+export function nachfrageSumme(ablage) {
+  return pruefsumme(join(ablage, NACHFRAGE_AUSSTEHEND));
+}
+
+function offeneFrage(eintrag) {
+  return istText(eintrag?.frage) && Array.isArray(eintrag.nummern) && eintrag.nummern.length > 0 && eintrag.nummern.every(istText);
+}
+
+function ausstehendeForm(wert) {
+  const offen = Array.isArray(wert?.offen) && wert.offen.length > 0 && wert.offen.every(offeneFrage);
+  return offen && typeof wert.klaerung === "boolean" && istObjekt(wert.bericht) && Array.isArray(wert.befunde) && wert.befunde.every(istText);
+}
+
+export function liesAusstehendeNachfrage(ablage, { nachfrageAusstehend }) {
+  if (!istText(nachfrageAusstehend) || nachfrageSumme(ablage) !== nachfrageAusstehend) return null;
+  const wert = jsonAus(join(ablage, NACHFRAGE_AUSSTEHEND));
+  return ausstehendeForm(wert) ? wert : null;
 }
 
 function pruefungsEingaben(ablage) {
