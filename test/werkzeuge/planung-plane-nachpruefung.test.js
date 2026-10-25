@@ -35,7 +35,7 @@ test("plane: nach der Korrektur prüft ein frischer Prüfer genau die Nachprüf-
   assert.equal(weitere.length, 0);
   assert.equal(nachpruefung.resume, false);
   assert.equal(pruefungen.some(({ sitzung }) => sitzung === nachpruefung.sitzung), false);
-  assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "weg:S2", "weg:S3", "weg:S6", "weg:S4", "weg:S5", "weg:B1", "weg:T1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
+  assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "weg:S4", "weg:S5", "weg:B1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
   assert.ok(nachpruefung.eingabe.includes("allein-gruen:a2: a2 braucht den Code aus a1 | korrigiert: a2 liest den Code aus a1"));
   assert.equal(planungsBericht(lauf).nachpruefungen[0].sitzung, nachpruefung.sitzung);
 });
