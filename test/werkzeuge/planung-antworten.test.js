@@ -179,6 +179,37 @@ test("antworten: bei einem Schlüssel ohne Auftrag zählt jede Änderung der Sch
   assert.deepEqual(antwortenBefunde(befunde, antworten, { alt: SCHNITT, neu: { ...SCHNITT, annahmen: [{ text: "neu" }] } }), []);
 });
 
+const KORRIGIERT_A2 = [{ schluessel: "allein-gruen:a2", antwort: "korrigiert: Annahme berichtigt" }];
+const A2_UNVERAENDERT = ["allein-gruen:a2: „korrigiert“, aber der Auftrag a2 ist unverändert"];
+
+function mitAnnahmen(...annahmen) {
+  return { ...SCHNITT, annahmen };
+}
+
+test("antworten: eine geänderte Annahme mit der Kennung des Auftrags zählt bei einer Regel mit Auftrag als Korrektur", () => {
+  const alt = mitAnnahmen({ auftrag: "a1", text: "bleibt" }, { auftrag: "a2", text: "Seed flach" });
+  const neu = mitAnnahmen({ auftrag: "a1", text: "bleibt" }, { auftrag: "a2", text: "Seed verschachtelt" });
+  assert.deepEqual(antwortenBefunde(PRUEFER, KORRIGIERT_A2, { alt, neu }), []);
+});
+
+test("antworten: eine geänderte Annahme eines anderen Auftrags zählt nicht als Korrektur", () => {
+  const alt = mitAnnahmen({ auftrag: "a1", text: "Seed flach" }, { auftrag: "a2", text: "bleibt" });
+  const neu = mitAnnahmen({ auftrag: "a1", text: "Seed verschachtelt" }, { auftrag: "a2", text: "bleibt" });
+  assert.deepEqual(antwortenBefunde(PRUEFER, KORRIGIERT_A2, { alt, neu }), A2_UNVERAENDERT);
+});
+
+test("antworten: eine geänderte Annahme ohne Kennung zählt bei einer Regel mit Auftrag nicht als Korrektur", () => {
+  const alt = mitAnnahmen({ text: "Seed flach" }, { auftrag: "a2", text: "bleibt" });
+  const neu = mitAnnahmen({ text: "Seed verschachtelt" }, { auftrag: "a2", text: "bleibt" });
+  assert.deepEqual(antwortenBefunde(PRUEFER, KORRIGIERT_A2, { alt, neu }), A2_UNVERAENDERT);
+});
+
+test("antworten: ohne Änderung an Auftrag und Annahme bleibt die Meldung wörtlich wie bisher", () => {
+  const alt = mitAnnahmen({ auftrag: "a2", text: "bleibt" });
+  const neu = { ...mitAnnahmen({ auftrag: "a2", text: "bleibt" }), ownerAufgaben: [{ aufgabe: "neu", fundstelle: "pitch.md, ## Ergebnis", auftrag: "a2" }] };
+  assert.deepEqual(antwortenBefunde(PRUEFER, KORRIGIERT_A2, { alt, neu }), A2_UNVERAENDERT);
+});
+
 test("antworten: Zurückweisung ohne Grund, fremde und doppelte Antworten und ein anderer Text sind Befunde", () => {
   assert.deepEqual(antwortenBefunde(PRUEFER, [{ schluessel: "allein-gruen:a2", antwort: "trifft nicht zu, weil" }], { alt: SCHNITT, neu: SCHNITT }), ["allein-gruen:a2: „trifft nicht zu, weil …“ ohne Grund"]);
   assert.deepEqual(antwortenBefunde(PRUEFER, [{ schluessel: "allein-gruen:a2", antwort: "passt schon" }, { schluessel: "weg:S1", antwort: "korrigiert: x" }], { alt: SCHNITT, neu: SCHNITT }), [
@@ -289,4 +320,65 @@ test("nachprüfung: ein entfernter Auftrag bringt den Weg jeder Nummer, die er g
   const ergebnis = nachpruefSchluessel({ vorher: VOR_DER_KORREKTUR, nachher: ohneA3, befunde: [], soll: NACHPRUEF_SOLL, annahmen: [] });
   assert.deepEqual(ergebnis.schluessel, ["durchstich:a1", "weg:B1", "b-nummer:B1", "gegenfrage:alle"]);
   assert.deepEqual(ergebnis.entfernt, ["a3"]);
+});
+
+function nachpruefungMit(vorher, id, felder) {
+  const nachher = { ...vorher, auftraege: vorher.auftraege.map((eintrag) => (eintrag.id === id ? { ...eintrag, ...felder } : eintrag)) };
+  return nachpruefSchluessel({ vorher, nachher, befunde: [], soll: NACHPRUEF_SOLL, annahmen: [] }).schluessel.toSorted();
+}
+
+function planweitUnd(...zeilen) {
+  return [...planweiteSchluessel(NACHPRUEF_SOLL), ...zeilen].toSorted();
+}
+
+const NIE_SATZ = [{ satz: "Ein Anruf geht nie ohne Offenlegung hinaus.", quelle: "pitch.md", abschnitt: "## Nicht-Ziele" }];
+
+test("nachprüfung: ändert sich nur wasDarfNiePassieren eines Auftrags, prüft die Nachprüfung nur die Zeilen, die daran hängen", () => {
+  assert.deepEqual(nachpruefungMit(VOR_DER_KORREKTUR, "a3", { wasDarfNiePassieren: NIE_SATZ }), planweitUnd(...zeilenDes("a3")));
+});
+
+test("nachprüfung: ein Feld ohne belegte Zeilenzuordnung bringt alle Zeilen des Auftrags in die Nachprüfung", () => {
+  assert.deepEqual(nachpruefungMit(VOR_DER_KORREKTUR, "a3", { wasDarfNiePassieren: NIE_SATZ, notiz: "neu" }), planweitUnd("weg:B1", ...zeilenDes("a3")));
+});
+
+const FELD_AUFTRAG = auftrag("u2", {
+  art: "umbau",
+  bereich: ["src/a.js", "scripts/b.sh"],
+  bereichsgrund: "test/x.test.js koppelt beide Dateien",
+  erwarteteDateien: ["src/a.js", "scripts/b.sh"],
+  abnahme: "test/x.test.js",
+  prueft: ["S1"],
+  wasDarfNiePassieren: [],
+  abhaengigVon: [],
+  falscheAngaben: [{ nummer: "S1", datei: "src/x.js", grund: "liest nichts", fundstelle: "src/a.js:1" }],
+  altfunktionen: [],
+});
+const FELD_SCHNITT = { annahmen: [], auftraege: [auftrag("a1", { prueft: ["S2"], erwarteteDateien: ["src/c.js"] }), FELD_AUFTRAG] };
+const UMBAU = "umbau:u2";
+const GANZER_AUFTRAG = ["nie-saetze:u2", "allein-gruen:u2", "nicht-zusammengelegt:u2", "bereichsgrund:u2"];
+const FALSCHE_ANGABE = "falsche-angabe:u2:S1:src/x.js";
+const INHALT = [UMBAU, ...GANZER_AUFTRAG];
+
+const ZEILEN_JE_FELD_DER_SCHNITTLISTE = [
+  ["art", { art: "testumbau" }, INHALT],
+  ["ziel", { ziel: "anders" }, INHALT],
+  ["bereich", { bereich: ["src/a.js", "scripts/c.sh"] }, INHALT],
+  ["bereichsgrund", { bereichsgrund: "test/y.test.js koppelt beide Dateien" }, GANZER_AUFTRAG],
+  ["erwarteteDateien", { erwarteteDateien: ["src/a.js"] }, INHALT],
+  ["abnahme", { abnahme: "test/y.test.js" }, INHALT],
+  ["erwarteterFehler", { erwarteterFehler: "erwartet 1" }, INHALT],
+  ["prueft", { prueft: ["S1", "B1"] }, [...INHALT, "weg:S1", "weg:B1"]],
+  ["wasDarfNiePassieren", { wasDarfNiePassieren: NIE_SATZ }, GANZER_AUFTRAG],
+  ["abhaengigVon", { abhaengigVon: [{ id: "a1", grund: "liest a1" }] }, INHALT],
+  ["eingang", { eingang: "erreicht" }, INHALT],
+  ["falscheAngaben", { falscheAngaben: [{ ...FELD_AUFTRAG.falscheAngaben[0], grund: "anders" }] }, [...GANZER_AUFTRAG, FALSCHE_ANGABE, "weg:S1"]],
+  ["altfunktionen", { altfunktionen: [{ datei: "src/a.js", funktion: "alt", von: 1, bis: 2 }] }, INHALT],
+  ["schema", { schema: "vertraeglich" }, INHALT],
+];
+
+test("nachprüfung: jede Zeile, deren Eingabe sich geändert hat, steht in der Nachprüfung", () => {
+  assert.equal(ZEILEN_JE_FELD_DER_SCHNITTLISTE.length, 14);
+  for (const [feld, wert, zeilen] of ZEILEN_JE_FELD_DER_SCHNITTLISTE) {
+    assert.deepEqual(nachpruefungMit(FELD_SCHNITT, "u2", wert), planweitUnd(...zeilen), feld);
+  }
 });
