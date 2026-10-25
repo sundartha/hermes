@@ -26,3 +26,14 @@ useDefault = true
     regexes = [
       '''(?m)^const LANG_KEY = "hermes\.lang\.v2";$''',
     ]
+
+  [[rules.allowlists]]
+    description = "Fehlalarm, von Antonio am 25.10.2026 freigegeben (#2033, PR #2035): ABGEBROCHEN_S1 ist der Name einer Testkonstante (60 000 Token gemessener Verbrauch eines abgebrochenen Erkunders), token das Feld der Buchung kostenAbgebrochen, kein Zugangsschluessel"
+    condition = "AND"
+    paths = [
+      '''^test/werkzeuge/planung-plane-deckel\.test\.js$''',
+    ]
+    regexTarget = "line"
+    regexes = [
+      '''(?m)^  assert\.deepEqual\(planungsBericht\(lauf\)\.kostenAbgebrochen\?\.erkunder, \{ laeufe: 1, token: ABGEBROCHEN_S1 \}\);$''',
+    ]
