@@ -1,41 +1,9 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUPPEN, LAUF_FRIST_MS, ORDNER, aufrufe, bericht, exit, planOrdner, planeIn, stelle } from "./planung-probe.js";
-import { commitAll } from "./probe-repo.js";
+import { LAUF_FRIST_MS, ORDNER, aufrufe, exit, planeIn } from "./planung-probe.js";
+import { ANRUF_NUMMERN, EINGANG, KETTE, MITTE, WIRKUNG, mitWeg, wurzelMitKette } from "./planung-kette-probe.js";
 import { AUFTRAG, EXIT_GRUEN, planeAntworten, wegpruefungen } from "./planung-plane-probe.js";
-
-const KETTE = "src/kette-probe.js";
-const KETTE_QUELLE = `export function nimmAuftrag(nummer) {
-  const werkzeug = "place_call";
-  return pruefeAuftrag({ werkzeug, nummer });
-}
-
-function pruefeAuftrag(auftrag) {
-  return speichereAuftrag(auftrag);
-}
-
-export function speichereAuftrag(auftrag) {
-  return auftrag;
-}
-`;
-const EINGANG = stelle("eingang", KETTE, { funktion: "nimmAuftrag", von: 1, bis: 4 });
-const MITTE = stelle("logik", KETTE, { funktion: "pruefeAuftrag", von: 6, bis: 8 });
-const WIRKUNG = stelle("wirkung", KETTE, { funktion: "speichereAuftrag", von: 10, bis: 12 });
-const ANRUF_NUMMERN = GRUPPEN[1].nummern;
-
-function mitWeg(weg) {
-  return bericht(ANRUF_NUMMERN, Object.fromEntries(ANRUF_NUMMERN.map((nummer) => [nummer, { weg }])));
-}
-
-function wurzelMitKette(context) {
-  const wurzel = planOrdner(context);
-  writeFileSync(join(wurzel, KETTE), KETTE_QUELLE);
-  commitAll(wurzel, "Kette");
-  return wurzel;
-}
 
 test("plane: ein Erkunder-Bericht mit Lücke in der Aufrufkette bekommt den Befund mit den Zwischengliedern vor der Wegprüfung", { timeout: LAUF_FRIST_MS }, (context) => {
   const ueberschrieben = { "erkunder|## Erkundung|S4": [mitWeg([EINGANG, WIRKUNG])], "erkunder|## Befunde": [mitWeg([EINGANG, MITTE, WIRKUNG])] };

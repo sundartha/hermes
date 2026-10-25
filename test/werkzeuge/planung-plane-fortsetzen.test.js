@@ -4,12 +4,11 @@ import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, EXIT_PASST_NICHT, abgelegt, phaseDatei, plane, planeAntworten, werkzeug } from "./planung-plane-probe.js";
-import { runIn } from "./probe-repo.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, planeIn, schnittliste } from "./planung-probe.js";
+import { EINGANG, WIRKUNG, mitWeg, wurzelMitKette } from "./planung-kette-probe.js";
+import { ABBRUCH_IM_SCHNITT, AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, EXIT_PASST_NICHT, SCHNITT_SOFORT, abgebrochen, abgelegt, aendereWerkzeug, FORTSETZEN, fortsetzung, phaseDatei, plane, planeAntworten, planungsDatei, werkzeug } from "./planung-plane-probe.js";
+import { commitPaths, runIn } from "./probe-repo.js";
 
-const FORTSETZEN = [ORDNER, "--fortsetzen"];
-const ABBRUCH_IM_SCHNITT = { "planer|## Zuschnitt": [`Zerlegung passt nicht: Dann widerspricht der Lösung (Fundstellen: pitch.md, ## Problem; design.md, ${LOESUNG})`] };
 const FRAGE = "Wo wird die Nummer gespeichert?";
 const MIT_NACHFRAGE = {
   "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: FRAGE }] }), alsJson({ schnitt: schnittliste() })],
@@ -29,28 +28,13 @@ const ZUSCHNITT_KOPF = "## Zuschnitt\n\n";
 const NACHFRAGEN = "nachfragen.json";
 const ANTWORT_KOPF = "### Antwort auf deine Nachfrage 1";
 const LAGEBILD_KOPF = "### Annahmen der Erkunder";
-const SCHNITT_SOFORT = { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })] };
-
-function abgebrochen(context, zusatz = {}) {
-  const lauf = plane(context, { ...ABBRUCH_IM_SCHNITT, ...zusatz });
-  exit(lauf, EXIT_PASST_NICHT);
-  return lauf;
-}
-
-function fortsetzung(context, { wurzel }, { argumente = FORTSETZEN, ueberschrieben = MIT_NACHFRAGE } = {}) {
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
-}
 
 function weiter(context, vorher, argumente = FORTSETZEN) {
-  return fortsetzung(context, vorher, { argumente });
+  return fortsetzung(context, vorher, { argumente, ueberschrieben: MIT_NACHFRAGE });
 }
 
 function nachfrageWellen(lauf) {
   return abgelegt(lauf, FINGERABDRUCK).zustand.nachfrageWellen;
-}
-
-function planungsDatei({ wurzel }, name) {
-  return join(wurzel, ORDNER, "planung", name);
 }
 
 function eingaben(lauf, agent, ueberschrift) {
@@ -228,4 +212,77 @@ test("plane ohne --fortsetzen endet bei vorhandenem planung/ wie bisher, und --f
   exit(nochmal, EXIT_AUFRUF);
   assert.match(nochmal.stderr, /phase\.json gibt es schon; plane überschreibt nichts/u);
   assert.equal(keinAgent(nochmal), true);
+});
+
+const WERKZEUG_FUNDSTELLE = "tools/bereiche.json Zeile 1";
+
+function ohneErkundung(lauf) {
+  exit(lauf, EXIT_GRUEN);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Gliederung"), []);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  assert.equal(werkzeug(lauf, AUFTRAG, "pruefe", phaseDatei(lauf)).status, EXIT_GRUEN);
+}
+
+test("plane --fortsetzen: eine seit der Erkundung committete Änderung nur unter tools/ setzt fort, ohne einen Erkunder zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  aendereWerkzeug(vorher, { committet: true });
+  ohneErkundung(fortsetzung(context, vorher));
+});
+
+test("plane --fortsetzen: eine nicht committete Änderung nur unter tools/ setzt ebenso fort", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  aendereWerkzeug(vorher, { committet: false });
+  ohneErkundung(fortsetzung(context, vorher));
+});
+
+test("plane --fortsetzen: eine Änderung unter tools/ zusammen mit einer Änderung am Produktcode bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  aendereWerkzeug(vorher, { committet: true });
+  appendFileSync(join(vorher.wurzel, ROUTE), "\nexport const nachtrag = 1;\n");
+  abgelehnt(fortsetzung(context, vorher), /der Arbeitsbaum ohne planung\/ ist ein anderer als beim Ablegen der Erkundung/u);
+  commitPaths(vorher.wurzel, [ROUTE], "Produktcode");
+  abgelehnt(fortsetzung(context, vorher), /der Repo-Baum \(HEAD\^\{tree\}\) ist [0-9a-f]+, beim Ablegen der Erkundung war er [0-9a-f]+/u);
+});
+
+test("plane --fortsetzen: eine Änderung unter tools/ bricht ab, wenn ein Erkundungsbericht eine Datei unter tools/ als Fundstelle nennt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const amWerkzeug = { "erkunder|## Erkundung|S1": [bericht(GRUPPEN[0].nummern, { S1: { schema: { aenderung: false, fundstelle: WERKZEUG_FUNDSTELLE } } })] };
+  const vorher = abgebrochen(context, amWerkzeug);
+  ohneErkundung(fortsetzung(context, vorher));
+  const zweiter = abgebrochen(context, amWerkzeug);
+  aendereWerkzeug(zweiter, { committet: true });
+  abgelehnt(fortsetzung(context, zweiter), /erkundung-g1\.json nennt tools\/bereiche\.json/u);
+});
+
+test("plane --fortsetzen: eine Änderung an einer Rollen-Datei oder am Format des Fingerabdrucks bricht weiter ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  aendereWerkzeug(vorher, { committet: true });
+  const abdruck = abgelegt(vorher, FINGERABDRUCK);
+  const { wegZaehler, ...zustand } = abdruck.zustand;
+  assert.ok(Array.isArray(wegZaehler));
+  writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, zustand }));
+  abgelehnt(fortsetzung(context, vorher), /fingerabdruck\.json hat nicht die Form eines Fingerabdrucks/u);
+  writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify(abdruck));
+  appendFileSync(join(vorher.wurzel, ".claude/agents/erkunder.md"), "\n");
+  abgelehnt(fortsetzung(context, vorher), /\.claude\/agents\/erkunder\.md ist seit dem Ablegen der Erkundung geändert/u);
+});
+
+test("plane --fortsetzen: ein Fingerabdruck ohne die neuen Felder vergleicht die ganzen Bäume wie bisher", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  const abdruck = abgelegt(vorher, FINGERABDRUCK);
+  const { kopfBaum, arbeitsbaum, dateien } = abdruck.stand;
+  writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, stand: { kopfBaum, arbeitsbaum, dateien } }));
+  aendereWerkzeug(vorher, { committet: false });
+  abgelehnt(fortsetzung(context, vorher), /der Arbeitsbaum ohne planung\/ ist ein anderer als beim Ablegen der Erkundung/u);
+  assert.equal(abgelegt(vorher, FINGERABDRUCK).stand.kopfBaum, kopfBaum);
+});
+
+test("plane --fortsetzen: ein Befund der Kettenprüfung über den gespeicherten Bericht bricht die Fortsetzung ab", { timeout: LAUF_FRIST_MS }, (context) => {
+  const luecke = mitWeg([EINGANG, WIRKUNG]);
+  const ueberschrieben = { ...ABBRUCH_IM_SCHNITT, "erkunder|## Erkundung|S4": [luecke], "erkunder|## Befunde": [luecke] };
+  const vorher = planeIn(context, wurzelMitKette(context), { werkzeug: AUFTRAG, grund: planeAntworten(), argumente: ["plane", ORDNER], ueberschrieben });
+  exit(vorher, EXIT_PASST_NICHT);
+  assert.equal(aufrufe(vorher, "erkunder", "## Befunde").length, 1);
+  aendereWerkzeug(vorher, { committet: true });
+  const lauf = fortsetzung(context, vorher);
+  abgelehnt(lauf, /S4: zwischen nimmAuftrag \(src\/kette-probe\.js\) und speichereAuftrag \(src\/kette-probe\.js\) liegen ungemeldet pruefeAuftrag/u);
 });

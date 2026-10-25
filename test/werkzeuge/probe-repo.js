@@ -59,9 +59,13 @@ function git(directory, args) {
   if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
 }
 
-export function commitAll(directory, message) {
-  git(directory, ["add", "."]);
+export function commitPaths(directory, paths, message) {
+  git(directory, ["add", ...paths]);
   git(directory, [...PROBE_AUTHOR, ...PROBE_COMMIT_SETTINGS, "commit", "-q", "-m", message]);
+}
+
+export function commitAll(directory, message) {
+  commitPaths(directory, ["."], message);
 }
 
 export function mitUpstreamMaster(directory) {
