@@ -25,7 +25,7 @@ const PFAD_TRENNER = "/";
 const WORT_RAND = /^[„“"'`([]+|[„“"'`)\],;:.!?]+$/g;
 const LEERRAUM = /\s+/;
 export const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
-const UEBERSCHRIFT = /^#+ (.+)/;
+export const UEBERSCHRIFT = /^#+ (.+)/;
 const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
 const GRENZE_NEUE_ZEILEN = 400;
@@ -447,7 +447,7 @@ function varianten(zeile) {
   return titel === undefined ? [zeile.replace(LISTENZEICHEN, "")] : [zeile, ETIKETT.exec(titel)?.[1] ?? titel];
 }
 
-function saetzeIn(abschnitt) {
+export function saetzeIn(abschnitt) {
   const zeilen = abschnitt.split("\n").flatMap(varianten);
   return new Set(zeilen.flatMap((zeile) => [zeile, ...zeile.split(SATZENDE)]).map(gleicherText).filter(Boolean));
 }
