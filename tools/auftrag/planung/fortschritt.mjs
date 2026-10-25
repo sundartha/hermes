@@ -1,6 +1,7 @@
 import { bereichSchluessel } from "../format.mjs";
 import { liste } from "./erkundung.mjs";
 import { gleicherText } from "./nummern.mjs";
+import { saetzeIn } from "./schnitt.mjs";
 
 export const RUECKSENDUNGEN = 3;
 
@@ -67,20 +68,21 @@ export class Fortschritt {
   constructor(art, grenze = RUECKSENDUNGEN, quellen = []) {
     this.art = art;
     this.grenze = grenze;
-    this.quellen = quellen.map(gleicherText);
+    this.saetze = new Set(quellen.flatMap((quelle) => [...saetzeIn(quelle)]));
     this.runden = [];
     this.gesehen = new Map();
     this.ende = null;
   }
 
   mitQuellsaetzen(schluessel) {
-    return { ...schluessel, zitate: schluessel.zitate.filter((zitat) => this.quellen.some((quelle) => quelle.includes(zitat))) };
+    const zitate = schluessel.zitate.filter((zitat) => this.saetze.has(zitat));
+    return { ...schluessel, zitate, belegtNeu: zitate.length > 0 && zitate.length === schluessel.zitate.length };
   }
 
-  kehrtWieder({ roh, inhalt, zitate }) {
+  kehrtWieder({ roh, inhalt, zitate, belegtNeu }) {
     return [roh, inhalt].some((schluessel) => {
       const frueher = this.gesehen.get(schluessel);
-      return frueher !== undefined && (zitate.length === 0 || zitate.some((zitat) => frueher.has(zitat)));
+      return frueher !== undefined && (!belegtNeu || zitate.some((zitat) => frueher.has(zitat)));
     });
   }
 
