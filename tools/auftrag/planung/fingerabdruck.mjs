@@ -11,7 +11,7 @@ export const NACHFRAGEN = "nachfragen.json";
 export const GEPRUEFT = "geprueft.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
-const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend"];
+const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend", "erkundungAusstehend"];
 const KOPF_BAUM = "HEAD^{tree}";
 
 export function erkundungsDatei(stelle) {

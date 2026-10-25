@@ -162,6 +162,10 @@ function vorBekanntem(links, rechts) {
   return rechts.mittel - links.mittel || Number(links.ganz) - Number(rechts.ganz);
 }
 
+function fertigeRollen(geplant, stelle) {
+  return stelle?.abgebrochen.size > 0 ? geplant.filter((rolle) => stelle.fertig.has(rolle) && !stelle.abgebrochen.has(rolle)) : geplant;
+}
+
 export class Kostendeckel {
   constructor(root, phase, deckel) {
     this.root = root;
@@ -176,6 +180,10 @@ export class Kostendeckel {
     this.offen = new Map();
     this.halt = null;
     this.schritt = null;
+    this.zaehlung = null;
+    this.stellen = new Map();
+    this.liveAbbruch = null;
+    this.wellen = [];
   }
 
   wert(rolle, gemessen) {
@@ -272,8 +280,76 @@ export class Kostendeckel {
     this.offen.delete(stelle);
   }
 
+  wache({ stelle, rolle }) {
+    return { an: (beende, wer) => this.an(stelle(), beende, rolle(wer)), melde: (lauf, groesse, zuvor) => this.melde(lauf, groesse, zuvor), ab: (lauf, abgebrochen) => this.ab(lauf, abgebrochen), gesperrt: () => this.gesperrt(), kostendeckel: this };
+  }
+
+  async gezaehlt({ gemessen, schritt }, arbeit) {
+    this.beginneZaehlung(gemessen(), schritt);
+    try {
+      return await arbeit();
+    } finally {
+      this.beendeZaehlung(gemessen());
+    }
+  }
+
+  beginneZaehlung(gemessen, schritt) {
+    this.zaehlung = { grund: gemessen, schritt, live: 0, groesste: 0, laufend: new Map(), stellen: new Map(), abbruch: null };
+  }
+
+  an(stelle, beende, rolle) {
+    if (this.zaehlung === null) return null;
+    const lauf = { stelle, rolle, beende };
+    this.zaehlung.laufend.set(lauf, null);
+    return lauf;
+  }
+
+  ab(lauf, abgebrochen) {
+    if (this.zaehlung === null || lauf === null) return;
+    this.zaehlung.laufend.delete(lauf);
+    const { stellen } = this.zaehlung;
+    const stelle = stellen.get(lauf.stelle) ?? { fertig: new Set(), abgebrochen: new Set() };
+    (abgebrochen ? stelle.abgebrochen : stelle.fertig).add(lauf.rolle);
+    stellen.set(lauf.stelle, stelle);
+  }
+
+  gesperrt() {
+    return this.zaehlung?.abbruch ?? null;
+  }
+
+  melde(lauf, groesse, zuvor) {
+    const { zaehlung } = this;
+    if (zaehlung === null) return;
+    zaehlung.live += groesse - zuvor;
+    zaehlung.groesste = Math.max(zaehlung.groesste, groesse);
+    if (zaehlung.laufend.has(lauf)) zaehlung.laufend.set(lauf, groesse);
+    if (zaehlung.abbruch === null) this.pruefeLive();
+  }
+
+  pruefeLive() {
+    const { zaehlung } = this;
+    const { grund, live, schritt, laufend, groesste } = zaehlung;
+    const vorhalt = [...laufend.values()].reduce((summe, letzte) => summe + (letzte ?? groesste), 0);
+    if (grund + live + vorhalt <= this.deckel) return;
+    zaehlung.abbruch = `Deckel ${this.deckel} Token: gemessen ${grund}, live ${live}, Vorhalt ${vorhalt}, zusammen ${grund + live + vorhalt}; plane bricht die laufenden Agenten beim Schritt „${schritt}“ ab und wartet auf eine Entscheidung`;
+    this.halt = this.halt === null ? zaehlung.abbruch : `${this.halt}; ${zaehlung.abbruch}`;
+    this.liveAbbruch ??= zaehlung.abbruch;
+    if (this.schritt === null) {
+      this.stand = { gemessen: grund, live, vorhalt };
+      this.schritt = schritt;
+    }
+    for (const { beende } of laufend.keys()) beende(zaehlung.abbruch);
+  }
+
+  beendeZaehlung(gemessen) {
+    const { grund, live, schritt, stellen } = this.zaehlung;
+    this.wellen.push({ schritt, live, gemessen: gemessen - grund });
+    this.stellen = stellen;
+    this.zaehlung = null;
+  }
+
   verbuche(schritte, kosten) {
-    const rollen = schritte.flat();
+    const rollen = schritte.flatMap((geplant, stelle) => fertigeRollen(geplant, this.stellen.get(stelle)));
     const vorkommen = Map.groupBy(rollen, (rolle) => rolle);
     const eigene = [...vorkommen.keys()].reduce((summe, rolle) => summe + (kosten[rolle] ?? 0), 0);
     const rest = Object.values(kosten).reduce((summe, token) => summe + token, 0) - eigene;
@@ -286,6 +362,6 @@ export class Kostendeckel {
   bericht() {
     const schritt = this.schritt === null ? {} : { deckelSchritt: this.schritt };
     const ohneKennzeichnung = !this.vorigeJeRolle && this.vorige[ERKUNDER] !== undefined && this.jeLauf[ERKUNDER] === undefined;
-    return { deckel: { deckel: this.deckel, ...this.stand }, ...schritt, kostenJeLauf: { ...this.vorige, ...this.jeLauf }, ...(!ohneKennzeichnung && { kostenGebucht: JE_ROLLE }) };
+    return { deckel: { deckel: this.deckel, ...this.stand }, ...schritt, wellen: this.wellen, kostenJeLauf: { ...this.vorige, ...this.jeLauf }, ...(!ohneKennzeichnung && { kostenGebucht: JE_ROLLE }) };
   }
 }
