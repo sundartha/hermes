@@ -94,6 +94,7 @@ export function planBericht(lauf, { root, team }) {
     ownerAufgaben: liste(lauf.schnitt?.ownerAufgaben),
     befunde: lauf.befunde,
     ruecksendungen: team.ruecksendungen,
+    ruecksendeBefunde: liste(lauf.ruecksendeBefunde),
     netzabbrueche: team.netzabbrueche,
     schleifen: liste(lauf.schleifen),
     nachpruefungen: liste(lauf.nachpruefungen),

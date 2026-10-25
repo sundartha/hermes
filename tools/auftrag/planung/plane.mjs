@@ -204,6 +204,7 @@ export class Planung {
     this.wegAusstehend = [];
     this.erkundungAusstehend = [];
     this.bezahlteStaende = new Map();
+    this.ruecksendeBefunde = [];
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
     this.beantworteteWellen = [];
@@ -461,6 +462,7 @@ export class Planung {
     const erste = await mitKettenBefunden(this.root, this.pruefeBericht(await this.team.frage(wer, text), nummern));
     if (erste.befunde.length === 0) return erste;
     this.merkeBezahlt(nummern, { ergebnis: erste });
+    this.merkeRuecksendung(wer.rolle, nummern, erste.befunde);
     this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
     const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, erste.befunde));
     return this.pruefeBericht(zweite, nummern);
@@ -469,6 +471,11 @@ export class Planung {
   async erkunde(wer, text, nummern) {
     const ergebnis = await this.berichtVon(wer, text, nummern);
     return ergebnis.befunde.length === 0 ? this.wegPruefung(wer, ergebnis, nummern) : ergebnis;
+  }
+
+  merkeRuecksendung(rolle, nummern, befunde) {
+    this.ruecksendeBefunde.push({ rolle, nummern, befunde });
+    console.log(`Rücksendung an ${rolle} (${nummern.join(", ")}) wegen:\n${punkte(befunde)}`);
   }
 
   merkeBezahlt(nummern, stand) {
@@ -1151,6 +1158,7 @@ function berichte(planung, ergebnis) {
     schleifen: planung.schleifen.map((schleife) => schleife.bericht()),
     nachpruefungen: planung.nachpruefungen,
     wegpruefungen: planung.wegpruefungen,
+    ruecksendeBefunde: planung.ruecksendeBefunde,
   };
   const geteilt = ergebnis.exit === EXIT_GETEILT ? teilungsBericht(planung.ordner) : {};
   const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht(), ...geteilt };
