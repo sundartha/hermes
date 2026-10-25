@@ -10,7 +10,7 @@ import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { hebeFreigabe } from "./planung-freigabe-probe.js";
-import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
+import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitGeaendertenDateien, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
 const EXIT_DECKEL = 5;
@@ -32,6 +32,7 @@ const HAENGT_MS = 30_000;
 const ANGRIFFSWEG_T3 = /### T3:[\s\S]*?(?=## 3\. Lückenprüfung)/u;
 const FEHLERFAELLE = "## Fehlerfälle";
 const ZEILENANGABE = ":7";
+const UMBAU_DATEI = "src/umbau.js";
 
 const TEILE = alsJson({ teile: [
   { kuerzel: "t1", name: "eigene-nummer-hinterlegen", nummern: ["S1", "S2", "S3", "S6", "S7"], tWege: ["T1", "T2"], dateien: [ROUTE], nurUmbau: false, abhaengigVon: [], grund: "eigener Eingang zum Hinterlegen" },
@@ -347,8 +348,9 @@ test("ein Teil, der nach dem Start eines Agenten endet, bucht den gemessenen Ver
   assert.deepEqual(laeufe.map((lauf) => ({ teil: lauf.teil, token: lauf.token, deckel: lauf.deckel })), [{ teil: basename(HINTERLEGEN), token, deckel: TEIL_DECKEL }]);
 });
 
-function teilMitDesign(context, { genannt, auchInT2 = [] }) {
+function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder }) {
   const { wurzel, ...teilung } = geteilt(context, { vorher: (ordner) => {
+    if (geaendert !== undefined) mitGeaendertenDateien(ordner, geaendert);
     const design = join(ordner, ORDNER, "design.md");
     ersetze(design, `${LOESUNG}\n`, `${LOESUNG}\n\nDie Stellen dieser Gruppe liegen in ${genannt.map((datei) => `\`${datei}\``).join(" und ")}.\n`);
     ersetze(design, `${FEHLERFAELLE}\n`, `${FEHLERFAELLE}\n\nDer Hinweis beim Anruf liegt in \`${HINWEIS}\`.\n`);
@@ -359,7 +361,8 @@ function teilMitDesign(context, { genannt, auchInT2 = [] }) {
   const mitGeteilten = eltern.teile.map((teil) => (teil.kuerzel === "t2" ? { ...teil, dateien: [...teil.dateien, ...auchInT2] } : teil));
   writeFileSync(teileDatei, JSON.stringify({ ...eltern, teile: mitGeteilten }));
   mitIssue(wurzel, HINTERLEGEN, 97);
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[0]] })] }, argumente: ["plane", HINTERLEGEN] });
+  const grund = erkunder === undefined ? {} : { ...planeAntworten(), "erkunder|## Erkundung|S1": [erkunder] };
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund, ueberschrieben: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[0]] })] }, argumente: ["plane", HINTERLEGEN] });
 }
 
 function befundZu(lauf, datei) {
@@ -381,6 +384,32 @@ test("eine Gruppe, die nur Dateien des eigenen Teils nennt, plant weiter wie bis
 
   assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
   assert.equal(lauf.stderr.includes(basename(HINWEIS_ORDNER)), false, lauf.stderr);
+});
+
+test("eine Beleg-Datei eines gemeinsamen Abschnitts gilt im Teil nicht als fremde Datei", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`], geaendert: [ROUTE, UMBAU_DATEI] });
+
+  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
+  assert.equal(befundZu(lauf, HINWEIS), "", lauf.stderr);
+});
+
+test("ändert die Erkundung im Teil eine Datei, die der Pitch nur für einen anderen Teil als geändert nennt, hält plane den Teil vor dem Zuschnitt mit Exit 4 an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const hinweisAendern = { aenderungen: [{ datei: HINWEIS, funktion: "setzeHinweis", von: 6, bis: 9, neueZeilen: 3 }] };
+  const erkunder = bericht(GRUPPEN[0].nummern, Object.fromEntries(GRUPPEN[0].nummern.map((nummer) => [nummer, hinweisAendern])));
+  const lauf = teilMitDesign(context, { genannt: [ROUTE], geaendert: [ROUTE, HINWEIS, UMBAU_DATEI], erkunder });
+
+  exit(lauf, EXIT_BEFUNDE);
+  assert.equal(aufrufe(lauf, "erkunder", "## Erkundung").length, 1, lauf.stderr);
+  assert.deepEqual(aufrufe(lauf, "planer", "## Zuschnitt"), [], lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").some((zeile) => zeile.includes(HINWEIS) && zeile.includes("Geänderte Dateien")), lauf.stderr);
+});
+
+test("eine im Pitch als geändert genannte Datei eines anderen Teils in einem gemeinsamen Abschnitt hält den Teil weiter mit Exit 4 an", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`], geaendert: [ROUTE, HINWEIS, UMBAU_DATEI] });
+
+  exit(lauf, EXIT_BEFUNDE);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.ok(befundZu(lauf, HINWEIS).includes(basename(HINWEIS_ORDNER)), lauf.stderr);
 });
 
 test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile zusammen nie über die Freigabe kommen", { timeout: LAUF_FRIST_MS }, async (context) => {

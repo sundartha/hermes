@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
@@ -165,6 +165,14 @@ export function hinweisInDerDateikarte(eingabe) {
 
 export function mitUmbauZeilen(pitch, namen) {
   return pitch.replace(ALTFUNKTIONEN_ZEILE, `## Altfunktionen\n${namen.map((name) => `- Umbau: \`${name}\``).join("\n")}`);
+}
+
+export function geaenderteDateien(dateien) {
+  return `\n## Geänderte Dateien\n\n${dateien.map((datei) => `- \`${datei}\``).join("\n")}\n`;
+}
+
+export function mitGeaendertenDateien(wurzel, dateien) {
+  appendFileSync(join(wurzel, ORDNER, "pitch.md"), geaenderteDateien(dateien));
 }
 
 export function alsJson(wert) {
