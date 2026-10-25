@@ -52,6 +52,35 @@ test("fortschritt: gleich viele Befunde beenden die Schleife", () => {
   assert.equal(zweite.grund, "zuschnitt: Befunde blieben nach 1 Rücksendungen offen, die Zahl der Befunde sank nicht (2 → 2)");
 });
 
+test("fortschritt: mehr Befunde, die alle neu sind, beenden die Schleife nicht", () => {
+  const schleife = new Fortschritt("korrektur");
+  const ergebnis = runden(schleife, [["Regel Abnahmetest: a1 hat keinen Test"], ["Regel Bereich: a2 liegt in zwei Ordnern", "Regel Eingang: a3 nennt keinen Eingang"]]);
+  assert.deepEqual(ergebnis, [null, null]);
+  assert.equal(schleife.bericht().ende, null);
+});
+
+test("fortschritt: gleich viele Befunde, von denen einer wiederkehrt, beenden die Schleife als wiederkehrend", () => {
+  const schleife = new Fortschritt("korrektur");
+  const [erste, zweite] = runden(schleife, [
+    ["Regel Abnahmetest: a1 hat keinen Test", "Regel Bereich: a2 liegt in zwei Ordnern"],
+    ["Regel Abnahmetest: a1 hat noch keinen Test", "Regel Eingang: a3 nennt keinen Eingang"],
+  ]);
+  assert.equal(erste, null);
+  assert.equal(zweite.grund, 'korrektur: Befunde blieben nach 1 Rücksendungen offen, wiederkehrend: ["Abnahmetest",["a1"]]');
+});
+
+test("fortschritt: neue Befunde in jeder Runde enden nach der Grenze an Rücksendungen", () => {
+  const schleife = new Fortschritt("korrektur");
+  const ergebnis = runden(schleife, [
+    ["Regel Abnahmetest: a1 hat keinen Test"],
+    ["Regel Bereich: a2 liegt in zwei Ordnern"],
+    ["Regel Eingang: a3 nennt keinen Eingang", "Regel Nie-Sätze: a14 hat keinen Nie-Satz"],
+    ["Regel Abnahmetest: a2 hat keinen Test", "Regel Form: es gibt keine Gliederung"],
+  ]);
+  assert.deepEqual(ergebnis.slice(0, RUECKSENDUNGEN), [null, null, null]);
+  assert.equal(ergebnis[RUECKSENDUNGEN].grund, "korrektur: Befunde blieben nach 3 Rücksendungen offen, nach 3 Rücksendungen");
+});
+
 test("fortschritt: ein umbenannter Auftrag bleibt derselbe Befund", () => {
   const schleife = new Fortschritt("korrektur");
   assert.equal(schleife.endeNachRunde(["Regel Abnahmetest: a14 hat keinen Test", "Regel Bereich: a2 liegt in zwei Ordnern"], SCHNITT, SOLL), null);

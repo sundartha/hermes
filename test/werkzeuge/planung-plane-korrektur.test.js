@@ -48,6 +48,16 @@ test("plane: eine Korrektur ohne weniger Befunde endet mit Exit 4",{ timeout: LA
   assert.match(planungsBericht(lauf).grund, /sank nicht/u);
 });
 
+test("plane: steigen die Befunde nach der Korrektur, sind aber alle neu, geht die Korrektur weiter und endet grün", { timeout: LAUF_FRIST_MS }, (context) => {
+  const zweiNeue = korrektur({ a2: A2_KORRIGIERT, a3: { prueft: ["S4", "B1"] }, dazu: [zusatz("a14", ["S5"]), zusatz("a15", ["B1"]), zusatz("a16", [])] });
+  const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(zweiNeue), antwortMit(MIT_NUMMER)] });
+  exit(lauf, EXIT_GRUEN);
+  const korrekturschleife = planungsBericht(lauf).schleifen.find(({ art }) => art === "korrektur");
+  assert.deepEqual(korrekturschleife.runden.map(({ zahl }) => zahl), [1, 2], JSON.stringify(planungsBericht(lauf).schleifen));
+  assert.equal(aufrufe(lauf, "planer", "## Befunde").length, 3);
+  assert.deepEqual(geplanteListe(lauf), MIT_NUMMER);
+});
+
 test("plane: nach drei Rücksendungen endet die Schleife mit Exit 4", { timeout: LAUF_FRIST_MS }, (context) => {
   const ohneNummern = (...kennungen) => alsJson({ schnitt: korrektur({ dazu: kennungen.map((id) => zusatz(id, [])) }) });
   const lauf = plane(context, {
