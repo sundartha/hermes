@@ -145,3 +145,35 @@ test("fortschritt: ersetzt der Planer einen Nie-Satz, der in keiner Quelle steht
   assert.equal(schleife.endeNachRunde([falsch("Der Code wird nie im Klartext gespeichert."), "Regel Form: es gibt keine Gliederung"], SCHNITT, SOLL), null);
   assert.match(schleife.endeNachRunde([falsch("Der Code bleibt immer gehasht.")], SCHNITT, SOLL).grund, /wiederkehrend/u);
 });
+
+const PITCH_ZWEI_FALLEN = ["## Fallen", "- Der Code wird nur gehasht gespeichert.", "- Der Link gilt nur zehn Minuten.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: ein zweiter Kanal."].join("\n");
+const CODE = "„Der Code wird nur gehasht gespeichert.“";
+const LINK = "„Der Link gilt nur zehn Minuten.“";
+
+function nieBefund(zitat, zusatz = "") {
+  return `Regel Nie-Sätze: a1 wasDarfNiePassieren: „${zitat}“ steht nicht wörtlich als ganzer Satz oder ganze Zeile in pitch.md, ## Fallen${zusatz}`;
+}
+
+function zweiteRunde(erste, zweite) {
+  const schleife = new Fortschritt("zuschnitt", RUECKSENDUNGEN, [PITCH_ZWEI_FALLEN]);
+  assert.equal(schleife.endeNachRunde([erste, "Regel Form: es gibt keine Gliederung"], SCHNITT, SOLL), null);
+  return schleife.endeNachRunde([zweite], SCHNITT, SOLL);
+}
+
+test("Fortschritt: ein anderes Satzstück derselben Pitch-Zeile macht einen Befund nicht neu", () => {
+  assert.match(zweiteRunde(nieBefund("Der Code wird"), nieBefund("nur gehasht gespeichert")).grund, /wiederkehrend: /u);
+});
+
+test("Fortschritt: ein falsches Zitat neben einem neuen Pitch-Satz macht einen Befund nicht neu", () => {
+  const falsch = "Der Code bleibt immer gehasht.";
+  assert.match(zweiteRunde(nieBefund(falsch), nieBefund(falsch, `; es fehlt ${LINK}`)).grund, /wiederkehrend: /u);
+});
+
+test("Fortschritt: ersetzt der Planer ein falsches Zitat durch ein anderes falsches, gilt der Befund als wiederkehrend", () => {
+  assert.match(zweiteRunde(nieBefund("Der Code wird nie im Klartext gespeichert."), nieBefund("Der Code wird nur gehasht")).grund, /wiederkehrend: /u);
+});
+
+test("Fortschritt: ein ganzer neuer Pitch-Satz macht einen Befund neu", () => {
+  const gegenfrage = (zitat) => ({ schluessel: "gegenfrage:alle", ergebnis: "befund", befund: `Bei a1 fehlt in wasDarfNiePassieren ${zitat}`, fundstelle: "pitch.md" });
+  assert.equal(zweiteRunde(gegenfrage(CODE), gegenfrage(LINK)), null);
+});
