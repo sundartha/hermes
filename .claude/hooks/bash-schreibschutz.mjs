@@ -22,7 +22,9 @@ const VARIABLE = /^[A-Za-z_]\w*|^\{([A-Za-z_]\w*)\}/;
 const SONDERPARAMETER = /^[0-9@*#?$!-]/;
 const BEDINGT_VORHER = new Set(["&&", "||", "|"]);
 const BEDINGT_NACHHER = new Set(["|", "&"]);
-const ERSETZUNG_GESPERRT = "Ersetzung in Bash ist für Test- und Bau-Agent gesperrt; Werte direkt schreiben oder Read/Grep nutzen.";
+const ERSETZUNG_GESPERRT =
+  "Ersetzung in Bash ist für Test- und Bau-Agent gesperrt; ohne Ersetzung schreiben: Temp-Datei als fester Pfad unter /tmp statt $TMPDIR, " +
+  "$ in Mustern in einfache Anführungszeichen, Pfade und Dateien wörtlich statt aus Variable oder Schleife (mehrere Dateien in einem Aufruf), Exit-Code nur mit $?";
 const EXIT_CODE = "$?";
 const ARITHMETIK = /^[\d\s+\-*/%()<>=!&|^~?:,]*$/;
 const PARAMETER = /^#?(?:[A-Za-z_]\w*|\d+|[@*#?$!-])(?:\[([^\]]*)\])?/;
