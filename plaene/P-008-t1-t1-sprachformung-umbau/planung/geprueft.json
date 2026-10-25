@@ -1,0 +1,29 @@
+{
+  "erkundung": "b5578515dde5307347d1c984d71450d7999d4fb92f0c03d7effab16b0340a9de",
+  "schnitt": "8b16153b1d152dc1f8521095cbeb390fb4e2c391053ed3c4d3c55a17084a4c18",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Bei u1 (bereich: ganze Datei src/speech-shape.js, schreibt alle Suchmuster neu) fehlen diese Sätze, die u1 brechen kann: (1) pitch.md, ## Fallen: „Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).“ Das ist eine Grenze für Rechenzeit; die Annahme „Er ändert kein Verhalten“ deckt sie nicht ab, und kein bestehender Test misst sie. (2) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ Diese Zeilen stehen in derselben Datei wie der Umbau. (3) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: die Gedankenstriche „–“ (U+2013) und „—“ (U+2014), weil sie heute unverändert durchgehen und ihre Aussprache eine eigene Entscheidung ist.“ Der Umbau berührt die Strich-Regel in src/speech-shape.js:6, und kein Test prüft diese Zeichen. Der Planer soll die drei Sätze bei u1 aufnehmen, etwa unter wasDarfNiePassieren.",
+        "antwort": "korrigiert: Das Ziel von u1 legt jetzt fest, dass die Suchmuster und ihre Reihenfolge gleich bleiben. Damit führt der Umbau keine verschachtelte Wiederholung ein und lässt die Strich-Regel für U+2013/U+2014 unverändert. Die drei Sätze stehen als Bauvorgaben unter annahmen bei u1: (1) wörtlich, (2) und (3) sinngemäß mit Fundstelle pitch.md, ## Nicht-Ziele, weil ihr Wortlaut eine Zeilenangabe enthält, die das Skript an einem Namen in genau diesen Zeilen prüfen würde. Sie stehen nicht unter wasDarfNiePassieren, weil ein Umbau laut Format kein solches Feld hat und keinen neuen Abnahmetest bekommt (Zuschnitt, Antwortformat der Schnittliste)."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "5c05d66c-5921-4d6b-946c-c347f9231ee4",
+      "schluessel": [
+        "umbau:u1",
+        "nie-saetze:u1",
+        "allein-gruen:u1",
+        "nicht-zusammengelegt:u1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

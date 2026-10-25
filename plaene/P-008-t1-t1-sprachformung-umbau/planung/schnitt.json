@@ -1,0 +1,67 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "u1",
+      "text": "Die Funktionsliste ist leer. Die Zeilen von `shapedCore` stammen deshalb aus design.md, ## Ausgangslage und Annahmen: src/speech-shape.js:1-10 (`shapedCore`). Die 2 Befunde no-restricted-syntax (Demeter G36) sind dort mit eslint-suppressions.json:774 belegt."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Der Umbau behält die Reihenfolge der Ersetzungen bei: Listenzeichen am Zeilenanfang mit `[ \\t]*`, dann Markdown-Zeichen, dann Gedankenstrich `\\s+-\\s+`, dann Leerraum falten, dann trim (Pitch, ## Fallen). Er ändert kein Verhalten und fügt keine Spannen- oder Unterstrichregel ein. Diese Regeln gehören in die anderen Teile des Eltern-Pitches."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Ein Verlust von `[ \\t]*` in der Listenzeichen-Regel macht laut Pitch, ## Premortem Nr. 6 keinen bestehenden Test rot. Der Abnahmetest des Umbaus fängt das also nicht. Angenommen wird, dass B7 im folgenden Teil des Eltern-Pitches diesen Fall prüft. Der Bau-Agent behält das Muster deshalb unverändert bei."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Als Abnahme gilt test/anrufe/sprechausgabe.test.js. Er ruft die Formung direkt auf, ohne Modell-Attrappe (design.md, ## Ausgangslage und Annahmen), und steht beim Start der Phase grün im Repo. Auch test/shape-for-speech.test.js bleibt unverändert grün."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Die Aufrufer src/claude.js, src/thinking-signal.js und src/speech-chunker.js bleiben unverändert (Pitch, ## Nicht-Ziele). Die Schnittstellen `shapeForSpeech` und `shapeChunkForSpeech` behalten Namen und Signatur."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Grenze für den Umbau, wörtlich aus pitch.md, ## Fallen: „Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).“ Kein bestehender Test misst diese Grenze. Der Umbau übernimmt deshalb die heutigen Suchmuster unverändert und führt kein neues Muster und keine verschachtelte Wiederholung ein. Gemessen wird die Grenze erst im SG-27-Test eines späteren Teils."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Nicht-Ziel aus pitch.md, ## Nicht-Ziele: Das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` bleiben unverändert. Der Umbau ändert nur `shapedCore`, nicht `shapeForSpeech` und nicht `shapeChunkForSpeech`."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Nicht-Ziel aus pitch.md, ## Nicht-Ziele: Die Gedankenstriche „–“ (U+2013) und „—“ (U+2014) gehen weiter unverändert durch. Kein Test prüft das. Der Umbau übernimmt deshalb die Strich-Regel `\\s+-\\s+` Zeichen für Zeichen und erweitert sie nicht auf andere Strichzeichen."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [
+    {
+      "aufgabe": "Nach dem lintfreien Umbau den Eintrag für src/speech-shape.js (no-restricted-syntax, Zähler 2) aus eslint-suppressions.json entfernen (prune). Die Datei steht in .github/CODEOWNERS.",
+      "fundstelle": "design.md, ## Ausgangslage und Annahmen",
+      "auftrag": "u1"
+    }
+  ],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "shapedCore lintfrei umbauen, dieselben Muster in derselben Reihenfolge",
+      "bereich": "src/speech-shape.js",
+      "erwarteteDateien": [
+        "src/speech-shape.js"
+      ],
+      "abnahme": "test/anrufe/sprechausgabe.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "altfunktionen": [
+        {
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 1,
+          "bis": 10
+        }
+      ],
+      "abhaengigVon": []
+    }
+  ]
+}
