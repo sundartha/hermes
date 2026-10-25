@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { FUNDSTELLE, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
-import { A2_ANTWORT, A2_BEFUND, A2_KORRIGIERT, antwortMit, auftragAus, EXIT_BEFUNDE, EXIT_GRUEN, geplanteListe, jePruefer, korrektur, MIT_NUMMER, OHNE_NUMMER, phaseDatei, plane, planungsBericht, prueflisteZeilen, zusatz } from "./planung-plane-probe.js";
+import { A2_ANTWORT, A2_BEFUND, A2_KORRIGIERT, antwortMit, auftragAus, EXIT_BEFUNDE, EXIT_GRUEN, geplanteListe, gruppenPruefung, jePruefer, korrektur, MIT_NUMMER, OHNE_NUMMER, phaseDatei, plane, planungsBericht, zusatz } from "./planung-plane-probe.js";
 
 test("plane: ein Skriptbefund nach der Korrektur geht an den Planer zurück und die Planung endet grün", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = plane(context, { "pruefer-planung|## Prüfung": jePruefer(A2_BEFUND), "planer|## Befunde": [antwortMit(OHNE_NUMMER), antwortMit(MIT_NUMMER)] });
@@ -120,9 +120,8 @@ test("plane: der Planer liest verdichtete Berichte, Prüfer und Entwurf-Schreibe
   assert.ok(nachNachfrage.eingabe.includes("Frage: Wo liegt der Hinweis?"), nachNachfrage.eingabe);
   assert.ok(nachNachfrage.eingabe.includes(`weg: eingang ${HINWEIS} nimmAnruf 1–4 · wirkung ${HINWEIS} setzeHinweis 6–9`), nachNachfrage.eingabe);
   for (const planer of [zuschnitt, nachNachfrage]) assert.equal(planer.eingabe.includes('"nummern": {'), false);
-  const pruefungen = aufrufe(lauf, "pruefer-planung", "## Prüfung");
   for (const { nummern: [erste] } of GRUPPEN) {
-    const pruefer = pruefungen.find((eintrag) => prueflisteZeilen(eintrag).includes(`weg:${erste}`));
+    const pruefer = gruppenPruefung(lauf, erste);
     assert.ok(pruefer.eingabe.includes(`"${erste}": {`), `Volltext zu ${erste} fehlt beim Prüfer`);
   }
   for (const entwurf of aufrufe(lauf, "entwurf", "## Entwurf")) assert.ok(entwurf.eingabe.includes('"nummern": {'), entwurf.eingabe);

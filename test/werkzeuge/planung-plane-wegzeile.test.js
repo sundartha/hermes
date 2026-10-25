@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ROUTE, WEGPRUEFUNGEN, aufrufe, bericht, exit } from "./planung-probe.js";
+import { GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ROUTE, WEGPRUEFUNGEN, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
 import { A2_BEFUND, EXIT_GRUEN, MIT_NUMMER, WEGFEHLER, abgebrochen, abgelegt, aendereWerkzeug, antwortMit, fortsetzung, jePruefer, plane, planungsDatei, prueflisteZeilen } from "./planung-plane-probe.js";
 
 const ZEILE_DES_WEGPRUEFERS = 2;
@@ -64,6 +64,21 @@ test("plane: eine Wegprüfung mit Befund oder mit verworfener Korrektur wird nic
   exit(verworfen, EXIT_GRUEN);
   assert.deepEqual(wegzeilenBeimPruefer(verworfen).toSorted(), ERSTE.map((nummer) => `weg:${nummer}`).toSorted());
   assert.deepEqual(zeileIn(verworfen, "pruefliste.json", "S4"), abgenommen("S4"));
+});
+
+test("plane: eine spätere Wegprüfung mit Befund verwirft die frühere Abnahme derselben Nummer, auch wenn der Bericht gleich bleibt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const nachfrage = alsJson({ nachfragen: [{ nummern: ["S4"], frage: "Wo endet der Weg von S4?" }] });
+  const befund = { ...GRUEN_PRUEFLISTE, befunde: { "weg:S4": "der Weg endet nicht in setzeHinweis" } };
+  const lauf = plane(context, {
+    ...WEGE_GRUEN,
+    "planer|## Zuschnitt": [nachfrage, alsJson({ schnitt: schnittliste() })],
+    "erkunder|## Nachfrage|S4": [bericht(["S4"])],
+    "pruefer-planung|## Wegprüfung|S4": [WEG_GRUEN, befund, befund],
+    "erkunder|## Befunde": [bericht(["S4"])],
+  });
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(aufrufe(lauf, "pruefer-planung", "## Wegprüfung").filter(({ eingabe }) => eingabe.includes("#### S4 (")).length, 3);
+  assert.deepEqual(wegzeilenBeimPruefer(lauf), ["weg:S4"]);
 });
 
 test("plane: die Nachprüfung fragt eine abgenommene Wegzeile nicht neu, solange der Bericht der Nummer gleich ist", { timeout: LAUF_FRIST_MS }, (context) => {

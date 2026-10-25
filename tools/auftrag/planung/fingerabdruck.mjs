@@ -66,7 +66,7 @@ export function fingerabdruck(stand, { ablage, anzahl, zustand }) {
   return { stand, ablage: summen, zustand };
 }
 
-function jsonAus(datei) {
+export function jsonAus(datei) {
   try {
     return JSON.parse(readFileSync(datei, "utf8"));
   } catch {

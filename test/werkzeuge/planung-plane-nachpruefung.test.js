@@ -20,7 +20,11 @@ test("plane: die Gruppenprüfer und der übergreifende Prüfer laufen gleichzeit
   assert.equal(weitere.length, 0);
   for (const schluessel of ["nie-saetze:a1", "allein-gruen:a2"]) assert.ok(ruecksendung.eingabe.includes(`${schluessel}: `), ruecksendung.eingabe);
   const zeilen = pruefungen.flatMap(prueflisteZeilen);
-  assert.deepEqual(zeilen.toSorted(), abgelegt(lauf, "pruefliste.json").map(({ schluessel }) => schluessel).toSorted());
+  const pruefliste = abgelegt(lauf, "pruefliste.json");
+  const wege = pruefliste.filter(({ schluessel }) => schluessel.startsWith("weg:"));
+  assert.deepEqual(zeilen.toSorted(), pruefliste.filter((zeile) => !wege.includes(zeile)).map(({ schluessel }) => schluessel).toSorted());
+  assert.equal(wege.length, GRUPPEN.flatMap(({ nummern }) => nummern).length);
+  for (const zeile of wege) assert.deepEqual(zeile, { schluessel: zeile.schluessel, ergebnis: "erfüllt", fundstelle: FUNDSTELLE });
   assert.deepEqual(abgelegt(lauf, "pruefliste-aufteilung.json").map(({ gruppe }) => gruppe), [...GRUPPEN.keys(), null]);
   const uebergreifend = pruefungen.find((eintrag) => prueflisteZeilen(eintrag).includes("gegenfrage:alle"));
   for (const teil of ["### Erkundungsberichte (verdichtet)", "### Dateikarte", `weg: eingang ${ROUTE} hinterlege 2–4`]) assert.ok(uebergreifend.eingabe.includes(teil), teil);
@@ -35,7 +39,7 @@ test("plane: nach der Korrektur prüft ein frischer Prüfer genau die Nachprüf-
   assert.equal(weitere.length, 0);
   assert.equal(nachpruefung.resume, false);
   assert.equal(pruefungen.some(({ sitzung }) => sitzung === nachpruefung.sitzung), false);
-  assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "weg:S4", "weg:S5", "weg:B1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
+  assert.deepEqual(prueflisteZeilen(nachpruefung), ["durchstich:a1", "b-nummer:B1", ...zeilenDes("a2"), ...zeilenDes("a3"), ...zeilenDes("a14"), "gegenfrage:alle"]);
   assert.ok(nachpruefung.eingabe.includes("allein-gruen:a2: a2 braucht den Code aus a1 | korrigiert: a2 liest den Code aus a1"));
   assert.equal(planungsBericht(lauf).nachpruefungen[0].sitzung, nachpruefung.sitzung);
 });

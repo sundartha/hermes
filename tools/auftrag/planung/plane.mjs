@@ -37,6 +37,7 @@ import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe, nachrichtenKarte } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
+import { abgelegteListe, uebernommeneWege, verbuchteAbnahmen } from "./wegabnahme.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
@@ -514,6 +515,7 @@ export class Planung {
 
   verbucheWegpruefung({ pruefer, nummern, runden }, sauber, offen) {
     this.wegpruefungen.push({ nummern, sitzung: pruefer.sitzung, runden, offen: offen.map(({ zeile }) => zeile) });
+    this.wegAbnahmen = verbuchteAbnahmen(this, { nummern, bericht: sauber.bericht, offen });
     return { ...sauber, weg: { nummern, offen } };
   }
 
@@ -595,7 +597,7 @@ export class Planung {
 
   legeFingerabdruck() {
     this.lege(NACHFRAGEN, this.beantworteteWellen);
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen };
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen, wegAbnahmen: liste(this.wegAbnahmen) };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
@@ -800,11 +802,12 @@ export class Planung {
 
   async pruefliste() {
     const schluessel = fuerDenPitch(prueflisteSoll(this.schnitt, this.soll, this.erkunderAnnahmen()), { nurUmbau: this.nurUmbau });
+    const { rest, zeilen } = uebernommeneWege(this, schluessel);
     const laeufe = [];
-    for (const teil of teilePruefliste(schluessel, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
+    for (const teil of teilePruefliste(rest, this.schnitt, this.gliederung.gruppen)) laeufe.push(await this.prueferTeil(teil));
     const ergebnisse = await this.welle(laeufe, "Prüfliste");
     const unvollstaendig = ergebnisse.flatMap(({ befunde }) => befunde);
-    const befunde = this.nimmPrueflisteAn(unvollstaendig, () => zusammengefuegt(schluessel, ergebnisse), { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
+    const befunde = this.nimmPrueflisteAn(unvollstaendig, () => zusammengefuegt(schluessel, [...ergebnisse, { pruefliste: zeilen }]), { datei: "pruefliste.json", grund: "die Prüfliste blieb nach der Rücksendung unvollständig" });
     this.lege("pruefliste-aufteilung.json", ergebnisse.map(({ teil, pruefer }) => ({ gruppe: teil.gruppe, sitzung: pruefer.sitzung, schluessel: teil.schluessel })));
     return befunde;
   }
@@ -823,7 +826,10 @@ export class Planung {
     const auswahl = nachpruefSchluessel({ vorher, nachher, befunde, soll: this.soll, annahmen: this.erkunderAnnahmen(), nurUmbau: this.nurUmbau });
     const runde = this.nachpruefungen.length + 1;
     const grund = "die Prüfliste der Nachprüfung blieb nach der Rücksendung unvollständig";
-    const { pruefer, befunde: neue } = await this.pruefeMitFrischemPruefer(this.nachpruefNachricht(auswahl, { nachher, antworten }), auswahl.schluessel, { datei: `nachpruefung-${runde}.json`, grund });
+    const datei = `nachpruefung-${runde}.json`;
+    const { rest, zeilen } = uebernommeneWege(this, auswahl.schluessel);
+    const { pruefer, befunde: neue } = await this.pruefeMitFrischemPruefer(this.nachpruefNachricht({ ...auswahl, schluessel: rest }, { nachher, antworten }), rest, { datei, grund });
+    if (zeilen.length > 0) this.lege(datei, zusammengefuegt(auswahl.schluessel, [{ pruefliste: abgelegteListe(this, datei) }, { pruefliste: zeilen }]));
     this.nachpruefungen.push({ runde, sitzung: pruefer.sitzung, schluessel: auswahl.schluessel, befunde: neue.length, entfallen: auswahl.entfallen });
     return neue;
   }
@@ -1012,6 +1018,7 @@ class Fortsetzung extends Planung {
     this.erkundungAusstehend = zustand.erkundungAusstehend;
     this.nachfrageWellen = zustand.nachfrageWellen;
     this.beantworteteWellen = nachfragen;
+    this.wegAbnahmen = liste(zustand.wegAbnahmen);
     this.werkzeugGeaendert = erkundung.werkzeugGeaendert === true;
     return [];
   }
