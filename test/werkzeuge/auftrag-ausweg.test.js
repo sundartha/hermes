@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { env } from "node:process";
 import { test } from "node:test";
 
 import { ausgang, nenntAltenTest } from "../../tools/auftrag/ausgang.mjs";
@@ -9,7 +8,7 @@ import { GRUEN, ROT } from "../../tools/auftrag/bericht.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { teamRepository } from "./neuschnitt-probe.js";
-import { probeDirectory, runIn } from "./probe-repo.js";
+import { ersatzClaude, probeDirectory, runIn } from "./probe-repo.js";
 
 const GRUND = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
 const AUSSTIEG = `Auftrag passt nicht: ${GRUND}`;
@@ -178,29 +177,16 @@ test("ein Testname mit Bindestrich wird ganz erkannt, passt die Zeile auf zwei T
 const NOTIZ_ERSATZ = `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 readFileSync(0, "utf8");
-appendFileSync(process.env.ERSATZ_STARTS, process.env.HERMES_ROLLE + "\\n");
+appendFileSync(process.env.ERSATZ_ZIEL, process.env.HERMES_ROLLE + "\\n");
 process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "1. Entscheiden" }) + "\\n");
 `;
 const PLAN = "plaene/P-001-probe";
-
-function setzeUmgebung(context, werte) {
-  const vorher = new Map(Object.keys(werte).map((name) => [name, env[name]]));
-  Object.assign(env, werte);
-  context.after(() => {
-    vorher.forEach((alt, name) => {
-      if (alt === undefined) delete env[name];
-      else env[name] = alt;
-    });
-  });
-}
 
 function ausPlanung(context, ausweg, roteRunden = []) {
   const auftrag = { id: "a1", art: "funktion", ziel: "Verdopple Zahlen", bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], abnahme: "test/rechnen.test.js" };
   const phase = { phase: "P-001-probe", entwurf: { "src/rechnen.js": "Entwurf." }, auftraege: [auftrag] };
   const root = teamRepository(context, { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl;\n}\n", "test/rechnen.test.js": "", [`${PLAN}/pitch.md`]: "# P-001\n", [`${PLAN}/sicherheit.md`]: "# Sicherheit\n", [`${PLAN}/phase.json`]: `${JSON.stringify(phase)}\n` });
-  const werkzeug = probeDirectory(context, { "claude.mjs": NOTIZ_ERSATZ });
-  chmodSync(join(werkzeug, "claude.mjs"), 0o755);
-  setzeUmgebung(context, { HERMES_CLAUDE: join(werkzeug, "claude.mjs"), ERSATZ_STARTS: join(werkzeug, "starts.txt") });
+  const startliste = ersatzClaude(context, NOTIZ_ERSATZ);
   const kontext = { phase, auftrag, root, phasendatei: `${PLAN}/phase.json`, plan: { fertig: new Set() } };
   const offen = [...roteRunden];
   const gestartet = [];
@@ -209,7 +195,7 @@ function ausPlanung(context, ausweg, roteRunden = []) {
     return { ergebnis: ROT, runde: 1, phase: "P-001-probe", auftrag: "a1", basis: "HEAD", agenten: [], pruefungen: [], ...(offen.shift() ?? ausweg) };
   };
   const ergebnis = fuehreRundenAus(kontext, runde);
-  const starts = existsSync(join(werkzeug, "starts.txt")) ? readFileSync(join(werkzeug, "starts.txt"), "utf8") : "";
+  const starts = existsSync(startliste) ? readFileSync(startliste, "utf8") : "";
   const belegDatei = join(root, ".fortschritt/P-001-probe/a1.json");
   const beleg = existsSync(belegDatei) ? JSON.parse(readFileSync(belegDatei, "utf8")) : null;
   return { ergebnis, starts, beleg, gestartet };

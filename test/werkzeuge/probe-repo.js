@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -17,6 +18,7 @@ export const PRE_PUSH_HOOK = join(REPO_ROOT, ".githooks/pre-push");
 const INHERITED_TEST_RUNNER_VARIABLE = "NODE_TEST_CONTEXT";
 const GIT_VARIABLE_PREFIX = "GIT_";
 const CLAUDE_CONFIGURATION_VARIABLE = "CLAUDE_CONFIG_DIR";
+const EXECUTABLE_MODE = 0o755;
 const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
 const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
@@ -44,6 +46,25 @@ export function probeDirectory(context, files) {
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   writeFiles(directory, files);
   return directory;
+}
+
+function setzeUmgebung(context, werte) {
+  const vorher = new Map(Object.keys(werte).map((name) => [name, env[name]]));
+  Object.assign(env, werte);
+  context.after(() => {
+    vorher.forEach((alt, name) => {
+      if (alt === undefined) delete env[name];
+      else env[name] = alt;
+    });
+  });
+}
+
+export function ersatzClaude(context, skript, werte = {}) {
+  const ordner = probeDirectory(context, { "claude.mjs": skript });
+  chmodSync(join(ordner, "claude.mjs"), EXECUTABLE_MODE);
+  const ziel = join(ordner, "ziel.txt");
+  setzeUmgebung(context, { HERMES_CLAUDE: join(ordner, "claude.mjs"), ERSATZ_ZIEL: ziel, ...werte });
+  return ziel;
 }
 
 export function runIn(directory, command, args) {
