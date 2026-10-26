@@ -54,6 +54,10 @@ function zeilenOhneMutant(datei, bereiche, ergebnisse) {
   );
 }
 
+export function loeschbareZeilen(datei, bereiche) {
+  return zeilenOhneMutant(datei, bereiche, []);
+}
+
 function abweichendeDateien() {
   const namen = (args) => git(args).split("\0").filter(Boolean);
   return [
