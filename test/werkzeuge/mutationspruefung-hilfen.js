@@ -246,6 +246,8 @@ export function quelltexttest(name) {
     'import assert from "node:assert/strict";',
     'import { readFileSync } from "node:fs";',
     'import { test } from "node:test";',
+    'import { pathToFileURL } from "node:url";',
+    'await import(pathToFileURL("src/zahl.js"));',
     `test("${name}", () => assert.equal(readFileSync("src/zahl.js", "utf8"), ""));`,
     "",
   ].join("\n");
