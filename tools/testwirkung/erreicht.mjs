@@ -10,7 +10,7 @@ import { geladeneDateien, gelaufeneAufrufzeilen } from "./abdeckung.mjs";
 import { TESTDATEI, dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { abschnitte, arbeitsbaumAbbauen, basisArbeitsbaum, innersterTest } from "./geaendert.mjs";
 import { git, inBasis } from "./git.mjs";
-import { testlaufNebenher } from "./testlauf.mjs";
+import { testlaufGleichzeitig } from "./testlauf.mjs";
 
 const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
 const ABDECKUNG = "NODE_V8_COVERAGE";
@@ -121,12 +121,12 @@ function markierteDateien(verzeichnis) {
   return existsSync(markierung) ? readFileSync(markierung, "utf8").split("\n") : [];
 }
 
-async function erreicht({ tests, vergleich }, seite, { verzeichnis, entfernt = [] }) {
+async function erreicht({ tests, vergleich }, seite, { name, verzeichnis, entfernt = [] }) {
   const ordner = realpathSync(mkdtempSync(join(tmpdir(), ABDECKUNGSORDNER)));
   try {
     const dateien = [...new Set(tests.map((test) => dateiAuf(test, seite)))];
     const muster = [...new Set(tests.flatMap((test) => test[seite]))];
-    await testlaufNebenher({ dateien, muster, vorspann: ECHT, verzeichnis, umgebung: { [ABDECKUNG]: ordner } });
+    await testlaufGleichzeitig({ name, dateien, muster, vorspann: ECHT, verzeichnis, umgebung: { [ABDECKUNG]: ordner } });
     return {
       zeilen: gelaufeneAufrufzeilen(ordner, { verzeichnis, dateien: vergleich }),
       geladen: geladeneDateien(ordner, { verzeichnis, dateien: entfernt }),
@@ -140,7 +140,7 @@ async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
     const entfernt = neuerCodeMitErsatzIn(verzeichnis, basis, auftrag.umbenannt);
-    const lauf = await erreicht(auftrag, "alt", { verzeichnis, entfernt });
+    const lauf = await erreicht(auftrag, "alt", { name: "erreicht-basis", verzeichnis, entfernt });
     const markiert = markierteDateien(verzeichnis);
     return { ...lauf, geladen: entfernt.filter((datei) => lauf.geladen.includes(datei) || markiert.includes(datei)) };
   } finally {
@@ -194,12 +194,15 @@ function nichtVergleichbar(datei) {
 export async function vergleicheErreichtes(basis, auftrag) {
   const ergebnis = { verglichen: auftrag.vergleich.length, verstoesse: [] };
   if (auftrag.tests.length === 0 || auftrag.vergleich.length === 0) return ergebnis;
-  const [basislauf, { zeilen: nachher }] = await Promise.all([imBasisstand(basis, auftrag), erreicht(auftrag, "neu", { verzeichnis: cwd() })]);
+  const [basislauf, { zeilen: nachher }] = await Promise.all([
+    imBasisstand(basis, auftrag),
+    erreicht(auftrag, "neu", { name: "erreicht", verzeichnis: cwd() }),
+  ]);
   if (basislauf.geladen.length > 0) return { ...ergebnis, verstoesse: basislauf.geladen.map(nichtVergleichbar) };
   const vorher = basislauf.zeilen;
   const erster = fehlende(basis, auftrag.vergleich, { vorher, nachher });
   if ([...erster.values()].every((zeilen) => zeilen.length === 0)) return ergebnis;
-  const wiederholt = vereint(nachher, (await erreicht(auftrag, "neu", { verzeichnis: cwd() })).zeilen);
+  const wiederholt = vereint(nachher, (await erreicht(auftrag, "neu", { name: "erreicht-wiederholt", verzeichnis: cwd() })).zeilen);
   const bleibend = fehlende(basis, auftrag.vergleich, { vorher, nachher: wiederholt });
   return { ...ergebnis, verstoesse: [...bleibend].flatMap(([datei, zeilen]) => (zeilen.length === 0 ? [] : meldungen(datei, zeilen))) };
 }

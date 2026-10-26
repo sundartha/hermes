@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 
 import { dateiAuf, testaufrufe } from "./aufrufe.mjs";
 import { git, inBasis } from "./git.mjs";
-import { UNTER_ATTRAPPE, testlauf } from "./testlauf.mjs";
+import { UNTER_ATTRAPPE, testlaufGleichzeitig } from "./testlauf.mjs";
 
 const ABSCHNITT = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const STANDARDLAENGE = 1;
@@ -70,21 +70,21 @@ function stelle({ datei, zeile, spalte }) {
   return `${datei}:${zeile}:${spalte}`;
 }
 
-export function ergebnisseJeTest(tests, seite, lauf) {
+export async function ergebnisseJeTest(tests, seite, lauf) {
   const dateien = [...new Set(tests.map((test) => dateiAuf(test, seite)))];
   const muster = [...new Set(tests.flatMap((test) => test[seite].flatMap((aufruf) => aufruf.muster)))];
   const nachStelle = new Map(
     tests.flatMap((test) => test[seite].map((aufruf) => [stelle({ datei: dateiAuf(test, seite), ...aufruf }), test.kennung])),
   );
   const jeTest = new Map(tests.map(({ kennung }) => [kennung, []]));
-  for (const ergebnis of testlauf({ dateien, muster, ...lauf })) {
+  for (const ergebnis of await testlaufGleichzeitig({ dateien, muster, ...lauf })) {
     jeTest.get(nachStelle.get(stelle(ergebnis)))?.push(ergebnis.bestanden);
   }
   return jeTest;
 }
 
-function unterAttrappe(tests, seite, verzeichnis) {
-  return ergebnisseJeTest(tests, seite, { vorspann: UNTER_ATTRAPPE, verzeichnis });
+function unterAttrappe(tests, seite, { name, verzeichnis }) {
+  return ergebnisseJeTest(tests, seite, { name, vorspann: UNTER_ATTRAPPE, verzeichnis });
 }
 
 export function basisArbeitsbaum(basis) {
@@ -99,10 +99,10 @@ export function arbeitsbaumAbbauen(verzeichnis) {
   rmSync(verzeichnis, { recursive: true, force: true });
 }
 
-function imBasisstand(basis, tests) {
+async function imBasisstand(basis, tests) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
-    return unterAttrappe(tests, "alt", verzeichnis);
+    return await unterAttrappe(tests, "alt", { name: "geändert-basis", verzeichnis });
   } finally {
     arbeitsbaumAbbauen(verzeichnis);
   }
@@ -123,13 +123,13 @@ function befund(kennung, { vorher, nachher }) {
   return { hinweis: `Test lief weder auf der Basis noch nach der Änderung: ${kennung}` };
 }
 
-export function pruefeGeaenderte(basis, tests) {
+export async function pruefeGeaenderte(basis, tests) {
   const ergebnis = { geprueft: tests.length, verstoesse: [], hinweise: [] };
   if (tests.length === 0) return ergebnis;
-  const nachher = unterAttrappe(tests, "neu");
+  const nachher = await unterAttrappe(tests, "neu", { name: "geändert" });
   const verdaechtig = tests.filter(({ kennung }) => ohneWirkung(nachher.get(kennung)));
   if (verdaechtig.length === 0) return ergebnis;
-  const vorher = imBasisstand(basis, verdaechtig);
+  const vorher = await imBasisstand(basis, verdaechtig);
   const befunde = verdaechtig.map(({ kennung }) => befund(kennung, { vorher, nachher }));
   return {
     ...ergebnis,
