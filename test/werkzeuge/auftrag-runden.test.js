@@ -6,7 +6,9 @@ import { test } from "node:test";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, passingTest, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { ghErsatz } from "./warteschlange/hilfen.mjs";
 
 const AUSFUEHRBAR = 0o755;
 const EXIT_ROT = 1;
@@ -344,4 +346,63 @@ test("ein Umbau aus einer anderen fehlenden Voraussetzung bleibt grün, auch wen
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.equal(beleg("A1-umbau").ergebnis, "grün");
   assert.deepEqual(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim().split("\n"), [FUNKTION.ziel, vorbereiten.ziel, "Basis"]);
+});
+
+const FEHLT_TEXT = "Voraussetzung fehlt: Es braucht zuerst src/text.js.";
+const ZURUECK = "Zurück in die Entwurfsprüfung: Umbau meldet fehlende Voraussetzung: Es braucht zuerst src/text.js.";
+const VERTRAULICHE_PHASE = "F-999-probe";
+
+function zurueckMitGh(context, { phase = {}, exitCode = 0 } = {}) {
+  const gh = ghErsatz(context, { exitCode });
+  const { repo, lauf: ergebnis } = starte(context, { auftrag: UMBAU, drehbuch: { "bau-antwort": FEHLT_TEXT }, phase, umgebung: gh.umgebung });
+  const name = phase.phase ?? "probe";
+  return { ergebnis, beleg: JSON.parse(readFileSync(join(repo, ".fortschritt", name, "A1.json"), "utf8")), aufrufe: gh.aufrufe() };
+}
+
+test("geht ein Auftrag zurück in die Entwurfsprüfung, steht der Grund als Kommentar im Issue der Phase", (context) => {
+  const { datei } = lauf(context, { bau: [{ antwort: FEHLT_TEXT }] });
+  const zeilen = datei("gh.log").split("\n").filter(Boolean);
+  const aufrufe = zeilen.map((zeile) => JSON.parse(zeile));
+  const kommentar = aufrufe.find((aufruf) => aufruf[1] === "comment");
+  assert.ok(kommentar, datei("gh.log"));
+  assert.deepEqual(kommentar.slice(0, 3), ["issue", "comment", String(ISSUE)]);
+  assert.match(kommentar.at(-1), /^## Zurück in die Entwurfsprüfung\n/);
+  assert.ok(kommentar.at(-1).includes("Umbau meldet fehlende Voraussetzung: Es braucht zuerst src/text.js."), kommentar.at(-1));
+  assert.ok(kommentar.at(-1).includes(".fortschritt/probe/A1.json"), kommentar.at(-1));
+  assert.ok(aufrufe.some((aufruf) => aufruf.join(" ").startsWith(`issue edit ${ISSUE} --add-label entscheidung`)), datei("gh.log"));
+});
+
+test("geht ein Auftrag einer vertraulichen Phase zurück in die Entwurfsprüfung, ruft lauf GitHub nicht auf und nennt das im Beleg", (context) => {
+  const { ergebnis, beleg, aufrufe } = zurueckMitGh(context, { phase: { phase: VERTRAULICHE_PHASE, vertraulich: true, issue: undefined } });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.deepEqual([beleg.ergebnis, beleg.grund], ["entwurfsprüfung", ZURUECK]);
+  assert.deepEqual(aufrufe, []);
+  assert.match(beleg.notiz.hinweis, /vertraulich; die Notiz steht nur im Beleg/);
+});
+
+test("scheitert gh, bleibt das Ergebnis der Rückgabe in die Entwurfsprüfung gleich und der Beleg nennt das", (context) => {
+  const { ergebnis, beleg, aufrufe } = zurueckMitGh(context, { exitCode: 1 });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.deepEqual([beleg.ergebnis, beleg.grund], ["entwurfsprüfung", ZURUECK]);
+  assert.ok(aufrufe.length > 0);
+  assert.match(beleg.notiz.hinweis, /ließ sich nicht vollständig ins Issue schreiben; sie steht im Beleg/);
+});
+
+test("die Rückgabe in die Entwurfsprüfung behält Exit-Code, Ergebnis, Grund und Logzeile", (context) => {
+  const { ergebnis, beleg, aufrufe } = zurueckMitGh(context);
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.deepEqual([beleg.ergebnis, beleg.grund], ["entwurfsprüfung", ZURUECK]);
+  assert.ok(ergebnis.stdout.split("\n").includes(`Auftrag A1: entwurfsprüfung (${ZURUECK})`), ergebnis.stdout);
+  assert.equal(beleg.zweck, undefined);
+  assert.ok(aufrufe.every(({ args }) => args[0] === "issue"), JSON.stringify(aufrufe));
+});
+
+test("geht ein Auftrag mit Zweck-Block zurück in die Entwurfsprüfung, steht der Block im Beleg und im Kommentar", (context) => {
+  const ohneUmbau = { bau: [{ antwort: ALTFUNKTION_FEHLT }], plan: [{ antwort: "Kein Umbau." }], test: ROTER_TEST, auftrag: FUNKTION };
+  const { beleg, datei } = lauf(context, ohneUmbau, MIT_ALTFUNKTION);
+  const { ergebnis: urteil, zweck } = beleg("A1");
+  assert.equal(urteil, "entwurfsprüfung");
+  assert.ok(Array.isArray(zweck) && zweck.length > 0, JSON.stringify(zweck));
+  const protokoll = datei("gh.log");
+  for (const zeile of zweck) assert.ok(protokoll.includes(JSON.stringify(zeile).slice(1, -1)), zeile);
 });
