@@ -23,6 +23,15 @@ test("der Bau-Agent wird an Bereich, Zeilengrenze, geschützten Dateien, Tests u
   }
 });
 
+test("eine gelöschte Datei außerhalb des Bereichs macht den Auftrag rot", (context) => {
+  const drehbuch = { "bau-loeschen": ["lib/alt.js"] };
+  const { lauf, beleg, basis, kopf } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { "lib/alt.js": "export const ALT = 1;\n" } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(beleg.ergebnis, "rot");
+  assert.ok(JSON.stringify(beleg).includes("außerhalb des Bereichs src/: lib/alt.js"), JSON.stringify(beleg));
+  assert.equal(kopf, basis);
+});
+
 test("gelöschte Zeilen zählen nicht zur Grenze: 360 gelöscht und 50 neu besteht sie", (context) => {
   const dateien = { "src/lang.js": "export const ZEILE = 1;\n".repeat(GELOESCHTE_ZEILEN) };
   const drehbuch = { bau: { "src/lang.js": "export const ZEILE = 2;\n".repeat(NEUE_ZEILEN) } };

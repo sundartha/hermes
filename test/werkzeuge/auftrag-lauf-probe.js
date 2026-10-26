@@ -50,6 +50,7 @@ const antwort = drehbuch[rolle + "-antwort"] ?? "";
 const angeboten = typeof antwort === "string" ? antwort : Object.entries(antwort).find(([angebot]) => prompt.includes(angebot))[1];
 console.log(JSON.stringify({ type: "result", result: angeboten }));
 for (const [alt, neu] of drehbuch[rolle + "-umbenennen"] ?? []) execFileSync("git", ["mv", alt, neu]);
+for (const pfad of drehbuch[rolle + "-loeschen"] ?? []) execFileSync("git", ["rm", "-q", pfad]);
 for (const [pfad, inhalt] of Object.entries(drehbuch[rolle] ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
