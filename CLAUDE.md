@@ -1,5 +1,8 @@
 # Hermes
 
+Jede Änderung an Hermes beginnt mit dem Skill `aenderung`, auch eine kleine: erst Fragen, dann Einstufung, dann Pitch bzw. Dokumente, dann `lauf`.
+Code unter `src/` schreibt nur `lauf`.
+
 Autonomer Telefon-KI-Agent: Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, MCP-Server.
 Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth.
 Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
