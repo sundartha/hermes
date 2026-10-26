@@ -18,6 +18,7 @@ import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
+import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
@@ -423,6 +424,13 @@ class AuftragsLauf {
     return gruen;
   }
 
+  listenKuerzen() {
+    const schritt = () => this.gruen(PRUEFUNG.LISTEN_KUERZEN, [execPath, LISTEN_KUERZEN, "--basis", this.basis]);
+    const { gruen, umzug } = umzugGemerkt(this.kontext.root, schritt, KUERZLISTEN);
+    this.listenumzug = [...this.listenumzug, ...umzug];
+    return gruen;
+  }
+
   commitNachricht() {
     const { phase, auftrag } = this.kontext;
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
@@ -486,6 +494,7 @@ class AuftragsLauf {
       () => this.grenzen("bau", this.basisBau),
       () => this.bauHatGeaendert(),
       () => this.listenUmziehen(),
+      () => this.listenKuerzen(),
       () => this.allesVormerken(),
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
