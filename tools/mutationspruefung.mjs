@@ -44,6 +44,15 @@ const NENNENDE_DATEI = /^(?!src\/|tools\/).+\.[cm]?[jt]s$/;
 const LITERALFOLGE = /(["'])[^"'\n]*\1(?:\s*,\s*(["'])[^"'\n]*\2)+/g;
 const LITERAL = /(["'])([^"'\n]*)\1/g;
 const CODEPFAD = /\.[cm]?[jt]s$/;
+const STARTAUFRUF = /\b(?:spawn|spawnSync|fork|exec|execFile|execFileSync|execSync|import)\s*\(/g;
+const KONSTANTE = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=(?![=>])/g;
+const BEZEICHNER = /[A-Za-z_$][\w$]*/g;
+const VERANKERT = /\bREPO_ROOT\b|\bimport\.meta\.url\b/;
+const ANFUEHRUNG = new Set(["'", '"', "`"]);
+const OEFFNEND = new Set(["(", "[", "{"]);
+const SCHLIESSEND = new Set([")", "]", "}"]);
+const ANWEISUNGSENDE = ";";
+const GANZER_TEXT = (text) => text;
 const FREMDE_PAKETE = "node_modules";
 const AUSSERHALB = "..";
 const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
@@ -158,19 +167,58 @@ function segmentpfade(text) {
   });
 }
 
-function genannteDateien(modul) {
-  const text = readFileSync(modul, "utf8");
+function ausdruck(text, von, bisAnweisungsende) {
+  let tiefe = 0;
+  for (let stelle = von; stelle < text.length; stelle += 1) {
+    const zeichen = text[stelle];
+    if (ANFUEHRUNG.has(zeichen)) {
+      stelle = literalende(text, stelle);
+    } else if (OEFFNEND.has(zeichen)) {
+      tiefe += 1;
+    } else if (SCHLIESSEND.has(zeichen)) {
+      tiefe -= 1;
+      if (tiefe < 0) return text.slice(von, stelle);
+    } else if (bisAnweisungsende && tiefe === 0 && zeichen === ANWEISUNGSENDE) {
+      return text.slice(von, stelle);
+    }
+  }
+  return text.slice(von);
+}
+
+function literalende(text, anfang) {
+  const zeichen = text[anfang];
+  for (let stelle = anfang + 1; stelle < text.length; stelle += 1) {
+    if (text[stelle] === "\\") stelle += 1;
+    else if (text[stelle] === zeichen || (zeichen !== "`" && text[stelle] === "\n")) return stelle;
+  }
+  return text.length;
+}
+
+function gestartet(text) {
+  const werte = new Map();
+  for (const treffer of text.matchAll(KONSTANTE)) {
+    werte.set(treffer[1], [...(werte.get(treffer[1]) ?? []), ausdruck(text, treffer.index + treffer[0].length, true)]);
+  }
+  const aufrufe = [...text.matchAll(STARTAUFRUF)].flatMap((treffer) => {
+    const aufruf = ausdruck(text, treffer.index + treffer[0].length, false);
+    return [aufruf, ...[...aufruf.matchAll(BEZEICHNER)].flatMap(([name]) => werte.get(name) ?? [])];
+  });
+  return [...aufrufe, ...text.split("\n").filter((zeile) => VERANKERT.test(zeile))].join("\n");
+}
+
+function genannteDateien(modul, auswahl) {
+  const text = auswahl(readFileSync(modul, "utf8"));
   const nennungen = [...[...text.matchAll(PFADNENNUNG)].map(([pfad]) => pfad), ...segmentpfade(text).filter((pfad) => CODEPFAD.test(pfad))];
   const ziele = nennungen.flatMap((pfad) => [normalize(pfad), join(dirname(modul), pfad)]);
   return [...new Set(ziele)].filter((ziel) => ziel !== modul && eigeneDatei(ziel));
 }
 
-async function abhaengigkeiten(wurzeln, nennend = NENNENDE_DATEI) {
+async function abhaengigkeiten(wurzeln, { nennend = NENNENDE_DATEI, auswahl = gestartet } = {}) {
   const { output } = await cruise(wurzeln, CRUISE_OPTIONEN);
   return new Map(
     output.modules.map(({ source, dependencies }) => [
       source,
-      { importe: dependencies.map(({ resolved }) => resolved), genannt: nennend.test(source) && eigeneDatei(source) ? genannteDateien(source) : [] },
+      { importe: dependencies.map(({ resolved }) => resolved), genannt: nennend.test(source) && eigeneDatei(source) ? genannteDateien(source, auswahl) : [] },
     ]),
   );
 }
@@ -450,7 +498,7 @@ function geloeschteDateien({ von, bis, seite }) {
 
 async function importierteDateien() {
   const code = git(["ls-files", "-z", "--", ...CODEDATEIEN]).split("\0").filter(Boolean);
-  const nachQuelle = await abhaengigkeiten(code, CODEPFAD);
+  const nachQuelle = await abhaengigkeiten(code, { nennend: CODEPFAD, auswahl: GANZER_TEXT });
   const ziele = [...nachQuelle].flatMap(([quelle, { importe, genannt }]) => [...importe, ...genannt].filter((ziel) => ziel !== quelle));
   return new Set(ziele);
 }
