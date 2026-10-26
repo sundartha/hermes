@@ -32,6 +32,8 @@ const AREA_CODES_BY_ZONE = Object.freeze({
     OH: "216 440 330 234 419 567 614 380 513 937 740",
     MI: "313 248 947 586 734 810 517 616 231 989",
     FL: "305 786 954 754 561 772 407 321 689 813 727 941 239 863 352 386 904",
+    ON: "416 647 437 942 905 289 365 742 613 343 753 519 226 548 382 705 249 683",
+    QC: "514 438 263 450 579 354 819 873 468",
   }),
   [ZONE_CENTRAL]: Object.freeze({
     IL: "312 773 872 224 847 630 331 708 815 779 217 309 618",
@@ -47,6 +49,7 @@ const AREA_CODES_BY_ZONE = Object.freeze({
     OK: "405 918 539 580",
     NE: "402 531",
     KS: "913 316",
+    MB: "204 431 584",
   }),
   [ZONE_MOUNTAIN]: Object.freeze({
     CO: "303 720 983 970 719",
@@ -54,6 +57,7 @@ const AREA_CODES_BY_ZONE = Object.freeze({
     NM: "505 575",
     WY: "307",
     MT: "406",
+    AB: "780",
   }),
   [ZONE_ARIZONA]: Object.freeze({ AZ: "602 480 623 520" }),
   [ZONE_PACIFIC]: Object.freeze({
@@ -61,6 +65,7 @@ const AREA_CODES_BY_ZONE = Object.freeze({
     WA: "206 253 425 360 564 509",
     OR: "503 971",
     NV: "702 725",
+    BC: "604",
   }),
   [ZONE_HAWAII]: Object.freeze({ HI: "808" }),
 });
