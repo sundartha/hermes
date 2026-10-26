@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import http from "node:http";
 import test from "node:test";
 
 import {
@@ -13,15 +12,13 @@ import {
   waitUntil,
 } from "../helpers.js";
 import { DISCLOSURE_JONAS } from "../_outbound-harness.js";
-import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
-const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
-const KONVERSATION_PFAD = "/v1/convai/conversations/";
 const AUFTRAG = "Tisch fuer zwei reservieren (GW0)";
 
 const EL_WEG = Object.freeze({
@@ -32,35 +29,8 @@ const EL_WEG = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
 
-async function starteAnbieter() {
-  const anfragen = [];
-  const naechsteKonversation = () => `conv_gw0_${anfragen.length}`;
-  const server = http.createServer((req, res) => {
-    let roh = "";
-    req.on("data", (stueck) => (roh += stueck));
-    req.on("end", () => {
-      anfragen.push({ methode: req.method, pfad: req.url, body: JSON.parse(roh || "{}") });
-      const antwort = req.url.startsWith(START_PFAD)
-        ? { success: true, conversation_id: naechsteKonversation(), sip_call_id: "sip_gw0" }
-        : { ...CONVERSATION_IN_PROGRESS, conversation_id: req.url.slice(KONVERSATION_PFAD.length) };
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify(antwort));
-    });
-  });
-  await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    starts: () => anfragen.filter((a) => a.methode === "POST" && a.pfad.startsWith(START_PFAD)),
-    beendetGespraech: (konversation) => {
-      assert.ok(konversation, "ohne Gespraechs-ID laesst sich das Beenden keinem Anruf zuordnen");
-      return anfragen.some((a) => a.methode === "DELETE" && a.pfad === KONVERSATION_PFAD + konversation);
-    },
-    schliessen: () => new Promise((fertig) => server.close(fertig)),
-  };
-}
-
 async function aufDemElWeg({ env = {}, seed = seedState() } = {}, lauf) {
-  const anbieter = await starteAnbieter();
+  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
     env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env },
     seed,
