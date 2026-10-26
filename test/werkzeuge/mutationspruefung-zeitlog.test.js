@@ -72,10 +72,22 @@ test("ein Mutationslauf schreibt ein Zeit-Log mit Start, Warten an der Sperre, T
   const [datei] = arten(eintraege, "datei");
   assert.deepEqual([datei.datei, datei.nummer, datei.von, datei.laeufe], ["src/zahl.js", 1, 1, strykerlaeufe.length]);
   assert.equal(datei.ueberlebt, schluessel(lauf.stdout, UEBERLEBT).length, lauf.stdout);
+  const loeschproben = arten(eintraege, "loeschprobe");
+  assert.deepEqual(loeschproben.map(({ datei: geprueft }) => geprueft), ["src/zahl.js"], JSON.stringify(eintraege));
+  assert.ok(Number.isFinite(loeschproben[0].ms), JSON.stringify(loeschproben));
+  const zeilen = logzeilen(lauf.stderr);
+  for (const phase of [/^Mutationslog: Sperre nach .+ Warten erhalten$/, /^Mutationslog: Testauswahl \(Seite neu\): 1 Dateien, 1 Testdateien in /, /^Mutationslog: Löschprobe src\/zahl\.js in /]) {
+    assert.equal(zeilen.filter((zeile) => phase.test(zeile)).length, 1, `${phase}\n${zeilen.join("\n")}`);
+  }
   const ende = eintraege.at(-1);
   assert.equal(ende.art, "ende");
   assert.equal(ende.exit, EXIT_ROT);
   assert.deepEqual(Object.keys(ende.phasen).sort(), [...PHASEN].sort());
+  assert.deepEqual(
+    [ende.phasen.sperre, ende.phasen.testauswahl, ende.phasen.loeschprobe],
+    [arten(eintraege, "sperre")[0].ms, auswahl.ms, loeschproben[0].ms],
+    JSON.stringify(ende),
+  );
   assert.ok(Object.values(ende.phasen).every((dauer) => dauer >= 0 && dauer <= ende.ms), JSON.stringify(ende));
 });
 

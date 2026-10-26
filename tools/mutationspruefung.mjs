@@ -25,7 +25,7 @@ import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStuec
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
-import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, LOGORDNER, notierePhase, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
+import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
@@ -453,7 +453,7 @@ async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
   if (loeschung === null) return ergebnisse;
   const beginn = Date.now();
   const geloescht = await loeschung.pruefe({ datei, zeilen, ergebnisse, tests });
-  notierePhase("loeschprobe", Date.now() - beginn, { datei });
+  notiereLoeschprobe(Date.now() - beginn, { datei });
   return [...ergebnisse, ...geloescht];
 }
 
@@ -551,17 +551,17 @@ async function ohneUnbenutzteGeloeschte(einheiten, geloescht) {
   });
 }
 
-function notiereTestauswahl({ seite }, beginn, { einheiten, graph }) {
+function meldeTestauswahl({ seite }, beginn, { einheiten, graph }) {
   const gemessen = einheiten.filter(({ bereiche }) => bereiche !== undefined);
   const testdateien = graph === null ? [] : gemessen.flatMap(({ datei }) => testauswahl(datei, graph).alle);
-  notierePhase("testauswahl", Date.now() - beginn, { seite, dateien: gemessen.length, testdateien: new Set(testdateien).size });
+  notiereTestauswahl(Date.now() - beginn, { seite, dateien: gemessen.length, testdateien: new Set(testdateien).size });
 }
 
 async function imStand(pruefung, arbeit) {
   const beginn = Date.now();
   const einheiten = await bestandteile(pruefung);
   if (einheiten.every(({ bereiche }) => bereiche === undefined)) {
-    notiereTestauswahl(pruefung, beginn, { einheiten, graph: null });
+    meldeTestauswahl(pruefung, beginn, { einheiten, graph: null });
     return arbeit(einheiten, null);
   }
   const geaendert = geaenderteTests(pruefung);
@@ -569,7 +569,7 @@ async function imStand(pruefung, arbeit) {
   const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
     const auswahl = { einheiten: await ohneUnbenutzteGeloeschte(einheiten, geloescht), graph: { ...(await importierer()), geaendert } };
-    notiereTestauswahl(pruefung, beginn, auswahl);
+    meldeTestauswahl(pruefung, beginn, auswahl);
     return await arbeit(auswahl.einheiten, auswahl.graph);
   } finally {
     zurueck?.();
@@ -841,7 +841,7 @@ async function vorherVerteilt(values) {
 async function gemesseneSperre(anlass) {
   const beginn = Date.now();
   await nimmSperreAuchFuerKindprozesse(anlass);
-  notierePhase("sperre", Date.now() - beginn);
+  notiereSperre(Date.now() - beginn);
 }
 
 function betriebsart(values) {
