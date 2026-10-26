@@ -2,24 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { hauptversionLautSquawk } from "../gemeinsam/echtes-postgres.js";
-import { workflowLines, workflowStepLines } from "./workflow-dateien.js";
+import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 
 const CI = "ci.yml";
 const VARIABLE = "HERMES_TEST_POSTGRES_URL";
-const JOB_KOPF = /^ {2}[a-z][\w-]*:$/;
 const BILD = /^ {8}image: postgres:(\d+)\.\d+@sha256:[0-9a-f]{64}$/;
 
-function jobZeilen(job) {
-  const zeilen = workflowLines(CI);
-  const beginn = zeilen.indexOf(`  ${job}:`);
-  assert.notEqual(beginn, -1, `Job ${job} fehlt in ${CI}`);
-  const rest = zeilen.slice(beginn + 1);
-  const ende = rest.findIndex((zeile) => JOB_KOPF.test(zeile));
-  return ende === -1 ? rest : rest.slice(0, ende);
-}
-
 function postgresBild(job) {
-  const zeilen = jobZeilen(job);
+  const zeilen = workflowJobLines(CI, job);
   const dienst = zeilen.indexOf("      postgres:");
   assert.ok(zeilen.includes("    services:") && dienst !== -1, `Job ${job} hat keinen Dienst postgres`);
   const treffer = BILD.exec(zeilen[dienst + 1] ?? "");
