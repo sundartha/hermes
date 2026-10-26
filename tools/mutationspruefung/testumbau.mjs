@@ -6,6 +6,7 @@ import { cruise } from "dependency-cruiser";
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
 import { nurHaenger } from "./bestaetigung.mjs";
+import { reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
@@ -98,6 +99,11 @@ function gruenZeile(umfang, getoetet, entfallen) {
 }
 
 export async function testumbauPruefung(basis, werkzeug) {
+  const verschiebung = await reineVerschiebung(basis, cwd());
+  if (verschiebung !== null) {
+    console.log(verschiebungsZeile(verschiebung));
+    return EXIT_GRUEN;
+  }
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
   const vorher = await mitVorherSpeicher({ basis, geaendert, root: cwd() }, () => vorherGetoetet(basis, geaendert, werkzeug));
   if (vorher.quellen.length === 0) {

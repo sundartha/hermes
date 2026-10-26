@@ -19,8 +19,8 @@ const ENDUNGSPAARE = new Map([
 ]);
 export const TYPESCRIPT = /\.([cm]?)ts$/;
 const ENDUNG = /\.[cm]?[jt]s$/;
-const RELATIVE_QUELLE = /^\.{1,2}\//;
-const QUELLKNOTEN = new Set([
+export const RELATIVE_QUELLE = /^\.{1,2}\//;
+export const QUELLKNOTEN = new Set([
   "ImportDeclaration",
   "ExportNamedDeclaration",
   "ExportAllDeclaration",
@@ -28,9 +28,9 @@ const QUELLKNOTEN = new Set([
 ]);
 const PFADABHAENGIG = { meta: "import", bezeichner: new Set(["__filename", "module"]) };
 const FELDER_JE_EINTRAG = 2;
-const GELOESCHT = "D";
-const HINZUGEFUEGT = "A";
-const GEAENDERT = "M";
+export const GELOESCHT = "D";
+export const HINZUGEFUEGT = "A";
+export const GEAENDERT = "M";
 const MAX_GIT_AUSGABE = 268_435_456;
 export const INDEX = "";
 const EXIT_GRUEN = 0;
@@ -46,8 +46,8 @@ const GRUND = {
 const AUFRUF =
   'Aufruf: node tools/umbenennung.mjs --basis <commit> [--bis <commit> | --bis "" für den Index] [--streng]';
 
-function git(args) {
-  const lauf = spawnSync("git", args, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
+function git(args, cwd = undefined) {
+  const lauf = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
   if (lauf.status !== 0) throw new Error(`git ${args.join(" ")}: ${lauf.stderr.trim()}`);
   return lauf.stdout;
 }
@@ -61,22 +61,25 @@ export function inhalt(stand, datei) {
   return lauf.status === 0 ? lauf.stdout : undefined;
 }
 
-function aenderungen(von, bis) {
-  const felder = git([
-    "diff",
-    "--no-renames",
-    "--name-status",
-    "-z",
-    ...(bis === INDEX ? ["--cached"] : []),
-    von,
-    ...(bis ? [bis] : []),
-    "--",
-  ]).split("\0");
+export function aenderungen(von, bis, root = undefined) {
+  const felder = git(
+    [
+      "diff",
+      "--no-renames",
+      "--name-status",
+      "-z",
+      ...(bis === INDEX ? ["--cached"] : []),
+      von,
+      ...(bis ? [bis] : []),
+      "--",
+    ],
+    root,
+  ).split("\0");
   const nachArt = { [GELOESCHT]: new Set(), [HINZUGEFUEGT]: new Set() };
   for (let index = 0; index + 1 < felder.length; index += FELDER_JE_EINTRAG)
-    nachArt[felder[index]]?.add(felder[index + 1]);
+    (nachArt[felder[index]] ??= new Set()).add(felder[index + 1]);
   if (bis === undefined) {
-    for (const datei of git(["ls-files", "--others", "--exclude-standard", "-z"])
+    for (const datei of git(["ls-files", "--others", "--exclude-standard", "-z"], root)
       .split("\0")
       .filter(Boolean)) {
       nachArt[HINZUGEFUEGT].add(datei);
@@ -112,7 +115,7 @@ export function laufzeitText(datei, text) {
   }
 }
 
-function liestEigenenPfad(baum) {
+export function liestEigenenPfad(baum) {
   return alleKnoten({ ast: baum, visitorKeys: VisitorKeys }).some(
     (knoten) =>
       (knoten.type === "MetaProperty" && knoten.meta.name === PFADABHAENGIG.meta) ||
