@@ -5,22 +5,13 @@ import { BELEGE } from "../bericht.mjs";
 import { gemeinsamerOrdner } from "../git.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
 import { istObjekt, schreibeJsonAtomar } from "./erkundung.mjs";
-import { gitLauf } from "./git.mjs";
 import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
-import { werkzeugeDerRolle } from "./team.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
-const PLANUNGSBERICHTE = /^planung(?:-[^/]+)?\.json$/u;
 const JE_ROLLE = "je Rolle";
 const ERKUNDER = "erkunder";
 export const WEGPRUEFER = "wegpruefer";
 export const ERKUNDUNG = [ERKUNDER, WEGPRUEFER];
-const GLIEDERUNG = ["planer"];
-const TEILBAR_AB_GRUPPEN = 2;
-const MINDEST_SCHRITT = "Gliederung";
-const ERSATZ = "Ersatz";
-const AGENT_DER_ROLLE = { [WEGPRUEFER]: "pruefer-planung" };
-const WORKTREE = "worktree ";
 const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
 export const TEIL_DECKEL = 3_000_000;
 const FREIGABE = { name: "Planung freigegeben", einheit: "Token" };
@@ -55,43 +46,8 @@ function vorigeKosten(root, phase) {
   return liesKosten(join(root, BELEGE, phase, PLANUNGSBERICHT));
 }
 
-function istLauf(eintrag) {
-  return Number.isInteger(eintrag?.laeufe) && eintrag.laeufe > 0 && Number.isFinite(eintrag.token);
-}
-
-function mittel(eintrag) {
-  return istLauf(eintrag) ? eintrag.token / eintrag.laeufe : 0;
-}
-
-function worktrees(root) {
-  const zeilen = gitLauf(root, ["worktree", "list", "--porcelain"]).stdout.split("\n");
-  return zeilen.filter((zeile) => zeile.startsWith(WORKTREE)).map((zeile) => zeile.slice(WORKTREE.length));
-}
-
-function berichteAndererPhasen(baum, phase) {
-  const belege = join(baum, BELEGE);
-  if (!existsSync(belege)) return [];
-  const ordner = readdirSync(belege, { withFileTypes: true }).filter((eintrag) => eintrag.isDirectory() && eintrag.name !== phase);
-  return ordner.flatMap(({ name }) => readdirSync(join(belege, name)).filter((datei) => PLANUNGSBERICHTE.test(datei)).map((datei) => join(belege, name, datei)));
-}
-
-function andereMittel(root, phase) {
-  const hoechste = {};
-  for (const datei of worktrees(root).flatMap((baum) => berichteAndererPhasen(baum, phase))) {
-    const { kosten, jeRolle } = liesKosten(datei);
-    const zaehlen = Object.entries(kosten).filter(([rolle, eintrag]) => istLauf(eintrag) && (jeRolle || rolle !== ERKUNDER));
-    for (const [rolle, eintrag] of zaehlen) hoechste[rolle] = Math.max(hoechste[rolle] ?? 0, mittel(eintrag));
-  }
-  return hoechste;
-}
-
 export function gemesseneKosten(root, beteiligte) {
   return kostenDesAuftrags(root, beteiligte.filter(({ sitzung }) => sitzung !== undefined)).summe.gesamt;
-}
-
-export function gemesseneLaeufe(root, sitzungen) {
-  const { sitzungen: gemessen, summe } = kostenDesAuftrags(root, sitzungen);
-  return { laeufe: gemessen.length, token: summe.gesamt };
 }
 
 const TOPF_BUCH = "hermes-topf";
@@ -196,10 +152,6 @@ function prozent(teil, ganzes) {
   return `${((teil * PROZENT) / ganzes).toFixed(1).replace(".", ",")} %`;
 }
 
-function vorBekanntem(links, rechts) {
-  return rechts.mittel - links.mittel || Number(links.ganz) - Number(rechts.ganz);
-}
-
 function fertigeRollen(geplant, stelle) {
   return stelle?.abgebrochen.size > 0 ? geplant.filter((rolle) => stelle.fertig.has(rolle) && !stelle.abgebrochen.has(rolle)) : geplant;
 }
@@ -212,35 +164,15 @@ export function ohneGliederung({ soll, nurUmbau }) {
   return nurUmbau && soll.size === 0;
 }
 
-export function weiterTeilbar(teil, gruppen) {
-  return teil && gruppen >= TEILBAR_AB_GRUPPEN;
-}
-
-function teilungNachGliederung({ soll, teil, gruppenUeberGrenze }) {
-  return gruppenUeberGrenze(soll.size) || weiterTeilbar(teil, soll.size);
-}
-
-function mindestweg(lauf) {
-  if (ohneGliederung(lauf)) return [];
-  return teilungNachGliederung(lauf) ? [GLIEDERUNG] : [GLIEDERUNG, ERKUNDUNG];
-}
-
-export function rollenText(rollen) {
-  return rollen.map(({ rolle, token, herkunft }) => `${rolle} ${token} (${herkunft})`).join(", ");
-}
-
 export class Kostendeckel {
   constructor(root, phase, deckel) {
     this.root = root;
     this.deckel = deckel;
-    this.werkzeuge = {};
     const vorige = vorigeKosten(root, phase);
     this.vorige = vorige.kosten;
     this.vorigeJeRolle = vorige.jeRolle;
-    this.andere = andereMittel(root, phase);
     this.jeLauf = {};
     this.stand = {};
-    this.offen = new Map();
     this.halt = null;
     this.schritt = null;
     this.zaehlung = null;
@@ -254,110 +186,6 @@ export class Kostendeckel {
 
   gesamt(gemessen) {
     return this.vorverbrauch + gemessen;
-  }
-
-  wert(rolle, gemessen) {
-    if (this.jeLauf[rolle] !== undefined) return { mittel: mittel(this.jeLauf[rolle]), ganz: false };
-    const vorige = istLauf(this.vorige[rolle]) ? [{ mittel: mittel(this.vorige[rolle]), ganz: rolle === ERKUNDER && !this.vorigeJeRolle }] : [];
-    const dieserLauf = istLauf(gemessen) ? [{ mittel: mittel(gemessen), ganz: false }] : [];
-    const andere = this.andere[rolle] === undefined ? [] : [{ mittel: this.andere[rolle], ganz: false }];
-    return [...vorige, ...dieserLauf, ...andere].toSorted(vorBekanntem)[0];
-  }
-
-  mittelJeLauf(rolle, gemessen) {
-    return this.wert(rolle, gemessen)?.mittel ?? this.ersatz(rolle);
-  }
-
-  ersatz(rolle) {
-    if (rolle === WEGPRUEFER) return this.wegpruefErsatz().mittel;
-    const gemesseneRollen = Object.keys(this.jeLauf);
-    const gleicheWerkzeuge = gemesseneRollen.filter((andere) => this.ausstattung(andere) === this.ausstattung(rolle));
-    return this.hoechstesMittel(gleicheWerkzeuge.length > 0 ? gleicheWerkzeuge : gemesseneRollen);
-  }
-
-  hoechstesMittel(rollen) {
-    return Math.max(0, ...rollen.map((rolle) => mittel(this.jeLauf[rolle])));
-  }
-
-  ausstattung(rolle) {
-    this.werkzeuge[rolle] ??= werkzeugeDerRolle(this.root, AGENT_DER_ROLLE[rolle] ?? rolle).toSorted().join(",");
-    return this.werkzeuge[rolle];
-  }
-
-  imErkunderEnthalten(rollen, jeRolle) {
-    if (!rollen.includes(ERKUNDER) || this.wert(WEGPRUEFER, jeRolle[WEGPRUEFER]) !== undefined) return false;
-    return this.wert(ERKUNDER, jeRolle[ERKUNDER])?.ganz ?? true;
-  }
-
-  gezaehlteRollen(rollen, jeRolle) {
-    const ohne = this.imErkunderEnthalten(rollen, jeRolle) ? WEGPRUEFER : null;
-    return rollen.filter((rolle) => rolle !== ohne);
-  }
-
-  schrittVorschau(rollen, jeRolle) {
-    return this.gezaehlteRollen(rollen, jeRolle).reduce((summe, rolle) => summe + this.mittelJeLauf(rolle, jeRolle[rolle]), 0);
-  }
-
-  vorschau(schritte, jeRolle = {}) {
-    return Math.round(schritte.reduce((summe, rollen) => summe + this.schrittVorschau(rollen, jeRolle), 0));
-  }
-
-  herkunft(rolle) {
-    const wert = this.wert(rolle);
-    if (wert === undefined) return rolle === WEGPRUEFER ? `${ERSATZ} wie ${this.ersatzQuelle()}` : "keine Messung";
-    return istLauf(this.vorige[rolle]) && wert.mittel === mittel(this.vorige[rolle]) ? "eigene Messung" : "fremde Phase";
-  }
-
-  wegpruefErsatz() {
-    const pruefer = { quelle: AGENT_DER_ROLLE[WEGPRUEFER], mittel: this.mittelJeLauf(AGENT_DER_ROLLE[WEGPRUEFER]) };
-    const erkunder = this.wert(ERKUNDER);
-    return erkunder !== undefined && !erkunder.ganz && erkunder.mittel >= pruefer.mittel ? { quelle: ERKUNDER, mittel: erkunder.mittel } : pruefer;
-  }
-
-  ersatzQuelle() {
-    const { quelle } = this.wegpruefErsatz();
-    return `${quelle}, ${this.herkunft(quelle)}`;
-  }
-
-  mindestvorschau(lauf) {
-    const schritte = mindestweg(lauf);
-    const rollen = schritte.flatMap((schritt) => this.gezaehlteRollen(schritt, {})).map((rolle) => ({ rolle, token: Math.round(this.mittelJeLauf(rolle)), herkunft: this.herkunft(rolle) }));
-    return { token: this.vorschau(schritte), rollen };
-  }
-
-  vorDemErstenAgenten(lauf) {
-    const { token, rollen } = this.mindestvorschau(lauf);
-    if (!this.haelt({ gemessen: 0, vorschau: token }, MINDEST_SCHRITT)) return null;
-    return `Deckel ${this.deckel} Token: schon die Mindestvorschau ${token} für den kürzesten Weg bis zum Schnitt (${rollenText(rollen)}) liegt darüber; plane hält vor dem ersten Agenten an und wartet auf eine Entscheidung. Den Mindestdeckel zeigt node tools/auftrag.mjs umfang <Ordner>`;
-  }
-
-  haelt({ gemessen, vorschau }, schritt) {
-    if (this.gesamt(gemessen + vorschau) <= this.deckel) return false;
-    this.stand = { gemessen, vorschau };
-    this.schritt = schritt;
-    return true;
-  }
-
-  ueber({ gemessen, jeRolle }, schritte, schritt) {
-    const vorschau = this.vorschau(schritte, jeRolle);
-    if (!this.haelt({ gemessen, vorschau }, schritt)) {
-      this.offen = new Map(schritte.map((rollen, stelle) => [stelle, this.schrittVorschau(rollen, jeRolle)]));
-      return null;
-    }
-    return `Deckel ${this.deckel} Token: ${vorverbrauchText(this.vorverbrauch)}gemessen ${gemessen}, mit der Vorschau ${vorschau} für ${schritte.length} Läufe (${[...new Set(schritte.flat())].join(", ")}) wären es ${this.gesamt(gemessen + vorschau)}; plane hält vor dem Schritt „${schritt}“ an und wartet auf eine Entscheidung`;
-  }
-
-  imLauf(stelle, { gemessen, jeRolle }, { rolle, schritt }) {
-    if (this.halt !== null) return this.halt;
-    const eigener = this.mittelJeLauf(rolle, jeRolle[rolle]);
-    const andere = [...this.offen].reduce((summe, [lauf, betrag]) => (lauf === stelle ? summe : summe + betrag), 0);
-    const vorschau = Math.round(andere + eigener);
-    if (!this.haelt({ gemessen, vorschau }, schritt)) {
-      this.offen.set(stelle, eigener);
-      return null;
-    }
-    this.halt = `Deckel ${this.deckel} Token: ${vorverbrauchText(this.vorverbrauch)}gemessen ${gemessen}, mit der Vorschau ${vorschau} für die offenen Schritte dieser Welle wären es ${this.gesamt(gemessen + vorschau)}; plane startet den Schritt „${schritt}“ nicht, lässt die laufenden Antworten zu Ende laufen und wartet auf eine Entscheidung`;
-    return this.halt;
   }
 
   halteUeberschreitungFest(gemessen, schritt) {
@@ -374,10 +202,6 @@ export class Kostendeckel {
     if (!this.halteUeberschreitungFest(gemessen, schritt)) return null;
     const { ueberschritten } = this.stand;
     return `Deckel ${this.deckel} Token überschritten: ${vorverbrauchText(this.vorverbrauch)}gemessen ${gemessen}, ${ueberschritten} Token (${prozent(ueberschritten, this.deckel)}) über dem Deckel beim Schritt „${this.schritt}“; plane startet keinen Agenten mehr und wartet auf eine Entscheidung`;
-  }
-
-  endeLauf(stelle) {
-    this.offen.delete(stelle);
   }
 
   wache({ stelle, rolle }) {

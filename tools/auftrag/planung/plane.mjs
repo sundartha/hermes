@@ -26,7 +26,7 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { ERKUNDUNG, Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gemesseneLaeufe, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, ohneGliederung, schliesseVerbrauch, verbucheLauf, weiterTeilbar } from "./deckel.mjs";
+import { ERKUNDUNG, Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, ohneGliederung, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
 import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGE_AUSSTEHEND, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesAusstehendeNachfrage, liesFortsetzung, liesGeprueft, nachfrageSumme } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
@@ -44,7 +44,7 @@ import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
-import { GEAENDERTE_DATEIEN, dokumenteIm, gruppenUeberGrenze, umfang } from "./umfang.mjs";
+import { GEAENDERTE_DATEIEN, dokumenteIm, umfang } from "./umfang.mjs";
 import { text as wortlautDes, verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
@@ -270,13 +270,6 @@ export class Planung {
     return null;
   }
 
-  wegpruefKosten() {
-    const sitzungen = new Set(this.wegpruefungen.map(({ sitzung }) => sitzung));
-    const pruefer = this.team.beteiligte.filter(({ rolle, sitzung }) => rolle === "pruefer-planung" && sitzungen.has(sitzung));
-    const gemessen = gemesseneLaeufe(this.root, pruefer);
-    return { "pruefer-planung": gemessen, [WEGPRUEFER]: gemessen };
-  }
-
   kostenrolle(wer) {
     return this.wegpruefer.has(wer) ? WEGPRUEFER : wer.rolle;
   }
@@ -284,10 +277,6 @@ export class Planung {
   kostenJeRolle() {
     const gruppen = Map.groupBy(this.team.beteiligte, (wer) => this.kostenrolle(wer));
     return Object.fromEntries([...gruppen].map(([rolle, beteiligte]) => [rolle, gemesseneKosten(this.root, beteiligte)]));
-  }
-
-  messung() {
-    return { gemessen: this.gemessen(), jeRolle: this.wegpruefKosten() };
   }
 
   ueberschreitung(schritt) {
@@ -304,12 +293,10 @@ export class Planung {
     if (grund !== null) this.haltAmDeckel(grund);
   }
 
-  pruefeDeckel(schritte, schritt) {
+  pruefeDeckel(schritt) {
     if (this.kostendeckel === null) return;
     this.pruefeUeberschreitung(schritt);
     if (this.kostendeckel.liveAbbruch !== null) this.haltAmDeckel(this.kostendeckel.halt);
-    const grund = this.kostendeckel.ueber(this.messung(), schritte, schritt);
-    if (grund !== null) this.haltAmDeckel(grund);
   }
 
   ausgangAmDeckel(ergebnis) {
@@ -321,14 +308,13 @@ export class Planung {
     return { exit: EXIT_DECKEL, grund: [grund, `ohne den Deckel Exit ${ergebnis.exit}: ${ergebnis.grund}`, ...offen].join("; "), offen: ergebnis.offen };
   }
 
-  pruefeSchritt(rolle, schritt) {
-    if (this.kostendeckel === null) return;
-    const grund = this.kostendeckel.imLauf(this.laufInWelle.getStore(), this.messung(), { rolle, schritt });
+  pruefeSchritt(schritt) {
+    const grund = this.kostendeckel?.halt ?? this.ueberschreitung(schritt);
     if (grund !== null) throw new Ende(EXIT_DECKEL, grund);
   }
 
   inWelle({ rolle, lauf }, stelle) {
-    return { rolle, lauf: () => this.laufInWelle.run(stelle, lauf).finally(() => this.kostendeckel?.endeLauf(stelle)) };
+    return { rolle, lauf: () => this.laufInWelle.run(stelle, lauf) };
   }
 
   nachDeckelHalt(fehler, wegpruefungen) {
@@ -347,7 +333,7 @@ export class Planung {
 
   async welle(laeufe, schritt) {
     const schritte = laeufe.map(({ rolle, kosten = [rolle] }) => kosten);
-    this.pruefeDeckel(schritte, schritt);
+    this.pruefeDeckel(schritt);
     const vorher = this.kostendeckel === null ? {} : this.kostenJeRolle();
     const wegpruefungen = [...this.wegpruefungen];
     const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle)))).catch((fehler) => {
@@ -479,7 +465,7 @@ export class Planung {
     if (erste.befunde.length === 0) return erste;
     merkeBezahlt(erste);
     this.merkeRuecksendung(wer.rolle, nummern, erste.befunde);
-    this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
+    this.pruefeSchritt(`Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
     return this.berichtNachRuecksendung(wer, { befunde: erste.befunde, nummern, frueher: erste.bericht.hinweise });
   }
 
@@ -562,11 +548,11 @@ export class Planung {
     let text = this.wegNachricht(nummern, sauber.bericht, false);
     this.merkeBezahlt(nummern, { weg: { weg, runden: 0, sauber, offen: [], sauberGeprueft: false } });
     for (let runden = 1; ; runden += 1) {
-      this.pruefeSchritt(WEGPRUEFER, `Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
+      this.pruefeSchritt(`Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const runde = await this.wegRunde(weg, text);
       if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
       this.merkeBezahlt(nummern, { weg: { weg, runden, sauber, offen: runde.offen, sauberGeprueft: true } });
-      this.pruefeSchritt(wer.rolle, `Korrektur nach der Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
+      this.pruefeSchritt(`Korrektur nach der Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
       if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
       sauber = neu;
@@ -822,7 +808,7 @@ export class Planung {
   async prueferLauf(pruefer, text, schluessel) {
     const ergebnis = this.prueflisteDer(await this.team.frage(pruefer, text), schluessel);
     if (ergebnis.befunde.length === 0) return ergebnis;
-    this.pruefeSchritt(this.kostenrolle(pruefer), `Rücksendung an ${pruefer.rolle}`);
+    this.pruefeSchritt(`Rücksendung an ${pruefer.rolle}`);
     return this.prueflisteDer(await this.team.frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
@@ -950,7 +936,7 @@ export class Planung {
     let entwurf = lies(await this.team.frage(wer, text));
     let befunde = entwurfBefunde(entwurf, namen);
     if (befunde.length > 0) {
-      this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle}`);
+      this.pruefeSchritt(`Rücksendung an ${wer.rolle}`);
       entwurf = lies(await this.team.frage(wer, this.team.ruecksenden(wer, befunde)));
       befunde = entwurfBefunde(entwurf, namen);
     }
@@ -979,16 +965,6 @@ export class Planung {
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Phase hat Befunde", befunde);
   }
 
-  teilDeckelUeber() {
-    const { gruppen } = this.gliederung;
-    if (!weiterTeilbar(this.teil, gruppen.length)) return null;
-    const { gemessen, jeRolle } = this.messung();
-    const { deckel } = this.kostendeckel;
-    const vorschau = this.kostendeckel.vorschau(gruppen.map(() => ERKUNDUNG), jeRolle);
-    if (gemessen + vorschau <= deckel) return null;
-    return `Erkundung von ${gruppen.length} Gruppen: gemessen ${gemessen}, mit der Vorschau ${vorschau} wären es ${gemessen + vorschau}, über dem Teil-Deckel ${deckel}`;
-  }
-
   pruefeFremdeDateien() {
     if (!this.teil) return;
     const gruppen = this.gliederung.gruppen.map(({ nummern, ueberschriften }) => ({ nummern, text: this.designAbschnitte(ueberschriften) }));
@@ -1009,10 +985,9 @@ export class Planung {
   }
 
   async nachsteuern() {
-    const teilDeckel = this.teilDeckelUeber();
-    const ueber = [...gruppenZahlUeber(this.gliederung.gruppen.length), ...(teilDeckel === null ? [] : [teilDeckel])];
+    const ueber = gruppenZahlUeber(this.gliederung.gruppen.length);
     if (ueber.length === 0) return;
-    this.pruefeDeckel([["planer"]], "Teilung nach der Gliederung");
+    this.pruefeDeckel("Teilung nach der Gliederung");
     const { deckel } = this.kostendeckel;
     const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung, umbau: this.umbau };
     const geteilt = await this.gezaehlt("Teilung nach der Gliederung", () => laufeTeilung(this.root, this.ordner, angaben));
@@ -1020,13 +995,7 @@ export class Planung {
     throw new Ende(ergebnis.exit, ergebnis.fehler);
   }
 
-  pruefeMindestvorschau() {
-    const grund = this.kostendeckel.vorDemErstenAgenten({ soll: this.soll, nurUmbau: this.nurUmbau, teil: this.teil, gruppenUeberGrenze });
-    if (grund !== null) throw new Ende(EXIT_DECKEL, grund);
-  }
-
   async laufe() {
-    this.pruefeMindestvorschau();
     this.stand = this.ausgangsstand();
     await this.gliedere();
     this.pruefeFremdeDateien();
