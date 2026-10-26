@@ -8,7 +8,7 @@ import { vergleicheErreichtes } from "./testwirkung/erreicht.mjs";
 import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaendert.mjs";
 import { git, inBasis } from "./testwirkung/git.mjs";
 import { katalogtests } from "./testwirkung/katalog.mjs";
-import { UNTER_ATTRAPPE, testlauf } from "./testwirkung/testlauf.mjs";
+import { UNTER_ATTRAPPE, laeufeAbbrechen, testlaufGleichzeitig } from "./testwirkung/testlauf.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { pruefeWeitergabe } from "./testwirkung/weitergabe.mjs";
 import { umbenennungen } from "./umbenennung.mjs";
@@ -104,11 +104,12 @@ function namensmuster(tests) {
   return [...new Set(tests.flatMap(({ name, vorfahren }) => [`^${maskiert(name)}$`, ...vorfahren]))];
 }
 
-function lauf(tests, vorspann) {
+async function lauf(name, tests, vorspann) {
   const dateien = [...new Set(tests.map(({ datei }) => datei))];
   const ergebnisse = new Map(tests.map((test) => [schluessel(test), []]));
   const uebersprungen = new Set();
-  for (const gelaufen of testlauf({ dateien, muster: namensmuster(tests), vorspann, mitUebersprungenen: true })) {
+  const gelaufene = await testlaufGleichzeitig({ name, dateien, muster: namensmuster(tests), vorspann, mitUebersprungenen: true });
+  for (const gelaufen of gelaufene) {
     if (gelaufen.uebersprungen) uebersprungen.add(schluessel(gelaufen));
     else ergebnisse.get(schluessel(gelaufen))?.push(gelaufen.bestanden);
   }
@@ -178,11 +179,18 @@ function befund(test, { ueberspringenErlaubt, ohnePruefung, wiederholungen }) {
   };
 }
 
-function befunde(tests, wiederholt) {
+function wiederholungslaeufe(wiederholt) {
+  if (wiederholt.length === 0) return [];
+  return Array.from({ length: WIEDERHOLUNGEN }, (_leer, index) => lauf(laufname(index + 1), wiederholt, []));
+}
+
+async function befunde(tests, wiederholt) {
   const alle = vereint(tests, wiederholt);
   if (alle.length === 0) return [];
-  const ohnePruefung = tests.length === 0 ? KEIN_LAUF : lauf(tests, UNTER_ATTRAPPE);
-  const wiederholungen = wiederholt.length === 0 ? [] : Array.from({ length: WIEDERHOLUNGEN }, () => lauf(wiederholt, []));
+  const [ohnePruefung, ...wiederholungen] = await Promise.all([
+    tests.length === 0 ? KEIN_LAUF : lauf(laufname(0), tests, UNTER_ATTRAPPE),
+    ...wiederholungslaeufe(wiederholt),
+  ]);
   const zuWiederholen = new Set(wiederholt.map(schluessel));
   const imLaufA = new Set(tests.map(schluessel));
   return alle.map((test) =>
@@ -264,6 +272,14 @@ function erreichbarZeile({ verglichen, verstoesse: luecken }) {
   return `Erreichte Zeilen: ${verglichen} geänderte Dateien unter test/ verglichen, ${luecken.length} Tests oder Hilfsdateien erreichen Zeilen der Basis nicht mehr.`;
 }
 
+async function gemeinsam(pruefungen) {
+  try {
+    return await Promise.all(pruefungen);
+  } catch (fehler) {
+    throw laeufeAbbrechen(fehler);
+  }
+}
+
 async function main() {
   const { values } = parseArgs({ options: { basis: { type: "string" } } });
   if (values.basis === undefined) {
@@ -275,9 +291,7 @@ async function main() {
   const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const inGeaenderten = alleTestsIn([...geaendert]);
-  const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten));
   const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
-  const eingefuegt = pruefeGeaenderte(values.basis, bestehende);
   const auftrag = {
     bestehende,
     geaenderteDateien: [...geaendert],
@@ -285,8 +299,12 @@ async function main() {
     vergleich: geaenderteSkripte(values.basis),
     umbenannt,
   };
-  const erreichbar = await erreichbarkeit(values.basis, auftrag);
-  const weitergegeben = weitergabe(values.basis, auftrag);
+  const [ergebnisse, eingefuegt, erreichbar, weitergegeben] = await gemeinsam([
+    befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten)),
+    pruefeGeaenderte(values.basis, bestehende),
+    erreichbarkeit(values.basis, auftrag),
+    weitergabe(values.basis, auftrag),
+  ]);
   const gruppen = [
     [WIRKUNG_ZWECK.KATALOG, katalog.verstoesse],
     ...neueTestsVerstoesse(ohneNamen, ergebnisse),
