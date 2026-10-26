@@ -2,6 +2,7 @@ import { NIE_VORGABEN } from "../annahmen.mjs";
 import { brauchtRotenTest } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { istObjekt, istText, liste } from "./erkundung.mjs";
+import { teilVon } from "./kopfzeile.mjs";
 import { PITCH, gleicherText } from "./nummern.mjs";
 import { listenpunkteIn, szenarioMitSatz } from "./schnitt.mjs";
 
@@ -31,7 +32,7 @@ function fehlendeSaetze(pitch, soll, eigene) {
 
 export function mitNieSaetzenDerVorgaben(schnitt, pitch, soll) {
   const auftrag = einzigerAuftragMitTest(schnitt);
-  if (auftrag === null || !istText(pitch)) return schnitt;
+  if (auftrag === null || !istText(pitch) || teilVon(pitch) !== undefined) return schnitt;
   const eigene = auftrag.wasDarfNiePassieren ?? [];
   const fehlende = fehlendeSaetze(pitch, soll, eigene);
   return fehlende.length === 0 ? schnitt : { ...schnitt, auftraege: [{ ...auftrag, wasDarfNiePassieren: [...eigene, ...fehlende] }] };
