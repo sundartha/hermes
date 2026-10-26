@@ -16,6 +16,10 @@ export function gleichwertigGemeldet(text) {
   return [...text.matchAll(ZEILE)].map(([, mutant]) => mutant.trim());
 }
 
+export function gemeint(gemeldet, schluessel) {
+  return schluessel === gemeldet || schluessel.startsWith(`${gemeldet} `);
+}
+
 export function ohneTestdatei(datei, zeile) {
   return { schluessel: `${datei}:${zeile} ${KEINE_TESTDATEI}`, status: "NoCoverage", art: KEINE_TESTDATEI };
 }

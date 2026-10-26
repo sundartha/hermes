@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { dirname, join, normalize, relative } from "node:path";
+import { basename, dirname, join, normalize, relative } from "node:path";
 import { chdir, cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -49,6 +49,13 @@ const AUSSERHALB = "..";
 const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
 const DIFF_KOPF = "diff --git ";
 const GEAENDERTE_DATEIEN = ["diff", "--name-only", "-z", "--no-renames"];
+const NUR_GELOESCHTE = "--diff-filter=D";
+const CODEDATEIEN = ["*.js", "*.mjs", "*.cjs", "*.ts", "*.mts", "*.cts"];
+const KEINE_BENUTZUNG = [":(exclude)*.md", ":(exclude)tools/basis/"];
+const GREP_GEFUNDEN = 0;
+const GREP_NICHT_GEFUNDEN = 1;
+const VERZEICHNISEINSTIEG = "index";
+const UNBENUTZT_GELOESCHT = "übersprungen: gelöscht, auf der Basis von keinem Modul importiert.";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const UEBERLEBT = "Survived";
@@ -158,12 +165,12 @@ function genannteDateien(modul) {
   return [...new Set(ziele)].filter((ziel) => ziel !== modul && eigeneDatei(ziel));
 }
 
-async function abhaengigkeiten(wurzeln) {
+async function abhaengigkeiten(wurzeln, nennend = NENNENDE_DATEI) {
   const { output } = await cruise(wurzeln, CRUISE_OPTIONEN);
   return new Map(
     output.modules.map(({ source, dependencies }) => [
       source,
-      { importe: dependencies.map(({ resolved }) => resolved), genannt: NENNENDE_DATEI.test(source) && eigeneDatei(source) ? genannteDateien(source) : [] },
+      { importe: dependencies.map(({ resolved }) => resolved), genannt: nennend.test(source) && eigeneDatei(source) ? genannteDateien(source) : [] },
     ]),
   );
 }
@@ -435,13 +442,47 @@ function geaenderteTests({ von, bis }) {
   return new Set(dateien.filter((pfad) => TESTDATEI.test(pfad)));
 }
 
+function geloeschteDateien({ von, bis, seite }) {
+  if (seite !== "alt") return new Set();
+  const dateien = git([...GEAENDERTE_DATEIEN, NUR_GELOESCHTE, von, ...(bis ? [bis] : []), "--", "src/"]).split("\0");
+  return new Set(dateien.filter((pfad) => QUELLDATEI.test(pfad)));
+}
+
+async function importierteDateien() {
+  const code = git(["ls-files", "-z", "--", ...CODEDATEIEN]).split("\0").filter(Boolean);
+  const nachQuelle = await abhaengigkeiten(code, CODEPFAD);
+  const ziele = [...nachQuelle].flatMap(([quelle, { importe, genannt }]) => [...importe, ...genannt].filter((ziel) => ziel !== quelle));
+  return new Set(ziele);
+}
+
+function pfadAnderswoGenannt(datei) {
+  const stamm = datei.replace(CODEPFAD, "");
+  const nennungen = basename(stamm) === VERZEICHNISEINSTIEG ? [stamm, dirname(stamm)] : [stamm];
+  const muster = nennungen.flatMap((nennung) => ["-e", nennung]);
+  const suche = spawnSync("git", ["grep", "-q", "-F", ...muster, "--", ".", `:(exclude,literal)${datei}`, ...KEINE_BENUTZUNG], { encoding: "utf8" });
+  if (suche.status === GREP_GEFUNDEN) return true;
+  if (suche.status === GREP_NICHT_GEFUNDEN) return false;
+  throw new Error(`git grep ${nennungen.join(", ")}: ${suche.stderr.trim()}`);
+}
+
+async function ohneUnbenutzteGeloeschte(einheiten, geloescht) {
+  if (geloescht.size === 0) return einheiten;
+  const importiert = await importierteDateien();
+  return einheiten.filter(({ datei }) => {
+    if (!geloescht.has(datei) || importiert.has(datei) || pfadAnderswoGenannt(datei)) return true;
+    console.log(`${datei}: ${UNBENUTZT_GELOESCHT}`);
+    return false;
+  });
+}
+
 async function imStand(pruefung, arbeit) {
   const einheiten = await bestandteile(pruefung);
   if (einheiten.every(({ bereiche }) => bereiche === undefined)) return arbeit(einheiten, null);
   const geaendert = geaenderteTests(pruefung);
+  const geloescht = geloeschteDateien(pruefung);
   const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
-    return await arbeit(einheiten, { ...(await importierer()), geaendert });
+    return await arbeit(await ohneUnbenutzteGeloeschte(einheiten, geloescht), { ...(await importierer()), geaendert });
   } finally {
     zurueck?.();
   }

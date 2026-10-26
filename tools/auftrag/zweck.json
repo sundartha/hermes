@@ -226,7 +226,7 @@
   "mutation alter Stand": {
     "liste": "A15",
     "wozu": "Vor einem Umbau müssen Tests das bisherige Ergebnis festhalten, sonst ändert der Umbau unbemerkt, was Kunden erleben.",
-    "behebung": "Tests ergänzen, die das Ergebnis festhalten.",
+    "behebung": "Tests ergänzen, die das Ergebnis festhalten. Eine gelöschte Datei, die auf dem alten Stand von keiner anderen Datei importiert oder genannt wird (Markdown und die Befund-Basen unter tools/basis/ zählen nicht), ist kein Ziel der Prüfung; die Ausgabe nennt sie mit „übersprungen: gelöscht, auf der Basis von keinem Modul importiert“.",
     "nichtAngenommen": "Tests, die nur die Schreibweise des Codes festnageln.",
     "ausweg": "Ändert ein Mutant kein beobachtbares Verhalten, antwortet der Test-Agent je Mutant mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <Satz>“; die Meldung geht zur Freigabe an Antonio."
   },
