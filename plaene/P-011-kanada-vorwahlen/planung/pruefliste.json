@@ -1,0 +1,225 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:716"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:716"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/time-context.js:31"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:90"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:330"
+  },
+  {
+    "schluessel": "weg:S5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/number-denylist.js:66"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:264"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:265"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/defaults.js:449"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js:42"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:79"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:79"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:79"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:258"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:13"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js:35"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js:63"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js:35"
+  },
+  {
+    "schluessel": "ausweg:S1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S2:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S3:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S4:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/number-gate.test.js:169"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S5:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:S5:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B1:weg eingang",
+    "ergebnis": "befund",
+    "befund": "Der Ausweg „nicht gefunden, weil to: \"+12125550147\" entsteht neu“ stimmt nicht. Die Nummer steht schon als HYPOTHESE_NUMMER in test/elevenlabs-anrufstart.test.js:1127, und der Test „EL-START T8“ (:1214–1215) schickt sie über usLauf/placeCall (:1199–1203) an POST /api/calls. Dieser Test deckt B1 nicht ab: Der Auftraggeber hat OWNER_TZ statt Europe/Berlin, und geprüft werden nur Marker, nicht der ganze Satz. Der Planer soll den Eingang beim Weg für B1 auf diese vorhandene Stelle berichtigen. Die zeichengleiche Prüfung mit Zone Europe/Berlin bleibt Aufgabe des neuen Abnahmetests von a1.",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B2:weg eingang",
+    "ergebnis": "befund",
+    "befund": "Der Ausweg „nicht gefunden, weil to: \"+15555550147\" entsteht neu“ stimmt nicht. Die Nummer steht schon als OHNE_ZONE_NUMMER in test/elevenlabs-anrufstart.test.js:1129, und der Test „EL-START T8 (Fallback)“ (:1272–1273) schickt sie über usLauf/placeCall (:1199–1203) an POST /api/calls. Dieser Test deckt B2 nicht ab: Der Auftraggeber hat OWNER_TZ statt Europe/Berlin, und geprüft werden nur Marker, nicht der ganze Satz. Der Planer soll den Eingang beim Weg für B2 auf diese vorhandene Stelle berichtigen. Die zeichengleiche Prüfung bleibt Aufgabe des neuen Abnahmetests von a1.",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1129"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B3:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:B3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S2:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S3:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S4:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S5:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B1:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B2:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1129"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B3:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei a1, der einzigen Änderung an AREA_CODES_BY_ZONE, fehlen in wasDarfNiePassieren zwei Nicht-Ziele aus pitch.md, Abschnitt ## Nicht-Ziele, die a1 brechen kann: (1) „Nicht Teil dieser Änderung: neue Zonen Atlantic (902, 782, 506, 428), Neufundland (709, 879) und Saskatchewan ohne Sommerzeit (306, 474, 639), weil die Tabelle und die gesprochenen Namen heute nur Eastern, Central, Mountain, Arizona, Pacific und Hawaii kennen.“ a1 ändert genau diese Tabelle, und die Absicht verbietet die Abkürzung über neue Zonen ausdrücklich. (2) „Nicht Teil dieser Änderung: eine Land-Ableitung für +1-Nummern (Kanada oder USA), weil sie nach Owner-Entscheidung E2 bewusst leer bleibt.“ Auch diese Abkürzung verbietet die Absicht. Eine Land-Ableitung würde calleeZone setzen und den Satz von der Vermutung zur festen Angabe ändern (src/elevenlabs/outbound.js:263). Bitte beide Sätze wörtlich mit Quelle pitch.md und Abschnitt ## Nicht-Ziele bei a1 ergänzen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

@@ -1,0 +1,175 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Alle acht Nummern liegen in einem Auftrag. Sie haben denselben Eingang `POST /api/calls`, ändern nur die Konstante `AREA_CODES_BY_ZONE` in src/elevenlabs/nanp-area-codes.js (laut Bericht etwa +12 Zeilen) und lassen sich in einem Abnahmetest prüfen. Damit ist a1 Durchstich und vollständige Änderung zugleich; ein weiterer Funktionsauftrag hätte nichts mehr zu bauen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Eingang ist im Test erreichbar, weil die Testumgebung das Land-Gate über `ALLOWED_COUNTRY_CODES` auf \"*\" setzt (test/helpers.js:80). Die E.164-Prüfung und die Denylist weisen laut Bericht keine der 55 kanadischen Vorwahlen und weder 212 noch 555 ab."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Auftraggeber im Abnahmetest hat die Zone Europe/Berlin und wird damit angelegt. Die Konstante `OWNER_TZ` der bestehenden Anrufstart-Tests ist Asia/Tokyo (test/elevenlabs-anrufstart.test.js:1031) und passt nicht zum Gegeben."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Berichtigter Eingang für B1: Die Zielnummer +12125550147 steht schon als `HYPOTHESE_NUMMER` (test/elevenlabs-anrufstart.test.js:1127). Der bestehende Test „EL-START T8“ schickt sie über `usLauf` (test/elevenlabs-anrufstart.test.js:1199-1212) an POST /api/calls. Er deckt B1 nicht ab, weil sein Auftraggeber die Zone `OWNER_TZ` statt Europe/Berlin hat und er nur Marker prüft. Die zeichengleiche Prüfung mit Zone Europe/Berlin macht der neue Abnahmetest von a1."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Berichtigter Eingang für B2: Die Zielnummer +15555550147 steht schon als `OHNE_ZONE_NUMMER` (test/elevenlabs-anrufstart.test.js:1129). Der bestehende Test „EL-START T8 (Fallback)“ schickt sie über `usLauf` (test/elevenlabs-anrufstart.test.js:1199-1212) an POST /api/calls. Er deckt B2 nicht ab, weil sein Auftraggeber die Zone `OWNER_TZ` statt Europe/Berlin hat und er nur Marker prüft. Die zeichengleiche Prüfung mit Zone Europe/Berlin macht der neue Abnahmetest von a1."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Für B1, B2 und B3 ändert sich weder src/elevenlabs/outbound.js noch src/elevenlabs/time-context.js. Satz, gesprochener Name und Land-Ableitung bleiben unverändert (Pitch, Grobe Lösung). B1 bis B3 gehören zu a1, weil nur die Tabellenänderung dieses Verhalten berühren kann."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Den Hinweis des Erkunders zu 819, 873 und 468 (Bericht S5) werte ich nicht als Widerspruch. Der Pitch entscheidet unter „## Fallen“ ausdrücklich „hingenommen“ und führt alle drei Vorwahlen in der Liste unter Eastern. Das Design Doc trägt dieselbe Entscheidung."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Nur test/anrufe/schutz-bei-ausgehenden-anrufen.test.js schneidet unter test/anrufe/ den ElevenLabs-Anrufstart mit, und zwar über die lokale Attrappe `starteAnbieter` (test/anrufe/schutz-bei-ausgehenden-anrufen.test.js:35-60). Diese zeichnet den `body` auf. Ein neuer Test mit eigener Kopie davon würde jscpd melden (minTokens 50, test/ nicht ausgeschlossen); Umformulieren verbietet CLAUDE.md. Deshalb zieht u1 die Attrappe ohne Verhaltensänderung in die Testhilfe test/anrufe/elevenlabs-anrufstart-attrappe.js, und der Schutztest importiert sie von dort."
+    },
+    {
+      "auftrag": "u1",
+      "text": "Die ausgelagerte Hilfe muss den Mitschnitt der Anrufstarts liefern, sodass `body.conversation_initiation_client_data.dynamic_variables.callee_timezone` lesbar ist. Die Zone des Auftraggebers legt der nutzende Test selbst über `seedState` aus test/helpers.js fest; die Hilfe gibt keine Zone fest vor."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [
+    {
+      "name": "starteAnrufstartAttrappe (Export von test/anrufe/elevenlabs-anrufstart-attrappe.js, liefert den Mitschnitt der ElevenLabs-Anrufstarts)",
+      "anbieter": "test/anrufe/",
+      "nutzer": "src/elevenlabs/nanp-area-codes.js"
+    }
+  ],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "32 kanadische Vorwahlen unter vier vorhandenen Zonen der Tabelle",
+      "bereich": "src/elevenlabs/nanp-area-codes.js",
+      "erwarteteDateien": [
+        "src/elevenlabs/nanp-area-codes.js",
+        "test/anrufe/zonen-vermutung-kanadische-vorwahlen.test.js"
+      ],
+      "abnahme": "test/anrufe/zonen-vermutung-kanadische-vorwahlen.test.js",
+      "erwarteterFehler": "probably in the America/New_York time zone",
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "B1",
+        "B2",
+        "B3"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht Teil dieser Änderung: neue Zonen Atlantic (902, 782, 506, 428), Neufundland (709, 879) und Saskatchewan ohne Sommerzeit (306, 474, 639), weil die Tabelle und die gesprochenen Namen heute nur Eastern, Central, Mountain, Arizona, Pacific und Hawaii kennen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine Land-Ableitung für +1-Nummern (Kanada oder USA), weil sie nach Owner-Entscheidung E2 bewusst leer bleibt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eigene kanadische Zonen-Kennungen wie `America/Toronto` oder neue gesprochene Namen, weil die vorhandenen Kennungen dieselben Regeln haben.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Freigabe von +1 im Land-Gate (`ALLOWED_COUNTRY_CODES`, Profilfeld `allowedCountryCodes`), weil das ein geschütztes Safety-Gate ist (CLAUDE.md, Absolute Regeln 1); der Blueprint setzt `+49,+33,+44` (`render.yaml:95-96`), die Vermutung wirkt erst, wenn der Betreiber +1 freigibt, bis dahin nur in der Testumgebung (`test/helpers.js:80`).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: weitere US-Vorwahlen oder Änderungen an bestehenden US-Einträgen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Abnahmetests: laufen über `POST /api/calls` und den Anrufstart am Anbieter; sie importieren kein internes Modul neu.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u1",
+          "grund": "der Abnahmetest liest den Anrufstart über die ausgelagerte Attrappe aus u1, statt sie zu kopieren"
+        }
+      ],
+      "eingang": "erreicht",
+      "falscheAngaben": [
+        {
+          "nummer": "S1",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "Der Bericht nennt die Datei nur als Ort für die neuen Testwerte (Zeilen 1127–1129), nicht als nötige Änderung. Der Abnahmetest einer Funktion ist ein neuer Test unter test/anrufe/, und die bestehende Datei bleibt unverändert.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "S2",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "Der Bericht nennt die Datei nur als Ort für die neuen Testwerte (Zeilen 1127–1129), nicht als nötige Änderung. Der Abnahmetest einer Funktion ist ein neuer Test unter test/anrufe/, und die bestehende Datei bleibt unverändert.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "S3",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "Der Bericht nennt die Datei nur als Ort für die neuen Testwerte (Zeilen 1127–1129), nicht als nötige Änderung. Der Abnahmetest einer Funktion ist ein neuer Test unter test/anrufe/, und die bestehende Datei bleibt unverändert.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "S4",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "Der Bericht nennt die Datei nur als Ort für die neuen Testwerte (Zeilen 1127–1129), nicht als nötige Änderung. Der Abnahmetest einer Funktion ist ein neuer Test unter test/anrufe/, und die bestehende Datei bleibt unverändert.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "S5",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "Der Bericht nennt die Datei nur als Ort für die neuen Testwerte (Zeilen 1127–1129), nicht als nötige Änderung. Der Abnahmetest einer Funktion ist ein neuer Test unter test/anrufe/, und die bestehende Datei bleibt unverändert.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "B1",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "B1 verlangt keine Änderung an dieser Datei. Die Zielnummer steht dort schon als HYPOTHESE_NUMMER und geht im Test „EL-START T8“ über usLauf an POST /api/calls; dieser Test bleibt unverändert. Die zeichengleiche Prüfung mit Zone Europe/Berlin macht der neue Abnahmetest unter test/anrufe/.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        },
+        {
+          "nummer": "B2",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "B2 verlangt keine Änderung an dieser Datei. Die Zielnummer steht dort schon als OHNE_ZONE_NUMMER und geht im Test „EL-START T8 (Fallback)“ über usLauf an POST /api/calls; dieser Test bleibt unverändert. Die zeichengleiche Prüfung mit Zone Europe/Berlin macht der neue Abnahmetest unter test/anrufe/.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1129"
+        },
+        {
+          "nummer": "B3",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "grund": "B3 verlangt keine Änderung: Die 23 ausgelassenen Vorwahlen bleiben ohne Vermutung. Der Bericht nennt die Datei nur als Ort für die Testwerte, und der Abnahmetest liegt neu unter test/anrufe/.",
+          "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+        }
+      ]
+    },
+    {
+      "id": "u1",
+      "art": "testumbau",
+      "ziel": "ElevenLabs-Anrufstart-Attrappe des Schutztests in Testhilfe auslagern",
+      "bereich": "test/anrufe/",
+      "erwarteteDateien": [
+        "test/anrufe/elevenlabs-anrufstart-attrappe.js",
+        "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js"
+      ],
+      "abnahme": "test/anrufe/schutz-bei-ausgehenden-anrufen.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    }
+  ]
+}

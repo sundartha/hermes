@@ -1,0 +1,30 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "B1",
+        "B2",
+        "B3"
+      ],
+      "eingang": "HTTP-Route POST /api/calls mit Ziel `to`, danach die Gates vor dem Wählen (src/telephony/outbound-gates.js) und der ElevenLabs-Anrufstart für ausgehende Anrufe mit der Variablen `callee_timezone` (src/elevenlabs/outbound.js:257-266, :330); die Zonen-Vermutung kommt nur aus `timezoneHypothesisForNumber` in src/elevenlabs/nanp-area-codes.js über src/elevenlabs/time-context.js:25-34, und nur, wenn die Land-Ableitung für +1 leer ist",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie ist `AREA_CODES_BY_ZONE` in src/elevenlabs/nanp-area-codes.js (laut Design Doc Zeilen 13-66) aufgebaut (eine Zeichenkette oder ein Array je Zone, Reihenfolge der Zonen), wie wird daraus die Map gebaut (Zeilen 79-91), und gibt es eine Prüfung auf doppelte Vorwahlen? Welche Zeilen müssen sich ändern, damit diese 32 kanadischen Vorwahlen unter den vorhandenen Kennungen stehen: Eastern `America/New_York`: 416 647 437 942 905 289 365 742 613 343 753 519 226 548 382 705 249 683 514 438 263 450 579 354 819 873 468; Central `America/Chicago`: 204 431 584; Mountain `America/Denver`: 780; Pacific `America/Los_Angeles`: 604?",
+        "Steht eine dieser 32 Vorwahlen oder eine der 23 ausgelassenen (807, 418, 581, 367, 250, 778, 236, 672, 257, 403, 587, 825, 368, 867, 306, 474, 639, 902, 782, 506, 428, 709, 879) heute schon irgendwo in der Tabelle oder in einer anderen Vorwahl-Liste unter src/?",
+        "Verfolge den Weg von POST /api/calls (Handler in src/routes/api-calls.js, Aufruf von `originateCall` laut Sicherheitsprüfung bei src/routes/api-calls.js:333) bis zum Feld `callee_timezone` im Anrufstart an ElevenLabs (src/elevenlabs/outbound.js:330, :436-439, :712-719): welche Funktionen mit Datei und Zeilen liegen auf dem Weg, und wo wird `timezoneHypothesisForNumber` aufgerufen (src/elevenlabs/time-context.js:31)?",
+        "Erreicht ein Test diesen Eingang heute: Gibt es eine Testhilfe (etwa in test/helpers.js, Zeile 80 soll +1 im Land-Gate der Testumgebung freigeben), die einen Auftraggeber mit Zone `Europe/Berlin` anlegt, POST /api/calls aufruft und den Anrufstart am Anbieter (ElevenLabs-Request) mitschneidet, sodass ein Test `callee_timezone` lesen kann? Welche bestehenden Tests tun das schon (etwa test/elevenlabs-anrufstart.test.js um Zeile 1141 und 1235-1239), mit Pfad und Testname?",
+        "Lässt der Weg vor dem Anrufstart jede dieser Zielnummern durch: +1<Vorwahl>5550147 für alle 32 und alle 23 oben genannten Vorwahlen, dazu +12125550147 und +15555550147? Prüfe die E.164-Prüfung (src/telephony/outbound-gates.js:260), das Land-Gate (:261-266), die Denylist (src/telephony/number-denylist.js, etwa Sperren für 555-01xx, Sondernummern oder unbekannte NANP-Vorwahlen) und jede Nummernvalidierung mit Bibliothek (etwa libphonenumber, die neuere Vorwahlen wie 257, 368, 382, 683, 742, 753, 263, 354, 468, 584, 428, 474, 879 als ungültig ablehnen könnte). Welche Nummer würde wo abgewiesen?",
+        "Welche bestehenden Tests prüfen den Inhalt der Vorwahl-Tabelle, die Zahl ihrer Einträge oder die Sätze in `callee_timezone` zeichengenau (für B1 den Satz mit „probably in the America/New_York time zone“, für B2 den Satz „You do not know which time zone …“), und würde einer davon durch neue Einträge in der Tabelle rot?",
+        "Gibt es außer src/elevenlabs/time-context.js:31 einen weiteren Leser von `timezoneHypothesisForNumber` oder der Tabelle (laut Sicherheitsprüfung fragt src/elevenlabs/inbound-initiation.js:166 ohne Gegenstelle)?",
+        "Welche Lint-Befunde (Regel und Zeilen) haben die Funktionen in src/elevenlabs/nanp-area-codes.js, src/elevenlabs/time-context.js und die Stelle in src/elevenlabs/outbound.js, die `callee_timezone` bildet, und würde eine Regel wie max-lines oder max-statements durch 32 zusätzliche Vorwahlen in src/elevenlabs/nanp-area-codes.js anschlagen?"
+      ]
+    }
+  ]
+}
