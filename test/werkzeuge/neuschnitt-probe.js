@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { alsJson } from "./planung-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { NACHRICHTEN_MODUS, nachrichtenImTranskript } from "./nachrichten-ersatz.js";
+import { NACHRICHTEN_MODUS } from "./nachrichten-ersatz.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
 export const AUSFUEHRBAR = 0o755;
@@ -155,10 +155,6 @@ function erkundung(weitere = []) {
   return { antwort: alsJson({ nummern: { S1: { ...weg, ...SCHEMA, eingangImTest: "erreichbar", widersprueche: [] } }, hinweise: [] }) };
 }
 
-export function erkunderMitNachrichten(nachrichten) {
-  return { ...erkundung(), nachrichten };
-}
-
 export const MIT_TEXT = erkundung([{ datei: "src/text.js", funktion: "gross", von: 1, bis: 3, neueZeilen: 0 }]);
 
 const TEAM = { erkunder: [erkundung()], "pruefer-planung": [{ pruefliste: true }], entwurf: [{ antwort: alsJson({ entwurf: ENTWURF_RECHNEN }) }] };
@@ -256,8 +252,4 @@ export function ohneTeam(context, faelle) {
     befundeWie(befunde, erwartet);
     assert.deepEqual(["planer", "erkunder", "kind"].map((rolle) => datei(`anzahl-${rolle}`)), ["", "", "2"]);
   }
-}
-
-export function nachrichtenJeAufruf({ werkzeug, repo }, rolle) {
-  return nachrichtenImTranskript(join(werkzeug, ".claude"), repo, rolle);
 }

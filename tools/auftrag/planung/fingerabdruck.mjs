@@ -10,10 +10,10 @@ import { DOKUMENTE, SCHNITT } from "./schnitt.mjs";
 export const FINGERABDRUCK = "fingerabdruck.json";
 export const NACHFRAGEN = "nachfragen.json";
 export const GEPRUEFT = "geprueft.json";
-export const NACHFRAGE_AUSSTEHEND = "nachfrage-ausstehend.json";
 const GLIEDERUNG = "gliederung.json";
 const TEAM = ["planer", "erkunder", "pruefer-planung", "entwurf"];
-const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler", "wegAusstehend", "erkundungAusstehend"];
+const ZUSTAND = ["gesehen", "ausgeschoepft", "wegOffen", "wegpruefungen", "wegZaehler"];
+const AUSSTEHEND = ["erkundungAusstehend", "wegAusstehend"];
 const KOPF_BAUM = "HEAD^{tree}";
 const WERKZEUG = "tools";
 const BAUM = "tree";
@@ -83,6 +83,10 @@ function lesbar(abdruck) {
   return istText(kopfBaum) && istText(arbeitsbaum) && istObjekt(dateien) && wellen && ZUSTAND.every((name) => Array.isArray(abdruck.zustand[name]));
 }
 
+function mitAusstehendem(zustand) {
+  return AUSSTEHEND.some((name) => Array.isArray(zustand[name]) && zustand[name].length > 0) || istText(zustand.nachfrageAusstehend);
+}
+
 function ohneWerkzeugGetrennt(stand) {
   return istText(stand.kopfOhneWerkzeug) && istText(stand.arbeitsbaumOhneWerkzeug);
 }
@@ -147,6 +151,7 @@ export function liesFortsetzung(ablage, jetzt) {
   if (!existsSync(datei)) return { gruende: [`${datei} fehlt; ohne Fingerabdruck der Erkundung setzt plane nicht fort`] };
   const abdruck = jsonAus(datei);
   if (!lesbar(abdruck)) return { gruende: [`${datei} hat nicht die Form eines Fingerabdrucks`] };
+  if (mitAusstehendem(abdruck.zustand)) return { gruende: [`${datei} stammt von einem Halt am früheren Token-Deckel, bei dem noch eine Erkundung, Wegprüfung oder Nachfrage ausstand`] };
   const gruende = [...standGruende(abdruck.stand, jetzt), ...ablageGruende(ablage, abdruck.ablage)];
   if (gruende.length > 0) return { gruende };
   const gelesen = erkundungAus(ablage, abdruck);
@@ -155,24 +160,6 @@ export function liesFortsetzung(ablage, jetzt) {
   return amWerkzeug.length > 0 ? { gruende: amWerkzeug } : { ...gelesen, erkundung: { ...gelesen.erkundung, werkzeugGeaendert: true } };
 }
 
-export function nachfrageSumme(ablage) {
-  return pruefsumme(join(ablage, NACHFRAGE_AUSSTEHEND));
-}
-
-function offeneFrage(eintrag) {
-  return istText(eintrag?.frage) && Array.isArray(eintrag.nummern) && eintrag.nummern.length > 0 && eintrag.nummern.every(istText);
-}
-
-function ausstehendeForm(wert) {
-  const offen = Array.isArray(wert?.offen) && wert.offen.length > 0 && wert.offen.every(offeneFrage);
-  return offen && typeof wert.klaerung === "boolean" && istObjekt(wert.bericht) && Array.isArray(wert.befunde) && wert.befunde.every(istText);
-}
-
-export function liesAusstehendeNachfrage(ablage, { nachfrageAusstehend }) {
-  if (!istText(nachfrageAusstehend) || nachfrageSumme(ablage) !== nachfrageAusstehend) return null;
-  const wert = jsonAus(join(ablage, NACHFRAGE_AUSSTEHEND));
-  return ausstehendeForm(wert) ? wert : null;
-}
 
 function pruefungsEingaben(ablage) {
   return { erkundung: pruefsumme(join(ablage, FINGERABDRUCK)), schnitt: pruefsumme(join(ablage, SCHNITT)) };

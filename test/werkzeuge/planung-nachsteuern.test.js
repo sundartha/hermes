@@ -1,27 +1,20 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { GRUEN_PRUEFLISTE, GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
-import { EXIT_AUFRUF } from "./planung-plane-probe.js";
-import { hebeFreigabe, mitKopfzeile } from "./planung-freigabe-probe.js";
 import { RUECKSENDUNGEN } from "../../tools/auftrag/planung/fortschritt.mjs";
 
-const EXIT_DECKEL = 5;
 const HINTERLEGEN = "plaene/P-001-t1-eigene-nummer-hinterlegen";
 const HINWEIS_ORDNER = "plaene/P-001-t2-hinweis-beim-anruf";
 const STELLEN = "## Weitere Stellen";
 const ELF = Array.from({ length: 11 }, (_, stelle) => `src/stellen/datei-${stelle + 1}.js`);
-const TEIL_DECKEL = 3_000_000;
 const TEIL_ISSUE = 77;
-const MIO = 1_000_000;
-const OHNE_WIRKUNG = String(1000 * MIO);
 const KENNZEICHNUNG = { kostenGebucht: "je Rolle" };
 
 const PLANER_JE_AUFRUF = 1000;
-const PLANER_AUFRUFE_BIS_TEILUNG = 2;
 const NEBENROLLE_JE_AUFRUF = 10;
 const STELLE_QUELLE = "export const stelle = 1;\n";
 const TOTE_DATEIEN = ["src/stellen/alt-1.js", "src/stellen/alt-2.js"];
@@ -155,7 +148,6 @@ test("die Löschmenge eines Teils zählt Exporte, Reste und Funktionen nur aus s
 });
 
 const DREI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [HINTERLEGEN_NUMMERN, ["S2", "S3"], ["S6", "T1"]].map((nummern) => ({ ...GRUPPEN[0], nummern })) })] };
-const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
 const UNTER_TEILE = [
   eintrag("t1", "hinterlegen", { nummern: ["S1", "S7"], tWege: ["T2"], dateien: [ROUTE, ...ELF.slice(0, 2)] }),
   eintrag("t2", "bestaetigen", { nummern: ["S2", "S3", "S6"], tWege: ["T1"], dateien: ELF.slice(2, 5) }),
@@ -222,140 +214,4 @@ test("die Unter-Teilung eines Teils aus einer Eltern-teile.json ohne umbau-Felde
   const grund = unterTeilungMitBefund(context, nurEigener, wurzel);
 
   assert.ok(grund.includes(`Regel Teilung: ${FREMDER_UMBAU} aus „## Altfunktionen“ steht 0-mal unter umbau statt genau einmal`), grund);
-});
-
-test("ein weitergeteilter Teil zieht seinen weitergegebenen Deckel vom Rest-Topf seiner Geschwister ab, wenn der Deckel größer ist als sein Verbrauch", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context, { freigabe: FREIGABE_UNTER_ZWEI_TEIL_DECKELN });
-  exit(teilung, EXIT_GETEILT);
-  const { topf } = abgelegt({ wurzel }, "teile.json");
-  assert.equal(topf.freigabe, FREIGABE_UNTER_ZWEI_TEIL_DECKELN);
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
-  mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER });
-
-  assert.equal(planungsBericht({ wurzel }, HINWEIS_ORDNER).deckel.deckel, topf.freigabe - topf.vorschnitt - TEIL_DECKEL);
-});
-
-const KLEINE_FREIGABE = 2 * MIO;
-const NEUE_MENGE = MIO;
-const UEBERZUG = MIO / 2;
-const UNTER_HINTERLEGEN = "plaene/P-001-t1-t1-hinterlegen";
-const UNTER_BESTAETIGEN = "plaene/P-001-t1-t2-bestaetigen";
-const UNTER_VORSCHNITT = PLANER_AUFRUFE_BIS_TEILUNG * PLANER_JE_AUFRUF;
-const OHNE_JSON = "Ich antworte ohne JSON.";
-const OHNE_ANTWORT = { "planer|## Gliederung": [OHNE_JSON], "planer|## Zuschnitt": [OHNE_JSON] };
-
-function weitergeteilt(context, { teilFreigabe } = {}) {
-  const { wurzel, ...teilung } = geteilt(context, { freigabe: KLEINE_FREIGABE });
-  exit(teilung, EXIT_GETEILT);
-  const { topf } = abgelegt({ wurzel }, "teile.json");
-  if (teilFreigabe !== undefined) hebeFreigabe(wurzel, HINTERLEGEN, { von: topf.teilDeckel, auf: teilFreigabe });
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
-  mitIssue(wurzel, UNTER_HINTERLEGEN, TEIL_ISSUE);
-  return { wurzel, weitergegeben: teilFreigabe ?? topf.teilDeckel, vorschnitt: topf.vorschnitt };
-}
-
-function deckelDesUnterTeils(context, wurzel) {
-  planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: {}, argumente: ["plane", UNTER_HINTERLEGEN, "--deckel", OHNE_WIRKUNG], token: { planer: PLANER_JE_AUFRUF } });
-  return planungsBericht({ wurzel }, UNTER_HINTERLEGEN).deckel.deckel;
-}
-
-test("teilordner: eine höhere Freigabe am Teil-Pitch hebt den Rest-Topf nicht", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, weitergegeben } = weitergeteilt(context);
-  hebeFreigabe(wurzel, HINTERLEGEN, { von: weitergegeben, auf: OHNE_WIRKUNG });
-
-  assert.equal(deckelDesUnterTeils(context, wurzel), weitergegeben - UNTER_VORSCHNITT);
-});
-
-test("teilordner: ein Teil zweiter Stufe bekommt nach einer höheren Freigabe im obersten Pitch mehr als den einst weitergegebenen Betrag", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, weitergegeben } = weitergeteilt(context);
-  hebeFreigabe(wurzel, ORDNER, { von: KLEINE_FREIGABE, auf: KLEINE_FREIGABE + NEUE_MENGE });
-
-  const deckel = deckelDesUnterTeils(context, wurzel);
-
-  assert.ok(deckel > weitergegeben, `${deckel} ≤ ${weitergegeben}`);
-  assert.equal(deckel, weitergegeben - UNTER_VORSCHNITT + NEUE_MENGE);
-});
-
-test("teilordner: die Summe aller Teile bleibt unter der Freigabe des obersten Pitches", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, weitergegeben, vorschnitt } = weitergeteilt(context);
-  const freigabe = KLEINE_FREIGABE + NEUE_MENGE;
-  hebeFreigabe(wurzel, ORDNER, { von: KLEINE_FREIGABE, auf: freigabe });
-  const unterTeil = weitergegeben - UNTER_VORSCHNITT + UEBERZUG;
-  planeTeil(context, wurzel, { ordner: UNTER_HINTERLEGEN, antworten: OHNE_ANTWORT, token: { planer: unterTeil } });
-  mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER });
-
-  assert.equal(planungsBericht({ wurzel }, HINWEIS_ORDNER).deckel.deckel, freigabe - vorschnitt - UNTER_VORSCHNITT - unterTeil);
-});
-
-function mitGebuchtemUnterTeil(context) {
-  const { wurzel } = weitergeteilt(context);
-  planeTeil(context, wurzel, { ordner: UNTER_HINTERLEGEN, antworten: OHNE_ANTWORT, token: { planer: PLANER_JE_AUFRUF } });
-  mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
-  return wurzel;
-}
-
-function aendereTeileVonT1(wurzel, aendere) {
-  const datei = join(wurzel, HINTERLEGEN, "planung", "teile.json");
-  writeFileSync(datei, JSON.stringify(aendere(JSON.parse(readFileSync(datei, "utf8")))));
-}
-
-function haeltVorDemAgenten(lauf, { code, meldung }) {
-  exit(lauf, code);
-  assert.deepEqual(aufrufe(lauf, "planer"), [], lauf.stderr);
-  assert.ok(lauf.stderr.includes(meldung), lauf.stderr);
-}
-
-test("teilordner: hat ein weitergeteilter Teil gebuchte Läufe, aber keine weitergegebene Menge in teile.json, hält plane vor dem ersten Agenten an", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = mitGebuchtemUnterTeil(context);
-  aendereTeileVonT1(wurzel, (teilung) => ({ ...teilung, topf: undefined }));
-
-  const lauf = planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER });
-
-  haeltVorDemAgenten(lauf, { code: EXIT_DECKEL, meldung: "nennt keine weitergegebene Menge" });
-});
-
-test("teilordner: führt eine teile.json einen Teil als eigenen Unter-Teil, hält plane vor dem ersten Agenten an", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = mitGebuchtemUnterTeil(context);
-  aendereTeileVonT1(wurzel, (teilung) => ({ ...teilung, teile: [...teilung.teile, { ...teilung.teile[0], kuerzel: "eigene", name: "nummer-hinterlegen" }] }));
-
-  const lauf = planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER });
-
-  haeltVorDemAgenten(lauf, { code: EXIT_AUFRUF, meldung: "führt sich selbst als Teil" });
-});
-
-test("teilordner: fehlt in der Kette bis zum obersten Pitch eine teile.json, hält plane vor dem ersten Agenten an", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel } = weitergeteilt(context);
-  rmSync(join(wurzel, ORDNER, "planung", "teile.json"));
-
-  const lauf = planeTeil(context, wurzel, { ordner: UNTER_HINTERLEGEN });
-
-  haeltVorDemAgenten(lauf, { code: EXIT_AUFRUF, meldung: "der Rest-Topf rechnet bis zum obersten Pitch" });
-});
-
-test("teilordner: führen die Zeilen „Teil von“ im Kreis, hält plane vor dem ersten Agenten an", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel } = weitergeteilt(context);
-  mitKopfzeile(wurzel, ORDNER, "Teil von: P-001-t1-eigene-nummer-hinterlegen; nach: –");
-
-  const lauf = planeTeil(context, wurzel, { ordner: UNTER_HINTERLEGEN });
-
-  haeltVorDemAgenten(lauf, { code: EXIT_AUFRUF, meldung: "führen im Kreis" });
-});
-
-test("teilordner: hat ein Unter-Teil die neue Menge schon zum Teil verbraucht, bekommt der nächste Unter-Teil nur noch den Rest davon", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, weitergegeben } = weitergeteilt(context, { teilFreigabe: KLEINE_FREIGABE / 2 });
-  hebeFreigabe(wurzel, ORDNER, { von: KLEINE_FREIGABE, auf: KLEINE_FREIGABE + NEUE_MENGE });
-  planeTeil(context, wurzel, { ordner: UNTER_HINTERLEGEN, antworten: OHNE_ANTWORT, token: { planer: weitergegeben - UNTER_VORSCHNITT + UEBERZUG } });
-  mitIssue(wurzel, UNTER_BESTAETIGEN, TEIL_ISSUE);
-
-  planeTeil(context, wurzel, { ordner: UNTER_BESTAETIGEN });
-
-  assert.equal(planungsBericht({ wurzel }, UNTER_BESTAETIGEN).deckel.deckel, NEUE_MENGE - UEBERZUG);
 });

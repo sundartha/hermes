@@ -1,19 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { test } from "node:test";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
-import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { hebeFreigabe, mitKopfzeile } from "./planung-freigabe-probe.js";
+import { AUFTRAG, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
+import { mitKopfzeile } from "./planung-freigabe-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitGeaendertenDateien, planOrdner, planeIn } from "./planung-probe.js";
-import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
+import { mitUpstreamMaster, runIn } from "./probe-repo.js";
 
-const EXIT_DECKEL = 5;
 const EXIT_GETEILT = 7;
 const ELTERN = "P-001-eigene-nummer";
 const HINTERLEGEN = "plaene/P-001-t1-eigene-nummer-hinterlegen";
@@ -22,13 +19,6 @@ const UMBAU_ORDNER = "plaene/P-001-t3-umbau-davor";
 const TEIL_ORDNER = [HINTERLEGEN, HINWEIS_ORDNER, UMBAU_ORDNER];
 const FREIGABE = 2000;
 const TEILUNG_TOKEN = 500;
-const TEIL_DECKEL = FREIGABE - TEILUNG_TOKEN;
-const GROSSE_FREIGABE = 5000;
-const UEBER_DEM_TOPF = TEIL_DECKEL + 100;
-const ISSUE_HINTERLEGEN = 98;
-const ISSUE_HINWEIS = 99;
-const OHNE_JSON = "Ich antworte ohne JSON.";
-const HAENGT_MS = 30_000;
 const ANGRIFFSWEG_T3 = /### T3:[\s\S]*?(?=## 3\. Lückenprüfung)/u;
 const FEHLERFAELLE = "## Fehlerfälle";
 const ZEILENANGABE = ":7";
@@ -58,65 +48,14 @@ function text(wurzel, ordner, name) {
   return readFileSync(join(wurzel, ordner, name), "utf8");
 }
 
-function verbraucht(context, wurzel, { ordner, token }) {
-  const antworten = { "planer|## Gliederung": [OHNE_JSON], "planer|## Zuschnitt": [OHNE_JSON] };
-  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: antworten, argumente: ["plane", ordner], token: { planer: token } });
-  assert.ok(aufrufe(lauf, "planer").length > 0, lauf.stderr);
-}
-
-
-function imHintergrund(context, { wurzel, ersatz }, argumente) {
-  writeFileSync(join(ersatz, "antworten.json"), JSON.stringify({ "planer|## Gliederung": [{ warte: HAENGT_MS }], "planer|## Zuschnitt": [{ warte: HAENGT_MS }] }));
-  const kind = spawn(process.execPath, [AUFTRAG, "plane", ...argumente], { cwd: wurzel, detached: true, stdio: "ignore", env: { ...isolatedEnvironment(), HERMES_CLAUDE: join(ersatz, "claude.mjs"), ...mitErsatzWerkzeugen(ersatz) } });
-  const beende = () => {
-    try {
-      return process.kill(-kind.pid, "SIGTERM");
-    } catch {
-      return false;
-    }
-  };
-  context.after(beende);
-  return beende;
-}
-
-function planerGestartet(context, ersatz) {
-  const gestartet = () => readdirSync(ersatz).some((name) => name.startsWith("zug-planer") && !name.includes("Teilung"));
-  return new Promise((fertig) => {
-    const wache = watch(ersatz, () => {
-      if (!gestartet()) return;
-      wache.close();
-      fertig();
-    });
-    context.after(() => wache.close());
-    if (gestartet()) {
-      wache.close();
-      fertig();
-    }
-  });
-}
 
 function planeTeil(context, wurzel, ordner) {
   return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: {}, argumente: ["plane", ordner] });
 }
 
-function plantMitDeckel(context, wurzel, { ordner, deckel }) {
-  const lauf = planeTeil(context, wurzel, ordner);
-
-  exit(lauf, EXIT_ABBRUCH);
-  assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
-  assert.equal(planungsBericht({ wurzel }, ordner).deckel.deckel, deckel);
-}
-
 function ohneAgent(lauf) {
   assert.deepEqual(aufrufe(lauf, "planer"), [], lauf.stderr);
   assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
-}
-
-function abgewieseneFortsetzung(context, wurzel) {
-  const fortsetzung = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: {}, argumente: ["plane", HINTERLEGEN, "--fortsetzen"] });
-  exit(fortsetzung, EXIT_AUFRUF);
-  ohneAgent(fortsetzung);
-  assert.ok(fortsetzung.stderr.includes("voller Neulauf nötig"), fortsetzung.stderr);
 }
 
 function sortiert(werte) {
@@ -175,18 +114,6 @@ test("die Ausgabe der ersten Teilung nennt die gemessenen Vorschnitt-Kosten und 
   assert.equal(zeilen.some((zeile) => zeile.startsWith("Topf:")), false, lauf.stdout);
 });
 
-test("hält die erste Teilung am Deckel mit Exit 5, schreibt sie planung.json mit gemessenen Token und Exit 5 und behält ihre Meldung", { timeout: LAUF_FRIST_MS }, (context) => {
-  const freigabe = TEILUNG_TOKEN - 1;
-  const lauf = geteilt(context, { freigabe });
-
-  exit(lauf, EXIT_DECKEL);
-  assert.ok(lauf.stderr.includes(`Deckel ${freigabe} Token: gemessen ${TEILUNG_TOKEN}`), lauf.stderr);
-  for (const ordner of TEIL_ORDNER) assert.ok(!existsSync(join(lauf.wurzel, ordner)), ordner);
-  const plan = planungsBericht(lauf);
-  assert.equal(plan.exit, EXIT_DECKEL);
-  assert.deepEqual(plan.beteiligte.map(({ rolle, token }) => ({ rolle, token })), [{ rolle: "planer", token: TEILUNG_TOKEN }]);
-});
-
 test("ein Teil eines nicht freigegebenen Eltern-Pitches übernimmt dessen Status, statt eine Freigabe zu behaupten", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = geteilt(context, { status: "Status: fertig (nicht freigegeben)" });
 
@@ -233,40 +160,6 @@ test("ein veränderter Abschnitt ohne Nummer in einem Teil-Pitch ergibt einen Be
   assert.equal(existsSync(join(wurzel, HINTERLEGEN, "planung")), false);
 });
 
-test("ein leerer Topf ergibt Exit 5, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 77);
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 1600 });
-  mitIssue(wurzel, HINWEIS_ORDNER, 78);
-
-  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
-
-  exit(lauf, EXIT_DECKEL);
-  ohneAgent(lauf);
-  assert.ok(lauf.stderr.includes(`Freigabe ${FREIGABE} − Vorschnitt ${TEILUNG_TOKEN} − Teile 1600 = -100`), lauf.stderr);
-  assert.equal(existsSync(join(wurzel, HINWEIS_ORDNER, "planung")), false);
-});
-
-test("ist schon die Teilung so teuer, dass der Topf leer ist, endet plane mit Exit 5 und schreibt keinen Teil-Ordner", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = geteilt(context, { freigabe: TEILUNG_TOKEN });
-
-  exit(lauf, EXIT_DECKEL);
-  assert.ok(lauf.stderr.includes(`Freigabe ${TEILUNG_TOKEN} − Vorschnitt ${TEILUNG_TOKEN} − Teile 0 = 0`), lauf.stderr);
-  for (const ordner of TEIL_ORDNER) assert.equal(existsSync(join(lauf.wurzel, ordner)), false, ordner);
-});
-
-test("ein Teil plant mit dem kleineren Deckel aus Rest-Topf und Teil-Pitch", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 76);
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 300 });
-  mitIssue(wurzel, HINWEIS_ORDNER, 79);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: FREIGABE - TEILUNG_TOKEN - 300 });
-});
-
 test("ein Teil, dessen Vorgänger auf upstream/master nicht gemergt ist, ergibt Exit 2, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context);
   exit(teilung, EXIT_GETEILT);
@@ -311,46 +204,6 @@ test("eine Zeile „Teil von“, die keinen Ordner neben dem Teil nennt, ergibt 
   exit(lauf, EXIT_AUFRUF);
   ohneAgent(lauf);
   assert.ok(lauf.stderr.includes("braucht die Form „Teil von: <Eltern-Ordner>; nach:"), lauf.stderr);
-});
-
-test("der Topf zählt jeden Lauf eines Teils, auch eine Fortsetzung und einen abgebrochenen Lauf", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 85);
-  mitIssue(wurzel, HINWEIS_ORDNER, 86);
-  const [erster, zweiter] = [300, 200];
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: erster });
-  rmSync(join(wurzel, HINTERLEGEN, "planung"), { recursive: true });
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: zweiter });
-  abgewieseneFortsetzung(context, wurzel);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: GROSSE_FREIGABE - TEILUNG_TOKEN - erster - zweiter });
-});
-
-test("ein Teil, der ohne Agent mit Exit 2 endet, gibt seine Reservierung im Topf frei", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 94);
-  mkdirSync(join(wurzel, HINTERLEGEN, "planung"));
-  abgewieseneFortsetzung(context, wurzel);
-  mitIssue(wurzel, HINWEIS_ORDNER, 95);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });
-});
-
-test("ein Teil, der nach dem Start eines Agenten endet, bucht den gemessenen Verbrauch statt die Reservierung freizugeben", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 96);
-  const token = 400;
-
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token });
-
-  const buch = topfBuchIn(wurzel);
-  const laeufe = readdirSync(buch).map((name) => JSON.parse(readFileSync(join(buch, name), "utf8")));
-  assert.deepEqual(laeufe.map((lauf) => ({ teil: lauf.teil, token: lauf.token, deckel: lauf.deckel })), [{ teil: basename(HINTERLEGEN), token, deckel: TEIL_DECKEL }]);
 });
 
 function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder, teil = HINTERLEGEN, gruppe = GRUPPEN[0], nachTeilung = () => {} }) {
@@ -463,81 +316,4 @@ test("teilordner: ein Vorgänger, der nur auf dem eigenen Branch steht, gibt kei
   exit(lauf, EXIT_AUFRUF);
   assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
   assert.equal(lauf.stdout.includes(`${ROUTE} gehört`), false, lauf.stdout);
-});
-
-test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile zusammen nie über die Freigabe kommen", { timeout: LAUF_FRIST_MS }, async (context) => {
-  const { wurzel, ersatz, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, 87);
-  mitIssue(wurzel, HINWEIS_ORDNER, 88);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-  const beende = imHintergrund(context, { wurzel, ersatz }, [HINTERLEGEN, "--deckel", "1000"]);
-  await planerGestartet(context, ersatz);
-
-  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
-  beende();
-
-  exit(lauf, EXIT_ABBRUCH);
-  assert.equal(planungsBericht({ wurzel }, HINWEIS_ORDNER).deckel.deckel, GROSSE_FREIGABE - TEILUNG_TOKEN - 1000);
-});
-
-test("zwei Worktrees desselben Klons rechnen mit demselben Topf", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context, { freigabe: GROSSE_FREIGABE });
-  exit(teilung, EXIT_GETEILT);
-  commitAll(wurzel, "Teil-Ordner");
-  const zweiter = join(probeDirectory(context, {}), "zweiter");
-  assert.equal(runIn(wurzel, "git", ["worktree", "add", "--detach", "-q", zweiter]).status, 0);
-  symlinkSync(join(REPO_ROOT, "node_modules"), join(zweiter, "node_modules"));
-  mitIssue(wurzel, HINTERLEGEN, 89);
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: 700 });
-  mitIssue(zweiter, HINWEIS_ORDNER, 90);
-  vorgaengerGemergt(zweiter, HINTERLEGEN);
-
-  plantMitDeckel(context, zweiter, { ordner: HINWEIS_ORDNER, deckel: GROSSE_FREIGABE - TEILUNG_TOKEN - 700 });
-});
-
-function topfBuchIn(wurzel) {
-  const gemeinsam = runIn(wurzel, "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim();
-  const buch = join(gemeinsam, "hermes-topf", ELTERN);
-  mkdirSync(buch, { recursive: true });
-  return buch;
-}
-
-test("eine Laufdatei, die ein paralleler Lauf zwischen Auflisten und Lesen freigibt, zählt nicht und hält plane nicht an", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINWEIS_ORDNER, 91);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-  symlinkSync(join(wurzel, "freigegeben.json"), join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"));
-
-  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });
-});
-
-test("eine unlesbare Laufdatei im Topf-Buch macht den Topf nicht messbar und ergibt Exit 5, bevor ein Agent startet", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINWEIS_ORDNER, 92);
-  writeFileSync(join(topfBuchIn(wurzel), "P-001-t1-eigene-nummer-hinterlegen-1-1.json"), "{ halb");
-
-  const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
-
-  exit(lauf, EXIT_DECKEL);
-  ohneAgent(lauf);
-  assert.ok(lauf.stderr.includes("Rest-Topf nicht messbar"), lauf.stderr);
-});
-
-test("teilordner: eine höhere Freigabe im obersten Pitch hebt den Rest-Topf der Teile", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  mitIssue(wurzel, HINTERLEGEN, ISSUE_HINTERLEGEN);
-  verbraucht(context, wurzel, { ordner: HINTERLEGEN, token: UEBER_DEM_TOPF });
-  mitIssue(wurzel, HINWEIS_ORDNER, ISSUE_HINWEIS);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-  const leer = planeTeil(context, wurzel, HINWEIS_ORDNER);
-  exit(leer, EXIT_DECKEL);
-  assert.ok(leer.stderr.includes(`${ORDNER}/pitch.md`), leer.stderr);
-
-  hebeFreigabe(wurzel, ORDNER, { von: FREIGABE, auf: GROSSE_FREIGABE });
-
-  plantMitDeckel(context, wurzel, { ordner: HINWEIS_ORDNER, deckel: TEIL_DECKEL });
 });

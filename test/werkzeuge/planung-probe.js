@@ -7,7 +7,7 @@ import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { auftragAusSchnitt, entwurfFuer } from "../../tools/auftrag/planung/zusammensetzen.mjs";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { NACHRICHTEN_MODUS, NOTFRIST_MS, nachrichtenImTranskript } from "./nachrichten-ersatz.js";
+import { NACHRICHTEN_MODUS } from "./nachrichten-ersatz.js";
 import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository } from "./probe-repo.js";
 
 const SKILL = join(REPO_ROOT, ".claude/skills/pitch");
@@ -25,8 +25,6 @@ export const LOESUNG = "## Lösung";
 export const LAUF_FRIST_MS = 240_000;
 const AUSFUEHRBAR = 0o755;
 const ALTFUNKTIONEN_ZEILE = /^## Altfunktionen\n.*$/mu;
-export { BIS_ZUM_ABBRUCH, MIT_DEM_ERGEBNIS } from "./nachrichten-ersatz.js";
-const TAKT_MS = 20;
 
 const ROUTE_QUELLE = `export function registriere(router) {
   router.post("/api/self-service/private-number", function hinterlege(anfrage) {
@@ -76,7 +74,7 @@ export const GRUPPEN = [
 const ANRUF_NUMMERN = new Set(GRUPPEN[1].nummern);
 
 const ERSATZ_CLAUDE = `#!${process.execPath}
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const ort = dirname(process.argv[1]);
 const argumente = process.argv.slice(2);
@@ -95,19 +93,13 @@ const folge = antworten[schluessel] ?? [];
 let stelle = 0;
 const zug = (name) => "zug-" + name.replace(/[^A-Za-z0-9]/g, "_") + "-";
 for (;;) { try { mkdirSync(join(ort, zug(schluessel) + stelle)); break; } catch { stelle += 1; } }
-writeFileSync(join(ort, zug(schluessel) + stelle, "waechter"), String(process.ppid));
 const start = Date.now();
 const eintrag = folge[stelle];
 const art = typeof eintrag === "object" && eintrag !== null ? eintrag : { text: eintrag };
 if (art.warte) await new Promise((fertig) => setTimeout(fertig, art.warte));
 if (art.schreibe) writeFileSync(join(process.cwd(), art.schreibe), "geändert\\n");
 appendFileSync(join(ort, "protokoll.jsonl"), JSON.stringify({ agent, sitzung: resume ?? wert("--session-id"), resume: resume !== undefined, ueberschrift, eingabe, start, ende: Date.now() }) + "\\n");
-let zurueckgehalten = null;
-const melde = (zeile) => {
-  const ausgabe = JSON.stringify(zeile) + "\\n";
-  if (zurueckgehalten === null) process.stdout.write(ausgabe);
-  else zurueckgehalten += ausgabe;
-};
+const melde = (zeile) => process.stdout.write(JSON.stringify(zeile) + "\\n");
 if (eintrag === undefined) { process.stderr.write("keine weitere Antwort für " + schluessel); process.exit(1); }
 if (art.absturz) { process.stderr.write(art.absturz.fehler); process.exit(art.absturz.exit); }
 if (art.limit) {
@@ -133,22 +125,13 @@ const tokenWerte = existsSync(tokenDatei) ? JSON.parse(readFileSync(tokenDatei, 
 const tokenWert = tokenWerte?.[agent + "|" + ueberschrift + "|" + merkmal] ?? tokenWerte?.[agent + "|" + ueberschrift] ?? tokenWerte?.[agent];
 ${NACHRICHTEN_MODUS}
 const transkript = () => transkriptDatei(process.env.CLAUDE_CONFIG_DIR, resume ?? wert("--session-id"));
-const beendet = (datei) => { try { process.kill(Number(readFileSync(datei, "utf8")), 0); return false; } catch (fehler) { return fehler.code === "ESRCH"; } };
-const waechterVon = (anderer) => readdirSync(ort).filter((name) => name.startsWith(zug(anderer))).map((name) => join(ort, name, "waechter"));
-const nachDemEndeVon = async (anderer) => {
-  for (const frist = Date.now() + ${NOTFRIST_MS}; Date.now() < frist; await pause(${TAKT_MS})) {
-    const waechter = waechterVon(anderer);
-    if (waechter.length > 0 && waechter.every((datei) => existsSync(datei) && beendet(datei))) return;
-  }
-};
 if (Array.isArray(tokenWert)) {
-  await schreibeNachrichten(tokenWert, { kennung: schluessel + "-" + stelle, transkript, melde, text, mitDemErgebnis: () => { zurueckgehalten = ""; }, warteAuf: nachDemEndeVon });
+  await schreibeNachrichten(tokenWert, { kennung: schluessel + "-" + stelle, transkript, melde, text });
 } else {
   if (tokenWerte !== null) appendFileSync(transkript(), JSON.stringify({ type: "assistant", message: { id: schluessel + "-" + stelle, usage: { input_tokens: tokenWert ?? 0 } } }) + "\\n");
   melde({ type: "assistant", message: { id: "m" + start, content: [{ type: "text", text }], usage: { input_tokens: 1 } } });
 }
 melde({ type: "result", result: text });
-if (zurueckgehalten !== null) process.stdout.write(zurueckgehalten);
 `;
 
 export const UEBER_ZWISCHENDATEI = {
@@ -295,10 +278,6 @@ export function planeIn(context, wurzel, { werkzeug, grund, ueberschrieben, argu
 function protokoll({ ersatz }) {
   const datei = join(ersatz, "protokoll.jsonl");
   return existsSync(datei) ? readFileSync(datei, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile)) : [];
-}
-
-export function nachrichtenJeAufruf({ ersatz, wurzel }, schluessel) {
-  return nachrichtenImTranskript(join(ersatz, "konfiguration"), wurzel, schluessel);
 }
 
 export function aufrufe(lauf, agent, ueberschrift) {

@@ -42,17 +42,6 @@ export const ABBRUCH_IM_SCHNITT = { "planer|## Zuschnitt": [`Zerlegung passt nic
 
 export const SCHNITT_SOFORT = { "planer|## Zuschnitt": [alsJson({ schnitt: schnittliste() })] };
 
-export const EXIT_DECKEL = 5;
-const ROLLEN_TOKEN = { planer: 100_000, erkunder: 1_000_000, "pruefer-planung": 340_000, entwurf: 100_000 };
-const ERKUNDER_MIT_WEG = ROLLEN_TOKEN.erkunder + ROLLEN_TOKEN["pruefer-planung"];
-const BIS_ZUR_NACHFRAGE = 2 * ROLLEN_TOKEN.planer + GRUPPEN.length * ERKUNDER_MIT_WEG;
-export const HALT_VOR_DER_RUECKSENDUNG = BIS_ZUR_NACHFRAGE + 0.5 * ROLLEN_TOKEN.erkunder;
-export const OHNE_GRENZE = String(1_000_000_000);
-
-export function mitDeckel(context, wurzel, { argumente, ueberschrieben }) {
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER, ...argumente], token: ROLLEN_TOKEN });
-}
-
 const WERKZEUG_DATEI = "tools/nachtrag.mjs";
 
 export function abgebrochen(context, zusatz = {}) {

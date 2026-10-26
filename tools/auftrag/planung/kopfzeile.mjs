@@ -15,21 +15,19 @@ function kopf(pitch) {
   return ende === -1 ? pitch : pitch.slice(0, ende);
 }
 
-function zahlHinter(rest, einheit) {
-  const schluss = einheit === undefined ? "" : ` ${einheit}`;
+function zahlHinter(rest) {
   const wert = rest.trimEnd();
-  if (!wert.startsWith(" ") || !wert.endsWith(schluss)) return undefined;
-  return ganzeZahl(wert.slice(" ".length, wert.length - schluss.length));
+  return wert.startsWith(" ") ? ganzeZahl(wert.slice(" ".length)) : undefined;
 }
 
 function zeileMit(text, anfang) {
   return text.match(ZEILE).find((zeile) => zeile.startsWith(anfang));
 }
 
-export function zahlZeile(pitch, { name, einheit, nurKopf }) {
+export function zahlZeile(pitch, name) {
   const anfang = `${name}:`;
-  const zeile = zeileMit(nurKopf ? kopf(pitch) : pitch, anfang);
-  return zeile === undefined ? undefined : { zeile, zahl: zahlHinter(zeile.slice(anfang.length), einheit) };
+  const zeile = zeileMit(kopf(pitch), anfang);
+  return zeile === undefined ? undefined : { zeile, zahl: zahlHinter(zeile.slice(anfang.length)) };
 }
 
 export function teilVonZeile({ eltern, nach }) {

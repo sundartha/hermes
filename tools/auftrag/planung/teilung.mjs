@@ -1,17 +1,17 @@
-import { basename, join } from "node:path";
+import { join } from "node:path";
 
 import { istTestdatei, reihenfolge } from "../format.mjs";
 import { ueberschneiden } from "../sperren.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
 import { ALTFUNKTIONEN, altfunktionenAusPitch } from "./altfunktionen-vorab.mjs";
 import { teilungBefunde, zerlegungBefunde } from "./antworten.mjs";
-import { Kostendeckel, gemesseneKosten } from "./deckel.mjs";
+import { Kostenbuch, gemesseneKosten } from "./deckel.mjs";
 import { schreibeJsonAtomar } from "./erkundung.mjs";
 import { RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
-import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
+import { EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
-import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
+import { Abbruch, Team } from "./team.mjs";
 import { GEAENDERTE_DATEIEN, GRENZE_BELEG_DATEIEN, GRENZE_CODE_DATEIEN, GRENZE_GRUPPEN, GRENZE_SZENARIEN, ORDNER_ENDE, dokumenteIm, gruppenUeberGrenze, istOrdner } from "./umfang.mjs";
 
 const TEILE = "teile.json";
@@ -219,12 +219,11 @@ function teilZeile({ kuerzel, name, nummern, tWege, dateien, abhaengigVon }, ste
 }
 
 class Teilung {
-  constructor(root, ordner, { soll, umfang, deckel, ueber, ableitung, team = new Team(root, ordner), planer = team.teilnehmer("planer"), gliederung = null, umbau }) {
+  constructor(root, ordner, { soll, umfang, ueber, ableitung, team = new Team(root, ordner), planer = team.teilnehmer("planer"), gliederung = null, umbau }) {
     this.root = root;
     this.ordner = ordner;
     this.soll = soll;
     this.umfang = umfang;
-    this.deckel = deckel;
     this.ueber = ueber;
     this.ableitung = ableitung;
     this.dokumente = dokumenteIm(ordner);
@@ -271,12 +270,6 @@ class Teilung {
     schreibeJsonAtomar(join(this.ordner, PLANUNG, name), wert);
   }
 
-  deckelHalt() {
-    const gemessen = gemesseneKosten(this.root, this.team.beteiligte);
-    if (gemessen <= this.deckel) return null;
-    return { exit: EXIT_DECKEL, fehler: `Deckel ${this.deckel} Token: gemessen ${gemessen}; plane hält nach der Teilung an und wartet auf eine Entscheidung` };
-  }
-
   pruefe(antwort) {
     if (antwort.art === STILLSTAND) return { ende: { exit: EXIT_ABBRUCH, fehler: `${this.planer.rolle}: ${antwort.text}` } };
     if (antwort.art === "pitch") return { befunde: [PITCH_NICHT_HIER] };
@@ -304,8 +297,6 @@ class Teilung {
     let text = this.nachricht();
     for (let ruecksendungen = 0; ; ruecksendungen += 1) {
       const antwort = await this.frage(text);
-      const deckel = this.deckelHalt();
-      if (deckel !== null) return deckel;
       const { ende, befunde } = this.pruefe(antwort);
       if (ende !== undefined) return ende;
       if (befunde.length === 0) return this.geteilt(antwort.wert.teile, ruecksendungen);
@@ -320,7 +311,6 @@ export async function laufeTeilung(root, ordner, angaben) {
     return await new Teilung(root, ordner, angaben).laufe();
   } catch (fehler) {
     if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, fehler: fehler.message };
-    if (fehler instanceof Deckelabbruch) return { exit: EXIT_DECKEL, fehler: fehler.message };
     throw fehler;
   }
 }
@@ -331,14 +321,13 @@ export function belegHalt(umfang) {
   return { exit: EXIT_BEFUNDE, fehler: `plane hält vor dem ersten Agenten an und teilt nicht: ${belege} Beleg-Dateien, Grenze ${GRENZE_BELEG_DATEIEN}. Beleg-Dateien sind belegte Code-Dateien, die der Pitch nicht unter „${GEAENDERTE_DATEIEN}“ nennt; eine Teilung würde nur Belege verteilen, das braucht eine Entscheidung` };
 }
 
-export async function teilungHalt(root, ordner, { umfang, deckel, ableitung }) {
+export async function teilungHalt(root, ordner, { umfang, ableitung }) {
   const { soll, unklar } = nummernImOrdner(ordner);
   if (unklar.length > 0) return null;
   const ueber = ueberDerGrenze({ szenarien: [...soll.keys()].filter((nummer) => SZENARIO.test(nummer)).length, codeDateien: geaenderteCodeDateien(umfang).length });
   if (ueber.length === 0) return null;
   const team = new Team(root, ordner);
-  const kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
-  team.wache = kostendeckel.wache({ stelle: () => undefined, rolle: ({ rolle }) => rolle });
+  const kostenbuch = new Kostenbuch();
   const zaehlung = { gemessen: () => gemesseneKosten(root, team.beteiligte), schritt: "Teilung vor der Planung" };
-  return { ...(await kostendeckel.gezaehlt(zaehlung, () => laufeTeilung(root, ordner, { soll, umfang, deckel, ueber, ableitung, team }))), team };
+  return { ...(await kostenbuch.gezaehlt(zaehlung, () => laufeTeilung(root, ordner, { soll, umfang, ueber, ableitung, team }))), team, kostenbuch };
 }

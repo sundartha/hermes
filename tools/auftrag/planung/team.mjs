@@ -7,7 +7,7 @@ import { starteAgentParallel } from "../agenten.mjs";
 import { limitSperre, restDerSperre, setzeLimitSperre } from "../einsatz.mjs";
 import { BELEGE } from "../bericht.mjs";
 import { meldeNetzabbruch, netzabbruch } from "../netz.mjs";
-import { DECKEL, STILLSTAND } from "../verlauf.mjs";
+import { STILLSTAND } from "../verlauf.mjs";
 import { istObjekt } from "./erkundung.mjs";
 import { gitLauf, gitPfadeAbfragen } from "./git.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
@@ -36,8 +36,6 @@ const ZWEITE_NETZ_WARTEZEIT_MS = 120_000;
 const NETZ_WARTEZEITEN_MS = [ERSTE_NETZ_WARTEZEIT_MS, ZWEITE_NETZ_WARTEZEIT_MS];
 
 export class Abbruch extends Error {}
-
-export class Deckelabbruch extends Error {}
 
 function letzterJsonBlock(text) {
   const bloecke = [...text.matchAll(JSON_BLOCK)];
@@ -231,7 +229,6 @@ export function befundNachricht(befunde, anhang = []) {
 }
 
 function meldeAbsturz(wer, lauf) {
-  if (lauf.aktion?.art === DECKEL) throw new Deckelabbruch(lauf.aktion.grund);
   if (lauf.exitCode === 0) return;
   const zeilen = (lauf.fehlerausgabe ?? "").trim().split("\n");
   const auszug = zeilen.slice(-FEHLERZEILEN).join("\n");
@@ -264,7 +261,6 @@ export class Team {
     this.ruecksendungen = {};
     this.netzWartezeitenMs = netzWartezeitenMs;
     this.netzabbrueche = [];
-    this.wache = null;
   }
 
   teilnehmer(rolle) {
@@ -279,29 +275,12 @@ export class Team {
     let versuch = 0;
     for (;;) {
       await warteAufSperre(sperre);
-      const gesperrt = this.wache?.gesperrt() ?? null;
-      if (gesperrt !== null) throw new Deckelabbruch(gesperrt);
       const beginn = Date.now();
-      const lauf = await this.starte(wer, nachricht, start);
+      const lauf = await starteAgentParallel({ rolle: wer.rolle, root: this.root, fortsetzung: wer.sitzung }, nachricht, { ...start, kontextGrenze: null, vollstaendig: true });
       wer.merke(lauf.sitzung, Date.now() - beginn);
-      if (lauf.aktion?.art === DECKEL) return lauf;
       if (lauf.limit) console.log(`${wer.rolle}: ${setzeLimitSperre(sperre, lauf.limit)}`);
       else if (await this.nachNetzabbruch(wer, lauf, versuch)) versuch += 1;
       else return lauf;
-    }
-  }
-
-  async starte(wer, nachricht, start) {
-    let angemeldet = null;
-    const beiNachricht = (groesse, zuvor) => this.wache?.melde(angemeldet, groesse, zuvor);
-    const laufend = starteAgentParallel({ rolle: wer.rolle, root: this.root, fortsetzung: wer.sitzung }, nachricht, { ...start, kontextGrenze: null, vollstaendig: true, beiNachricht });
-    angemeldet = this.wache?.an(laufend.beende, wer) ?? null;
-    let lauf = null;
-    try {
-      lauf = await laufend;
-      return lauf;
-    } finally {
-      this.wache?.ab(angemeldet, lauf?.aktion?.art === DECKEL);
     }
   }
 

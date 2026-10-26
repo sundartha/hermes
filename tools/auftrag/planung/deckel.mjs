@@ -1,283 +1,36 @@
-import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-
-import { BELEGE } from "../bericht.mjs";
-import { gemeinsamerOrdner } from "../git.mjs";
 import { kostenDesAuftrags } from "../kosten.mjs";
-import { istObjekt, schreibeJsonAtomar } from "./erkundung.mjs";
-import { ganzeZahl, zahlZeile } from "./kopfzeile.mjs";
 
-const PLANUNGSBERICHT = "planung.json";
 const JE_ROLLE = "je Rolle";
 const ERKUNDER = "erkunder";
 export const WEGPRUEFER = "wegpruefer";
 export const ERKUNDUNG = [ERKUNDER, WEGPRUEFER];
-const FREIGABE_ZEILE = "Planung freigegeben: <Zahl> Token";
-export const TEIL_DECKEL = 3_000_000;
-const FREIGABE = { name: "Planung freigegeben", einheit: "Token" };
-const PROZENT = 100;
-
-export function freigabeZeileFehlt(pitch) {
-  return zahlZeile(pitch, FREIGABE) === undefined;
-}
-
-function freigabeAusPitch(pitch) {
-  const gefunden = zahlZeile(pitch, FREIGABE);
-  if (gefunden === undefined) return { fehler: `pitch.md hat keine Zeile „${FREIGABE_ZEILE}“ und --deckel fehlt; ohne freigegebene Token-Menge plant plane nicht` };
-  return gefunden.zahl === undefined ? { fehler: `pitch.md: die Zeile „${gefunden.zeile.trim()}“ braucht die Form „${FREIGABE_ZEILE}“ mit einer ganzen Zahl über 0` } : { deckel: gefunden.zahl };
-}
-
-export function deckelAus(angabe, pitch) {
-  if (angabe === undefined) return freigabeAusPitch(pitch);
-  const deckel = ganzeZahl(angabe);
-  return deckel === undefined ? { fehler: `--deckel braucht eine ganze Zahl Token über 0, nicht ${angabe}` } : { deckel };
-}
-
-function liesKosten(datei) {
-  try {
-    const bericht = JSON.parse(readFileSync(datei, "utf8"));
-    return { kosten: istObjekt(bericht?.kostenJeLauf) ? bericht.kostenJeLauf : {}, jeRolle: bericht?.kostenGebucht === JE_ROLLE };
-  } catch {
-    return { kosten: {}, jeRolle: false };
-  }
-}
-
-function vorigeKosten(root, phase) {
-  return liesKosten(join(root, BELEGE, phase, PLANUNGSBERICHT));
-}
 
 export function gemesseneKosten(root, beteiligte) {
   return kostenDesAuftrags(root, beteiligte.filter(({ sitzung }) => sitzung !== undefined)).summe.gesamt;
-}
-
-const TOPF_BUCH = "hermes-topf";
-const LAUF_ENDUNG = ".json";
-const ENTWURF = ".entwurf";
-const EIGENER_LAUF = { datei: null };
-
-export function topfBuch(root, eltern) {
-  return gemeinsamerOrdner(root, TOPF_BUCH, eltern);
-}
-
-function liesLauf(datei) {
-  try {
-    return JSON.parse(readFileSync(datei, "utf8"));
-  } catch (fehler) {
-    return fehler.code === "ENOENT" ? null : {};
-  }
-}
-
-function laeufe(buch) {
-  if (!existsSync(buch)) return [];
-  const namen = readdirSync(buch).filter((name) => name.endsWith(LAUF_ENDUNG) && !name.startsWith("."));
-  return namen.map((name) => ({ name, lauf: liesLauf(join(buch, name)) })).filter(({ lauf }) => lauf !== null).map(({ name, lauf }) => ({ name, ...lauf }));
-}
-
-function laufKosten({ token, deckel, weitergegeben }) {
-  if (Number.isFinite(token)) return Math.max(token, Number.isFinite(weitergegeben) ? weitergegeben : 0);
-  return Number.isFinite(deckel) ? deckel : null;
-}
-
-export function restTopf(buch, { freigabe, vorschnitt, ohne }) {
-  const andere = laeufe(buch).filter(({ name }) => name !== ohne);
-  const offen = andere.filter((lauf) => laufKosten(lauf) === null).map(({ name }) => join(buch, name));
-  if (offen.length > 0) return { fehler: `Rest-Topf nicht messbar: ${offen.join(", ")} nennt weder Verbrauch noch Deckel; plane hält an, statt zu schätzen` };
-  const verbraucht = andere.reduce((summe, lauf) => summe + laufKosten(lauf), 0);
-  const rest = freigabe - vorschnitt - verbraucht;
-  const topf = { freigabe, vorschnitt, teile: verbraucht, rest, teilDeckel: Math.max(0, Math.min(TEIL_DECKEL, rest)) };
-  return { topf, rechnung: `Freigabe ${freigabe} − Vorschnitt ${vorschnitt} − Teile ${verbraucht} = ${rest}` };
-}
-
-export function reserviere(buch, { teil, deckel, worktree }) {
-  mkdirSync(buch, { recursive: true });
-  const name = `${teil}-${Date.now()}-${process.pid}${LAUF_ENDUNG}`;
-  const entwurf = join(buch, `.${name}${ENTWURF}`);
-  writeFileSync(entwurf, JSON.stringify({ teil, beginn: new Date().toISOString(), deckel, worktree }));
-  linkSync(entwurf, join(buch, name));
-  unlinkSync(entwurf);
-  EIGENER_LAUF.datei = join(buch, name);
-  return name;
-}
-
-export function setzeReservierung(deckel) {
-  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...liesLauf(EIGENER_LAUF.datei), deckel });
-}
-
-export function gibReservierungFrei() {
-  if (EIGENER_LAUF.datei === null) return;
-  unlinkSync(EIGENER_LAUF.datei);
-  EIGENER_LAUF.datei = null;
-}
-
-const VERBRAUCH = "verbrauch.json";
-
-function liesBuchung(datei) {
-  try {
-    const buchung = JSON.parse(readFileSync(datei, "utf8"));
-    return Number.isFinite(buchung?.gesamt) && buchung.gesamt >= 0 ? { gesamt: buchung.gesamt } : { grund: "nennt keinen abgeschlossenen Gesamtverbrauch (ein früherer Lauf endete ohne Buchung)" };
-  } catch (fehler) {
-    return { grund: fehler.code === "ENOENT" ? "fehlt" : "ist unlesbar" };
-  }
-}
-
-function verbrauchsDatei(root, phase) {
-  return join(root, BELEGE, phase, VERBRAUCH);
-}
-
-export function liesVorverbrauch(root, phase) {
-  const datei = verbrauchsDatei(root, phase);
-  const { gesamt, grund } = liesBuchung(datei);
-  if (grund === undefined) return { vorverbrauch: gesamt };
-  return {
-    fehler: `Vorverbrauch nicht bestimmbar: ${datei} ${grund}; plane hält an, statt ihn als 0 zu zählen. Ausweg: ein voller Neulauf ohne --fortsetzen, oder die Betreuung trägt den gemessenen Gesamtverbrauch aller früheren Läufe als JSON-Objekt mit den Feldern „gesamt“ (Token) und „quelle“ in ${datei} ein`,
-  };
-}
-
-export function oeffneVerbrauch(root, phase, vorverbrauch) {
-  mkdirSync(join(root, BELEGE, phase), { recursive: true });
-  schreibeJsonAtomar(verbrauchsDatei(root, phase), { vorverbrauch });
-}
-
-export function schliesseVerbrauch(root, phase, { vorverbrauch, lauf }) {
-  schreibeJsonAtomar(verbrauchsDatei(root, phase), { vorverbrauch, lauf, gesamt: vorverbrauch + lauf });
-}
-
-export function verbucheLauf(root, beteiligte, { weitergegeben = false } = {}) {
-  if (EIGENER_LAUF.datei === null) return;
-  const lauf = liesLauf(EIGENER_LAUF.datei);
-  schreibeJsonAtomar(EIGENER_LAUF.datei, { ...lauf, token: gemesseneKosten(root, beteiligte), ...(weitergegeben && { weitergegeben: lauf.deckel }) });
-}
-
-function prozent(teil, ganzes) {
-  return `${((teil * PROZENT) / ganzes).toFixed(1).replace(".", ",")} %`;
-}
-
-function fertigeRollen(geplant, stelle) {
-  return stelle?.abgebrochen.size > 0 ? geplant.filter((rolle) => stelle.fertig.has(rolle) && !stelle.abgebrochen.has(rolle)) : geplant;
-}
-
-function vorverbrauchText(vorverbrauch) {
-  return vorverbrauch > 0 ? `Vorverbrauch ${vorverbrauch}, ` : "";
 }
 
 export function ohneGliederung({ soll, nurUmbau }) {
   return nurUmbau && soll.size === 0;
 }
 
-export class Kostendeckel {
-  constructor(root, phase, deckel) {
-    this.root = root;
-    this.deckel = deckel;
-    const vorige = vorigeKosten(root, phase);
-    this.vorige = vorige.kosten;
-    this.vorigeJeRolle = vorige.jeRolle;
+export class Kostenbuch {
+  constructor() {
     this.jeLauf = {};
-    this.stand = {};
-    this.halt = null;
-    this.schritt = null;
-    this.zaehlung = null;
-    this.stellen = new Map();
-    this.liveAbbruch = null;
     this.wellen = [];
-    this.vorverbrauch = 0;
-    this.abgebrochen = {};
-    this.abgebrocheneLaeufe = [];
-  }
-
-  gesamt(gemessen) {
-    return this.vorverbrauch + gemessen;
-  }
-
-  halteUeberschreitungFest(gemessen, schritt) {
-    if (this.gesamt(gemessen) <= this.deckel) return false;
-    if (this.schritt === null) {
-      this.stand = { gemessen };
-      this.schritt = schritt;
-    }
-    this.stand = { ...this.stand, ueberschritten: this.gesamt(gemessen) - this.deckel };
-    return true;
-  }
-
-  ueberschritten(gemessen, schritt) {
-    if (!this.halteUeberschreitungFest(gemessen, schritt)) return null;
-    const { ueberschritten } = this.stand;
-    return `Deckel ${this.deckel} Token überschritten: ${vorverbrauchText(this.vorverbrauch)}gemessen ${gemessen}, ${ueberschritten} Token (${prozent(ueberschritten, this.deckel)}) über dem Deckel beim Schritt „${this.schritt}“; plane startet keinen Agenten mehr und wartet auf eine Entscheidung`;
-  }
-
-  wache({ stelle, rolle }) {
-    return { an: (beende, wer) => this.an(stelle(), beende, { rolle: rolle(wer), wer }), melde: (lauf, groesse, zuvor) => this.melde(lauf, groesse, zuvor), ab: (lauf, abgebrochen) => this.ab(lauf, abgebrochen), gesperrt: () => this.gesperrt(), kostendeckel: this };
   }
 
   async gezaehlt({ gemessen, schritt }, arbeit) {
-    this.beginneZaehlung(gemessen(), schritt);
+    const grund = gemessen();
     try {
       return await arbeit();
     } finally {
-      this.beendeZaehlung(gemessen());
+      this.wellen.push({ schritt, gemessen: gemessen() - grund });
     }
-  }
-
-  beginneZaehlung(gemessen, schritt) {
-    this.zaehlung = { grund: gemessen, schritt, live: 0, groesste: 0, laufend: new Map(), stellen: new Map(), abgebrochen: [], abbruch: null };
-  }
-
-  an(stelle, beende, { rolle, wer }) {
-    if (this.zaehlung === null) return null;
-    const lauf = { stelle, rolle, beende, wer, zuvor: gemesseneKosten(this.root, [wer]) };
-    this.zaehlung.laufend.set(lauf, null);
-    return lauf;
-  }
-
-  ab(lauf, abgebrochen) {
-    if (this.zaehlung === null || lauf === null) return;
-    this.zaehlung.laufend.delete(lauf);
-    const { stellen } = this.zaehlung;
-    const stelle = stellen.get(lauf.stelle) ?? { fertig: new Set(), abgebrochen: new Set() };
-    (abgebrochen ? stelle.abgebrochen : stelle.fertig).add(lauf.rolle);
-    stellen.set(lauf.stelle, stelle);
-    if (abgebrochen) this.zaehlung.abgebrochen.push(lauf);
-  }
-
-  gesperrt() {
-    return this.zaehlung?.abbruch ?? null;
-  }
-
-  melde(lauf, groesse, zuvor) {
-    const { zaehlung } = this;
-    if (zaehlung === null) return;
-    zaehlung.live += groesse - zuvor;
-    zaehlung.groesste = Math.max(zaehlung.groesste, groesse);
-    if (zaehlung.laufend.has(lauf)) zaehlung.laufend.set(lauf, groesse);
-    if (zaehlung.abbruch === null) this.pruefeLive();
-  }
-
-  pruefeLive() {
-    const { zaehlung } = this;
-    const { grund, live, schritt, laufend, groesste } = zaehlung;
-    const vorhalt = [...laufend.values()].reduce((summe, letzte) => summe + (letzte ?? groesste), 0);
-    if (this.gesamt(grund + live + vorhalt) <= this.deckel) return;
-    zaehlung.abbruch = `Deckel ${this.deckel} Token: ${vorverbrauchText(this.vorverbrauch)}gemessen ${grund}, live ${live}, Vorhalt ${vorhalt}, zusammen ${this.gesamt(grund + live + vorhalt)}; plane bricht die laufenden Agenten beim Schritt „${schritt}“ ab und wartet auf eine Entscheidung`;
-    this.halt = this.halt === null ? zaehlung.abbruch : `${this.halt}; ${zaehlung.abbruch}`;
-    this.liveAbbruch ??= zaehlung.abbruch;
-    if (this.schritt === null) {
-      this.stand = { gemessen: grund, live, vorhalt };
-      this.schritt = schritt;
-    }
-    for (const { beende } of laufend.keys()) beende(zaehlung.abbruch);
-  }
-
-  beendeZaehlung(gemessen) {
-    const { grund, live, schritt, stellen, abgebrochen } = this.zaehlung;
-    this.wellen.push({ schritt, live, gemessen: gemessen - grund });
-    this.stellen = stellen;
-    this.abgebrocheneLaeufe = abgebrochen;
-    this.zaehlung = null;
   }
 
   verbuche(schritte, kosten, { geworfen = false } = {}) {
-    const rollen = geworfen ? [] : schritte.flatMap((geplant, stelle) => fertigeRollen(geplant, this.stellen.get(stelle)));
+    const rollen = geworfen ? [] : schritte.flat();
     const vorkommen = Map.groupBy(rollen, (rolle) => rolle);
-    this.verbucheAbgebrochene();
     const eigene = [...vorkommen.keys()].reduce((summe, rolle) => summe + (kosten[rolle] ?? 0), 0);
     const rest = Object.values(kosten).reduce((summe, token) => summe + token, 0) - eigene;
     for (const [rolle, { length: laeufe }] of vorkommen) {
@@ -286,19 +39,7 @@ export class Kostendeckel {
     }
   }
 
-  verbucheAbgebrochene() {
-    for (const { rolle, wer, zuvor } of this.abgebrocheneLaeufe) {
-      const bisher = this.abgebrochen[rolle] ?? { laeufe: 0, token: 0 };
-      this.abgebrochen[rolle] = { laeufe: bisher.laeufe + 1, token: bisher.token + gemesseneKosten(this.root, [wer]) - zuvor };
-    }
-    this.abgebrocheneLaeufe = [];
-  }
-
   bericht() {
-    const schritt = this.schritt === null ? {} : { deckelSchritt: this.schritt };
-    const ohneKennzeichnung = !this.vorigeJeRolle && this.vorige[ERKUNDER] !== undefined && this.jeLauf[ERKUNDER] === undefined;
-    const vorverbrauch = this.vorverbrauch > 0 ? { vorverbrauch: this.vorverbrauch } : {};
-    const abgebrochen = Object.keys(this.abgebrochen).length > 0 ? { kostenAbgebrochen: this.abgebrochen } : {};
-    return { deckel: { deckel: this.deckel, ...vorverbrauch, ...this.stand }, ...schritt, wellen: this.wellen, kostenJeLauf: { ...this.vorige, ...this.jeLauf }, ...abgebrochen, ...(!ohneKennzeichnung && { kostenGebucht: JE_ROLLE }) };
+    return { wellen: this.wellen, kostenJeLauf: this.jeLauf, kostenGebucht: JE_ROLLE };
   }
 }
