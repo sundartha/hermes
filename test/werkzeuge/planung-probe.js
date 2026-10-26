@@ -207,8 +207,8 @@ export function angaben(nummer, ueberschrieben = {}) {
   return rolle === "wirkung" ? { ...rest, ...ueberschrieben } : rest;
 }
 
-export function bericht(nummern, ueberschrieben = {}) {
-  return alsJson({ nummern: Object.fromEntries(nummern.map((nummer) => [nummer, angaben(nummer, ueberschrieben[nummer])])), hinweise: [] });
+export function bericht(nummern, ueberschrieben = {}, hinweise = []) {
+  return alsJson({ nummern: Object.fromEntries(nummern.map((nummer) => [nummer, angaben(nummer, ueberschrieben[nummer])])), hinweise });
 }
 
 export function auftrag(id, bereich, { prueft, abnahme, abhaengigVon, ...zusatz }) {
