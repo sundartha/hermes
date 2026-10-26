@@ -239,7 +239,7 @@
   },
   "mutation testumbau": {
     "liste": "ohne Nummer",
-    "wozu": "Ein Testumbau darf nicht weniger prüfen als vorher: Jeder Mutant der Quelldateien, die die betroffenen Tests importieren, den sie vorher getötet haben, muss nachher weiter getötet werden.",
+    "wozu": "Ein Testumbau darf nicht weniger prüfen als vorher: Jeder Mutant der Quelldateien, die die betroffenen Tests importieren, den sie vorher getötet haben, muss nachher weiter getötet werden. Eine reine Verschiebung (Testdatei mit gleichem Inhalt in gleicher Verzeichnistiefe, in allen anderen Dateien nur die Importpfade auf sie nachgezogen) prüft nichts anders und startet deshalb keine Mutation; jede weitere Änderung führt zur vollen Prüfung.",
     "behebung": "Die Prüfung, die den genannten Mutanten vorher getötet hat, im Umbau erhalten oder an der neuen Stelle wieder aufnehmen.",
     "nichtAngenommen": "Den Mutanten als gleichwertig melden; vorher getötet heißt, er ändert beobachtbares Verhalten.",
     "ausweg": "Ist die Prüfung nur durch neues Verhalten zu erhalten, eine eigene letzte Zeile „Auftrag passt nicht: <Mutant> lässt sich ohne neue Erwartung nicht weiter töten, weil <Grund>“."
