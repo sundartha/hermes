@@ -8,9 +8,10 @@ const MUSTER_UNGUELTIG = 128;
 const KEINE_TREFFER = "keine Treffer";
 const KEINE_DATEIEN = "keine Dateien";
 const GESPERRT = [":(exclude,glob,icase)**/.env*", ":(exclude,glob)data/**"];
-const CODE_ORDNER = ["src", "tools"];
 const CODE_ENDUNGEN = ["js", "mjs", "cjs", "ts", "mts", "cts"];
-const CODE_DATEIEN = CODE_ORDNER.flatMap((ordner) => CODE_ENDUNGEN.map((endung) => `:(glob)${ordner}/**/*.${endung}`));
+const dateienIn = (ordner) => ordner.flatMap((name) => CODE_ENDUNGEN.map((endung) => `:(glob)${name}/**/*.${endung}`));
+const CODE_DATEIEN = dateienIn(["src", "tools"]);
+const TEST_DATEIEN = dateienIn(["test"]);
 
 function unsaubereAbgelehnt(pfade) {
   const unsauber = pfade.filter((pfad) => !pfadIstSauber(pfad));
@@ -25,14 +26,22 @@ function grepLauf(muster, pfade, root) {
   return gitLauf(root, ["-c", "core.quotePath=false", "grep", "-n", "-I", "--full-name", "-e", muster, "--", ...pfade, ...GESPERRT], { erlaubt: [EXIT_GRUEN, OHNE_TREFFER, MUSTER_UNGUELTIG] });
 }
 
-export function suchTreffer(muster, root) {
-  const lauf = grepLauf(muster, CODE_DATEIEN, root);
+function trefferIn(muster, pfade, root) {
+  const lauf = grepLauf(muster, pfade, root);
   if (lauf.status === MUSTER_UNGUELTIG) return null;
   if (lauf.status !== EXIT_GRUEN) return [];
   return lauf.stdout.split("\n").flatMap((zeile) => {
     const treffer = TREFFER_ZEILE.exec(zeile);
     return treffer === null ? [] : [`${treffer[1]}:${treffer[2]}`];
   });
+}
+
+export function suchTreffer(muster, root) {
+  return trefferIn(muster, CODE_DATEIEN, root);
+}
+
+export function testTreffer(muster, root) {
+  return trefferIn(muster, TEST_DATEIEN, root);
 }
 
 export function suche([muster, ...pfade], root) {

@@ -6,7 +6,7 @@ import { TEST_FILE } from "../../testgraph.mjs";
 import { funktionenIn } from "../../ziele/funktionen.mjs";
 import { geschuetzteMuster, istGeschuetzt, istTestdatei, pfadIstSauber } from "../format.mjs";
 import { zeilenDes } from "../zeilen.mjs";
-import { suchTreffer } from "./suche.mjs";
+import { suchTreffer, testTreffer } from "./suche.mjs";
 
 const JSON_EINRUECKUNG = 2;
 export const ROLLEN = ["eingang", "logik", "speicher", "wirkung"];
@@ -192,7 +192,8 @@ function suchErgebnis(ort, { name, begriffe }, kontext) {
 }
 
 function trefferBefund(ort, { begriffe, gefunden, treffer }, kontext) {
-  const erfunden = treffer.filter((stelle) => !trefferInFundDatei(stelle, gefunden, kontext));
+  const pruefbar = [...gefunden, ...begriffe.flatMap((begriff) => testTreffer(begriff, kontext.root))];
+  const erfunden = treffer.filter((stelle) => !trefferInFundDatei(stelle, pruefbar, kontext));
   if (erfunden.length > 0) return `${ort}: treffer ${erfunden.join(", ")} liegt in keiner Datei, in der die Suche nach ${begriffe.join(", ")} etwas findet, oder die Zeile gibt es dort nicht`;
   return treffer.length === 0 ? `${ort}: die Suche nach ${begriffe.join(", ")} hat ${gefunden.length} Treffer, treffer nennt keinen` : null;
 }
