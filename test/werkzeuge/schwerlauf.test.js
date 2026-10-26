@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { once } from "node:events";
 
-import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository } from "./probe-repo.js";
+import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, SPERRE, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
-import { bisBeendet, lebt } from "./mutationspruefung-hilfen.js";
+import { BASIS, NEGATIV, NULL, bisBeendet, lebt, quelle } from "./mutationspruefung-hilfen.js";
 
 const WARTEZEIT_AUF_SPERRE_MS = 3_600_000;
 const LAUFZEIT_NACH_FREIGABE_MS = 2000;
@@ -218,10 +218,14 @@ test("die Halterdatei kann nur der eigene Nutzer lesen und schreiben", FRIST, as
   assert.equal(statSync(`${env.SCHWERLAUF_SPERRDATEI}.platz-1.json`).mode & RECHTE_BITS, NUR_EIGENTUEMER);
 });
 
-async function wartetAufSperre(context, [skript, ...args], dateien = {}) {
+function wartetAufSperre(context, befehl, dateien = {}) {
+  return wartetAufSperreIn(context, befehl, probeDirectory(context, dateien));
+}
+
+async function wartetAufSperreIn(context, [skript, ...args], verzeichnis) {
   const env = umgebung(context);
   await halter(context, env);
-  const lauf = starte([join(REPO_ROOT, skript), ...args], { env, cwd: probeDirectory(context, dateien) });
+  const lauf = starte([join(REPO_ROOT, skript), ...args], { env, cwd: verzeichnis });
   context.after(() => lauf.kind.kill("SIGKILL"));
   await wartet(lauf);
 
@@ -229,11 +233,17 @@ async function wartetAufSperre(context, [skript, ...args], dateien = {}) {
   assert.match(lauf.stderr, /gehalten von PID \d+, Halter im Test, /);
 }
 
+function repoMitMutanten(context) {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  return repo;
+}
+
 test("der Prüfleiter vor dem Push wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
   wartetAufSperre(context, ["tools/pruefleiter.mjs", "--vor-push"]));
 
 test("die Mutationsprüfung wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
-  wartetAufSperre(context, ["tools/mutationspruefung.mjs", "--basis", "HEAD"]));
+  wartetAufSperreIn(context, ["tools/mutationspruefung.mjs", "--basis", "HEAD"], repoMitMutanten(context)));
 
 test("die Testwirkung wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
   wartetAufSperre(context, ["tools/testwirkung.mjs", "--basis", "HEAD"]));

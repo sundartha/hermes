@@ -27,7 +27,8 @@ import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitab
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
-import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { hatMutanten } from "./mutationspruefung/vorplanung.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -112,6 +113,7 @@ const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
+const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
@@ -443,11 +445,18 @@ function testauswahl(datei, graph) {
   return { erste: alle.filter((test) => erste.includes(test) || nachsichtig.includes(test)), alle, nachsichtig };
 }
 
+async function schwereArbeit(datei, zeilen, loeschung) {
+  if (await hatMutanten(datei, zeilen)) return true;
+  return loeschung !== null && loeschbareZeilen(datei, zeilen).length > 0;
+}
+
 async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
   const auswahl = testauswahl(datei, graph);
   if (auswahl.alle.length === 0) {
     return zeilen.map(([von]) => ohneTestdatei(datei, von));
   }
+  if (await schwereArbeit(datei, zeilen, loeschung)) await sperreVorTestprozessen();
+  else console.log(`${datei}: keine Mutanten und keine löschbare Anweisung in den geänderten Zeilen, Erstlauf ohne Sperrplatz.`);
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
   if (loeschung === null) return ergebnisse;
@@ -844,6 +853,11 @@ async function gemesseneSperre(anlass) {
   notiereSperre(Date.now() - beginn);
 }
 
+function sperreVorTestprozessen() {
+  SPERRE.genommen ??= gemesseneSperre(SPERRE.anlass);
+  return SPERRE.genommen;
+}
+
 function betriebsart(values) {
   return BETRIEBSARTEN.find((art) => values[art] !== undefined && values[art] !== false) ?? NORMAL;
 }
@@ -893,9 +907,12 @@ async function main() {
   }
   beginneLog(() => join(legeSandboxordnerAn(WURZEL), LOGORDNER), startkopf(values));
   if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
-  await gemesseneSperre(`test:mutation --basis ${values.basis}`);
+  SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();
-  if (values.testumbau) return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });
+  if (values.testumbau) {
+    await sperreVorTestprozessen();
+    return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });
+  }
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
