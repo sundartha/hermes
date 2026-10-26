@@ -70,6 +70,11 @@ test("aufteilung: die Schlüssel aller Prüfer ergeben genau prueflisteSoll", ()
   assert.deepEqual(zuordnung, ERWARTET);
 });
 
+test("aufteilung: bei einer Gruppe bleibt die Prüfliste ein Teil mit allen Schlüsseln", () => {
+  const schluessel = prueflisteSoll(SCHNITT, SOLL, ANNAHMEN);
+  assert.deepEqual(teilePruefliste(schluessel, SCHNITT, [{ nummern: [...SOLL.keys()] }]), [{ gruppe: 0, schluessel }]);
+});
+
 test("aufteilung: ohne Gruppen prüft ein Prüfer alle Schlüssel", () => {
   const schluessel = prueflisteSoll(SCHNITT, SOLL, ANNAHMEN);
   assert.deepEqual(teilePruefliste(schluessel, SCHNITT, []), [{ gruppe: UEBERGREIFEND, schluessel }]);

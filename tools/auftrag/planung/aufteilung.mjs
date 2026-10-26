@@ -56,6 +56,7 @@ class Gruppen {
 }
 
 export function teilePruefliste(schluessel, schnitt, gruppen) {
+  if (gruppen.length === 1) return schluessel.length > 0 ? [{ gruppe: 0, schluessel }] : [];
   const zuordnung = new Gruppen(schnitt, gruppen);
   const teile = [...gruppen.map((_gruppe, stelle) => ({ gruppe: stelle, schluessel: [] })), { gruppe: null, schluessel: [] }];
   for (const eintrag of schluessel) teile.at(zuordnung.desSchluessels(eintrag) ?? -1).schluessel.push(eintrag);
