@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
-import { gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
+import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -217,7 +217,7 @@ function testRunde(lauf, ueberlebende, gemeldet) {
   const weg = testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND });
   if (weg === null) return false;
   for (const { mutant, grund } of weg.gleichwertig) {
-    if (ueberlebende.includes(mutant)) gemeldet.set(mutant, grund);
+    for (const schluessel of ueberlebende.filter((ueberlebend) => gemeint(mutant, ueberlebend))) gemeldet.set(schluessel, grund);
   }
   if (aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return null;
   return lauf.vorherGruen() && testsFesthalten(lauf, ueberlebende);
