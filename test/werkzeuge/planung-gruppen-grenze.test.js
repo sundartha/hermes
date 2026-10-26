@@ -41,13 +41,12 @@ test("plane teilt bei drei Gruppen nach der Gliederung mit Exit 7 und startet ke
   assert.equal(existsSync(join(lauf.wurzel, "plaene/P-001-t2-hinweis-beim-anruf/pitch.md")), true);
 });
 
-test("die Ausgabe einer Teilung aus dem Nachsteuern nennt Freigabe, Vorschnitt-Kosten, Rest-Topf und Zahl der Teile aus teile.json", { timeout: LAUF_FRIST_MS }, (context) => {
+test("die Ausgabe einer Teilung aus dem Nachsteuern nennt die gemessenen Vorschnitt-Kosten und die Zahl der Teile aus teile.json", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = dreiGruppen(context, [alsJson({ teile: [ROUTEN_TEIL, ANRUF_TEIL] })]);
 
   exit(lauf, EXIT_GETEILT);
-  const { topf, teile } = abgelegt(lauf, "teile.json");
-  const zeile = lauf.stdout.split("\n").find((kandidat) => kandidat.startsWith("Topf:")) ?? "";
-  for (const angabe of [`Freigabe ${topf.freigabe} Token`, `Vorschnitt gemessen ${topf.vorschnitt} Token`, `Rest ${topf.rest} Token`, `${teile.length} Teile`]) assert.ok(zeile.includes(angabe), `${angabe}\n\n${lauf.stdout}`);
+  const { token, teile } = abgelegt(lauf, "teile.json");
+  assert.ok(lauf.stdout.split("\n").includes(`Teilung: Vorschnitt gemessen ${token} Token, ${teile.length} Teile`), lauf.stdout);
 });
 
 test("plane plant bei zwei Gruppen ohne Teilung weiter", { timeout: LAUF_FRIST_MS }, (context) => {

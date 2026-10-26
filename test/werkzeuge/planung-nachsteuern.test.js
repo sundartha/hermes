@@ -79,7 +79,7 @@ function mittel({ laeufe, token }) {
 test("ein Schritt mit Erkunder und Wegprüfer bucht jede Rolle mit ihren eigenen Sitzungen", { timeout: LAUF_FRIST_MS }, (context) => {
   const [erkunder, pruefer] = [1000, 300];
   const ueberschrieben = { "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, GRUEN_PRUEFLISTE], "erkunder|## Befunde": [bericht(GRUPPEN[0].nummern)] };
-  const lauf = planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER, "--deckel", OHNE_WIRKUNG], token: { planer: NEBENROLLE_JE_AUFRUF, erkunder, "pruefer-planung": pruefer, entwurf: NEBENROLLE_JE_AUFRUF } });
+  const lauf = planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER], token: { planer: NEBENROLLE_JE_AUFRUF, erkunder, "pruefer-planung": pruefer, entwurf: NEBENROLLE_JE_AUFRUF } });
 
   exit(lauf, EXIT_GRUEN);
   const plan = planungsBericht(lauf);

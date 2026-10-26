@@ -9,7 +9,7 @@ import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_ABBRUCH, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { hebeFreigabe } from "./planung-freigabe-probe.js";
+import { hebeFreigabe, mitKopfzeile } from "./planung-freigabe-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitGeaendertenDateien, planOrdner, planeIn } from "./planung-probe.js";
 import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, runIn } from "./probe-repo.js";
 
@@ -140,16 +140,19 @@ test("die Vereinigung der Nummern aller Teil-Ordner ist gleich den Nummern des E
   assert.ok(lauf.stderr.includes(HINTERLEGEN), lauf.stderr);
 });
 
-test("der Kopf eines Teil-Pitches nennt Status, offenes Issue, den Teil-Deckel aus dem Rest-Topf und Eltern samt Vorgängern, und design.md ist eine Kopie", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = geteilt(context);
+test("der Kopf eines Teil-Pitches nennt Status, offenes Issue und Eltern samt Vorgängern, aber keine Token-Menge, und design.md ist eine Kopie", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = geteilt(context, { vorher: (wurzel) => mitKopfzeile(wurzel, ORDNER, `Planung freigegeben: ${FREIGABE} Token`) });
 
   exit(lauf, EXIT_GETEILT);
+  assert.equal(text(lauf.wurzel, ORDNER, "pitch.md").includes(`Planung freigegeben: ${FREIGABE} Token`), true);
   const pitch = text(lauf.wurzel, HINWEIS_ORDNER, "pitch.md");
-  for (const zeile of ["Status: freigegeben", "Issue: offen", `Planung freigegeben: ${TEIL_DECKEL} Token`, `Teil von: ${ELTERN}; nach: P-001-t1-eigene-nummer-hinterlegen`]) assert.ok(pitch.split("\n").includes(zeile), `${zeile}\n\n${pitch}`);
+  for (const zeile of ["Status: freigegeben", "Issue: offen", `Teil von: ${ELTERN}; nach: P-001-t1-eigene-nummer-hinterlegen`]) assert.ok(pitch.split("\n").includes(zeile), `${zeile}\n\n${pitch}`);
+  for (const ordner of TEIL_ORDNER) assert.equal(text(lauf.wurzel, ordner, "pitch.md").includes("Planung freigegeben:"), false, ordner);
   assert.ok(text(lauf.wurzel, HINTERLEGEN, "pitch.md").split("\n").includes(`Teil von: ${ELTERN}; nach: –`));
   for (const ordner of TEIL_ORDNER) assert.equal(text(lauf.wurzel, ordner, "design.md"), text(lauf.wurzel, ORDNER, "design.md"));
-  const topf = abgelegt(lauf, "teile.json").topf;
-  assert.deepEqual(topf, { freigabe: FREIGABE, vorschnitt: TEILUNG_TOKEN, teile: 0, rest: TEIL_DECKEL, teilDeckel: TEIL_DECKEL });
+  const teilung = abgelegt(lauf, "teile.json");
+  assert.equal(teilung.topf, undefined);
+  assert.equal(teilung.token, TEILUNG_TOKEN);
 });
 
 test("die erste Teilung mit Exit 7 schreibt planung.json mit gemessenen Token je Rolle und Exit 7", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -162,13 +165,14 @@ test("die erste Teilung mit Exit 7 schreibt planung.json mit gemessenen Token je
   assert.equal(plan.token, abgelegt(lauf, "teile.json").token);
 });
 
-test("die Ausgabe der ersten Teilung nennt Freigabe, Vorschnitt-Kosten, Rest-Topf und Zahl der Teile", { timeout: LAUF_FRIST_MS }, (context) => {
+test("die Ausgabe der ersten Teilung nennt die gemessenen Vorschnitt-Kosten und die Zahl der Teile, aber keinen Topf", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = geteilt(context);
 
   exit(lauf, EXIT_GETEILT);
   const bericht = lauf.stdout.split(`Planung ${ELTERN}: Exit ${EXIT_GETEILT}`)[1] ?? "";
-  const topf = bericht.split("\n").find((zeile) => zeile.startsWith("Topf:")) ?? "";
-  for (const angabe of [`Freigabe ${FREIGABE} Token`, `Vorschnitt gemessen ${TEILUNG_TOKEN} Token`, `Rest ${TEIL_DECKEL} Token`, `${TEIL_ORDNER.length} Teile`]) assert.ok(topf.includes(angabe), `${angabe}\n\n${lauf.stdout}`);
+  const zeilen = bericht.split("\n");
+  assert.ok(zeilen.includes(`Teilung: Vorschnitt gemessen ${TEILUNG_TOKEN} Token, ${TEIL_ORDNER.length} Teile`), lauf.stdout);
+  assert.equal(zeilen.some((zeile) => zeile.startsWith("Topf:")), false, lauf.stdout);
 });
 
 test("hält die erste Teilung am Deckel mit Exit 5, schreibt sie planung.json mit gemessenen Token und Exit 5 und behält ihre Meldung", { timeout: LAUF_FRIST_MS }, (context) => {

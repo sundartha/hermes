@@ -260,14 +260,27 @@ test("plane --deckel: liefert in der letzten Welle ein Agent sein Ergebnis mit d
   assert.equal(planungsBericht(lauf).kostenJeLauf.entwurf.laeufe, BEIDE_ENTWUERFE);
 });
 
-test("plane --deckel: planung.json nennt je Welle den live gezählten und den gemessenen Verbrauch", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = planeMit(context, planOrdner(context), { deckel: DECKEL_OHNE_WIRKUNG, token: IN_JEDER_ROLLE_KLEIN });
-
+function kleinerGruenerLauf(context) {
+  const lauf = planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER], token: IN_JEDER_ROLLE_KLEIN });
   exit(lauf, EXIT_GRUEN);
+  return lauf;
+}
+
+test("plane: planung.json nennt je Welle nur den Schritt und den gemessenen Verbrauch", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = kleinerGruenerLauf(context);
+
   const { wellen, token } = planungsBericht(lauf);
   assert.deepEqual(wellen.map(({ schritt }) => schritt), ["Antwort des Planers (gliederung)", "Erkundung", "Antwort des Planers (zuschnitt)", "Prüfliste", "Entwurfs-Welle"]);
-  for (const welle of wellen) assert.ok(welle.gemessen > 0 && welle.live === welle.gemessen, JSON.stringify(welle));
+  for (const welle of wellen) assert.ok(welle.gemessen > 0 && Object.keys(welle).toSorted().join() === "gemessen,schritt", JSON.stringify(welle));
   assert.equal(wellen.reduce((summe, { gemessen }) => summe + gemessen, 0), token);
+});
+
+test("plane: planung.json nennt je Rolle die Zahl der Läufe und ihre gemessenen Token", { timeout: LAUF_FRIST_MS }, (context) => {
+  const { kostenJeLauf } = planungsBericht(kleinerGruenerLauf(context));
+
+  assert.equal(kostenJeLauf.planer.laeufe, GLIEDERUNG_UND_ZUSCHNITT);
+  assert.equal(kostenJeLauf.planer.token, GLIEDERUNG_UND_ZUSCHNITT * KLEIN_JE_AUFRUF);
+  assert.equal(kostenJeLauf.entwurf.laeufe, BEIDE_ENTWUERFE);
 });
 
 test("plane --deckel: bleibt der laufende Verbrauch mit Vorhalt unter dem Deckel, bricht plane keinen Agenten ab und plant grün", { timeout: LAUF_FRIST_MS }, (context) => {
