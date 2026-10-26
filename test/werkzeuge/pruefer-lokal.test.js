@@ -244,7 +244,7 @@ const FALLE = "- Zahl und Wort nie zu einem Satz zusammensetzen, auch wenn die A
 const NICHT_ZIEL = "- Kein neuer Text für Französisch.";
 const NUR_IM_PITCH = "Das Problem steht nur im Pitch und nicht im Auftragszettel.";
 const PITCH = ["# Pitch", "", "## Problem", "", NUR_IM_PITCH, "", "## Fallen", "", FALLE, "", "## Nicht-Ziele", "", NICHT_ZIEL, ""].join("\n");
-const VORGABEN = "## Fallen und Nicht-Ziele aus dem Pitch";
+const VORGABEN = "## Fallen, Nicht-Ziele und neue Begriffe aus dem Pitch";
 
 function auftragszettelDesLetztenCommits(protokoll) {
   const anfang = protokoll.eingabe.indexOf("# Auftragszettel");

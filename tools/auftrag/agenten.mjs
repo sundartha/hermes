@@ -167,11 +167,11 @@ function vorgabenAbschnitt(root, phase) {
   if (pitch === null || !existsSync(join(root, pitch))) return [];
   const text = vorgabenAusPitch(readFileSync(join(root, pitch), "utf8"));
   if (text === "") return [];
-  return [abschnitt("Fallen und Nicht-Ziele aus dem Pitch", [`Die Abschnitte „Fallen“ und „Nicht-Ziele“ aus ${pitch}, wörtlich.`, VORGABEN_FOLGE, "", text].join("\n"))];
+  return [abschnitt("Fallen, Nicht-Ziele und neue Begriffe aus dem Pitch", [`Die Abschnitte „Fallen“, „Nicht-Ziele“ und „Neue Begriffe“ aus ${pitch}, wörtlich.`, VORGABEN_FOLGE, "", text].join("\n"))];
 }
 
 export function testAgentPrompt({ phase, auftrag, root, design }) {
-  return [testPrompt(phase, auftrag, root), ...annahmenAbschnitt(root, design), testMusterAbschnitt(root, auftrag), abschnitt("Speicher in Abnahmetests", SPEICHER_REGEL)].join("\n");
+  return [testPrompt(phase, auftrag, root), ...annahmenAbschnitt(root, design), ...vorgabenAbschnitt(root, phase), testMusterAbschnitt(root, auftrag), abschnitt("Speicher in Abnahmetests", SPEICHER_REGEL)].join("\n");
 }
 
 function vorhandeneFunktion(root, { datei, funktion }) {
