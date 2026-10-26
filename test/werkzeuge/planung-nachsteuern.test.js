@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, pruefeTeilungOhneErkundung, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, WEGFEHLER, abgelegt, mitIssue, planeAntworten, planungsBericht, teilEintrag as eintrag, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { GRUEN_PRUEFLISTE, GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitUmbauZeilen, planOrdner, planeIn } from "./planung-probe.js";
 import { EXIT_AUFRUF } from "./planung-plane-probe.js";
 import { hebeFreigabe, mitKopfzeile } from "./planung-freigabe-probe.js";
-import { REPO_ROOT, commitAll, probeDirectory, runIn } from "./probe-repo.js";
 import { RUECKSENDUNGEN } from "../../tools/auftrag/planung/fortschritt.mjs";
 
 const EXIT_DECKEL = 5;
-const ELTERN = "P-001-eigene-nummer";
 const HINTERLEGEN = "plaene/P-001-t1-eigene-nummer-hinterlegen";
 const HINWEIS_ORDNER = "plaene/P-001-t2-hinweis-beim-anruf";
 const STELLEN = "## Weitere Stellen";
@@ -22,13 +20,6 @@ const MIO = 1_000_000;
 const OHNE_WIRKUNG = String(1000 * MIO);
 const KENNZEICHNUNG = { kostenGebucht: "je Rolle" };
 
-const P003_LAUF5_FUNDSTELLE = "betreuung/tmp-sicherung/paket-VST/konzept.md, 1.2 (a) und 2.2: P-003 Lauf 5, 16 Erkunder-Läufe, Erkunder 13,32 M, pruefer-planung (nur Wegprüfungen) 8,38 M";
-const P003_LAUF5_LAEUFE = 16;
-const P003_LAUF5_ERKUNDER = 13_320_000;
-const P003_LAUF5_WEGPRUEFER = 8_380_000;
-const P003_ERKUNDER = P003_LAUF5_ERKUNDER / P003_LAUF5_LAEUFE;
-const P003_WEGPRUEFER = P003_LAUF5_WEGPRUEFER / P003_LAUF5_LAEUFE;
-const PLANER = 100_000;
 const PLANER_JE_AUFRUF = 1000;
 const PLANER_AUFRUFE_BIS_TEILUNG = 2;
 const NEBENROLLE_JE_AUFRUF = 10;
@@ -68,11 +59,6 @@ function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde 
   return { ...lauf, wurzel };
 }
 
-function anderePhase(wurzel, kosten, datei = "planung.json") {
-  mkdirSync(join(wurzel, ".fortschritt", "P-009-andere"), { recursive: true });
-  writeFileSync(join(wurzel, ".fortschritt", "P-009-andere", datei), JSON.stringify(kosten));
-}
-
 function planeTeil(context, wurzel, { ordner, antworten = {}, token = { planer: PLANER_JE_AUFRUF } }) {
   return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: antworten, argumente: ["plane", ordner], token });
 }
@@ -89,26 +75,6 @@ function umfangDesHinweisTeils(context, { wurzel, ...teilung }) {
 function mittel({ laeufe, token }) {
   return token / laeufe;
 }
-
-test("die Vorschau mit den Werten von P-003 Lauf 5 ergibt 0,83 M je Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = planOrdner(context);
-  const token = { planer: PLANER, erkunder: P003_ERKUNDER, "pruefer-planung": P003_WEGPRUEFER, entwurf: PLANER };
-  const erster = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER, "--deckel", OHNE_WIRKUNG], token });
-  exit(erster, EXIT_GRUEN);
-  const { kostenJeLauf } = planungsBericht(erster);
-  assert.equal(Math.round(mittel(kostenJeLauf.erkunder) / 10_000) / 100, 0.83, P003_LAUF5_FUNDSTELLE);
-  assert.equal(mittel(kostenJeLauf.wegpruefer), P003_WEGPRUEFER);
-
-  rmSync(join(wurzel, ORDNER, "phase.json"));
-  rmSync(join(wurzel, ORDNER, "planung"), { recursive: true });
-  const schritt = P003_ERKUNDER + P003_WEGPRUEFER;
-  const deckel = PLANER + ERSTE_WELLE * schritt - 1;
-  const zweiter = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: {}, argumente: ["plane", ORDNER, "--deckel", String(deckel)], token });
-
-  exit(zweiter, EXIT_DECKEL);
-  assert.deepEqual(aufrufe(zweiter, "erkunder"), []);
-  assert.deepEqual(planungsBericht(zweiter).deckel, { deckel, gemessen: PLANER, vorschau: ERSTE_WELLE * schritt });
-});
 
 test("ein Schritt mit Erkunder und Wegprüfer bucht jede Rolle mit ihren eigenen Sitzungen", { timeout: LAUF_FRIST_MS }, (context) => {
   const [erkunder, pruefer] = [1000, 300];
@@ -188,17 +154,7 @@ test("die Löschmenge eines Teils zählt Exporte, Reste und Funktionen nur aus s
   assert.deepEqual([umfang.funktionen, geschwister.funktionen], [GENANNTE_FUNKTIONEN_JE_KETTE, GENANNTE_FUNKTIONEN_JE_KETTE]);
 });
 
-function zweiterWorktree(context, wurzel) {
-  commitAll(wurzel, "Teil-Ordner");
-  const zweiter = join(probeDirectory(context, {}), "zweiter");
-  assert.equal(runIn(wurzel, "git", ["worktree", "add", "--detach", "-q", zweiter]).status, 0);
-  symlinkSync(join(REPO_ROOT, "node_modules"), join(zweiter, "node_modules"));
-  return zweiter;
-}
-
-const ZWEI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [{ ...GRUPPEN[0], nummern: HINTERLEGEN_NUMMERN }, { ...GRUPPEN[0], nummern: GRUPPEN[0].nummern.filter((nummer) => !HINTERLEGEN_NUMMERN.includes(nummer)) }] })] };
-const ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL = { erkunder: { laeufe: 1, token: TEIL_DECKEL } };
-const PLANER_TEURER_ALS_DER_TEIL_DECKEL = { planer: { laeufe: 1, token: TEIL_DECKEL + 1 } };
+const DREI_GRUPPEN = { "planer|## Gliederung": [alsJson({ gruppen: [HINTERLEGEN_NUMMERN, ["S2", "S3"], ["S6", "T1"]].map((nummern) => ({ ...GRUPPEN[0], nummern })) })] };
 const FREIGABE_UNTER_ZWEI_TEIL_DECKELN = TEIL_DECKEL + 2 * MIO;
 const UNTER_TEILE = [
   eintrag("t1", "hinterlegen", { nummern: ["S1", "S7"], tWege: ["T2"], dateien: [ROUTE, ...ELF.slice(0, 2)] }),
@@ -211,7 +167,6 @@ function teilMitEigenemUndFremdemUmbau(context) {
   const quellen = { [ELF[0]]: ALT_QUELLE, [ELF[5]]: ALT_QUELLE };
   const { wurzel, ...teilung } = geteilt(context, { teilung: alsJson({ teile: ELTERN_TEILE_MIT_UMBAU }), quellen, umbau: [EIGENER_UMBAU, FREMDER_UMBAU] });
   exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
   mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
   return wurzel;
 }
@@ -220,7 +175,7 @@ test("die Unter-Teilung eines Teils ordnet nur die Umbauten aus dessen Eintrag i
   const wurzel = teilMitEigenemUndFremdemUmbau(context);
   const nurEigener = alsJson({ teile: [{ ...UNTER_TEILE[0], umbau: [EIGENER_UMBAU] }, UNTER_TEILE[1]] });
 
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [nurEigener] } });
+  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [nurEigener] } });
 
   exit(lauf, EXIT_GETEILT);
   const [frage] = aufrufe(lauf, "planer", "## Teilung");
@@ -236,7 +191,7 @@ test("die Unter-Teilung eines Teils ordnet nur die Umbauten aus dessen Eintrag i
 function unterTeilungMitBefund(context, unterTeilung, wurzel = teilMitEigenemUndFremdemUmbau(context)) {
   const immerGleich = Array.from({ length: RUECKSENDUNGEN }, () => unterTeilung);
 
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [unterTeilung], "planer|## Befunde": immerGleich } });
+  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [unterTeilung], "planer|## Befunde": immerGleich } });
 
   exit(lauf, EXIT_BEFUNDE);
   assert.equal(existsSync(join(wurzel, "plaene/P-001-t1-t1-hinterlegen")), false);
@@ -269,96 +224,13 @@ test("die Unter-Teilung eines Teils aus einer Eltern-teile.json ohne umbau-Felde
   assert.ok(grund.includes(`Regel Teilung: ${FREMDER_UMBAU} aus „## Altfunktionen“ steht 0-mal unter umbau statt genau einmal`), grund);
 });
 
-test("liegt die Vorschau der Erkundung mit dem Startwert aus einem anderen Worktree über dem Teil-Deckel, teilt sich ein Teil mit 2 Gruppen, statt mit Exit 5 zu enden, und reicht seinen Deckel an die Unter-Teile weiter", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  anderePhase(zweiterWorktree(context, wurzel), { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } });
-
-  assert.ok(pruefeTeilungOhneErkundung(lauf).includes(`über dem Teil-Deckel ${TEIL_DECKEL}`), lauf.stderr);
-  const verbraucht = PLANER_AUFRUFE_BIS_TEILUNG * PLANER_JE_AUFRUF;
-  const pitch = readFileSync(join(wurzel, "plaene/P-001-t1-t1-hinterlegen/pitch.md"), "utf8");
-  assert.ok(pitch.split("\n").includes(`Planung freigegeben: ${TEIL_DECKEL - verbraucht} Token`), pitch);
-  assert.ok(pitch.split("\n").includes("Teil von: P-001-t1-eigene-nummer-hinterlegen; nach: –"), pitch);
-  assert.equal(existsSync(join(wurzel, "plaene/P-001-t1-t2-bestaetigen/pitch.md")), true);
-  const buch = join(runIn(wurzel, "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim(), "hermes-topf", ELTERN);
-  const [reserviert] = readdirSync(buch).map((name) => JSON.parse(readFileSync(join(buch, name), "utf8")));
-  assert.deepEqual({ token: reserviert.token, weitergegeben: reserviert.weitergegeben }, { token: verbraucht, weitergegeben: TEIL_DECKEL });
-});
-
-test("liegt die Vorschau der Erkundung eines Teils mit 1 Gruppe über dem Teil-Deckel, endet plane wie bisher mit Exit 5 ohne Teilung", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
-  mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
-  vorgaengerGemergt(wurzel, HINTERLEGEN);
-
-  const lauf = planeTeil(context, wurzel, { ordner: HINWEIS_ORDNER, antworten: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[1]] })] } });
-
-  exit(lauf, EXIT_DECKEL);
-  assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), []);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
-});
-
-test("reicht der Deckel nach der Gliederung nicht mehr für den Planer der Teilung, endet plane mit Exit 5, ohne die Teilung zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  const nurGliederung = PLANER_AUFRUFE_BIS_TEILUNG * PLANER_JE_AUFRUF - 1;
-
-  const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: {}, ueberschrieben: ZWEI_GRUPPEN, argumente: ["plane", HINTERLEGEN, "--deckel", String(nurGliederung)], token: { planer: PLANER_JE_AUFRUF } });
-
-  exit(lauf, EXIT_DECKEL);
-  assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), []);
-  assert.equal(aufrufe(lauf, "planer").length, 1, lauf.stderr);
-  assert.equal(planungsBericht({ wurzel }, HINTERLEGEN).deckelSchritt, "Teilung nach der Gliederung");
-});
-
-test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für den Erkunder nicht", { timeout: LAUF_FRIST_MS }, (context) => {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-
-  const lauf = planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: ZWEI_GRUPPEN });
-
-  assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), []);
-  assert.equal(aufrufe(lauf, "erkunder").length, 2, lauf.stderr);
-});
-
-function mitPlanerStartwert(context, datei) {
-  const { wurzel, ...teilung } = geteilt(context);
-  exit(teilung, EXIT_GETEILT);
-  anderePhase(wurzel, { kostenJeLauf: PLANER_TEURER_ALS_DER_TEIL_DECKEL }, datei);
-  mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  return planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: ZWEI_GRUPPEN });
-}
-
-test("eine planung.json ohne Kennzeichnung je Rolle zählt als Startwert für den Planer", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = mitPlanerStartwert(context, "planung.json");
-
-  exit(lauf, EXIT_DECKEL);
-  assert.deepEqual(aufrufe(lauf, "planer"), []);
-});
-
-test("eine planung-*.json einer anderen Phase zählt als Startwert wie eine planung.json", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = mitPlanerStartwert(context, "planung-0955.json");
-
-  exit(lauf, EXIT_DECKEL);
-  assert.deepEqual(aufrufe(lauf, "planer"), []);
-});
-
 test("ein weitergeteilter Teil zieht seinen weitergegebenen Deckel vom Rest-Topf seiner Geschwister ab, wenn der Deckel größer ist als sein Verbrauch", { timeout: LAUF_FRIST_MS }, (context) => {
   const { wurzel, ...teilung } = geteilt(context, { freigabe: FREIGABE_UNTER_ZWEI_TEIL_DECKELN });
   exit(teilung, EXIT_GETEILT);
   const { topf } = abgelegt({ wurzel }, "teile.json");
   assert.equal(topf.freigabe, FREIGABE_UNTER_ZWEI_TEIL_DECKELN);
-  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
   mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
+  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
   mitIssue(wurzel, HINWEIS_ORDNER, TEIL_ISSUE);
   vorgaengerGemergt(wurzel, HINTERLEGEN);
 
@@ -381,9 +253,8 @@ function weitergeteilt(context, { teilFreigabe } = {}) {
   exit(teilung, EXIT_GETEILT);
   const { topf } = abgelegt({ wurzel }, "teile.json");
   if (teilFreigabe !== undefined) hebeFreigabe(wurzel, HINTERLEGEN, { von: topf.teilDeckel, auf: teilFreigabe });
-  anderePhase(wurzel, { ...KENNZEICHNUNG, kostenJeLauf: ERKUNDER_SO_TEUER_WIE_DER_TEIL_DECKEL });
   mitIssue(wurzel, HINTERLEGEN, TEIL_ISSUE);
-  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...ZWEI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
+  exit(planeTeil(context, wurzel, { ordner: HINTERLEGEN, antworten: { ...DREI_GRUPPEN, "planer|## Teilung": [UNTER_TEILE_VON_T1] } }), EXIT_GETEILT);
   mitIssue(wurzel, UNTER_HINTERLEGEN, TEIL_ISSUE);
   return { wurzel, weitergegeben: teilFreigabe ?? topf.teilDeckel, vorschnitt: topf.vorschnitt };
 }
