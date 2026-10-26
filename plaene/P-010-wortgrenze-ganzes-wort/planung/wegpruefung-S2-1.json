@@ -1,0 +1,15 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/utils/text.js:4"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/claude.js:228"
+    }
+  ],
+  "befunde": []
+}

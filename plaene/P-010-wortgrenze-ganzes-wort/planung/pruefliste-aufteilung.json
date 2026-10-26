@@ -1,0 +1,35 @@
+[
+  {
+    "gruppe": 0,
+    "sitzung": "7a060c8d-680c-4fec-a1d7-1f0a4b8e6eb2",
+    "schluessel": [
+      "b-nummer:B2",
+      "b-nummer:B3",
+      "ausweg:S1:ownerEntscheidung",
+      "ausweg:B2:ownerEntscheidung",
+      "ausweg:B3:ownerEntscheidung",
+      "ausweg:T1:aenderungen",
+      "ausweg:T1:ownerEntscheidung"
+    ]
+  },
+  {
+    "gruppe": 1,
+    "sitzung": "b6c54f99-a747-4b0b-b485-33166beebf5d",
+    "schluessel": [
+      "b-nummer:B1",
+      "ausweg:S2:ownerEntscheidung",
+      "ausweg:B1:ownerEntscheidung"
+    ]
+  },
+  {
+    "gruppe": null,
+    "sitzung": "9330336e-a260-4761-8e2f-7990ed490548",
+    "schluessel": [
+      "durchstich:a1",
+      "nie-saetze:a1",
+      "allein-gruen:a1",
+      "nicht-zusammengelegt:a1",
+      "gegenfrage:alle"
+    ]
+  }
+]

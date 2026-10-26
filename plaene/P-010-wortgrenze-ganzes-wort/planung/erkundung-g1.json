@@ -1,0 +1,281 @@
+{
+  "gruppe": [
+    "S1",
+    "B2",
+    "B3",
+    "T1"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "handleLookup",
+          "von": 164,
+          "bis": 211
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "executeLookup",
+          "von": 135,
+          "bis": 162
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/adapters/exa-search.js",
+          "funktion": "factLineOf",
+          "von": 8,
+          "bis": 10
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/lookup-guard.js",
+          "funktion": "lookupFactsFrom",
+          "von": 38,
+          "bis": 46
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "lookupAnswer",
+          "von": 109,
+          "bis": 112
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 4
+        }
+      ],
+      "tests": [
+        "test/el-lookup-webhook.test.js",
+        "test/al-p10b-lookup.test.js",
+        "test/al-p10b-lookup-guard.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Funktion, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder pitch.md noch design.md für S1 eine Entscheidung des Owners verlangen; die Änderung bleibt in clampAtWordBoundary",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "handleLookup",
+          "von": 164,
+          "bis": 211
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "executeLookup",
+          "von": 135,
+          "bis": 162
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/adapters/exa-search.js",
+          "funktion": "factLineOf",
+          "von": 8,
+          "bis": 10
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/lookup-guard.js",
+          "funktion": "lookupFactsFrom",
+          "von": 38,
+          "bis": 46
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "lookupAnswer",
+          "von": 109,
+          "bis": 112
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 4
+        }
+      ],
+      "tests": [
+        "test/el-lookup-webhook.test.js",
+        "test/al-p10b-lookup.test.js",
+        "test/al-p10b-lookup-guard.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Funktion, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder pitch.md noch design.md für B2 eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "handleLookup",
+          "von": 164,
+          "bis": 211
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "executeLookup",
+          "von": 135,
+          "bis": 162
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/adapters/exa-search.js",
+          "funktion": "factLineOf",
+          "von": 8,
+          "bis": 10
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/lookup-guard.js",
+          "funktion": "lookupFactsFrom",
+          "von": 38,
+          "bis": 46
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "lookupAnswer",
+          "von": 109,
+          "bis": 112
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 4
+        }
+      ],
+      "tests": [
+        "test/el-lookup-webhook.test.js",
+        "test/al-p10b-lookup.test.js",
+        "test/al-p10b-lookup-guard.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Funktion, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder pitch.md noch design.md für B3 eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "T1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "handleLookup",
+          "von": 164,
+          "bis": 211
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "executeLookup",
+          "von": 135,
+          "bis": 162
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/research/lookup-guard.js",
+          "funktion": "lookupFactsFrom",
+          "von": 38,
+          "bis": 46
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/webhooks-elevenlabs.js",
+          "funktion": "lookupAnswer",
+          "von": 109,
+          "bis": 112
+        }
+      ],
+      "aenderungen": "keine Änderung, weil T1 ein Abnahmetest zu S1, B2 und B3 ist; die Codeänderung steht bei S1, B2 und B3 (clampAtWordBoundary), und die Tests dazu entstehen neu unter test/anrufe/",
+      "tests": [
+        "test/el-lookup-webhook.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Funktion, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil sicherheit.md für T1 nur die Rotbedingungen der Tests nennt, keine Entscheidung des Owners",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Heutiger Wortlaut von clampAtWordBoundary (src/utils/text.js:1-6): `if (text.length <= maxChars) return text; const cut = text.slice(0, maxChars); const lastSpace = cut.lastIndexOf(\" \"); return lastSpace > 0 ? cut.slice(0, lastSpace) : cut;`. Die Änderung geht allein in dieser Funktion, ohne Export-, Namens- oder Signaturänderung. Zeile 2 sorgt dafür, dass bei `text.length > maxChars` Index `maxChars` immer existiert. Steht dort ein Leerzeichen, gibt die Funktion `cut` zurück. Das entspricht dem Plan, und `lastIndexOf(\" \", maxChars)` auf dem ganzen Text gibt dasselbe Ergebnis.",
+    "Zusammensetzung der answer (src/routes/webhooks-elevenlabs.js:157-161): `${control.lookUpFactsFrame}${facts.join(\" \")}`. Der Rahmensatz kommt aus `localeFor(call.language).prompt.turnControl` (src/i18n/prompts/de.js:236-238) und endet auf „: “, also mit einem Leerzeichen. Hinter dem letzten Fakt hängt nichts an: kein Punkt, kein Leerzeichen, kein Zeilenumbruch. Bei einem Treffer endet die answer deshalb genau am Ende des gekürzten Fakts.",
+    "Veränderungen zwischen Exa und Kürzung: `factLineOf` (src/research/adapters/exa-search.js:8-10) verbindet Titel und erstes Highlight mit „: “. `lookupFactsFrom` (src/research/lookup-guard.js:42) ersetzt NON_PRINTABLE durch ein Leerzeichen, faltet Leerraum auf ein Leerzeichen und trimmt. Danach kommen `.filter(Boolean)`, `.slice(0, LOOKUP_MAX_FACTS)` und die Kürzung auf `KEY_FACTS_LIMITS.maxLen` = 200 (src/store/defaults.js:179). Es gibt keine Prüfung, keinen Filter und keine Dublettenprüfung nach der Kürzung. Titel „Praxis Dr. Hoffmann“ (19 Zeichen) + „: “ (2) + ein Auszug von 205 Zeichen ergeben genau 226 Zeichen; die 227 aus S1 hängen davon ab, wie lang der Auszug im Test tatsächlich ist, das habe ich nicht nachgezählt.",
+    "Aufbau des Eingangs in Tests (test/el-lookup-webhook.test.js:1-110): `startServer` und `seedState`/`seedCall` aus test/helpers.js legen einen aktiven Outbound-Anruf mit `elevenlabsConversationId` an. Env: LOOKUP_ENABLED=true, EXA_API_KEY, ELEVENLABS_TOOL_TOKEN, SKIP_TWILIO_SIGNATURE_CHECK=false, MULTI_TENANT=true. Authentifizierung ist der Header `x-hermes-tool-token`. Exa wird durch einen lokalen http-Server (`startExaFake`, Zeilen 93-110) ersetzt, der `{results:[{title, url, highlights:[…]}]}` liefert. `abrufMitFrist` aus test/gemeinsam/antwortfrist.mjs macht den POST. `startExaFake` ist nur lokal in jener Datei definiert und nicht exportiert; ich habe nicht geprüft, wie sie die Exa-Basis-URL auf den Fake umbiegt und wie der Anruf der Anfrage zugeordnet wird (vermutlich über die conversation id in `boundCallFor`).",
+    "Aufrufer von clampAtWordBoundary (src): src/call-memory.js:21 (maxChars-1), src/claude.js:248, src/consult/question.js:16, src/research/lookup-guard.js:35 und :45, src/thinking-signal.js:10; keine weiteren. Kein Test importiert src/utils/text.js direkt. Ob eine Eingabe in den Aufrufertests genau an Index maxChars ein Leerzeichen hat, habe ich nicht Test für Test geprüft. Das Design Doc belegt für 20 Testdateien 270 bestanden, 0 rot.",
+    "Lint: `karte` zeigt für src/utils/text.js bei clampAtWordBoundary keine Befunde. `lookupFactsFrom` hat no-restricted-syntax (2, davon 3 in der anonymen Funktion Zeile 42), `factLineOf` hat no-restricted-syntax (1); die Änderung berührt diese Zeilen nicht.",
+    "Zur Absicht: Der Offenlegungssatz geht nicht durch die Hilfe (nur das Ziel, src/claude.js:248). Ich habe keinen Weg gefunden, der die Absicht verletzt. `lastIndexOf(` kommt in src sonst nur für andere Zwecke vor (claude.js:743, config.js:145, widget-catalog.js:71, web-auth.js:31). Deshalb gibt es keine `neu`-Stelle und keinen `vorhanden`-Eintrag.",
+    "CODEOWNERS: keine der Änderungsdateien (src/utils/text.js) steht in .github/CODEOWNERS. Ein neuer Test unter test/anrufe/ liegt auch außerhalb von /test/werkzeuge/.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Zusammensetzung der answer (src/routes/webhooks-elevenlabs.js:157-161): `${control.lookUpFactsFrame}${facts.join(\" \")}`. Der Rahmensatz kommt aus `localeFor(call.language).prompt.turnControl` (src/i18n/prompts/de.js:236-238) und endet auf „: “, also mit einem Leerzeichen. Hinter dem letzten Fakt hängt nichts an: kein Punkt, kein Leerzeichen, kein Zeilenumbruch. Bei einem Treffer endet die answer deshalb genau am Ende des gekürzten Fakts. Das Test-Muster ist in der Test-Datei so: ein Treffer ergibt eine answer, die mit dem Fakt endet.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Veränderungen zwischen Exa und Kürzung: `factLineOf` (src/research/adapters/exa-search.js:8-10) verbindet Titel und erstes Highlight mit „: “. `lookupFactsFrom` (src/research/lookup-guard.js:42) ersetzt NON_PRINTABLE durch ein Leerzeichen, faltet Leerraum auf ein Leerzeichen und trimmt. Danach kommen `.filter(Boolean)`, `.slice(0, LOOKUP_MAX_FACTS)` und die Kürzung auf `KEY_FACTS_LIMITS.maxLen` = 200 (src/store/defaults.js:179). Es gibt keine Prüfung, keinen Filter und keine Dublettenprüfung nach der Kürzung. Titel „Praxis Dr. Hoffmann“ (19 Zeichen) + „: “ (2) + ein Auszug von 205 Zeichen ergeben genau 226 Zeichen; die 227 aus S1 hängen davon ab, wie lang der Auszug im Test tatsächlich ist, das habe ich nicht nachgezählt. Der Fakt wird nicht anders verändert, solange der Auszug keine nicht druckbaren Zeichen oder doppelten Leerzeichen enthält.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Aufbau des Eingangs in Tests (test/el-lookup-webhook.test.js:1-110): `startServer` und `seedState`/`seedCall` aus test/helpers.js legen einen aktiven Outbound-Anruf mit `elevenlabsConversationId` an. Env: LOOKUP_ENABLED=true, EXA_API_KEY, ELEVENLABS_TOOL_TOKEN, SKIP_TWILIO_SIGNATURE_CHECK=false, MULTI_TENANT=true. Authentifizierung ist der Header `x-hermes-tool-token`. Exa wird durch einen lokalen http-Server (`startExaFake`, Zeilen 93-110) ersetzt, der `{results:[{title, url, highlights:[…]}]}` liefert. `abrufMitFrist` aus test/gemeinsam/antwortfrist.mjs macht den POST. Ein neuer Test unter test/anrufe/ kann dieselben Hilfen nutzen, `startExaFake` ist aber nur lokal in jener Datei definiert und nicht exportiert; ich habe nicht geprüft, wie sie die Exa-Basis-URL (`config.research.exaApiBase`) auf den Fake umbiegt. Ich habe auch nicht gelesen, wie der Anruf der Anfrage zugeordnet wird; vermutlich über die conversation id in `boundCallFor`.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Aufrufer von clampAtWordBoundary (src): src/call-memory.js:21 (maxChars-1), src/claude.js:248, src/consult/question.js:16, src/research/lookup-guard.js:35 und :45, src/thinking-signal.js:10; keine weiteren. Kein Test importiert src/utils/text.js direkt, `suche 'utils/text'` findet nur src-Dateien. Auch `clampAtWordBoundary` kommt in test/ nur als Text in test/werkzeuge/planung-fortschritt.test.js:161 und :165 vor. Ob eine Eingabe in den Aufrufertests genau an Index maxChars ein Leerzeichen hat, habe ich nicht Test für Test geprüft. Das Design Doc belegt für 20 Testdateien 270 bestanden, 0 rot.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Lint: `karte` zeigt für src/utils/text.js bei clampAtWordBoundary keine Befunde (nicht selbst gelaufen; das Design Doc nennt sie auch befundfrei). Befunde liegen woanders: `lookupFactsFrom` hat no-restricted-syntax (2, davon 3 in der anonymen Funktion Zeile 42), `factLineOf` hat no-restricted-syntax (1). Beides ist nicht der Kürzungsaufruf, die Änderung berührt diese Zeilen nicht.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Zur Absicht: Der Offenlegungssatz geht nicht durch die Hilfe (nur das Ziel, src/claude.js:248). Ich habe keinen Weg gefunden, der die Absicht verletzt. Die Absicht verlangt, keine zweite Kürzungshilfe zu bauen, und `lastIndexOf(` kommt in src sonst nur für andere Zwecke vor (claude.js:743, config.js:145, widget-catalog.js:71, web-auth.js:31). Deshalb gibt es keine `neu`-Stelle und keinen `vorhanden`-Eintrag."
+  ]
+}
