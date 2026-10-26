@@ -2,10 +2,12 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { pfadIstSauber } from "../format.mjs";
+import { gemergteUmbauten } from "../teil-vorgaenger.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { vonEslintGeprueft } from "./eslint-prueft.mjs";
 import { funktionsListe } from "./funktionsliste.mjs";
 import { befundText, funktionsKarten, ignorierteDateien } from "./karte.mjs";
+import { teilVon } from "./kopfzeile.mjs";
 import { istAltfunktion } from "./schnitt.mjs";
 
 export const ALTFUNKTIONEN = "## Altfunktionen";
@@ -15,6 +17,7 @@ const FOLGE = /^`?\s*(?:,|und)\s*`?:(\d+)(?:-(\d+))?/;
 const EINTRAG = /^-\s+(Umbau|nicht berührt):\s+`([^`:]+):([^`]+)`(?:,\s+weil\s+(\S.*))?$/u;
 const KEINE = /^keine, weil\s+\S/u;
 const NICHT_BERUEHRT = "nicht berührt";
+const UMBAU = "Umbau";
 const EIGENES_VERZEICHNIS = "./";
 export const FORM = `„- Umbau: \`<Datei>:<Funktion>\`“, „- ${NICHT_BERUEHRT}: \`<Datei>:<Funktion>\`, weil <wo die Änderung stattdessen liegt>“ oder genau eine Zeile „keine, weil <Grund>“; Datei und Funktion schreibst du so, wie node tools/auftrag.mjs karte <Datei> sie ausgibt`;
 
@@ -110,23 +113,40 @@ function unbenannte(alt, eintraege, stellen) {
     .map((funktion) => `Altfunktion ${altfunktionZeile(funktion)}, genannt in ${fundstellen(funktion, stellen)}, steht nicht unter „${ALTFUNKTIONEN}“ im Pitch`);
 }
 
-function altfunktionenDerEintraege(root, eintraege) {
+function funktionenDerEintraege(root, eintraege) {
   const dateien = pruefbareDateien(root, eintraege.map(({ datei }) => datei));
   const geprueft = dateien.length === 0 ? [] : vonEslintGeprueft(root, dateien);
   if (geprueft.length === 0) return [];
-  return funktionsKarten(root, geprueft).flatMap(({ datei, funktionen }) => funktionen.map((funktion) => ({ datei, ...funktion }))).filter(istAltfunktion);
+  return funktionsKarten(root, geprueft).flatMap(({ datei, funktionen }) => funktionen.map((funktion) => ({ datei, ...funktion })));
 }
 
-function falscheEintraege(root, eintraege) {
-  const alt = altfunktionenDerEintraege(root, eintraege);
-  return eintraege
-    .filter((eintrag) => !alt.some((funktion) => gleich(eintrag, funktion)))
-    .map(({ art, datei, funktion }) => `„${art}: ${datei}:${funktion}“ unter „${ALTFUNKTIONEN}“ ist laut karte keine Funktion mit Lint-Befunden in ${datei}`);
+function gemergterUmbau(eintrag, { ohneBefunde, umbauten }) {
+  if (eintrag.art !== UMBAU || !ohneBefunde.some((funktion) => gleich(eintrag, funktion))) return undefined;
+  return umbauten.find(({ datei, funktion }) => datei === eintrag.datei && funktion === eintrag.funktion);
+}
+
+function vorgaengerAus(pitch) {
+  return teilVon(pitch)?.nach ?? [];
+}
+
+function pruefeEintraege(root, eintraege, pitch) {
+  const funktionen = funktionenDerEintraege(root, eintraege);
+  const alt = funktionen.filter(istAltfunktion);
+  const ohneAlt = eintraege.filter((eintrag) => !alt.some((funktion) => gleich(eintrag, funktion)));
+  const umbauten = ohneAlt.some(({ art }) => art === UMBAU) ? gemergteUmbauten(root, vorgaengerAus(pitch)) : [];
+  const kontext = { ohneBefunde: funktionen.filter((funktion) => !istAltfunktion(funktion)), umbauten };
+  const geprueft = ohneAlt.map((eintrag) => ({ eintrag, umbau: gemergterUmbau(eintrag, kontext) }));
+  return {
+    falsch: geprueft.filter(({ umbau }) => umbau === undefined).map(({ eintrag: { art, datei, funktion } }) => `„${art}: ${datei}:${funktion}“ unter „${ALTFUNKTIONEN}“ ist laut karte keine Funktion mit Lint-Befunden in ${datei}`),
+    erledigt: geprueft.filter(({ umbau }) => umbau !== undefined).map(({ umbau: { datei, funktion, vorgaenger, sha } }) => `Umbau von ${datei}:${funktion} durch ${vorgaenger} gemergt, ${sha}`),
+  };
 }
 
 export function altfunktionenVorab(root, dokumente) {
-  const { eintraege, fehler } = altfunktionenAusPitch(dokumente["pitch.md"] ?? "");
-  if (fehler.length > 0) return { form: fehler, offen: [] };
+  const pitch = dokumente["pitch.md"] ?? "";
+  const { eintraege, fehler } = altfunktionenAusPitch(pitch);
+  if (fehler.length > 0) return { form: fehler, offen: [], erledigt: [] };
   const stellen = genannteStellen(dokumente);
-  return { form: [], offen: [...unbenannte(genannteFunktionen(root, stellen).filter(istAltfunktion), eintraege, stellen), ...falscheEintraege(root, eintraege)] };
+  const { falsch, erledigt } = pruefeEintraege(root, eintraege, pitch);
+  return { form: [], offen: [...unbenannte(genannteFunktionen(root, stellen).filter(istAltfunktion), eintraege, stellen), ...falsch], erledigt };
 }
