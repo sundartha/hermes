@@ -118,7 +118,6 @@
     "files|scripts/spike2-sip.mjs|scripts/spike2-sip.mjs",
     "files|scripts/unlock-tenant.js|scripts/unlock-tenant.js",
     "files|scripts/workflow-kosten.mjs|scripts/workflow-kosten.mjs",
-    "files|src/conversation/elevenlabs-agent-config.js|src/conversation/elevenlabs-agent-config.js",
-    "files|src/mail/ports.js|src/mail/ports.js"
+    "files|src/conversation/elevenlabs-agent-config.js|src/conversation/elevenlabs-agent-config.js"
   ]
 }
