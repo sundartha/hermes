@@ -202,3 +202,18 @@ test("AL-P7b-5: leerer/Whitespace-/Nicht-String-Rundentext -> kein Aufruf des Ab
     assert.deepEqual(chunks, []);
   }
 });
+
+test("AL-P7-9: eingerueckte Listenpunkte verlieren ihr Zeichen, Bindestriche im Wort bleiben", () => {
+  assert.equal(shapeChunkForSpeech("Eins\n  - Zwei"), "Eins Zwei");
+  assert.equal(shapeChunkForSpeech("Eins\n\t* Zwei"), "Eins Zwei");
+  assert.equal(shapeChunkForSpeech("Wort- naechstes"), "Wort- naechstes");
+});
+
+test("AL-P7-10: ein Listenzeichen mit mehreren Leerzeichen entfernt alle, ein zweiter Strich bleibt Text", () => {
+  assert.equal(shapeChunkForSpeech("-  - Zwei"), "- Zwei");
+});
+
+test("AL-P7-11: Gedankenstrich mit mehreren Leerzeichen davor oder danach wird zu genau einem Komma", () => {
+  assert.equal(shapeChunkForSpeech("Montag  - oder Dienstag"), "Montag, oder Dienstag");
+  assert.equal(shapeChunkForSpeech("Montag -  - Dienstag"), "Montag, - Dienstag");
+});
