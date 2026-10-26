@@ -1,14 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import { pitchPfad } from "./annahmen.mjs";
-import { auftragsTrailer, git } from "./git.mjs";
+import { auftragsCommits, gibtEsIn, git } from "./git.mjs";
+import { istObjekt, istText, liste } from "./planung/erkundung.mjs";
 import { teilVon } from "./planung/kopfzeile.mjs";
 import { MASTER } from "./worktrees.mjs";
 
 const KURZ_SHA = 7;
 const ART = "Art: ";
 const EIGENER_STAND = "HEAD";
+const UMBAU = "umbau";
+const SCHNITT = "planung/schnitt.json";
 const ZWECK = `Ein Teil eines geteilten Pitches plant und baut erst auf einem Stand, der jeden Vorgänger aus „nach:“ in pitch.md enthält; sonst fehlt ihm Code, auf dem sein Auftrag steht. Gezählt wird nur ein gebauter Auftrag des Vorgängers (Zeilen „Auftrag:“ und „Art:“) auf ${MASTER}, der auch im eigenen Stand (${EIGENER_STAND}) gilt; nicht der eigene Branch allein, kein Plan-Commit und kein zurückgenommener Commit. Behebung: den Vorgänger bauen und mergen lassen; ist er schon gemergt, erst git fetch upstream master und den eigenen Stand auf ${MASTER} bringen.`;
 
 function stand(root) {
@@ -19,14 +22,14 @@ function stand(root) {
   }
 }
 
-function trailerGebauterCommits(trailer) {
-  const zeilen = [...trailer];
-  return zeilen.some((zeile) => zeile.startsWith(ART)) ? zeilen : [];
+function gebauteCommits(root, bezug) {
+  const gebaut = auftragsCommits(root, bezug).filter(({ trailer }) => [...trailer].some((zeile) => zeile.startsWith(ART)));
+  return (passt) => gebaut.find(({ trailer }) => [...trailer].some(passt));
 }
 
 function gebauteTeile(root, bezug) {
-  const auftraege = auftragsTrailer(root, bezug).flatMap(trailerGebauterCommits);
-  return (teil) => auftraege.some((zeile) => zeile.startsWith(`Auftrag: ${teil}/`));
+  const finde = gebauteCommits(root, bezug);
+  return (teil) => finde((zeile) => zeile.startsWith(`Auftrag: ${teil}/`)) !== undefined;
 }
 
 function fehlendeBefunde(teil, nach, root) {
@@ -52,4 +55,40 @@ export function teilVorgaengerBefunde(phase, root) {
   if (herkunft === undefined) return [];
   if (herkunft.fehler !== undefined) return [`Teil ${phase.phase}: ${herkunft.fehler}`];
   return vorgaengerBefunde(phase.phase, herkunft.nach, root);
+}
+
+function schnittAufMaster(root, vorgaenger) {
+  const pitch = pitchPfad({ phase: vorgaenger });
+  if (pitch === null) return null;
+  const pfad = posix.join(posix.dirname(pitch), SCHNITT);
+  if (!gibtEsIn(MASTER, pfad, root)) return null;
+  try {
+    return JSON.parse(git(["show", `${MASTER}:${pfad}`], { cwd: root }));
+  } catch {
+    return null;
+  }
+}
+
+function umbauAuftraege(root, vorgaenger) {
+  const schnitt = schnittAufMaster(root, vorgaenger);
+  return liste(schnitt?.auftraege).filter((auftrag) => istObjekt(auftrag) && auftrag.art === UMBAU && istText(auftrag.id));
+}
+
+function umgebauteFunktionen(auftrag) {
+  return liste(auftrag.altfunktionen).filter((alt) => istObjekt(alt) && istText(alt.datei) && istText(alt.funktion));
+}
+
+export function gemergteUmbauten(root, nach) {
+  if (nach.length === 0 || stand(root) === null) return [];
+  const gemergt = gebauteCommits(root, MASTER);
+  const imStand = gebauteCommits(root, EIGENER_STAND);
+  return nach.flatMap((vorgaenger) =>
+    umbauAuftraege(root, vorgaenger).flatMap((auftrag) => {
+      const zeile = `Auftrag: ${vorgaenger}/${auftrag.id}`;
+      const gleich = (trailer) => trailer === zeile;
+      const commit = gemergt(gleich);
+      if (commit === undefined || imStand(gleich) === undefined) return [];
+      return umgebauteFunktionen(auftrag).map(({ datei, funktion }) => ({ vorgaenger, datei, funktion, sha: commit.sha.slice(0, KURZ_SHA) }));
+    }),
+  );
 }

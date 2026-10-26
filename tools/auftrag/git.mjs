@@ -106,13 +106,17 @@ export function festhalten(nachricht, cwd) {
   return spawnSync("git", ["commit", "-q", "-F", "-"], { cwd, encoding: "utf8", input: nachricht });
 }
 
-export function auftragsTrailer(cwd, stand = "HEAD") {
+export function auftragsCommits(cwd, stand = "HEAD") {
   const ruecknahmen = git(["log", `--grep=${RUECKNAHME_ZEILE}`, "--format=%B", stand], { cwd });
   const zurueckgenommen = new Set([...ruecknahmen.matchAll(ZURUECKGENOMMEN)].map(([, alt]) => alt));
   const ausgabe = git(["log", "-z", `--grep=${AUFTRAG_ZEILE}`, "--format=%H%n%(trailers:only,unfold)", stand], { cwd });
   const commits = ausgabe.split(NUL).map((eintrag) => eintrag.split("\n"));
   const geltend = commits.filter(([sha]) => sha !== "" && !zurueckgenommen.has(sha));
-  return geltend.map(([, ...trailer]) => new Set(trailer.filter(Boolean)));
+  return geltend.map(([sha, ...trailer]) => ({ sha, trailer: new Set(trailer.filter(Boolean)) }));
+}
+
+export function auftragsTrailer(cwd, stand = "HEAD") {
+  return auftragsCommits(cwd, stand).map(({ trailer }) => trailer);
 }
 
 export function weichZuruecksetzen(basis, cwd) {

@@ -1178,9 +1178,10 @@ function aufrufFehler(ordner, fortsetzen) {
 }
 
 function altfunktionenHalt(root, ordner) {
-  const { form, offen } = altfunktionenVorab(root, dokumenteIm(ordner));
+  const { form, offen, erledigt } = altfunktionenVorab(root, dokumenteIm(ordner));
   const zweck = zweckBlock(MELDUNG.ALTFUNKTIONEN_VORAB).join("\n");
   if (form.length > 0) return { exit: EXIT_AUFRUF, fehler: [...form, zweck].join("\n") };
+  for (const hinweis of erledigt) console.log(hinweis);
   if (offen.length === 0) return null;
   const kopf = `plane hält vor dem ersten Agenten: ${offen.length} Altfunktion(en) ohne Entscheidung unter „## Altfunktionen“ im Pitch`;
   return { exit: EXIT_ALTFUNKTIONEN, fehler: [kopf, ...offen, zweck].join("\n") };
