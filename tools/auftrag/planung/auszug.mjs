@@ -26,9 +26,7 @@ function istCodeStelle(stelle) {
 
 function stellenDer(berichte) {
   const nummern = berichte.flatMap((bericht) => Object.entries(istObjekt(bericht?.nummern) ? bericht.nummern : {}));
-  const code = nummern.flatMap(([nummer, angaben]) => [...liste(angaben?.weg), ...liste(angaben?.aenderungen)].filter(istCodeStelle).map((stelle) => ({ ...stelle, nummer, quelle: istText(stelle.funktion) ? "funktion" : "zeilen" })));
-  const tests = nummern.flatMap(([nummer, angaben]) => liste(angaben?.tests).filter(istText).map((datei) => ({ datei, nummer, quelle: "test" })));
-  return [...code, ...tests];
+  return nummern.flatMap(([nummer, angaben]) => [...liste(angaben?.weg), ...liste(angaben?.aenderungen)].filter(istCodeStelle).map((stelle) => ({ ...stelle, nummer, quelle: istText(stelle.funktion) ? "funktion" : "zeilen" })));
 }
 
 function dateiInhalt(kontext, datei) {
@@ -43,14 +41,6 @@ function alsEinheit(datei, { name, von, bis }) {
   return { datei, name, von, bis };
 }
 
-function aeussere(funktionen) {
-  return funktionen.filter((funktion) => !funktionen.some((aussen) => aussen.start < funktion.start && aussen.von <= funktion.von && funktion.bis <= aussen.bis));
-}
-
-function testEinheiten(kontext, { datei }) {
-  return aeussere(dateiInhalt(kontext, datei).funktionen).map((gefunden) => alsEinheit(datei, gefunden));
-}
-
 function zeilenEinheit(kontext, { datei, von, bis }) {
   if (!Number.isInteger(von) || !Number.isInteger(bis) || von < 1 || bis < von) return [];
   return [{ datei, name: ZEILEN, von, bis: Math.min(bis, dateiInhalt(kontext, datei).zeilen.length) }];
@@ -62,7 +52,7 @@ function funktionsEinheit(kontext, stelle) {
   return gewaehlt === undefined ? [] : [alsEinheit(datei, gewaehlt)];
 }
 
-const EINHEITEN = { test: testEinheiten, zeilen: zeilenEinheit, funktion: funktionsEinheit };
+const EINHEITEN = { zeilen: zeilenEinheit, funktion: funktionsEinheit };
 
 function zeilenVon(kontext, { datei, von, bis }) {
   return dateiInhalt(kontext, datei).zeilen.slice(von - 1, bis);
