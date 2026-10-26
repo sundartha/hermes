@@ -45,7 +45,7 @@ import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
 import { GEAENDERTE_DATEIEN, dokumenteIm, gruppenUeberGrenze, umfang } from "./umfang.mjs";
-import { verdichteBerichte } from "./verdichtung.mjs";
+import { text as wortlautDes, verdichteBerichte } from "./verdichtung.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
 const PLANUNG = "planung";
@@ -65,6 +65,7 @@ const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; sch
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 const KONFLIKTE = "Bereichskonflikte";
 const NACHFRAGEN_ENDE = "Ende der Nachfragen";
+const VOR_DER_RUECKSENDUNG = "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: ";
 const BEZAHLTER_BERICHT = "Diesen Bericht hat ein Erkunder auf die Nachfrage unten geschickt; vor der Rücksendung hielt plane am Kostendeckel an. Die Befunde oben gehören zu diesem Bericht. Antworte mit dem korrigierten Bericht in der Form des Gerüsts unten.";
 const NACHFRAGE_NEU = "die abgelegte Nachfrage fehlt oder passt nicht zum Fingerabdruck; die Nachfrage-Welle wird neu gemacht";
 const WELLE_VERBRAUCHT = "Die eine Nachfrage-Welle dieses Planungslaufs ist verbraucht; es wird nicht mehr erkundet. Schneide mit einer Annahme und nenn sie unter `annahmen`, oder antworte „Zerlegung passt nicht: …“, wenn ohne die fehlende Tatsache keine Zerlegung geht. Fragst du noch einmal nach, endet die Planung mit Befunden.";
@@ -126,6 +127,16 @@ function offenerPrueferBefund(befund, antworten) {
 function nachfrageAntwort({ frage, nummern, bericht, befunde }, stelle) {
   const teile = [`Frage: ${frage}`, `Nummern: ${nummern.join(", ")}`, verdichteBerichte([bericht]), `Befunde:\n${punkte(befunde)}`];
   return abschnitt(`Antwort auf deine Nachfrage ${stelle + 1}`, teile.join("\n\n"));
+}
+
+function frueherHinweis(wortlaut) {
+  return wortlaut.startsWith(VOR_DER_RUECKSENDUNG) ? wortlaut : `${VOR_DER_RUECKSENDUNG}${wortlaut}`;
+}
+
+function mitFruehenHinweisen(bericht, frueher) {
+  const wiederholt = new Set(bericht.hinweise.map(wortlautDes));
+  const neue = liste(frueher).map(wortlautDes).filter((wortlaut) => !wiederholt.has(wortlaut));
+  return { ...bericht, hinweise: [...bericht.hinweise, ...neue.map(frueherHinweis)] };
 }
 
 function berichtZu(bericht, nummern) {
@@ -431,7 +442,7 @@ export class Planung {
 
   erkunderNachricht(ueberschrift, { nummern, fragen, kopf = [], mitBericht = false }) {
     const berichte = this.berichte.filter(({ gruppe }) => gruppe.some((nummer) => nummern.includes(nummer))).map((bericht) => berichtZu(bericht, nummern));
-    const bisher = "Diese Angaben hat die Erkundung bereits mit Fundstellen belegt. Deine Nachfrage klärt nur die Fragen des Planers und wiederholt die Erkundung nicht. Jede Aussage in deinem Bericht belegst du weiter mit Fundstelle, auch wenn sie hier schon steht.";
+    const bisher = "Diese Angaben hat die Erkundung bereits mit Fundstellen belegt. Deine Nachfrage klärt nur die Fragen des Planers und wiederholt die Erkundung nicht. Fundstellen aus diesem Bericht übernimmst du, statt die Stelle neu zu lesen; neu liest du eine Stelle nur, wenn die Frage des Planers mehr verlangt, als hier steht. Jede neue Aussage in deinem Bericht belegst du mit Fundstelle.";
     return nachricht(ueberschrift, [
       ...kopf,
       ...this.absichtTeil(),
@@ -469,12 +480,12 @@ export class Planung {
     merkeBezahlt(erste);
     this.merkeRuecksendung(wer.rolle, nummern, erste.befunde);
     this.pruefeSchritt(wer.rolle, `Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
-    return this.berichtNachRuecksendung(wer, { befunde: erste.befunde, nummern });
+    return this.berichtNachRuecksendung(wer, { befunde: erste.befunde, nummern, frueher: erste.bericht.hinweise });
   }
 
-  async berichtNachRuecksendung(wer, { befunde, nummern, anhang = [] }) {
-    const zweite = await this.team.frage(wer, this.team.ruecksenden(wer, befunde, anhang));
-    return this.pruefeBericht(zweite, nummern);
+  async berichtNachRuecksendung(wer, { befunde, nummern, anhang = [], frueher = [] }) {
+    const zweite = this.pruefeBericht(await this.team.frage(wer, this.team.ruecksenden(wer, befunde, anhang)), nummern);
+    return { ...zweite, bericht: mitFruehenHinweisen(zweite.bericht, frueher) };
   }
 
   async erkunde(wer, text, nummern) {
@@ -1087,7 +1098,7 @@ class Fortsetzung extends Planung {
     const anhang = [abschnitt("Bisheriger Bericht auf diese Nachfrage", `${BEZAHLTER_BERICHT}\n\n${json(bericht)}`), text];
     return this.erkunderLauf(text, nummern, async (wer) => {
       this.merkeRuecksendung(wer.rolle, nummern, befunde);
-      return this.bucheNachfrageBericht(wer, await this.berichtNachRuecksendung(wer, { befunde, nummern, anhang }), offen);
+      return this.bucheNachfrageBericht(wer, await this.berichtNachRuecksendung(wer, { befunde, nummern, anhang, frueher: bericht?.hinweise }), offen);
     });
   }
 

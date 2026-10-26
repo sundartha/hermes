@@ -8,7 +8,7 @@ const STELLE_BEKANNT = ["rolle", "datei", "funktion", "von", "bis", "neueZeilen"
 const LEER = "keine";
 const FEHLT = "fehlt";
 
-function text(wert) {
+export function text(wert) {
   return typeof wert === "string" ? wert : JSON.stringify(wert);
 }
 
