@@ -59,7 +59,7 @@
     ".github/workflows/ci.yml › pruefungen › Secret-Scan": "Die Sicherungen des CI-Schritts (leerer Bereich, ERR-Zeilen, gelesene gegen erwartete Commits) liegen nur in ci.yml; eine lokale Kopie wäre ein zweiter, schwächerer Scan. Gemeinsames Skript für CI und ci-lokal ist ein Folgepaket.",
     ".github/workflows/ci.yml › pruefungen › Install-Skripte": "Baut die Pakete aus tools/basis/install-skripte.json im frischen Checkout nach npm ci --ignore-scripts; das ist Aufbau der CI-Maschine. Lokal liegen die Pakete schon gebaut, der Vorab-Check prüft, dass sie da sind.",
     ".github/actions/node-npm-ci/action.yml › Install-Skripte": "Derselbe Aufbau wie der Schritt Install-Skripte im Job Prüfungen, für die anderen Jobs.",
-    ".github/workflows/ci.yml › tests › Tests": "Volle Suite in vier Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
+    ".github/workflows/ci.yml › tests › Tests": "Volle Suite in sechs Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
     ".github/workflows/ci.yml › tests › Testlaufzeit": "Liest die Laufzeiten der vollen Suite aus dem Schritt Tests; ohne volle Suite gibt es nichts zu messen.",
     ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": "Mutationsprüfung über den ganzen PR, teuer; lauf prüft Mutanten je Auftrag selbst.",
     ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": "Sammelt die Ergebnisse der anderen GitHub-Jobs; lokal ist das der Exit von ci-lokal.",

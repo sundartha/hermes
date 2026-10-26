@@ -272,12 +272,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        teil: [1, 2, 3, 4]
+        teil: [1, 2, 3, 4, 5, 6]
     outputs:
       teil-1: ${{ steps.bestanden.outputs.teil-1 }}
       teil-2: ${{ steps.bestanden.outputs.teil-2 }}
       teil-3: ${{ steps.bestanden.outputs.teil-3 }}
       teil-4: ${{ steps.bestanden.outputs.teil-4 }}
+      teil-5: ${{ steps.bestanden.outputs.teil-5 }}
+      teil-6: ${{ steps.bestanden.outputs.teil-6 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
