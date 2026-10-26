@@ -58,7 +58,7 @@
   "hooks/nur-anhaengen": {
     "liste": "H7",
     "wozu": "Bestehende Tests halten Verhalten fest, das weiter gelten soll. Schreibt der Test-Agent sie beim Ergänzen um, kann er sie abschwächen, und ein Fehler, den der alte Test gefangen hätte, käme unbemerkt zu den Kunden.",
-    "behebung": "Den neuen Fall ans Ende der Datei anhängen; bestehende Zeilen ändern nur in den Testdateien, die der Auftrag in erwarteteDateien nennt.",
+    "behebung": "Den neuen Fall ans Ende der Datei anhängen; bestehende Zeilen ändern nur in den Testdateien, die der Auftrag in erwarteteDateien nennt. Bestehend ist der Stand an der Auftragsbasis: Zeilen, die derselbe Auftrag danach angehängt hat, darf der Test-Agent ändern.",
     "nichtAngenommen": "Die Datei über die Kommandozeile umschreiben, den neuen Fall so anhängen, dass er einen alten außer Kraft setzt, oder eine Kopie der Datei anlegen, die den alten Test ersetzt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hält ein bestehender Test ein Verhalten fest, das der Auftrag absichtlich ändert, änderst du ihn nicht und antwortest als Letztes mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; passt der Auftrag sonst nicht, mit „Auftrag passt nicht: <Grund>“."
   },
