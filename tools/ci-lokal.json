@@ -46,6 +46,7 @@
     { "name": "tsconfig", "befehl": "node tools/tsconfig-pruefen.mjs", "ci": [".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › TypeScript-Konfiguration prüfen"] },
     { "name": "abhaengigkeiten", "befehl": "node tools/abhaengigkeiten.mjs --basis \"$BASIS\"", "ci": [".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Abhängigkeitsregeln"] },
     { "name": "lockfile-alter", "befehl": "node tools/lockfile-alter.mjs --basis \"$BASIS\"", "ci": [".github/workflows/lieferkette.yml › lieferkette › Mindestalter neuer Paketversionen prüfen"] },
+    { "name": "test-statisch", "befehl": "node tools/test-statisch.mjs --basis \"$BASIS\"" },
     {
       "name": "test:wirkung",
       "werkzeug": "postgres",

@@ -1,10 +1,13 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import * as espree from "espree";
 
 import { laufzeitText } from "../umbenennung.mjs";
 
+const BASIS_ECHTE_WARTEZEITEN = "tools/basis/echte-wartezeiten.json";
+const TESTDATEIEN = ["test/*.js", "test/*.mjs", "test/*.cjs", "test/*.ts", "test/*.mts", "test/*.cts"];
 const OBERGRENZE_MS = 100;
 const NAME = "echtWarten";
 const MODUL_ENDE = /echt-warten\.[cm]?[jt]s$/;
@@ -140,8 +143,30 @@ export function echtWartenBefunde(aufrufe, eintraege) {
   return [...zuHoch, ...verwaist];
 }
 
-export function aufrufeInDateien(wurzel, dateien) {
+function aufrufeInDateien(wurzel, dateien) {
   return dateien.flatMap((datei) =>
     aufrufeIn(datei, readFileSync(path.join(wurzel, datei), "utf8")),
   );
+}
+
+function testdateien(wurzel) {
+  return execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", ...TESTDATEIEN],
+    {
+      cwd: wurzel,
+      encoding: "utf8",
+    },
+  )
+    .split("\n")
+    .filter((datei) => datei !== "" && existsSync(path.join(wurzel, datei)));
+}
+
+export function echteWartezeitenListe(wurzel, { ohneListe }) {
+  const pfad = path.join(wurzel, BASIS_ECHTE_WARTEZEITEN);
+  return ohneListe !== undefined && !existsSync(pfad) ? ohneListe : JSON.parse(readFileSync(pfad, "utf8"));
+}
+
+export function echtWartenImArbeitsbaum(wurzel, eintraege) {
+  return echtWartenBefunde(aufrufeInDateien(wurzel, testdateien(wurzel)), eintraege);
 }
