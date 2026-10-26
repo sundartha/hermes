@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
+import { posix } from "node:path";
 import { argv } from "node:process";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -7,7 +8,7 @@ import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
-import { inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
+import { RELATIVE_QUELLE, inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
 import { ersteAbweichung, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
 
 const QUELLDATEI = /\.[cm]?[jt]s$/;
@@ -24,6 +25,8 @@ const ZEILENUMBRUCH = /\n/g;
 const ERSTE_ZEILE = 1;
 const PUFFER = 268_435_456;
 const EXIT_ABBRUCH = 2;
+const STATISCHE_QUELLEN = new Set(["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration"]);
+const PAKET_ODER_NODE = /^(?:node:|[@\w][^:]*$)/;
 const AUFRUF = "Aufruf: node tools/vorbereitung-pruefen.mjs --basis <commit> [--bis <commit>] [--bereich <json-datei>]";
 
 function felder(text) {
@@ -49,10 +52,39 @@ function zeileVon(text, knoten) {
   return anfang === undefined ? ERSTE_ZEILE : (text.slice(0, anfang).match(ZEILENUMBRUCH)?.length ?? 0) + ERSTE_ZEILE;
 }
 
-export async function vergleicheVorbereitung({ pfad, vorher, nachher }, eslint = new ESLint()) {
+function relativeZiele(baum, datei) {
+  const quellen = baum.body.filter(({ type, source }) => STATISCHE_QUELLEN.has(type) && source).map(({ source }) => source.value);
+  if (quellen.some((quelle) => !RELATIVE_QUELLE.test(quelle) && !PAKET_ODER_NODE.test(quelle))) return undefined;
+  return quellen.filter((quelle) => RELATIVE_QUELLE.test(quelle)).map((quelle) => posix.join(posix.dirname(datei), quelle));
+}
+
+async function importKreisfrei(datei, stand, eslint) {
+  const offen = [datei];
+  const gesehen = new Set();
+  while (offen.length > 0) {
+    const aktuell = offen.pop();
+    const text = inhalt(stand, aktuell);
+    const baum = text === undefined ? undefined : await laufzeitBaum({ pfad: aktuell, text }, eslint);
+    const ziele = baum === undefined ? undefined : relativeZiele(baum, aktuell);
+    if (ziele === undefined || ziele.includes(datei)) return false;
+    const neu = [...new Set(ziele)].filter((ziel) => !gesehen.has(ziel));
+    for (const ziel of neu) gesehen.add(ziel);
+    offen.push(...neu);
+  }
+  return true;
+}
+
+async function normalformen(alt, neu, kreisfrei) {
+  const ohneZahlen = [normalform(alt), normalform(neu)];
+  const [links, rechts] = ohneZahlen;
+  if (vergleichstext(links.baum) === vergleichstext(rechts.baum) || !(await kreisfrei())) return ohneZahlen;
+  return [alt, neu].map((baum) => normalform(baum, { kreisfrei: true }));
+}
+
+export async function vergleicheVorbereitung({ pfad, vorher, nachher, kreisfrei = async () => false }, eslint = new ESLint()) {
   const [alt, neu] = await Promise.all([vorher, nachher].map((text) => laufzeitBaum({ pfad, text }, eslint)));
   if (alt === undefined || neu === undefined) return { gleich: false, befund: `${pfad}: nicht lesbar` };
-  const [links, rechts] = [normalform(alt), normalform(neu)];
+  const [links, rechts] = await normalformen(alt, neu, kreisfrei);
   const ids = new Set([...links.genutzt.keys(), ...rechts.genutzt.keys()]);
   const genutzt = [...ids].filter((id) => links.genutzt.get(id) !== rechts.genutzt.get(id)).toSorted();
   if (vergleichstext(links.baum) === vergleichstext(rechts.baum)) return { gleich: true, genutzt };
@@ -67,7 +99,8 @@ async function dateiBefund({ art, datei }, { basis, bis, umbenannt, eslint }) {
   }
   if (await umbenannt.nurQuellenNachgezogen(datei)) return undefined;
   if (COMMONJS.test(datei)) return `${datei}: CommonJS läuft ohne strict mode; die Katalog-Bedingungen sind dafür nicht geprüft`;
-  const vergleich = await vergleicheVorbereitung({ pfad: datei, vorher: inhalt(basis, datei), nachher: inhalt(bis, datei) }, eslint);
+  const kreisfrei = async () => (await importKreisfrei(datei, basis, eslint)) && importKreisfrei(datei, bis, eslint);
+  const vergleich = await vergleicheVorbereitung({ pfad: datei, vorher: inhalt(basis, datei), nachher: inhalt(bis, datei), kreisfrei }, eslint);
   if (vergleich.gleich) console.log(`${datei}: gleichwertig${vergleich.genutzt.length > 0 ? ` (${vergleich.genutzt.join(", ")})` : ""}`);
   return vergleich.befund;
 }

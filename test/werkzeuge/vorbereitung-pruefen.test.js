@@ -289,8 +289,9 @@ test("vorbereitung-pruefen: zahl-konstante hinter einer Anweisung, die beim Lade
   for (const [fall, aufruf] of [
     ["Aufruf", "antworte(globalThis.res, false);"],
     ["const mit Aufruf", "const ERGEBNIS = antworte(globalThis.res, false);"],
+    ["Destrukturierung", 'const [ERSTES] = "ab";'],
   ]) {
-    await zahlRot(quelle(...antwort("400"), aufruf), quelle(...antwort("HTTP_UNGUELTIG"), aufruf, KONSTANTE), fall);
+    await zahlRot(quelle(aufruf, ...antwort("400")), quelle(aufruf, KONSTANTE, ...antwort("HTTP_UNGUELTIG")), fall);
   }
 });
 
@@ -309,12 +310,21 @@ test("vorbereitung-pruefen: zahl-konstante mit einem String-Literal ist nicht gl
   await zahlRot(quelle(...antwort('"400"')), quelle('const HTTP_UNGUELTIG = "400";', ...antwort("HTTP_UNGUELTIG")));
 });
 
+test("vorbereitung-pruefen: zahl-konstante mit BigInt, true, null, RegExp oder negativem Wert ist nicht gleichwertig", async () => {
+  for (const wert of ["400n", "true", "null", "/x/", "-400"]) {
+    await zahlRot(quelle(...antwort(wert)), quelle(`const HTTP_UNGUELTIG = ${wert};`, ...antwort("HTTP_UNGUELTIG")), wert);
+  }
+});
+
 test("vorbereitung-pruefen: zahl-konstante gilt nicht für exportierte const, mehrere Bindungen, Schlüssel, Aufgerufene oder ohne Nachweis gegen Import-Kreise", async () => {
   const faelle = [
     ["exportiert", quelle(...antwort("400")), quelle(`export ${KONSTANTE}`, ...antwort("HTTP_UNGUELTIG"))],
     ["zwei Bindungen", quelle(...antwort("400")), quelle("const HTTP_UNGUELTIG = 400, NIE = 1;", ...antwort("HTTP_UNGUELTIG"))],
     ["Schlüssel", quelle("export const o = { 400: 1 };"), quelle(KONSTANTE, "export const o = { HTTP_UNGUELTIG: 1 };")],
     ["Aufgerufener", quelle("export const f = () => (400)();"), quelle(KONSTANTE, "export const f = () => HTTP_UNGUELTIG();")],
+    ["unbenutzt", quelle(...antwort("400")), quelle(KONSTANTE, ...antwort("400"))],
+    ["Destrukturierung", quelle("export const f = () => toFixed;"), quelle("const { toFixed } = 400;", "export const f = () => toFixed;")],
+    ["eval in der Datei", quelle(...antwort("400"), "export const e = (s) => eval(s);"), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG"), "export const e = (s) => eval(s);")],
   ];
   for (const [fall, vorher, nachher] of faelle) await zahlRot(vorher, nachher, fall);
   const ohneNachweis = await vergleich(quelle(...antwort("400")), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG")));
@@ -352,6 +362,14 @@ test("vorbereitung-pruefen: über Git gilt zahl-konstante nicht, wenn die Datei 
     "src/b.js": quelle('import "./a.js";', "export const b = 1;"),
   });
   const nachher = { "src/a.js": quelle('import "./b.js";', KONSTANTE, ...antwort("HTTP_UNGUELTIG")), "src/b.js": quelle("export const b = 1;") };
+  const lauf = mitBereich(repo, ["src/a.js"], nachher);
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/a\.js:\d+: Änderung, die keine Umformung/m);
+});
+
+test("vorbereitung-pruefen: über Git gilt zahl-konstante nicht, wenn die Datei erst am Ziel in einem Import-Kreis liegt", (context) => {
+  const repo = repoMitBasis(context, { "src/a.js": quelle('import "./b.js";', ...antwort("400")), "src/b.js": quelle("export const b = 1;") });
+  const nachher = { "src/a.js": quelle('import "./b.js";', KONSTANTE, ...antwort("HTTP_UNGUELTIG")), "src/b.js": quelle('import "./a.js";', "export const b = 1;") };
   const lauf = mitBereich(repo, ["src/a.js"], nachher);
   assert.equal(lauf.status, EXIT_ROT, lauf.output);
   assert.match(lauf.output, /^src\/a\.js:\d+: Änderung, die keine Umformung/m);
