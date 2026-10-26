@@ -370,3 +370,93 @@ test("die Schreibweisen ohne Ersetzung aus der Sperrmeldung laufen durch", (cont
     ],
   });
 });
+
+const LOESCHBAR = {
+  ...DATEIEN,
+  "src/b.js": "export const b = 2;\n",
+  "src/a.test.js": "export const c = 3;\n",
+  ".github/a.yml": "a: 1\n",
+  ".claude/hooks/a.mjs": "export const d = 4;\n",
+  "tools/basis/a.mjs": "export const e = 5;\n",
+  "eslint.config.js": "export default [];\n",
+  "knip.json": "{}\n",
+};
+const ABNAHME = "test/a.test.js";
+
+function transkript(befehl) {
+  const aufruf = { type: "tool_use", id: "abnahme", name: "Bash", input: { command: befehl } };
+  const ergebnis = { type: "tool_result", tool_use_id: "abnahme", content: "1 bestanden" };
+  return [aufruf, ergebnis].map((eintrag) => JSON.stringify({ message: { content: [eintrag] } })).join("\n");
+}
+
+function bauLoescht(repo, befehl) {
+  const [hook] = bashHooks(vorWerkzeug("bau"));
+  const input = { tool_name: "Bash", tool_input: { command: befehl }, cwd: repo, transcript_path: join(repo, "transkript.jsonl") };
+  return runHook(hook, { cwd: repo, input, environment: { HERMES_ROLLE: "bau", HERMES_ABNAHME: ABNAHME } });
+}
+
+test("der Bau-Agent darf eine Datei mit git rm und wörtlichem Pfad löschen", (context) => {
+  const repo = probeRepository(context, { ...LOESCHBAR, "transkript.jsonl": transkript(`npm --silent test -- ${ABNAHME}`) });
+  for (const befehl of ["git rm src/a.js", "git rm -- src/a.js src/b.js", "git rm 'src/a.js'", "cd src && git rm a.js", "git rm src/a.js 2>&1 | tail -3"]) {
+    const lauf = bauLoescht(repo, befehl);
+    assert.equal(lauf.status, 0, `${befehl}: ${lauf.stderr}`);
+  }
+});
+
+test("der Bau-Agent kann eine Datei unter src erst nach dem Abnahmetest mit git rm löschen", (context) => {
+  const repo = probeRepository(context, { ...LOESCHBAR, "transkript.jsonl": transkript(`cat ${ABNAHME}`) });
+  const lauf = bauLoescht(repo, "git rm src/a.js");
+  assert.equal(lauf.status, BLOCKING_EXIT_CODE, lauf.stderr);
+  assert.match(lauf.stderr, /führe zuerst den Abnahmetest selbst aus/);
+});
+
+test("der Test-Agent darf nicht mit git rm löschen", (context) => {
+  const repo = probeRepository(context, LOESCHBAR);
+  assertGesperrt(repo, "test", ["git rm src/a.js", "git rm test/a.test.js", "git rm -- src/b.js"]);
+});
+
+test("git rm mit -r, Muster, Ersetzung, Option oder fremdem Ziel bleibt für den Bau-Agenten gesperrt", (context) => {
+  const repo = probeRepository(context, LOESCHBAR);
+  assertGesperrt(repo, "bau", [
+    "git rm -r src",
+    "git rm src",
+    "git rm src/a.js -r",
+    "git rm -f src/a.js",
+    "git rm --cached src/a.js",
+    "git rm --pathspec-from-file=/tmp/liste",
+    "git rm",
+    "git rm --",
+    "git rm src/*.js",
+    "git rm 'src/*.js'",
+    "git rm 'src/a?.js'",
+    "git rm 'src/[ab].js'",
+    "git rm ':(glob)src/a.js'",
+    "git rm ':/src/a.js'",
+    "git rm $f",
+    "git rm src/$f",
+    "git rm src/fehlt.js",
+    "git rm ../a.js",
+    "git rm /tmp/a.js",
+    "git -C src rm a.js",
+    "git --no-pager rm src/a.js",
+  ]);
+});
+
+test("git rm unter einem geschützten Pfad bleibt für den Bau-Agenten gesperrt", (context) => {
+  const repo = probeRepository(context, LOESCHBAR);
+  const geschuetzt = [".github/a.yml", ".claude/hooks/a.mjs", "tools/basis/a.mjs", "test/a.test.js", "src/a.test.js", "eslint.config.js", "knip.json"];
+  for (const pfad of geschuetzt) {
+    const { gesperrt } = bash(repo, "bau", `git rm ${pfad}`);
+    assert.ok(gesperrt, `bau darf nicht: git rm ${pfad}`);
+    assert.match(gesperrt.stderr, /geschützt/, pfad);
+  }
+});
+
+test("die Sperre von rm nennt dem Bau-Agenten git rm mit Pfad als Weg", (context) => {
+  const repo = probeRepository(context, LOESCHBAR);
+  for (const befehl of ["rm src/a.js", "rm -f src/a.js", "unlink src/a.js"]) {
+    const { gesperrt } = bash(repo, "bau", befehl);
+    assert.ok(gesperrt, `bau darf nicht: ${befehl}`);
+    assert.match(gesperrt.stderr, /git rm <Pfad>/, befehl);
+  }
+});
