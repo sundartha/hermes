@@ -1,12 +1,13 @@
+const SHAPE_STEPS = [
+  [/^[ \t]*[-*+]\s+/gm, ""],
+  [/[*_#`]/g, ""],
+  [/\s+-\s+/g, ", "],
+  [/\s+/g, " "],
+];
+
 function shapedCore(text) {
-  return (
-    text
-      .replace(/^[ \t]*[-*+]\s+/gm, "")
-      .replace(/[*_#`]/g, "")
-      .replace(/\s+-\s+/g, ", ")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
+  const replaced = SHAPE_STEPS.reduce((acc, [pattern, to]) => acc.replace(pattern, to), text);
+  return replaced.trim();
 }
 
 export function shapeChunkForSpeech(text) {
