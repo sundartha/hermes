@@ -115,6 +115,21 @@ test("ein Fund nur in Dokumenten ist kein Fund im Code: die Suche zählt ihn nic
   nurBefund(pruefe(context, { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, "docs/design.md:1"] }), "treffer docs/design.md:1 liegt in keiner Datei");
 });
 
+const TESTDATEI = "test/anrufe/summe.test.js";
+
+function pruefeTestdatei(context, inhalt) {
+  const vorhanden = { ...NUTZT_SUMME, treffer: [TREFFER_DER_REGEL, `${TESTDATEI}:2`] };
+  return erkundungBefunde(bericht(vorhanden), { gruppe: ["S1"], soll: SOLL, root: repo(context, { [TESTDATEI]: inhalt }) });
+}
+
+test("erkundung: eine echte Fundstelle in einer Testdatei mit dem Suchbegriff gilt nicht als erfunden", (context) => {
+  assert.deepEqual(pruefeTestdatei(context, 'const FELDER = [\n  "isSafeInteger",\n];\n').befunde, []);
+});
+
+test("erkundung: eine Fundstelle in einer Testdatei ohne den Suchbegriff bleibt erfunden", (context) => {
+  nurBefund(pruefeTestdatei(context, 'const FELDER = [\n  "area code",\n];\n'), `treffer ${TESTDATEI}:2 liegt in keiner Datei`);
+});
+
 const REGEL_IN_TYPESCRIPT = ["export function rundeAb(betrag: number): number {", "  return Math.floor(betrag);", "}", ""].join("\n");
 
 function pruefeSucheIn(context, datei) {
