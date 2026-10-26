@@ -1,9 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { env } from "node:process";
 
-import { block } from "./lib.mjs";
+import { block, startDirectory, withoutGitVariables } from "./lib.mjs";
 import { TESTDATEI, rolle, schreibziel } from "./rolle.mjs";
+
+const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const NUL = "\0";
 
 function ersetzt(text, { old_string: alt, new_string: neu, replace_all: alle }) {
   if (typeof alt !== "string" || typeof neu !== "string") return null;
@@ -20,10 +24,36 @@ function inhaltNachher(vorher, { tool_name: werkzeug, tool_input: eingabe }) {
   );
 }
 
-function haengtNurAn(absolut, input) {
-  const vorher = readFileSync(absolut, "utf8");
-  const nachher = inhaltNachher(vorher, input);
-  return typeof nachher === "string" && nachher.startsWith(vorher);
+function imRepo(relativ) {
+  return !relativ.startsWith("../") && !isAbsolute(relativ);
+}
+
+function gitAusgabe(args, cwd) {
+  const lauf = spawnSync("git", args, { cwd, encoding: "utf8", env: withoutGitVariables(env) });
+  return lauf.status === 0 ? lauf.stdout : null;
+}
+
+function verwechselbar(pfad, anderer) {
+  const [eins, zwei] = [pfad.normalize("NFC"), anderer.normalize("NFC")];
+  return eins.toLowerCase() === zwei.toLowerCase() || eins.toUpperCase() === zwei.toUpperCase();
+}
+
+function inhaltAnDerAuftragsbasis({ input, absolut, relativ }) {
+  const basis = env.HERMES_AUFTRAGSBASIS ?? "";
+  if (!COMMIT.test(basis) || !imRepo(relativ)) return null;
+  const cwd = startDirectory(input);
+  const dateien = gitAusgabe(["ls-tree", "-r", "-z", "--full-tree", "--name-only", basis], cwd);
+  if (dateien === null) return null;
+  const aehnliche = dateien.split(NUL).filter((datei) => verwechselbar(datei, relativ));
+  if (aehnliche.length === 0) return statSync(absolut).nlink > 1 ? null : "";
+  return aehnliche.length === 1 && aehnliche[0] === relativ ? gitAusgabe(["cat-file", "blob", `${basis}:${relativ}`], cwd) : null;
+}
+
+function haengtNurAn(ziel) {
+  const vorher = readFileSync(ziel.absolut, "utf8");
+  const nachher = inhaltNachher(vorher, ziel.input);
+  const bisher = inhaltAnDerAuftragsbasis(ziel) ?? vorher;
+  return typeof nachher === "string" && nachher.startsWith(bisher);
 }
 
 function geplanteTests() {
@@ -36,7 +66,7 @@ function geplanteTests() {
 }
 
 function istGeplant(relativ) {
-  return !relativ.startsWith("../") && !isAbsolute(relativ) && geplanteTests().includes(relativ);
+  return imRepo(relativ) && geplanteTests().includes(relativ);
 }
 
 function main() {
@@ -52,10 +82,11 @@ function main() {
   }
   if (name === "test" && !istTest) block("hooks/test-aendert-keinen-produktcode", [`Test-Agenten ändern keinen Produktcode: ${ziel.relativ}`]);
   const geschuetzt = name === "test" && existsSync(ziel.absolut) && !istGeplant(ziel.relativ);
-  if (geschuetzt && !haengtNurAn(ziel.absolut, ziel.input)) {
+  if (geschuetzt && !haengtNurAn(ziel)) {
     block("hooks/nur-anhaengen", [
       `An bestehende Testdateien wird nur angehängt: ${ziel.relativ}`,
       "Der bisherige Inhalt bleibt unverändert am Anfang stehen.",
+      "Bisher heißt: Stand an der Auftragsbasis; Zeilen, die derselbe Auftrag danach angehängt hat, darf der Test-Agent ändern. Ohne bestimmbare Basis gilt der Arbeitsstand.",
       "Bestehende Zeilen ändert der Test-Agent nur in den Testdateien, die der Auftrag in erwarteteDateien nennt.",
     ]);
   }
