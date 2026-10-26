@@ -11,6 +11,7 @@ import {
 import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs";
 import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { releaseSections } from "./freigabe-markdown.mjs";
+import { listenkuerzungen } from "./freigabe-listenkuerzung.mjs";
 import { pfadumzuege } from "./freigabe-pfadumzug.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
@@ -353,7 +354,9 @@ function classify(basis) {
   const files = changedFiles(basis);
   const strenger = stricterCases(basis, files) ?? [];
   const umzuege = pfadumzuege(basis, files);
-  const kindFor = (path) => (umzuege.has(path) ? "code" : kindOf(patterns, path));
+  const kuerzungen = listenkuerzungen(basis, files);
+  const nachgerechnet = (path) => umzuege.has(path) || kuerzungen.has(path);
+  const kindFor = (path) => (nachgerechnet(path) ? "code" : kindOf(patterns, path));
   const changes = files.map((change) => ({
     ...change,
     kind: strenger.length > 0 ? STRENGER : kindFor(change.path),

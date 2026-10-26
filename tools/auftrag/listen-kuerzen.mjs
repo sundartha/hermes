@@ -120,21 +120,29 @@ function zeilenGestrichen(text, tot) {
   return zeilen.flatMap((zeile, stelle) => (weg.has(stelle) ? [] : [kommaWeg.has(stelle) ? ohneKomma(zeile) : zeile])).join(ZEILE);
 }
 
-function listeGekuerzt({ pfad, kuerzen }, { root, dateistand }) {
-  const text = lesbar(join(root, pfad));
-  const vorher = text === undefined ? undefined : gelesen(text);
+export function textGekuerzt(pfad, text, dateistand) {
+  const liste = LISTEN.find((eintrag) => eintrag.pfad === pfad);
+  const vorher = liste === undefined || text === undefined ? undefined : gelesen(text);
   if (vorher === undefined) return undefined;
-  const { nachher, tot } = kuerzen(vorher, dateistand);
+  const { nachher, tot } = liste.kuerzen(vorher, dateistand);
   if (tot.length === 0) return undefined;
   const neu = zeilenGestrichen(text, tot);
-  return { pfad, tot, neu: isDeepStrictEqual(gelesen(neu), nachher) ? neu : undefined };
+  return { tot, neu: isDeepStrictEqual(gelesen(neu), nachher) ? neu : undefined };
+}
+
+export function geloeschtSeit(basis, { ziel, root = "." } = {}) {
+  return dateien(["diff", "--no-renames", "--name-only", "--diff-filter=D", "-z", basis, ...(ziel === undefined ? [] : [ziel])], root);
+}
+
+export function versioniertIn(commit, root = ".") {
+  return dateien(["ls-tree", "-r", "--name-only", "-z", commit], root);
 }
 
 function listenGekuerzt({ basis, root }) {
-  const geloescht = dateien(["diff", "--no-renames", "--name-only", "--diff-filter=D", "-z", basis], root);
+  const geloescht = geloeschtSeit(basis, { root });
   if (geloescht.length === 0) return [];
   const dateistand = { geloescht, jetzt: vorhanden(root) };
-  return LISTEN.map((liste) => listeGekuerzt(liste, { root, dateistand })).filter(Boolean);
+  return KUERZLISTEN.map((pfad) => ({ pfad, ...textGekuerzt(pfad, lesbar(join(root, pfad)), dateistand) })).filter(({ tot }) => tot !== undefined);
 }
 
 function listenKuerzen({ basis, root }) {
