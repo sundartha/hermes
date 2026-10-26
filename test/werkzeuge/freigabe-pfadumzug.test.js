@@ -2,19 +2,15 @@ import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
 
-import { freigabeImProbeRepo } from "./freigabe/hilfen.mjs";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import {
+  codeOhneFreigabe,
+  freigabeImProbeRepo,
+  grundZeile,
+  nachgerechnet,
+} from "./freigabe/hilfen.mjs";
+import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
-const UMZUG_URL = pathToFileURL(join(REPO_ROOT, "tools/freigabe-pfadumzug.mjs")).href;
-const AUFRUF = [
-  `import { pfadumzuege } from ${JSON.stringify(UMZUG_URL)};`,
-  "const pfade = process.argv.slice(1);",
-  'const menge = pfadumzuege("HEAD~1", pfade.map((path) => ({ status: "M", path })));',
-  "console.log(JSON.stringify([...menge].sort()));",
-].join("\n");
-const EXIT_OK = 0;
 const EXIT_ROT = 1;
 const JSON_EINZUG = 2;
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
@@ -114,14 +110,12 @@ function aenderung(verzeichnis, { umbenennen = [[ALT, NEU]], dateien }) {
 function umzuege(context, aenderungen) {
   const verzeichnis = probeRepository(context, BASIS);
   aenderung(verzeichnis, aenderungen);
-  const lauf = runIn(verzeichnis, process.execPath, [
-    "--input-type=module",
-    "-e",
-    AUFRUF,
-    ...ALLE_LISTEN,
-  ]);
-  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
-  return JSON.parse(lauf.stdout);
+  return nachgerechnet(verzeichnis, {
+    modul: "tools/freigabe-pfadumzug.mjs",
+    funktion: "pfadumzuege",
+    basis: "HEAD~1",
+    pfade: ALLE_LISTEN,
+  });
 }
 
 test("pfadumzug: beide Listen ziehen nur mit der Git-Umbenennung um", (context) => {
@@ -223,15 +217,8 @@ async function freigabePruefung(context, { basis = {}, aenderungen }) {
   return freigabeImProbeRepo(context, { verzeichnis, basis: basisStand });
 }
 
-function grundZeile(stdout) {
-  return stdout.split("\n").find((zeile) => zeile.includes("Bestehende Prüfungsdateien")) ?? "";
-}
-
 test("freigabe-pruefung: ein reiner Pfadumzug mit Umbenennung ist art:code ohne Freigabe", async (context) => {
-  const lauf = await freigabePruefung(context, { aenderungen: { dateien: VOLLER_UMZUG } });
-  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /Art art:code\./);
-  assert.equal(grundZeile(lauf.stdout), "");
+  codeOhneFreigabe(await freigabePruefung(context, { aenderungen: { dateien: VOLLER_UMZUG } }));
 });
 
 test("freigabe-pruefung: eine beim Umzug erhöhte Zahl wartet als art:pruefung", async (context) => {
