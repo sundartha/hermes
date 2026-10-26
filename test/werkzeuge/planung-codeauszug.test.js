@@ -25,7 +25,7 @@ function bericht(angaben) {
   return { gruppe: ["S1"], nummern: { S1: { weg: [], aenderungen: [], tests: [], ...angaben } } };
 }
 
-test("auszug: legt ganze Funktionsrümpfe mit Zeilennummern aus Weg, Änderungen und Tests ab, jede Stelle einmal", (context) => {
+test("auszug: legt ganze Funktionsrümpfe mit Zeilennummern aus Weg und Änderungen ab, jede Stelle einmal", (context) => {
   const root = probeRepository(context, QUELLEN);
   const weg = [{ rolle: "eingang", datei: DATEI, funktion: "klein", von: 1, bis: 3 }, { rolle: "wirkung", datei: DATEI, funktion: "gross", von: 6, bis: 7 }];
   const aenderungen = [{ datei: DATEI, funktion: "klein", von: 2, bis: 2, neueZeilen: 1 }, { datei: DATEI, art: "konstante", von: GROSS_BIS + 2, bis: GROSS_BIS + 2, neueZeilen: 1 }];
@@ -35,9 +35,15 @@ test("auszug: legt ganze Funktionsrümpfe mit Zeilennummern aus Weg, Änderungen
   assert.ok(text.includes(`#### ${DATEI}:5-${GROSS_BIS} gross (S1)`), text);
   assert.ok(text.includes(`${GROSS_BIS} }`), text);
   assert.ok(text.includes(`#### ${DATEI}:${GROSS_BIS + 2}-${GROSS_BIS + 2} Zeilen (S1)\n`), text);
-  assert.ok(text.includes(`#### ${TEST}:3-5`), text);
-  assert.ok(text.includes('3 test("eins", () => {'), text);
   assert.equal(text.includes("Nicht im Auszug"), false, text);
+});
+
+test("auszug: Testdateien einer Nummer erscheinen nicht als Code im Auszug", (context) => {
+  const root = probeRepository(context, QUELLEN);
+  const text = codeAuszug(root, [bericht({ weg: [{ rolle: "eingang", datei: DATEI, funktion: "klein", von: 1, bis: 3 }], tests: [TEST] })]);
+  assert.ok(text.includes(`#### ${DATEI}:1-3 klein (S1)`), text);
+  assert.equal(text.includes(`#### ${TEST}`), false, text);
+  assert.equal(text.includes('test("eins"'), false, text);
 });
 
 test("auszug: über der Grenze fehlt ein ganzer Rumpf, steht mit Datei und Zeilen unter Nicht im Auszug, und kleinere Stellen danach kommen noch hinein", (context) => {
