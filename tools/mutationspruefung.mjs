@@ -25,6 +25,8 @@ import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStuec
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
+import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, LOGORDNER, notierePhase, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
+import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
@@ -32,6 +34,7 @@ import { inhalt, umbenennungen } from "./umbenennung.mjs";
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
 const GENAU_PLUGIN = fileURLToPath(new URL("./mutationspruefung/genau.mjs", import.meta.url));
 const KINDABDECKUNG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/kindabdeckung.mjs", import.meta.url));
+const ZEITLOG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/zeitlog.mjs", import.meta.url));
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
 const BANK = "regression";
@@ -118,7 +121,13 @@ const AUFRUF = [
   "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
+  "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
 ].join("\n");
+const LOG_AUSWERTUNG = "log-auswertung";
+const BETRIEBSARTEN = [...VORHER_ARTEN, "testumbau", "plan", "teil", "urteil", "alter-stand"];
+const NORMAL = "normal";
+const ERSTER_LAUF = "erster Lauf";
+const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
 
 function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -268,7 +277,22 @@ function muster(datei, bereich) {
   return Array.isArray(bereich) ? `${datei}:${bereich[0]}-${bereich[1]}` : spaltenbereich(datei, bereich);
 }
 
+function laufart(faktor, anlass) {
+  if (anlass !== "") return anlass.trim();
+  return faktor === 1 ? ERSTER_LAUF : WIEDERHOLUNG;
+}
+
+async function gemessenerStryker(optionen, zeitlog) {
+  try {
+    return await new Stryker({ ...optionen, ...zeitlog.optionen }).runMutationTest();
+  } catch (fehler) {
+    zeitlog.abgebrochen(fehler);
+    throw fehler;
+  }
+}
+
 async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
+  const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
   const beginn = Date.now();
@@ -278,7 +302,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
     ...KONFIGURATION,
     ...kindbericht.option,
     testRunner: KINDABDECKUNG,
-    appendPlugins: [KINDABDECKUNG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
+    appendPlugins: [KINDABDECKUNG_PLUGIN, ZEITLOG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
@@ -287,7 +311,8 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
     concurrency,
     tempDirName: SANDBOXORDNER,
   };
-  const ergebnisse = (await new Stryker(optionen).runMutationTest()).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
+  const ergebnisse = (await gemessenerStryker(optionen, zeitlog)).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
+  zeitlog.fertig(ergebnisse);
   const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
   console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
   const uebersprungen = kindbericht.ohneTestdatei();
@@ -426,7 +451,10 @@ async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = await mutantenproben(datei, zeilen, tests);
   if (loeschung === null) return ergebnisse;
-  return [...ergebnisse, ...(await loeschung.pruefe({ datei, zeilen, ergebnisse, tests }))];
+  const beginn = Date.now();
+  const geloescht = await loeschung.pruefe({ datei, zeilen, ergebnisse, tests });
+  notierePhase("loeschprobe", Date.now() - beginn, { datei });
+  return [...ergebnisse, ...geloescht];
 }
 
 function alterStand(commit) {
@@ -523,14 +551,26 @@ async function ohneUnbenutzteGeloeschte(einheiten, geloescht) {
   });
 }
 
+function notiereTestauswahl({ seite }, beginn, { einheiten, graph }) {
+  const gemessen = einheiten.filter(({ bereiche }) => bereiche !== undefined);
+  const testdateien = graph === null ? [] : gemessen.flatMap(({ datei }) => testauswahl(datei, graph).alle);
+  notierePhase("testauswahl", Date.now() - beginn, { seite, dateien: gemessen.length, testdateien: new Set(testdateien).size });
+}
+
 async function imStand(pruefung, arbeit) {
+  const beginn = Date.now();
   const einheiten = await bestandteile(pruefung);
-  if (einheiten.every(({ bereiche }) => bereiche === undefined)) return arbeit(einheiten, null);
+  if (einheiten.every(({ bereiche }) => bereiche === undefined)) {
+    notiereTestauswahl(pruefung, beginn, { einheiten, graph: null });
+    return arbeit(einheiten, null);
+  }
   const geaendert = geaenderteTests(pruefung);
   const geloescht = geloeschteDateien(pruefung);
   const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
-    return await arbeit(await ohneUnbenutzteGeloeschte(einheiten, geloescht), { ...(await importierer()), geaendert });
+    const auswahl = { einheiten: await ohneUnbenutzteGeloeschte(einheiten, geloescht), graph: { ...(await importierer()), geaendert } };
+    notiereTestauswahl(pruefung, beginn, auswahl);
+    return await arbeit(auswahl.einheiten, auswahl.graph);
   } finally {
     zurueck?.();
   }
@@ -543,8 +583,11 @@ async function messe(einheiten, { graph, auswahl, seite }) {
   if (gemessen.length === 0) return ergebnisse;
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
-    for (const anteil of gemessen) {
-      ergebnisse.push(...(await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { graph, loeschung, anteil })));
+    for (const [index, anteil] of gemessen.entries()) {
+      dateiBeginnt(anteil.datei, { nummer: index + 1, von: gemessen.length, seite });
+      const geprueft = await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { graph, loeschung, anteil });
+      dateiEndet(geprueft, ueberlebt);
+      ergebnisse.push(...geprueft);
     }
     return ergebnisse;
   } finally {
@@ -787,11 +830,39 @@ async function vorherVerteilt(values) {
     return EXIT_GRUEN;
   }
   const stueck = stueckAus(values["vorher-stueck"]);
-  await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis} --vorher-stueck`);
+  await gemesseneSperre(`test:mutation --basis ${values.basis} --vorher-stueck`);
   kindprozesseInEigenemTempOrdner();
   const bericht = await vorherStueck(stand, stueck, werkzeug);
   schreibeJson(values.ergebnis, bericht);
   console.log(`Stück ${bericht.stueck.nummer}: ${bericht.getoetet.length} von ${bericht.anzahl} Mutanten getötet in ${bericht.sekunden} s.`);
+  return EXIT_GRUEN;
+}
+
+async function gemesseneSperre(anlass) {
+  const beginn = Date.now();
+  await nimmSperreAuchFuerKindprozesse(anlass);
+  notierePhase("sperre", Date.now() - beginn);
+}
+
+function betriebsart(values) {
+  return BETRIEBSARTEN.find((art) => values[art] !== undefined && values[art] !== false) ?? NORMAL;
+}
+
+function startkopf(values) {
+  const kopf = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+  return { betriebsart: betriebsart(values), basis: values.basis, commit: kopf.status === 0 ? kopf.stdout.trim() : null };
+}
+
+function nurLogAuswertung(values) {
+  return Object.entries(values).every(([name, wert]) => name === LOG_AUSWERTUNG || wert === false || (Array.isArray(wert) && wert.length === 0));
+}
+
+function werteLogAus(values) {
+  if (!nurLogAuswertung(values)) {
+    console.error(AUFRUF);
+    return EXIT_ABBRUCH;
+  }
+  console.log(logAuswertung(values[LOG_AUSWERTUNG]).join("\n"));
   return EXIT_GRUEN;
 }
 
@@ -812,14 +883,17 @@ async function main() {
       teile: { type: "string" },
       ergebnis: { type: "string" },
       urteil: { type: "string" },
+      [LOG_AUSWERTUNG]: { type: "string" },
     },
   });
+  if (values[LOG_AUSWERTUNG] !== undefined) return werteLogAus(values);
   if (!aufrufGueltig(values)) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
+  beginneLog(() => join(legeSandboxordnerAn(WURZEL), LOGORDNER), startkopf(values));
   if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
-  await nimmSperreAuchFuerKindprozesse(`test:mutation --basis ${values.basis}`);
+  await gemesseneSperre(`test:mutation --basis ${values.basis}`);
   kindprozesseInEigenemTempOrdner();
   if (values.testumbau) return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
@@ -859,4 +933,6 @@ try {
 } catch (fehler) {
   console.error(`Abbruch: ${fehler.message}`);
   process.exitCode = EXIT_ABBRUCH;
+} finally {
+  beendeLog(process.exitCode);
 }

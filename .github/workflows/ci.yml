@@ -419,6 +419,16 @@ jobs:
           TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
         run: npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json"
 
+      - name: Zeit-Log hochladen
+        if: always() && needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-zeitlog-${{ matrix.teil }}
+          path: .mutationspruefung/log/*.jsonl
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Teilergebnis hochladen
         if: needs.mutationsplan.outputs.messen == 'ja'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
