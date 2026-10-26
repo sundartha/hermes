@@ -23,7 +23,7 @@ Frag nur, was du für die Einstufung brauchst; was im Repo steht, liest du nach,
 - **Einfache oder größere Änderung:** Die Frage dahinter ist, ob es sich lohnt, vor dem Bau gemeinsam festzuhalten, was genau entstehen soll, und eine Sicherheitsprüfung, wenn nötig auch ein Design Doc, zu schreiben. Begründe deine Einschätzung mit dem, was du in diesem Fall siehst, etwa einer Schnittstelle, auf die sich fremde Agenten verlassen, einer Entscheidung, die sich später schwer zurücknehmen lässt, oder Daten und Anrufen, die berührt werden. Ein Umbau, bei dem sich nur der Aufbau des Codes ändert, ist eine einfache Änderung.
 
 ### 2. Worktree
-Im Haupt-Checkout sperrt der Hook `worktree-pflicht` jedes Schreiben. Wechsle deshalb vor der ersten Datei mit `EnterWorktree` in einen Worktree unter `.claude/worktrees/`. Beim Notfall gilt das erst für das Postmortem; eindämmen kommt vor allem anderen. Fehlt im Worktree etwas, sag es dem Nutzer und halte an; einen Branch setzt du nie mit `git reset` zurück, und eine Bitte um Erlaubnis gehört nie in eine Fragerunde.
+Im Haupt-Checkout sperrt der Hook `worktree-pflicht` jedes Schreiben. Wechsle deshalb vor der ersten Datei mit `EnterWorktree` in einen Worktree unter `.claude/worktrees/`. Danach führst du im Worktree `npm ci --prefer-offline --ignore-scripts` aus, weil ein frischer Worktree kein `node_modules` hat. Beim Notfall gilt das erst für das Postmortem; eindämmen kommt vor allem anderen. Fehlt im Worktree etwas, sag es dem Nutzer und halte an; einen Branch setzt du nie mit `git reset` zurück, und eine Bitte um Erlaubnis gehört nie in eine Fragerunde.
 
 ### 3a. Notfall
 Ohne Pipeline und ohne neuen Code.

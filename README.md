@@ -97,6 +97,19 @@ npm run test:gates # i18n-Launch-Testkatalog, darf rot sein (sinkt Richtung 0 bi
 
 Beide Laeufe partitionieren dieselbe Suite automatisch nach Katalog-ID im Testnamen (kein manuell gepflegter Ausschluss) — Details in `CLAUDE.md` unter "Befehle".
 
+### 3d. Einrichtung für den Arbeitsweg
+
+Für Änderungen mit Claude Code (Skill `aenderung`, `plane` und `lauf` aus `tools/auftrag.mjs`) und für den Pre-Push-Hook:
+
+1. Node 22 (Fassung aus `engines` in `package.json`).
+2. `npm ci`, dann `npm run prepare`: setzt die Git-Hooks aus `.githooks/` und legt das Remote `upstream` (`https://github.com/sundartha/hermes`) an, wenn es fehlt.
+3. `git fetch upstream`: Pre-Push und `npm run test:betroffen` vergleichen mit `upstream/master` und enden ohne diese Basis rot.
+4. Postgres in der Hauptversion aus `tools/basis/squawk.toml` starten und `HERMES_TEST_POSTGRES_URL=postgres://<nutzer>@localhost:<port>/postgres` setzen.
+5. semgrep in der Fassung aus `tools/basis/semgrep.json` (Feld `version`) in den `PATH` bringen.
+6. `gh auth login`.
+
+Fehlen die Pakete, Postgres oder semgrep, halten `plane` und `lauf` vor dem ersten Agenten und nennen den Schritt.
+
 ### 4. Provider-Webhooks setzen
 
 Telnyx-Portal → Voice → **TeXML Application** (die aus Schritt 1):
