@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -103,5 +103,20 @@ test("zeige-prompt: eine unbekannte Auftrags-ID, eine unbekannte Rolle oder eine
     assert.notEqual(gezeigt.status, EXIT_GRUEN, argumente.join(" "));
     assert.equal(gezeigt.stdout, "", argumente.join(" "));
     assert.match(gezeigt.stderr, meldung, argumente.join(" "));
+  }
+});
+
+const BEGRIFF = "- Liste der Probe-Vorwahlen (2): Ontario 647 289. Quelle: Probe.";
+const NUR_IM_PITCH = "Diese Frage steht nur im Pitch.";
+
+test("zeige-prompt: der Abschnitt „Neue Begriffe“ aus dem Pitch steht wörtlich im Test- und im Bau-Prompt, der Rest des Pitches nicht", (context) => {
+  const { root } = pitchPhase(context, funktion());
+  writeFileSync(join(root, "plaene/P-001-probe/pitch.md"), `# Pitch\n\n## Fallen\n\n${FALLE}\n\n## Nicht-Ziele\n\nKeine.\n\n## Neue Begriffe\n${BEGRIFF}\n\n## Offene Fragen\n\n${NUR_IM_PITCH}\n`);
+  for (const rolle of ["test", "bau"]) {
+    const gezeigt = zeige(root, "phase.json", ["A1", "--rolle", rolle]);
+    assert.equal(gezeigt.status, EXIT_GRUEN, gezeigt.stderr);
+    assert.ok(gezeigt.stdout.includes(`## Neue Begriffe\n${BEGRIFF}\n`), `${rolle}\n${gezeigt.stdout}`);
+    assert.ok(gezeigt.stdout.includes(FALLE), rolle);
+    assert.equal(gezeigt.stdout.includes(NUR_IM_PITCH), false, rolle);
   }
 });

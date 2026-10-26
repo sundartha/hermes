@@ -265,3 +265,15 @@ test("ohne Phase aus einem Pitch sagt der Auftragszettel, dass es keine Fallen u
   assert.equal(lauf.status, 0, lauf.ausgabe);
   assert.ok(auftragszettelDesLetztenCommits(lauf.protokoll).includes(`${VORGABEN}\n\nkeine Angabe; `));
 });
+
+const BEGRIFF = "- `ZAHL`: die Zahl aus src/zahl.js, immer 2.";
+
+test("bringt der PR eine Phase aus einem Pitch mit „Neue Begriffe“, steht der Abschnitt wörtlich im Auftragszettel des Prüfers", async (context) => {
+  const mitBegriffen = `${PITCH}\n## Neue Begriffe\n\n${BEGRIFF}\n`;
+  const phase = { [`plaene/${PHASE}/pitch.md`]: mitBegriffen, [`plaene/${PHASE}/phase.json`]: JSON.stringify({ phase: PHASE, auftraege: [] }) };
+  const lauf = await starte(context, { aufnahme: ohneBefunde(), phase });
+  assert.equal(lauf.status, 0, lauf.ausgabe);
+  const zettel = auftragszettelDesLetztenCommits(lauf.protokoll);
+  assert.ok(zettel.includes(`## Nicht-Ziele\n\n${NICHT_ZIEL}\n\n## Neue Begriffe\n\n${BEGRIFF}\n`), zettel);
+  assert.equal(zettel.includes(NUR_IM_PITCH), false, zettel);
+});

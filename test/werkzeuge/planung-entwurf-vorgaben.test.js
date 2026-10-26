@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { bauPrompt } from "../../tools/auftrag/agenten.mjs";
+import { bauPrompt, testAgentPrompt } from "../../tools/auftrag/agenten.mjs";
 import { designPfad } from "../../tools/auftrag/annahmen.mjs";
 import { AUFTRAG, EXIT_GRUEN, jePruefer, phaseDatei, plane } from "./planung-plane-probe.js";
 import { ENTWURF_HINWEIS, GRUEN_PRUEFLISTE, GRUPPEN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, auftrag, bericht, exit, phaseFuer, plane as planeMit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
@@ -141,4 +141,23 @@ test("entwurf-vorgaben: der Neuschnitt setzt in den neuen Entwurf die Annahmen d
   const entwurf = phaseVon(lauf).entwurf[HINWEIS];
   assert.ok(entwurf.includes(`Annahme a3-n1: ${NEU_EIGENE}`) && entwurf.includes(`Annahme der Planung: ${PLANWEITE}`), entwurf);
   assert.equal(entwurf.includes(NEU_FREMDE), false, entwurf);
+});
+
+function neueBegriffe(pitch) {
+  const [, ...zeilen] = pitch.slice(pitch.indexOf("\n## Neue Begriffe\n") + 1).split("\n");
+  const ende = zeilen.findIndex((zeile) => zeile.startsWith("#"));
+  return zeilen.slice(0, ende).filter((zeile) => zeile.startsWith("- "));
+}
+
+test("entwurf-vorgaben: Entwurf-Nachricht, Test- und Bau-Prompt enthalten die neuen Begriffe des Pitches wörtlich", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = plane(context);
+  exit(lauf, EXIT_GRUEN);
+  const begriffe = neueBegriffe(readFileSync(join(lauf.wurzel, ORDNER, "pitch.md"), "utf8"));
+  assert.ok(begriffe.length > 0);
+  const phase = phaseVon(lauf);
+  const auftrag = phase.auftraege.find((eintrag) => eintrag.id === "a1");
+  const testPrompt = testAgentPrompt({ phase, auftrag, root: lauf.wurzel, design: designPfad(phase) });
+  for (const text of [entwurfNachricht(lauf, ROUTE), testPrompt, bauPromptFuer(lauf, "a1")]) {
+    for (const begriff of begriffe) assert.ok(text.includes(begriff), `${begriff}\n${text}`);
+  }
 });
