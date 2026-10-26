@@ -9,7 +9,7 @@ import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 import { BEREICHE_DATEI, bereichDerDatei, leseBereiche } from "../tests-ausmisten/pfade.mjs";
 import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
-import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
+import { geschuetzteMuster, istVertraulich, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
@@ -67,8 +67,18 @@ export function meldeBefunde(befunde) {
   return EXIT_ROT;
 }
 
-export function pruefe(phasendatei, root) {
+export function issueBefunde(phase) {
+  if (istVertraulich(phase)) return [];
+  return Number.isInteger(phase.issue) && phase.issue > 0 ? [] : ["issue muss die Nummer des Phasen-Issues sein."];
+}
+
+function phasenUndIssueBefunde(phasendatei, root) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
+  return { phase, befunde: befunde.length > 0 ? befunde : issueBefunde(phase) };
+}
+
+export function pruefe(phasendatei, root) {
+  const { phase, befunde } = phasenUndIssueBefunde(phasendatei, root);
   if (befunde.length > 0) {
     meldeBefunde(befunde);
     console.log(`rot: ${befunde.length} Befunde in ${phasendatei}.`);

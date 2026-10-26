@@ -109,6 +109,7 @@ Für Änderungen mit Claude Code (Skill `aenderung`, `plane` und `lauf` aus `too
 6. `gh auth login`.
 
 Fehlen die Pakete, Postgres oder semgrep, halten `plane` und `lauf` vor dem ersten Agenten und nennen den Schritt.
+Liest `gh` das Phasen-Issue nicht, etwa ohne `gh auth login`, halten `lauf` und `phase` ebenso und nennen die erste Zeile von `gh` und den Schritt.
 
 ### 4. Provider-Webhooks setzen
 

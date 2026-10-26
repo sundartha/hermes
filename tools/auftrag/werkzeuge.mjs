@@ -13,10 +13,13 @@ function ersteZeile(text) {
   return text.split("\n").find((zeile) => zeile.trim() !== "") ?? "";
 }
 
-function laeuftNicht(befehl, argumente, root) {
-  const lauf = spawnSync(befehl, argumente, { cwd: root, encoding: "utf8" });
+export function laufGrund(befehl, lauf) {
   if (lauf.error) return `${befehl} ließ sich nicht starten: ${lauf.error.message}`;
   return lauf.status === 0 ? null : `${befehl} endete mit Exit ${lauf.status}: ${ersteZeile(`${lauf.stderr}\n${lauf.stdout}`)}`;
+}
+
+function laeuftNicht(befehl, argumente, root) {
+  return laufGrund(befehl, spawnSync(befehl, argumente, { cwd: root, encoding: "utf8" }));
 }
 
 function fehlendePakete(root) {

@@ -95,6 +95,7 @@ export const MELDUNG = {
   SEMGREP_FEHLT: "semgrep-fehlt",
   PAKETE_FEHLEN: "pakete-fehlen",
   POSTGRES_FEHLT: "postgres-fehlt",
+  GH_FEHLT: "gh-fehlt",
   CI_LOKAL: "ci-lokal",
   ALTFUNKTIONEN_VORAB: "altfunktionen-vorab",
 };

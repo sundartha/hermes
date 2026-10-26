@@ -5,16 +5,17 @@ import { env, execPath } from "node:process";
 import { setTimeout as schlafen } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-import { EXIT_GRUEN, EXIT_ROT, gueltigePhase } from "./befehle.mjs";
+import { EXIT_GRUEN, EXIT_ROT, gueltigePhase, issueBefunde } from "./befehle.mjs";
 import { sperrSchluessel } from "./bereiche.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { istVertraulich, reihenfolge } from "./format.mjs";
 import { git, kopf } from "./git.mjs";
 import { ciLokalAmPhasenende } from "./phasenende.mjs";
-import { issueAbsichtBefunde } from "./planung/absicht.mjs";
+import { IssueNichtLesbar, issueAbsichtBefunde } from "./planung/absicht.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { REMOTE, belegteSperren, eigeneSperren, erwerben, freigeben } from "./sperren.mjs";
 import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
+import { laufGrund } from "./werkzeuge.mjs";
 import {
   MASTER,
   entferneAuftrag,
@@ -210,9 +211,7 @@ function hochladen(ort) {
   return EXIT_GRUEN;
 }
 
-export function issueBefunde(phase) {
-  return Number.isInteger(phase.issue) && phase.issue > 0 ? [] : ["issue muss die Nummer des Phasen-Issues sein."];
-}
+export { issueBefunde };
 
 function startIssueBefunde(phase) {
   return istVertraulich(phase) ? [VERTRAULICH] : issueBefunde(phase);
@@ -221,7 +220,9 @@ function startIssueBefunde(phase) {
 function issueText(issue, root) {
   const gh = env.HERMES_GH ?? "gh";
   const lauf = spawnSync(gh, ["issue", "view", String(issue), "--json", "body", "--jq", ".body"], { cwd: root, encoding: "utf8" });
-  return lauf.status === 0 ? lauf.stdout : null;
+  const grund = laufGrund(gh, lauf);
+  if (grund !== null) throw new IssueNichtLesbar(grund);
+  return lauf.stdout;
 }
 
 export function absichtImIssueBefunde(phase, root) {

@@ -398,6 +398,13 @@
     "nichtAngenommen": "Die Prüfung abschalten, die Variable auf einen Server setzen, den die Tests nicht nutzen können, oder den Auftrag ohne lauf bauen.",
     "ausweg": "entfällt: ohne Postgres startet kein Agent. Einrichtungsschritt: Postgres starten und HERMES_TEST_POSTGRES_URL setzen (README.md, „Einrichtung für den Arbeitsweg“)."
   },
+  "gh-fehlt": {
+    "liste": "ohne Nummer",
+    "wozu": "lauf und phase lesen vor dem ersten Agenten den Abschnitt „## Absicht“ aus dem Phasen-Issue mit gh issue view; der KI-Prüfer misst die Arbeit später an genau diesem Text. Liest gh das Issue nicht, etwa weil gh nicht angemeldet ist, startet die Phase nicht. Die Meldung nennt deshalb die erste Zeile, mit der gh abbrach, damit die Ursache sichtbar ist und niemand raten muss.",
+    "behebung": "Die genannte gh-Zeile lesen und die Ursache beheben: ist gh nicht angemeldet, gh auth login ausführen; sonst die Nummer in issue der Phasendatei und den Zugriff auf das Issue prüfen, dann lauf oder phase neu starten.",
+    "nichtAngenommen": "Die Prüfung abschalten, das Feld absicht aus der Phasendatei streichen, im echten Lauf ein Ersatzprogramm in HERMES_GH legen, das einen passenden Text ausgibt, oder den Auftrag ohne lauf bauen.",
+    "ausweg": "entfällt: ohne lesbares Issue startet keine Phase. Einrichtungsschritt: gh auth login (README.md, „Einrichtung für den Arbeitsweg“)."
+  },
   "commitlint": {
     "liste": "ohne Nummer",
     "wozu": "Die CI prüft jede Commit-Nachricht mit commitlint. lauf schreibt die Nachricht des Auftrags und des Neuschnitts selbst aus der Phasendatei; fiele sie erst in der CI durch, kostete das eine volle CI-Runde und einen Eingriff von Hand. lauf prüft sie deshalb vor dem Commit mit denselben Regeln aus commitlint.config.mjs.",
