@@ -18,6 +18,7 @@ export function mitErsatzWerkzeugen(werkzeug) {
 
 const CI_LOKAL_AUFRUFE = "ci-lokal-aufrufe.jsonl";
 const CI_LOKAL_ERSATZ = "ci-lokal-ersatz.mjs";
+const CI_LOKAL_VORRANG = "ci-lokal-vorrang.jsonl";
 export const CI_LOKAL_ROT = "ci-lokal: rot: jscpd";
 
 function ersatzCiLokal(exitCode) {
@@ -26,6 +27,7 @@ function ersatzCiLokal(exitCode) {
     'import { appendFileSync } from "node:fs";',
     'import { join } from "node:path";',
     `appendFileSync(join(process.env.HOME, ${JSON.stringify(CI_LOKAL_AUFRUFE)}), JSON.stringify(process.argv.slice(2)) + "\\n");`,
+    `appendFileSync(join(process.env.HOME, ${JSON.stringify(CI_LOKAL_VORRANG)}), JSON.stringify(process.env.SCHWERLAUF_VORRANG ?? null) + "\\n");`,
     `console.log(${JSON.stringify(ausgabe)});`,
     `process.exitCode = ${exitCode};`,
     "",
@@ -38,8 +40,16 @@ export function mitCiLokal(paketJson, exitCode) {
   return { "package.json": JSON.stringify({ ...paket, scripts }), [CI_LOKAL_ERSATZ]: ersatzCiLokal(exitCode) };
 }
 
-export function ciLokalAufrufe(home) {
-  const datei = join(home, CI_LOKAL_AUFRUFE);
+function mitschrift(home, name) {
+  const datei = join(home, name);
   if (!existsSync(datei)) return [];
   return readFileSync(datei, "utf8").split("\n").filter(Boolean).map((zeile) => JSON.parse(zeile));
+}
+
+export function ciLokalAufrufe(home) {
+  return mitschrift(home, CI_LOKAL_AUFRUFE);
+}
+
+export function ciLokalVorrang(home) {
+  return mitschrift(home, CI_LOKAL_VORRANG);
 }
