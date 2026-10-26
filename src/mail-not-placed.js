@@ -4,7 +4,7 @@ import { MS_PER_MINUTE } from "./utils/timer.js";
 const MINUTES_PER_HOUR = 60;
 const NOT_PLACED_MAIL_DEBOUNCE_MS = MINUTES_PER_HOUR * MS_PER_MINUTE;
 
-export function notPlacedMailDebounced(calls, call, windowMs = NOT_PLACED_MAIL_DEBOUNCE_MS) {
+function notPlacedMailDebounced(calls, call, windowMs = NOT_PLACED_MAIL_DEBOUNCE_MS) {
   const endedMs = Date.parse(call.endedAt || "");
   if (Number.isNaN(endedMs)) return false;
   return calls.some((other) => {
