@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 
-import { vorgaengerBefunde } from "../teil-vorgaenger.mjs";
+import { gemergteVorgaenger, vorgaengerBefunde } from "../teil-vorgaenger.mjs";
 import { TEIL_DECKEL, deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
 import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
@@ -275,11 +275,26 @@ function umbauDesEintrags(teilung, eintrag) {
   return teilung.teile.some((kandidat) => Array.isArray(kandidat?.umbau)) ? liste(eintrag.umbau) : undefined;
 }
 
-function fremdeDateien(teilung, eintrag, elternOrdner) {
+function dateienAndererTeile(teilung, eintrag, elternOrdner) {
   const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
   const belege = new Set(liste(teilung.umfang?.belegDateien));
   const geaendert = (datei) => !belege.has(datei);
   return andere.flatMap((anderer) => liste(anderer?.dateien).filter(geaendert).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+}
+
+function fremdeDateien(teilung, eintrag, { elternOrdner, nach, root }) {
+  const gemergt = new Map(gemergteVorgaenger(root, nach).map(({ vorgaenger, sha }) => [vorgaenger, sha]));
+  const genannt = dateienAndererTeile(teilung, eintrag, elternOrdner);
+  return {
+    fremd: genannt.filter(({ teil }) => !gemergt.has(teil)),
+    hinweise: genannt.filter(({ teil }) => gemergt.has(teil)).map(({ datei, teil }) => `${datei} gehört ${teil}, gemergt ${gemergt.get(teil)}`),
+  };
+}
+
+function meldeGemergteUndGibTeil(reserviert, { teilung, eintrag, elternOrdner, nach, root }) {
+  const { fremd, hinweise } = fremdeDateien(teilung, eintrag, { elternOrdner, nach, root });
+  for (const hinweis of hinweise) console.log(hinweis);
+  return { ...reserviert, dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd };
 }
 
 function genanntePfade(text) {
@@ -310,7 +325,7 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
   const reserviert = reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
-  return reserviert.exit === undefined ? { ...reserviert, dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd: fremdeDateien(teilung, eintrag, elternOrdner) } : reserviert;
+  return reserviert.exit === undefined ? meldeGemergteUndGibTeil(reserviert, { teilung, eintrag, elternOrdner, nach: herkunft.nach, root }) : reserviert;
 }
 
 function teilStart(root, ordner, { fortsetzen, deckel }) {
