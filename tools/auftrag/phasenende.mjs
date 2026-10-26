@@ -1,5 +1,6 @@
 import { env } from "node:process";
 
+import { VORRANG_PUSH, VORRANG_VARIABLE } from "../schwerlauf/sperre.mjs";
 import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
 import { git } from "./git.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
@@ -7,7 +8,7 @@ import { MASTER } from "./worktrees.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 function ciLokalBefunde(cwd, basis) {
-  const lauf = fuehreAus(MELDUNG.CI_LOKAL, ["npm", "--silent", "run", "ci:lokal", "--", "--basis", basis], { cwd, env });
+  const lauf = fuehreAus(MELDUNG.CI_LOKAL, ["npm", "--silent", "run", "ci:lokal", "--", "--basis", basis], { cwd, env: { ...env, [VORRANG_VARIABLE]: VORRANG_PUSH } });
   console.log(lauf.ausgabe.trimEnd());
   return lauf.exitCode === 0 ? [] : [`ci-lokal gegen die Basis ${basis} endete mit Exit ${lauf.exitCode}; die roten Schritte stehen oben.`];
 }
