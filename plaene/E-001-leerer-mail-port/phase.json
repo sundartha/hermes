@@ -1,0 +1,22 @@
+{
+  "phase": "E-001-leerer-mail-port",
+  "issue": 2066,
+  "entwurf": {
+    "src/mail/ports.js": "Was sich ändert: Die leere, nirgends importierte Datei src/mail/ports.js (Inhalt nur `export {};`, seit Paket 34 die JSDoc-Typdefs als Kommentare entfernt hat) wird gelöscht, und ihre Ausnahme `files|src/mail/ports.js|src/mail/ports.js` in tools/basis/knip.json (Zeile 122) wird gestrichen.\nDie Zeile in tools/basis/knip.json streicht nicht der Bau-Agent, weil tools/ geschützt ist und außerhalb des Bereichs liegt; sie wird nach dem Bau mit `node tools/basis-vergleich.mjs knip --basis-kuerzen` gekürzt.\nBleibt gleich: Die Kündigungsbestätigung per E-Mail (§ 312k BGB) geht weiterhin genau einmal an die Adresse des Kontos; kein Modul unter src/, test/, tools/ oder scripts/ importiert src/mail/ports.js, deshalb ändert sich kein Laufzeitverhalten.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün (test/312k-p5-cancellation-mail.test.js).\nNicht-Ziele: keine weiteren knip-Befunde abbauen, weil die Änderung bei dieser einen Datei bleibt; keine Änderung an anderen Mail-Modulen, weil sie benutzt werden; src/mail/ enthält außer ports.js keine Datei, die Mail-Module liegen in src/mail-summary.js, src/mail-boot-probe.js, src/mail-not-placed.js und src/billing/cancellation-mail.js, deshalb verschwindet mit dem Löschen der Ordner src/mail/; kein Kürzen der Basislisten unter tools/basis/ im Auftrag u1, weil tools/ geschützt ist und außerhalb des Bereichs liegt; die Sitzung kürzt tools/basis/knip.json und tools/basis/anweisungen.json nach dem Bau mit `node tools/basis-vergleich.mjs <werkzeug> --basis-kuerzen`.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil mit ports.js der ganze Ordner src/mail/ verschwindet, aber tools/basis/anweisungen.json:118 den Eintrag `src/mail|ohne-eigene-regeln` behält (basis-vergleich meldet ihn nur als behoben), passiert beim späteren Neuanlegen eines Ordners src/mail/ ohne CLAUDE.md kein Befund, und die Folge ist eine still abgeschaltete Anweisungsprüfung für diesen Ordner ohne Freigabe. | Nicht-Ziel: kein Kürzen der Basislisten im Auftrag u1, weil tools/ geschützt ist und außerhalb des Bereichs liegt; die Sitzung kürzt tools/basis/anweisungen.json und tools/basis/knip.json nach dem Bau mit `--basis-kuerzen`, vor dem Push. |"
+  },
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "Leere ungenutzte Datei src/mail/ports.js samt knip-Ausnahme löschen",
+      "bereich": "src/mail/ports.js",
+      "erwarteteDateien": [
+        "src/mail/ports.js"
+      ],
+      "abnahme": "test/312k-p5-cancellation-mail.test.js",
+      "wasDarfNiePassieren": [
+        "Die Kündigungsbestätigung per E-Mail geht nach dem Löschen nicht mehr oder mehr als einmal an die Adresse des Kontos."
+      ]
+    }
+  ]
+}
