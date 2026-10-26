@@ -1,0 +1,149 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:673"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "weg:S5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-chunker.js:33"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:4"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "weg:B5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "weg:B7",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:2"
+  },
+  {
+    "schluessel": "weg:B10",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:673"
+  },
+  {
+    "schluessel": "weg:T2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/voice.js:287"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:4"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "b-nummer:B5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "b-nummer:B7",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:2"
+  },
+  {
+    "schluessel": "b-nummer:B10",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "befund",
+    "befund": "Mehrere Sätze in wasDarfNiePassieren passen nicht zu a1, das nur R2 baut. (1) „Die Formung ist heute eine Kette aus fünf `.replace` … erst Umbau der ganzen Funktion lintfrei …, dann die Änderung.“ beschreibt einen Stand, den es nicht mehr gibt: Die Formung ist schon die Tabelle SHAPE_STEPS (src/speech-shape.js:1-6), `karte` meldet für shapedCore keine Befunde, und laut eigener Annahme gibt es keinen Umbau davor. Der Satz ist für a1 keine feste Regel. (2) „„Zahl“ in R1 heißt …“, „„Kette“ in R1 heißt …“ und „Die neue Katalogzeile in `docs/sicherheitsgrenzen.md` … SG-27 … Der Test zu T3 trägt diesen Namen.“ gehören zu R1 bzw. T3/SG-27. Laut Annahme zu a1 liegen R1 und T3 nicht in diesem Teil, und a1 hat keinen SG-27-Test. (3) Die Nicht-Ziele „eine sprachabhängige Ersetzung der Spanne …“ und „Spannen mit Einheit an beiden Enden …“ betreffen nur R1, und a1 kann sie nicht brechen. (4) Der Satz „Die neuen Regeln laufen … (Sicherheitsprüfung T3).“ steht zweimal, einmal gekürzt und einmal mit dem Zusatz zu `detect-redos`. Der Planer soll die Sätze (1)–(3) aus a1 streichen und den Satz unter (4) nur einmal in voller Länge behalten.",
+    "fundstelle": "src/speech-shape.js:1"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:9"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B1:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:4"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B5:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B7:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:2"
+  },
+  {
+    "schluessel": "ausweg:B7:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B10:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:T2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:S5:weg speicher",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-chunker.js:35"
+  },
+  {
+    "schluessel": "ausweg:S5:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei a1, der einzigen Änderung am Unterstrich, fehlen diese Sätze, obwohl a1 sie brechen kann. (1) sicherheit.md, „## 5. Vorschlag für docs/sicherheitsgrenzen.md“: „Neue Vertrauensannahme zu SG-13: Was die Sprachformung (`src/speech-shape.js`) aus Ziffernfolgen macht, erkennt die Maskierung (`src/restricted-data.js`) weiterhin; die Formung erzeugt keine Trennzeichen-Mischung, die die Maskierung verwirft.“ Das Eintragen in docs/ mag im anderen Teil liegen, aber die Grenze gilt für die Ziffer-Ziffer-Ausnahme von R2. (2) pitch.md, „## Absicht“: „Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern. Im Zweifel bleibt das heutige Verhalten für alles, was weder Ziffer-Strich-Ziffer noch Unterstrich mitten im Wort ist.“ (3) sicherheit.md, „### Nicht-Ziele“: „Diese Änderung schützt nicht gegen ein Modell, das Angaben des Kunden oder des Gegenübers ausspricht, die es nicht nennen soll, weil das die Promptregel (`src/i18n/prompts/de.js:54`) und SG-11 betrifft; dass die heutige Formung Unterstriche zufällig verstümmelt, war kein Schutz.“ (4) sicherheit.md, „### T4: Ein Unterstrich mit einem Buchstaben daneben bleibt in einer Ausweisnummer stehen, und die Maskierung erkennt die Nummer nicht mehr“: „Ausgang: hinnehmen (Freigabe 2026-10-24), weil der Prompt Codes Ziffer für Ziffer verlangt (`src/i18n/prompts/de.js:29`, `en.js:53`, `fr.js:29`), solche Schreibweisen in Modellausgaben ungewöhnlich sind und sich ein Schutz in der Formung ohne Wortwissen nicht von `grüß_gott_2` (S5) unterscheiden lässt.“ (5) pitch.md, „## Premortem“, Nr. 5: „Nennt das Modell einen Werkzeugnamen (`take_message`), wird er künftig mit Unterstrich gesprochen statt verschluckt.“ mit dem Ausgang „hingenommen: der Fehler liegt in der Modellausgabe; ein Werkzeugname lässt sich ohne Wortwissen nicht von `max_weber` unterscheiden (Runde 2, Frage 4)“. Der Planer soll diese Sätze in wasDarfNiePassieren von a1 aufnehmen.",
+    "fundstelle": "sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md"
+  }
+]

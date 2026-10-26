@@ -1,0 +1,202 @@
+{
+  "stand": {
+    "kopfBaum": "1313ee4b1e5cfdddb4a97f1648d5187adee32258",
+    "arbeitsbaum": "c00b94c68cdcdb8bfe5c6f2a5ed18c07e9b14e84",
+    "dateien": {
+      ".claude/agents/entwurf.md": "4b624cda3bb772a809d08986998d81ae76d7d3a943c56f3e27e2f452156bd00d",
+      ".claude/agents/erkunder.md": "1d5bacbb67a84f854e46348c6d50c2e2340e54fbd13f19daf58b393b147aa210",
+      ".claude/agents/planer.md": "b85167be0bb21471167d3557f6a47e1f5204ddbdb1ae808301140456ac878e0d",
+      ".claude/agents/pruefer-planung.md": "4e7a1ac4f59694d722a344495136ae9be2b24ef26814e17c10687a6b3a69799b",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "09843d98224739272168781c2a0ed26234dde95a3cdf1812263bbf4df64f86ee",
+      "plaene/P-008-t1-t2-sprachformung-unterstrich-regel/design.md": "eec3ccf0cbbb18b14996731dc7477bcc9484902df5f96fbca9e30d58b53b2a68",
+      "plaene/P-008-t1-t2-sprachformung-unterstrich-regel/pitch.md": "82994a902137ac42f82ea4f1707ea8fa90af5bc07ee34087e9dbc46ec0d74159",
+      "plaene/P-008-t1-t2-sprachformung-unterstrich-regel/sicherheit.md": "bb31dfea29ebd28d1c046922d3697f48cf9794872ef372d6c23e1772ddb9f0cb",
+      "tools/bereiche.json": "57b2b8f1c7ed8b01f41c13599edb6a4a897ad382b9b981302a5ef728200b7ef9"
+    },
+    "kopfOhneWerkzeug": "bbf4c378990a281079dc33b8b06282fd02c3ccd042f0dd554d01d7368a5a0219",
+    "arbeitsbaumOhneWerkzeug": "3ae6cbde9479b8f500e414253408c74cd110740c3cd589b861d73fd30c6b7aa8",
+    "werkzeugBaum": "f9ad68ebf106d157a28789d3a210c88fdc24dab4"
+  },
+  "ablage": {
+    "gliederung.json": "23acb132b67b4b7a98ba3db896e6a28b719c00034f384b69f5b01faea77d4b02",
+    "nachfragen.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "erkundung-g1.json": "ae19a57852334c110b6a63a4168d60ec40acb5cb02738eb37e4103781efaaa7d",
+    "erkundung-g2.json": "55cd1c1e32626248f116784a1faa7db7647951380685b76b7e32c6ce9c96f1ba"
+  },
+  "zustand": {
+    "gesehen": [
+      "S4\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "S4\u0000src/claude.js\u0000agentTurn",
+      "S4\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "S4\u0000src/speech-shape.js\u0000shapedCore",
+      "S4\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "S4\u0000src/speech-shape.js\u0000",
+      "B1\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "B1\u0000src/claude.js\u0000agentTurn",
+      "B1\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "B1\u0000src/speech-shape.js\u0000shapedCore",
+      "B1\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "B3\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "B3\u0000src/claude.js\u0000agentTurn",
+      "B3\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "B3\u0000src/speech-shape.js\u0000shapedCore",
+      "B3\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "B3\u0000src/speech-shape.js\u0000",
+      "B5\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "B5\u0000src/claude.js\u0000agentTurn",
+      "B5\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "B5\u0000src/speech-shape.js\u0000shapedCore",
+      "B5\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "B5\u0000src/speech-shape.js\u0000",
+      "B7\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "B7\u0000src/claude.js\u0000agentTurn",
+      "B7\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "B7\u0000src/speech-shape.js\u0000shapedCore",
+      "B7\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "B10\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "B10\u0000src/claude.js\u0000agentTurn",
+      "B10\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "B10\u0000src/speech-shape.js\u0000shapedCore",
+      "B10\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "B10\u0000src/speech-shape.js\u0000",
+      "T2\u0000src/routes/voice.js\u0000anonym ab Zeile 373",
+      "T2\u0000src/claude.js\u0000agentTurn",
+      "T2\u0000src/speech-shape.js\u0000shapeForSpeech",
+      "T2\u0000src/speech-shape.js\u0000shapedCore",
+      "T2\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "T2\u0000src/speech-shape.js\u0000",
+      "S5\u0000src/speech-chunker.js\u0000makeSentenceChunker",
+      "S5\u0000src/speech-shape.js\u0000shapeChunkForSpeech",
+      "S5\u0000src/speech-shape.js\u0000shapedCore",
+      "S5\u0000src/speech-shape.js\u0000"
+    ],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S5"
+        ],
+        "sitzung": "c42cb64b-a670-4aee-be47-7808923208f0",
+        "runden": 1,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S4",
+          "B1",
+          "B3",
+          "B5",
+          "B7",
+          "B10",
+          "T2"
+        ],
+        "sitzung": "528964e8-a430-4b63-bcc2-293b87da693d",
+        "runden": 1,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S5",
+        1
+      ],
+      [
+        "S4",
+        1
+      ]
+    ],
+    "wegAusstehend": [],
+    "erkundungAusstehend": [],
+    "nachfrageWellen": 0,
+    "wegAbnahmen": [
+      {
+        "nummer": "S5",
+        "summe": "9145e780e040afb7c3e101b00277789d7ddc5b88b7fd2d11e13cf6a74560a39b",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:S5",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-chunker.js:33"
+        }
+      },
+      {
+        "nummer": "S4",
+        "summe": "8fca3d4dfa04577a858a1c637e1e8144db73d9984d6b0dbf501d0fb689af1268",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:S4",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-shape.js:3"
+        }
+      },
+      {
+        "nummer": "B1",
+        "summe": "6321b45c85280f821a910e671c8042d7c1cde2af0a96e242bbfbdeb4cbb9a27b",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-shape.js:4"
+        }
+      },
+      {
+        "nummer": "B3",
+        "summe": "479ad64a87d9ae66391325cadca29f5874bf05fa5c1f24e75e0ae3c2920ec503",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-shape.js:3"
+        }
+      },
+      {
+        "nummer": "B5",
+        "summe": "5d2f9cf97bc70b1148228b35adb20a0c37b97cd717c7ecf62f045311ec07c393",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B5",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-shape.js:3"
+        }
+      },
+      {
+        "nummer": "B7",
+        "summe": "e78a2dab3c6eb04896345d8264aecdb74c04e93142542c54d8ceacb56f5c1a59",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B7",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/speech-shape.js:2"
+        }
+      },
+      {
+        "nummer": "B10",
+        "summe": "523ab57b69c09054caacbb75ecdf073a0e1672a131326489d66e783ef4931fb9",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B10",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/claude.js:673"
+        }
+      },
+      {
+        "nummer": "T2",
+        "summe": "3c4d9d08437f5f3a651d90c5738597739c9eacbaa6c9657461c4dca36759e12a",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:T2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/routes/voice.js:287"
+        }
+      }
+    ],
+    "nachfrageAusstehend": null
+  }
+}

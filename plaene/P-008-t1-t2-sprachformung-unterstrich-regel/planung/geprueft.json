@@ -1,0 +1,62 @@
+{
+  "erkundung": "2ff6684b1d4cdc1e95d1a332cfb6e727786f8eeb05382f9c7c2ffd12734b5356",
+  "schnitt": "d3291f079b817b17b50eee412b2ea3c273133c768c27c150f6fd6445a180bc84",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "nie-saetze:a1",
+        "befund": "Mehrere Sätze in wasDarfNiePassieren passen nicht zu a1, das nur R2 baut. (1) „Die Formung ist heute eine Kette aus fünf `.replace` … erst Umbau der ganzen Funktion lintfrei …, dann die Änderung.“ beschreibt einen Stand, den es nicht mehr gibt: Die Formung ist schon die Tabelle SHAPE_STEPS (src/speech-shape.js:1-6), `karte` meldet für shapedCore keine Befunde, und laut eigener Annahme gibt es keinen Umbau davor. Der Satz ist für a1 keine feste Regel. (2) „„Zahl“ in R1 heißt …“, „„Kette“ in R1 heißt …“ und „Die neue Katalogzeile in `docs/sicherheitsgrenzen.md` … SG-27 … Der Test zu T3 trägt diesen Namen.“ gehören zu R1 bzw. T3/SG-27. Laut Annahme zu a1 liegen R1 und T3 nicht in diesem Teil, und a1 hat keinen SG-27-Test. (3) Die Nicht-Ziele „eine sprachabhängige Ersetzung der Spanne …“ und „Spannen mit Einheit an beiden Enden …“ betreffen nur R1, und a1 kann sie nicht brechen. (4) Der Satz „Die neuen Regeln laufen … (Sicherheitsprüfung T3).“ steht zweimal, einmal gekürzt und einmal mit dem Zusatz zu `detect-redos`. Der Planer soll die Sätze (1)–(3) aus a1 streichen und den Satz unter (4) nur einmal in voller Länge behalten.",
+        "antwort": "korrigiert: In wasDarfNiePassieren von a1 steht keiner der Sätze aus (1) bis (3). Es fehlen also der Satz zur Kette aus fünf `.replace`, die R1-Begriffe „Zahl“ und „Kette“, die SG-27-Katalogzeile und die Nicht-Ziele zur Spanne. Der T3-Satz „Die neuen Regeln laufen … (Sicherheitsprüfung T3).“ steht genau einmal, als ganzer Satz bis zu seinem Punkt (pitch.md, ## Fallen). Der folgende Satz zu `detect-redos` ist eine Feststellung über eine Prüfung und beschreibt kein Verhalten, das der Abnahmetest prüfen kann. Deshalb steht er nicht dabei."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Bei a1, der einzigen Änderung am Unterstrich, fehlen diese Sätze, obwohl a1 sie brechen kann. (1) sicherheit.md, „## 5. Vorschlag für docs/sicherheitsgrenzen.md“: „Neue Vertrauensannahme zu SG-13: Was die Sprachformung (`src/speech-shape.js`) aus Ziffernfolgen macht, erkennt die Maskierung (`src/restricted-data.js`) weiterhin; die Formung erzeugt keine Trennzeichen-Mischung, die die Maskierung verwirft.“ Das Eintragen in docs/ mag im anderen Teil liegen, aber die Grenze gilt für die Ziffer-Ziffer-Ausnahme von R2. (2) pitch.md, „## Absicht“: „Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern. Im Zweifel bleibt das heutige Verhalten für alles, was weder Ziffer-Strich-Ziffer noch Unterstrich mitten im Wort ist.“ (3) sicherheit.md, „### Nicht-Ziele“: „Diese Änderung schützt nicht gegen ein Modell, das Angaben des Kunden oder des Gegenübers ausspricht, die es nicht nennen soll, weil das die Promptregel (`src/i18n/prompts/de.js:54`) und SG-11 betrifft; dass die heutige Formung Unterstriche zufällig verstümmelt, war kein Schutz.“ (4) sicherheit.md, „### T4: Ein Unterstrich mit einem Buchstaben daneben bleibt in einer Ausweisnummer stehen, und die Maskierung erkennt die Nummer nicht mehr“: „Ausgang: hinnehmen (Freigabe 2026-10-24), weil der Prompt Codes Ziffer für Ziffer verlangt (`src/i18n/prompts/de.js:29`, `en.js:53`, `fr.js:29`), solche Schreibweisen in Modellausgaben ungewöhnlich sind und sich ein Schutz in der Formung ohne Wortwissen nicht von `grüß_gott_2` (S5) unterscheiden lässt.“ (5) pitch.md, „## Premortem“, Nr. 5: „Nennt das Modell einen Werkzeugnamen (`take_message`), wird er künftig mit Unterstrich gesprochen statt verschluckt.“ mit dem Ausgang „hingenommen: der Fehler liegt in der Modellausgabe; ein Werkzeugname lässt sich ohne Wortwissen nicht von `max_weber` unterscheiden (Runde 2, Frage 4)“. Der Planer soll diese Sätze in wasDarfNiePassieren von a1 aufnehmen.",
+        "antwort": "korrigiert: Alle fünf Punkte stehen jetzt wörtlich in wasDarfNiePassieren von a1, jeweils mit quelle und abschnitt. (1) Die Vertrauensannahme zu SG-13 aus sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md. (2) Beide Sätze aus pitch.md, ## Absicht. (3) Das Nicht-Ziel aus sicherheit.md, ### Nicht-Ziele. (4) Der Ausgang von T4 aus dem T4-Abschnitt. (5) Premortem Nr. 5 steht als ganze Tabellenzeile mit Grund und Ausgang „hingenommen“ (pitch.md, ## Premortem), weil die Skriptprüfung nur ganze Sätze oder ganze Zeilen annimmt. Den Eintrag in docs/sicherheitsgrenzen.md baut a1 nicht, weil die Datei in .github/CODEOWNERS steht. a1 prüft nur die Grenze an der Formung."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "a1 ändert src/speech-shape.js als ganze Datei, also auch `shapeForSpeech` (Zeilen 18-22), und sein Abnahmetest prüft auch das Streaming-Häppchen (S5). Bei a1 fehlen zwei Sätze, die a1 brechen kann: (1) pitch.md, „## Nicht-Ziele“: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ (2) pitch.md, „## Fallen“: „Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).“ Der Abnahmetest für S5 könnte sonst `src/speech-chunker.js` importieren. Der Planer soll beide Sätze in wasDarfNiePassieren von a1 aufnehmen.",
+        "antwort": "korrigiert: In wasDarfNiePassieren von a1 stehen jetzt beide Sätze wörtlich. Der erste ist das Nicht-Ziel zu den Satzzeichen am Ende und zum angehängten Schlusspunkt in `shapeForSpeech` (pitch.md, ## Nicht-Ziele). Der zweite ist die Regel, dass Abnahmetests nur `src/speech-shape.js` importieren und kein anderes Modul unter `src/` (pitch.md, ## Fallen). Der Abnahmetest für S5 ruft damit `shapeChunkForSpeech` direkt aus `src/speech-shape.js` auf und nicht über `src/speech-chunker.js`."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "78481709-1161-4cf8-8088-68e6b21da986",
+      "schluessel": [
+        "durchstich:a1",
+        "b-nummer:B1",
+        "b-nummer:B3",
+        "b-nummer:B5",
+        "b-nummer:B7",
+        "b-nummer:B10",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 1,
+      "entfallen": []
+    },
+    {
+      "runde": 2,
+      "sitzung": "a10f01f2-0f4b-4489-8338-8d2882e79e79",
+      "schluessel": [
+        "durchstich:a1",
+        "b-nummer:B1",
+        "b-nummer:B3",
+        "b-nummer:B5",
+        "b-nummer:B7",
+        "b-nummer:B10",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

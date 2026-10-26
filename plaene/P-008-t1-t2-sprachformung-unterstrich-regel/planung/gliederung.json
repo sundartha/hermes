@@ -1,0 +1,44 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S4",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B10",
+        "T2"
+      ],
+      "eingang": "Ganze Antwort des Sprachmodells auf dem Telnyx-Rückfallweg: `src/claude.js:673` ruft `shapeForSpeech`, das `shapedCore` aufruft und danach `,;:` am Ende entfernt und einen Punkt anhängt, wenn kein `.!?` am Ende steht (`src/speech-shape.js:12-21`); der Text geht als `<Say>` an die Sprachausgabe (`src/routes/voice.js:284-288`).",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie sieht `shapedCore` in `src/speech-shape.js` heute genau aus: Zeilen, jeder reguläre Ausdruck und die Reihenfolge der Ersetzungen (Listenzeichen am Zeilenanfang, `[*_#`]` entfernen, `\\s+-\\s+` → „, “, Leerraum falten, `trim`)? Enthält die Listenzeichen-Regel noch `[ \\t]*` und das Flag `m`?",
+        "Ist der vorbereitende Umbau (Phase P-008-t1-t1-sprachformung-umbau: `shapedCore` lintfrei bei gleichem Verhalten) schon im Code? Steht für `src/speech-shape.js` in `eslint-suppressions.json` (früher Zeile 774) noch ein Zähler für `no-restricted-syntax`, und meldet die Funktionsliste für `shapedCore` noch Lint-Befunde?",
+        "Ist die Spannenregel R1 („9 - 18“ → „9-18“, außer bei ziffernweisen Folgen und Ketten) schon in `shapedCore` umgesetzt, oder steht dort noch die alte Regel `\\s+-\\s+` → „, “ allein? Diese Phase baut nur R2: Ein Unterstrich mit einem Unicode-Buchstaben oder einer Unicode-Ziffer direkt davor und direkt danach bleibt stehen, außer auf beiden Seiten steht eine Ziffer; ein Unterstrich neben einem Unterstrich und am Wortrand fällt wie bisher weg.",
+        "Welche Stelle in `shapedCore` muss sich für R2 ändern (die Regel, die heute `_` zusammen mit `*#`` entfernt), und lässt sie sich ändern, ohne die Reihenfolge der übrigen Ersetzungen zu verschieben?",
+        "Welche Node-Version gibt `package.json` unter `engines` an, und nutzt der Code schon reguläre Ausdrücke mit Flag `u` und `\\p{L}`/`\\p{N}` oder Lookbehind?",
+        "Welche bestehenden Tests prüfen `shapeForSpeech` oder `shapedCore` (`test/shape-for-speech.test.js`, `test/anrufe/sprechausgabe.test.js` und andere), mit welchen Eingaben und Erwartungen? Erwartet einer davon, dass ein Unterstrich mitten im Wort (zwischen Buchstaben oder zwischen Buchstabe und Ziffer) wegfällt, so dass er mit R2 rot würde?",
+        "Welche Ausgabe liefert `shapeForSpeech` heute für „Mail an max_weber@beispiel.de“, „Alles klar - ich buche“, „_Wichtig_: morgen“, „__fett__ bitte“, „Uhrzeiten:\\n  - 9\\n  - 18“ und „Karte 4111_1111_1111_1111“ (nach Code gelesen, nicht geraten)?",
+        "Importiert `test/anrufe/sprechausgabe.test.js` nur `src/speech-shape.js` und kein anderes Modul unter `src/`, und gibt es unter `test/anrufe/` eine Tabellenform für Fachlogik-Tests, die ein neuer Abnahmetest übernehmen kann?"
+      ]
+    },
+    {
+      "nummern": [
+        "S5"
+      ],
+      "eingang": "Streaming-Häppchen von `agentTurn`: `src/speech-chunker.js:33` ruft `shapeChunkForSpeech`, das ebenfalls `shapedCore` aufruft (`src/speech-shape.js:12-21`); heute schaltet kein Live-Aufrufer diesen Weg ein (`src/routes/voice.js:396` ruft `agentTurn` ohne `onSpeechChunk`).",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie sieht `shapeChunkForSpeech` in `src/speech-shape.js` aus (Zeilen), ist sie exportiert, und macht sie außer dem Aufruf von `shapedCore` noch etwas (Satzzeichen am Ende, Punkt anhängen, `trim`)? Erwartet wird für „Kennung grüß_gott_2“ das Häppchen „Kennung grüß_gott_2“ ohne angehängten Punkt.",
+        "Ruft `src/speech-chunker.js` (um Zeile 33) `shapeChunkForSpeech` auf jedes Häppchen unverändert auf, oder verändert der Chunker den Text vor oder nach der Formung (Schneiden hinter `.!?…` mit Leerraum, `src/speech-chunker.js:5`, `:14-24`)? Würde „Kennung grüß_gott_2“ ohne Satzende als ein Häppchen ausgegeben?",
+        "Welche bestehenden Tests prüfen `shapeChunkForSpeech` oder den Chunker, mit welchen Eingaben und Erwartungen, und würde einer davon rot, wenn ein Unterstrich zwischen Unicode-Buchstaben (auch Umlaut und ß) oder zwischen Buchstabe und Ziffer künftig stehen bleibt (R2: bleibt stehen, außer beide Seiten sind Ziffern; neben einem weiteren Unterstrich oder am Wortrand fällt er weg)?",
+        "Liefert `shapeChunkForSpeech` heute für „Kennung grüß_gott_2“ „Kennung grüßgott2“ (nach Code gelesen)? Kann ein Abnahmetest `shapeChunkForSpeech` direkt aus `src/speech-shape.js` importieren, ohne `src/speech-chunker.js` oder `src/claude.js` zu importieren?"
+      ]
+    }
+  ]
+}

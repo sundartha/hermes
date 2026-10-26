@@ -1,0 +1,40 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:3"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:4"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:3"
+    },
+    {
+      "schluessel": "weg:B5",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:3"
+    },
+    {
+      "schluessel": "weg:B7",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:2"
+    },
+    {
+      "schluessel": "weg:B10",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/claude.js:673"
+    },
+    {
+      "schluessel": "weg:T2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/voice.js:287"
+    }
+  ],
+  "befunde": []
+}

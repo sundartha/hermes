@@ -1,0 +1,430 @@
+{
+  "gruppe": [
+    "S4",
+    "B1",
+    "B3",
+    "B5",
+    "B7",
+    "B10",
+    "T2"
+  ],
+  "nummern": {
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante",
+          "von": 3,
+          "bis": 3,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22 (reine Textformung, kein Store-Zugriff)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Owner-Entscheidung verlangt; die Absicht schließt eine zweite Formungsstelle aus, und die Änderung bleibt in SHAPE_STEPS.",
+      "eingangImTest": "erreichbar",
+      "widersprueche": [
+        {
+          "designDoc": "## Ausgangslage und Annahmen (shapedCore hat 2 Befunde no-restricted-syntax, unterdrückt mit Zähler 2; Formung in speech-shape.js:1-10)",
+          "code": "src/speech-shape.js:8",
+          "text": "shapedCore steht jetzt in Zeilen 8-11 und hat laut karte keine Befunde. In eslint-suppressions.json gibt es keinen Eintrag mehr für speech-shape. Der vorbereitende Umbau ist schon im Code."
+        }
+      ]
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": "keine Änderung, weil Schritt 3 (`\\s+-\\s+` → \", \") schon „Alles klar, ich buche.“ liefert; die Änderung für R2 (Zeile 3) berührt diesen Fall nicht und R1 gehört nicht in diese Phase.",
+      "tests": [
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante",
+          "von": 3,
+          "bis": 3,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B5": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante",
+          "von": 3,
+          "bis": 3,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B7": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": "keine Änderung, weil Schritt 1 (Listenzeichen am Zeilenanfang mit `[ \\t]*` und Flag m) die Zeilen „  - 9“ und „  - 18“ schon zu „Uhrzeiten: 9 18.“ macht und R2 daran nichts ändert.",
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B10": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante",
+          "von": 3,
+          "bis": 3,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "T2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 373",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 18,
+          "bis": 22
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 284,
+          "bis": 290
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante",
+          "von": 3,
+          "bis": 3,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Ausgaben von shapeForSpeech heute (aus dem Code gelesen, nicht ausgeführt): „Mail an max_weber@beispiel.de“ → „Mail an maxweber@beispiel.de.“ (das einzige, was R2 ändert, S4). „Alles klar - ich buche“ → „Alles klar, ich buche.“ „_Wichtig_: morgen“ → „Wichtig: morgen.“ „__fett__ bitte“ → „fett bitte.“ „Uhrzeiten:\\n  - 9\\n  - 18“ → „Uhrzeiten: 9 18.“ „Karte 4111_1111_1111_1111“ → „Karte 4111111111111111.“ B1, B3, B5, B7 und B10/T2 stimmen also schon; nur S4 braucht R2.",
+    "Gerüst von R2: Schritt 2 (Zeile 3) wird auf `[*#`]` verkürzt. Dahinter kommt ein eigener Schritt mit `/_/g`, der den Unterstrich nur dann ersetzt, wenn er nicht (Buchstabe oder Ziffer davor und danach) ist. Sind davor und danach beide Ziffern, fällt er trotzdem weg (B10, T2). Direkt aneinander liegende Unterstriche und Unterstriche am Wortrand fallen weg (B3, B5). Die Prüfung geht mit `(?<=[\\p{L}\\p{N}])_(?=[\\p{L}\\p{N}])` und einer Ziffer-Ziffer-Ausnahme, Flag `u`. `engines` (`>=22.18 <23`, package.json:66) und der übrige Code erlauben das (z. B. src/restricted-data.js:7-8).",
+    "Bestehende Tests: `test/shape-for-speech.test.js` (CASES Zeilen 15-29) und `test/anrufe/sprechausgabe.test.js` (AL-P7-3 Zeilen 57-64, AL-P7-5 mit Korpus Zeilen 75-94, AL-P7-8 Zeilen 115-126) prüfen nur Markdown-Unterstriche am Wortrand und Wort-Strich-Wort. Keiner erwartet, dass ein Unterstrich mitten im Wort wegfällt, deshalb wird keiner mit R2 rot. `test/al-p14-in-call-consult.test.js:174-185` lässt Locale-Texte durch `shapeForSpeech`; ich habe nicht geprüft, ob sie einen Unterstrich enthalten.",
+    "`test/anrufe/sprechausgabe.test.js` importiert `src/speech-shape.js`, aber auch `src/speech-chunker.js` und `src/thinking-signal.js` (Zeilen 3-5). Tabellenvorbild: `PAARE` (Zeilen 116-125) und `CASES` in `test/shape-for-speech.test.js:15-29`. Ein neuer Abnahmetest kann diese Form übernehmen und nur `src/speech-shape.js` importieren.",
+    "Eingang: `/voice/turn` (voice.js:373-408) ruft `agentTurn` (claude.js:455-687, dort Zeile 673 `shapeForSpeech`) und gibt das Ergebnis an `sendTurnOutcome` (voice.js:284-290) weiter. `kette` belegt keinen Pfad, weil der Aufruf in der Route über einen anonymen Handler läuft; ich habe ihn selbst gelesen. Die Streaming-Wege `shapeChunkForSpeech` (`src/speech-chunker.js:33`) und `thinking-signal.js:10` laufen durch denselben `shapedCore`, R2 wirkt dort ebenso.",
+    "Das Wenn der Szenarien nennt keine Werkzeuge oder Routen mit Namen in Backticks. Neue Funktionen sind nicht nötig, deshalb gibt es keine `neu`-Stelle und keine `vorhanden`-Angabe.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Gerüst von R2: Schritt 2 (Zeile 3) wird auf `[*#`]` verkürzt. Dahinter kommt ein eigener Schritt mit `/_/g`, der den Unterstrich nur dann ersetzt, wenn er nicht (Buchstabe oder Ziffer davor und danach) ist. Sind davor und danach beide Ziffern, fällt er trotzdem weg (B10, T2). Direkt aneinander liegende Unterstriche und Unterstriche am Wortrand fallen weg (B3, B5). Die Prüfung geht mit `(?<=[\\p{L}\\p{N}])_(?=[\\p{L}\\p{N}])` und einer Ziffer-Ziffer-Ausnahme, Flag `u`. `engines` und der übrige Code erlauben das (Node 22).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Bestehende Tests: `test/shape-for-speech.test.js` (CASES Zeilen 15-29) und `test/anrufe/sprechausgabe.test.js` (AL-P7-3 Zeilen 57-64, AL-P7-5 mit Korpus Zeilen 75-94, AL-P7-8 Zeilen 115-126) prüfen nur Markdown-Unterstriche am Wortrand und Wort-Strich-Wort. Keiner erwartet, dass ein Unterstrich mitten im Wort wegfällt, deshalb wird keiner mit R2 rot. Der Korpus von AL-P7-5 enthält keinen Unterstrich. `test/al-p14-in-call-consult.test.js:174-185` lässt Locale-Texte durch `shapeForSpeech`. Ich habe nicht geprüft, ob die Texte einen Unterstrich enthalten.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: `test/anrufe/sprechausgabe.test.js` importiert `src/speech-shape.js`, aber auch `src/speech-chunker.js` und `src/thinking-signal.js` (Zeilen 3-5). Es ist ein Tabellenvorbild: `PAARE` (Zeilen 116-125) und `CASES` in `test/shape-for-speech.test.js:15-29` sind Listen aus [Eingabe, erwartet] mit einer Schleife. Ein neuer Abnahmetest kann diese Form übernehmen und nur `src/speech-shape.js` importieren. Das ist laut Design Doc als Fachlogik-Datei im Bereich `anrufe` erlaubt.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Eingang: `/voice/turn` (voice.js:373-408) ruft `agentTurn` (claude.js:455-687, dort Zeile 673 `shapeForSpeech`) und gibt das Ergebnis an `sendTurnOutcome` (voice.js:284-290) weiter. `kette` belegt keinen Pfad, weil der Aufruf in der Route über einen anonymen Handler läuft; ich habe ihn selbst gelesen. Die Streaming-Wege `shapeChunkForSpeech` (`src/speech-chunker.js:33`) und `thinking-signal.js:10` laufen durch denselben `shapedCore`, R2 wirkt dort ebenso. Der Chunker schneidet nur hinter `.!?…`, ein Unterstrich im Wort wird also nicht zerteilt."
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "gruppe": [
+    "S5"
+  ],
+  "nummern": {
+    "S5": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/speech-chunker.js",
+          "funktion": "makeSentenceChunker",
+          "von": 26,
+          "bis": 66
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeChunkForSpeech",
+          "von": 13,
+          "bis": 16
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11
+        },
+        {
+          "rolle": "speicher",
+          "ausweg": "nicht gefunden, weil der Weg nichts speichert: die Formung ist eine reine Funktion",
+          "datei": "src/speech-shape.js"
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-chunker.js",
+          "funktion": "makeSentenceChunker",
+          "von": 32,
+          "bis": 37
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 8,
+          "bis": 11,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "src/speech-shape.js",
+          "art": "export",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js",
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-22 (reine Textfunktion, kein Speicherzugriff)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder Pitch noch Design Doc für S5 eine Entscheidung des Owners verlangen; die Absicht legt Unterstrich und Spanne fest",
+      "eingangImTest": "erreichbar",
+      "widersprueche": [
+        {
+          "designDoc": "## Ausgangslage und Annahmen",
+          "code": "src/speech-shape.js:1-22",
+          "text": "Das Design Doc nennt `shapedCore` in `src/speech-shape.js:1-10` mit Demeter-Befunden und fünf Zeilen. Im Code steht die Formung als Tabelle `SHAPE_STEPS` (Zeilen 1-6) und `shapedCore` in Zeilen 8-11; `shapeChunkForSpeech` steht in 13-16 und `shapeForSpeech` in 18-22, nicht in 12-21. Der Umbau scheint schon gelaufen zu sein."
+        }
+      ]
+    }
+  },
+  "hinweise": [
+    "Antwort auf Frage 1: `shapeChunkForSpeech` steht in src/speech-shape.js:13-16 und ist exportiert. Sie gibt bei leerem Text den Text selbst zurück und sonst `shapedCore(text)`. Sie entfernt keine Satzzeichen am Ende, hängt keinen Punkt an und macht kein eigenes `trim`; das `trim` steckt in `shapedCore` (Zeile 10). Für „Kennung grüß_gott_2“ liefert sie nach der Änderung „Kennung grüß_gott_2“ ohne Punkt.",
+    "Antwort auf Frage 2: Der Chunker (src/speech-chunker.js:32-37) ruft `shapeChunkForSpeech(raw)` auf jedes Stück und verwirft ein leeres Ergebnis. Dem Ergebnis stellt er ein Leerzeichen voran, außer beim ersten Häppchen ohne `continuesStream` (Zeile 35). Geschnitten wird nur hinter `.!?…` mit folgendem Leerraum und mindestens 12 Zeichen (Zeilen 5, 14-24). „Kennung grüß_gott_2“ hat kein Satzende und kommt erst bei `flushRemainder` (Zeilen 58-62) als ein Häppchen, ohne Leerzeichen davor, wenn es das erste ist.",
+    "Antwort auf Frage 3: `shapeChunkForSpeech` prüfen test/anrufe/sprechausgabe.test.js:58-62 und :207-218 mit Markdown, Listenzeichen und Strichen. Den Chunker prüfen dort die Tests ab Zeile 15 (`chunksFor`) mit Satzgrenzen. Von dieser Datei habe ich nur die Zeilen 1-70 gelesen; im ganzen File fand die Suche nach Unterstrich zwischen Buchstaben nur Konstantennamen, keine Eingaben mit Unterstrich. In test/shape-for-speech.test.js:18 steht `_Wichtig_:` am Wortrand, das bleibt nach R2 gleich. Kein Test wird rot, wenn ein Unterstrich zwischen Buchstaben oder Ziffern stehen bleibt.",
+    "Antwort auf Frage 4: Ja, heute liefert der Code für „Kennung grüß_gott_2“ „Kennung grüßgott2“, denn `[*_#`]` entfernt jeden Unterstrich (src/speech-shape.js:3). Ein Abnahmetest kann `shapeChunkForSpeech` direkt aus src/speech-shape.js importieren; test/anrufe/sprechausgabe.test.js:4 tut das schon. Den Chunker oder src/claude.js braucht er dafür nicht.",
+    "Absicht: Der Code widerspricht ihr nicht. Beide Wege (`shapeForSpeech` und `shapeChunkForSpeech`) laufen über `shapedCore`, eine zweite Formungsstelle ist nicht nötig. Die Aufrufer müssen sich nicht ändern. Die Unterstrichregel gehört in den Schritt mit `[*_#`]` (SHAPE_STEPS, Zeile 3).",
+    "Ein Unterstrich-Wort wie „grüß_gott_2“ wird vom Chunker nie auf zwei Häppchen verteilt, weil er nur hinter Satzzeichen mit Leerraum schneidet."
+  ]
+}
