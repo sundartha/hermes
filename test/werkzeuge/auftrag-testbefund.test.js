@@ -23,6 +23,7 @@ const BERECHNETER_FALL = `${ROTER_TEST}const FALL = ${JSON.stringify(FALL_AUS_TE
 const OHNE_FALL = 'import assert from "node:assert/strict";\nthrow new Error("2 !== 4");\n';
 const MIT_HILFE = `${ROTER_TEST}import * as hilfe from "./fall.js";\nif (hilfe.MIT_FALL) test(${JSON.stringify(FALL_AUS_TEXT)}, () => assert.equal(verdopple("2"), 4));\n`;
 const HILFE_OHNE_FALL = { ...VERDOPPELT, "test/fall.js": "export const MIT_FALL = false;\n" };
+const OHNE_FESTEN_NAMEN = `Verstoß: Test ohne festen Namen: ${ABNAHME} › FALL`;
 const TEST_NACH = "prompt-test-nach.txt";
 const BAU_NACH = "prompt-bau-nach.txt";
 
@@ -85,9 +86,17 @@ function ohneVerworfenenFall(context, neuerTest, { verworfen = FALSCHE_DATEN, ba
   for (const runde of beleg.runden) assert.ok(runde.includes(FALL_AUS_TEXT), runde);
 }
 
+function verworfenOhneFestenNamen(context) {
+  const { lauf, beleg, werkzeug } = mitBefund(context, BEFUND, { test: { [ABNAHME]: BERECHNETER_FALL }, "test-antwort": "Zweck tests/statisch: Drehbuchtext des Ersatz-Agenten.", bau: VERDOPPELT });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(existsSync(join(werkzeug, BAU_NACH)), false);
+  assert.equal(beleg.runden.length, ROTE_RUNDEN_BIS_ZUM_STOPP);
+  for (const runde of beleg.runden) assert.ok(runde.includes(OHNE_FESTEN_NAMEN), runde);
+}
+
 test("lässt der neu geschriebene Abnahmetest einen Fall des verworfenen weg, auch einen mit berechnetem Namen oder einen, den der Bau-Agent über eine Testhilfe abgeschaltet hat, ist die Runde rot", (context) => {
   ohneVerworfenenFall(context, ROTER_TEST);
-  ohneVerworfenenFall(context, ROTER_TEST, { verworfen: BERECHNETER_FALL });
+  verworfenOhneFestenNamen(context);
   ohneVerworfenenFall(context, ROTER_TEST, { verworfen: MIT_HILFE, bau: HILFE_OHNE_FALL });
 });
 
