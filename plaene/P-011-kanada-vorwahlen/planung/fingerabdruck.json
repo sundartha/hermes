@@ -1,0 +1,220 @@
+{
+  "stand": {
+    "kopfBaum": "f77acffa6a0e4b03880565bfa008a8d90a2a7830",
+    "arbeitsbaum": "a2209125e233a1fdb8598eb34bd7337be2db14ed",
+    "dateien": {
+      ".claude/agents/entwurf.md": "4b624cda3bb772a809d08986998d81ae76d7d3a943c56f3e27e2f452156bd00d",
+      ".claude/agents/erkunder.md": "1d5bacbb67a84f854e46348c6d50c2e2340e54fbd13f19daf58b393b147aa210",
+      ".claude/agents/planer.md": "b85167be0bb21471167d3557f6a47e1f5204ddbdb1ae808301140456ac878e0d",
+      ".claude/agents/pruefer-planung.md": "4e7a1ac4f59694d722a344495136ae9be2b24ef26814e17c10687a6b3a69799b",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "09843d98224739272168781c2a0ed26234dde95a3cdf1812263bbf4df64f86ee",
+      "plaene/P-011-kanada-vorwahlen/design.md": "f084366b48b10f99818932c6d358a97f8bff0f1b82978e68074f63c6468b9d8c",
+      "plaene/P-011-kanada-vorwahlen/pitch.md": "c9e0cda52655c5ae7f2986069ee598d79754743d3d1ffff0e48240b5279db547",
+      "plaene/P-011-kanada-vorwahlen/sicherheit.md": "5955bb5d549b7f8de8ff25caecddf256785c4f82e59ea9a7e8b64ae21c641d7c",
+      "tools/bereiche.json": "57b2b8f1c7ed8b01f41c13599edb6a4a897ad382b9b981302a5ef728200b7ef9"
+    },
+    "kopfOhneWerkzeug": "afdd87ed00a49112cf2e86ceb835668df64a5f2370ae795804ef09dc9c1dacef",
+    "arbeitsbaumOhneWerkzeug": "ab810879abf034793fe855a1a32cc710673e69ed3bed0c0e64cf09a7c18fd993",
+    "werkzeugBaum": "d78ceed6528113d74539291d35129e3cb8ba0ac3"
+  },
+  "ablage": {
+    "gliederung.json": "b287e652d756c2c1bead640d03bf054c1a62c6445f982d50f8c168a51af7ab24",
+    "nachfragen.json": "fec6269f61b867f24b5a6757afed1547abc19d43529d60682d94c21b619c81b5",
+    "erkundung-g1.json": "ace4574879c8e62faa1e7307382216c05de5684fe1ada51b9e809e07b89301ec"
+  },
+  "zustand": {
+    "gesehen": [
+      "S1\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "S1\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "S1\u0000src/telephony/outbound-gates.js\u0000numberGateError",
+      "S1\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "S1\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "S1\u0000src/elevenlabs/outbound.js\u0000dynamicVariables",
+      "S1\u0000src/elevenlabs/nanp-area-codes.js\u0000",
+      "S2\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "S2\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "S2\u0000src/telephony/outbound-gates.js\u0000numberGateError",
+      "S2\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "S2\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "S2\u0000src/elevenlabs/outbound.js\u0000dynamicVariables",
+      "S2\u0000src/elevenlabs/nanp-area-codes.js\u0000",
+      "S3\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "S3\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "S3\u0000src/telephony/outbound-gates.js\u0000numberGateError",
+      "S3\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "S3\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "S3\u0000src/elevenlabs/outbound.js\u0000dynamicVariables",
+      "S3\u0000src/elevenlabs/nanp-area-codes.js\u0000",
+      "S4\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "S4\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "S4\u0000src/telephony/outbound-gates.js\u0000numberGateError",
+      "S4\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "S4\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "S4\u0000src/elevenlabs/outbound.js\u0000dynamicVariables",
+      "S4\u0000src/elevenlabs/nanp-area-codes.js\u0000",
+      "S5\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "S5\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "S5\u0000src/telephony/outbound-gates.js\u0000numberGateError",
+      "S5\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "S5\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "S5\u0000src/elevenlabs/outbound.js\u0000dynamicVariables",
+      "S5\u0000src/elevenlabs/nanp-area-codes.js\u0000",
+      "B1\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "B1\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "B1\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "B1\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "B1\u0000src/elevenlabs/outbound.js\u0000calleeTimezoneText",
+      "B2\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "B2\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "B2\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "B2\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "B2\u0000src/elevenlabs/outbound.js\u0000calleeTimezoneText",
+      "B3\u0000src/routes/api-calls.js\u0000anonym ab Zeile 226",
+      "B3\u0000test/elevenlabs-anrufstart.test.js\u0000",
+      "B3\u0000src/elevenlabs/time-context.js\u0000callTimeContext",
+      "B3\u0000src/elevenlabs/nanp-area-codes.js\u0000timezoneHypothesisForNumber",
+      "B3\u0000src/elevenlabs/outbound.js\u0000calleeTimezoneText"
+    ],
+    "ausgeschoepft": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "B1",
+      "B2",
+      "B3"
+    ],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S1",
+          "S2",
+          "S3",
+          "S4",
+          "S5",
+          "B1",
+          "B2",
+          "B3"
+        ],
+        "sitzung": "595e56d9-2571-4b37-bb1e-587ec30cecb2",
+        "runden": 1,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S1",
+          "S2",
+          "S3",
+          "S4",
+          "S5",
+          "B1",
+          "B2",
+          "B3"
+        ],
+        "sitzung": "6c45f3b5-c048-4680-9444-e8c68e07d17a",
+        "runden": 1,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S1",
+        2
+      ]
+    ],
+    "wegAusstehend": [],
+    "erkundungAusstehend": [],
+    "nachfrageWellen": 1,
+    "wegAbnahmen": [
+      {
+        "nummer": "S1",
+        "summe": "dd094588b262fd7732c208a01d28e76fb53a33dd21bfc0f0742ce49cec767e47",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:S1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/outbound.js:716"
+        }
+      },
+      {
+        "nummer": "S2",
+        "summe": "bd8d1c263ddf41f3d6f1994fef5aefc9b9a43a1608b2ab01001b5ca7add91295",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:S2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/time-context.js:31"
+        }
+      },
+      {
+        "nummer": "S3",
+        "summe": "e7b0350fb1a4712d726d7425055a332b9b51fa0314eba6d3f2496a6206cc2772",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:S3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/nanp-area-codes.js:90"
+        }
+      },
+      {
+        "nummer": "S4",
+        "summe": "6a81c75e173255db3a80dd57b0445ec5754f0869a543a9bdeebbf43297e58193",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:S4",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/outbound.js:330"
+        }
+      },
+      {
+        "nummer": "S5",
+        "summe": "233e439b0d61e5e499831c90e107bc93c83b149239934a0f2961de6c85d92626",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:S5",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/telephony/number-denylist.js:66"
+        }
+      },
+      {
+        "nummer": "B1",
+        "summe": "9619d670db55cfae208540496602ac0e426052fa0ca3aefe7a50b81678f50c65",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:B1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/outbound.js:264"
+        }
+      },
+      {
+        "nummer": "B2",
+        "summe": "1ae1c284fe92dfc182b31288215bed59bf9afd86125c90e1929b076fc8b928df",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:B2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/elevenlabs/outbound.js:265"
+        }
+      },
+      {
+        "nummer": "B3",
+        "summe": "9b21d52632531360609c85a7ab774481307df06a68b9b6f2b66f8a0b9436fcb3",
+        "werkzeug": "d78ceed6528113d74539291d35129e3cb8ba0ac3",
+        "zeile": {
+          "schluessel": "weg:B3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/store/defaults.js:449"
+        }
+      }
+    ],
+    "nachfrageAusstehend": null
+  }
+}

@@ -1,0 +1,559 @@
+{
+  "gruppe": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "B1",
+    "B2",
+    "B3"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+14165550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/outbound-gates.js",
+          "funktion": "numberGateError",
+          "von": 250,
+          "bis": 268
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "dynamicVariables",
+          "von": 309,
+          "bis": 337
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "art": "konstante",
+          "von": 13,
+          "bis": 66,
+          "neueZeilen": 8
+        },
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 10
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/elevenlabs/nanp-area-codes.js:13-66 (nur Konstante)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil das Design Doc keine offene Owner-Entscheidung für diese Nummer nennt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+12045550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/outbound-gates.js",
+          "funktion": "numberGateError",
+          "von": 250,
+          "bis": 268
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "dynamicVariables",
+          "von": 309,
+          "bis": 337
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "art": "konstante",
+          "von": 36,
+          "bis": 50,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 10
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/elevenlabs/nanp-area-codes.js:13-66 (nur Konstante)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung für 204/431/584 verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+17805550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/outbound-gates.js",
+          "funktion": "numberGateError",
+          "von": 250,
+          "bis": 268
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "dynamicVariables",
+          "von": 309,
+          "bis": 337
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "art": "konstante",
+          "von": 51,
+          "bis": 57,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 10
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/elevenlabs/nanp-area-codes.js:13-66 (nur Konstante)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil 780 laut Design Doc nur Alberta bedient",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+16045550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/outbound-gates.js",
+          "funktion": "numberGateError",
+          "von": 250,
+          "bis": 268
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "dynamicVariables",
+          "von": 309,
+          "bis": 337
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "art": "konstante",
+          "von": 59,
+          "bis": 64,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 10
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/elevenlabs/nanp-area-codes.js:13-66 (nur Konstante)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung für 604 verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S5": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+1<Vorwahl>5550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/outbound-gates.js",
+          "funktion": "numberGateError",
+          "von": 250,
+          "bis": 268
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "dynamicVariables",
+          "von": 309,
+          "bis": 337
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "art": "konstante",
+          "von": 13,
+          "bis": 66,
+          "neueZeilen": 8
+        },
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 40
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/elevenlabs/nanp-area-codes.js:13-66 (nur Konstante)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil das Design Doc die Zuordnung als Annahme führt, nicht als offene Owner-Entscheidung",
+      "eingangImTest": "erreichbar",
+      "widersprueche": [
+        {
+          "designDoc": "## Ausgangslage und Annahmen (819 mit 873, 468: hingenommen)",
+          "code": "src/elevenlabs/nanp-area-codes.js:13",
+          "text": "Die Absicht sagt: im Zweifel keine Vermutung. Das Design Doc nimmt für 819 (mit 873, 468) einzelne Nummernblöcke in den Territorien mit anderer Zone hin, anders als bei 403 mit 587, 825, 368, die es auslässt."
+        }
+      ]
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+12125550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "calleeTimezoneText",
+          "von": 262,
+          "bis": 266
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "keine Datenbank beteiligt"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil der Bestand unverändert bleibt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+15555550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "calleeTimezoneText",
+          "von": 262,
+          "bis": 266
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "keine Datenbank beteiligt"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil der Bestand unverändert bleibt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-calls.js",
+          "funktion": "anonym ab Zeile 226",
+          "von": 226,
+          "bis": 371
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "ausweg": "nicht gefunden, weil `to: \"+1<Vorwahl>5550147\"` entsteht neu in test/elevenlabs-anrufstart.test.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/elevenlabs/time-context.js",
+          "funktion": "callTimeContext",
+          "von": 25,
+          "bis": 34
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/elevenlabs/nanp-area-codes.js",
+          "funktion": "timezoneHypothesisForNumber",
+          "von": 87,
+          "bis": 91
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/elevenlabs/outbound.js",
+          "funktion": "calleeTimezoneText",
+          "von": 262,
+          "bis": 266
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "test/elevenlabs-anrufstart.test.js",
+          "art": "konstante",
+          "von": 1127,
+          "bis": 1129,
+          "neueZeilen": 15
+        }
+      ],
+      "tests": [
+        "test/elevenlabs-anrufstart.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "keine Datenbank beteiligt"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Auslassung im Design Doc begründet ist",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Die Zielnummern aus dem Wenn stehen in keiner Quelldatei. Sie sind Testwerte, deshalb steht der Ausweg bei der Testdatei test/elevenlabs-anrufstart.test.js. Der echte Eingang ist `POST /api/calls` in src/routes/api-calls.js:226-371.",
+    "Aufbau der Tabelle: AREA_CODES_BY_ZONE (src/elevenlabs/nanp-area-codes.js:13-66) ist ein eingefrorenes Objekt, Zone -> Objekt (Staat -> Zeichenkette mit Vorwahlen, durch ein Leerzeichen getrennt). Reihenfolge der Zonen: Eastern, Central, Mountain, Arizona, Pacific, Hawaii. Für die Kanada-Vorwahlen braucht es je Zone einen neuen Schlüssel, etwa ON/QC, MB, AB, BC. Eastern: Zeilen 14-35, Central: 36-50, Mountain: 51-57, Pacific: 59-64. Die Map ZONE_BY_AREA_CODE entsteht in den Zeilen 79-85 per flatMap. Eine Prüfung auf doppelte Vorwahlen gibt es nicht: bei einem Duplikat gewinnt in der Map der spätere Eintrag still.",
+    "Keine der 32 oder 23 Vorwahlen steht heute in src/. Einziger Leser der Tabelle ist src/elevenlabs/time-context.js:31 über callTimeContext. Der zweite Aufrufer, src/elevenlabs/inbound-initiation.js:166, übergibt keine Gegenstelle und ist nicht betroffen. src/elevenlabs/outbound.js:14 importiert nur spokenTimezoneName.",
+    "Weg: POST /api/calls (src/routes/api-calls.js:226-371) ruft runOutboundGates (:239) und danach originateElevenLabsCall (:333). Das ist in src/elevenlabs/outbound.js die Funktion originateCall bei :712-719 mit callTimeContext, dann startCallBody (:418-460), dynamicVariables (:309-337, callee_timezone :330) und calleeTimezoneText (:262-266).",
+    "Test: placeCall(srv, null, { to }) (test/elevenlabs-anrufstart.test.js:206) und usLauf(nummer) (:1199) lesen mock.startRequests. Der Auftraggeber hat die Zone Europe/Berlin über seedOwner({ timezone: OWNER_TZ }). Die Tests „EL-START T8: die aus der Vorwahl abgeleitete Zone des Angerufenen reist als bestaetigungspflichtige Hypothese“ (:1214) und „EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine absolute Uhrzeit“ (:1272) prüfen Marker, nicht den Wortlaut zeichengleich. Neue Tabelleneinträge machen sie nicht rot.",
+    "Gates: E164 (src/store/defaults.js:348) ist /^\\+[1-9]\\d{6,14}$/, es gibt keine Bibliothek wie libphonenumber. Die Denylist (src/telephony/number-denylist.js) trifft für +1 nur 900, 976, 809, 829, 849, 876, 268, 284, 473, 649, 664, 767, also keine der 55 Vorwahlen und nicht 212 oder 555. test/helpers.js:80 setzt ALLOWED_COUNTRY_CODES auf \"*\". Keine Nummer wird abgewiesen. Lint: keine Befunde in nanp-area-codes.js, time-context.js, calleeTimezoneText und dynamicVariables. Die Dateien stehen in eslint.config.js:44 und .github/CODEOWNERS enthält keine davon.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Aufbau der Tabelle: AREA_CODES_BY_ZONE (src/elevenlabs/nanp-area-codes.js:13-66) ist ein eingefrorenes Objekt, Zone -> Objekt (Staat -> Zeichenkette mit Vorwahlen, durch ein Leerzeichen getrennt). Zonenreihenfolge: Eastern, Central, Mountain, Arizona, Pacific, Hawaii. Für die Kanada-Vorwahlen braucht es je Zone einen neuen Schlüssel, etwa ON/QC/MB/AB/BC, im Muster der Staaten-Schlüssel. Eastern: Zeilen 15-34, Central: 37-49, Mountain: 52-56, Pacific: 60-63. Die Map ZONE_BY_AREA_CODE entsteht in den Zeilen 79-85 per flatMap über alle Zonen und Staaten. Eine Prüfung auf doppelte Vorwahlen gibt es nicht: bei einem Duplikat gewinnt in der Map der spätere Eintrag still. Kein Test prüft Tabellen-Inhalt oder -Größe.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Keine der 32 oder 23 Vorwahlen steht heute irgendwo in src/. Die Suche nach Vorwahl und area code findet in src nur die Nutzung bei src/elevenlabs/outbound.js:258. Es gibt keine weitere Vorwahl-Liste. Der Leser der Tabelle ist nur src/elevenlabs/time-context.js:31 über callTimeContext, der zweite Aufrufer src/elevenlabs/inbound-initiation.js:166 übergibt OHNE_GEGENSTELLE und wird nicht berührt. Außerdem importiert src/elevenlabs/outbound.js:14 nur spokenTimezoneName.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Weg: POST /api/calls (src/routes/api-calls.js:226-371) ruft runOutboundGates (:239), danach originateElevenLabsCall (:333). Das ist in src/elevenlabs/outbound.js makeElevenLabsOutbound; dort steht originateCall bei :712-719 mit callTimeContext, dann startCallBody (:418-460) und dynamicVariables (:309-337, Feld callee_timezone :330) mit calleeTimezoneText (:262-266). Mit der Hypothese entsteht der Satz aus calleeZoneHypothesisSentence (:257-258): der Satz trägt Kennung und spokenTimezoneName(zone).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Test: test/elevenlabs-anrufstart.test.js erreicht den echten Eingang mit placeCall(srv, null, { to }) (Zeile 206) über withElevenLabs und liest den Anrufstart in mock.startRequests. Relevant: der Test „EL-START T8: die aus der Vorwahl abgeleitete Zone des Angerufenen reist als bestaetigungspflichtige Hypothese“ (212, B1) und der Test „EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine absolute Uhrzeit“ (555, B2) in den Zeilen 1214-1270 und 1272-1312. Dort ist OWNER_TZ der Auftraggeber (Zone Europe/Berlin, über seedOwner({ timezone: OWNER_TZ })). Eine kanadische Nummer läuft über usLauf(nummer) (Zeile 1199) ohne Änderung der Hilfe. test/helpers.js:80 setzt ALLOWED_COUNTRY_CODES auf \"*\". Beide T8-Tests werden durch neue Einträge nicht rot (212 und 555 bleiben). Keine Tests prüfen den Satz zeichengleich: sie suchen Marker (ANNAHME_MARKER usw.), nicht den ganzen Wortlaut.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Gates: E164 (src/store/defaults.js:348) ist /^\\+[1-9]\\d{6,14}$/, keine Bibliothek wie libphonenumber im Weg. Die Denylist (src/telephony/number-denylist.js) kennt für +1 nur 900, 976, 809, 829, 849, 876, 268, 284, 473, 649, 664, 767; keine der 32 oder 23 Vorwahlen und nicht 212 oder 555 trifft zu. Das Land-Gate (:170-174) ist mit \"*\" im Test offen. Keine Nummer wird abgewiesen. Lint: die Funktionen von nanp-area-codes.js und time-context.js sowie calleeTimezoneText und dynamicVariables haben keine Befunde. Die Tabelle ist eine Konstante und fällt in keine max-lines-per-function-Prüfung. Die Dateien sind in eslint.config.js:44 für die Regel kein-anrufzeit-gate freigegeben. Keine Datei der Änderung steht in .github/CODEOWNERS. Die Absicht verlangt für zweifelhafte Vorwahlen keine Vermutung; siehe der Widerspruch unter S5 zu 819/873/468."
+  ]
+}

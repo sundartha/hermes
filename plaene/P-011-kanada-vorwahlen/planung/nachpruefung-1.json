@@ -1,0 +1,133 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-calls.js:333"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:716"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/time-context.js:31"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:90"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:330"
+  },
+  {
+    "schluessel": "weg:S5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/number-denylist.js:66"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:264"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/outbound.js:265"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/defaults.js:449"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:15"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:90"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:13"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/helpers.js:80"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/elevenlabs/nanp-area-codes.js:13"
+  },
+  {
+    "schluessel": "ausweg:B1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "ausweg:B2:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1129"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S2:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S3:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S4:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S5:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B1:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1215"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B2:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1273"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:B3:test/elevenlabs-anrufstart.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/elevenlabs-anrufstart.test.js:1127"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei a1 fehlen zwei feste Regeln aus pitch.md in wasDarfNiePassieren. a1 ist der einzige Auftrag, der sie brechen kann. (1) pitch.md, Abschnitt ## Nicht-Ziele: „Nicht Teil dieser Änderung: die Freigabe von +1 im Land-Gate (`ALLOWED_COUNTRY_CODES`, Profilfeld `allowedCountryCodes`), weil das ein geschütztes Safety-Gate ist (CLAUDE.md, Absolute Regeln 1); der Blueprint setzt `+49,+33,+44` (`render.yaml:95-96`), die Vermutung wirkt erst, wenn der Betreiber +1 freigibt, bis dahin nur in der Testumgebung (`test/helpers.js:80`).“ Der Pitch nennt unter ## Premortem bei PM1 genau diese Abkürzung bei dieser Änderung: jemand lockert das Land-Gate, um die Änderung „nutzbar“ zu machen. Der Ausgang von PM1 ist dieses Nicht-Ziel. (2) pitch.md, Abschnitt ## Fallen: „Abnahmetests: laufen über `POST /api/calls` und den Anrufstart am Anbieter; sie importieren kein internes Modul neu.“ Der neue Abnahmetest von a1 kann diese Regel brechen, etwa wenn er für S5 oder B3 `src/elevenlabs/nanp-area-codes.js` direkt importiert. Bitte beide Sätze wörtlich mit Quelle und Abschnitt bei a1 ergänzen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

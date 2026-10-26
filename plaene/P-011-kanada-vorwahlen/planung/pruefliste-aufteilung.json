@@ -1,0 +1,50 @@
+[
+  {
+    "gruppe": 0,
+    "sitzung": "45978a95-7008-47bb-9caf-2447926ec150",
+    "schluessel": [
+      "b-nummer:B1",
+      "b-nummer:B2",
+      "b-nummer:B3",
+      "nie-saetze:a1",
+      "allein-gruen:a1",
+      "ausweg:S1:weg eingang",
+      "ausweg:S1:ownerEntscheidung",
+      "ausweg:S2:weg eingang",
+      "ausweg:S2:ownerEntscheidung",
+      "ausweg:S3:weg eingang",
+      "ausweg:S3:ownerEntscheidung",
+      "ausweg:S4:weg eingang",
+      "ausweg:S4:ownerEntscheidung",
+      "ausweg:S5:weg eingang",
+      "ausweg:S5:ownerEntscheidung",
+      "ausweg:B1:weg eingang",
+      "ausweg:B1:ownerEntscheidung",
+      "ausweg:B2:weg eingang",
+      "ausweg:B2:ownerEntscheidung",
+      "ausweg:B3:weg eingang",
+      "ausweg:B3:ownerEntscheidung",
+      "falsche-angabe:a1:S1:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:S2:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:S3:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:S4:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:S5:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:B1:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:B2:test/elevenlabs-anrufstart.test.js",
+      "falsche-angabe:a1:B3:test/elevenlabs-anrufstart.test.js"
+    ]
+  },
+  {
+    "gruppe": null,
+    "sitzung": "2e5e197f-d7c0-4cba-bed8-a26c8f23559b",
+    "schluessel": [
+      "durchstich:a1",
+      "umbau:u1",
+      "nicht-zusammengelegt:a1",
+      "nie-saetze:u1",
+      "allein-gruen:u1",
+      "nicht-zusammengelegt:u1",
+      "gegenfrage:alle"
+    ]
+  }
+]

@@ -1,0 +1,81 @@
+{
+  "erkundung": "bad1a31d22e54cb8f86d9fdf65ff0259d51f2ee0d9da57227ed99e063b0c5e8e",
+  "schnitt": "24feed536f8358ae9c9bd480f92c312b2bff9086e7ba679a3108937362578337",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "ausweg:B1:weg eingang",
+        "befund": "Der Ausweg „nicht gefunden, weil to: \"+12125550147\" entsteht neu“ stimmt nicht. Die Nummer steht schon als HYPOTHESE_NUMMER in test/elevenlabs-anrufstart.test.js:1127, und der Test „EL-START T8“ (:1214–1215) schickt sie über usLauf/placeCall (:1199–1203) an POST /api/calls. Dieser Test deckt B1 nicht ab: Der Auftraggeber hat OWNER_TZ statt Europe/Berlin, und geprüft werden nur Marker, nicht der ganze Satz. Der Planer soll den Eingang beim Weg für B1 auf diese vorhandene Stelle berichtigen. Die zeichengleiche Prüfung mit Zone Europe/Berlin bleibt Aufgabe des neuen Abnahmetests von a1.",
+        "antwort": "korrigiert: Der Eingang für B1 zeigt jetzt auf die vorhandene Stelle (HYPOTHESE_NUMMER test/elevenlabs-anrufstart.test.js:1127, über usLauf :1199-1212 an POST /api/calls), mit neuer Annahme bei a1 und neuem Grund unter falscheAngaben B1. Die zeichengleiche Prüfung mit Zone Europe/Berlin bleibt beim Abnahmetest von a1."
+      },
+      {
+        "schluessel": "ausweg:B2:weg eingang",
+        "befund": "Der Ausweg „nicht gefunden, weil to: \"+15555550147\" entsteht neu“ stimmt nicht. Die Nummer steht schon als OHNE_ZONE_NUMMER in test/elevenlabs-anrufstart.test.js:1129, und der Test „EL-START T8 (Fallback)“ (:1272–1273) schickt sie über usLauf/placeCall (:1199–1203) an POST /api/calls. Dieser Test deckt B2 nicht ab: Der Auftraggeber hat OWNER_TZ statt Europe/Berlin, und geprüft werden nur Marker, nicht der ganze Satz. Der Planer soll den Eingang beim Weg für B2 auf diese vorhandene Stelle berichtigen. Die zeichengleiche Prüfung bleibt Aufgabe des neuen Abnahmetests von a1.",
+        "antwort": "korrigiert: Der Eingang für B2 zeigt jetzt auf die vorhandene Stelle (OHNE_ZONE_NUMMER test/elevenlabs-anrufstart.test.js:1129, über usLauf :1199-1212 an POST /api/calls), mit neuer Annahme bei a1 und neuem Grund und neuer Fundstelle unter falscheAngaben B2. Die zeichengleiche Prüfung bleibt beim Abnahmetest von a1."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Bei a1, der einzigen Änderung an AREA_CODES_BY_ZONE, fehlen in wasDarfNiePassieren zwei Nicht-Ziele aus pitch.md, Abschnitt ## Nicht-Ziele, die a1 brechen kann: (1) „Nicht Teil dieser Änderung: neue Zonen Atlantic (902, 782, 506, 428), Neufundland (709, 879) und Saskatchewan ohne Sommerzeit (306, 474, 639), weil die Tabelle und die gesprochenen Namen heute nur Eastern, Central, Mountain, Arizona, Pacific und Hawaii kennen.“ a1 ändert genau diese Tabelle, und die Absicht verbietet die Abkürzung über neue Zonen ausdrücklich. (2) „Nicht Teil dieser Änderung: eine Land-Ableitung für +1-Nummern (Kanada oder USA), weil sie nach Owner-Entscheidung E2 bewusst leer bleibt.“ Auch diese Abkürzung verbietet die Absicht. Eine Land-Ableitung würde calleeZone setzen und den Satz von der Vermutung zur festen Angabe ändern (src/elevenlabs/outbound.js:263). Bitte beide Sätze wörtlich mit Quelle pitch.md und Abschnitt ## Nicht-Ziele bei a1 ergänzen.",
+        "antwort": "korrigiert: Unter wasDarfNiePassieren von a1 stehen jetzt beide Nicht-Ziele wörtlich, mit Quelle pitch.md und Abschnitt ## Nicht-Ziele: das Nicht-Ziel zu den neuen Zonen Atlantic, Neufundland und Saskatchewan und das Nicht-Ziel zur Land-Ableitung für +1-Nummern."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Bei a1 fehlen zwei feste Regeln aus pitch.md in wasDarfNiePassieren. a1 ist der einzige Auftrag, der sie brechen kann. (1) pitch.md, Abschnitt ## Nicht-Ziele: „Nicht Teil dieser Änderung: die Freigabe von +1 im Land-Gate (`ALLOWED_COUNTRY_CODES`, Profilfeld `allowedCountryCodes`), weil das ein geschütztes Safety-Gate ist (CLAUDE.md, Absolute Regeln 1); der Blueprint setzt `+49,+33,+44` (`render.yaml:95-96`), die Vermutung wirkt erst, wenn der Betreiber +1 freigibt, bis dahin nur in der Testumgebung (`test/helpers.js:80`).“ Der Pitch nennt unter ## Premortem bei PM1 genau diese Abkürzung bei dieser Änderung: jemand lockert das Land-Gate, um die Änderung „nutzbar“ zu machen. Der Ausgang von PM1 ist dieses Nicht-Ziel. (2) pitch.md, Abschnitt ## Fallen: „Abnahmetests: laufen über `POST /api/calls` und den Anrufstart am Anbieter; sie importieren kein internes Modul neu.“ Der neue Abnahmetest von a1 kann diese Regel brechen, etwa wenn er für S5 oder B3 `src/elevenlabs/nanp-area-codes.js` direkt importiert. Bitte beide Sätze wörtlich mit Quelle und Abschnitt bei a1 ergänzen.",
+        "antwort": "korrigiert: Unter wasDarfNiePassieren von a1 stehen jetzt beide Sätze wörtlich: das Nicht-Ziel zur Freigabe von +1 im Land-Gate (pitch.md, ## Nicht-Ziele; Ausgang von PM1) und die Regel „Abnahmetests: laufen über `POST /api/calls` und den Anrufstart am Anbieter; sie importieren kein internes Modul neu.“ (pitch.md, ## Fallen)."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "015e7f3e-5a15-4ae1-ae52-f8a281bdf5ab",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S1",
+        "weg:S2",
+        "weg:S3",
+        "weg:S4",
+        "weg:S5",
+        "weg:B1",
+        "weg:B2",
+        "weg:B3",
+        "b-nummer:B1",
+        "b-nummer:B2",
+        "b-nummer:B3",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "ausweg:B1:weg eingang",
+        "ausweg:B2:weg eingang",
+        "falsche-angabe:a1:S1:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:S2:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:S3:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:S4:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:S5:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:B1:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:B2:test/elevenlabs-anrufstart.test.js",
+        "falsche-angabe:a1:B3:test/elevenlabs-anrufstart.test.js",
+        "gegenfrage:alle"
+      ],
+      "befunde": 1,
+      "entfallen": []
+    },
+    {
+      "runde": 2,
+      "sitzung": "6dfc833d-6c0d-409d-926a-345b13c91ba7",
+      "schluessel": [
+        "durchstich:a1",
+        "b-nummer:B1",
+        "b-nummer:B2",
+        "b-nummer:B3",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}
