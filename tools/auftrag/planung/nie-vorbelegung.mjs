@@ -1,4 +1,4 @@
-import { VORGABEN } from "../annahmen.mjs";
+import { NIE_VORGABEN } from "../annahmen.mjs";
 import { brauchtRotenTest } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { istObjekt, istText, liste } from "./erkundung.mjs";
@@ -19,7 +19,7 @@ function einzigerAuftragMitTest(schnitt) {
 function fehlendeSaetze(pitch, soll, eigene) {
   const vorhanden = new Set(eigene.map((eintrag) => gleicherText(eintrag?.satz)));
   const fehlende = [];
-  for (const abschnitt of VORGABEN) {
+  for (const abschnitt of NIE_VORGABEN) {
     for (const satz of listenpunkteDes(pitch, abschnitt)) {
       if (vorhanden.has(gleicherText(satz)) || szenarioMitSatz(satz, soll) !== undefined) continue;
       vorhanden.add(gleicherText(satz));

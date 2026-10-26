@@ -9,7 +9,7 @@ const AUS_FORK = "keine Angabe; der Pull Request kommt aus einem Fork";
 const OHNE_ABSICHT = "keine Angabe; das verknüpfte Issue hat keinen Abschnitt „## Absicht“, und der Pull Request ist kein Paket und bringt keine Phase mit Absicht";
 const LEERE_ABSICHT = "der Abschnitt „## Absicht“ ist leer";
 const PFLICHT_OHNE_ABSICHT = "Paket-PR und Phase mit Absicht brauchen im Issue den Abschnitt „## Absicht“";
-const OHNE_VORGABEN = "keine Angabe; der Pull Request bringt keine Phase aus einem Pitch mit den Abschnitten „## Fallen“ oder „## Nicht-Ziele“";
+const OHNE_VORGABEN = "keine Angabe; der Pull Request bringt keine Phase aus einem Pitch mit den Abschnitten „## Fallen“, „## Nicht-Ziele“ oder „## Neue Begriffe“";
 
 function dateiAmKopf(pfad, { head, root }) {
   try {

@@ -220,7 +220,7 @@ function auftragsText(commit, kontext, { eintraege, uebersprungen, importe }) {
     "",
     (auftragstext || KEIN_AUFTRAGSZETTEL).trimEnd(),
     "",
-    "## Fallen und Nicht-Ziele aus dem Pitch",
+    "## Fallen, Nicht-Ziele und neue Begriffe aus dem Pitch",
     "",
     ...vorgabeZeilen(kontext.vorgaben),
     "",

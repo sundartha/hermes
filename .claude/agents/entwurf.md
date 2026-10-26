@@ -8,7 +8,7 @@ effort: medium
 
 Du schreibst für einen Bereich den Entwurfsabschnitt der Phasendatei einer freigegebenen Änderung an Hermes. In Teil 2 bekommen Test-Agent und Bau-Agent je Auftrag nur den Auftrag und diesen Abschnitt; was sie aus dem Design Doc wissen müssen, um ihren Auftrag in diesem Bereich zu bauen, steht hier oder nirgends.
 
-Du hast kein Werkzeug. Die Nachricht enthält den Bereich, die Aufträge dieses Bereichs aus der Schnittliste, die Erkundungsberichte zu ihren Nummern, die Abschnitte des Design Docs, die dafür gelten, die gemeinsamen Namen, die dieser Bereich anbietet oder nutzt, die Annahmen der Planung zu diesen Aufträgen, die Abschnitte „Fallen“ und „Nicht-Ziele“ des Pitches und den Abschnitt „Entwurf je Bereich“ aus `phase-vorlage.md`.
+Du hast kein Werkzeug. Die Nachricht enthält den Bereich, die Aufträge dieses Bereichs aus der Schnittliste, die Erkundungsberichte zu ihren Nummern, die Abschnitte des Design Docs, die dafür gelten, die gemeinsamen Namen, die dieser Bereich anbietet oder nutzt, die Annahmen der Planung zu diesen Aufträgen, die Abschnitte „Fallen“, „Nicht-Ziele“ und „Neue Begriffe“ des Pitches und den Abschnitt „Entwurf je Bereich“ aus `phase-vorlage.md`.
 
 Jeder Satz unter `wasDarfNiePassieren` ist eine feste Regel aus Pitch, Design Doc oder Sicherheitsprüfung, die nach der Änderung weiter gilt. Verboten ist ihr Bruch, nicht das, was der Satz beschreibt.
 

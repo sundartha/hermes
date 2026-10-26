@@ -940,7 +940,7 @@ export class Planung {
       abschnitt("Abschnitte des Design Docs", this.designAbschnitte(ueberschriften)),
       abschnitt("Gemeinsame Namen", punkte(namen)),
       abschnitt("Annahmen der Planung zu diesen Aufträgen", punkte(eigeneAnnahmen(this.alleAnnahmen(), auftraege).map(annahmeText))),
-      abschnitt("Fallen und Nicht-Ziele des Pitches", vorgabenAusPitch(this.dokumente[PITCH] ?? "") || "keine"),
+      abschnitt("Fallen, Nicht-Ziele und neue Begriffe des Pitches", vorgabenAusPitch(this.dokumente[PITCH] ?? "") || "keine"),
       abschnitt("Entwurf je Bereich (phase-vorlage.md)", vorlage),
     ]);
   }
