@@ -30,15 +30,15 @@ const TEILE = alsJson({ teile: [
   { kuerzel: "t3", name: "umbau-davor", nummern: [], tWege: [], dateien: ["src/umbau.js"], nurUmbau: true, abhaengigVon: [], grund: "reiner Umbau ohne Nummer" },
 ] });
 
-function neunSzenarien(wurzel, { freigabe, status }) {
+function neunSzenarien(wurzel, status) {
   const pitch = join(wurzel, ORDNER, "pitch.md");
-  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Planung freigegeben: 15000000 Token", `Planung freigegeben: ${freigabe} Token`).replace("Status: fertig", status));
+  writeFileSync(pitch, readFileSync(pitch, "utf8").replace("Status: fertig", status));
   appendFileSync(pitch, "\n### Szenario B2: Anruf ohne hinterlegte Nummer\nGegeben ein Kunde ohne eigene Nummer\nWenn sein Agent mit `place_call` eine Nummer anruft\nDann beginnt der Anruf mit dem Hinweis für Fremde\n");
 }
 
-function geteilt(context, { freigabe = FREIGABE, status = "Status: freigegeben", vorher = () => {} } = {}) {
+function geteilt(context, { status = "Status: freigegeben", vorher = () => {} } = {}) {
   const wurzel = planOrdner(context);
-  neunSzenarien(wurzel, { freigabe, status });
+  neunSzenarien(wurzel, status);
   vorher(wurzel);
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [TEILE] }, argumente: ["plane", ORDNER], token: { planer: TEILUNG_TOKEN } });
   return lauf;

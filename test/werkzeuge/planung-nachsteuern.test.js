@@ -29,7 +29,7 @@ const ELTERN_TEILE = [
   eintrag("t2", "hinweis-beim-anruf", { nummern: ["S4", "S5", "B1"], dateien: [HINWEIS, ...ELF.slice(5)], abhaengigVon: ["t1"] }),
 ];
 
-function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe, umbau }) {
+function elfStellen(wurzel, { quellen, einstiege, stellen, umbau }) {
   const elf = Object.fromEntries(ELF.map((datei) => [datei, STELLE_QUELLE]));
   for (const [datei, inhalt] of Object.entries({ ...elf, ...quellen })) {
     mkdirSync(dirname(join(wurzel, datei)), { recursive: true });
@@ -41,13 +41,12 @@ function elfStellen(wurzel, { quellen, einstiege, stellen, freigabe, umbau }) {
   const loeschAbschnitt = einstiege.length === 0 ? "" : `\n## Löschen\n\n${einstiege.map((einstieg) => `- \`${einstieg}\``).join("\n")}\n`;
   const text = readFileSync(pitch, "utf8");
   const freigegeben = (umbau.length === 0 ? text : mitUmbauZeilen(text, umbau)).replace("Status: fertig", "Status: freigegeben");
-  const mitFreigabe = freigabe === undefined ? freigegeben : freigegeben.replace(/^Planung freigegeben: \d+ Token$/mu, `Planung freigegeben: ${freigabe} Token`);
-  writeFileSync(pitch, mitFreigabe + loeschAbschnitt);
+  writeFileSync(pitch, freigegeben + loeschAbschnitt);
 }
 
-function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [], freigabe, umbau = [] } = {}) {
+function geteilt(context, { teilung = alsJson({ teile: ELTERN_TEILE }), befunde = [], quellen = {}, einstiege = [], stellen = [], umbau = [] } = {}) {
   const wurzel = planOrdner(context);
-  elfStellen(wurzel, { quellen, einstiege, stellen, freigabe, umbau });
+  elfStellen(wurzel, { quellen, einstiege, stellen, umbau });
   const lauf = planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: { "planer|## Teilung": [teilung], "planer|## Befunde": befunde }, argumente: ["plane", ORDNER] });
   return { ...lauf, wurzel };
 }
