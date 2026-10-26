@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   AFFECTED_TESTS_TOOL,
   failingTest,
+  mitUpstreamMaster,
   probeRepository,
   runIn,
 } from "./probe-repo.js";
@@ -154,4 +155,45 @@ test("ohne volle Suite laufen bei einem Rueckfall nur die Tests unter apps/web",
   assert.match(result.stdout, new RegExp(WEB_MARKER));
   assert.doesNotMatch(result.stdout, new RegExp(UNRELATED_MARKER));
   assert.doesNotMatch(result.stdout, new RegExp(TWO_STEP_MARKER));
+});
+
+const MISSING_BASE_REF = "upstream/master";
+const MISSING_BASE_MESSAGE =
+  /Basis upstream\/master fehlt; git fetch upstream oder npm run prepare/;
+
+function runWithMissingBase(context, extraArgs) {
+  const directory = probeRepository(context, BASE_FILES);
+  changeFile("LIESMICH.txt")(directory);
+  return runIn(directory, process.execPath, [
+    AFFECTED_TESTS_TOOL,
+    "--basis",
+    MISSING_BASE_REF,
+    ...extraArgs,
+  ]);
+}
+
+test("eine fehlende Basis endet rot und nennt die fehlende Basis", (context) => {
+  const result = runWithMissingBase(context, []);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, MISSING_BASE_MESSAGE);
+  assert.doesNotMatch(result.stdout, new RegExp(UNRELATED_MARKER));
+});
+
+test("eine fehlende Basis endet auch ohne volle Suite rot und nennt die fehlende Basis", (context) => {
+  const result = runWithMissingBase(context, ["--ohne-volle-suite"]);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, MISSING_BASE_MESSAGE);
+});
+
+test("mit vorhandener Standardbasis bleibt ein Rueckfall ohne volle Suite gruen und nennt den CI-Job", (context) => {
+  const directory = mitUpstreamMaster(probeRepository(context, BASE_FILES));
+  changeFile("LIESMICH.txt")(directory);
+
+  const result = runIn(directory, process.execPath, [AFFECTED_TESTS_TOOL, "--ohne-volle-suite"]);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /volle Suite läuft im Job CI/);
+  assert.doesNotMatch(result.stderr, MISSING_BASE_MESSAGE);
 });
