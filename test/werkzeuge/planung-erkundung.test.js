@@ -178,6 +178,37 @@ test("eine neue Route aus dem Wenn bleibt ein Befund ohne Änderung in der Datei
   }
 });
 
+const WENN_TESTWERT = 'Gegeben ein Kunde\nWenn er `POST /api/probe` mit `to: "+12125550147"` aufruft\nDann kommt eine Antwort';
+const TEST_MIT_WERT = { "test/nummern.test.js": 'const NUMMER = "+12125550147";\n' };
+
+function testwertLauf(context, tests) {
+  return einzeln(context, { tests }, { soll: sollMitText(WENN_TESTWERT), weitere: TEST_MIT_WERT }).befunde;
+}
+
+test("erkundung: ein Wert aus dem Wenn, der wörtlich in einer unter tests gemeldeten Testdatei steht, ist belegt", (context) => {
+  assert.deepEqual(testwertLauf(context, ["test/vorhanden.test.js", "test/nummern.test.js"]), []);
+});
+
+test("erkundung: ein Wert aus dem Wenn, der nur in einer nicht unter tests gemeldeten Testdatei steht, bleibt ein Befund", (context) => {
+  genau(testwertLauf(context, ["test/vorhanden.test.js"]), '`to: "+12125550147"` aus dem Wenn steht in keiner gemeldeten Eingangsdatei');
+});
+
+test("erkundung: die Wenn-Meldung nennt den Weg über eine bestehende Testdatei mit dem Wert", (context) => {
+  genau(testwertLauf(context, ["test/vorhanden.test.js"]), "steht er schon wörtlich in einer bestehenden Testdatei, melde sie unter tests");
+});
+
+test("erkundung: ein ganzer Name aus dem Wenn, der wörtlich in einer unter tests gemeldeten Testdatei steht, ist belegt", (context) => {
+  const soll = sollMitText("Gegeben ein Kunde\nWenn der Agent `place_call` aufruft\nDann kommt eine Antwort");
+  const weitere = { "test/werkzeug.test.js": 'rufe("place_call");\n' };
+  const { befunde } = einzeln(context, { tests: ["test/werkzeug.test.js"] }, { soll, weitere });
+  assert.deepEqual(befunde, []);
+});
+
+test("erkundung: eine unter tests gemeldete, aber fehlende Testdatei belegt keinen Wert aus dem Wenn", (context) => {
+  const befunde = testwertLauf(context, ["test/vorhanden.test.js", "test/fehlt.test.js"]);
+  assert.deepEqual(befunde.map((befund) => befund.split(" (")[0]), ["S1: Test test/fehlt.test.js fehlt", 'S1: `to: "+12125550147"` aus dem Wenn steht in keiner gemeldeten Eingangsdatei']);
+});
+
 test("eine S-Nummer ohne Änderungsstelle und ohne Ausweg ist ein Befund", (context) => {
   const { befunde } = einzeln(context, { aenderungen: [] });
   genau(befunde, "ohne Änderungsstelle und ohne „keine Änderung, weil …“");
