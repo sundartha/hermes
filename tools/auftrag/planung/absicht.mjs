@@ -1,4 +1,5 @@
 import { ABSICHT, absichtBefunde } from "../format.mjs";
+import { MELDUNG, zweckBlock } from "../zweck.mjs";
 
 const ZEILENUMBRUCH = /\r?\n/;
 const ABSICHT_KOPF = /^##\s+Absicht\s*$/;
@@ -26,10 +27,23 @@ export function phasenAbsichtBefunde(pitch, phase) {
   return ["phase.json: absicht weicht vom Abschnitt „## Absicht“ in pitch.md ab; sie wird wörtlich übernommen"];
 }
 
+export class IssueNichtLesbar extends Error {}
+
+function gelesenesIssue(leseIssue) {
+  try {
+    return { body: leseIssue() };
+  } catch (fehler) {
+    if (!(fehler instanceof IssueNichtLesbar)) throw fehler;
+    return { grund: fehler.message };
+  }
+}
+
 export function issueAbsichtBefunde(phase, leseIssue) {
   if (!Object.hasOwn(phase, "absicht")) return [];
-  const body = leseIssue();
-  if (body === null) return [`Issue #${phase.issue} nicht lesbar; ohne seinen Abschnitt „## ${ABSICHT}“ startet die Phase nicht`];
+  const { body, grund } = gelesenesIssue(leseIssue);
+  if (grund !== undefined) {
+    return [`Issue #${phase.issue} nicht lesbar; ohne seinen Abschnitt „## ${ABSICHT}“ startet die Phase nicht (${grund}).`, ...zweckBlock(MELDUNG.GH_FEHLT)];
+  }
   if (absichtAusPitch(body) === phase.absicht) return [];
   return [`Issue #${phase.issue}: der Abschnitt „## ${ABSICHT}“ fehlt oder weicht von absicht in phase.json ab; schreib ihn wörtlich aus pitch.md ins Issue`];
 }
