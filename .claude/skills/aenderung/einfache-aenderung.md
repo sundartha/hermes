@@ -1,10 +1,12 @@
 # Vorlage: Phasendatei für eine einfache Änderung
 
-Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste freie dreistellige Nummer unter `plaene/E-*`. Was in spitzen Klammern steht, ersetzt du; alles andere bleibt so.
+Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste freie dreistellige Nummer unter `plaene/E-*`; mit zählen die Ordner `plaene/E-*` in jedem Worktree unter `.claude/worktrees/` des Hauptklons. Was in spitzen Klammern steht, ersetzt du; alles andere bleibt so.
 
 ```json
 {
   "phase": "E-<Nummer>-<kurzname>",
+  "issue": <Nummer des Issues>,
+  "absicht": "<2 bis 4 Sätze: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist, wie im Zweifel zu wählen ist>",
   "entwurf": {
     "<bereich>": "<Entwurf, siehe unten, Zeilen mit \\n getrennt>"
   },
@@ -16,7 +18,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste f
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
       "abnahme": "test/<name>.test.js",
-      "erwarteterFehler": "<nur bei funktion: Meldung, mit der der Abnahmetest heute rot wird, eine Zeile>",
+      "erwarteterFehler": "<nur bei funktion: wörtlicher Text der Meldung, mit der der Abnahmetest heute rot wird, eine Zeile>",
       "wasDarfNiePassieren": ["<das Verhalten, das gleich bleiben muss, als prüfbarer Satz>"]
     }
   ]
@@ -25,6 +27,8 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste f
 
 - `funktion`: Die Änderung zeigt sich von außen. `abnahme` ist ein neuer Abnahmetest über den echten Eingang, der heute mit `erwarteterFehler` rot wird.
 - `umbau`: Nur der Aufbau des Codes ändert sich, oder nur die Gestaltung der Website. `abnahme` ist ein bestehender Verhaltenstest, der grün bleibt; `erwarteterFehler` fällt weg.
+- `issue`: Leg das Issue an, bevor du `lauf` startest, und trag seine Nummer ein. Sein erster Abschnitt ist `## Absicht` mit genau dem Text aus `absicht`; `lauf` gleicht beides ab und hält sonst an.
+- `erwarteterFehler`: `lauf` sucht diesen Text wörtlich in der Fehlermeldung des roten Abnahmetests; ein Testname zählt nicht. Der Test-Agent gibt ihn dem `assert`, das heute fehlschlägt, als Meldung mit, etwa `assert.equal(ist, soll, "<erwarteterFehler>")`.
 - Bleibt nichts Besonderes gleich, ist `wasDarfNiePassieren` die leere Liste `[]`, und der Grund steht im Entwurf.
 
 ## Entwurf
