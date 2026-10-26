@@ -3,16 +3,10 @@ import { appendFileSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GRUPPEN, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, angaben, aufrufe, bericht, exit, planOrdner, planeIn, schnittliste } from "./planung-probe.js";
-import { AUFTRAG, EXIT_GRUEN, SCHNITT_SOFORT, plane, planeAntworten, planungsBericht, wegpruefungen } from "./planung-plane-probe.js";
+import { LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, angaben, aufrufe, bericht, exit, planOrdner, schnittliste } from "./planung-probe.js";
+import { EXIT_DECKEL, EXIT_GRUEN, HALT_VOR_DER_RUECKSENDUNG, OHNE_GRENZE, SCHNITT_SOFORT, mitDeckel, plane, planungsBericht, wegpruefungen } from "./planung-plane-probe.js";
 
-const EXIT_DECKEL = 5;
 const NACHGEFRAGT = ["S1", "S2"];
-const ROLLEN_TOKEN = { planer: 100_000, erkunder: 1_000_000, "pruefer-planung": 340_000, entwurf: 100_000 };
-const ERKUNDER_MIT_WEG = ROLLEN_TOKEN.erkunder + ROLLEN_TOKEN["pruefer-planung"];
-const BIS_ZUR_NACHFRAGE = 2 * ROLLEN_TOKEN.planer + GRUPPEN.length * ERKUNDER_MIT_WEG;
-const HALT_VOR_DER_RUECKSENDUNG = BIS_ZUR_NACHFRAGE + 1.5 * ROLLEN_TOKEN.erkunder;
-const OHNE_GRENZE = String(1_000_000_000);
 const MARKE = "Bezahlter Bericht der Nachfrage";
 const BEFUND = "Funktion gibtEsNicht fehlt in";
 const ANTWORT = "### Antwort auf deine Nachfrage 1";
@@ -21,10 +15,6 @@ const MIT_BEFUND = alsJson({ nummern: Object.fromEntries(NACHGEFRAGT.map((nummer
 const FRAGEN = alsJson({ nachfragen: NACHGEFRAGT.map((nummer) => ({ nummern: [nummer], frage: `Wo endet ${nummer}?` })) });
 const ZUSCHNITT = { "planer|## Zuschnitt": [FRAGEN, alsJson({ schnitt: schnittliste() })] };
 const ERSTE_NACHFRAGE = { ...ZUSCHNITT, "erkunder|## Nachfrage|S1": [MIT_BEFUND] };
-
-function mitDeckel(context, wurzel, { argumente, ueberschrieben }) {
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER, ...argumente], token: ROLLEN_TOKEN });
-}
 
 function vorDerRuecksendungAngehalten(context) {
   const lauf = mitDeckel(context, planOrdner(context), { argumente: ["--deckel", String(HALT_VOR_DER_RUECKSENDUNG)], ueberschrieben: ERSTE_NACHFRAGE });
