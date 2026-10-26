@@ -431,7 +431,7 @@ class AuftragsLauf {
   }
 
   listenKuerzen() {
-    const schritt = () => this.gruen(PRUEFUNG.LISTEN_KUERZEN, [execPath, LISTEN_KUERZEN, "--basis", this.basis]);
+    const schritt = () => this.gruen(PRUEFUNG.LISTEN_KUERZEN, [execPath, LISTEN_KUERZEN, "--basis", this.basis, "--alternativen"]);
     const { gruen, umzug } = umzugGemerkt(this.kontext.root, schritt, KUERZLISTEN);
     this.listenumzug = [...this.listenumzug, ...umzug];
     return gruen;

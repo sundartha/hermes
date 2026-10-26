@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 
 import { TOOLS } from "../basis-vergleich.mjs";
-import { regexHits } from "../feste-pfade/muster.mjs";
+import { INNER_GROUP, groupAlternatives, regexHits, splittable } from "../feste-pfade/muster.mjs";
 import { gelesen, lesbar } from "./bestandslisten.mjs";
 import { git, vormerken } from "./git.mjs";
 
@@ -18,6 +18,11 @@ const ZEILE = "\n";
 const OBJEKT_AUF = "{";
 const OBJEKT_ZU = "}";
 const ORDNER = "/";
+const GRUPPE_AUF = "(";
+const GRUPPE_ZU = ")";
+const ODER = "|";
+const TRENNER = ", ";
+const EINZEILIGE_LISTE = /^(\s*"(?:[^"\\]|\\.)*": )(\[.*\])(,?)$/;
 const BASISLISTEN = ["knip", "anweisungen", "jscpd", "semgrep", "selbstpruefung", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text"];
 
 function dateien(args, root) {
@@ -42,21 +47,51 @@ function ohne(eintraege, faellt) {
   return { rest: eintraege.filter((eintrag) => !tot.includes(eintrag)), tot };
 }
 
+function ohneToteAlternativen(muster, dateistand) {
+  if (!splittable(muster)) return muster;
+  for (const gruppe of muster.matchAll(INNER_GROUP)) {
+    const alternativen = groupAlternatives(muster, gruppe);
+    const bleiben = alternativen.filter(({ source }) => !musterTot(source, dateistand)).map(({ choice }) => choice);
+    if (bleiben.length > 0 && bleiben.length < alternativen.length) {
+      const [ganz, art = ""] = gruppe;
+      const neu = `${muster.slice(0, gruppe.index)}${GRUPPE_AUF}${art}${bleiben.join(ODER)}${GRUPPE_ZU}${muster.slice(gruppe.index + ganz.length)}`;
+      return ohneToteAlternativen(neu, dateistand);
+    }
+  }
+  return muster;
+}
+
+function gleicheTreffer(alt, neu, jetzt) {
+  return jetzt.every((datei) => regexHits([datei], alt) === regexHits([datei], neu));
+}
+
 function bereicheGekuerzt(bereiche, dateistand) {
   if (!Array.isArray(bereiche)) return { nachher: bereiche, tot: [] };
   const faellt = (eintrag) => typeof eintrag === "string" && musterTot(eintrag, dateistand);
   const tot = new Set();
+  const umgeschrieben = new Map();
+  const anders = new Set();
+  const umschreiben = (eintrag) => {
+    const neu = dateistand.alternativen === true && typeof eintrag === "string" ? ohneToteAlternativen(eintrag, dateistand) : eintrag;
+    if (neu === eintrag) return eintrag;
+    if (!gleicheTreffer(eintrag, neu, dateistand.jetzt)) {
+      anders.add(eintrag);
+      return eintrag;
+    }
+    umgeschrieben.set(eintrag, neu);
+    return neu;
+  };
   const nachher = bereiche.map((bereich) =>
     Object.fromEntries(
       Object.entries(bereich).map(([schluessel, wert]) => {
         if (!Array.isArray(wert)) return [schluessel, wert];
         const { rest, tot: gestrichen } = ohne(wert, faellt);
         for (const eintrag of gestrichen) tot.add(eintrag);
-        return [schluessel, rest];
+        return [schluessel, rest.map(umschreiben)];
       }),
     ),
   );
-  return { nachher, tot: [...tot] };
+  return { nachher, tot: [...tot], umgeschrieben: [...umgeschrieben].map(([alt, neu]) => ({ alt, neu })), anders: [...anders] };
 }
 
 function basisGekuerzt({ path }) {
@@ -108,6 +143,17 @@ function toteBloecke(zeilen, tot) {
   return bloecke;
 }
 
+function schreibweise(eintraege) {
+  return `[${eintraege.map((eintrag) => JSON.stringify(eintrag)).join(TRENNER)}]`;
+}
+
+function einzeiligGekuerzt(zeile, tot) {
+  const teile = EINZEILIGE_LISTE.exec(zeile);
+  const liste = teile === null ? undefined : gelesen(teile[2]);
+  const gewohnt = Array.isArray(liste) && liste.every((eintrag) => typeof eintrag === "string") && schreibweise(liste) === teile[2];
+  return gewohnt ? `${teile[1]}${schreibweise(ohne(liste, (eintrag) => tot.includes(eintrag)).rest)}${teile[3]}` : zeile;
+}
+
 function zeilenGestrichen(text, tot) {
   const zeilen = text.split(ZEILE);
   const bloecke = toteBloecke(zeilen, tot);
@@ -117,17 +163,33 @@ function zeilenGestrichen(text, tot) {
     const davor = zeilen.findLastIndex((zeile, stelle) => stelle < anfang && !weg.has(stelle));
     if (davor >= 0 && zeilen[davor].endsWith(KOMMA)) kommaWeg.add(davor);
   }
-  return zeilen.flatMap((zeile, stelle) => (weg.has(stelle) ? [] : [kommaWeg.has(stelle) ? ohneKomma(zeile) : zeile])).join(ZEILE);
+  return zeilen.flatMap((zeile, stelle) => (weg.has(stelle) ? [] : [einzeiligGekuerzt(kommaWeg.has(stelle) ? ohneKomma(zeile) : zeile, tot)])).join(ZEILE);
+}
+
+function genauEinmal(text, teil) {
+  const stelle = text.indexOf(teil);
+  return stelle !== -1 && stelle === text.lastIndexOf(teil);
+}
+
+function musterErsetzt(text, umgeschrieben) {
+  const nichtEinmal = umgeschrieben.filter(({ alt }) => !genauEinmal(text, JSON.stringify(alt)));
+  if (nichtEinmal.length > 0) return { nichtEinmal };
+  return { nichtEinmal, ersetzt: umgeschrieben.reduce((stand, { alt, neu }) => stand.replace(JSON.stringify(alt), () => JSON.stringify(neu)), text) };
+}
+
+function geprueftGekuerzt(text, { nachher, tot, umgeschrieben }) {
+  const { nichtEinmal, ersetzt } = musterErsetzt(zeilenGestrichen(text, tot), umgeschrieben);
+  const stimmt = ersetzt !== undefined && isDeepStrictEqual(gelesen(ersetzt), nachher);
+  return { nichtEinmal, neu: stimmt ? ersetzt : undefined };
 }
 
 export function textGekuerzt(pfad, text, dateistand) {
   const liste = LISTEN.find((eintrag) => eintrag.pfad === pfad);
   const vorher = liste === undefined || text === undefined ? undefined : gelesen(text);
   if (vorher === undefined) return undefined;
-  const { nachher, tot } = liste.kuerzen(vorher, dateistand);
-  if (tot.length === 0) return undefined;
-  const neu = zeilenGestrichen(text, tot);
-  return { tot, neu: isDeepStrictEqual(gelesen(neu), nachher) ? neu : undefined };
+  const { nachher, tot, umgeschrieben = [], anders = [] } = liste.kuerzen(vorher, dateistand);
+  if (tot.length === 0 && umgeschrieben.length === 0 && anders.length === 0) return undefined;
+  return { tot, umgeschrieben, anders, ...geprueftGekuerzt(text, { nachher, tot, umgeschrieben }) };
 }
 
 export function geloeschtSeit(basis, { ziel, root = "." } = {}) {
@@ -138,36 +200,45 @@ export function versioniertIn(commit, root = ".") {
   return dateien(["ls-tree", "-r", "--name-only", "-z", commit], root);
 }
 
-function listenGekuerzt({ basis, root }) {
+function listenGekuerzt({ basis, root, alternativen }) {
   const geloescht = geloeschtSeit(basis, { root });
   if (geloescht.length === 0) return [];
-  const dateistand = { geloescht, jetzt: vorhanden(root) };
+  const dateistand = { geloescht, jetzt: vorhanden(root), alternativen };
   return KUERZLISTEN.map((pfad) => ({ pfad, ...textGekuerzt(pfad, lesbar(join(root, pfad)), dateistand) })).filter(({ tot }) => tot !== undefined);
 }
 
-function listenKuerzen({ basis, root }) {
-  const listen = listenGekuerzt({ basis, root });
-  const gekuerzt = listen.filter(({ neu }) => neu !== undefined);
-  for (const { pfad, tot } of listen.filter(({ neu }) => neu === undefined)) {
-    console.log(`${pfad}: ${tot.length} tote Einträge ließen sich nicht zeilenweise streichen, die Liste bleibt.`);
+function summe(listen, feld) {
+  return listen.reduce((bisher, liste) => bisher + liste[feld].length, 0);
+}
+
+function listenKuerzen({ basis, root, alternativen }) {
+  const alle = listenGekuerzt({ basis, root, alternativen });
+  for (const { pfad, anders } of alle) {
+    for (const alt of anders) console.log(`${pfad}: das Muster ${JSON.stringify(alt)} träfe ohne seine toten Alternativen andere vorhandene Dateien, es bleibt.`);
   }
-  for (const { pfad, neu, tot } of gekuerzt) {
+  const listen = alle.filter(({ tot, umgeschrieben }) => tot.length + umgeschrieben.length > 0);
+  const gekuerzt = listen.filter(({ neu }) => neu !== undefined);
+  for (const { pfad, tot, umgeschrieben, nichtEinmal } of listen.filter(({ neu }) => neu === undefined)) {
+    for (const { alt } of nichtEinmal) console.log(`${pfad}: das Muster ${JSON.stringify(alt)} steht nicht genau einmal im Text, die Liste bleibt.`);
+    console.log(`${pfad}: ${tot.length} tote Einträge und ${umgeschrieben.length} Muster mit toten Alternativen ließen sich nicht zeilenweise streichen, die Liste bleibt.`);
+  }
+  for (const { pfad, neu, tot, umgeschrieben } of gekuerzt) {
     writeFileSync(join(root, pfad), neu);
     for (const eintrag of tot) console.log(`${pfad}: gestrichen ${JSON.stringify(eintrag)}`);
+    for (const muster of umgeschrieben) console.log(`${pfad}: tote Alternative gestrichen ${JSON.stringify(muster.alt)} -> ${JSON.stringify(muster.neu)}`);
   }
   vormerken(gekuerzt.map(({ pfad }) => pfad), root);
-  const gestrichen = gekuerzt.reduce((summe, { tot }) => summe + tot.length, 0);
-  console.log(`${gestrichen} Einträge in ${gekuerzt.length} Listen gestrichen, die nur Dateien trafen, die dieser Stand gelöscht hat.`);
+  console.log(`${summe(gekuerzt, "tot")} Einträge gestrichen und ${summe(gekuerzt, "umgeschrieben")} Muster um tote Alternativen gekürzt in ${gekuerzt.length} Listen; beides traf an der Basis nur Dateien, die dieser Stand gelöscht hat.`);
   return EXIT_GRUEN;
 }
 
 async function aufruf() {
-  const { values } = parseArgs({ options: { basis: { type: "string" } } });
+  const { values } = parseArgs({ options: { basis: { type: "string" }, alternativen: { type: "boolean", default: false } } });
   if (values.basis === undefined) {
-    console.error("Aufruf: node tools/auftrag/listen-kuerzen.mjs --basis <commit>");
+    console.error("Aufruf: node tools/auftrag/listen-kuerzen.mjs --basis <commit> [--alternativen]");
     return EXIT_AUFRUF;
   }
-  return listenKuerzen({ basis: values.basis, root: process.cwd() });
+  return listenKuerzen({ basis: values.basis, root: process.cwd(), alternativen: values.alternativen });
 }
 
 if (import.meta.url === pathToFileURL(realpathSync(argv[1] ?? ".")).href) process.exitCode = await aufruf();

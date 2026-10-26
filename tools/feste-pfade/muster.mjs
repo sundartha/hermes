@@ -5,7 +5,7 @@ const GLOB_TOKEN = /(?<![^/])\*\*\/|\/\*\*$|\*|\?|\{([^{}]*)\}/g;
 const EXTENSION_BRACE = /\.\{[^{}]*\}$/;
 const BRACE = /\{([^{}]*)\}/;
 const BRACES = /[{}]/g;
-const INNER_GROUP = /(?<!\\)\((\?(?::|=|!|<=|<!|<\w+>))?([^()]*)\)([?*]|\{0)?/g;
+export const INNER_GROUP = /(?<!\\)\((\?(?::|=|!|<=|<!|<\w+>))?([^()]*)\)([?*]|\{0)?/g;
 const PLAIN_GROUP = new Set([undefined, "?:"]);
 const EXTENSION_GROUP_PREFIX = "\\.";
 const END_OF_SOURCE = new Set(["", "$"]);
@@ -160,7 +160,7 @@ function isExtensionGroup(source, match) {
   return before === EXTENSION_GROUP_PREFIX && END_OF_SOURCE.has(after);
 }
 
-function groupAlternatives(source, match) {
+export function groupAlternatives(source, match) {
   const [whole, , body] = match;
   const choices = body.split(BAR);
   if (choices.length === 1 || isExtensionGroup(source, match)) return [];
@@ -169,7 +169,7 @@ function groupAlternatives(source, match) {
   return choices.map((choice) => ({ choice, source: `${before}(?:${choice})${after}` }));
 }
 
-function splittable(source) {
+export function splittable(source) {
   const groups = [...source.matchAll(INNER_GROUP)].filter(([, , body]) => body.includes(BAR));
   const plain = groups.every(
     ([, prefix, , quantifier]) => PLAIN_GROUP.has(prefix) && quantifier === undefined,
