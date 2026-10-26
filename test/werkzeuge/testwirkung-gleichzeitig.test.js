@@ -19,8 +19,8 @@ const GLEICHZEITIG = "TESTWIRKUNG_GLEICHZEITIG";
 const KERNE_JE_LAUF = 2;
 const EXIT_ABBRUCH = 2;
 const MINDESTDAUER_MS = 100;
-const PARTNERFRIST_MS = 2000;
-const SAMMELFRIST_MS = 10_000;
+const PARTNERFRIST_MS = 20_000;
+const SAMMELFRIST_MS = PARTNERFRIST_MS;
 const LAEUFE_NEUER_TESTS = ["A", "B1", "B2", "B3", "B4", "B5"];
 const ALS_MODUL = { "package.json": '{ "type": "module" }\n' };
 
@@ -34,7 +34,7 @@ function treffpunkt(
   sammelordner,
   {
     partnerfristMs = PARTNERFRIST_MS,
-    genug = '(art() === "echt" ? gesehen.size > 0 : gesehen.has("echt"))',
+    genug = "gesehen.has(anderer) || fertig.has(anderer)",
     pruefung = "assert.ok(hoechstens >= 0);",
   } = {},
 ) {
@@ -57,16 +57,22 @@ function treffpunkt(
     '  writeFileSync(join(ORDNER, eigen), "");',
     "  const beginn = Date.now();",
     "  const gesehen = new Set();",
+    "  const fertig = new Set();",
     "  let hoechstens = 0;",
+    '  const anderer = art() === "echt" ? "attrappe" : "echt";',
     `  const genug = () => ${genug};`,
-    `  while (Date.now() - beginn < ${MINDESTDAUER_MS} || (!genug() && Date.now() - beginn < ${partnerfristMs})) {`,
-    '    const andere = readdirSync(ORDNER).filter((name) => name.startsWith("lebt-") && name !== eigen);',
+    `  let ende = beginn + ${partnerfristMs};`,
+    "  while (Date.now() < ende) {",
+    "    const namen = readdirSync(ORDNER);",
+    '    const andere = namen.filter((name) => name.startsWith("lebt-") && name !== eigen);',
     "    hoechstens = Math.max(hoechstens, andere.length);",
     '    for (const name of andere) gesehen.add(name.split("-")[1]);',
+    '    for (const name of namen.filter((name) => name.startsWith("bericht-"))) fertig.add(name.split("-")[1]);',
+    `    if (genug()) ende = Math.min(ende, Date.now() + ${MINDESTDAUER_MS});`,
     "    await new Promise((weiter) => setTimeout(weiter, 5));",
     "  }",
     "  rmSync(join(ORDNER, eigen));",
-    "  writeFileSync(join(ORDNER, `bericht-${process.pid}.json`), JSON.stringify({ art: art(), hoechstens, gesehen: [...gesehen] }));",
+    "  writeFileSync(join(ORDNER, `bericht-${art()}-${process.pid}.json`), JSON.stringify({ art: art(), hoechstens, gesehen: [...gesehen] }));",
     `  ${pruefung}`,
     "});",
     "",
