@@ -19,21 +19,21 @@ const ERSTE_WELLE = GRUPPEN.length;
 const PRUEFLISTE_LAEUFE = GRUPPEN.length + UEBERGREIFENDER_PRUEFER;
 const PLANER_ANTWORTEN_BIS_NACHPRUEFUNG = 3;
 const VOR_NACHPRUEFUNG = PLANER_ANTWORTEN_BIS_NACHPRUEFUNG * PLANER + ERSTE_WELLE * (ERKUNDER + WEGPRUEFER) + PRUEFLISTE_LAEUFE * WEGPRUEFER;
-const DECKEL_VOR_NACHPRUEFUNG = VOR_NACHPRUEFUNG + WEGPRUEFER / 2;
+const DECKEL_VOR_NACHPRUEFUNG = VOR_NACHPRUEFUNG - PLANER / 2;
 
 function planeMitDeckel(context, wurzel, argumente) {
   return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben: BEFUND_UND_KORREKTUR, argumente: ["plane", ORDNER, ...argumente], token: TOKEN });
 }
 
-test("plane --deckel: passt die Antwort des Planers nach der Prüfliste noch, die Nachprüfung aber nicht mehr unter den Deckel, startet plane keinen Nachprüfer, legt den Fingerabdruck ab und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
+test("plane --deckel: überschreitet die Antwort des Planers nach der Prüfliste den Deckel, startet plane keinen Nachprüfer, legt den Fingerabdruck ab und lässt sich fortsetzen", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = planeMitDeckel(context, planOrdner(context), ["--deckel", String(DECKEL_VOR_NACHPRUEFUNG)]);
 
   exit(lauf, EXIT_DECKEL);
   assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").length, PRUEFLISTE_LAEUFE);
   assert.equal(aufrufe(lauf, "planer").length, PLANER_ANTWORTEN_BIS_NACHPRUEFUNG);
   assert.equal(aufrufe(lauf, "pruefer-planung", "## Nachprüfung").length, 0);
-  assert.match(planungsBericht(lauf).deckelSchritt, /^Nachprüfung$/);
-  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_VOR_NACHPRUEFUNG, gemessen: VOR_NACHPRUEFUNG, vorschau: WEGPRUEFER });
+  assert.match(planungsBericht(lauf).deckelSchritt, /^Antwort des Planers \(korrektur\)$/);
+  assert.deepEqual(planungsBericht(lauf).deckel, { deckel: DECKEL_VOR_NACHPRUEFUNG, gemessen: VOR_NACHPRUEFUNG, ueberschritten: VOR_NACHPRUEFUNG - DECKEL_VOR_NACHPRUEFUNG });
   assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung", "fingerabdruck.json")), true);
 
   const fortgesetzt = planeMitDeckel(context, lauf.wurzel, ["--fortsetzen", "--deckel", String(DECKEL_OHNE_WIRKUNG)]);

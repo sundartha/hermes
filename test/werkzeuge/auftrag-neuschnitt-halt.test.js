@@ -9,8 +9,6 @@ const AUSSTIEG = { antwort: "Ich höre auf.\nAuftrag passt nicht: Der Abnahmetes
 const NOTIZ = { antwort: "1. Agenten-Form prüfen" };
 const EXIT_SCHNITT_ABGELEHNT = 4;
 const KLEINER_DECKEL = 1;
-const FRUEHERER_LAUF_UEBER_DEM_DECKEL = { laeufe: 1, token: 1000 * KLEINER_DECKEL };
-const VORIGE_KOSTEN = JSON.stringify({ kostenJeLauf: { erkunder: FRUEHERER_LAUF_UEBER_DEM_DECKEL, planer: FRUEHERER_LAUF_UEBER_DEM_DECKEL, "pruefer-planung": FRUEHERER_LAUF_UEBER_DEM_DECKEL, entwurf: FRUEHERER_LAUF_UEBER_DEM_DECKEL } });
 
 test("zwei an Formprüfungen rote Runden führen zur Entscheidungsnotiz ohne Neuschnitt", (context) => {
   const drehbuch = { test: [TEST], bau: [MIT_FIX], planer: [SCHNITT], notiz: [NOTIZ] };
@@ -36,11 +34,11 @@ test("eine rote Runde mit Auftrag passt nicht führt weiter zum Neuschnitt", (co
 
 test("der Neuschnitt hält an, wenn sein Kostendeckel erreicht ist", (context) => {
   const pitch = PITCH.replace("\n\n## Anforderungen", `\n\nPlanung freigegeben: ${KLEINER_DECKEL} Token\n\n## Anforderungen`);
-  const dateien = { [`${ORDNER}/pitch.md`]: pitch, ".fortschritt/P-001-probe/planung.json": VORIGE_KOSTEN };
-  const drehbuch = { test: [TEST], planer: [SCHNITT], notiz: [NOTIZ] };
+  const dateien = { [`${ORDNER}/pitch.md`]: pitch };
+  const drehbuch = { test: [TEST], planer: [{ ...SCHNITT, nachrichten: [2 * KLEINER_DECKEL] }], notiz: [NOTIZ] };
   const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien });
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
-  assert.deepEqual(["erkunder", "planer", "pruefer-planung", "entwurf"].map((rolle) => datei(`anzahl-${rolle}`)), ["", "", "", ""]);
+  assert.deepEqual(["erkunder", "planer", "pruefer-planung", "entwurf"].map((rolle) => datei(`anzahl-${rolle}`)), ["1", "1", "1", ""]);
   const { versuche } = beleg("a1-neuschnitt");
   assert.equal(versuche.length, 1, JSON.stringify(versuche));
   const notiz = datei("gh.log");

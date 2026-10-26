@@ -78,7 +78,6 @@ test("umfang zählt Nummern, belegte Code- und Testdateien, getroffene Funktione
     altfunktionen: 1,
     testsAnDateien: ["test/grund.test.js", "test/hinweis.test.js"],
     dokumentKB: DOKUMENT_KB,
-    mindestdeckel: { token: 0, rollen: [{ rolle: "planer", token: 0, herkunft: "keine Messung" }] },
   });
 });
 
@@ -130,10 +129,7 @@ test("plane schreibt den Umfang des Pitches in planung.json, gleich der Ausgabe 
 
   const gemessen = umfangIn(lauf.wurzel, ORDNER);
   exit(gemessen, EXIT_GRUEN);
-  const { mindestdeckel, ...ohneMindestdeckel } = JSON.parse(gemessen.stdout);
-  assert.deepEqual(umfang, ohneMindestdeckel);
-  assert.ok(Number.isInteger(mindestdeckel.token), JSON.stringify(mindestdeckel));
-  assert.deepEqual(mindestdeckel.rollen.map(({ rolle }) => rolle), ["planer"]);
+  assert.deepEqual(umfang, JSON.parse(gemessen.stdout));
   assert.ok(umfang.codeDateien.includes(HINWEIS), JSON.stringify(umfang));
 });
 
