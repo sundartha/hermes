@@ -1,6 +1,6 @@
 # Vorlage: Phasendatei für eine einfache Änderung
 
-Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste freie dreistellige Nummer unter `plaene/E-*`; mit zählen die Ordner `plaene/E-*` in jedem Worktree unter `.claude/worktrees/` des Hauptklons. Was in spitzen Klammern steht, ersetzt du; alles andere bleibt so.
+Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des Issues aus dem Feld `issue` (`SKILL.md` 3c Schritt 1). Was in spitzen Klammern steht, ersetzt du; alles andere bleibt so.
 
 ```json
 {
@@ -27,7 +27,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die nächste f
 
 - `funktion`: Die Änderung zeigt sich von außen. `abnahme` ist ein neuer Abnahmetest über den echten Eingang, der heute mit `erwarteterFehler` rot wird.
 - `umbau`: Nur der Aufbau des Codes ändert sich, oder nur die Gestaltung der Website. `abnahme` ist ein bestehender Verhaltenstest, der grün bleibt; `erwarteterFehler` fällt weg.
-- `issue`: Leg das Issue an, bevor du `lauf` startest, und trag seine Nummer ein. Sein erster Abschnitt ist `## Absicht` mit genau dem Text aus `absicht`; `lauf` gleicht beides ab und hält sonst an.
+- `issue`: die Nummer des Issues, nach dem der Ordner heißt. Sein erster Abschnitt ist `## Absicht` mit genau dem Text aus `absicht`; `lauf` gleicht beides ab und hält sonst an.
 - `erwarteterFehler`: `lauf` sucht diesen Text wörtlich in der Fehlermeldung des roten Abnahmetests; ein Testname zählt nicht. Der Test-Agent gibt ihn dem `assert`, das heute fehlschlägt, als Meldung mit, etwa `assert.equal(ist, soll, "<erwarteterFehler>")`.
 - Bleibt nichts Besonderes gleich, ist `wasDarfNiePassieren` die leere Liste `[]`, und der Grund steht im Entwurf.
 
