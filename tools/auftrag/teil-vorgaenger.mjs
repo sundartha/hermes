@@ -29,23 +29,39 @@ function gebauteCommits(root, bezug) {
 
 function gebauteTeile(root, bezug) {
   const finde = gebauteCommits(root, bezug);
-  return (teil) => finde((zeile) => zeile.startsWith(`Auftrag: ${teil}/`)) !== undefined;
+  return (teil) => finde((zeile) => zeile.startsWith(`Auftrag: ${teil}/`));
+}
+
+function vorgaengerStaende(root, nach) {
+  const gemergt = gebauteTeile(root, MASTER);
+  const imStand = gebauteTeile(root, EIGENER_STAND);
+  return nach.map((vorgaenger) => {
+    const commit = gemergt(vorgaenger);
+    const fehltImStand = imStand(vorgaenger) === undefined;
+    return { vorgaenger, commit, fehltImStand, gilt: commit !== undefined && !fehltImStand };
+  });
 }
 
 function fehlendeBefunde(teil, nach, root) {
   const sha = stand(root);
   if (sha === null) return [`Teil ${teil}: ${MASTER} fehlt; ohne den Hauptstand lässt sich nicht prüfen, ob ${nach.join(", ")} gemergt sind.`, ZWECK];
-  const gemergt = gebauteTeile(root, MASTER);
-  const imStand = gebauteTeile(root, EIGENER_STAND);
-  const befunde = nach.flatMap((vorgaenger) => {
-    if (!gemergt(vorgaenger)) return [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) nicht gemergt; kein geltender Commit trägt „Auftrag: ${vorgaenger}/…“ mit „${ART}…“.`];
-    return imStand(vorgaenger) ? [] : [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) gemergt, fehlt aber im eigenen Stand (${EIGENER_STAND}); der Teil baut sonst ohne seinen Code.`];
+  const befunde = vorgaengerStaende(root, nach).flatMap(({ vorgaenger, commit, gilt }) => {
+    if (gilt) return [];
+    if (commit === undefined) return [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) nicht gemergt; kein geltender Commit trägt „Auftrag: ${vorgaenger}/…“ mit „${ART}…“.`];
+    return [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) gemergt, fehlt aber im eigenen Stand (${EIGENER_STAND}); der Teil baut sonst ohne seinen Code.`];
   });
   return befunde.length > 0 ? [...befunde, ZWECK] : [];
 }
 
 export function vorgaengerBefunde(teil, nach, root) {
   return nach.length === 0 ? [] : fehlendeBefunde(teil, nach, root);
+}
+
+export function gemergteVorgaenger(root, nach) {
+  if (nach.length === 0 || stand(root) === null) return [];
+  return vorgaengerStaende(root, nach)
+    .filter(({ gilt }) => gilt)
+    .map(({ vorgaenger, commit }) => ({ vorgaenger, sha: commit.sha.slice(0, KURZ_SHA) }));
 }
 
 export function teilVorgaengerBefunde(phase, root) {
