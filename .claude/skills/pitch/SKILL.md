@@ -19,7 +19,7 @@ Kopiere diese Liste in deine Antwort und hake sie ab:
 - [ ] 6. Zerlegen lassen und Abdeckung prüfen
 
 ### 1. Datei anlegen
-Kopiere `vorlage.md` nach `plaene/P-<nächste freie Nummer>-<kurzname>/pitch.md`. Verwende genau diese Struktur; jeder Abschnitt bleibt stehen. `beispiel.md` zeigt einen fertigen Pitch. Die „Absicht“ schreibst du mit dem Nutzer; ohne sie ist `node tools/abdeckung-pruefen.mjs` rot, und das Zusammensetzen der Phasendatei verweigert sich.
+Such mit `gh issue list --search "<Stichworte>"` nach einem offenen Issue zum Thema, sonst leg eines an. Kopiere dann `vorlage.md` nach `plaene/P-<Nummer des Issues>-<kurzname>/pitch.md`. Verwende genau diese Struktur; jeder Abschnitt bleibt stehen. `beispiel.md` zeigt einen fertigen Pitch. Die „Absicht“ schreibst du mit dem Nutzer; ohne sie ist `node tools/abdeckung-pruefen.mjs` rot, und das Zusammensetzen der Phasendatei verweigert sich.
 
 ### 2. Mit dem Nutzer klären
 Rede mit dem Nutzer wie mit einem Software-Engineer: mit Fachbegriffen, Werkzeug- und Routennamen und den technischen Abwägungen, ohne zu vereinfachen.
@@ -86,7 +86,7 @@ Sind alle Fragen unter „Vor dem Bau zu klären“ beantwortet, setz den Status
 
 Zu jedem Widerspruch passt du nach der Antwort alle betroffenen Dokumente an, bis sie dasselbe sagen; gibt der Nutzer frei, ohne dazu etwas zu sagen, gilt deine Empfehlung.
 
-Nimmt der Nutzer einen Vorschlag an, der ein Szenario, einen Begriff oder eine Entscheidung ändert, passt du Pitch, Design Doc und Sicherheitsprüfung an. Zu jedem Vorschlag unter „Zu entscheiden“ in der Sicherheitsprüfung trägst du dort ein, ob er angenommen oder abgelehnt ist; gibt der Nutzer frei, ohne etwas dazu zu sagen, gilt deine Empfehlung. Der Nutzer gibt mit einem Wort im Chat frei; dann setzt du den Status aller Dokumente auf „freigegeben“ und trägst im Pitch unter `Status:` die freigegebene Token-Menge als Zeile `Planung freigegeben: <Zahl> Token` ein und darunter die Zeile `Issue: <Nummer>` mit der Nummer des Issues, das der PR später mit `Closes #` nennt; gibt es noch keins, fragst du den Nutzer danach. Der erste Abschnitt dieses Issues ist „## Absicht“ aus `pitch.md`, wörtlich; ohne ihn hält der KI-Prüfer am PR an. Will der Nutzer etwas ändern, änderst du es und passt die betroffenen Dokumente an.
+Nimmt der Nutzer einen Vorschlag an, der ein Szenario, einen Begriff oder eine Entscheidung ändert, passt du Pitch, Design Doc und Sicherheitsprüfung an. Zu jedem Vorschlag unter „Zu entscheiden“ in der Sicherheitsprüfung trägst du dort ein, ob er angenommen oder abgelehnt ist; gibt der Nutzer frei, ohne etwas dazu zu sagen, gilt deine Empfehlung. Der Nutzer gibt mit einem Wort im Chat frei; dann setzt du den Status aller Dokumente auf „freigegeben“ und trägst im Pitch unter `Status:` die freigegebene Token-Menge als Zeile `Planung freigegeben: <Zahl> Token` ein und darunter die Zeile `Issue: <Nummer>` mit der Nummer des Issues aus Schritt 1, das der PR später mit `Closes #` nennt. Der erste Abschnitt dieses Issues ist „## Absicht“ aus `pitch.md`, wörtlich; ohne ihn hält der KI-Prüfer am PR an. Will der Nutzer etwas ändern, änderst du es und passt die betroffenen Dokumente an.
 
 ### 6. Zerlegung
 Nach der Freigabe, ohne Rückfrage:
