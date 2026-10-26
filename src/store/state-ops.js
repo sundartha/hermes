@@ -2040,9 +2040,7 @@ function spendMonthKeyOf(nowIso) {
 function previousMonthKeyOf(nowIso) {
   const at = parseValidDate(nowIso);
   if (at === null) return null;
-  const previous = new Date(at.getTime());
-  previous.setUTCMonth(previous.getUTCMonth() - 1);
-  return yearMonthKey(previous);
+  return yearMonthKey(new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 1, 1)));
 }
 
 export function laterMonotonicKey(storedKey, nowKey) {
