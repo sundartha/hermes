@@ -100,6 +100,7 @@ export const MELDUNG = {
 };
 
 export const ALTER_TEST = "alter test";
+export const TEST_STATISCH = "tests/statisch";
 
 const HINWEIS_SCHRITTE = new Set([ALTER_TEST, "bisect", "entscheidung kommentar", "entscheidung label", "merge-tree", "cherry-pick"]);
 const GRENZEN = new Set([PRUEFUNG.GRENZEN_BAU, PRUEFUNG.GRENZEN_TEST]);
@@ -188,6 +189,7 @@ const ZUSTAENDIG = new Map([
   [PRUEFUNG.COMMIT, BAU],
   [GRUND.KEINE_AENDERUNG, BAU],
   [PRUEFUNG.GRENZEN_TEST, TEST],
+  [TEST_STATISCH, TEST],
   [PRUEFUNG.GEAENDERTE_FAELLE, TEST],
   [PRUEFUNG.ROT, TEST],
   [PRUEFUNG.MUTATION_NACH_TEST, TEST],

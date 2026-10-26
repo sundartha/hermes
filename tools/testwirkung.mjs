@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { zweckBlock } from "./auftrag/zweck.mjs";
@@ -74,6 +75,17 @@ function neueTests(basis, geaendert) {
     tests: jeDatei.flatMap(({ benannt }) => benannt),
     ohneNamen: jeDatei.flatMap(({ unbenannt }) => unbenannt),
   };
+}
+
+async function neueTestsSeit(basis) {
+  const umbenannt = await umbenennungen({ von: basis });
+  const geaendert = await ohneNurTypen(umbenannt, geaenderteTestdateien(basis));
+  return { umbenannt, geaendert: new Set(geaendert), ...neueTests(basis, geaendert) };
+}
+
+export async function testsOhneFestenNamen(basis) {
+  const { ohneNamen } = await neueTestsSeit(basis);
+  return neueTestsVerstoesse(ohneNamen, []).flatMap(([, liste]) => liste);
 }
 
 function alleTestsIn(dateien) {
@@ -259,9 +271,7 @@ async function main() {
     return EXIT_ABBRUCH;
   }
   await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
-  const umbenannt = await umbenennungen({ von: values.basis });
-  const geaendert = new Set(await ohneNurTypen(umbenannt, geaenderteTestdateien(values.basis)));
-  const { tests, ohneNamen } = neueTests(values.basis, [...geaendert]);
+  const { umbenannt, geaendert, tests, ohneNamen } = await neueTestsSeit(values.basis);
   const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const inGeaenderten = alleTestsIn([...geaendert]);
@@ -298,9 +308,11 @@ async function main() {
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
 }
 
-try {
-  process.exitCode = await main();
-} catch (fehler) {
-  console.error(`Abbruch: ${fehler.message}`);
-  process.exitCode = EXIT_ABBRUCH;
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
+  try {
+    process.exitCode = await main();
+  } catch (fehler) {
+    console.error(`Abbruch: ${fehler.message}`);
+    process.exitCode = EXIT_ABBRUCH;
+  }
 }

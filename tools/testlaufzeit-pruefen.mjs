@@ -11,16 +11,14 @@ import {
   sekunden,
   tabellenZeile,
 } from "./testlaufzeit/aufteilung.mjs";
-import { aufrufeInDateien, echtWartenBefunde } from "./testlaufzeit/echt-warten-statisch.mjs";
+import { echtWartenImArbeitsbaum, echteWartezeitenListe } from "./testlaufzeit/echt-warten-statisch.mjs";
 import { TESTDATEI, hilfsdateiBefunde } from "./testlaufzeit/hilfsdatei.mjs";
 import { ausklingenStrenger, zeitgliederStrenger } from "./testlaufzeit/nur-strenger.mjs";
 import { zeitgliederBefunde } from "./testlaufzeit/zeitglieder.mjs";
 
 const BASIS_AUSKLINGEN = "tools/basis/testlaufzeit.json";
-const BASIS_ECHTE_WARTEZEITEN = "tools/basis/echte-wartezeiten.json";
 const BASIS_ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const LAUFZEITEN = ".pruefung/dateien.jsonl";
-const TESTDATEIEN = ["test/*.js", "test/*.mjs", "test/*.cjs", "test/*.ts", "test/*.mts", "test/*.cts"];
 const LANGSAMSTE = 20;
 const JSON_EINRUECKUNG = 2;
 const EXIT_OK = 0;
@@ -33,18 +31,6 @@ const AUFRUF = [
 
 function json(datei) {
   return JSON.parse(readFileSync(datei, "utf8"));
-}
-
-function testdateien() {
-  return execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", ...TESTDATEIEN],
-    {
-      encoding: "utf8",
-    },
-  )
-    .split("\n")
-    .filter((datei) => datei !== "" && existsSync(datei));
 }
 
 function neueTestdateien(basis) {
@@ -111,7 +97,7 @@ async function pruefen(werte) {
   const befunde = [
     ...ausklingenStrenger(vergleich, BASIS_AUSKLINGEN, ausklingen),
     ...zeitgliederStrenger(vergleich, BASIS_ZEITGLIEDER, zeitglieder),
-    ...echtWartenBefunde(aufrufeInDateien(".", testdateien()), json(BASIS_ECHTE_WARTEZEITEN)),
+    ...echtWartenImArbeitsbaum(".", echteWartezeitenListe(".", { ohneListe: undefined })),
     ...(await zeitgliederBefunde(process.cwd(), zeitglieder)),
     ...hilfsdateiBefunde(zeilen),
     ...ausklingBefunde(zeilen, ausklingen),

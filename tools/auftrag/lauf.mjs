@@ -32,13 +32,14 @@ import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
+const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
 const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", import.meta.url));
@@ -298,6 +299,11 @@ class AuftragsLauf {
     return this.scheitert(genannt.zeile);
   }
 
+  statischeTestpruefung() {
+    this.allesVormerken();
+    return this.gruen(TEST_STATISCH, [execPath, STATISCHE_TESTPRUEFUNG, "--basis", this.basis], befundOhneZweck);
+  }
+
   importendungen() {
     return this.gruen(PRUEFUNG.IMPORTENDUNGEN, [execPath, EINSTIEG, "importendungen", "--basis", this.basisBau]);
   }
@@ -474,6 +480,7 @@ class AuftragsLauf {
       ? [
           () => this.agent("test", testAgentPrompt(this.kontext)),
           () => this.grenzen("test", this.basis),
+          () => this.statischeTestpruefung(),
           () => this.faelleErhalten(),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.abhaengigkeiten(),
