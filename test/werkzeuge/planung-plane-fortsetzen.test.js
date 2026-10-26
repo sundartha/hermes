@@ -10,6 +10,7 @@ import { ABBRUCH_IM_SCHNITT, AUFTRAG, EXIT_AUFRUF, EXIT_GRUEN, EXIT_PASST_NICHT,
 import { commitPaths, runIn } from "./probe-repo.js";
 
 const FRAGE = "Wo wird die Nummer gespeichert?";
+const SHA256_HEX_ZEICHEN = 64;
 const MIT_NACHFRAGE = {
   "planer|## Zuschnitt": [alsJson({ nachfragen: [{ nummern: ["S1"], frage: FRAGE }] }), alsJson({ schnitt: schnittliste() })],
   "erkunder|## Nachfrage|S1": [bericht(["S1"])],
@@ -154,12 +155,35 @@ test("plane --fortsetzen: ohne Nachfrage-Welle vor dem Abbruch darf das Fortsetz
   assert.equal(nachfrageWellen(lauf), 1);
 });
 
+test("plane --fortsetzen: übernimmt die abgelegten Wegprüfungen und ergänzt sie um die Wegprüfung der neuen Nachfrage-Welle", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  const zuvor = abgelegt(vorher, FINGERABDRUCK).zustand.wegpruefungen;
+  assert.equal(zuvor.length, GRUPPEN.length);
+
+  const lauf = weiter(context, vorher);
+
+  exit(lauf, EXIT_GRUEN);
+  const danach = abgelegt(lauf, FINGERABDRUCK).zustand.wegpruefungen;
+  assert.equal(danach.length, zuvor.length + 1);
+  assert.deepEqual(danach.slice(0, zuvor.length), zuvor);
+});
+
 test("plane --fortsetzen: ein Fingerabdruck ohne nachfrageWellen oder mit einer Zahl, die keine ganze Zahl ab 0 ist, bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
   const vorher = abgebrochen(context);
   const abdruck = abgelegt(vorher, FINGERABDRUCK);
   for (const wellen of [undefined, -1, 0.5, "0"]) {
     writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, zustand: { ...abdruck.zustand, nachfrageWellen: wellen } }));
     abgelehnt(weiter(context, vorher), /fingerabdruck\.json hat nicht die Form eines Fingerabdrucks/u);
+  }
+});
+
+test("plane --fortsetzen: ein Fingerabdruck mit ausstehender Erkundung, Wegprüfung oder Nachfrage bricht ab, ohne einen Agenten zu starten", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = abgebrochen(context);
+  const abdruck = abgelegt(vorher, FINGERABDRUCK);
+  const [{ nummern }] = GRUPPEN;
+  for (const ausstehend of [{ erkundungAusstehend: [nummern] }, { wegAusstehend: [nummern] }, { nachfrageAusstehend: "0".repeat(SHA256_HEX_ZEICHEN) }]) {
+    writeFileSync(planungsDatei(vorher, FINGERABDRUCK), JSON.stringify({ ...abdruck, zustand: { ...abdruck.zustand, ...ausstehend } }));
+    abgelehnt(weiter(context, vorher), /voller Neulauf/u);
   }
 });
 

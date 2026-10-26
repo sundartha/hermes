@@ -9,6 +9,9 @@ const AUSSTIEG = { antwort: "Ich höre auf.\nAuftrag passt nicht: Der Abnahmetes
 const NOTIZ = { antwort: "1. Agenten-Form prüfen" };
 const EXIT_SCHNITT_ABGELEHNT = 4;
 const KLEINER_DECKEL = 1;
+const FREIGEGEBEN = 5;
+const ZWEI_VERSUCHE = 2;
+const ABGELEHNT = "die Skriptprüfung hat den neuen Schnitt abgelehnt";
 
 test("zwei an Formprüfungen rote Runden führen zur Entscheidungsnotiz ohne Neuschnitt", (context) => {
   const drehbuch = { test: [TEST], bau: [MIT_FIX], planer: [SCHNITT], notiz: [NOTIZ] };
@@ -30,6 +33,16 @@ test("eine rote Runde mit Auftrag passt nicht führt weiter zum Neuschnitt", (co
   assert.deepEqual([datei("anzahl-planer"), datei("gh.log")], ["1", ""]);
   assert.equal(beleg("a1-neuschnitt").ergebnis, "grün");
   assert.equal(beleg("a1-n1").ergebnis, "grün");
+});
+
+test("der Neuschnitt schneidet auch dann fertig, wenn er mehr Token verbraucht, als der Pitch unter Planung freigegeben nennt", (context) => {
+  const pitch = PITCH.replace("\n\n## Anforderungen", `\n\nPlanung freigegeben: ${KLEINER_DECKEL} Token\n\n## Anforderungen`);
+  const drehbuch = { test: [TEST], bau: [AUSSERHALB, AUSSTIEG, MIT_FIX], planer: [{ ...SCHNITT, nachrichten: [2 * KLEINER_DECKEL] }] };
+  const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { [`${ORDNER}/pitch.md`]: pitch } });
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(datei("anzahl-planer"), "1");
+  assert.equal(beleg("a1-n1").ergebnis, "grün");
+  assert.doesNotMatch(datei("gh.log"), /Deckel/);
 });
 
 test("der Neuschnitt hält an, wenn sein Kostendeckel erreicht ist", (context) => {
@@ -65,4 +78,27 @@ test("eine fehlerhafte Zeile Planung freigegeben im Pitch hält den Neuschnitt v
   assert.equal(datei("anzahl-kind"), "");
   assert.equal(beleg("a1-neuschnitt"), null);
   assert.match(datei("gh.log"), /Planung freigegeben: viele Token/);
+});
+
+test("eine Zeile Planung freigegeben ohne Zahl im Pitch hält den Neuschnitt nicht mehr an, seine Versuche starten", (context) => {
+  const pitch = PITCH.replace("\n\n## Anforderungen", "\n\nPlanung freigegeben: viele Token\n\n## Anforderungen");
+  const drehbuch = { test: [TEST], kind: [{}], notiz: [NOTIZ] };
+  const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { [`${ORDNER}/pitch.md`]: pitch } });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(datei("anzahl-kind"), String(ZWEI_VERSUCHE));
+  assert.equal(beleg("a1-neuschnitt").versuche.length, ZWEI_VERSUCHE);
+  assert.doesNotMatch(datei("gh.log"), /Planung freigegeben: viele Token/);
+});
+
+test("lehnt die Skriptprüfung den ersten Versuch des Neuschnitts ab, startet ein zweiter, auch wenn der erste die unter Planung freigegeben genannten Token verbraucht hat", (context) => {
+  const pitch = PITCH.replace("\n\n## Anforderungen", `\n\nPlanung freigegeben: ${FREIGEGEBEN} Token\n\n## Anforderungen`);
+  const abgelehnt = { ergebnis: { exitCode: EXIT_SCHNITT_ABGELEHNT, grund: ABGELEHNT, sitzungen: [{ rolle: "planer", sitzung: "verbraucht-1" }] }, verbrauch: FREIGEGEBEN };
+  const drehbuch = { test: [TEST], kind: [abgelehnt], notiz: [NOTIZ] };
+  const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { [`${ORDNER}/pitch.md`]: pitch } });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  const { versuche, kosten } = beleg("a1-neuschnitt");
+  assert.equal(kosten.summe.gesamt, FREIGEGEBEN);
+  assert.equal(datei("anzahl-kind"), String(ZWEI_VERSUCHE));
+  assert.deepEqual(versuche.map(({ befunde }) => befunde), [[ABGELEHNT], [ABGELEHNT]]);
+  assert.doesNotMatch(datei("gh.log"), /Deckel/);
 });
