@@ -28,22 +28,26 @@ export async function listenUmziehen({ basis, root }) {
   return EXIT_GRUEN;
 }
 
-function listenStand(root) {
-  return new Map(LISTENPFADE.map((pfad) => [pfad, lesbar(join(root, pfad))]));
+function listenStand(root, pfade) {
+  return new Map(pfade.map((pfad) => [pfad, lesbar(join(root, pfad))]));
 }
 
-export function umzugGemerkt(root, schritt) {
-  const vorher = listenStand(root);
+export function umzugGemerkt(root, schritt, pfade = LISTENPFADE) {
+  const vorher = listenStand(root, pfade);
   const gruen = schritt();
-  const nachher = listenStand(root);
+  const nachher = listenStand(root, pfade);
   const umzug = [...vorher].filter(([pfad, text]) => text !== undefined && nachher.get(pfad) !== text);
   return { gruen, umzug: umzug.map(([pfad, text]) => ({ pfad, vorher: text, nachher: nachher.get(pfad) })) };
 }
 
 export function umzugZuruecknehmen(root, umzug = []) {
-  const zurueck = umzug.filter(({ pfad, nachher }) => lesbar(join(root, pfad)) === nachher);
-  for (const { pfad, vorher } of zurueck) writeFileSync(join(root, pfad), vorher);
-  vormerken(zurueck.map(({ pfad }) => pfad), root);
+  const zurueck = [];
+  for (const { pfad, vorher, nachher } of umzug.toReversed()) {
+    if (lesbar(join(root, pfad)) !== nachher) continue;
+    writeFileSync(join(root, pfad), vorher);
+    zurueck.push(pfad);
+  }
+  vormerken(zurueck, root);
 }
 
 async function aufruf() {

@@ -107,7 +107,7 @@ export function lesbar(datei) {
   return existsSync(datei) ? readFileSync(datei, "utf8") : undefined;
 }
 
-function gelesen(text) {
+export function gelesen(text) {
   try {
     return JSON.parse(text);
   } catch {
