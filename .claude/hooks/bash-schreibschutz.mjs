@@ -1,8 +1,12 @@
-import { statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
+import { env, execPath } from "node:process";
+import { fileURLToPath } from "node:url";
 
 import { block, isInside, readInput, realPath, repositoryRoot, startDirectory } from "./lib.mjs";
+import { TESTDATEI } from "./rolle.mjs";
 
 const UMLEITUNG = /^(?:&>>?|<<<|<<-|<<|<>|<&|>>|>&|>\||[<>])/;
 const UND_ODER = /^(?:&>|&&|\|\||\|&|[&|])/;
@@ -269,6 +273,12 @@ const NPM_LS = /^(?:--all|-a|--json|--depth=\d+|[@\w][@\w./-]*)$/;
 const MUSTER_AUSSERHALB = /[[{]|(?:^|\/)\./;
 const FIND_SCHREIBEND = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"]);
 const DAUER = /^\d+(?:\.\d+)?[smhd]?$/;
+const LOESCHEN = new Set(["rm", "unlink"]);
+const LOESCHWEG = "; eine Datei löscht nur der Bau-Agent, mit git rm <Pfad> (wörtlicher Pfad, ohne -r und ohne Muster)";
+const PATHSPEC_ZEICHEN = /[*?[\]\\:]/;
+const BAU_ROLLE = new URL("../rollen/bau.json", import.meta.url);
+const EDIT_SPERRE = /^Edit\((.+)\)$/;
+const ABNAHME_ZUERST = fileURLToPath(new URL("./abnahme-zuerst.mjs", import.meta.url));
 const OHNE_DATEI = new Set(["/dev/null", "/dev/stdout", "/dev/stderr"]);
 const TEMP_ORDNER = ["/tmp", "/private/tmp"];
 const SED_ADRESSE = String.raw`(?:\d+|\$|/(?:\\.|[^\\/])*/)`;
@@ -431,12 +441,56 @@ function git(args, kontext) {
   const [unter, ...rest] = args.slice(stelle);
   if (!unter || unter.dyn) return "git ohne lesenden Unterbefehl";
   if (unter.text === "stash") return gitStash(rest);
+  if (unter.text === "rm") return stelle === 0 ? gitRm(rest, kontext) : "git rm nur ohne Option vor rm";
   if (!GIT_LESEND.has(unter.text)) return `git ${unter.text} ist kein lesender Unterbefehl`;
   return gitOptionFund(rest) ?? (unter.text === "grep" ? gitGrepFund(rest) : null);
 }
 
 function gitStash([aktion, ...rest]) {
   return aktion?.text === "list" && !aktion.dyn ? gitOptionFund(rest) : "git stash schreibt";
+}
+
+function gitRm(args, kontext) {
+  if (env.HERMES_ROLLE !== "bau") return `git rm löscht${LOESCHWEG}`;
+  const ende = args.findIndex((arg) => !arg.dyn && arg.text === "--");
+  const vorher = ende === -1 ? args : args.slice(0, ende);
+  const option = vorher.find((arg) => kannOptionSein(arg));
+  if (option) return `git rm ${option.text || "mit Option aus einer Variablen"}`;
+  const pfade = ende === -1 ? args : [...vorher, ...args.slice(ende + 1)];
+  if (pfade.length === 0) return "git rm ohne Pfad";
+  return pfade.map((arg) => loeschFund(arg, kontext)).find(Boolean) ?? null;
+}
+
+function bauGeschuetzt() {
+  const { permissions: { deny } } = JSON.parse(readFileSync(BAU_ROLLE, "utf8"));
+  return deny.map((eintrag) => EDIT_SPERRE.exec(eintrag)).filter(Boolean).map(([, muster]) => muster.toLowerCase());
+}
+
+function istGeschuetztFuerBau(pfad, muster) {
+  const klein = pfad.toLowerCase();
+  return TESTDATEI.test(klein) || muster.some((eintrag) => matchesGlob(klein, eintrag));
+}
+
+function repoPfad(wurzel, ziel) {
+  return relative(wurzel, ziel).split(sep).join("/");
+}
+
+function loeschFund(arg, kontext) {
+  if (arg.glob || PATHSPEC_ZEICHEN.test(arg.text) || !relativOhneAufstieg(arg)) return `git rm ${arg.text} ist kein wörtlicher Pfad`;
+  const ziele = [...kontext.orte].map((ort) => resolve(ort, arg.text));
+  const fremd = ziele.find((ziel) => !(statSync(ziel, { throwIfNoEntry: false })?.isFile() ?? false) || !isInside(realPath(ziel), kontext.wurzel));
+  if (fremd !== undefined) return `git rm ${arg.text} ist keine Datei im Repo`;
+  const pfade = ziele.flatMap((ziel) => [repoPfad(kontext.wurzel, ziel), repoPfad(kontext.wurzel, realPath(ziel))]);
+  const muster = bauGeschuetzt();
+  const geschuetzt = pfade.find((pfad) => istGeschuetztFuerBau(pfad, muster));
+  if (geschuetzt !== undefined) return `git rm ${geschuetzt}: der Pfad ist für den Bau-Agenten geschützt`;
+  return ziele.map((ziel) => abnahmeFund(ziel, kontext.input)).find(Boolean) ?? null;
+}
+
+function abnahmeFund(ziel, input) {
+  const eingabe = { ...input, tool_name: "Edit", tool_input: { file_path: ziel } };
+  const lauf = spawnSync(execPath, [ABNAHME_ZUERST], { input: JSON.stringify(eingabe), encoding: "utf8" });
+  return lauf.status === 0 ? null : `git rm: ${lauf.stderr?.trim() || "abnahme-zuerst ohne Ergebnis"}`;
 }
 
 function gitGrepFund(args) {
@@ -555,7 +609,8 @@ const PROGRAMME = new Map([
 function programmFund([programm, ...args], kontext) {
   if (programm.dyn || (programm.glob && programm.text !== "[")) return "Programmname aus einer Variablen oder einem Muster";
   const regel = PROGRAMME.get(programm.text);
-  return regel ? regel(args, kontext) : `${programm.text} steht nicht auf der Erlaubtliste`;
+  if (regel) return regel(args, kontext);
+  return `${programm.text} steht nicht auf der Erlaubtliste${LOESCHEN.has(programm.text) ? LOESCHWEG : ""}`;
 }
 
 function ohneSchluesselwort(woerter) {
@@ -601,6 +656,7 @@ function umleitungFund({ op, ziel }, wurzel) {
 
 class Pruefung {
   constructor(input) {
+    this.input = input;
     this.wurzel = realPath(repositoryRoot(startDirectory(input)));
     this.orte = new Set([realPath(startDirectory(input))]);
     this.unsicher = false;
@@ -614,7 +670,7 @@ class Pruefung {
     if (rest.length === 0) return null;
     const zuweisung = zuweisungFund(rest);
     if (zuweisung !== null || ZUWEISUNG.test(rest[0].text)) return zuweisung;
-    return programmFund(rest, { wurzel: this.wurzel, orte: this.orte, bedingt: bedingt || this.unsicher });
+    return programmFund(rest, { input: this.input, wurzel: this.wurzel, orte: this.orte, bedingt: bedingt || this.unsicher });
   }
 
   fund(befehle) {
