@@ -102,3 +102,16 @@ test("pruefe nimmt vertraulich nur als true in der Phase eines Fehlers an", () =
   ];
   for (const [felder, anzahl] of tabelle) assert.equal(fall(felder).length, anzahl, JSON.stringify(felder));
 });
+
+test("pruefe nimmt Fehler-Phasen mit drei- und vierstelliger Issue-Nummer an", (context) => {
+  for (const [phase, issue] of [["F-999-probe", 999], ["F-2075-probe", 2075]]) {
+    const { lauf } = befehlMitPhase(context, "pruefe", { phase, issue });
+    assert.equal(lauf.status, 0, `${phase}: ${lauf.stdout}${lauf.stderr}`);
+  }
+});
+
+test("pruefe nimmt eine vertrauliche Phase F-V<n> ohne Issue an", (context) => {
+  const { lauf, gh } = befehlMitPhase(context, "pruefe", { phase: "F-V1-probe", vertraulich: true });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(gh, []);
+});
