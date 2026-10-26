@@ -16,6 +16,14 @@ const VAR_GRENZEN = new Set([...FUNKTIONEN, "StaticBlock", "Program"]);
 const EINZIGE = 1;
 const ZWEI = 2;
 const LAENGE = "length";
+const ZAHL_DURCHLASS = new Set(["BinaryExpression", "LogicalExpression", "UnaryExpression", "ConditionalExpression"]);
+const ZAHL_LESEZIEL = {
+  CallExpression: "arguments",
+  NewExpression: "arguments",
+  ReturnStatement: "argument",
+  ArrowFunctionExpression: "body",
+  IfStatement: "test",
+};
 
 function namenImMuster(muster) {
   if (!muster) return [];
@@ -113,23 +121,77 @@ function konstantenAus(deklarationen) {
   return new Map(mitWert.map(({ id, init }) => [id.name, init]));
 }
 
+function ladeFrei(anweisung) {
+  if (anweisung.type === "ImportDeclaration") return true;
+  if (anweisung.type !== "VariableDeclaration" || anweisung.kind !== "const") return false;
+  return anweisung.declarations.every(({ id, init }) => id.type === "Identifier" && init.type === "Literal");
+}
+
+function zahlDeklaration(anweisung) {
+  const [{ id, init }, ...weitere] = anweisung.declarations;
+  return weitere.length === 0 && typeof init.value === "number" ? { anweisung, id, wert: init } : undefined;
+}
+
+function zahlKandidaten(programm) {
+  const kandidaten = new Map();
+  for (const anweisung of programm.body) {
+    if (!ladeFrei(anweisung)) break;
+    const kandidat = anweisung.type === "VariableDeclaration" ? zahlDeklaration(anweisung) : undefined;
+    if (kandidat) kandidaten.set(kandidat.id.name, kandidat);
+  }
+  return kandidaten;
+}
+
+function imFeld(elter, feld, kind) {
+  return feld !== undefined && [elter[feld]].flat().includes(kind);
+}
+
+function zahlLesestelle({ knoten, eltern }) {
+  let kind = knoten;
+  for (const elter of eltern.toReversed()) {
+    if (imFeld(elter, ZAHL_LESEZIEL[elter.type], kind)) return true;
+    if (!ZAHL_DURCHLASS.has(elter.type)) return false;
+    kind = elter;
+  }
+  return false;
+}
+
+function bereichVon(knoten) {
+  return String(knoten.range);
+}
+
+function zahlKonstantenAus(programm, eintraege, kreisfrei) {
+  const kandidaten = kreisfrei ? zahlKandidaten(programm) : new Map();
+  const fundstellen = eintraege.filter(({ knoten }) => knoten.type === "Identifier" && kandidaten.has(knoten.name) && kandidaten.get(knoten.name).id !== knoten);
+  const gesperrt = new Set(fundstellen.filter((eintrag) => !zahlLesestelle(eintrag)).map(({ knoten }) => knoten.name));
+  const frei = fundstellen.filter(({ knoten }) => !gesperrt.has(knoten.name));
+  const gelesen = new Set(frei.map(({ knoten }) => knoten.name));
+  const deklarationen = [...kandidaten.values()].filter(({ id }) => gelesen.has(id.name));
+  return {
+    stellen: new Map(frei.map(({ knoten }) => [bereichVon(knoten), kandidaten.get(knoten.name).wert])),
+    anweisungen: new Set(deklarationen.map(({ anweisung }) => bereichVon(anweisung))),
+  };
+}
+
 function orteJeName(bindungen) {
   const orte = new Map();
   for (const { name, ort } of bindungen) orte.set(name, [...(orte.get(name) ?? []), ort]);
   return orte;
 }
 
-export function fakten(programm) {
+export function fakten(programm, { kreisfrei = false } = {}) {
   const eintraege = mitEltern(programm);
   const knoten = eintraege.map((eintrag) => eintrag.knoten);
   const deklarationen = obersteDeklarationen(programm);
   const hilfen = deklarationen.map(hilfeAus).filter(Boolean);
+  const unsicher = knoten.some(({ type, name }) => type === "WithStatement" || UNSICHERE_NAMEN.has(name));
   return {
     gebunden: orteJeName(eintraege.flatMap(gebundeneNamen)),
     geschrieben: new Set(knoten.flatMap(geschriebeneNamen)),
     konstanten: konstantenAus(deklarationen),
     hilfen: new Map(hilfen.map((hilfe) => [hilfe.name, hilfe])),
-    unsicher: knoten.some(({ type, name }) => type === "WithStatement" || UNSICHERE_NAMEN.has(name)),
+    unsicher,
+    zahlen: zahlKonstantenAus(programm, eintraege, kreisfrei && !unsicher),
   };
 }
 
@@ -241,11 +303,22 @@ function hilfeEinsetzen(knoten, stand) {
   return fest ? eingesetzt(hilfe.ausdruck, hilfe.parameter, argument) : undefined;
 }
 
+function zahlKonstante(knoten, stand) {
+  if (knoten.type === "Identifier") {
+    const wert = stand.zahlen.stellen.get(bereichVon(knoten));
+    return wert && { ...wert, range: knoten.range };
+  }
+  if (knoten.type !== "Program") return undefined;
+  const body = knoten.body.filter((anweisung) => !stand.zahlen.anweisungen.has(bereichVon(anweisung)));
+  return body.length === knoten.body.length ? undefined : { ...knoten, body };
+}
+
 export const REGELN = {
   "vorlage-string": vorlageString,
   "boolean-verknuepfung": booleanVerknuepfung,
   "laenge-optional": laengeOptional,
   "hilfe-einsetzen": hilfeEinsetzen,
+  "zahl-konstante": zahlKonstante,
 };
 
 function regelAnwenden(knoten, lauf) {
@@ -275,8 +348,8 @@ function umgeformt(knoten, lauf) {
   return ersetzt === undefined ? kopie : umgeformt(ersetzt, lauf);
 }
 
-export function normalform(programm) {
-  const lauf = { stand: fakten(programm), genutzt: new Map() };
+export function normalform(programm, optionen = {}) {
+  const lauf = { stand: fakten(programm, optionen), genutzt: new Map() };
   return { baum: umgeformt(programm, lauf), genutzt: lauf.genutzt };
 }
 
