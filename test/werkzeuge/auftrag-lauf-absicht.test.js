@@ -12,6 +12,10 @@ const ISSUE = 7;
 const ABSICHT = "Die Zahl soll verdoppelt werden, ohne Sonderfall für die Testeingabe.";
 const ABWEICHENDES_ISSUE = issueMitAbsicht(ABSICHT.slice(0, -1));
 const NICHT_LESBAR = "process.exit(1);";
+const GH_ZEILE = "To get started with GitHub CLI, please run: gh auth login";
+const NICHT_ANGEMELDET = `process.stderr.write(${JSON.stringify(`${GH_ZEILE}\nAlternatively, populate the GH_TOKEN environment variable.\n`)});\nprocess.exit(4);`;
+const OHNE_ABSICHT = `console.log(${JSON.stringify("## Ziel\n\nZahl\n")});`;
+const EINRICHTUNG = "Einrichtungsschritt: gh auth login (README.md, „Einrichtung für den Arbeitsweg“)";
 const WEICHT_AB = `Issue #${ISSUE}: der Abschnitt „## Absicht“ fehlt oder weicht von absicht in phase.json ab`;
 const PASST_NICHT = "Auftrag passt nicht: Die Stelle gibt es so nicht.";
 
@@ -36,6 +40,21 @@ test("lauf mit Feld absicht startet nicht, wenn das Issue den Abschnitt „Absic
 
 test("lauf mit Feld absicht startet nicht, wenn das Issue nicht lesbar ist", (context) => {
   haeltVorDemAgenten(mitIssue(context, "lauf", NICHT_LESBAR), `Issue #${ISSUE} nicht lesbar; ohne seinen Abschnitt „## Absicht“ startet die Phase nicht`);
+});
+
+test("lauf nennt bei nicht angemeldetem gh die erste gh-Zeile, den Exit und den Einrichtungsschritt gh auth login", (context) => {
+  const ergebnis = mitIssue(context, "lauf", NICHT_ANGEMELDET);
+  haeltVorDemAgenten(ergebnis, `Issue #${ISSUE} nicht lesbar; ohne seinen Abschnitt „## Absicht“ startet die Phase nicht`);
+  assert.ok(ergebnis.lauf.stderr.includes(`endete mit Exit 4: ${GH_ZEILE}`), ergebnis.lauf.stderr);
+  assert.ok(ergebnis.lauf.stderr.includes(EINRICHTUNG), ergebnis.lauf.stderr);
+  assert.doesNotMatch(ergebnis.lauf.stderr, /Alternatively/);
+});
+
+test("lauf meldet bei einem lesbaren Issue ohne Abschnitt „Absicht“ nur die Abweichung, ohne Einrichtungsschritt", (context) => {
+  const ergebnis = mitIssue(context, "lauf", OHNE_ABSICHT);
+  haeltVorDemAgenten(ergebnis, WEICHT_AB);
+  assert.ok(!ergebnis.lauf.stderr.includes(EINRICHTUNG), ergebnis.lauf.stderr);
+  assert.doesNotMatch(ergebnis.lauf.stderr, /nicht lesbar/);
 });
 
 test("teillauf mit Feld absicht startet nicht, wenn das Issue den Abschnitt „Absicht“ nicht wörtlich hat", (context) => {

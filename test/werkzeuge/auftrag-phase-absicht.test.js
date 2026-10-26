@@ -54,6 +54,13 @@ test("ein Issue mit wörtlich gleicher Absicht ist kein Befund, eine Phase ohne 
   assert.deepEqual(gelesen, []);
 });
 
+test("ein Fehler im Leser, der kein Abbruch von gh ist, bricht laut ab statt als nicht lesbares Issue", () => {
+  const leseIssue = () => {
+    throw new TypeError("Programmfehler im Leser");
+  };
+  assert.throws(() => issueAbsichtBefunde({ issue: ISSUE, absicht: ABSICHT }, leseIssue), /Programmfehler im Leser/);
+});
+
 test("phase ohne Feld absicht (Phase von vor der Absicht) fragt das Issue nicht ab", (context) => {
   const { werkzeug } = starteMitIssue(context, `import { writeFileSync } from "node:fs";\nwriteFileSync(process.env.HOME + "/gh-aufgerufen", "");`, {});
   assert.equal(existsSync(join(werkzeug, "gh-aufgerufen")), false);
