@@ -10,7 +10,7 @@
     "abnahmePattern": "^ABNAHME-[A-Z0-9]"
   },
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true; node tools/upstream-anlegen.mjs",
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
     "check": "node scripts/check-setup.js",

@@ -22,10 +22,15 @@ const EXIT_FAILURE = 1;
 const NO_CHANGES_MESSAGE = "Keine Änderungen gegenüber der Basis, keine Tests betroffen.";
 const SKIP_FULL_SUITE_OPTION = "ohne-volle-suite";
 const FULL_SUITE_ELSEWHERE_MESSAGE = "Die volle Suite läuft im Job CI und wird hier ausgelassen.";
+const MISSING_BASE_HINT = "git fetch upstream oder npm run prepare";
 
 function git(args) {
   const result = spawnSync("git", args, { encoding: "utf8" });
   return result.status === 0 ? result.stdout : null;
+}
+
+function baseExists(baseRef) {
+  return git(["rev-parse", "--verify", "--quiet", baseRef]) !== null;
 }
 
 export async function changedFiles(baseRef) {
@@ -77,6 +82,11 @@ async function main() {
       [SKIP_FULL_SUITE_OPTION]: { type: "boolean", default: false },
     },
   });
+  if (!baseExists(values.basis)) {
+    console.error(`Basis ${values.basis} fehlt; ${MISSING_BASE_HINT}.`);
+    process.exitCode = EXIT_FAILURE;
+    return;
+  }
   const changes = await changedFiles(values.basis);
   if (changes?.length === 0) {
     console.log(NO_CHANGES_MESSAGE);
