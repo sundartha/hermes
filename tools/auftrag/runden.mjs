@@ -372,9 +372,17 @@ class Runden {
   }
 
   zurueckInDenEntwurf(ergebnis, grund, zweck = []) {
+    const { phase, root } = this.kontext;
     const text = `Zurück in die Entwurfsprüfung: ${grund}`;
-    schreibeBeleg(this.kontext.root, { ...ergebnis, ergebnis: ENTWURFSPRUEFUNG, grund: text, ...(zweck.length > 0 ? { zweck } : {}) });
-    console.log([`Auftrag ${ergebnis.auftrag}: ${ENTWURFSPRUEFUNG} (${text})`, ...zweck].join("\n"));
+    const kommentar = [
+      "## Zurück in die Entwurfsprüfung",
+      `Auftrag ${ergebnis.auftrag} der Phase ${phase.phase} ist angehalten: ${grund}`,
+      `Der Beleg steht in ${BELEGE}/${phase.phase}/${ergebnis.auftrag}.json.`,
+      ...zweck,
+    ].join("\n\n");
+    const veroeffentlicht = veroeffentliche(phase, kommentar, root);
+    schreibeBeleg(root, { ...ergebnis, ergebnis: ENTWURFSPRUEFUNG, grund: text, ...(zweck.length > 0 ? { zweck } : {}), notiz: { text: kommentar, ...veroeffentlicht } });
+    console.log([`Auftrag ${ergebnis.auftrag}: ${ENTWURFSPRUEFUNG} (${text})`, ...zweck, veroeffentlicht.hinweis].join("\n"));
     return ENTWURFSPRUEFUNG;
   }
 
