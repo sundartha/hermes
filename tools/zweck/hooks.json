@@ -76,6 +76,13 @@
     "nichtAngenommen": "HERMES_ROLLE selbst setzen oder die Datei auf einem Weg schreiben, den der Hook nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "entfällt: Der Agent kann seine Rolle nicht selbst setzen, der Fehler liegt beim Start. Im Auftragsweg antwortet der Agent als Letztes mit „Auftrag passt nicht: HERMES_ROLLE fehlt“; sonst gehört der Befund als Entscheidungsnotiz ins Issue."
   },
+  "hooks/src-nur-lauf": {
+    "liste": "H1",
+    "wozu": "Jede Änderung an Hermes läuft denselben Weg: erst Fragen, dann Einstufung, dann Pitch bzw. Dokumente, dann die Agenten über lauf, die gegen einen Abnahmetest bauen. Schreibt eine Sitzung Code unter src/ von Hand, fehlen Einstufung, Abnahmetest und Prüfung, und eine Änderung erreicht Kunden, die niemand gegen das verlangte Verhalten geprüft hat.",
+    "behebung": "Mit dem Skill aenderung beginnen, auch bei einer kleinen Bitte wie einer Datei, die entfernt werden soll; er führt bis zur Phasendatei, und den Code schreibt danach der Bau-Agent über lauf.",
+    "nichtAngenommen": "HERMES_ROLLE selbst setzen oder dieselbe Datei über die Kommandozeile statt über Edit oder Write schreiben oder löschen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "entfällt: Der Weg über den Skill aenderung steht jeder Sitzung offen. Passt er für eine Änderung nicht, hältst du an und fragst nach, statt unter src/ zu schreiben."
+  },
   "hooks/test-aendert-keinen-produktcode": {
     "liste": "H6",
     "wozu": "Der Test-Agent schreibt den Test, der das bestellte Verhalten verlangt. Ändert er auch den Produktcode, prüft er seinen eigenen Code, und ein grüner Test belegt nicht mehr, dass der Bau-Agent das Verhalten gebaut hat.",
@@ -85,8 +92,8 @@
   },
   "hooks/worktree-pflicht": {
     "liste": "H1",
-    "wozu": "Im Haupt-Checkout liegt Antonios Arbeitsstand. Schreibt eine Sitzung dort, geht Arbeit verloren, die noch nicht committet ist, oder sie landet in einem fremden Commit.",
-    "behebung": "Vor der ersten Datei mit EnterWorktree in eine eigene Arbeitskopie unter .claude/worktrees/<name> wechseln und dort schreiben.",
+    "wozu": "Im Haupt-Checkout liegt dein Arbeitsstand. Schreibt eine Sitzung dort, geht Arbeit verloren, die noch nicht committet ist, oder sie landet in einem fremden Commit.",
+    "behebung": "Vor der ersten Datei mit EnterWorktree in eine eigene Arbeitskopie unter .claude/worktrees/<name> wechseln und dort schreiben. Eine Änderung an Hermes beginnt mit dem Skill aenderung, der diesen Schritt selbst enthält.",
     "nichtAngenommen": "Dieselbe Datei über die Kommandozeile statt über Edit oder Write schreiben, die der Hook als einzige sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "entfällt: Ein Worktree lässt sich immer anlegen, einen anderen Weg gibt es nicht. Lehnt die Rechteprüfung das Anlegen ab, hältst du an und meldest das, statt im Haupt-Checkout zu schreiben."
   }
