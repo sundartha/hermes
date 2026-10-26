@@ -47,3 +47,27 @@ test("ein Funktionsauftrag ruft die Prüfung nicht auf, auch wenn er eine Datei 
   assert.ok(liste.includes("feste-pfade"), liste.join(", "));
   assert.ok(!liste.includes(VORBEREITUNG), liste.join(", "));
 });
+
+test("ein Umbau, der 400 und 409 einer Routenfunktion durch benannte Konstanten ersetzt, kommt an der Prüfung vorbei", (context) => {
+  const route = (konstanten, ungueltig, konflikt) =>
+    [
+      'import { Router } from "express";',
+      ...konstanten,
+      "function answerConsultFinal({ res, validated, outcome }) {",
+      `  if (validated.error) return res.status(${ungueltig}).json({ error: validated.error });`,
+      `  if (outcome !== "accepted") return res.status(${konflikt}).json({ error: outcome });`,
+      "  return res.json({ accepted: true });",
+      "}",
+      "export function makeCallRoutes() {",
+      "  const router = Router();",
+      '  router.post("/consult", (req, res) => answerConsultFinal({ res, ...req.body }));',
+      "  return router;",
+      "}",
+      "",
+    ].join("\n");
+  const nachher = route(["const HTTP_UNGUELTIG = 400;", "const HTTP_KONFLIKT = 409;"], "HTTP_UNGUELTIG", "HTTP_KONFLIKT");
+  const drehbuch = { bau: { [DATEI]: nachher }, "bau-antwort": ABSATZ };
+  const { lauf, beleg } = starte(context, { auftrag: UMBAU_IM_BEREICH, drehbuch, dateien: { [DATEI]: route([], "400", "409") } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(pruefung(beleg, VORBEREITUNG), 0, JSON.stringify(beleg.pruefungen));
+});
