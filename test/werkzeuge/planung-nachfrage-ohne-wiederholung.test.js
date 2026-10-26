@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, alsJson, aufrufe, bericht, exit, planOrdner, schnittliste } from "./planung-probe.js";
-import { EXIT_DECKEL, EXIT_GRUEN, HALT_VOR_DER_RUECKSENDUNG, OHNE_GRENZE, SCHNITT_SOFORT, mitDeckel, plane } from "./planung-plane-probe.js";
+import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
+import { EXIT_GRUEN, plane } from "./planung-plane-probe.js";
 
 const ANRUF = GRUPPEN[1].nummern;
 const NIMM_ANRUF_ZEILE = 1;
@@ -79,16 +79,4 @@ test("plane: ein Nachfrage-Bericht ohne Fundstelle wird weiter zurückgeschickt"
   exit(lauf, EXIT_GRUEN);
   const rueckgabe = eingabeVon(lauf, "erkunder", "## Befunde");
   assert.ok(rueckgabe.includes("S4: schema braucht eine Fundstelle"), rueckgabe);
-});
-
-test("plane --fortsetzen gibt die Hinweise der am Deckel abgelegten Nachfrage gekennzeichnet an den Planer weiter", { timeout: LAUF_FRIST_MS }, (context) => {
-  const wurzel = planOrdner(context);
-  const nachfrage = { "planer|## Zuschnitt": [ZU_S4], "erkunder|## Nachfrage|S4": [bericht(["S4"], OHNE_FUNKTION, [FUND])] };
-  const angehalten = mitDeckel(context, wurzel, { argumente: ["--deckel", String(HALT_VOR_DER_RUECKSENDUNG)], ueberschrieben: nachfrage });
-  exit(angehalten, EXIT_DECKEL);
-  assert.equal(aufrufe(angehalten, "erkunder", "## Befunde").length, 0);
-  const lauf = mitDeckel(context, wurzel, { argumente: ["--fortsetzen", "--deckel", OHNE_GRENZE], ueberschrieben: { ...SCHNITT_SOFORT, "erkunder|## Befunde": [bericht(["S4"])] } });
-  exit(lauf, EXIT_GRUEN);
-  assert.equal(aufrufe(lauf, "erkunder", "## Befunde").length, 1);
-  assert.match(hinweisZeile(eingabeVon(lauf, "planer", "## Zuschnitt"), FUND), /^hinweis: aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: /u);
 });

@@ -2,10 +2,9 @@ import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from "n
 import { basename, dirname, join, relative } from "node:path";
 
 import { gemergteVorgaenger, vorgaengerBefunde } from "../teil-vorgaenger.mjs";
-import { TEIL_DECKEL, deckelAus, gibReservierungFrei, reserviere, restTopf, setzeReservierung, topfBuch } from "./deckel.mjs";
-import { liste, schreibeJsonAtomar } from "./erkundung.mjs";
+import { liste } from "./erkundung.mjs";
 import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
-import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT } from "./nachricht.mjs";
+import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GETEILT } from "./nachricht.mjs";
 import { ANFORDERUNGEN, ANGRIFFSWEG, ANGRIFFSWEGE, BLEIBT_UNVERAENDERT, PITCH, PITCH_SZENARIO, SICHERHEIT, sollNummern } from "./nummern.mjs";
 import { belegHalt, teilungHalt } from "./teilung.mjs";
 
@@ -89,17 +88,17 @@ function ableitung(eltern, eintrag) {
   return { kopf: verbunden(kopf), pitch, sicherheit: ohneWeg ? mitSatz(bleibt, ANGRIFFSWEGE, SATZ_ANGRIFFSWEGE) : bleibt };
 }
 
-function teilKopf(kopf, { eintrag, teilDeckel, herkunft }) {
+function teilKopf(kopf, { eintrag, herkunft }) {
   const [titel, ...rest] = kopf.split("\n");
   const uebrige = rest.filter((zeile) => zeile.trim() !== "" && !EIGENER_KOPF.some((anfang) => zeile.startsWith(anfang)));
   const status = rest.filter((zeile) => zeile.startsWith(STATUS)).slice(0, 1);
-  return [`${titel}: Teil ${eintrag.kuerzel} ${eintrag.name}`, "", ...status, "Issue: offen", `Planung freigegeben: ${teilDeckel} Token`, teilVonZeile(herkunft), ...uebrige, "", ""].join("\n");
+  return [`${titel}: Teil ${eintrag.kuerzel} ${eintrag.name}`, "", ...status, "Issue: offen", teilVonZeile(herkunft), ...uebrige, "", ""].join("\n");
 }
 
-function teilTexte(eltern, { eintrag, teilDeckel, herkunft }) {
+function teilTexte(eltern, { eintrag, herkunft }) {
   const { kopf, pitch, sicherheit } = ableitung(eltern, eintrag);
   const design = eltern[DESIGN] === undefined ? {} : { [DESIGN]: eltern[DESIGN] };
-  return { [PITCH]: teilKopf(kopf, { eintrag, teilDeckel, herkunft }) + verbunden(pitch), [SICHERHEIT]: verbunden(sicherheit), ...design };
+  return { [PITCH]: teilKopf(kopf, { eintrag, herkunft }) + verbunden(pitch), [SICHERHEIT]: verbunden(sicherheit), ...design };
 }
 
 function abweichung(name, { ist, soll, eltern }) {
@@ -148,120 +147,6 @@ function herkunftDes(teilung, eintrag, elternOrdner) {
   return { eltern: basename(elternOrdner), nach: liste(eintrag.abhaengigVon).map((kuerzel) => ordner.get(kuerzel)) };
 }
 
-function leererTopf(buch, { rechnung, oberster }) {
-  return { exit: EXIT_DECKEL, fehler: `Rest-Topf leer: ${rechnung}; plane startet keinen Agenten, bis im obersten Pitch ${oberster} eine neue Menge freigegeben ist. Ein Lauf ohne gemessenen Verbrauch zählt mit seinem Deckel; frei wird er nur, wenn ein Mensch nach Blick in die Transkripte seine Datei in ${buch} löscht` };
-}
-
-function nichtMessbar(fehler) {
-  return { exit: EXIT_DECKEL, fehler };
-}
-
-function teileDatei(root, ordner) {
-  return join(relative(root, ordner), PLANUNG, TEILE);
-}
-
-function mitWeitergegebenerMenge(root, { ordner, teilung }) {
-  const freigabe = teilung?.topf?.freigabe;
-  return Number.isFinite(freigabe) ? { ordner, teilung, freigabe } : nichtMessbar(`${teileDatei(root, ordner)} nennt keine weitergegebene Menge; plane hält an, statt zu schätzen`);
-}
-
-function ueberzugDes(root, ordner, umgebung) {
-  const gebucht = restTopf(topfBuch(root, basename(ordner)), { freigabe: 0, vorschnitt: 0, ohne: umgebung.ohne });
-  if (gebucht.fehler !== undefined) return nichtMessbar(gebucht.fehler);
-  if (gebucht.topf.teile === 0) return { ueberzug: 0 };
-  if (umgebung.besucht.has(ordner)) return { exit: EXIT_AUFRUF, fehler: `${teileDatei(root, ordner)} führt sich selbst als Teil; plane hält an, statt zu schätzen` };
-  const stufe = umgebung.bekannt?.ordner === ordner ? umgebung.bekannt : mitWeitergegebenerMenge(root, { ordner, teilung: liesTeilung(ordner) });
-  if (stufe.exit !== undefined) return stufe;
-  const eigen = eigenerTopf(root, stufe, umgebung);
-  return eigen.exit === undefined ? { ueberzug: Math.max(0, -eigen.topf.rest) } : eigen;
-}
-
-function ueberzugDerTeile(root, { ordner, teilung }, umgebung) {
-  let summe = 0;
-  for (const eintrag of teilung.teile) {
-    const ergebnis = ueberzugDes(root, join(dirname(ordner), teilOrdnerName(ordner, eintrag ?? {})), umgebung);
-    if (ergebnis.exit !== undefined) return ergebnis;
-    summe += ergebnis.ueberzug;
-  }
-  return { summe };
-}
-
-function eigenerTopf(root, stufe, umgebung) {
-  const { ordner, teilung, freigabe } = stufe;
-  if (!Number.isFinite(teilung.token) || teilung.token < 0) return nichtMessbar(`${teileDatei(root, ordner)} nennt den Verbrauch der Teilung nicht als Zahl; plane hält an, statt zu schätzen`);
-  const buch = topfBuch(root, basename(ordner));
-  const { topf, rechnung, fehler } = restTopf(buch, { freigabe, vorschnitt: teilung.token, ohne: umgebung.ohne });
-  if (fehler !== undefined) return nichtMessbar(fehler);
-  const ueberzug = ueberzugDerTeile(root, stufe, { ...umgebung, besucht: new Set([...umgebung.besucht, ordner]) });
-  if (ueberzug.exit !== undefined) return ueberzug;
-  if (ueberzug.summe === 0) return { buch, topf, rechnung };
-  const rest = topf.rest - ueberzug.summe;
-  return { buch, topf: { ...topf, teile: topf.teile + ueberzug.summe, rest }, rechnung: `${rechnung} − Überzug weitergeteilter Teile ${ueberzug.summe} = ${rest}` };
-}
-
-function kette(root, ordner, { pitch, teilung }) {
-  const stufen = [];
-  let stufe = { ordner, pitch, teilung };
-  while (true) {
-    const herkunft = teilVon(stufe.pitch);
-    if (herkunft === undefined) return { stufen, oberster: stufe };
-    if (herkunft.fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `${relative(root, stufe.ordner)}: ${herkunft.fehler}` };
-    stufen.push(stufe);
-    const eltern = join(dirname(stufe.ordner), herkunft.eltern);
-    if (stufen.some((frueher) => frueher.ordner === eltern)) return { exit: EXIT_AUFRUF, fehler: `${relative(root, eltern)}: die Zeilen „Teil von“ führen im Kreis; plane hält an, statt zu schätzen` };
-    stufe = { ordner: eltern, pitch: texte(eltern)[PITCH], teilung: liesTeilung(eltern) };
-    if (stufe.pitch === undefined || stufe.teilung === null) return { exit: EXIT_AUFRUF, fehler: `${relative(root, eltern)} hat kein ${PITCH} oder kein ${join(PLANUNG, TEILE)} mit Teilen; der Rest-Topf rechnet bis zum obersten Pitch` };
-  }
-}
-
-function neueMenge(freigabe, oberster) {
-  const gespeichert = oberster.teilung.topf?.freigabe;
-  return Number.isFinite(gespeichert) ? Math.max(0, freigabe - gespeichert) : 0;
-}
-
-function abwaerts(root, { wurzel, stufen, neu }, umgebung) {
-  let stand = { ...wurzel, gesamt: wurzel.topf.rest };
-  let offen = neu;
-  for (const stufe of stufen.toReversed()) {
-    const eigen = eigenerTopf(root, stufe, umgebung);
-    if (eigen.exit !== undefined) return eigen;
-    offen = Math.max(0, offen - Math.max(0, -eigen.topf.rest));
-    const extra = Math.max(0, Math.min(offen, stand.gesamt));
-    const gesamt = Math.max(0, eigen.topf.rest) + extra;
-    stand = { ...eigen, gesamt, rechnung: `${eigen.rechnung}; dazu aus der neuen Freigabe im obersten Pitch ${extra} = ${gesamt}` };
-  }
-  return stand;
-}
-
-function topfAus(root, { ordner, pitch, teilung, ohne, obergrenze = Infinity }) {
-  const gefunden = kette(root, ordner, { pitch, teilung });
-  if (gefunden.exit !== undefined) return gefunden;
-  const { stufen, oberster } = gefunden;
-  const { deckel: freigabe, fehler } = deckelAus(undefined, oberster.pitch);
-  if (fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: `Oberster Pitch ${relative(root, oberster.ordner)}: ${fehler}; der Rest-Topf der Teile rechnet mit dieser Freigabe` };
-  const unten = stufen.map((stufe, stelle) => (stelle === 0 && Number.isFinite(obergrenze) ? { ...stufe, freigabe: obergrenze } : mitWeitergegebenerMenge(root, stufe)));
-  const ohneMenge = unten.find((stufe) => stufe.exit !== undefined);
-  if (ohneMenge !== undefined) return ohneMenge;
-  const umgebung = { ohne, besucht: new Set(), bekannt: Number.isFinite(obergrenze) ? { ordner, teilung, freigabe: obergrenze } : null };
-  const wurzel = eigenerTopf(root, { ...oberster, freigabe: unten.length === 0 ? Math.min(freigabe, obergrenze) : freigabe }, umgebung);
-  if (wurzel.exit !== undefined) return wurzel;
-  const stand = abwaerts(root, { wurzel, stufen: unten, neu: neueMenge(freigabe, oberster) }, umgebung);
-  if (stand.exit !== undefined) return stand;
-  const topf = { ...stand.topf, teilDeckel: Math.max(0, Math.min(TEIL_DECKEL, stand.gesamt)) };
-  return topf.teilDeckel <= 0 ? leererTopf(stand.buch, { rechnung: stand.rechnung, oberster: join(relative(root, oberster.ordner), PITCH) }) : { topf, rechnung: stand.rechnung };
-}
-
-function reserviereTeil(buch, { teil, deckel, root, quelle }) {
-  const name = reserviere(buch, { teil, deckel, worktree: root });
-  const nachher = topfAus(root, { ...quelle, ohne: name });
-  if (nachher.exit !== undefined) {
-    gibReservierungFrei();
-    return nachher;
-  }
-  if (nachher.topf.teilDeckel < deckel) setzeReservierung(nachher.topf.teilDeckel);
-  return { deckel: Math.min(deckel, nachher.topf.teilDeckel) };
-}
-
 function liesTeilung(elternOrdner) {
   try {
     const teilung = JSON.parse(readFileSync(join(elternOrdner, PLANUNG, TEILE), "utf8"));
@@ -291,10 +176,10 @@ function fremdeDateien(teilung, eintrag, { elternOrdner, nach, root }) {
   };
 }
 
-function meldeGemergteUndGibTeil(reserviert, { teilung, eintrag, elternOrdner, nach, root }) {
+function meldeGemergteUndGibTeil({ teilung, eintrag, elternOrdner, nach, root }) {
   const { fremd, hinweise } = fremdeDateien(teilung, eintrag, { elternOrdner, nach, root });
   for (const hinweis of hinweise) console.log(hinweis);
-  return { ...reserviert, dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd };
+  return { dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd };
 }
 
 function genanntePfade(text) {
@@ -308,7 +193,7 @@ export function fremdeDateienBefunde(fremd, gruppen) {
   });
 }
 
-function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
+function pruefeTeil(root, ordner, { teil, herkunft }) {
   if (herkunft.fehler !== undefined) return { exit: EXIT_AUFRUF, fehler: herkunft.fehler };
   const elternOrdner = join(dirname(ordner), herkunft.eltern);
   const name = relative(root, elternOrdner);
@@ -318,29 +203,24 @@ function pruefeTeil(root, ordner, { teil, herkunft, deckel }) {
   const eltern = texte(elternOrdner);
   const befunde = teilBefunde({ eltern, teil, eintrag, herkunft: herkunftDes(teilung, eintrag, elternOrdner), name }, relative(root, ordner));
   if (befunde.length > 0) return { exit: EXIT_BEFUNDE, fehler: [`plane plant den Teil nicht, weil er vom Eltern-Ordner ${name} abweicht:`, ...befunde].join("\n") };
-  const buch = topfBuch(root, herkunft.eltern);
-  const quelle = { ordner: elternOrdner, pitch: eltern[PITCH], teilung };
-  const vorher = topfAus(root, quelle);
-  if (vorher.exit !== undefined) return vorher;
   const vorgaenger = vorgaengerBefunde(basename(ordner), herkunft.nach, root);
   if (vorgaenger.length > 0) return { exit: EXIT_AUFRUF, fehler: vorgaenger.join("\n") };
-  const reserviert = reserviereTeil(buch, { teil: basename(ordner), deckel: Math.min(deckel, vorher.topf.teilDeckel), root, quelle });
-  return reserviert.exit === undefined ? meldeGemergteUndGibTeil(reserviert, { teilung, eintrag, elternOrdner, nach: herkunft.nach, root }) : reserviert;
+  return meldeGemergteUndGibTeil({ teilung, eintrag, elternOrdner, nach: herkunft.nach, root });
 }
 
-function teilStart(root, ordner, { fortsetzen, deckel }) {
+function teilStart(root, ordner, { fortsetzen }) {
   const teil = texte(ordner);
   const herkunft = teilVon(teil[PITCH]);
   if (herkunft === undefined) return undefined;
-  const ergebnis = pruefeTeil(root, ordner, { teil, herkunft, deckel });
+  const ergebnis = pruefeTeil(root, ordner, { teil, herkunft });
   if (ergebnis.exit !== undefined && !fortsetzen) rmdirSync(join(ordner, PLANUNG));
   return ergebnis;
 }
 
-function abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel }) {
+function abgeleiteteTeile(eltern, teilung, ordner) {
   return teilung.teile.map((eintrag) => {
     const herkunft = herkunftDes(teilung, eintrag, ordner);
-    return { eintrag, herkunft, dokumente: teilTexte(eltern, { eintrag, teilDeckel, herkunft }) };
+    return { eintrag, herkunft, dokumente: teilTexte(eltern, { eintrag, herkunft }) };
   });
 }
 
@@ -356,26 +236,23 @@ export function schreibeTeile(root, ordner, geteilt) {
   const vorhanden = ziele.filter((ziel) => existsSync(ziel)).map((ziel) => `${relative(root, ziel)} gibt es schon; plane überschreibt keinen Teil-Ordner`);
   if (vorhanden.length > 0) return { exit: EXIT_AUFRUF, fehler: vorhanden.join("\n") };
   const eltern = texte(ordner);
-  const topf = topfAus(root, { ordner, pitch: eltern[PITCH], teilung, obergrenze: geteilt.freigabe });
-  if (topf.exit !== undefined) return topf;
-  const neu = abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: topf.topf.teilDeckel });
+  const neu = abgeleiteteTeile(eltern, teilung, ordner);
   const befunde = neu.flatMap(({ eintrag, herkunft, dokumente }, stelle) => teilBefunde({ eltern, teil: dokumente, eintrag, herkunft, name: relative(root, ordner) }, relative(root, ziele[stelle])));
   if (befunde.length > 0) return { exit: EXIT_BEFUNDE, fehler: ["plane schreibt keinen Teil-Ordner, weil die abgeleiteten Teile Befunde haben:", ...befunde].join("\n") };
   neu.forEach(({ dokumente }, stelle) => schreibeOrdner(ziele[stelle], dokumente));
-  schreibeJsonAtomar(datei, { ...teilung, topf: topf.topf });
-  const kopf = `Teil-Ordner in Merge-Reihenfolge, je mit „Issue: offen“ und höchstens ${topf.topf.teilDeckel} Token (${topf.rechnung}):`;
+  const kopf = "Teil-Ordner in Merge-Reihenfolge, je mit „Issue: offen“:";
   return { exit: EXIT_GETEILT, fehler: [geteilt.fehler, kopf, ...ziele.map((ziel) => relative(root, ziel))].join("\n") };
 }
 
 export function ableitungsBefunde(ordner) {
   const eltern = texte(ordner);
-  return (teilung) => abgeleiteteTeile(eltern, teilung, { ordner, teilDeckel: TEIL_DECKEL }).flatMap(({ eintrag, dokumente }) => nummernBefunde(dokumente, eintrag).map((befund) => `${eintrag.kuerzel}: ${befund}`));
+  return (teilung) => abgeleiteteTeile(eltern, teilung, ordner).flatMap(({ eintrag, dokumente }) => nummernBefunde(dokumente, eintrag).map((befund) => `${eintrag.kuerzel}: ${befund}`));
 }
 
-export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
-  const teil = teilStart(root, ordner, { fortsetzen, deckel });
+export async function teile(root, ordner, { fortsetzen, messe }) {
+  const teil = teilStart(root, ordner, { fortsetzen });
   if (teil?.exit !== undefined) return teil;
-  if (teil !== undefined) return { deckel: teil.deckel, teil: true, fremd: teil.fremd, umbau: teil.umbau, umfang: await messe(teil.dateien) };
+  if (teil !== undefined) return { teil: true, fremd: teil.fremd, umbau: teil.umbau, umfang: await messe(teil.dateien) };
   const umfang = await messe();
   if (fortsetzen) return { umfang };
   const belege = belegHalt(umfang);
@@ -383,13 +260,13 @@ export async function teile(root, ordner, { fortsetzen, messe, deckel }) {
     rmdirSync(join(ordner, PLANUNG));
     return { ...belege, umfang };
   }
-  const geteilt = await teilungHalt(root, ordner, { umfang, deckel, ableitung: ableitungsBefunde(ordner) });
+  const geteilt = await teilungHalt(root, ordner, { umfang, ableitung: ableitungsBefunde(ordner) });
   if (geteilt === null) return { umfang };
   const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(root, ordner, geteilt) : geteilt;
-  return { ...ergebnis, umfang, team: geteilt.team };
+  return { ...ergebnis, umfang, team: geteilt.team, kostenbuch: geteilt.kostenbuch };
 }
 
 export function teilungsBericht(ordner) {
   const teilung = liesTeilung(ordner);
-  return teilung?.topf === undefined ? {} : { teilung: { anzahl: teilung.teile.length, topf: teilung.topf } };
+  return teilung === null ? {} : { teilung: { anzahl: teilung.teile.length, token: teilung.token } };
 }

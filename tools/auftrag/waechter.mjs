@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-import { DECKEL, Verlauf } from "./verlauf.mjs";
+import { Verlauf } from "./verlauf.mjs";
 
 const EXIT_OHNE_STATUS = 1;
 const MAX_FEHLERAUSGABE_ZEICHEN = 2000;
@@ -15,19 +15,9 @@ async function liesEingang() {
   return text;
 }
 
-let fruehesBeende = null;
-let aufBeende = (grund) => {
-  fruehesBeende ??= grund;
-};
-process.on("message", (befehl) => {
-  if (befehl?.art === "beende") aufBeende(befehl.grund);
-});
-process.channel?.unref();
-
 const { befehl, eingabe, kontextGrenze, vollstaendig } = JSON.parse(await liesEingang());
 const [programm, ...argumente] = befehl;
-const beiNachricht = process.send === undefined ? null : (groesse, zuvor) => process.connected && process.send({ nachricht: groesse, zuvor });
-const verlauf = new Verlauf({ kontextGrenze, beiNachricht });
+const verlauf = new Verlauf({ kontextGrenze });
 let kind = null;
 let aktion = null;
 let fehlerausgabe = "";
@@ -64,11 +54,6 @@ function schreibeErgebnis(exitCode) {
 
 function starteKind() {
   kind = spawn(programm, argumente, { detached: true, stdio: ["pipe", "pipe", "pipe"] });
-  aufBeende = (grund) => {
-    if (verlauf.abgeschlossen || aktion !== null) return;
-    aktion = { art: DECKEL, grund };
-    beende();
-  };
   beobachteKind();
 }
 
@@ -90,9 +75,4 @@ function beobachteKind() {
   });
 }
 
-if (fruehesBeende === null) {
-  starteKind();
-} else {
-  aktion = { art: DECKEL, grund: fruehesBeende };
-  schreibeErgebnis(EXIT_OHNE_STATUS);
-}
+starteKind();

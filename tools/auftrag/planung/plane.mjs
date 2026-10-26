@@ -1,6 +1,5 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 
 import { vorgabenAusPitch } from "../annahmen.mjs";
@@ -26,13 +25,13 @@ import {
   prueflisteSoll,
   zerlegungBefunde,
 } from "./antworten.mjs";
-import { ERKUNDUNG, Kostendeckel, WEGPRUEFER, deckelAus, gemesseneKosten, gibReservierungFrei, liesVorverbrauch, oeffneVerbrauch, ohneGliederung, schliesseVerbrauch, verbucheLauf } from "./deckel.mjs";
+import { ERKUNDUNG, Kostenbuch, WEGPRUEFER, gemesseneKosten, ohneGliederung } from "./deckel.mjs";
 import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
-import { FINGERABDRUCK, GEPRUEFT, NACHFRAGE_AUSSTEHEND, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesAusstehendeNachfrage, liesFortsetzung, liesGeprueft, nachfrageSumme } from "./fingerabdruck.mjs";
+import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { kettenBefunde, mitKettenBefunden, modulGraph } from "./kette.mjs";
-import { EXIT_ABBRUCH, EXIT_ALTFUNKTIONEN, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_DECKEL, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
+import { EXIT_ABBRUCH, EXIT_ALTFUNKTIONEN, EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GETEILT, EXIT_GRUEN, EXIT_PASST_NICHT, PLANER_KONTEXT, abschnitt, dateiText, json, nachricht, nummernText } from "./nachricht.mjs";
 import { Fortschritt, RUECKSENDUNGEN } from "./fortschritt.mjs";
 import { dateiKarte, funktionsListe, nachrichtenKarte } from "./funktionsliste.mjs";
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
@@ -40,7 +39,7 @@ import { teilePruefliste } from "./aufteilung.mjs";
 import { abgelegteListe, uebernommeneWege, verbuchteAbnahmen } from "./wegabnahme.mjs";
 import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
-import { Abbruch, Deckelabbruch, Team } from "./team.mjs";
+import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
 import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungsBericht } from "./teilordner.mjs";
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
@@ -60,14 +59,11 @@ const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du i
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";
-const WEG_ANGEHALTEN = "die Wegprüfung blieb unvollständig, weil plane am Kostendeckel anhielt";
 const TEILLISTE_ZUGLEICH = "Regel Teilliste: schnitt und teilliste zugleich; schick eines";
 const TEILLISTE_ZU_FRUEH = "Regel Teilliste: teilliste gibt es erst nach einer Schnittliste";
 const KONFLIKTE = "Bereichskonflikte";
 const NACHFRAGEN_ENDE = "Ende der Nachfragen";
 const VOR_DER_RUECKSENDUNG = "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: ";
-const BEZAHLTER_BERICHT = "Diesen Bericht hat ein Erkunder auf die Nachfrage unten geschickt; vor der Rücksendung hielt plane am Kostendeckel an. Die Befunde oben gehören zu diesem Bericht. Antworte mit dem korrigierten Bericht in der Form des Gerüsts unten.";
-const NACHFRAGE_NEU = "die abgelegte Nachfrage fehlt oder passt nicht zum Fingerabdruck; die Nachfrage-Welle wird neu gemacht";
 const WELLE_VERBRAUCHT = "Die eine Nachfrage-Welle dieses Planungslaufs ist verbraucht; es wird nicht mehr erkundet. Schneide mit einer Annahme und nenn sie unter `annahmen`, oder antworte „Zerlegung passt nicht: …“, wenn ohne die fehlende Tatsache keine Zerlegung geht. Fragst du noch einmal nach, endet die Planung mit Befunden.";
 
 export class Ende extends Error {
@@ -76,19 +72,6 @@ export class Ende extends Error {
     this.exit = exit;
     this.befunde = befunde;
   }
-}
-
-function amDeckel(fehler) {
-  return (fehler instanceof Ende && fehler.exit === EXIT_DECKEL) || fehler instanceof Deckelabbruch;
-}
-
-function ausstehendOderWirf(fehler, nummern) {
-  if (!(fehler instanceof Deckelabbruch)) throw fehler;
-  return { bericht: { gruppe: nummern, nummern: {}, hinweise: [] }, befunde: [], annahmen: [], ausstehend: nummern };
-}
-
-function vorhandene(ergebnisse, feld) {
-  return ergebnisse.flatMap((ergebnis) => (ergebnis[feld] === undefined ? [] : [ergebnis[feld]]));
 }
 
 function zusammengefuegt(schluessel, ergebnisse) {
@@ -212,20 +195,15 @@ export class Planung {
     this.wegpruefungen = [];
     this.wegZaehler = new Map();
     this.wegOffen = [];
-    this.wegAusstehend = [];
-    this.erkundungAusstehend = [];
-    this.nachfrageAusstehend = null;
-    this.bezahlteStaende = new Map();
     this.ruecksendeBefunde = [];
     this.abgewiesenBei = null;
     this.nachfrageWellen = 0;
     this.beantworteteWellen = [];
     this.nachfragenBeendet = false;
-    this.kostendeckel = null;
+    this.kostenbuch = null;
     this.teil = false;
     this.fremd = [];
     this.wegpruefer = new Set();
-    this.laufInWelle = new AsyncLocalStorage();
   }
 
   beginne({ soll, andererAusgang, nurUmbau }) {
@@ -233,7 +211,6 @@ export class Planung {
     this.andererAusgang = andererAusgang;
     this.nurUmbau = nurUmbau;
     this.team = this.neuesTeam();
-    this.team.wache = this.wache();
     this.planer = this.team.teilnehmer("planer");
   }
 
@@ -241,13 +218,9 @@ export class Planung {
     return new Team(this.root, this.ordner);
   }
 
-  wache() {
-    return this.kostendeckel?.wache({ stelle: () => this.laufInWelle.getStore(), rolle: (wer) => this.kostenrolle(wer) }) ?? null;
-  }
-
   gezaehlt(schritt, arbeit) {
-    if (this.kostendeckel === null) return arbeit();
-    return this.kostendeckel.gezaehlt({ gemessen: () => this.gemessen(), schritt }, arbeit);
+    if (this.kostenbuch === null) return arbeit();
+    return this.kostenbuch.gezaehlt({ gemessen: () => this.gemessen(), schritt }, arbeit);
   }
 
   lege(name, wert) {
@@ -262,14 +235,6 @@ export class Planung {
     return gemesseneKosten(this.root, this.team.beteiligte);
   }
 
-  oeffneBuchungMitVorverbrauch(fortsetzen) {
-    const { vorverbrauch, fehler } = fortsetzen ? liesVorverbrauch(this.root, basename(this.ordner)) : { vorverbrauch: 0 };
-    if (fehler !== undefined) return fehler;
-    this.kostendeckel.vorverbrauch = vorverbrauch;
-    oeffneVerbrauch(this.root, basename(this.ordner), vorverbrauch);
-    return null;
-  }
-
   kostenrolle(wer) {
     return this.wegpruefer.has(wer) ? WEGPRUEFER : wer.rolle;
   }
@@ -279,69 +244,20 @@ export class Planung {
     return Object.fromEntries([...gruppen].map(([rolle, beteiligte]) => [rolle, gemesseneKosten(this.root, beteiligte)]));
   }
 
-  ueberschreitung(schritt) {
-    return this.kostendeckel?.ueberschritten(this.gemessen(), schritt) ?? null;
-  }
-
-  haltAmDeckel(grund) {
-    if (this.berichte.length > 0) this.legeFingerabdruck();
-    throw new Ende(EXIT_DECKEL, grund);
-  }
-
-  pruefeUeberschreitung(schritt) {
-    const grund = this.ueberschreitung(schritt);
-    if (grund !== null) this.haltAmDeckel(grund);
-  }
-
-  pruefeDeckel(schritt) {
-    if (this.kostendeckel === null) return;
-    this.pruefeUeberschreitung(schritt);
-    if (this.kostendeckel.liveAbbruch !== null) this.haltAmDeckel(this.kostendeckel.halt);
-  }
-
-  ausgangAmDeckel(ergebnis) {
-    if (ergebnis.exit === EXIT_AUFRUF) return ergebnis;
-    const grund = this.ueberschreitung(`Ausgang mit Exit ${ergebnis.exit}`) ?? this.kostendeckel?.liveAbbruch ?? null;
-    if (grund === null || ergebnis.grund?.includes(grund)) return ergebnis;
-    if (ergebnis.exit === EXIT_DECKEL) return { ...ergebnis, grund: `${ergebnis.grund}; ${grund}` };
-    const offen = ergebnis.offen.length > 0 ? [`offen: ${ergebnis.offen.join("; ")}`] : [];
-    return { exit: EXIT_DECKEL, grund: [grund, `ohne den Deckel Exit ${ergebnis.exit}: ${ergebnis.grund}`, ...offen].join("; "), offen: ergebnis.offen };
-  }
-
-  pruefeSchritt(schritt) {
-    const grund = this.kostendeckel?.halt ?? this.ueberschreitung(schritt);
-    if (grund !== null) throw new Ende(EXIT_DECKEL, grund);
-  }
-
-  inWelle({ rolle, lauf }, stelle) {
-    return { rolle, lauf: () => this.laufInWelle.run(stelle, lauf) };
-  }
-
-  nachDeckelHalt(fehler, wegpruefungen) {
-    if (amDeckel(fehler) && this.berichte.length > 0) {
-      this.wegpruefungen = wegpruefungen;
-      this.legeFingerabdruck();
-    }
-    throw fehler;
-  }
-
   verbucheWelle(schritte, vorher, geworfen = false) {
-    if (this.kostendeckel === null) return;
+    if (this.kostenbuch === null) return;
     const nachher = this.kostenJeRolle();
-    this.kostendeckel.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])), { geworfen });
+    this.kostenbuch.verbuche(schritte, Object.fromEntries(Object.entries(nachher).map(([rolle, token]) => [rolle, token - (vorher[rolle] ?? 0)])), { geworfen });
   }
 
   async welle(laeufe, schritt) {
     const schritte = laeufe.map(({ rolle, kosten = [rolle] }) => kosten);
-    this.pruefeDeckel(schritt);
-    const vorher = this.kostendeckel === null ? {} : this.kostenJeRolle();
-    const wegpruefungen = [...this.wegpruefungen];
-    const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe.map((eintrag, stelle) => this.inWelle(eintrag, stelle)))).catch((fehler) => {
+    const vorher = this.kostenbuch === null ? {} : this.kostenJeRolle();
+    const ergebnisse = await this.gezaehlt(schritt, () => this.team.gruppe(laeufe)).catch((fehler) => {
       this.verbucheWelle(schritte, vorher, true);
-      return this.nachDeckelHalt(fehler, wegpruefungen);
+      throw fehler;
     });
     this.verbucheWelle(schritte, vorher);
-    this.kostendeckel?.halteUeberschreitungFest(this.gemessen(), schritt);
     return ergebnisse;
   }
 
@@ -456,21 +372,15 @@ export class Planung {
     return { bericht, ...erkundungBefunde(bericht, { gruppe: nummern, soll: this.soll, root: this.root }) };
   }
 
-  berichtVon(wer, text, nummern) {
-    return this.berichtMitRuecksendung(wer, { text, nummern }, (erste) => this.merkeBezahlt(nummern, { ergebnis: erste }));
-  }
-
-  async berichtMitRuecksendung(wer, { text, nummern }, merkeBezahlt) {
+  async berichtVon(wer, text, nummern) {
     const erste = await mitKettenBefunden(this.root, this.pruefeBericht(await this.team.frage(wer, text), nummern));
     if (erste.befunde.length === 0) return erste;
-    merkeBezahlt(erste);
     this.merkeRuecksendung(wer.rolle, nummern, erste.befunde);
-    this.pruefeSchritt(`Rücksendung an ${wer.rolle} (${nummern.join(", ")})`);
     return this.berichtNachRuecksendung(wer, { befunde: erste.befunde, nummern, frueher: erste.bericht.hinweise });
   }
 
-  async berichtNachRuecksendung(wer, { befunde, nummern, anhang = [], frueher = [] }) {
-    const zweite = this.pruefeBericht(await this.team.frage(wer, this.team.ruecksenden(wer, befunde, anhang)), nummern);
+  async berichtNachRuecksendung(wer, { befunde, nummern, frueher = [] }) {
+    const zweite = this.pruefeBericht(await this.team.frage(wer, this.team.ruecksenden(wer, befunde)), nummern);
     return { ...zweite, bericht: mitFruehenHinweisen(zweite.bericht, frueher) };
   }
 
@@ -482,22 +392,6 @@ export class Planung {
   merkeRuecksendung(rolle, nummern, befunde) {
     this.ruecksendeBefunde.push({ rolle, nummern, befunde });
     console.log(`Rücksendung an ${rolle} (${nummern.join(", ")}) wegen:\n${punkte(befunde)}`);
-  }
-
-  merkeBezahlt(nummern, stand) {
-    const schluessel = nummern.join(", ");
-    this.bezahlteStaende.set(schluessel, { ...this.bezahlteStaende.get(schluessel), ...stand });
-  }
-
-  bezahlterStandOderWirf(fehler, nummern) {
-    const stand = this.bezahlteStaende.get(nummern.join(", "));
-    if (!amDeckel(fehler)) throw fehler;
-    if (stand === undefined) return ausstehendOderWirf(fehler, nummern);
-    if (stand.weg === undefined) return stand.ergebnis;
-    const { weg, runden, sauber, offen, sauberGeprueft } = stand.weg;
-    const halt = [...offen, gruppenWegZeile(nummern, WEG_ANGEHALTEN)];
-    const ergebnis = runden === 0 ? { ...sauber, weg: { nummern, offen: halt } } : this.verbucheWegpruefung({ ...weg, runden }, sauber, halt);
-    return sauberGeprueft ? ergebnis : { ...ergebnis, wegAusstehend: nummern };
   }
 
   wegNachricht(nummern, bericht, nachKorrektur) {
@@ -546,17 +440,12 @@ export class Planung {
     const weg = { pruefer: this.neuerWegpruefer(), schleife: this.schleife("weg"), nummern };
     let sauber = ergebnis;
     let text = this.wegNachricht(nummern, sauber.bericht, false);
-    this.merkeBezahlt(nummern, { weg: { weg, runden: 0, sauber, offen: [], sauberGeprueft: false } });
     for (let runden = 1; ; runden += 1) {
-      this.pruefeSchritt(`Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const runde = await this.wegRunde(weg, text);
       if (runde.befunde.length === 0 || runde.ende) return this.verbucheWegpruefung({ ...weg, runden }, sauber, runde.offen);
-      this.merkeBezahlt(nummern, { weg: { weg, runden, sauber, offen: runde.offen, sauberGeprueft: true } });
-      this.pruefeSchritt(`Korrektur nach der Wegprüfung ${nummern.join(", ")}, Runde ${runden}`);
       const neu = await this.berichtVon(wer, this.team.ruecksenden(wer, runde.befunde.map(prueferZeile)), nummern);
       if (neu.befunde.length > 0) return this.verbucheWegpruefung({ ...weg, runden }, sauber, [...runde.offen, ...neu.befunde.map((befund) => gruppenWegZeile(nummern, `Korrektur verworfen: ${befund}`))]);
       sauber = neu;
-      this.merkeBezahlt(nummern, { weg: { weg, runden, sauber, offen: runde.offen, sauberGeprueft: false } });
       text = this.wegNachricht(nummern, sauber.bericht, true);
     }
   }
@@ -566,11 +455,8 @@ export class Planung {
     return { rolle: wer.rolle, kosten: ERKUNDUNG, lauf: () => erkunde(wer) };
   }
 
-  async erkundeNachfragen(wer, text, { offen, klaerung }) {
-    const merkeBezahlt = ({ bericht, befunde }) => {
-      this.nachfrageAusstehend = { offen, klaerung, bericht, befunde };
-    };
-    return this.bucheNachfrageBericht(wer, await this.berichtMitRuecksendung(wer, { text, nummern: nummernVon(offen) }, merkeBezahlt), offen);
+  async erkundeNachfragen(wer, text, offen) {
+    return this.bucheNachfrageBericht(wer, await this.berichtVon(wer, text, nummernVon(offen)), offen);
   }
 
   async bucheNachfrageBericht(wer, ergebnis, offen) {
@@ -582,14 +468,8 @@ export class Planung {
     return { ...roh, ...sauber, befunde: ergebnis.befunde };
   }
 
-  erkundungsLaufMitBezahltemStand(gruppe) {
-    const wer = this.team.teilnehmer("erkunder");
-    const text = this.erkunderNachricht("Erkundung", gruppe);
-    return { rolle: wer.rolle, kosten: ERKUNDUNG, lauf: () => this.erkunde(wer, text, gruppe.nummern).catch((fehler) => this.bezahlterStandOderWirf(fehler, gruppe.nummern)) };
-  }
-
   async erkundeGruppen() {
-    const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkundungsLaufMitBezahltemStand(gruppe));
+    const laeufe = this.gliederung.gruppen.map((gruppe) => this.erkunderLauf(this.erkunderNachricht("Erkundung", gruppe), gruppe.nummern));
     this.nimmErkundungAn(this.gliederung.gruppen.map((_gruppe, stelle) => stelle), await this.welle(laeufe, "Erkundung"));
   }
 
@@ -597,9 +477,7 @@ export class Planung {
     ergebnisse.forEach(({ bericht }, stelle) => {
       this.berichte[stellen[stelle]] = bericht;
     });
-    this.erkundungAusstehend = vorhandene(ergebnisse, "ausstehend");
-    this.wegAusstehend = [...this.wegAusstehend, ...vorhandene(ergebnisse, "wegAusstehend")];
-    for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0 && ergebnis.ausstehend === undefined) {
+    for (const ergebnis of ergebnisse) if (ergebnis.befunde.length === 0) {
       merkeStellen(this.gesehen, ergebnis.bericht);
       this.uebernimmWeg(ergebnis);
     }
@@ -616,15 +494,12 @@ export class Planung {
 
   legeFingerabdruck() {
     this.lege(NACHFRAGEN, this.beantworteteWellen);
-    if (this.nachfrageAusstehend !== null) this.lege(NACHFRAGE_AUSSTEHEND, this.nachfrageAusstehend);
-    const nachfrageAusstehend = this.nachfrageAusstehend === null ? null : nachfrageSumme(this.ablage);
-    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], wegAusstehend: this.wegAusstehend, erkundungAusstehend: this.erkundungAusstehend, nachfrageWellen: this.nachfrageWellen, wegAbnahmen: liste(this.wegAbnahmen), nachfrageAusstehend };
+    const zustand = { gesehen: [...this.gesehen], ausgeschoepft: [...this.ausgeschoepft], wegOffen: this.wegOffen, wegpruefungen: this.wegpruefungen, wegZaehler: [...this.wegZaehler], nachfrageWellen: this.nachfrageWellen, wegAbnahmen: liste(this.wegAbnahmen) };
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
   pruefungDerBerichte() {
-    const ausstehend = new Set(this.erkundungAusstehend.map((nummern) => nummern.join(", ")));
-    return this.berichte.filter(({ gruppe }) => !ausstehend.has(gruppe.join(", "))).map((bericht) => ({ bericht, ...erkundungBefunde(bericht, { gruppe: bericht.gruppe, soll: this.soll, root: this.root }) }));
+    return this.berichte.map((bericht) => ({ bericht, ...erkundungBefunde(bericht, { gruppe: bericht.gruppe, soll: this.soll, root: this.root }) }));
   }
 
   erkunderAnnahmen() {
@@ -724,7 +599,7 @@ export class Planung {
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
     const nachfrage = { offen, klaerung };
     const text = this.nachfrageNachricht(offen);
-    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummernVon(offen), (wer) => this.erkundeNachfragen(wer, text, nachfrage))], "Nachfrage-Welle");
+    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummernVon(offen), (wer) => this.erkundeNachfragen(wer, text, offen))], "Nachfrage-Welle");
     const welle = this.nimmNachfrageAn(nachfrage, ergebnis);
     return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
   }
@@ -739,7 +614,6 @@ export class Planung {
     const enden = this.verbucheNachfrage(offen, ergebnis);
     const welle = { antworten: nachfrageAntworten(offen, ergebnis), enden };
     this.beantworteteWellen.push(welle);
-    this.nachfrageAusstehend = null;
     this.legeBerichte();
     this.pruefeGeaenderteDateien();
     this.legeFingerabdruck();
@@ -808,7 +682,6 @@ export class Planung {
   async prueferLauf(pruefer, text, schluessel) {
     const ergebnis = this.prueflisteDer(await this.team.frage(pruefer, text), schluessel);
     if (ergebnis.befunde.length === 0) return ergebnis;
-    this.pruefeSchritt(`Rücksendung an ${pruefer.rolle}`);
     return this.prueflisteDer(await this.team.frage(pruefer, this.team.ruecksenden(pruefer, ergebnis.befunde)), schluessel);
   }
 
@@ -936,7 +809,6 @@ export class Planung {
     let entwurf = lies(await this.team.frage(wer, text));
     let befunde = entwurfBefunde(entwurf, namen);
     if (befunde.length > 0) {
-      this.pruefeSchritt(`Rücksendung an ${wer.rolle}`);
       entwurf = lies(await this.team.frage(wer, this.team.ruecksenden(wer, befunde)));
       befunde = entwurfBefunde(entwurf, namen);
     }
@@ -960,7 +832,6 @@ export class Planung {
     if (offen.length > 0) throw new Ende(EXIT_BEFUNDE, "Befunde zu Entwürfen blieben nach der Rücksendung offen", offen);
     const entwuerfe = Object.fromEntries(bereiche.map((bereich, stelle) => [bereich, ergebnisse[stelle].entwurf]));
     this.lege("entwuerfe.json", entwuerfe);
-    this.pruefeUeberschreitung("Entwurfs-Welle");
     const { befunde } = await setzePhaseZusammen(this.ordner, { schnitt: this.schnitt, berichte: this.berichte, entwuerfe, root: this.root, issue: this.issue });
     if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "die Phase hat Befunde", befunde);
   }
@@ -987,11 +858,9 @@ export class Planung {
   async nachsteuern() {
     const ueber = gruppenZahlUeber(this.gliederung.gruppen.length);
     if (ueber.length === 0) return;
-    this.pruefeDeckel("Teilung nach der Gliederung");
-    const { deckel } = this.kostendeckel;
-    const angaben = { soll: this.soll, umfang: this.umfang, deckel, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung, umbau: this.umbau };
+    const angaben = { soll: this.soll, umfang: this.umfang, ueber, ableitung: ableitungsBefunde(this.ordner), team: this.team, planer: this.planer, gliederung: this.gliederung, umbau: this.umbau };
     const geteilt = await this.gezaehlt("Teilung nach der Gliederung", () => laufeTeilung(this.root, this.ordner, angaben));
-    const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(this.root, this.ordner, { ...geteilt, freigabe: deckel }) : geteilt;
+    const ergebnis = geteilt.exit === EXIT_GETEILT ? schreibeTeile(this.root, this.ordner, geteilt) : geteilt;
     throw new Ende(ergebnis.exit, ergebnis.fehler);
   }
 
@@ -1002,13 +871,7 @@ export class Planung {
     await this.nachsteuern();
     await this.erkundeGruppen();
     this.legeFingerabdruck();
-    this.pruefeHalt();
     await this.planeAbSchnitt();
-  }
-
-  pruefeHalt() {
-    const halt = this.kostendeckel?.halt ?? null;
-    if (halt !== null) throw new Ende(EXIT_DECKEL, halt);
   }
 
   async planeAbSchnitt() {
@@ -1034,19 +897,11 @@ class Fortsetzung extends Planung {
     this.wegOffen = zustand.wegOffen;
     this.wegpruefungen = zustand.wegpruefungen;
     this.wegZaehler = new Map(zustand.wegZaehler);
-    this.wegAusstehend = zustand.wegAusstehend;
-    this.erkundungAusstehend = zustand.erkundungAusstehend;
     this.nachfrageWellen = zustand.nachfrageWellen;
     this.beantworteteWellen = nachfragen;
     this.wegAbnahmen = liste(zustand.wegAbnahmen);
     this.werkzeugGeaendert = erkundung.werkzeugGeaendert === true;
-    this.uebernimmAusstehendeNachfrage(zustand);
     return [];
-  }
-
-  uebernimmAusstehendeNachfrage(zustand) {
-    this.nachfrageAusstehend = liesAusstehendeNachfrage(this.ablage, zustand);
-    if (istText(zustand.nachfrageAusstehend) && this.nachfrageAusstehend === null) console.log(NACHFRAGE_NEU);
   }
 
   async zuschnittNachricht() {
@@ -1055,26 +910,7 @@ class Fortsetzung extends Planung {
 
   async laufe() {
     await this.pruefeKetteNachWerkzeug();
-    await this.erkundeAusstehende();
-    await this.pruefeAusstehendeWege();
-    await this.frageAusstehendeNach();
     await this.planeAbSchnitt();
-  }
-
-  ausstehenderNachfrageLauf({ offen, bericht, befunde }) {
-    const nummern = nummernVon(offen);
-    const text = this.nachfrageNachricht(offen);
-    const anhang = [abschnitt("Bisheriger Bericht auf diese Nachfrage", `${BEZAHLTER_BERICHT}\n\n${json(bericht)}`), text];
-    return this.erkunderLauf(text, nummern, async (wer) => {
-      this.merkeRuecksendung(wer.rolle, nummern, befunde);
-      return this.bucheNachfrageBericht(wer, await this.berichtNachRuecksendung(wer, { befunde, nummern, anhang, frueher: bericht?.hinweise }), offen);
-    });
-  }
-
-  async frageAusstehendeNach() {
-    if (this.nachfrageAusstehend === null) return;
-    const [ergebnis] = await this.welle([this.ausstehenderNachfrageLauf(this.nachfrageAusstehend)], "Nachfrage-Welle nach dem Deckel-Halt");
-    this.nimmNachfrageAn(this.nachfrageAusstehend, ergebnis);
   }
 
   async pruefeKetteNachWerkzeug() {
@@ -1082,31 +918,6 @@ class Fortsetzung extends Planung {
     const graph = await modulGraph(this.root);
     const befunde = this.sauberBerichte().flatMap((bericht) => kettenBefunde(this.root, graph, bericht));
     if (befunde.length > 0) throw new Ende(EXIT_AUFRUF, "plane setzt nicht fort, voller Neulauf nötig: das Werkzeug unter tools/ ist geändert, und die Kettenprüfung über die gespeicherten Berichte hat Befunde", befunde);
-  }
-
-  async erkundeAusstehende() {
-    if (this.erkundungAusstehend.length === 0) return;
-    const ausstehend = new Set(this.erkundungAusstehend.map((nummern) => nummern.join(", ")));
-    const stellen = this.gliederung.gruppen.flatMap((gruppe, stelle) => (ausstehend.has(gruppe.nummern.join(", ")) ? [stelle] : []));
-    const laeufe = stellen.map((stelle) => this.erkundungsLaufMitBezahltemStand(this.gliederung.gruppen[stelle]));
-    this.nimmErkundungAn(stellen, await this.welle(laeufe, "Erkundung nach dem Deckel-Halt"));
-    this.legeFingerabdruck();
-    this.pruefeHalt();
-  }
-
-  ausstehenderWeg(nummern) {
-    const weg = { pruefer: this.neuerWegpruefer(), schleife: this.schleife("weg"), nummern };
-    const sauber = { bericht: this.berichte.find(({ gruppe }) => gruppe.join(", ") === nummern.join(", ")) };
-    const lauf = async () => this.verbucheWegpruefung({ ...weg, runden: 1 }, sauber, (await this.wegRunde(weg, this.wegNachricht(nummern, sauber.bericht, false))).offen);
-    return { rolle: weg.pruefer.rolle, kosten: [WEGPRUEFER], lauf };
-  }
-
-  async pruefeAusstehendeWege() {
-    if (this.wegAusstehend.length === 0) return;
-    const ergebnisse = await this.welle(this.wegAusstehend.map((nummern) => this.ausstehenderWeg(nummern)), "Wegprüfung nach dem Deckel-Halt");
-    for (const ergebnis of ergebnisse) this.uebernimmWeg(ergebnis);
-    this.wegAusstehend = [];
-    this.legeFingerabdruck();
   }
 
   async planeAbSchnitt() {
@@ -1160,27 +971,24 @@ async function pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben }
   const fehler = aufrufFehler(ordner, fortsetzen);
   if (fehler !== null) return { fehler };
   const pitch = readFileSync(join(ordner, PITCH), "utf8");
-  const { deckel, fehler: deckelFehler } = deckelAus(angaben.deckel, pitch);
   const { issue, fehler: issueFehler } = issueAus(angaben.issue, pitch);
-  const kopfFehler = deckelFehler ?? issueFehler;
-  if (kopfFehler !== undefined) return { fehler: kopfFehler };
+  if (issueFehler !== undefined) return { fehler: issueFehler };
   const halt = fortsetzen ? null : altfunktionenHalt(root, ordner);
   if (halt !== null) return halt;
   const ablage = legeAblageAn(ordner, fortsetzen);
   const messe = (dateien) => umfang(root, ordner, { dateien });
-  const teilung = ablage === null ? await teile(root, ordner, { fortsetzen, messe, deckel }) : null;
-  return { deckel, issue, fehler: ablage, ...teilung };
+  const teilung = ablage === null ? await teile(root, ordner, { fortsetzen, messe }) : null;
+  return { issue, fehler: ablage, ...teilung };
 }
 
 function ausgang(fehler) {
   if (fehler instanceof Ende) return { exit: fehler.exit, grund: fehler.message, offen: fehler.befunde };
-  if (fehler instanceof Deckelabbruch) return { exit: EXIT_DECKEL, grund: fehler.message, offen: [] };
   if (fehler instanceof Abbruch) return { exit: EXIT_ABBRUCH, grund: fehler.message, offen: [] };
   throw fehler;
 }
 
 export function ausgangOhneWurf(fehler) {
-  if (fehler instanceof Ende || fehler instanceof Abbruch || fehler instanceof Deckelabbruch) return ausgang(fehler);
+  if (fehler instanceof Ende || fehler instanceof Abbruch) return ausgang(fehler);
   return { exit: EXIT_ABBRUCH, grund: `unerwarteter Fehler: ${inspect(fehler)}`, offen: [] };
 }
 
@@ -1198,19 +1006,17 @@ function berichte(planung, ergebnis) {
     ruecksendeBefunde: planung.ruecksendeBefunde,
   };
   const geteilt = ergebnis.exit === EXIT_GETEILT ? teilungsBericht(planung.ordner) : {};
-  const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostendeckel?.bericht(), ...geteilt };
+  const bericht = { ...planBericht(lauf, { root: planung.root, team: planung.team }), ...planung.kostenbuch?.bericht(), ...geteilt };
   druckePlanBericht(bericht, schreibePlanBericht(planung.root, bericht));
-  if (planung.kostendeckel !== null && existsSync(planung.ablage)) schliesseVerbrauch(planung.root, basename(planung.ordner), { vorverbrauch: planung.kostendeckel.vorverbrauch, lauf: gemesseneKosten(planung.root, planung.team.beteiligte) });
-  verbucheLauf(planung.root, planung.team.beteiligte, { weitergegeben: ergebnis.exit === EXIT_GETEILT });
   for (const befund of ergebnis.offen) console.error(befund);
   return ergebnis.exit;
 }
 
-function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd = [], umbau }) {
+function neuePlanung(root, ordner, { fortsetzen, issue, umfang: gemessen, teil, fremd = [], umbau }) {
   const planung = fortsetzen ? new Fortsetzung(root, ordner) : new Planung(root, ordner);
   planung.beginn = Date.now();
   planung.umfang = gemessen;
-  planung.kostendeckel = new Kostendeckel(root, basename(ordner), deckel);
+  planung.kostenbuch = new Kostenbuch();
   planung.issue = issue;
   planung.teil = teil === true;
   planung.fremd = fremd;
@@ -1218,20 +1024,15 @@ function neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen
   return planung;
 }
 
-function endeOhneAgent(exit) {
-  gibReservierungFrei();
-  return exit;
-}
-
 function endeVorDerPlanung(root, ordner, { vorab, beginn }) {
-  const { team, fehler, exit = EXIT_AUFRUF, deckel, issue, umfang: gemessen } = vorab;
+  const { team, kostenbuch, fehler, exit = EXIT_AUFRUF, issue, umfang: gemessen } = vorab;
   console.error(fehler);
-  if (team === undefined) return endeOhneAgent(exit);
-  const planung = neuePlanung(root, ordner, { fortsetzen: false, deckel, issue, umfang: gemessen });
+  if (team === undefined) return exit;
+  const planung = neuePlanung(root, ordner, { fortsetzen: false, issue, umfang: gemessen });
   planung.team = team;
-  planung.kostendeckel = team.wache.kostendeckel;
+  planung.kostenbuch = kostenbuch;
   planung.beginn = beginn;
-  return berichte(planung, planung.ausgangAmDeckel({ exit, grund: fehler, offen: [] }));
+  return berichte(planung, { exit, grund: fehler, offen: [] });
 }
 
 export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben } = {}) {
@@ -1244,26 +1045,21 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
   const beginn = Date.now();
   const vorab = await pruefeAufrufUndLegeAblageAn(root, ordner, { fortsetzen, angaben });
   if (vorab.fehler !== null) return endeVorDerPlanung(root, ordner, { vorab, beginn });
-  const { deckel, issue, umfang: gemessen, teil, fremd, umbau } = vorab;
+  const { issue, umfang: gemessen, teil, fremd, umbau } = vorab;
   const nummern = nummernImOrdner(ordner);
-  const planung = neuePlanung(root, ordner, { fortsetzen, deckel, issue, umfang: gemessen, teil, fremd, umbau });
+  const planung = neuePlanung(root, ordner, { fortsetzen, issue, umfang: gemessen, teil, fremd, umbau });
   planung.beginne(nummern);
   const abweichungen = fortsetzen ? planung.uebernimmErkundung() : [];
   if (abweichungen.length > 0) {
     console.error(`plane setzt nicht fort, voller Neulauf nötig:\n${punkte(abweichungen)}`);
-    return endeOhneAgent(EXIT_AUFRUF);
-  }
-  const vorverbrauchFehler = planung.oeffneBuchungMitVorverbrauch(fortsetzen);
-  if (vorverbrauchFehler !== null) {
-    console.error(vorverbrauchFehler);
-    return endeOhneAgent(EXIT_DECKEL);
+    return EXIT_AUFRUF;
   }
   if (nummern.unklar.length > 0) return berichte(planung, { exit: EXIT_BEFUNDE, grund: "die Nummern der Dokumente sind nicht bestimmbar", offen: nummern.unklar });
   try {
     await planung.laufe();
-    return berichte(planung, planung.ausgangAmDeckel({ exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] }));
+    return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });
   } catch (abbruch) {
-    return berichte(planung, planung.ausgangAmDeckel(ausgangOhneWurf(abbruch)));
+    return berichte(planung, ausgangOhneWurf(abbruch));
   }
 }
 

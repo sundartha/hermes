@@ -137,10 +137,9 @@ function beteiligtenZeile({ rolle, sitzung, laufzeitS, dauerS, aktiveZeitS, schr
   return [rolle, sitzung, `Laufzeit ${laufzeitS} s`, `Dauer ${dauerS} s`, ...aktiv, `${schritte} Schritte`, `Kontext ${groessterKontext}`, `${token} Token`, `${werkzeugZeichen} Werkzeugzeichen`].join("\t");
 }
 
-function topfZeilen(teilung) {
+function teilungsZeilen(teilung) {
   if (teilung === undefined) return [];
-  const { anzahl, topf: { freigabe, vorschnitt, teile, rest, teilDeckel } } = teilung;
-  return [`Topf: Freigabe ${freigabe} Token, Vorschnitt gemessen ${vorschnitt} Token, Teile ${teile} Token (gemessen; ein Lauf ohne Messung mit seinem Deckel), Rest ${rest} Token; ${anzahl} Teile mit je höchstens ${teilDeckel} Token`];
+  return [`Teilung: Vorschnitt gemessen ${teilung.token} Token, ${teilung.anzahl} Teile`];
 }
 
 export function druckePlanBericht(bericht, pfad) {
@@ -156,7 +155,7 @@ export function druckePlanBericht(bericht, pfad) {
     `Wegprüfungen: ${JSON.stringify(bericht.wegpruefungen)}`,
     ...bericht.beteiligte.map(beteiligtenZeile),
     `Laufzeit ${bericht.laufzeitS} s, ${bericht.token} Token, Arten ${JSON.stringify(bericht.arten)}`,
-    ...topfZeilen(bericht.teilung),
+    ...teilungsZeilen(bericht.teilung),
     `Bericht: ${pfad}`,
   ];
   console.log(zeilen.join("\n"));
