@@ -27,7 +27,7 @@ const CODEOWNERS = ".github/CODEOWNERS";
 const VERANKERT = "/";
 const LEERRAUM = /\s+/;
 const PHASE_AUS_PITCH = /^P-/i;
-const PHASE_EINES_FEHLERS = /^F-\d/;
+const PHASE_EINES_FEHLERS = /^F-V?\d/;
 const NUMMER = /^[SBT][1-9]\d*$/;
 const WURZEL = "/";
 const LISTEN_VERBINDER = " + ";
@@ -54,7 +54,7 @@ export function istVertraulich(phase) {
 function vertraulichBefunde(phase) {
   if (!Object.hasOwn(phase, "vertraulich")) return [];
   if (!istVertraulich(phase)) return ["vertraulich darf nur true sein; eine gewöhnliche Phase nennt stattdessen ihr issue"];
-  const befunde = PHASE_EINES_FEHLERS.test(String(phase.phase)) ? [] : ["vertraulich gilt nur für die Phase eines Fehlers (F-<Nummer>-<kurzname>)"];
+  const befunde = PHASE_EINES_FEHLERS.test(String(phase.phase)) ? [] : ["vertraulich gilt nur für die Phase eines Fehlers (F-V<n>-<kurzname>)"];
   const zugleich = "issue und vertraulich zugleich: eine vertrauliche Phase hat kein öffentliches Issue; entferne eins der beiden Felder";
   return Object.hasOwn(phase, "issue") ? [...befunde, zugleich] : befunde;
 }
