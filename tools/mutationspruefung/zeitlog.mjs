@@ -49,8 +49,9 @@ function melde(text) {
 function schreibe(art, daten) {
   if (log.datei === null) return;
   const jetzt = Date.now();
+  const eintrag = { art, zeit: new Date(jetzt).toISOString(), ms_seit_start: jetzt - log.beginn, ...daten };
   try {
-    appendFileSync(log.datei, `${JSON.stringify({ art, zeit: new Date(jetzt).toISOString(), ms_seit_start: jetzt - log.beginn, ...daten })}\n`);
+    appendFileSync(log.datei, `${JSON.stringify(eintrag)}\n`);
   } catch (fehler) {
     log.datei = null;
     melde(`kein Log mehr, das Ergebnis bleibt davon unberührt: ${fehler.message}`);
@@ -75,16 +76,24 @@ export function beginneLog(logordner, kopf) {
   melde(`Log in ${relative(cwd(), datei)} (Betriebsart ${kopf.betriebsart}${kopf.basis ? `, Basis ${kopf.basis}` : ""})`);
 }
 
-const TEXTE = {
-  sperre: ({ ms }) => `Sperre nach ${dauer(ms)} Warten erhalten`,
-  testauswahl: ({ ms, seite, dateien, testdateien }) => `Testauswahl (Seite ${seite}): ${dateien} Dateien, ${testdateien} Testdateien in ${dauer(ms)}`,
-  loeschprobe: ({ ms, datei }) => `Löschprobe ${datei} in ${dauer(ms)}`,
-};
-
-export function notierePhase(phase, ms, daten = {}) {
+function notierePhase(phase, ms, daten = {}) {
   log.phasen[phase] += ms;
   schreibe(phase, { ms, ...daten });
-  melde(TEXTE[phase]({ ms, ...daten }));
+}
+
+export function notiereSperre(ms) {
+  notierePhase("sperre", ms);
+  melde(`Sperre nach ${dauer(ms)} Warten erhalten`);
+}
+
+export function notiereTestauswahl(ms, { seite, dateien, testdateien }) {
+  notierePhase("testauswahl", ms, { seite, dateien, testdateien });
+  melde(`Testauswahl (Seite ${seite}): ${dateien} Dateien, ${testdateien} Testdateien in ${dauer(ms)}`);
+}
+
+export function notiereLoeschprobe(ms, { datei }) {
+  notierePhase("loeschprobe", ms, { datei });
+  melde(`Löschprobe ${datei} in ${dauer(ms)}`);
 }
 
 function ort(datei) {
