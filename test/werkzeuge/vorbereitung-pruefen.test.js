@@ -245,3 +245,114 @@ test("vorbereitung-pruefen: eine reine Umbenennung mit umgezogener Bereichsliste
   assert.match(zusammen.output, /^src\/c\.js: gelöscht; das ist keine Umformung aus dem Katalog$/m);
   assert.match(zusammen.output, /zwei Phasen: Umformung an der \.js in einer ersten Phase, reine Umbenennung in einer zweiten Phase/);
 });
+
+const KONSTANTE = "const HTTP_UNGUELTIG = 400;";
+const IMPORT = 'import { Router } from "express";';
+const KATALOG_BEFUND = /^src\/probe\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/;
+
+function antwort(status) {
+  return ["export function antworte(res, ok) {", `  if (!ok) return res.status(${status}).json({});`, "  return res.json({});", "}"];
+}
+
+async function zahlVergleich(vorher, nachher) {
+  return vergleicheVorbereitung({ pfad: PFAD, vorher, nachher, kreisfrei: async () => true });
+}
+
+async function zahlRot(vorher, nachher, fall) {
+  const ergebnis = await zahlVergleich(vorher, nachher);
+  assert.equal(ergebnis.gleich, false, fall);
+  assert.match(ergebnis.befund, KATALOG_BEFUND, fall);
+}
+
+test("vorbereitung-pruefen: ein Zahlliteral durch eine const auf oberster Ebene mit genau diesem Literal ersetzt ist gleichwertig", async () => {
+  const nachher = quelle(IMPORT, 'const PFAD = "/x";', KONSTANTE, ...antwort("HTTP_UNGUELTIG"));
+  assert.deepEqual(await zahlVergleich(quelle(IMPORT, 'const PFAD = "/x";', ...antwort("400")), nachher), { gleich: true, genutzt: ["zahl-konstante"] });
+});
+
+test("vorbereitung-pruefen: zahl-konstante gilt in Bedingung, Vergleich, Rechnung, new-Argument, return und Pfeilrumpf", async () => {
+  const rumpf = (n) => ["export function f(x) {", `  if (x > ${n}) return new Date(${n});`, `  return x === ${n} ? -${n} : !${n} || x;`, "}", `export const g = () => ${n};`];
+  assert.deepEqual(await zahlVergleich(quelle(...rumpf("3")), quelle("const DREI = 3;", ...rumpf("DREI"))), { gleich: true, genutzt: ["zahl-konstante"] });
+});
+
+test("vorbereitung-pruefen: zahl-konstante mit einem Ausdruck statt eines Zahlliterals ist nicht gleichwertig", async () => {
+  await zahlRot(quelle(...antwort("200 * 2")), quelle("const HTTP_UNGUELTIG = 200 * 2;", ...antwort("HTTP_UNGUELTIG")));
+});
+
+test("vorbereitung-pruefen: zahl-konstante, deren Name in der Datei noch einmal gebunden ist, ist nicht gleichwertig", async () => {
+  const parameter = "export const g = (HTTP_UNGUELTIG) => HTTP_UNGUELTIG;";
+  const lokal = ["export function h() {", "  const HTTP_UNGUELTIG = 1;", "  return HTTP_UNGUELTIG;", "}"];
+  await zahlRot(quelle(...antwort("400"), parameter), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG"), parameter), "Parameter");
+  await zahlRot(quelle(...antwort("400"), ...lokal), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG"), ...lokal), "lokale Variable");
+});
+
+test("vorbereitung-pruefen: zahl-konstante hinter einer Anweisung, die beim Laden Code ausführt, ist nicht gleichwertig", async () => {
+  for (const [fall, aufruf] of [
+    ["Aufruf", "antworte(globalThis.res, false);"],
+    ["const mit Aufruf", "const ERGEBNIS = antworte(globalThis.res, false);"],
+  ]) {
+    await zahlRot(quelle(...antwort("400"), aufruf), quelle(...antwort("HTTP_UNGUELTIG"), aufruf, KONSTANTE), fall);
+  }
+});
+
+test("vorbereitung-pruefen: zahl-konstante mit einem anderen Wert als dem ersetzten Literal ist nicht gleichwertig", async () => {
+  await zahlRot(quelle(...antwort("400")), quelle("const HTTP_UNGUELTIG = 401;", ...antwort("HTTP_UNGUELTIG")));
+  await zahlRot(quelle(...antwort("400")), quelle("const HTTP_UNGUELTIG = 0x190;", ...antwort("HTTP_UNGUELTIG")), "andere Schreibweise");
+});
+
+test("vorbereitung-pruefen: zahl-konstante mit let oder mit einer späteren Zuweisung ist nicht gleichwertig", async () => {
+  await zahlRot(quelle(...antwort("400")), quelle("let HTTP_UNGUELTIG = 400;", ...antwort("HTTP_UNGUELTIG")), "let");
+  const zuweisung = ["export function setze() {", "  HTTP_UNGUELTIG = 401;", "}"];
+  await zahlRot(quelle(...antwort("400"), ...zuweisung), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG"), ...zuweisung), "Zuweisung");
+});
+
+test("vorbereitung-pruefen: zahl-konstante mit einem String-Literal ist nicht gleichwertig", async () => {
+  await zahlRot(quelle(...antwort('"400"')), quelle('const HTTP_UNGUELTIG = "400";', ...antwort("HTTP_UNGUELTIG")));
+});
+
+test("vorbereitung-pruefen: zahl-konstante gilt nicht für exportierte const, mehrere Bindungen, Schlüssel, Aufgerufene oder ohne Nachweis gegen Import-Kreise", async () => {
+  const faelle = [
+    ["exportiert", quelle(...antwort("400")), quelle(`export ${KONSTANTE}`, ...antwort("HTTP_UNGUELTIG"))],
+    ["zwei Bindungen", quelle(...antwort("400")), quelle("const HTTP_UNGUELTIG = 400, NIE = 1;", ...antwort("HTTP_UNGUELTIG"))],
+    ["Schlüssel", quelle("export const o = { 400: 1 };"), quelle(KONSTANTE, "export const o = { HTTP_UNGUELTIG: 1 };")],
+    ["Aufgerufener", quelle("export const f = () => (400)();"), quelle(KONSTANTE, "export const f = () => HTTP_UNGUELTIG();")],
+  ];
+  for (const [fall, vorher, nachher] of faelle) await zahlRot(vorher, nachher, fall);
+  const ohneNachweis = await vergleich(quelle(...antwort("400")), quelle(KONSTANTE, ...antwort("HTTP_UNGUELTIG")));
+  assert.equal(ohneNachweis.gleich, false);
+});
+
+test("vorbereitung-pruefen: über Git gilt zahl-konstante nur in einer Datei ohne Import-Kreis und mit lesbaren Importen", (context) => {
+  const route = (importe, status) => quelle(...importe, ...(status === "400" ? [] : [KONSTANTE]), ...antwort(status));
+  const importe = {
+    "src/frei.js": ['import { readFileSync } from "node:fs";', IMPORT, 'import { h } from "./hilfe.js";'],
+    "src/kreis-a.js": ['import { b } from "./kreis-b.js";'],
+    "src/raute.js": ['import x from "#intern";'],
+    "src/url.js": ['import y from "file:///tmp/y.js";'],
+    "src/luecke.js": ['import { z } from "./fehlt.js";'],
+  };
+  const vorher = Object.fromEntries(Object.entries(importe).map(([datei, zeilen]) => [datei, route(zeilen, "400")]));
+  const repo = repoMitBasis(context, {
+    ...vorher,
+    "src/hilfe.js": quelle('import "node:path";', "export const h = 1;"),
+    "src/kreis-b.js": quelle('export * from "./kreis-c.js";', "export const b = 1;"),
+    "src/kreis-c.js": quelle('export { antworte } from "./kreis-a.js";'),
+  });
+  const nachher = Object.fromEntries(Object.entries(importe).map(([datei, zeilen]) => [datei, route(zeilen, "HTTP_UNGUELTIG")]));
+  const lauf = nachCommitPruefen(repo, WERKZEUG, nachher);
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/frei\.js: gleichwertig \(zahl-konstante\)$/m);
+  for (const datei of ["kreis-a", "raute", "url", "luecke"]) {
+    assert.match(lauf.output, new RegExp(`^src/${datei}\\.js:\\d+: Änderung, die keine Umformung`, "m"), datei);
+  }
+});
+
+test("vorbereitung-pruefen: über Git gilt zahl-konstante nicht, wenn die Datei an der Basis in einem Import-Kreis lag", (context) => {
+  const repo = repoMitBasis(context, {
+    "src/a.js": quelle('import "./b.js";', ...antwort("400")),
+    "src/b.js": quelle('import "./a.js";', "export const b = 1;"),
+  });
+  const nachher = { "src/a.js": quelle('import "./b.js";', KONSTANTE, ...antwort("HTTP_UNGUELTIG")), "src/b.js": quelle("export const b = 1;") };
+  const lauf = mitBereich(repo, ["src/a.js"], nachher);
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/a\.js:\d+: Änderung, die keine Umformung/m);
+});
