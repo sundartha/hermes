@@ -1,0 +1,173 @@
+{
+  "stand": {
+    "kopfBaum": "1313ee4b1e5cfdddb4a97f1648d5187adee32258",
+    "arbeitsbaum": "7f6007fd99f8b657a720d7c3e4f9f59eae7947a6",
+    "dateien": {
+      ".claude/agents/entwurf.md": "4b624cda3bb772a809d08986998d81ae76d7d3a943c56f3e27e2f452156bd00d",
+      ".claude/agents/erkunder.md": "1d5bacbb67a84f854e46348c6d50c2e2340e54fbd13f19daf58b393b147aa210",
+      ".claude/agents/planer.md": "b85167be0bb21471167d3557f6a47e1f5204ddbdb1ae808301140456ac878e0d",
+      ".claude/agents/pruefer-planung.md": "4e7a1ac4f59694d722a344495136ae9be2b24ef26814e17c10687a6b3a69799b",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "09843d98224739272168781c2a0ed26234dde95a3cdf1812263bbf4df64f86ee",
+      "plaene/P-010-wortgrenze-ganzes-wort/design.md": "1f9ebcce36e4e1a0aa90115a971ceedbd3d8ff858f9772db23c920be0055f931",
+      "plaene/P-010-wortgrenze-ganzes-wort/pitch.md": "e840d4ab7a19d549832b7f0b9c4a88e21504eec05b9a582c7ada85aa56042b60",
+      "plaene/P-010-wortgrenze-ganzes-wort/sicherheit.md": "eefe617f1bd60444e8330f7e2d5eefa86efee46a7d8c078f488c0d1ac7a9566c",
+      "tools/bereiche.json": "57b2b8f1c7ed8b01f41c13599edb6a4a897ad382b9b981302a5ef728200b7ef9"
+    },
+    "kopfOhneWerkzeug": "bbf4c378990a281079dc33b8b06282fd02c3ccd042f0dd554d01d7368a5a0219",
+    "arbeitsbaumOhneWerkzeug": "eacede2181df6a44d652a5d150802334b08d33df12e63530795f311b55bd53b8",
+    "werkzeugBaum": "f9ad68ebf106d157a28789d3a210c88fdc24dab4"
+  },
+  "ablage": {
+    "gliederung.json": "705899d9f4da85f26dd60093b336081ec77a145ad7e53af60c06a71fded10685",
+    "nachfragen.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "erkundung-g1.json": "d2a986b38e3fa3752bd4c2c85db581bc0022b34aee8cdcaf227b6cce5420cc2a",
+    "erkundung-g2.json": "643312659ec70619ce546c8dd67e92c620767bef3bbb2bbf9e8ba247efce7a7d"
+  },
+  "zustand": {
+    "gesehen": [
+      "S1\u0000src/routes/webhooks-elevenlabs.js\u0000handleLookup",
+      "S1\u0000src/routes/webhooks-elevenlabs.js\u0000executeLookup",
+      "S1\u0000src/research/adapters/exa-search.js\u0000factLineOf",
+      "S1\u0000src/research/lookup-guard.js\u0000lookupFactsFrom",
+      "S1\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "S1\u0000src/routes/webhooks-elevenlabs.js\u0000lookupAnswer",
+      "B2\u0000src/routes/webhooks-elevenlabs.js\u0000handleLookup",
+      "B2\u0000src/routes/webhooks-elevenlabs.js\u0000executeLookup",
+      "B2\u0000src/research/adapters/exa-search.js\u0000factLineOf",
+      "B2\u0000src/research/lookup-guard.js\u0000lookupFactsFrom",
+      "B2\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "B2\u0000src/routes/webhooks-elevenlabs.js\u0000lookupAnswer",
+      "B3\u0000src/routes/webhooks-elevenlabs.js\u0000handleLookup",
+      "B3\u0000src/routes/webhooks-elevenlabs.js\u0000executeLookup",
+      "B3\u0000src/research/adapters/exa-search.js\u0000factLineOf",
+      "B3\u0000src/research/lookup-guard.js\u0000lookupFactsFrom",
+      "B3\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "B3\u0000src/routes/webhooks-elevenlabs.js\u0000lookupAnswer",
+      "T1\u0000src/routes/webhooks-elevenlabs.js\u0000handleLookup",
+      "T1\u0000src/routes/webhooks-elevenlabs.js\u0000executeLookup",
+      "T1\u0000src/research/lookup-guard.js\u0000lookupFactsFrom",
+      "T1\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "T1\u0000src/routes/webhooks-elevenlabs.js\u0000lookupAnswer",
+      "S2\u0000src/routes/voice.js\u0000anonym ab Zeile 410",
+      "S2\u0000src/claude.js\u0000openingText",
+      "S2\u0000src/claude.js\u0000trimGoalForSpeech",
+      "S2\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "S2\u0000src/telephony/voice-render.js\u0000turnDirectives",
+      "S2\u0000src/routes/voice.js\u0000sendVoiceXml",
+      "B1\u0000src/routes/voice.js\u0000anonym ab Zeile 410",
+      "B1\u0000src/claude.js\u0000openingText",
+      "B1\u0000src/claude.js\u0000firstSpokenSentence",
+      "B1\u0000src/claude.js\u0000disclosureSentence",
+      "B1\u0000src/claude.js\u0000ownerOpeningFor",
+      "B1\u0000src/claude.js\u0000trimGoalForSpeech",
+      "B1\u0000src/utils/text.js\u0000clampAtWordBoundary",
+      "B1\u0000src/routes/voice.js\u0000sendVoiceXml"
+    ],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S2",
+          "B1"
+        ],
+        "sitzung": "941c097e-d32e-41ef-8e50-42c135c3ff99",
+        "runden": 1,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S1",
+          "B2",
+          "B3",
+          "T1"
+        ],
+        "sitzung": "949afa88-a521-4ef9-8d22-c6623088b849",
+        "runden": 1,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S2",
+        1
+      ],
+      [
+        "S1",
+        1
+      ]
+    ],
+    "wegAusstehend": [],
+    "erkundungAusstehend": [],
+    "nachfrageWellen": 0,
+    "wegAbnahmen": [
+      {
+        "nummer": "S2",
+        "summe": "c4d778d7704a259c3a819cca14612cd9b94e15de3eed4223c2d6cb83eb3795d3",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:S2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/utils/text.js:4"
+        }
+      },
+      {
+        "nummer": "B1",
+        "summe": "548809ec7e59e3dc0eb85a5e1ff6b5e9d70466ee4ee28198846d42fde06b7404",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/claude.js:228"
+        }
+      },
+      {
+        "nummer": "S1",
+        "summe": "64fdc2bf3ea802a6f26f3926fd0627cd82024180d5ac34ec876d19a6905ea96d",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:S1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/routes/webhooks-elevenlabs.js:160"
+        }
+      },
+      {
+        "nummer": "B2",
+        "summe": "15480d11b4c4321d9cbd6f38c0c2f26773009791798a0ae38af96360df1b243e",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/research/lookup-guard.js:45"
+        }
+      },
+      {
+        "nummer": "B3",
+        "summe": "d3a3b65f77b7e2b21dd05d48f365637576fefe136546b7f7124247ec70629224",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:B3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/utils/text.js:4"
+        }
+      },
+      {
+        "nummer": "T1",
+        "summe": "ff0a4b31c870434b722a75e623c7c153b0d7415d617deed51a5032fbd7355685",
+        "werkzeug": "f9ad68ebf106d157a28789d3a210c88fdc24dab4",
+        "zeile": {
+          "schluessel": "weg:T1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/routes/webhooks-elevenlabs.js:308"
+        }
+      }
+    ],
+    "nachfrageAusstehend": null
+  }
+}

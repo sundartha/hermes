@@ -1,0 +1,175 @@
+{
+  "gruppe": [
+    "S2",
+    "B1"
+  ],
+  "nummern": {
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 410",
+          "von": 410,
+          "bis": 437
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "openingText",
+          "von": 224,
+          "bis": 229
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "trimGoalForSpeech",
+          "von": 243,
+          "bis": 249
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/telephony/voice-render.js",
+          "funktion": "turnDirectives",
+          "von": 10,
+          "bis": 16
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendVoiceXml",
+          "von": 252,
+          "bis": 255
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/personal-assistant-characterization.test.js",
+        "test/al-p5-opening.test.js",
+        "test/callee-is-owner-opening.test.js",
+        "test/g2-opening-turn.test.js",
+        "test/anrufe/ausgehende-begruessung.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Textfunktion, kein Store-Zugriff)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument für S2 eine Entscheidung des Owners verlangt; die Änderung berührt weder Gates noch den Offenlegungssatz",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "anonym ab Zeile 410",
+          "von": 410,
+          "bis": 437
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "openingText",
+          "von": 224,
+          "bis": 229
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "firstSpokenSentence",
+          "von": 231,
+          "bis": 233
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "disclosureSentence",
+          "von": 215,
+          "bis": 218
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "ownerOpeningFor",
+          "von": 235,
+          "bis": 241
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "trimGoalForSpeech",
+          "von": 243,
+          "bis": 249
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendVoiceXml",
+          "von": 252,
+          "bis": 255
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/utils/text.js",
+          "funktion": "clampAtWordBoundary",
+          "von": 1,
+          "bis": 6,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": [
+        "test/al-p5-opening.test.js",
+        "test/p11-agent-language-contract.test.js",
+        "test/f1-i18n-locale.test.js",
+        "test/personal-assistant-characterization.test.js",
+        "test/callee-is-owner-opening.test.js",
+        "test/g1-identity-binding.test.js",
+        "test/anrufe/ausgehende-begruessung.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/utils/text.js:1-6 (reine Textfunktion, kein Store-Zugriff)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil die Änderung am Offenlegungssatz nichts ändert: nur das Ziel geht durch clampAtWordBoundary (src/claude.js:248), der Satz steht in src/claude.js:215-218",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Weg: place_call speichert das Ziel im Call (call.goal). src/routes/api-calls.js:340 gibt Telnyx die URL `/voice/outbound?callId=<id>`. Der Handler (src/routes/voice.js:410-437) holt den Call, ruft in Zeile 434 openingText(call) auf, schreibt das Ergebnis in Zeile 435 ins Transkript und rendert es in Zeile 436 mit turnDirectives und sendVoiceXml. Das Gate-Ggespann von place_call habe ich nicht verfolgt, weil der Test den Call direkt seedet.",
+    "Brücke: trimGoalForSpeech (src/claude.js:243-249) faltet Leerraum (`\\s+` zu ein Leerzeichen), trimmt, entfernt endende `.!?`, kürzt dann mit clampAtWordBoundary(text, 75) und entfernt endende `.!?` noch einmal. Die Groß-/Kleinschreibung bleibt. Die Brücke steht in src/i18n/locales.js:132-133: bridgePhrase(goal) gibt `Es geht um Folgendes: ${goal}.` zurück, und bei einem Ziel, das mit „Ich“ beginnt, `${goal}.` ohne Präfix. Der Punkt wird also immer angehängt. Das Ziel aus S2 hat an Index 75 ein Leerzeichen. Der Anfang `slice(0,75)` endet auf „…passt mir nicht“, und die Brücke ergibt „…passt mir nicht.“. Heute schneidet die Hilfe beim letzten Leerzeichen innerhalb von `slice(0,75)` ab und lässt „nicht“ weg. Das stimmt mit der Absicht überein.",
+    "Antwortform: TeXML/XML (Content-Type text/xml). turnDirectives (src/telephony/voice-render.js:10-16) baut ein Gather mit dem Eröffnungstext als Say-Text (promptText) und danach ein Redirect auf dieselbe Aktion. Der Text steht also im Say im Gather, danach folgt noch ein Redirect-Element. Geprüft wird deshalb am Say-Inhalt, nicht an der ganzen Antwort. In den bestehenden Tests ist das Muster `<Say voice=\"Azure.de-DE-KatjaNeural\" language=\"de-DE\">` + Offenlegung (test/anrufe/ausgehende-begruessung.test.js:16-22). XML-Escaping: Das Ziel aus S2 enthält keine Sonderzeichen wie `&`, `<` oder Apostroph, ein Test sollte nur diesen Text prüfen. Das Escaping selbst habe ich nicht nachgelesen (Renderer in src/telephony/registry.js).",
+    "Offenlegung: LOCALES.de.disclosure (src/i18n/locales.js:136-140) ist makeDisclosure(ownerName => `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`, DISCLOSURE_OWNER_FALLBACK_DE). Der Besitzername kommt aus store.tenantContext(call.tenantId).ownerName (src/claude.js:215-218). Der Satz wird gewählt, wenn ownerOpeningFor(call) leer ist (src/claude.js:231-233). Das ist der Fall, wenn call.calleeIsOwner nicht `true` ist oder der Vorname des Tenants fehlt (src/claude.js:235-241). Die Tenant-Allowlist wird im Eröffnungstext nicht geprüft, sie steckt im Ergebnis von calleeIsOwner. Die Prüfung habe ich nicht verfolgt (src/callee-is-owner.js).",
+    "Testaufbau: test/_outbound-harness.js bietet runOutbound({provider:'telnyx', call:{…}, seed, env}). Es startet mit startServer einen echten Server mit geseedetem Call (seedState/seedCall aus test/helpers.js), ruft POST /voice/outbound?callId=… mit CallSid auf und gibt {body,status,contentType,stdout} zurück. Der Besitzername ist dort „Jonas Beispiel“ (DISCLOSURE_JONAS). assertDisclosureInGather prüft den Anfang. Der Call wird direkt geseedet, place_call mit seinen Gates (Permit, Kostendecke, Denylist, Land-Gate, prepare_call) wird also nicht durchlaufen. Dasselbe gilt für die Telnyx-Signatur: Der Bypass ist die globale Test-Konfiguration, ich habe nicht geprüft, wie startServer sie setzt. Ein neuer Test unter test/anrufe/ kann runOutbound mit call:{goal:'Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht mehr, Montag geht'} nutzen. Das Konto mit hinterlegtem Besitzernamen muss er über seed liefern, falls „Jonas Beispiel“ nicht reicht. ElevenLabs-Outbound ist aus, wenn die Harness-Defaults gelten (nicht geprüft).",
+    "Bestehende Eröffnungs-Tests: Aus den Zielen, die ich gelesen habe, hat keines ein Leerzeichen an Index 75. Gelesen: O5-Ziel in test/personal-assistant-characterization.test.js:290-292 (Index 75 liegt mitten in „dabei“; erwartet wird …vereinbaren und.), die Ziele in BOUNDARY_GOALS in test/al-p5-opening.test.js:33-69 und das 200×„a“-Ziel in :16 (kein Leerzeichen, harte Kürzung auf 75). Index 75 selbst habe ich nur für das O5-Ziel gezählt, bei den übrigen nicht. Das Design Doc nennt 270 grüne Tests mit der geänderten Hilfe (20 Dateien). Ich habe das nicht nachgespielt. Die vollständige Suite ist laut Design Doc nicht gelaufen.",
+    "Doppelung: clampAtWordBoundary ist die einzige Kürzung an der Wortgrenze. Aufrufer in src/: src/call-memory.js:21, src/claude.js:248, src/consult/question.js:16, src/research/lookup-guard.js:35 und :45, src/thinking-signal.js:10. Die Änderung gilt für alle, wie im Design Doc steht. Neue Funktionen sind nicht nötig, deshalb gibt es keinen `neu`-Eintrag und kein `vorhanden`.",
+    "CODEOWNERS: .github/CODEOWNERS enthält nur `/src/db/migrations/rueckbau/` (Zeile 24). Keine Änderungsdatei steht darin.",
+    "Absicht und Code: Ich habe keinen Widerspruch gefunden. Der Weg zur Brücke hat keine Satzzeichen-Sonderbehandlung hinter der Grenze, die die Abkürzung aus dem Pitch erlauben würde. Zu beachten für den Planer: Die Ausgabe nach dem Kürzen wird in src/claude.js:248 erneut von `.!?` am Ende befreit (zusätzlich zum Satzzeichen-Strip davor). Ein Test muss die Länge der Grenze daher am Ergebnis von clampAtWordBoundary prüfen, nicht am Eröffnungstext."
+  ]
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/webhooks-elevenlabs.js:160"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/webhooks-elevenlabs.js:160"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/utils/text.js:4"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:228"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/research/lookup-guard.js:45"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/utils/text.js:4"
+  },
+  {
+    "schluessel": "weg:T1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/webhooks-elevenlabs.js:308"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:248"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/research/lookup-guard.js:45"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/utils/text.js:4"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/utils/text.js:4"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:248"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:T1:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ### T1: Ein Fehler an der neuen Stelle der Hilfe ließe Text über die Längengrenze aller sechs Ausgänge"
+  },
+  {
+    "schluessel": "ausweg:T1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "CLAUDE.md:36"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:217"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]
