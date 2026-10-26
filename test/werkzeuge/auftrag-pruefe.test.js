@@ -7,6 +7,8 @@ import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+const ISSUE = 7;
+const ENTWURF = { "src/d.js": "Entwurf" };
 const AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
 const TEXT_S1 = "Gegeben ein Kunde\nWenn er `POST /api/x` sendet\nDann enthält die Antwort `ok`";
 const TEXT_B1 = "Gegeben ein Kunde\nWenn er `GET /api/y` sendet\nDann enthält die Antwort `wie bisher`";
@@ -42,14 +44,17 @@ function funktion(felder = {}) {
   };
 }
 
-function pruefe(context, auftraege, name = "P-001-probe") {
-  const phase = { phase: name, entwurf: { "src/d.js": "Entwurf" }, auftraege };
+function pruefePhase(context, phase) {
   const ordner = probeDirectory(context, {
     "src/d.js": "export const WERT = 1;\n",
     "test/ok.test.js": 'import { test } from "node:test";\ntest("ok", () => {});\n',
     "phase.json": JSON.stringify(phase),
   });
   return runIn(ordner, process.execPath, [EINSTIEG, "pruefe", "phase.json"]);
+}
+
+function pruefe(context, auftraege, name = "P-001-probe") {
+  return pruefePhase(context, { phase: name, issue: ISSUE, entwurf: ENTWURF, auftraege });
 }
 
 test("auftrag-pruefe: ein Auftrag aus einem Pitch mit Nummern und wörtlichem Text ist grün", (context) => {
@@ -129,4 +134,18 @@ test("auftrag-pruefe: ändert ein anderer Auftrag die Datei, die ein Umbau derse
   assert.equal(pruefe(context, [umbenennung]).status, EXIT_GRUEN);
   const zweite = pruefe(context, [{ ...laufzeit, abhaengigVon: [] }]);
   assert.equal(zweite.status, EXIT_GRUEN, zweite.stderr);
+});
+
+test("auftrag-pruefe: eine Phase mit issue null oder 0 ist rot wie bei lauf", (context) => {
+  for (const issue of [null, 0]) {
+    const lauf = pruefePhase(context, { phase: "P-001-probe", issue, entwurf: ENTWURF, auftraege: [umbau()] });
+    assert.equal(lauf.status, EXIT_ROT, `issue ${issue}: ${lauf.stdout}${lauf.stderr}`);
+    assert.match(lauf.stderr, /^issue muss die Nummer des Phasen-Issues sein\.$/m);
+  }
+});
+
+test("auftrag-pruefe: eine vertrauliche Phase F-V1 ohne issue bleibt grün", (context) => {
+  const lauf = pruefePhase(context, { phase: "F-V1-probe", vertraulich: true, entwurf: ENTWURF, auftraege: [umbau()] });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /grün: 1 Aufträge/);
 });

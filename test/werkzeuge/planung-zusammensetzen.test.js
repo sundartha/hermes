@@ -15,6 +15,7 @@ const HINWEIS = "src/callee-is-owner.js";
 const BESTEHENDER_TEST = "test/anrufe/anrufreserve.test.js";
 const NIE_SATZ = "Nicht Teil dieser Änderung: eine zweite eigene Nummer pro Kunde, weil heute jeder Kunde genau eine eigene Nummer hinterlegt.";
 const EXIT_GRUEN = 0;
+const PHASEN_ISSUE = 12;
 const EINRUECKUNG = 2;
 
 const ROUTE_QUELLE = [
@@ -194,8 +195,8 @@ function entwuerfe(ueberschrieben = {}) {
   };
 }
 
-function zusammen(ordner, { schnitt = schnittliste(), entwurf = entwuerfe(), bericht = berichte() } = {}) {
-  return setzePhaseZusammen(ordner, { schnitt, berichte: bericht, entwuerfe: entwurf, root: wurzelVon(ordner) });
+function zusammen(ordner, { schnitt = schnittliste(), entwurf = entwuerfe(), bericht = berichte(), issue } = {}) {
+  return setzePhaseZusammen(ordner, { schnitt, berichte: bericht, entwuerfe: entwurf, root: wurzelVon(ordner), issue });
 }
 
 function phaseDatei(ordner) {
@@ -222,7 +223,7 @@ function rot(ordner, ergebnis, teil) {
 
 test("zusammensetzen: ein vollständiger Schnitt ergibt eine Phase, die tools/auftrag.mjs und die Abdeckungsprüfung bestehen", async (context) => {
   const ordner = ordnerMitDokumenten(context);
-  const ergebnis = await zusammen(ordner);
+  const ergebnis = await zusammen(ordner, { issue: PHASEN_ISSUE });
   assert.deepEqual(ergebnis.befunde, []);
   assert.equal(werkzeug(ordner, "tools/auftrag.mjs", "pruefe", phaseDatei(ordner)).status, EXIT_GRUEN);
   assert.equal(werkzeug(ordner, "tools/abdeckung-pruefen.mjs", ordner).status, EXIT_GRUEN);
