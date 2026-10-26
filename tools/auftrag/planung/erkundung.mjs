@@ -21,6 +21,7 @@ const MIT_AENDERUNG = /^[ST]/;
 const WENN = /^\s*Wenn\s/;
 const IN_BACKTICKS = /`([^`]+)`/g;
 const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
+const WERT = /^[^\s:"]+:\s*("[^"]+")$/;
 export const PLATZHALTER = "<AUSFUELLEN>";
 export const NUTZEN = "nutzen";
 const KEIN_TREFFER_PASST = /^kein Treffer passt, weil(.*)$/su;
@@ -289,19 +290,27 @@ function geplanteAuswege(weg, aenderungen) {
   return weg.filter((eintrag) => eintrag?.rolle === "eingang" && typeof eintrag.ausweg === "string" && istText(eintrag.datei) && geaendert.has(eintrag.datei)).map(({ ausweg }) => ausweg);
 }
 
+function testTexte(kontext) {
+  const tests = liste(kontext.angaben.tests).filter((test) => TEST_FILE.test(test) && dateiBefund("", { datei: test }, kontext) === null);
+  return tests.map((test) => quelle(kontext, test));
+}
+
+function kommtVor(texte, teile) {
+  const gesucht = teile.filter(Boolean);
+  return texte.some((text) => gesucht.some((teil) => text.includes(teil)));
+}
+
 function wennBefunde(ort, kontext) {
   const { weg, aenderungen } = kontext.angaben;
   const eingaenge = Array.isArray(weg) ? weg.filter((eintrag) => eintrag?.rolle === "eingang" && eintrag.ausweg === undefined) : [];
   const dateien = eingaenge.map(({ datei }) => datei).filter((datei) => istText(datei) && existsSync(join(kontext.root, datei)));
   if (dateien.length === 0) return [];
   const texte = [...dateien.map((datei) => quelle(kontext, datei)), ...geplanteAuswege(weg, aenderungen)];
+  const tests = testTexte(kontext);
   const szenario = kontext.soll.get(kontext.nummer);
-  const fehlend = namenImWenn(szenario?.text).filter((name) => {
-    const gesucht = [name, ROUTE.exec(name)?.[1]].filter(Boolean);
-    return !texte.some((text) => gesucht.some((teil) => text.includes(teil)));
-  });
-  const weiter = "; entsteht er erst neu, melde ihn als Eingang mit datei und ausweg „nicht gefunden, weil";
-  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")})${weiter} \`${name}\` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei`);
+  const fehlend = namenImWenn(szenario?.text).filter((name) => !kommtVor(texte, [name, ROUTE.exec(name)?.[1]]) && !kommtVor(tests, [name, WERT.exec(name)?.[1]]));
+  const weiter = "; steht er schon wörtlich in einer bestehenden Testdatei, melde sie unter tests; entsteht er erst neu, melde ihn als Eingang mit datei und ausweg „nicht gefunden, weil";
+  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")}) und in keiner unter tests gemeldeten Testdatei${weiter} \`${name}\` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei`);
 }
 
 function nummerBefunde(nummer, angaben, kontext) {
