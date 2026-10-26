@@ -1,6 +1,6 @@
 ---
 name: aenderung
-description: Klärt mit dem Nutzer, welche Art von Änderung an Hermes er anstößt (Notfall, Fehler, einfache Änderung oder größere Änderung), und führt den Weg dieser Art bis zur Phasendatei, bis zum Skill pitch oder beim Notfall bis zum Postmortem. Verwenden, sobald jemand im Hermes-Ordner in eigenen Worten beschreibt, was sich ändern soll, was falsch läuft oder was gestoppt werden muss, auch wenn er keine Art nennt.
+description: Klärt mit dem Nutzer, welche Art von Änderung an Hermes er anstößt (Notfall, Fehler, einfache Änderung oder größere Änderung), und führt den Weg dieser Art bis zur Phasendatei, bis zum Skill pitch oder beim Notfall bis zum Postmortem. Verwenden, sobald jemand im Hermes-Ordner in eigenen Worten beschreibt, was sich ändern soll, was falsch läuft oder was gestoppt werden muss, auch wenn er keine Art nennt, und auch bei einer kleinen Bitte wie einer Datei, die entfernt oder gelöscht werden soll.
 ---
 
 # Änderung anstoßen
