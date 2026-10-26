@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { funktion, ROTER_TEST } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { CI_LOKAL_ROT, ciLokalAufrufe, mitCiLokal } from "./ersatz-werkzeuge.js";
+import { CI_LOKAL_ROT, ciLokalAufrufe, ciLokalVorrang, mitCiLokal } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
 
 const DREHBUCH = {
@@ -27,6 +27,13 @@ test("nach dem letzten Auftrag der Phase fährt lauf ci-lokal einmal gegen die B
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(ciLokalAufrufe(werkzeug), [["--basis", basis]]);
   assert.match(lauf.stdout, /^ci-lokal: grün$/m);
+});
+
+test("am Phasenende startet lauf ci-lokal mit dem Push-Vorrang, auch wenn lauf selbst ohne ihn gestartet wurde", (context) => {
+  const umgebung = { SCHWERLAUF_VORRANG: "" };
+  const { werkzeug, lauf } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien: ciLokal(0), umgebung });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(ciLokalVorrang(werkzeug), ["push"]);
 });
 
 test("ist ci-lokal am Ende der Phase rot, endet lauf rot mit den roten Schritten und dem Zweck, der Auftrag bleibt committet", (context) => {
