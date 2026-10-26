@@ -34,14 +34,6 @@ export function teilEintrag(kuerzel, name, { nummern, tWege = [], dateien, abhae
   return { kuerzel, name, nummern, tWege, dateien, nurUmbau, abhaengigVon, grund: `${name} hat einen eigenen Eingang` };
 }
 
-export function pruefeTeilungOhneErkundung(lauf) {
-  exit(lauf, EXIT_GETEILT);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
-  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
-  const [nachricht] = aufrufe(lauf, "planer", "## Teilung");
-  return nachricht.eingabe;
-}
-
 export function plane(context, ueberschrieben = {}, argumente = [ORDNER]) {
   return planeLauf(context, { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ...argumente] });
 }

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { AUFTRAG, EXIT_GETEILT, EXIT_GRUEN, abgelegt, plane, planeAntworten, teilEintrag as eintrag, pruefeTeilungOhneErkundung } from "./planung-plane-probe.js";
+import { AUFTRAG, EXIT_GETEILT, EXIT_GRUEN, abgelegt, plane, planeAntworten, teilEintrag as eintrag } from "./planung-plane-probe.js";
 import { GRUPPEN, HINTERLEGEN_NUMMERN, HINWEIS, LAUF_FRIST_MS, ORDNER, ROUTE, alsJson, aufrufe, exit, planOrdner, planeIn } from "./planung-probe.js";
 
 const HINTERLEGEN = { ...GRUPPEN[0], nummern: HINTERLEGEN_NUMMERN, eingang: "POST /api/self-service/private-number" };
@@ -18,6 +18,14 @@ const NUR_UMBAU = eintrag("t2", "nur-umbau", { nummern: [], dateien: [], abhaeng
 function dreiGruppen(context, teilungen) {
   const ueberschrieben = { "planer|## Gliederung": [alsJson({ gruppen: DREI_GRUPPEN })], "planer|## Teilung": [teilungen[0]], "planer|## Befunde": teilungen.slice(1) };
   return planeIn(context, planOrdner(context), { werkzeug: AUFTRAG, grund: planeAntworten(), ueberschrieben, argumente: ["plane", ORDNER] });
+}
+
+function pruefeTeilungOhneErkundung(lauf) {
+  exit(lauf, EXIT_GETEILT);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
+  const [nachricht] = aufrufe(lauf, "planer", "## Teilung");
+  return nachricht.eingabe;
 }
 
 test("plane teilt bei drei Gruppen nach der Gliederung mit Exit 7 und startet keinen Erkunder", { timeout: LAUF_FRIST_MS }, (context) => {
