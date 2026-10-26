@@ -348,7 +348,7 @@ test("ein Teil, der nach dem Start eines Agenten endet, bucht den gemessenen Ver
   assert.deepEqual(laeufe.map((lauf) => ({ teil: lauf.teil, token: lauf.token, deckel: lauf.deckel })), [{ teil: basename(HINTERLEGEN), token, deckel: TEIL_DECKEL }]);
 });
 
-function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder }) {
+function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder, teil = HINTERLEGEN, gruppe = GRUPPEN[0], nachTeilung = () => {} }) {
   const { wurzel, ...teilung } = geteilt(context, { vorher: (ordner) => {
     if (geaendert !== undefined) mitGeaendertenDateien(ordner, geaendert);
     const design = join(ordner, ORDNER, "design.md");
@@ -360,9 +360,21 @@ function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder })
   const eltern = JSON.parse(readFileSync(teileDatei, "utf8"));
   const mitGeteilten = eltern.teile.map((teil) => (teil.kuerzel === "t2" ? { ...teil, dateien: [...teil.dateien, ...auchInT2] } : teil));
   writeFileSync(teileDatei, JSON.stringify({ ...eltern, teile: mitGeteilten }));
-  mitIssue(wurzel, HINTERLEGEN, 97);
+  mitIssue(wurzel, teil, 97);
+  nachTeilung(wurzel);
   const grund = erkunder === undefined ? {} : { ...planeAntworten(), "erkunder|## Erkundung|S1": [erkunder] };
-  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund, ueberschrieben: { "planer|## Gliederung": [alsJson({ gruppen: [GRUPPEN[0]] })] }, argumente: ["plane", HINTERLEGEN] });
+  return planeIn(context, wurzel, { werkzeug: AUFTRAG, grund, ueberschrieben: { "planer|## Gliederung": [alsJson({ gruppen: [gruppe] })] }, argumente: ["plane", teil] });
+}
+
+const HINWEIS_GRUPPE = { ...GRUPPEN[1], nummern: ["S4", "S5", "B1", "B2"], ueberschriften: [LOESUNG] };
+
+function hinweisTeilNachT1(context, { genannt, auchInT2 = [], nachTeilung = (wurzel) => vorgaengerGemergt(wurzel, HINTERLEGEN) }) {
+  return teilMitDesign(context, { genannt, auchInT2, teil: HINWEIS_ORDNER, gruppe: HINWEIS_GRUPPE, nachTeilung });
+}
+
+function gemergtHinweis(lauf, datei) {
+  const sha = runIn(lauf.wurzel, "git", ["rev-parse", "--short=7", "upstream/master"]).stdout.trim();
+  return `${datei} gehört ${basename(HINTERLEGEN)}, gemergt ${sha}`;
 }
 
 function befundZu(lauf, datei) {
@@ -410,6 +422,42 @@ test("eine im Pitch als geändert genannte Datei eines anderen Teils in einem ge
   exit(lauf, EXIT_BEFUNDE);
   assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
   assert.ok(befundZu(lauf, HINWEIS).includes(basename(HINWEIS_ORDNER)), lauf.stderr);
+});
+
+test("teilordner: eine eigene Datei, die auch ein gemergter Vorgänger aus nach ändert, ist keine Datei eines anderen Teils", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], auchInT2: [ROUTE] });
+
+  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
+  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
+});
+
+test("teilordner: Dateien eines gemergten Vorgängers aus nach sind keine fremden Dateien und stehen als Hinweis im Protokoll", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = hinweisTeilNachT1(context, { genannt: [`${ROUTE}${ZEILENANGABE}`] });
+
+  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
+  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(gemergtHinweis(lauf, ROUTE)), lauf.stdout);
+});
+
+test("teilordner: Dateien eines anderen offenen Teils bleiben fremde Dateien, auch neben einem gemergten Vorgänger", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE, UMBAU_DATEI] });
+
+  exit(lauf, EXIT_BEFUNDE);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.ok(befundZu(lauf, UMBAU_DATEI).includes(basename(UMBAU_ORDNER)), lauf.stderr);
+  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
+});
+
+test("teilordner: ein Vorgänger, der nur auf dem eigenen Branch steht, gibt keine Dateien frei und plane hält vor den Erkundern", { timeout: LAUF_FRIST_MS }, (context) => {
+  const nurImBranch = (wurzel) => {
+    vorgaengerGemergt(wurzel, HINTERLEGEN);
+    assert.equal(runIn(wurzel, "git", ["update-ref", "refs/remotes/upstream/master", "HEAD~1"]).status, 0);
+  };
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], nachTeilung: nurImBranch });
+
+  exit(lauf, EXIT_AUFRUF);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.equal(lauf.stdout.includes(`${ROUTE} gehört`), false, lauf.stdout);
 });
 
 test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile zusammen nie über die Freigabe kommen", { timeout: LAUF_FRIST_MS }, async (context) => {
