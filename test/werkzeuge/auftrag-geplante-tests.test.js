@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, symlinkSync } from "node:fs";
-import { basename, join } from "node:path";
-import { env } from "node:process";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { starteAgent } from "../../tools/auftrag/agenten.mjs";
@@ -10,6 +9,7 @@ import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import {
   BLOCKING_EXIT_CODE,
   REPO_ROOT,
+  ersatzClaude,
   isolatedEnvironment,
   probeDirectory,
   probeRepository,
@@ -22,7 +22,6 @@ const GEPLANT = "test/geplant.test.js";
 const FREMD = "test/fremd.test.js";
 const ALT = 'test("alt", () => {});\n';
 const NEU = 'test("neu", () => {});\n';
-const AUSFUEHRBAR = 0o755;
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
 const ABSATZ_GEAENDERTE_FAELLE = "Zweck geänderte fälle: Drehbuchtext des Ersatz-Agenten.";
@@ -91,22 +90,14 @@ console.log(JSON.stringify({ type: "result", result: "fertig" }));
 `;
 
 test("geplante Tests: der Start eines Agenten gibt nur die Testdateien aus erwarteteDateien als HERMES_ERWARTET mit", (context) => {
-  const ordner = probeDirectory(context, { "claude.mjs": ERSATZ_CLAUDE });
-  chmodSync(join(ordner, "claude.mjs"), AUSFUEHRBAR);
-  const vorher = { HERMES_CLAUDE: env.HERMES_CLAUDE, ERSATZ_ZIEL: env.ERSATZ_ZIEL };
-  context.after(() => {
-    for (const [name, wert] of Object.entries(vorher)) {
-      if (wert === undefined) delete env[name];
-      else env[name] = wert;
-    }
-  });
-  Object.assign(env, { HERMES_CLAUDE: join(ordner, "claude.mjs"), ERSATZ_ZIEL: join(ordner, "erwartet.txt") });
+  const ziel = ersatzClaude(context, ERSATZ_CLAUDE);
+  const ordner = dirname(ziel);
   const erwarteteDateien = ["src/x.js", "test/x.test.js", "docs/x.md", "test/hilfe/daten.json", "src/x.test.js"];
   const auftrag = { bereich: "src/x.js", abnahme: "test/x.test.js", erwarteteDateien };
   for (const rolle of ["test", "bau"]) {
     const lauf = starteAgent({ rolle, auftrag, root: ordner }, "Auftrag");
     assert.equal(lauf.exitCode, 0, lauf.fehlerausgabe);
-    const gesetzt = JSON.parse(readFileSync(join(ordner, "erwartet.txt"), "utf8"));
+    const gesetzt = JSON.parse(readFileSync(ziel, "utf8"));
     assert.deepEqual(gesetzt, ["test/x.test.js", "test/hilfe/daten.json", "src/x.test.js"], rolle);
   }
 });
