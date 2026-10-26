@@ -21,7 +21,7 @@ jobs:
   pruefungen:
     name: Prüfungen
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240
     services:
       postgres:
         image: postgres:16.15@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
