@@ -771,11 +771,6 @@
       "count": 2
     }
   },
-  "src/speech-shape.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "src/store/defaults.js": {
     "complexity": {
       "count": 1
