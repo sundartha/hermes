@@ -1,8 +1,8 @@
 # P-008 Sprachformung erhält Zahlenspannen und Unterstriche
 
 Status: freigegeben
-Planung freigegeben: 6500000 Token
-Freigabe Antonio 25.10. 22:00
+Planung freigegeben: 100000000 Token
+Freigabe Antonio 26.10. 12:2x
 Issue: 1973
 Design Doc: nein, weil die Änderung in einer Funktion (`src/speech-shape.js:shapedCore`) auf einem Weg liegt, kein Anbieteraufruf und kein Werkzeugvertrag sich ändert und der Rückweg ein Code-Rollback ist
 

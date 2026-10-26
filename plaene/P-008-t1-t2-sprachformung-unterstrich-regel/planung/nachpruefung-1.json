@@ -1,0 +1,53 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:673"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:4"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "b-nummer:B5",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "b-nummer:B7",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:2"
+  },
+  {
+    "schluessel": "b-nummer:B10",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:3"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:9"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "a1 ändert src/speech-shape.js als ganze Datei, also auch `shapeForSpeech` (Zeilen 18-22), und sein Abnahmetest prüft auch das Streaming-Häppchen (S5). Bei a1 fehlen zwei Sätze, die a1 brechen kann: (1) pitch.md, „## Nicht-Ziele“: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ (2) pitch.md, „## Fallen“: „Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).“ Der Abnahmetest für S5 könnte sonst `src/speech-chunker.js` importieren. Der Planer soll beide Sätze in wasDarfNiePassieren von a1 aufnehmen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

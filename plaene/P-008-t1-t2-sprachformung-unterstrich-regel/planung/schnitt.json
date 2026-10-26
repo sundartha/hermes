@@ -1,0 +1,171 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Der vorbereitende Umbau aus Phase P-008-t1-t1-sprachformung-umbau ist schon im Code. Die Formung steht als Tabelle `SHAPE_STEPS` in src/speech-shape.js:1-6, `shapedCore` in src/speech-shape.js:8-11. Die Funktionsliste meldet für `shapedCore` keine Lint-Befunde, und in eslint-suppressions.json steht laut Bericht kein Eintrag mehr. Deshalb gibt es keinen Umbau davor. Die Zeilenangaben im Design Doc (Abschnitt „## Ausgangslage und Annahmen“) beschreiben den Stand vor diesem Umbau."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Diese Phase baut nur R2 (Unterstrich). R1 (Spanne), die Szenarien B2, B4, B6, B8, B9, T1, T3, die Katalogzeile SG-27 und die Vertrauensannahme zu SG-13 in docs/sicherheitsgrenzen.md gehören nicht zu den Nummern dieses Teils. Ich nehme an, dass sie im anderen Teil des Pakets liegen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "S4, S5, B1, B3, B5, B7, B10 und T2 kommen in einen Auftrag. Alle laufen durch dieselbe Stelle in `SHAPE_STEPS` (Schritt mit `[*_#`]`). Ändert man sie für S4, wird S5 zugleich grün. Ein eigener Auftrag für S5 könnte deshalb nie rot werden. Der Abnahmetest prüft beide Formungswege, `shapeForSpeech` und `shapeChunkForSpeech`, als Tabelle der Fachlogik."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Locale-Texte, die test/al-p14-in-call-consult.test.js durch `shapeForSpeech` laufen lässt, wurden nicht auf Unterstriche mitten im Wort geprüft. Ich nehme an, dass keiner einen enthält und der Test grün bleibt. Wird er rot, meldet der Bau-Agent das."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Sprachformung lässt Unterstrich mitten im Wort stehen (R2)",
+      "bereich": "src/speech-shape.js",
+      "erwarteteDateien": [
+        "src/speech-shape.js",
+        "test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js"
+      ],
+      "abnahme": "test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js",
+      "erwarteterFehler": "Mail an maxweber@beispiel.de.",
+      "prueft": [
+        "S4",
+        "S5",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B10",
+        "T2"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Doppelte Unterstriche am Wortrand (`__fett__`) sind Markdown-Fett: Ein Unterstrich bleibt nur, wenn direkt davor und direkt danach ein Buchstabe oder eine Ziffer steht und nicht beide Seiten Ziffern sind; ein Unterstrich neben einem Unterstrich fällt weg.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "„Buchstabe“ beim Unterstrich schließt Umlaute und ß ein (`grüß_gott`): Die Regel arbeitet mit Unicode-Buchstaben und -Ziffern, nicht mit `[A-Za-z0-9]`.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die neuen Regeln laufen auf Text, den Anrufer und Angerufene über das Modell beeinflussen, im einzigen Prozess für alle Mandanten: Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Im Zweifel bleibt das heutige Verhalten für alles, was weder Ziffer-Strich-Ziffer noch Unterstrich mitten im Wort ist.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "| 5 | Nennt das Modell einen Werkzeugnamen (`take_message`), wird er künftig mit Unterstrich gesprochen statt verschluckt. | hingenommen: der Fehler liegt in der Modellausgabe; ein Werkzeugname lässt sich ohne Wortwissen nicht von `max_weber` unterscheiden (Runde 2, Frage 4) |",
+          "quelle": "pitch.md",
+          "abschnitt": "## Premortem"
+        },
+        {
+          "satz": "Neue Vertrauensannahme zu SG-13: Was die Sprachformung (`src/speech-shape.js`) aus Ziffernfolgen macht, erkennt die Maskierung (`src/restricted-data.js`) weiterhin; die Formung erzeugt keine Trennzeichen-Mischung, die die Maskierung verwirft.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "## 5. Vorschlag für docs/sicherheitsgrenzen.md"
+        },
+        {
+          "satz": "Diese Änderung schützt nicht gegen ein Modell, das Angaben des Kunden oder des Gegenübers ausspricht, die es nicht nennen soll, weil das die Promptregel (`src/i18n/prompts/de.js:54`) und SG-11 betrifft; dass die heutige Formung Unterstriche zufällig verstümmelt, war kein Schutz.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Nicht-Ziele"
+        },
+        {
+          "satz": "Ausgang: hinnehmen (Freigabe 2026-10-24), weil der Prompt Codes Ziffer für Ziffer verlangt (`src/i18n/prompts/de.js:29`, `en.js:53`, `fr.js:29`), solche Schreibweisen in Modellausgaben ungewöhnlich sind und sich ein Schutz in der Formung ohne Wortwissen nicht von `grüß_gott_2` (S5) unterscheiden lässt.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### T4: Ein Unterstrich mit einem Buchstaben daneben bleibt in einer Ausweisnummer stehen, und die Maskierung erkennt die Nummer nicht mehr"
+        },
+        {
+          "satz": "Die Formung ist heute eine Kette aus fünf `.replace` und verstößt gegen die Demeter-Regel (G36, 2 Befunde, unterdrückt): erst Umbau der ganzen Funktion lintfrei mit gleichem Verhalten, dann die Änderung.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Reihenfolge der Ersetzungen bestimmt das Ergebnis (Listenzeichen am Zeilenanfang → Markdown-Zeichen → Gedankenstrich → Leerraum): Der Umbau behält diese Reihenfolge; die Spannenregel greift vor der Regel „ - “ → „, “, und Listenzeichen am Zeilenanfang werden weiter zuerst entfernt, so dass „9“ am Zeilenende und „- 18“ in der nächsten Zeile keine Spanne bilden.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "„Zahl“ in R1 heißt: eine Folge aus Ziffern 0–9, in der zwischen zwei Ziffern ein `:` oder `.` stehen darf („9“, „9:30“, „18.00“); „grenzt durch Leerraum an eine weitere Zahl“ heißt: vor der linken Zahl steht Leerraum und davor wieder eine Ziffer, oder hinter der rechten Zahl steht Leerraum und dahinter wieder eine Ziffer (B6). „030 - 123456“ wird damit zur Spanne „030-123456“ (Premortem Nr. 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "„Kette“ in R1 heißt: die linke Zahl steht selbst hinter einem Strich mit einer Zahl davor, oder die rechte Zahl steht selbst vor einem Strich mit einer Zahl dahinter. Der Strich der Kette ist dasselbe Trennzeichen wie in R1 und in der heutigen Regel `src/speech-shape.js:6`: Leerraum beliebiger Länge, Bindestrich, Leerraum beliebiger Länge, nicht nur das wörtliche „ - “ (B9, Sicherheitsprüfung Gegenprüfung Nr. 2). Jeder Strich einer Kette wird wie heute „, “ (B8).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die neuen Regeln laufen auf Text, den Anrufer und Angerufene über das Modell beeinflussen, im einzigen Prozess für alle Mandanten: Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3). Die Semgrep-Regel `detect-redos` prüft `replace` nicht und meldet eine solche Umsetzung deshalb nicht.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Der Streaming-Weg schneidet nur hinter `.`, `!`, `?` oder `…` mit folgendem Leerraum (`src/speech-chunker.js:5`); eine Spanne „9 - 18“ wird also nie auf zwei Häppchen verteilt. Keine Änderung am Schneiden.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die neue Katalogzeile in `docs/sicherheitsgrenzen.md` (Sicherheitsprüfung, Abschnitt 5, Kennung SG-27) braucht einen Test, dessen Name mit „SG-27 “ beginnt, und die letzte Spalte der Zeile muss mit „SG-27 “ beginnen; sonst ist `tools/katalog-pruefen.mjs` rot (`:24`, `:110`). Der Test zu T3 trägt diesen Namen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine sprachabhängige Ersetzung der Spanne („bis“, „to“, „à“), weil die Formung die Sprache des Anrufs nicht kennt und „9-18“ die Form ist, die die Sprachausgabe heute schon bekommt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Aufrufer `src/claude.js`, `src/thinking-signal.js` und `src/speech-chunker.js` zu ändern oder ihnen eine Sprache zu übergeben, weil die Änderung ganz in der gemeinsamen Formung liegt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Gedankenstriche „–“ (U+2013) und „—“ (U+2014), weil sie heute unverändert durchgehen und ihre Aussprache eine eigene Entscheidung ist.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: der Hauptweg über die ElevenLabs-Agents-Plattform, weil er die Formung nicht aufruft.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: Spannen mit Einheit an beiden Enden („9 Uhr - 18 Uhr“, „9 h - 18 h“, „9 am - 5 pm“), weil sie sich ohne Wort- und Sprachwissen nicht von „Termin am Montag - 18 Uhr“ (B4) unterscheiden lassen und die Formung die Sprache des Anrufs nicht kennt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: wie die Sprachausgabe den Unterstrich ausspricht, weil das Ergebnis als Text an die Sprachausgabe festgelegt ist und kein Testweg den erzeugten Ton erreicht (CLAUDE.md Regel 5).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}
