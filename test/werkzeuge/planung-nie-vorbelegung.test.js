@@ -74,3 +74,22 @@ test("Nie-Vorbelegung: die nächste Zeile mit Listenzeichen beginnt einen neuen 
   const pitch = ["## Fallen", "- Der Status bleibt offen.", "  - Die SMS geht nur einmal raus.", "1. Die Liste bleibt bestehen.", "", "## Nicht-Ziele", "- Nicht Teil dieser Änderung: ein zweiter Kanal."];
   assert.deepEqual(vorbelegteSaetze(pitch), ["Der Status bleibt offen.", "Die SMS geht nur einmal raus.", "Die Liste bleibt bestehen.", "Nicht Teil dieser Änderung: ein zweiter Kanal."]);
 });
+
+const EIGENE_FALLE = "Ein Unterstrich zwischen zwei Buchstaben bleibt stehen.";
+const FREMDE_FALLE = "Die Spanne entsteht nur zwischen zwei Zahlen.";
+const TEIL_RUMPF = ["## Fallen", `- ${EIGENE_FALLE}`, `- ${FREMDE_FALLE}`];
+
+function vorbelegtIm(kopf, eigene) {
+  const pitch = [...kopf, "", ...TEIL_RUMPF].join("\n");
+  const [auftrag] = mitNieSaetzenDerVorgaben({ auftraege: [{ id: "a1", art: "funktion", wasDarfNiePassieren: eigene.map((satz) => nieSatz(satz, "## Fallen")) }] }, pitch, new Map()).auftraege;
+  return auftrag.wasDarfNiePassieren.map(({ satz }) => satz);
+}
+
+test("Nie-Vorbelegung: im Teil-Pitch kommt ein vom Planer gestrichener Satz aus Fallen nicht zurück", () => {
+  const kopf = ["# P-008 Sprachformung: Teil t2 regel", "", "Teil von: P-008-t1-sprachformung; nach: P-008-t1-t1-umbau"];
+  assert.deepEqual(vorbelegtIm(kopf, [EIGENE_FALLE]), [EIGENE_FALLE]);
+});
+
+test("Nie-Vorbelegung: im Pitch ohne Teil von wird ein vergessener Satz aus Fallen weiter ergänzt", () => {
+  assert.deepEqual(vorbelegtIm(["# P-008 Sprachformung"], [EIGENE_FALLE]), [EIGENE_FALLE, FREMDE_FALLE]);
+});
