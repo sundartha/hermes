@@ -116,6 +116,11 @@ const PHASE = {
 const BAU = { dateien: { "src/text.js": NEU } };
 const ABSATZ = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten.";
 
+function phaseMit(nie) {
+  if (nie === undefined) return PHASE;
+  return { ...PHASE, auftraege: PHASE.auftraege.map((auftrag) => ({ ...auftrag, wasDarfNiePassieren: nie })) };
+}
+
 function testEintrag(...namen) {
   return { dateien: { "test/text.test.js": textTest(...namen) }, antwort: ABSATZ };
 }
@@ -129,7 +134,7 @@ function starte(context, drehbuch, dateien = {}) {
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {
-    "phase.json": JSON.stringify(PHASE),
+    "phase.json": JSON.stringify(phaseMit(drehbuch.nie)),
     "drehbuch.json": JSON.stringify(drehbuch),
   });
   writeFileSync(join(werkzeug, "claude.mjs"), ERSATZ_CLAUDE, { mode: AUSFUEHRBAR });
@@ -311,4 +316,78 @@ test("auftrag-umbau-behalten: schreibt der Test-Agent auf dem alten Stand keine 
   for (const name of TEST_PRUEFUNGEN) assert.ok(exitCodes(beleg, name).every((exitCode) => exitCode === 0), `${name}: ${exitCodes(beleg, name)}`);
   assert.equal(agentenMit(beleg, "bau").length, 1, "der Bau-Agent wurde mehr als einmal gerufen");
   assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
+});
+
+const SATZ = "gross liefert immer einen Text.";
+const SCHUTZ_ABSATZ = "Zweck schutztests: Drehbuchtext des Ersatz-Agenten.";
+const SCHUTZTEST = 'test("[NIE1] gross liefert einen Text", () => assert.equal(typeof gross("b"), "string"));';
+const OHNE_UEBERLEBENDE = { "test/text.test.js": textTest("leer", "umlaut") };
+const MIT_SCHUTZTEST = { dateien: { "test/text.test.js": `${textTest("leer", "umlaut")}${SCHUTZTEST}\n` }, antwort: SCHUTZ_ABSATZ };
+
+test("auftrag-umbau-behalten: hat der Umbau Sätze in wasDarfNiePassieren, schreibt der Test-Agent ihre Schutztests auf dem alten Stand auch ohne überlebende Mutanten", (context) => {
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], test: [MIT_SCHUTZTEST] }, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(agentenMit(beleg, "test").length, 1, "der Test-Agent lief nicht");
+  pruefeGesichert(werkzeug, 0);
+  const aufgabe = lesePrompt(werkzeug, 0);
+  for (const erwartet of [`[NIE1] ${SATZ}`, "gegen den alten Stand grün"]) assert.ok(aufgabe.includes(erwartet), `der Test-Agent bekam nicht: ${erwartet}`);
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0, 0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
+  assert.ok(gitAusgabe(repo, "show", "HEAD^:test/text.test.js").includes(SCHUTZTEST));
+  assert.equal(gitAusgabe(repo, "show", "HEAD:src/text.js"), NEU);
+  assert.equal(beleg.ergebnis, "grün");
+});
+
+test("auftrag-umbau-behalten: ohne Sätze in wasDarfNiePassieren und ohne überlebende Mutanten läuft kein Test-Agent", (context) => {
+  const { repo, lauf, basis, beleg, ausgabe } = starte(context, { nie: [], bau: [BAU] }, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(agentenMit(beleg, "test").length, 0, "der Test-Agent lief ohne Anlass");
+  assert.deepEqual(exitCodes(beleg, "schutztests"), []);
+  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
+});
+
+test("auftrag-umbau-behalten: schreibt der Test-Agent zu einem Satz aus wasDarfNiePassieren keinen Schutztest, bleibt der Umbau rot und unkommittet", (context) => {
+  const ohneSchutztest = { dateien: OHNE_UEBERLEBENDE, antwort: SCHUTZ_ABSATZ };
+  const drehbuch = { nie: [SATZ], bau: [BAU, BAU], test: [ohneSchutztest, ohneSchutztest], notiz: [{ antwort: "Notiz des Ersatzes." }] };
+  const { repo, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, EXIT_ROT, ausgabe);
+  assert.ok(agentenMit(beleg, "test").length > 0, "der Test-Agent lief nicht");
+  assert.equal(exitCodes(beleg, "schutztests")[0], EXIT_ROT, JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
+  assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
+});
+
+test("auftrag-umbau-behalten: stehen die Schutztests aus einer roten Runde schon im Branch, verlangt die nächste Runde sie nicht noch einmal", (context) => {
+  const mitKaputtemPatch = { ...MIT_SCHUTZTEST, dateien: { ...MIT_SCHUTZTEST.dateien, [PATCH]: "kein gültiger Patch\n" } };
+  const zweiterBau = { ...BAU, antwort: "Zweck keine änderung: Drehbuchtext des Ersatz-Agenten." };
+  const drehbuch = { nie: [SATZ], bau: [BAU, {}, zweiterBau], test: [mitKaputtemPatch], notiz: [{ antwort: "Notiz des Ersatzes." }] };
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(existsSync(join(werkzeug, "prompt-test-1.txt")), false, "der Test-Agent wurde in der zweiten Runde noch einmal gerufen");
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
+});
+
+test("auftrag-umbau-behalten: überleben Mutanten und hat der Umbau Sätze in wasDarfNiePassieren, bekommt ein Test-Agent beide Aufgaben in einem Auftrag", (context) => {
+  const beides = { dateien: MIT_SCHUTZTEST.dateien, antwort: `${ABSATZ}\n\n${SCHUTZ_ABSATZ}` };
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], test: [beides] });
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(agentenMit(beleg, "test").length, 1, "die Aufgaben gingen nicht in einen Auftrag");
+  const aufgabe = lesePrompt(werkzeug, 0);
+  for (const erwartet of [LEER_MUTANT, UMLAUT_MUTANT, `[NIE1] ${SATZ}`]) assert.ok(aufgabe.includes(erwartet), `der Test-Agent bekam nicht: ${erwartet}`);
+  assert.deepEqual(exitCodes(beleg, "mutation alter Stand"), [EXIT_ROT, 0]);
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0, 0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
+  assert.ok(gitAusgabe(repo, "show", "HEAD^:test/text.test.js").includes(SCHUTZTEST));
+});
+
+test("auftrag-umbau-behalten: bricht der eingespielte Umbau einen Schutztest, der auf dem alten Stand grün war, bleibt der Umbau rot und unkommittet", (context) => {
+  const schutzDatei = ['import assert from "node:assert/strict";', 'import { test } from "node:test";', 'import { gross } from "../src/text.js";', 'test("[NIE1] gross behält führende Leerzeichen", () => assert.equal(gross(" a"), " A"));', ""].join("\n");
+  const mitSchutzDatei = { dateien: { "test/text-schutz.test.js": schutzDatei }, antwort: SCHUTZ_ABSATZ };
+  const bricht = { dateien: { "src/text.js": "export function gross(text) {\n  return text.trim().toLocaleUpperCase();\n}\n" } };
+  const drehbuch = { nie: [SATZ], bau: [bricht, bricht], test: [mitSchutzDatei], notiz: [{ antwort: "Notiz des Ersatzes." }] };
+  const { repo, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, EXIT_ROT, ausgabe);
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [EXIT_ROT], JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
+  assert.ok(exitCodes(beleg, "abnahme").every((exitCode) => exitCode === 0), "der Umbau scheiterte schon an der Abnahme");
+  assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
 });

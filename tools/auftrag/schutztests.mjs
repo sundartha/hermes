@@ -5,7 +5,7 @@ import { EXIT_GRUEN, EXIT_ROT, gueltigerAuftrag, meldeBefunde } from "./befehle.
 import { geaenderteFaelle } from "./faelle.mjs";
 import { istAusfuehrbarerTest } from "./format.mjs";
 import { aenderungenSeit } from "./git.mjs";
-import { satzNummer, schutzSaetze, traegtKennung } from "./schutzkennung.mjs";
+import { satzKennung, satzNummer, schutzSaetze, traegtKennung } from "./schutzkennung.mjs";
 
 const NIE_ABNAHME = "Ein Schutztest zählt nie als Abnahme.";
 
@@ -29,7 +29,7 @@ function pflichtBefunde(faelle, { saetze, rolle }) {
   return saetze.flatMap((satz, index) => {
     const nummer = index + 1;
     if (faelle.some((fall) => zaehlt(fall, nummer))) return [];
-    return [`Der Satz [NIE${nummer}] „${satz}“ hat keinen neuen Testfall mit der Kennung [NIE${nummer}] am Namensanfang${zustand}.`];
+    return [`Der Satz ${satzKennung(nummer)} „${satz}“ hat keinen neuen Testfall mit der Kennung ${satzKennung(nummer)} am Namensanfang${zustand}.`];
   });
 }
 
