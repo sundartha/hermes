@@ -1,0 +1,18 @@
+{
+  "titel": "Neue Speicherfunktion als Export in src/store/json.js statt unter src/store/zustand/",
+  "vorher": {
+    "src/store/json.js": [
+      "export function load() {}"
+    ],
+    "tools/basis/sammeldatei-exporte.json": [
+      "[\"src/store/json.js#load\"]"
+    ]
+  },
+  "dateien": {
+    "src/store/json.js": [
+      "export function load() {}",
+      "export function markiere() {}"
+    ]
+  },
+  "erwartet": "neuer Export „markiere“"
+}

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { bausteinBefunde } from "./abhaengigkeiten/bausteine.mjs";
 import { aufDerBasis, bestaendeNurKuerzer, imArbeitsbaum } from "./abhaengigkeiten/bestaende.mjs";
 import { run } from "./abhaengigkeiten/prozess.mjs";
+import { sammeldateiBefunde, sammeldateiZusammenfassung } from "./abhaengigkeiten/sammeldatei-exporte.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
 import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
@@ -134,6 +135,7 @@ export const BEFUNDQUELLEN = [
   { zweck: "basis/bausteine-zuordnung", befunde: ({ bausteine }) => bausteine.zuordnung },
   { zweck: "basis/bausteine-eingaenge", befunde: ({ bausteine }) => bausteine.eingaenge },
   { zweck: "basis/bausteine-richtung", befunde: ({ bausteine }) => bausteine.richtung },
+  { zweck: "basis/sammeldatei-exporte", befunde: ({ basis }) => sammeldateiBefunde(basis) },
 ];
 
 function reportFindings(sources) {
@@ -164,6 +166,8 @@ async function main() {
   for (const state of states) console.log(summary(state));
   console.log(order.zusammenfassung);
   if (bausteine.zusammenfassung !== undefined) console.log(bausteine.zusammenfassung);
+  const sammeldateien = sammeldateiZusammenfassung();
+  if (sammeldateien !== undefined) console.log(sammeldateien);
   return EXIT_OK;
 }
 

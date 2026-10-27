@@ -54,7 +54,7 @@ function exportDerDeklaration(anweisung) {
   return { namen: klausel.elements.filter(({ isTypeOnly }) => !isTypeOnly).map(({ name }) => name.text), sterne: [] };
 }
 
-function exportDerAnweisung(anweisung) {
+export function exportDerAnweisung(anweisung) {
   if (ts.isExportAssignment(anweisung)) return { namen: [STANDARDEXPORT], sterne: [] };
   if (ts.isExportDeclaration(anweisung)) return exportDerDeklaration(anweisung);
   const arten = new Set((ts.canHaveModifiers(anweisung) ? (ts.getModifiers(anweisung) ?? []) : []).map(({ kind }) => kind));
