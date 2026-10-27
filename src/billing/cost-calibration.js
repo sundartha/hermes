@@ -28,19 +28,20 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
   TARIFF_DRIFT_FINDING.CONVERSION_ERROR,
 ]);
 
-function isDriftSample(call, prefix) {
-  return (
-    istBeweisendeHerkunft(call.costTruedSource) &&
-    hasCountryPrefix(call.to, prefix) &&
-    hasCountryPrefix(call.from, prefix)
-  );
-}
-
 function providerMicroCentsPerMinOf(call) {
   const minutes = voiceMinutesOf(call);
   if (minutes <= 0) return null;
   if (!Number.isSafeInteger(call.actualCostMicroCents) || call.actualCostMicroCents < 0) return null;
   return Math.ceil(call.actualCostMicroCents / minutes);
+}
+
+function isDriftSample(call, prefix) {
+  return (
+    istBeweisendeHerkunft(call.costTruedSource) &&
+    hasCountryPrefix(call.to, prefix) &&
+    hasCountryPrefix(call.from, prefix) &&
+    providerMicroCentsPerMinOf(call) !== null
+  );
 }
 
 export function nearestRankWert(werte, percent) {
