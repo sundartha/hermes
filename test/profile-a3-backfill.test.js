@@ -133,3 +133,94 @@ test("CLI ist im json-Backend ein No-Op (exit 0, store.json nicht erzeugt)", asy
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+async function pgBestand(mandanten) {
+  const { makePgTestStore } = await import("./pg-helpers.js");
+  const { store, db } = await makePgTestStore();
+  for (const { id, kyc = KYC_LEVEL.CARD, planSlug, subscriptionId } of mandanten) {
+    await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active')`, [id]);
+    await store.ensureTenant(id);
+    if (kyc) store.setKycLevel(id, kyc);
+    if (planSlug || subscriptionId) store.setTenantSubscription(id, { planSlug, subscriptionId });
+  }
+  await store.save();
+  return store;
+}
+
+test("Resolver ohne Antwort setzt keinen planSlug und meldet kein reconciled (skip no_plan)", async () => {
+  const store = await pgBestand([{ id: "t_a", subscriptionId: "sub_x" }]);
+  const r = await backfillPlanProfiles({ store, apply: true, resolvePlanSlug: async () => null });
+  assert.deepEqual(r.reconciled, [], "ein Resolver ohne Slug darf nichts nachholen");
+  assert.deepEqual(r.skipped, [
+    { id: BOOTSTRAP_TENANT_ID, reason: BACKFILL_SKIP.BOOTSTRAP },
+    { id: "t_a", reason: BACKFILL_SKIP.NO_PLAN },
+  ]);
+  assert.equal(store.tenantSubscription("t_a").planSlug ?? null, null);
+  assert.equal(store.load().profiles["t_a"], undefined);
+});
+
+test("gemischter Bestand: Bericht folgt der Mandantenreihenfolge (Bootstrap plus sechs Mandanten)", async () => {
+  const store = await pgBestand([
+    { id: "t_ns", kyc: null, planSlug: "starter" },
+    { id: "t_np" },
+    { id: "t_new" },
+    { id: "t_same", planSlug: "business" },
+    { id: "t_old" },
+    { id: "t_rec", subscriptionId: "sub_rec" },
+  ]);
+  await backfillPlanProfiles({ store, apply: true });
+  store.setTenantSubscription("t_new", { planSlug: "starter" });
+  store.setTenantSubscription("t_old", { planSlug: "business" });
+  store.setProfile("t_old", { unrestricted: true, maxCallsPerHour: 99 });
+  await store.save();
+
+  const r = await backfillPlanProfiles({ store, apply: true, resolvePlanSlug: async () => "business" });
+  assert.deepEqual(r, {
+    apply: true,
+    scanned: 7,
+    changes: [
+      { id: "t_new", hadExisting: false },
+      { id: "t_old", hadExisting: true },
+      { id: "t_rec", hadExisting: false },
+    ],
+    unchanged: [{ id: "t_same" }],
+    skipped: [
+      { id: BOOTSTRAP_TENANT_ID, reason: BACKFILL_SKIP.BOOTSTRAP },
+      { id: "t_ns", reason: BACKFILL_SKIP.NOT_SUBSCRIBER },
+      { id: "t_np", reason: BACKFILL_SKIP.NO_PLAN },
+    ],
+    reconciled: [{ id: "t_rec" }],
+  });
+});
+
+test("Reconcile fragt den Resolver nacheinander je Mandant und schreibt dazwischen das Profil", async () => {
+  const store = await pgBestand([
+    { id: "t_a", subscriptionId: "sub_a" },
+    { id: "t_b", subscriptionId: "sub_b" },
+  ]);
+  const ablauf = [];
+  const gemeldet = new Set();
+  const neueProfile = () => {
+    for (const id of ["t_a", "t_b"]) {
+      if (store.load().profiles[id] && !gemeldet.has(id)) {
+        gemeldet.add(id);
+        ablauf.push(`setProfile ${id}`);
+      }
+    }
+  };
+  let laufend = 0;
+  let hoechstens = 0;
+  const resolvePlanSlug = async (subscriptionId) => {
+    neueProfile();
+    ablauf.push(`resolve ${subscriptionId}`);
+    laufend++;
+    hoechstens = Math.max(hoechstens, laufend);
+    await new Promise((weiter) => setImmediate(weiter));
+    laufend--;
+    return "starter";
+  };
+  await backfillPlanProfiles({ store, apply: true, resolvePlanSlug });
+  neueProfile();
+  assert.equal(hoechstens, 1, "Resolver-Aufrufe dürfen nicht gleichzeitig laufen");
+  assert.deepEqual(ablauf, ["resolve sub_a", "setProfile t_a", "resolve sub_b", "setProfile t_b"]);
+});
