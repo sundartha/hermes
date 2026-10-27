@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { config } from "../../src/config.js";
 import {
   applyStripeWebhook,
   interpretStripeEvent,
@@ -400,4 +404,169 @@ test("werfendes messaging() (fehlender Bootstrap-Absender) beeintraechtigt die A
   const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true trotz fehlendem Absender");
   assert.equal(calls.length, 0, "kein Absender -> kein Versand");
+});
+
+const VERWORFEN_MELDUNG = "verworfenes Zahlungsereignis nennt Art und Ereignis-ID nicht";
+const VERWORFEN_GEIST_TENANT = "t_verworfen_geist";
+const BEKANNTER_KUNDE = "cus_verworfen_bekannt";
+
+config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-verworfen-"));
+const speicher = await import("../../src/store.js");
+speicher.load().numbers.push(BOOTSTRAP_SENDER);
+speicher.save();
+if (!fs.existsSync(path.join(config.server.dataDir, "store.json"))) {
+  throw new Error("Vorbedingung: der JSON-Speicher schreibt nicht ins Wegwerf-Verzeichnis");
+}
+
+function speicherStand() {
+  return {
+    imSpeicher: JSON.stringify(speicher.load()),
+    aufPlatte: fs.readFileSync(path.join(config.server.dataDir, "store.json"), "utf8"),
+  };
+}
+
+function speicherRoute(audit, messaging) {
+  return webhookRoute({
+    secret: ROUTE_SECRET,
+    audit,
+    store: speicher,
+    platformAlertSmsTo: ALARM_SMS_TO,
+    messaging,
+  });
+}
+
+async function sendeEreignis(ereignis) {
+  const { audit, calls: auditCalls } = makeAuditSpy();
+  const { calls: smsCalls, messaging } = fakeMessaging();
+  const vorher = speicherStand();
+  const res = await postSignedBody(speicherRoute(audit, messaging), JSON.stringify(ereignis), ROUTE_SECRET);
+  await speicher.drainFlushes();
+  const zeilen = auditCalls.map(([event, , detail]) => [event, detail]);
+  return { res, zeilen, smsCalls, vorher, nachher: speicherStand() };
+}
+
+function ignoriertDetail(zeilen) {
+  const zeile = zeilen.find(([event]) => event === "stripe_money_event_ignored");
+  assert.ok(zeile, "Auditzeile stripe_money_event_ignored fehlt");
+  return zeile[1];
+}
+
+test("verworfene Erstattung ohne Tenant: Audit nennt type= und event= vor no_tenant", async () => {
+  const ergebnis = await sendeEreignis({
+    id: "evt_verworfen_ohne_tenant",
+    type: "charge.refunded",
+    data: { object: { customer: "cus_verworfen_ohne_tenant" } },
+  });
+  assert.deepEqual(ergebnis.res.body, { received: true });
+  assert.deepEqual(ergebnis.nachher, ergebnis.vorher, "kein Schreibzugriff auf den Speicher");
+  assert.equal(
+    ignoriertDetail(ergebnis.zeilen),
+    "type=charge.refunded event=evt_verworfen_ohne_tenant no_tenant",
+    VERWORFEN_MELDUNG,
+  );
+});
+
+test("verworfene Erstattung mit unbekanntem tenant_ref: Audit nennt type= und event= vor unknown_tenant", async () => {
+  const ergebnis = await sendeEreignis({
+    id: "evt_verworfen_geist",
+    type: "charge.refunded",
+    data: { object: { customer: "cus_verworfen_geist", metadata: { tenant_ref: VERWORFEN_GEIST_TENANT } } },
+  });
+  assert.deepEqual(ergebnis.res.body, { received: true });
+  assert.deepEqual(ergebnis.nachher, ergebnis.vorher, "kein Schreibzugriff auf den Speicher");
+  assert.equal(
+    ignoriertDetail(ergebnis.zeilen),
+    `type=charge.refunded event=evt_verworfen_geist tenant=${VERWORFEN_GEIST_TENANT} unknown_tenant`,
+    VERWORFEN_MELDUNG,
+  );
+});
+
+test("verworfene Rückbuchung ohne Tenant: keine Alarm-SMS, Audit nennt type= und event=", async () => {
+  const ergebnis = await sendeEreignis({
+    id: "evt_verworfen_dispute",
+    type: "charge.dispute.created",
+    data: { object: { customer: "cus_verworfen_dispute" } },
+  });
+  assert.deepEqual(ergebnis.res.body, { received: true });
+  assert.equal(ergebnis.smsCalls.length, 0, "keine Alarm-SMS fuer ein verworfenes Ereignis");
+  assert.equal(
+    ignoriertDetail(ergebnis.zeilen),
+    "type=charge.dispute.created event=evt_verworfen_dispute no_tenant",
+    VERWORFEN_MELDUNG,
+  );
+});
+
+test("[NIE1] Zahlungsereignisse ohne Tenant: received:true, Speicher unveraendert, keine Alarm-SMS", async () => {
+  const ereignisse = [
+    { id: "evt_nie1_dispute", type: "charge.dispute.created", data: { object: { customer: "cus_nie1_dispute" } } },
+    { id: "evt_nie1_aktion", type: "invoice.payment_action_required", data: { object: { customer: "cus_nie1_aktion" } } },
+    {
+      id: "evt_nie1_geist",
+      type: "charge.dispute.created",
+      data: { object: { customer: "cus_nie1_geist", metadata: { tenant_ref: "t_nie1_geist" } } },
+    },
+  ];
+  for (const ereignis of ereignisse) {
+    const ergebnis = await sendeEreignis(ereignis);
+    assert.deepEqual(ergebnis.res.body, { received: true }, `${ereignis.id}: Antwort received:true`);
+    assert.deepEqual(ergebnis.nachher, ergebnis.vorher, `${ereignis.id}: kein Schreibzugriff`);
+    assert.equal(ergebnis.smsCalls.length, 0, `${ereignis.id}: keine Alarm-SMS`);
+  }
+});
+
+test("[NIE2] Auditzeile des verworfenen Ereignisses behaelt den Grund und nennt keine Kunden-ID", async () => {
+  const ohneTenant = await sendeEreignis({
+    id: "evt_nie2_ohne",
+    type: "customer.subscription.paused",
+    data: { object: { customer: "cus_nie2_ohne" } },
+  });
+  const ohneDetail = ignoriertDetail(ohneTenant.zeilen);
+  assert.match(ohneDetail, /(^| )no_tenant$/, "Grund no_tenant bleibt am Ende der Zeile");
+  assert.equal(ohneDetail.includes("cus_nie2_ohne"), false, "keine Kunden-ID in der Zeile");
+
+  const geist = await sendeEreignis({
+    id: "evt_nie2_geist",
+    type: "charge.refunded",
+    data: { object: { customer: "cus_nie2_geist", metadata: { tenant_ref: "t_nie2_geist" } } },
+  });
+  const geistDetail = ignoriertDetail(geist.zeilen);
+  assert.match(geistDetail, /(^| )tenant=t_nie2_geist unknown_tenant$/, "Grund unknown_tenant bleibt");
+  assert.equal(geistDetail.includes("cus_nie2_geist"), false, "keine Kunden-ID in der Zeile");
+});
+
+test("[NIE3] stripe_money_event-Zeile und aufgeloeste Zahlungsereignisse bleiben wie bisher", async () => {
+  const verworfen = await sendeEreignis({
+    id: "evt_nie3_verworfen",
+    type: "charge.refunded",
+    data: { object: { customer: "cus_nie3_verworfen" } },
+  });
+  assert.deepEqual(verworfen.zeilen[0], [
+    "stripe_money_event",
+    "type=charge.refunded event=evt_nie3_verworfen action=revoke_period_credit",
+  ]);
+
+  speicher.setTenantStripe(BOOTSTRAP_SENDER.tenantId, { customerId: BEKANNTER_KUNDE });
+  const erstattung = await sendeEreignis({
+    id: "evt_nie3_erstattung",
+    type: "charge.refunded",
+    data: { object: { customer: BEKANNTER_KUNDE } },
+  });
+  assert.deepEqual(erstattung.res.body, { received: true });
+  assert.deepEqual(erstattung.zeilen, [
+    ["stripe_money_event", "type=charge.refunded event=evt_nie3_erstattung action=revoke_period_credit"],
+  ]);
+  assert.equal(speicher.tenantSubscription(BOOTSTRAP_SENDER.tenantId).periodCreditRevoked, true);
+  assert.equal(erstattung.smsCalls.length, 0, "Erstattung ohne Alarm");
+
+  const rueckbuchung = await sendeEreignis({
+    id: "evt_nie3_dispute",
+    type: "charge.dispute.created",
+    data: { object: { customer: BEKANNTER_KUNDE } },
+  });
+  assert.deepEqual(rueckbuchung.zeilen, [
+    ["stripe_money_event", "type=charge.dispute.created event=evt_nie3_dispute action=warn"],
+  ]);
+  assert.deepEqual(rueckbuchung.nachher, rueckbuchung.vorher, "Rueckbuchung schreibt nichts");
+  assert.equal(rueckbuchung.smsCalls.length, 1, "aufgeloeste Rueckbuchung alarmiert weiter");
+  assert.match(rueckbuchung.smsCalls[0].body, /type=charge\.dispute\.created tenant=owner$/);
 });

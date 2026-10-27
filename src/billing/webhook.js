@@ -325,7 +325,11 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
     () => (customerId && store.findTenantByCustomer(customerId)?.id) || null,
   );
   if (!tenant) {
-    audit("stripe_money_event_ignored", req, unresolvedTenantDetail(unresolved, tenantRef));
+    audit(
+      "stripe_money_event_ignored",
+      req,
+      `type=${eventType} event=${eventId} ${unresolvedTenantDetail(unresolved, tenantRef)}`,
+    );
     return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
   }
   applyMoneyAction(store, tenant, moneyAction);
