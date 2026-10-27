@@ -209,3 +209,62 @@ test("B4A-BOOT-5: die ausgelieferte Konfiguration startet und nennt im Banner ih
     await srv.stop();
   }
 });
+
+const { outboundCallsSeed } = await import("./helpers.js");
+
+const UNZUORDENBARER_KOSTEN_TYP = "inference";
+const CALLS_GESAMT = 5;
+const CALLS_BEWIESEN = 1;
+
+test("[NIE1] fataler Befund der Kostendecken-, Kurs- oder STT-Pruefung: Exit 1 und Abbruchzeile mit der Befund-Meldung", async () => {
+  const faelle = [
+    {
+      env: { DEFAULT_TENANT_BUDGET_CENTS: "500", VOICE_TARIFF_DEFAULT_CENTS: "300" },
+      abbruchzeile: /^\[boot\] Start abgebrochen: .*DEFAULT_TENANT_BUDGET_CENTS=500/m,
+    },
+    {
+      env: { PROVIDER_TO_BUCKET_RATE_MICRO: "920" },
+      abbruchzeile: /^\[boot\] Start abgebrochen: PROVIDER_TO_BUCKET_RATE_MICRO=920 liegt ausserhalb/m,
+    },
+    {
+      env: { STT_PROFILE: "nova3" },
+      abbruchzeile: /^\[boot\] Start abgebrochen: STT_PROFILE='nova3' ist unbekannt/m,
+    },
+  ];
+  for (const { env, abbruchzeile } of faelle) {
+    const { code, output } = await startServerExpectExit({ env });
+    assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+    assert.match(output, abbruchzeile);
+    assert.doesNotMatch(output, /Gateway laeuft/);
+  }
+});
+
+test("[NIE2] Start ohne fatalen Befund: keine Konfig-Warnung aus Kurs- oder STT-Pruefung", async () => {
+  const srv = await startServer({
+    env: { PROVIDER_TO_BUCKET_RATE_MICRO: "920000", STT_PROFILE: "accurate" },
+  });
+  try {
+    assert.equal((await abrufMitFrist(`${srv.localUrl}/healthz`)).status, 200);
+    const warnzeilen = srv.stdout.split("\n").filter((zeile) => /\[boot\] Konfig-Warnung/.test(zeile));
+    assert.ok(
+      warnzeilen.some((zeile) => /DEFAULT_TENANT_BUDGET_CENTS=0/.test(zeile)),
+      `Kostendecken-Warnung bleibt, Output:\n${srv.stdout}`,
+    );
+    for (const zeile of warnzeilen) {
+      assert.doesNotMatch(zeile, /PROVIDER_TO_BUCKET_RATE_MICRO|STT_PROFILE/);
+    }
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("[NIE3] fataler Befund neben nicht fatalem: vor dem Abbruch keine Konfig-Warnung aus derselben Befundliste", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: `sip-trunking,${UNZUORDENBARER_KOSTEN_TYP}` },
+    seed: outboundCallsSeed(CALLS_GESAMT, CALLS_BEWIESEN, "call_nie3_"),
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /^\[boot\] Start abgebrochen: COST_TRUING_REQUIRED_RECORD_TYPES fordert/m);
+  assert.doesNotMatch(output, /Konfig-Warnung: .*Deckungsquote/);
+});
