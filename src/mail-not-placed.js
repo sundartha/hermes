@@ -9,6 +9,7 @@ function notPlacedMailDebounced(calls, call, windowMs = NOT_PLACED_MAIL_DEBOUNCE
   if (Number.isNaN(endedMs)) return false;
   return calls.some((other) => {
     if (other.id === call.id || other.tenantId !== call.tenantId) return false;
+    if (other.direction !== "outbound") return false;
     if (failureReasonBase(other.failureReason) !== NOT_PLACED) return false;
     const otherMs = Date.parse(other.endedAt || "");
     return !Number.isNaN(otherMs) && otherMs < endedMs && endedMs - otherMs <= windowMs;
