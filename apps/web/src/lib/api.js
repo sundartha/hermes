@@ -294,14 +294,18 @@ export function turnRoleLabel(turn) {
   return tDyn({ en: TURN_ROLE_LABELS, de: TURN_ROLE_LABELS_DE }, key);
 }
 
+const TIME_PART_WIDTH = 2;
+
+function padTimePart(value) {
+  return String(value).padStart(TIME_PART_WIDTH, "0");
+}
+
 export function turnTimeLabel(turn) {
-  const at = turn && turn.at;
-  if (!at) return "";
-  const d = new Date(at);
-  if (Number.isNaN(d.getTime())) return "";
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  const timestamp = turn && turn.at;
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${padTimePart(date.getHours())}:${padTimePart(date.getMinutes())}`;
 }
 
 export function callSummary(call) {
