@@ -25,7 +25,7 @@ import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStuec
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
-import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
+import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { hatMutanten } from "./mutationspruefung/vorplanung.mjs";
@@ -128,7 +128,6 @@ const AUFRUF = [
 const LOG_AUSWERTUNG = "log-auswertung";
 const BETRIEBSARTEN = [...VORHER_ARTEN, "testumbau", "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
-const ERSTER_LAUF = "erster Lauf";
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
 
 function git(args, verzeichnis = cwd()) {
