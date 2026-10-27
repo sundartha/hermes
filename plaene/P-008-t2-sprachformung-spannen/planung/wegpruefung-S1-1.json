@@ -1,0 +1,50 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/voice.js:397"
+    },
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/claude.js:673"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:5"
+    },
+    {
+      "schluessel": "weg:B4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:5"
+    },
+    {
+      "schluessel": "weg:B6",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/voice.js:288"
+    },
+    {
+      "schluessel": "weg:B8",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/tts/directive-synth.js:21"
+    },
+    {
+      "schluessel": "weg:B9",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-shape.js:10"
+    },
+    {
+      "schluessel": "weg:T1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/telephony/adapters/telnyx/render.js:49"
+    },
+    {
+      "schluessel": "weg:T3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "docs/sicherheitsgrenzen.md:39"
+    }
+  ],
+  "befunde": []
+}

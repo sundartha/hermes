@@ -1,0 +1,163 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:673"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/voice.js:397"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/claude.js:673"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-chunker.js:33"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "weg:B4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "weg:B6",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/voice.js:288"
+  },
+  {
+    "schluessel": "weg:B8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/tts/directive-synth.js:21"
+  },
+  {
+    "schluessel": "weg:B9",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:10"
+  },
+  {
+    "schluessel": "weg:T1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/adapters/telnyx/render.js:49"
+  },
+  {
+    "schluessel": "weg:T3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "docs/sicherheitsgrenzen.md:39"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B6",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B9",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "tools/katalog-pruefen.mjs:210"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:9"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B2:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B4:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "ausweg:B4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B6:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B8:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:B9:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:T1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:T3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Folgende Sätze aus den Dokumenten stehen bei keinem Auftrag. a1 kann jeden von ihnen in src/speech-shape.js brechen. Bitte in `wasDarfNiePassieren` von a1 aufnehmen: (1) pitch.md, ## Absicht: „Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern.“ (2) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: eine sprachabhängige Ersetzung der Spanne („bis“, „to“, „à“), weil die Formung die Sprache des Anrufs nicht kennt und „9-18“ die Form ist, die die Sprachausgabe heute schon bekommt.“ (3) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ (4) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: Spannen mit Einheit an beiden Enden („9 Uhr - 18 Uhr“, „9 h - 18 h“, „9 am - 5 pm“), weil sie sich ohne Wort- und Sprachwissen nicht von „Termin am Montag - 18 Uhr“ (B4) unterscheiden lassen und die Formung die Sprache des Anrufs nicht kennt.“ (5) pitch.md, ## Fallen: „Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).“ Der T3-Test misst nur die Zeit. Die Regel gegen verschachtelte Wiederholungen prüft er nicht. (6) pitch.md, ## Fallen: „Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).“ Das ist wichtig, weil der Erkundungsbericht zu S3 vorschlägt, zusätzlich über `makeSentenceChunker` aus src/speech-chunker.js zu prüfen.",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

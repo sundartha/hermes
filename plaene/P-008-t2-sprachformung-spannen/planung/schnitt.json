@@ -1,0 +1,123 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Der Umbau von `shapedCore` (src/speech-shape.js:9-12) entfällt. Teil t1 ist im Stand enthalten, und die Formung steht schon als Schrittliste `SHAPE_STEPS`. Die Funktionsliste ist leer, und für src/speech-shape.js steht laut Bericht nichts in eslint-suppressions.json. Die neue Regel kommt als weiterer Schritt vor den Schritt „ - “ → „, “ und braucht keine Umstellung bestehenden Codes."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Alle Nummern liegen in einem Auftrag, weil `shapeForSpeech` und `shapeChunkForSpeech` `shapedCore` teilen. Schon die einfachste Spannenregel macht S1, S2 und S3 zugleich grün, ein späterer Auftrag für S2 oder S3 hätte also keinen Abnahmetest, der vorher rot ist. B6, B8, B9 und T1 bricht genau diese Regel, und T3 hängt an ihrer Umsetzung. Ein eigener Durchstich ohne diese Regel hätte eine Zwischenfassung mit gemischten Trennzeichen in Kartennummern committet (sicherheit.md, T1). Der Auftrag bleibt weit unter 200 Zeilen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Abnahmetest ruft die Formung als Tabelle reiner Fachlogik auf, wie der Pitch es vorsieht (Grobe Lösung, Fallen). S3 prüft er über `shapeChunkForSpeech`, die übrigen Nummern über `shapeForSpeech`. Laut Bericht ist der Eingang damit im Test erreichbar."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Test zu T3 steht in der Abnahmedatei unter test/anrufe/, weil test/sicherheit/ in tools/bereiche.json kein bereich ist. Sein Name beginnt mit „SG-27 “, damit die Katalogzeile des Owners einen Test findet. Laut Bericht beanstandet tools/katalog-pruefen.mjs einen Test ohne Katalogzeile nicht, deshalb ist a1 auch vor der Katalogzeile grün."
+    },
+    {
+      "auftrag": "a1",
+      "text": "docs/sicherheitsgrenzen.md steht in `.github/CODEOWNERS` und gehört zu keinem Auftrag. Damit ist der Bereichskonflikt zu T3 gelöst: a1 ändert nur src/speech-shape.js. Die beiden Einträge aus der Sicherheitsprüfung, Abschnitt 5, trägt der Owner nach."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [
+    {
+      "aufgabe": "Neue Katalogzeile SG-27 in docs/sicherheitsgrenzen.md (Abschnitt 5): Angriff, verletzte Grenze, Mechanismus wie in der Sicherheitsprüfung. Fünf Spalten, die letzte beginnt mit „SG-27 “ und nennt den Test zu T3 aus test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js. Ist SG-27 dann vergeben, nimm die nächste freie Kennung und benenne den Test entsprechend.",
+      "fundstelle": "sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md",
+      "auftrag": "a1"
+    },
+    {
+      "aufgabe": "Neue Vertrauensannahme zu SG-13 in docs/sicherheitsgrenzen.md: Was die Sprachformung (src/speech-shape.js) aus Ziffernfolgen macht, erkennt die Maskierung (src/restricted-data.js) weiterhin. Negativtest: die Szenarien zu T1 und T2 (Pitch B8, B9, B10).",
+      "fundstelle": "sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md",
+      "auftrag": "a1"
+    }
+  ],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Sprachformung macht Zahl - Zahl zur Spanne, Ketten bleiben Komma",
+      "bereich": "src/speech-shape.js",
+      "erwarteteDateien": [
+        "src/speech-shape.js",
+        "test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js"
+      ],
+      "abnahme": "test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js",
+      "erwarteterFehler": "Geöffnet 9-18 Uhr.",
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "B2",
+        "B4",
+        "B6",
+        "B8",
+        "B9",
+        "T1",
+        "T3"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Im Zweifel bleibt das heutige Verhalten für alles, was weder Ziffer-Strich-Ziffer noch Unterstrich mitten im Wort ist.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Die Reihenfolge der Ersetzungen bestimmt das Ergebnis (Listenzeichen am Zeilenanfang → Markdown-Zeichen → Gedankenstrich → Leerraum): Der Umbau behält diese Reihenfolge; die Spannenregel greift vor der Regel „ - “ → „, “, und Listenzeichen am Zeilenanfang werden weiter zuerst entfernt, so dass „9“ am Zeilenende und „- 18“ in der nächsten Zeile keine Spanne bilden.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "„Zahl“ in R1 heißt: eine Folge aus Ziffern 0–9, in der zwischen zwei Ziffern ein `:` oder `.` stehen darf („9“, „9:30“, „18.00“); „grenzt durch Leerraum an eine weitere Zahl“ heißt: vor der linken Zahl steht Leerraum und davor wieder eine Ziffer, oder hinter der rechten Zahl steht Leerraum und dahinter wieder eine Ziffer (B6). „030 - 123456“ wird damit zur Spanne „030-123456“ (Premortem Nr. 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die neuen Regeln laufen auf Text, den Anrufer und Angerufene über das Modell beeinflussen, im einzigen Prozess für alle Mandanten: Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Ein Unterstrich mit einem Buchstaben oder einer Ziffer direkt davor und direkt danach bleibt stehen, außer auf beiden Seiten steht eine Ziffer.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Anforderungen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine sprachabhängige Ersetzung der Spanne („bis“, „to“, „à“), weil die Formung die Sprache des Anrufs nicht kennt und „9-18“ die Form ist, die die Sprachausgabe heute schon bekommt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Gedankenstriche „–“ (U+2013) und „—“ (U+2014), weil sie heute unverändert durchgehen und ihre Aussprache eine eigene Entscheidung ist.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: Spannen mit Einheit an beiden Enden („9 Uhr - 18 Uhr“, „9 h - 18 h“, „9 am - 5 pm“), weil sie sich ohne Wort- und Sprachwissen nicht von „Termin am Montag - 18 Uhr“ (B4) unterscheiden lassen und die Formung die Sprache des Anrufs nicht kennt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}

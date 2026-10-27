@@ -1,0 +1,45 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S2",
+        "B2",
+        "B4",
+        "B6",
+        "B8",
+        "B9",
+        "T1",
+        "T3"
+      ],
+      "eingang": "Ganze Antwort des Sprachmodells eines Gesprächszugs: `shapeForSpeech` (`src/claude.js:673`, auch `src/thinking-signal.js:10`) ruft `shapedCore` in `src/speech-shape.js` (Zeilen 1-10, Aufruf in 12-21); der geformte Text geht auf dem Telnyx-Weg als `<Say>` an die Sprachausgabe (`src/routes/voice.js:284-288`). Laut Pitch prüfen die Abnahmetests die Formung als Tabelle reiner Fachlogik (Eingabetext → Text an die Sprachausgabe) und importieren nur `src/speech-shape.js`.",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie sieht `shapedCore` in `src/speech-shape.js` heute aus (Zeilen, jede `.replace` mit Muster und Ersetzung, Reihenfolge)? Diese Phase ist Teil t2 nach Teil t1 `P-008-t1-sprachformung-unterstrich` (Unterstrich-Regel R2: Unterstrich zwischen Buchstabe/Ziffer bleibt, außer zwischen zwei Ziffern). Ist t1 im Stand schon enthalten, also steht die Unterstrich-Ausnahme bereits in `shapedCore`, oder fällt `_` noch mit `[*_#\\`]` ganz weg (laut Design Doc Zeile 5)?",
+        "Ist `shapedCore` heute schon lintfrei umgebaut, oder steht in `eslint-suppressions.json` (laut Design Doc um Zeile 774) noch eine Unterdrückung `no-restricted-syntax` (Demeter G36, verkettete Zugriffe) für `src/speech-shape.js` mit Zähler 2? Welche Zeilen von `shapedCore` lösen die Befunde aus?",
+        "Welche bestehenden Tests rufen `shapeForSpeech` oder `shapedCore` auf (laut Design Doc `test/shape-for-speech.test.js:16-22` und `test/anrufe/sprechausgabe.test.js:59-62`, ggf. weitere aus t1)? Nenne je Test Pfad, Testname und die geprüften Eingaben/Ausgaben, insbesondere ob einer schon „Wort - Wort“ → „Wort, Wort“, „14-15 Uhr“ unverändert, Listenzeichen am Zeilenanfang (auch eingerückt mit `[ \\t]*`) oder Kartennummern prüft, und ob einer davon heute grün ist und ohne Produktänderung als Abnahmetest eines verhaltensgleichen Umbaus von `shapedCore` taugt.",
+        "Ist `test/anrufe/` als Ordner für neue Abnahmetests vorhanden, und importiert `test/anrufe/sprechausgabe.test.js` nur `src/speech-shape.js` (keine anderen Module unter `src/`)? Die Regel `tests-nur-ueber-eingaenge` in `.dependency-cruiser.cjs:51-57` soll laut Design Doc nur `fachlogik`-Module wie `src/speech-shape.js` als Direktimport erlauben; bestätige das.",
+        "Was prüft `tools/katalog-pruefen.mjs` an den Zeilen 24 und 110 genau? Der Pitch verlangt eine neue Katalogzeile SG-27 in `docs/sicherheitsgrenzen.md` (Abschnitt 5, Sicherheitsprüfung) und einen Test, dessen Name mit „SG-27 “ beginnt (Test zu T3: 500 Ziffern bzw. 250 Ziffern mit Punkt/Doppelpunkt, dann „ - Uhr“, Formung in unter 1 s). Wird der Katalog rot, wenn ein Test „SG-27 …“ existiert, aber die Zeile in `docs/sicherheitsgrenzen.md` fehlt, oder umgekehrt? Ist SG-27 in `docs/sicherheitsgrenzen.md` noch frei, und ist SG-26 schon vergeben? Steht die Vertrauensannahme zu SG-13 (Formung bleibt für die Maskierung erkennbar) schon dort?",
+        "Wie erkennt `maskRestrictedText` in `src/restricted-data.js` Kartennummern (Zeilen um 18, 35, 109-114, 122, 142-159)? Bestätige, dass „4111, 1111, 1111, 1111“ maskiert wird und eine Mischung aus Bindestrich und Komma („4111-1111, 1111-1111“) nicht; nur als Hintergrund, die Maskierung soll sich nicht ändern.",
+        "Rufen `src/claude.js:673` und `src/thinking-signal.js:10` `shapeForSpeech` mit dem rohen Modelltext auf, ohne eigene Vor- oder Nachbearbeitung von Strichen oder Unterstrichen? Gibt es irgendwo sonst in `src/` eine zweite Stelle, die „ - “ oder `_` in gesprochenem Text ersetzt?"
+      ]
+    },
+    {
+      "nummern": [
+        "S3"
+      ],
+      "eingang": "Streaming-Weg von `agentTurn`: der Satz-Schneider `src/speech-chunker.js` (Schnitt hinter `.!?…` mit folgendem Leerraum, Zeilen 5 und 14-24) übergibt jedes Häppchen an `shapeChunkForSpeech` (`src/speech-chunker.js:33`), das wie `shapeForSpeech` `shapedCore` in `src/speech-shape.js` ruft (Zeilen 12-21); heute schaltet kein Live-Aufrufer den Weg ein (`src/routes/voice.js:396` ruft `agentTurn` ohne `onSpeechChunk`). Laut Pitch prüft der Abnahmetest die Formung als Tabelle reiner Fachlogik und importiert nur `src/speech-shape.js`.",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Was macht `shapeChunkForSpeech` in `src/speech-shape.js` genau (Zeilen, Unterschied zu `shapeForSpeech`: entfernt es Satzzeichen am Ende oder hängt es einen Punkt an)? Ergibt `shapeChunkForSpeech(\"Kosten 10 - 20 Euro.\")` heute „Kosten 10, 20 Euro.“, also nur die Strich-Regel als Unterschied zum Ziel „Kosten 10-20 Euro.“?",
+        "Teilen `shapeForSpeech` und `shapeChunkForSpeech` dieselbe Funktion `shapedCore` ohne eigene Strich- oder Unterstrich-Regeln, so dass eine Änderung an `shapedCore` beide Wege gleich trifft? Diese Phase ist Teil t2 nach Teil t1 `P-008-t1-sprachformung-unterstrich`; ist dessen Änderung (Unterstrich mitten im Wort bleibt) schon im Stand, und hat sie `shapeChunkForSpeech` berührt?",
+        "Welche bestehenden Tests rufen `shapeChunkForSpeech` oder den Satz-Schneider in `src/speech-chunker.js` auf (Pfad, Testname, geprüfte Eingaben)? Gibt es einen Test, der `agentTurn` mit `onSpeechChunk` und einer Modell-Attrappe mit gewähltem gestreamtem Text fährt, oder ist der direkte Aufruf von `shapeChunkForSpeech` aus einem Test unter `test/anrufe/` der einzige Weg?",
+        "Schneidet `src/speech-chunker.js` den Text „Kosten 10 - 20 Euro.“ als ein einziges Häppchen (kein Schnitt an „ - “ oder zwischen Ziffern), und ist dafür keine Änderung am Schneider nötig? Der Pitch verbietet Änderungen an `src/speech-chunker.js`, `src/claude.js` und `src/thinking-signal.js`."
+      ]
+    }
+  ]
+}
