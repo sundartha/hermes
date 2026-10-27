@@ -14,6 +14,8 @@ const IN_CI = ["--in-ci"];
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
+const AM_BUDGET = /^Abbruch: Budget\b.*kein Urteil\.$/m;
+const BUDGET_ZEILEN = /^((?:Vorschau |Abbruch: Budget\b|Mutationslog: Ende nach ).*)$/gm;
 const ABLAGE = "auftrag-umbau";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
@@ -43,6 +45,16 @@ function abbruchExit(exitCode) {
   return exitCode !== 0 && exitCode !== EXIT_UEBERLEBT;
 }
 
+function amBudget(ausgabe) {
+  return AM_BUDGET.test(ausgabe);
+}
+
+function budgetEnde(lauf, name, ausgabe) {
+  const { phase, auftrag } = lauf.kontext;
+  const grund = `${name} am Budget beendet, kein Urteil; die Prüfung läuft nicht noch einmal.`;
+  return lauf.entscheidungNoetig({ kopf: `Auftrag ${auftrag.id} der Phase ${phase.phase}: ${grund}`, anlass: grund, verlauf: [grund, ...treffer(ausgabe, BUDGET_ZEILEN)] });
+}
+
 function mutationsBefehl(lauf, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
@@ -51,6 +63,7 @@ function mutationsBefehl(lauf, argumente) {
 
 function ausgewertet(lauf, name, { exitCode, ausgabe }) {
   if (exitCode === 0) return { ende: true };
+  if (amBudget(ausgabe)) return { ende: budgetEnde(lauf, name, ausgabe) };
   if (abbruchExit(exitCode)) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
   return { ueberlebende: treffer(ausgabe, UEBERLEBT), ausgabe };
 }
@@ -58,7 +71,8 @@ function ausgewertet(lauf, name, { exitCode, ausgabe }) {
 function mutanten(lauf, name, argumente) {
   const befehl = mutationsBefehl(lauf, argumente);
   const erster = lauf.pruefung(name, befehl);
-  return ausgewertet(lauf, name, abbruchExit(erster.exitCode) ? lauf.pruefung(name, befehl) : erster);
+  const wiederholen = abbruchExit(erster.exitCode) && !amBudget(erster.ausgabe);
+  return ausgewertet(lauf, name, wiederholen ? lauf.pruefung(name, befehl) : erster);
 }
 
 function vorgemerkterCodestand(lauf) {
