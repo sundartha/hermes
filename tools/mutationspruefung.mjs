@@ -30,6 +30,7 @@ import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
 import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
 import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
@@ -119,6 +120,8 @@ const ERSTLAUF_MITSCHRIFT = [];
 const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const VORHER_AUS_CI = "vorher-aus-ci";
+const IN_CI = "in-ci";
+const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig"];
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
@@ -128,11 +131,12 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
 const TESTUMBAU = "testumbau";
-const BETRIEBSARTEN = [...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
+const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
@@ -846,10 +850,19 @@ function ausCiAufrufGueltig(values) {
   return values.basis !== undefined && allein && ohneAndereBetriebsart(values);
 }
 
+function inCiAufrufGueltig(values) {
+  return values.basis !== undefined && nurAngegeben(values, IN_CI_OPTIONEN);
+}
+
 function aufrufGueltig(values) {
+  if (values[IN_CI]) return inCiAufrufGueltig(values);
   if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
   if (vorher.length > 0) return vorher.length === 1 && vorherAufrufGueltig(values, vorher[0]);
+  return messAufrufGueltig(values);
+}
+
+function messAufrufGueltig(values) {
   if (NUR_VORHER.some((name) => values[name] !== undefined)) return false;
   const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
   const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length + Number(values.testumbau);
@@ -923,17 +936,30 @@ function startkopf(values) {
   return { betriebsart: betriebsart(values), basis: values.basis, commit: kopf.status === 0 ? kopf.stdout.trim() : null };
 }
 
-function nurLogAuswertung(values) {
-  return Object.entries(values).every(([name, wert]) => name === LOG_AUSWERTUNG || wert === false || (Array.isArray(wert) && wert.length === 0));
+function nurAngegeben(values, namen) {
+  return Object.entries(values).every(([name, wert]) => namen.includes(name) || wert === false || (Array.isArray(wert) && wert.length === 0));
 }
 
 function werteLogAus(values) {
-  if (!nurLogAuswertung(values)) {
+  if (!nurAngegeben(values, [LOG_AUSWERTUNG])) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
   console.log(logAuswertung(values[LOG_AUSWERTUNG]).join("\n"));
   return EXIT_GRUEN;
+}
+
+async function urteilAusCi(values) {
+  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], gleichwertige: values.gleichwertig });
+  console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
+  return ergebnis.lokal === undefined ? ergebnis.exitCode : undefined;
+}
+
+async function eigenerAblauf(values) {
+  if (values[IN_CI]) return urteilAusCi(values);
+  if (values[VORHER_AUS_CI] !== undefined) return vorherEinlesen(values);
+  if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
+  return undefined;
 }
 
 async function main() {
@@ -946,6 +972,7 @@ async function main() {
       "vorher-stueck": { type: "string" },
       "vorher-zusammen": { type: "string" },
       [VORHER_AUS_CI]: { type: "string" },
+      [IN_CI]: { type: "boolean", default: false },
       "alter-stand": { type: "boolean", default: false },
       testumbau: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
@@ -963,8 +990,8 @@ async function main() {
     return EXIT_ABBRUCH;
   }
   beginneLog(() => join(legeSandboxordnerAn(WURZEL), LOGORDNER), startkopf(values));
-  if (values[VORHER_AUS_CI] !== undefined) return vorherEinlesen(values);
-  if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
+  const eigener = await eigenerAblauf(values);
+  if (eigener !== undefined) return eigener;
   SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();
   if (values.testumbau) {
