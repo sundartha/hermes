@@ -40,7 +40,10 @@ const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
-const KOPIEN_BASIS = "tools/basis/jscpd.json";
+const BASIS_VERGLEICHE = [
+  { name: MELDUNG.JSCPD, liste: "tools/basis/jscpd.json", art: "Kopien" },
+  { name: MELDUNG.SEMGREP, liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep", fehlt: MELDUNG.SEMGREP_FEHLT },
+];
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
@@ -387,11 +390,16 @@ class AuftragsLauf {
     return this.einmalHinweisen(`Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`);
   }
 
-  kopien() {
-    if (gibtEsIn(this.basis, KOPIEN_BASIS, this.kontext.root)) {
-      return this.gruen(MELDUNG.JSCPD, [execPath, BASIS_VERGLEICH, "jscpd", "--basis", this.basis], befundOhneZweck);
-    }
-    return this.einmalHinweisen(`Kopien: ${KOPIEN_BASIS} fehlt auf der Basis.`);
+  basisVergleiche() {
+    return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
+  }
+
+  basisVergleich({ name, liste, art, werkzeug, fehlt }) {
+    const { root } = this.kontext;
+    if (!gibtEsIn(this.basis, liste, root)) return this.einmalHinweisen(`${art}: ${liste} fehlt auf der Basis.`);
+    const [laeuftNicht] = werkzeug === undefined ? [] : werkzeugBefunde(root, [werkzeug]);
+    if (laeuftNicht !== undefined) return this.scheitert(laeuftNicht, fehlt);
+    return this.gruen(name, [execPath, BASIS_VERGLEICH, name, "--basis", this.basis], befundOhneZweck);
   }
 
   einmalHinweisen(hinweis) {
@@ -493,7 +501,7 @@ class AuftragsLauf {
           () => this.agent("test", testAgentPrompt(this.kontext)),
           () => this.grenzen("test", this.basis),
           () => this.statischeTestpruefung(),
-          () => this.kopien(),
+          () => this.basisVergleiche(),
           () => this.faelleErhalten(),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.abhaengigkeiten(),
@@ -519,7 +527,7 @@ class AuftragsLauf {
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
-      () => this.kopien(),
+      () => this.basisVergleiche(),
       () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
