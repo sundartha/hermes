@@ -90,7 +90,7 @@ async function meldeAbweichungen({ store, config, audit, messaging, mailer, befu
     });
 }
 
-async function schliesseMarker({ store, istZuSchliessen, nowMs }) {
+export async function schliesseMarker({ store, istZuSchliessen, nowMs }) {
   const geschlossen = await store.withStoreLock(() => {
     const state = store.load();
     const offene = state.outageAlerts.filter(
