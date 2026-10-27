@@ -375,3 +375,25 @@ test("PII: der Bericht enthaelt weder Call-ID noch Tenant-ID noch Rufnummer", ()
   assert.ok(!roh.includes(GEHEIME_TENANT_ID), "keine Tenant-ID");
   assert.ok(!roh.includes(GEHEIME_RUFNUMMER), "keine Rufnummer");
 });
+
+test("unbeschaffbarer Anruf im Herzschlagfenster: kein Herzschlag-Eintrag, kein erfassung-tot, Deckung unbeschaffbar", () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const anruf = beendeterAnruf(state, { nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: DREI_STUNDEN_MIN });
+  anruf.elevenlabsConversationId = "conv_unbeschaffbar";
+  const billing = testConfig({ costSettleDeadlineHours: 1 }).billing;
+
+  const ohneDeckungsfenster = kostenBuchBericht({ state, billing, nowMs, deckungFensterMs: MINUTE_MS });
+  assert.deepEqual(ohneDeckungsfenster.deckung, [], "Deckungsfenster kuerzer als die Karenz: kein Deckungs-Eintrag");
+
+  const bericht = berichtFuer(state, nowMs, billing);
+  assert.deepEqual(bericht.herzschlag, [], "der unbeschaffbare Anruf zaehlt nicht fuer den Herzschlag");
+  assert.equal(
+    bericht.befunde.some((befund) => befund.code.startsWith(KOSTEN_BEFUND.ERFASSUNG_TOT)), false,
+    "kein erfassung-tot fuer einen unbeschaffbaren Anruf",
+  );
+  const deckEintrag = bericht.deckung.find((zeile) => zeile.traeger === KOSTENART.ELEVENLABS_CONVAI);
+  assert.deepEqual(deckEintrag, {
+    traeger: KOSTENART.ELEVENLABS_CONVAI, kandidaten: 0, belegt: 0, offen: 0, unbeschaffbar: 1, prozent: null,
+  });
+});
