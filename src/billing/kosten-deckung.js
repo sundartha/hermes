@@ -73,12 +73,15 @@ function deckungTraegerEintrag({ zeilen, traeger, unbeschaffbarerAnruf, bisher }
   return eintrag;
 }
 
+function anrufeImFenster({ calls, index, fen }) {
+  if (!fen) return [];
+  const beendet = calls.filter((call) => imFenster(call.endedAt, fen));
+  return beendet.map((call) => ({ call, zeilen: index.get(call.id) ?? [] }));
+}
+
 function deckungJeTraeger({ calls, index, fen, nowMs, deadlineMs }) {
   const ergebnis = new Map();
-  if (!fen) return ergebnis;
-  for (const call of calls) {
-    if (!imFenster(call.endedAt, fen)) continue;
-    const zeilen = index.get(call.id) ?? [];
+  for (const { call, zeilen } of anrufeImFenster({ calls, index, fen })) {
     const unbeschaffbarerAnruf = istUnbeschaffbarerAnruf({ call, zeilen, nowMs, deadlineMs });
     for (const traeger of traegerVon(call)) {
       ergebnis.set(traeger, deckungTraegerEintrag({ zeilen, traeger, unbeschaffbarerAnruf, bisher: ergebnis.get(traeger) }));
@@ -89,10 +92,7 @@ function deckungJeTraeger({ calls, index, fen, nowMs, deadlineMs }) {
 
 function herzschlagJeTraeger({ calls, index, fen, nowMs, deadlineMs }) {
   const ergebnis = new Map();
-  if (!fen) return ergebnis;
-  for (const call of calls) {
-    if (!imFenster(call.endedAt, fen)) continue;
-    const zeilen = index.get(call.id) ?? [];
+  for (const { call, zeilen } of anrufeImFenster({ calls, index, fen })) {
     if (istUnbeschaffbarerAnruf({ call, zeilen, nowMs, deadlineMs })) continue;
     for (const traeger of traegerVon(call)) {
       const eintrag = ergebnis.get(traeger) ?? { beendet: 0, angelegt: 0 };
