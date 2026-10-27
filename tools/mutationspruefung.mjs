@@ -31,7 +31,7 @@ import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
-import { budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
+import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -475,9 +475,14 @@ async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
 function alterStand(commit) {
   const verzeichnis = legeArbeitsordnerAn(arbeitsverzeichnis("alter-stand-"), commit);
   chdir(verzeichnis);
-  return () => {
+  const aufraeumen = () => {
     chdir(WURZEL);
     entferneArbeitsordner(verzeichnis);
+  };
+  const abmelden = beimHalt(aufraeumen);
+  return () => {
+    abmelden();
+    aufraeumen();
   };
 }
 
@@ -616,6 +621,7 @@ async function messe(einheiten, { graph, auswahl, seite }) {
   if (gemessen.length === 0) return ergebnisse;
   await vorschauDerSeite(gemessen, { nachDatei, graph, seite });
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
+  const abmelden = loeschung === null ? null : beimHalt(loeschung.abbauen);
   try {
     for (const [index, anteil] of gemessen.entries()) {
       dateiBeginnt(anteil.datei, { nummer: index + 1, von: gemessen.length, seite });
@@ -625,6 +631,7 @@ async function messe(einheiten, { graph, auswahl, seite }) {
     }
     return ergebnisse;
   } finally {
+    abmelden?.();
     loeschung?.abbauen();
   }
 }
@@ -893,7 +900,7 @@ async function vorherEinlesen(values) {
 
 async function gemesseneSperre(anlass) {
   const beginn = Date.now();
-  await nimmSperreAuchFuerKindprozesse(anlass);
+  await anDerSperre(() => nimmSperreAuchFuerKindprozesse(anlass));
   notiereSperre(Date.now() - beginn);
 }
 

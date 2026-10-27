@@ -26,7 +26,11 @@ const LANGSAMSTE = 5;
 const PROZENT = 100;
 export const PHASEN = { sperre: "Sperre", testauswahl: "Testauswahl", sandbox: "Sandbox", erstlauf: "Erstlauf", mutanten: "Mutantenläufe", loeschprobe: "Löschprobe" };
 
-const log = { datei: null, begonnen: false, beginn: Date.now(), letzteZeile: Date.now(), phasen: leerePhasen(), laeufe: new Map(), aktuell: null };
+const log = { datei: null, begonnen: false, beginn: Date.now(), letzteZeile: Date.now(), phasen: leerePhasen(), laeufe: new Map(), aktuell: null, fertig: leeresTeilergebnis() };
+
+function leeresTeilergebnis() {
+  return { laeufe: 0, mutanten: 0, getoetet: 0, dateien: 0 };
+}
 
 function leerePhasen() {
   return Object.fromEntries(Object.keys(PHASEN).map((phase) => [phase, 0]));
@@ -116,6 +120,7 @@ export function dateiEndet(ergebnisse, ueberlebt) {
   const ms = Date.now() - beginn;
   const ueberlebend = ergebnisse.filter(ueberlebt).length;
   schreibe("datei", { ...aktuell, ms, ergebnisse: ergebnisse.length, ueberlebt: ueberlebend });
+  log.fertig.dateien += 1;
   melde(`${ort(aktuell.datei)} fertig in ${dauer(ms)}: ${aktuell.laeufe} Stryker-Läufe, ${ergebnisse.length} Ergebnisse, ${ueberlebend} überlebt`);
   log.aktuell = null;
 }
@@ -214,6 +219,7 @@ function laufFertig(lauf, ergebnisse, fehler) {
   }
   const status = zaehle(ergebnisse);
   const zahlen = { mutanten: ergebnisse.length, getoetet: status[GETOETET] ?? 0, ueberlebt: ergebnisse.filter(lauf.ueberlebt).length, zeitueberschreitung: status[ZEITUEBERSCHREITUNG] ?? 0 };
+  log.fertig = { ...log.fertig, laeufe: log.fertig.laeufe + 1, mutanten: log.fertig.mutanten + zahlen.mutanten, getoetet: log.fertig.getoetet + zahlen.getoetet };
   schreibe("stryker", { datei, anlass, testdateien, tests, geplant, ms: jetzt - lauf.beginn, ...zeiten, ...zahlen, status, langsamste, ...(fehler ? { fehler: fehler.message } : {}) });
   const teile = `Sandbox ${dauer(zeiten.ms_sandbox)}, Erstlauf ${dauer(zeiten.ms_erstlauf)}, Mutanten ${dauer(zeiten.ms_mutanten)}`;
   const ausgang = fehler ? `abgebrochen: ${fehler.message}` : `${zahlen.getoetet} getötet, ${zahlen.ueberlebt} überlebt, ${zahlen.zeitueberschreitung} Zeitüberschreitung`;
@@ -236,8 +242,17 @@ export function strykerLauf({ datei, anlass, testdateien }, ueberlebt) {
   };
 }
 
+export function notiereBudget(halt) {
+  const laufend = [...log.laeufe.values()].map(({ datei, anlass, geplant, getestet }) => ({ datei, anlass, geplant, getestet }));
+  schreibe("budget", { ...halt, fertig: log.fertig, laufend, aktuell: log.aktuell?.datei ?? null });
+  const { laeufe, mutanten, getoetet, dateien } = log.fertig;
+  const ort = log.datei === null ? "kein Zeit-Log" : `Zeit-Log ${relative(cwd(), log.datei)}`;
+  return `Teilergebnis bis zum Halt: ${laeufe} Stryker-Läufe fertig mit ${mutanten} Mutanten, davon ${getoetet} getötet, ${dateien} Dateien ganz geprüft, ${laufend.length} Läufe abgebrochen; ${ort}`;
+}
+
 export function beendeLog(exit) {
   if (!log.begonnen) return;
+  log.begonnen = false;
   const ms = Date.now() - log.beginn;
   schreibe("ende", { ms, exit, phasen: log.phasen });
   const anteile = Object.entries(PHASEN).map(([phase, name]) => `${name} ${anteil(log.phasen[phase], ms)}`);

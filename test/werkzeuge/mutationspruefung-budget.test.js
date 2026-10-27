@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { BASIS, EXIT_ABBRUCH, NEGATIV, quelle, testdatei } from "./mutationspruefung-hilfen.js";
-import { commitAll, outputLines, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { BASIS, bisBeendet, EXIT_ABBRUCH, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
+import { commitAll, outputLines, probeDirectory, probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
 import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-lauf.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
+const EINE_SEKUNDE = fileURLToPath(new URL("mutationspruefung-budget-ersatz.mjs", import.meta.url));
+const HAENGER = fileURLToPath(new URL("mutationspruefung-budget-haenger-ersatz.mjs", import.meta.url));
+const HAENGER_BUDGET_MS = 5000;
 const LOGORDNER = ".mutationspruefung/log";
 const VIELE_ZEILEN = 600;
 const URTEIL = /^(?:grün|rot): /m;
@@ -26,6 +30,10 @@ const BUDGET_UMGEBUNG = [
 const SEHR_VIEL = "999999999";
 const UNLESBAR = "  const grenze = (;";
 const UNTERGRENZE = /^Vorschau Seite neu: 1 Quelldateien, 1 Testdateien, 1 Testgruppen, 0 Mutanten, Mutanten in 1 Quelldateien nicht zählbar, Schätzung mindestens/m;
+const PS_FEHLT = /^Prozessliste nicht lesbar \(.+\); Kindprozesse bleiben unbeendet\.$/m;
+const LOESCHPROBE = /^Löschprobe src\/zahl\.js:\d+: Gruppe 1 von 1/m;
+const NUR_EIGENTUEMER = 0o600;
+const IMMER = 1000;
 
 function vieleMutanten() {
   return Array.from({ length: VIELE_ZEILEN }, (_leer, stelle) => `  if (zahl > ${stelle} && zahl < ${stelle + 2}) return "${stelle}";`);
@@ -121,4 +129,135 @@ test("eine nicht zählbare Quelldatei rechnet die Vorschau nicht als 0 Mutanten,
   assert.match(lauf.stdout, UNTERGRENZE, lauf.stdout);
   const [vorschau] = arten(logeintraege(repo), "vorschau");
   assert.deepEqual([vorschau.mutanten, vorschau.unzaehlbar], [0, 1], JSON.stringify(vorschau));
+});
+
+function kleinesRepo(context) {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  return repo;
+}
+
+function kleinerTestumbau(context) {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "test/zahl.test.js": `${BASIS["test/zahl.test.js"]}// umgebaut\n` });
+  commitAll(repo, "Testumbau");
+  return repo;
+}
+
+async function mitBudget(context, { ersatz, repo, env, vorab = [] }, argumente) {
+  const lauf = starte(["--import", ersatz, ...vorab, WERKZEUG, ...argumente], { env, cwd: repo });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  const [status] = await lauf.ende;
+  return { ...lauf, status };
+}
+
+function angehalten(lauf, repo) {
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, ABBRUCH_BUDGET, lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, URTEIL, lauf.stdout);
+  const eintraege = logeintraege(repo);
+  const [halt] = arten(eintraege, "budget");
+  assert.ok(halt.rechenzeit_ms >= halt.budget_ms, JSON.stringify(halt));
+  assert.deepEqual([eintraege.at(-1).art, eintraege.at(-1).exit], ["ende", EXIT_ABBRUCH], JSON.stringify(eintraege.at(-1)));
+  return halt;
+}
+
+function haengerProtokoll(context) {
+  const protokoll = join(probeDirectory(context, {}), "haenger");
+  return { protokoll, env: { ...umgebung(context, EIN_PLATZ), HAENGER_PROTOKOLL: protokoll } };
+}
+
+async function keinerLebt(protokoll) {
+  const kinder = outputLines(readFileSync(protokoll, "utf8")).map(Number);
+  assert.ok(kinder.length > 0, "der Ersatz-Stryker hat keinen Kindprozess gestartet");
+  for (const kind of kinder) assert.ok(await bisBeendet(kind), `Kindprozess ${kind} läuft nach dem Halt weiter`);
+}
+
+test("eine normale Mutation mit 1 s Budget an einer kleinen Quelldatei hält mit Exit 2 an, behält das Zeit-Log und meldet kein Urteil", async (context) => {
+  const repo = kleinesRepo(context);
+  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung(context, EIN_PLATZ) }, ["--basis", "HEAD"]), repo);
+});
+
+test("eine Testumbau-Mutation mit 1 s Budget hält mit Exit 2 an, behält das Zeit-Log und meldet kein Urteil", async (context) => {
+  const repo = kleinerTestumbau(context);
+  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung(context, EIN_PLATZ) }, ["--basis", "HEAD~1", "--testumbau"]), repo);
+});
+
+test("am Budget beendet die Mutationsprüfung jeden Kindprozess, den sie gestartet hat", async (context) => {
+  const repo = kleinesRepo(context);
+  const { protokoll, env } = haengerProtokoll(context);
+  angehalten(await mitBudget(context, { ersatz: HAENGER, repo, env }, ["--basis", "HEAD"]), repo);
+  await keinerLebt(protokoll);
+});
+
+test("das Warten an der Sperre zählt nicht zur Rechenzeit des Budgets", async (context) => {
+  const repo = kleinesRepo(context);
+  const { protokoll, env } = haengerProtokoll(context);
+  const gehalten = await halter(context, env);
+  const lauf = starte(["--import", HAENGER, WERKZEUG, "--basis", "HEAD"], { env, cwd: repo });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await wartet(lauf);
+  gehalten.kind.kill("SIGKILL");
+  const [status] = await lauf.ende;
+  const halt = angehalten({ ...lauf, status }, repo);
+  assert.equal(halt.budget_ms, HAENGER_BUDGET_MS);
+  assert.ok(halt.warten_ms > 0 && halt.ms_seit_start >= halt.budget_ms + halt.warten_ms, JSON.stringify(halt));
+  await keinerLebt(protokoll);
+});
+
+function keinArbeitsordner(repo) {
+  const arbeitsordner = outputLines(runIn(repo, "git", ["worktree", "list", "--porcelain"]).stdout).filter((zeile) => zeile.startsWith("worktree "));
+  assert.equal(arbeitsordner.length, 1, arbeitsordner.join("\n"));
+}
+
+test("hält die Testumbau-Mutation im alten Stand am Budget an, bleibt kein Arbeitsordner zurück", async (context) => {
+  const repo = kleinerTestumbau(context);
+  const { protokoll, env } = haengerProtokoll(context);
+  angehalten(await mitBudget(context, { ersatz: HAENGER, repo, env }, ["--basis", "HEAD~1", "--testumbau"]), repo);
+  await keinerLebt(protokoll);
+  keinArbeitsordner(repo);
+});
+
+function ohnePs(context) {
+  const nichtAusfuehrbar = join(probeDirectory(context, {}), "ps");
+  writeFileSync(nichtAusfuehrbar, "", { mode: NUR_EIGENTUEMER });
+  const umlenken = `import kindprozesse from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+const { spawnSync } = kindprozesse;
+kindprozesse.spawnSync = (datei, ...rest) => spawnSync(datei === "ps" ? ${JSON.stringify(nichtAusfuehrbar)} : datei, ...rest);
+syncBuiltinESMExports();`;
+  return ["--import", `data:text/javascript,${encodeURIComponent(umlenken)}`];
+}
+
+test("ohne lesbare Prozessliste hält die Mutationsprüfung am Budget trotzdem mit Exit 2 an und nennt das", async (context) => {
+  const repo = kleinesRepo(context);
+  const { protokoll, env } = haengerProtokoll(context);
+  const lauf = await mitBudget(context, { ersatz: HAENGER, repo, env, vorab: ohnePs(context) }, ["--basis", "HEAD"]);
+  for (const kind of outputLines(readFileSync(protokoll, "utf8")).map(Number)) process.kill(kind, "SIGKILL");
+  await keinerLebt(protokoll);
+  angehalten(lauf, repo);
+  assert.match(lauf.stderr, PS_FEHLT, lauf.stderr);
+});
+
+function strykerOhneMutanten() {
+  const stryker = `data:text/javascript,${encodeURIComponent("export class Stryker { runMutationTest() { return Promise.resolve([]); } }")}`;
+  const umlenken = `import { registerHooks } from "node:module";
+registerHooks({
+  resolve: (specifier, context, nextResolve) => (specifier === "@stryker-mutator/core" ? { url: ${JSON.stringify(stryker)}, shortCircuit: true } : nextResolve(specifier, context)),
+});`;
+  return ["--import", `data:text/javascript,${encodeURIComponent(umlenken)}`];
+}
+
+function haengtInDerLoeschprobe() {
+  return [`if (import.meta.url.includes("loeschprobe-")) setInterval(() => {}, ${IMMER});`, testdatei([-1, "negativ"], [1, "positiv"])].join("\n");
+}
+
+test("hält die normale Mutation während der Löschprobe am Budget an, bleibt kein Arbeitsordner zurück", async (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)), "test/zahl.test.js": haengtInDerLoeschprobe() });
+  writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const { env } = haengerProtokoll(context);
+  const lauf = await mitBudget(context, { ersatz: HAENGER, repo, env, vorab: strykerOhneMutanten() }, ["--basis", "HEAD"]);
+  angehalten(lauf, repo);
+  assert.match(lauf.stderr, LOESCHPROBE, lauf.stderr);
+  keinArbeitsordner(repo);
 });
