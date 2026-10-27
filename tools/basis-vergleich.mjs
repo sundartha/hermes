@@ -134,15 +134,19 @@ function byTokens(left, right) {
   return jscpdTokens(left) - jscpdTokens(right);
 }
 
-function jscpdShrunk(findings, freeKeys) {
+function jscpdShrunk(findings, freeKeys, unchangedKnownPair) {
   const free = freeKeys.toSorted(byTokens);
   const shrunk = { covered: [], keys: [] };
-  for (const finding of findings.toSorted((left, right) => byTokens(right.key, left.key))) {
-    const fits = (key) => jscpdPair(key) === jscpdPair(finding.key) && jscpdTokens(finding.key) <= jscpdTokens(key);
-    const index = free.findIndex(fits);
-    if (index === -1) continue;
+  const cover = (finding, fits) => {
+    const index = free.findIndex((key) => jscpdPair(key) === jscpdPair(finding.key) && fits(key));
+    if (index === -1) return;
     shrunk.covered.push(finding);
     shrunk.keys.push(...free.splice(index, 1));
+  };
+  const largestFirst = findings.toSorted((left, right) => byTokens(right.key, left.key));
+  for (const finding of largestFirst) cover(finding, (key) => jscpdTokens(finding.key) <= jscpdTokens(key));
+  for (const finding of largestFirst) {
+    if (!shrunk.covered.includes(finding) && unchangedKnownPair(finding.key)) cover(finding, () => true);
   }
   return shrunk;
 }
@@ -423,6 +427,23 @@ function onlyUnchangedFiles(root, basis, renames) {
   return (key) => jscpdPair(key).split(KEY_SEPARATOR).every((path) => !changed.has(path));
 }
 
+function unchangedKnownPair({ root, basis, toolName, tool }, baseline) {
+  const none = () => false;
+  if (basis === undefined || tool.shrunk === undefined) return none;
+  checkBasis(basis);
+  const before = baselineAt(basis, toolName);
+  if (before === undefined || before.version !== baseline.version) return none;
+  const unchanged = onlyUnchangedFiles(root, basis, []);
+  if (!unchanged(JSCPD_CONFIG_FILE)) return none;
+  const onBasis = new Set(before.befunde.map(jscpdPair));
+  return (key) => onBasis.has(jscpdPair(key)) && unchanged(key);
+}
+
+function onFirstUse(build) {
+  let decide;
+  return (key) => (decide ??= build())(key);
+}
+
 async function renamedBasisFindings({ root, basis, tool }) {
   if (basis === undefined || tool.renamedBasis !== true) return [];
   checkBasis(basis);
@@ -567,7 +588,8 @@ async function measure(context, baseline, renamed = []) {
   );
   const exact = innerhalb.map(findingKeyOf);
   const unmatched = aufgeteilt(baseline.befunde, exact, unveraendert).darueber;
-  const shrunk = tool.shrunk?.(darueber, unmatched) ?? NOTHING_SHRUNK;
+  const unchangedPair = onFirstUse(() => unchangedKnownPair(context, baseline));
+  const shrunk = tool.shrunk?.(darueber, unmatched, unchangedPair) ?? NOTHING_SHRUNK;
   const open = darueber.filter((finding) => !shrunk.covered.includes(finding));
   const renamedOnly = aufgeteilt(renamed, baseline.befunde, unveraendert).darueber;
   const byRename = aufgeteilt(open, renamedOnly, findingKeyOf);

@@ -4,7 +4,7 @@ import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { isolatedEnvironment, probeDirectory, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { commitAll, isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 const EXIT_OK = 0;
@@ -230,6 +230,75 @@ test("basis-vergleich: eine Basislinie ohne jscpd-Version ist rot", (context) =>
   const probed = probe(context, JSCPD, "jscpd");
   write(probed, JSCPD_BASIS, JSON.stringify({ befunde: jscpdBaseline(probed).befunde }));
   expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: installedJscpd() });
+});
+
+const BASIS_HEAD = ["--basis", "HEAD"];
+const REGRUPPIERTE_TOKENS = 2;
+const KEY_SEPARATOR = "|";
+
+function schreibeBefunde(probed, befunde) {
+  write(probed, JSCPD_BASIS, JSON.stringify({ ...jscpdBaseline(probed), befunde }));
+}
+
+function einmalEingefroren(context, files, befunde = mitWenigerTokens) {
+  const probed = { directory: probeRepository(context, { ".jscpd.json": REPO_JSCPD_CONFIG, ...files }) };
+  expectRun(probed, ["jscpd", CREATE], { status: EXIT_OK });
+  const gemeldet = jscpdBaseline(probed).befunde;
+  schreibeBefunde(probed, befunde(gemeldet));
+  commitAll(probed.directory, "Basislinie");
+  return { ...probed, gemeldet };
+}
+
+function mitWenigerTokens(gemeldet) {
+  return gemeldet.map((key) => {
+    const [erste, zweite, tokens] = key.split(KEY_SEPARATOR);
+    return [erste, zweite, Number(tokens) - REGRUPPIERTE_TOKENS].join(KEY_SEPARATOR);
+  });
+}
+
+const ANDERES_PAAR = "src/alt-a.js|src/alt-b.js|59";
+
+test("basis-vergleich: ein bekanntes Paar unveränderter Dateien ist mit mehr Tokens als in der Basislinie keine neue Kopie und nicht behoben", (context) => {
+  const probed = einmalEingefroren(context, JSCPD);
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_OK, shows: "0 neue Befunde, 1 bekannte", hides: SHORTEN });
+});
+
+test("basis-vergleich: ohne --basis ist dasselbe Paar mit mehr Tokens als in der Basislinie neu", (context) => {
+  const probed = einmalEingefroren(context, JSCPD);
+  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, sobald eine seiner Dateien seit der Basis geändert ist", (context) => {
+  const probed = einmalEingefroren(context, JSCPD);
+  write(probed, "src/eins.js", `${DUPLICATED_BLOCK}${OTHER_CODE}`);
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: ein Paar unveränderter Dateien ohne Eintrag in der Basislinie ist neu", (context) => {
+  const probed = einmalEingefroren(context, JSCPD, () => [ANDERES_PAAR]);
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: ein Paar, das erst die geänderte Basislinie kennt, ist neu", (context) => {
+  const probed = einmalEingefroren(context, JSCPD, () => [ANDERES_PAAR]);
+  schreibeBefunde(probed, [ANDERES_PAAR, ...mitWenigerTokens(probed.gemeldet)]);
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, sobald .jscpd.json seit der Basis geändert ist", (context) => {
+  const probed = einmalEingefroren(context, JSCPD);
+  const { ignore, ...rest } = JSON.parse(REPO_JSCPD_CONFIG);
+  write(probed, ".jscpd.json", JSON.stringify({ ...rest, ignore: [...ignore, "**/nichts/**"] }));
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
+});
+
+test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, wenn die Basis eine Basislinie für eine andere jscpd-Version hatte", (context) => {
+  const probed = einmalEingefroren(context, JSCPD);
+  const jetzt = jscpdBaseline(probed);
+  write(probed, JSCPD_BASIS, JSON.stringify({ ...jetzt, version: OTHER_VERSION }));
+  commitAll(probed.directory, "Basislinie einer anderen Version");
+  write(probed, JSCPD_BASIS, JSON.stringify(jetzt));
+  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
 });
 
 test("basis-vergleich: ohne Basislinie ist der Vergleich rot", (context) => {
