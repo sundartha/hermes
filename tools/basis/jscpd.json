@@ -127,7 +127,6 @@
     "scripts/spike1-b.mjs|scripts/spike1-ws-probe.mjs|92",
     "scripts/spike1-lab.mjs|scripts/spike1-setup.mjs|73",
     "scripts/spike2-sip.mjs|scripts/spike2-sip.mjs|68",
-    "src/billing/kosten-deckung.js|src/billing/kosten-deckung.js|67",
     "src/billing/subscribe.js|src/billing/subscribe.js|70",
     "src/mcp-tools.js|test/mcp-tool-annotations.test.js|198",
     "src/mcp-tools.js|test/mcp-tool-annotations.test.js|50",
