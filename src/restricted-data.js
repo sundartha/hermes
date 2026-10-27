@@ -513,6 +513,27 @@ export function maskRestrictedLines(lines) {
   return lines.map((line, index) => maskRestrictedText(line.prefix + texts[index]));
 }
 
+function hitKey(hit) {
+  return `${hit.category}:${hit.start}:${hit.end}`;
+}
+
+function isUnsafeAtCut(hit, cut, keptKeys) {
+  if (hit.start >= cut) return false;
+  return hit.end > cut || !keptKeys.has(hitKey(hit));
+}
+
+export function clampWithoutSplittingRestrictedData(text, maxChars) {
+  const fullHits = findRestrictedData(text);
+  let cut = Math.min(maxChars, text.length);
+  for (;;) {
+    const clamped = text.slice(0, cut);
+    const keptKeys = new Set(findRestrictedData(clamped).map(hitKey));
+    const unsafe = fullHits.findLast((hit) => isUnsafeAtCut(hit, cut, keptKeys));
+    if (!unsafe) return clamped;
+    cut = unsafe.start;
+  }
+}
+
 export function firstRestrictedField(value, exemptKeys) {
   return walkForRestrictedField(value, exemptKeys, { path: null, isTopLevel: true });
 }
