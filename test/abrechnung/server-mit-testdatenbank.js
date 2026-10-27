@@ -127,6 +127,7 @@ async function serverImportieren() {
   let server = null;
   const echtesListen = http.Server.prototype.listen;
   http.Server.prototype.listen = function listenMitzeichnen(...args) {
+    if (args[0] !== 0) throw new Error(`Testaufbau: Server soll auf einem freien Port (0) lauschen, bekommt ${String(args[0])}`);
     server = this;
     return echtesListen.apply(this, args);
   };
