@@ -219,6 +219,33 @@ test("eine T-Nummer ohne Änderungsstelle und ohne Ausweg ist ein Befund", (cont
   genau(befunde, "T1: ohne Änderungsstelle und ohne „keine Änderung, weil …“");
 });
 
+const OHNE_AENDERUNG = "keine Änderung, weil der Schutz schon in src/logik.js:2 steht";
+const TEXTFORM = "schreib aenderungen statt der Liste als Text „keine Änderung, weil …“";
+
+test("eine T-Nummer mit „keine Änderung, weil …“ ist grün und steht in den Annahmen", (context) => {
+  const { befunde, annahmen } = lauf(context, { T1: angaben({ aenderungen: OHNE_AENDERUNG }) }, { gruppe: ["T1"] });
+  assert.deepEqual(befunde, []);
+  assert.deepEqual(annahmen, [{ nummer: "T1", angabe: "aenderungen", text: OHNE_AENDERUNG }]);
+});
+
+test("ein Ausweg als Objekt in der Liste aenderungen ist ein Befund, der die Textform nennt", (context) => {
+  const eintrag = { datei: "src/logik.js", ausweg: OHNE_AENDERUNG, neueZeilen: 0 };
+  const { befunde, annahmen } = lauf(context, { T1: angaben({ aenderungen: [eintrag] }) }, { gruppe: ["T1"] });
+  genau(befunde, `T1 aenderungen[0]: ein Ausweg ist keine Änderungsstelle; ändert sich für T1 nichts, ${TEXTFORM}`);
+  assert.deepEqual(annahmen, []);
+});
+
+test("ein Ausweg als Text in der Liste aenderungen ist ein Befund, der die Textform nennt", (context) => {
+  const { befunde, annahmen } = lauf(context, { T1: angaben({ aenderungen: [OHNE_AENDERUNG] }) }, { gruppe: ["T1"] });
+  genau(befunde, TEXTFORM);
+  assert.deepEqual(annahmen, []);
+});
+
+test("ein anderer Text in der Liste aenderungen bleibt ein Befund ohne Objekt", (context) => {
+  const { befunde } = einzeln(context, { aenderungen: ["src/logik.js"] });
+  genau(befunde, "Änderungsstelle ist kein Objekt");
+});
+
 test("eine B-Nummer darf ohne Änderungsstelle bleiben", (context) => {
   const { befunde } = lauf(context, { B1: angaben({ aenderungen: [] }) }, { gruppe: ["B1"] });
   assert.deepEqual(befunde, []);

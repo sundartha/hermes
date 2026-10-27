@@ -252,6 +252,28 @@ test("Neuschnitt: der Erkunder bekommt Anlass, Verlauf und das ganze Design Doc,
   assert.equal(existsSync(join(lauf.wurzel, ORDNER, "planung")), false);
 });
 
+test("Neuschnitt: eine T-Nummer mit „keine Änderung, weil …“ endet grün, Planer und Prüfer sehen sie als Annahme", (context) => {
+  const ohneAenderung = `keine Änderung, weil der Schutz schon in ${ROUTE}:5 steht`;
+  const lauf = neuschnitt(context, { ueberschrieben: { "erkunder|## Nachfrage": [bericht(NUMMERN, { T1: { aenderungen: ohneAenderung } })] } });
+  exit(lauf, 0);
+  const { annahmen } = JSON.parse(readFileSync(join(lauf.ablage, "planung.json"), "utf8"));
+  assert.ok(annahmen.includes(`Annahme T1: ${ohneAenderung}`), annahmen.join("\n"));
+  const [{ eingabe: planer }] = aufrufe(lauf, "planer");
+  assert.ok(planer.includes(`Annahme T1: ${ohneAenderung}`), planer);
+  const [pruefung] = aufrufe(lauf, "pruefer-planung", "## Prüfung");
+  assert.ok(prueflisteDer(pruefung).includes("- ausweg:T1:aenderungen"), pruefung.eingabe);
+});
+
+test("Neuschnitt: ein Ausweg als Objekt in der Liste aenderungen geht mit der Textform an den Erkunder zurück", (context) => {
+  const eintrag = { datei: ROUTE, ausweg: `keine Änderung, weil der Schutz schon in ${ROUTE}:5 steht`, neueZeilen: 0 };
+  const falsch = bericht(NUMMERN, { T1: { aenderungen: [eintrag] } });
+  const lauf = neuschnitt(context, { ueberschrieben: { "erkunder|## Nachfrage": [falsch], "erkunder|## Befunde": [falsch, falsch] } });
+  exit(lauf, 4);
+  const [rueckfrage] = aufrufe(lauf, "erkunder", "## Befunde");
+  assert.ok(rueckfrage.eingabe.includes("T1 aenderungen[0]: ein Ausweg ist keine Änderungsstelle; ändert sich für T1 nichts, schreib aenderungen statt der Liste als Text „keine Änderung, weil …“"), rueckfrage.eingabe);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
+});
+
 test("Neuschnitt: ein offener Befund der Wegprüfung endet mit Exit 4 vor dem Planer", (context) => {
   const ueberschrieben = { "pruefer-planung|## Wegprüfung": [{ ...GRUEN_PRUEFLISTE, befunde: { "weg:S2": "der Weg endet nicht im Speicher" } }], "erkunder|## Befunde": [alsJson({}), alsJson({})] };
   const lauf = neuschnitt(context, { ueberschrieben });

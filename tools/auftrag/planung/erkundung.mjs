@@ -216,7 +216,12 @@ function neueAenderungBefund(ort, stelle, kontext) {
   return neueStelleBefund(ort, stelle, kontext) ?? vorhandenBefund(ort, stelle, kontext);
 }
 
+function istAuswegEintrag(stelle) {
+  return istObjekt(stelle) ? stelle.ausweg !== undefined : typeof stelle === "string" && AUSWEG.test(stelle);
+}
+
 function aenderungBefund(ort, stelle, kontext) {
+  if (istAuswegEintrag(stelle)) return `${ort}: ein Ausweg ist keine Änderungsstelle; ändert sich für ${kontext.nummer} nichts, schreib aenderungen statt der Liste als Text „keine Änderung, weil …“, sonst nenn die Stelle mit datei und funktion`;
   if (!istObjekt(stelle)) return `${ort}: Änderungsstelle ist kein Objekt`;
   if (!Number.isInteger(stelle.neueZeilen) || stelle.neueZeilen < 0) return `${ort}: neueZeilen fehlt (grobe Schätzung neuer Zeilen)`;
   if (stelle.neu === undefined) return bestehendeStelleBefund(ort, stelle, kontext);
