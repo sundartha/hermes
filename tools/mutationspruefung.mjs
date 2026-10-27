@@ -15,7 +15,7 @@ import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN
 import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
-import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
+import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
@@ -356,7 +356,8 @@ async function gruppenlauf(lauf) {
 }
 
 function staerker(eintrag, anderer) {
-  if (anderer === undefined) return eintrag;
+  if (anderer === undefined || bestaetigungAbgestuerzt(eintrag)) return eintrag;
+  if (bestaetigungAbgestuerzt(anderer)) return anderer;
   if (!ueberlebt(eintrag)) return bestaetigt(eintrag) || ueberlebt(anderer) ? eintrag : anderer;
   return ueberlebt(anderer) && eintrag.status === UEBERLEBT ? eintrag : anderer;
 }
@@ -687,14 +688,19 @@ function urteil({ seite, von }, ergebnisse, ueberlebende) {
     : `rot: ${anteil}; kein Test verlangt diese Zeilen.`;
 }
 
-function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
+function gesamturteil(pruefung, { ergebnisse, ueberlebende, abgestuerzte, zugriffe }) {
   const mutanten = urteil(pruefung, ergebnisse, ueberlebende);
-  if (zugriffe.length === 0) return mutanten;
-  return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
+  const vorab = [
+    ...(zugriffe.length > 0 ? [`${zugriffe.length} neue Zeilen fragen Strykers Zustand ab`] : []),
+    ...(abgestuerzte.length > 0 ? [`${abgestuerzte.length} Mutanten mit abgebrochener Bestätigung (Absturz), Ursache im Testaufbau prüfen`] : []),
+  ];
+  if (vorab.length === 0) return mutanten;
+  return `rot: ${vorab.join("; ")}; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
 }
 
-function roteZwecke({ ueberlebende, zugriffe }) {
-  return [...(ueberlebende.length > 0 ? [ZWECK_UEBERLEBT] : []), ...(zugriffe.length > 0 ? [ZWECK_ZUSTAND] : [])];
+function roteZwecke({ ueberlebende, abgestuerzte, zugriffe }) {
+  const mutanten = ueberlebende.length + abgestuerzte.length > 0;
+  return [...(mutanten ? [ZWECK_UEBERLEBT] : []), ...(zugriffe.length > 0 ? [ZWECK_ZUSTAND] : [])];
 }
 
 function zeigeZweck(ids) {
@@ -710,11 +716,13 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
   for (const { hinweis } of ergebnisse.filter((eintrag) => eintrag.hinweis !== undefined)) console.log(hinweis);
+  const abgestuerzte = ergebnisse.filter(bestaetigungAbgestuerzt);
+  for (const { befund } of abgestuerzte) console.log(befund);
   for (const { schluessel } of ueberlebende) console.log(`${MUTANT_UEBERLEBT}: ${schluessel}`);
   for (const stelle of zugriffe) console.log(`${ZUSTAND_VERSTOSS}: ${stelle}`);
   if (ergebnisse.length > 0) console.log(`${BESTAETIGUNG}: ${bilanz(ergebnisse)}.`);
-  console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
-  return roteZwecke({ ueberlebende, zugriffe });
+  console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, abgestuerzte, zugriffe }));
+  return roteZwecke({ ueberlebende, abgestuerzte, zugriffe });
 }
 
 async function pruefe(pruefung, gleichwertige) {

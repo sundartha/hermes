@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { chdir, cwd } from "node:process";
 import { test } from "node:test";
 
+import { bestaetige } from "../../tools/mutationspruefung/bestaetigung.mjs";
 import { testumbauPruefung } from "../../tools/mutationspruefung/testumbau.mjs";
 import { EXIT_ROT } from "./mutationspruefung-probe.js";
 import { probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
@@ -95,6 +96,18 @@ test("Testumbau-Nachher: die Nachher-Seite fragt Stryker nach der genauen Lage j
   assert.deepEqual(werkzeug.aufrufe.at(-1), [BLOCK.lage, VERGLEICH.lage, NEGATIV.lage]);
   assert.equal(ergebnis, EXIT_ROT, zeilen.join("\n"));
   assert.deepEqual(verstoesse(zeilen), [VERGLEICH.schluessel, NEGATIV.schluessel]);
+});
+
+test("Testumbau-Nachher: stürzt die Bestätigung eines vorher getöteten Mutanten nachher ab, ist das Urteil rot mit eigenem Befund statt „weiter getötet“", async (context) => {
+  const toeter = "test/zahl.test.js";
+  const [abgestuerzt] = await bestaetige([{ ...VERGLEICH, toeter: [toeter] }], async () => [{ ...VERGLEICH, status: "RuntimeError", toeter: [] }]);
+  const werkzeug = ersatzWerkzeug([BLOCK, abgestuerzt, NEGATIV]);
+  const { ergebnis, zeilen } = await imProbeRepo(context, () => testumbauPruefung("HEAD", werkzeug));
+  assert.equal(ergebnis, EXIT_ROT, zeilen.join("\n"));
+  assert.deepEqual(verstoesse(zeilen), []);
+  const befund = `Verstoß: Bestätigung abgebrochen (Absturz) in ${toeter}, Ursache im Testaufbau prüfen (erster Lauf Killed ${toeter}, Bestätigungslauf RuntimeError): ${VERGLEICH.schluessel}`;
+  assert.ok(zeilen.includes(befund), zeilen.join("\n"));
+  assert.ok(zeilen.some((zeile) => zeile.startsWith("rot: bei 1 von 3 vorher getötete Mutanten") && zeile.includes("Ursache im Testaufbau prüfen")), zeilen.join("\n"));
 });
 
 async function pruefeMit(context, werkzeug) {

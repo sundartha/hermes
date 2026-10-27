@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { bestaetige } from "../../tools/mutationspruefung/bestaetigung.mjs";
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
 import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
@@ -123,6 +124,33 @@ test("die Teile messen zusammen genau dieselben Dateien und Mutanten wie der gan
   assert.ok(treffer(urteil.stdout, UEBERLEBT).every((mutant) => mutant.startsWith("src/zahl.js:3:")), urteil.stdout);
   assert.deepEqual(treffer(urteil.stdout, URTEIL), treffer(ganz.stdout, URTEIL));
   assert.deepEqual(treffer(urteil.stdout, BESTAETIGUNG), treffer(ganz.stdout, BESTAETIGUNG));
+});
+
+const ABSTURZ = /^Verstoß: Bestätigung abgebrochen \(Absturz\) in test\/zahl\.test\.js, Ursache im Testaufbau prüfen \(.+\): src\/zahl\.js:3:7 /m;
+
+async function bestaetigterUndAbgestuerzter() {
+  const mutant = { schluessel: "src/zahl.js:3:7 EqualityOperator → zahl <= 0", status: "Killed", toeter: ["test/zahl.test.js"], zeilen: [3, 3], art: "EqualityOperator" };
+  const [bestaetigter] = await bestaetige([mutant], async () => [mutant]);
+  const [abgestuerzter] = await bestaetige([mutant], async () => [{ ...mutant, status: "RuntimeError", toeter: [] }]);
+  return [bestaetigter, abgestuerzter];
+}
+
+test("meldet ein Teil für einen Mutanten einen bestätigten Kill und einer einen Absturz in der Bestätigung, bleibt das Urteil rot mit dem Absturz-Befund, in jeder Reihenfolge", async (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const { teile, pruefsumme } = plane(context, repo);
+  const ergebnisse = await bestaetigterUndAbgestuerzter();
+  for (const reihenfolge of [ergebnisse, [...ergebnisse].reverse()]) {
+    const ordner = ergebnisordner(context);
+    for (const teil of teile) {
+      const messungen = teil === teile[0] ? [{ pruefung: 0, ergebnisse: reihenfolge }] : [];
+      writeFileSync(join(ordner, `mutation-teil-${teil}.json`), JSON.stringify({ pruefsumme, teil, messungen }));
+    }
+    const urteil = pruefe(repo, "--urteil", ordner);
+    assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
+    assert.match(urteil.stdout, ABSTURZ);
+    assert.deepEqual(treffer(urteil.stdout, UEBERLEBT), []);
+  }
 });
 
 function fuellung(anzahl) {

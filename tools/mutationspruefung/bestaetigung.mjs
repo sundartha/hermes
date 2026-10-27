@@ -1,13 +1,17 @@
 const ROTER_TEST = "Killed";
 const UEBERLEBT = "Survived";
 const ABBRUCH = new Set(["Timeout", "RuntimeError", "CompileError"]);
+const ABSTURZ = new Set(["RuntimeError", "CompileError"]);
 const OHNE_ERGEBNIS = { status: "ohne Ergebnis", toeter: [] };
 const LAUFNAMEN = ["erster Lauf", "Bestätigungslauf", "dritter Lauf"];
 const BESTAETIGT = "getoetet";
 const HAENGER = "haenger";
+const ABGESTUERZT = "absturz";
 const NICHT_BESTAETIGT = "Hinweis: im Bestätigungslauf nicht bestätigt, Mutant zählt als überlebt";
 const NUR_HAENGER = "Hinweis: nur durch Zeitablauf oder Absturz erkannt, in beiden Läufen; nicht bestätigt getötet";
 const WACKELT = "Hinweis: Testdatei wackelt bei diesem Mutanten, bestätigt getötet durch";
+const ABSTURZ_BEFUND = "Verstoß: Bestätigung abgebrochen (Absturz) in";
+const TESTAUFBAU = "Ursache im Testaufbau prüfen";
 
 function roterTest({ status }) {
   return status === ROTER_TEST;
@@ -19,6 +23,10 @@ function abgebrochen({ status }) {
 
 function dieselbeDatei(rot, wiederholung) {
   return roterTest(rot) && roterTest(wiederholung) && wiederholung.toeter.includes(rot.toeter[0]);
+}
+
+function laufAbgestuerzt({ status }) {
+  return ABSTURZ.has(status);
 }
 
 function beschreibung(verlauf) {
@@ -44,7 +52,12 @@ function massgeblich(verlauf) {
 
 function wackelnd(verlauf) {
   const [rot, wiederholung] = massgeblich(verlauf);
-  return roterTest(rot) && !dieselbeDatei(rot, wiederholung) ? rot.toeter[0] : undefined;
+  return roterTest(rot) && !dieselbeDatei(rot, wiederholung) && !laufAbgestuerzt(wiederholung) ? rot.toeter[0] : undefined;
+}
+
+function absturzBefund(eintrag, rot, laeufe) {
+  const befund = `${ABSTURZ_BEFUND} ${rot.toeter.join(", ")}, ${TESTAUFBAU} (${laeufe}): ${eintrag.schluessel}`;
+  return { ...eintrag, bestaetigung: ABGESTUERZT, befund };
 }
 
 export function unentschieden(verlauf) {
@@ -59,7 +72,9 @@ export function entscheide(eintrag, verlauf) {
   if (abgebrochen(erster) && abgebrochen(zweiter)) {
     return { ...eintrag, bestaetigung: HAENGER, hinweis: `${NUR_HAENGER}: ${eintrag.schluessel}` };
   }
-  if (dieselbeDatei(...massgeblich(verlauf))) return { ...eintrag, bestaetigung: BESTAETIGT };
+  const [rot, wiederholung] = massgeblich(verlauf);
+  if (dieselbeDatei(rot, wiederholung)) return { ...eintrag, bestaetigung: BESTAETIGT };
+  if (laufAbgestuerzt(wiederholung)) return absturzBefund(eintrag, rot, beschreibung(verlauf));
   return { ...eintrag, status: UEBERLEBT, hinweis: `${NICHT_BESTAETIGT} (${beschreibung(verlauf)}): ${eintrag.schluessel}` };
 }
 
@@ -69,6 +84,10 @@ export function bestaetigt({ bestaetigung }) {
 
 export function nurHaenger({ bestaetigung }) {
   return bestaetigung === HAENGER;
+}
+
+export function bestaetigungAbgestuerzt({ bestaetigung }) {
+  return bestaetigung === ABGESTUERZT;
 }
 
 function anzahl(ergebnisse, art) {
@@ -95,6 +114,7 @@ function urteil(eintrag, beobachtungen) {
   const letztes = entscheide({ ...eintrag, status, toeter }, verlauf);
   if (bestaetigt(letztes)) return { ...letztes, hinweis: wackelHinweis(eintrag, beobachtungen) };
   if (letztes.bestaetigung === HAENGER) return letztes;
+  if (bestaetigungAbgestuerzt(letztes)) return absturzBefund(eintrag, massgeblich(verlauf)[0], laeufe(beobachtungen));
   return { ...eintrag, status: UEBERLEBT, hinweis: `${NICHT_BESTAETIGT} (${laeufe(beobachtungen.filter(erkannt))}): ${eintrag.schluessel}` };
 }
 

@@ -180,14 +180,14 @@ export const NUR_IN_DER_LOESCHPROBE_OHNE_ZEILE = [
 ];
 const NICHT_BESTAETIGT = /^Hinweis: im Bestätigungslauf nicht bestätigt, Mutant zählt als überlebt \((.+)\): (.+)$/gm;
 
-export function wackeltest(marke, ausloeser) {
+export function wackeltest(marke, ausloeser, danach = "return;") {
   return [
     'import { existsSync, writeFileSync } from "node:fs";',
     'import { test } from "node:test";',
     'import * as zahl from "../src/zahl.js";',
     'test("wackelt nur beim ersten Mal", () => {',
     ...ausloeser,
-    `  if (existsSync(${JSON.stringify(marke)})) return;`,
+    `  if (existsSync(${JSON.stringify(marke)})) ${danach}`,
     `  writeFileSync(${JSON.stringify(marke)}, "");`,
     '  throw new Error("wackelt");',
     "});",

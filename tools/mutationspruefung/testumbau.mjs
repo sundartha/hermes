@@ -5,7 +5,7 @@ import { cruise } from "dependency-cruiser";
 
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
-import { nurHaenger } from "./bestaetigung.mjs";
+import { bestaetigungAbgestuerzt, nurHaenger } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
 import { auslagerungsZeile, reineAuslagerung, reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
@@ -83,12 +83,12 @@ function brichAbOhneLage(getoetet) {
 }
 
 async function schluesselNachLage(eintraege, { tests, werkzeug }, auswahl) {
-  const treffer = new Set();
+  const treffer = new Map();
   if (tests.length === 0) return treffer;
   for (const datei of new Set(eintraege.map((eintrag) => eintrag.datei))) {
     const dort = eintraege.filter((eintrag) => eintrag.datei === datei);
     for (const eintrag of await werkzeug.durchgang(datei, dort.map(({ lage }) => lage), tests)) {
-      if (auswahl(eintrag)) treffer.add(eintrag.schluessel);
+      if (auswahl(eintrag)) treffer.set(eintrag.schluessel, eintrag);
     }
   }
   return treffer;
@@ -97,13 +97,21 @@ async function schluesselNachLage(eintraege, { tests, werkzeug }, auswahl) {
 async function nachherVerloren(getoetet, tests, werkzeug) {
   brichAbOhneLage(getoetet);
   const weiter = await schluesselNachLage(getoetet, { tests, werkzeug }, (eintrag) => !werkzeug.ueberlebt(eintrag));
-  return getoetet.filter(({ schluessel }) => !weiter.has(schluessel));
+  const abgestuerzte = [...weiter.values()].filter(bestaetigungAbgestuerzt);
+  return { verloren: getoetet.filter(({ schluessel }) => !weiter.has(schluessel)), abgestuerzte };
 }
 
 async function vorherNieGetoetet(verloren, vorherStand, werkzeug) {
   if (verloren.length === 0 || !verloren.every(nurHaenger)) return [];
   const ueberlebt = await imVorherStand(vorherStand, werkzeug, ({ tests }) => schluesselNachLage(verloren, { tests, werkzeug }, werkzeug.ueberlebt));
   return verloren.filter(({ schluessel }) => ueberlebt.has(schluessel));
+}
+
+function rotGruende(verloren, abgestuerzte, umfang) {
+  return [
+    ...(verloren.length > 0 ? [`${verloren.length} von ${umfang} überleben nach dem Testumbau; die umgebauten Tests prüfen weniger als vorher`] : []),
+    ...(abgestuerzte.length > 0 ? [`bei ${abgestuerzte.length} von ${umfang} brach die Bestätigung ab (Absturz), Ursache im Testaufbau prüfen`] : []),
+  ];
 }
 
 function gruenZeile(umfang, getoetet, entfallen) {
@@ -132,16 +140,17 @@ export async function testumbauPruefung(basis, werkzeug) {
   const tests = await betroffeneTests(geaendert, cwd());
   const quellen = [...new Set(vorher.getoetet.map(({ datei }) => datei))];
   await freigeben(werkzeug, "Nachher-Seite", { tests, quellen, mutanten: () => ({ mutanten: vorher.getoetet.length, unzaehlbar: 0 }) });
-  const nachher = await nachherVerloren(vorher.getoetet, tests, werkzeug);
+  const { verloren: nachher, abgestuerzte } = await nachherVerloren(vorher.getoetet, tests, werkzeug);
   const entfallen = await vorherNieGetoetet(nachher, { basis, tests: geaendert }, werkzeug);
   for (const { schluessel } of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);
   const verloren = nachher.filter((eintrag) => !entfallen.includes(eintrag));
   for (const { schluessel } of verloren) console.log(`Verstoß: Mutant nicht mehr getötet: ${schluessel}`);
+  for (const { befund } of abgestuerzte) console.log(befund);
   const umfang = `${vorher.getoetet.length} vorher getötete Mutanten in ${vorher.quellen.length} Quelldateien (${vorher.quellen.join(", ")})`;
-  if (verloren.length === 0) {
+  if (verloren.length + abgestuerzte.length === 0) {
     console.log(gruenZeile(umfang, vorher.getoetet.length, entfallen.length));
     return EXIT_GRUEN;
   }
-  console.log(`rot: ${verloren.length} von ${umfang} überleben nach dem Testumbau; die umgebauten Tests prüfen weniger als vorher.`);
+  console.log(`rot: ${rotGruende(verloren, abgestuerzte, umfang).join("; ")}.`);
   return EXIT_ROT;
 }
