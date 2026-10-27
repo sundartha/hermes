@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { TOOL_TEST_DIRECTORY, TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { changedFiles } from "./betroffene-tests.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
@@ -18,12 +19,10 @@ const EXIT_USAGE = 2;
 const SKIP_FULL_SUITE_FLAG = "--ohne-volle-suite";
 const DEFAULT_BASE_REF = "upstream/master";
 const TOOL_BANK = "regression";
-const TOOL_TEST_GLOB = "test/werkzeuge/**/*.test.{js,ts}";
 const TEST_CONCURRENCY = 4;
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
 const DELETED = "D";
 const PRODUCT_PREFIXES = ["src/", "test/"];
-const TOOL_TEST_PREFIX = "test/werkzeuge/";
 const FIRST_ARGUMENT = 2;
 const PART_PATTERN = /^([1-9]\d*)\/([1-9]\d*)$/;
 const PART_REPORT_PREFIX = "werkzeugteil-";
@@ -88,12 +87,16 @@ function affectedTests(args) {
 
 function isProductChange({ status, path }) {
   const isProductPath = PRODUCT_PREFIXES.some((prefix) => path.startsWith(prefix));
-  return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_PREFIX);
+  return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_DIRECTORY);
 }
 
 async function needsToolTests(baseRef) {
   const changes = await changedFiles(baseRef);
   return changes === null || changes.some((change) => !isProductChange(change));
+}
+
+async function toolTestsWanted(options) {
+  return options["alle-werkzeugtests"] || needsToolTests(selectedBaseRef(options));
 }
 
 function partReportPath({ index }) {
@@ -124,6 +127,7 @@ function parseOptions() {
       basis: { type: "string" },
       "vor-push": { type: "boolean", default: false },
       "ohne-werkzeugtests": { type: "boolean", default: false },
+      "alle-werkzeugtests": { type: "boolean", default: false },
       werkzeugteil: { type: "string" },
       "teile-pruefen": { type: "string" },
       jobs: { type: "string" },
@@ -157,7 +161,7 @@ async function fullRun(options) {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
   const affectedStatus = affectedTests(affectedTestArgs(options));
-  if (!runsToolTests(options) || !(await needsToolTests(selectedBaseRef(options)))) {
+  if (!runsToolTests(options) || !(await toolTestsWanted(options))) {
     return affectedStatus;
   }
   const toolStatus = toolTests();
@@ -165,7 +169,7 @@ async function fullRun(options) {
 }
 
 async function partRun(options, part) {
-  if (!(await needsToolTests(selectedBaseRef(options)))) {
+  if (!(await toolTestsWanted(options))) {
     console.log(
       `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
     );
@@ -223,7 +227,7 @@ function emptyGlobFindings(toolTestsNeeded, expected) {
 }
 
 async function checkParts(options) {
-  const toolTestsNeeded = await needsToolTests(selectedBaseRef(options));
+  const toolTestsNeeded = await toolTestsWanted(options);
   const expected = expectedToolTestFiles(toolTestsNeeded);
   const findings = [
     ...emptyGlobFindings(toolTestsNeeded, expected),

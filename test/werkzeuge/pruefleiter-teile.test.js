@@ -71,18 +71,19 @@ function runPruefleiter(directory, args) {
   return runIn(directory, process.execPath, [PRUEFLEITER_TOOL, "--basis", "HEAD", ...args]);
 }
 
-function runParts(directory) {
+function runParts(directory, extraArgs = []) {
   return Array.from({ length: PARTS }, (_, index) =>
-    runPruefleiter(directory, ["--werkzeugteil", `${index + 1}/${PARTS}`]),
+    runPruefleiter(directory, ["--werkzeugteil", `${index + 1}/${PARTS}`, ...extraArgs]),
   );
 }
 
-function checkParts(directory, jobs = ALL_GREEN) {
+function checkParts(directory, jobs = ALL_GREEN, extraArgs = []) {
   return runPruefleiter(directory, [
     "--teile-pruefen",
     REPORT_DIRECTORY,
     "--jobs",
     JSON.stringify(jobs),
+    ...extraArgs,
   ]);
 }
 
@@ -97,6 +98,12 @@ function filesIn(directory, report) {
     .map((line) => JSON.parse(line).datei);
 }
 
+function assertEveryToolTestRanOnce(directory, results) {
+  for (const result of results) assert.equal(result.status, 0, result.stdout + result.stderr);
+  const ran = reports(directory).flatMap((report) => filesIn(directory, report));
+  assert.deepEqual(ran.toSorted(), TOOL_TEST_FILES);
+}
+
 function partsWithToolChange(context, options) {
   const directory = probe(context, options);
   change(directory, TOOL_CHANGE_FILE);
@@ -106,9 +113,7 @@ function partsWithToolChange(context, options) {
 test("die Werkzeugteile fahren zusammen jede Werkzeug-Testdatei genau einmal, und die Prüfung der Teile ist grün", (context) => {
   const { directory, results } = partsWithToolChange(context);
 
-  for (const result of results) assert.equal(result.status, 0, result.stdout + result.stderr);
-  const ran = reports(directory).flatMap((report) => filesIn(directory, report));
-  assert.deepEqual(ran.toSorted(), TOOL_TEST_FILES);
+  assertEveryToolTestRanOnce(directory, results);
   assert.equal(reports(directory).length, PARTS);
   const check = checkParts(directory);
   assert.equal(check.status, 0, check.stdout + check.stderr);
@@ -245,4 +250,44 @@ test("ein ungültiger Teil oder zwei Arten auf einmal brechen mit Nutzungsfehler
     const result = runPruefleiter(directory, args);
     assert.equal(result.status, EXIT_USAGE, args.join(" "));
   }
+});
+
+const ALL_TOOL_TESTS = "--alle-werkzeugtests";
+
+function partsWithAllToolTests(context) {
+  const directory = probe(context);
+  change(directory, PRODUCT_CHANGE_FILE);
+  return { directory, results: runParts(directory, [ALL_TOOL_TESTS]) };
+}
+
+test("mit --alle-werkzeugtests fahren die Teile auch bei einer reinen Änderung unter src jede Werkzeug-Testdatei genau einmal", (context) => {
+  const { directory, results } = partsWithAllToolTests(context);
+
+  assertEveryToolTestRanOnce(directory, results);
+  const check = checkParts(directory, ALL_GREEN, [ALL_TOOL_TESTS]);
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+});
+
+test("mit --alle-werkzeugtests ist die Prüfung der Teile rot, wenn die Teile bei einer reinen Änderung unter src keinen Werkzeugtest gefahren haben", (context) => {
+  const directory = probe(context);
+  change(directory, PRODUCT_CHANGE_FILE);
+  for (const result of runParts(directory)) assert.equal(result.status, 0, result.stdout + result.stderr);
+
+  const check = checkParts(directory, ALL_GREEN, [ALL_TOOL_TESTS]);
+
+  assert.notEqual(check.status, 0);
+  for (const file of TOOL_TEST_FILES) assert.match(check.stdout, new RegExp(`${file}: in 0 Teilen gelaufen`));
+});
+
+test("mit --alle-werkzeugtests fährt der Gesamtlauf auch bei einer reinen Änderung unter src die Werkzeugtests", (context) => {
+  const directory = probe(context, { redFile: RED_TOOL_TEST_FILE });
+  change(directory, PRODUCT_CHANGE_FILE);
+
+  const withoutOption = runPruefleiter(directory, []);
+  const withOption = runPruefleiter(directory, [ALL_TOOL_TESTS]);
+
+  assert.equal(withoutOption.status, 0, withoutOption.stdout + withoutOption.stderr);
+  assert.doesNotMatch(withoutOption.stdout, new RegExp(RED_TOOL_TEST_MARKER));
+  assert.notEqual(withOption.status, 0);
+  assert.match(withOption.stdout, new RegExp(RED_TOOL_TEST_MARKER));
 });
