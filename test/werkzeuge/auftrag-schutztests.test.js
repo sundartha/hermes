@@ -104,6 +104,17 @@ test("Schutztest: ein Fall mit Kennung, der mit dem erwarteten Fehler rot ist, z
   rot(schutztests("test"), /„\[NIE1\] die Zahl ist zwei“ ist mit dem erwarteten Fehler rot\. Ein Schutztest zählt nie als Abnahme/);
 });
 
+test("Schutztest: ein bestehender Fall, der eine Kennung bekommt, wird auf erwarteten Fehler und passenden Satz geprüft", (context) => {
+  const umbenannteFaelle = [
+    { nachher: BESTAND.replace('test("eins", () => {\n  assert.equal(ZAHL, 1);', `test("[NIE1] eins", () => {\n  assert.equal(ZAHL, 2, ${JSON.stringify(ERWARTET)});`), meldung: /„\[NIE1\] eins“ ist mit dem erwarteten Fehler rot\. Ein Schutztest zählt nie als Abnahme/ },
+    { nachher: BESTAND.replace('test("eins"', 'test("[NIE9] eins"'), meldung: /„\[NIE9\] eins“ trägt keine Kennung eines Satzes aus wasDarfNiePassieren/ },
+  ];
+  for (const { nachher, meldung } of umbenannteFaelle) {
+    const { schutztests } = probe(context, { nachher: { [ZAHL_TEST]: nachher } });
+    rot(schutztests("test"), meldung);
+  }
+});
+
 test("Schutztest: aus anderem Grund rot ist vor dem Bau erlaubt, nach dem Bau erfüllt der Fall die Pflicht nicht", (context) => {
   const { schutztests } = probe(context, { nachher: angehaengt(fall("[NIE1] die Zahl ist zwei", 'assert.equal(ZAHL, 2, "anderer Grund");')) });
   gruen(schutztests("test"));

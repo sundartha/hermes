@@ -87,12 +87,19 @@ function istNeu(fall, stuecke) {
   return beginntNeu && stuecke.filter((stueck) => reichtIn(stueck, fall)).every(({ entfernt }) => entfernt === 0);
 }
 
-export function neueFaelle(basis, root, pfad) {
-  const { faelle } = laufe(root, pfad);
-  if (!gibtEsIn(basis, pfad, root)) return faelle;
-  const gespannt = spannen(faelle, readFileSync(join(root, pfad), "utf8").split("\n"));
+function aenderungIn(basis, root, pfad) {
+  const zeilen = readFileSync(join(root, pfad), "utf8").split("\n");
+  const { faelle, dateiRot } = laufe(root, pfad);
+  const gespannt = spannen(faelle, zeilen);
   const stuecke = hunks(basis, root, pfad);
-  return gespannt.filter((fall) => istNeu(fall, stuecke));
+  const treffer = stuecke.flatMap((hunk) => beruehrt(gespannt, zeilen, hunk));
+  return { gespannt, dateiRot, stuecke, treffer, geaendert: new Set(treffer.flatMap((stelle) => stelle.faelle)) };
+}
+
+export function geaenderteFaelle(basis, root, pfad) {
+  if (!gibtEsIn(basis, pfad, root)) return laufe(root, pfad).faelle.map((fall) => ({ ...fall, neu: true }));
+  const { gespannt, stuecke, geaendert } = aenderungIn(basis, root, pfad);
+  return gespannt.filter((fall) => geaendert.has(fall)).map((fall) => ({ ...fall, neu: istNeu(fall, stuecke) }));
 }
 
 function faelleAn(faelle, nummer) {
@@ -108,12 +115,7 @@ function beruehrt(faelle, zeilen, { start, anzahl }) {
 }
 
 function dateiBefunde({ basis, root, anzahl }, pfad) {
-  const zeilen = readFileSync(join(root, pfad), "utf8").split("\n");
-  const { faelle, dateiRot } = laufe(root, pfad);
-  const gespannt = spannen(faelle, zeilen);
-  const stuecke = hunks(basis, root, pfad);
-  const treffer = stuecke.flatMap((hunk) => beruehrt(gespannt, zeilen, hunk));
-  const geaendert = new Set(treffer.flatMap((stelle) => stelle.faelle));
+  const { gespannt, dateiRot, stuecke, treffer, geaendert } = aenderungIn(basis, root, pfad);
   const schutz = (fall) => satzNummer(fall.name, anzahl) !== null && istNeu(fall, stuecke);
   const befunde = [...geaendert]
     .filter((fall) => !fall.rot && !schutz(fall))
