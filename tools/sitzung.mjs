@@ -367,7 +367,7 @@ function sessionEnvironment(token, store) {
 }
 
 function startSession({ model, order, token, store }) {
-  const claudeArguments = ["--model", model, "--permission-mode", "acceptEdits"];
+  const claudeArguments = ["--model", model, "--permission-mode", "auto"];
   if (order !== undefined) claudeArguments.push("--", order);
   process.on("SIGINT", () => {});
   const child = spawn("caffeinate", ["-i", "claude", ...claudeArguments], {

@@ -337,7 +337,7 @@ test("sitzung: startet claude unter caffeinate mit Opus als Vorgabe", async () =
     "--model",
     "opus",
     "--permission-mode",
-    "acceptEdits",
+    "auto",
   ]);
 });
 
@@ -350,7 +350,7 @@ test("sitzung: --modell sonnet startet claude mit Sonnet", async () => {
     "--model",
     "sonnet",
     "--permission-mode",
-    "acceptEdits",
+    "auto",
   ]);
 });
 
@@ -690,7 +690,7 @@ test("sitzung: --auftrag gibt den Inhalt der Datei als erste Nachricht an claude
     "--model",
     "opus",
     "--permission-mode",
-    "acceptEdits",
+    "auto",
     "--",
     order,
   ]);
