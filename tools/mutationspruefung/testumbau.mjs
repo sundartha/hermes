@@ -6,8 +6,10 @@ import { cruise } from "dependency-cruiser";
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 
 import { nurHaenger } from "./bestaetigung.mjs";
+import { gruppen } from "./gruppen.mjs";
 import { reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
+import { mutantenzahl } from "./vorplanung.mjs";
 
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTSEITE = /^test\//;
@@ -52,8 +54,20 @@ export async function getoetetIn({ datei, zeilen }, tests, werkzeug) {
   return { anzahl: ergebnisse.length, getoetet };
 }
 
+async function freigeben(werkzeug, seite, { tests, quellen, mutanten }) {
+  if (werkzeug.freigabe === undefined) return;
+  const testgruppen = gruppen(tests).length;
+  const umfang = { seite, quelldateien: quellen.length, testdateien: tests.length, testgruppen, aufrufe: quellen.length * testgruppen };
+  await werkzeug.freigabe({ ...umfang, ...(await mutanten()) });
+}
+
+function mutantenGanzerDateien(quellen) {
+  return mutantenzahl(quellen.map((datei) => ({ datei, bereiche: ganzeDatei(datei) })));
+}
+
 export function vorherGetoetet(basis, geaendert, werkzeug) {
   return imVorherStand({ basis, tests: geaendert }, werkzeug, async ({ tests, quellen }) => {
+    await freigeben(werkzeug, "Vorher-Seite", { tests, quellen, mutanten: () => mutantenGanzerDateien(quellen) });
     const getoetet = [];
     for (const datei of quellen) getoetet.push(...(await getoetetIn({ datei, zeilen: ganzeDatei(datei) }, tests, werkzeug)).getoetet);
     return { tests, quellen, getoetet };
@@ -111,6 +125,8 @@ export async function testumbauPruefung(basis, werkzeug) {
     return EXIT_GRUEN;
   }
   const tests = await betroffeneTests(geaendert, cwd());
+  const quellen = [...new Set(vorher.getoetet.map(({ datei }) => datei))];
+  await freigeben(werkzeug, "Nachher-Seite", { tests, quellen, mutanten: () => ({ mutanten: vorher.getoetet.length, unzaehlbar: 0 }) });
   const nachher = await nachherVerloren(vorher.getoetet, tests, werkzeug);
   const entfallen = await vorherNieGetoetet(nachher, { basis, tests: geaendert }, werkzeug);
   for (const { schluessel } of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);

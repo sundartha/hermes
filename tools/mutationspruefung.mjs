@@ -30,7 +30,8 @@ import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
-import { hatMutanten } from "./mutationspruefung/vorplanung.mjs";
+import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
+import { budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -130,8 +131,10 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
-const BETRIEBSARTEN = [...VORHER_ARTEN, VORHER_AUS_CI, "testumbau", "plan", "teil", "urteil", "alter-stand"];
+const TESTUMBAU = "testumbau";
+const BETRIEBSARTEN = [...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
+const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
 
 function git(args, verzeichnis = cwd()) {
@@ -588,11 +591,30 @@ async function imStand(pruefung, arbeit) {
   }
 }
 
+async function vorschauDerSeite(gemessen, { nachDatei, graph, seite }) {
+  if (!budgetLaeuft()) return;
+  const dateien = [];
+  for (const { datei } of gemessen) {
+    const tests = testauswahl(datei, graph).alle;
+    if (tests.length > 0) dateien.push({ tests, datei, bereiche: nachDatei.get(datei).bereiche });
+  }
+  const testgruppen = dateien.reduce((summe, { tests }) => summe + gruppen(tests).length, 0);
+  vorschau({
+    seite: SEITENNAME[seite],
+    quelldateien: dateien.length,
+    testdateien: new Set(dateien.flatMap(({ tests }) => tests)).size,
+    testgruppen,
+    aufrufe: testgruppen,
+    ...(await mutantenzahl(dateien)),
+  });
+}
+
 async function messe(einheiten, { graph, auswahl, seite }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
   if (gemessen.length === 0) return ergebnisse;
+  await vorschauDerSeite(gemessen, { nachDatei, graph, seite });
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
     for (const [index, anteil] of gemessen.entries()) {
@@ -880,6 +902,11 @@ function sperreVorTestprozessen() {
   return SPERRE.genommen;
 }
 
+async function freigabe(umfang) {
+  vorschau(umfang);
+  await sperreVorTestprozessen();
+}
+
 function betriebsart(values) {
   return BETRIEBSARTEN.find((art) => values[art] !== undefined && values[art] !== false) ?? NORMAL;
 }
@@ -934,8 +961,8 @@ async function main() {
   SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();
   if (values.testumbau) {
-    await sperreVorTestprozessen();
-    return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt });
+    starteBudget(TESTUMBAU);
+    return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt, freigabe });
   }
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
@@ -944,6 +971,7 @@ async function main() {
   if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan);
   if (values.teil !== undefined) return messeTeil(pruefungen, values);
   if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige });
+  starteBudget(NORMAL);
   return gesamtlauf(pruefungen, gleichwertige);
 }
 
