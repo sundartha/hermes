@@ -66,7 +66,6 @@
     "exports|src/elevenlabs/inbound-rueckfall.js|EL_DIAL_ANSWER_ON_BRIDGE",
     "exports|src/elevenlabs/inbound-rueckfall.js|elBeinUrl",
     "exports|src/i18n/failure-reason-texts.js|makeFailureSentence",
-    "exports|src/mail-not-placed.js|notPlacedMailDebounced",
     "exports|src/mcp-rate-limit.js|ablehnungsSchluessel",
     "exports|src/mcp-rate-limit.js|mandantSchluessel",
     "exports|src/mcp-security-schemes.js|NOAUTH_TOOL_SECURITY_SCHEMES",
