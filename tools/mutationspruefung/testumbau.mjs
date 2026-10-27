@@ -7,7 +7,7 @@ import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/test
 
 import { nurHaenger } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
-import { reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
+import { auslagerungsZeile, reineAuslagerung, reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 import { mutantenzahl } from "./vorplanung.mjs";
 
@@ -116,6 +116,11 @@ export async function testumbauPruefung(basis, werkzeug) {
   const verschiebung = await reineVerschiebung(basis, cwd());
   if (verschiebung !== null) {
     console.log(verschiebungsZeile(verschiebung));
+    return EXIT_GRUEN;
+  }
+  const auslagerung = await reineAuslagerung(basis, cwd());
+  if (auslagerung !== null) {
+    console.log(auslagerungsZeile(auslagerung));
     return EXIT_GRUEN;
   }
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
