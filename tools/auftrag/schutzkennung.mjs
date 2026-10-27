@@ -7,6 +7,10 @@ export function schutzSaetze(auftrag) {
   return saetze(auftrag?.wasDarfNiePassieren);
 }
 
+export function satzKennung(nummer) {
+  return `[NIE${nummer}]`;
+}
+
 export function traegtKennung(name) {
   return KENNUNG_ANFANG.test(name);
 }

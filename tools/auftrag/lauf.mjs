@@ -329,8 +329,8 @@ class AuftragsLauf {
     return ergebnis.exitCode === 0 || this.scheitert("Der Abnahmetest ist nicht mit dem erwarteten Fehler rot.", PRUEFUNG.ROT);
   }
 
-  schutztests(rolle) {
-    return this.gruen(PRUEFUNG.SCHUTZTESTS, this.eigenerBefehl("schutztests", "--rolle", rolle, "--basis", this.basis));
+  schutztests(rolle, basis = this.basis) {
+    return this.gruen(PRUEFUNG.SCHUTZTESTS, this.eigenerBefehl("schutztests", "--rolle", rolle, "--basis", basis));
   }
 
   vorherGruen() {
