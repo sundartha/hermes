@@ -121,11 +121,19 @@ function umformatiert(gestoppt, name) {
   writeFileSync(datei, JSON.stringify(JSON.parse(readFileSync(datei, "utf8"))));
 }
 
-function beanstandeterSchnittMitPassenderPruefsumme(gestoppt) {
-  const schnitt = JSON.stringify({ ...abgelegt(gestoppt, "schnitt.json"), auftraege: [] });
+function schnittMitPassenderPruefsumme(gestoppt, geaendert) {
+  const schnitt = JSON.stringify({ ...abgelegt(gestoppt, "schnitt.json"), ...geaendert });
   writeFileSync(planungsDatei(gestoppt, "schnitt.json"), schnitt);
   const geprueft = { ...abgelegt(gestoppt, "geprueft.json"), schnitt: createHash("sha256").update(schnitt).digest("hex") };
   writeFileSync(planungsDatei(gestoppt, "geprueft.json"), JSON.stringify(geprueft));
+}
+
+function beanstandeterSchnittMitPassenderPruefsumme(gestoppt) {
+  schnittMitPassenderPruefsumme(gestoppt, { auftraege: [] });
+}
+
+function falscherZeilenbelegMitPassenderPruefsumme(gestoppt) {
+  schnittMitPassenderPruefsumme(gestoppt, { annahmen: [{ auftrag: "a1", text: `\`speichereStatus\` legt den Status ab (\`${ROUTE}:2\`), weil die Bestätigung ihn liest.` }] });
 }
 
 test("plane --fortsetzen nach einem Abbruch in der Entwurfs-Welle bringt die übernommenen korrigierten Befunde und Nachprüfungen in den Planungsbericht", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -167,4 +175,8 @@ test("plane --fortsetzen nach einem Abbruch in der Entwurfs-Welle schneidet und 
 
 test("plane --fortsetzen nach einem Abbruch in der Entwurfs-Welle schneidet und prüft neu, wenn die Skriptprüfung den Schnitt trotz passender Prüfsumme beanstandet", { timeout: LAUF_FRIST_MS }, (context) => {
   neuGeschnittenNach(context, beanstandeterSchnittMitPassenderPruefsumme);
+});
+
+test("plane --fortsetzen nach einem Abbruch in der Entwurfs-Welle schneidet und prüft neu, wenn eine Annahme des geprüften Schnitts einen falschen Zeilenbeleg hat", { timeout: LAUF_FRIST_MS }, (context) => {
+  neuGeschnittenNach(context, falscherZeilenbelegMitPassenderPruefsumme);
 });
