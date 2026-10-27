@@ -79,7 +79,7 @@ function imHintergrund(context, { wurzel, ersatz }, argumente) {
   return beende;
 }
 
-function planerGestartet(ersatz) {
+function planerGestartet(context, ersatz) {
   const gestartet = () => readdirSync(ersatz).some((name) => name.startsWith("zug-planer") && !name.includes("Teilung"));
   return new Promise((fertig) => {
     const wache = watch(ersatz, () => {
@@ -87,6 +87,7 @@ function planerGestartet(ersatz) {
       wache.close();
       fertig();
     });
+    context.after(() => wache.close());
     if (gestartet()) {
       wache.close();
       fertig();
@@ -467,7 +468,7 @@ test("ein laufender Teil reserviert seinen Deckel, so dass zwei parallele Teile 
   mitIssue(wurzel, HINWEIS_ORDNER, 88);
   vorgaengerGemergt(wurzel, HINTERLEGEN);
   const beende = imHintergrund(context, { wurzel, ersatz }, [HINTERLEGEN, "--deckel", "1000"]);
-  await planerGestartet(ersatz);
+  await planerGestartet(context, ersatz);
 
   const lauf = planeTeil(context, wurzel, HINWEIS_ORDNER);
   beende();
