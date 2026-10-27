@@ -465,6 +465,54 @@ export function maskRestrictedText(text) {
   return out + text.slice(cursor);
 }
 
+const LINE_JOINER = " ";
+const CARD_PART_MASK = "****";
+const CROSS_LINE_MIN_PARTS = 2;
+
+function digitLineSegments(texts) {
+  const segments = [];
+  let offset = 0;
+  texts.forEach((text, index) => {
+    if (!/\d/.test(text)) return;
+    segments.push({ index, start: offset, end: offset + text.length });
+    offset += text.length + LINE_JOINER.length;
+  });
+  return segments;
+}
+
+function spanParts(span, segments) {
+  return segments
+    .filter((segment) => segment.start < span.end && span.start < segment.end)
+    .map((segment) => ({
+      index: segment.index,
+      start: Math.max(span.start, segment.start) - segment.start,
+      end: Math.min(span.end, segment.end) - segment.start,
+    }));
+}
+
+function replaceAt(text, { start, end }, replacement) {
+  return text.slice(0, start) + replacement + text.slice(end);
+}
+
+function maskCrossLineCards(texts) {
+  const segments = digitLineSegments(texts);
+  const joined = segments.map((segment) => texts[segment.index]).join(LINE_JOINER);
+  const masked = [...texts];
+  for (const span of findCardSpans(joined).reverse()) {
+    const parts = spanParts(span, segments);
+    if (parts.length < CROSS_LINE_MIN_PARTS) continue;
+    const last = parts.pop();
+    masked[last.index] = replaceAt(masked[last.index], last, maskCard(joined.slice(span.start, span.end)));
+    for (const part of parts) masked[part.index] = replaceAt(masked[part.index], part, CARD_PART_MASK);
+  }
+  return masked;
+}
+
+export function maskRestrictedLines(lines) {
+  const texts = maskCrossLineCards(lines.map((line) => line.text));
+  return lines.map((line, index) => maskRestrictedText(line.prefix + texts[index]));
+}
+
 export function firstRestrictedField(value, exemptKeys) {
   return walkForRestrictedField(value, exemptKeys, { path: null, isTopLevel: true });
 }
