@@ -45,6 +45,7 @@ import { ableitungsBefunde, fremdeDateienBefunde, schreibeTeile, teile, teilungs
 import { gruppenMit, gruppenZahlUeber, laufeTeilung } from "./teilung.mjs";
 import { GEAENDERTE_DATEIEN, dokumenteIm, umfang } from "./umfang.mjs";
 import { text as wortlautDes, verdichteBerichte } from "./verdichtung.mjs";
+import { zeilenbelegBefunde } from "./zeilenbeleg.mjs";
 import { eigeneAnnahmen, setzePhaseZusammen } from "./zusammensetzen.mjs";
 
 const PLANUNG = "planung";
@@ -625,9 +626,14 @@ export class Planung {
     const schnitt = mitNieSaetzenDerVorgaben(antwort, this.dokumente[PITCH], this.soll);
     this.lege(SCHNITT, schnitt);
     this.schnitt = schnitt;
-    const ergebnis = await schnittImOrdner(this.ordner, { schnitt, berichte: this.berichte, root: this.root });
+    const ergebnis = await this.schnittBefunde(schnitt);
     this.schnittAnnahmen = ergebnis.annahmen;
     return ergebnis.befunde.length > 0 ? { befunde: ergebnis.befunde, schnitt } : { wert: schnitt };
+  }
+
+  async schnittBefunde(schnitt) {
+    const ergebnis = await schnittImOrdner(this.ordner, { schnitt, berichte: this.berichte, root: this.root });
+    return { ...ergebnis, befunde: [...ergebnis.befunde, ...zeilenbelegBefunde(this.ordner, this.root)] };
   }
 
   schnittAusAntwort(wert) {
