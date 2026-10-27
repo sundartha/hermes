@@ -3,17 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ROTER_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
+import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
-import { REPO_ROOT } from "./probe-repo.js";
 
 const JSCPD = "jscpd";
 const WOZU = "Wozu: Zwei Kopien derselben Logik lassen sich nur gemeinsam richtig ändern";
 const ABSATZ = `Zweck ${JSCPD}: Drehbuchtext des Ersatz-Agenten.`;
-const KOPIEN_LISTE = {
-  ".jscpd.json": readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8"),
-  "tools/basis/jscpd.json": `${JSON.stringify({ version: JSON.parse(readFileSync(join(REPO_ROOT, "tools/basis/jscpd.json"), "utf8")).version, befunde: [] })}\n`,
-};
 const RUMPF = [
   "  const wort = String(text).trim();",
   '  if (wort.length === 0) throw new Error("leeres Wort kann nicht umgewandelt werden");',

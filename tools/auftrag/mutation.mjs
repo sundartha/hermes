@@ -220,7 +220,7 @@ function testRunde(lauf, ueberlebende, gemeldet) {
     for (const schluessel of ueberlebende.filter((ueberlebend) => gemeint(mutant, ueberlebend))) gemeldet.set(schluessel, grund);
   }
   if (aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return null;
-  return lauf.vorherGruen() && testsFesthalten(lauf, ueberlebende);
+  return lauf.statischeTestpruefung() && lauf.kopien() && lauf.abhaengigkeiten() && lauf.vorherGruen() && testsFesthalten(lauf, ueberlebende);
 }
 
 function alterStand(lauf) {
