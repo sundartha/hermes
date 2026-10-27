@@ -8,7 +8,7 @@ import { postgresDa } from "../../tools/mutationspruefung/vorher-aus-ci.mjs";
 import { mitVorherSpeicher } from "../../tools/mutationspruefung/vorher-speicher.mjs";
 import { werkzeug as werkzeugAufruf } from "./mutationspruefung-probe.js";
 import { commitAll, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
-import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
+import { workflowJobLines, workflowLines, workflowStepLines } from "./workflow-dateien.js";
 
 const EXIT_ABBRUCH = 2;
 const AUSFUEHRBAR = 0o755;
@@ -308,4 +308,17 @@ test("Vorher aus der CI: der Stück-Job startet dasselbe Postgres wie die Tests 
   const adresse = postgresAdresse("ci.yml", "Tests");
   assert.equal(adresse.length, 1);
   assert.deepEqual(postgresAdresse("testumbau-vorher.yml", "Stück rechnen"), adresse);
+});
+
+const FESTE_NODE_VERSION = /^ {2}NODE_VERSION_FEST: \d+\.\d+\.\d+$/;
+const NODE_AUS_WORKFLOW = "        node-version: ${{ env.NODE_VERSION_FEST || '22' }}";
+
+test("Vorher aus der CI: alle Jobs rechnen mit derselben festen Node-Version, die CI weiter mit Node 22", () => {
+  const vorher = workflowLines("testumbau-vorher.yml");
+  const umgebung = vorher.indexOf("env:");
+  assert.notEqual(umgebung, -1, "testumbau-vorher.yml setzt keine Variablen für alle Jobs");
+  assert.match(vorher[umgebung + 1], FESTE_NODE_VERSION);
+  assert.equal(vorher.filter((zeile) => zeile.includes("NODE_VERSION_FEST")).length, 1);
+  assert.ok(workflowLines("action.yml", join(REPO_ROOT, ".github/actions/node-npm-ci")).includes(NODE_AUS_WORKFLOW));
+  assert.ok(!workflowLines("ci.yml").some((zeile) => zeile.includes("NODE_VERSION_FEST")));
 });
