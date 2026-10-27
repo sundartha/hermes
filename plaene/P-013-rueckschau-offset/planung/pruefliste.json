@@ -1,0 +1,106 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:10"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:14"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/app.js:107"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:13"
+  },
+  {
+    "schluessel": "weg:T1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/state-ops.js:417"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:13"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/helpers.js:335"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "ausweg:S1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:308"
+  },
+  {
+    "schluessel": "ausweg:S1:vorhanden",
+    "ergebnis": "befund",
+    "befund": "Stimmt, dass kein bestehender Test S1 schon prüft. Die Stelle für die neuen Tests gibt es aber: test/posteingang/posteingang-poll.test.js hat die Hilfe poll (Zeilen 93-99), die Importe startServer/seedState/seedCall (Zeile 5) und Tests über die echte Route mit include_seen (R5, Zeile 301). Der Pitch nennt genau diese Datei unter „Geänderte Dateien“. Die Schnittliste legt stattdessen test/posteingang/posteingang-poll-seite.test.js an (dort müsste poll dupliziert werden) und erklärt posteingang-poll.test.js für unverändert. Laut Pitch soll aber nur der Test INBOX-P2 A5 unverändert bleiben. Der Planer soll erwarteteDateien und abnahme auf test/posteingang/posteingang-poll.test.js umstellen oder begründen, warum er vom Pitch abweicht.",
+    "fundstelle": "pitch.md, ## Geänderte Dateien"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S2:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:221"
+  },
+  {
+    "schluessel": "ausweg:S2:vorhanden",
+    "ergebnis": "befund",
+    "befund": "Wie bei S1: Kein bestehender Test prüft offset, aber die passende Datei gibt es: test/posteingang/posteingang-poll.test.js mit poll (Zeilen 93-99) und den Seed-Helfern. Der Pitch nennt sie unter „Geänderte Dateien“. Die neue Datei posteingang-poll-seite.test.js weicht davon ab. Der Planer soll den S2-Test in die bestehende Datei legen oder die Abweichung begründen.",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:93"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:B1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:221"
+  },
+  {
+    "schluessel": "ausweg:B1:vorhanden",
+    "ergebnis": "befund",
+    "befund": "Stimmt, dass A5 (Zeile 221) den Text \"true\" nur gegen einen Spy prüft. Die passende Datei für den B1-Test ist aber test/posteingang/posteingang-poll.test.js: Sie nutzt den echten Eingang mit poll und startServer (Zeilen 232-249, R1: verbrauchender Abruf, danach leerer zweiter Abruf, also dasselbe Muster wie B1), und der Pitch nennt sie unter „Geänderte Dateien“. Der Planer soll den B1-Test dort anlegen oder die neue Datei begründen.",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:232"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:T1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei a1 fehlen Grenzen, die a1 in src/routes/api-inbox.js brechen kann (Audit-Zeile 18, Antwort 19). Der Test R7 deckt ein angehängtes offset in der Audit-Zeile nicht auf, weil sein Muster am Ende offen ist (test/posteingang/posteingang-poll.test.js:356). Fehlend: (1) sicherheit.md, ### Eingänge und Grenzen: „Audit-Zeile `inbox_poll`: unverändert, nur Zähler (`src/routes/api-inbox.js:18`). Angriffswege: keiner, weil `offset` nicht in die Zeile geht (Pitch, Geänderte Dateien nennen nur die Route; die Audit-Zeile bleibt unberührt).“ (2) sicherheit.md, ### Eingänge und Grenzen: „Antwort der Route an den Aufrufer: von Hermes zum Aufrufer im Prozess. Die Form `{ entries, remaining }` ist unverändert (`src/routes/api-inbox.js:19`).“ (3) sicherheit.md, ### Umfang: „Store, MCP-Werkzeug, Seitengröße, Audit-Zeile und Antwortform bleiben, wie sie sind (Pitch, Absicht und Geänderte Dateien).“ (4) pitch.md, ## Absicht: „Keine Abkürzung über eine Änderung am Store, am MCP-Werkzeug `check_inbox` oder an der Seitengröße von 20.“ Der Planer soll diese Sätze in wasDarfNiePassieren von a1 aufnehmen.",
+    "fundstelle": "sicherheit.md, ### Eingänge und Grenzen"
+  }
+]

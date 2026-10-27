@@ -1,0 +1,112 @@
+{
+  "stand": {
+    "kopfBaum": "800ad4aa08c1da975d5a122331f353fa4387d666",
+    "arbeitsbaum": "60275dfea213ad231e9be7b4dfba5801e348a6ac",
+    "dateien": {
+      ".claude/agents/entwurf.md": "c85d87ce8c561ddf29a286af6477df0bf47007f66e0001b168f395c6c95d3cae",
+      ".claude/agents/erkunder.md": "8fc33ae5afa5e3c7a5c4f85cd33f7cabf091322702f80425f84909103d015db2",
+      ".claude/agents/planer.md": "b85167be0bb21471167d3557f6a47e1f5204ddbdb1ae808301140456ac878e0d",
+      ".claude/agents/pruefer-planung.md": "897eaf47fb9b472876e8ace7333c4556cff74a847cf67a28d211ac27405a47b7",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "23e9ecdc84bef477f569ca4e9cda40b0445f5b48bcbddcf505ddcfc1b19721a0",
+      "plaene/P-013-rueckschau-offset/design.md": "0c1537742d1d0a3677a1922113391c03edc563bb89cbace0308e1303fa6995af",
+      "plaene/P-013-rueckschau-offset/pitch.md": "dd68a1d5f3b6a287ddae77396fc4e797d4bc8ded241712c2ad7e2466793407b9",
+      "plaene/P-013-rueckschau-offset/sicherheit.md": "fae6cac99fed976ffc8a60697f622daf3839da9b913273206995e0426ebb165f",
+      "tools/bereiche.json": "0735efba9a59a62b1be71f905e60c05041517b1fb84b2d94efd37d59f7a317c2"
+    },
+    "kopfOhneWerkzeug": "bdeeef247a2b6a637b41a0a0c090e7d00ac65bc006640834699a208605177175",
+    "arbeitsbaumOhneWerkzeug": "3397c770c4d33d76147e892eebcf3e52405db95eb6974fb3b704284af1ca59a9",
+    "werkzeugBaum": "441c4a6de09b4ef32016341470543d314fc5f164"
+  },
+  "ablage": {
+    "gliederung.json": "ce67a30a436de868f68e265ef1991c8ba666edc2a1aa40efaf12f8fe8e92000c",
+    "nachfragen.json": "c62606c2d3368d5abd02d81ccd690cf869357840b47a87c1aea6b16232534c8a",
+    "erkundung-g1.json": "bbcf271695ecdfa750a8eae11f5ac381e87dce1b29fc98b0e0877e2cb9c95993"
+  },
+  "zustand": {
+    "gesehen": [
+      "S1\u0000src/routes/api-inbox.js\u0000makeInboxRoutes",
+      "S1\u0000test/posteingang/posteingang-poll-seite.test.js\u0000",
+      "S1\u0000src/store/json.js\u0000takeInboxEntries",
+      "S1\u0000src/store/state-ops.js\u0000takeInboxEntries",
+      "S2\u0000src/routes/api-inbox.js\u0000makeInboxRoutes",
+      "S2\u0000test/posteingang/posteingang-poll-seite.test.js\u0000",
+      "B1\u0000src/routes/api-inbox.js\u0000makeInboxRoutes",
+      "B1\u0000test/posteingang/posteingang-poll-seite.test.js\u0000",
+      "B1\u0000src/store/json.js\u0000takeInboxEntries",
+      "B1\u0000src/store/state-ops.js\u0000takeInboxEntries",
+      "T1\u0000src/routes/api-inbox.js\u0000makeInboxRoutes",
+      "T1\u0000src/store/json.js\u0000takeInboxEntries",
+      "T1\u0000src/store/state-ops.js\u0000takeInboxEntries"
+    ],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S1",
+          "S2",
+          "B1",
+          "T1"
+        ],
+        "sitzung": "34b7ae55-8631-43de-a070-2000cf626bcc",
+        "runden": 1,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S1",
+        1
+      ]
+    ],
+    "nachfrageWellen": 1,
+    "wegAbnahmen": [
+      {
+        "nummer": "S1",
+        "summe": "20b82a2a7f687f142874624055ed89052f02c15bda83c37b24e68ff6f96cd9a8",
+        "werkzeug": "441c4a6de09b4ef32016341470543d314fc5f164",
+        "zeile": {
+          "schluessel": "weg:S1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/routes/api-inbox.js:14"
+        }
+      },
+      {
+        "nummer": "S2",
+        "summe": "5715598961298f9ee48bc76a4c219f63232aafaaeffd149bdefa8847be072692",
+        "werkzeug": "441c4a6de09b4ef32016341470543d314fc5f164",
+        "zeile": {
+          "schluessel": "weg:S2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/app.js:107"
+        }
+      },
+      {
+        "nummer": "B1",
+        "summe": "1f1ffdb31ad0990e62851876c7383bebc8a3ae31ff82980e5fa5f8ba66d5e2f1",
+        "werkzeug": "441c4a6de09b4ef32016341470543d314fc5f164",
+        "zeile": {
+          "schluessel": "weg:B1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/routes/api-inbox.js:13"
+        }
+      },
+      {
+        "nummer": "T1",
+        "summe": "bcf95e911af3ee9fe2d6b416e9e422658c15abc1eb7447eadbfeaa3ea9dd73f0",
+        "werkzeug": "441c4a6de09b4ef32016341470543d314fc5f164",
+        "zeile": {
+          "schluessel": "weg:T1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/store/state-ops.js:417"
+        }
+      }
+    ]
+  }
+}

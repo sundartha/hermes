@@ -1,0 +1,24 @@
+[
+  {
+    "gruppe": 0,
+    "sitzung": "4ee0497f-02a2-4065-ab08-94cde4e29897",
+    "schluessel": [
+      "durchstich:a1",
+      "b-nummer:B1",
+      "nie-saetze:a1",
+      "allein-gruen:a1",
+      "nicht-zusammengelegt:a1",
+      "ausweg:S1:weg eingang",
+      "ausweg:S1:vorhanden",
+      "ausweg:S1:ownerEntscheidung",
+      "ausweg:S2:weg eingang",
+      "ausweg:S2:vorhanden",
+      "ausweg:S2:ownerEntscheidung",
+      "ausweg:B1:weg eingang",
+      "ausweg:B1:vorhanden",
+      "ausweg:B1:ownerEntscheidung",
+      "ausweg:T1:ownerEntscheidung",
+      "gegenfrage:alle"
+    ]
+  }
+]

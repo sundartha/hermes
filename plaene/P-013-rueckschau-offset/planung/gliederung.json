@@ -1,0 +1,26 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S2",
+        "B1",
+        "T1"
+      ],
+      "eingang": "HTTP-Route POST /api/inbox/poll hinter internalOnly (src/routes/api-inbox.js:10), JSON-Body mit include_seen und neu optional offset; die Route ruft mit limit INBOX_MAX_ENTRIES (20) und includeSeen (nur bei genau true) die unveränderte Store-Funktion (src/store/state-ops.js:406-421) und antwortet mit { entries, remaining } (src/routes/api-inbox.js:13-19)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie ist der Handler von POST /api/inbox/poll in src/routes/api-inbox.js aufgebaut (Funktionsname, Zeilen, wie wird der Body gelesen, wo steht die Bedingung include_seen === true, wo wird INBOX_MAX_ENTRIES definiert und an den Store übergeben)? Gibt es für diesen Handler Lint-Befunde?",
+        "Wie heißt die Store-Funktion, die die Route ruft (src/store/state-ops.js:406-421), welche Optionen nimmt sie genau ({ limit, includeSeen }?), und wie berechnet sie remaining? Liefert sie bei limit = offset + 20 die Einträge aufsteigend nach startedAt, sodass die Route mit slice(offset) die Seite ab offset bekommt und remaining unverändert die Einträge hinter dieser Seite zählt?",
+        "Markiert die Store-Funktion mit includeSeen:true wirklich nichts als gesehen (src/store/state-ops.js:417), und markiert sie ohne includeSeen genau die gelieferten limit Einträge (src/store/state-ops.js:413-418)?",
+        "Wie antwortet die Route oder eine andere Route unter src/routes/ heute auf einen ungültigen Body-Wert mit 400 (Form res.status(400).json({ error: ... }))? Gibt es einen gemeinsamen Helfer dafür, den die Route nutzen sollte?",
+        "Was schreibt die Audit-Zeile inbox_poll (src/routes/api-inbox.js:18) genau, und zählt sie entries.length oder einen Wert aus der Store-Antwort? Ändert sich ihr Inhalt, wenn die Route nur die Einträge ab offset zurückgibt?",
+        "Welche Testhilfen in test/posteingang/posteingang-poll.test.js (poll, Zeilen 93-99) und test/helpers.js (startServer, seedState, seedCall) erreichen den echten Eingang POST /api/inbox/poll mit beliebigem JSON-Body und Header x-internal-tenant? Wie legt ein Test 25 Einträge mit verschiedenen startedAt an, und wie markiert er sie schon als gesehen (für S1)?",
+        "Wie prüft der bestehende Test INBOX-P2 A5 (test/posteingang/posteingang-poll.test.js:208-226) die Store-Optionen genau als { limit: 20, includeSeen } (Stub, Spy auf den Store)? Bleibt er grün, wenn die Route ohne offset weiter genau diese Optionen übergibt und mit offset { limit: offset + 20, includeSeen: true }?",
+        "Liegt test/posteingang/ als Testordner zum Bereich posteingang aus tools/bereiche.json, und gibt es dort weitere Tests, die POST /api/inbox/poll oder die Store-Funktion erreichen und durch die Änderung rot werden könnten?"
+      ]
+    }
+  ]
+}

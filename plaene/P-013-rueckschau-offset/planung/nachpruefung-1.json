@@ -1,0 +1,47 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:233"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:13"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ### Eingänge und Grenzen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/helpers.js:335"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-inbox.js:10"
+  },
+  {
+    "schluessel": "ausweg:S1:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:308"
+  },
+  {
+    "schluessel": "ausweg:S2:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:308"
+  },
+  {
+    "schluessel": "ausweg:B1:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/posteingang/posteingang-poll.test.js:221"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]

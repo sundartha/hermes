@@ -1,0 +1,135 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "a1 trägt alle vier Nummern S1, S2, B1 und T1. Alle haben denselben Eingang POST /api/inbox/poll und dieselbe einzige Produktdatei src/routes/api-inbox.js. Ein Abnahmetest kann sie zusammen prüfen, und die Änderung bleibt bei rund 25 Zeilen (Bericht S1: +15, S2: +6, B1: +3). B1/T1 gehören zu a1, weil die einfachste Form von S1 (offset ohne Bedingung lesen) genau diesen Schutz brechen kann. Ein eigener Auftrag für S2 würde dieselbe Datei teilen und könnte nicht parallel laufen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Kein Umbau davor: Die Funktionsliste meldet für `makeInboxRoutes` (src/routes/api-inbox.js:6-23) und den anonymen Handler ab Zeile 10 keine Lint-Befunde. Das Schema ändert sich nicht (Bericht S1, schema aenderung=false)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Abnahmetest ist die neue Datei test/posteingang/posteingang-poll-seite.test.js. Eine `funktion` braucht einen neuen Test, der heute rot ist; die bestehende Datei test/posteingang/posteingang-poll.test.js ist heute grün und zählt nicht als neuer Test. Pitch, „## Geänderte Dateien“, nennt die bestehende Datei. Sie bleibt trotzdem unverändert, weil die Tests für S1, S2 und B1 im selben Ordner test/posteingang/ in der neuen Datei stehen. Die neue Datei importiert startServer, seedState und seedCall aus test/helpers.js und baut nur eine kleine eigene Hilfe für den POST-Aufruf, weil sie aus einer anderen Testdatei nichts importieren kann. Meldet jscpd dabei eine Doppelung, nimmt der Bau-Agent den Ausweg, den die Meldung nennt; er formt die Hilfe nicht um, um die Prüfung zu umgehen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der bestehende Test INBOX-P2 A5 vergleicht die Store-Optionen streng mit `INBOX_MAX_ENTRIES` (test/posteingang/posteingang-poll.test.js:208-226, node:assert/strict). Deshalb übergibt die Route ohne offset und bei include_seen ungleich true weiter genau { limit: INBOX_MAX_ENTRIES, includeSeen } ohne Schlüssel offset, auch nicht als undefined. Nur im Zweig include_seen === true mit gültigem offset übergibt sie { limit: offset + INBOX_MAX_ENTRIES, includeSeen: true } und schneidet danach mit slice(offset)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Prüfung von offset steht inline im Handler vor dem Store-Aufruf: fehlt offset, bleibt alles wie heute, sonst gilt Number.isSafeInteger(offset) && offset >= 0. Einen gemeinsamen Helfer gibt es nicht, und parseNonNegativeInteger passt laut Pitch nicht (Bericht S2, Hinweis Offset-Prüfung)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Abnahmetest legt die 25 Einträge selbst an. Er ruft seedCall je Eintrag mit eigener id, eigenem startedAt, direction inbound, status completed und gesetztem inboxEntryAt auf, mit inboxSeenAt gesetzt für S1 und null für B1, und übergibt sie über seedState an startServer. In test/helpers.js gibt es keine Hilfe zum Massenanlegen (Antwort auf Nachfrage 1)."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Posteingang-Rückschau mit offset blättern, ungültiges offset → 400",
+      "bereich": "src/routes/api-inbox.js",
+      "erwarteteDateien": [
+        "src/routes/api-inbox.js",
+        "test/posteingang/posteingang-poll-seite.test.js"
+      ],
+      "abnahme": "test/posteingang/posteingang-poll-seite.test.js",
+      "erwarteterFehler": "5 !== 0",
+      "prueft": [
+        "S1",
+        "S2",
+        "B1",
+        "T1"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Ohne `include_seen:true` bleibt der Abruf genau wie heute, einschließlich des Markierens als gesehen, und `offset` wird dort nicht ausgewertet.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Keine Abkürzung über eine Änderung am Store, am MCP-Werkzeug `check_inbox` oder an der Seitengröße von 20.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Ein `offset` als Text (`\"20\"`), als Bruch (`1.5`) oder negativ (`-1`): Entscheidung: 400 mit `{\"error\":\"offset muss eine ganze Zahl ab 0 sein\"}`, wie `include_seen` nur bei genau `true` wirkt (fail-closed, kein Umwandeln von Text).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Sehr großes `offset` (etwa `1000000`): Entscheidung: 200 mit leerer Liste und `\"remaining\":0`; `remaining` kommt unverändert aus der Store-Abfrage, die Route rechnet es nicht selbst.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Bestehender Test `INBOX-P2 A5` prüft die Store-Optionen genau als `{ limit: 20, includeSeen }`: Entscheidung: ohne `offset` übergibt die Route weiter genau diese Optionen; der Test bleibt unverändert.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Store, MCP-Werkzeug, Seitengröße, Audit-Zeile und Antwortform bleiben, wie sie sind (Pitch, Absicht und Geänderte Dateien).",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Umfang"
+        },
+        {
+          "satz": "Audit-Zeile `inbox_poll`: unverändert, nur Zähler (`src/routes/api-inbox.js:18`). Angriffswege: keiner, weil `offset` nicht in die Zeile geht (Pitch, Geänderte Dateien nennen nur die Route; die Audit-Zeile bleibt unberührt).",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Eingänge und Grenzen"
+        },
+        {
+          "satz": "Die Form `{ entries, remaining }` ist unverändert (`src/routes/api-inbox.js:19`).",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Eingänge und Grenzen"
+        },
+        {
+          "satz": "Die Store-Funktion markiert ohne `include_seen` jeden gelieferten Eintrag als gesehen: Ein `offset` im verbrauchenden Abruf würde die übersprungenen Einträge mitmarkieren, ohne dass jemand sie gesehen hat. Entscheidung: `offset` wirkt nur mit `include_seen:true`; ohne wird es nicht gelesen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Ein `offset` als Text (`\"20\"`), als Bruch (`1.5`) oder negativ (`-1`): Entscheidung: 400 mit `{\"error\":\"offset muss eine ganze Zahl ab 0 sein\"}`, wie `include_seen` nur bei genau `true` wirkt (fail-closed, kein Umwandeln von Text). Die vorhandene Hilfe `parseNonNegativeInteger` (`src/telephony/adapters/telnyx/cost-parse.js:48-55`) wandelt Text um und passt deshalb nicht.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Sehr großes `offset` (etwa `1000000`): Entscheidung: 200 mit leerer Liste und `\"remaining\":0`; `remaining` kommt unverändert aus der Store-Abfrage, die Route rechnet es nicht selbst. Die Arbeit je Abruf wächst mit `offset`, bis zur Zahl aller Einträge des Tenants mal der Zahl aller Aufgaben (`src/store/state-ops.js:400-404`, `src/store/state-ops.js:415-419`); hingenommen, weil nur Aufrufer im Prozess die Route erreichen und `check_inbox` kein `offset` schickt (PM5).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "`offset` als Bruch (`1.5`) oder als Text (`\"20\"`) fällt unter dieselbe Regel R2 wie `-1` in S2; S2 nimmt `-1`, weil dort eine Umsetzung ohne Prüfung still eine falsche Seite liefert (`slice(-1)`).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: das Blättern für den Agenten des Kunden über MCP. `check_inbox` bekommt kein `offset`, weil `src/mcp-tools.js` für dieses Paket ausgeschlossen ist und eine Änderung am Werkzeugvertrag eine eigene Entscheidung über fremde Agenten wäre; bis dahin erreicht nur ein Aufrufer im Prozess die Einträge hinter den ersten 20.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine stabile Fortsetzung über einen Cursor (`startedAt` und `id`), weil sie eine Änderung am Store bräuchte (PM6, PM7).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: `offset` im verbrauchenden Abruf ohne `include_seen`, weil übersprungene Einträge sonst als gesehen markiert würden.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine andere Seitengröße oder ein `limit` vom Aufrufer, weil die Seitengröße 20 die Antwortgröße für den MCP-Pfad begrenzt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}
