@@ -72,6 +72,15 @@ export function pruefung(beleg, name) {
   return beleg.pruefungen.findLast((eintrag) => eintrag.name === name)?.exitCode;
 }
 
+export function namen(beleg) {
+  return beleg.pruefungen.map(({ name }) => name);
+}
+
+export function rotAn(name, lauf, beleg) {
+  const ergebnis = { status: lauf.status, ergebnis: beleg.ergebnis, grund: beleg.grund, exitCode: pruefung(beleg, name) };
+  assert.deepEqual(ergebnis, { status: EXIT_ROT, ergebnis: "rot", grund: `${name} endete mit Exit ${EXIT_ROT}.`, exitCode: EXIT_ROT }, lauf.stdout + lauf.stderr);
+}
+
 export function exitCodes(beleg, name) {
   return beleg.pruefungen.filter((eintrag) => eintrag.name === name).map(({ exitCode }) => exitCode);
 }
