@@ -439,14 +439,6 @@
       "count": 1
     }
   },
-  "src/billing/backfill-profiles.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 1
-    }
-  },
   "src/billing/cancellation-mail.js": {
     "no-magic-numbers": {
       "count": 1
