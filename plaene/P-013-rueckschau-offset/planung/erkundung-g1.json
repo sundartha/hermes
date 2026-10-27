@@ -1,0 +1,298 @@
+{
+  "gruppe": [
+    "S1",
+    "S2",
+    "B1",
+    "T1"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "ausweg": "nicht gefunden, weil `POST /api/inbox/poll` und `{\"include_seen\":true,\"offset\":20}` entstehen neu in test/posteingang/posteingang-poll-seite.test.js"
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/json.js",
+          "funktion": "takeInboxEntries",
+          "von": 350,
+          "bis": 351
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "takeInboxEntries",
+          "von": 406,
+          "bis": 421
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 18,
+          "bis": 19
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20,
+          "neueZeilen": 15
+        },
+        {
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "neu": "datei",
+          "neueZeilen": 90,
+          "vorhanden": {
+            "suche": [
+              "include_seen",
+              "takeInboxEntries",
+              "INBOX_MAX_ENTRIES",
+              "remaining"
+            ],
+            "treffer": [
+              "test/posteingang/posteingang-poll.test.js:301",
+              "test/posteingang/posteingang-poll.test.js:93",
+              "test/posteingang/posteingang-poll.test.js:224"
+            ],
+            "urteil": "kein Treffer passt, weil kein bestehender Test die Rückschau über die echte Route mit mehr als 20 Einträgen, mit offset oder mit remaining aus einem Store mit 25 Einträgen prüft; R5 (Zeile 301) liest nur wenige Einträge, und A5 (Zeile 208-226) prüft nur die Store-Optionen über einen Spy. Es wird eine neue Datei angelegt, die poll und die Helfer aus test/helpers.js im selben Stil nutzt"
+          }
+        }
+      ],
+      "tests": [
+        "test/posteingang/posteingang-poll.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/store/state-ops.js:406-421"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder Pitch noch Design Doc eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "ausweg": "nicht gefunden, weil `POST /api/inbox/poll` und `{\"include_seen\":true,\"offset\":-1}` entstehen neu in test/posteingang/posteingang-poll-seite.test.js"
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "neu": "datei",
+          "neueZeilen": 90,
+          "vorhanden": {
+            "suche": [
+              "include_seen",
+              "takeInboxEntries"
+            ],
+            "treffer": [
+              "test/posteingang/posteingang-poll.test.js:301",
+              "test/posteingang/posteingang-poll.test.js:93"
+            ],
+            "urteil": "kein Treffer passt, weil keine Testdatei einen offset-Body gegen die echte Route prüft; dieselbe neue Datei wie bei S1"
+          }
+        }
+      ],
+      "tests": [
+        "test/posteingang/posteingang-poll.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/routes/api-inbox.js:10-20"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder Pitch noch Design Doc eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "ausweg": "nicht gefunden, weil `POST /api/inbox/poll` und `{\"include_seen\":\"true\",\"offset\":20}` entstehen neu in test/posteingang/posteingang-poll-seite.test.js"
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/json.js",
+          "funktion": "takeInboxEntries",
+          "von": 350,
+          "bis": 351
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "takeInboxEntries",
+          "von": 406,
+          "bis": 421
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 18,
+          "bis": 19
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20,
+          "neueZeilen": 3
+        },
+        {
+          "datei": "test/posteingang/posteingang-poll-seite.test.js",
+          "neu": "datei",
+          "neueZeilen": 90,
+          "vorhanden": {
+            "suche": [
+              "include_seen",
+              "takeInboxEntries"
+            ],
+            "treffer": [
+              "test/posteingang/posteingang-poll.test.js:221",
+              "test/posteingang/posteingang-poll.test.js:93"
+            ],
+            "urteil": "kein Treffer passt, weil A5 (Zeile 221) den Text \"true\" nur gegen einen Spy-Store prüft und nicht, dass die 20 ältesten kommen und ein folgender Abruf die 5 jüngsten liefert; dieselbe neue Datei wie bei S1"
+          }
+        }
+      ],
+      "tests": [
+        "test/posteingang/posteingang-poll.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/routes/api-inbox.js:13"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder Pitch noch Design Doc eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "T1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 10,
+          "bis": 20
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/json.js",
+          "funktion": "takeInboxEntries",
+          "von": 350,
+          "bis": 351
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/state-ops.js",
+          "funktion": "takeInboxEntries",
+          "von": 406,
+          "bis": 421
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/store/state-ops.js",
+          "funktion": "takeInboxEntries",
+          "von": 414,
+          "bis": 418
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/routes/api-inbox.js",
+          "funktion": "makeInboxRoutes",
+          "von": 13,
+          "bis": 13,
+          "neueZeilen": 1
+        }
+      ],
+      "tests": [
+        "test/posteingang/posteingang-poll.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/store/state-ops.js:414-418"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil weder Pitch noch Design Doc eine Entscheidung des Owners verlangen",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Handler: anonyme Funktion in makeInboxRoutes, src/routes/api-inbox.js:10-20, ohne Lint-Befunde. include_seen wird in Zeile 13 gelesen, INBOX_MAX_ENTRIES steht in Zeile 4 und geht in Zeile 15 an den Store.",
+    "`kette` belegt weder Route → Store noch json.js → state-ops, weil der Aufruf über das Store-Objekt und über den Namensraum-Import `ops.` läuft. Aufrufstellen: src/routes/api-inbox.js:14, src/store/json.js:351, src/store/pg.js:183.",
+    "Store-Funktion takeInboxEntries(state, tenantId, { limit, includeSeen }), src/store/state-ops.js:406-421: aufsteigend nach startedAt, slice(0, limit), remaining = Kandidaten minus gelieferte. Mit limit = offset + 20 und slice(offset) in der Route kommt die Seite ab offset, remaining zählt unverändert die Einträge dahinter. Mit includeSeen:true wird nichts markiert (Zeile 417), ohne includeSeen werden genau die gelieferten limit Einträge markiert.",
+    "B1/T1: \"true\" als Text ist nicht === true, also ist includeSeen false. offset wird dort nicht ausgewertet, es kommen die 20 ältesten, remaining ist 5, ein folgender Aufruf mit {} liefert die 5 jüngsten. Die Route muss offset nur bei includeSeen true auswerten und prüfen.",
+    "Offset-Prüfung: fehlt offset, bleibt alles wie heute. Sonst muss gelten Number.isSafeInteger(offset) && offset >= 0, andernfalls res.status(400).json({ error: \"offset muss eine ganze Zahl ab 0 sein\" }) vor dem Store-Aufruf. Die Fehlerform steht ebenso in src/routes/api-calls.js:234 und src/routes/api-billing.js:113. Einen gemeinsamen Helfer gibt es nicht. Number.isSafeInteger kommt in src/ nur bei Anbieter-Antworten vor, deshalb meldet keine Nummer eine neue Funktion; die Prüfung steht inline.",
+    "Audit-Zeile (src/routes/api-inbox.js:18): `neu=${marked} rest=${remaining}`, beide aus der Store-Antwort, nicht entries.length. Bei includeSeen ist marked 0. Ihr Inhalt ändert sich durch slice(offset) nicht. Bei 400 läuft sie nicht.",
+    "Tests: test/posteingang/posteingang-poll.test.js hat die Hilfe poll(srv, {headers, body}) (Zeilen 93-99) und Importe von startServer, seedState, seedCall aus test/helpers.js (Zeile 5). 25 Einträge entstehen mit seedCall({... startedAt, inboxEntryAt, inboxSeenAt}) wie in den Zeilen 56-74; gesehen heißt inboxSeenAt gesetzt. Die Bodys aus dem Wenn stehen in keiner bestehenden Testdatei, deshalb der neue Test test/posteingang/posteingang-poll-seite.test.js; die Datei dient als Eingangsdatei für S1, S2 und B1. test/helpers.js habe ich nicht gelesen.",
+    "INBOX-P2 A5 (test/posteingang/posteingang-poll.test.js:208-226) prüft die Optionen über den Spy makeMockStore (Zeilen 16-28). Er bleibt grün, wenn die Route ohne offset weiter genau { limit: 20, includeSeen } übergibt, ohne zusätzlichen Schlüssel offset. Mit offset gehen { limit: offset + 20, includeSeen: true } an den Store. Die Zeilen 208-226 habe ich nicht selbst gelesen.",
+    "test/posteingang/ gehört zum Bereich posteingang. Weitere Tests am Weg: test/posteingang/posteingang-poll-gleichzeitig.test.js (Zeile 31, POST ohne Body) und test/route-auth-inventory.test.js:190 (nur der Routenname); beide bleiben grün. Direkt am Store, von der Routenänderung unberührt: test/inbox-mcp-tool.test.js, test/inbox-poll-flush-disk.test.js, test/inbox-poll-projection.test.js, test/inbox-store-parity.test.js.",
+    "Absicht: Store, check_inbox (src/mcp-tools.js:1163-1167) und die Seitengröße 20 bleiben unverändert. Ich habe im Code keinen Weg gefunden, der die ausgeschlossene Abkürzung nimmt.",
+    "T1 ändert keinen eigenen Code. Die Stelle src/routes/api-inbox.js:13 ist die Zeile, in der der Schutz (include_seen === true) steht; B1 prüft ihn mit dem Test.",
+    "CODEOWNERS: Die Suche nach api-inbox in .github/CODEOWNERS fand nichts. Die Datei habe ich nicht ganz gelesen.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Handler: anonyme Funktion in makeInboxRoutes, src/routes/api-inbox.js:10-20, `karte` zeigt sie als „anonym ab Zeile 10“ ohne Lint-Befunde. Der Body kommt aus req.body?.include_seen (Zeile 13). INBOX_MAX_ENTRIES = 20 steht in Zeile 4 und geht in Zeile 15 als limit an den Store. Eine Stelle in der Funktion makeInboxRoutes (6-23) nennt den Handler.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: `kette` belegt weder Route → Store noch json.js → state-ops: Die Route ruft `store.takeInboxEntries` (Objektmethode), json.js ruft `ops.takeInboxEntries` (Namensraum-Import). Beide Aufrufe stehen im Quelltext: src/routes/api-inbox.js:14, src/store/json.js:351 und src/store/pg.js:183. Die Glieder speicher und logik in den Wegen sind nach dem Quelltext gemeldet, nicht per `kette` belegt.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Store-Funktion `takeInboxEntries(state, tenantId, { limit, includeSeen })`, src/store/state-ops.js:406-421. Kandidaten sind Aufrufe mit inboxEntryAt und (includeSeen oder ohne inboxSeenAt). Die Sortierung ist aufsteigend nach startedAt, geliefert wird slice(0, limit). `remaining` ist Kandidaten minus gelieferte. Mit limit = offset + 20 und slice(offset) in der Route liefert die Route die Seite ab offset, und `remaining` zählt unverändert die Einträge hinter dieser Seite. S1: 25 Einträge, offset 20, limit 40 ergibt 25 gelieferte, nach slice(20) die 5 jüngsten, `remaining` 0.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Markieren: Mit includeSeen:true markiert der Store nichts (Zeile 417, `!includeSeen &&`). Ohne includeSeen markiert er genau die gelieferten limit Einträge (413-418). Wichtig für B1/T1: `\"true\"` als Text ist nicht `=== true`, also includeSeen false. Dann wird `offset` nicht ausgewertet, es kommen die 20 ältesten, `remaining` ist 5, und der nächste Aufruf mit `{}` liefert die 5 jüngsten. Die Route muss `offset` also nur auswerten, wenn includeSeen true ist (Absicht). Dieser Pfad ist heute schon so und darf nicht verändert werden.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Offset-Prüfung (S2): Bei includeSeen true muss `offset` fehlen/undefined sein oder `Number.isSafeInteger(offset) && offset >= 0`, sonst `res.status(400).json({ error: \"offset muss eine ganze Zahl ab 0 sein\" })`. Die Fehlerform ist in src/routes/api-calls.js:234 und src/routes/api-billing.js:113 dieselbe. Einen gemeinsamen Helfer für Body-Prüfungen gibt es nicht, jede Route schreibt res.status(400).json({ error }) selbst. `parseNonNegativeInteger` wandelt auch Text um und passt nicht, wie das Design Doc sagt. Die Prüfung gehört vor den Store-Aufruf, damit bei 400 nichts passiert. Bei `include_seen` ungleich true wird `offset` nicht geprüft (Absicht: dort wird er nicht ausgewertet).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Doppelungssuche für die Prüfung: Die einzigen Treffer für `Number.isSafeInteger` in src/ sind Anbieter-Antworten (src/telephony/adapters/telnyx/cost-parse.js:48-55, src/elevenlabs/kosten-beleg.js:24), kein Routen-Body. Deshalb meldet keine Nummer eine `neu`-Funktion: Die Prüfung steht inline im Handler.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Audit-Zeile: `audit(\"inbox_poll\", req, `neu=${marked} rest=${remaining}`)` (src/routes/api-inbox.js:18). Sie nimmt `marked` und `remaining` aus der Store-Antwort, nicht entries.length. Bei includeSeen ist marked 0, `remaining` ändert sich durch slice(offset) nicht. Ihr Inhalt bleibt unverändert. Sie läuft nach dem Store-Aufruf. Bei 400 läuft sie nicht (so wie sie auch bei der 403-Ablehnung nicht läuft).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Lint/Größe: Der Handler hat 11 Zeilen, die Funktion makeInboxRoutes 18 Zeilen, ohne Befunde. Mit der Prüfung sind es rund 25 Zeilen, die Verzweigungen kommen dazu. Wenn eine Komplexitätsgrenze greift, ist die Prüfung als Modul-Funktion in derselben Datei abzutrennen. Bisher gibt es dafür keinen Befund.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Tests: test/posteingang/posteingang-poll.test.js ruft den echten Eingang. Die Hilfe `poll(srv, {headers, body})` (Zeilen 93-99) schickt einen beliebigen JSON-Body an `${srv.localUrl}/api/inbox/poll`. `startServer`, `seedState`, `seedCall` kommen aus test/helpers.js (Import Zeile 5). 25 Einträge entstehen mit seedCall({ id, direction:\"inbound\", status:\"completed\", startedAt, inboxEntryAt, inboxSeenAt }) und je verschiedenem startedAt, gesehen = inboxSeenAt auf einen Zeitstempel gesetzt (Muster Zeilen 56-74, mit inboxSeenAt: null für ungesehen). Der Header x-internal-tenant wird über den Parameter headers durchgereicht. Einschränkung: Ich habe test/helpers.js nicht gelesen, die Namen der Parameter sind nur aus dem Testimport und den Aufrufen geschlossen.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: INBOX-P2 A5 (test/posteingang/posteingang-poll.test.js:208-226) benutzt den Spy `makeMockStore` (Zeilen 16-28, pollCalls speichert { tenantId, options }). Er bleibt grün, wenn die Route ohne offset weiter genau { limit: 20, includeSeen } übergibt (kein weiterer Schlüssel, auch kein `offset: undefined` als eigener Schlüssel bei deepEqual-Prüfung). Mit offset muss die Route { limit: offset + 20, includeSeen: true } übergeben. Ich habe den Test an Zeilen 208-226 nicht selbst gelesen; die Aussage folgt aus Design Doc und den Aufrufen in den Zeilen 212-218.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Ordner: test/posteingang/ liegt zum Bereich posteingang (Quelle ^src/routes/api-inbox). Weitere Tests, die die Route berühren: test/posteingang/posteingang-poll-gleichzeitig.test.js (Zeile 31, POST ohne Body, wird grün bleiben) und test/route-auth-inventory.test.js:190 (nur der Routenname). Tests, die takeInboxEntries direkt am Store/ops rufen und von der Routenänderung nicht berührt sind, weil der Store unverändert bleibt: test/inbox-mcp-tool.test.js, test/inbox-poll-flush-disk.test.js, test/inbox-poll-projection.test.js, test/inbox-store-parity.test.js. test/posteingang/posteingang-poll-gleichzeitig.test.js:78 ruft die Store-Funktion direkt.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Absicht beachtet: Der Weg über die Route hält den Store, das MCP-Werkzeug check_inbox (src/mcp-tools.js:1163-1167) und die Seitengröße 20 unverändert. Ich habe im Code keinen Weg gefunden, der die Abkürzung nimmt.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: CODEOWNERS: Die Suche nach `api-inbox` in .github/CODEOWNERS fand nichts; ich habe die Datei nicht ganz gelesen, daher `codeowners` leer als Befund der Suche.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Schema: Keine Änderung, weil die Route nur Body und Aufrufoptionen ändert. Eine neue Test-Datei wäre ein Auftragsthema des Planers, nicht von mir."
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/api-inbox.js:14"
+    },
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/app.js:107"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/api-inbox.js:13"
+    },
+    {
+      "schluessel": "weg:T1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/state-ops.js:417"
+    }
+  ],
+  "befunde": []
+}
