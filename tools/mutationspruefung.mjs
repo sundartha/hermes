@@ -410,7 +410,7 @@ async function welle(datei, zeilen, testgruppen) {
 async function durchgang(datei, zeilen, tests) {
   let ergebnisse = null;
   for (const testgruppen of wellen(gruppen(tests))) {
-    const offen = ergebnisse === null ? zeilen : ergebnisse.filter(ueberlebt).map((eintrag) => eintrag.zeilen);
+    const offen = ergebnisse === null ? zeilen : ergebnisse.filter(ueberlebt).map((eintrag) => eintrag.lage);
     if (offen.length === 0) break;
     const laeufe = await welle(datei, offen, testgruppen);
     ergebnisse = vereine(ergebnisse ?? laeufe[0], laeufe);
@@ -425,7 +425,7 @@ async function mutantenproben(datei, zeilen, { erste, alle, nachsichtig }) {
   const offen = ergebnisse.filter(ueberlebt);
   const uebrige = alle.filter((test) => !erste.includes(test));
   if (offen.length === 0 || uebrige.length === 0) return ergebnisse;
-  const zweite = await ohneRoteErstlaeufe(datei, offen.map((eintrag) => eintrag.zeilen), { tests: uebrige });
+  const zweite = await ohneRoteErstlaeufe(datei, offen.map((eintrag) => eintrag.lage), { tests: uebrige });
   return vereine(ergebnisse, [zweite]);
 }
 
