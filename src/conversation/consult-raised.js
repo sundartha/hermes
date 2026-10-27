@@ -10,7 +10,7 @@ export const CONSULT_RESULT = Object.freeze({
   TIMEOUT: "timeout",
 });
 
-export const EL_CONSULT_STAGES = Object.freeze({
+const EL_CONSULT_STAGES = Object.freeze({
   deliveryDeadlineMs: config.tenancy.elConsultDeliveryMs,
   ackDeadlineMs: config.tenancy.elConsultDeliveryMs + config.tenancy.elConsultAckMs,
   answerDeadlineMs: config.tenancy.elConsultAnswerMs,
