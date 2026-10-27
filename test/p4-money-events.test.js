@@ -158,6 +158,12 @@ test("unbekannter Tenant (customerId ohne Treffer) -> no_tenant-Audit, kein Writ
     },
     baseDeps(store, audit),
   );
-  assert.ok(calls.some((c) => c.event === "stripe_money_event_ignored" && c.detail === "no_tenant"));
+  assert.ok(
+    calls.some(
+      (c) =>
+        c.event === "stripe_money_event_ignored" &&
+        c.detail === "type=charge.refunded event=evt_unknown1 no_tenant",
+    ),
+  );
   assert.deepEqual(store.calls.setTenantSubscription, []);
 });

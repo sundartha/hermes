@@ -142,7 +142,10 @@ test("FW1-A3: Geld-Ereignis mit unbekanntem tenant_ref wird ignoriert, kein Writ
     ["stripe_money_event", "stripe_money_event_ignored"],
     "unbedingtes Audit bleibt VOR der Aufloesung stehen",
   );
-  assert.equal(auditCalls[1].detail, `tenant=${GHOST_TENANT} unknown_tenant`);
+  assert.equal(
+    auditCalls[1].detail,
+    `type=charge.refunded event=evt_refund_1 tenant=${GHOST_TENANT} unknown_tenant`,
+  );
 });
 
 test("FW1-A4: ACTIVATE mit bekanntem tenant_ref aktiviert unveraendert", async () => {
