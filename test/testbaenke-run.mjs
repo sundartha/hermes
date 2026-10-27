@@ -1,6 +1,6 @@
-import { createWriteStream, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createWriteStream, globSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { nimmEigeneSperreFuerTests, nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
@@ -14,7 +14,13 @@ const MODE_GATES = "gates";
 const MODE_ABNAHME = "abnahme";
 const MODES = [MODE_REGRESSION, MODE_GATES, MODE_ABNAHME];
 
-const TEST_GLOB = "test/**/*.test.{js,ts}";
+const TEST_FILES_IN_DIRECTORY = "**/*.test.{js,ts}";
+const TEST_GLOB = `test/${TEST_FILES_IN_DIRECTORY}`;
+const WITHOUT_TOOL_TESTS_OPTION = "--ohne-werkzeugtests";
+export const TOOL_TEST_DIRECTORY = "test/werkzeuge/";
+export const TOOL_TEST_GLOB = `${TOOL_TEST_DIRECTORY}${TEST_FILES_IN_DIRECTORY}`;
+const NO_FILES_FOR_PATH = `${WITHOUT_TOOL_TESTS_OPTION}: keine Testdatei unter `;
+const NO_FILES_WITHOUT_TOOL_TESTS = `${WITHOUT_TOOL_TESTS_OPTION}: keine Testdatei außerhalb von ${TOOL_TEST_DIRECTORY} ausgewählt.`;
 const FIRST_FILE_ARGUMENT = 3;
 const PATTERN_CHARACTERS = /[*?[{]/;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
@@ -127,11 +133,46 @@ function migratedCriteriaCount() {
   return JSON.parse(readFileSync(MIGRATED_LIST, "utf8")).length;
 }
 
-function testFilesFrom(argv) {
+function fileArguments(argv) {
   const separatorIndex = argv.indexOf("--");
   const end = separatorIndex === -1 ? argv.length : separatorIndex;
-  const files = argv.slice(FIRST_FILE_ARGUMENT, end);
+  return argv.slice(FIRST_FILE_ARGUMENT, end);
+}
+
+function testFilesFrom(argv) {
+  const files = fileArguments(argv).filter((file) => file !== WITHOUT_TOOL_TESTS_OPTION);
   return files.length > 0 ? files : [TEST_GLOB];
+}
+
+function optionsAndPaths(files) {
+  return {
+    options: files.filter((file) => file.startsWith(OPTION_PREFIX)),
+    paths: files.filter((file) => !file.startsWith(OPTION_PREFIX)),
+  };
+}
+
+function testFilesIn(path) {
+  const isDirectory = statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+  return globSync(isDirectory ? join(path, TEST_FILES_IN_DIRECTORY) : path);
+}
+
+function isToolTest(file) {
+  return relative(process.cwd(), resolve(file)).startsWith(TOOL_TEST_DIRECTORY);
+}
+
+function withoutToolTests(files) {
+  const { options, paths } = optionsAndPaths(files);
+  const found = paths.map((path) => ({ path, testFiles: testFilesIn(path) }));
+  const missing = found.filter(({ testFiles }) => testFiles.length === 0).map(({ path }) => path);
+  if (missing.length > 0) return { error: `${NO_FILES_FOR_PATH}${missing.join(", ")}` };
+  const selected = found.flatMap(({ testFiles }) => testFiles).filter((file) => !isToolTest(file));
+  if (selected.length === 0) return { error: NO_FILES_WITHOUT_TOOL_TESTS };
+  return { files: [...options, ...selected.sort()] };
+}
+
+function selectedFiles(argv, requested) {
+  const skipsToolTests = fileArguments(argv).includes(WITHOUT_TOOL_TESTS_OPTION);
+  return skipsToolTests ? withoutToolTests(requested) : { files: requested };
 }
 
 function isPatternOrDirectory(file) {
@@ -147,8 +188,7 @@ function fileTimeoutFlag(environment) {
 }
 
 function nodeTestArguments(mode, extraArgs, files) {
-  const options = files.filter((file) => file.startsWith(OPTION_PREFIX));
-  const paths = files.filter((file) => !file.startsWith(OPTION_PREFIX));
+  const { options, paths } = optionsAndPaths(files);
   return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, fileTimeoutFlag(process.env), ...paths];
 }
 
@@ -380,14 +420,19 @@ async function main() {
   const mode = process.argv[2];
   if (!MODES.includes(mode)) {
     console.error(
-      `Nutzung: node test/testbaenke-run.mjs <${MODES.join("|")}> [<Testdatei> ...] [-- <node --test-Flags>]`,
+      `Nutzung: node test/testbaenke-run.mjs <${MODES.join("|")}> [${WITHOUT_TOOL_TESTS_OPTION}] [<Testdatei> ...] [-- <node --test-Flags>]`,
     );
     process.exit(1);
   }
-  const files = testFilesFrom(process.argv);
+  const requested = testFilesFrom(process.argv);
+  const { files, error } = selectedFiles(process.argv, requested);
+  if (error !== undefined) {
+    console.error(error);
+    process.exit(1);
+  }
   const { run, environment: testEnvironment, elapsedMs } = await measuredAfterLocks(
     async () => {
-      if (files.some(isPatternOrDirectory)) await nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster oder Ordner)`);
+      if (requested.some(isPatternOrDirectory)) await nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster oder Ordner)`);
       return nimmEigeneSperreFuerTests(
         environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE, FILE_LIMIT_VARIABLE]),
       );
