@@ -1,0 +1,26 @@
+{
+  "phase": "E-2167-mcp-anzeigename",
+  "issue": 2167,
+  "absicht": "MCP-Hosts wie Claude und ChatGPT zeigen einen Connector unter dem Namen an, den der Server bei `initialize` in `serverInfo` meldet; heute meldet Hermes nur den Programmnamen `hermes` und keinen Anzeigenamen `title`, sodass Hosts laut MCP-Spezifikation auf `hermes` zurückfallen. `serverInfo` soll den Anzeigenamen `Hermes` tragen, über `POST /mcp` und über den stdio-Server gleich. Nicht gewollt sind eine Änderung an `name`, `version`, `websiteUrl`, den Icons oder den Server-Instructions und ein Abnahmetest, der nur die Konstante statt der echten `initialize`-Antwort prüft. Im Zweifel bleibt alles außer dem neuen Feld `title` wie heute.",
+  "entwurf": {
+    "src/mcp-server-info.js": "Was sich ändert: `HERMES_SERVER_INFO` in src/mcp-server-info.js (Zeile 9-25) bekommt das Feld `title: \"Hermes\"` neben `name: \"hermes\"`; das MCP-SDK 1.32.0 führt `title` im Schema `Implementation` (BaseMetadataSchema) und gibt es in der `initialize`-Antwort unter `result.serverInfo.title` weiter. Dieselbe Konstante nutzen `POST /mcp` (src/routes/mcp.js:102) und der stdio-Server (src/mcp-server.js:14), deshalb ändert sich nur diese eine Quelldatei.\nBleibt gleich: Ein `initialize` über `POST /mcp` meldet `serverInfo.name` \"hermes\", `version` \"0.2.0\", `websiteUrl` \"https://www.sundartha.com\" und die beiden Icons (data-URI zuerst, https-Fallback) wie heute; der stdio-Server meldet dieselbe `serverInfo` wie `POST /mcp`; die `instructions` der `initialize`-Antwort bleiben wörtlich gleich.\nAbnahme: Abnahmetest über den echten Eingang: test/gemeinsam/mcp-initialize-meldet-anzeigename.test.js startet den Server, schickt `initialize` über `POST /mcp` (wie test/mcp-server-icon.test.js T-T3-AC3) und erwartet `result.serverInfo.title` gleich \"Hermes\", `result.serverInfo.name` gleich \"hermes\" und `result.serverInfo.version` gleich \"0.2.0\" (PM2); den Aufruf schickt er mit `mcpPost` aus test/helpers.js. Icons und `websiteUrl` sichert weiter test/mcp-server-icon.test.js T-T3-AC3, den Gleichstand stdio = `POST /mcp` T-T3-AC2. Heute ist `title` nicht gesetzt, der Test wird mit der Meldung aus `erwarteterFehler` rot.\nNicht-Ziele: keine Änderung an `name`, weil Hosts und gespeicherte Connector-Einträge den Programmnamen als Kennung nutzen können; keine Änderung an `version` oder package.json, weil die Absicht nur den Anzeigenamen betrifft; keine Änderung an den Werkzeugen in src/mcp-tools.js oder an den Instructions, weil sie das Verhalten des Modells steuern; kein Wechsel auf ein anderes SDK oder eine andere Protokollversion, weil `title` schon unterstützt wird.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil Claude.ai, ChatGPT und Claude Desktop bei einem selbst angelegten Connector den Namen zeigen, den der Nutzer beim Anlegen eintippt, und bestehende Einträge ihren gespeicherten Namen behalten, passiert nach dem Deploy in diesen Hosts sichtbar nichts, und die Folge ist, dass #2167 als erledigt gilt, obwohl Nutzer den Connector weiter unter dem alten Namen sehen. | hingenommen: Was ein Host anzeigt, lässt sich über keinen echten Eingang in test/ beobachten; die Änderung ist spezifikationsgemäß und schadet keinem Host, der `title` nicht liest. Nach dem Deploy prüft die Sitzung bzw. Betreuung einmal von Hand in Claude.ai und ChatGPT, wo `title` erscheint, und hält das Ergebnis im Issue fest (Entscheidung der Sitzung, E006 H1). |\n| PM2 | Weil bisher kein Test `serverInfo.version` \"0.2.0\" prüft und die Abnahme nur `title` und `name` prüfen würde, passiert beim Ändern von `HERMES_SERVER_INFO` eine mitgezogene `version` (etwa aus package.json) ohne roten Test, und die Folge ist, dass Hermes über `POST /mcp` und stdio eine andere Version meldet, gegen die Absicht. | Test: Satz in wasDarfNiePassieren; die Abnahme prüft `version` \"0.2.0\" mit. |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "MCP-serverInfo meldet den Anzeigenamen Hermes als title",
+      "bereich": "src/mcp-server-info.js",
+      "erwarteteDateien": [
+        "src/mcp-server-info.js",
+        "test/gemeinsam/mcp-initialize-meldet-anzeigename.test.js"
+      ],
+      "abnahme": "test/gemeinsam/mcp-initialize-meldet-anzeigename.test.js",
+      "erwarteterFehler": "serverInfo.title ist nicht der Anzeigename Hermes",
+      "wasDarfNiePassieren": [
+        "Ein initialize über POST /mcp meldet nach der Änderung einen anderen serverInfo.name als hermes oder eine andere version, websiteUrl oder Icon-Liste als heute.",
+        "Ein initialize über POST /mcp meldet nach der Änderung eine andere serverInfo.version als 0.2.0."
+      ]
+    }
+  ]
+}
