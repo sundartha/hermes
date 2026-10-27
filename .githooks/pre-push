@@ -2,4 +2,18 @@
 unset $(git rev-parse --local-env-vars)
 unset SCHWERLAUF_SPERRDATEI
 export SCHWERLAUF_VORRANG=push
+if [ "${HERMES_PUSH_LAUF_MUTATION:-}" = "1" ]; then
+  gelesen=0
+  andere=0
+  while read -r lokale_ref lokaler_sha entfernte_ref entfernter_sha; do
+    gelesen=$((gelesen + 1))
+    case "$entfernte_ref" in
+      refs/heads/lauf-mutation/*) ;;
+      *) andere=$((andere + 1)) ;;
+    esac
+  done
+  if [ "$gelesen" -gt 0 ] && [ "$andere" -eq 0 ]; then
+    exit 0
+  fi
+fi
 exec npm run --silent pruefleiter -- --basis upstream/master --ohne-werkzeugtests

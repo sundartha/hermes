@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { env } from "node:process";
 
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
@@ -8,6 +9,8 @@ import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
+const MUTATION_IN_CI = "HERMES_MUTATION_IN_CI";
+const IN_CI = ["--in-ci"];
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
@@ -42,7 +45,8 @@ function abbruchExit(exitCode) {
 
 function mutationsBefehl(lauf, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
-  return ["npm", "--silent", "run", SKRIPT, "--", ...argumente, ...gemeldet];
+  const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
+  return ["npm", "--silent", "run", SKRIPT, "--", ...weg, ...argumente, ...gemeldet];
 }
 
 function ausgewertet(lauf, name, { exitCode, ausgabe }) {

@@ -127,3 +127,56 @@ test("Der pre-push-Hook faehrt Lint und nennt die Fundstelle", (context) => {
   assert.notEqual(hook.status, 0);
   assert.match(hook.stdout, /src\/basis\.js:2/);
 });
+
+const PRUEFLEITER_MARKER = "Prüfleiter gestartet";
+const NULL_SHA = "0".repeat(40);
+const LOKALER_SHA = "1".repeat(40);
+const PUSH_DES_WERKZEUGS = { HERMES_PUSH_LAUF_MUTATION: "1" };
+
+function probeWithPruefleiterMarker(context) {
+  return probeRepository(context, {
+    "package.json": JSON.stringify({ name: "pre-push-marker-probe", private: true, scripts: { pruefleiter: `echo ${PRUEFLEITER_MARKER}` } }),
+  });
+}
+
+function runHookWithRefs(directory, kennung, ...remoteRefs) {
+  const lines = remoteRefs.map(([localRef, remoteRef]) => `${localRef} ${localRef === "(delete)" ? NULL_SHA : LOKALER_SHA} ${remoteRef} ${NULL_SHA}\n`);
+  return spawnSync("sh", [PRE_PUSH_HOOK], {
+    cwd: directory,
+    encoding: "utf8",
+    input: lines.join(""),
+    env: { ...isolatedEnvironment(), ...kennung, GIT_DIR: join(directory, ".git") },
+  });
+}
+
+test("Der pre-push-Hook laesst einen Push nur nach lauf-mutation ohne Pruefleiter durch", (context) => {
+  const hook = runHookWithRefs(probeWithPruefleiterMarker(context), PUSH_DES_WERKZEUGS, ["refs/heads/x", "refs/heads/lauf-mutation/x"]);
+
+  assert.equal(hook.status, 0, hook.stdout + hook.stderr);
+  assert.doesNotMatch(hook.stdout, new RegExp(PRUEFLEITER_MARKER));
+});
+
+test("Der pre-push-Hook faehrt den Pruefleiter, wenn neben lauf-mutation ein anderer Branch gepusht wird", (context) => {
+  const hook = runHookWithRefs(probeWithPruefleiterMarker(context), PUSH_DES_WERKZEUGS, ["refs/heads/x", "refs/heads/lauf-mutation/x"], ["refs/heads/y", "refs/heads/paket/y"]);
+
+  assert.match(hook.stdout, new RegExp(PRUEFLEITER_MARKER));
+});
+
+test("Der pre-push-Hook faehrt den Pruefleiter fuer einen Branch, der nur mit lauf-mutation beginnt", (context) => {
+  const hook = runHookWithRefs(probeWithPruefleiterMarker(context), PUSH_DES_WERKZEUGS, ["refs/heads/x", "refs/heads/lauf-mutation-x"]);
+
+  assert.match(hook.stdout, new RegExp(PRUEFLEITER_MARKER));
+});
+
+test("Der pre-push-Hook faehrt den Pruefleiter beim Loeschen eines anderen Branches und ohne Angaben auf stdin", (context) => {
+  const directory = probeWithPruefleiterMarker(context);
+
+  assert.match(runHookWithRefs(directory, PUSH_DES_WERKZEUGS, ["(delete)", "refs/heads/paket/y"]).stdout, new RegExp(PRUEFLEITER_MARKER));
+  assert.match(runHookWithRefs(directory, PUSH_DES_WERKZEUGS).stdout, new RegExp(PRUEFLEITER_MARKER));
+});
+
+test("Der pre-push-Hook faehrt den Pruefleiter fuer lauf-mutation, wenn der Push nicht vom Werkzeug gekennzeichnet ist", (context) => {
+  const hook = runHookWithRefs(probeWithPruefleiterMarker(context), {}, ["refs/heads/x", "refs/heads/lauf-mutation/x"]);
+
+  assert.match(hook.stdout, new RegExp(PRUEFLEITER_MARKER));
+});

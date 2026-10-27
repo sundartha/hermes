@@ -31,9 +31,9 @@ const ABBRUCHZEILE = /(Abbruch: .*)$/;
 const NACHRICHT = ["Mutationsprüfung auf Abruf", "", "Auftrag: lauf/in-ci"];
 const GEMELDET = "in lauf gemeldet";
 const NUR_COMMIT = "^{commit}";
-const OHNE_NACHFRAGE = { ...env, GIT_TERMINAL_PROMPT: "0" };
 const KEIN_SCHREIBRECHT = /Permission to \S+ denied|returned error: 403|Authentication failed|could not read Username|terminal prompts disabled|Repository not found|does not appear to be a git repository|\[remote rejected\] \S+ -> \S+ \((?:permission denied|[\w -]*hook declined)\)/;
 const ZEILENUMBRUCH = /\n/g;
+const NUR_LAUF_MUTATION = { GIT_TERMINAL_PROMPT: "0", HERMES_PUSH_LAUF_MUTATION: "1" };
 
 function git(argumente, root, umgebung = env) {
   const lauf = spawnSync("git", argumente, { cwd: root, encoding: "utf8", env: umgebung });
@@ -61,7 +61,7 @@ export function ohneSchreibrecht(meldung) {
 }
 
 function abgelehnterPush(root, stand, zweig) {
-  const lauf = spawnSync("git", ["push", REMOTE, `${stand}:refs/heads/${zweig}`], { cwd: root, encoding: "utf8", env: OHNE_NACHFRAGE });
+  const lauf = spawnSync("git", ["push", REMOTE, `${stand}:refs/heads/${zweig}`], { cwd: root, encoding: "utf8", env: { ...env, ...NUR_LAUF_MUTATION } });
   if (lauf.status === EXIT_GRUEN) return null;
   const meldung = String(lauf.stderr ?? "").trim().replace(ZEILENUMBRUCH, " / ");
   if (ohneSchreibrecht(meldung)) return meldung;
