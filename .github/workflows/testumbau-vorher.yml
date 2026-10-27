@@ -19,6 +19,9 @@ on:
 
 permissions: {}
 
+env:
+  NODE_VERSION_FEST: 22.23.2
+
 concurrency:
   group: testumbau-vorher-${{ inputs.commit }}
   cancel-in-progress: false
