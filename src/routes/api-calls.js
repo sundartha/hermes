@@ -25,6 +25,9 @@ import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 
+const HTTP_BAD_REQUEST = 400;
+const HTTP_CONFLICT = 409;
+
 function contextReceivedMeta(context, config) {
   return {
     active: config.tenancy.assistantContextEnabled,
@@ -81,7 +84,7 @@ function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
 function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) {
   const validated = validateAssistantContext({ key_facts: answers });
   if (validated.error || !validated.value)
-    return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
+    return res.status(HTTP_BAD_REQUEST).json({ error: validated.error || "answers ist Pflicht" });
   const { outcome, mergedFacts } = store.answerConsult(call.id, {
     eventId,
     facts: validated.value.key_facts,
@@ -93,7 +96,8 @@ function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) 
     req,
     `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
   );
-  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  if (outcome !== CONSULT_ANSWER.ACCEPTED)
+    return res.status(HTTP_CONFLICT).json({ error: outcome });
   return res.json({ accepted: true, merged_facts: mergedFacts });
 }
 
