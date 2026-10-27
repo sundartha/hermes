@@ -160,6 +160,45 @@ test("GET /api/billing/platform-costs: Kurs-Produkt ausserhalb des sicheren Ganz
   }
 });
 
+const ABWEICHENDE_MONATSMIETE_CENTS = 137;
+const ABWEICHENDE_MIETE_CONFIG = withConfigNamespaces({
+  ...PLATFORM_COSTS_CONFIG.billing,
+  numberMonthlyCostCents: ABWEICHENDE_MONATSMIETE_CENTS,
+});
+const KEINE_AKTIVE_NUMMER = 0;
+
+test("GET /api/billing/platform-costs: nennt die eingestellte Monatsmiete je Nummer, mit aktiven Nummern und ohne", async () => {
+  const gemischt = await startPlatformCostsApp(mixedSeed(), ABWEICHENDE_MIETE_CONFIG);
+  try {
+    const body = await (await fetchCosts(gemischt)).json();
+    assert.equal(
+      body.numberMonthlyCostCents,
+      ABWEICHENDE_MONATSMIETE_CENTS,
+      "platform-costs nennt die Monatsmiete je Nummer nicht",
+    );
+    assert.equal(body.didRentCents, ABWEICHENDE_MONATSMIETE_CENTS * ACTIVE_COUNT);
+  } finally {
+    await gemischt.close();
+  }
+
+  const ohneNummern = await startPlatformCostsApp(
+    { ...mixedSeed(), numbers: [] },
+    ABWEICHENDE_MIETE_CONFIG,
+  );
+  try {
+    const body = await (await fetchCosts(ohneNummern)).json();
+    assert.equal(body.activeNumbers, KEINE_AKTIVE_NUMMER);
+    assert.equal(
+      body.numberMonthlyCostCents,
+      ABWEICHENDE_MONATSMIETE_CENTS,
+      "platform-costs nennt die Monatsmiete je Nummer nicht",
+    );
+    assert.equal(body.didRentCents, KEINE_AKTIVE_NUMMER);
+  } finally {
+    await ohneNummern.close();
+  }
+});
+
 test("countActiveNumbers: leerer Nummernbestand -> 0", () => {
   assert.equal(countActiveNumbers(makeDefaultState()), 0);
 });
