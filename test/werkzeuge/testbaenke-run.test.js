@@ -22,6 +22,8 @@ const SHARD_TOTAL = 2;
 const PASSED_COUNT = /^(\d+) bestanden/m;
 const RESULT_FILE = join(PROTOCOL_DIR, "regression.json");
 const GREEN_CASES = ["gruener Fall", "noch ein gruener Fall"];
+const TOOL_TEST_FILE = "test/werkzeuge/rot.test.js";
+const TOOL_TEST_MARKER = "roter Werkzeugtest";
 const CRITERION_NAME = "ABNAHME-PROBE1: Kriterium im Unterordner | ROT WEIL: keiner | FIX: keiner";
 
 function runBank(directory, bank) {
@@ -107,21 +109,29 @@ function passedCount(output) {
   return Number(PASSED_COUNT.exec(output)?.[1]);
 }
 
+function shardResults(directory, options = []) {
+  const shards = Array.from({ length: SHARD_TOTAL }, (_unused, offset) => offset + 1);
+  return shards.map((shard) =>
+    runIn(directory, process.execPath, [RUNNER, "regression", ...options, "--", `--test-shard=${shard}/${SHARD_TOTAL}`]),
+  );
+}
+
+function assertOnePassedPerShard(results) {
+  for (const result of results) {
+    assert.equal(result.status, 0, result.stdout);
+    assert.equal(passedCount(result.stdout), 1, result.stdout);
+  }
+}
+
 test("mit --test-shard faehrt jeder Teil nur seine Testdateien", (context) => {
   const directory = probeDirectory(context, {
     "test/erste.test.js": passingTest("erster Fall"),
     "test/zweite.test.js": passingTest("zweiter Fall"),
   });
-  const shards = Array.from({ length: SHARD_TOTAL }, (_unused, offset) => offset + 1);
 
-  const results = shards.map((shard) =>
-    runIn(directory, process.execPath, [RUNNER, "regression", "--", `--test-shard=${shard}/${SHARD_TOTAL}`]),
-  );
+  const results = shardResults(directory);
 
-  for (const result of results) {
-    assert.equal(result.status, 0, result.stdout);
-    assert.equal(passedCount(result.stdout), 1, result.stdout);
-  }
+  assertOnePassedPerShard(results);
 });
 
 test("der Lauf hinterlegt die Zahl der bestandenen Tests maschinenlesbar", (context) => {
@@ -135,4 +145,68 @@ test("der Lauf hinterlegt die Zahl der bestandenen Tests maschinenlesbar", (cont
 
   const result = JSON.parse(readFileSync(join(directory, RESULT_FILE), "utf8"));
   assert.equal(result.bestanden, GREEN_CASES.length);
+});
+
+function suiteWithToolTest(context) {
+  return probeDirectory(context, {
+    "test/gruen.test.js": passingTest(GREEN_CASES[0]),
+    "test/unterordner/auch-gruen.test.js": passingTest(GREEN_CASES[1]),
+    [TOOL_TEST_FILE]: failingTest(TOOL_TEST_MARKER, "x"),
+  });
+}
+
+test("mit --ohne-werkzeugtests faehrt die Regressionsbank alle Testdateien ausser denen unter test/werkzeuge", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const result = runIn(directory, process.execPath, [RUNNER, "regression", "--ohne-werkzeugtests"]);
+
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(passedCount(result.stdout), GREEN_CASES.length, result.stdout);
+  assert.doesNotMatch(readFileSync(join(directory, PROTOCOL_DIR, "regression.log"), "utf8"), new RegExp(TOOL_TEST_MARKER));
+});
+
+test("ohne --ohne-werkzeugtests faehrt die Regressionsbank auch die Testdateien unter test/werkzeuge", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const result = runRegressionBank(directory);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, new RegExp(TOOL_TEST_MARKER));
+});
+
+test("mit --ohne-werkzeugtests teilt --test-shard die uebrigen Testdateien auf", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const results = shardResults(directory, ["--ohne-werkzeugtests"]);
+
+  assertOnePassedPerShard(results);
+});
+
+test("mit --ohne-werkzeugtests faehrt ein Ordner als Argument nur seine Testdateien ausserhalb von test/werkzeuge", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const result = runIn(directory, process.execPath, [RUNNER, "regression", "--ohne-werkzeugtests", "test"]);
+
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(passedCount(result.stdout), GREEN_CASES.length, result.stdout);
+});
+
+test("mit --ohne-werkzeugtests bricht der Lauf ab, wenn ausserhalb von test/werkzeuge keine Testdatei uebrig bleibt", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const result = runIn(directory, process.execPath, [RUNNER, "regression", "--ohne-werkzeugtests", "test/werkzeuge/"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /keine Testdatei außerhalb von test\/werkzeuge\//);
+  assert.doesNotMatch(result.stdout, new RegExp(TOOL_TEST_MARKER));
+});
+
+test("mit --ohne-werkzeugtests bricht der Lauf ab und nennt den Pfad, wenn ein angegebener Pfad keine Testdatei ergibt", (context) => {
+  const directory = suiteWithToolTest(context);
+
+  const result = runIn(directory, process.execPath, [RUNNER, "regression", "--ohne-werkzeugtests", "test/vertippt.test.js", "test"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /keine Testdatei unter test\/vertippt\.test\.js/);
+  assert.doesNotMatch(result.stdout, PASSED_COUNT);
 });
