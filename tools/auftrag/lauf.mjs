@@ -33,7 +33,7 @@ import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
@@ -41,8 +41,8 @@ const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", 
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
 const BASIS_VERGLEICHE = [
-  { name: MELDUNG.JSCPD, liste: "tools/basis/jscpd.json", art: "Kopien" },
-  { name: MELDUNG.SEMGREP, liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep", fehlt: MELDUNG.SEMGREP_FEHLT },
+  { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" },
+  { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" },
 ];
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
@@ -394,12 +394,13 @@ class AuftragsLauf {
     return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
   }
 
-  basisVergleich({ name, liste, art, werkzeug, fehlt }) {
+  basisVergleich({ name, unterbefehl, liste, art, werkzeug }) {
     const { root } = this.kontext;
     if (!gibtEsIn(this.basis, liste, root)) return this.einmalHinweisen(`${art}: ${liste} fehlt auf der Basis.`);
-    const [laeuftNicht] = werkzeug === undefined ? [] : werkzeugBefunde(root, [werkzeug]);
-    if (laeuftNicht !== undefined) return this.scheitert(laeuftNicht, fehlt);
-    return this.gruen(name, [execPath, BASIS_VERGLEICH, name, "--basis", this.basis], befundOhneZweck);
+    const laeuftNicht = werkzeug === undefined ? [] : werkzeugBefunde(root, [werkzeug]);
+    const [fehlt] = zweckIdsAusBloecken(laeuftNicht);
+    if (fehlt !== undefined) return this.scheitert(laeuftNicht[0], fehlt);
+    return this.gruen(name, [execPath, BASIS_VERGLEICH, unterbefehl, "--basis", this.basis], befundOhneZweck);
   }
 
   einmalHinweisen(hinweis) {
