@@ -14,7 +14,7 @@ import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, arbeitsstand, auftragsTrailer, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, arbeitsstand, auftragsTrailer, aufVorgemerktemStand, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -47,6 +47,8 @@ const BASIS_VERGLEICHE = [
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
+const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
+const LINT_REGELN = "eslint.config.js";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
@@ -394,6 +396,13 @@ class AuftragsLauf {
     return this.einmalHinweisen(`Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`);
   }
 
+  lintNeuerFunktionen() {
+    const { root } = this.kontext;
+    if (!existsSync(join(root, LINT_REGELN))) return this.einmalHinweisen(`Lint neuer Funktionen: ${LINT_REGELN} fehlt.`);
+    const befehl = [execPath, LINT_NEUE_FUNKTIONEN, "--basis", this.basis];
+    return aufVorgemerktemStand(root, () => this.gruen(PRUEFUNG.LINT_NEUE_FUNKTIONEN, befehl, vollerBelegMitZweckAusBloecken));
+  }
+
   basisVergleiche() {
     return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
   }
@@ -511,6 +520,7 @@ class AuftragsLauf {
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
           () => this.schutztests("test"),
           () => this.abhaengigkeiten(),
+          () => this.lintNeuerFunktionen(),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
           () => this.merkeAbnahmeFaelle(),
@@ -538,6 +548,7 @@ class AuftragsLauf {
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
+      () => this.lintNeuerFunktionen(),
       () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
       () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),

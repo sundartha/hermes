@@ -209,6 +209,13 @@
     "nichtAngenommen": "Dasselbe Muster in einer Form schreiben, die die Regel nicht erkennt; in .ts-Dateien besonders any durch unknown ohne Prüfung ersetzen, eine Behauptung mit as oder ! in eine Hilfsfunktion verschieben, void vor ein vergessenes await setzen, einen exportierten Typ als unknown ausschreiben oder einen Typwächter schreiben, der den Typ nicht wirklich prüft.",
     "ausweg": "Nur als Bau-Agent, wenn der Verstoß in einer Funktion mit Einträgen in eslint-suppressions.json liegt, eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“; sonst „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“."
   },
+  "lint neuer funktionen": {
+    "liste": "ohne Nummer",
+    "wozu": "lauf fährt nach dem Test-Agenten und nach dem Bau-Agenten dieselbe Prüfung neuer und geänderter Funktionen wie ci-lokal am Phasenende (node tools/lint-neue-funktionen.mjs gegen die Basis des Auftrags), auch für Warnungen, die npm run lint durchlässt. So erfährt der Agent den Befund in der Runde, in der er ihn macht, statt dass die Phase erst nach dem Lauf rot wird und kein Weg mehr zu ihm zurückführt. Den Grund der Prüfung und der einzelnen Regelgruppe nennen ihre Blöcke in der Ausgabe.",
+    "behebung": "Die gemeldete Funktion an der genannten Datei:Zeile so ändern, wie es der Block der Regelgruppe sagt; fehlt der Block, steht die Ursache in der Ausgabe der Prüfung.",
+    "nichtAngenommen": "Die Funktion so schneiden, umbenennen oder verschieben, dass die Prüfung die berührte Stelle nicht mehr sieht, eine Warnung abschalten oder eine Regel in eslint.config.js ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt der Befund in einer großen Altfunktion, die erst zerlegt werden muss, als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>“; sonst eine eigene letzte Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“."
+  },
   "pin-prüfung": {
     "liste": "A11",
     "wozu": "Geduldete Altverstöße in eslint-suppressions.json dürfen neue Verstöße nicht verdecken; die Altlast soll schrumpfen.",
