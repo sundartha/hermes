@@ -1,0 +1,31 @@
+{
+  "phase": "F-1977-spanne-vor-satzende",
+  "issue": 1977,
+  "absicht": "Was Hermes am Telefon spricht, soll Zahlenspannen und Adressen so weitergeben, wie das Sprachmodell sie geschrieben hat: „9 - 18 Uhr“ bleibt eine Spanne, `max_weber@beispiel.de` behält den Unterstrich, damit der Angerufene keine falsche Öffnungszeit oder Adresse notiert. Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern. Im Zweifel bleibt das heutige Verhalten für alles, was weder Ziffer-Strich-Ziffer noch Unterstrich mitten im Wort ist.",
+  "entwurf": {
+    "src/speech-shape.js": "Was passiert: Steht eine Spanne „Zahl - Zahl“ direkt vor einem Satzpunkt und beginnt der nächste Satz mit einer Ziffer, wird der Strich zum Komma: „Geöffnet 9 - 18. 24 Stunden erreichbar ist die Hotline“ geht als „Geöffnet 9, 18. 24 Stunden erreichbar ist die Hotline.“ an die Sprachausgabe.\nWas passieren sollte: Der Satzpunkt hinter der rechten Zahl gehört nicht zur Zahl; die Spanne bleibt: „Geöffnet 9-18. 24 Stunden erreichbar ist die Hotline.“\nWie man es auslöst: shapeForSpeech(\"Geöffnet 9 - 18. 24 Stunden erreichbar ist die Hotline\") (Formung als reine Fachlogik, wie test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js); heute „Geöffnet 9, 18. …“, erwartet „Geöffnet 9-18. …“.\nBleibt gleich: alle Fälle aus test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js (Spannen, Ketten, einzeln gesprochene Ziffern, Wort-Strich, Listenzeichen, Unterstrich, Laufzeit); die Reihenfolge der Schritte in SHAPE_STEPS; Aufrufer, Chunker und die Satzzeichen-Behandlung am Ende von shapeForSpeech.\nVermutete Diagnose: Der Spannen-Schritt in src/speech-shape.js:5 prüft mit dem negativen Lookahead `(?![\\d:.]*\\s+(?:-\\s+)?\\d)`, ob die rechte Zahl durch Leerraum an eine weitere Zahl grenzt. `[\\d:.]*` läuft dabei über einen Punkt oder Doppelpunkt am Ende der Zahl hinaus („18.“), obwohl laut Definition `:` oder `.` nur zwischen zwei Ziffern zur Zahl gehört; danach findet er Leerraum und die Ziffer „2“ und verwirft die Spanne. Die linke Seite (`(?<=\\d)` direkt vor dem Leerraum) ist richtig. Gefunden vom lokalen KI-Prüfer am Bau-Commit von P-008 t2 a1 (G3); in Runde 1 hatte der Zeichen-Scan den Punkt am Ende noch zurückgenommen, die Regex aus Runde 2 nicht.\nAbnahme-Meldung: Die Prüfung des Prüfer-Falls trägt als Assert-Meldung wörtlich „Spanne vor Satzende wird zum Komma“; heute wird der Test mit genau dieser Meldung rot.\nEchte Inhalte gelesen: keine\nNicht-Ziele: keine Änderung der Definition „Zahl“ oder „Kette“ aus dem Pitch P-008 t2, weil sie freigegeben ist und der Fehler nur von ihr abweicht; keine Spannen mit Einheit an beiden Enden, weil das ein Nicht-Ziel von P-008 t2 ist; keine Änderung an den Aufrufern oder am Chunker, weil der Fehler in der Formung liegt.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\nKeine Gründe gefunden, weil der Auftrag nur den Fall ändert, in dem die rechte Zahl einer Spanne auf „.“ oder „:“ endet und danach Leerraum und eine Ziffer folgen; Ketten und einzeln gesprochene Ziffern bleiben über Leerraum direkt hinter der Zahl erhalten, die linke Seite ändert sich nicht, und Öffnungszeiten über zwei Sätze, Datumsangaben, Vorwahlen, Zeitlisten nach Doppelpunkt, negative Zahlen nach dem Satzpunkt und Listenzeichen ergeben gleich gute oder bessere Ausgaben als heute."
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "fehlerbehebung",
+      "ziel": "Spanne vor Satzende bleibt Spanne, auch wenn eine Zahl folgt",
+      "bereich": "src/speech-shape.js",
+      "erwarteteDateien": [
+        "src/speech-shape.js",
+        "test/anrufe/spanne-vor-satzende-bleibt-spanne.test.js"
+      ],
+      "abnahme": "test/anrufe/spanne-vor-satzende-bleibt-spanne.test.js",
+      "erwarteterFehler": "Spanne vor Satzende wird zum Komma",
+      "wasDarfNiePassieren": [
+        "shapeForSpeech(\"Geöffnet 9 - 18. 24 Stunden erreichbar ist die Hotline\") ergibt „Geöffnet 9-18. 24 Stunden erreichbar ist die Hotline.“ (Fall des Prüfers).",
+        "Eine Spanne direkt vor einem Satzende mit folgender Zahl bleibt Spanne, auch mit Uhrzeit oder Doppelpunkt am Satzende: shapeForSpeech(\"Termin 9:30 - 18:00. 2 Plätze sind frei\") ergibt „Termin 9:30-18:00. 2 Plätze sind frei.“ und shapeForSpeech(\"Kosten 10 - 20: 3 Varianten\") ergibt „Kosten 10-20: 3 Varianten.“",
+        "Grenzt die rechte Zahl durch Leerraum an eine weitere Zahl, bleibt der Strich ein Komma: shapeForSpeech(\"Ihre Nummer ist 0 1 5 1 - 2 3 4 5 6 7\") ergibt „Ihre Nummer ist 0 1 5 1, 2 3 4 5 6 7.“",
+        "Jeder Strich einer Kette bleibt ein Komma: shapeForSpeech(\"Kartennummer: 4111 - 1111 - 1111 - 1111\") ergibt „Kartennummer: 4111, 1111, 1111, 1111.“",
+        "Alle Fälle in test/anrufe/zahlenspanne-bleibt-in-sprachausgabe.test.js bleiben unverändert grün; die Datei wird nicht geändert.",
+        "Die Mustersuche enthält keine verschachtelten Wiederholungen und formt 500 Ziffern, auch 250 Ziffern mit je einem Punkt oder Doppelpunkt dazwischen, vor „ - Uhr“ in weniger als 1 Sekunde.",
+        "Der Abnahmetest importiert aus src/ nur src/speech-shape.js."
+      ]
+    }
+  ]
+}
