@@ -128,33 +128,47 @@ function geteiltAbgelegt(repo, vorgaenger = ERSTER, teile = [{ kuerzel: "t1", na
   commitAll(repo, `Plane ${vorgaenger}: Teile`);
 }
 
-test("Teil-Vorgänger: ist ein Vorgänger laut teile.json auf upstream/master geteilt und sind alle Unter-Teile gemergt, startet lauf wie bisher", (context) => {
+const REGEL_BLAETTER = ["P-9-t1-t2-t1-wort", "P-9-t1-t2-t2-zahl"];
+
+function geteiltLauf(context, { teile, zweistufig = false }) {
   const vorbereiten = (repo) => {
     geteiltAbgelegt(repo);
-    [UMBAU_TEIL, REGEL_TEIL, DRITTER].forEach((teil) => gebaut(repo, teil));
+    if (zweistufig) geteiltAbgelegt(repo, REGEL_TEIL, [{ kuerzel: "t1", name: "wort" }, { kuerzel: "t2", name: "zahl" }]);
+    teile.forEach((teil) => gebaut(repo, teil));
   };
-  const { lauf } = teilLauf(context, { vorbereiten });
+  return teilLauf(context, { vorbereiten });
+}
+
+function startetOhneBefund({ lauf }) {
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.doesNotMatch(lauf.stderr, /Vorgänger/);
+}
+
+function unterTeilFehlt(ergebnis, unterteil, genannt) {
+  pruefeHalt(ergebnis, [unterteil]);
+  assert.ok(ergebnis.lauf.stderr.includes(`Vorgänger ${unterteil} (Unter-Teil des geteilten Vorgängers ${ERSTER} laut planung/teile.json auf upstream/master) ist auf upstream/master`), ergebnis.lauf.stderr);
+  assert.doesNotMatch(ergebnis.lauf.stderr, new RegExp(`Vorgänger (${genannt.join("|")}) `));
+}
+
+test("Teil-Vorgänger: ist ein Vorgänger laut teile.json auf upstream/master geteilt und sind alle Unter-Teile gemergt, startet lauf wie bisher", (context) => {
+  startetOhneBefund(geteiltLauf(context, { teile: [UMBAU_TEIL, REGEL_TEIL, DRITTER] }));
 });
 
 test("Teil-Vorgänger: fehlt von einem geteilten Vorgänger ein Unter-Teil auf upstream/master, nennt der Befund den Unter-Teil und den geteilten Vorgänger", (context) => {
-  const vorbereiten = (repo) => {
-    geteiltAbgelegt(repo);
-    [UMBAU_TEIL, DRITTER].forEach((teil) => gebaut(repo, teil));
-  };
-  const ergebnis = teilLauf(context, { vorbereiten });
-  pruefeHalt(ergebnis, [REGEL_TEIL]);
-  assert.ok(ergebnis.lauf.stderr.includes(`Vorgänger ${REGEL_TEIL} (Unter-Teil des geteilten Vorgängers ${ERSTER} laut planung/teile.json auf upstream/master) ist auf upstream/master`), ergebnis.lauf.stderr);
-  assert.doesNotMatch(ergebnis.lauf.stderr, new RegExp(`Vorgänger (${UMBAU_TEIL}|${DRITTER}) `));
+  unterTeilFehlt(geteiltLauf(context, { teile: [UMBAU_TEIL, DRITTER] }), REGEL_TEIL, [UMBAU_TEIL, DRITTER]);
+});
+
+test("Teil-Vorgänger: ist ein Unter-Teil selbst geteilt und sind alle Blätter beider Teilungen gemergt, startet lauf wie bisher", (context) => {
+  startetOhneBefund(geteiltLauf(context, { teile: [UMBAU_TEIL, ...REGEL_BLAETTER, DRITTER], zweistufig: true }));
+});
+
+test("Teil-Vorgänger: fehlt bei zweistufiger Teilung ein Blatt des geteilten Unter-Teils, nennt der Befund dieses Blatt", (context) => {
+  const [wort, zahl] = REGEL_BLAETTER;
+  unterTeilFehlt(geteiltLauf(context, { teile: [UMBAU_TEIL, wort, DRITTER], zweistufig: true }), zahl, [UMBAU_TEIL, REGEL_TEIL, wort, DRITTER]);
 });
 
 test("Teil-Vorgänger: ein ungeteilter, nicht gemergter Vorgänger neben einem geteilten, gemergten ergibt denselben Befund wie bisher", (context) => {
-  const vorbereiten = (repo) => {
-    geteiltAbgelegt(repo);
-    [UMBAU_TEIL, REGEL_TEIL].forEach((teil) => gebaut(repo, teil));
-  };
-  const ergebnis = teilLauf(context, { vorbereiten });
+  const ergebnis = geteiltLauf(context, { teile: [UMBAU_TEIL, REGEL_TEIL] });
   pruefeHalt(ergebnis, [DRITTER]);
   assert.match(ergebnis.lauf.stderr, new RegExp(`Teil ${TEIL}: Vorgänger ${DRITTER} ist auf upstream/master \\([0-9a-f]{7}\\) nicht gemergt; kein geltender Commit trägt „Auftrag: ${DRITTER}/…“ mit „Art: …“\\.`));
   assert.doesNotMatch(ergebnis.lauf.stderr, /Unter-Teil des geteilten/);
