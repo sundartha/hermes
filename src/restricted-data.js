@@ -18,6 +18,7 @@ function digitCount(raw) {
 const CARD_MIN_DIGITS = 13;
 const CARD_MAX_DIGITS = 19;
 const CARD_GROUP_SIZE = 4;
+const CARD_GROUP_MIN_SIZE = 2;
 const AMEX_MIDDLE_GROUP_SIZE = 6;
 const AMEX_LAST_GROUP_SIZE = 5;
 const DINERS_MIDDLE_GROUP_SIZE = 6;
@@ -31,8 +32,12 @@ const LUHN_SUBTRACT_THRESHOLD = 9;
 const LUHN_MOD_BASE = 10;
 const CONTEXT_WINDOW_CHARS = 32;
 const CARD_MIN_DIGITS_WITHOUT_CARD_WORD = 15;
+const DIGITWISE_PHONE_MIN_DIGITS = 16;
 
-const CARD_CANDIDATE = /(?<![+\d])\d(?:(?:[ -]|[.,] ?)?\d){11,18}(?!\d)/g;
+const CARD_GAP_SPACE = "[ \\t\\u00A0\\u202F]";
+const CARD_GAP_MARK = "(?:\\.{1,3}|[-_/;,\\u2026])";
+const CARD_GAP = `(?:${CARD_GAP_SPACE}?${CARD_GAP_MARK}${CARD_GAP_SPACE}?|${CARD_GAP_SPACE})?`;
+const CARD_CANDIDATE = new RegExp(`(?<![+\\d])\\d(?:${CARD_GAP}\\d){11,18}(?!\\d)`, "g");
 
 const PHONE_CONTEXT_WORDS = Object.freeze([
   "r(?:ü|ue)ckruf(?:nummer)?",
@@ -92,6 +97,10 @@ function hasCardBrandPrefix(digits) {
     });
 }
 
+function isDigitwise(raw) {
+  return !/\d\d/.test(raw);
+}
+
 const CARD_CONTEXT_STEMS = Object.freeze(["card", "carte", "karte"]);
 
 function isExemptByContext(candidate, before) {
@@ -106,7 +115,9 @@ function requiredCardDigits(text, candidate) {
   const after = text.slice(candidate.end, candidate.end + CONTEXT_WINDOW_CHARS);
   const surrounding = `${before} ${after}`.toLowerCase();
   if (CARD_CONTEXT_STEMS.some((stem) => surrounding.includes(stem))) return CARD_MIN_DIGITS;
-  return isExemptByContext(candidate, before) ? null : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
+  if (isExemptByContext(candidate, before)) return null;
+  const isDigitwisePhone = isDigitwise(candidate.raw) && PHONE_CONTEXT_PATTERN.test(before);
+  return isDigitwisePhone ? DIGITWISE_PHONE_MIN_DIGITS : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
 }
 
 function hasUniformSeparator(raw) {
@@ -122,8 +133,10 @@ function hasCardGroupShape(raw) {
   if (groups.length === 1) return true;
   if (groupSizesMatch(groups, AMEX_GROUP_SIZES) || groupSizesMatch(groups, DINERS_GROUP_SIZES)) return true;
   const lastGroupLength = groups.at(-1).length;
-  const leadingGroupsFull = groups.slice(0, -1).every((group) => group.length === CARD_GROUP_SIZE);
-  return leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
+  const leadingSize = groups[0].length;
+  const leadingGroupsFull = groups.slice(0, -1).every((group) => group.length === leadingSize);
+  const leadingSizeOk = leadingSize >= CARD_GROUP_MIN_SIZE && leadingSize <= CARD_GROUP_SIZE;
+  return leadingSizeOk && leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
 }
 
 function luhnValid(digits) {
@@ -147,8 +160,6 @@ function isCardNumber(raw, minDigits) {
   return lengthOk && iinOk && luhnValid(digits);
 }
 
-const SINGLE_DIGIT_SPACED = /^\d(?:(?: |, )\d)+$/;
-
 function isDigitwiseCard(digits) {
   const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
   return iinOk && luhnValid(digits);
@@ -166,7 +177,7 @@ function bestDigitwiseWindow(raw, minDigits) {
 }
 
 function bestCardWindow(raw, minDigits) {
-  if (SINGLE_DIGIT_SPACED.test(raw)) return bestDigitwiseWindow(raw, minDigits);
+  if (isDigitwise(raw)) return bestDigitwiseWindow(raw, minDigits);
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
