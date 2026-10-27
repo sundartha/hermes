@@ -23,7 +23,7 @@ const FREMD = "test/fremd.test.js";
 const ALT = 'test("alt", () => {});\n';
 const NEU = 'test("neu", () => {});\n';
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
-const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
+const NIE = [];
 const ABSATZ_GEAENDERTE_FAELLE = "Zweck geänderte fälle: Drehbuchtext des Ersatz-Agenten.";
 
 function aendern(repo, pfad) {

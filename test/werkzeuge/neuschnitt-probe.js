@@ -91,6 +91,7 @@ const ROTER_TEST = [
   'import { test } from "node:test";',
   'import { verdopple } from "../../src/rechnen.js";',
   'test("verdoppelt", () => assert.equal(verdopple(2), 4));',
+  'test("[NIE1] eine negative Zahl wird nie positiv", () => assert.ok(verdopple(-3) < 0));',
   "",
 ].join("\n");
 
