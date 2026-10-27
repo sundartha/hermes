@@ -110,7 +110,7 @@ function geplanteTestsAbschnitt(auftrag, root) {
       ...bestehende.map((pfad) => `- ${pfad}`),
       "",
       "In diesen Testdateien passt du genau die Fälle an, deren Erwartung das neue Verhalten ändert.",
-      "Jeder geänderte oder neue Fall ist gegen den unveränderten Produktcode rot, unveränderte Fälle bleiben grün.",
+      "Jeder geänderte oder neue Fall ist gegen den unveränderten Produktcode rot, ausgenommen ein neuer Schutztest mit der Kennung [NIE<n>] eines Satzes aus wasDarfNiePassieren; unveränderte Fälle bleiben grün.",
       "Reiner Umbau von Tests gehört nicht in diesen Schritt. An alle anderen bestehenden Testdateien hängst du nur an.",
     ].join("\n")),
   ];
