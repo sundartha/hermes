@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { env } from "node:process";
 import { test } from "node:test";
@@ -8,7 +8,7 @@ import { gleichwertigGemeldet } from "../../tools/auftrag/gleichwertig.mjs";
 import { mutationInCi, ohneSchreibrecht } from "../../tools/mutationspruefung/in-ci.mjs";
 import { jsonZeilenAus } from "../_iel-messbaum.mjs";
 import { werkzeug } from "./mutationspruefung-probe.js";
-import { commitAll, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
+import { commitAll, PRE_PUSH_HOOK, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
@@ -280,4 +280,14 @@ const PUSH_MELDUNGEN = [
 
 test("Mutationsprüfung in der CI: nur Push-Meldungen über fehlendes Schreibrecht führen auf den lokalen Weg", () => {
   for (const [meldung, lokal] of PUSH_MELDUNGEN) assert.equal(ohneSchreibrecht(meldung), lokal, meldung);
+});
+
+test("Mutationsprüfung in der CI: der Push des Wegwerf-Stands geht durch den Pre-Push-Hook des Repos, ohne den Prüfleiter zu starten", async (context) => {
+  const probe = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  const hook = join(probe.repo, ".git", "hooks", "pre-push");
+  copyFileSync(PRE_PUSH_HOOK, hook);
+  chmodSync(hook, AUSFUEHRBAR);
+  const ergebnis = await imCi(probe);
+  assert.equal(ergebnis.exitCode, 0, ergebnis.zeilen.join("\n"));
+  assert.match(gepushterStand(probe.upstream), /^[0-9a-f]{40}$/);
 });

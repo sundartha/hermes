@@ -179,3 +179,27 @@ test("meldet der erste Durchgang nur einen Zustandszugriff, bleibt die Mutations
 test("endet der erste Durchgang rot ohne lesbare Verstoßzeile, läuft die Mutationsprüfung nach dem Bau neu", (context) => {
   pruefeNachBau(mitZaehlenderMutation(context, { rotOhneZeile: true }, { "bau-nachrunde-antwort": ABSATZ_MUTATION }), { abgeleitet: false });
 });
+
+const GRUEN_NACH_NACHRUNDE = {
+  test: { "test/rechnen.test.js": ROTER_TEST },
+  bau: MIT_SIEBEN,
+  ...ehrlicheNachrunde(NOETIG),
+  "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST },
+  "test-nachrunde-antwort": ABSATZ_MUTATION,
+};
+
+function mutationsBefehle(context, schalter) {
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: GRUEN_NACH_NACHRUNDE, dateien: MIT_MUTATION, umgebung: { HERMES_MUTATION_IN_CI: schalter } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const befehle = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation")).map(({ befehl }) => befehl);
+  assert.ok(befehle.length > 0, lauf.stdout + lauf.stderr);
+  return befehle;
+}
+
+test("mit HERMES_MUTATION_IN_CI=1 fährt jede Mutationsprüfung des Auftrags über die CI", (context) => {
+  for (const befehl of mutationsBefehle(context, "1")) assert.match(befehl, /^npm --silent run test:mutation -- --in-ci --basis /);
+});
+
+test("ohne HERMES_MUTATION_IN_CI fährt die Mutationsprüfung des Auftrags lokal", (context) => {
+  for (const befehl of mutationsBefehle(context, "")) assert.doesNotMatch(befehl, /--in-ci/);
+});
