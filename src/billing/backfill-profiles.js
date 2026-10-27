@@ -8,40 +8,53 @@ export const BACKFILL_SKIP = Object.freeze({
   ...PROFILE_SKIP,
 });
 
+function ausschlussGrund(store, id) {
+  if (id === BOOTSTRAP_TENANT_ID) return BACKFILL_SKIP.BOOTSTRAP;
+  if (!store.tenantActiveSubscriber(id, KYC_OUTBOUND_MIN)) return BACKFILL_SKIP.NOT_SUBSCRIBER;
+  return null;
+}
+
+function brauchtPlanSlug(lauf, tenant) {
+  if (!lauf.apply || !lauf.resolvePlanSlug || !tenant.stripeSubscriptionId) return false;
+  return !lauf.store.tenantSubscription(tenant.id).planSlug;
+}
+
+async function holePlanSlugNach(lauf, tenant) {
+  if (!brauchtPlanSlug(lauf, tenant)) return;
+  const slug = await lauf.resolvePlanSlug(tenant.stripeSubscriptionId);
+  if (!slug) return;
+  lauf.store.setTenantSubscription(tenant.id, { planSlug: slug });
+  lauf.report.reconciled.push({ id: tenant.id });
+}
+
+function gleicheProfilAb(lauf, id, vorhandeneProfile) {
+  const { tier, skip } = resolveTierForTenant({ store: lauf.store, tenant: id });
+  if (skip) {
+    lauf.report.skipped.push({ id, reason: skip });
+    return;
+  }
+  const existing = vorhandeneProfile[id];
+  if (existing && isDeepStrictEqual(existing, sanitizeProfile(tier))) {
+    lauf.report.unchanged.push({ id });
+    return;
+  }
+  lauf.report.changes.push({ id, hadExisting: !!existing });
+  if (lauf.apply) lauf.store.setProfile(id, tier);
+}
+
 export async function backfillPlanProfiles({ store, apply = false, resolvePlanSlug }) {
-  const s = store.load();
+  const stand = store.load();
   const report = { apply, scanned: 0, changes: [], unchanged: [], skipped: [], reconciled: [] };
-  for (const tenant of s.tenants) {
+  const lauf = { store, apply, resolvePlanSlug, report };
+  for (const tenant of stand.tenants) {
     report.scanned++;
-    const id = tenant.id;
-    if (id === BOOTSTRAP_TENANT_ID) {
-      report.skipped.push({ id, reason: BACKFILL_SKIP.BOOTSTRAP });
+    const reason = ausschlussGrund(store, tenant.id);
+    if (reason) {
+      report.skipped.push({ id: tenant.id, reason });
       continue;
     }
-    if (!store.tenantActiveSubscriber(id, KYC_OUTBOUND_MIN)) {
-      report.skipped.push({ id, reason: BACKFILL_SKIP.NOT_SUBSCRIBER });
-      continue;
-    }
-    if (apply && resolvePlanSlug && tenant.stripeSubscriptionId && !store.tenantSubscription(id).planSlug) {
-      const slug = await resolvePlanSlug(tenant.stripeSubscriptionId);
-      if (slug) {
-        store.setTenantSubscription(id, { planSlug: slug });
-        report.reconciled.push({ id });
-      }
-    }
-    const { tier, skip } = resolveTierForTenant({ store, tenant: id });
-    if (skip) {
-      report.skipped.push({ id, reason: skip });
-      continue;
-    }
-    const desired = sanitizeProfile(tier);
-    const existing = s.profiles[id];
-    if (existing && isDeepStrictEqual(existing, desired)) {
-      report.unchanged.push({ id });
-      continue;
-    }
-    report.changes.push({ id, hadExisting: !!existing });
-    if (apply) store.setProfile(id, tier);
+    await holePlanSlugNach(lauf, tenant);
+    gleicheProfilAb(lauf, tenant.id, stand.profiles);
   }
   return report;
 }
