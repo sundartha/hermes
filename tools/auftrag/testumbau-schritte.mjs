@@ -66,6 +66,7 @@ export function testumbauSchritte(lauf) {
     () => vorbauNurErgaenzt(lauf),
     () => lauf.allesVormerken(),
     () => lauf.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
+    () => lauf.kopien(),
     () => lauf.pinPruefung(),
     () => lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)),
     () => mutationNichtSchlechter(lauf),
