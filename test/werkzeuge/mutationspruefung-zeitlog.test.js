@@ -12,6 +12,11 @@ const URTEIL = /^(?:grün|rot): .+$/gm;
 const FORTSCHRITT_ABSTAND_S = 30;
 const MS_JE_SEKUNDE = 1000;
 const PHASEN = ["sperre", "testauswahl", "sandbox", "erstlauf", "mutanten", "loeschprobe"];
+const MIT_SPALTE = /^\S+:\d+:\d+ /;
+const UEBERLEBEND = ["Survived", "NoCoverage"];
+const GETOETET = "Killed";
+const BESTAETIGUNGSLAUF = "im Bestätigungslauf";
+const ERSTER_LAUF = "erster Lauf";
 
 function logs(repo) {
   const ordner = join(repo, LOGORDNER);
@@ -89,6 +94,24 @@ test("ein Mutationslauf schreibt ein Zeit-Log mit Start, Warten an der Sperre, T
     JSON.stringify(ende),
   );
   assert.ok(Object.values(ende.phasen).every((dauer) => dauer >= 0 && dauer <= ende.ms), JSON.stringify(ende));
+});
+
+test("das Zeit-Log nennt je überlebendem Mutanten Lage, Mutator und Status und im Bestätigungslauf je getötetem Mutanten die tötende Testdatei", (context) => {
+  const repo = rotesRepo(context);
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  const mutanten = arten(logDer(repo, "normal"), "mutant");
+  const ueberlebende = schluessel(lauf.stdout, UEBERLEBT).filter((verstoss) => MIT_SPALTE.test(verstoss));
+  assert.ok(ueberlebende.length > 0, lauf.stdout);
+  for (const verstoss of ueberlebende) {
+    const treffer = mutanten.filter((eintrag) => eintrag.schluessel === verstoss && UEBERLEBEND.includes(eintrag.status));
+    assert.ok(treffer.length > 0, `${verstoss}\n${JSON.stringify(mutanten)}`);
+    for (const { datei, lage, mutator } of treffer) assert.ok(verstoss.startsWith(`${datei}:${lage.start.line}:${lage.start.column} ${mutator} → `), `${verstoss}\n${JSON.stringify(treffer)}`);
+  }
+  const bestaetigt = mutanten.filter(({ anlass, status }) => anlass === BESTAETIGUNGSLAUF && status === GETOETET);
+  assert.ok(bestaetigt.length > 0, JSON.stringify(mutanten));
+  for (const eintrag of bestaetigt) assert.deepEqual(eintrag.toeter, ["test/zahl.test.js"], JSON.stringify(eintrag));
+  assert.deepEqual(mutanten.filter(({ anlass, status }) => anlass === ERSTER_LAUF && status === GETOETET), [], JSON.stringify(mutanten));
 });
 
 test("auf der Konsole meldet der Lauf seine Phasen mit eigenem Präfix nur auf stderr, eine Zeile je Stryker-Lauf und Datei, und höchstens eine Fortschrittszeile je 30 s", (context) => {
