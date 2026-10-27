@@ -122,3 +122,14 @@ export function auftragsTrailer(cwd, stand = "HEAD") {
 export function weichZuruecksetzen(basis, cwd) {
   git(["reset", "-q", "--soft", basis], { cwd });
 }
+
+export function aufVorgemerktemStand(cwd, pruefen) {
+  const vorher = kopf(cwd);
+  const baum = git(["write-tree"], { cwd }).trim();
+  weichZuruecksetzen(git(["commit-tree", baum, "-p", vorher, "-m", "Prüfstand"], { cwd }).trim(), cwd);
+  try {
+    return pruefen();
+  } finally {
+    weichZuruecksetzen(vorher, cwd);
+  }
+}

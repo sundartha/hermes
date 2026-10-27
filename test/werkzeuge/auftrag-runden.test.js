@@ -338,14 +338,14 @@ test("ein geplanter Umbau, der keine Altfunktion aufräumen soll, bleibt grün, 
   assert.deepEqual(JSON.parse(git("show", "HEAD:eslint-suppressions.json")), UNTERDRUECKUNGEN_AM_ANFANG);
 });
 
-test("ein Umbau aus einer anderen fehlenden Voraussetzung bleibt grün, auch wenn eslint-suppressions.json gleich bleibt", (context) => {
+test("ein Umbau aus einer anderen fehlenden Voraussetzung, der die Zeile einer geduldeten Altlast ändert, wird an lint neuer funktionen rot", (context) => {
   const vorbereiten = { ...ALTFUNKTION_UMBAU, ziel: "Bereite zahl vor" };
   const bau = [{ antwort: `Voraussetzung fehlt: Erst muss alt in ${ZAHL} den Wert 2 haben.` }, ALT_BLEIBT, { dateien: { [ZAHL]: "const alt = 2;\nexport const ZAHL = 2;\n" } }];
   const plan = [{ antwort: alsBlock({ ...vorbereiten, entwurf: "alt bekommt den Wert 2." }) }];
   const { repo, ergebnis, beleg } = lauf(context, { bau, plan, test: ROTER_TEST, auftrag: FUNKTION }, MIT_ALTFUNKTION);
-  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
-  assert.equal(beleg("A1-umbau").ergebnis, "grün");
-  assert.deepEqual(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim().split("\n"), [FUNKTION.ziel, vorbereiten.ziel, "Basis"]);
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
+  assert.equal(beleg("A1-umbau.runde-1").grund, "lint neuer funktionen endete mit Exit 1.");
+  assert.deepEqual(runIn(repo, "git", ["log", "--format=%s"]).stdout.trim().split("\n"), ["Basis"]);
 });
 
 const FEHLT_TEXT = "Voraussetzung fehlt: Es braucht zuerst src/text.js.";
