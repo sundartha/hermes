@@ -129,9 +129,47 @@ async function ohneZeile(pfad, zeile, pruefen) {
   }
 }
 
-async function verteilt(auftraege, kopie, pruefen) {
-  const ergebnisse = [];
-  const lage = { naechster: 0, fehler: [] };
+function urteil(bisher, fertig, anzahl) {
+  let ergebnis = bisher;
+  for (let nummer = 0; nummer < anzahl; nummer += 1) {
+    if (fertig[nummer] === undefined) return {};
+    if (fertig[nummer].fehler !== undefined) return { fehler: fertig[nummer].fehler };
+    ergebnis = vorzug(ergebnis, fertig[nummer].ergebnis);
+    if (ergebnis.status !== UEBERLEBT) break;
+  }
+  return { ergebnis };
+}
+
+function zeilenlage(bisher, { erste, alle }) {
+  const fertig = [];
+  const lage = { naechste: 0, laufend: 0, ersteFertig: 0, zu: false };
+  const freigegeben = () => lage.naechste < erste || lage.ersteFertig === erste;
+  return {
+    bisher,
+    gruppen: alle,
+    offen: () => !lage.zu && lage.naechste < alle && freigegeben(),
+    ruhend: () => lage.laufend === 0,
+    beginne: () => {
+      lage.laufend += 1;
+      return lage.naechste++;
+    },
+    ende: (nummer, ausgang) => {
+      lage.laufend -= 1;
+      if (nummer < erste) lage.ersteFertig += 1;
+      fertig[nummer] = ausgang;
+      lage.zu ||= ausgang.ergebnis?.status !== UEBERLEBT;
+    },
+    urteil: () => urteil(bisher, fertig, alle),
+  };
+}
+
+function naechsteZeile(zeilen) {
+  const offen = zeilen.filter((zeile) => zeile.offen());
+  return offen.find((zeile) => zeile.ruhend()) ?? offen[0];
+}
+
+async function verteilt(zeilen, kopie, pruefen) {
+  const lage = { fehler: [] };
   const abbrechbar = (stand) => ({
     ...stand,
     laufen: (tests) => {
@@ -139,19 +177,32 @@ async function verteilt(auftraege, kopie, pruefen) {
       return testlauf(stand.verzeichnis, tests);
     },
   });
+  const laufende = new Set();
+  const gruppenlauf = (platz, zeile) => {
+    const probe = pruefer(abbrechbar(kopie(platz)));
+    const nummer = zeile.beginne();
+    const ausgang = pruefen(probe, zeile.bisher, nummer).then((ergebnis) => ({ ergebnis }), (fehler) => ({ fehler }));
+    const lauf = ausgang.then((fertig) => {
+      laufende.delete(lauf);
+      zeile.ende(nummer, fertig);
+      const { fehler } = zeile.urteil();
+      if (fehler !== undefined) lage.fehler.push(fehler);
+    });
+    laufende.add(lauf);
+    return lauf;
+  };
   const arbeiter = async (platz) => {
-    while (lage.fehler.length === 0 && lage.naechster < auftraege.length) {
-      const index = lage.naechster++;
-      try {
-        ergebnisse[index] = await pruefen(pruefer(abbrechbar(kopie(platz))), auftraege[index]);
-      } catch (fehler) {
-        lage.fehler.push(fehler);
-      }
+    while (lage.fehler.length === 0) {
+      const zeile = naechsteZeile(zeilen);
+      if (zeile === undefined && laufende.size === 0) return;
+      await (zeile === undefined ? Promise.race(laufende) : gruppenlauf(platz, zeile));
     }
   };
-  await Promise.all(Array.from({ length: Math.min(ARBEITSKOPIEN, auftraege.length) }, (_leer, platz) => arbeiter(platz)));
+  const auftraege = zeilen.reduce((summe, { gruppen: anzahl }) => summe + anzahl, 0);
+  const plaetze = Array.from({ length: Math.min(ARBEITSKOPIEN, auftraege) }, (_leer, platz) => platz);
+  await Promise.all(plaetze.map((platz) => arbeiter(platz).catch((fehler) => lage.fehler.push(fehler))));
   if (lage.fehler.length > 0) throw lage.fehler[0];
-  return ergebnisse;
+  return zeilen.map((zeile) => zeile.urteil().ergebnis);
 }
 
 function pruefer({ verzeichnis, gruen, laufen }) {
@@ -163,7 +214,7 @@ function pruefer({ verzeichnis, gruen, laufen }) {
     }
     gruen.add(kennung);
   };
-  const gruppenprobe = async (datei, zeile, gruppe) => {
+  return async (datei, zeile, gruppe) => {
     await grundlauf(gruppe);
     const beobachte = async () => {
       const status = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe));
@@ -173,30 +224,27 @@ function pruefer({ verzeichnis, gruen, laufen }) {
     while (unentschieden(verlauf)) verlauf.push(await beobachte());
     return entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf);
   };
-  return async (datei, auswahl, bisher) => {
-    const [zeile] = bisher.zeilen;
-    let ergebnis = bisher;
-    for (const [nummer, gruppe] of auswahl.entries()) {
-      console.error(`Löschprobe ${datei}:${zeile}: Gruppe ${nummer + 1} von ${auswahl.length} mit ${gruppe.length} Testdateien`);
-      ergebnis = vorzug(ergebnis, await gruppenprobe(datei, zeile, gruppe));
-      if (ergebnis.status !== UEBERLEBT) break;
-    }
-    return ergebnis;
-  };
 }
 
 export function loeschprobe(verzeichnisAnlegen) {
   const kopien = new Map();
+  const gruen = new Set();
   const kopie = (platz) => {
-    if (!kopien.has(platz)) kopien.set(platz, { verzeichnis: gepruefterStand(verzeichnisAnlegen()), gruen: new Set() });
+    if (!kopien.has(platz)) kopien.set(platz, { verzeichnis: gepruefterStand(verzeichnisAnlegen()), gruen });
     return kopien.get(platz);
   };
   return {
     pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) => {
       const uebrige = alle.filter((test) => !erste.includes(test));
-      const auswahl = [...gruppen(erste), ...gruppen(uebrige)];
-      const offen = zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => eintrag(datei, zeile, UEBERLEBT));
-      return verteilt(offen, kopie, (probe, bisher) => probe(datei, auswahl, bisher));
+      const vorne = gruppen(erste);
+      const auswahl = [...vorne, ...gruppen(uebrige)];
+      const stufen = { erste: vorne.length, alle: auswahl.length };
+      const offen = zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => zeilenlage(eintrag(datei, zeile, UEBERLEBT), stufen));
+      const gruppenprobe = async (probe, { zeilen: [zeile] }, nummer) => {
+        console.error(`Löschprobe ${datei}:${zeile}: Gruppe ${nummer + 1} von ${auswahl.length} mit ${auswahl[nummer].length} Testdateien`);
+        return probe(datei, zeile, auswahl[nummer]);
+      };
+      return verteilt(offen, kopie, gruppenprobe);
     },
     abbauen: () => {
       const fehler = [];
