@@ -21,6 +21,8 @@ import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindab
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
+import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
+import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
@@ -115,6 +117,7 @@ const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
 const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
+const VORHER_AUS_CI = "vorher-aus-ci";
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
@@ -123,10 +126,11 @@ const AUFRUF = [
   "Aufruf: node tools/mutationspruefung.mjs --basis <commit> [--alter-stand | --testumbau] [--gleichwertig <mutant>] [--plan <datei> | --teil <n> --teile <anzahl> --ergebnis <datei> | --urteil <ordner>]",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
-const BETRIEBSARTEN = [...VORHER_ARTEN, "testumbau", "plan", "teil", "urteil", "alter-stand"];
+const BETRIEBSARTEN = [...VORHER_ARTEN, VORHER_AUS_CI, "testumbau", "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
 
@@ -808,7 +812,13 @@ function vorherAufrufGueltig(values, art) {
   return ohneAndereBetriebsart(values) && stand && ergebnis && groesse;
 }
 
+function ausCiAufrufGueltig(values) {
+  const allein = [...VORHER_ARTEN, ...NUR_VORHER, "ergebnis"].every((name) => values[name] === undefined);
+  return values.basis !== undefined && allein && ohneAndereBetriebsart(values);
+}
+
 function aufrufGueltig(values) {
+  if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
   if (vorher.length > 0) return vorher.length === 1 && vorherAufrufGueltig(values, vorher[0]);
   if (NUR_VORHER.some((name) => values[name] !== undefined)) return false;
@@ -833,7 +843,7 @@ async function vorherVerteilt(values) {
   const stand = { basis: git(["rev-parse", "--verify", values.basis + NUR_COMMIT]).trim(), tests: testsAus(values.tests) };
   if (values["vorher-plan"] !== undefined) {
     const plan = await vorherPlan(stand, werkzeug, values["stueck-sekunden"] === undefined ? undefined : Number(values["stueck-sekunden"]));
-    schreibeJson(values["vorher-plan"], plan);
+    schreibeJson(values["vorher-plan"], { ...plan, umgebung: werkzeugStand(WURZEL) });
     console.log(planZeilen(plan).join("\n"));
     return EXIT_GRUEN;
   }
@@ -841,8 +851,21 @@ async function vorherVerteilt(values) {
   await gemesseneSperre(`test:mutation --basis ${values.basis} --vorher-stueck`);
   kindprozesseInEigenemTempOrdner();
   const bericht = await vorherStueck(stand, stueck, werkzeug);
-  schreibeJson(values.ergebnis, bericht);
+  schreibeJson(values.ergebnis, { ...bericht, umgebung: werkzeugStand(WURZEL), postgres: postgresDa() });
   console.log(`Stück ${bericht.stueck.nummer}: ${bericht.getoetet.length} von ${bericht.anzahl} Mutanten getötet in ${bericht.sekunden} s.`);
+  return EXIT_GRUEN;
+}
+
+async function vorherEinlesen(values) {
+  const basis = git(["rev-parse", "--verify", values.basis + NUR_COMMIT]).trim();
+  const lauf = values[VORHER_AUS_CI];
+  const { schluessel, neu, herkunft, getoetet, quellen } = await vorherAusCi({ basis, lauf, root: WURZEL }, { werkzeug: { alterStand, durchgang, ueberlebt } });
+  const kurz = schluessel.slice(0, SCHLUESSEL_ANZEIGE);
+  if (!neu) {
+    console.log(`Vorher-Seite für diesen Fall liegt schon im Speicher (Schlüssel ${kurz}); Lauf ${lauf} nicht übernommen.`);
+    return EXIT_GRUEN;
+  }
+  console.log(`Vorher-Seite aus der CI abgelegt (Schlüssel ${kurz}): Lauf ${lauf}, Kopf ${herkunft.kopf}, ${herkunft.plattform}, Node ${herkunft.node}; ${getoetet} getötete Mutanten in ${quellen} Quelldateien.`);
   return EXIT_GRUEN;
 }
 
@@ -888,6 +911,7 @@ async function main() {
       "vorher-plan": { type: "string" },
       "vorher-stueck": { type: "string" },
       "vorher-zusammen": { type: "string" },
+      [VORHER_AUS_CI]: { type: "string" },
       "alter-stand": { type: "boolean", default: false },
       testumbau: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
@@ -905,6 +929,7 @@ async function main() {
     return EXIT_ABBRUCH;
   }
   beginneLog(() => join(legeSandboxordnerAn(WURZEL), LOGORDNER), startkopf(values));
+  if (values[VORHER_AUS_CI] !== undefined) return vorherEinlesen(values);
   if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
   SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();

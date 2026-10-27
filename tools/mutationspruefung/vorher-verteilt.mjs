@@ -152,7 +152,7 @@ function lueckenlos({ quellen, stuecke }) {
 
 function passtZumPlan(bericht, plan, stueck) {
   const gleich = (feld) => isDeepStrictEqual(bericht[feld], plan[feld]);
-  return isDeepStrictEqual(bericht.stueck, kern(stueck)) && gleich("basis") && gleich("tests") && gleich("betroffen");
+  return isDeepStrictEqual(bericht.stueck, kern(stueck)) && gleich("basis") && gleich("tests") && gleich("betroffen") && gleich("umgebung");
 }
 
 export function vereineStuecke(plan, berichte) {
