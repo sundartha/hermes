@@ -203,3 +203,32 @@ test("mit HERMES_MUTATION_IN_CI=1 fährt jede Mutationsprüfung des Auftrags üb
 test("ohne HERMES_MUTATION_IN_CI fährt die Mutationsprüfung des Auftrags lokal", (context) => {
   for (const befehl of mutationsBefehle(context, "")) assert.doesNotMatch(befehl, /--in-ci/);
 });
+
+const VORSCHAU_ZEILE = "Vorschau alt: 3 Quelldateien, 4 Testdateien, 4 Testgruppen, 120 Mutanten; Schätzung 4 Stryker-Aufrufe × 15 s + 120 Mutanten × 1 s = 3 min; Budget der normalen Mutation 15 min Rechenzeit, davon frei 15 min.";
+const BUDGET_ZEILE = "Abbruch: Budget der normalen Mutation erreicht: 15 min Rechenzeit bei 15 min Budget, dazu 0 s Warten an der Sperre; Teilergebnis bis zum Halt: 2 Stryker-Läufe fertig mit 80 Mutanten, davon 80 getötet, 1 Dateien ganz geprüft, 2 Läufe abgebrochen; kein Zeit-Log; kein Urteil.";
+const ENDE_ZEILE = "Mutationslog: Ende nach 15 min, Exit 2: Erstlauf 10 %, Mutanten 85 %, Sperre 0 %";
+const ANDERE_ZEILE = "Mutationslog: Sperre nach 2 s Warten erhalten";
+
+function immerAbbrechenMit(context, zeilen) {
+  const skript = [...zeilen.map((zeile) => `console.error(${JSON.stringify(zeile)});`), "process.exitCode = 2;", ""].join("\n");
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
+  const ergebnis = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": skript } });
+  const { lauf, beleg } = ergebnis;
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(beleg.entscheidung.text.startsWith("## Entscheidung nötig\n"), beleg.entscheidung.text);
+  return { ...ergebnis, notizPrompt: readFileSync(join(ergebnis.werkzeug, "prompt-notiz.txt"), "utf8") };
+}
+
+test("endet die Mutationsprüfung am Budget, läuft sie nicht noch einmal und die Notiz sieht Budget, Schätzung und Dauer", (context) => {
+  const { beleg, notizPrompt } = immerAbbrechenMit(context, [ANDERE_ZEILE, VORSCHAU_ZEILE, BUDGET_ZEILE, ENDE_ZEILE]);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [2]);
+  assert.equal(beleg.grund, "mutation am Budget beendet, kein Urteil; die Prüfung läuft nicht noch einmal.");
+  assert.ok(notizPrompt.includes(`${VORSCHAU_ZEILE}\n${BUDGET_ZEILE}\n${ENDE_ZEILE}\n`), notizPrompt);
+  assert.ok(!notizPrompt.includes(ANDERE_ZEILE), notizPrompt);
+});
+
+test("nennt ein anderer Abbruch nur in der Vorschau das Budget, läuft die Mutationsprüfung weiter einmal neu", (context) => {
+  const { beleg } = immerAbbrechenMit(context, [VORSCHAU_ZEILE, "Abbruch: Netzfehler"]);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [2, 2]);
+  assert.ok(beleg.entscheidung.text.includes("Ein Werkzeug ist 2-mal abgebrochen"), beleg.entscheidung.text);
+});
