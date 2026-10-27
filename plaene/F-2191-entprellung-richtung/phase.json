@@ -1,0 +1,27 @@
+{
+  "phase": "F-2191-entprellung-richtung",
+  "issue": 2191,
+  "absicht": "Die Mail „Anruf nicht zustande gekommen“ soll den Besitzer erreichen, sobald ein ausgehender Auftrag scheitert. Ein früherer eingehender Fehlschlag, für den nie eine Mail ging, darf sie nicht unterdrücken. Nicht gewollt ist eine Änderung am gleitenden 1-h-Fenster unter ausgehenden Fehlversuchen, an den Gründen im Audit, am Aufrufer in der Telefonie oder an `planNotPlacedMail`, die E-002 (#2068) umbaut. Im Zweifel entprellt nur ein früherer ausgehender not-placed-Anruf desselben Tenants, sonst bleibt alles wie heute.",
+  "entwurf": {
+    "src/mail-not-placed.js": "Was passiert: Endet bei einem Tenant ein eingehender Anruf mit Fehlergrund not-placed und binnen einer Stunde danach ein ausgehender Anruf mit Fehlergrund not-placed, geht für den ausgehenden keine Mail „Anruf nicht zustande gekommen“ an die Konto-Adresse, obwohl für den eingehenden nie eine Mail ging.\nWas passieren sollte: Der ausgehende Fehlversuch löst genau eine Mail aus; nur ein früherer ausgehender not-placed-Anruf desselben Tenants binnen einer Stunde unterdrückt sie.\nWie man es auslöst: Über finishCall (wie test/nutzer-mail-nur-not-placed.test.js) mit erfundenen Daten: Tenant mit Konto-Adresse, eingehender Anruf failureReason not-placed:invite-403 endet 08:00, ausgehender Anruf failureReason not-placed:start-403 endet 08:10; beide nacheinander beenden ergibt heute 0 Mails statt 1.\nBleibt gleich: Unter ausgehenden not-placed-Anrufen desselben Tenants gleitet das 1-h-Fenster wie heute (fünf in 6 Minuten ergeben 1 Mail, zwei 2 h auseinander 2 Mails, drei bei 0, 50 und 100 Minuten 1 Mail); ein not-placed-Anruf eines anderen Tenants unterdrückt nichts; eingehende Anrufe und die Gründe unreachable, no-answer, result-unknown lösen keine Mail aus; ohne Mailer oder Konto-Adresse bleibt der Grund im Audit wie heute.\nVermutete Diagnose: notPlacedMailDebounced (src/mail-not-placed.js:7-16, karte: keine Befunde) prüft bei den früheren Anrufen nur Tenant, Fehlergrund-Basis und Zeitabstand, nicht die Richtung. planNotPlacedMail (src/mail-not-placed.js:19) schickt nur für outbound eine Mail, die Entprellung zählt aber auch inbound mit. Der Fix gehört in notPlacedMailDebounced: ein früherer Anruf, der nicht outbound ist, entprellt nicht. planNotPlacedMail bleibt unverändert, weil E-002 (#2068) sie umbaut.\nEchte Inhalte gelesen: keine\nNicht-Ziele: kein festes Fenster nach der letzten gesendeten Mail, weil E-003 PM2 und Test 5 („EIN Vorfall“) das gleitende Fenster als heutiges Verhalten festhalten und eine Änderung eine Produktentscheidung wäre; keine Änderung an planNotPlacedMail, weil E-002 (#2068) sie umbaut; keine Änderung an src/telephony/call-finish.js, weil der Aufrufer nur planNotPlacedMail importiert und P012 dort ruht; keine Entprellung, die nur Anrufe mit tatsächlich gesendeter Mail zählt (Mailer wirft oder no_account_email), weil sie den festgehaltenen Satz „drei bei 0, 50 und 100 Minuten 1 Mail“ bräche und dieselbe Produktentscheidung wie das feste Fenster ist; sie steht als offener Punkt im Issue für E-002 (#2068).\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil der Fix nur den jüngsten früheren not-placed-Anruf auf outbound prüfen könnte statt jeden früheren im Fenster, passiert bei einer Störung beider Richtungen (eingehende und ausgehende Fehlschläge im Wechsel) für jeden ausgehenden Fehlschlag nach einem eingehenden eine eigene Mail, und die Folge ist, dass das gleitende Fenster unter ausgehenden verletzt ist, ohne dass ein Test rot wird. | Test: Ein ausgehender not-placed-Anruf (Ende 08:00), ein eingehender not-placed-Anruf (Ende 08:05) und ein ausgehender not-placed-Anruf (Ende 08:10) desselben Tenants ergeben über finishCall genau eine Mail. |\n| PM2 | Weil jeder frühere ausgehende not-placed-Anruf entprellt, auch einer ohne gesendete Mail (Mailer wirft, call-finish.js:71-76 schluckt den Fehler, oder no_account_email), passiert bei Fehlversuchen im Abstand unter einer Stunde unbegrenzt keine Mail, und die Folge ist, dass der Besitzer nie erfährt, dass seine Aufträge scheitern. | Nicht-Ziel: keine Entprellung nur nach gesendeten Mails, weil sie den Satz „0, 50, 100 Minuten → 1 Mail“ bräche und dieselbe Produktentscheidung wie das feste Fenster ist (E-003 PM2); offener Punkt im Issue für E-002 (#2068). |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "fehlerbehebung",
+      "ziel": "Nur frühere ausgehende not-placed-Anrufe entprellen die Mail",
+      "bereich": "src/mail-not-placed.js",
+      "erwarteteDateien": [
+        "src/mail-not-placed.js",
+        "test/nutzer-mail-nur-not-placed.test.js"
+      ],
+      "abnahme": "test/nutzer-mail-nur-not-placed.test.js",
+      "erwarteterFehler": "ein eingehender not-placed-Anruf darf die Mail zum ausgehenden nicht unterdruecken",
+      "wasDarfNiePassieren": [
+        "Drei ausgehende not-placed-Anrufe desselben Tenants, die bei 0, 50 und 100 Minuten enden, ergeben über finishCall genau eine Mail.",
+        "Ein eingehender not-placed-Anruf allein ergibt über finishCall keine Mail.",
+        "Ein ausgehender not-placed-Anruf (Ende 08:00), ein eingehender not-placed-Anruf (Ende 08:05) und ein ausgehender not-placed-Anruf (Ende 08:10) desselben Tenants ergeben über finishCall genau eine Mail."
+      ]
+    }
+  ]
+}
