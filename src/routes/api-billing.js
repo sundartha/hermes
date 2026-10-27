@@ -89,6 +89,7 @@ export function makeBillingRoutes({
       listPriceNotBilled: true,
       elevenLabsUsdCents,
       elevenLabsCents,
+      numberMonthlyCostCents: config.billing.numberMonthlyCostCents,
       didRentCents,
       activeNumbers,
       fixedCostCentsPerMonth,
