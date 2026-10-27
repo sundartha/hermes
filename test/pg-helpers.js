@@ -21,6 +21,8 @@ export async function makePgTestStore() {
   store = makePgStore(runner);
   store.setzeAnrufpause = (an) => anrufpauseSetzen(store, an);
   store.withStoreLock = macheSpeicherSperre();
+  const { zustandsFunktionen } = await import("../src/store.js");
+  Object.assign(store, zustandsFunktionen(store));
   await store.init();
   return { store, db, runner };
 }

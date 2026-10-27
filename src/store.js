@@ -2,6 +2,7 @@ import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
 import { anrufpauseSetzen } from "./store/state-ops.js";
 import { macheSpeicherSperre } from "./store/sperre.js";
+import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -12,10 +13,14 @@ async function createPgBackend() {
   return store;
 }
 
+function mitZustandsFunktionen(speicher) {
+  return { ...speicher, ...zustandsFunktionen(speicher) };
+}
+
 let backend;
 if (config.store.storeBackend === "pg") {
   try {
-    backend = await createPgBackend();
+    backend = mitZustandsFunktionen(await createPgBackend());
   } catch (err) {
     console.error(
       "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
@@ -25,7 +30,7 @@ if (config.store.storeBackend === "pg") {
     process.exit(1);
   }
 } else {
-  backend = jsonBackend;
+  backend = mitZustandsFunktionen(jsonBackend);
 }
 
 export const {
@@ -179,17 +184,15 @@ export const {
   removeNewsletterRecipient,
   confirmNewsletterRecipientByToken,
   unsubscribeNewsletterRecipientByToken,
+  anrufpauseAktiv,
 } = backend;
-
-export function anrufpauseAktiv() {
-  return load().anrufpause === true;
-}
 
 export function setzeAnrufpause(an) {
   return anrufpauseSetzen(backend, an);
 }
 
 export { classifyCallTime } from "./store/state-ops.js";
+export { zustandsFunktionen };
 export { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 
 export const withStoreLock = macheSpeicherSperre();
