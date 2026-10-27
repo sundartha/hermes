@@ -7,13 +7,12 @@ import { isDeepStrictEqual } from "node:util";
 
 import { beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 import { POSTGRES_VARIABLE } from "../auftrag/werkzeuge.mjs";
+import { gh, ghRepo, LAUF_FERTIG, MAX_GH_AUSGABE } from "./gh.mjs";
 import { imVorherStand } from "./testumbau.mjs";
 import { HERKUNFT_CI, INSTALLIERTE_MODULE, legeVorherAb, werkzeugStand } from "./vorher-speicher.mjs";
 import { PLANDATEI, vereineStuecke } from "./vorher-verteilt.mjs";
 
-const STANDARD_REPO = "sundartha/hermes";
 const WORKFLOW = "testumbau-vorher";
-const FERTIG = "completed";
 const ERFOLG = "success";
 const LAUF_NUMMER = /^[1-9]\d*$/;
 const STUECKDATEI = /^stueck-\d+\.json$/;
@@ -22,7 +21,6 @@ const LOCKDATEI = "package-lock.json";
 const MODULORDNER = "node_modules/";
 const BEISPIELE = 3;
 const EXIT_GRUEN = 0;
-const MAX_GH_AUSGABE = 268_435_456;
 const COMMIT = /^[0-9a-f]{40}$/;
 const WORKFLOW_DATEI = ".github/workflows/testumbau-vorher.yml";
 
@@ -30,17 +28,11 @@ export function postgresDa() {
   return Boolean(env[POSTGRES_VARIABLE]);
 }
 
-function gh(argumente) {
-  const lauf = spawnSync("gh", argumente, { encoding: "utf8", maxBuffer: MAX_GH_AUSGABE });
-  if (lauf.status === EXIT_GRUEN) return lauf.stdout;
-  throw new Error(`gh ${argumente.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`);
-}
-
 function holeLauf(lauf, ordner) {
-  const repo = env.GITHUB_REPOSITORY || STANDARD_REPO;
+  const repo = ghRepo();
   const daten = JSON.parse(gh(["run", "view", lauf, "-R", repo, "--json", "workflowName,status,conclusion,headSha"]));
   if (daten.workflowName !== WORKFLOW) throw new Error(`Lauf ${lauf} gehört zum Workflow ${daten.workflowName}, nicht zu ${WORKFLOW}`);
-  if (daten.status !== FERTIG || daten.conclusion !== ERFOLG) {
+  if (daten.status !== LAUF_FERTIG || daten.conclusion !== ERFOLG) {
     throw new Error(`Lauf ${lauf} ist nicht grün abgeschlossen (${daten.status}, ${daten.conclusion}); ein offenes oder rotes Stück wird nicht übernommen`);
   }
   gh(["run", "download", lauf, "-R", repo, "-D", ordner, ...ARTEFAKTE.flatMap((muster) => ["-p", muster])]);
