@@ -72,8 +72,11 @@ test("die Mutationsprüfung endet nur rot, wenn sie die Zweck-Blöcke ihrer rote
   const rot = [...text.matchAll(ROTER_AUSGANG)].length;
   const mitBlock = text.match(/zeigeZweck\(rot\);\n {2}return rot\.size === 0 \? EXIT_GRUEN : EXIT_ROT;/g) ?? [];
   assert.equal(rot - DEFINITION_DES_ROTEN_AUSGANGS, mitBlock.length, "jeder Ausgang EXIT_ROT folgt auf zeigeZweck");
-  assert.match(text, /return roteZwecke\(\{ ueberlebende, zugriffe \}\);/);
-  assert.match(text, /function roteZwecke\(\{ ueberlebende, zugriffe \}\) \{\n {2}return \[\.\.\.\(ueberlebende\.length > 0 \? \[ZWECK_UEBERLEBT\] : \[\]\), \.\.\.\(zugriffe\.length > 0 \? \[ZWECK_ZUSTAND\] : \[\]\)\];/);
+  assert.match(text, /return roteZwecke\(\{ ueberlebende, abgestuerzte, zugriffe \}\);/);
+  assert.match(
+    text,
+    /function roteZwecke\(\{ ueberlebende, abgestuerzte, zugriffe \}\) \{\n {2}const mutanten = ueberlebende\.length \+ abgestuerzte\.length > 0;\n {2}return \[\.\.\.\(mutanten \? \[ZWECK_UEBERLEBT\] : \[\]\), \.\.\.\(zugriffe\.length > 0 \? \[ZWECK_ZUSTAND\] : \[\]\)\];/,
+  );
 });
 
 test("die Mutationsprüfung nennt nach dem roten Urteil den Block der überlebenden Mutanten, ein grüner Lauf keinen", MUTATION_FRIST, (context) => {

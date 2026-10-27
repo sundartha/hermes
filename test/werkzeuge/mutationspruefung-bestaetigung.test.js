@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bestaetige, bestaetigt, bilanz } from "../../tools/mutationspruefung/bestaetigung.mjs";
+import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "../../tools/mutationspruefung/bestaetigung.mjs";
 
 const ERSTE_ZEILE = 3;
 const ZWEITE_ZEILE = 4;
@@ -64,7 +64,6 @@ test("ein roter Test, den der Bestätigungslauf nicht in derselben Datei wiederh
     [[eintrag("NoCoverage")], "Bestätigungslauf NoCoverage"],
     [[eintrag("Killed", [ANDERE])], `Bestätigungslauf Killed ${ANDERE}`],
     [[eintrag("Timeout")], "Bestätigungslauf Timeout"],
-    [[eintrag("RuntimeError")], "Bestätigungslauf RuntimeError"],
     [[], "Bestätigungslauf ohne Ergebnis"],
   ];
   for (const [antwort, zweiter] of wiederholungen) {
@@ -198,4 +197,63 @@ test("wird auch der zweite Töter nicht bestätigt und bleibt keine Datei übrig
       `erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived; ohne ${WACKLER}: erster Lauf Killed ${DATEI}, Bestätigungslauf Survived`,
     ),
   );
+});
+
+const ABSTURZ = "Verstoß: Bestätigung abgebrochen (Absturz) in";
+
+function abgestuerzt(datei, laeufe) {
+  return `${ABSTURZ} ${datei}, Ursache im Testaufbau prüfen (${laeufe}): ${SCHLUESSEL}`;
+}
+
+function keinUrteil(ergebnis) {
+  assert.equal(bestaetigungAbgestuerzt(ergebnis), true);
+  assert.equal(bestaetigt(ergebnis), false);
+  assert.notEqual(ergebnis.status, "Survived");
+  assert.equal(ergebnis.hinweis, undefined);
+  assert.equal(bilanz([ergebnis]), "0 bestätigt getötet, 0 nur durch Zeitablauf oder Absturz erkannt");
+}
+
+test("stürzt der Bestätigungslauf der tötenden Datei ab, ist das ein eigener roter Befund mit Datei und Mutant, und die Datei bleibt in der Gruppe", async () => {
+  for (const status of ["RuntimeError", "CompileError"]) {
+    const { ergebnis, aufrufe } = await gruppenbestaetigung([WACKLER, DATEI, ANDERE], [eintrag(status)]);
+    assert.deepEqual(aufrufe, laeufe([WACKLER]), status);
+    keinUrteil(ergebnis);
+    assert.equal(ergebnis.befund, abgestuerzt(WACKLER, `erster Lauf Killed ${WACKLER}, Bestätigungslauf ${status}`));
+  }
+});
+
+test("stürzt nach einem Zeitablauf der dritte Lauf der tötenden Datei ab, ist das derselbe rote Befund", async () => {
+  const { ergebnis, aufrufe } = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("RuntimeError")]);
+  assert.deepEqual(aufrufe, [
+    { zeilen: [LAGE], tests: undefined },
+    { zeilen: [LAGE], tests: [DATEI] },
+  ]);
+  keinUrteil(ergebnis);
+  assert.equal(ergebnis.befund, abgestuerzt(DATEI, `erster Lauf Timeout, Bestätigungslauf Killed ${DATEI}, dritter Lauf RuntimeError`));
+});
+
+test("stürzt nach einem echten Wackler die Bestätigung der nächsten tötenden Datei ab, nennt der Befund diese Datei und alle Läufe", async () => {
+  const { ergebnis, aufrufe } = await gruppenbestaetigung(
+    [WACKLER, DATEI, ANDERE],
+    [eintrag("Survived")],
+    [eintrag("Killed", [DATEI])],
+    [eintrag("RuntimeError")],
+  );
+  assert.deepEqual(aufrufe, laeufe([WACKLER], [DATEI, ANDERE], [DATEI]));
+  keinUrteil(ergebnis);
+  assert.equal(
+    ergebnis.befund,
+    abgestuerzt(DATEI, `erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived; ohne ${WACKLER}: erster Lauf Killed ${DATEI}, Bestätigungslauf RuntimeError`),
+  );
+});
+
+test("endet der Bestätigungslauf der tötenden Datei ohne Absturz anders, bleibt sie ein Wackler wie bisher und die übrige Gruppe entscheidet", async () => {
+  for (const [antwort, zweiter] of [[[eintrag("Timeout")], "Timeout"], [[eintrag("Killed", [ANDERE])], `Killed ${ANDERE}`]]) {
+    const { ergebnis, aufrufe } = await gruppenbestaetigung([WACKLER, DATEI], antwort, [eintrag("Survived")]);
+    assert.deepEqual(aufrufe, laeufe([WACKLER], [DATEI]), zweiter);
+    assert.equal(bestaetigungAbgestuerzt(ergebnis), false, zweiter);
+    assert.equal(ergebnis.befund, undefined, zweiter);
+    assert.equal(ergebnis.status, "Survived", zweiter);
+    assert.equal(ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${WACKLER}, Bestätigungslauf ${zweiter}`), zweiter);
+  }
 });
