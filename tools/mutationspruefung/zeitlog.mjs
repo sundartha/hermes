@@ -93,6 +93,10 @@ export function notiereTestauswahl(ms, { seite, dateien, testdateien }) {
   melde(`Testauswahl (Seite ${seite}): ${dateien} Dateien, ${testdateien} Testdateien in ${dauer(ms)}`);
 }
 
+export function notiereVorschau(umfang) {
+  schreibe("vorschau", umfang);
+}
+
 export function notiereLoeschprobe(ms, { datei }) {
   notierePhase("loeschprobe", ms, { datei });
   melde(`Löschprobe ${datei} in ${dauer(ms)}`);
