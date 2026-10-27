@@ -5,6 +5,7 @@ const TEIL_VON = "Teil von";
 const TEIL_VON_FORM = /^Teil von: (P-[^\s/\\]+); nach: (.+)$/u;
 const OHNE_VORGAENGER = "–";
 const VORGAENGER_TRENNER = ", ";
+const TEILNUMMER = /^P-\d+(?:-t\d+(?=-|$))*/u;
 
 export function ganzeZahl(text) {
   return GANZE_ZAHL.test(text) ? Number(text) : undefined;
@@ -28,6 +29,10 @@ export function zahlZeile(pitch, name) {
   const anfang = `${name}:`;
   const zeile = zeileMit(kopf(pitch), anfang);
   return zeile === undefined ? undefined : { zeile, zahl: zahlHinter(zeile.slice(anfang.length)) };
+}
+
+export function teilName(eltern, { kuerzel, name }) {
+  return `${TEILNUMMER.exec(eltern)?.[0] ?? eltern}-${kuerzel}-${name}`;
 }
 
 export function teilVonZeile({ eltern, nach }) {

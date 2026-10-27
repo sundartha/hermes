@@ -9,7 +9,7 @@ import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitKopfzeile } from "./planung-freigabe-probe.js";
 import { GRUPPEN, HINWEIS, LAUF_FRIST_MS, LOESUNG, ORDNER, ROUTE, alsJson, aufrufe, bericht, exit, mitGeaendertenDateien, planOrdner, planeIn } from "./planung-probe.js";
-import { mitUpstreamMaster, runIn } from "./probe-repo.js";
+import { commitPaths, mitUpstreamMaster, runIn, writeFiles } from "./probe-repo.js";
 
 const EXIT_GETEILT = 7;
 const ELTERN = "P-001-eigene-nummer";
@@ -315,5 +315,24 @@ test("teilordner: ein Vorgänger, der nur auf dem eigenen Branch steht, gibt kei
 
   exit(lauf, EXIT_AUFRUF);
   assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.equal(lauf.stdout.includes(`${ROUTE} gehört`), false, lauf.stdout);
+});
+
+const HINTERLEGEN_UNTERTEILE = ["plaene/P-001-t1-t1-nummer-anlegen", "plaene/P-001-t1-t2-nummer-pruefen"];
+
+function hinterlegenGeteilt(wurzel, gemergt) {
+  const datei = `${HINTERLEGEN}/planung/teile.json`;
+  writeFiles(wurzel, { [datei]: `${JSON.stringify({ teile: [{ kuerzel: "t1", name: "nummer-anlegen" }, { kuerzel: "t2", name: "nummer-pruefen" }] })}\n` });
+  commitPaths(wurzel, [datei], "Plane P-001 t1: Teile");
+  mitUpstreamMaster(wurzel);
+  for (const ordner of gemergt) vorgaengerGemergt(wurzel, ordner);
+}
+
+test("teilordner: fehlt einem geteilten Vorgänger aus nach ein gemergter Unter-Teil, hält plane vor den Erkundern und nennt den Unter-Teil", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], nachTeilung: (wurzel) => hinterlegenGeteilt(wurzel, HINTERLEGEN_UNTERTEILE.slice(0, 1)) });
+
+  exit(lauf, EXIT_AUFRUF);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.ok(lauf.stderr.includes(`Vorgänger ${basename(HINTERLEGEN_UNTERTEILE[1])} (Unter-Teil des geteilten Vorgängers ${basename(HINTERLEGEN)}`), lauf.stderr);
   assert.equal(lauf.stdout.includes(`${ROUTE} gehört`), false, lauf.stdout);
 });

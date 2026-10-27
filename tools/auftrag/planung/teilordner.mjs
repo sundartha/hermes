@@ -3,7 +3,7 @@ import { basename, dirname, join, relative } from "node:path";
 
 import { gemergteVorgaenger, vorgaengerBefunde } from "../teil-vorgaenger.mjs";
 import { liste } from "./erkundung.mjs";
-import { teilVon, teilVonZeile } from "./kopfzeile.mjs";
+import { teilName, teilVon, teilVonZeile } from "./kopfzeile.mjs";
 import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GETEILT } from "./nachricht.mjs";
 import { ANFORDERUNGEN, ANGRIFFSWEG, ANGRIFFSWEGE, BLEIBT_UNVERAENDERT, PITCH, PITCH_SZENARIO, SICHERHEIT, sollNummern } from "./nummern.mjs";
 import { belegHalt, teilungHalt } from "./teilung.mjs";
@@ -15,7 +15,6 @@ const TEILE = "teile.json";
 const NACH_ZEILEN = /(?<=\n)/u;
 const UEBERSCHRIFT = /^(#{1,6})\s/u;
 const ABSCHNITT = 2;
-const TEILNUMMER = /^P-\d+(?:-t\d+(?=-|$))*/u;
 const STATUS = "Status:";
 const EIGENER_KOPF = [STATUS, "Issue:", "Planung freigegeben:", "Teil von:"];
 const SZENARIEN_ANDERSWO = "dieser Teil baut nur um; die Szenarien des Eltern-Pitches stehen in den anderen Teilen";
@@ -137,9 +136,8 @@ function texte(ordner) {
   return Object.fromEntries(DOKUMENTE.filter((datei) => existsSync(join(ordner, datei))).map((datei) => [datei, readFileSync(join(ordner, datei), "utf8")]));
 }
 
-function teilOrdnerName(elternOrdner, { kuerzel, name }) {
-  const eltern = basename(elternOrdner);
-  return `${TEILNUMMER.exec(eltern)?.[0] ?? eltern}-${kuerzel}-${name}`;
+function teilOrdnerName(elternOrdner, eintrag) {
+  return teilName(basename(elternOrdner), eintrag);
 }
 
 function herkunftDes(teilung, eintrag, elternOrdner) {
