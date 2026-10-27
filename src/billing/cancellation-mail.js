@@ -54,6 +54,9 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
   const { pending, receivedAt } = store.cancellationMailPending(tenantId);
   if (!pending) return false;
 
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenantId);
+  if (cancelAtPeriodEnd === false) return true;
+
   if (!mailer) {
     logger.warn(`[cancellation-mail] SMTP nicht konfiguriert - Bestaetigung offen tenant=${tenantId}`);
     await auditStore.record({
@@ -75,7 +78,6 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
     return true;
   }
 
-  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenantId);
   const { subject, text } = buildCancellationMailText({
     planSlug,
     currentPeriodEnd,

@@ -13,6 +13,8 @@ import {
   runCancellationMailSweep,
   buildCancellationMailText,
 } from "../src/billing/cancellation-mail.js";
+import crypto from "node:crypto";
+import { verifyStripeSignature, applyStripeWebhookSerialized } from "../src/billing/webhook.js";
 
 const TENANT = "t_mail";
 const PLAN_SLUG = "starter";
@@ -293,6 +295,11 @@ function fakeBilling() {
       cancelAtPeriodEnd: true,
       currentPeriodEnd: NEW_PERIOD_END,
     }),
+    unscheduleCancellation: async (params) => ({
+      subscriptionId: params.subscriptionId,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: NEW_PERIOD_END,
+    }),
   };
 }
 
@@ -341,6 +348,8 @@ async function setupIntegration({ mailer } = {}) {
   return {
     base: `http://127.0.0.1:${server.address().port}`,
     store,
+    accounts,
+    auditStore,
     cookie: cookieFor(sessionId),
     close: () => new Promise((r) => server.close(r)),
   };
@@ -379,4 +388,120 @@ test("Integration: SMTP nicht konfiguriert (kein mailer injiziert) -> Kuendigung
   } finally {
     await s.close();
   }
+});
+
+const STRIPE_TEST_SECRET = "312k-p5-stripe-secret-erfunden";
+const MS_PER_SECOND = 1000;
+let stripeEventSeq = 0;
+
+function postBilling(s, action) {
+  return request("POST", `${s.base}/api/self-service/billing/${action}`, { cookie: s.cookie });
+}
+
+function sweepWith(s, mailer) {
+  return runCancellationMailSweep({
+    store: s.store, mailer, accounts: s.accounts, config: fakeConfig(), auditStore: s.auditStore, logger: fakeLogger(),
+  });
+}
+
+async function withRoutesWithoutMailer(steps) {
+  const s = await setupIntegration({ mailer: null });
+  try {
+    return await steps(s);
+  } finally {
+    await s.close();
+  }
+}
+
+async function signedSubscriptionUpdate(s, cancelAtPeriodEnd) {
+  stripeEventSeq++;
+  const rawBody = JSON.stringify({
+    id: `evt_312k_p5_${stripeEventSeq}`,
+    created: Math.floor(Date.now() / MS_PER_SECOND) + stripeEventSeq,
+    type: "customer.subscription.updated",
+    data: {
+      object: {
+        id: SUBSCRIPTION_ID,
+        status: "active",
+        cancel_at_period_end: cancelAtPeriodEnd,
+        current_period_end: NEW_PERIOD_END,
+        metadata: { tenant_ref: TENANT_M, plan_slug: PLAN_SLUG },
+      },
+    },
+  });
+  const ts = Math.floor(Date.now() / MS_PER_SECOND);
+  const mac = crypto.createHmac("sha256", STRIPE_TEST_SECRET).update(`${ts}.${rawBody}`).digest("hex");
+  const signed = verifyStripeSignature({
+    rawBody, signatureHeader: `t=${ts},v1=${mac}`, secret: STRIPE_TEST_SECRET, nowS: ts,
+  });
+  assert.equal(signed, true, "Ereignis ist gueltig signiert");
+  await applyStripeWebhookSerialized(JSON.parse(rawBody), {
+    store: s.store, accounts: s.accounts, audit: () => {}, req: {}, provision: async () => {},
+    billing: fakeBilling(), auditStore: s.auditStore,
+  });
+  assert.equal(s.store.tenantSubscription(TENANT_M).cancelAtPeriodEnd, cancelAtPeriodEnd);
+}
+
+test("Fortsetzen nach Kuendigung ohne Mailer: der naechste Sweep verschickt keine Kuendigungsbestaetigung", async () => {
+  await withRoutesWithoutMailer(async (s) => {
+    assert.equal((await postBilling(s, "cancel")).status, 200);
+    assert.equal(s.store.cancellationMailPending(TENANT_M).pending, true, "Vermerk offen nach Kuendigung");
+    const resumed = await postBilling(s, "resume");
+    assert.equal(resumed.status, 200);
+    assert.equal(JSON.parse(resumed.body).cancelAtPeriodEnd, false);
+    assert.equal(s.store.tenantSubscription(TENANT_M).cancelAtPeriodEnd, false);
+
+    const mailer = successfulMailer();
+    await sweepWith(s, mailer);
+
+    assert.equal(mailer.calls.length, 0, "Kündigungsbestätigung nach Rücknahme der Kündigung verschickt");
+    assert.equal(s.store.cancellationMailPending(TENANT_M).pending, true, "Vermerk bleibt offen");
+
+    const stillPending = await attemptCancellationMailConfirm({
+      store: s.store, mailer, accounts: s.accounts, config: fakeConfig(), auditStore: s.auditStore,
+      logger: fakeLogger(), tenantId: TENANT_M,
+    });
+    assert.equal(stillPending, true, "direkter Versuch meldet den Vermerk als offen");
+    assert.equal(mailer.calls.length, 0, "auch der direkte Versuch verschickt nichts");
+  });
+});
+
+test("[NIE1] Kuendigung ohne Mailer, Sweep ohne Fortsetzen: genau eine Bestaetigung an die Kontoadresse, Vermerk erledigt", async () => {
+  await withRoutesWithoutMailer(async (s) => {
+    assert.equal((await postBilling(s, "cancel")).status, 200);
+    const mailer = successfulMailer();
+    await sweepWith(s, mailer);
+
+    assert.equal(mailer.calls.length, 1);
+    assert.equal(mailer.calls[0].to, ACCOUNT_EMAIL);
+    assert.equal(s.store.cancellationMailPending(TENANT_M).pending, false, "Vermerk erledigt");
+  });
+});
+
+test("[NIE2] Kuendigen, Fortsetzen, erneut Kuendigen ohne Mailer: der Sweep verschickt genau eine Bestaetigung", async () => {
+  await withRoutesWithoutMailer(async (s) => {
+    for (const action of ["cancel", "resume", "cancel"]) {
+      assert.equal((await postBilling(s, action)).status, 200, action);
+    }
+    const mailer = successfulMailer();
+    await sweepWith(s, mailer);
+
+    assert.equal(mailer.calls.length, 1);
+    assert.equal(mailer.calls[0].to, ACCOUNT_EMAIL);
+  });
+});
+
+test("[NIE3] veraltetes Stripe-Ereignis cancel_at_period_end false, dann true: zusammen genau eine Bestaetigung", async () => {
+  await withRoutesWithoutMailer(async (s) => {
+    assert.equal((await postBilling(s, "cancel")).status, 200);
+    const mailer = successfulMailer();
+
+    await signedSubscriptionUpdate(s, false);
+    await sweepWith(s, mailer);
+    await signedSubscriptionUpdate(s, true);
+    await sweepWith(s, mailer);
+
+    assert.equal(mailer.calls.length, 1);
+    assert.equal(mailer.calls[0].to, ACCOUNT_EMAIL);
+  });
 });
