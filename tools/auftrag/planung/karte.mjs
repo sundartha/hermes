@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { ungefilterteMeldungen } from "../../ziele/eslint-ungefiltert.mjs";
 import { echterRepoPfad, funktionenIn, regelnJeFunktion } from "../../ziele/funktionen.mjs";
+import { dateiImAnrufbereich } from "../anrufbereich.mjs";
 import { pfadIstSauber } from "../format.mjs";
 import { gitLauf } from "./git.mjs";
 
@@ -84,5 +85,6 @@ export function karte(datei, root, { json = false } = {}) {
   for (const { name, von, bis, zeilen, befunde } of ergebnis.funktionen) {
     console.log([name, `${von}-${bis}`, `${zeilen} Zeilen`, befundText(befunde)].join("\t"));
   }
+  for (const zeile of dateiImAnrufbereich(ergebnis.datei)) console.log(zeile);
   return EXIT_GRUEN;
 }

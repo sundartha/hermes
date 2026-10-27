@@ -167,3 +167,18 @@ test("karte und die Wahl der Altfunktionen nennen eine Datei hinter einem Symlin
   assert.equal(lauf.status, 0, lauf.stderr);
   assert.deepEqual([...altfunktionBefunde(ordner).keys()], [JSON.parse(lauf.stdout).datei]);
 });
+
+test("karte nennt bei einer Datei des Anrufbereichs nach den Funktionen die Grenze für einen Umbau", async (context) => {
+  const ordner = probe(context);
+  writeFiles(ordner, { "src/routes/_call-request.js": "export function antwort() {\n  return 1;\n}\n" });
+  const lauf = karte(ordner, "src/routes/_call-request.js");
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const [datei, funktion, hinweis, ...grenze] = lauf.stdout.trimEnd().split("\n");
+  assert.deepEqual([datei, funktion], ["src/routes/_call-request.js", "antwort\t1-3\t3 Zeilen\tkeine Befunde"]);
+  assert.match(hinweis, /^Hinweis: src\/routes\/_call-request\.js .*Anrufbereich/);
+  const { default: zweck } = await import("../../tools/auftrag/zweck.json", { with: { type: "json" } });
+  const { wozu, behebung, nichtAngenommen, ausweg } = zweck.vorbereitung;
+  assert.deepEqual(grenze, [`Wozu: ${wozu}`, `Echte Behebung: ${behebung}`, `Nicht angenommen: ${nichtAngenommen}`, `Ausweg: ${ausweg}`]);
+  const json = karte(ordner, "src/routes/_call-request.js", "--json");
+  assert.deepEqual(JSON.parse(json.stdout), { datei: "src/routes/_call-request.js", funktionen: [{ name: "antwort", von: 1, bis: 3, zeilen: 3, befunde: {} }] });
+});
