@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { ROTER_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
-import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 
 const JSCPD = "jscpd";
@@ -88,4 +88,29 @@ test("löscht der Bau-Agent tools/basis/jscpd.json, entfällt die Kopien-Prüfun
   const drehbuch = { "bau-loeschen": ["tools/basis/jscpd.json"], "bau-antwort": ABSATZ };
   const { lauf, beleg } = starte(context, { auftrag, drehbuch, dateien: KOPIEN_LISTE });
   rotAnJscpd(lauf, beleg);
+});
+
+const TESTUMBAU = { ...UMBAU, art: "testumbau", ziel: "Ziehe die Rechen-Tests in eine eigene Datei", bereich: "test/", erwarteteDateien: ["test/rechnen.test.js"], vorbild: "test/text.test.js" };
+const PAKET = JSON.parse(BASIS["package.json"]);
+const MUTATION = "mutation testumbau";
+const MIT_MUTATION_UND_KOPIEN = { ...KOPIEN_LISTE, "src/rechnen.js": VERDOPPELT, "package.json": JSON.stringify({ ...PAKET, scripts: { ...PAKET.scripts, "test:mutation": "node -e 0 --" } }) };
+
+function testumbau(context, drehbuch) {
+  return starte(context, { auftrag: TESTUMBAU, drehbuch, dateien: MIT_MUTATION_UND_KOPIEN });
+}
+
+test("die Kopien-Prüfung läuft im Testumbau direkt nach lint und vor der Mutation", (context) => {
+  const { lauf, beleg } = testumbau(context, { test: { "test/rechnen.test.js": ROTER_TEST } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const liste = namen(beleg);
+  assert.equal(liste[liste.indexOf("lint") + 1], JSCPD, liste.join(", "));
+  assert.ok(liste.indexOf(JSCPD) < liste.indexOf(MUTATION), liste.join(", "));
+});
+
+test("schreibt der Testumbau-Agent zwei Testfälle mit gleichem Rumpf, wird die Runde vor der Mutation an jscpd rot und der Testumbau-Agent bekommt Befund und Zweck-Text", (context) => {
+  const { werkzeug, lauf, beleg } = testumbau(context, { test: { "test/rechnen.test.js": TEST_MIT_KOPIE }, "test-antwort": ABSATZ });
+  rotAnJscpd(lauf, beleg);
+  assert.ok(!namen(beleg).includes(MUTATION), namen(beleg).join(", "));
+  const zweiteRunde = readFileSync(join(werkzeug, "prompt-test.txt"), "utf8");
+  for (const teil of ["## Testumbau", "gleicht test/rechnen.test.js:", WOZU, `dem Test-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
 });
