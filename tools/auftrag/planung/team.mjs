@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 
-import { starteAgentParallel } from "../agenten.mjs";
+import { rollenKopf, starteAgentParallel } from "../agenten.mjs";
 import { limitSperre, restDerSperre, setzeLimitSperre } from "../einsatz.mjs";
 import { BELEGE } from "../bericht.mjs";
 import { meldeNetzabbruch, netzabbruch } from "../netz.mjs";
@@ -12,8 +12,6 @@ import { istObjekt } from "./erkundung.mjs";
 import { gitLauf, gitPfadeAbfragen } from "./git.mjs";
 import { DOKUMENTE } from "./schnitt.mjs";
 
-const KOPF = /^---\n([\s\S]*?)\n---\n/;
-const KOPF_FELD = /^(\w+):\s*(.*)$/gm;
 const LEERE_LISTE = /^(""|''|\[\])$/;
 const LISTEN_TRENNER = /\s*,\s*/;
 const PLANUNG = "planung";
@@ -57,20 +55,8 @@ export function liesAntwort(text) {
   return wert === null ? { art: OHNE } : { art: "json", wert };
 }
 
-function kopfFelder(text, datei) {
-  const kopf = KOPF.exec(text);
-  if (kopf === null) throw new Error(`${datei} hat keinen Kopf zwischen ---`);
-  const felder = Object.fromEntries([...kopf[1].matchAll(KOPF_FELD)].map(([, name, wert]) => [name, wert.trim()]));
-  return { felder, rumpf: text.slice(kopf[0].length).trim() };
-}
-
 function werkzeuge(wert = "") {
   return LEERE_LISTE.test(wert) || wert === "" ? [] : wert.split(LISTEN_TRENNER);
-}
-
-function rollenKopf(root, rolle) {
-  const datei = join(".claude/agents", `${rolle}.md`);
-  return kopfFelder(readFileSync(join(root, datei), "utf8"), datei);
 }
 
 export function werkzeugeDerRolle(root, rolle) {
