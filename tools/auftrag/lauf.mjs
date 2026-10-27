@@ -38,6 +38,8 @@ import { geordnet } from "../soll-vergleich/vergleich.mjs";
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
+const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
+const KOPIEN_BASIS = "tools/basis/jscpd.json";
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
@@ -382,7 +384,17 @@ class AuftragsLauf {
     if (existsSync(join(this.kontext.root, ABHAENGIGKEITSREGELN))) {
       return this.gruen(PRUEFUNG.ABHAENGIGKEITEN, [execPath, ABHAENGIGKEITEN, "--basis", this.basis], vollerBelegMitZweckAusBloecken);
     }
-    const hinweis = `Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`;
+    return this.einmalHinweisen(`Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`);
+  }
+
+  kopien() {
+    if (gibtEsIn(this.basis, KOPIEN_BASIS, this.kontext.root)) {
+      return this.gruen(MELDUNG.JSCPD, [execPath, BASIS_VERGLEICH, "jscpd", "--basis", this.basis], befundOhneZweck);
+    }
+    return this.einmalHinweisen(`Kopien: ${KOPIEN_BASIS} fehlt auf der Basis.`);
+  }
+
+  einmalHinweisen(hinweis) {
     if (!this.hinweise.includes(hinweis)) this.hinweise.push(hinweis);
     return true;
   }
@@ -481,6 +493,7 @@ class AuftragsLauf {
           () => this.agent("test", testAgentPrompt(this.kontext)),
           () => this.grenzen("test", this.basis),
           () => this.statischeTestpruefung(),
+          () => this.kopien(),
           () => this.faelleErhalten(),
           () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
           () => this.abhaengigkeiten(),
@@ -506,6 +519,7 @@ class AuftragsLauf {
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
+      () => this.kopien(),
       () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
