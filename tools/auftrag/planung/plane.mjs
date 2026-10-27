@@ -928,7 +928,7 @@ class Fortsetzung extends Planung {
 
   async planeAbSchnitt() {
     const vorher = liesGeprueft(this.ablage);
-    const ergebnis = vorher === undefined ? undefined : await schnittImOrdner(this.ordner, { schnitt: vorher.schnitt, berichte: this.berichte, root: this.root });
+    const ergebnis = vorher === undefined ? undefined : await this.schnittBefunde(vorher.schnitt);
     if (ergebnis === undefined || ergebnis.befunde.length > 0) return super.planeAbSchnitt();
     this.schnitt = vorher.schnitt;
     this.schnittAnnahmen = ergebnis.annahmen;
