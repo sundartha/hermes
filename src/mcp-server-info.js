@@ -8,6 +8,7 @@ const HERMES_ICON_FILENAME = "hermes-icon.png";
 
 export const HERMES_SERVER_INFO = {
   name: "hermes",
+  title: "Hermes",
   version: "0.2.0",
   websiteUrl: "https://www.sundartha.com",
   icons: [
