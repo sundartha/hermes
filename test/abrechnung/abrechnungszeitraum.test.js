@@ -19,6 +19,6 @@ test("beide Wrapper-Formate meinen denselben Zeitpunkt (ISO == Sekunden)", () =>
   assert.equal(new Date(sec * MS_PER_SECOND).toISOString(), iso, "ISO und Sekunden konsistent");
 });
 
-test("Monatsletzten-Ueberlauf: dokumentiertes Roll-over (akzeptiert, kein Gate)", () => {
-  assert.equal(periodStartFromEnd(END_MAR_31_SEC).toISOString(), "2026-03-03T00:00:00.000Z");
+test("Monatsletzter: Beginn bleibt im Vormonat, begrenzt auf dessen letzten Tag", () => {
+  assert.equal(periodStartFromEnd(END_MAR_31_SEC).toISOString(), "2026-02-28T00:00:00.000Z");
 });
