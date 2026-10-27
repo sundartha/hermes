@@ -12,12 +12,10 @@ import {
   runIn,
   writeFiles,
 } from "./probe-repo.js";
-import { workflowStepLines } from "./workflow-dateien.js";
+import { workflowStepScript } from "./workflow-dateien.js";
 
 const WORKFLOW = "ci.yml";
 const SCHRITT = "Secret-Scan";
-const SKRIPT_ANFANG = "        run: |";
-const SKRIPT_EINZUG = 10;
 const UNBEKANNTER_COMMIT = "f".repeat(40);
 
 const GIT_FEHLER = [
@@ -50,16 +48,6 @@ const ATTRAPPEN = {
   gitleaks: '#!/bin/sh\nprintf \'%s\\n\' "$ATTRAPPE_AUSGABE" >&2\nexit "$ATTRAPPE_STATUS"\n',
 };
 
-function schrittSkript() {
-  const rumpf = workflowStepLines(WORKFLOW, SCHRITT);
-  const skript = rumpf.indexOf(SKRIPT_ANFANG);
-  assert.notEqual(skript, -1, `${SKRIPT_ANFANG.trim()} fehlt im Secret-Scan`);
-  return rumpf
-    .slice(skript + 1)
-    .map((zeile) => zeile.slice(SKRIPT_EINZUG))
-    .join("\n");
-}
-
 function attrappen(context) {
   const ordner = probeDirectory(context, ATTRAPPEN);
   for (const name of Object.keys(ATTRAPPEN)) chmodSync(join(ordner, name), 0o755);
@@ -75,7 +63,7 @@ function scanne(context, repo, { basis, kopf, ausgabe, status = 0 }) {
   const runnerTemp = join(werkzeuge, "runner");
   mkdirSync(runnerTemp);
   const skript = join(werkzeuge, "schritt.sh");
-  writeFileSync(skript, schrittSkript());
+  writeFileSync(skript, workflowStepScript(WORKFLOW, SCHRITT));
   return spawnSync("bash", ["-e", skript], {
     cwd: repo,
     encoding: "utf8",

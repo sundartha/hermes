@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        teil: [1, 2, 3, 4]
+        teil: [1, 2, 3, 4, 5, 6]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -51,11 +51,17 @@ jobs:
 
       - name: Werkzeugtests
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
-        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE"
+        run: |
+          auswahl=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--alle-werkzeugtests)
+          fi
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" "${auswahl[@]}"
 
       - name: Testlaufzeit
         if: always()
@@ -103,6 +109,12 @@ jobs:
 
       - name: Alle Teile erfolgreich und vollständig
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           JOBS: ${{ toJSON(needs) }}
-        run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS"
+        run: |
+          auswahl=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--alle-werkzeugtests)
+          fi
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" "${auswahl[@]}"

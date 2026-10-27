@@ -9,6 +9,8 @@ const WORKFLOW_FILE = /\.ya?ml$/;
 const LINE_BREAK = /\r?\n/;
 const NEXT_STEP = /^ {6}- /;
 const NEXT_JOB = /^ {2}[a-z][\w-]*:$/;
+const STEP_SCRIPT_START = "        run: |";
+const STEP_SCRIPT_INDENT = 10;
 
 export function workflowFiles(directory = WORKFLOW_DIR) {
   return readdirSync(directory).filter((file) => WORKFLOW_FILE.test(file));
@@ -34,4 +36,14 @@ export function workflowJobLines(file, job, directory = WORKFLOW_DIR) {
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => NEXT_JOB.test(line));
   return end === -1 ? rest : rest.slice(0, end);
+}
+
+export function workflowStepScript(file, step, directory = WORKFLOW_DIR) {
+  const body = workflowStepLines(file, step, directory);
+  const start = body.indexOf(STEP_SCRIPT_START);
+  assert.notEqual(start, -1, `${STEP_SCRIPT_START.trim()} fehlt im Schritt ${step} in ${file}`);
+  return body
+    .slice(start + 1)
+    .map((line) => line.slice(STEP_SCRIPT_INDENT))
+    .join("\n");
 }

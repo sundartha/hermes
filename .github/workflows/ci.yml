@@ -294,16 +294,21 @@ jobs:
       - name: Tests
         id: tests
         env:
+          EVENT_NAME: ${{ github.event_name }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
           TESTS_ZWEITER_LAUF: ja
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
-        run: >-
-          npm test -- -- --test-concurrency=4 --test-shard="$TEIL/$TEILE"
-          --test-reporter-destination=stdout
-          --test-reporter=./tools/testlaufzeit-reporter.mjs
-          --test-reporter-destination=.pruefung/dateien.jsonl
+        run: |
+          auswahl=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--ohne-werkzeugtests)
+          fi
+          npm test -- "${auswahl[@]}" -- --test-concurrency=4 --test-shard="$TEIL/$TEILE" \
+            --test-reporter-destination=stdout \
+            --test-reporter=./tools/testlaufzeit-reporter.mjs \
+            --test-reporter-destination=.pruefung/dateien.jsonl
 
       - name: Zweck der Tests
         if: failure() && steps.tests.outcome == 'failure'
