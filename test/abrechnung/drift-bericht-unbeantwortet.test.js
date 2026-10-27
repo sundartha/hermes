@@ -1,8 +1,7 @@
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import express from "express";
 import { tempDataDir } from "../helpers.js";
-import { operatorAuthPassThrough } from "../operator-route-app.js";
+import { operatorAuthPassThrough, startRouterApp } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { config } from "../../src/config.js";
@@ -72,8 +71,7 @@ function beendeterAnruf({
 }
 
 async function driftBerichtAbrufen() {
-  const app = express();
-  app.use(
+  const { base, close } = await startRouterApp(
     makeBillingRoutes({
       config: DRIFT_KONFIG,
       store,
@@ -83,19 +81,14 @@ async function driftBerichtAbrufen() {
       operatorAuth: operatorAuthPassThrough(),
     }),
   );
-  const server = await new Promise((fertig) => {
-    const laufend = app.listen(0, "127.0.0.1", () => fertig(laufend));
-  });
   try {
-    const antwort = await abrufMitFrist(
-      `http://127.0.0.1:${server.address().port}/api/billing/cost-drift`,
-    );
+    const antwort = await abrufMitFrist(`${base}/api/billing/cost-drift`);
     assert.equal(antwort.status, 200);
     const rohtext = await antwort.text();
     const eintrag = JSON.parse(rohtext).prefixes.find((zeile) => zeile.prefix === PRAEFIX);
     return { eintrag, rohtext };
   } finally {
-    await new Promise((fertig) => server.close(fertig));
+    await close();
   }
 }
 
