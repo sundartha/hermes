@@ -18,7 +18,7 @@ Die Nachricht enthält die Schnittliste, die Nummern mit Text, die Erkundungsber
 - `bereichsgrund:<id>`: Der Grund verwirft Teilen und Umbau davor zu Recht. Ist `bereich` eine Liste von Dateien, koppelt der Test, den der Grund nennt, wirklich jede Datei der Liste: Ohne die Änderung an einer davon wird er rot, und keine lässt sich in einem eigenen Auftrag ändern, ohne dass er rot wird.
 - `allein-gruen:<id>`: Der Auftrag kann allein seinen Abnahmetest grün machen.
 - `nicht-zusammengelegt:<id>`: Nichts ist mit anderem zusammengelegt oder weggelassen, um weniger Aufträge zu haben.
-- `ausweg:<Nummer>:<Angabe>`: Der Ausweg des Erkunders stimmt; sieh im Code nach, ob es die Stelle doch gibt.
+- `ausweg:<Nummer>:<Angabe>`: Der Ausweg des Erkunders stimmt; sieh im Code nach, ob es die Stelle doch gibt. Meldet ein Bericht für eine Nummer `aenderungen` als „keine Änderung, weil …“, ist das eine Annahme, keine falsche Angabe: Die Nummer hat keine Änderungsdatei, und ihr Grund wird wie jeder Ausweg geprüft (`ausweg:<Nummer>:aenderungen`); sieh nach, ob der genannte Schutz im Code steht und die Nummer ohne eigene Änderung trägt.
 - `falsche-angabe:<id>:<Nummer>:<Datei>`: Die Angabe des Erkunders ist wirklich falsch.
 - `gegenfrage:alle`: Welche Nicht-Ziele, Fehlerfälle mit Ausgang und Grenzen aus den Dokumenten stehen bei keinem Auftrag, der sie brechen kann?
 
