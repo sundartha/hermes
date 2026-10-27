@@ -97,6 +97,13 @@
     "nichtAngenommen": "Die Kennung an einen Abnahmefall, einen bestehenden Fall oder einen Fall ohne Bezug zum Satz hängen, einen Schutztest überspringen oder als todo markieren, oder einen Satz aus wasDarfNiePassieren streichen.",
     "ausweg": "Lässt sich ein Satz nicht über einen Eingang prüfen, eine eigene letzte Zeile „Auftrag passt nicht: [NIE<n>] ist nicht prüfbar, weil <Grund>“."
   },
+  "schutzwirkung": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Schutztest hält seinen Satz aus wasDarfNiePassieren nur fest, wenn er rot wird, sobald der schützende Code fehlt. Ein Fall, der die neuen Zeilen durchläuft und bei keinem ihrer Mutanten rot wird, bleibt grün, auch wenn der Schutz gestrichen wird; dass ein anderer Test die Zeilen verlangt, ersetzt ihn nicht.",
+    "behebung": "Den Schutztest so schreiben, dass er genau das Verhalten aus seinem Satz über den Eingang prüft: der Wert, der nie entstehen darf, wird direkt verglichen (Status, Text, Liste), nicht gegen einen Wert anderer Art, der nie gleich sein kann.",
+    "nichtAngenommen": "Die Kennung vom Fall nehmen, den Fall überspringen, den Satz streichen oder einen Schutz im alten Code behaupten, den der Fall dort nicht verlangt.",
+    "ausweg": "Liegt der Schutz in Code, den der Auftrag nicht ändert, eine eigene Zeile „Alter Schutz: [NIE<n>] src/<datei>:<zeile>, weil <Satz>“; sie gilt nur, wenn der Fall Mutanten genau dieser unveränderten Zeile tötet."
+  },
   "testumbau fälle": {
     "liste": "ohne Nummer",
     "wozu": "Ein Testumbau ändert nur die Struktur der Tests: Jeder betroffene Test ist vor und nach dem Umbau gegen den unveränderten Produktcode grün, jeder seiner Fälle.",

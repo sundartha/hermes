@@ -6,7 +6,7 @@ import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
-import { satzKennung, schutzSaetze } from "./schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -16,6 +16,10 @@ const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
 const AM_BUDGET = /^Abbruch: Budget\b.*kein Urteil\.$/m;
+const OHNE_WIRKUNG = new RegExp(`^Verstoß: ((?:${SCHUTZ_WIRKUNGSLOS}|${ALTER_SCHUTZ_NICHT_BELEGT} \\([^)]*\\)): .+)$`, "gm");
+const SCHUTZ_HINWEIS = new RegExp(`^((?:${SCHUTZ_NICHT_PRUEFBAR}|${SCHUTZ_UNERREICHT}|${ALTER_SCHUTZ_BELEGT}).*)$`, "gm");
+const UMBAU_UNGEPRUEFT = "Hinweis: Wirkung der Schutztests im Umbau nicht geprüft.";
+const SCHUTZFALL = "[NIE";
 const BUDGET_ZEILEN = /^((?:Vorschau |Abbruch: Budget\b|Mutationslog: Ende nach ).*)$/gm;
 const ABLAGE = "auftrag-umbau";
 const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
@@ -56,24 +60,31 @@ function budgetEnde(lauf, name, ausgabe) {
   return lauf.entscheidungNoetig({ kopf: `Auftrag ${auftrag.id} der Phase ${phase.phase}: ${grund}`, anlass: grund, verlauf: [grund, ...treffer(ausgabe, BUDGET_ZEILEN)] });
 }
 
+function skriptAufruf(argumente) {
+  return ["npm", "--silent", "run", SKRIPT, "--", ...argumente];
+}
+
 function mutationsBefehl(lauf, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
-  return ["npm", "--silent", "run", SKRIPT, "--", ...weg, ...argumente, ...gemeldet];
+  return skriptAufruf([...weg, ...argumente, ...gemeldet]);
 }
 
-function ausgewertet(lauf, name, { exitCode, ausgabe }) {
-  if (exitCode === 0) return { ende: true, ueberlebende: [] };
+function ausgewertet(lauf, name, { exitCode, ausgabe, muster = UEBERLEBT }) {
+  if (exitCode === 0) return { ende: true, ueberlebende: [], ausgabe };
   if (amBudget(ausgabe)) return { ende: budgetEnde(lauf, name, ausgabe) };
   if (abbruchExit(exitCode)) return { ende: lauf.scheitert(abbruch(name, exitCode, ausgabe), GRUND.MUTATION_ABBRUCH) };
-  return { ueberlebende: treffer(ausgabe, UEBERLEBT), ausgabe };
+  return { ueberlebende: treffer(ausgabe, muster), ausgabe };
+}
+
+function geprueft(lauf, name, { befehl, muster }) {
+  const erster = lauf.pruefung(name, befehl);
+  const wiederholen = abbruchExit(erster.exitCode) && !amBudget(erster.ausgabe);
+  return ausgewertet(lauf, name, { ...(wiederholen ? lauf.pruefung(name, befehl) : erster), muster });
 }
 
 function mutanten(lauf, name, argumente) {
-  const befehl = mutationsBefehl(lauf, argumente);
-  const erster = lauf.pruefung(name, befehl);
-  const wiederholen = abbruchExit(erster.exitCode) && !amBudget(erster.ausgabe);
-  return ausgewertet(lauf, name, wiederholen ? lauf.pruefung(name, befehl) : erster);
+  return geprueft(lauf, name, { befehl: mutationsBefehl(lauf, argumente), muster: UEBERLEBT });
 }
 
 function vorgemerkterCodestand(lauf) {
@@ -155,22 +166,25 @@ function bauSchritteOhneAgentWiederholt(lauf) {
   return lauf.bauSchritte().slice(1).every((schritt) => schritt());
 }
 
-function testErgaenzt(lauf, ueberlebende, vorgabe) {
-  for (const zweck of zweckeDerRunde(ueberlebende, vorgabe)) lauf.meldet(zweck, "test");
-  const weg = lauf.setzeAgentEinUndUebernimmAusgang(
-    "test",
-    testNachrunde(lauf.kontext, ueberlebende, vorgabe),
-  );
+function testAgentNachrunde(lauf, zwecke, prompt) {
+  for (const zweck of zwecke) lauf.meldet(zweck, "test");
+  const weg = lauf.setzeAgentEinUndUebernimmAusgang("test", prompt);
   return weg !== null && lauf.grenzen("test", lauf.basisBau) ? weg : null;
 }
 
+function testErgaenzt(lauf, ueberlebende, vorgabe) {
+  return testAgentNachrunde(lauf, zweckeDerRunde(ueberlebende, vorgabe), testNachrunde(lauf.kontext, ueberlebende, vorgabe));
+}
+
+function nachgeholtUndAbgenommen(lauf, nachrunde) {
+  if (!lauf.zwischenstand()) return null;
+  const weg = nachrunde();
+  return weg !== null && lauf.allesVormerken() && lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)) ? weg : null;
+}
+
 function testNachgeholt(lauf, ueberlebende, noetig) {
-  return (
-    lauf.zwischenstand() &&
-    testErgaenzt(lauf, ueberlebende, { stand: "in den neuen Zeilen", melden: false, noetig, zweck: PRUEFUNG.MUTATION }) &&
-    lauf.allesVormerken() &&
-    lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag))
-  );
+  const vorgabe = { stand: "in den neuen Zeilen", melden: false, noetig, zweck: PRUEFUNG.MUTATION };
+  return nachgeholtUndAbgenommen(lauf, () => testErgaenzt(lauf, ueberlebende, vorgabe)) !== null;
 }
 
 function neueZeilen(lauf) {
@@ -328,8 +342,67 @@ function alterStand(lauf) {
   }
 }
 
+function wirkung(lauf, name, alteStellen) {
+  const befehl = skriptAufruf(["--basis", lauf.basis, "--schutzwirkung", ...alteStellen.flatMap((stelle) => ["--alter-schutz", stelle])]);
+  const stand = geprueft(lauf, name, { befehl, muster: OHNE_WIRKUNG });
+  if (stand.ende === true) lauf.berichtszeilen.push(...treffer(stand.ausgabe, SCHUTZ_HINWEIS));
+  return stand;
+}
+
+function mitSatz(saetze, befund) {
+  const nummer = satzNummer(befund.slice(befund.indexOf(SCHUTZFALL)), saetze.length);
+  return nummer === null ? befund : `${befund} – Satz ${satzKennung(nummer)} „${saetze[nummer - 1]}“`;
+}
+
+function wirkungsAbschnitt(auftrag, befunde) {
+  const kopf = "Diese Schutztests durchlaufen neue Zeilen, werden aber bei keinem ihrer Mutanten rot; sie halten ihren Satz aus wasDarfNiePassieren nicht fest:";
+  const aufgabe = `Mach jeden in ${auftrag.abnahme} wirksam: Er prüft genau das Verhalten aus seinem Satz über den Eingang und wird rot, wenn der schützende Code fehlt. Produktcode änderst du nicht.`;
+  const ausweg = ["Liegt der Schutz eines Satzes in Code, den der Auftrag nicht ändert, antworte statt eines Tests mit einer Zeile je Kennung:", "Alter Schutz: [NIE<n>] src/<datei>:<zeile>, weil <ein Satz>", "Die Zeile gilt nur, wenn der Fall Mutanten genau dieser unveränderten Zeile tötet."];
+  const offen = liste(befunde.map((befund) => mitSatz(schutzSaetze(auftrag), befund)));
+  return ["## Schutztests ohne Wirkung", "", ...zweckBlock(PRUEFUNG.SCHUTZWIRKUNG), absatzVerlangt([PRUEFUNG.SCHUTZWIRKUNG]), "", kopf, "", offen, "", aufgabe, ...ausweg, ""];
+}
+
+function wirkungNachgeholt(lauf, befunde) {
+  const { kontext } = lauf;
+  const prompt = [testAgentPrompt(kontext), ...wirkungsAbschnitt(kontext.auftrag, befunde)].join("\n");
+  const weg = nachgeholtUndAbgenommen(lauf, () => testAgentNachrunde(lauf, [PRUEFUNG.SCHUTZWIRKUNG], prompt));
+  return weg !== null && lauf.statischeTestpruefung() && lauf.schutztests("bau") ? ersteJeKennung(weg.alterSchutz) : null;
+}
+
+function ersteJeKennung(alterSchutz) {
+  const kennungen = new Set();
+  return alterSchutz.filter(({ mutant }) => {
+    const kennung = ALTER_SCHUTZ.exec(mutant)?.[1];
+    if (kennung === undefined || kennungen.has(kennung)) return false;
+    kennungen.add(kennung);
+    return true;
+  });
+}
+
+function neueZeilenNachSchutzrunde(lauf) {
+  const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", lauf.basis]);
+  return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
+}
+
+function schutzwirkung(lauf) {
+  const { auftrag } = lauf.kontext;
+  if (schutzSaetze(auftrag).length === 0) return true;
+  if (auftrag.art === "umbau") {
+    lauf.berichtszeilen.push(UMBAU_UNGEPRUEFT);
+    return true;
+  }
+  const erster = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG, []);
+  if (erster.ende !== undefined) return erster.ende;
+  const alteSchutze = wirkungNachgeholt(lauf, erster.ueberlebende);
+  if (alteSchutze === null) return false;
+  for (const { mutant, grund } of alteSchutze) lauf.berichtszeilen.push(`Alter Schutz: ${mutant}, weil ${grund}`);
+  if (!neueZeilenNachSchutzrunde(lauf)) return false;
+  const zweiter = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG_NACH_TEST, alteSchutze.map(({ mutant }) => mutant));
+  return zweiter.ende ?? lauf.scheitert(`Schutztest ohne Wirkung: ${zweiter.ueberlebende[0]}`);
+}
+
 export function mutationsSchritte(lauf) {
-  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf)];
+  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf), () => schutzwirkung(lauf)];
   lauf.hinweise.push(`Mutationsprüfung: package.json hat kein Skript ${SKRIPT}.`);
   return [];
 }
