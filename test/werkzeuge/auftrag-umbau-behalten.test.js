@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { exitCodes } from "./auftrag-lauf-hilfen.js";
+import { KOPIEN_LISTE, exitCodes } from "./auftrag-lauf-hilfen.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
@@ -124,8 +124,8 @@ function gitAusgabe(repo, ...argumente) {
   return runIn(repo, "git", argumente).stdout;
 }
 
-function starte(context, drehbuch) {
-  const repo = mitUpstreamMaster(probeRepository(context, BASIS));
+function starte(context, drehbuch, dateien = {}) {
+  const repo = mitUpstreamMaster(probeRepository(context, { ...BASIS, ...dateien }));
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {
@@ -263,4 +263,52 @@ test("auftrag-umbau-behalten: passt der gesicherte Umbau nicht mehr auf den Stan
   assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
   assert.equal(gitAusgabe(repo, "show", "HEAD:src/text.js"), NEU);
   assert.equal(beleg.ergebnis, "grün");
+});
+
+const ZWECK_KOPIEN = "Zweck jscpd: Drehbuchtext des Ersatz-Agenten.";
+const TEST_PRUEFUNGEN = ["tests/statisch", "jscpd", "abhängigkeiten"];
+const MIT_REGELN = {
+  ...KOPIEN_LISTE,
+  ".dependency-cruiser.cjs": readFileSync(join(REPO_ROOT, ".dependency-cruiser.cjs"), "utf8"),
+  "tools/bereiche.json": `${JSON.stringify([{ bereich: "text", quellen: ["^src/text\\.js$"], eingaenge: ["^src/text\\.js$"], fachlogik: [] }])}\n`,
+};
+
+function doppelterFall(name) {
+  return [
+    `test("${name}", () => {`,
+    '  const woerter = ["alpha", "beta", "gamma"].map((wort) => gross(wort));',
+    '  assert.deepEqual(woerter, ["ALPHA", "BETA", "GAMMA"], "jedes Wort soll groß geschrieben sein");',
+    '  assert.equal(woerter.join(" ").length, 16, "die Länge der Wörter bleibt gleich");',
+    '  assert.ok(woerter.every((wort) => wort === wort.toUpperCase()), "kein Kleinbuchstabe bleibt übrig");',
+    "});",
+  ].join("\n");
+}
+
+const MIT_KOPIE = { dateien: { "test/text.test.js": `${textTest("leer", "umlaut")}${doppelterFall("drei Wörter")}\n${doppelterFall("drei Wörter noch einmal")}\n` }, antwort: ABSATZ };
+
+function namenDer(beleg) {
+  return beleg.pruefungen.map(({ name }) => name);
+}
+
+test("auftrag-umbau-behalten: schreibt der Test-Agent auf dem alten Stand eine Kopie, geht der Befund vor dem Commit an ihn zurück, und erst seine Tests ohne Kopie werden festgehalten", (context) => {
+  const ohneKopie = { ...testEintrag("leer", "umlaut"), antwort: `${ABSATZ}\n\n${ZWECK_KOPIEN}` };
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { bau: [BAU, BAU], test: [MIT_KOPIE, ohneKopie] }, KOPIEN_LISTE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
+  assert.doesNotMatch(gitAusgabe(repo, "log", "-p", `${basis}..HEAD`), /drei Wörter/);
+  const zweiteRunde = lesePrompt(werkzeug, 1);
+  for (const teil of ["gleicht test/text.test.js:", "Überlebende Mutanten"]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
+  assert.match(zweiteRunde, /Zugeordnet sind dem Test-Agenten: [^.;]*\bjscpd\b/);
+  assert.equal(beleg.ergebnis, "grün");
+});
+
+test("auftrag-umbau-behalten: schreibt der Test-Agent auf dem alten Stand keine Kopie, laufen statische Testprüfung, Kopien und Abhängigkeiten grün vor dem Test-Commit und es bleibt bei einer Runde", (context) => {
+  const { repo, lauf, basis, beleg, ausgabe } = starte(context, { bau: [BAU], test: [testEintrag("leer", "umlaut")] }, MIT_REGELN);
+  assert.equal(lauf.status, 0, ausgabe);
+  const namen = namenDer(beleg);
+  const vorFesthalten = namen.slice(namen.indexOf("mutation alter Stand"), namen.indexOf("tests alter Stand"));
+  assert.deepEqual(vorFesthalten.filter((name) => TEST_PRUEFUNGEN.includes(name)), TEST_PRUEFUNGEN, namen.join(", "));
+  for (const name of TEST_PRUEFUNGEN) assert.ok(exitCodes(beleg, name).every((exitCode) => exitCode === 0), `${name}: ${exitCodes(beleg, name)}`);
+  assert.equal(agentenMit(beleg, "bau").length, 1, "der Bau-Agent wurde mehr als einmal gerufen");
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, UMBAU_COMMIT]);
 });

@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { commitAll, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, writeFiles } from "./probe-repo.js";
 
 export const ZEILEN_UEBER_GRENZE = 401;
 export const GELOESCHTE_ZEILEN = 360;
@@ -14,6 +14,10 @@ export const ABSATZ_ROT = "Zweck rot: Drehbuchtext des Ersatz-Agenten.";
 export const ABSATZ_MUTATION = "Zweck mutation: Drehbuchtext des Ersatz-Agenten.";
 export const ABSATZ_ALTER_STAND = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten.";
 export const ABSATZ_PIN = "Zweck pin-prüfung: Drehbuchtext des Ersatz-Agenten.";
+export const KOPIEN_LISTE = {
+  ".jscpd.json": readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8"),
+  "tools/basis/jscpd.json": `${JSON.stringify({ version: JSON.parse(readFileSync(join(REPO_ROOT, "tools/basis/jscpd.json"), "utf8")).version, befunde: [] })}\n`,
+};
 
 export const ROTER_TEST = [
   'import assert from "node:assert/strict";',
