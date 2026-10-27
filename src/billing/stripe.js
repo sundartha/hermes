@@ -316,6 +316,7 @@ export const stripeBilling = {
       planSlug: (json.metadata && json.metadata.plan_slug) || null,
       numberSetupFeeExempt: typeof invoiceTotal === "number" ? invoiceTotal === 0 : false,
       status: typeof json.status === "string" ? json.status : null,
+      cancelAtPeriodEnd: typeof json.cancel_at_period_end === "boolean" ? json.cancel_at_period_end : null,
     };
   },
 

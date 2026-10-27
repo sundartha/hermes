@@ -384,6 +384,31 @@ function isStaleEvent(lastApplied, candidate) {
   return true;
 }
 
+const CANCEL_STATE_ACTIONS = Object.freeze(new Set([WEBHOOK_ACTION.ACTIVATE, WEBHOOK_ACTION.CANCEL_SCHEDULED]));
+
+async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
+  try {
+    const abo = await billing.retrieveSubscription(subscriptionId);
+    return typeof abo.cancelAtPeriodEnd === "boolean" ? abo.cancelAtPeriodEnd : null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncCancelStateFromStripe(interpreted, { store, billing }) {
+  const { action, tenantRef, subscriptionId } = interpreted;
+  if (!CANCEL_STATE_ACTIONS.has(action) || !subscriptionId) return;
+  const { tenant } = resolveExistingTenant(
+    store,
+    tenantRef,
+    () => store.findTenantBySubscription(subscriptionId)?.id || null,
+  );
+  if (!tenant || store.tenantSubscription(tenant).subscriptionId !== subscriptionId) return;
+  const atStripe = await cancelAtPeriodEndAtStripe(billing, subscriptionId);
+  if (atStripe === null || store.tenantSubscription(tenant).cancelAtPeriodEnd === atStripe) return;
+  store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
+}
+
 export async function applyStripeWebhookSerialized(event, deps) {
   const interpreted = interpretStripeEvent(event);
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
@@ -391,9 +416,10 @@ export async function applyStripeWebhookSerialized(event, deps) {
   if (!key) return applyStripeWebhook(event, deps);
   const candidate = eventAnchorOf(event, interpreted.action);
   return webhookLock(key, async () => {
-    if (isStaleEvent(lastAppliedByKey.get(key), candidate)) return;
-    const outcome = await applyStripeWebhook(event, deps);
-    lastAppliedByKey.set(key, candidate);
+    const stale = isStaleEvent(lastAppliedByKey.get(key), candidate);
+    const outcome = stale ? undefined : await applyStripeWebhook(event, deps);
+    if (!stale) lastAppliedByKey.set(key, candidate);
+    await syncCancelStateFromStripe(interpreted, deps);
     return outcome;
   });
 }

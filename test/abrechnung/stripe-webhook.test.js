@@ -14,6 +14,7 @@ import {
 } from "../../src/billing/webhook.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { makePgTestStore } from "../pg-helpers.js";
 import {
   STRIPE_ALARM_GEHEIMNIS,
   STRIPE_FALSCHES_GEHEIMNIS,
@@ -569,4 +570,263 @@ test("[NIE3] stripe_money_event-Zeile und aufgeloeste Zahlungsereignisse bleiben
   assert.deepEqual(rueckbuchung.nachher, rueckbuchung.vorher, "Rueckbuchung schreibt nichts");
   assert.equal(rueckbuchung.smsCalls.length, 1, "aufgeloeste Rueckbuchung alarmiert weiter");
   assert.match(rueckbuchung.smsCalls[0].body, /type=charge\.dispute\.created tenant=owner$/);
+});
+
+const ABO_SECRET = STRIPE_ROUTEN_GEHEIMNIS;
+const ABO_CREATED_S = 1_800_000_000;
+const VERZOEGERUNG_RUNDEN = 20;
+
+async function aboStore(tenantId, subscriptionId, { gesperrt = false } = {}) {
+  const { store } = await makePgTestStore();
+  store.load().tenants.push({
+    id: tenantId,
+    status: gesperrt ? "suspended" : "active",
+    firstName: "Kunde",
+    ownerName: "Kunde Abo",
+    idpSubject: tenantId,
+  });
+  store.setTenantSubscription(tenantId, { subscriptionId, planSlug: "starter", currentPeriodEnd: PERIOD_END_S });
+  if (gesperrt) store.setSuspendedAtIfAbsent(tenantId);
+  return store;
+}
+
+function stripeAbo(cancelAtPeriodEnd) {
+  return { planSlug: "starter", numberSetupFeeExempt: false, status: "active", cancelAtPeriodEnd };
+}
+
+function aboRoute({ store, retrieveSubscription, audit = () => {} }) {
+  const kontoStatus = [];
+  const handler = makeStripeWebhookRoute({
+    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: ABO_SECRET }),
+    store,
+    audit,
+    accounts: { setStatus: async (tenant, status) => kontoStatus.push([tenant, status]) },
+    sessions: { invalidateByTenant: async () => {} },
+    billing: { retrieveSubscription },
+    provision: async () => {},
+  });
+  return { handler, kontoStatus };
+}
+
+function aboEreignis({ id, tenantId, subscriptionId, cancelAtPeriodEnd, created = ABO_CREATED_S }) {
+  return JSON.stringify({
+    id,
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    created,
+    data: {
+      object: {
+        id: subscriptionId,
+        status: "active",
+        cancel_at_period_end: cancelAtPeriodEnd,
+        metadata: { tenant_ref: tenantId, plan_slug: "starter" },
+      },
+    },
+  });
+}
+
+function aboEndeEreignis({ id, tenantId, subscriptionId }) {
+  return JSON.stringify({
+    id,
+    type: SUBSCRIPTION_EVENT.DELETED,
+    created: ABO_CREATED_S,
+    data: { object: { id: subscriptionId, status: "canceled", metadata: { tenant_ref: tenantId } } },
+  });
+}
+
+test("Kündigung nach Fortsetzen in derselben Sekunde: gespeicherter Kündigungsstand folgt Stripe (true)", async () => {
+  const store = await aboStore("t_f9_abnahme", "sub_f9_abnahme");
+  const { handler } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(true) });
+  const ziel = { tenantId: "t_f9_abnahme", subscriptionId: "sub_f9_abnahme" };
+  const fortsetzen = await postSignedBody(handler, aboEreignis({ id: "evt_f9_a1", cancelAtPeriodEnd: false, ...ziel }), ABO_SECRET);
+  const kuendigen = await postSignedBody(handler, aboEreignis({ id: "evt_f9_a2", cancelAtPeriodEnd: true, ...ziel }), ABO_SECRET);
+  assert.deepEqual(fortsetzen.body, { received: true });
+  assert.deepEqual(kuendigen.body, { received: true });
+  assert.equal(
+    store.tenantSubscription("t_f9_abnahme").cancelAtPeriodEnd,
+    true,
+    "Fortsetzen-Ereignis derselben Sekunde überschreibt die spätere Kündigung",
+  );
+});
+
+test("[NIE1] deleted, danach updated derselben Sekunde lässt den Tenant gesperrt, auch wenn Stripe ein laufendes Abo meldet", async () => {
+  const store = await aboStore("t_f9_nie1", "sub_f9_nie1");
+  const { handler, kontoStatus } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(false) });
+  const ziel = { tenantId: "t_f9_nie1", subscriptionId: "sub_f9_nie1" };
+  await postSignedBody(handler, aboEndeEreignis({ id: "evt_f9_n1a", ...ziel }), ABO_SECRET);
+  const res = await postSignedBody(handler, aboEreignis({ id: "evt_f9_n1b", cancelAtPeriodEnd: false, ...ziel }), ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.deepEqual(kontoStatus, [["t_f9_nie1", "suspended"]], "kein Freischalten nach dem Abo-Ende");
+  assert.notEqual(store.tenantSuspendedAt("t_f9_nie1"), null, "Sperrzeitpunkt bleibt gesetzt");
+});
+
+test("[NIE2] scheiternder Abruf: updated mit Kündigung wird wie heute gespeichert und mit received:true beantwortet", async () => {
+  const store = await aboStore("t_f9_nie2", "sub_f9_nie2");
+  const retrieveSubscription = async () => {
+    throw new Error("stripe nicht erreichbar");
+  };
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const body = aboEreignis({ id: "evt_f9_n2", tenantId: "t_f9_nie2", subscriptionId: "sub_f9_nie2", cancelAtPeriodEnd: true });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_nie2").cancelAtPeriodEnd, true, "Stand aus dem Ereignis bleibt");
+});
+
+test("[NIE3] updated mit Kündigung hebt die Sperre eines gesperrten Tenants nicht auf, auch wenn Stripe nicht gekündigt meldet", async () => {
+  const store = await aboStore("t_f9_nie3", "sub_f9_nie3", { gesperrt: true });
+  const { handler, kontoStatus } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(false) });
+  const body = aboEreignis({ id: "evt_f9_n3", tenantId: "t_f9_nie3", subscriptionId: "sub_f9_nie3", cancelAtPeriodEnd: true });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.deepEqual(kontoStatus, [], "Konto wird nicht freigeschaltet");
+  assert.notEqual(store.tenantSuspendedAt("t_f9_nie3"), null, "Sperrzeitpunkt bleibt gesetzt");
+});
+
+test("[NIE4] verworfenes Fortsetzen derselben Sekunde nach Kündigung: Kündigungsstand folgt dem Abruf (false)", async () => {
+  const store = await aboStore("t_f9_nie4", "sub_f9_nie4");
+  let stripeStand = true;
+  const { handler } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(stripeStand) });
+  const ziel = { tenantId: "t_f9_nie4", subscriptionId: "sub_f9_nie4" };
+  const kuendigen = await postSignedBody(handler, aboEreignis({ id: "evt_f9_n4a", cancelAtPeriodEnd: true, ...ziel }), ABO_SECRET);
+  stripeStand = false;
+  const fortsetzen = await postSignedBody(handler, aboEreignis({ id: "evt_f9_n4b", cancelAtPeriodEnd: false, ...ziel }), ABO_SECRET);
+  assert.deepEqual(kuendigen.body, { received: true });
+  assert.deepEqual(fortsetzen.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_nie4").cancelAtPeriodEnd, false, "Stand bei Stripe: fortgesetzt");
+});
+
+test("[NIE5] gleichzeitige Zustellung: verzögerte ältere Abrufantwort überschreibt die neuere nicht", async () => {
+  const store = await aboStore("t_f9_nie5", "sub_f9_nie5");
+  let abrufe = 0;
+  const retrieveSubscription = async () => {
+    abrufe += 1;
+    if (abrufe > 1) return stripeAbo(false);
+    for (let runde = 0; runde < VERZOEGERUNG_RUNDEN; runde += 1) await new Promise((resolve) => setImmediate(resolve));
+    return stripeAbo(true);
+  };
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const ziel = { tenantId: "t_f9_nie5", subscriptionId: "sub_f9_nie5" };
+  const frueher = aboEreignis({ id: "evt_f9_n5a", cancelAtPeriodEnd: true, ...ziel });
+  const spaeter = aboEreignis({ id: "evt_f9_n5b", cancelAtPeriodEnd: false, created: ABO_CREATED_S + 1, ...ziel });
+  await Promise.all([postSignedBody(handler, frueher, ABO_SECRET), postSignedBody(handler, spaeter, ABO_SECRET)]);
+  assert.equal(store.tenantSubscription("t_f9_nie5").cancelAtPeriodEnd, false, "neuerer Stand bei Stripe gewinnt");
+});
+
+test("[NIE6] updated für unbekannten Tenant: received:true, Audit unknown_tenant, kein Tenant angelegt", async () => {
+  const store = await aboStore("t_f9_nie6", "sub_f9_nie6");
+  const { audit, calls } = makeAuditSpy();
+  const { handler } = aboRoute({ store, audit, retrieveSubscription: async () => stripeAbo(true) });
+  const body = aboEreignis({ id: "evt_f9_n6", tenantId: "t_f9_gibtsnicht", subscriptionId: "sub_f9_nie6_fremd", cancelAtPeriodEnd: false });
+  const vorher = store.tenantSubscription("t_f9_nie6");
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(
+    calls.some(([event, , detail]) => event === "stripe_webhook_ignored" && String(detail).includes("unknown_tenant")),
+    true,
+    "Audit stripe_webhook_ignored mit unknown_tenant",
+  );
+  assert.equal(store.tenantExists("t_f9_gibtsnicht"), false, "kein Schreiben am unbekannten Tenant");
+  assert.deepEqual(store.tenantSubscription("t_f9_nie6"), vorher, "anderer Tenant unberührt");
+});
+
+const EIGENE_DECKE_CENTS = 1234;
+
+function aboEreignisOhneTenantRef({ id, subscriptionId, cancelAtPeriodEnd }) {
+  return JSON.stringify({
+    id,
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    created: ABO_CREATED_S,
+    data: { object: { id: subscriptionId, status: "active", cancel_at_period_end: cancelAtPeriodEnd, metadata: {} } },
+  });
+}
+
+function deckeVon(store, tenantId) {
+  return store.load().tenantBudgets.find((row) => row.tenantId === tenantId) ?? null;
+}
+
+async function deckeNachVerworfenemEreignis(tenantId, subscriptionId, retrieveSubscription) {
+  const store = await aboStore(tenantId, subscriptionId);
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const ziel = { tenantId, subscriptionId, cancelAtPeriodEnd: false };
+  await postSignedBody(handler, aboEreignis({ id: `${subscriptionId}_e1`, ...ziel }), ABO_SECRET);
+  store.setTenantBudget(tenantId, { budgetCents: EIGENE_DECKE_CENTS, hardCapCents: EIGENE_DECKE_CENTS });
+  const res = await postSignedBody(handler, aboEreignis({ id: `${subscriptionId}_e2`, ...ziel }), ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  return deckeVon(store, tenantId);
+}
+
+test("Ereignis ohne tenant_ref: Kündigungsstand des Abo-Halters folgt dem Abruf bei Stripe", async () => {
+  const store = await aboStore("t_f9_ohneref", "sub_f9_ohneref");
+  const { handler } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(true) });
+  const body = aboEreignisOhneTenantRef({ id: "evt_f9_or", subscriptionId: "sub_f9_ohneref", cancelAtPeriodEnd: false });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_ohneref").cancelAtPeriodEnd, true, "Stand bei Stripe: gekündigt");
+});
+
+test("Ereignis ohne tenant_ref für unbekannte Abo-ID: received:true, kein Tenant berührt", async () => {
+  const store = await aboStore("t_f9_unbekannt", "sub_f9_unbekannt");
+  const { handler } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(true) });
+  const body = aboEreignisOhneTenantRef({ id: "evt_f9_ub", subscriptionId: "sub_f9_gibtsnicht", cancelAtPeriodEnd: false });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_unbekannt").cancelAtPeriodEnd, false);
+});
+
+test("Zahlung gescheitert (Sperre): Kündigungsstand wird nicht aus dem Abruf übernommen", async () => {
+  const store = await aboStore("t_f9_zahlung", "sub_f9_zahlung");
+  const { handler, kontoStatus } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(true) });
+  const body = JSON.stringify({
+    id: "evt_f9_pf",
+    type: SUBSCRIPTION_EVENT.PAYMENT_FAILED,
+    created: ABO_CREATED_S,
+    data: { object: { subscription: "sub_f9_zahlung", customer: "cus_f9", metadata: { tenant_ref: "t_f9_zahlung" } } },
+  });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.deepEqual(kontoStatus, [["t_f9_zahlung", "suspended"]]);
+  assert.equal(store.tenantSubscription("t_f9_zahlung").cancelAtPeriodEnd, false, "nur ACTIVATE/CANCEL_SCHEDULED gleichen ab");
+});
+
+test("verworfenes updated nach Abo-Ende derselben Sekunde setzt den Kündigungsstand nicht aus dem Abruf", async () => {
+  const store = await aboStore("t_f9_ende", "sub_f9_ende");
+  const { handler } = aboRoute({ store, retrieveSubscription: async () => stripeAbo(true) });
+  const ziel = { tenantId: "t_f9_ende", subscriptionId: "sub_f9_ende" };
+  await postSignedBody(handler, aboEndeEreignis({ id: "evt_f9_ea", ...ziel }), ABO_SECRET);
+  const res = await postSignedBody(handler, aboEreignis({ id: "evt_f9_eb", cancelAtPeriodEnd: false, ...ziel }), ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_ende").subscriptionId, null, "Abo-Referenz bleibt gelöscht");
+  assert.equal(store.tenantSubscription("t_f9_ende").cancelAtPeriodEnd, false, "kein Abgleich ohne laufendes Abo");
+});
+
+test("verworfenes älteres Ereignis verschiebt die Ordnung nicht: späteres Duplikat der neuesten Sekunde bleibt verworfen", async () => {
+  const store = await aboStore("t_f9_anker", "sub_f9_anker");
+  const retrieveSubscription = async () => {
+    throw new Error("stripe nicht erreichbar");
+  };
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const ziel = { tenantId: "t_f9_anker", subscriptionId: "sub_f9_anker" };
+  const neuer = ABO_CREATED_S + 1;
+  await postSignedBody(handler, aboEreignis({ id: "evt_f9_k1", cancelAtPeriodEnd: false, created: neuer, ...ziel }), ABO_SECRET);
+  await postSignedBody(handler, aboEreignis({ id: "evt_f9_k2", cancelAtPeriodEnd: true, ...ziel }), ABO_SECRET);
+  await postSignedBody(handler, aboEreignis({ id: "evt_f9_k3", cancelAtPeriodEnd: true, created: neuer, ...ziel }), ABO_SECRET);
+  assert.equal(store.tenantSubscription("t_f9_anker").cancelAtPeriodEnd, false, "nur das zuerst angewendete Ereignis zählt");
+});
+
+test("scheiternder Abruf bei verworfenem Ereignis: kein Schreiben, eigene Tenant-Decke bleibt", async () => {
+  const retrieveSubscription = async () => {
+    throw new Error("stripe nicht erreichbar");
+  };
+  const decke = await deckeNachVerworfenemEreignis("t_f9_dwirft", "sub_f9_dwirft", retrieveSubscription);
+  assert.equal(decke.hardCapCents, EIGENE_DECKE_CENTS);
+});
+
+test("Abruf ohne Wahrheitswert bei verworfenem Ereignis: kein Schreiben, eigene Tenant-Decke bleibt", async () => {
+  const retrieveSubscription = async () => ({ planSlug: "starter", status: "active" });
+  const decke = await deckeNachVerworfenemEreignis("t_f9_dleer", "sub_f9_dleer", retrieveSubscription);
+  assert.equal(decke.hardCapCents, EIGENE_DECKE_CENTS);
+});
+
+test("Abruf mit unverändertem Kündigungsstand bei verworfenem Ereignis: kein Schreiben, eigene Tenant-Decke bleibt", async () => {
+  const decke = await deckeNachVerworfenemEreignis("t_f9_dgleich", "sub_f9_dgleich", async () => stripeAbo(false));
+  assert.equal(decke.hardCapCents, EIGENE_DECKE_CENTS);
 });
