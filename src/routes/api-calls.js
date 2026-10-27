@@ -83,7 +83,7 @@ function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
 
 function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) {
   const validated = validateAssistantContext({ key_facts: answers });
-  if (validated.error || !validated.value)
+  if (validated.error || !validated.value?.key_facts.length)
     return res.status(HTTP_BAD_REQUEST).json({ error: validated.error || "answers ist Pflicht" });
   const { outcome, mergedFacts } = store.answerConsult(call.id, {
     eventId,
