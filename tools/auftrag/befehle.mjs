@@ -9,6 +9,7 @@ import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
 import { BEREICHE_DATEI, bereichDerDatei, leseBereiche } from "../tests-ausmisten/pfade.mjs";
 import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
+import { anrufbereichHinweis, umbauImAnrufbereich } from "./anrufbereich.mjs";
 import { geschuetzteMuster, istVertraulich, ladePhase, phasenBefunde } from "./format.mjs";
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
@@ -86,6 +87,7 @@ export function pruefe(phasendatei, root) {
     return EXIT_ROT;
   }
   console.log(`grün: ${phase.auftraege.length} Aufträge in ${phasendatei} sind vollständig.`);
+  for (const zeile of anrufbereichHinweis(umbauImAnrufbereich(phase.auftraege))) console.log(zeile);
   return EXIT_GRUEN;
 }
 

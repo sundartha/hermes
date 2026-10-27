@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
+import { VORBEREITUNG_BEREICH } from "./anrufbereich.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
 import { EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, nachSekunden, schreibeBeleg } from "./bericht.mjs";
@@ -44,7 +45,6 @@ const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.m
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
-const VORBEREITUNG_BEREICH = fileURLToPath(new URL("vorbereitung-bereich.json", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const EINRUECKUNG = 2;
