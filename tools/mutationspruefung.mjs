@@ -21,6 +21,7 @@ import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindab
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
+import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
 import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
@@ -132,11 +133,14 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --schutzwirkung [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
 const TESTUMBAU = "testumbau";
-const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
+const SCHUTZWIRKUNG = "schutzwirkung";
+const ALTER_SCHUTZ = "alter-schutz";
+const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, SCHUTZWIRKUNG, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
@@ -277,8 +281,8 @@ function erreichendeTests(datei, nachZiel) {
   return { direkt: tests(nachZiel.get(datei) ?? []), alle: tests(erreicht) };
 }
 
-function mutant({ location, mutatorName, status, killedBy, ...ergebnis }) {
-  return { ...mutantenOrt({ ...ergebnis, location, mutatorName }), status, lage: location, art: mutatorName, toeter: killedBy ?? [] };
+function mutant({ location, mutatorName, status, killedBy, statusReason, ...ergebnis }) {
+  return { ...mutantenOrt({ ...ergebnis, location, mutatorName }), status, lage: location, art: mutatorName, toeter: killedBy ?? [], grund: statusReason };
 }
 
 function muster(datei, bereich) {
@@ -299,7 +303,11 @@ async function gemessenerStryker(optionen, zeitlog) {
   }
 }
 
-async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
+function nurSchutzfaelle(namensmuster) {
+  return namensmuster === undefined ? {} : { disableBail: true, coverageAnalysis: "perTest" };
+}
+
+async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "", namensmuster }) {
   const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
@@ -313,7 +321,8 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" 
     appendPlugins: [KINDABDECKUNG_PLUGIN, ZEITLOG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
+    ...nurSchutzfaelle(namensmuster),
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
@@ -858,7 +867,12 @@ function inCiAufrufGueltig(values) {
   return values.basis !== undefined && nurAngegeben(values, IN_CI_OPTIONEN);
 }
 
+function schutzAufrufGueltig(values) {
+  return values[SCHUTZWIRKUNG] && values.basis !== undefined && nurAngegeben(values, ["basis", SCHUTZWIRKUNG, ALTER_SCHUTZ]);
+}
+
 function aufrufGueltig(values) {
+  if (values[SCHUTZWIRKUNG] || values[ALTER_SCHUTZ].length > 0) return schutzAufrufGueltig(values);
   if (values[IN_CI]) return inCiAufrufGueltig(values);
   if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
@@ -966,6 +980,15 @@ async function eigenerAblauf(values) {
   return undefined;
 }
 
+function schutzwerkzeug(basis) {
+  return {
+    testdateien: () => [...geaenderteTests({ von: basis })],
+    einheiten: () => bestandteile({ von: basis, seite: "neu" }),
+    stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
+    freigabe: sperreVorTestprozessen,
+  };
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -979,6 +1002,8 @@ async function main() {
       [IN_CI]: { type: "boolean", default: false },
       "alter-stand": { type: "boolean", default: false },
       testumbau: { type: "boolean", default: false },
+      [SCHUTZWIRKUNG]: { type: "boolean", default: false },
+      [ALTER_SCHUTZ]: { type: "string", multiple: true, default: [] },
       gleichwertig: { type: "string", multiple: true, default: [] },
       plan: { type: "string" },
       teil: { type: "string" },
@@ -998,6 +1023,10 @@ async function main() {
   if (eigener !== undefined) return eigener;
   SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();
+  if (values[SCHUTZWIRKUNG]) {
+    starteBudget(NORMAL);
+    return schutzwirkungPruefung(values.basis, values[ALTER_SCHUTZ], schutzwerkzeug(values.basis));
+  }
   if (values.testumbau) {
     starteBudget(TESTUMBAU);
     return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt, freigabe });
