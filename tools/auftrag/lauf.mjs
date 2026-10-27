@@ -329,6 +329,10 @@ class AuftragsLauf {
     return ergebnis.exitCode === 0 || this.scheitert("Der Abnahmetest ist nicht mit dem erwarteten Fehler rot.", PRUEFUNG.ROT);
   }
 
+  schutztests(rolle) {
+    return this.gruen(PRUEFUNG.SCHUTZTESTS, this.eigenerBefehl("schutztests", "--rolle", rolle, "--basis", this.basis));
+  }
+
   vorherGruen() {
     const ergebnis = this.pruefung(PRUEFUNG.ABNAHME_VORHER, abnahmeBefehl(this.kontext.auftrag));
     this.testausgabe = ergebnis.ausgabe;
@@ -504,7 +508,8 @@ class AuftragsLauf {
           () => this.statischeTestpruefung(),
           () => this.basisVergleiche(),
           () => this.faelleErhalten(),
-          () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
+          () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
+          () => this.schutztests("test"),
           () => this.abhaengigkeiten(),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
@@ -535,6 +540,7 @@ class AuftragsLauf {
       () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
       () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
+      () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),
       () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
   }
