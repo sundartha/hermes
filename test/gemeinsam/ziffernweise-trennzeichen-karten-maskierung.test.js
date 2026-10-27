@@ -1,0 +1,220 @@
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { maskRestrictedText } from "../../src/restricted-data.js";
+import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+
+const RUNTIME_BUDGET_MS = 2000;
+const MEGABYTE_CHARS = 1000000;
+const MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT = 16;
+const MAX_KARTENZIFFERN = 19;
+
+const VISA_16 = "4111111111111111";
+const MASTERCARD_16 = "5555555555554444";
+const AMEX_15 = "378282246310005";
+const RUFNUMMER_VORNE = "04111111";
+const RUFNUMMER_HINTEN = "111111111";
+
+const GESCHUETZTES_LEERZEICHEN = " ";
+const SCHMALES_GESCHUETZTES_LEERZEICHEN = " ";
+const TABULATOR = "\t";
+
+const AGENT = "agent";
+const COUNTERPARTY = "counterparty";
+
+function ziffernMit(ziffern, trenner) {
+  return ziffern.split("").join(trenner);
+}
+
+function ziffernGemischt(ziffern, trennerReihe) {
+  return ziffern
+    .split("")
+    .map((ziffer, index) => (index < ziffern.length - 1 ? ziffer + trennerReihe[index % trennerReihe.length] : ziffer))
+    .join("");
+}
+
+function luhnGueltig(ziffern) {
+  let summe = 0;
+  for (const [position, zeichen] of [...ziffern].reverse().entries()) {
+    let wert = Number(zeichen);
+    if (position % 2 === 1) {
+      wert *= 2;
+      if (wert > 9) wert -= 9;
+    }
+    summe += wert;
+  }
+  return summe % 10 === 0;
+}
+
+function hatLuhnFensterMitKartenanfang(ziffern) {
+  for (let start = 0; start < ziffern.length; start += 1) {
+    for (let laenge = MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT; laenge <= MAX_KARTENZIFFERN; laenge += 1) {
+      const fenster = ziffern.slice(start, start + laenge);
+      if (fenster.length === laenge && /^[2-6]/.test(fenster) && luhnGueltig(fenster)) return true;
+    }
+  }
+  return false;
+}
+
+const TRENNZEICHEN_UND_GRUPPEN = [
+  [AGENT, `Karte ${ziffernMit(VISA_16, " - ")}.`, "Karte ****1111."],
+  [AGENT, `Karte ${ziffernMit(VISA_16, "-")}.`, "Karte ****1111."],
+  [AGENT, `Karte ${ziffernMit(VISA_16, "_")}.`, "Karte ****1111."],
+  [AGENT, `Karte ${ziffernMit(VISA_16, ", ")}.`, "Karte ****1111."],
+  [COUNTERPARTY, `Karte ${ziffernMit(MASTERCARD_16, " - ")}.`, "Karte ****4444."],
+  [AGENT, `Karte ${ziffernGemischt(VISA_16, [" ", ", ", " - ", "-", "_"])}.`, "Karte ****1111."],
+  [COUNTERPARTY, `Karte ${ziffernGemischt(MASTERCARD_16, ["_", " ", "-", ", "])}.`, "Karte ****4444."],
+  [COUNTERPARTY, "Kreditkarte 41 11 11 11 11 11 11 11", "Kreditkarte ****1111"],
+  [COUNTERPARTY, "Karte 411 111 111 111 1111", "Karte ****1111"],
+  [AGENT, "Karte 4 1 1 1… 1 1 1 1… 1 1 1 1… 1 1 1 1.", "Karte ****1111."],
+  [AGENT, "Karte 4 1 1 1... 1 1 1 1; 1 1 1 1/ 1 1 1 1", "Karte ****1111"],
+  [COUNTERPARTY, `Telefon ${ziffernMit(VISA_16, " ")}`, "Telefon ****1111"],
+];
+
+const LEERZEICHENARTEN = [
+  [AGENT, `Karte ${ziffernMit(VISA_16, GESCHUETZTES_LEERZEICHEN)}`, "Karte ****1111"],
+  [AGENT, `Karte ${ziffernMit(VISA_16, SCHMALES_GESCHUETZTES_LEERZEICHEN)}`, "Karte ****1111"],
+  [AGENT, `Karte ${ziffernMit(VISA_16, TABULATOR)}`, "Karte ****1111"],
+  [
+    AGENT,
+    `Karte 4111${GESCHUETZTES_LEERZEICHEN}1111${GESCHUETZTES_LEERZEICHEN}1111${GESCHUETZTES_LEERZEICHEN}1111`,
+    "Karte ****1111",
+  ],
+];
+
+const UNMASKIERT = [
+  [COUNTERPARTY, `Telefon ${ziffernMit(AMEX_15, " ")}`],
+  [AGENT, "Postleitzahl 1 - 0 - 1 - 1 - 5 in Berlin."],
+  [AGENT, "Postleitzahl 1_0_1_1_5 in Berlin."],
+  [AGENT, "Ihr Bestätigungscode ist 4 - 8 - 2 - 9 - 1 - 7."],
+  [COUNTERPARTY, "Der Code lautet 4, 8, 2, 9, 1, 7."],
+  [AGENT, "Der Code lautet 4-8-2-9-1-7."],
+  [AGENT, "Termin am 2 5 - 0 9 - 2 0 2 6 um 1 4 : 3 0 Uhr."],
+  [AGENT, "Termin am 2 5 / 0 9 / 2 0 2 6, um 1 4 ; 3 0 Uhr."],
+];
+
+const RUECKRUFNUMMERN_ZEILE = `Rückrufnummer ${ziffernMit(RUFNUMMER_VORNE, " ")} ${ziffernMit(RUFNUMMER_HINTEN, " ")}`;
+
+const LUHN_GUELTIG_14_ZIFFERN = "41111111111114";
+const LUHN_GUELTIG_17_ZIFFERN = "41111111111111113";
+
+const UNGLEICHE_GRUPPEN_UNMASKIERT = [
+  [
+    AGENT,
+    `Karte ${LUHN_GUELTIG_14_ZIFFERN.slice(0, 4)} ${LUHN_GUELTIG_14_ZIFFERN.slice(4, 6)} ${LUHN_GUELTIG_14_ZIFFERN.slice(6, 10)} ${LUHN_GUELTIG_14_ZIFFERN.slice(10)}`,
+  ],
+  [AGENT, `Karte ${ziffernMit(VISA_16.slice(0, 14), " ")} ${VISA_16.slice(14)}`],
+  [AGENT, `Karte ${VISA_16.slice(0, 5)} ${VISA_16.slice(5, 10)} ${VISA_16.slice(10, 15)} ${VISA_16.slice(15)}`],
+  [
+    AGENT,
+    `Karte ${LUHN_GUELTIG_17_ZIFFERN.slice(0, 4)} ${LUHN_GUELTIG_17_ZIFFERN.slice(4, 8)} ${LUHN_GUELTIG_17_ZIFFERN.slice(8, 12)} ${LUHN_GUELTIG_17_ZIFFERN.slice(12)}`,
+  ],
+];
+
+function rolleUndText([role, text], index) {
+  return seedCall({
+    id: `call_trennzeichen_${index}`,
+    status: "completed",
+    answeredAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    transcript: [{ role, text }],
+  });
+}
+
+const ZEILEN = [
+  ...TRENNZEICHEN_UND_GRUPPEN,
+  ...LEERZEICHENARTEN,
+  ...UNMASKIERT,
+  [COUNTERPARTY, RUECKRUFNUMMERN_ZEILE],
+  ...UNGLEICHE_GRUPPEN_UNMASKIERT,
+];
+const OFFSET_UNGLEICHE_GRUPPEN = ZEILEN.length - UNGLEICHE_GRUPPEN_UNMASKIERT.length;
+const OFFSET_LEERZEICHENARTEN = TRENNZEICHEN_UND_GRUPPEN.length;
+const OFFSET_UNMASKIERT = OFFSET_LEERZEICHENARTEN + LEERZEICHENARTEN.length;
+const OFFSET_RUECKRUFNUMMERN = OFFSET_UNMASKIERT + UNMASKIERT.length;
+const ZEILEN_CALLS = ZEILEN.map(rolleUndText);
+
+let srv;
+
+before(async () => {
+  srv = await startServer({ seed: seedState({ calls: ZEILEN_CALLS }) });
+});
+
+after(async () => {
+  await srv.stop();
+});
+
+async function ausgabezeile(index) {
+  const result = await readToolResult(
+    await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: ZEILEN_CALLS[index].id })),
+  );
+  const lines = result.structuredContent.last_transcript_lines;
+  assert.equal(lines.length, 1);
+  return lines[0];
+}
+
+function pruefeMaskiert(offset, liste) {
+  return async () => {
+    for (const [position, [, text, erwartet]] of liste.entries()) {
+      const line = await ausgabezeile(offset + position);
+      assert.ok(line.endsWith(erwartet), `Kartennummer im Klartext: ${line} (Eingabe: ${text})`);
+    }
+  };
+}
+
+test(
+  "ziffernweise Karte mit Bindestrich, Unterstrich, Komma, gemischten Trennzeichen, Paar- und Dreiergruppen, Auslassungspunkten und Rufnummernwort erscheint in get_call_status als ****1111",
+  pruefeMaskiert(0, TRENNZEICHEN_UND_GRUPPEN),
+);
+
+test(
+  "ziffernweise Karte mit geschütztem Leerzeichen, schmalem geschütztem Leerzeichen und Tabulator erscheint in get_call_status als ****1111",
+  pruefeMaskiert(OFFSET_LEERZEICHENARTEN, LEERZEICHENARTEN),
+);
+
+test("Entscheidung E1: 15 ziffernweise Luhn-gültige Ziffern hinter Telefon bleiben in get_call_status sichtbar, zwei Rückrufnummern mit Luhn-gültigem Fenster werden maskiert", async () => {
+  assert.ok(luhnGueltig(AMEX_15) && /^[2-6]/.test(AMEX_15) && AMEX_15.length === 15);
+  assert.ok(hatLuhnFensterMitKartenanfang(RUFNUMMER_VORNE + RUFNUMMER_HINTEN));
+  const [, text] = UNMASKIERT[0];
+  const telefonZeile = await ausgabezeile(OFFSET_UNMASKIERT);
+  assert.ok(telefonZeile.endsWith(text), `Ziffernfolge ohne Karte fälschlich verändert: ${telefonZeile}`);
+  const rueckrufZeile = await ausgabezeile(OFFSET_RUECKRUFNUMMERN);
+  assert.ok(rueckrufZeile.includes("****1111"), `Kartennummer im Klartext: ${rueckrufZeile}`);
+  assert.ok(!rueckrufZeile.includes(ziffernMit(VISA_16, " ")), `Kartennummer im Klartext: ${rueckrufZeile}`);
+});
+
+test("Postleitzahl, Code, Datum und Uhrzeit Ziffer für Ziffer mit übrigen Trennzeichen bleiben in get_call_status unmaskiert", async () => {
+  for (const [position, [, text]] of UNMASKIERT.slice(1).entries()) {
+    const line = await ausgabezeile(OFFSET_UNMASKIERT + 1 + position);
+    assert.ok(line.endsWith(text), `Ziffernfolge ohne Karte fälschlich verändert: ${line}`);
+  }
+});
+
+test("Luhn-gültige Ziffernfolgen mit ungleichen Gruppen (4-2-4-4, Einzelziffern mit Zweiergruppe am Ende, 5-5-5-1, 4-4-4-5) bleiben in get_call_status mit Kartenwort unmaskiert", async () => {
+  for (const [position, [, text]] of UNGLEICHE_GRUPPEN_UNMASKIERT.entries()) {
+    const line = await ausgabezeile(OFFSET_UNGLEICHE_GRUPPEN + position);
+    assert.ok(line.endsWith(text), `Ziffernfolge ohne Kartengruppen fälschlich verändert: ${line}`);
+  }
+});
+
+function assertUnveraendertInnerhalbDerGrenze(text) {
+  const started = Date.now();
+  const masked = maskRestrictedText(text);
+  assert.ok(Date.now() - started < RUNTIME_BUDGET_MS, "kein exponentielles Verhalten");
+  assert.equal(masked, text);
+}
+
+test("1 MB aus der Ziffer 1 getrennt mit Bindestrich und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
+  assertUnveraendertInnerhalbDerGrenze("1 - ".repeat(MEGABYTE_CHARS / 4));
+});
+
+test("1 MB aus der Ziffer 1 getrennt mit Unterstrich wird innerhalb der Laufzeitgrenze verarbeitet", () => {
+  assertUnveraendertInnerhalbDerGrenze("1_".repeat(MEGABYTE_CHARS / 2));
+});
+
+test("1 MB aus der Ziffer 1 getrennt mit Komma und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
+  assertUnveraendertInnerhalbDerGrenze("1, ".repeat(MEGABYTE_CHARS / 3));
+});
+
+test("1 MB aus der Ziffer 1 mit gemischten Trennzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
+  assertUnveraendertInnerhalbDerGrenze("1 - 1_1, 1-".repeat(MEGABYTE_CHARS / 11));
+});
