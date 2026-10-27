@@ -1,0 +1,510 @@
+{
+  "gruppe": [
+    "S1",
+    "S2",
+    "B2",
+    "B4",
+    "B6",
+    "B8",
+    "B9",
+    "T1",
+    "T3"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js",
+        "test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23 (reine Textfunktion, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": [
+        {
+          "designDoc": "## Ausgangslage und Annahmen (Zeile 5: `[*_#`]` entfernt)",
+          "code": "src/speech-shape.js:3-4",
+          "text": "Im Code steht der Unterstrich schon in eigenem Schritt 4 mit Ausnahme mitten im Wort (t1); Schritt 3 entfernt nur `[*#`]`."
+        }
+      ]
+    },
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/shape-for-speech.test.js",
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": "keine Änderung, weil „14-15 Uhr“ ohne Leerraum heute schon unverändert bleibt (Schritt 5 `\\s+-\\s+` verlangt Leerraum, src/speech-shape.js:5); die Änderung für S1 darf das nicht brechen",
+      "tests": [
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": "keine Änderung, weil „Montag - 18 Uhr“ (Wort-Strich-Ziffer) heute schon zu „Montag, 18 Uhr.“ wird (Schritt 5, src/speech-shape.js:5); die Änderung für S1 muss diesen Fall mit Bedingung auf die Ziffer davor halten",
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js",
+        "test/shape-for-speech.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B6": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B8": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B9": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "T1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "T3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 373,
+          "bis": 408
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 673,
+          "bis": 673
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeForSpeech",
+          "von": 19,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "docs/sicherheitsgrenzen.md",
+          "art": "tabellenzeile SG-27",
+          "von": 40,
+          "bis": 40,
+          "neueZeilen": 1
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-23"
+      },
+      "codeowners": [
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Absicht/Abkürzung: Ich habe keinen Weg gefunden, der die Absicht verletzt. Es gibt nur eine Formungsstelle (`SHAPE_STEPS` in src/speech-shape.js); `suche` fand keine zweite Ersetzung von ' - ' oder '_' in gesprochenem Text. Die Aufrufer src/claude.js:673, src/thinking-signal.js:10 und src/speech-chunker.js:33 übergeben den rohen Text an die Formung.",
+    "Weg: Die Kette makeVoiceRoutes → agentTurn → shapeForSpeech → shapedCore ist mit `kette` belegt. Die Ausgabe an die Sprachausgabe geschieht in `sendTurnOutcome` (src/routes/voice.js:284-290), das `makeVoiceRoutes` aufruft. Das Ergebnis von `shapedCore` kommt nur über den Rückgabewert dorthin, daher belegt `kette` shapedCore → sendTurnOutcome nicht. Ich habe `shapedCore` als Wirkung gemeldet.",
+    "Eingang im Test: Der Abnahmetest ruft `shapeForSpeech` direkt auf (test/anrufe/sprechausgabe.test.js:4).",
+    "t1 ist im Stand enthalten (Unterstrich-Ausnahme in src/speech-shape.js:4). Für src/speech-shape.js steht nichts in eslint-suppressions.json; `karte` zeigt `shapedCore` ohne Befunde.",
+    "Bestehende Tests: test/shape-for-speech.test.js:15-47 (13 Paare, darunter 'Alles klar - ich buche…' → Komma, Grenzfälle, Idempotenz); test/anrufe/sprechausgabe.test.js:58-63, 115-126, 207-218 (Listenzeichen eingerückt, 'Montag - oder Dienstag', 'Wort- naechstes'); test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js (t1); test/al-p14-in-call-consult.test.js:174-182. Kein Test prüft Ziffer-Strich-Ziffer oder Kartennummern mit Strich. Ob sie grün sind, habe ich nicht ausgeführt.",
+    "test/anrufe/ existiert. sprechausgabe.test.js importiert Zeile 4 src/speech-shape.js; die übrigen Imports habe ich nicht vollständig gesehen. Fachlogik-Eintrag: tools/bereiche.json (anrufe, speech-shape).",
+    "Katalog: SG-26 und SG-27 sind frei, die letzte Zeile ist SG-25 (docs/sicherheitsgrenzen.md:39). tools/katalog-pruefen.mjs verlangt fünf Spalten und eine letzte Spalte, die mit 'SG-27 ' beginnt (Zeilen 105-115). Eine Katalogzeile ohne Test, dessen Name mit 'SG-27 ' beginnt, ist ein Befund (Zeilen 207-219, ohne Eintrag in tools/basis/katalog-ohne-test.txt, die nicht wachsen darf). Ein Test ohne Katalogzeile wird nicht beanstandet. Zeile und Test müssen daher zusammen kommen. docs/sicherheitsgrenzen.md steht in CODEOWNERS (Zeile 17).",
+    "Zur Regel: In S1/S2 fallen die Leerzeichen um den Strich weg, in B6/B8/B9/T1 wird der Strich zum Komma. B6 ('0 1 5 1 - 2 3 4 5 6 7', einzelne Ziffern) unterscheidet sich von S1 ('9 - 18'). Der Planer muss festlegen, woran die Unterscheidung hängt.",
+    "Maskierung: `CARD_CANDIDATE` (src/restricted-data.js:35) erlaubt Leerzeichen, Bindestrich oder '.'/',' als Trenner; `hasUniformSeparator` (112-114) verlangt einen einheitlichen Trenner. Dass '4111, 1111, 1111, 1111' maskiert wird und eine Mischung nicht, habe ich nur aus dem Code gelesen, nicht durchgespielt.",
+    "T3, Laufzeit: Ein neues Muster mit Rückverweisen oder verschachtelten Quantoren riskiert Backtracking. Der Zeitmesstest (Name beginnt mit 'SG-27 ') gehört üblicherweise nach test/sicherheit/.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Absicht/Abkürzung: Ich habe keinen Weg gefunden, der die Absicht verletzt. Es gibt nur eine Formungsstelle (`SHAPE_STEPS` in src/speech-shape.js); `suche` fand keine zweite Ersetzung von ' - ' oder '_' in gesprochenem Text. Die Aufrufer `src/claude.js:673`, `src/thinking-signal.js:10` und `src/speech-chunker.js:33` übergeben den rohen Text an `shapeForSpeech` beziehungsweise `shapeChunkForSpeech`, ohne eigene Strich- oder Unterstrich-Bearbeitung.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Weg: Die Kette makeVoiceRoutes → agentTurn → shapeForSpeech → shapedCore ist mit `kette` belegt. Die Ausgabe an die Sprachausgabe geschieht in `sendTurnOutcome` (src/routes/voice.js:284-290), das `makeVoiceRoutes` aufruft. Das Ergebnis von `shapedCore` kommt nur über den Rückgabewert dorthin. Eine Kette `shapedCore` → `sendTurnOutcome` kann `kette` daher nicht belegen. Ich habe `shapedCore` als Wirkung der Formung gemeldet.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Eingang: Der Abnahmetest ruft `shapeForSpeech` direkt auf (test/anrufe/sprechausgabe.test.js:4, Direktimport von src/speech-shape.js).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 1: t1 ist im Stand enthalten (siehe oben). Frage 2: Es gibt keine Unterdrückung für src/speech-shape.js; `karte` zeigt `shapedCore` ohne Befunde.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 3, bestehende Tests: (a) test/shape-for-speech.test.js:15-47, 'I8: shapeForSpeech normalisiert Input/Output-Paare' mit 13 Paaren, darunter 'Alles klar - ich buche den Termin.' → 'Alles klar, ich buche den Termin.', 'Kuendigungs-Service' unverändert und '- **Freitag** um 14 Uhr - das passt gut' → 'Freitag um 14 Uhr, das passt gut.'. Dazu die Grenzfälle leer/undefined/null und die Idempotenz. (b) test/anrufe/sprechausgabe.test.js:58-63 (shapeChunkForSpeech: '- Erster Punkt', 'Montag - oder Dienstag' → 'Montag, oder Dienstag'), :115-126 (AL-P7-8, 7 Paare), :207-218 (eingerückte Listenzeichen 'Eins\\n  - Zwei' → 'Eins Zwei', 'Wort- naechstes' unverändert, '-  - Zwei' → '- Zwei', 'Montag -  - Dienstag' → 'Montag, - Dienstag'). (c) test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js (t1): 'max_weber@beispiel.de' bleibt, '_Wichtig_: morgen', '__fett__', 'Uhrzeiten:\\n  - 9\\n  - 18' → 'Uhrzeiten: 9 18.', 'Karte 4111_1111_1111_1111' → 'Karte 4111111111111111.'. (d) test/al-p14-in-call-consult.test.js:174-182 (Füller und Halte-Satz bleiben unverändert). Kein Test prüft 'Ziffer - Ziffer' oder 'Kartennummer mit Strich'. 'Ziffer-Strich-Ziffer ohne Leerraum' prüft auch keiner (B2 hat keinen Test). Ob die Tests grün sind, habe ich nicht ausgeführt; sie prüfen das heutige Verhalten und taugen als Gegenprobe für einen verhaltensgleichen Umbau.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 4: test/anrufe/ existiert. sprechausgabe.test.js importiert aus src/ nur src/speech-shape.js (Zeile 4 sicher gelesen; weitere Imports in den Zeilen 1-12 nicht vollständig geprüft, weil die Ausgabe gesperrt wurde) und ruft es ohne Modell-Attrappe auf. Die Regel `tests-nur-ueber-eingaenge` erlaubt Fachlogik laut tools/bereiche.json:fachlogik für anrufe (speech-shape.js).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 5, Katalog: SG-27 und SG-26 sind in docs/sicherheitsgrenzen.md frei, die letzte Zeile ist SG-25 (Zeile 39). Das Skript tools/katalog-pruefen.mjs:105-115 verlangt je Katalogzeile fünf Spalten und eine letzte Spalte, die mit '<ID> ' beginnt. Zeile 207-219: Eine Katalogzeile ohne Test, dessen Name mit '<ID> ' beginnt, und die nicht in tools/basis/katalog-ohne-test.txt steht, ist ein Befund. Die Liste darf mit --basis nicht wachsen. Ein Test 'SG-27 …' ohne Katalogzeile wird von testFindings nicht beanstandet, weil nur Katalog-Kennungen gegen die getesteten Namen geprüft werden. Das Testnamenmuster ist `test(\"SG-27 …\"` (Zeile 24). Die Zeile und der Test müssen daher zusammen kommen. docs/sicherheitsgrenzen.md und docs/sicherheitsabgleich.json stehen in CODEOWNERS (Zeilen 17-18); tools/ ebenfalls.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Vertrauensannahme zu SG-13: Ob der Text dort schon steht, habe ich nicht gesehen. Die SG-13-Zeile (docs/sicherheitsgrenzen.md:27) nennt `maskRestrictedText`, enthält aber keinen Hinweis auf die Sprachformung.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 6, Maskierung: `CARD_CANDIDATE` in src/restricted-data.js:35 erlaubt zwischen Ziffern ein Leerzeichen, einen Bindestrich oder '.'/',' mit optionalem Leerzeichen. 'hasUniformSeparator' (112-114) und 'hasCardGroupShape' (120-127) prüfen die Gruppenform. Dass '4111, 1111, 1111, 1111' maskiert und '4111-1111, 1111-1111' nicht, habe ich nicht im Code durchgespielt. Ich schließe es nur aus 'hasUniformSeparator' (einheitlicher Trenner).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 7: Ich habe in src/nach Ersetzungen von ' - ' oder '_' gesucht; Treffer von Bedeutung gab es nur in src/speech-shape.js. src/elevenlabs/outbound.js:213 entfernt `LIST_DASH` (ein anderer Weg, nicht der Telnyx-Pfad). Die Suche war auf `replace(` begrenzt und nicht lückenlos.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Zur Regel: In S1/S2 fallen die Leerzeichen um den Strich weg, in B6/B8/B9/T1 wird der Strich zum Komma. B4 (Wort-Strich-Ziffer) bleibt beim heutigen Verhalten. B6 ('0 1 5 1 - 2 3 4 5 6 7', einzelne Ziffern mit Leerzeichen) ist anders als S1 ('9 - 18'). Der Planer muss festlegen, woran die Unterscheidung hängt. Die Absicht verlangt 'Ziffer-Strich-Ziffer'; B6, B8, B9 und T1 sind vermutlich Fälle, die bewusst beim Komma bleiben.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: T3, Laufzeit: Die Eingabe mit 500 Ziffern oder 250 Ziffern mit je einem Trenner muss in unter 1 s geformt werden. Ein neues Muster mit Rückverweisen oder verschachtelten Quantoren riskiert Backtracking. Der Test ist ein Zeitmesstest (Name beginnt mit 'SG-27 ') in test/sicherheit/ oder test/anrufe/; test/sicherheit/ ist die übliche Stelle für SG-Negativtests."
+  ]
+}

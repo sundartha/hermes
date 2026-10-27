@@ -1,0 +1,75 @@
+{
+  "gruppe": [
+    "S3"
+  ],
+  "nummern": {
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/claude.js",
+          "funktion": "agentTurn",
+          "von": 455,
+          "bis": 687
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/claude.js",
+          "funktion": "streamSinkFor",
+          "von": 403,
+          "bis": 411
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-chunker.js",
+          "funktion": "makeSentenceChunker",
+          "von": 26,
+          "bis": 66
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapeChunkForSpeech",
+          "von": 14,
+          "bis": 17
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/speech-shape.js",
+          "funktion": "shapedCore",
+          "von": 9,
+          "bis": 12
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/speech-shape.js",
+          "art": "konstante SHAPE_STEPS",
+          "von": 1,
+          "bis": 7,
+          "neueZeilen": 2
+        }
+      ],
+      "tests": [
+        "test/anrufe/sprechausgabe.test.js",
+        "test/anrufe/unterstrich-im-wort-bleibt-in-sprachausgabe.test.js",
+        "test/shape-for-speech.test.js",
+        "test/al-p7-turn-streaming.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/speech-shape.js:1-12 (reine Textformung, kein Speicher)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil pitch.md, design.md und sicherheit.md für S3 keine Owner-Entscheidung verlangen; die Absicht legt Verhalten und Grenzen fest",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Die Regel gehört als Eintrag in SHAPE_STEPS (src/speech-shape.js, vor Zeile 5 `\\s+-\\s+` → „, “, damit sie zuerst greift). Keine zweite Formungsstelle, kein Eingriff in src/speech-chunker.js, src/claude.js oder src/thinking-signal.js. Beide Wege (shapeForSpeech und shapeChunkForSpeech) bekommen die Regel gleich, weil beide shapedCore nutzen. Nichts im Code widerspricht der Absicht.",
+    "SHAPE_STEPS liegt in keiner Funktion und ist kein Export. Die Änderung steht deshalb mit art „konstante SHAPE_STEPS“ und den Zeilen 1-7 im Bericht. Die Regel Ziffer-Strich-Ziffer-mit-Leerraum → „10-20“ soll die Ziffern erhalten, z. B. mit Lookbehind/Lookahead `(?<=\\p{N})\\s+-\\s+(?=\\p{N})` → „-“. Das heutige Verhalten für Wort-Strich-Wort (Test sprechausgabe.test.js:60) bleibt dann erhalten.",
+    "Heute ergibt shapeChunkForSpeech(\"Kosten 10 - 20 Euro.\") „Kosten 10, 20 Euro.“. Das ist gelesen, nicht gemessen.",
+    "Der direkte Abnahmetest ruft shapeChunkForSpeech aus src/speech-shape.js auf (Fachlogik-Tabelle, wie der Pitch es vorsieht). Zusätzlich lässt sich der Satz-Schneider über makeSentenceChunker prüfen (Muster: chunksFor in sprechausgabe.test.js:15-24). Für „Kosten 10 - 20 Euro.“ kommt ein einziges Häppchen heraus, das flushRemainder ausgibt."
+  ]
+}

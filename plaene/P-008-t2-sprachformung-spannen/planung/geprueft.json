@@ -1,0 +1,34 @@
+{
+  "erkundung": "3cba8ced5b9c092afac25d3e6ca98b37d37603fe2c1c506fd2671cf06f0329ab",
+  "schnitt": "7ee527a2ff3fe53d7786a0d7896af552657029d30651cc6690c3b1fe31dc3368",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Folgende Sätze aus den Dokumenten stehen bei keinem Auftrag. a1 kann jeden von ihnen in src/speech-shape.js brechen. Bitte in `wasDarfNiePassieren` von a1 aufnehmen: (1) pitch.md, ## Absicht: „Nicht gewollt ist eine zweite Formungsstelle, eine sprachabhängige Ersetzung oder eine Änderung an den Aufrufern.“ (2) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: eine sprachabhängige Ersetzung der Spanne („bis“, „to“, „à“), weil die Formung die Sprache des Anrufs nicht kennt und „9-18“ die Form ist, die die Sprachausgabe heute schon bekommt.“ (3) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: das Entfernen der Satzzeichen am Ende und der angehängte Schlusspunkt in `shapeForSpeech` (`src/speech-shape.js:19-20`), weil sie mit Spannen und Unterstrichen nichts zu tun haben.“ (4) pitch.md, ## Nicht-Ziele: „Nicht Teil dieser Änderung: Spannen mit Einheit an beiden Enden („9 Uhr - 18 Uhr“, „9 h - 18 h“, „9 am - 5 pm“), weil sie sich ohne Wort- und Sprachwissen nicht von „Termin am Montag - 18 Uhr“ (B4) unterscheiden lassen und die Formung die Sprache des Anrufs nicht kennt.“ (5) pitch.md, ## Fallen: „Die Mustersuche darf keine verschachtelten Wiederholungen enthalten und muss auf 500 Ziffern in weniger als 1 Sekunde enden (Sicherheitsprüfung T3).“ Der T3-Test misst nur die Zeit. Die Regel gegen verschachtelte Wiederholungen prüft er nicht. (6) pitch.md, ## Fallen: „Abnahmetests importieren nur `src/speech-shape.js` (in `tools/bereiche.json:79` unter `fachlogik` erlaubt) und kein anderes Modul unter `src/`, weil die Regel `tests-nur-ueber-eingaenge` sonst erst am Phasenende rot wird (P-007, R13).“ Das ist wichtig, weil der Erkundungsbericht zu S3 vorschlägt, zusätzlich über `makeSentenceChunker` aus src/speech-chunker.js zu prüfen.",
+        "antwort": "korrigiert: Alle sechs Sätze stehen jetzt wörtlich mit Quelle und Abschnitt in `wasDarfNiePassieren` von a1. (1) und (2) bis (4) stehen so, wie du sie genannt hast. Bei (5) steht der ganze Satz aus pitch.md, ## Fallen, ab „Die neuen Regeln laufen auf Text …“; er enthält deinen Wortlaut vollständig, ist aber wie die übrigen Sätze von a1 als ganzer Satz übernommen. Bei (6) steht die ganze Zeile aus ## Fallen, damit auch der Import-Rand für den S3-Test (kein Import von src/speech-chunker.js) bei a1 steht."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "6a19a9f0-3fbf-4f8a-9074-579f261883fa",
+      "schluessel": [
+        "durchstich:a1",
+        "b-nummer:B2",
+        "b-nummer:B4",
+        "b-nummer:B6",
+        "b-nummer:B8",
+        "b-nummer:B9",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

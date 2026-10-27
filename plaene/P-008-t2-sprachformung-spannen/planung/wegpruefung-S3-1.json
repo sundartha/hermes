@@ -1,0 +1,10 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/speech-chunker.js:33"
+    }
+  ],
+  "befunde": []
+}

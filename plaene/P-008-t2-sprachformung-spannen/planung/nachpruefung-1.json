@@ -1,0 +1,52 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B6",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B9",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:5"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "tools/katalog-pruefen.mjs:210"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/speech-shape.js:9"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  }
+]
