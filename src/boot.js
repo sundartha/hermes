@@ -100,13 +100,7 @@ function assertSpendCapCoherence(config) {
     ...planCapUnderivableFindings({ slugs: CATALOG_SLUGS, capForSlug }),
     ...planCapReserveFindings({ slugs: CATALOG_SLUGS, capForSlug, ...worstCase }),
   ];
-  const all = [...findings, ...planCapFindings];
-  const fatal = all.find((finding) => finding.fatal);
-  if (fatal) {
-    console.error(`[boot] Start abgebrochen: ${fatal.message}`);
-    process.exit(1);
-  }
-  for (const finding of all) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+  applyBootFindings([...findings, ...planCapFindings]);
 }
 
 function assertPricedModels(config) {
@@ -139,17 +133,11 @@ function warnStaleModelPrices(config) {
 }
 
 function assertProviderRateInBand(config) {
-  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((finding) => finding.fatal);
-  if (!fatal) return;
-  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
-  process.exit(1);
+  abortOnFatal(providerRateOutOfBand(config.billing.providerToBucketRateMicro));
 }
 
 function assertSttProfile(config) {
-  const fatal = sttProfileFindings(config.voice.sttProfile).find((finding) => finding.fatal);
-  if (!fatal) return;
-  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
-  process.exit(1);
+  abortOnFatal(sttProfileFindings(config.voice.sttProfile));
 }
 
 function currentCoverage(config, store) {
@@ -159,12 +147,15 @@ function currentCoverage(config, store) {
   };
 }
 
-function applyBootFindings(findings) {
+function abortOnFatal(findings) {
   const fatal = findings.find((finding) => finding.fatal);
-  if (fatal) {
-    console.error(`[boot] Start abgebrochen: ${fatal.message}`);
-    process.exit(1);
-  }
+  if (!fatal) return;
+  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
+  process.exit(1);
+}
+
+function applyBootFindings(findings) {
+  abortOnFatal(findings);
   for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
