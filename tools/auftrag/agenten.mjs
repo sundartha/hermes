@@ -14,6 +14,8 @@ import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
 const KRITISCH_SUFFIX = "-kritisch";
+const KOPF = /^---\n([\s\S]*?)\n---\n/;
+const KOPF_FELD = /^(\w+):\s*(.*)$/gm;
 const ENTFALLENES_FELD = "vorbild";
 const JSON_EINRUECKUNG = 2;
 const NUTZEN_REGEL = [
@@ -70,6 +72,28 @@ export function istKritisch(bereich) {
 
 export function agentFuer(rolle, bereich) {
   return istKritisch(bereich) ? `${rolle}${KRITISCH_SUFFIX}` : rolle;
+}
+
+function kopfFelder(text, datei) {
+  const kopf = KOPF.exec(text);
+  if (kopf === null) throw new Error(`${datei} hat keinen Kopf zwischen ---`);
+  const felder = Object.fromEntries([...kopf[1].matchAll(KOPF_FELD)].map(([, name, wert]) => [name, wert.trim()]));
+  return { felder, rumpf: text.slice(kopf[0].length).trim() };
+}
+
+function agentDatei(agent) {
+  return join(".claude/agents", `${agent}.md`);
+}
+
+export function rollenKopf(root, rolle) {
+  const datei = agentDatei(rolle);
+  return kopfFelder(readFileSync(join(root, datei), "utf8"), datei);
+}
+
+function effortDerAgentendatei(root, agent) {
+  if (!existsSync(join(root, agentDatei(agent)))) return [];
+  const { effort } = rollenKopf(root, agent).felder;
+  return effort ? ["--effort", effort] : [];
 }
 
 function abschnitt(titel, inhalt) {
@@ -238,7 +262,7 @@ function vorbereitung({ rolle, phase, auftrag, root, fortsetzung }, prompt, star
     "-p",
     "--agent",
     agent,
-    ...(start.argumente ?? ["--settings", `.claude/rollen/${rolle}.json`]),
+    ...(start.argumente ?? ["--settings", `.claude/rollen/${rolle}.json`, ...effortDerAgentendatei(root, agent)]),
     fortsetzung ? "--resume" : "--session-id",
     sitzung,
     "--permission-mode",

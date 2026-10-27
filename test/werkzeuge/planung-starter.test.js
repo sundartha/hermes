@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -9,6 +9,7 @@ import { probeDirectory } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
 const LANGE_ANTWORT = `${"a".repeat(1500)}ENDE`;
+const BAU_AUFTRAG = { bereich: "tools/beispiel.mjs", abnahme: "test/werkzeuge/beispiel.test.js" };
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -45,6 +46,12 @@ function mitErsatz(context) {
     else process.env.HERMES_CLAUDE = bisher;
   });
   return ort;
+}
+
+function bauMitKopf(ort, kopf) {
+  mkdirSync(join(ort, ".claude/agents"), { recursive: true });
+  writeFileSync(join(ort, ".claude/agents/bau.md"), `---\nname: bau\n${kopf}---\n\nBaut.\n`);
+  return starteAgent({ rolle: "bau", auftrag: BAU_AUFTRAG, root: ort }, "eins").befehl.split(" ");
 }
 
 function antwortMitKontext(kontext, eltern = null) {
@@ -97,6 +104,18 @@ test("ohne Wunsch liefert starteAgent dieselben Felder wie bisher", (context) =>
   assert.deepEqual(Object.keys(lauf), ["rolle", "agent", "sitzung", "befehl", "exitCode", "aktion", "fehlerausgabe", "antwort", "limit"]);
   assert.equal(lauf.aktion.art, UEBERGABE);
   assert.equal(lauf.antwort.length, 1000);
+});
+
+test("lauf startet eine Rolle mit dem Effort ihrer Agentendatei", (context) => {
+  const befehl = bauMitKopf(mitErsatz(context), "effort: high\n");
+  assert.equal(befehl[befehl.indexOf("--effort") + 1], "high");
+  assert.equal(befehl.filter((teil) => teil === "--effort").length, 1);
+});
+
+test("ohne Effort in der Agentendatei startet lauf die Rolle ohne --effort", (context) => {
+  const befehl = bauMitKopf(mitErsatz(context), "");
+  assert.equal(befehl.includes("--effort"), false);
+  assert.equal(befehl[befehl.indexOf("--agent") + 1], "bau");
 });
 
 test("zwei Agenten laufen gleichzeitig, ohne Bereich und Abnahme und ohne Kontextgrenze", async (context) => {
