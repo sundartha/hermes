@@ -8,6 +8,7 @@ import { postgresDa } from "../../tools/mutationspruefung/vorher-aus-ci.mjs";
 import { mitVorherSpeicher } from "../../tools/mutationspruefung/vorher-speicher.mjs";
 import { werkzeug as werkzeugAufruf } from "./mutationspruefung-probe.js";
 import { commitAll, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
+import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 
 const EXIT_ABBRUCH = 2;
 const AUSFUEHRBAR = 0o755;
@@ -285,4 +286,26 @@ test("Vorher aus der CI: falsche Aufrufe brechen ab, ohne GitHub zu fragen", (co
   const keineNummer = werkzeugAufruf(repo, basis, "--vorher-aus-ci", "../4711");
   assert.equal(keineNummer.status, EXIT_ABBRUCH);
   assert.match(keineNummer.stderr, /--vorher-aus-ci verlangt die Nummer eines Laufs, nicht \.\.\/4711/);
+});
+
+const NAECHSTER_JOB_SCHLUESSEL = /^ {4}\S/;
+const POSTGRES_ADRESSE = "          HERMES_TEST_POSTGRES_URL: ";
+
+function dienste(datei, job) {
+  const zeilen = workflowJobLines(datei, job);
+  const anfang = zeilen.indexOf("    services:");
+  assert.notEqual(anfang, -1, `Job ${job} in ${datei} hat keine Dienste`);
+  const ende = zeilen.findIndex((zeile, nummer) => nummer > anfang && NAECHSTER_JOB_SCHLUESSEL.test(zeile));
+  return zeilen.slice(anfang, ende === -1 ? undefined : ende);
+}
+
+function postgresAdresse(datei, schritt) {
+  return workflowStepLines(datei, schritt).filter((zeile) => zeile.startsWith(POSTGRES_ADRESSE));
+}
+
+test("Vorher aus der CI: der Stück-Job startet dasselbe Postgres wie die Tests der CI", () => {
+  assert.deepEqual(dienste("testumbau-vorher.yml", "stueck"), dienste("ci.yml", "tests"));
+  const adresse = postgresAdresse("ci.yml", "Tests");
+  assert.equal(adresse.length, 1);
+  assert.deepEqual(postgresAdresse("testumbau-vorher.yml", "Stück rechnen"), adresse);
 });
