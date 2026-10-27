@@ -4,7 +4,7 @@ import { join, posix } from "node:path";
 import { pitchPfad } from "./annahmen.mjs";
 import { auftragsCommits, gibtEsIn, git } from "./git.mjs";
 import { istObjekt, istText, liste } from "./planung/erkundung.mjs";
-import { teilVon } from "./planung/kopfzeile.mjs";
+import { teilName, teilVon } from "./planung/kopfzeile.mjs";
 import { MASTER } from "./worktrees.mjs";
 
 const KURZ_SHA = 7;
@@ -12,7 +12,8 @@ const ART = "Art: ";
 const EIGENER_STAND = "HEAD";
 const UMBAU = "umbau";
 const SCHNITT = "planung/schnitt.json";
-const ZWECK = `Ein Teil eines geteilten Pitches plant und baut erst auf einem Stand, der jeden Vorgänger aus „nach:“ in pitch.md enthält; sonst fehlt ihm Code, auf dem sein Auftrag steht. Gezählt wird nur ein gebauter Auftrag des Vorgängers (Zeilen „Auftrag:“ und „Art:“) auf ${MASTER}, der auch im eigenen Stand (${EIGENER_STAND}) gilt; nicht der eigene Branch allein, kein Plan-Commit und kein zurückgenommener Commit. Behebung: den Vorgänger bauen und mergen lassen; ist er schon gemergt, erst git fetch upstream master und den eigenen Stand auf ${MASTER} bringen.`;
+const TEILE = "planung/teile.json";
+const ZWECK = `Ein Teil eines geteilten Pitches plant und baut erst auf einem Stand, der jeden Vorgänger aus „nach:“ in pitch.md enthält; sonst fehlt ihm Code, auf dem sein Auftrag steht. Gezählt wird nur ein gebauter Auftrag des Vorgängers (Zeilen „Auftrag:“ und „Art:“) auf ${MASTER}, der auch im eigenen Stand (${EIGENER_STAND}) gilt; nicht der eigene Branch allein, kein Plan-Commit und kein zurückgenommener Commit. Ist ein Vorgänger selbst geteilt (${TEILE} auf ${MASTER}), zählen an seiner Stelle alle seine Unter-Teile. Behebung: den Vorgänger bauen und mergen lassen; ist er schon gemergt, erst git fetch upstream master und den eigenen Stand auf ${MASTER} bringen.`;
 
 function stand(root) {
   try {
@@ -32,23 +33,55 @@ function gebauteTeile(root, bezug) {
   return (teil) => finde((zeile) => zeile.startsWith(`Auftrag: ${teil}/`));
 }
 
+function planungAufMaster(root, vorgaenger, datei) {
+  const pitch = pitchPfad({ phase: vorgaenger });
+  if (pitch === null) return null;
+  const pfad = posix.join(posix.dirname(pitch), datei);
+  if (!gibtEsIn(MASTER, pfad, root)) return null;
+  try {
+    return JSON.parse(git(["show", `${MASTER}:${pfad}`], { cwd: root }));
+  } catch {
+    return null;
+  }
+}
+
+function istTeilEintrag(eintrag) {
+  return istObjekt(eintrag) && istText(eintrag.kuerzel) && istText(eintrag.name);
+}
+
+function unterTeile(root, vorgaenger, gesehen = new Set()) {
+  if (gesehen.has(vorgaenger)) return [vorgaenger];
+  const teile = liste(planungAufMaster(root, vorgaenger, TEILE)?.teile);
+  if (teile.length === 0 || !teile.every(istTeilEintrag)) return [vorgaenger];
+  const weiter = new Set([...gesehen, vorgaenger]);
+  return teile.flatMap((eintrag) => unterTeile(root, teilName(vorgaenger, eintrag), weiter));
+}
+
+function aufgeloest(root, nach) {
+  return nach.flatMap((vorgaenger) => unterTeile(root, vorgaenger).map((unterteil) => ({ vorgaenger, unterteil })));
+}
+
 function vorgaengerStaende(root, nach) {
   const gemergt = gebauteTeile(root, MASTER);
   const imStand = gebauteTeile(root, EIGENER_STAND);
-  return nach.map((vorgaenger) => {
-    const commit = gemergt(vorgaenger);
-    const fehltImStand = imStand(vorgaenger) === undefined;
-    return { vorgaenger, commit, fehltImStand, gilt: commit !== undefined && !fehltImStand };
+  return aufgeloest(root, nach).map(({ vorgaenger, unterteil }) => {
+    const commit = gemergt(unterteil);
+    const fehltImStand = imStand(unterteil) === undefined;
+    return { vorgaenger, unterteil, commit, fehltImStand, gilt: commit !== undefined && !fehltImStand };
   });
+}
+
+function genannt({ vorgaenger, unterteil }) {
+  return unterteil === vorgaenger ? `Vorgänger ${vorgaenger}` : `Vorgänger ${unterteil} (Unter-Teil des geteilten Vorgängers ${vorgaenger} laut ${TEILE} auf ${MASTER})`;
 }
 
 function fehlendeBefunde(teil, nach, root) {
   const sha = stand(root);
   if (sha === null) return [`Teil ${teil}: ${MASTER} fehlt; ohne den Hauptstand lässt sich nicht prüfen, ob ${nach.join(", ")} gemergt sind.`, ZWECK];
-  const befunde = vorgaengerStaende(root, nach).flatMap(({ vorgaenger, commit, gilt }) => {
-    if (gilt) return [];
-    if (commit === undefined) return [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) nicht gemergt; kein geltender Commit trägt „Auftrag: ${vorgaenger}/…“ mit „${ART}…“.`];
-    return [`Teil ${teil}: Vorgänger ${vorgaenger} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) gemergt, fehlt aber im eigenen Stand (${EIGENER_STAND}); der Teil baut sonst ohne seinen Code.`];
+  const befunde = vorgaengerStaende(root, nach).flatMap((eintrag) => {
+    if (eintrag.gilt) return [];
+    if (eintrag.commit === undefined) return [`Teil ${teil}: ${genannt(eintrag)} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) nicht gemergt; kein geltender Commit trägt „Auftrag: ${eintrag.unterteil}/…“ mit „${ART}…“.`];
+    return [`Teil ${teil}: ${genannt(eintrag)} ist auf ${MASTER} (${sha.slice(0, KURZ_SHA)}) gemergt, fehlt aber im eigenen Stand (${EIGENER_STAND}); der Teil baut sonst ohne seinen Code.`];
   });
   return befunde.length > 0 ? [...befunde, ZWECK] : [];
 }
@@ -59,9 +92,13 @@ export function vorgaengerBefunde(teil, nach, root) {
 
 export function gemergteVorgaenger(root, nach) {
   if (nach.length === 0 || stand(root) === null) return [];
-  return vorgaengerStaende(root, nach)
-    .filter(({ gilt }) => gilt)
-    .map(({ vorgaenger, commit }) => ({ vorgaenger, sha: commit.sha.slice(0, KURZ_SHA) }));
+  const staende = vorgaengerStaende(root, nach);
+  return nach.flatMap((vorgaenger) => {
+    const eigene = staende.filter((eintrag) => eintrag.vorgaenger === vorgaenger);
+    if (!eigene.every(({ gilt }) => gilt)) return [];
+    const { commit } = eigene.at(-1);
+    return [{ vorgaenger, sha: commit.sha.slice(0, KURZ_SHA) }];
+  });
 }
 
 export function teilVorgaengerBefunde(phase, root) {
@@ -73,20 +110,8 @@ export function teilVorgaengerBefunde(phase, root) {
   return vorgaengerBefunde(phase.phase, herkunft.nach, root);
 }
 
-function schnittAufMaster(root, vorgaenger) {
-  const pitch = pitchPfad({ phase: vorgaenger });
-  if (pitch === null) return null;
-  const pfad = posix.join(posix.dirname(pitch), SCHNITT);
-  if (!gibtEsIn(MASTER, pfad, root)) return null;
-  try {
-    return JSON.parse(git(["show", `${MASTER}:${pfad}`], { cwd: root }));
-  } catch {
-    return null;
-  }
-}
-
 function umbauAuftraege(root, vorgaenger) {
-  const schnitt = schnittAufMaster(root, vorgaenger);
+  const schnitt = planungAufMaster(root, vorgaenger, SCHNITT);
   return liste(schnitt?.auftraege).filter((auftrag) => istObjekt(auftrag) && auftrag.art === UMBAU && istText(auftrag.id));
 }
 
@@ -98,7 +123,7 @@ export function gemergteUmbauten(root, nach) {
   if (nach.length === 0 || stand(root) === null) return [];
   const gemergt = gebauteCommits(root, MASTER);
   const imStand = gebauteCommits(root, EIGENER_STAND);
-  return nach.flatMap((vorgaenger) =>
+  return aufgeloest(root, nach).flatMap(({ unterteil: vorgaenger }) =>
     umbauAuftraege(root, vorgaenger).flatMap((auftrag) => {
       const zeile = `Auftrag: ${vorgaenger}/${auftrag.id}`;
       const gleich = (trailer) => trailer === zeile;

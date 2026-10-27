@@ -5,7 +5,8 @@ import { test } from "node:test";
 
 import { ROTER_TEST, VERDOPPELT, funktion } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { commitAll, mitUpstreamMaster, outputLines, runIn, writeFiles } from "./probe-repo.js";
+import { gemergteVorgaenger } from "../../tools/auftrag/teil-vorgaenger.mjs";
+import { commitAll, mitUpstreamMaster, outputLines, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const TEIL = "P-9-t2-zweit";
 const ERSTER = "P-9-t1-erst";
@@ -117,4 +118,77 @@ test("Teil-Vorgänger: eine fehlerhafte Zeile „Teil von“ ist ein Startbefund
 test("Teil-Vorgänger: auch phase hält ohne gemergten Vorgänger, bevor es eine Integration anlegt", (context) => {
   const { repo } = nurErsterFehlt(context, { befehl: "phase", vorbereiten: (repo) => gebaut(repo, DRITTER) });
   assert.equal(outputLines(runIn(repo, "git", ["worktree", "list"]).stdout).length, 1);
+});
+
+const UMBAU_TEIL = "P-9-t1-t1-umbau";
+const REGEL_TEIL = "P-9-t1-t2-regel";
+
+function geteiltAbgelegt(repo, vorgaenger = ERSTER, teile = [{ kuerzel: "t1", name: "umbau" }, { kuerzel: "t2", name: "regel" }]) {
+  writeFiles(repo, { [`plaene/${vorgaenger}/planung/teile.json`]: `${JSON.stringify({ teile })}\n` });
+  commitAll(repo, `Plane ${vorgaenger}: Teile`);
+}
+
+test("Teil-Vorgänger: ist ein Vorgänger laut teile.json auf upstream/master geteilt und sind alle Unter-Teile gemergt, startet lauf wie bisher", (context) => {
+  const vorbereiten = (repo) => {
+    geteiltAbgelegt(repo);
+    [UMBAU_TEIL, REGEL_TEIL, DRITTER].forEach((teil) => gebaut(repo, teil));
+  };
+  const { lauf } = teilLauf(context, { vorbereiten });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /Vorgänger/);
+});
+
+test("Teil-Vorgänger: fehlt von einem geteilten Vorgänger ein Unter-Teil auf upstream/master, nennt der Befund den Unter-Teil und den geteilten Vorgänger", (context) => {
+  const vorbereiten = (repo) => {
+    geteiltAbgelegt(repo);
+    [UMBAU_TEIL, DRITTER].forEach((teil) => gebaut(repo, teil));
+  };
+  const ergebnis = teilLauf(context, { vorbereiten });
+  pruefeHalt(ergebnis, [REGEL_TEIL]);
+  assert.ok(ergebnis.lauf.stderr.includes(`Vorgänger ${REGEL_TEIL} (Unter-Teil des geteilten Vorgängers ${ERSTER} laut planung/teile.json auf upstream/master) ist auf upstream/master`), ergebnis.lauf.stderr);
+  assert.doesNotMatch(ergebnis.lauf.stderr, new RegExp(`Vorgänger (${UMBAU_TEIL}|${DRITTER}) `));
+});
+
+test("Teil-Vorgänger: ein ungeteilter, nicht gemergter Vorgänger neben einem geteilten, gemergten ergibt denselben Befund wie bisher", (context) => {
+  const vorbereiten = (repo) => {
+    geteiltAbgelegt(repo);
+    [UMBAU_TEIL, REGEL_TEIL].forEach((teil) => gebaut(repo, teil));
+  };
+  const ergebnis = teilLauf(context, { vorbereiten });
+  pruefeHalt(ergebnis, [DRITTER]);
+  assert.match(ergebnis.lauf.stderr, new RegExp(`Teil ${TEIL}: Vorgänger ${DRITTER} ist auf upstream/master \\([0-9a-f]{7}\\) nicht gemergt; kein geltender Commit trägt „Auftrag: ${DRITTER}/…“ mit „Art: …“\\.`));
+  assert.doesNotMatch(ergebnis.lauf.stderr, /Unter-Teil des geteilten/);
+});
+
+test("Teil-Vorgänger: eine teile.json, die nur auf dem eigenen Branch liegt, löst den Vorgänger nicht in Unter-Teile auf", (context) => {
+  const vorbereiten = (repo) => {
+    [UMBAU_TEIL, REGEL_TEIL, DRITTER].forEach((teil) => gebaut(repo, teil));
+    mitUpstreamMaster(repo);
+    geteiltAbgelegt(repo);
+  };
+  const { lauf } = nurErsterFehlt(context, { vorbereiten, mitUpstream: false });
+  assert.doesNotMatch(lauf.stderr, /Unter-Teil des geteilten/);
+});
+
+test("Teil-Vorgänger: eine teile.json, die ihren eigenen Ordner als Unter-Teil nennt, endet im Befund für diesen Vorgänger statt in einer Schleife", (context) => {
+  const kreis = "P-9-t1-erst-kreis";
+  const vorbereiten = (repo) => geteiltAbgelegt(repo, kreis, [{ kuerzel: "erst", name: "kreis" }]);
+  const ergebnis = teilLauf(context, { kopfzeile: `Teil von: P-9-gross; nach: ${kreis}`, vorbereiten });
+  pruefeHalt(ergebnis, [kreis]);
+});
+
+test("Teil-Vorgänger: gemergteVorgaenger nennt einen geteilten Vorgänger erst, wenn alle Unter-Teile gemergt sind, mit dem Commit des letzten Unter-Teils, und einen ungeteilten wie bisher", (context) => {
+  const faelle = [
+    { gebaut: [UMBAU_TEIL, REGEL_TEIL, DRITTER], erwartet: [[ERSTER, REGEL_TEIL], [DRITTER, DRITTER]] },
+    { gebaut: [UMBAU_TEIL, DRITTER], erwartet: [[DRITTER, DRITTER]] },
+    { gebaut: [UMBAU_TEIL, REGEL_TEIL], erwartet: [[ERSTER, REGEL_TEIL]] },
+  ];
+  for (const { gebaut: teile, erwartet } of faelle) {
+    const repo = probeRepository(context, { "README.md": "Probe\n" });
+    geteiltAbgelegt(repo);
+    const shas = new Map(teile.map((teil) => [teil, gebaut(repo, teil)]));
+    mitUpstreamMaster(repo);
+    const soll = erwartet.map(([vorgaenger, commit]) => ({ vorgaenger, sha: shas.get(commit).slice(0, 7) }));
+    assert.deepEqual(gemergteVorgaenger(repo, [ERSTER, DRITTER]), soll, teile.join(", "));
+  }
 });
