@@ -149,3 +149,44 @@ test("auftrag-pruefe: eine vertrauliche Phase F-V1 ohne issue bleibt grün", (co
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /grün: 1 Aufträge/);
 });
+
+async function grenzeDesAnrufbereichs() {
+  const { default: zweck } = await import("../../tools/auftrag/zweck.json", { with: { type: "json" } });
+  const { wozu, behebung, nichtAngenommen, ausweg } = zweck.vorbereitung;
+  return [`Wozu: ${wozu}`, `Echte Behebung: ${behebung}`, `Nicht angenommen: ${nichtAngenommen}`, `Ausweg: ${ausweg}`];
+}
+
+function pruefeImAnrufbereich(context, auftraege) {
+  return pruefePhase(context, {
+    phase: "E-005-sprachcodes-intern",
+    issue: ISSUE,
+    entwurf: { ...ENTWURF, "src/routes/_call-request.js": "Entwurf" },
+    auftraege,
+  });
+}
+
+test("auftrag-pruefe: ein Umbau an einer Datei des Anrufbereichs bleibt grün und zeigt die Grenze aus lauf vor dem Bau", async (context) => {
+  const lauf = pruefeImAnrufbereich(context, [
+    {
+      id: "u1",
+      art: "umbau",
+      ziel: "UNSUPPORTED_LANGUAGE und LANGUAGE_UNAVAILABLE nicht mehr exportieren",
+      bereich: "src/routes/_call-request.js",
+      erwarteteDateien: ["src/routes/_call-request.js"],
+      abnahme: "test/ok.test.js",
+      wasDarfNiePassieren: ["POST /api/calls mit einer nicht unterstützten Sprache antwortet nicht mehr mit 400."],
+    },
+  ]);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+  const [gruen, hinweis, ...grenze] = lauf.stdout.trimEnd().split("\n");
+  assert.match(gruen, /^grün: 1 Aufträge/);
+  assert.match(hinweis, /^Hinweis: .*\bu1\b.*src\/routes\/_call-request\.js/);
+  assert.deepEqual(grenze, await grenzeDesAnrufbereichs());
+});
+
+test("auftrag-pruefe: ein Umbau außerhalb des Anrufbereichs und eine Funktion im Anrufbereich bekommen keinen Hinweis", (context) => {
+  const imAnrufbereich = ["src/routes/_call-request.js", "test/x.test.js"];
+  const lauf = pruefeImAnrufbereich(context, [umbau(), funktion({ bereich: "src/routes/_call-request.js", erwarteteDateien: imAnrufbereich })]);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+  assert.deepEqual(lauf.stdout.trimEnd().split("\n"), [`grün: 2 Aufträge in phase.json sind vollständig.`]);
+});
