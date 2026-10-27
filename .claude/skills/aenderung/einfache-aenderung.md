@@ -26,7 +26,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
 ```
 
 - `funktion`: Die Änderung zeigt sich von außen. `abnahme` ist ein neuer Abnahmetest über den echten Eingang, der heute mit `erwarteterFehler` rot wird.
-- `umbau`: Nur der Aufbau des Codes ändert sich, oder nur die Gestaltung der Website. `abnahme` ist ein bestehender Verhaltenstest, der grün bleibt; `erwarteterFehler` fällt weg.
+- `umbau`: Nur der Aufbau des Codes ändert sich, oder nur die Gestaltung der Website. `abnahme` ist ein bestehender Verhaltenstest, der grün bleibt; `erwarteterFehler` fällt weg. Kein bestehender Test ändert sich, neue Absicherungstests des alten Stands, die `lauf` bei überlebenden Mutanten ergänzt, sind erlaubt und erwünscht; schreib in `absicht` und Entwurf deshalb „bestehende Tests ändern sich nicht“, nie „keine Testdatei ändert sich“.
 - `issue`: die Nummer des Issues, nach dem der Ordner heißt. Sein erster Abschnitt ist `## Absicht` mit genau dem Text aus `absicht`; `lauf` gleicht beides ab und hält sonst an.
 - `erwarteterFehler`: `lauf` sucht diesen Text wörtlich in der Fehlermeldung des roten Abnahmetests; ein Testname zählt nicht. Der Test-Agent gibt ihn dem `assert`, das heute fehlschlägt, als Meldung mit, etwa `assert.equal(ist, soll, "<erwarteterFehler>")`.
 - Bleibt nichts Besonderes gleich, ist `wasDarfNiePassieren` die leere Liste `[]`, und der Grund steht im Entwurf.
@@ -36,7 +36,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
 ```text
 Was sich ändert: <ein Satz>
 Bleibt gleich: <beobachtbares Verhalten> (oder: nichts Besonderes, weil <Grund>)
-Abnahme: <Bildschirmfotos vorher und nachher, Desktop und Handy | Testgespräche über die geänderte Stelle und die festen Fälle | Abnahmetest über den echten Eingang> (bei Umbau: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün)
+Abnahme: <Bildschirmfotos vorher und nachher, Desktop und Handy | Testgespräche über die geänderte Stelle und die festen Fälle | Abnahmetest über den echten Eingang> (bei Umbau: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün; Absicherungstests des alten Stands sind erlaubt)
 Nicht-Ziele: <je mit „weil“> (oder: keine)
 
 Premortem:
