@@ -215,10 +215,12 @@ test("startet der Testlauf nicht, bricht die Löschprobe am Grundlauf ab und bau
 const UEBRIGE_GRUPPEN = 4;
 const UEBRIGE = Array.from({ length: GRUPPE * (UEBRIGE_GRUPPEN - 1) + 1 }, (_leer, index) => `test/uebrige-${index}.test.js`);
 const NUMMER_DER_ERSTEN_UEBRIGEN = 2;
+const ZWEITE_UEBRIGE_MARKE = String(NUMMER_DER_ERSTEN_UEBRIGEN + 1);
 const PRUEFUNGEN = {
   ueberlebt: "",
   erkennt: 'assert.equal(fehlend, "");',
   haengt: 'if (fehlend !== "") process.kill(process.ppid, "SIGKILL");',
+  rot: 'assert.fail("immer rot");',
 };
 const NUR_UEBERLEBENDE = ["ueberlebt", "ueberlebt", "ueberlebt", "ueberlebt"];
 
@@ -245,8 +247,7 @@ function mitUebrigen(context, rollen, { marken, von, bis }) {
     return [pfad, uebrigerTest(String(gruppe + NUMMER_DER_ERSTEN_UEBRIGEN), PRUEFUNGEN[rollen[gruppe]])];
   });
   const lauf = loescheIn(context, Object.fromEntries(uebrige), [pruefung(marken, [ERSTE, ...UEBRIGE], [[zeileVon(von), zeileVon(bis)]])]);
-  assert.equal(lauf.fehler, undefined);
-  return { ergebnisse: lauf.ergebnisse, protokoll: laeufe(marken) };
+  return { fehler: lauf.fehler, ergebnisse: lauf.ergebnisse, protokoll: laeufe(marken) };
 }
 
 function ersteGruppe([, , marke]) {
@@ -255,7 +256,8 @@ function ersteGruppe([, , marke]) {
 
 test("prüft die Löschprobe nur eine Zeile, laufen ihre übrigen Gruppen erst nach den ersten und dann gleichzeitig in drei Arbeitskopien, und das Urteil folgt der Gruppenreihenfolge", (context) => {
   const marken = ordner(context, "loeschprobe-marken-");
-  const { ergebnisse, protokoll } = mitUebrigen(context, ["ueberlebt", "haengt", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
+  const { fehler, ergebnisse, protokoll } = mitUebrigen(context, ["ueberlebt", "haengt", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
+  assert.equal(fehler, undefined);
   const hinweis = `Hinweis: nur durch Zeitablauf oder Absturz erkannt, in beiden Läufen; nicht bestätigt getötet: ${DATEI}:${zeileVon("b")} Zeile gelöscht`;
   assert.deepEqual(ergebnisse, [[zeile("b", "Timeout", { bestaetigung: "haenger", hinweis })]]);
   const uebrige = protokoll.filter((lauf) => lauf[1] === "b" && !ersteGruppe(lauf));
@@ -266,13 +268,14 @@ test("prüft die Löschprobe nur eine Zeile, laufen ihre übrigen Gruppen erst n
 
 test("erkennen die gleichzeitig laufenden Gruppen eine Zeile, beginnt keine Arbeitskopie danach die nächste Gruppe dieser Zeile", (context) => {
   const marken = ordner(context, "loeschprobe-marken-");
-  const { ergebnisse, protokoll } = mitUebrigen(context, ["erkennt", "erkennt", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
+  const { fehler, ergebnisse, protokoll } = mitUebrigen(context, ["erkennt", "erkennt", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
+  assert.equal(fehler, undefined);
   assert.deepEqual(ergebnisse, [[zeile("b", "Killed", GETOETET)]]);
   const gruppen = new Set(protokoll.filter((lauf) => !ersteGruppe(lauf)).map(([, , marke]) => marke));
   assert.deepEqual([...gruppen].sort(), ["2", "3", "4"], protokoll.join("\n"));
 });
 
-test("ist ein Grundlauf in einer Arbeitskopie grün, läuft er in keiner später angelegten Arbeitskopie derselben Probe noch einmal", (context) => {
+test("ist ein Grundlauf in einer Arbeitskopie grün, läuft er in keiner später angelegten der drei Arbeitskopien derselben Probe noch einmal", (context) => {
   const marken = ordner(context, "loeschprobe-marken-");
   const nurA = [[zeileVon("a"), zeileVon("a")]];
   const bisD = [[zeileVon("b"), zeileVon("d")]];
@@ -286,9 +289,26 @@ test("ist ein Grundlauf in einer Arbeitskopie grün, läuft er in keiner später
 
 test("eine frei gewordene Arbeitskopie beginnt eine noch offene Zeile, bevor sie eine weitere Gruppe einer schon laufenden Zeile nimmt", (context) => {
   const marken = ordner(context, "loeschprobe-marken-");
-  const { ergebnisse, protokoll } = mitUebrigen(context, NUR_UEBERLEBENDE, { marken, von: "a", bis: "d" });
+  const { fehler, ergebnisse, protokoll } = mitUebrigen(context, NUR_UEBERLEBENDE, { marken, von: "a", bis: "d" });
+  assert.equal(fehler, undefined);
   const ueberlebt = (buchstabe) => zeile(buchstabe, "Survived");
   assert.deepEqual(ergebnisse, [[zeile("a", "Killed", GETOETET), ueberlebt("b"), ueberlebt("c"), ueberlebt("d")]]);
   const zuD = protokoll.findIndex(([, fehlend]) => fehlend === "d");
-  assert.ok(zuD >= 0 && zuD < protokoll.findIndex(([, fehlend, marke]) => fehlend === "b" && marke === "3"), protokoll.join("\n"));
+  assert.ok(zuD >= 0 && zuD < protokoll.findIndex(([, fehlend, marke]) => fehlend === "b" && marke === ZWEITE_UEBRIGE_MARKE), protokoll.join("\n"));
+});
+
+const ZWEITE_UEBRIGE = UEBRIGE.filter((_pfad, index) => index % UEBRIGE_GRUPPEN === 1);
+
+test("ist der Grundlauf einer späteren Gruppe rot, während eine frühere Gruppe die Zeile erkennt, zählt nur die Erkennung", (context) => {
+  const marken = ordner(context, "loeschprobe-marken-");
+  const { fehler, ergebnisse, protokoll } = mitUebrigen(context, ["erkennt", "rot", "ueberlebt", "ueberlebt"], { marken, von: "b", bis: "b" });
+  assert.equal(fehler, undefined);
+  assert.deepEqual(ergebnisse, [[zeile("b", "Killed", GETOETET)]]);
+  assert.ok(protokoll.some(([, , marke]) => marke === ZWEITE_UEBRIGE_MARKE), protokoll.join("\n"));
+});
+
+test("ist der Grundlauf einer späteren Gruppe rot und hat jede frühere Gruppe die Zeile überlebt, bricht die Löschprobe ab, auch wenn eine noch spätere Gruppe die Zeile erkennt", (context) => {
+  const marken = ordner(context, "loeschprobe-marken-");
+  const { fehler } = mitUebrigen(context, ["ueberlebt", "rot", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
+  assert.equal(fehler, `Grundlauf rot, Löschprobe nicht aussagekräftig: ${ZWEITE_UEBRIGE.join(", ")}`);
 });
