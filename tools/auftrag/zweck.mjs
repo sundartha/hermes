@@ -40,6 +40,7 @@ export const PRUEFUNG = {
   LISTENUMZUG: "listenumzug",
   LISTEN_KUERZEN: "listen-kuerzen",
   GEAENDERTE_FAELLE: "geänderte fälle",
+  SCHUTZTESTS: "schutztests",
   TESTUMBAU_FAELLE: "testumbau fälle",
   VORBAU_NUR_ERGAENZT: "vorbau nur ergänzt",
   MUTATION_TESTUMBAU: "mutation testumbau",
