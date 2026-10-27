@@ -18,8 +18,10 @@ const RULE_FILES = [
   'export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);',
 ].join("\n");
 
-export function eslintConfig(files, options = []) {
-  return `export default [{ ignores: ["coverage/**"] }, { name: "probe", files: ${JSON.stringify(files)}, rules: { "no-console": ["error", ...${JSON.stringify(options)}] } }];\n${RULE_FILES}\n`;
+export function eslintConfig(files, options = [], { typescript = false } = {}) {
+  const kopf = typescript ? 'import tseslint from "typescript-eslint";\n' : "";
+  const sprache = typescript ? "languageOptions: { parser: tseslint.parser }, " : "";
+  return `${kopf}export default [{ ignores: ["coverage/**"] }, { name: "probe", files: ${JSON.stringify(files)}, ${sprache}rules: { "no-console": ["error", ...${JSON.stringify(options)}] } }];\n${RULE_FILES}\n`;
 }
 
 export const WORKFLOW = 'on:\n  push:\n    paths:\n      - src/**\n      - "!src/a.js"\njobs: {}\n';
@@ -99,13 +101,16 @@ export const LOST = "aber nicht";
 export const BACK = "src/b.js → src/b.ts";
 export const MOVED = "src/geheim/d.js → src/d.js";
 
+const RENAMED_ESLINT_FILES = ["src/a.{js,ts}", "{src,test}/**/*.{ts,mts}"];
+
 export const RENAMED_FILES = {
   ".gitignore": "node_modules\n",
   "src/b.js": "export const zwei = 2;\n",
   "src/geheim/c.js": "export const drei = 3;\n",
   "src/geheim/d.js": "export const vier = 4;\n",
-  "eslint.config.js": eslintConfig(["src/a.{js,ts}", "{src,test}/**/*.{ts,mts}"]),
+  "eslint.config.js": eslintConfig(RENAMED_ESLINT_FILES),
 };
+export const RENAMED_ESLINT_MIT_TYPESCRIPT = eslintConfig(RENAMED_ESLINT_FILES, [], { typescript: true });
 
 export function renamedRepo(context, { files, renames, after = {} }) {
   const repo = probeRepository(context, { ...BASE_FILES, ...RENAMED_FILES, ...files });

@@ -330,7 +330,7 @@ test("ein Aufräum-Umbau, der die Altfunktion stehen lässt, wird nicht als grü
 });
 
 test("ein geplanter Umbau, der keine Altfunktion aufräumen soll, bleibt grün, auch wenn eslint-suppressions.json gleich bleibt", (context) => {
-  const { repo, ergebnis, beleg } = lauf(context, { bau: [ALT_BLEIBT] }, MIT_ALTFUNKTION);
+  const { repo, ergebnis, beleg } = lauf(context, { bau: [{ dateien: { [ZAHL]: "const alt = 1;\nexport const ZAHL = 2;\n" } }] }, MIT_ALTFUNKTION);
   const git = (...args) => runIn(repo, "git", args).stdout.trim();
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
   assert.equal(beleg("A1").ergebnis, "grün");
