@@ -147,7 +147,26 @@ function isCardNumber(raw, minDigits) {
   return lengthOk && iinOk && luhnValid(digits);
 }
 
+const SINGLE_DIGIT_SPACED = /^\d(?:(?: |, )\d)+$/;
+
+function isDigitwiseCard(digits) {
+  const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
+  return iinOk && luhnValid(digits);
+}
+
+function bestDigitwiseWindow(raw, minDigits) {
+  const groups = [...raw.matchAll(/\d/g)].map((group) => ({ start: group.index, digit: group[0] }));
+  for (let size = groups.length; size >= minDigits; size--) {
+    for (let first = 0; first + size <= groups.length; first++) {
+      const digits = groups.slice(first, first + size).map((group) => group.digit).join("");
+      if (isDigitwiseCard(digits)) return { start: groups[first].start, end: groups[first + size - 1].start + 1 };
+    }
+  }
+  return null;
+}
+
 function bestCardWindow(raw, minDigits) {
+  if (SINGLE_DIGIT_SPACED.test(raw)) return bestDigitwiseWindow(raw, minDigits);
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
