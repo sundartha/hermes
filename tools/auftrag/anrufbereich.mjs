@@ -22,3 +22,7 @@ export function umbauImAnrufbereich(auftraege) {
     return dateien.length > 0 ? [`Umbau ${id} ändert Dateien des Anrufbereichs: ${dateien.join(", ")}.`] : [];
   });
 }
+
+export function dateiImAnrufbereich(datei) {
+  return anrufbereichHinweis(anrufbereich().includes(datei) ? [`${datei} gehört zum Anrufbereich.`] : []);
+}
