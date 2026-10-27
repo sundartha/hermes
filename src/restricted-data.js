@@ -38,6 +38,7 @@ const CARD_GAP_SPACE = "[ \\t\\u00A0\\u202F]";
 const CARD_GAP_MARK = "(?:\\.{1,3}|[-_/;,\\u2026])";
 const CARD_GAP = `(?:${CARD_GAP_SPACE}?${CARD_GAP_MARK}${CARD_GAP_SPACE}?|${CARD_GAP_SPACE})?`;
 const CARD_CANDIDATE = new RegExp(`(?<![+\\d])\\d(?:${CARD_GAP}\\d){11,18}(?!\\d)`, "g");
+const CARD_CONTINUATION = new RegExp(`(?:${CARD_GAP}\\d){1,${CARD_MAX_DIGITS}}(?!\\d)`, "y");
 
 const PHONE_CONTEXT_WORDS = Object.freeze([
   "r(?:ü|ue)ckruf(?:nummer)?",
@@ -165,15 +166,27 @@ function isDigitwiseCard(digits) {
   return iinOk && luhnValid(digits);
 }
 
-function bestDigitwiseWindow(raw, minDigits) {
-  const groups = [...raw.matchAll(/\d/g)].map((group) => ({ start: group.index, digit: group[0] }));
-  for (let size = groups.length; size >= minDigits; size--) {
+function digitwiseWindows(groups, minDigits) {
+  const windows = [];
+  const maxSize = Math.min(groups.length, CARD_MAX_DIGITS);
+  for (let size = maxSize; size >= minDigits; size--) {
     for (let first = 0; first + size <= groups.length; first++) {
       const digits = groups.slice(first, first + size).map((group) => group.digit).join("");
-      if (isDigitwiseCard(digits)) return { start: groups[first].start, end: groups[first + size - 1].start + 1 };
+      if (isDigitwiseCard(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
     }
   }
-  return null;
+  return windows;
+}
+
+function bestDigitwiseWindow(raw, minDigits) {
+  const groups = [...raw.matchAll(/\d/g)].map((group) => ({ start: group.index, digit: group[0] }));
+  const windows = digitwiseWindows(groups, minDigits);
+  if (!windows.length) return null;
+  if (groups.length <= CARD_MAX_DIGITS) return windows[0];
+  return {
+    start: Math.min(...windows.map((window) => window.start)),
+    end: Math.max(...windows.map((window) => window.end)),
+  };
 }
 
 function bestCardWindow(raw, minDigits) {
@@ -252,11 +265,20 @@ function withoutIbans(text) {
   return blanked;
 }
 
+function extendedCandidate(text, match) {
+  const candidate = { raw: match[0], start: match.index, end: match.index + match[0].length };
+  if (!isDigitwise(candidate.raw) || digitCount(candidate.raw) < CARD_MAX_DIGITS) return candidate;
+  CARD_CONTINUATION.lastIndex = candidate.end;
+  const more = CARD_CONTINUATION.exec(text);
+  if (!more) return candidate;
+  return { raw: candidate.raw + more[0], start: candidate.start, end: candidate.end + more[0].length };
+}
+
 function findCardSpans(originalText) {
   const text = withoutIbans(originalText);
   const spans = [];
   for (const match of text.matchAll(CARD_CANDIDATE)) {
-    const candidate = { raw: match[0], start: match.index, end: match.index + match[0].length };
+    const candidate = extendedCandidate(text, match);
     const minDigits = requiredCardDigits(text, candidate);
     const window = minDigits === null ? null : bestCardWindow(candidate.raw, minDigits);
     if (window) spans.push({ start: candidate.start + window.start, end: candidate.start + window.end });
