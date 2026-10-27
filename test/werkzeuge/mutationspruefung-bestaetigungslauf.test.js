@@ -7,7 +7,7 @@ import { BASIS, EXIT_ROT, KEINER_BESTAETIGT, KIND_BEENDEN, kindquelle, kindtest,
 import { probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
 const ABSTURZ_IN_DER_BESTAETIGUNG =
-  /^Verstoß: Bestätigung abgebrochen \(Absturz\) in test\/absturz\.test\.js, Ursache im Testaufbau prüfen \(erster Lauf Killed test\/absturz\.test\.js, Bestätigungslauf RuntimeError\): src\/zahl\.js:5:26\S* StringLiteral → ""$/m;
+  /^Verstoß: Bestätigung abgebrochen \(Absturz\) in test\/absturz\.test\.js, Ursache im Testaufbau prüfen \(erster Lauf Killed test\/absturz\.test\.js, Bestätigungslauf RuntimeError\): src\/zahl\.js:5:26-5:32 StringLiteral → ""$/m;
 
 test("ein Mutant, den ein wackelnder Test nur im ersten Lauf tötet, überlebt, weil der Bestätigungslauf es nicht wiederholt", (context) => {
   const marke = join(probeDirectory(context, {}), MARKE);
@@ -16,7 +16,7 @@ test("ein Mutant, den ein wackelnder Test nur im ersten Lauf tötet, überlebt, 
   const rot = pruefe(repo, "--basis", "HEAD");
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
   const verstoesse = schluessel(rot.stdout, UEBERLEBT);
-  assert.deepEqual(verstoesse, ['src/zahl.js:5:26 StringLiteral → ""']);
+  assert.deepEqual(verstoesse, ['src/zahl.js:5:26-5:32 StringLiteral → ""']);
   assert.deepEqual(nichtBestaetigt(rot.stdout), [[verstoesse[0], "erster Lauf Killed test/wackel.test.js, Bestätigungslauf Survived"]]);
 });
 

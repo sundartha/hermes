@@ -27,6 +27,17 @@ test("eine neue Zeile ohne Test ist grün, wenn ein Commit des Auftragswegs ihre
   assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), []);
 });
 
+test("zwei Mutanten an derselben Stelle mit gleichem Mutator und Ersatz, aber verschiedener Endlage, tragen zwei Schlüssel", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle('  if (zahl === undefined || zahl === "") return "leer";', NEGATIV) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
+  assert.deepEqual(ueberlebende, [...new Set(ueberlebende)], rot.stdout);
+  const ganzOderLinks = ueberlebende.filter((mutant) => mutant.startsWith("src/zahl.js:2:7-") && mutant.endsWith(" ConditionalExpression → false"));
+  assert.deepEqual(ganzOderLinks, ["src/zahl.js:2:7-2:25 ConditionalExpression → false", "src/zahl.js:2:7-2:40 ConditionalExpression → false"], rot.stdout);
+});
+
 test("eine neue Datei, die keine Testdatei erreicht, bleibt rot, auch wenn ein Commit des Auftragswegs sie mit Grund gleichwertig meldet", (context) => {
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, { "src/neu.js": quelle(NEGATIV) });

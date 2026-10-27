@@ -1,10 +1,11 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { gruppen } from "../mutationspruefung/gruppen.mjs";
+import { mutantenOrt } from "../mutationspruefung/mutantenort.mjs";
 import { katalogtests } from "../testwirkung/katalog.mjs";
 import {
   TROCKENLAUF_GESCHEITERT,
@@ -26,7 +27,6 @@ const KONFIGURATION = Object.fromEntries(
   ),
 );
 const BANK = "regression";
-const LEERRAUM = /\s+/g;
 const LAUF_SKRIPT = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
 const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
 const BERICHT_OPTION = /^--test-reporter/;
@@ -38,16 +38,8 @@ function sekundenSeit(beginn) {
   return Math.round(((Date.now() - beginn) / MS_JE_SEKUNDE) * NACHKOMMA) / NACHKOMMA;
 }
 
-function eintrag({ fileName, location, mutatorName, replacement, status }) {
-  const datei = relative(cwd(), fileName);
-  const { start, end } = location;
-  const ersatz = (replacement ?? "").replace(LEERRAUM, " ");
-  const ort = `${start.line}:${start.column}-${end.line}:${end.column}`;
-  return {
-    schluessel: `${datei}:${ort} ${mutatorName} → ${ersatz}`,
-    status,
-    zeilen: [start.line, end.line],
-  };
+function eintrag({ status, ...mutant }) {
+  return { ...mutantenOrt(mutant), status };
 }
 
 async function strykerImEigenenProzess(optionen) {
