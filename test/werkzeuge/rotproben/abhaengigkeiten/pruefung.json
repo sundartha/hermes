@@ -10,7 +10,9 @@
     "tools/abhaengigkeiten/bestaende.mjs",
     "tools/bestand-rueckfuehrung.mjs",
     "tools/abhaengigkeiten/bausteine.mjs",
-    "tools/bausteine.json"
+    "tools/bausteine.json",
+    "tools/abhaengigkeiten/sammeldatei-exporte.mjs",
+    "tools/basis/sammeldatei-exporte.json"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],
