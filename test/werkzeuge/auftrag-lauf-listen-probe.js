@@ -2,7 +2,7 @@ import { symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 import { BASIS, starte } from "./auftrag-lauf-probe.js";
-import { BASE_FILES, MANIFEST_BOTH, RENAMED_FILES } from "./feste-pfade-probe.js";
+import { BASE_FILES, MANIFEST_BOTH, RENAMED_ESLINT_MIT_TYPESCRIPT } from "./feste-pfade-probe.js";
 import { REPO_ROOT, runIn } from "./probe-repo.js";
 
 const OHNE = new Set(["package.json", ".github/CODEOWNERS", "scripts/pin.js", ".githooks/pre-commit", "src/schema.sql"]);
@@ -20,7 +20,7 @@ function dateien(skripte) {
     ...SCHUTZ,
     ...MANIFEST_BOTH,
     "package.json": JSON.stringify({ ...PAKET, scripts: { ...PAKET.scripts, lint: "node -e 0 --", ...skripte } }),
-    "eslint.config.js": RENAMED_FILES["eslint.config.js"],
+    "eslint.config.js": RENAMED_ESLINT_MIT_TYPESCRIPT,
     ".gitignore": `${BASIS[".gitignore"]}node_modules\n`,
   };
 }

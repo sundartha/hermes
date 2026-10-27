@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { MIT_PIN_PRUEFUNG } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { BASE_FILES, MANIFEST_BOTH, RENAMED_FILES } from "./feste-pfade-probe.js";
+import { BASE_FILES, MANIFEST_BOTH, RENAMED_ESLINT_MIT_TYPESCRIPT } from "./feste-pfade-probe.js";
 import { REPO_ROOT, runIn } from "./probe-repo.js";
 
 const TEXT_TS = "export function gross(text: string): string {\n  return text.toUpperCase();\n}\n";
@@ -36,7 +36,7 @@ const SCHUTZLISTEN = [
 const MIT_SCHUTZLISTEN = {
   ...Object.fromEntries(SCHUTZLISTEN.map((pfad) => [pfad, BASE_FILES[pfad]])),
   ...MANIFEST_BOTH,
-  "eslint.config.js": RENAMED_FILES["eslint.config.js"],
+  "eslint.config.js": RENAMED_ESLINT_MIT_TYPESCRIPT,
   ".gitignore": `${BASIS[".gitignore"]}node_modules\n`,
 };
 
