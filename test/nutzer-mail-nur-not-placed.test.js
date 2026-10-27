@@ -231,3 +231,34 @@ test("Entprellung ist tenant-scoped: ein not-placed-Anruf von Tenant A unterdrue
 
   assert.equal(sent.length, TWO_MAILS, "verschiedene Tenants entprellen sich nicht gegenseitig");
 });
+
+test("Ein frueherer eingehender not-placed-Anruf entprellt die Mail zum ausgehenden nicht", async () => {
+  const MINUTES_ZWISCHEN_EINGEHEND_UND_AUSGEHEND = 10;
+  const eingehendEnde = Date.parse("2026-08-27T08:00:00.000Z");
+  const eingehend = makeFailedCall({
+    id: "call_eingehend",
+    direction: "inbound",
+    from: TARGET,
+    to: undefined,
+    failureReason: "not-placed:invite-403",
+    endedAt: new Date(eingehendEnde).toISOString(),
+  });
+  const ausgehend = makeFailedCall({
+    id: "call_ausgehend",
+    failureReason: "not-placed:start-403",
+    endedAt: new Date(
+      eingehendEnde + MINUTES_ZWISCHEN_EINGEHEND_UND_AUSGEHEND * ONE_MINUTE_MS,
+    ).toISOString(),
+  });
+  const { sent, mailer } = makeMailer();
+  const { callFinish } = harness({ calls: [eingehend, ausgehend], mailer });
+
+  await callFinish.finishCall(eingehend);
+  await callFinish.finishCall(ausgehend);
+
+  assert.equal(
+    sent.length,
+    1,
+    "ein eingehender not-placed-Anruf darf die Mail zum ausgehenden nicht unterdruecken",
+  );
+});
