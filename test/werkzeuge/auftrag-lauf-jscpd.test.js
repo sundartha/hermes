@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
-import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
+import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 const JSCPD = "jscpd";
 const WOZU = "Wozu: Zwei Kopien derselben Logik lassen sich nur gemeinsam richtig ändern";
@@ -26,15 +26,6 @@ const FALL = [
 ];
 const TEST_MIT_KOPIE = [...ROTER_TEST.split("\n").slice(0, 3), 'test("verdoppelt zwei", () => {', ...FALL, 'test("verdoppelt zwei noch einmal", () => {', ...FALL, ""].join("\n");
 
-function namen(beleg) {
-  return beleg.pruefungen.map(({ name }) => name);
-}
-
-function rotAnJscpd(lauf, beleg) {
-  const ergebnis = { status: lauf.status, ergebnis: beleg.ergebnis, grund: beleg.grund, exitCode: pruefung(beleg, JSCPD) };
-  assert.deepEqual(ergebnis, { status: EXIT_ROT, ergebnis: "rot", grund: `${JSCPD} endete mit Exit ${EXIT_ROT}.`, exitCode: EXIT_ROT }, lauf.stdout + lauf.stderr);
-}
-
 test("die Kopien-Prüfung läuft im Bau direkt nach feste-pfade und ist grün, wenn der Bau keine neue Kopie schreibt", (context) => {
   const drehbuch = { bau: { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" } };
   const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: KOPIEN_LISTE });
@@ -47,7 +38,7 @@ test("die Kopien-Prüfung läuft im Bau direkt nach feste-pfade und ist grün, w
 test("schreibt der Bau-Agent eine Funktion doppelt, wird die Runde an jscpd rot, und die zweite Runde des Bau-Agenten bekommt Befund und Zweck-Text", (context) => {
   const drehbuch = { bau: { "src/text.js": MIT_KOPIE }, "bau-antwort": ABSATZ };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: KOPIEN_LISTE });
-  rotAnJscpd(lauf, beleg);
+  rotAn(JSCPD, lauf, beleg);
   const zweiteRunde = readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8");
   for (const teil of ["src/text.js:1-6 gleicht src/text.js:8-13", WOZU, `dem Bau-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
 });
@@ -64,7 +55,7 @@ test("die Kopien-Prüfung läuft nach dem Test-Agenten direkt nach der statische
 test("schreibt der Test-Agent zwei Testfälle mit gleichem Rumpf, hält lauf vor dem Bau an und gibt dem Test-Agenten Befund und Zweck-Text", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": TEST_MIT_KOPIE }, "test-antwort": ABSATZ, bau: { "src/rechnen.js": VERDOPPELT } };
   const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: KOPIEN_LISTE });
-  rotAnJscpd(lauf, beleg);
+  rotAn(JSCPD, lauf, beleg);
   assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
   const zweiteRunde = readFileSync(join(werkzeug, "prompt-test.txt"), "utf8");
   for (const teil of ["gleicht test/rechnen.test.js:", WOZU, `dem Test-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
@@ -82,7 +73,7 @@ test("löscht der Bau-Agent tools/basis/jscpd.json, entfällt die Kopien-Prüfun
   const auftrag = { ...UMBAU, bereich: "tools/", erwarteteDateien: ["tools/basis/jscpd.json"] };
   const drehbuch = { "bau-loeschen": ["tools/basis/jscpd.json"], "bau-antwort": ABSATZ };
   const { lauf, beleg } = starte(context, { auftrag, drehbuch, dateien: KOPIEN_LISTE });
-  rotAnJscpd(lauf, beleg);
+  rotAn(JSCPD, lauf, beleg);
 });
 
 const TESTUMBAU = { ...UMBAU, art: "testumbau", ziel: "Ziehe die Rechen-Tests in eine eigene Datei", bereich: "test/", erwarteteDateien: ["test/rechnen.test.js"], vorbild: "test/text.test.js" };
@@ -104,7 +95,7 @@ test("die Kopien-Prüfung läuft im Testumbau direkt nach lint und vor der Mutat
 
 test("schreibt der Testumbau-Agent zwei Testfälle mit gleichem Rumpf, wird die Runde vor der Mutation an jscpd rot und der Testumbau-Agent bekommt Befund und Zweck-Text", (context) => {
   const { werkzeug, lauf, beleg } = testumbau(context, { test: { "test/rechnen.test.js": TEST_MIT_KOPIE }, "test-antwort": ABSATZ });
-  rotAnJscpd(lauf, beleg);
+  rotAn(JSCPD, lauf, beleg);
   assert.ok(!namen(beleg).includes(MUTATION), namen(beleg).join(", "));
   const zweiteRunde = readFileSync(join(werkzeug, "prompt-test.txt"), "utf8");
   for (const teil of ["## Testumbau", "gleicht test/rechnen.test.js:", WOZU, `dem Test-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
