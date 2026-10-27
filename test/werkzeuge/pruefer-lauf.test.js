@@ -244,12 +244,12 @@ test("der Arbeitsordner enthält kein .claude/, kein CLAUDE.md und keine .mcp.js
   assert.equal(ergebnis.zustand, "geprueft");
 });
 
-test("ein kritischer Commit läuft mit dem höchsten Denkaufwand", async (context) => {
+test("ein kritischer Commit läuft mit Denkaufwand xhigh", async (context) => {
   const { protokoll } = await pruefeMit(context, {
     aufnahme: aufzeichnung("gueltig"),
     dateien: { "src/telephony/anruf.js": "x\n" },
   });
-  assert.ok(protokoll.argumente.join(" ").includes("--effort max"));
+  assert.ok(protokoll.argumente.join(" ").includes("--effort xhigh"));
 });
 
 function gitMitProtokoll(context) {

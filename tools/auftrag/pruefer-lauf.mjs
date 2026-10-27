@@ -69,7 +69,7 @@ export function zeitgrenzeFuer(restzeitMs) {
 }
 
 export function effortFuer(commit) {
-  return commit.kritisch ? "max" : "medium";
+  return commit.kritisch ? "xhigh" : "medium";
 }
 
 function agentenText() {
