@@ -149,15 +149,15 @@ function zeilenlage(bisher, { erste, alle }) {
     gruppen: alle,
     offen: () => !lage.zu && lage.naechste < alle && freigegeben(),
     ruhend: () => lage.laufend === 0,
-    beginne: () => {
+    pruefeNaechsteGruppe: async (pruefen) => {
       lage.laufend += 1;
-      return lage.naechste++;
-    },
-    ende: (nummer, ausgang) => {
+      const nummer = lage.naechste++;
+      const ausgang = await pruefen(nummer).then((ergebnis) => ({ ergebnis }), (fehler) => ({ fehler }));
       lage.laufend -= 1;
       if (nummer < erste) lage.ersteFertig += 1;
       fertig[nummer] = ausgang;
       lage.zu ||= ausgang.ergebnis?.status !== UEBERLEBT;
+      return urteil(bisher, fertig, alle);
     },
     urteil: () => urteil(bisher, fertig, alle),
   };
@@ -180,12 +180,8 @@ async function verteilt(zeilen, kopie, pruefen) {
   const laufende = new Set();
   const gruppenlauf = (platz, zeile) => {
     const probe = pruefer(abbrechbar(kopie(platz)));
-    const nummer = zeile.beginne();
-    const ausgang = pruefen(probe, zeile.bisher, nummer).then((ergebnis) => ({ ergebnis }), (fehler) => ({ fehler }));
-    const lauf = ausgang.then((fertig) => {
+    const lauf = zeile.pruefeNaechsteGruppe((nummer) => pruefen(probe, zeile.bisher, nummer)).then(({ fehler }) => {
       laufende.delete(lauf);
-      zeile.ende(nummer, fertig);
-      const { fehler } = zeile.urteil();
       if (fehler !== undefined) lage.fehler.push(fehler);
     });
     laufende.add(lauf);
