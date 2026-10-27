@@ -104,7 +104,7 @@ function isDigitwise(raw) {
 const CARD_CONTEXT_STEMS = Object.freeze(["card", "carte", "karte"]);
 
 function isExemptByContext(candidate, before) {
-  if (/\D/.test(candidate.raw)) return false;
+  if (/\D/.test(candidate.raw) && !isDigitwise(candidate.raw)) return false;
   const isPhone = PHONE_CONTEXT_PATTERN.test(before) && candidate.raw.length <= PHONE_MAX_DIGITS;
   const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw);
   return isPhone || isReference;
@@ -199,7 +199,7 @@ const IBAN_COUNTRY_LENGTHS = Object.freeze({
   PT: 25, QA: 29, RO: 24, RS: 22, SA: 24, SC: 31, SE: 24, SI: 19, SK: 24, SM: 27,
   ST: 25, SV: 28, TL: 23, TN: 24, TR: 26, UA: 29, VA: 22, VG: 24, XK: 20,
 });
-const IBAN_CANDIDATE = /(?<![\p{L}\p{N}])[A-Za-z]{2}\d{2}(?:[ ]?[A-Za-z0-9]){11,30}/gu;
+const IBAN_CANDIDATE = /(?<![\p{L}\p{N}])[A-Za-z] ?[A-Za-z] ?\d ?\d(?:[ ]?[A-Za-z0-9]){11,30}/gu;
 const IBAN_COUNTRY_CODE_LENGTH = 2;
 const IBAN_HEADER_LENGTH = 4;
 const IBAN_MOD97_BASE = 97n;
@@ -213,8 +213,12 @@ function ibanChecksumValid(compact) {
   return BigInt(numeric) % IBAN_MOD97_BASE === IBAN_MOD97_VALID_REMAINDER;
 }
 
+function ibanCountryCode(raw) {
+  return raw.replace(/ /g, "").toUpperCase().slice(0, IBAN_COUNTRY_CODE_LENGTH);
+}
+
 function validIbanLength(raw) {
-  const expectedLength = IBAN_COUNTRY_LENGTHS[raw.slice(0, IBAN_COUNTRY_CODE_LENGTH).toUpperCase()];
+  const expectedLength = IBAN_COUNTRY_LENGTHS[ibanCountryCode(raw)];
   if (!expectedLength) return 0;
   let compactLength = 0;
   for (let index = 0; index < raw.length; index++) {
