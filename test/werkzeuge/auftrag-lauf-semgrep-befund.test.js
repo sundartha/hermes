@@ -4,7 +4,7 @@ import { delimiter, join } from "node:path";
 import { test } from "node:test";
 
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
+import { KOPIEN_LISTE, MELDUNG_OHNE_SEMGREP, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
@@ -13,10 +13,10 @@ const JSCPD = "jscpd";
 const AUSFUEHRBAR = 0o755;
 const VERSION = "1.0.0";
 const REGEL = "probe.regexp";
+const MUSTER = "new RegExp(";
 const WOZU = zweckBlock(SEMGREP)[0];
 const ABSATZ = `Zweck ${SEMGREP}: Drehbuchtext des Ersatz-Agenten.`;
 const LISTEN = { ...KOPIEN_LISTE, "tools/basis/semgrep.json": `${JSON.stringify({ version: VERSION, befunde: [] })}\n` };
-const MELDUNG_OHNE_SEMGREP = "semgrep läuft nicht; ohne ihn zählt kein Paar als nur Typen und lint bricht ab";
 const ZUR_LAUFZEIT = "export function passt(text, wort) {\n  return new RegExp(wort).test(text);\n}\n";
 const TEST_ZUR_LAUFZEIT = `${ROTER_TEST}test("passt", () => assert.ok(new RegExp(String(4)).test(String(verdopple(2)))));\n`;
 
@@ -32,7 +32,14 @@ if (process.argv.includes("--version")) {
   process.exit(0);
 }
 const dateien = ["src", "test"].filter((ordner) => existsSync(ordner)).flatMap((ordner) => readdirSync(ordner, { recursive: true }).map((name) => join(ordner, name)));
-const treffer = (path, text) => [...text.matchAll(/new RegExp\\(/g)].map(({ index }) => ({ check_id: ${JSON.stringify(REGEL)}, path, start: { line: text.slice(0, index).split("\\n").length, offset: index }, end: { offset: index + 11 } }));
+const muster = ${JSON.stringify(MUSTER)};
+const treffer = (path, text) => {
+  const gefunden = [];
+  for (let index = text.indexOf(muster); index !== -1; index = text.indexOf(muster, index + 1)) {
+    gefunden.push({ check_id: ${JSON.stringify(REGEL)}, path, start: { line: text.slice(0, index).split("\\n").length, offset: index }, end: { offset: index + muster.length } });
+  }
+  return gefunden;
+};
 console.log(JSON.stringify({ errors: [], results: dateien.filter((pfad) => pfad.endsWith(".js")).flatMap((pfad) => treffer(pfad, readFileSync(pfad, "utf8"))) }));
 `;
 }

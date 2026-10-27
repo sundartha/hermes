@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
+import { MELDUNG_OHNE_SEMGREP } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
-const MELDUNG_OHNE_SEMGREP = "semgrep läuft nicht; ohne ihn zählt kein Paar als nur Typen und lint bricht ab";
 const DATEI = "src/text.js";
 const DREHBUCH = { bau: { [DATEI]: "export const text = 1;\n" }, "bau-antwort": "Zweck semgrep-fehlt: Drehbuchtext des Ersatz-Agenten." };
 
