@@ -14,6 +14,8 @@ const GEPLANT = "Run";
 const NICHT_GELAUFEN = "Ignored";
 const GETOETET = "Killed";
 const ZEITUEBERSCHREITUNG = "Timeout";
+export const ERSTER_LAUF = "erster Lauf";
+const EINZELN_IM_ERSTEN_LAUF = new Set(["Survived", "NoCoverage", ZEITUEBERSCHREITUNG]);
 const SANDBOXPFAD = /^.*\/sandbox-[^/]+\//;
 const DATEINAME_OHNE = /:/g;
 const FORTSCHRITT_ABSTAND_MS = 30_000;
@@ -172,6 +174,10 @@ function zeitlogReporter(options) {
 }
 zeitlogReporter.inject = [OPTIONEN];
 
+function einzeln(anlass, { status }) {
+  return anlass !== ERSTER_LAUF || EINZELN_IM_ERSTEN_LAUF.has(status);
+}
+
 function zaehle(ergebnisse) {
   const status = {};
   for (const eintrag of ergebnisse) status[eintrag.status] = (status[eintrag.status] ?? 0) + 1;
@@ -199,6 +205,9 @@ function laufFertig(lauf, ergebnisse, fehler) {
   const zeiten = dauern(lauf, jetzt);
   verbuche(lauf.datei, zeiten);
   const { datei, anlass, testdateien, tests, geplant, langsamste } = lauf;
+  for (const { schluessel, lage, art, status, toeter } of ergebnisse.filter((eintrag) => einzeln(anlass, eintrag))) {
+    schreibe("mutant", { anlass, schluessel, datei, lage, mutator: art, status, toeter: toeter.length > 0 ? toeter : null });
+  }
   const status = zaehle(ergebnisse);
   const zahlen = { mutanten: ergebnisse.length, getoetet: status[GETOETET] ?? 0, ueberlebt: ergebnisse.filter(lauf.ueberlebt).length, zeitueberschreitung: status[ZEITUEBERSCHREITUNG] ?? 0 };
   schreibe("stryker", { datei, anlass, testdateien, tests, geplant, ms: jetzt - lauf.beginn, ...zeiten, ...zahlen, status, langsamste, ...(fehler ? { fehler: fehler.message } : {}) });
