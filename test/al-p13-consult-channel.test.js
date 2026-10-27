@@ -946,3 +946,50 @@ test("AL-P13-45: ein fleissig pollendes Modell kann sich nicht selbst mit 429 bl
     `${requestsPerMinute.toFixed(1)} Polls/min muessen unter ${limit} liegen`,
   );
 });
+
+async function mountRealStoreConsult() {
+  const realStore = await import("../src/store.js");
+  const call = realStore.createCall({
+    direction: "outbound",
+    from: "+4930111222333",
+    to: "+4915112345678",
+    tenantId: defaults.BOOTSTRAP_TENANT_ID,
+  });
+  realStore.emitConsult(call.id, ["Wie heisst der Hund?"]);
+  const srv = await mountCallRoutes(realStore);
+  const post = (body) =>
+    abrufMitFrist(`${srv.base}/api/calls/${call.id}/consult/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-tenant": defaults.BOOTSTRAP_TENANT_ID },
+      body: JSON.stringify(body),
+    });
+  const reload = () => realStore.getCall(call.id);
+  return { srv, post, reload };
+}
+
+test("AL-P13-52: fehlende answers -> 400 mit 'answers ist Pflicht', Rueckfrage bleibt offen", async () => {
+  const { srv, post, reload } = await mountRealStoreConsult();
+  try {
+    const res = await post({ event_id: "c0" });
+    assert.equal(res.status, HTTP_BAD_REQUEST);
+    assert.deepEqual(await res.json(), { error: "answers ist Pflicht" }, "Meldung bei fehlendem answers");
+    assert.equal(reload().consults[0].status, defaults.CONSULT_STATUS.OPEN);
+    assert.equal(reload().context, null, "nichts erreicht den Systemprompt");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("AL-P13-53: uebergrosse Antwort -> 400 traegt die Meldung der Validierung, nicht die Pflicht-Meldung", async () => {
+  const { srv, post, reload } = await mountRealStoreConsult();
+  try {
+    const tooLong = "x".repeat(defaults.KEY_FACTS_LIMITS.maxLen + 1);
+    const expected = validateAssistantContext({ key_facts: [tooLong] }).error;
+    const res = await post({ event_id: "c0", answers: [tooLong] });
+    assert.equal(res.status, HTTP_BAD_REQUEST);
+    assert.deepEqual(await res.json(), { error: expected }, "Meldung der Validierung");
+    assert.equal(reload().consults[0].status, defaults.CONSULT_STATUS.OPEN);
+  } finally {
+    await srv.stop();
+  }
+});
