@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { basename, dirname, join, normalize, relative } from "node:path";
+import { basename, dirname, join, normalize } from "node:path";
 import { chdir, cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -18,6 +18,7 @@ import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
+import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
@@ -95,7 +96,6 @@ const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
 const BESTAETIGUNG = "Bestätigung";
 const ABGELEHNT = "rejected";
-const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
 const AUFTRAGSWEG = /^Auftrag: [^\s/]+\/\S+$/m;
 const KURZ = 7;
@@ -273,12 +273,8 @@ function erreichendeTests(datei, nachZiel) {
   return { direkt: tests(nachZiel.get(datei) ?? []), alle: tests(erreicht) };
 }
 
-function mutant({ fileName, location, mutatorName, replacement, status, killedBy }) {
-  const datei = relative(cwd(), fileName);
-  const { line, column } = location.start;
-  const ersatz = (replacement ?? "").replace(LEERRAUM, " ");
-  const schluessel = `${datei}:${line}:${column} ${mutatorName} → ${ersatz}`;
-  return { schluessel, status, zeilen: [line, location.end.line], lage: location, art: mutatorName, toeter: killedBy ?? [] };
+function mutant({ location, mutatorName, status, killedBy, ...ergebnis }) {
+  return { ...mutantenOrt({ ...ergebnis, location, mutatorName }), status, lage: location, art: mutatorName, toeter: killedBy ?? [] };
 }
 
 function muster(datei, bereich) {

@@ -12,7 +12,7 @@ const URTEIL = /^(?:grün|rot): .+$/gm;
 const FORTSCHRITT_ABSTAND_S = 30;
 const MS_JE_SEKUNDE = 1000;
 const PHASEN = ["sperre", "testauswahl", "sandbox", "erstlauf", "mutanten", "loeschprobe"];
-const MIT_SPALTE = /^\S+:\d+:\d+ /;
+const MIT_SPALTE = /^\S+:\d+:\d+-\d+:\d+ /;
 const UEBERLEBEND = ["Survived", "NoCoverage"];
 const GETOETET = "Killed";
 const BESTAETIGUNGSLAUF = "im Bestätigungslauf";
@@ -106,7 +106,7 @@ test("das Zeit-Log nennt je überlebendem Mutanten Lage, Mutator und Status und 
   for (const verstoss of ueberlebende) {
     const treffer = mutanten.filter((eintrag) => eintrag.schluessel === verstoss && UEBERLEBEND.includes(eintrag.status));
     assert.ok(treffer.length > 0, `${verstoss}\n${JSON.stringify(mutanten)}`);
-    for (const { datei, lage, mutator } of treffer) assert.ok(verstoss.startsWith(`${datei}:${lage.start.line}:${lage.start.column} ${mutator} → `), `${verstoss}\n${JSON.stringify(treffer)}`);
+    for (const { datei, lage, mutator } of treffer) assert.ok(verstoss.startsWith(`${datei}:${lage.start.line}:${lage.start.column}-${lage.end.line}:${lage.end.column} ${mutator} → `), `${verstoss}\n${JSON.stringify(treffer)}`);
   }
   const bestaetigt = mutanten.filter(({ anlass, status }) => anlass === BESTAETIGUNGSLAUF && status === GETOETET);
   assert.ok(bestaetigt.length > 0, JSON.stringify(mutanten));
