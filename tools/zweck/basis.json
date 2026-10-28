@@ -96,5 +96,26 @@
     "behebung": "Die Datei oder den Ordner in den Unterordner legen, zu dem der Inhalt gehört, zum Beispiel ein Konzept nach docs/, ein Werkzeug nach tools/, ein Skript nach scripts/.",
     "nichtAngenommen": "Die Datei in einen Unterordner legen, zu dem sie nicht gehört, nur weil die Prüfung dort nicht hinsieht, ihre Endung ändern oder einen Eintrag in tools/basis/wurzel.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Muss die Datei in den Wurzelordner, weil ein Werkzeug sie nur dort findet (wie tsconfig.json), gehören Datei und Grund als Entscheidungsnotiz ins Issue; der neue Eintrag in tools/basis/wurzel.json braucht Antonios Approve und ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/wurzel/ wie tsconfig-in-der-wurzel.json."
+  },
+  "basis/bausteine-zuordnung": {
+    "liste": "ohne Nummer",
+    "wozu": "Jede Datei unter src/ gehört zu genau einem Baustein aus tools/bausteine.json, damit ihr Zweck, ihre erlaubten Abhängigkeiten und ihre Eingänge feststehen. Eine neue Datei direkt in src/ oder in einem Ordner ohne Baustein landete sonst in einem Sammelbecken ohne Grenzen. Die Karte nennt Ordner (mit / am Ende) und einzelne Dateien; ein genannter Dateiname gilt vor dem Ordner eines anderen Bausteins, und ein Name mit .js gilt auch für dieselbe Datei mit .ts.",
+    "behebung": "Die Datei in den Ordner des Bausteins legen, zu dessen Zweck sie gehört; die Meldung nennt den Baustein, der sie nutzt, und seine Ordner. Trifft eine Datei zwei Bausteine, gehört sie in den Ordner nur eines davon.",
+    "nichtAngenommen": "Einen Ordner oder Dateinamen in tools/bausteine.json ergänzen, die Datei in einen Ordner legen, zu dessen Baustein sie nicht gehört, nur weil die Karte den Ordner kennt, oder die Endung so wählen, dass die Prüfung sie nicht als Quelldatei sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Hat der passende Baustein keinen Ordner für die Datei, etwa bei einer neuen Route unter src/routes/, gehören Datei, Baustein und Grund als Entscheidungsnotiz ins Issue; die Karte bekommt den Eintrag vorab in einem eigenen PR mit Antonios Approve."
+  },
+  "basis/bausteine-eingaenge": {
+    "liste": "ohne Nummer",
+    "wozu": "Ein Baustein importiert aus einem anderen nur dessen Eingänge, die in tools/bausteine.json stehen. So bleibt das Innere eines Bausteins austauschbar, und jede neue öffentliche Datei ist eine sichtbare Entscheidung. Grundbausteine wie basis und texte haben jede Datei als Eingang, und start darf jede Datei importieren, weil er den Dienst zusammenbaut.",
+    "behebung": "Über einen Eingang des Bausteins importieren, den die Meldung nennt, oder die Logik in den eigenen Baustein legen, wenn nur er sie braucht.",
+    "nichtAngenommen": "Einen Eingang in tools/bausteine.json ergänzen, eine Durchreiche in einem Eingang anlegen, die nur weitergibt, was sie einbindet, die Datei kopieren oder den Import über start umleiten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Braucht der Auftrag wirklich eine neue öffentliche Datei eines anderen Bausteins, gehören Datei, Nutzer und Grund als Entscheidungsnotiz ins Issue; der neue Eingang kommt vorab in einem eigenen PR mit Antonios Approve."
+  },
+  "basis/bausteine-richtung": {
+    "liste": "ohne Nummer",
+    "wozu": "Abhängigkeiten gehen nur nach unten in der Schichtfolge aus tools/bausteine.json (basis, begriffe, konfiguration, mail und sperrdaten, texte, speicher, Fachbausteine, mcp und oberflaeche und betrieb, start); zwischen Fachbausteinen gilt nur, was die Karte bei nutzt nennt. Die Bausteinpaare, zwischen denen es heute Importe gegen diese Richtung gibt, stehen dort unter altlast und dürfen nur weniger werden; ein neues Paar gegen die Richtung ist rot.",
+    "behebung": "Die Logik in den importierenden Baustein oder einen tieferen legen, oder die Richtung umkehren: der höhere Baustein gibt den Wert oder die Funktion als Argument hinein. Ein Paar unter altlast, zwischen dem es keinen Import mehr gibt, wird aus tools/bausteine.json gestrichen.",
+    "nichtAngenommen": "Ein Paar unter altlast ergänzen, nutzt erweitern, die Schichtfolge ändern oder den Import in eine Form bringen, die dependency-cruiser nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Lässt sich die Richtung im Auftrag nicht umkehren, gehören Import und Grund als Entscheidungsnotiz ins Issue."
   }
 }

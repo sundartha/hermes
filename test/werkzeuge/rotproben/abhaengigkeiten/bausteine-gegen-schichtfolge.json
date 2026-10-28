@@ -1,0 +1,13 @@
+{
+  "titel": "Ein Grundbaustein importiert einen Fachbaustein",
+  "vorher": {
+    "src/claude.js": ["export const modell = \"probe\";"]
+  },
+  "dateien": {
+    "src/utils/modell-text.js": [
+      "import { modell } from \"../claude.js\";",
+      "export const text = modell;"
+    ]
+  },
+  "erwartet": "basis darf anrufe nicht nutzen"
+}

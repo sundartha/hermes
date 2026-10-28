@@ -164,7 +164,7 @@
     "liste": "B7",
     "wozu": "lauf fährt nach dem Test-Agenten und nach dem Bau-Agenten dieselbe Prüfung der Abhängigkeitsregeln wie ci-lokal am Phasenende (node tools/abhaengigkeiten.mjs gegen die Basis des Auftrags). So erfährt der Agent einen neuen Verstoß in der Runde, in der er ihn macht, statt dass die Phase erst nach Mutation und Commit rot wird. Den Grund und die echte Behebung der einzelnen Regel nennt ihr Block in der Ausgabe.",
     "behebung": "Den gemeldeten Verstoß so beheben, wie es der Block der Regel nennt; fehlt der Block, steht die Ursache in der Ausgabe der Prüfung.",
-    "nichtAngenommen": "Eine Regel in .dependency-cruiser.cjs ändern, einen Eintrag in .dependency-cruiser-known-violations.json oder tools/basis/test-importe.json ergänzen oder den Import in eine Form bringen, die dependency-cruiser nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "nichtAngenommen": "Eine Regel in .dependency-cruiser.cjs ändern, einen Eintrag in .dependency-cruiser-known-violations.json oder tools/basis/test-importe.json ergänzen, die Bausteinkarte tools/bausteine.json um einen Ordner, eine Datei, einen Eingang, eine Nutzung oder ein Altlast-Paar erweitern oder den Import in eine Form bringen, die dependency-cruiser nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
   },
   "ts-sperre": {

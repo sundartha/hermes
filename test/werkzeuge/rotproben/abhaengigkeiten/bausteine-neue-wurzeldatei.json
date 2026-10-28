@@ -1,0 +1,7 @@
+{
+  "titel": "Neue Datei direkt in src/ ohne Baustein",
+  "dateien": {
+    "src/nummern-sperre.js": ["export const sperre = true;"]
+  },
+  "erwartet": "Neue Datei direkt in src/: src/nummern-sperre.js gehört zu keinem Baustein"
+}

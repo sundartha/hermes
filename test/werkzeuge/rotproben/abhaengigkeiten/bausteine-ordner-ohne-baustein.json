@@ -1,0 +1,7 @@
+{
+  "titel": "Neue Datei in einem Ordner, den kein Baustein hat",
+  "dateien": {
+    "src/routes/api-sperre.js": ["export const route = true;"]
+  },
+  "erwartet": "Datei ohne Baustein: src/routes/api-sperre.js"
+}

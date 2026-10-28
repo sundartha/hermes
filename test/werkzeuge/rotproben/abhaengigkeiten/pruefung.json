@@ -8,7 +8,9 @@
     "tools/syntaxbaum.mjs",
     "tools/eslint-rules/knoten.js",
     "tools/abhaengigkeiten/bestaende.mjs",
-    "tools/bestand-rueckfuehrung.mjs"
+    "tools/bestand-rueckfuehrung.mjs",
+    "tools/abhaengigkeiten/bausteine.mjs",
+    "tools/bausteine.json"
   ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],
@@ -21,7 +23,7 @@
     "zaehlen": "anzahl"
   },
   "probe": {
-    "mitnehmen": [".dependency-cruiser.cjs"],
+    "mitnehmen": [".dependency-cruiser.cjs", "tools/bausteine.json"],
     "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "HEAD~1"]
   }
 }

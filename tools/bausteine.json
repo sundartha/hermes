@@ -1,0 +1,384 @@
+{
+  "schichten": [
+    ["basis"],
+    ["begriffe"],
+    ["konfiguration"],
+    ["mail", "sperrdaten"],
+    ["texte"],
+    ["speicher"],
+    [
+      "rueckfrage",
+      "posteingang",
+      "nummern",
+      "abrechnung",
+      "anmeldung",
+      "selbstbedienung",
+      "anrufe"
+    ],
+    ["mcp", "oberflaeche", "betrieb"],
+    ["start"]
+  ],
+  "bausteine": [
+    {
+      "baustein": "start",
+      "zweck": "Baut den Dienst zusammen und startet ihn.",
+      "quellen": [
+        "src/server.js",
+        "src/boot.js",
+        "src/app.js",
+        "src/boot-guard.js",
+        "src/mcp-server.js",
+        "src/process-guards.js",
+        "src/mail-boot-probe.js"
+      ],
+      "eingaenge": ["src/boot-guard.js"],
+      "nutzt": [],
+      "importiertJedeDatei": true
+    },
+    {
+      "baustein": "basis",
+      "zweck": "Reine technische Hilfen ohne Fachwissen: Zeit, Text, Sperren, Log-Maske, Metriken.",
+      "quellen": [
+        "src/utils/",
+        "src/util.js",
+        "src/chain-mutex.js",
+        "src/single-flight.js",
+        "src/log-maske.js",
+        "src/metrics.js",
+        "src/middleware.js",
+        "src/config-fingerprint.js",
+        "src/brand-icon-data.js",
+        "src/render-api.js"
+      ],
+      "eingaenge": "alle",
+      "nutzt": []
+    },
+    {
+      "baustein": "konfiguration",
+      "zweck": "Liest Umgebungsvariablen, prüft sie beim Start und liefert config nach Namensräumen.",
+      "quellen": ["src/config.js"],
+      "eingaenge": ["src/config.js"],
+      "nutzt": []
+    },
+    {
+      "baustein": "speicher",
+      "zweck": "Hält und speichert den Zustand, eine Fassade für alle.",
+      "quellen": [
+        "src/store/",
+        "src/store.js",
+        "src/db/",
+        "src/audit-store.js",
+        "src/durable-audit.js"
+      ],
+      "eingaenge": [
+        "src/audit-store.js",
+        "src/store.js",
+        "src/store/cost-evidence.js",
+        "src/store/defaults.js",
+        "src/store/portal.js",
+        "src/store/state-ops.js",
+        "src/store/views.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "texte",
+      "zweck": "Alle Texte und Sprachen.",
+      "quellen": ["src/i18n/"],
+      "eingaenge": "alle",
+      "nutzt": []
+    },
+    {
+      "baustein": "oberflaeche",
+      "zweck": "Widgets und Karten für die MCP-Oberfläche.",
+      "quellen": ["src/ui/"],
+      "eingaenge": [
+        "src/ui/adapters/mcp-native.js",
+        "src/ui/chatgpt-egress.js",
+        "src/ui/contract.js",
+        "src/ui/registry.js",
+        "src/ui/widget-catalog.js",
+        "src/ui/widget-i18n.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "mcp",
+      "zweck": "MCP-Werkzeuge: Eingabe prüfen, Gateway rufen, Ergebnis aufbereiten.",
+      "quellen": [
+        "src/mcp-tools.js",
+        "src/mcp-server-info.js",
+        "src/mcp-rate-limit.js",
+        "src/mcp-no-tenant.js",
+        "src/mcp-security-schemes.js",
+        "src/routes/mcp.js"
+      ],
+      "eingaenge": [],
+      "nutzt": ["oberflaeche"]
+    },
+    {
+      "baustein": "mail",
+      "zweck": "Mailversand über Brevo und SMTP.",
+      "quellen": ["src/brevo-mail.js", "src/smtp-mail.js"],
+      "eingaenge": ["src/brevo-mail.js", "src/smtp-mail.js"],
+      "nutzt": []
+    },
+    {
+      "baustein": "sperrdaten",
+      "zweck": "Erkennen und Maskieren eingeschränkter Daten.",
+      "quellen": ["src/restricted-data.js"],
+      "eingaenge": ["src/restricted-data.js"],
+      "nutzt": []
+    },
+    {
+      "baustein": "betrieb",
+      "zweck": "Interne Betriebsrouten (Deploy-Info, Anrufpause, laufende Anrufe) und Eingabeprüfung.",
+      "quellen": [
+        "src/routes/api-deploy-info.js",
+        "src/routes/intern-anrufe-laufend.js",
+        "src/routes/intern-anrufpause.js",
+        "src/routes/_validation.js"
+      ],
+      "eingaenge": [
+        "src/routes/_validation.js",
+        "src/routes/intern-anrufe-laufend.js",
+        "src/routes/intern-anrufpause.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "rueckfrage",
+      "zweck": "Rückfragen während des Anrufs.",
+      "quellen": ["src/consult/", "src/conversation/consult-raised.js"],
+      "eingaenge": [
+        "src/consult/delivery.js",
+        "src/consult/gate.js",
+        "src/consult/in-call.js",
+        "src/conversation/consult-raised.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "posteingang",
+      "zweck": "Posteingang und Zusammenfassungen nach dem Anruf.",
+      "quellen": [
+        "src/inbox-entry.js",
+        "src/sms-summary.js",
+        "src/mail-summary.js",
+        "src/mail-not-placed.js",
+        "src/routes/api-inbox.js"
+      ],
+      "eingaenge": ["src/mail-not-placed.js", "src/mail-summary.js"],
+      "nutzt": []
+    },
+    {
+      "baustein": "abrechnung",
+      "zweck": "Pläne, Zahlung, Budget, Kostenbelege und Abgleich.",
+      "quellen": [
+        "src/billing/",
+        "src/plans.js",
+        "src/budget-gate.js",
+        "src/llm-usage.js",
+        "src/llm-billing-outage.js",
+        "src/elevenlabs/kosten-beleg.js",
+        "src/routes/api-billing.js",
+        "src/routes/stripe-webhook.js",
+        "src/telephony/budget-watchdog.js"
+      ],
+      "eingaenge": [
+        "src/billing/activation.js",
+        "src/billing/cancellation-mail.js",
+        "src/billing/card-setup.js",
+        "src/billing/contract-end-cleanup.js",
+        "src/billing/cost-calibration.js",
+        "src/billing/kostenarten.js",
+        "src/billing/meter.js",
+        "src/billing/metering.js",
+        "src/billing/payment-gate.js",
+        "src/billing/payment-method-eligibility.js",
+        "src/billing/period.js",
+        "src/billing/plan-caps.js",
+        "src/billing/provision-outcome.js",
+        "src/billing/provision-retry.js",
+        "src/billing/stripe-reconcile.js",
+        "src/billing/stripe.js",
+        "src/billing/subscribe.js",
+        "src/billing/subscription-cancellation.js",
+        "src/budget-gate.js",
+        "src/elevenlabs/kosten-beleg.js",
+        "src/llm-billing-outage.js",
+        "src/llm-usage.js",
+        "src/plans.js",
+        "src/routes/stripe-webhook.js",
+        "src/telephony/budget-watchdog.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "nummern",
+      "zweck": "Nummern bestellen, binden und freigeben.",
+      "quellen": [
+        "src/onboarding.js",
+        "src/release-reconcile.js",
+        "src/worker/",
+        "src/queue/",
+        "src/telephony/provisioning-geo.js",
+        "src/telephony/absender-registrierung.js",
+        "src/telephony/adapters/telnyx/numbers.js",
+        "src/elevenlabs/nummern-registrierung.js",
+        "src/elevenlabs/inbound-trunk-beleg.js"
+      ],
+      "eingaenge": [
+        "src/elevenlabs/nummern-registrierung.js",
+        "src/release-reconcile.js",
+        "src/telephony/absender-registrierung.js",
+        "src/telephony/adapters/telnyx/numbers.js",
+        "src/telephony/provisioning-geo.js"
+      ],
+      "nutzt": ["abrechnung"]
+    },
+    {
+      "baustein": "anmeldung",
+      "zweck": "Login, Mandant zur Anfrage und Rechte.",
+      "quellen": [
+        "src/auth.js",
+        "src/web-auth.js",
+        "src/route-policy.js",
+        "src/request-tenant.js",
+        "src/workos-management.js",
+        "src/orphan-account-reconcile.js",
+        "src/portal-pool.js",
+        "src/wiring/",
+        "src/routes/_tenant.js",
+        "src/elevenlabs/tenant-tool-token.js"
+      ],
+      "eingaenge": [
+        "src/auth.js",
+        "src/elevenlabs/tenant-tool-token.js",
+        "src/request-tenant.js",
+        "src/routes/_tenant.js",
+        "src/wiring/internal-only.js",
+        "src/wiring/operator-routes.js"
+      ],
+      "nutzt": []
+    },
+    {
+      "baustein": "selbstbedienung",
+      "zweck": "Website-Anmeldung, Portal, Newsletter und Geo.",
+      "quellen": [
+        "src/self-service-routes.js",
+        "src/self-service.js",
+        "src/portal-paths.js",
+        "src/cookie-consent-log.js",
+        "src/newsletter-recipients.js",
+        "src/onboard-guard.js",
+        "src/geo/",
+        "src/routes/api-onboard.js"
+      ],
+      "eingaenge": [
+        "src/cookie-consent-log.js",
+        "src/geo/resolve.js",
+        "src/newsletter-recipients.js",
+        "src/portal-paths.js",
+        "src/self-service-routes.js",
+        "src/self-service.js"
+      ],
+      "nutzt": ["abrechnung", "anmeldung"]
+    },
+    {
+      "baustein": "anrufe",
+      "zweck": "Anruf führen: Telefonie, ElevenLabs, LLM, TTS, Recherche und Anruf-Routen.",
+      "quellen": [
+        "src/telephony/",
+        "src/elevenlabs/",
+        "src/conversation/",
+        "src/llm/",
+        "src/tts/",
+        "src/research/",
+        "src/llm.js",
+        "src/claude.js",
+        "src/precall-briefing.js",
+        "src/call-confirmation.js",
+        "src/call-duration.js",
+        "src/call-memory.js",
+        "src/call-result.js",
+        "src/callee-is-owner.js",
+        "src/diagnostic-retention.js",
+        "src/no-speech-escalation.js",
+        "src/speech-chunker.js",
+        "src/speech-shape.js",
+        "src/thinking-signal.js",
+        "src/tool-follow-up.js",
+        "src/turn-budget.js",
+        "src/routes/voice.js",
+        "src/routes/webhooks-elevenlabs-init.js",
+        "src/routes/webhooks-elevenlabs.js",
+        "src/routes/api-calls.js",
+        "src/routes/api-call-confirmations.js",
+        "src/routes/api-read.js",
+        "src/routes/_call-request.js"
+      ],
+      "eingaenge": [
+        "src/call-confirmation.js",
+        "src/call-memory.js",
+        "src/call-result.js",
+        "src/claude.js",
+        "src/elevenlabs/convai.js",
+        "src/elevenlabs/inbound-bridge-state.js",
+        "src/elevenlabs/inbound-path-decision.js",
+        "src/elevenlabs/inbound-rueckfall.js",
+        "src/elevenlabs/inbound-scope.js",
+        "src/elevenlabs/outbound.js",
+        "src/llm.js",
+        "src/llm/provider.js",
+        "src/llm/registry.js",
+        "src/routes/webhooks-elevenlabs-init.js",
+        "src/telephony/adapters/telnyx/cost-parse.js",
+        "src/telephony/adapters/telnyx/errors.js",
+        "src/telephony/adapters/telnyx/http.js",
+        "src/telephony/alert-sms.js",
+        "src/telephony/failure-reason.js",
+        "src/telephony/number-denylist.js",
+        "src/telephony/outage-report.js",
+        "src/telephony/outbound-gates.js",
+        "src/telephony/registry.js",
+        "src/telephony/sip-call-id.js",
+        "src/telephony/stt-profile.js"
+      ],
+      "nutzt": ["rueckfrage", "abrechnung"]
+    }
+  ],
+  "altlast": [
+    { "von": "abrechnung", "nach": "anmeldung" },
+    { "von": "abrechnung", "nach": "anrufe" },
+    { "von": "abrechnung", "nach": "nummern" },
+    { "von": "abrechnung", "nach": "selbstbedienung" },
+    { "von": "abrechnung", "nach": "start" },
+    { "von": "anmeldung", "nach": "abrechnung" },
+    { "von": "anmeldung", "nach": "anrufe" },
+    { "von": "anmeldung", "nach": "betrieb" },
+    { "von": "anmeldung", "nach": "nummern" },
+    { "von": "anmeldung", "nach": "selbstbedienung" },
+    { "von": "anmeldung", "nach": "start" },
+    { "von": "anrufe", "nach": "anmeldung" },
+    { "von": "anrufe", "nach": "betrieb" },
+    { "von": "anrufe", "nach": "nummern" },
+    { "von": "anrufe", "nach": "posteingang" },
+    { "von": "anrufe", "nach": "selbstbedienung" },
+    { "von": "basis", "nach": "konfiguration" },
+    { "von": "basis", "nach": "sperrdaten" },
+    { "von": "konfiguration", "nach": "abrechnung" },
+    { "von": "konfiguration", "nach": "anrufe" },
+    { "von": "konfiguration", "nach": "speicher" },
+    { "von": "konfiguration", "nach": "start" },
+    { "von": "nummern", "nach": "anrufe" },
+    { "von": "posteingang", "nach": "anmeldung" },
+    { "von": "posteingang", "nach": "anrufe" },
+    { "von": "selbstbedienung", "nach": "betrieb" },
+    { "von": "selbstbedienung", "nach": "nummern" },
+    { "von": "speicher", "nach": "abrechnung" },
+    { "von": "speicher", "nach": "anrufe" },
+    { "von": "texte", "nach": "anrufe" },
+    { "von": "texte", "nach": "speicher" }
+  ]
+}
