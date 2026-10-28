@@ -67,8 +67,9 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { safeEqual } from "../util.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
+import { MS_PER_DAY, newId, tenantsOf } from "./zustand/grundlagen.js";
+export { newId, tenantsOf } from "./zustand/grundlagen.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
 
 export function makeDefaultState() {
@@ -110,10 +111,6 @@ export async function anrufpauseSetzen(speicher, an) {
     throw err;
   }
   return an;
-}
-
-export function newId(prefix) {
-  return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 function requireTenantId(tenantId) {
@@ -1056,8 +1053,6 @@ export function canTransitionNumber(from, to) {
 export function findNumber(state, id) {
   return state.numbers.find((number) => number.id === id) || null;
 }
-
-export const tenantsOf = (state) => state.tenants || [];
 
 export function findTenant(state, id) {
   return tenantsOf(state).find((tenant) => tenant.id === id) || null;
