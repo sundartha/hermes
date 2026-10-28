@@ -34,11 +34,10 @@ const CONTEXT_WINDOW_CHARS = 32;
 const CARD_MIN_DIGITS_WITHOUT_CARD_WORD = 15;
 const DIGITWISE_PHONE_MIN_DIGITS = 16;
 
-const CARD_GAP_SPACE = "[ \\t\\u00A0\\u202F]";
-const CARD_GAP_MARK = "(?:\\.{1,3}|[-_/;,\\u2026])";
-const CARD_GAP = `(?:${CARD_GAP_SPACE}?${CARD_GAP_MARK}${CARD_GAP_SPACE}?|${CARD_GAP_SPACE})?`;
-const CARD_CANDIDATE = new RegExp(`(?<![+\\d])\\d(?:${CARD_GAP}\\d){11,18}(?!\\d)`, "g");
-const CARD_CONTINUATION = new RegExp(`(?:${CARD_GAP}\\d){1,${CARD_MAX_DIGITS}}(?!\\d)`, "y");
+const CARD_CANDIDATE =
+  /(?<![+\d])\d(?:(?:[ \t\u00A0\u202F]?(?:\.{1,3}|[-_/;,\u2026])[ \t\u00A0\u202F]?|[ \t\u00A0\u202F])?\d){11,18}(?!\d)/g;
+const CARD_CONTINUATION =
+  /(?:(?:[ \t\u00A0\u202F]?(?:\.{1,3}|[-_/;,\u2026])[ \t\u00A0\u202F]?|[ \t\u00A0\u202F])?\d){1,19}(?!\d)/y;
 
 const PHONE_CONTEXT_WORDS = Object.freeze([
   "r(?:ü|ue)ckruf(?:nummer)?",

@@ -218,3 +218,29 @@ test("1 MB aus der Ziffer 1 getrennt mit Komma und Leerzeichen wird innerhalb de
 test("1 MB aus der Ziffer 1 mit gemischten Trennzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
   assertUnveraendertInnerhalbDerGrenze("1 - 1_1, 1-".repeat(MEGABYTE_CHARS / 11));
 });
+
+const VORANGESTELLTE_ZIFFERN = "092600";
+const KARTENENDE_MASTERCARD = "****4444";
+
+function maskiertEndetMitKartenende(text) {
+  const masked = maskRestrictedText(text);
+  assert.ok(masked.endsWith(KARTENENDE_MASTERCARD), `Kartenende nicht maskiert: ${masked}`);
+  assert.ok(!masked.includes("5 5 5 5 5") && !masked.includes("5-5-5-5-5"), `Kartennummer im Klartext: ${masked}`);
+}
+
+test("ziffernweise Karte nach sechs vorangestellten Ziffern mit Leerzeichen erscheint in maskRestrictedText bis zur letzten Ziffer maskiert", () => {
+  maskiertEndetMitKartenende(`Karte ${ziffernMit(VORANGESTELLTE_ZIFFERN, " ")} ${ziffernMit(MASTERCARD_16, " ")}`);
+});
+
+test("ziffernweise Karte nach sechs vorangestellten Ziffern mit drei Auslassungspunkten erscheint in maskRestrictedText bis zur letzten Ziffer maskiert", () => {
+  maskiertEndetMitKartenende(`Karte ${ziffernMit(VORANGESTELLTE_ZIFFERN, " ")} ${ziffernMit(MASTERCARD_16, "...")}`);
+});
+
+test("ziffernweise Karte nach sechs vorangestellten Ziffern mit Bindestrich ohne Leerzeichen erscheint in maskRestrictedText bis zur letzten Ziffer maskiert", () => {
+  maskiertEndetMitKartenende(`Karte ${ziffernMit(VORANGESTELLTE_ZIFFERN, " ")} ${ziffernMit(MASTERCARD_16, "-")}`);
+});
+
+test("19 ziffernweise Ziffern mit zwei zusammenhängenden Ziffern dahinter bleiben in maskRestrictedText unverändert (bisherige Erkennung)", () => {
+  const eingabe = `Karte ${ziffernMit(`${MASTERCARD_16}000`, " ")} 12`;
+  assert.equal(maskRestrictedText(eingabe), eingabe);
+});
