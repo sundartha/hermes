@@ -1,0 +1,11 @@
+{
+  "titel": "Zustandsfunktion ändert einen Parameter, der weder state noch tenant heißt",
+  "dateien": {
+    "src/store/zustand/rotprobe.js": [
+      "export function setze(nutzung) {",
+      "  nutzung.wert = true;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-param-reassign\""
+}
