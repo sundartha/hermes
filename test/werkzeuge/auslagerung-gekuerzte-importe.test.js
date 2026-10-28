@@ -6,6 +6,7 @@ const MASSE = {
   "src/masse.js": 'export const GRENZE = 0;\nexport const STUFE = "aus";\nexport const EXTRA = 1;\nexport function runde(wert) {\n  return Math.round(wert);\n}\n',
   "src/anders.js": 'export const GRENZE = 1;\nexport const STUFE = "an";\nexport function runde(wert) {\n  return wert;\n}\n',
   "src/tot.js": "export const TOT = 1;\n",
+  "src/standard.js": "export default 2;\n",
 };
 const KOPF = 'import { einordnen } from "./zahl.js";';
 const ALLE_NAMEN = 'import { GRENZE, STUFE, runde } from "./masse.js";';
@@ -125,6 +126,18 @@ test("Auslagerung mit gekürzten Importen: teilt die alte Datei eine Importanwei
   const geteilt = 'import { GRENZE } from "./masse.js";\nimport { STUFE } from "./masse.js";';
   const rest = 'export function pruefen(wert) {\n  return einordnen(wert) === "negativ" ? STUFE : GRENZE;\n}';
   istKeineReineAuslagerung(context, kuerzung(context, { alt, nachher: geteilt, neuKopf: 'import { runde } from "./masse.js";', rest, verschoben: [GERUNDET] }));
+});
+
+test("Auslagerung mit gekürzten Importen: streicht die alte Datei einen Standard-Import, den die neue Datei gleich importiert und liest, ist es keine reine Auslagerung", (context) => {
+  const alt = 'import FAKTOR from "./standard.js";';
+  const verdoppelt = "export function verdoppelt(wert) {\n  return wert * FAKTOR;\n}";
+  istKeineReineAuslagerung(context, kuerzung(context, { alt, nachher: 'import "./standard.js";', neuKopf: alt, rest: OHNE_NAMEN, verschoben: [verdoppelt] }));
+});
+
+test("Auslagerung mit gekürzten Importen: streicht die alte Datei einen Namensraum-Import, den die neue Datei gleich importiert und liest, ist es keine reine Auslagerung", (context) => {
+  const alt = 'import * as masse from "./masse.js";';
+  const oberhalbVon = "export function oberhalbVon(wert) {\n  return wert > masse.GRENZE;\n}";
+  istKeineReineAuslagerung(context, kuerzung(context, { alt, nachher: OHNE_NAMEN_IMPORT, neuKopf: alt, rest: OHNE_NAMEN, verschoben: [oberhalbVon] }));
 });
 
 test("Auslagerung mit gekürzten Importen: streicht die alte Datei einen Namen, den sie unter Alias importierte, ist es keine reine Auslagerung, auch wenn die neue Datei denselben Alias importiert", (context) => {

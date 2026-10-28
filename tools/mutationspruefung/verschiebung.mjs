@@ -380,7 +380,7 @@ function gestrichenWirdVonNeuenGelesen(vorher, nachher, neue) {
   const bleibt = new Set(bindungen(nachher.pfad, nachher.baum));
   const gestrichen = bindungen(vorher.pfad, vorher.baum).filter((bindung) => !bleibt.has(bindung));
   const gelesen = neue.map((datei) => geltungsbereich(datei).gelesen);
-  const ohneAlias = ([, art, importiert, lokal]) => art !== "ImportSpecifier" || importiert === lokal;
+  const ohneAlias = ([, art, importiert, lokal]) => art === "ImportSpecifier" && importiert === lokal;
   return gestrichen.map((bindung) => JSON.parse(bindung)).every((teile) => ohneAlias(teile) && gelesen.some((namen) => namen.has(teile.at(-1))));
 }
 
