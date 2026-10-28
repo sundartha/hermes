@@ -4,6 +4,7 @@ import {
   abhaengigkeitenUmgezogen,
   schluesselUmgezogen,
 } from "./auftrag/listen-eintraege-umzug.mjs";
+import { UNTERDRUECKUNGEN, auslagerungsHerkunft, listeNachAuslagerung } from "./auslagerung-eintraege.mjs";
 import { fileAt, git } from "./pruefungen-messen.mjs";
 
 const UMBENANNT = /^R\d*$/;
@@ -66,4 +67,21 @@ export function pfadumzuege(basis, changes) {
   const neuFuer = umbenennungen(basis);
   if (neuFuer.size === 0) return new Set();
   return new Set(geaendert.filter((pfad) => nurUmgezogen(basis, pfad, neuFuer)));
+}
+
+async function auslagerungNachgerechnet(basis, root) {
+  const [vorher, nachher] = [basis, KOPF].map((commit) => gelesen(commit, UNTERDRUECKUNGEN));
+  if (!istObjekt(vorher) || !istObjekt(nachher)) return false;
+  const herkunft = await auslagerungsHerkunft({ von: basis, bis: KOPF }, root);
+  const liste = await listeNachAuslagerung(vorher, herkunft, root);
+  return liste !== undefined && !isDeepStrictEqual(liste, vorher) && isDeepStrictEqual(liste, nachher);
+}
+
+export async function auslagerungsumzuege(basis, changes) {
+  if (!changes.some(({ path }) => path === UNTERDRUECKUNGEN)) return new Set();
+  try {
+    return (await auslagerungNachgerechnet(basis, process.cwd())) ? new Set([UNTERDRUECKUNGEN]) : new Set();
+  } catch {
+    return new Set();
+  }
 }
