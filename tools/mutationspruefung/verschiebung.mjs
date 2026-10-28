@@ -297,17 +297,8 @@ function importeAusVorher(vorher, { pfad, baum }) {
   return importeVon(baum).every(({ specifiers }) => specifiers.length > 0) && bindungen(pfad, baum).every((bindung) => gebunden.has(bindung));
 }
 
-function zieleVon({ pfad, baum }) {
-  return importeVon(baum).map(({ source }) => zielDer(pfad, source.value));
-}
-
 function laedtAlleNeuen({ pfad, baum }, neue) {
   return neue.every((neu) => baum.body.some((anweisung) => holtAusNeuer(pfad, anweisung, [neu])));
-}
-
-function nichtsFaelltWeg(vorher, nachher, neue) {
-  const geladen = new Set([nachher, ...neue].flatMap(zieleVon));
-  return laedtAlleNeuen(nachher, neue.map(({ pfad }) => pfad)) && zieleVon(vorher).every((datei) => geladen.has(datei));
 }
 
 function istKuerzung(alt, anweisung) {
@@ -321,13 +312,14 @@ function istKuerzung(alt, anweisung) {
 }
 
 function importeDerHilfe(vorher, nachher, neue) {
-  const frei = importeVon(vorher.baum);
-  const ordneZu = (anweisung) => {
-    const stelle = frei.findIndex((alt) => istKuerzung(alt, anweisung));
-    if (stelle !== -1) frei.splice(stelle, 1);
-    return stelle !== -1;
-  };
-  return importeVon(nachher.baum).every((anweisung) => holtAusNeuer(nachher.pfad, anweisung, neue) || ordneZu(anweisung));
+  const alte = importeVon(vorher.baum);
+  const behalten = importeVon(nachher.baum).filter((anweisung) => !holtAusNeuer(nachher.pfad, anweisung, neue));
+  return behalten.length === alte.length && behalten.every((anweisung, stelle) => istKuerzung(alte[stelle], anweisung));
+}
+
+function neueHinterDenImporten({ pfad, baum }, neue) {
+  const letzterAlter = baum.body.findLastIndex((anweisung) => istImport(anweisung) && !holtAusNeuer(pfad, anweisung, neue));
+  return baum.body.every((anweisung, stelle) => stelle > letzterAlter || !holtAusNeuer(pfad, anweisung, neue));
 }
 
 function namenDerDeklaration(deklaration) {
@@ -394,8 +386,8 @@ function gestrichenWirdVonNeuenGelesen(vorher, nachher, neue) {
 
 function gleicherGraph(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
-  const importe = importeDerHilfe(vorher, nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
-  return neue.every((datei) => importeAusVorher(vorher, datei)) && importe && nichtsFaelltWeg(vorher, nachher, neue);
+  const importe = importeDerHilfe(vorher, nachher, neuePfade) && neueHinterDenImporten(nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
+  return neue.every((datei) => importeAusVorher(vorher, datei)) && importe && laedtAlleNeuen(nachher, neuePfade);
 }
 
 function jedeNeueWeitergereicht(nachher, neue) {

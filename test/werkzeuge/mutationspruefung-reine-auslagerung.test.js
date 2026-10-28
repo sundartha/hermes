@@ -19,6 +19,8 @@ const GRENZEN = "export const GRENZEN = Object.freeze({ unten: 0, oben: 1, stufe
 const DOPPELT = "export const doppelt = (wert) => wert * 2;";
 const GLEICH = "export function gleich(wert) {\n  assert.equal(wert, MINUS);\n}";
 const NEGATIV = "export function negativ() {\n  return einordnen(GRENZEN.unten);\n}";
+const SICHER_OHNE_NAMEN = 'import "node:assert/strict";';
+const WERTE_OHNE_NAMEN = 'import "./werte.js";';
 const AUS_NEU = 'import { GRENZEN } from "../gemeinsam/ohne-quelle.js";';
 const ALLES_WEITER = 'export * from "../gemeinsam/ohne-quelle.js";';
 
@@ -28,7 +30,7 @@ function datei(...teile) {
 
 const VORHER = { kopf: [SICHER, QUELLE, WERTE_IN_HILFE], rumpf: [GRENZEN, DOPPELT, GLEICH, NEGATIV] };
 const AUSGELAGERT = { kopf: [SICHER, WERTE_IN_NEU], rumpf: [GRENZEN, DOPPELT, GLEICH] };
-const NACHHER = { kopf: [QUELLE, AUS_NEU], rumpf: [ALLES_WEITER, NEGATIV] };
+const NACHHER = { kopf: [SICHER_OHNE_NAMEN, QUELLE, WERTE_OHNE_NAMEN, AUS_NEU], rumpf: [ALLES_WEITER, NEGATIV] };
 
 function aufgebaut({ kopf, rumpf }) {
   return datei(kopf.join("\n"), ...rumpf);
@@ -117,6 +119,10 @@ test("Reine Auslagerung: eine Hilfe gibt eine Funktion, eine Pfeilfunktion und e
 test("Reine Auslagerung: dieselbe Auslagerung mit benannter Weiterreichung startet keine Testumbau-Mutation", async (context) => {
   const benannt = 'export { GRENZEN, doppelt, gleich } from "../gemeinsam/ohne-quelle.js";';
   erkannt(await nachAuslagerung(context, { nachher: mitRumpf(NACHHER, [benannt, NEGATIV]) }));
+});
+
+test("Reine Auslagerung: verliert die Hilfe eine ganze Importanweisung, deren Modul die neue Hilfe lädt, führt das zur vollen Testumbau-Mutation", async (context) => {
+  vollGerechnet(await nachAuslagerung(context, { nachher: mitKopf(NACHHER, [QUELLE, AUS_NEU]) }));
 });
 
 test("Reine Auslagerung: ein geändertes Literal in einer verschobenen Anweisung führt zur vollen Testumbau-Mutation", async (context) => {
