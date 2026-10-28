@@ -410,3 +410,49 @@ test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE
     },
   );
 });
+
+const CONSULT_ANSWER_REJECTED_HTTP = 400;
+const CONSULT_ANSWER_CONFLICT_HTTP = 409;
+
+async function answerConsultAgainst(status, language) {
+  const mock = await startGatewayMock({ body: { error: "nope" }, status });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({
+      identity: null,
+      scopedTenant: `tenant-${language}`,
+      language,
+      consultAllowed: true,
+    });
+    return await handlers.get("answer_consult")({
+      call_id: "call_1",
+      event_id: "ev_1",
+      answers: ["Ja"],
+    });
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+}
+
+test("answer_consult: abgelehnte oder nicht mehr offene Antwort kommt als Textinhalt in der Tenant-Sprache", async () => {
+  const cases = [
+    [CONSULT_ANSWER_REJECTED_HTTP, "consultAnswerRejected"],
+    [CONSULT_ANSWER_CONFLICT_HTTP, "consultNoLongerOpen"],
+  ];
+  for (const [status, key] of cases) {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const result = await answerConsultAgainst(status, language);
+      assert.deepEqual(
+        result,
+        {
+          content: [{ type: "text", text: MCP_TEXTS[language][key] }],
+          structuredContent: { accepted: false, merged_facts: 0 },
+        },
+        `HTTP ${status} in ${language} liefert genau einen Textinhalt und accepted=false`,
+      );
+    }
+  }
+});
