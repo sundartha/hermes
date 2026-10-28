@@ -46,7 +46,7 @@ export function erlaubt(aus, nach) {
   return nach.schicht < aus.schicht || aus.nutzt.has(nach.baustein);
 }
 
-function erlaubteNamen(karte, aus) {
+export function erlaubteNamen(karte, aus) {
   const namen = karte.bausteine.filter((nach) => nach !== aus && erlaubt(aus, nach)).map(({ baustein }) => baustein);
   return namen.length > 0 ? namen.join(", ") : LEER;
 }

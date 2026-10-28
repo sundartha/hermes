@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import { blockFindings, coveredLines, expectedBlocks, FOLDER_INSTRUCTIONS } from "./anweisungen-karte.mjs";
+
 const KEY_SEPARATOR = "|";
 const PATH_SEPARATOR = "/";
 const LINE_BREAK = "\n";
@@ -14,7 +16,6 @@ const NESTED_RULES_DIRECTORY = `${PATH_SEPARATOR}${RULES_DIRECTORY}`;
 const MARKDOWN_SUFFIX = ".md";
 const IGNORED_SEGMENT = "node_modules";
 const SOURCE_DIRECTORY = "src";
-const FOLDER_INSTRUCTIONS = "CLAUDE.md";
 const MIN_PARTS_IN_SOURCE_FOLDER = 3;
 const WITHOUT_OWN_RULES = "ohne-eigene-regeln";
 const ROOT_ENTRY = "wurzel-eintrag";
@@ -105,12 +106,16 @@ function folderFindings(files) {
 
 export function instructionFindings(root) {
   const files = trackedFiles(root);
-  const lines = files.filter(isInstructionFile).flatMap((path) => numberedLines(root, path));
+  const blocks = expectedBlocks(root);
+  const covered = coveredLines(root, blocks);
+  const allLines = files.filter(isInstructionFile).flatMap((path) => numberedLines(root, path));
+  const lines = allLines.filter(({ path, number }) => !covered.has(`${path}:${number}`));
   return [
     ...lines.map(lineFinding),
     ...duplicateFindings(lines),
-    ...importFindings(lines),
+    ...importFindings(allLines),
     ...folderFindings(files),
+    ...blockFindings(root, blocks),
   ];
 }
 
