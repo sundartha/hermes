@@ -6,6 +6,13 @@ import {
   SUBSCRIPTION_EVENT,
 } from "../src/billing/webhook.js";
 import { MONEY_EVENT, PAYMENT_ACTION_GRACE_HOURS } from "../src/billing/money-events.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { config } from "../src/config.js";
+
+config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-p4-geldereignisse-"));
+const echterSpeicher = await import("../src/store.js");
 
 const CUSTOMER = "cus_money1";
 const TENANT = "t_money1";
@@ -108,7 +115,7 @@ test("Doppelzustellung derselben event.id -> Wirkung genau einmal (applyStripeWe
   assert.equal(store.calls.setTenantSubscription.length, 1, "genau EIN Write trotz zweifacher Zustellung");
 });
 
-test("ACTIVATE loescht Hold UND Revocation (Reversibilitaet)", async () => {
+test("Aktivierung derselben Periode löst die Sperre und schreibt nichts am Entzug", async () => {
   const store = fakeMoneyStore();
   store.tenantStripe = () => ({ customerId: null, paymentMethodId: null });
   store.setTenantStripe = () => {};
@@ -138,11 +145,10 @@ test("ACTIVATE loescht Hold UND Revocation (Reversibilitaet)", async () => {
   );
   assert.deepEqual(setStatusCalls, [[TENANT, "active"]]);
   assert.deepEqual(store.calls.clearBillingHold, [TENANT]);
-  assert.ok(
-    store.calls.setTenantSubscription.some(
-      ([t, patch]) => t === TENANT && patch.periodCreditRevoked === false,
-    ),
-    "periodCreditRevoked wird auf false zurueckgesetzt",
+  assert.deepEqual(
+    store.calls.setTenantSubscription.filter(([, patch]) => "periodCreditRevoked" in patch),
+    [],
+    "Aktivierung derselben Periode schreibt den Entzug neu",
   );
   void priorTenantSubscription;
 });
@@ -166,4 +172,108 @@ test("unbekannter Tenant (customerId ohne Treffer) -> no_tenant-Audit, kein Writ
     ),
   );
   assert.deepEqual(store.calls.setTenantSubscription, []);
+});
+
+const JANUAR = 1_890_864_000;
+const FEBRUAR = 1_893_456_000;
+let kundenZaehler = 0;
+
+function kundeImEchtenSpeicher(name) {
+  kundenZaehler += 1;
+  const tenant = `t_p4_${name}`;
+  echterSpeicher.bootstrapTenant(`+4940777${String(kundenZaehler).padStart(4, "0")}`, tenant);
+  echterSpeicher.setTenantStripe(tenant, { customerId: `cus_p4_${name}` });
+  return tenant;
+}
+
+async function zustellen(event) {
+  await applyStripeWebhook(event, {
+    ...baseDeps(echterSpeicher, () => {}),
+    accounts: { setStatus: async () => {} },
+    sessions: { invalidateByTenant: async () => {} },
+    provision: async () => ({ ok: true, reason: "queued" }),
+  });
+  await echterSpeicher.drainFlushes();
+}
+
+function aboAktiv(tenant, { typ = SUBSCRIPTION_EVENT.UPDATED, abo, periodenstart }) {
+  return {
+    type: typ,
+    data: {
+      object: {
+        id: abo,
+        status: "active",
+        customer: echterSpeicher.tenantStripe(tenant).customerId,
+        metadata: { tenant_ref: tenant, plan_slug: "starter" },
+        current_period_start: periodenstart,
+        current_period_end: periodenstart + 2_592_000,
+      },
+    },
+  };
+}
+
+function geldEreignisFuer(tenant, type, objekt = {}) {
+  const customer = echterSpeicher.tenantStripe(tenant).customerId;
+  return { id: `evt_${type}_${tenant}`, type, data: { object: { customer, ...objekt } } };
+}
+
+const entzogen = (tenant) => echterSpeicher.tenantSubscription(tenant).periodCreditRevoked;
+
+test("[NIE1] Verlängerung in eine spätere Periode nimmt den Entzug im Speicher zurück", async () => {
+  const tenant = kundeImEchtenSpeicher("verlaengert");
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_v", periodenstart: JANUAR }));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.REFUNDED));
+  assert.equal(entzogen(tenant), true, "Vorbedingung: Erstattung entzieht");
+
+  await zustellen(aboAktiv(tenant, { abo: "sub_p4_v", periodenstart: FEBRUAR }));
+
+  assert.equal(entzogen(tenant), false);
+});
+
+test("[NIE1] Neues Abo mit neuer Periode nach beendetem Abo nimmt den Entzug im Speicher zurück", async () => {
+  const tenant = kundeImEchtenSpeicher("neu_abonniert");
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_alt", periodenstart: JANUAR }));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.REFUNDED));
+  await zustellen({
+    type: SUBSCRIPTION_EVENT.DELETED,
+    data: { object: { id: "sub_p4_alt", metadata: { tenant_ref: tenant } } },
+  });
+  assert.equal(entzogen(tenant), true, "Vorbedingung: Entzug steht nach Ende des Abos");
+
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_neu", periodenstart: FEBRUAR }));
+
+  assert.equal(entzogen(tenant), false);
+});
+
+test("[NIE2] Aktivierung derselben Periode lässt den Entzug im Speicher stehen", async () => {
+  const tenant = kundeImEchtenSpeicher("gleiche_periode");
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_g", periodenstart: JANUAR }));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.REFUNDED));
+
+  await zustellen(aboAktiv(tenant, { abo: "sub_p4_g", periodenstart: JANUAR }));
+
+  assert.equal(entzogen(tenant), true);
+});
+
+test("[NIE3] Aktivierung derselben Periode nach Erstattung hebt die Sperre auf", async () => {
+  const tenant = kundeImEchtenSpeicher("gesperrt");
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_s", periodenstart: JANUAR }));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.REFUNDED));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.SUBSCRIPTION_PAUSED, { id: "sub_p4_s" }));
+  assert.equal(echterSpeicher.billingHoldActive(tenant), "paused", "Vorbedingung: Pause sperrt");
+
+  await zustellen(aboAktiv(tenant, { abo: "sub_p4_s", periodenstart: JANUAR }));
+
+  assert.equal(echterSpeicher.billingHoldActive(tenant), null);
+});
+
+test("[NIE3] Aktivierung einer späteren Periode hebt die Sperre auf", async () => {
+  const tenant = kundeImEchtenSpeicher("gesperrt_verlaengert");
+  await zustellen(aboAktiv(tenant, { typ: SUBSCRIPTION_EVENT.CREATED, abo: "sub_p4_sv", periodenstart: JANUAR }));
+  await zustellen(geldEreignisFuer(tenant, MONEY_EVENT.SUBSCRIPTION_PAUSED, { id: "sub_p4_sv" }));
+  assert.equal(echterSpeicher.billingHoldActive(tenant), "paused", "Vorbedingung: Pause sperrt");
+
+  await zustellen(aboAktiv(tenant, { abo: "sub_p4_sv", periodenstart: FEBRUAR }));
+
+  assert.equal(echterSpeicher.billingHoldActive(tenant), null);
 });

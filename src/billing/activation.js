@@ -3,7 +3,7 @@ import { resolveTierForTenant } from "./plan-profile-resolver.js";
 import { provisionCleared } from "./provision-outcome.js";
 import { resolvePeriodStartIso } from "./period.js";
 
-function stampBudgetPeriodIfPaid({ store, tenant }) {
+function stampPeriodAndRestoreCreditIfPaid({ store, tenant }) {
   if (store.billingHoldActive(tenant)) return false;
   const periodStarted =
     store.stampBudgetPeriod(tenant, resolvePeriodStartIso(store.tenantSubscription(tenant))) === true;
@@ -46,29 +46,27 @@ async function activateAccountAndRefreshMirror({ store, accounts, tenant }) {
   await store.ensureTenant(tenant);
 }
 
-function clearBillingHoldKeepingRevokedCredit({ store, tenant }) {
+function clearBillingHold({ store, tenant }) {
   store.clearBillingHold(tenant);
-  if (!store.tenantSubscription(tenant).periodCreditRevoked)
-    store.setTenantSubscription(tenant, { periodCreditRevoked: false });
   return !store.billingHoldActive(tenant);
 }
 
-function stampBudgetPeriodAfterHoldClear({ store, tenant, holdCleared }) {
-  return holdCleared && stampBudgetPeriodIfPaid({ store, tenant });
+function stampPeriodAndRestoreCreditAfterHoldClear({ store, tenant, holdCleared }) {
+  return holdCleared && stampPeriodAndRestoreCreditIfPaid({ store, tenant });
 }
 
 export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
   store.clearSuspendedAt(tenant);
-  const budgetPeriodStarted = stampBudgetPeriodIfPaid({ store, tenant });
+  const budgetPeriodStarted = stampPeriodAndRestoreCreditIfPaid({ store, tenant });
   store.setTenantSubscription(tenant, { activationPending: true });
   const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
   const profile = provisionPlanProfile({ store, tenant });
   if (!provisionCleared(provisioned))
     return { profile, activated: false, provisioned, budgetPeriodStarted };
   await activateAccountAndRefreshMirror({ store, accounts, tenant });
-  const holdCleared = clearBillingHoldKeepingRevokedCredit({ store, tenant });
-  const budgetPeriodStartedAfterHold = stampBudgetPeriodAfterHoldClear({ store, tenant, holdCleared });
+  const holdCleared = clearBillingHold({ store, tenant });
+  const budgetPeriodStartedAfterHold = stampPeriodAndRestoreCreditAfterHoldClear({ store, tenant, holdCleared });
   return {
     profile,
     activated: true,
