@@ -19,7 +19,6 @@ const GRENZEN = "export const GRENZEN = Object.freeze({ unten: 0, oben: 1, stufe
 const DOPPELT = "export const doppelt = (wert) => wert * 2;";
 const GLEICH = "export function gleich(wert) {\n  assert.equal(wert, MINUS);\n}";
 const NEGATIV = "export function negativ() {\n  return einordnen(GRENZEN.unten);\n}";
-const SICHER_OHNE_NAMEN = 'import "node:assert/strict";';
 const WERTE_OHNE_NAMEN = 'import "./werte.js";';
 const AUS_NEU = 'import { GRENZEN } from "../gemeinsam/ohne-quelle.js";';
 const ALLES_WEITER = 'export * from "../gemeinsam/ohne-quelle.js";';
@@ -30,7 +29,7 @@ function datei(...teile) {
 
 const VORHER = { kopf: [SICHER, QUELLE, WERTE_IN_HILFE], rumpf: [GRENZEN, DOPPELT, GLEICH, NEGATIV] };
 const AUSGELAGERT = { kopf: [SICHER, WERTE_IN_NEU], rumpf: [GRENZEN, DOPPELT, GLEICH] };
-const NACHHER = { kopf: [SICHER_OHNE_NAMEN, QUELLE, WERTE_OHNE_NAMEN, AUS_NEU], rumpf: [ALLES_WEITER, NEGATIV] };
+const NACHHER = { kopf: [SICHER, QUELLE, WERTE_OHNE_NAMEN, AUS_NEU], rumpf: [ALLES_WEITER, NEGATIV] };
 
 function aufgebaut({ kopf, rumpf }) {
   return datei(kopf.join("\n"), ...rumpf);
