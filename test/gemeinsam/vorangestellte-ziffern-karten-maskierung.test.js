@@ -1,6 +1,16 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+import {
+  AGENT,
+  COUNTERPARTY,
+  anrufeJeGruppe,
+  bestaetigungsServerOptionen,
+  einzeln,
+  einzigeAusgabezeile,
+  hatLuhnFensterMitKartenanfang,
+  luhnGueltig,
+  starteServer,
+} from "./kartenmaskierung.js";
 
 const KARTENZIFFERN_IM_KLARTEXT = "Kartenziffern hinter fremden Ziffern im Klartext";
 const FREMDE_ZIFFERN_MASKIERT = "Fremde Ziffern ohne Karte maskiert";
@@ -11,39 +21,9 @@ const FENSTER_MAX_ZIFFERN = 19;
 const ZIEL_NUMMER = "+4915112340077";
 const BESTAETIGUNGS_GEHEIMNIS = "vorangestellte-ziffern-test-secret-min-32-zeichen";
 
-const AGENT = "agent";
-const COUNTERPARTY = "counterparty";
-
 const ABLAUFDATUM = "1227";
 const KARTE_VISA_16 = "4111111111111111";
 const KARTE_MASTERCARD_16 = "5555555555554444";
-
-function einzeln(ziffern, trenner = " ") {
-  return ziffern.split("").join(trenner);
-}
-
-function luhnGueltig(ziffern) {
-  let summe = 0;
-  for (const [position, zeichen] of [...ziffern].reverse().entries()) {
-    let wert = Number(zeichen);
-    if (position % 2 === 1) {
-      wert *= 2;
-      if (wert > 9) wert -= 9;
-    }
-    summe += wert;
-  }
-  return summe % 10 === 0;
-}
-
-function hatLuhnFensterMitKartenanfang(ziffern) {
-  for (let start = 0; start < ziffern.length; start += 1) {
-    for (let laenge = FENSTER_MIN_ZIFFERN; laenge <= FENSTER_MAX_ZIFFERN; laenge += 1) {
-      const fenster = ziffern.slice(start, start + laenge);
-      if (fenster.length === laenge && /^[2-6]/.test(fenster) && luhnGueltig(fenster)) return true;
-    }
-  }
-  return false;
-}
 
 function laengsteZiffernfolge(text) {
   const ohneTrennzeichen = text.replace(/(?<=\d)[^0-9A-Za-zäöüÄÖÜß]+(?=\d)/g, "");
@@ -189,53 +169,11 @@ const GRUPPEN = {
   ],
 };
 
-const CALLS = Object.fromEntries(
-  Object.entries(GRUPPEN).map(([gruppe, zeilen]) => [
-    gruppe,
-    zeilen.map(([role, text], index) =>
-      seedCall({
-        id: `call_vorangestellt_${gruppe}_${index}`,
-        direction: "outbound",
-        to: ZIEL_NUMMER,
-        status: "completed",
-        answeredAt: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        transcript: [{ role, text }],
-        summary: text,
-        objectiveAchieved: true,
-        inboxEntryAt: new Date().toISOString(),
-        from: ZIEL_NUMMER,
-      }),
-    ),
-  ]),
-);
+const CALLS = anrufeJeGruppe("call_vorangestellt", GRUPPEN, ZIEL_NUMMER);
 
-let srv;
+const srv = starteServer(() => bestaetigungsServerOptionen(CALLS, BESTAETIGUNGS_GEHEIMNIS));
 
-before(async () => {
-  srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      ALLOWED_COUNTRY_CODES: "*",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: BESTAETIGUNGS_GEHEIMNIS,
-    },
-    seed: seedState({ calls: Object.values(CALLS).flat() }),
-  });
-});
-
-after(async () => {
-  await srv.stop();
-});
-
-async function statuszeile(gruppe, index) {
-  const result = await readToolResult(
-    await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: CALLS[gruppe][index].id })),
-  );
-  const lines = result.structuredContent.last_transcript_lines;
-  assert.equal(lines.length, 1);
-  return lines[0];
-}
+const statuszeile = (gruppe, index) => einzigeAusgabezeile(srv, CALLS[gruppe][index].id);
 
 test("Karte hinter Ablaufdatum aus einzelnen Ziffern erscheint in get_call_status ohne 12 oder mehr Kartenziffern im Klartext", async () => {
   for (const [index, [, text, letzteVier]] of KARTEN_ZEILEN.entries()) {
@@ -255,7 +193,7 @@ test("Ablaufdatum und Postleitzahl ohne Karte bleiben in get_call_status unverä
 
 test("durch Wörter getrennte Angaben hinter Kartenwort mit Luhn-gültigem Fenster bleiben in get_call_status unverändert", async () => {
   const ziffern = WORTGETRENNT_ZEILE.replace(/\D/g, "");
-  assert.ok(hatLuhnFensterMitKartenanfang(ziffern));
+  assert.ok(hatLuhnFensterMitKartenanfang(ziffern, FENSTER_MIN_ZIFFERN));
   const line = await statuszeile("wortgetrennt", 0);
   assert.ok(line.endsWith(WORTGETRENNT_ZEILE), `${WORTGETRENNTE_ANGABEN_MASKIERT}: ${line}`);
 });

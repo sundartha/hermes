@@ -1,9 +1,19 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+import { seedState } from "../helpers.js";
 import { makeThinkingSignal, THINKING_SIGNAL_MAX_CHARS } from "../../src/thinking-signal.js";
 import { shapeForSpeech } from "../../src/speech-shape.js";
-import { PASSWORT_BEISPIEL } from "./erfundene-geheimnisse.js";
+import {
+  abgeschlossenerAnruf,
+  einzeln,
+  fuelltext,
+  geheimnisseAnDerGrenze,
+  ausgabezeilen,
+  ohneMasken,
+  starteServer,
+  stellen,
+  textMitAngabeAb,
+} from "./kartenmaskierung.js";
 
 const KLARTEXT_FEHLER = "Kartenziffern im gekürzten Brückensatz im Klartext";
 const ANGABE_FEHLER = "Angabe im gekürzten Brückensatz im Klartext";
@@ -13,35 +23,21 @@ const AGENT_PRAEFIX = "Agent: ";
 const KARTENWORT = "Karte ";
 const VISA_GRUPPIERT = "4111 1111 1111 1111";
 const VISA_ZIFFERN = "4111111111111111";
-const PIN = "PIN: 4711";
-const PASSWORT_KENNWORT = "password: ";
 const NACHTEXT = " und danach prüfe ich gleich noch den Termin am Montag für dich.";
 
 const ZIFFERNWEISE_FORMEN = [
-  VISA_ZIFFERN.split("").join(" "),
+  einzeln(VISA_ZIFFERN),
   VISA_ZIFFERN.match(/.{4}/g)
-    .map((block) => block.split("").join(" "))
+    .map((block) => einzeln(block))
     .join(", "),
-  VISA_ZIFFERN.split("").join(" - "),
-  VISA_ZIFFERN.split("").join("_"),
-  VISA_ZIFFERN.split("").join(" "),
-  VISA_ZIFFERN.split("").join("\t"),
+  einzeln(VISA_ZIFFERN, " - "),
+  einzeln(VISA_ZIFFERN, "_"),
+  einzeln(VISA_ZIFFERN),
+  einzeln(VISA_ZIFFERN, "\t"),
 ];
 
-const MASKEN = /\*{4}\d{0,4}|\[restricted-credential\]|\[restricted-government-id\]/g;
-
-function fuelltext(laenge) {
-  let text = "";
-  while (laenge - text.length >= 9) text += "Termin ";
-  return text + "a".repeat(laenge - text.length - 1) + " ";
-}
-
 function satzMitAngabeAb(stelle, angabe, nachtext = NACHTEXT) {
-  return fuelltext(stelle) + angabe + nachtext;
-}
-
-function stellen(von, bis) {
-  return Array.from({ length: bis - von + 1 }, (_, index) => von + index);
+  return textMitAngabeAb(stelle, angabe, nachtext);
 }
 
 function gesprochenerBrueckensatz(text) {
@@ -60,12 +56,9 @@ function anrufMitBrueckensatz(text) {
   const id = "call_brueckensatz_" + "x".repeat(ANRUFE.length + 1);
   const { gesprochen, transkript } = gesprochenerBrueckensatz(text);
   ANRUFE.push(
-    seedCall({
+    abgeschlossenerAnruf({
       id,
       direction: "outbound",
-      status: "completed",
-      answeredAt: new Date().toISOString(),
-      endedAt: new Date().toISOString(),
       transcript: [
         { role: "caller", text: "Hallo, hier ist die Praxis.", at: new Date().toISOString() },
         { role: "agent", text: transkript, at: new Date().toISOString() },
@@ -85,21 +78,8 @@ const ZIFFERNWEISE_AN_DER_GRENZE = ZIFFERNWEISE_FORMEN.flatMap((form) =>
   ),
 );
 
-const PASSWORT = PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
-const GEHEIMNISSE = [
-  { angabe: PIN, kennwort: "PIN: ", wert: "4711" },
-  { angabe: PASSWORT, kennwort: PASSWORT_KENNWORT, wert: PASSWORT_BEISPIEL },
-];
-const GEHEIMNIS_AN_DER_GRENZE = GEHEIMNISSE.flatMap((geheimnis) =>
-  stellen(110, 119).flatMap((stelle) => [
-    { ...geheimnis, ...anrufMitBrueckensatz(satzMitAngabeAb(stelle, geheimnis.angabe)) },
-    {
-      ...geheimnis,
-      ...anrufMitBrueckensatz(
-        satzMitAngabeAb(stelle - geheimnis.kennwort.length, geheimnis.angabe),
-      ),
-    },
-  ]),
+const GEHEIMNIS_AN_DER_GRENZE = geheimnisseAnDerGrenze(110, 119, (stelle, angabe) =>
+  anrufMitBrueckensatz(satzMitAngabeAb(stelle, angabe)),
 );
 
 const OHNE_ANGABE = anrufMitBrueckensatz(
@@ -114,24 +94,13 @@ const SATZ_UNTER_DER_GRENZE = fuelltext(THINKING_SIGNAL_MAX_CHARS - 9) + "Montag
 
 const LEERRAUM_VOR_KURZEM_SATZ = anrufMitBrueckensatz("     " + SATZ_UNTER_DER_GRENZE);
 
-let srv;
-
-before(async () => {
-  srv = await startServer({
-    env: { THINKING_SIGNAL_ENABLED: "true" },
-    seed: seedState({ calls: ANRUFE }),
-  });
-});
-
-after(async () => {
-  await srv.stop();
-});
+const srv = starteServer(() => ({
+  env: { THINKING_SIGNAL_ENABLED: "true" },
+  seed: seedState({ calls: ANRUFE }),
+}));
 
 async function agentZeile(anruf) {
-  const result = await readToolResult(
-    await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: anruf.id })),
-  );
-  const zeilen = result.structuredContent.last_transcript_lines;
+  const zeilen = await ausgabezeilen(srv, anruf.id);
   assert.equal(zeilen.length, 2);
   return zeilen[1];
 }
@@ -139,10 +108,6 @@ async function agentZeile(anruf) {
 function anWortgrenzeGekuerzt(text) {
   const schnitt = text.slice(0, THINKING_SIGNAL_MAX_CHARS);
   return schnitt.slice(0, schnitt.lastIndexOf(" ")) + ".";
-}
-
-function ohneMasken(text) {
-  return text.replace(MASKEN, "");
 }
 
 function pruefeKeineZiffernAusserMaske(zeile, meldung) {

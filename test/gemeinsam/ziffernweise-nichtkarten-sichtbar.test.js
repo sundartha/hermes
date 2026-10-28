@@ -1,12 +1,22 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findRestrictedData, maskRestrictedText } from "../../src/restricted-data.js";
-import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+import {
+  AGENT,
+  COUNTERPARTY,
+  anrufeJeGruppe,
+  bestaetigungsServerOptionen,
+  einzeln,
+  einzigeAusgabezeile,
+  hatLuhnFensterMitKartenanfang,
+  luhnGueltig,
+  rufeWerkzeug,
+  starteServer,
+} from "./kartenmaskierung.js";
 
 const NICHT_KARTE_MASKIERT = "Nicht-Karte maskiert";
 const KARTE_UNMASKIERT = "Karte im Klartext";
 const FENSTER_MIN_ZIFFERN = 15;
-const FENSTER_MAX_ZIFFERN = 19;
 const RUFNUMMER_MAX_ZIFFERN = 15;
 const IBAN_MOD97_REST = 1n;
 const IBAN_MOD97_TEILER = 97n;
@@ -14,9 +24,6 @@ const IBAN_BUCHSTABENWERT_VERSATZ = 55;
 const BESTAETIGUNGSCODE = /^[0-9A-HJKMNP-TV-Z]{6}$/;
 const BESTAETIGUNGS_GEHEIMNIS = "ziffernweise-nichtkarten-test-secret-min-32-zeichen";
 const ZIEL_NUMMER = "+4915112340077";
-
-const AGENT = "agent";
-const COUNTERPARTY = "counterparty";
 
 const AMEX_15 = "378282246310005";
 const VISA_15_LUHN_GUELTIG = "411111111111116";
@@ -28,33 +35,6 @@ const RUFNUMMER_VORNE = "04111111";
 const RUFNUMMER_HINTEN = "111111111";
 const FREMDE_RUFNUMMER_15 = "491512345678901";
 const TELEFON_MIT_PLUS = "4915123456789";
-
-function einzeln(ziffern, trenner = " ") {
-  return ziffern.split("").join(trenner);
-}
-
-function luhnGueltig(ziffern) {
-  let summe = 0;
-  for (const [position, zeichen] of [...ziffern].reverse().entries()) {
-    let wert = Number(zeichen);
-    if (position % 2 === 1) {
-      wert *= 2;
-      if (wert > 9) wert -= 9;
-    }
-    summe += wert;
-  }
-  return summe % 10 === 0;
-}
-
-function hatLuhnFensterMitKartenanfang(ziffern) {
-  for (let start = 0; start < ziffern.length; start += 1) {
-    for (let laenge = FENSTER_MIN_ZIFFERN; laenge <= FENSTER_MAX_ZIFFERN; laenge += 1) {
-      const fenster = ziffern.slice(start, start + laenge);
-      if (fenster.length === laenge && /^[2-6]/.test(fenster) && luhnGueltig(fenster)) return true;
-    }
-  }
-  return false;
-}
 
 function ibanPruefsummeGueltig(iban) {
   const umgestellt = iban.slice(4) + iban.slice(0, 4);
@@ -110,55 +90,13 @@ const GRUPPEN = {
   plus: PLUS_ZEILEN,
 };
 
-const CALLS = Object.fromEntries(
-  Object.entries(GRUPPEN).map(([gruppe, zeilen]) => [
-    gruppe,
-    zeilen.map(([role, text], index) =>
-      seedCall({
-        id: `call_nichtkarte_${gruppe}_${index}`,
-        direction: "outbound",
-        to: ZIEL_NUMMER,
-        status: "completed",
-        answeredAt: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        transcript: [{ role, text }],
-        summary: text,
-        objectiveAchieved: true,
-        inboxEntryAt: new Date().toISOString(),
-        from: ZIEL_NUMMER,
-      }),
-    ),
-  ]),
-);
+const CALLS = anrufeJeGruppe("call_nichtkarte", GRUPPEN, ZIEL_NUMMER);
 
-let srv;
+const srv = starteServer(() => bestaetigungsServerOptionen(CALLS, BESTAETIGUNGS_GEHEIMNIS));
 
-before(async () => {
-  srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      ALLOWED_COUNTRY_CODES: "*",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: BESTAETIGUNGS_GEHEIMNIS,
-    },
-    seed: seedState({ calls: Object.values(CALLS).flat() }),
-  });
-});
+const werkzeug = (name, args) => rufeWerkzeug(srv, name, args);
 
-after(async () => {
-  await srv.stop();
-});
-
-async function werkzeug(name, args) {
-  return readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall(name, args)));
-}
-
-async function statuszeile(gruppe, index) {
-  const result = await werkzeug("get_call_status", { call_id: CALLS[gruppe][index].id });
-  const lines = result.structuredContent.last_transcript_lines;
-  assert.equal(lines.length, 1);
-  return lines[0];
-}
+const statuszeile = (gruppe, index) => einzigeAusgabezeile(srv, CALLS[gruppe][index].id);
 
 async function pruefeSichtbar(gruppe) {
   for (const [index, [, text]] of GRUPPEN[gruppe].entries()) {
@@ -193,7 +131,7 @@ test("Rufnummer Ziffer für Ziffer wird von findRestrictedData nicht als Karte e
 
 test("ziffernweise IBAN mit Luhn-gültigem Fenster wird von findRestrictedData nicht als Karte erkannt und in get_call_result nicht maskiert", async () => {
   assert.ok(ibanPruefsummeGueltig(IBAN_DE_MIT_LUHN_FENSTER));
-  assert.ok(hatLuhnFensterMitKartenanfang(IBAN_DE_MIT_LUHN_FENSTER.slice(2)));
+  assert.ok(hatLuhnFensterMitKartenanfang(IBAN_DE_MIT_LUHN_FENSTER.slice(2), FENSTER_MIN_ZIFFERN));
   for (const [index, [, text]] of IBAN_ZEILEN.entries()) {
     assert.deepEqual(findRestrictedData(text).filter(istKarte), [], `${NICHT_KARTE_MASKIERT}: ${text}`);
     assert.equal(maskRestrictedText(text), text, `${NICHT_KARTE_MASKIERT}: ${text}`);
@@ -204,7 +142,7 @@ test("ziffernweise IBAN mit Luhn-gültigem Fenster wird von findRestrictedData n
 
 test("zwei ziffernweise Rückrufnummern mit Luhn-gültigem Fenster bleiben in check_inbox und get_call_status vollständig sichtbar", async () => {
   assert.ok(RUFNUMMER_VORNE.length <= RUFNUMMER_MAX_ZIFFERN && RUFNUMMER_HINTEN.length <= RUFNUMMER_MAX_ZIFFERN);
-  assert.ok(hatLuhnFensterMitKartenanfang(RUFNUMMER_VORNE + RUFNUMMER_HINTEN));
+  assert.ok(hatLuhnFensterMitKartenanfang(RUFNUMMER_VORNE + RUFNUMMER_HINTEN, FENSTER_MIN_ZIFFERN));
   await pruefeSichtbar("zweiRueckrufnummern");
   const inbox = JSON.stringify(await werkzeug("check_inbox", {}));
   for (const [, text] of ZWEI_RUECKRUFNUMMERN) {
