@@ -616,7 +616,7 @@
   },
   "src/mcp-tools.js": {
     "id-length": {
-      "count": 21
+      "count": 6
     },
     "max-lines-per-function": {
       "count": 1
