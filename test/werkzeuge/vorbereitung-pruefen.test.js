@@ -385,9 +385,9 @@ const MIETER = 'export const BOOTSTRAP_TENANT_ID = "owner";';
 const STATUS = 'export const NUMBER_STATUS = Object.freeze({\n  REQUESTED: "requested",\n  ACTIVE: "active",\n  RELEASED: "released",\n});';
 const UEBERGAENGE = [
   "export const NUMBER_TRANSITIONS = Object.freeze({",
-  "  [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.ACTIVE],",
-  "  [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.RELEASED],",
-  "  [NUMBER_STATUS.RELEASED]: [],",
+  "  [NUMBER_STATUS.REQUESTED]: Object.freeze([NUMBER_STATUS.ACTIVE]),",
+  "  [NUMBER_STATUS.ACTIVE]: Object.freeze([NUMBER_STATUS.RELEASED]),",
+  "  [NUMBER_STATUS.RELEASED]: Object.freeze([]),",
   "});",
 ].join("\n");
 const HINWEIS = "export function hinweis(sprache) {\n  return HINWEISE[sprache];\n}";

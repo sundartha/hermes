@@ -15,7 +15,7 @@ const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 
 const KOPF = 'import { einordnen } from "./zahl.js";';
 const STATUS = 'export const STATUS = Object.freeze({\n  AN: "an",\n  AUS: "aus",\n});';
-const UEBERGAENGE = "export const UEBERGAENGE = Object.freeze({\n  [STATUS.AN]: [STATUS.AUS],\n  [STATUS.AUS]: [STATUS.AN],\n});";
+const UEBERGAENGE = "export const UEBERGAENGE = Object.freeze({\n  [STATUS.AN]: Object.freeze([STATUS.AUS]),\n  [STATUS.AUS]: Object.freeze([STATUS.AN]),\n});";
 const ZUSTAND = 'export function zustand(wert) {\n  return einordnen(wert) === "negativ" ? "aus" : "an";\n}';
 const WEITER = 'export { STATUS, UEBERGAENGE } from "./status.js";';
 

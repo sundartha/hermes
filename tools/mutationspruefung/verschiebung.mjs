@@ -219,7 +219,7 @@ function istFreeze({ type, callee, arguments: argumente }) {
 }
 
 function istEingefroren(ausdruck, bekannt) {
-  return istFreeze(ausdruck) && wirktNichtBeimLaden(ausdruck.arguments[0], bekannt);
+  return istFreeze(ausdruck) && festerInhalt(ausdruck.arguments[0], bekannt);
 }
 
 function schluesselName({ type, kind, computed, key }) {
@@ -247,11 +247,15 @@ function festerSchluessel(eigenschaft, bekannt) {
   return schluessel?.type === "Literal" && SCHLUESSELARTEN.has(typeof schluessel.value);
 }
 
+function festerInhalt(ausdruck, bekannt) {
+  if (ausdruck.type === "ArrayExpression") return ausdruck.elements.every((element) => element !== null && wirktNichtBeimLaden(element, bekannt));
+  if (ausdruck.type === "ObjectExpression") return ausdruck.properties.every((eigenschaft) => eigenschaft.type === "Property" && festerSchluessel(eigenschaft, bekannt) && wirktNichtBeimLaden(eigenschaft.value, bekannt));
+  return wirktNichtBeimLaden(ausdruck, bekannt);
+}
+
 function wirktNichtBeimLaden(ausdruck, bekannt) {
   if (OHNE_WIRKUNG.has(ausdruck.type)) return true;
   if (VERWEIS.has(ausdruck.type)) return aufgeloest(ausdruck, bekannt) !== undefined;
-  if (ausdruck.type === "ArrayExpression") return ausdruck.elements.every((element) => element !== null && wirktNichtBeimLaden(element, bekannt));
-  if (ausdruck.type === "ObjectExpression") return ausdruck.properties.every((eigenschaft) => eigenschaft.type === "Property" && festerSchluessel(eigenschaft, bekannt) && wirktNichtBeimLaden(eigenschaft.value, bekannt));
   return istEingefroren(ausdruck, bekannt);
 }
 
