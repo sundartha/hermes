@@ -288,14 +288,27 @@ function entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch }) {
   return lauf.entscheidungNoetig({ kopf: kopfzeile, anlass: grund, verlauf: [grund], notiz });
 }
 
+function gemeldetUebernommen(lauf, { gleichwertig, ueberlebende }, gemeldet) {
+  let neu = false;
+  for (const { mutant, grund } of gleichwertig) {
+    for (const schluessel of ueberlebende.filter((ueberlebend) => gemeint(mutant, ueberlebend))) {
+      gemeldet.set(schluessel, grund);
+      if (gleichwertige(lauf).includes(schluessel)) continue;
+      lauf.berichtszeilen.push(gleichwertigZeile(schluessel, grund));
+      neu = true;
+    }
+  }
+  return neu;
+}
+
 function testRunde(lauf, runde, gemeldet) {
   const { ueberlebende, offen } = runde;
   const weg = testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND, offen });
   if (weg === null) return false;
-  for (const { mutant, grund } of weg.gleichwertig) {
-    for (const schluessel of ueberlebende.filter((ueberlebend) => gemeint(mutant, ueberlebend))) gemeldet.set(schluessel, grund);
-  }
-  if (ueberlebende.length > 0 && aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0) return null;
+  const neu = gemeldetUebernommen(lauf, { gleichwertig: weg.gleichwertig, ueberlebende }, gemeldet);
+  const ohneAenderung = aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0;
+  if (ueberlebende.length > 0 && ohneAenderung && !neu) return null;
+  if (ohneAenderung && neu && offen.length === 0) return true;
   return testsGeprueft(lauf, offen) && testsFesthalten(lauf, runde);
 }
 
