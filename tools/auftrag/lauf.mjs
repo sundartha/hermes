@@ -40,10 +40,9 @@ const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
-const BASIS_VERGLEICHE = [
-  { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" },
-  { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" },
-];
+const KOPIEN = { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" };
+const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" };
+const BASIS_VERGLEICHE = [KOPIEN, INJEKTION];
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
@@ -407,6 +406,20 @@ class AuftragsLauf {
     return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
   }
 
+  kopien() {
+    return this.basisVergleich(KOPIEN);
+  }
+
+  injektion() {
+    return this.basisVergleich(INJEKTION);
+  }
+
+  zugleich(schritte) {
+    const gruende = schritte.flatMap((schritt) => (schritt() ? [] : [this.grund]));
+    if (gruende.length > 0) this.grund = gruende.join(" ");
+    return gruende.length === 0;
+  }
+
   basisVergleich({ name, unterbefehl, liste, art, werkzeug }) {
     const { root } = this.kontext;
     if (!gibtEsIn(this.basis, liste, root)) return this.einmalHinweisen(`${art}: ${liste} fehlt auf der Basis.`);
@@ -513,14 +526,8 @@ class AuftragsLauf {
     const vorBau = brauchtRotenTest(auftrag)
       ? [
           () => this.agent("test", testAgentPrompt(this.kontext)),
-          () => this.grenzen("test", this.basis),
-          () => this.statischeTestpruefung(),
-          () => this.basisVergleiche(),
-          () => this.faelleErhalten(),
-          () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
-          () => this.schutztests("test"),
-          () => this.abhaengigkeiten(),
-          () => this.lintNeuerFunktionen(),
+          () => this.zugleich(this.schnelleTestpruefungen()),
+          () => this.injektion(),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
           () => this.merkeAbnahmeFaelle(),
@@ -530,20 +537,27 @@ class AuftragsLauf {
     return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
   }
 
-  bauSchritte() {
+  schnelleTestpruefungen() {
     const { auftrag } = this.kontext;
     return [
-      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
-      () => this.importendungen(),
-      () => this.grenzen("bau", this.basisBau),
-      () => this.bauHatGeaendert(),
-      () => this.listenUmziehen(),
-      () => this.listenKuerzen(),
-      () => this.allesVormerken(),
+      () => this.grenzen("test", this.basis),
+      () => this.statischeTestpruefung(),
+      () => this.kopien(),
+      () => this.faelleErhalten(),
+      () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
+      () => this.schutztests("test"),
+      () => this.abhaengigkeiten(),
+      () => this.lintNeuerFunktionen(),
+    ];
+  }
+
+  schnelleBauPruefungen() {
+    const { auftrag } = this.kontext;
+    return [
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
-      () => this.basisVergleiche(),
+      () => this.kopien(),
       () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.typpruefung(),
@@ -552,6 +566,20 @@ class AuftragsLauf {
       () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
       () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),
+    ];
+  }
+
+  bauSchritte() {
+    return [
+      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
+      () => this.importendungen(),
+      () => this.grenzen("bau", this.basisBau),
+      () => this.bauHatGeaendert(),
+      () => this.listenUmziehen(),
+      () => this.listenKuerzen(),
+      () => this.allesVormerken(),
+      () => this.zugleich(this.schnelleBauPruefungen()),
+      () => this.injektion(),
       () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
   }
