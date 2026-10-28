@@ -156,7 +156,7 @@
     "test/312k-p3-self-service-cancel.test.js|test/312k-p5-cancellation-mail.test.js|72",
     "test/312k-p3-self-service-cancel.test.js|test/bk4-self-service-quota.test.js|87",
     "test/312k-p3-self-service-cancel.test.js|test/bk5-smoke-e2e.test.js|59",
-    "test/312k-p3-self-service-cancel.test.js|test/e2e-01-tenant-country-change.test.js|77",
+    "test/312k-p3-self-service-cancel.test.js|test/e2e-01-tenant-country-change.test.js|80",
     "test/312k-p3-self-service-cancel.test.js|test/self-service-newsletter-consent.test.js|70",
     "test/312k-p4-contract-end-cleanup.test.js|test/312k-p4-contract-end-cleanup.test.js|106",
     "test/312k-p4-contract-end-cleanup.test.js|test/312k-p4-contract-end-cleanup.test.js|52",
