@@ -235,25 +235,23 @@ function pruefeEntscheidung(ergebnis, ueberlebende) {
   return text;
 }
 
-test("auftrag-umbau-behalten: senkt eine Runde die Zahl nicht, verlangt der Auftrag eine Entscheidung und lässt den alten Stand stehen", (context) => {
+test("auftrag-umbau-behalten: meldet der Test-Agent den letzten Überlebenden als gleichwertig, nimmt der Auftrag ihn an und nennt die Meldung im Umbau-Commit", (context) => {
   const drehbuch = {
-    bau: [BAU, BAU, BAU, BAU],
+    bau: [BAU],
     test: [testEintrag("leer"), { ...testEintrag("leer", "nichts"), antwort: `${ABSATZ}\n\n${GLEICHWERTIG}` }],
-    notiz: [{ antwort: "Notiz des Ersatzes." }],
   };
-  const lauf = starte(context, drehbuch);
-  const text = pruefeEntscheidung(lauf, [UMLAUT_MUTANT]);
-  assert.ok(text.split("\n").includes(GLEICHWERTIG), text);
-  const betreffe = commitBetreffe(lauf.repo, lauf.basis);
-  assert.ok(betreffe.length > 0 && betreffe.every((betreff) => betreff === TEST_COMMIT), betreffe.join(" | "));
-  assert.ok(gitAusgabe(lauf.repo, "show", "HEAD:test/text.test.js").includes('test("leer"'));
+  const { repo, lauf, basis, ausgabe } = starte(context, drehbuch);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.ok(gitAusgabe(repo, "log", "-1", "--format=%B", "HEAD").split("\n").includes(GLEICHWERTIG));
+  assert.deepEqual(commitBetreffe(repo, basis), [TEST_COMMIT, TEST_COMMIT, UMBAU_COMMIT]);
+  assert.equal(gitAusgabe(repo, "show", "HEAD:src/text.js"), NEU);
 });
 
-test("auftrag-umbau-behalten: ändert der Test-Agent nichts, verlangt der Auftrag ebenfalls eine Entscheidung", (context) => {
+test("auftrag-umbau-behalten: ändert der Test-Agent nichts und meldet nur einen von zwei Überlebenden als gleichwertig, verlangt der Auftrag für den anderen eine Entscheidung", (context) => {
   const gleichwertig = `Gleichwertig: ${LEER_MUTANT}, weil die Methode dort nie beobachtbar ist`;
   const lauf = starte(context, { bau: [BAU], test: [{ antwort: gleichwertig }], notiz: [{ antwort: "Notiz des Ersatzes." }] });
-  const text = pruefeEntscheidung(lauf, [LEER_MUTANT, UMLAUT_MUTANT]);
-  assert.ok(text.split("\n").includes(gleichwertig), text);
+  const text = pruefeEntscheidung(lauf, [UMLAUT_MUTANT]);
+  assert.ok(!text.includes(LEER_MUTANT), text);
   assert.deepEqual(commitBetreffe(lauf.repo, lauf.basis), []);
 });
 
