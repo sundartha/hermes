@@ -502,6 +502,7 @@ jobs:
           ALTER_STAND: ${{ inputs.alter_stand }}
         run: |
           set -uo pipefail
+          set +e
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           mkdir -p "$RUNNER_TEMP/urteil"
