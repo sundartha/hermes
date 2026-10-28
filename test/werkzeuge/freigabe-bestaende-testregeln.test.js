@@ -131,3 +131,69 @@ test("freigabe-strenger: eine neue Datei oder Regel ohne Zahl in eslint-suppress
   });
   assert.deepEqual([neueDatei, neueDateiBeiSenkung, neueRegel], [null, null, null]);
 });
+
+const KARTE = "tools/bausteine.json";
+const KARTE_STRENGER = "(d) Bausteinkarte nur strenger";
+const BAUSTEINE = [
+  { baustein: "start", zweck: "Baut zusammen.", quellen: ["src/app.js"], eingaenge: [], nutzt: [], importiertJedeDatei: true },
+  { baustein: "werk", zweck: "Hilfen.", quellen: ["src/werk/"], eingaenge: "alle", nutzt: [] },
+  { baustein: "kasse", zweck: "Kasse.", quellen: ["src/kasse/"], eingaenge: ["src/kasse/a.js", "src/kasse/b.js"], nutzt: [] },
+  { baustein: "fach", zweck: "Fach.", quellen: ["src/fach/"], eingaenge: ["src/fach/tor.js"], nutzt: ["kasse", "werk"] },
+];
+const ALTLAST = [
+  { von: "werk", nach: "fach" },
+  { von: "werk", nach: "kasse" },
+];
+
+function karte(aenderung = {}) {
+  return { schichten: [["werk"], ["kasse", "fach"], ["start"]], bausteine: BAUSTEINE, altlast: ALTLAST, ...aenderung };
+}
+
+function mitBaustein(name, felder) {
+  return karte({ bausteine: BAUSTEINE.map((eintrag) => (eintrag.baustein === name ? { ...eintrag, ...felder } : eintrag)) });
+}
+
+function karteEingestuft(context, nachher, vorher = karte()) {
+  return einstufung(context, KARTE, { vorher: `${JSON.stringify(vorher, null, 2)}\n`, nachher: `${JSON.stringify(nachher)}\n` });
+}
+
+test("freigabe-strenger: Streichen in tools/bausteine.json (Eingang, Altlast-Paar, Nutzung, alle Eingänge, freies Importieren) ist strenger", (context) => {
+  const faelle = {
+    eingang: mitBaustein("kasse", { eingaenge: ["src/kasse/a.js"] }),
+    altlast: karte({ altlast: ALTLAST.slice(1) }),
+    nutzung: mitBaustein("fach", { nutzt: [] }),
+    nutzungMitteGestrichen: mitBaustein("fach", { nutzt: ["werk"] }),
+    alleEingaenge: mitBaustein("werk", { eingaenge: ["src/werk/zeit.js"] }),
+    freiesImportieren: mitBaustein("start", { importiertJedeDatei: undefined }),
+  };
+  for (const [name, nachher] of Object.entries(faelle)) {
+    assert.deepEqual(karteEingestuft(context, nachher), [{ path: KARTE, fall: KARTE_STRENGER }], name);
+  }
+});
+
+test("freigabe-strenger: Ergänzen, Umordnen oder Umschreiben in tools/bausteine.json ist nicht strenger", (context) => {
+  const faelle = {
+    eingang: mitBaustein("kasse", { eingaenge: ["src/kasse/a.js", "src/kasse/b.js", "src/kasse/c.js"] }),
+    altlast: karte({ altlast: [...ALTLAST, { von: "kasse", nach: "fach" }] }),
+    nutzung: mitBaustein("kasse", { nutzt: ["fach"] }),
+    eingangUmgeordnet: mitBaustein("kasse", { eingaenge: ["src/kasse/b.js", "src/kasse/a.js"] }),
+    eingangDoppelt: mitBaustein("kasse", { eingaenge: ["src/kasse/a.js", "src/kasse/a.js", "src/kasse/b.js"] }),
+    nutzungUmgeordnet: mitBaustein("fach", { nutzt: ["werk", "kasse"] }),
+    nutzungDoppelt: mitBaustein("fach", { nutzt: ["kasse", "kasse", "werk"] }),
+    altlastUmgeordnet: karte({ altlast: [...ALTLAST].reverse() }),
+    altlastDoppelt: karte({ altlast: [ALTLAST[0], ALTLAST[0], ALTLAST[1]] }),
+    listeZuAlle: mitBaustein("kasse", { eingaenge: "alle" }),
+    freiesImportierenNeu: mitBaustein("fach", { importiertJedeDatei: true }),
+    quelleGestrichen: mitBaustein("fach", { quellen: [] }),
+    schichten: karte({ schichten: [["werk"], ["kasse"], ["fach"], ["start"]] }),
+    zweck: mitBaustein("fach", { zweck: "Anders." }),
+    bausteinGestrichen: karte({ bausteine: BAUSTEINE.slice(0, -1) }),
+    neuesFeld: mitBaustein("fach", { ausnahmen: [] }),
+    schreibweise: karte(),
+  };
+  for (const [name, nachher] of Object.entries(faelle)) {
+    assert.equal(karteEingestuft(context, nachher), null, name);
+  }
+  const mitZusatz = (wert, felder) => karte({ zusatz: wert, ...felder });
+  assert.equal(karteEingestuft(context, mitZusatz(2, { altlast: ALTLAST.slice(1) }), mitZusatz(1)), null, "zusatzSchluessel");
+});
