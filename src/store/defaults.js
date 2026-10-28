@@ -1,5 +1,6 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 import { MANDATE_OUT_OF_SCOPE } from "./begriffe-anrufe.js";
+import { emptyUsage } from "./begriffe-leerzustaende.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
 import { E164, isNanpCountry, normNum } from "./begriffe-rufnummern.js";
 
@@ -63,6 +64,11 @@ export {
   MANDATE_OUT_OF_SCOPE_DEFAULT,
   MAX_CALL_DURATION_CAP_S,
 } from "./begriffe-anrufe.js";
+export {
+  emptyCostCrossCheck,
+  emptyPlatformTtsUsage,
+  emptyUsage,
+} from "./begriffe-leerzustaende.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -139,32 +145,8 @@ export function calendarMap() {
   return { [BOOTSTRAP_TENANT_ID]: demoCalendar() };
 }
 
-export function emptyUsage() {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    costCents: 0,
-    costMicroCentsRem: 0,
-    costCorrectionMicroCentsRem: 0,
-    ttsCharacters: 0,
-    calls: 0,
-    spendMonthKey: null,
-    spendMonthCostCents: 0,
-    budgetPeriodKey: null,
-    budgetPeriodBaselineCents: 0,
-  };
-}
-
 export function emptyUsageMap() {
   return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
-}
-
-export function emptyPlatformTtsUsage() {
-  return { cycleKey: null, characters: 0, warnedCycle: null };
-}
-
-export function emptyCostCrossCheck() {
-  return { lastCheckedMonthKey: null };
 }
 
 export const PROFILE_FIELDS = {
