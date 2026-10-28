@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
+import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { RELATIVE_QUELLE, inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
 import { ersteAbweichung, fakten, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
@@ -29,6 +30,7 @@ const EXIT_ABBRUCH = 2;
 const STATISCHE_QUELLEN = new Set(["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration"]);
 const PAKET_ODER_NODE = /^(?:node:|[@\w][^:]*$)/;
 export const AUSLAGERUNG = "reine-auslagerung";
+export const UMBENENNUNG = "lokale-umbenennung";
 const AUFRUF = "Aufruf: node tools/vorbereitung-pruefen.mjs --basis <commit> [--bis <commit>] [--bereich <json-datei>]";
 
 function felder(text) {
@@ -101,6 +103,17 @@ async function ausgelagerteDateien({ basis, bis }, eslint) {
   return fakten(vorher).unsicher ? new Set() : new Set([auslagerung.hilfe, ...auslagerung.neue]);
 }
 
+function gleichwertigMeldenOderBefund(datei, { vorher, nachher }, vergleich) {
+  if (vergleich.gleich) {
+    console.log(`${datei}: gleichwertig${vergleich.genutzt.length > 0 ? ` (${vergleich.genutzt.join(", ")})` : ""}`);
+    return undefined;
+  }
+  const umbenennung = lokaleUmbenennung({ pfad: datei, vorher, nachher });
+  if (umbenennung === null) return vergleich.befund;
+  console.log(`${datei}: gleichwertig (${UMBENENNUNG}: ${umbenennung.namen} Namen)`);
+  return undefined;
+}
+
 async function dateiBefund({ art, datei }, { basis, bis, umbenannt, ausgelagert, eslint }) {
   if (ausgelagert.has(datei)) {
     console.log(`${datei}: gleichwertig (${AUSLAGERUNG})`);
@@ -113,9 +126,9 @@ async function dateiBefund({ art, datei }, { basis, bis, umbenannt, ausgelagert,
   if (await umbenannt.nurQuellenNachgezogen(datei)) return undefined;
   if (COMMONJS.test(datei)) return `${datei}: CommonJS läuft ohne strict mode; die Katalog-Bedingungen sind dafür nicht geprüft`;
   const kreisfrei = async () => (await importKreisfrei(datei, basis, eslint)) && importKreisfrei(datei, bis, eslint);
-  const vergleich = await vergleicheVorbereitung({ pfad: datei, vorher: inhalt(basis, datei), nachher: inhalt(bis, datei), kreisfrei }, eslint);
-  if (vergleich.gleich) console.log(`${datei}: gleichwertig${vergleich.genutzt.length > 0 ? ` (${vergleich.genutzt.join(", ")})` : ""}`);
-  return vergleich.befund;
+  const texte = { vorher: inhalt(basis, datei), nachher: inhalt(bis, datei) };
+  const vergleich = await vergleicheVorbereitung({ pfad: datei, ...texte, kreisfrei }, eslint);
+  return gleichwertigMeldenOderBefund(datei, texte, vergleich);
 }
 
 export async function vorbereitungsBefunde({ basis, bis, bereich }) {

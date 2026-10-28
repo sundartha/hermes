@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { REGELN } from "../../tools/vorbereitung/normalform.mjs";
-import { AUSLAGERUNG, vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
+import { AUSLAGERUNG, UMBENENNUNG, vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
 import { nachCommitAufrufen, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
 
@@ -417,7 +417,7 @@ function rot(lauf) {
 }
 
 test("vorbereitung-pruefen: reine Auslagerung: der Katalog beschreibt die reine Auslagerung als Datei-Umformung mit Bedingung und Begründung", () => {
-  assert.deepEqual(KATALOG.dateiUmformungen.map(({ id }) => id), [AUSLAGERUNG]);
+  assert.deepEqual(KATALOG.dateiUmformungen.map(({ id }) => id), [AUSLAGERUNG, UMBENENNUNG]);
   for (const eintrag of KATALOG.dateiUmformungen) {
     for (const feld of ["vorher", "nachher", "bedingung", "grund"]) assert.ok(eintrag[feld]?.trim(), `${eintrag.id}.${feld}`);
   }
