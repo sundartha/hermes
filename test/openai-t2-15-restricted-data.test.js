@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { findRestrictedData, maskRestrictedText, firstRestrictedField } from "../src/restricted-data.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
-import { toolErrorText } from "../src/mcp-tools.js";
+import { toolErrorText, registerTools } from "../src/mcp-tools.js";
 import {
   startServer,
   startIdp,
@@ -659,4 +662,161 @@ test("T7 (Draht stdio): prepare_call mit Karte/SSN/Passwort -> isError; get_call
     await client.close();
     await gateway.stop();
   }
+});
+
+const GATEWAY_LANGUAGE = "en";
+const GATEWAY_CALL_ID = "call_t2_15_gateway";
+const VALID_LOOKING_CODE = "AAAAAA";
+
+const RESTRICTED_BY_CATEGORY = [
+  { code: MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD, value: `Bitte Karte ${CARD} hinterlegen` },
+  { code: MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID, value: `SSN ${SSN_VALUE} beim Amt angeben` },
+  { code: MCP_ERROR_CODE.RESTRICTED_CREDENTIAL, value: `Login pruefen, password: ${PASSWORD_VALUE}` },
+];
+
+function categoryText(code, field) {
+  return toolErrorText({ code, field }, MCP_TEXTS[GATEWAY_LANGUAGE]);
+}
+
+function gatewayAnswer(path, body) {
+  if (path === "/api/call-confirmations") {
+    return { preview: { status: "pending", to: body.to, objective: body.objective }, confirmed: false };
+  }
+  return { merged_facts: 0 };
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => resolve(raw ? JSON.parse(raw) : null));
+  });
+}
+
+async function withRecordingGateway(run) {
+  const requests = [];
+  const gateway = http.createServer(async (req, res) => {
+    const body = await readJsonBody(req);
+    requests.push({ method: req.method, path: req.url, body });
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(gatewayAnswer(req.url, body)));
+  });
+  await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
+  const previousGatewayUrl = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
+  try {
+    await run(requests);
+  } finally {
+    if (previousGatewayUrl === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = previousGatewayUrl;
+    await new Promise((resolve) => gateway.close(resolve));
+  }
+}
+
+async function withRegisteredTools(run) {
+  const server = new McpServer({ name: "hermes-t2-15-gateway", version: "0.0.0" });
+  registerTools(server, { consultAllowed: true, language: GATEWAY_LANGUAGE });
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hermes-t2-15-gateway-client", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    await run(client);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
+async function assertStoppedBeforeGateway({ client, requests, name, args, code, field }) {
+  const result = await client.callTool({ name, arguments: args });
+  assert.equal(result.isError, true, JSON.stringify(result));
+  assert.equal(result.content[0].text, categoryText(code, field), `${name}/${field}`);
+  assert.deepEqual(requests, [], `${name}/${field}: keine Anfrage an das Gateway`);
+}
+
+test("[NIE1] prepare_call und place_call enden bei Karte, Kennnummer und Zugangsdaten mit dem Kategorietext, bevor das Gateway eine Anfrage sieht", async () => {
+  await withRecordingGateway(async (requests) => {
+    await withRegisteredTools(async (client) => {
+      for (const { code, value } of RESTRICTED_BY_CATEGORY) {
+        await assertStoppedBeforeGateway({
+          client,
+          requests,
+          name: "prepare_call",
+          args: { to: TARGET, objective: value },
+          code,
+          field: "objective",
+        });
+        await assertStoppedBeforeGateway({
+          client,
+          requests,
+          name: "place_call",
+          args: { to: TARGET, objective: "Termin vereinbaren", briefing: value, confirmation_code: VALID_LOOKING_CODE },
+          code,
+          field: "briefing",
+        });
+      }
+    });
+  });
+});
+
+const EXEMPT_KEY_PROBES = [
+  { name: "prepare_call", args: { to: CARD_COMPACT, objective: "Termin vereinbaren" }, key: "to" },
+  { name: "place_call", args: { to: CARD_COMPACT, objective: "Termin vereinbaren", confirmation_code: VALID_LOOKING_CODE }, key: "to" },
+  { name: "prepare_call", args: { to: TARGET, objective: "Termin vereinbaren", language: `SSN ${SSN_VALUE}` }, key: "language" },
+  {
+    name: "place_call",
+    args: { to: TARGET, objective: "Termin vereinbaren", confirmation_code: `password: ${PASSWORD_VALUE}` },
+    key: "confirmation_code",
+  },
+];
+
+test("[NIE1] to, confirmation_code und language werden nicht durchsucht und erreichen das Gateway unveraendert", async () => {
+  await withRecordingGateway(async (requests) => {
+    await withRegisteredTools(async (client) => {
+      for (const { name, args, key } of EXEMPT_KEY_PROBES) {
+        const seenBefore = requests.length;
+        const result = await client.callTool({ name, arguments: args });
+        const text = result.content[0].text;
+        for (const { code } of RESTRICTED_BY_CATEGORY) {
+          assert.notEqual(text, categoryText(code, key), `${name}/${key} darf nicht abgelehnt werden`);
+        }
+        const fresh = requests.slice(seenBefore);
+        assert.deepEqual(
+          fresh.map(({ method, path }) => `${method} ${path}`),
+          ["POST /api/call-confirmations"],
+          `${name}/${key}`,
+        );
+        assert.equal(fresh[0].body[key], args[key], `${name}/${key} kommt unveraendert an`);
+      }
+    });
+  });
+});
+
+test("[NIE2] answer_consult endet bei eingeschraenkten Daten mit dem Kategorietext, ohne consult/answer aufzurufen", async () => {
+  await withRecordingGateway(async (requests) => {
+    await withRegisteredTools(async (client) => {
+      for (const { code, value } of RESTRICTED_BY_CATEGORY) {
+        await assertStoppedBeforeGateway({
+          client,
+          requests,
+          name: "answer_consult",
+          args: { call_id: GATEWAY_CALL_ID, event_id: "c0", answers: ["Ja", value] },
+          code,
+          field: "answers",
+        });
+      }
+      const harmless = await client.callTool({
+        name: "answer_consult",
+        arguments: { call_id: GATEWAY_CALL_ID, event_id: "c0", answers: ["Ja"] },
+      });
+      assert.notEqual(harmless.isError, true, JSON.stringify(harmless));
+      assert.deepEqual(
+        requests.map(({ method, path }) => `${method} ${path}`),
+        [`POST /api/calls/${GATEWAY_CALL_ID}/consult/answer`],
+        "Gegenprobe: eine harmlose Antwort erreicht das Gateway",
+      );
+    });
+  });
 });
