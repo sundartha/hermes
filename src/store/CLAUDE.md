@@ -14,3 +14,9 @@ Damit laesst sich ein bestimmter Anruf ohne DB-Zugriff in Sweep-Logs wiederfinde
 Der Weglauf-Fall bleibt gedeckt, aber an der richtigen Stelle: Outbound setzt Abo+KYC voraus (am Code
 belegt, `state-ops.js:1149`, `activation.js:87`, `outbound-gates.js:317`) — ein unverkaufter Tenant erzeugt
 keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `MAX_NUMBERS_PER_TENANT`.
+
+## Baustein speicher (erzeugt aus tools/bausteine.json mit npm run hinweise)
+- Zweck: Hält und speichert den Zustand, eine Fassade für alle.
+- Darf nutzen: basis, konfiguration, texte, mail, sperrdaten
+- Ort für Neues: Neue Dateien in `src/store/` gehören zu speicher, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von speicher: `src/db/`.
+- Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, defaults.js, portal.js, state-ops.js, views.js.

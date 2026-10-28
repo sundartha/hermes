@@ -20,7 +20,7 @@ const ORT = new Map([
   ],
   [
     "src/config.js",
-    "Ein neuer Konfigurationswert ist ein Schlüssel im passenden Namensraum von CONFIG_NAMESPACES und wird als config.<namensraum>.<schlüssel> gelesen; eine neue Hilfsfunktion steht in der Datei, die sie nutzt.",
+    "Ein neuer Konfigurationswert ist ein Schlüssel im passenden Namensraum von CONFIG_NAMESPACES (zusammen mit rawConfig in src/config.js), steht in .env.example, wird in render.yaml geprüft und als config.<namensraum>.<schlüssel> gelesen; eine neue Hilfsfunktion steht in der Datei, die sie nutzt.",
   ],
   [
     "src/mcp-tools.js",

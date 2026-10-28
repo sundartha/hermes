@@ -120,6 +120,12 @@ function tabelleFehlt(context, { datei, tabelle }) {
 }
 
 const TABELLE_FEHLT = "{{tabelle}} aus {{datei}} lässt sich nicht laden; ohne die Tabelle prüft diese Regel nichts.";
+const NEUE_KONFIGURATION =
+  "Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.";
+
+function mitKonfigurationsSchritten(text) {
+  return `${text} ${NEUE_KONFIGURATION}`;
+}
 
 function ablehnungsgrundPruefer(context, gruende) {
   const bekannt = new Set(gruende);
@@ -304,9 +310,9 @@ const configPfade = {
     ],
     messages: {
       tabelleFehlt: TABELLE_FEHLT,
-      keinNamensraum: "config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js. Lies den Wert über einen vorhandenen Namensraum, oder lege den Schlüssel im passenden Namensraum von CONFIG_NAMESPACES in src/config.js an und trage die Variable in .env.example ein.",
+      keinNamensraum: mitKonfigurationsSchritten("config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js. Lies den Wert über einen vorhandenen Namensraum."),
       ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>.",
-      unbekanntesBlatt: "config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}} oder lege {{blatt}} dort in src/config.js an (in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES) und trage die Variable in .env.example ein.",
+      unbekanntesBlatt: mitKonfigurationsSchritten("config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}}."),
     },
   },
   create(context) {
