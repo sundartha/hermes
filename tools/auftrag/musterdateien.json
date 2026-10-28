@@ -1,5 +1,5 @@
 {
-  "regel": "Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster.",
+  "regel": "Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster.\nEine neue Route, Fachdatei oder einen neuen Test legst du mit `npm run neu -- route|fachdatei|test ZIEL NAME` an (ZIEL: Baustein, bei test der Bereich), nicht von Hand: der Befehl legt Datei und Test am richtigen Ort in der Form des Musters an.",
   "bau": [
     { "art": "Route", "praefix": "src/routes/", "datei": "src/routes/api-inbox.js", "form": "router" },
     { "art": "Telefonie-Adapter", "praefix": "src/telephony/adapters/", "datei": "src/telephony/adapters/telnyx/config-read.js" },
