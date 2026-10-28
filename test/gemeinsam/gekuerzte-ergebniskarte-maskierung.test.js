@@ -6,6 +6,8 @@ import {
   abgeschlossenerAnruf,
   geheimnisseAnDerGrenze,
   ohneMasken,
+  PASSWORT_KENNWORT,
+  pruefeNummerNichtGanzImKlartext,
   rufeWerkzeug,
   starteServer,
   stellen,
@@ -23,11 +25,15 @@ const VISA_ZIFFERN = "4111111111111111";
 const MASTERCARD_GRUPPIERT = "5555 5555 5555 4444";
 const DINERS_GRUPPIERT = "3056 930902 5904";
 const DINERS_ZIFFERN = "30569309025904";
+const DINERS_PRUEFUNG = {
+  ziffern: DINERS_ZIFFERN,
+  gruppiert: DINERS_GRUPPIERT,
+  meldung: KLARTEXT_FEHLER,
+};
 const VISA_ZIFFERNWEISE = VISA_ZIFFERN.split("").join(" ");
 const VISA_ZIFFERNWEISE_STRICH = VISA_ZIFFERN.split("").join(" - ");
 const STEUER_ID = "Steuer-ID 12 345 678 901";
 const REISEPASS = "Reisepassnummer 123 456 789";
-const PASSWORT_KENNWORT = "password: ";
 const PASSWORT_MIT_KARTENWORT = "Karte!Hunter2";
 const RUECKRUFNUMMER_NULL = "Rückrufnummer 0151 1234 5678";
 const RUECKRUFNUMMER_VIER = "Rückrufnummer 49 151 1234 5678";
@@ -216,12 +222,7 @@ test("Jedes Feld der Ergebniskarte wird in get_call_result und check_inbox ausge
 });
 
 test("Nummer mit abgeschnittenem Kartenwort auf, vor oder hinter der Grenze erscheint in get_call_result nie ganz im Klartext", async () => {
-  for (const anruf of KONTEXTWORT_AN_DER_GRENZE) {
-    for (const feld of await ergebnisfelder(anruf)) {
-      assert.ok(!feld.replace(/\D/g, "").includes(DINERS_ZIFFERN), KLARTEXT_FEHLER);
-      assert.ok(!feld.includes(DINERS_GRUPPIERT), KLARTEXT_FEHLER);
-    }
-  }
+  await pruefeNummerNichtGanzImKlartext(KONTEXTWORT_AN_DER_GRENZE, ergebnisfelder, DINERS_PRUEFUNG);
 });
 
 test("Zusammenfassung und gekürztes Feld mit derselben Karte lassen in get_call_result keine längere Ziffernfolge als die letzten vier zusammensetzen", async () => {
@@ -292,12 +293,7 @@ test("Karte früh im Feld wird in get_call_result und check_inbox wie heute auf 
 });
 
 test("Früh erkannte Karte verdeckt keine Nummer, deren Kartenwort an der Grenze abgeschnitten wird, in get_call_result", async () => {
-  for (const anruf of FRUEHE_KARTE_UND_KONTEXTWORT) {
-    for (const feld of await ergebnisfelder(anruf)) {
-      assert.ok(!feld.replace(/\D/g, "").includes(DINERS_ZIFFERN), KLARTEXT_FEHLER);
-      assert.ok(!feld.includes(DINERS_GRUPPIERT), KLARTEXT_FEHLER);
-    }
-  }
+  await pruefeNummerNichtGanzImKlartext(FRUEHE_KARTE_UND_KONTEXTWORT, ergebnisfelder, DINERS_PRUEFUNG);
 });
 
 test("Karte, die genau an der Grenze endet, wird in get_call_result und check_inbox wie heute auf 200 Zeichen gekürzt und als ****1111 gezeigt", async () => {

@@ -6,11 +6,11 @@ import { PASSWORT_BEISPIEL } from "./erfundene-geheimnisse.js";
 export const AGENT = "agent";
 export const COUNTERPARTY = "counterparty";
 
-export const PIN = "PIN: 4711";
-export const PIN_KENNWORT = "PIN: ";
-export const PIN_WERT = "4711";
+const PIN = "PIN: 4711";
+const PIN_KENNWORT = "PIN: ";
+const PIN_WERT = "4711";
 export const PASSWORT_KENNWORT = "password: ";
-export const PASSWORT = PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
+const PASSWORT =PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
 
 const RUNTIME_BUDGET_MS = 2000;
 const HOECHSTE_KARTENZIFFERN = 19;
@@ -157,6 +157,15 @@ export function pruefeMaskiert(zeileZuIndex, offset, liste) {
       assert.ok(line.endsWith(erwartet), `Kartennummer im Klartext: ${line} (Eingabe: ${text})`);
     }
   };
+}
+
+export async function pruefeNummerNichtGanzImKlartext(anrufe, felderVon, { ziffern, gruppiert, meldung }) {
+  for (const anruf of anrufe) {
+    for (const feld of await felderVon(anruf)) {
+      assert.ok(!feld.replace(/\D/g, "").includes(ziffern), meldung);
+      assert.ok(!feld.includes(gruppiert), meldung);
+    }
+  }
 }
 
 export function assertUnveraendertInnerhalbDerGrenze(maskiere, text) {
