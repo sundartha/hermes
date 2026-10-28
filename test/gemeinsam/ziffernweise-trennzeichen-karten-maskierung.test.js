@@ -1,12 +1,22 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { maskRestrictedText } from "../../src/restricted-data.js";
-import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+import { seedState } from "../helpers.js";
+import {
+  AGENT,
+  COUNTERPARTY,
+  MEGABYTE_CHARS,
+  anrufeJeZeile,
+  assertUnveraendertInnerhalbDerGrenze,
+  einzeln as ziffernMit,
+  einzigeAusgabezeile,
+  hatLuhnFensterMitKartenanfang,
+  luhnGueltig,
+  pruefeMaskiert,
+  starteServer,
+} from "./kartenmaskierung.js";
 
-const RUNTIME_BUDGET_MS = 2000;
-const MEGABYTE_CHARS = 1000000;
 const MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT = 16;
-const MAX_KARTENZIFFERN = 19;
 
 const VISA_16 = "4111111111111111";
 const MASTERCARD_16 = "5555555555554444";
@@ -18,41 +28,11 @@ const GESCHUETZTES_LEERZEICHEN = " ";
 const SCHMALES_GESCHUETZTES_LEERZEICHEN = " ";
 const TABULATOR = "\t";
 
-const AGENT = "agent";
-const COUNTERPARTY = "counterparty";
-
-function ziffernMit(ziffern, trenner) {
-  return ziffern.split("").join(trenner);
-}
-
 function ziffernGemischt(ziffern, trennerReihe) {
   return ziffern
     .split("")
     .map((ziffer, index) => (index < ziffern.length - 1 ? ziffer + trennerReihe[index % trennerReihe.length] : ziffer))
     .join("");
-}
-
-function luhnGueltig(ziffern) {
-  let summe = 0;
-  for (const [position, zeichen] of [...ziffern].reverse().entries()) {
-    let wert = Number(zeichen);
-    if (position % 2 === 1) {
-      wert *= 2;
-      if (wert > 9) wert -= 9;
-    }
-    summe += wert;
-  }
-  return summe % 10 === 0;
-}
-
-function hatLuhnFensterMitKartenanfang(ziffern) {
-  for (let start = 0; start < ziffern.length; start += 1) {
-    for (let laenge = MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT; laenge <= MAX_KARTENZIFFERN; laenge += 1) {
-      const fenster = ziffern.slice(start, start + laenge);
-      if (fenster.length === laenge && /^[2-6]/.test(fenster) && luhnGueltig(fenster)) return true;
-    }
-  }
-  return false;
 }
 
 const TRENNZEICHEN_UND_GRUPPEN = [
@@ -110,16 +90,6 @@ const UNGLEICHE_GRUPPEN_UNMASKIERT = [
   ],
 ];
 
-function rolleUndText([role, text], index) {
-  return seedCall({
-    id: `call_trennzeichen_${index}`,
-    status: "completed",
-    answeredAt: new Date().toISOString(),
-    endedAt: new Date().toISOString(),
-    transcript: [{ role, text }],
-  });
-}
-
 const ZEILEN = [
   ...TRENNZEICHEN_UND_GRUPPEN,
   ...LEERZEICHENARTEN,
@@ -131,49 +101,27 @@ const OFFSET_UNGLEICHE_GRUPPEN = ZEILEN.length - UNGLEICHE_GRUPPEN_UNMASKIERT.le
 const OFFSET_LEERZEICHENARTEN = TRENNZEICHEN_UND_GRUPPEN.length;
 const OFFSET_UNMASKIERT = OFFSET_LEERZEICHENARTEN + LEERZEICHENARTEN.length;
 const OFFSET_RUECKRUFNUMMERN = OFFSET_UNMASKIERT + UNMASKIERT.length;
-const ZEILEN_CALLS = ZEILEN.map(rolleUndText);
+const ZEILEN_CALLS = anrufeJeZeile("call_trennzeichen", ZEILEN);
 
-let srv;
+const srv = starteServer(() => ({ seed: seedState({ calls: ZEILEN_CALLS }) }));
 
-before(async () => {
-  srv = await startServer({ seed: seedState({ calls: ZEILEN_CALLS }) });
-});
-
-after(async () => {
-  await srv.stop();
-});
-
-async function ausgabezeile(index) {
-  const result = await readToolResult(
-    await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: ZEILEN_CALLS[index].id })),
-  );
-  const lines = result.structuredContent.last_transcript_lines;
-  assert.equal(lines.length, 1);
-  return lines[0];
-}
-
-function pruefeMaskiert(offset, liste) {
-  return async () => {
-    for (const [position, [, text, erwartet]] of liste.entries()) {
-      const line = await ausgabezeile(offset + position);
-      assert.ok(line.endsWith(erwartet), `Kartennummer im Klartext: ${line} (Eingabe: ${text})`);
-    }
-  };
-}
+const ausgabezeile = (index) => einzigeAusgabezeile(srv, ZEILEN_CALLS[index].id);
 
 test(
   "ziffernweise Karte mit Bindestrich, Unterstrich, Komma, gemischten Trennzeichen, Paar- und Dreiergruppen, Auslassungspunkten und Rufnummernwort erscheint in get_call_status als ****1111",
-  pruefeMaskiert(0, TRENNZEICHEN_UND_GRUPPEN),
+  pruefeMaskiert(ausgabezeile, 0, TRENNZEICHEN_UND_GRUPPEN),
 );
 
 test(
   "ziffernweise Karte mit geschütztem Leerzeichen, schmalem geschütztem Leerzeichen und Tabulator erscheint in get_call_status als ****1111",
-  pruefeMaskiert(OFFSET_LEERZEICHENARTEN, LEERZEICHENARTEN),
+  pruefeMaskiert(ausgabezeile, OFFSET_LEERZEICHENARTEN, LEERZEICHENARTEN),
 );
 
 test("Entscheidung E1: 15 ziffernweise Luhn-gültige Ziffern hinter Telefon bleiben in get_call_status sichtbar, zwei Rückrufnummern mit Luhn-gültigem Fenster werden maskiert", async () => {
   assert.ok(luhnGueltig(AMEX_15) && /^[2-6]/.test(AMEX_15) && AMEX_15.length === 15);
-  assert.ok(hatLuhnFensterMitKartenanfang(RUFNUMMER_VORNE + RUFNUMMER_HINTEN));
+  assert.ok(
+    hatLuhnFensterMitKartenanfang(RUFNUMMER_VORNE + RUFNUMMER_HINTEN, MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT),
+  );
   const [, text] = UNMASKIERT[0];
   const telefonZeile = await ausgabezeile(OFFSET_UNMASKIERT);
   assert.ok(telefonZeile.endsWith(text), `Ziffernfolge ohne Karte fälschlich verändert: ${telefonZeile}`);
@@ -196,27 +144,20 @@ test("Luhn-gültige Ziffernfolgen mit ungleichen Gruppen (4-2-4-4, Einzelziffern
   }
 });
 
-function assertUnveraendertInnerhalbDerGrenze(text) {
-  const started = Date.now();
-  const masked = maskRestrictedText(text);
-  assert.ok(Date.now() - started < RUNTIME_BUDGET_MS, "kein exponentielles Verhalten");
-  assert.equal(masked, text);
-}
-
 test("1 MB aus der Ziffer 1 getrennt mit Bindestrich und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1 - ".repeat(MEGABYTE_CHARS / 4));
+  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1 - ".repeat(MEGABYTE_CHARS / 4));
 });
 
 test("1 MB aus der Ziffer 1 getrennt mit Unterstrich wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1_".repeat(MEGABYTE_CHARS / 2));
+  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1_".repeat(MEGABYTE_CHARS / 2));
 });
 
 test("1 MB aus der Ziffer 1 getrennt mit Komma und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1, ".repeat(MEGABYTE_CHARS / 3));
+  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1, ".repeat(MEGABYTE_CHARS / 3));
 });
 
 test("1 MB aus der Ziffer 1 mit gemischten Trennzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1 - 1_1, 1-".repeat(MEGABYTE_CHARS / 11));
+  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1 - 1_1, 1-".repeat(MEGABYTE_CHARS / 11));
 });
 
 const VORANGESTELLTE_ZIFFERN = "092600";

@@ -1,8 +1,16 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
+import { seedState } from "../helpers.js";
 import { normalizeCallResult } from "../../src/call-result.js";
-import { PASSWORT_BEISPIEL } from "./erfundene-geheimnisse.js";
+import {
+  abgeschlossenerAnruf,
+  geheimnisseAnDerGrenze,
+  ohneMasken,
+  rufeWerkzeug,
+  starteServer,
+  stellen,
+  textMitAngabeAb,
+} from "./kartenmaskierung.js";
 
 const KLARTEXT_FEHLER = "Kartenziffern im gekürzten Ergebnis im Klartext";
 const ANGABE_FEHLER = "Angabe im gekürzten Ergebnis im Klartext";
@@ -19,7 +27,6 @@ const VISA_ZIFFERNWEISE = VISA_ZIFFERN.split("").join(" ");
 const VISA_ZIFFERNWEISE_STRICH = VISA_ZIFFERN.split("").join(" - ");
 const STEUER_ID = "Steuer-ID 12 345 678 901";
 const REISEPASS = "Reisepassnummer 123 456 789";
-const PIN = "PIN: 4711";
 const PASSWORT_KENNWORT = "password: ";
 const PASSWORT_MIT_KARTENWORT = "Karte!Hunter2";
 const RUECKRUFNUMMER_NULL = "Rückrufnummer 0151 1234 5678";
@@ -30,20 +37,8 @@ const NACHTEXT =
 const KURZER_EINTRAG = "Rückmeldung an den Kunden";
 const FRUEHER_ANFANG = "Kunde gab ";
 
-const MASKEN = /\*{4}\d{0,4}|\[restricted-credential\]|\[restricted-government-id\]/g;
-
-function fuelltext(laenge) {
-  let text = "";
-  while (laenge - text.length >= 9) text += "Termin ";
-  return text + "a".repeat(laenge - text.length - 1) + " ";
-}
-
 function feldMitAngabeAb(stelle, angabe, nachtext = NACHTEXT) {
-  return fuelltext(stelle) + angabe + nachtext;
-}
-
-function stellen(von, bis) {
-  return Array.from({ length: bis - von + 1 }, (_, index) => von + index);
+  return textMitAngabeAb(stelle, angabe, nachtext);
 }
 
 function ergebnisMit(text) {
@@ -61,12 +56,9 @@ const ANRUFE = [];
 function anrufMitFeld(text, summary = null) {
   const id = "call_gekuerzt_" + "x".repeat(ANRUFE.length + 1);
   ANRUFE.push(
-    seedCall({
+    abgeschlossenerAnruf({
       id,
       direction: "inbound",
-      status: "completed",
-      answeredAt: new Date().toISOString(),
-      endedAt: new Date().toISOString(),
       summary,
       objectiveAchieved: true,
       inboxEntryAt: new Date().toISOString(),
@@ -106,19 +98,8 @@ const AUSWEIS_AN_DER_GRENZE = [STEUER_ID, REISEPASS].flatMap((angabe) =>
   ),
 );
 
-const PASSWORT = PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
-const GEHEIMNISSE = [
-  { angabe: PIN, kennwort: "PIN: ", wert: "4711" },
-  { angabe: PASSWORT, kennwort: PASSWORT_KENNWORT, wert: PASSWORT_BEISPIEL },
-];
-const GEHEIMNIS_AN_DER_GRENZE = GEHEIMNISSE.flatMap((geheimnis) =>
-  stellen(190, 199).flatMap((stelle) => [
-    { ...geheimnis, ...anrufMitFeld(feldMitAngabeAb(stelle, geheimnis.angabe)) },
-    {
-      ...geheimnis,
-      ...anrufMitFeld(feldMitAngabeAb(stelle - geheimnis.kennwort.length, geheimnis.angabe)),
-    },
-  ]),
+const GEHEIMNIS_AN_DER_GRENZE = geheimnisseAnDerGrenze(190, 199, (stelle, angabe) =>
+  anrufMitFeld(feldMitAngabeAb(stelle, angabe)),
 );
 
 const DINERS_VOR_PASSWORT = DINERS_GRUPPIERT + " " + PASSWORT_KENNWORT;
@@ -168,19 +149,9 @@ const KARTE_ENDET_AN_DER_GRENZE = anrufMitFeld(
   feldMitAngabeAb(GRENZE - VISA_GRUPPIERT.length - KARTENWORT.length, KARTENWORT + VISA_GRUPPIERT),
 );
 
-let srv;
+const srv = starteServer(() => ({ seed: seedState({ calls: ANRUFE }) }));
 
-before(async () => {
-  srv = await startServer({ seed: seedState({ calls: ANRUFE }) });
-});
-
-after(async () => {
-  await srv.stop();
-});
-
-async function werkzeug(name, args) {
-  return readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall(name, args)));
-}
+const werkzeug = (name, args) => rufeWerkzeug(srv, name, args);
 
 function kartenfelder(daten) {
   return [
@@ -226,10 +197,6 @@ async function beideAusgabenWie(anruf, text) {
   const erwartet = kartenfelder(ergebnisMit(text));
   assert.deepEqual(await ergebnisfelder(anruf), erwartet, KUERZUNG_FEHLER);
   assert.deepEqual(await inboxfelder(anruf), erwartet, KUERZUNG_FEHLER);
-}
-
-function ohneMasken(text) {
-  return text.replace(MASKEN, "");
 }
 
 function pruefeKeineZiffernAusserMaske(felder, meldung) {
