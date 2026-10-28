@@ -11,6 +11,9 @@ const MASSE = {
 const KOPF = 'import { einordnen } from "./zahl.js";';
 const ALLE_NAMEN = 'import { GRENZE, STUFE, runde } from "./masse.js";';
 const OHNE_STUFE = 'import { GRENZE, runde } from "./masse.js";';
+const EXPORT_EXTRA = 'export { EXTRA } from "./masse.js";';
+const ANDERS_NAMEN = 'import { GRENZE, runde } from "./anders.js";';
+const ANDERS_OHNE_NAMEN = 'import "./anders.js";';
 const OHNE_NAMEN_IMPORT = 'import "./masse.js";';
 const NUR_STUFE = 'import { STUFE } from "./masse.js";';
 const OBERHALB = "export function oberhalb(wert) {\n  return wert > GRENZE;\n}";
@@ -54,6 +57,20 @@ test("Auslagerung mit gekürzten Importen: steht ein Import aus der neuen Datei 
   const ausNeuer = 'import { oberhalb } from "./ausgelagert.js";';
   const rest = 'export function pruefen(wert) {\n  return einordnen(wert) === "negativ" ? oberhalb(wert) : "an";\n}';
   istKeineReineAuslagerung(context, kuerzung(context, { alt: OHNE_STUFE, nachher: OHNE_NAMEN_IMPORT, rest, importeNachher: [ausNeuer, KOPF, OHNE_NAMEN_IMPORT] }));
+});
+
+test("Auslagerung mit gekürzten Importen: steht ein bleibendes export … from hinter einer gekürzten Importanweisung statt davor, ist es keine reine Auslagerung", (context) => {
+  istKeineReineAuslagerung(context, kuerzung(context, { rest: OHNE_NAMEN, neuKopf: ANDERS_NAMEN, importeVorher: [EXPORT_EXTRA, KOPF, ANDERS_NAMEN], importeNachher: [KOPF, ANDERS_OHNE_NAMEN, EXPORT_EXTRA] }));
+});
+
+test("Auslagerung mit gekürzten Importen: steht die Weiterreichung vor einem bleibenden export … from, ist es keine reine Auslagerung", (context) => {
+  const aufbau = (importe, weiter, uebrig) => [...importe, weiter, EXPORT_EXTRA, uebrig];
+  istKeineReineAuslagerung(context, kuerzung(context, { rest: OHNE_NAMEN, neuKopf: ANDERS_NAMEN, importeVorher: [KOPF, ANDERS_NAMEN, EXPORT_EXTRA], importeNachher: [KOPF, ANDERS_OHNE_NAMEN], aufbau }));
+});
+
+test("Auslagerung mit gekürzten Importen: bleiben export … from und gekürzte Importanweisung in der alten Reihenfolge vor der Weiterreichung, ist das eine reine Auslagerung", (context) => {
+  const aufbau = (importe, weiter, uebrig) => [...importe, weiter, uebrig];
+  istReineAuslagerung(context, kuerzung(context, { rest: OHNE_NAMEN, neuKopf: ANDERS_NAMEN, importeVorher: [KOPF, EXPORT_EXTRA, ANDERS_NAMEN], importeNachher: [KOPF, EXPORT_EXTRA, ANDERS_OHNE_NAMEN], aufbau }));
 });
 
 test("Auslagerung mit gekürzten Importen: vertauscht die alte Datei zwei bleibende Importanweisungen, ist es keine reine Auslagerung, auch wenn keine wegfällt", (context) => {

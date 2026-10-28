@@ -311,14 +311,22 @@ function istKuerzung(alt, anweisung) {
   return gleicherBaum(ohneNamen(alt), ohneNamen(anweisung)) && anweisung.specifiers.every(alsTeilfolge);
 }
 
-function importeDerHilfe(vorher, nachher, neue) {
-  const alte = importeVon(vorher.baum);
-  const behalten = importeVon(nachher.baum).filter((anweisung) => !holtAusNeuer(nachher.pfad, anweisung, neue));
-  return behalten.length === alte.length && behalten.every((anweisung, stelle) => istKuerzung(alte[stelle], anweisung));
+function ladeanweisungen({ pfad, baum }, neue) {
+  return baum.body.filter((anweisung) => istQuelle(anweisung) && !holtAusNeuer(pfad, anweisung, neue));
 }
 
-function neueHinterDenImporten({ pfad, baum }, neue) {
-  const letzterAlter = baum.body.findLastIndex((anweisung) => istImport(anweisung) && !holtAusNeuer(pfad, anweisung, neue));
+function bleibtAnDerStelle(alt, anweisung) {
+  return istImport(alt) ? istKuerzung(alt, anweisung) : gleicherBaum(alt, anweisung);
+}
+
+function ladeanweisungenDerHilfe(vorher, nachher, neue) {
+  const alte = ladeanweisungen(vorher, []);
+  const behalten = ladeanweisungen(nachher, neue);
+  return behalten.length === alte.length && behalten.every((anweisung, stelle) => bleibtAnDerStelle(alte[stelle], anweisung));
+}
+
+function neueHinterDenLadeanweisungen({ pfad, baum }, neue) {
+  const letzterAlter = baum.body.findLastIndex((anweisung) => istQuelle(anweisung) && !holtAusNeuer(pfad, anweisung, neue));
   return baum.body.every((anweisung, stelle) => stelle > letzterAlter || !holtAusNeuer(pfad, anweisung, neue));
 }
 
@@ -386,7 +394,7 @@ function gestrichenWirdVonNeuenGelesen(vorher, nachher, neue) {
 
 function gleicherGraph(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
-  const importe = importeDerHilfe(vorher, nachher, neuePfade) && neueHinterDenImporten(nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
+  const importe = ladeanweisungenDerHilfe(vorher, nachher, neuePfade) && neueHinterDenLadeanweisungen(nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
   return neue.every((datei) => importeAusVorher(vorher, datei)) && importe && laedtAlleNeuen(nachher, neuePfade);
 }
 
