@@ -1,0 +1,13 @@
+export const DEFAULT_COUNTRY = "DE";
+
+export const DEFAULT_TIMEZONE = "Europe/Berlin";
+
+export function resolveTimezone(timezone) {
+  if (typeof timezone !== "string" || !timezone.trim()) return DEFAULT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return timezone;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+}

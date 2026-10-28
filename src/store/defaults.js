@@ -69,6 +69,7 @@ export {
   emptyPlatformTtsUsage,
   emptyUsage,
 } from "./begriffe-leerzustaende.js";
+export { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone } from "./begriffe-sprache-zeit.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -92,23 +93,10 @@ export const DEFAULT_GREETING = withInboundNotice(
   INBOUND_NOTICES.de,
 );
 
-export const DEFAULT_COUNTRY = "DE";
 export let DEFAULT_LANGUAGE = "en";
 
 export function setWorldDefaultLanguageEnabled(enabled) {
   DEFAULT_LANGUAGE = enabled ? "en" : "de";
-}
-
-export const DEFAULT_TIMEZONE = "Europe/Berlin";
-
-export function resolveTimezone(timezone) {
-  if (typeof timezone !== "string" || !timezone.trim()) return DEFAULT_TIMEZONE;
-  try {
-    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
-    return timezone;
-  } catch {
-    return DEFAULT_TIMEZONE;
-  }
 }
 
 export function defaultSettings() {
