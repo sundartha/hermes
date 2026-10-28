@@ -23,22 +23,53 @@ const NEW_PERIOD_END = 1896134400;
 const SUBSCRIPTION_ID = "sub_c1";
 const CONFIG = { paymentEnabled: true };
 
-function fakeBilling(spy = { schedule: [], unschedule: [] }) {
-  return {
-    scheduleCancellation: async (params) => {
-      spy.schedule.push(params);
-      return { subscriptionId: params.subscriptionId, cancelAtPeriodEnd: true, currentPeriodEnd: NEW_PERIOD_END };
-    },
-    unscheduleCancellation: async (params) => {
-      spy.unschedule.push(params);
-      return { subscriptionId: params.subscriptionId, cancelAtPeriodEnd: false, currentPeriodEnd: NEW_PERIOD_END };
-    },
+function stripeLikeBillingIgnoringRepeatedKeys(gate) {
+  const calls = { schedule: [], unschedule: [] };
+  const seenKeys = new Set();
+  let cancelAtPeriodEndAtStripe = false;
+  const answer = async (direction, params, cancelAtPeriodEnd) => {
+    calls[direction].push(params);
+    await gate;
+    if (!seenKeys.has(params.idempotencyKey)) {
+      seenKeys.add(params.idempotencyKey);
+      cancelAtPeriodEndAtStripe = cancelAtPeriodEnd;
+    }
+    return {
+      subscriptionId: params.subscriptionId,
+      cancelAtPeriodEnd,
+      currentPeriodEnd: NEW_PERIOD_END,
+    };
   };
+  return {
+    billing: {
+      scheduleCancellation: (params) => answer("schedule", params, true),
+      unscheduleCancellation: (params) => answer("unschedule", params, false),
+    },
+    calls,
+    lastCall: (direction) => calls[direction].at(-1),
+    keysFor: (direction) => calls[direction].map((params) => params.idempotencyKey),
+    cancelAtPeriodEndAtStripe: () => cancelAtPeriodEndAtStripe,
+  };
+}
+
+function gateAfterAuthenticatedRequests(webAuthMw, count) {
+  let passed = 0;
+  let release = () => {};
+  const allPassed = new Promise((resolve) => {
+    release = resolve;
+  });
+  const countingAuth = (req, res, next) =>
+    webAuthMw(req, res, (...args) => {
+      next(...args);
+      passed += 1;
+      if (passed >= count) release();
+    });
+  return { allPassed, countingAuth };
 }
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-async function setup({ withSubscription = true, status = "active" } = {}) {
+async function setup({ withSubscription = true, status = "active", concurrentRequests = 0 } = {}) {
   const { store, db, runner } = await makePgTestStore();
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
@@ -60,18 +91,23 @@ async function setup({ withSubscription = true, status = "active" } = {}) {
     });
   }
 
-  const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
-  const billingSpy = { schedule: [], unschedule: [] };
+  const { allPassed, countingAuth } = gateAfterAuthenticatedRequests(
+    webAuth({ secret: SECRET, sessions, accounts }),
+    concurrentRequests,
+  );
+  const stripe = stripeLikeBillingIgnoringRepeatedKeys(
+    concurrentRequests > 0 ? allPassed : Promise.resolve(),
+  );
   const app = express();
   app.use(express.json());
   app.use(
     makeSelfServiceRoutes({
       store,
-      webAuthMw,
-      webAuthPendingMw: webAuthMw,
+      webAuthMw: countingAuth,
+      webAuthPendingMw: countingAuth,
       audit: () => {},
       config: withConfigNamespaces(CONFIG),
-      billing: fakeBilling(billingSpy),
+      billing: stripe.billing,
       accounts,
       provision: async () => {},
       auditStore,
@@ -84,7 +120,8 @@ async function setup({ withSubscription = true, status = "active" } = {}) {
     base: `http://127.0.0.1:${server.address().port}`,
     store,
     db,
-    billingSpy,
+    billingSpy: stripe.calls,
+    stripe,
     cookie: cookieFor(sessionId),
     close: () => new Promise((r) => server.close(r)),
   };
@@ -130,11 +167,16 @@ test("(b) Erfolg: Vormerkung persistiert + durabler Nachweis (auditStore, NICHT 
     assert.equal(sub.currentPeriodEnd, NEW_PERIOD_END, "Termin aus der Stripe-Antwort uebernommen");
 
     assert.equal(s.billingSpy.schedule.length, 1);
-    assert.equal(s.billingSpy.schedule[0].subscriptionId, SUBSCRIPTION_ID);
-    assert.equal(
-      s.billingSpy.schedule[0].idempotencyKey,
-      `cancel_sched_${SUBSCRIPTION_ID}`,
+    assert.equal(s.stripe.lastCall("schedule").subscriptionId, SUBSCRIPTION_ID);
+    assert.match(
+      s.stripe.lastCall("schedule").idempotencyKey,
+      /^cancel_sched_/,
       "Idempotenz-Schluessel traegt die Richtung (312k-P2-Vorgabe)",
+    );
+    assert.notEqual(
+      s.stripe.lastCall("schedule").idempotencyKey,
+      `cancel_sched_${SUBSCRIPTION_ID}`,
+      "Idempotenz-Schluessel je Uebergang, nicht fest je Abo und Richtung",
     );
 
     const rows = await auditRows(s, "self_service_cancel_scheduled");
@@ -171,7 +213,16 @@ test("(d) Ruecknahme: Zustand zurueckgesetzt + eigener durabler Nachweis, umgeke
 
     assert.equal(s.store.tenantSubscription(TENANT_C).cancelAtPeriodEnd, false);
     assert.equal(s.billingSpy.unschedule.length, 1);
-    assert.equal(s.billingSpy.unschedule[0].idempotencyKey, `cancel_unsched_${SUBSCRIPTION_ID}`);
+    assert.match(
+      s.stripe.lastCall("unschedule").idempotencyKey,
+      /^cancel_unsched_/,
+      "Schluessel traegt die Richtung",
+    );
+    assert.notEqual(
+      s.stripe.lastCall("unschedule").idempotencyKey,
+      `cancel_unsched_${SUBSCRIPTION_ID}`,
+      "Idempotenz-Schluessel je Uebergang, nicht fest je Abo und Richtung",
+    );
 
     const rows = await auditRows(s, "self_service_cancel_resumed");
     assert.equal(rows.length, 1);
@@ -256,7 +307,7 @@ test("(j) PAYMENT_ENABLED aus -> 404 (Muster subscribe/setup-checkout)", async (
       webAuthPendingMw: webAuthMw,
       audit: () => {},
       config: withConfigNamespaces({ paymentEnabled: false }),
-      billing: fakeBilling(),
+      billing: {},
       accounts,
       provision: async () => {},
       auditStore,
@@ -275,5 +326,104 @@ test("(j) PAYMENT_ENABLED aus -> 404 (Muster subscribe/setup-checkout)", async (
   } finally {
     await new Promise((r) => server.close(r));
     void db;
+  }
+});
+
+test("(k) Kuendigen, Fortsetzen, Kuendigen, Fortsetzen: jeder Richtungswechsel wirkt bei Stripe", async () => {
+  const s = await setup();
+  try {
+    await cancel(s);
+    await resume(s);
+    const erneutGekuendigt = await cancel(s);
+    assert.equal(
+      JSON.parse(erneutGekuendigt.body).cancelAtPeriodEnd,
+      true,
+      "Antwort meldet gekuendigt",
+    );
+    assert.equal(
+      s.store.tenantSubscription(TENANT_C).cancelAtPeriodEnd,
+      true,
+      "Store haelt gekuendigt",
+    );
+    assert.equal(
+      s.stripe.cancelAtPeriodEndAtStripe(),
+      true,
+      "nach Kuendigen, Fortsetzen und erneutem Kuendigen muss das Abo bei Stripe gekuendigt sein",
+    );
+
+    const erneutFortgesetzt = await resume(s);
+    assert.equal(
+      JSON.parse(erneutFortgesetzt.body).cancelAtPeriodEnd,
+      false,
+      "Antwort meldet fortgesetzt",
+    );
+    assert.equal(
+      s.store.tenantSubscription(TENANT_C).cancelAtPeriodEnd,
+      false,
+      "Store haelt fortgesetzt",
+    );
+    assert.equal(
+      s.stripe.cancelAtPeriodEndAtStripe(),
+      false,
+      "Abo ist bei Stripe wieder fortgesetzt",
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test("[NIE1] zweimal Kuendigen ohne Fortsetzen: ein Stripe-Aufruf, ein durabler Nachweis", async () => {
+  const s = await setup();
+  try {
+    const erste = await cancel(s);
+    const zweite = await cancel(s);
+    assert.deepEqual([erste.status, zweite.status], [200, 200]);
+    assert.deepEqual(
+      {
+        stripeAufrufe: s.stripe.keysFor("schedule").length,
+        nachweise: (await auditRows(s, "self_service_cancel_scheduled")).length,
+      },
+      { stripeAufrufe: 1, nachweise: 1 },
+    );
+    assert.equal(s.stripe.cancelAtPeriodEndAtStripe(), true, "das Abo ist bei Stripe gekuendigt");
+  } finally {
+    await s.close();
+  }
+});
+
+test("[NIE2] Schluessel zum Kuendigen gleicht nie einem Schluessel zum Fortsetzen desselben Abos", async () => {
+  const s = await setup();
+  try {
+    await cancel(s);
+    await resume(s);
+    await cancel(s);
+    await resume(s);
+    const zumKuendigen = s.stripe.keysFor("schedule");
+    const zumFortsetzen = new Set(s.stripe.keysFor("unschedule"));
+    assert.equal(zumKuendigen.length, 2, "beide Kuendigungen erreichen Stripe");
+    assert.equal(s.stripe.keysFor("unschedule").length, 2, "beide Ruecknahmen erreichen Stripe");
+    assert.deepEqual(
+      zumKuendigen.filter((key) => zumFortsetzen.has(key)),
+      [],
+      "kein Schluessel wird fuer beide Richtungen benutzt",
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test("[NIE3] zwei gleichzeitige Kuendigungen: ein Stripe-Aufruf, ein durabler Nachweis", async () => {
+  const s = await setup({ concurrentRequests: 2 });
+  try {
+    const antworten = await Promise.all([cancel(s), cancel(s)]);
+    assert.deepEqual(
+      antworten.map((antwort) => antwort.status),
+      [200, 200],
+    );
+    const nachweise = await auditRows(s, "self_service_cancel_scheduled");
+    assert.equal(s.stripe.keysFor("schedule").length, 1, "genau ein Stripe-Aufruf zum Kuendigen");
+    assert.equal(nachweise.length, 1, "genau ein durabler Nachweis");
+  } finally {
+    await s.close();
   }
 });
