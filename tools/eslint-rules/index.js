@@ -304,9 +304,9 @@ const configPfade = {
     ],
     messages: {
       tabelleFehlt: TABELLE_FEHLT,
-      keinNamensraum: "config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js.",
+      keinNamensraum: "config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js. Lies den Wert über einen vorhandenen Namensraum, oder lege den Schlüssel im passenden Namensraum von CONFIG_NAMESPACES in src/config.js an und trage die Variable in .env.example ein.",
       ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>.",
-      unbekanntesBlatt: "config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js.",
+      unbekanntesBlatt: "config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}} oder lege {{blatt}} dort in src/config.js an (in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES) und trage die Variable in .env.example ein.",
     },
   },
   create(context) {

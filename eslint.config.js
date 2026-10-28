@@ -553,7 +553,8 @@ export default [
         {
           object: "process",
           property: "env",
-          message: "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          message:
+            "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
         },
       ],
 
