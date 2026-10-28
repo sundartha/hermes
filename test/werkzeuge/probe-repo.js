@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { env } from "node:process";
@@ -99,6 +99,12 @@ export function probeRepository(context, files) {
   git(directory, ["init", "-q"]);
   commitAll(directory, "Basis");
   return directory;
+}
+
+export function echterCiLokalSchritt(name) {
+  const { schritte } = JSON.parse(readFileSync(join(REPO_ROOT, "tools/ci-lokal.json"), "utf8"));
+  const { befehl } = schritte.find((schritt) => schritt.name === name);
+  return befehl.replace("tools/basis-vergleich.mjs", JSON.stringify(join(REPO_ROOT, "tools/basis-vergleich.mjs")));
 }
 
 export function repoMitCiLokalListe(context, schritte) {
