@@ -62,6 +62,7 @@ const NICHT_GEKUERZT =
   "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
 const ZITAT = "> ";
+const OHNE_GRUND = "Ein Schritt der Gruppe war rot und nannte keinen Grund.";
 const BLOB = " blob ";
 const PLAENE = "plaene/";
 const ANLEITUNG = ".md";
@@ -414,8 +415,11 @@ class AuftragsLauf {
     return this.basisVergleich(INJEKTION);
   }
 
-  zugleich(schritte) {
-    const gruende = schritte.flatMap((schritt) => (schritt() ? [] : [this.grund]));
+  alleMitGruenden(schritte) {
+    const gruende = schritte.flatMap((schritt) => {
+      this.grund = null;
+      return schritt() ? [] : [this.grund ?? OHNE_GRUND];
+    });
     if (gruende.length > 0) this.grund = gruende.join(" ");
     return gruende.length === 0;
   }
@@ -526,7 +530,7 @@ class AuftragsLauf {
     const vorBau = brauchtRotenTest(auftrag)
       ? [
           () => this.agent("test", testAgentPrompt(this.kontext)),
-          () => this.zugleich(this.schnelleTestpruefungen()),
+          () => this.alleMitGruenden(this.schnelleTestpruefungen()),
           () => this.injektion(),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
@@ -578,7 +582,7 @@ class AuftragsLauf {
       () => this.listenUmziehen(),
       () => this.listenKuerzen(),
       () => this.allesVormerken(),
-      () => this.zugleich(this.schnelleBauPruefungen()),
+      () => this.alleMitGruenden(this.schnelleBauPruefungen()),
       () => this.injektion(),
       () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
