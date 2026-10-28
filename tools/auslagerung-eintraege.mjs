@@ -55,18 +55,23 @@ function umgezogen(liste, { hilfe, neu, befunde }) {
   return { ...andere, ...(Object.keys(rest).length > 0 ? { [hilfe]: rest } : {}), ...(Object.keys(eintrag).length > 0 ? { [neu]: eintrag } : {}) };
 }
 
+export async function listeNachAuslagerung(vorher, herkunft, root) {
+  let liste = vorher;
+  for (const [neu, hilfe] of herkunft) {
+    if (liste[neu] !== undefined) return undefined;
+    liste = umgezogen(liste, { hilfe, neu, befunde: await befundeDer(root, neu) });
+  }
+  return liste;
+}
+
 export async function unterdrueckungenAusgelagert({ basis, root }) {
   const pfad = join(root, UNTERDRUECKUNGEN);
   if (!existsSync(pfad)) return undefined;
   const herkunft = await auslagerungsHerkunft({ von: basis }, root);
   const text = readFileSync(pfad, "utf8");
   const vorher = JSON.parse(text);
-  let liste = vorher;
-  for (const [neu, hilfe] of herkunft) {
-    if (liste[neu] !== undefined) return undefined;
-    liste = umgezogen(liste, { hilfe, neu, befunde: await befundeDer(root, neu) });
-  }
-  if (isDeepStrictEqual(liste, vorher)) return undefined;
+  const liste = await listeNachAuslagerung(vorher, herkunft, root);
+  if (liste === undefined || isDeepStrictEqual(liste, vorher)) return undefined;
   const anzahl = [...herkunft.keys()].flatMap((neu) => Object.values(liste[neu] ?? {})).reduce((summe, { count }) => summe + count, 0);
   return { neu: JSON.stringify(geordnet(liste), null, EINRUECKUNG), anzahl };
 }
