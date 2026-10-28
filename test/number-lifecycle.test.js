@@ -226,3 +226,105 @@ test("release schliesst die assignment (released_at) und gibt den Platz frei", (
   );
   assert.equal(requestNumber(s, { tenantId: "t_user1", ...CAPS }).ok, true);
 });
+
+const ERLAUBTE_UEBERGAENGE = {
+  requested: ["provisioning", "failed"],
+  provisioning: ["capturing", "active", "failed"],
+  capturing: ["active", "failed"],
+  active: ["suspended", "released"],
+  suspended: ["active", "released"],
+  failed: ["released"],
+  released: [],
+};
+const ALLE_STATUS = Object.keys(ERLAUBTE_UEBERGAENGE);
+
+const nummerAufWeg = (s, weg) => {
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  for (const status of weg) {
+    if (status === "active" && findNumber(s, number.id).status === "provisioning") {
+      activateNumber(s, number.id, { e164: "+4915755500001", providerNumberId: "tnx_nie" });
+    } else {
+      transitionNumber(s, number.id, status);
+    }
+  }
+  return number.id;
+};
+
+test("[NIE1] Uebergangstabelle erlaubt genau die vorgesehenen Zielstatus, aus released keinen", async () => {
+  const { NUMBER_TRANSITIONS } = await import("../src/store/defaults.js");
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(NUMBER_TRANSITIONS).map(([von, nach]) => [von, [...nach]])),
+    ERLAUBTE_UEBERGAENGE,
+  );
+  for (const von of ALLE_STATUS) {
+    for (const nach of ALLE_STATUS) {
+      assert.equal(
+        canTransitionNumber(von, nach),
+        ERLAUBTE_UEBERGAENGE[von].includes(nach),
+        `${von} -> ${nach}`,
+      );
+    }
+  }
+});
+
+test("[NIE2] Nummernstatus traegt beim Anfordern bis Freigeben die vorgesehenen Werte", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  assert.equal(findNumber(s, number.id).status, "requested");
+  beginProvisioning(s, number.id);
+  assert.equal(findNumber(s, number.id).status, "provisioning");
+  beginCapturing(s, number.id);
+  assert.equal(findNumber(s, number.id).status, "capturing");
+  activateNumber(s, number.id, { e164: "+4915755500002", providerNumberId: "tnx_nie2" });
+  assert.equal(findNumber(s, number.id).status, "active");
+  transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED);
+  assert.equal(findNumber(s, number.id).status, "suspended");
+  releaseNumber(s, number.id);
+  assert.equal(findNumber(s, number.id).status, "released");
+  assert.deepEqual(
+    { ...NUMBER_STATUS },
+    {
+      REQUESTED: "requested",
+      PROVISIONING: "provisioning",
+      CAPTURING: "capturing",
+      ACTIVE: "active",
+      FAILED: "failed",
+      SUSPENDED: "suspended",
+      RELEASED: "released",
+    },
+  );
+});
+
+test("[NIE3] Status eines Bereitstellungsjobs sind queued, done und failed", async () => {
+  const { PROVISIONING_JOB_STATUS } = await import("../src/store/defaults.js");
+  assert.deepEqual(
+    { ...PROVISIONING_JOB_STATUS },
+    { QUEUED: "queued", DONE: "done", FAILED: "failed" },
+  );
+  assert.ok(Object.isFrozen(PROVISIONING_JOB_STATUS));
+});
+
+test("[NIE4] Uebergang in unbekannten Status wird aus keinem Status angenommen", () => {
+  const unbekannterStatus = "unbekannt";
+  for (const von of [...ALLE_STATUS, "garbage"]) {
+    assert.equal(canTransitionNumber(von, unbekannterStatus), false, `${von} -> unbekannt`);
+  }
+  const wege = {
+    requested: [],
+    provisioning: ["provisioning"],
+    capturing: ["provisioning", "capturing"],
+    active: ["provisioning", "active"],
+    suspended: ["provisioning", "active", "suspended"],
+    failed: ["failed"],
+    released: ["provisioning", "active", "released"],
+  };
+  for (const [status, weg] of Object.entries(wege)) {
+    const s = makeDefaultState();
+    const id = nummerAufWeg(s, weg);
+    assert.equal(findNumber(s, id).status, status);
+    assert.throws(() => transitionNumber(s, id, unbekannterStatus), /illegaler Uebergang/);
+    assert.equal(findNumber(s, id).status, status, "Status unveraendert");
+  }
+});
