@@ -6,6 +6,7 @@ import { env } from "node:process";
 import { tokenize } from "espree";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
+import { reineQuellauslagerung } from "../mutationspruefung/quellauslagerung.mjs";
 import { BEREICHE_DATEI, bereichDerDatei, leseBereiche } from "../tests-ausmisten/pfade.mjs";
 import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
@@ -114,6 +115,15 @@ function bereichNachListe(root) {
   return (pfad) => bereichDerDatei(pfad, bereiche);
 }
 
+async function ohneAusgelagerteZeilen(aenderungen, { rolle, basis, root }) {
+  const auslagerung = rolle === "bau" ? await reineQuellauslagerung({ von: basis }, root) : null;
+  if (auslagerung === null) return { gezaehlt: aenderungen, auslagerungsHinweise: [] };
+  const neue = new Set(auslagerung.neue);
+  const gezaehlt = aenderungen.map((eintrag) => (neue.has(eintrag.pfad) ? { ...eintrag, zeilen: 0 } : eintrag));
+  const hinweis = `Hinweis: reine Auslagerung aus ${auslagerung.hilfe} nach ${auslagerung.neue.join(", ")} (${auslagerung.anweisungen} Anweisungen Wort für Wort verschoben und weitergereicht); deren Zeilen zählen nicht als neue Zeilen Produktcode.`;
+  return { gezaehlt, auslagerungsHinweise: [hinweis] };
+}
+
 export async function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
   if (befunde.length > 0) {
@@ -122,10 +132,10 @@ export async function grenzen(phasendatei, kennung, { rolle, basis, root }) {
   }
   const umbenennung = rolle === "bau" ? await nurTypenNachgezogen({ basis, root }, aenderungenSeit(basis, root).map(({ pfad }) => pfad)) : OHNE_UMBENENNUNG;
   const { paare, nachgezogen, hinweise: umbenennungsHinweise } = umbenennung;
-  const aenderungen = aenderungenSeit(basis, root, paare);
+  const { gezaehlt: aenderungen, auslagerungsHinweise } = await ohneAusgelagerteZeilen(aenderungenSeit(basis, root, paare), { rolle, basis, root });
   const kontext = { auftrag, rolle, muster: geschuetzteMuster(root), bestand: (pfad) => gibtEsIn(basis, pfad, root), nachgezogen, paare, bereichDer: bereichNachListe(root) };
   const { verstoesse, hinweise, produktzeilen } = grenzBefunde(kontext, aenderungen);
-  for (const zeile of [...verstoesse, ...hinweise, ...umbenennungsHinweise]) console.log(zeile);
+  for (const zeile of [...verstoesse, ...hinweise, ...umbenennungsHinweise, ...auslagerungsHinweise]) console.log(zeile);
   const urteil = verstoesse.length === 0 ? "grün" : "rot";
   console.log(
     `${urteil}: ${aenderungen.length} Dateien geändert, ${produktzeilen} neue Zeilen Produktcode, Rolle ${rolle}.`,

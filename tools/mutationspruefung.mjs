@@ -23,6 +23,7 @@ import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, ze
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
+import { quellauslagerungsZeile, reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
 import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
@@ -517,10 +518,19 @@ async function gleicherLaufzeitcode(datei, { von, bis, seite }, umbenannt) {
   return gleich ? `${datei}: Syntaxbaum unverändert, keine Mutanten nötig.` : undefined;
 }
 
+async function ohneAuslagerung(zeilen, pruefung) {
+  const uebrig = new Map(zeilen);
+  const auslagerung = zeilen.size === 0 ? null : await reineQuellauslagerung(pruefung, cwd());
+  if (auslagerung === null) return uebrig;
+  for (const datei of [auslagerung.hilfe, ...auslagerung.neue]) uebrig.delete(datei);
+  console.log(quellauslagerungsZeile(auslagerung));
+  return uebrig;
+}
+
 async function ohneGleichenSyntaxbaum(zeilen, pruefung) {
   const umbenannt = await umbenennungen(pruefung);
-  const uebrig = new Map(zeilen);
-  for (const datei of zeilen.keys()) {
+  const uebrig = await ohneAuslagerung(zeilen, pruefung);
+  for (const datei of [...uebrig.keys()]) {
     const meldung = await gleicherLaufzeitcode(datei, pruefung, umbenannt);
     if (meldung === undefined) continue;
     uebrig.delete(datei);

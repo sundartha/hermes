@@ -246,7 +246,7 @@
   },
   "mutation": {
     "liste": "A14",
-    "wozu": "Jede neue Zeile muss von einem Test verlangt werden; sonst bemerkt niemand, wenn sie später bricht.",
+    "wozu": "Jede neue Zeile muss von einem Test verlangt werden; sonst bemerkt niemand, wenn sie später bricht. Eine reine Auslagerung (Anweisungen ohne Wirkung beim Laden Wort für Wort aus einer Quelldatei in neue Dateien unter src/ verschoben und mit export … from unter gleichem Namen weitergereicht, sonst keine Änderung unter src/ und test/) bringt keine neue Zeile und startet keine Mutation; ihre verschobenen Zeilen zählen auch nicht gegen die Zeilengrenze.",
     "behebung": "Ist die Zeile nötig und fehlt nur der Test, antwortet der Bau-Agent je Mutant mit einer eigenen Zeile „Nötig: <Mutant>, weil <Satz>“; streichen nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher.",
     "nichtAngenommen": "Eine nötige Absicherung streichen oder einen Mutanten, der Verhalten ändert, als gleichwertig melden.",
     "ausweg": "In der Nachrunde antwortet der Bau-Agent je wirkungslosem Mutanten mit einer eigenen Zeile „Gleichwertig: <Mutant>, weil <bei welcher Eingabe sich nichts ändert und warum keine andere Eingabe etwas ändert>“; der Test-Agent mit einer letzten Zeile „Auftrag passt nicht: <Grund>“."
