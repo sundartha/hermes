@@ -310,9 +310,24 @@ function nichtsFaelltWeg(vorher, nachher, neue) {
   return laedtAlleNeuen(nachher, neue.map(({ pfad }) => pfad)) && zieleVon(vorher).every((datei) => geladen.has(datei));
 }
 
+function istKuerzung(alt, anweisung) {
+  const ohneNamen = (eintrag) => ({ ...eintrag, specifiers: [] });
+  const vorhanden = alt.specifiers.values();
+  const alsTeilfolge = (eintrag) => {
+    for (const name of vorhanden) if (gleicherBaum(name, eintrag)) return true;
+    return false;
+  };
+  return gleicherBaum(ohneNamen(alt), ohneNamen(anweisung)) && anweisung.specifiers.every(alsTeilfolge);
+}
+
 function importeDerHilfe(vorher, nachher, neue) {
-  const alte = importeVon(vorher.baum);
-  return importeVon(nachher.baum).every((anweisung) => holtAusNeuer(nachher.pfad, anweisung, neue) || alte.some((alt) => gleicherBaum(alt, anweisung)));
+  const frei = importeVon(vorher.baum);
+  const ordneZu = (anweisung) => {
+    const stelle = frei.findIndex((alt) => istKuerzung(alt, anweisung));
+    if (stelle !== -1) frei.splice(stelle, 1);
+    return stelle !== -1;
+  };
+  return importeVon(nachher.baum).every((anweisung) => holtAusNeuer(nachher.pfad, anweisung, neue) || ordneZu(anweisung));
 }
 
 function namenDerDeklaration(deklaration) {
@@ -337,12 +352,15 @@ function exportNamen(datei, baum, exporteDerNeuen = new Map()) {
 }
 
 function geltungsbereich({ pfad, text }) {
-  const bereich = { namen: new Set(), frei: new Set() };
+  const bereich = { namen: new Set(), gelesen: new Set(), frei: new Set() };
   besucheSyntaxbaum(pfad, text, (context) => ({
     "Program:exit": (programm) => {
       const global = context.sourceCode.getScope(programm);
       const oben = global.childScopes.find(({ type }) => type === "module") ?? global;
-      for (const { name } of oben.variables) bereich.namen.add(name);
+      for (const { name, references } of oben.variables) {
+        bereich.namen.add(name);
+        if (references.length > 0) bereich.gelesen.add(name);
+      }
       for (const { identifier } of global.through) bereich.frei.add(identifier.name);
     },
   }));
@@ -366,9 +384,18 @@ function gleicheExporte(vorher, nachher, neue) {
   return isDeepStrictEqual(exportNamen(vorher.pfad, vorher.baum), exportNamen(nachher.pfad, nachher.baum, exporteDerNeuen));
 }
 
+function gestrichenWirdVonNeuenGelesen(vorher, nachher, neue) {
+  const bleibt = new Set(bindungen(nachher.pfad, nachher.baum));
+  const gestrichen = bindungen(vorher.pfad, vorher.baum).filter((bindung) => !bleibt.has(bindung));
+  const gelesen = neue.map((datei) => geltungsbereich(datei).gelesen);
+  const ohneAlias = ([, art, importiert, lokal]) => art !== "ImportSpecifier" || importiert === lokal;
+  return gestrichen.map((bindung) => JSON.parse(bindung)).every((teile) => ohneAlias(teile) && gelesen.some((namen) => namen.has(teile.at(-1))));
+}
+
 function gleicherGraph(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
-  return neue.every((datei) => importeAusVorher(vorher, datei)) && importeDerHilfe(vorher, nachher, neuePfade) && nichtsFaelltWeg(vorher, nachher, neue);
+  const importe = importeDerHilfe(vorher, nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
+  return neue.every((datei) => importeAusVorher(vorher, datei)) && importe && nichtsFaelltWeg(vorher, nachher, neue);
 }
 
 function jedeNeueWeitergereicht(nachher, neue) {
