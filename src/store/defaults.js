@@ -1,4 +1,5 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
+import { MANDATE_OUT_OF_SCOPE } from "./begriffe-anrufe.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
 import { E164, isNanpCountry, normNum } from "./begriffe-rufnummern.js";
 
@@ -55,6 +56,12 @@ export {
   resolveSeedProvider,
   shouldPersistProvisionResult,
 } from "./begriffe-nummern-vergabe.js";
+export {
+  KEY_FACTS_LIMITS,
+  MANDATE_OUT_OF_SCOPE,
+  MANDATE_OUT_OF_SCOPE_DEFAULT,
+  MAX_CALL_DURATION_CAP_S,
+} from "./begriffe-anrufe.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -66,18 +73,7 @@ export const MAX_NOTIFICATIONS = 50;
 
 export const WEBHOOK_ANCHOR_HISTORY = 6;
 
-export const MAX_CALL_DURATION_CAP_S = 1800;
-
-export const MANDATE_OUT_OF_SCOPE = Object.freeze({
-  TAKE_MESSAGE: "take_message",
-  DECLINE: "decline",
-  ACCEPT_BEST: "accept_best",
-});
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
-
-export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
-
-export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
 
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
