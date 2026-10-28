@@ -121,7 +121,7 @@ function interpretPaymentFailed(object) {
 }
 
 function interpretMoneyEvent(type, object) {
-  const money = moneyActionFor(type);
+  const money = moneyActionFor(type, object);
   if (!money) return ignoredEvent();
   return {
     action: WEBHOOK_ACTION.MONEY,
