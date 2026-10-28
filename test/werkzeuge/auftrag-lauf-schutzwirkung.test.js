@@ -139,3 +139,11 @@ test("nennt der Test-Agent dieselbe Kennung zweimal als alten Schutz, prüft der
   const [zweite] = beleg.pruefungen.filter(({ name }) => name === "schutzwirkung nach Test");
   assert.ok(zweite.befehl.includes(`--alter-schutz ${ALTER_SCHUTZ}`) && !zweite.befehl.includes(FALSCHER_SCHUTZ), zweite.befehl);
 });
+
+test("eine Alter-Schutz-Antwort zu einem wirksamen oder unbekannten Fall steht nur als nicht geprüft im Commit", (context) => {
+  const antwort = [ABSATZ, `Alter Schutz: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`, "Alter Schutz: [NIE2] src/text.js:2, weil es den Satz nicht gibt"].join("\n");
+  const { repo, lauf } = laufMit(context, schutzfall(OHNE_WIRKUNG), { "test-nach": schutzfall(MIT_WIRKUNG), "test-nach-antwort": antwort });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const zeilen = nachricht(repo).split("\n").filter((zeile) => zeile.startsWith("Alter Schutz"));
+  assert.deepEqual(zeilen, [`Alter Schutz nicht geprüft: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`, "Alter Schutz nicht geprüft: [NIE2] src/text.js:2, weil es den Satz nicht gibt"]);
+});
