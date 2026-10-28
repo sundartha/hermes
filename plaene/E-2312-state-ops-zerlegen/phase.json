@@ -22,19 +22,6 @@
       ]
     },
     {
-      "id": "a2",
-      "art": "umbau",
-      "ziel": "Nutzung aus state-ops.js nach zustand/nutzung.js auslagern",
-      "bereich": "src/store/",
-      "erwarteteDateien": [
-        "src/store/state-ops.js",
-        "src/store/zustand/nutzung.js",
-        "test/kv-p6-micro-cent-ledger.test.js"
-      ],
-      "abnahme": "test/kv-p6-micro-cent-ledger.test.js",
-      "wasDarfNiePassieren": []
-    },
-    {
       "id": "a3",
       "art": "umbau",
       "ziel": "Einstellungen aus state-ops.js nach zustand/einstellungen.js auslagern",
@@ -97,6 +84,19 @@
         "test/newsletter-recipients-model.test.js"
       ],
       "abnahme": "test/newsletter-recipients-model.test.js",
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a2",
+      "art": "umbau",
+      "ziel": "Nutzung aus state-ops.js nach zustand/nutzung.js auslagern",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/state-ops.js",
+        "src/store/zustand/nutzung.js",
+        "test/kv-p6-micro-cent-ledger.test.js"
+      ],
+      "abnahme": "test/kv-p6-micro-cent-ledger.test.js",
       "wasDarfNiePassieren": []
     }
   ]
