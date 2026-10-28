@@ -283,6 +283,12 @@ function renameOrigin(file, before, oldPathOf) {
   return before[file] ? undefined : oldPathOf(file);
 }
 
+function sameOrigin(file, origin, { before, after, oldPathOf }) {
+  return Object.keys(after).filter(
+    (other) => other !== file && renameOrigin(other, before, oldPathOf) === origin,
+  );
+}
+
 function increasesPerFile(
   before,
   after,
@@ -291,12 +297,18 @@ function increasesPerFile(
   return Object.entries(after).flatMap(([file, entry]) => {
     const origin = renameOrigin(file, before, oldPathOf);
     const counted = before[origin ?? file];
-    const remaining = origin !== undefined && after[origin];
-    const tallyAfter = remaining
-      ? combinedTally(tallyOf(entry), tallyOf(after[origin]))
-      : tallyOf(entry);
+    const together =
+      origin === undefined
+        ? []
+        : [origin, ...sameOrigin(file, origin, { before, after, oldPathOf })].filter(
+            (path) => after[path],
+          );
+    const tallyAfter = together.reduce(
+      (sum, path) => combinedTally(sum, tallyOf(after[path])),
+      tallyOf(entry),
+    );
     return increasesOf(counted ? tallyOf(counted) : new Map(), tallyAfter).map(
-      ({ key, ...movement }) => ({ file, origin, rule: key, ...movement }),
+      ({ key, ...movement }) => ({ file, origin, kind: oldPathOf.kind, rule: key, ...movement }),
     );
   });
 }
@@ -474,8 +486,8 @@ function jsonAt(revision, relativePath) {
 function printRaisedReport(relativePath, raised) {
   console.error("");
   logLine(`Abgebrochen: in ${relativePath} steigen Zahlen:`);
-  for (const { file, origin, rule, ...movement } of raised) {
-    const renamed = origin === undefined ? "" : ` (umbenannt aus ${origin})`;
+  for (const { file, origin, kind = RENAMED, rule, ...movement } of raised) {
+    const renamed = origin === undefined ? "" : ` (${kind} aus ${origin})`;
     console.error(`  ${file}${renamed} -> ${rule}: ${movementText(movement)}`);
   }
 }
@@ -486,7 +498,12 @@ const RAISED_LISTS = [
 ];
 
 const RENAME_MODULE = "../tools/umbenennung.mjs";
+const MOVE_MODULE = "../tools/auslagerung-eintraege.mjs";
 const TYPESCRIPT_PATH = /\.[cm]?ts$/;
+const SOURCE_PATH = /^src\//;
+const RENAMED = "umbenannt";
+const MOVED = "ausgelagert";
+const ERROR_SEVERITY = 2;
 
 function renameLookup(beforeRevision, afterRevision) {
   let loaded;
@@ -498,11 +515,68 @@ function renameLookup(beforeRevision, afterRevision) {
   };
 }
 
-async function oldPathsFromRenameModule(files, lookup) {
-  return files.some((file) => TYPESCRIPT_PATH.test(file)) ? lookup() : noRename;
+function moveLookup(beforeRevision, afterRevision) {
+  let loaded;
+  return function movedFilesLookup() {
+    loaded ??= import(new URL(MOVE_MODULE, import.meta.url))
+      .then(({ auslagerungsHerkunft }) =>
+        auslagerungsHerkunft({ von: beforeRevision, bis: afterRevision || undefined }, REPO_ROOT),
+      )
+      .catch((err) => {
+        logLine(`Auslagerung nicht pruefbar, Eintraege neuer Dateien gelten als neu: ${err.message.split("\n")[0]}`);
+        return new Map();
+      });
+    return loaded;
+  };
 }
 
-async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
+function lookupsFor(beforeRevision, afterRevision) {
+  return {
+    rename: renameLookup(beforeRevision, afterRevision),
+    move: moveLookup(beforeRevision, afterRevision),
+  };
+}
+
+function movesFor(files, lookups) {
+  const moves = !files.some((file) => TYPESCRIPT_PATH.test(file)) && files.some((file) => SOURCE_PATH.test(file));
+  return moves ? lookups.move() : Promise.resolve(new Map());
+}
+
+async function oldPathsFromRenameModule(files, lookups) {
+  if (files.some((file) => TYPESCRIPT_PATH.test(file))) return lookups.rename();
+  const moved = await movesFor(files, lookups);
+  return moved.size === 0 ? noRename : Object.assign((file) => moved.get(file), { kind: MOVED });
+}
+
+function errorTally(messages) {
+  const tally = new Map();
+  for (const { ruleId, severity } of messages)
+    if (severity === ERROR_SEVERITY) tally.set(ruleId, (tally.get(ruleId) ?? 0) + 1);
+  return tally;
+}
+
+async function unmatchedMoves(after, moved, afterRevision) {
+  const files = Object.keys(after).filter((file) => moved.has(file));
+  if (files.length === 0) return [];
+  const lintContent = await makeUnfilteredLinter();
+  const unmatched = [];
+  for (const file of files) {
+    const found = errorTally(await lintContent(readGitContent(`${afterRevision}:${file}`), file));
+    for (const [rule, count] of suppressionTally(after[file]))
+      if (count !== (found.get(rule) ?? 0))
+        unmatched.push({ file, origin: moved.get(file), rule, found: found.get(rule) ?? 0, count });
+  }
+  return unmatched;
+}
+
+function printUnmatchedReport(unmatched) {
+  console.error("");
+  logLine(`Abgebrochen: Eintraege ausgelagerter Dateien in ${SUPPRESSIONS_REL} passen nicht zu ihren Befunden:`);
+  for (const { file, origin, rule, found, count } of unmatched)
+    console.error(`  ${file} (${MOVED} aus ${origin}) -> ${rule}: Eintrag ${count}, Befunde ${found}`);
+}
+
+async function raisedCountsStatus(beforeRevision, afterRevision, lookups) {
   const lists = RAISED_LISTS.map((list) => ({
     ...list,
     before: jsonAt(beforeRevision, list.relativePath),
@@ -511,15 +585,18 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
   const newFiles = lists.flatMap(({ before, after }) =>
     Object.keys(after).filter((file) => !before[file]),
   );
-  const oldPathOf = await oldPathsFromRenameModule(newFiles, lookup);
+  const oldPathOf = await oldPathsFromRenameModule(newFiles, lookups);
+  const moved = await movesFor(newFiles, lookups);
+  const unmatched = await unmatchedMoves(lists[0].after, moved, afterRevision);
   const reports = lists
     .map(({ relativePath, findRaised, before, after }) => ({
       relativePath,
       raised: findRaised(before, after, oldPathOf),
     }))
     .filter(({ raised }) => raised.length > 0);
-  if (reports.length === 0) return 0;
+  if (reports.length === 0 && unmatched.length === 0) return 0;
   for (const { relativePath, raised } of reports) printRaisedReport(relativePath, raised);
+  if (unmatched.length > 0) printUnmatchedReport(unmatched);
   console.error("");
   logLine("Die Listen werden nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
   logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
@@ -529,18 +606,18 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookup) {
 
 function basisStatus(basis) {
   if (!isNonEmptyText(basis)) throw new Error(`${BASIS_OPTION} braucht einen Commit`);
-  return raisedCountsStatus(basis, HEAD_REVISION, renameLookup(basis, HEAD_REVISION));
+  return raisedCountsStatus(basis, HEAD_REVISION, lookupsFor(basis, HEAD_REVISION));
 }
 
 async function runCli() {
   const args = process.argv.slice(CLI_ARGS_OFFSET);
   if (args[0] === BASIS_OPTION) return basisStatus(args[1]);
-  const lookup = renameLookup(HEAD_REVISION, STAGED_REVISION);
-  if ((await raisedCountsStatus(HEAD_REVISION, STAGED_REVISION, lookup)) !== 0) return 1;
-  return stagedFilesStatus(args, lookup);
+  const lookups = lookupsFor(HEAD_REVISION, STAGED_REVISION);
+  if ((await raisedCountsStatus(HEAD_REVISION, STAGED_REVISION, lookups)) !== 0) return 1;
+  return stagedFilesStatus(args, lookups);
 }
 
-async function stagedFilesStatus(stagedFiles, lookup) {
+async function stagedFilesStatus(stagedFiles, lookups) {
   if (stagedFiles.length === 0) return 0;
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = loadLegacyExceptions();
@@ -556,7 +633,7 @@ async function stagedFilesStatus(stagedFiles, lookup) {
           readFindings: await makeGitFindingsReader(
             await oldPathsFromRenameModule(
               candidates.map(({ file }) => file),
-              lookup,
+              lookups,
             ),
           ),
         });
