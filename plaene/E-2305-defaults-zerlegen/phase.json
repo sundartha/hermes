@@ -1,0 +1,152 @@
+{
+  "phase": "E-2305-defaults-zerlegen",
+  "issue": 2305,
+  "absicht": "Hermes soll eine Architektur bekommen, in der der einfachste Weg für einen Agenten immer der richtige ist: src/store/defaults.js wird vollständig in kleine begriffe-Dateien mit je einer Verantwortung zerlegt (Muster: src/store/begriffe-nummern.js), und defaults.js reicht jeden bisherigen Export unter gleichem Namen weiter, sodass sich kein Importeur und kein bestehender Test ändert. Nicht gewollt sind eine Verhaltensänderung, das Schwächen oder Umschreiben eines Tests, das Lockern oder Umgehen einer Prüfung, Code zu verdoppeln statt zu teilen und eine Zieldatei wegzulassen, weil sie Mutanten kostet. Im Zweifel gilt die sauberere Struktur und lieber ein Absicherungstest mehr; lässt sich ein Auftrag nur mit einer Lockerung bauen, hält der Lauf an.",
+  "entwurf": {
+    "src/store/": "Was sich ändert: Die reinen Auslagerungen aus src/store/defaults.js (erste Phase der Zerlegung, Muster: begriffe-nummern.js aus dem Pilot ZNB, #2285). Jeder der neun Aufträge bringt eine Gruppe von Deklarationen Wort für Wort in genau eine neue Datei unter src/store/; defaults.js verliert sie und reicht jeden Namen unter gleichem Namen mit export { … } from weiter. Alle Deklarationen, die nicht Wort für Wort auswandern können (veränderlicher Zustand, Berechnung beim Laden, Bezug zwischen neuen Dateien, hängt an der Vorbereitungsprüfung für defaults.js), bleiben in defaults.js und wandern in der zweiten Phase, die erst nach der Entscheidung zur Vorbereitungsprüfung geschrieben wird.\nZuordnung (Reihenfolge der Aufträge; jeder baut auf dem Stand des vorigen auf, alle ändern defaults.js und legen genau eine neue Datei an):\na1 src/store/begriffe-rueckfrage.js: CONSULT_STATUS, CONSULT_WAIT, CONSULT_ANSWER, CONSULT_TIMEOUT_REASON, CONSULT_ANSWER_MODE.\na2 src/store/begriffe-mandant.js: BOOTSTRAP_TENANT_ID, TENANT_STATUS, TENANT_ID_PREFIX (privat), tenantIdForSubject, KYC_LEVEL, KYC_ORDER, KYC_OUTBOUND_MIN.\na3 src/store/begriffe-abrechnung.js: USAGE_EVENT_KIND, COST_TRUING_SOURCE, BEWEISENDE_HERKUNFT (privat), istBeweisendeHerkunft, REIFE, REIFE_FORTSCHRITT, REIFE_TERMINAL, REIFE_SUMMIERBAR, CENTS_PER_EUR, EUR_DECIMALS, eurText, ISO_DATE_LENGTH (privat), spendMonthEndDate, MICRO_CENTS_PER_CENT, USAGE_CORRUPT_REASON, isBookableCents, PROVIDER_RATE_SCALE, isCorrectionCents, isProviderMicroCents, TOKENS_PER_M_TOK, MODEL_PRICE_RATE_FIELDS, globalCapCents, RESERVE_LEAD_MINUTES, outboundReserveCents.\na4 src/store/begriffe-rufnummern.js: normNum, E164, NANP_ISO_COUNTRIES (privat), isNanpCountry. Der Rest der Rufnummern-Begriffe (Vorwahl-Tabellen, Zielnummer-Normalisierung, Länderprüfung) bleibt vorerst in defaults.js.\na5 src/store/begriffe-nummern-vergabe.js: PROVIDER, DEFAULT_PROVIDER, resolveSeedProvider, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON, GLOBAL_CAP_REASON, NEEDS_MANUAL_RECONCILE_REASON, REQUEST_NUMBER_REASON, shouldPersistProvisionResult, PROVISION_NUMBER_JOB. Eigene Datei neben begriffe-nummern.js, weil der Lebenslauf einer Nummer (Status, Übergänge) und ihre Vergabe (Anbieter, Zweck, Halte- und Ablehnungsgründe) zwei Verantwortungen sind.\na6 src/store/begriffe-anrufe.js: MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE, KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_DEFAULT. MANDATE_OUT_OF_SCOPE_VALUES bleibt vorerst in defaults.js, weil es beim Laden Object.values aufruft.\na7 src/store/begriffe-speicher.js: MAX_NOTIFICATIONS, WEBHOOK_ANCHOR_HISTORY (Listengrenzen des Speichers, nur von state-ops.js gelesen).\na8 src/store/begriffe-leerzustaende.js: emptyUsage, emptyPlatformTtsUsage, emptyCostCrossCheck. Die Fabriken, die BOOTSTRAP_TENANT_ID oder DEFAULT_GREETING lesen, bleiben vorerst in defaults.js.\na9 src/store/begriffe-sprache-zeit.js: DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone. DEFAULT_LANGUAGE und setWorldDefaultLanguageEnabled (veränderliche Bindung) bleiben vorerst in defaults.js. Die Regel kein-anrufzeit-gate (wort-nur-in) verlangt für die neue Datei einen Eintrag in der nurIn-Liste in eslint.config.js; den schreibt die Betreuung vor dem Lauf als eigenen Commit (Freigabe Antonio 28.10.2026, wörtlich im Issue), nicht der Auftrag.\nRegeln für jeden Auftrag:\n1. Schnitt nach Deklarationsnamen, nie nach Zeilennummern. Jede genannte Deklaration wandert Wort für Wort (gleicher Syntaxbaum, keine Umbenennung, keine Umformung) in der Reihenfolge von defaults.js in die neue Datei; ein Auftrag verschiebt genau seine Namen und nichts sonst. Die neue Datei enthält nur diese Deklarationen und keinen Import.\n2. In defaults.js entfällt jede verschobene Deklaration; dafür folgt auf die bestehenden Weiterleitungszeilen eine Zeile export { … } from \"./<datei>\"; mit genau den exportierten Namen des Auftrags (Prettier-Form, printWidth 100). Liest ein in defaults.js verbliebener Rest einen verschobenen exportierten Namen, importiert defaults.js ihn zusätzlich aus der neuen Datei (import { … } from \"./<datei>\";).\n3. Keine Kommentare im Code. Kein Importeur ändert sich, kein bestehender Test ändert sich, außer defaults.js und der neuen Datei ändert sich keine Datei.\n4. Passt der Schnitt nicht als reine Auslagerung (die Vorbereitungsprüfung für defaults.js meldet etwas), baut der Auftrag nichts anderes: er hält mit „Auftrag passt nicht: <Name>“ an.\nBleibt gleich: Jeder Importeur der 79 Namen (alle über src/store/defaults.js) bekommt dieselben Werte, Funktionen und Verhaltensweisen wie heute; kein Name verschwindet, keiner kommt dazu. Die Sicherheits- und Kostengrenzen darunter (KYC_OUTBOUND_MIN, MAX_CALL_DURATION_CAP_S, globalCapCents, outboundReserveCents, Länder- und Wahlnummernregeln) behalten ihre Werte und ihren Wortlaut.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün (je Auftrag der unter abnahme genannte Verhaltenstest, der die verschobenen Namen ausübt, dazu alle Testdateien, die einen verschobenen Namen nennen). Bestehende Tests ändern sich nicht; Absicherungstests des alten Stands sind erlaubt. wasDarfNiePassieren ist in dieser Phase leer: jeder Auftrag ist eine Auslagerung Wort für Wort, die Erkennung der reinen Auslagerung belegt die Gleichheit der Anweisungen, und die bestehenden Verhaltenstests (etwa kyc-gate, outbound-gates, dial-target-normalization) üben die Werte aus; kein Premortem-Grund verlangt einen eigenen Schutztest.\nNicht-Ziele: kein Umstellen eines Importeurs und kein Löschen von defaults.js, weil die rund 70 Importeure ein eigener Schritt sind; keine Verschiebung der Reste (Profil, Rufnummern-Rest, MANDATE_OUT_OF_SCOPE_VALUES, DEFAULT_GREETING und die Fabriken, die es oder BOOTSTRAP_TENANT_ID lesen, DEFAULT_LANGUAGE mit Setter), weil sie Wort für Wort nicht auswandern können und an der Entscheidung zur Vorbereitungsprüfung hängen; keine neue Ordnerstruktur und kein Karteneintrag, weil die Dateien wie beim Pilot ZNB unter src/store/ bleiben; kein Nachziehen der Doku-Anker, weil docs/ nicht im Bereich liegt; keine Umbenennung nach .ts; keine Lockerung einer Prüfung, kein eslint-disable, keine Änderung an einer Basisliste außer dem, was der Listenumzug von lauf selbst schreibt.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil Doku-Anker (docs/OPENAI-POLICY-ABGLEICH.md, docs/OPENAI-TOOL-INVENTORY.md, .env.example, elevenlabs/agent_configs/outbound-agent.template.json) auf Namen in src/store/defaults.js zeigen, die nach dem Umzug dort nur noch weitergeleitet werden, belegen die Einreichungsunterlagen Gate-Aussagen an Stellen ohne den Wortlaut, und die Folge ist, dass Prüfer und Owner die Belege nicht mehr nachvollziehen können. | Nicht-Ziel: bereich ist src/store/, docs/ steht in keiner erwarteten Datei; die Anker nachzuziehen ist ein eigener Schritt der Einreichungsdoku, der Test, der sie prüfte, existiert nicht mehr, und kein Verhalten für Kunden oder Angerufene ändert sich. |\n| PM2 | Weil Paket IDD (#2300) die lokalen Namen in defaults.js bereinigt und jeder Auftrag defaults.js ändert, entstünde bei einem Merge zwischen zwei Aufträgen ein Konflikt, und die Folge einer falschen Auflösung wäre ein doppelter Export, ein SyntaxError beim Laden von defaults.js und ein Dienst, der nicht startet. | hingenommen: IDD ist vor dem Start gemergt (d3b9736) und der Branch darauf aufgesetzt; ein doppelter Export macht jeden Test rot, der defaults.js lädt, die Merge-Queue lässt ihn nicht durch, und jscpd meldet jede Doppelung. |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "umbau",
+      "ziel": "Rückfrage-Begriffe aus defaults.js nach begriffe-rueckfrage.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-rueckfrage.js",
+        "src/store/defaults.js",
+        "test/el-consult-staffelung.test.js"
+      ],
+      "abnahme": "test/el-consult-staffelung.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": []
+    },
+    {
+      "id": "a2",
+      "art": "umbau",
+      "ziel": "Mandanten-Begriffe aus defaults.js nach begriffe-mandant.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-mandant.js",
+        "src/store/defaults.js",
+        "test/kyc-gate.test.js"
+      ],
+      "abnahme": "test/kyc-gate.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a1"
+      ]
+    },
+    {
+      "id": "a3",
+      "art": "umbau",
+      "ziel": "Abrechnungs-Begriffe aus defaults.js nach begriffe-abrechnung.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-abrechnung.js",
+        "src/store/defaults.js",
+        "test/usage-correction-booking.test.js"
+      ],
+      "abnahme": "test/usage-correction-booking.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a2"
+      ]
+    },
+    {
+      "id": "a4",
+      "art": "umbau",
+      "ziel": "Rufnummern-Kern aus defaults.js nach begriffe-rufnummern.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-rufnummern.js",
+        "src/store/defaults.js",
+        "test/dial-target-normalization.test.js"
+      ],
+      "abnahme": "test/dial-target-normalization.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a3"
+      ]
+    },
+    {
+      "id": "a5",
+      "art": "umbau",
+      "ziel": "Vergabe-Begriffe aus defaults.js nach begriffe-nummern-vergabe.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-nummern-vergabe.js",
+        "src/store/defaults.js",
+        "test/plattform-nummer-bindung.test.js"
+      ],
+      "abnahme": "test/plattform-nummer-bindung.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a4"
+      ]
+    },
+    {
+      "id": "a6",
+      "art": "umbau",
+      "ziel": "Anruf-Begriffe aus defaults.js nach begriffe-anrufe.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-anrufe.js",
+        "src/store/defaults.js",
+        "test/outbound-gates.test.js"
+      ],
+      "abnahme": "test/outbound-gates.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a5"
+      ]
+    },
+    {
+      "id": "a7",
+      "art": "umbau",
+      "ziel": "Speicher-Grenzen aus defaults.js nach begriffe-speicher.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-speicher.js",
+        "src/store/defaults.js",
+        "test/store-pg.test.js"
+      ],
+      "abnahme": "test/store-pg.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a6"
+      ]
+    },
+    {
+      "id": "a8",
+      "art": "umbau",
+      "ziel": "Leerzustands-Fabriken aus defaults.js nach begriffe-leerzustaende.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-leerzustaende.js",
+        "src/store/defaults.js",
+        "test/tenant-settings-calendar-map.test.js"
+      ],
+      "abnahme": "test/tenant-settings-calendar-map.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a7"
+      ]
+    },
+    {
+      "id": "a9",
+      "art": "umbau",
+      "ziel": "Land und Zeitzone aus defaults.js nach begriffe-sprache-zeit.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-sprache-zeit.js",
+        "src/store/defaults.js",
+        "test/p8-tenant-geo-timezone.test.js"
+      ],
+      "abnahme": "test/p8-tenant-geo-timezone.test.js",
+      "wasDarfNiePassieren": [],
+      "abhaengigVon": [
+        "a8"
+      ]
+    }
+  ]
+}
