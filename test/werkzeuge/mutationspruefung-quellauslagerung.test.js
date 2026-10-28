@@ -3,7 +3,7 @@ import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { BASIS, pruefe } from "./mutationspruefung-hilfen.js";
+import { BASIS, planAusgabe as plan } from "./mutationspruefung-hilfen.js";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERTE = "src/werte.js";
@@ -41,12 +41,6 @@ function ausgelagert(context, { werte = datei(KOPF, WEITER, ZUSTAND), status = d
   vorDemCommit(repo);
   commitAll(repo, nachricht);
   return repo;
-}
-
-function plan(context, repo) {
-  const lauf = pruefe(repo, "--basis", "HEAD~1", "--plan", join(probeDirectory(context, {}), "plan.json"));
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  return lauf.stdout;
 }
 
 function erkannt(context, repo) {

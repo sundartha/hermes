@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { GRUPPE } from "../../tools/mutationspruefung/gruppen.mjs";
 import { echtWarten } from "../echt-warten.js";
-import { REPO_ROOT, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const PRUEFABSTAND_MS = 100;
@@ -49,6 +49,12 @@ export const BASIS = {
 
 export function pruefe(repo, ...argumente) {
   return runIn(repo, process.execPath, [WERKZEUG, ...argumente]);
+}
+
+export function planAusgabe(context, repo) {
+  const lauf = pruefe(repo, "--basis", "HEAD~1", "--plan", join(probeDirectory(context, {}), "plan.json"));
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  return lauf.stdout;
 }
 
 export const EXIT_ABBRUCH = 2;

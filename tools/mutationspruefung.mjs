@@ -24,6 +24,7 @@ import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from ".
 import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { quellauslagerungsZeile, reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
+import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
 import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
 import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
@@ -507,6 +508,10 @@ function abschaltungen(datei, bereiche) {
   );
 }
 
+function umbenennungsZeile(datei, { namen }) {
+  return `${datei}: reine Umbenennung, keine Mutanten nötig (lokal gebundene Namen umbenannt, Syntaxbaum nach Rückbenennung gleich, jede Fundstelle an derselben Bindung): ${namen} Namen.`;
+}
+
 async function gleicherLaufzeitcode(datei, { von, bis, seite }, umbenannt) {
   const paar = umbenannt.paare.find(({ alt, neu }) => (seite === "neu" ? neu : alt) === datei);
   if (paar !== undefined) {
@@ -515,7 +520,9 @@ async function gleicherLaufzeitcode(datei, { von, bis, seite }, umbenannt) {
   const [vorher, nachher] = [inhalt(von, datei), inhalt(bis, datei)];
   if (vorher === undefined || nachher === undefined) return undefined;
   const { gleich } = await umbenannt.vergleiche({ pfad: datei, text: vorher }, { pfad: datei, text: nachher });
-  return gleich ? `${datei}: Syntaxbaum unverändert, keine Mutanten nötig.` : undefined;
+  if (gleich) return `${datei}: Syntaxbaum unverändert, keine Mutanten nötig.`;
+  const umbenennung = lokaleUmbenennung({ pfad: datei, vorher, nachher });
+  return umbenennung === null ? undefined : umbenennungsZeile(datei, umbenennung);
 }
 
 async function ohneAuslagerung(zeilen, pruefung) {
