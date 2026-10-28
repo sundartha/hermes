@@ -514,12 +514,20 @@ function renameLookup(beforeRevision, afterRevision) {
   };
 }
 
+function stagedTree() {
+  return execFileSync("git", ["write-tree"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
 function moveLookup(beforeRevision, afterRevision) {
   let loaded;
   return function movedFilesLookup() {
     loaded ??= import(new URL(MOVE_MODULE, import.meta.url))
       .then(({ auslagerungsHerkunft }) =>
-        auslagerungsHerkunft({ von: beforeRevision, bis: afterRevision || undefined }, REPO_ROOT),
+        auslagerungsHerkunft({ von: beforeRevision, bis: afterRevision || stagedTree() }, REPO_ROOT),
       )
       .catch((err) => {
         logLine(`Auslagerung nicht pruefbar, Eintraege neuer Dateien gelten als neu: ${err.message.split("\n")[0]}`);

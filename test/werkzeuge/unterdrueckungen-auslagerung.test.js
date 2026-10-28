@@ -76,6 +76,16 @@ test("pre-commit-Weg: die vorgemerkte Auslagerung mit umgezogenen Einträgen ist
   istGruen(lauf(repo, [HILFE, NEU]));
 });
 
+test("pre-commit-Weg: ist die vorgemerkte Funktion geändert, ist es rot, auch wenn der Arbeitsbaum rein ist", (context) => {
+  const repo = basisRepo(context, KONFIG);
+  writeFiles(repo, { ...AUSGELAGERT, [NEU]: datei(KURZ.replace("x * 60", "x * 60 + x"), RECHNE), ...liste(VERSCHOBEN) });
+  assert.equal(runIn(repo, "git", ["add", "-A"]).status, 0);
+  writeFiles(repo, AUSGELAGERT);
+  const ergebnis = lauf(repo, [HILFE, NEU]);
+  istRot(ergebnis);
+  assert.match(ergebnis.ausgabe, /^ {2}src\/rechnen\.js -> id-length: 0 -> 1$/m);
+});
+
 test("CI-Weg: bleibt der alte Eintrag stehen, zählen alte und neue Datei zusammen und es ist rot", (context) => {
   const ergebnis = ciWeg(context, { eintraegeNachher: { ...VERSCHOBEN, [HILFE]: { "id-length": 2 } } });
   istRot(ergebnis);
