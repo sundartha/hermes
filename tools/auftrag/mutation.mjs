@@ -6,7 +6,7 @@ import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -379,6 +379,13 @@ function ersteJeKennung(alterSchutz) {
   });
 }
 
+function alterSchutzZeile({ mutant, grund }, ausgabe) {
+  const [, kennung, datei, zeile] = ALTER_SCHUTZ.exec(mutant);
+  const beleg = alterSchutzBeleg(datei, zeile, `${kennung} `);
+  const belegt = ausgabe.split("\n").some((ausgabezeile) => ausgabezeile.startsWith(beleg));
+  return `${belegt ? "Alter Schutz" : ALTER_SCHUTZ_UNGEPRUEFT}: ${mutant}, weil ${grund}`;
+}
+
 function neueZeilenNachSchutzrunde(lauf) {
   const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", lauf.basis]);
   return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
@@ -394,11 +401,11 @@ function schutzwirkung(lauf) {
   const erster = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG, []);
   if (erster.ende !== undefined) return erster.ende;
   const alteSchutze = wirkungNachgeholt(lauf, erster.ueberlebende);
-  if (alteSchutze === null) return false;
-  for (const { mutant, grund } of alteSchutze) lauf.berichtszeilen.push(`Alter Schutz: ${mutant}, weil ${grund}`);
-  if (!neueZeilenNachSchutzrunde(lauf)) return false;
+  if (alteSchutze === null || !neueZeilenNachSchutzrunde(lauf)) return false;
   const zweiter = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG_NACH_TEST, alteSchutze.map(({ mutant }) => mutant));
-  return zweiter.ende ?? lauf.scheitert(`Schutztest ohne Wirkung: ${zweiter.ueberlebende[0]}`);
+  if (zweiter.ende !== true) return zweiter.ende ?? lauf.scheitert(`Schutztest ohne Wirkung: ${zweiter.ueberlebende[0]}`);
+  for (const angabe of alteSchutze) lauf.berichtszeilen.push(alterSchutzZeile(angabe, zweiter.ausgabe));
+  return true;
 }
 
 export function mutationsSchritte(lauf) {

@@ -10,6 +10,7 @@ export const SCHUTZ_NICHT_PRUEFBAR = "Hinweis: Wirkung der Schutztests nicht pr�
 export const SCHUTZ_UNERREICHT = "Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar";
 export const ALTER_SCHUTZ_BELEGT = "Hinweis: Schutz im alten Code belegt";
 export const ALTER_SCHUTZ_NICHT_BELEGT = "Alter Schutz nicht belegt";
+export const ALTER_SCHUTZ_UNGEPRUEFT = "Alter Schutz nicht geprüft";
 
 export function schutzSaetze(auftrag) {
   return saetze(auftrag?.wasDarfNiePassieren);
@@ -17,6 +18,10 @@ export function schutzSaetze(auftrag) {
 
 export function satzKennung(nummer) {
   return `[NIE${nummer}]`;
+}
+
+export function alterSchutzBeleg(datei, zeile, name) {
+  return `${ALTER_SCHUTZ_BELEGT} (${datei}:${zeile}): ${name}`;
 }
 
 export function traegtKennung(name) {

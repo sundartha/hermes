@@ -131,3 +131,13 @@ test("eine Altschutz-Angabe in falscher Form, doppelt oder ohne --schutzwirkung 
   assert.equal(ohneModus.status, EXIT_ABBRUCH, ohneModus.stdout + ohneModus.stderr);
   assert.match(ohneModus.stderr, /^Aufruf: /m);
 });
+
+test("eine Altschutz-Angabe ohne wirkungslosen Schutztest mit ihrer Kennung bleibt nicht stumm, sondern heißt nicht geprüft", (context) => {
+  const ungeprueft = "Hinweis: Alter Schutz nicht geprüft, kein wirkungsloser Schutztest mit dieser Kennung: [NIE1] src/seite.js:2";
+  const wirksam = pruefe(geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), MIT_WIRKUNG), "--basis", "HEAD", "--schutzwirkung", "--alter-schutz", "[NIE1] src/seite.js:2");
+  assert.equal(wirksam.status, 0, wirksam.stdout + wirksam.stderr);
+  assert.deepEqual(zeilen(wirksam.stdout, "Hinweis: "), [ungeprueft]);
+  const ohneNeueZeile = pruefe(geaendert(context, quelle(TENANT, ALTE_SEITE), OHNE_WIRKUNG), "--basis", "HEAD", "--schutzwirkung", "--alter-schutz", "[NIE1] src/seite.js:2");
+  assert.equal(ohneNeueZeile.status, 0, ohneNeueZeile.stdout + ohneNeueZeile.stderr);
+  assert.deepEqual(zeilen(ohneNeueZeile.stdout, "Hinweis: "), ["Hinweis: Wirkung der Schutztests nicht prüfbar, keine neue oder geänderte Zeile unter src/.", ungeprueft]);
+});

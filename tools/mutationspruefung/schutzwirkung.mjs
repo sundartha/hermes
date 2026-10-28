@@ -3,7 +3,7 @@ import { cwd } from "node:process";
 
 import { geaenderteFaelle } from "../auftrag/faelle.mjs";
 import { muster } from "../tests-ausmisten/ausnehmen.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS } from "../auftrag/schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS } from "../auftrag/schutzkennung.mjs";
 
 const GETOETET = new Set(["Killed", "Timeout"]);
 const GELAUFEN_UEBERLEBT = "Survived";
@@ -12,6 +12,7 @@ const EXIT_ROT = 1;
 const VERSTOSS = "Verstoß: ";
 const WIRKUNGSLOS = `${VERSTOSS}${SCHUTZ_WIRKUNGSLOS}`;
 const NICHT_BELEGT = `${VERSTOSS}${ALTER_SCHUTZ_NICHT_BELEGT}`;
+const UNGEPRUEFT = `Hinweis: ${ALTER_SCHUTZ_UNGEPRUEFT}, kein wirkungsloser Schutztest mit dieser Kennung`;
 
 function schutzfaelle(basis, testdateien) {
   return testdateien
@@ -58,29 +59,39 @@ function alteSchutzstellen(angaben) {
   return stellen;
 }
 
+function ungepruefteStellen(stellen, geprueft) {
+  return [...stellen].filter(([kennung]) => !geprueft.has(kennung)).map(([kennung, { datei, zeile }]) => `${UNGEPRUEFT}: ${kennung} ${datei}:${zeile}`);
+}
+
+function kennungVon(fall) {
+  return fall.name.slice(0, fall.name.indexOf(" "));
+}
+
 function geaendert(einheiten, { datei, zeile }) {
   return einheiten.some((einheit) => einheit.datei === datei && einheit.bereiche.some(([von, bis]) => von <= zeile && zeile <= bis));
 }
 
 async function alterSchutz(fall, { einheiten, stellen }, werkzeug) {
-  const stelle = stellen.get(fall.name.slice(0, fall.name.indexOf(" ")));
+  const stelle = stellen.get(kennungVon(fall));
   if (stelle === undefined) return [`${WIRKUNGSLOS}: ${fall.name}`];
   const ort = `${stelle.datei}:${stelle.zeile}`;
   if (!existsSync(stelle.datei)) return [`${NICHT_BELEGT} (${ort} gibt es nicht): ${fall.name}`];
   if (geaendert(einheiten, stelle)) return [`${NICHT_BELEGT} (${ort} ist seit der Basis geändert): ${fall.name}`];
   const urteil = await einzeln(fall, [{ datei: stelle.datei, bereiche: [[stelle.zeile, stelle.zeile]] }], werkzeug);
-  if (urteil === SCHUTZ_WIRKSAM) return [`${ALTER_SCHUTZ_BELEGT} (${ort}): ${fall.name}`];
+  if (urteil === SCHUTZ_WIRKSAM) return [alterSchutzBeleg(stelle.datei, stelle.zeile, fall.name)];
   return [`${NICHT_BELEGT} (${ort}, der Fall tötet dort keinen Mutanten): ${fall.name}`];
 }
 
 async function urteile(faelle, kontext, werkzeug) {
   const wirksam = await gemeinsamGetoetet(kontext.einheiten, faelle, werkzeug);
   const zeilen = [];
+  const geprueft = new Set();
   for (const fall of faelle) {
     const urteil = wirksam.has(fall) ? SCHUTZ_WIRKSAM : await einzeln(fall, kontext.einheiten, werkzeug);
+    if (urteil === WIRKUNGSLOS) geprueft.add(kennungVon(fall));
     zeilen.push(...(urteil === WIRKUNGSLOS ? await alterSchutz(fall, kontext, werkzeug) : [`${urteil}: ${fall.name}`]));
   }
-  return zeilen;
+  return [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)];
 }
 
 export async function schutzwirkungPruefung(basis, angaben, werkzeug) {
@@ -90,6 +101,7 @@ export async function schutzwirkungPruefung(basis, angaben, werkzeug) {
   if (faelle.length === 0 || einheiten.length === 0) {
     const grund = faelle.length === 0 ? "kein neuer Fall mit [NIE<n>]-Kennung" : "keine neue oder geänderte Zeile unter src/";
     console.log(`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`);
+    for (const zeile of ungepruefteStellen(stellen, new Set())) console.log(zeile);
     console.log("grün: keine Wirkung zu prüfen.");
     return EXIT_GRUEN;
   }
