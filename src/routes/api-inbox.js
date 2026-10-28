@@ -10,7 +10,8 @@ export function makeInboxRoutes({ store, audit, tenant }) {
   router.post("/api/inbox/poll", internalOnly, (req, res) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
-    const includeSeen = req.body?.include_seen === true;
+    const { include_seen: seen } = req.body ?? {};
+    const includeSeen = seen === true;
     const { entries, remaining, marked } = store.takeInboxEntries(tenantId, {
       limit: INBOX_MAX_ENTRIES,
       includeSeen,
