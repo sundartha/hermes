@@ -113,6 +113,17 @@ test("CI-Weg: stimmt die Summe, aber die Regel nicht, ist es rot", (context) => 
   assert.match(ergebnis.ausgabe, /src\/rechnen\.js \(ausgelagert aus src\/werte\.js\) -> id-length: Eintrag 2, Befunde 1/);
 });
 
+const KURZ_ABGESCHALTET = "function kurz(x) {\n  // eslint-disable-next-line no-magic-numbers\n  const teil = x * 7;\n  return teil * 60;\n}";
+
+test("CI-Weg: per eslint-disable abgeschaltete Befunde zählen nicht zum Eintrag der neuen Datei", (context) => {
+  const repo = basisRepo(context, KONFIG);
+  writeFiles(repo, { [HILFE]: datei(KURZ_ABGESCHALTET, RECHNE, BLEIBT) });
+  commitAll(repo, "Abgeschaltet");
+  writeFiles(repo, { [HILFE]: datei(AUS_NEU, BLEIBT), [NEU]: datei(KURZ_ABGESCHALTET, RECHNE), ...liste(VERSCHOBEN) });
+  commitAll(repo, "Auslagerung");
+  istGruen(lauf(repo, ["--basis", "HEAD~1"]));
+});
+
 test("CI-Weg: zwei neue Dateien aus derselben Datei zählen zusammen mit dem Rest der alten Datei", (context) => {
   const zwei = { [HILFE]: datei(AUS_ZWEITE, AUS_NEU), [NEU]: datei(KURZ, RECHNE), [ZWEITE]: datei(BLEIBT) };
   const ergebnis = ciWeg(context, {
@@ -128,4 +139,30 @@ test("CI-Weg: gelten für die neue Datei andere Regeln als für die alte, zieht 
   const ergebnis = ciWeg(context, { konfig: anders });
   istRot(ergebnis);
   assert.match(ergebnis.ausgabe, /^ {2}src\/rechnen\.js -> id-length: 0 -> 1$/m);
+});
+
+const LISTENUMZUG = join(REPO_ROOT, "tools/auftrag/listenumzug.mjs");
+
+function umzugImArbeitsbaum(context, { dateien = AUSGELAGERT, konfig = KONFIG } = {}) {
+  const repo = basisRepo(context, konfig);
+  writeFiles(repo, dateien);
+  const ergebnis = runIn(repo, process.execPath, [LISTENUMZUG, "--basis", "HEAD"]);
+  assert.equal(ergebnis.status, 0, ergebnis.stderr);
+  return { repo, liste: JSON.parse(readFileSync(join(repo, UNTERDRUECKUNGEN), "utf8")), ausgabe: ergebnis.stdout };
+}
+
+test("Listenumzug: schreibt die Einträge der ausgelagerten Funktion genau so, wie die Prüfung sie verlangt", (context) => {
+  const { repo, liste, ausgabe } = umzugImArbeitsbaum(context);
+  assert.deepEqual(liste, eintraege(VERSCHOBEN));
+  assert.match(ausgabe, /eslint-suppressions\.json: 2 Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen\./);
+  commitAll(repo, "Auslagerung");
+  istGruen(lauf(repo, ["--basis", "HEAD~1"]));
+});
+
+test("Listenumzug: ohne reine Auslagerung oder bei anderen Regeln bleibt die Liste", (context) => {
+  const geaendert = umzugImArbeitsbaum(context, { dateien: { ...AUSGELAGERT, [NEU]: datei(KURZ.replace("x * 60", "x * 61"), RECHNE) } });
+  assert.deepEqual(geaendert.liste, eintraege({ [HILFE]: { "id-length": 2, "no-magic-numbers": 1 } }));
+  const anders = `export default [{ files: ["**/*.js"], rules: ${REGELN} }, { files: ["${NEU}"], rules: { "no-magic-numbers": "warn" } }];\n`;
+  const andereRegeln = umzugImArbeitsbaum(context, { konfig: anders });
+  assert.deepEqual(andereRegeln.liste, eintraege({ [HILFE]: { "id-length": 2, "no-magic-numbers": 1 } }));
 });

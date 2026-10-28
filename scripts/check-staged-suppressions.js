@@ -503,7 +503,6 @@ const TYPESCRIPT_PATH = /\.[cm]?ts$/;
 const SOURCE_PATH = /^src\//;
 const RENAMED = "umbenannt";
 const MOVED = "ausgelagert";
-const ERROR_SEVERITY = 2;
 
 function renameLookup(beforeRevision, afterRevision) {
   let loaded;
@@ -548,20 +547,14 @@ async function oldPathsFromRenameModule(files, lookups) {
   return moved.size === 0 ? noRename : Object.assign((file) => moved.get(file), { kind: MOVED });
 }
 
-function errorTally(messages) {
-  const tally = new Map();
-  for (const { ruleId, severity } of messages)
-    if (severity === ERROR_SEVERITY) tally.set(ruleId, (tally.get(ruleId) ?? 0) + 1);
-  return tally;
-}
-
 async function unmatchedMoves(after, moved, afterRevision) {
   const files = Object.keys(after).filter((file) => moved.has(file));
   if (files.length === 0) return [];
   const lintContent = await makeUnfilteredLinter();
+  const { fehlerJeRegel } = await import(new URL(MOVE_MODULE, import.meta.url));
   const unmatched = [];
   for (const file of files) {
-    const found = errorTally(await lintContent(readGitContent(`${afterRevision}:${file}`), file));
+    const found = fehlerJeRegel(await lintContent(readGitContent(`${afterRevision}:${file}`), file));
     for (const [rule, count] of suppressionTally(after[file]))
       if (count !== (found.get(rule) ?? 0))
         unmatched.push({ file, origin: moved.get(file), rule, found: found.get(rule) ?? 0, count });

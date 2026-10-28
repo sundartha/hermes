@@ -4,6 +4,7 @@ import { argv } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { UNTERDRUECKUNGEN, unterdrueckungenAusgelagert } from "../auslagerung-eintraege.mjs";
 import { LISTENPFADE, lesbar, listenNachUmzug } from "./bestandslisten.mjs";
 import { aenderungenSeit, vormerken } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
@@ -25,6 +26,11 @@ export async function listenUmziehen({ basis, root }) {
   }
   vormerken(umgezogen.map(({ pfad }) => pfad), root);
   console.log(`${umgezogen.length} Listen für ${paare.length} nur-Typen-Umbenennungen umgezogen.`);
+  const ausgelagert = paare.length === 0 ? await unterdrueckungenAusgelagert({ basis, root }) : undefined;
+  if (ausgelagert === undefined) return EXIT_GRUEN;
+  writeFileSync(join(root, UNTERDRUECKUNGEN), ausgelagert.neu);
+  vormerken([UNTERDRUECKUNGEN], root);
+  console.log(`${UNTERDRUECKUNGEN}: ${ausgelagert.anzahl} Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen.`);
   return EXIT_GRUEN;
 }
 
