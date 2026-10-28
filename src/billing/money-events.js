@@ -22,7 +22,14 @@ const MONEY_EVENT_CONFIG = Object.freeze({
   [MONEY_EVENT.PAYMENT_ACTION_REQUIRED]: Object.freeze({ action: MONEY_ACTION.GRACE_THEN_HOLD, alarm: false }),
 });
 
-export function moneyActionFor(type) {
+const OHNE_WIRKUNG = Object.freeze({ action: MONEY_ACTION.WARN, alarm: false });
+
+function istNichtEingezogeneErstattung(type, charge) {
+  return type === MONEY_EVENT.REFUNDED && charge?.captured === false;
+}
+
+export function moneyActionFor(type, charge) {
+  if (istNichtEingezogeneErstattung(type, charge)) return OHNE_WIRKUNG;
   return MONEY_EVENT_CONFIG[type] ?? null;
 }
 

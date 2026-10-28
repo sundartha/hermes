@@ -5,7 +5,10 @@ import { resolvePeriodStartIso } from "./period.js";
 
 function stampBudgetPeriodIfPaid({ store, tenant }) {
   if (store.billingHoldActive(tenant)) return false;
-  return store.stampBudgetPeriod(tenant, resolvePeriodStartIso(store.tenantSubscription(tenant))) === true;
+  const periodStarted =
+    store.stampBudgetPeriod(tenant, resolvePeriodStartIso(store.tenantSubscription(tenant))) === true;
+  if (periodStarted) store.setTenantSubscription(tenant, { periodCreditRevoked: false });
+  return periodStarted;
 }
 
 function provisionPlanProfile({ store, tenant }) {
@@ -43,9 +46,10 @@ async function activateAccountAndRefreshMirror({ store, accounts, tenant }) {
   await store.ensureTenant(tenant);
 }
 
-function clearBillingHoldAndRestoreCredit({ store, tenant }) {
+function clearBillingHoldKeepingRevokedCredit({ store, tenant }) {
   store.clearBillingHold(tenant);
-  store.setTenantSubscription(tenant, { periodCreditRevoked: false });
+  if (!store.tenantSubscription(tenant).periodCreditRevoked)
+    store.setTenantSubscription(tenant, { periodCreditRevoked: false });
   return !store.billingHoldActive(tenant);
 }
 
@@ -63,7 +67,7 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   if (!provisionCleared(provisioned))
     return { profile, activated: false, provisioned, budgetPeriodStarted };
   await activateAccountAndRefreshMirror({ store, accounts, tenant });
-  const holdCleared = clearBillingHoldAndRestoreCredit({ store, tenant });
+  const holdCleared = clearBillingHoldKeepingRevokedCredit({ store, tenant });
   const budgetPeriodStartedAfterHold = stampBudgetPeriodAfterHoldClear({ store, tenant, holdCleared });
   return {
     profile,
