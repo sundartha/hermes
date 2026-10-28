@@ -812,7 +812,7 @@
       "count": 23
     },
     "no-magic-numbers": {
-      "count": 10
+      "count": 2
     },
     "no-negated-condition": {
       "count": 1
