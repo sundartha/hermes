@@ -1,6 +1,13 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 
 export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
+export {
+  CONSULT_ANSWER,
+  CONSULT_ANSWER_MODE,
+  CONSULT_STATUS,
+  CONSULT_TIMEOUT_REASON,
+  CONSULT_WAIT,
+} from "./begriffe-rueckfrage.js";
 
 export const BOOTSTRAP_TENANT_ID = "owner";
 
@@ -150,37 +157,6 @@ export const MANDATE_OUT_OF_SCOPE = Object.freeze({
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
 
 export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
-
-export const CONSULT_STATUS = Object.freeze({
-  OPEN: "open",
-  ANSWERED: "answered",
-  EXPIRED: "expired",
-  TIMED_OUT: "timed_out",
-});
-
-export const CONSULT_WAIT = Object.freeze({
-  NONE: "none",
-  HOLD: "hold",
-  PENDING: "pending",
-  TIMED_OUT: "timed_out",
-  ANSWERED: "answered",
-});
-
-export const CONSULT_ANSWER = Object.freeze({
-  ACCEPTED: "accepted",
-  UNKNOWN_EVENT: "unknown_event",
-  ALREADY_ANSWERED: "already_answered",
-  CALL_ENDED: "call_ended",
-  DEADLINE_PASSED: "deadline_passed",
-});
-
-export const CONSULT_TIMEOUT_REASON = Object.freeze({
-  NOT_DELIVERED: "not_delivered",
-  NOT_ACKED: "not_acked",
-  TIMEOUT: "timeout",
-});
-
-export const CONSULT_ANSWER_MODE = Object.freeze({ WORKING: "working", FINAL: "final" });
 
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
 
