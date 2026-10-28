@@ -6,6 +6,11 @@ export const STRENGER = "strenger";
 
 const FALL_ALTBEFUNDE = "(a) Altbefunde gestrichen";
 const FALL_TESTDATEI = "(c) neue Testdatei";
+const FALL_KARTE = "(d) Bausteinkarte nur strenger";
+const KARTE = "tools/bausteine.json";
+const ALLE_EINGAENGE = "alle";
+const KARTE_SCHLUESSEL = new Set(["schichten", "bausteine", "altlast"]);
+const BAUSTEIN_FELDER = new Set(["baustein", "zweck", "quellen", "eingaenge", "nutzt", "importiertJedeDatei"]);
 const STATUS_ADDED = "A";
 const STATUS_MODIFIED = "M";
 const TEST_FILE = /^test\/.+\.test\.js$/;
@@ -97,8 +102,50 @@ function onlyDropsEntries(before, after, key) {
   );
 }
 
+function keepsOrDrops(before, after) {
+  if (!Array.isArray(before) || !Array.isArray(after)) return false;
+  return isDeepStrictEqual(before, after) || isShorterSubsequence(after, before);
+}
+
+function entrancesStricter(before, after) {
+  if (after === ALLE_EINGAENGE) return before === ALLE_EINGAENGE;
+  return before === ALLE_EINGAENGE ? Array.isArray(after) : keepsOrDrops(before, after);
+}
+
+function blockStricter(before, after) {
+  if (before === undefined || !Object.keys(after).every((key) => BAUSTEIN_FELDER.has(key))) return false;
+  const freeBefore = before.importiertJedeDatei === true;
+  return (
+    isDeepStrictEqual([before.zweck, before.quellen], [after.zweck, after.quellen]) &&
+    entrancesStricter(before.eingaenge, after.eingaenge) &&
+    keepsOrDrops(before.nutzt ?? [], after.nutzt ?? []) &&
+    (after.importiertJedeDatei !== true || freeBefore)
+  );
+}
+
+function sameKnownKeys(before, after) {
+  const [oldKeys, newKeys] = [Object.keys(before).toSorted(), Object.keys(after).toSorted()];
+  return isDeepStrictEqual(oldKeys, newKeys) && newKeys.every((key) => KARTE_SCHLUESSEL.has(key));
+}
+
+export function onlyTightensMap(before, after) {
+  if (!isRecord(before) || !isRecord(after) || !Array.isArray(after.bausteine)) return false;
+  const sameShape = sameKnownKeys(before, after);
+  const named = new Map((before.bausteine ?? []).map((block) => [block.baustein, block]));
+  const sameBlocks = isDeepStrictEqual([...named.keys()], after.bausteine.map(({ baustein }) => baustein));
+  return (
+    sameShape &&
+    sameBlocks &&
+    isDeepStrictEqual(before.schichten, after.schichten) &&
+    after.bausteine.every((block) => blockStricter(named.get(block.baustein), block)) &&
+    keepsOrDrops(before.altlast, after.altlast) &&
+    !isDeepStrictEqual(before, after)
+  );
+}
+
 const RULES = [
   { fall: FALL_ALTBEFUNDE, settings: OLD_FINDING_LISTS, holds: onlyDropsEntries },
+  { fall: FALL_KARTE, settings: new Map([[KARTE, WHOLE_FILE]]), holds: onlyTightensMap },
 ];
 
 function stricterCase(basis, { status, path }) {
