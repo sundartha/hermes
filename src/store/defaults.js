@@ -1,5 +1,7 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 
+export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
+
 export const BOOTSTRAP_TENANT_ID = "owner";
 
 const DEMO_EVENTS = [
@@ -19,30 +21,6 @@ export function resolveSeedProvider(providerRaw) {
   if (!providerRaw) return DEFAULT_PROVIDER;
   return Object.values(PROVIDER).includes(providerRaw) ? providerRaw : null;
 }
-
-export const NUMBER_STATUS = Object.freeze({
-  REQUESTED: "requested",
-  PROVISIONING: "provisioning",
-  CAPTURING: "capturing",
-  ACTIVE: "active",
-  FAILED: "failed",
-  SUSPENDED: "suspended",
-  RELEASED: "released",
-});
-
-export const NUMBER_TRANSITIONS = Object.freeze({
-  [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
-  [NUMBER_STATUS.PROVISIONING]: [
-    NUMBER_STATUS.CAPTURING,
-    NUMBER_STATUS.ACTIVE,
-    NUMBER_STATUS.FAILED,
-  ],
-  [NUMBER_STATUS.CAPTURING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
-  [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.SUSPENDED, NUMBER_STATUS.RELEASED],
-  [NUMBER_STATUS.SUSPENDED]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED],
-  [NUMBER_STATUS.FAILED]: [NUMBER_STATUS.RELEASED],
-  [NUMBER_STATUS.RELEASED]: [],
-});
 
 export const PLATFORM_NUMBER_PURPOSE = Object.freeze({
   OUTBOUND_ANI: "outbound_ani",
@@ -69,11 +47,6 @@ export function shouldPersistProvisionResult(r) {
   return r.ok || r.reason === GLOBAL_CAP_REASON;
 }
 
-export const PROVISIONING_JOB_STATUS = Object.freeze({
-  QUEUED: "queued",
-  DONE: "done",
-  FAILED: "failed",
-});
 export const PROVISION_NUMBER_JOB = "provision_number";
 
 export const USAGE_EVENT_KIND = Object.freeze({
