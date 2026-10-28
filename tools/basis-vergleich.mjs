@@ -20,7 +20,7 @@ import { importeMitPlatzhalter } from "./eslint-rules/fester-importpfad.js";
 import { quelltextLesestellen } from "./eslint-rules/kein-quelltext-als-text.js";
 import { speicherAttrappen } from "./eslint-rules/keine-speicher-attrappe.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
-import { aenderungenSeit, legeWorktreeAn } from "./auftrag/git.mjs";
+import { aenderungenSeit, gibtEsIn, legeWorktreeAn } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { fileAt } from "./pruefungen-messen.mjs";
 import { isCommit } from "./ts-dateien.mjs";
@@ -63,6 +63,7 @@ const SHORTEN_OPTION = "basis-kuerzen";
 const CREATE_OPTION = "basis-anlegen";
 const PER_FOLDER_OPTION = "je-ordner";
 const BASIS_OPTION = "basis";
+const PER_JOB_OPTION = "je-auftrag";
 const RENAME_OPTION = "umbenennung-nachziehen";
 const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
@@ -218,7 +219,7 @@ function semgrepFinding(root, { check_id: ruleId, path, start, end }) {
   };
 }
 
-function semgrepFindings(root) {
+function semgrepFindings(root, paths = ["."]) {
   const args = [
     "scan",
     "--config",
@@ -233,7 +234,7 @@ function semgrepFindings(root) {
     SEMGREP_SINGLE_THREAD,
     "--exclude",
     NESTED_CHECKOUTS_DIRECTORY,
-    ".",
+    ...paths,
   ];
   const result = runTool(SEMGREP_COMMAND, args, root);
   if (result.status !== 0) throw toolFailure("semgrep", result);
@@ -353,6 +354,7 @@ export const TOOLS = {
     renamedBasis: true,
     zweck: MELDUNG.JSCPD,
     findingPerFile: true,
+    perJob: { configFiles: [JSCPD_CONFIG_FILE] },
   },
   knip: { findings: knipFindings, path: keyPart(1), back: knipBack, zweck: "basis/knip" },
   semgrep: {
@@ -361,6 +363,7 @@ export const TOOLS = {
     path: keyPart(1),
     back: teilZurueck(1),
     findingPerFile: true,
+    perJob: { configFiles: [SEMGREP_RULES_FILE], partialScan: true },
     zweck: "basis/semgrep",
   },
   "quelltext-als-text": {
@@ -444,22 +447,29 @@ function onFirstUse(build) {
   return (key) => (decide ??= build())(key);
 }
 
-async function renamedBasisFindings({ root, basis, tool }) {
-  if (basis === undefined || tool.renamedBasis !== true) return [];
-  checkBasis(basis);
-  const renames = pureRenames(basis);
-  if (renames.length === 0) return [];
-  const directory = mkdtempSync(join(tmpdir(), "basis-vergleich-umbenannt-"));
+async function inBasisWorktree({ root, basis }, prefix, work) {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
   const remove = legeWorktreeAn(basis, directory, root);
   try {
-    for (const { alt, neu } of renames) renameSync(join(directory, alt), join(directory, neu));
-    writeFileSync(join(directory, JSCPD_CONFIG_FILE), readFileSync(join(root, JSCPD_CONFIG_FILE)));
-    const keys = frozenFindings(await tool.findings(directory)).map(findingKeyOf);
-    return keys.filter(onlyUnchangedFiles(root, basis, renames));
+    return await work(directory);
   } finally {
     remove();
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+async function renamedBasisFindings(context) {
+  const { root, basis, tool } = context;
+  if (basis === undefined || tool.renamedBasis !== true) return [];
+  checkBasis(basis);
+  const renames = pureRenames(basis);
+  if (renames.length === 0) return [];
+  return inBasisWorktree(context, "basis-vergleich-umbenannt-", async (directory) => {
+    for (const { alt, neu } of renames) renameSync(join(directory, alt), join(directory, neu));
+    writeFileSync(join(directory, JSCPD_CONFIG_FILE), readFileSync(join(root, JSCPD_CONFIG_FILE)));
+    const keys = frozenFindings(await tool.findings(directory)).map(findingKeyOf);
+    return keys.filter(onlyUnchangedFiles(root, basis, renames));
+  });
 }
 
 async function grownEntries({ basis, toolName, tool }, baseline) {
@@ -527,6 +537,14 @@ function reportWidened({ toolName, basis }, widened) {
   for (const { schluessel } of widened) console.log(`  ${schluessel}`);
 }
 
+function reportSinceBefore({ toolName, basis }, sinceBefore) {
+  if (sinceBefore.length === 0) return;
+  console.log(
+    `${sinceBefore.length} Befunde von ${toolName} stehen nicht in ${baselineFile(toolName)}, bestehen aber schon auf dem Stand vor dem Auftrag (${basis}); dieser Auftrag hat sie nicht angelegt und zählt sie nicht. Am Phasenende (ci:lokal gegen master) und in der CI zählen sie:`,
+  );
+  for (const finding of sinceBefore) console.log(`  ${finding.location}`);
+}
+
 function reportGrown({ toolName, basis }, grown) {
   if (grown.length === 0) return;
   console.log(
@@ -576,26 +594,65 @@ function frozenFindings(findings) {
 }
 
 const NOTHING_SHRUNK = { covered: [], keys: [] };
+const NEVER = () => false;
+
+function shrinkRule(tool, unchangedPair) {
+  return (findings, freeKeys) => tool.shrunk?.(findings, freeKeys, unchangedPair) ?? NOTHING_SHRUNK;
+}
+
+function absorb(findings, keys, shrink) {
+  const { innerhalb, darueber } = aufgeteilt(findings, keys, findingKeyOf);
+  const exact = innerhalb.map(findingKeyOf);
+  const unmatched = aufgeteilt(keys, exact, unveraendert).darueber;
+  const shrunk = shrink(darueber, unmatched);
+  return {
+    exact,
+    shrunk,
+    absorbed: [...innerhalb, ...shrunk.covered],
+    open: darueber.filter((finding) => !shrunk.covered.includes(finding)),
+  };
+}
+
+function scanPaths({ root, basis, tool }, open) {
+  if (tool.perJob.partialScan !== true) return undefined;
+  const paths = new Set(open.map((finding) => tool.path(finding.key)));
+  return [...paths].filter((path) => gibtEsIn(basis, path, root));
+}
+
+async function findingsOnBasis(context, open) {
+  const paths = scanPaths(context, open);
+  if (paths?.length === 0) return [];
+  return inBasisWorktree(context, "basis-vergleich-vor-auftrag-", async (directory) =>
+    frozenFindings(await context.tool.findings(directory, paths)).map(findingKeyOf),
+  );
+}
+
+async function alreadyOnBasis(context, baseline, open) {
+  const { root, basis, tool, perJob } = context;
+  const none = { absorbed: [], open };
+  if (!perJob || open.length === 0) return none;
+  checkBasis(basis);
+  const changed = new Set(changedSince(root, basis));
+  if (tool.perJob.configFiles.some((file) => changed.has(file))) return none;
+  const onBasis = await findingsOnBasis(context, open);
+  const beyondList = aufgeteilt(onBasis, baseline.befunde, unveraendert).darueber;
+  return absorb(open, beyondList, shrinkRule(tool, NEVER));
+}
 
 async function measure(context, baseline, renamed = []) {
   checkVersion(context, baseline);
   const { tool, root } = context;
   const findings = await tool.findings(root);
-  const { innerhalb, darueber } = aufgeteilt(
-    frozenFindings(findings),
-    baseline.befunde,
-    findingKeyOf,
-  );
-  const exact = innerhalb.map(findingKeyOf);
-  const unmatched = aufgeteilt(baseline.befunde, exact, unveraendert).darueber;
   const unchangedPair = onFirstUse(() => unchangedKnownPair(context, baseline));
-  const shrunk = tool.shrunk?.(darueber, unmatched, unchangedPair) ?? NOTHING_SHRUNK;
-  const open = darueber.filter((finding) => !shrunk.covered.includes(finding));
+  const shrink = shrinkRule(tool, unchangedPair);
+  const { exact, shrunk, ...listed } = absorb(frozenFindings(findings), baseline.befunde, shrink);
+  const { absorbed: sinceBefore, open } = await alreadyOnBasis(context, baseline, listed.open);
   const renamedOnly = aufgeteilt(renamed, baseline.befunde, unveraendert).darueber;
   const byRename = aufgeteilt(open, renamedOnly, findingKeyOf);
   return {
     added: [...findings.filter(isAlways), ...byRename.darueber],
     renamed: byRename.innerhalb,
+    sinceBefore,
     known: aufgeteilt(baseline.befunde, [...exact, ...shrunk.keys], unveraendert),
     exact,
   };
@@ -634,12 +691,13 @@ async function compare(context) {
   const baseline = readBaseline(context.root, context.toolName);
   const renamedKeys = await renamedBasisFindings(context);
   const candidates = await grownEntries(context, baseline);
-  const { added, renamed, known, exact } = await measure(context, baseline, renamedKeys);
+  const { added, renamed, sinceBefore, known, exact } = await measure(context, baseline, renamedKeys);
   const sameSize = renamedKeys.length > 0 && !listGrew(context, baseline) ? renamedKeys : [];
   const { fromRenames, grown: rest } = splitRenamed(candidates, sameSize);
   const { widened, grown } = splitWidening(context, rest, exact);
   reportFromRenames(context, fromRenames);
   reportWidened(context, widened);
+  reportSinceBefore(context, sinceBefore);
   reportGrown(context, grown);
   reportFixed(context, known.darueber);
   console.log(
@@ -712,7 +770,12 @@ function perFolder(context) {
 }
 
 function usage() {
-  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${BASIS_OPTION} <commit> | --${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}], für jscpd auch --${BASIS_OPTION} <commit> --${RENAME_OPTION}`;
+  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${BASIS_OPTION} <commit> | --${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}], für jscpd auch --${BASIS_OPTION} <commit> --${RENAME_OPTION}, für jscpd und semgrep auch --${BASIS_OPTION} <commit> --${PER_JOB_OPTION}`;
+}
+
+function perJobMisused(values, toolName, modes) {
+  if (!values[PER_JOB_OPTION]) return false;
+  return values[BASIS_OPTION] === undefined || modes.length > 0 || TOOLS[toolName]?.perJob === undefined;
 }
 
 function parseOptions() {
@@ -722,6 +785,7 @@ function parseOptions() {
       [CREATE_OPTION]: { type: "boolean", default: false },
       [PER_FOLDER_OPTION]: { type: "boolean", default: false },
       [RENAME_OPTION]: { type: "boolean", default: false },
+      [PER_JOB_OPTION]: { type: "boolean", default: false },
       [BASIS_OPTION]: { type: "string" },
     },
     allowPositionals: true,
@@ -738,7 +802,8 @@ function parseOptions() {
     !Object.hasOwn(TOOLS, toolName ?? "") ||
     positionals.length > MAX_POSITIONALS ||
     severalModes ||
-    missingBasis
+    missingBasis ||
+    perJobMisused(values, toolName, modes)
   ) {
     throw new Error(usage());
   }
@@ -757,7 +822,8 @@ async function main() {
   try {
     const { toolName, values } = parseOptions();
     const basis = values[BASIS_OPTION];
-    await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd(), basis });
+    const perJob = values[PER_JOB_OPTION];
+    await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd(), basis, perJob });
   } catch (error) {
     console.error(`Abbruch: ${error.message}`);
     if (error instanceof VersionFailure) console.error(zweckBlock(VERSIONSWECHSEL).join(LINE_BREAK));
