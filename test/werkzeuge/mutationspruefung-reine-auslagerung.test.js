@@ -15,7 +15,7 @@ const SICHER = 'import assert from "node:assert/strict";';
 const QUELLE = 'import { einordnen } from "../../src/zahl.js";';
 const WERTE_IN_HILFE = 'import { MINUS } from "./werte.js";';
 const WERTE_IN_NEU = 'import { MINUS } from "../helfer/werte.js";';
-const GRENZEN = "export const GRENZEN = Object.freeze({ unten: 0, oben: 1, stufen: [0, 1] });";
+const GRENZEN = "export const GRENZEN = Object.freeze({ unten: 0, oben: 1, stufen: Object.freeze([0, 1]) });";
 const DOPPELT = "export const doppelt = (wert) => wert * 2;";
 const GLEICH = "export function gleich(wert) {\n  assert.equal(wert, MINUS);\n}";
 const NEGATIV = "export function negativ() {\n  return einordnen(GRENZEN.unten);\n}";
