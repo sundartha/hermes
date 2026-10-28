@@ -1,4 +1,5 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
+import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
 
 export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
 export {
@@ -8,8 +9,14 @@ export {
   CONSULT_TIMEOUT_REASON,
   CONSULT_WAIT,
 } from "./begriffe-rueckfrage.js";
-
-export const BOOTSTRAP_TENANT_ID = "owner";
+export {
+  BOOTSTRAP_TENANT_ID,
+  KYC_LEVEL,
+  KYC_ORDER,
+  KYC_OUTBOUND_MIN,
+  TENANT_STATUS,
+  tenantIdForSubject,
+} from "./begriffe-mandant.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -159,30 +166,6 @@ export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_O
 export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
 
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
-
-export const TENANT_STATUS = Object.freeze({
-  ACTIVE: "active",
-  SUSPENDED: "suspended",
-  CLOSED: "closed",
-});
-
-const TENANT_ID_PREFIX = "t_";
-export const tenantIdForSubject = (sub) => `${TENANT_ID_PREFIX}${sub}`;
-
-export const KYC_LEVEL = Object.freeze({
-  NONE: "none",
-  OTP: "otp",
-  CARD: "card",
-  ID_VERIFIED: "id_verified",
-});
-export const KYC_ORDER = Object.freeze([
-  KYC_LEVEL.NONE,
-  KYC_LEVEL.OTP,
-  KYC_LEVEL.CARD,
-  KYC_LEVEL.ID_VERIFIED,
-]);
-
-export const KYC_OUTBOUND_MIN = KYC_LEVEL.CARD;
 
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
