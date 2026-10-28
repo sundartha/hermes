@@ -40,6 +40,7 @@
     "test:statisch": "node tools/test-statisch.mjs",
     "pruefleiter": "node tools/pruefleiter.mjs",
     "ci:lokal": "node tools/ci-lokal.mjs",
+    "neu": "node tools/neu/neu.mjs",
     "hermes-ctl": "node tools/hermes-ctl.mjs",
     "systemstand": "node tools/systemstand.mjs",
     "lint": "eslint . --pass-on-unpruned-suppressions",

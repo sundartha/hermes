@@ -1,0 +1,14 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { %%CAMEL%% } from "../../%%QUELLE%%";
+
+const FAELLE = [
+  { eingabe: "a", erwartet: "a" },
+  { eingabe: "", erwartet: "" },
+];
+
+test("%%KEBAB%%: jede Tabellenzeile liefert das erwartete Ergebnis", () => {
+  for (const { eingabe, erwartet } of FAELLE) {
+    assert.equal(%%CAMEL%%(eingabe), erwartet);
+  }
+});

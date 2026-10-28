@@ -1,0 +1,16 @@
+import { Router } from "express";
+import { internalOnly } from "../wiring/internal-only.js";
+
+export function make%%PASCAL%%Routes({ audit, tenant }) {
+  const { requireTenant } = tenant;
+  const router = Router();
+
+  router.post("/api/%%KEBAB%%", internalOnly, (req, res) => {
+    const tenantId = requireTenant(req, res);
+    if (!tenantId) return;
+    audit("%%SNAKE%%", req, "");
+    res.json({});
+  });
+
+  return router;
+}
