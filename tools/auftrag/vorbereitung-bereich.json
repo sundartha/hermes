@@ -4,7 +4,6 @@
   "src/call-result.js",
   "src/callee-is-owner.js",
   "src/claude.js",
-  "src/config.js",
   "src/conversation/elevenlabs-agent-config.js",
   "src/diagnostic-retention.js",
   "src/elevenlabs/b1-doppelankaendigung.js",
