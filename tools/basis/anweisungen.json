@@ -95,8 +95,6 @@
     "CLAUDE.md|f7a4280317a08677",
     "CLAUDE.md|f8dbd33eeb9414dd",
     "src/billing/CLAUDE.md|cd7d08523b846ecb",
-    "src/consult|ohne-eigene-regeln",
-    "src/conversation|ohne-eigene-regeln",
     "src/db/CLAUDE.md|1883225f75902a98",
     "src/elevenlabs/CLAUDE.md|273d35e52cb003ca",
     "src/elevenlabs/CLAUDE.md|4baaed0cb380a4dc",
@@ -109,7 +107,6 @@
     "src/elevenlabs/CLAUDE.md|bd28a078f6d7c030",
     "src/elevenlabs/CLAUDE.md|c478a89a9465ade1",
     "src/elevenlabs/CLAUDE.md|d2de52601da0adde",
-    "src/geo|ohne-eigene-regeln",
     "src/i18n/CLAUDE.md|05187386a9bd242e",
     "src/i18n/CLAUDE.md|0a11704888b20c2a",
     "src/i18n/CLAUDE.md|35ae3e9b93306696",
@@ -117,9 +114,7 @@
     "src/i18n/CLAUDE.md|a3f3b52376f80f1e",
     "src/i18n/CLAUDE.md|db23d9d654d759c7",
     "src/konfiguration/CLAUDE.md|3c0ff6f351594c9f",
-    "src/llm|ohne-eigene-regeln",
     "src/queue/CLAUDE.md|f0969bf82736668b",
-    "src/research|ohne-eigene-regeln",
     "src/routes|ohne-eigene-regeln",
     "src/store/CLAUDE.md|0bc9dca04b267bce",
     "src/store/CLAUDE.md|22c175811e730dec",
@@ -144,11 +139,6 @@
     "src/telephony/CLAUDE.md|a8b013e8ac91f773",
     "src/telephony/CLAUDE.md|b606d58f2fe31d63",
     "src/telephony/CLAUDE.md|c05fe217387b0f9e",
-    "src/telephony/CLAUDE.md|c52d792545f88fb5",
-    "src/tts|ohne-eigene-regeln",
-    "src/ui|ohne-eigene-regeln",
-    "src/utils|ohne-eigene-regeln",
-    "src/wiring|ohne-eigene-regeln",
-    "src/worker|ohne-eigene-regeln"
+    "src/telephony/CLAUDE.md|c52d792545f88fb5"
   ]
 }
