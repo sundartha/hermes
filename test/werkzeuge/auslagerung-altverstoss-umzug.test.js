@@ -112,7 +112,7 @@ test("Altverstoß-Umzug: ist die Änderung keine reine Auslagerung, weil die alt
 
 test("Altverstoß-Umzug: importiert die neue Datei ein anderes Ziel als das, für das die alte Datei den Altverstoß hat, übernimmt der Listenumzug nur den Eintrag für dieses Ziel", (context) => {
   const vorher = datei('import { STUFE, TAKT } from "./store/defaults.js";\nimport { NAME } from "./store/begriffe.js";', TAKT, NAME, STUFE);
-  const nachher = datei('import { STUFE, TAKT } from "./store/defaults.js";', 'export { name } from "./konfiguration/rechnen.js";', TAKT, STUFE);
+  const nachher = datei('import { STUFE, TAKT } from "./store/defaults.js";\nimport "./store/begriffe.js";', 'export { name } from "./konfiguration/rechnen.js";', TAKT, STUFE);
   const neu = datei('import { NAME } from "../store/begriffe.js";', NAME);
   const repo = ausgelagert(context, { vorher, nachher, neu, eintraege: [verstoss(ALT, ZIEL), verstoss(ALT, ANDERES_ZIEL)] });
   const eintraege = schluessel(umziehen(repo));
