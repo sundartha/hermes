@@ -46,6 +46,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/elevenlabs/time-context.js",
       "src/geo/resolve.js",
       "src/store.js",
+      "src/store/begriffe-sprache-zeit.js",
       "src/store/defaults.js",
       "src/store/json.js",
       "src/store/pg.js",
