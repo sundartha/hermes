@@ -87,6 +87,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -95,6 +96,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -591,6 +593,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -599,6 +602,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -1087,6 +1091,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -1095,6 +1100,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -1583,6 +1589,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -1591,6 +1598,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -2079,6 +2087,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -2087,6 +2096,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -2575,6 +2585,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -2583,6 +2594,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -3071,6 +3083,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -3079,6 +3092,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -3567,6 +3581,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -3575,6 +3590,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -4063,6 +4079,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -4071,6 +4088,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -4559,6 +4577,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -4567,6 +4586,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -5055,6 +5075,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -5063,6 +5084,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -5551,6 +5573,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -5559,6 +5582,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -6051,6 +6075,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -6059,6 +6084,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -6555,6 +6581,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -6563,6 +6590,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -7051,6 +7079,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -7059,6 +7088,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -7547,6 +7577,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -7555,6 +7586,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -8043,6 +8075,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -8051,6 +8084,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -8539,6 +8573,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -8547,6 +8582,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -9035,6 +9071,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -9043,6 +9080,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -13458,6 +13496,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -13466,6 +13505,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -14367,6 +14407,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -14375,6 +14416,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
@@ -16189,6 +16231,7 @@
             "src/store/json.js",
             "src/store/pg.js",
             "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
             "src/web-auth.js"
           ]
         },
@@ -16197,6 +16240,7 @@
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
