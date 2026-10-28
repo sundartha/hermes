@@ -830,3 +830,88 @@ test("Abruf mit unverändertem Kündigungsstand bei verworfenem Ereignis: kein S
   const decke = await deckeNachVerworfenemEreignis("t_f9_dgleich", "sub_f9_dgleich", async () => stripeAbo(false));
   assert.equal(decke.hardCapCents, EIGENE_DECKE_CENTS);
 });
+
+async function abrufZumAltenAboUeberholt({ tenantId, standAlt, standNeu }) {
+  const altId = `sub_${tenantId}_alt`;
+  const neuId = `sub_${tenantId}_neu`;
+  const store = await aboStore(tenantId, altId);
+  let freigeben;
+  const freigabe = new Promise((resolve) => (freigeben = resolve));
+  let abrufGestartet;
+  const gestartet = new Promise((resolve) => (abrufGestartet = resolve));
+  const retrieveSubscription = async (subscriptionId) => {
+    if (subscriptionId !== altId) return stripeAbo(standNeu);
+    abrufGestartet();
+    await freigabe;
+    return stripeAbo(standAlt);
+  };
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const altEreignis = aboEreignis({ id: `evt_${tenantId}_alt`, tenantId, subscriptionId: altId, cancelAtPeriodEnd: true });
+  const neuEreignis = aboEreignis({ id: `evt_${tenantId}_neu`, tenantId, subscriptionId: neuId, cancelAtPeriodEnd: false });
+  const altAntwort = postSignedBody(handler, altEreignis, ABO_SECRET);
+  await gestartet;
+  const neuRes = await postSignedBody(handler, neuEreignis, ABO_SECRET);
+  freigeben();
+  const altRes = await altAntwort;
+  return { stand: store.tenantSubscription(tenantId), neuId, altRes, neuRes };
+}
+
+test("Abo-Wechsel während des Abrufs zum alten Abo: Kündigungsstand des neuen Abos bleibt (false)", async () => {
+  const { stand } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_abnahme", standAlt: true, standNeu: false });
+  assert.equal(stand.cancelAtPeriodEnd, false, "Abruf zum alten Abo überschreibt den Kündigungsstand des neuen Abos");
+});
+
+test("[NIE1] Tenant hält nach dem Abruf dasselbe Abo: Kündigungsstand aus dem Abruf wird gespeichert", async () => {
+  const store = await aboStore("t_f9_a2_nie1", "sub_f9_a2_nie1");
+  const retrieveSubscription = async () => {
+    await new Promise((resolve) => setImmediate(resolve));
+    return stripeAbo(true);
+  };
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const body = aboEreignis({ id: "evt_f9_a2_n1", tenantId: "t_f9_a2_nie1", subscriptionId: "sub_f9_a2_nie1", cancelAtPeriodEnd: false });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(store.tenantSubscription("t_f9_a2_nie1").cancelAtPeriodEnd, true, "Stand bei Stripe: gekündigt");
+});
+
+test("[NIE2] Ereignis zum neuen Abo setzt die Abo-Referenz und speichert den Stand aus seinem eigenen Abruf", async () => {
+  const { stand, neuId } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_nie2", standAlt: true, standNeu: true });
+  assert.equal(stand.subscriptionId, neuId, "Abo-Referenz zeigt auf das neue Abo");
+  assert.equal(stand.cancelAtPeriodEnd, true, "Stand aus dem Abruf des neuen Abos");
+});
+
+test("[NIE3] Abo-Wechsel während des Abrufs zum alten Abo: beide Ereignisse werden mit received:true beantwortet", async () => {
+  const { altRes, neuRes } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_nie3", standAlt: true, standNeu: false });
+  assert.deepEqual(neuRes.body, { received: true }, "Ereignis zum neuen Abo");
+  assert.deepEqual(altRes.body, { received: true }, "Ereignis zum alten Abo");
+});
+
+function abrufProtokoll() {
+  const abrufe = [];
+  const retrieveSubscription = async (subscriptionId) => {
+    abrufe.push(subscriptionId);
+    return stripeAbo(true);
+  };
+  return { abrufe, retrieveSubscription };
+}
+
+test("verworfenes updated nach Abo-Ende derselben Sekunde löst keinen Abruf bei Stripe aus", async () => {
+  const store = await aboStore("t_f9_a2_ohneabruf", "sub_f9_a2_ohneabruf");
+  const { abrufe, retrieveSubscription } = abrufProtokoll();
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const ziel = { tenantId: "t_f9_a2_ohneabruf", subscriptionId: "sub_f9_a2_ohneabruf" };
+  await postSignedBody(handler, aboEndeEreignis({ id: "evt_f9_a2_oa", ...ziel }), ABO_SECRET);
+  const res = await postSignedBody(handler, aboEreignis({ id: "evt_f9_a2_ob", cancelAtPeriodEnd: false, ...ziel }), ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.deepEqual(abrufe, [], "kein Abruf für ein Abo, das der Tenant nicht mehr hält");
+});
+
+test("updated für unbekannten Tenant löst keinen Abruf bei Stripe aus", async () => {
+  const store = await aboStore("t_f9_a2_fremd", "sub_f9_a2_fremd");
+  const { abrufe, retrieveSubscription } = abrufProtokoll();
+  const { handler } = aboRoute({ store, retrieveSubscription });
+  const body = aboEreignis({ id: "evt_f9_a2_fr", tenantId: "t_f9_a2_niemand", subscriptionId: "sub_f9_a2_niemand", cancelAtPeriodEnd: false });
+  const res = await postSignedBody(handler, body, ABO_SECRET);
+  assert.deepEqual(res.body, { received: true });
+  assert.deepEqual(abrufe, [], "kein Abruf ohne aufgelösten Tenant");
+});

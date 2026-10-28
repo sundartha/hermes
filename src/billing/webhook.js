@@ -395,6 +395,10 @@ async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
   }
 }
 
+function tenantHoldsSubscription(store, tenant, subscriptionId) {
+  return store.tenantSubscription(tenant).subscriptionId === subscriptionId;
+}
+
 async function syncCancelStateFromStripe(interpreted, { store, billing }) {
   const { action, tenantRef, subscriptionId } = interpreted;
   if (!CANCEL_STATE_ACTIONS.has(action) || !subscriptionId) return;
@@ -403,9 +407,10 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
     tenantRef,
     () => store.findTenantBySubscription(subscriptionId)?.id || null,
   );
-  if (!tenant || store.tenantSubscription(tenant).subscriptionId !== subscriptionId) return;
+  if (!tenant || !tenantHoldsSubscription(store, tenant, subscriptionId)) return;
   const atStripe = await cancelAtPeriodEndAtStripe(billing, subscriptionId);
-  if (atStripe === null || store.tenantSubscription(tenant).cancelAtPeriodEnd === atStripe) return;
+  if (atStripe === null || !tenantHoldsSubscription(store, tenant, subscriptionId)) return;
+  if (store.tenantSubscription(tenant).cancelAtPeriodEnd === atStripe) return;
   store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
 }
 
