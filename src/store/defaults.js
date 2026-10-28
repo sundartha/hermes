@@ -1,5 +1,6 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
+import { E164, isNanpCountry, normNum } from "./begriffe-rufnummern.js";
 
 export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
 export {
@@ -41,6 +42,7 @@ export {
   outboundReserveCents,
   spendMonthEndDate,
 } from "./begriffe-abrechnung.js";
+export { E164, isNanpCountry, normNum } from "./begriffe-rufnummern.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -206,12 +208,6 @@ export const PROFILE_FIELDS = {
   maxCallsPerHour: "number?",
 };
 
-export function normNum(rawNumber) {
-  return typeof rawNumber === "string" ? rawNumber.replace(/[\s\-()]/g, "") : "";
-}
-
-export const E164 = /^\+[1-9]\d{6,14}$/;
-
 const TRUNK_ZERO_COUNTRY_CODES = ["+49", "+33", "+44"];
 const NATIONAL_TRUNK_PREFIX = "0";
 
@@ -224,15 +220,6 @@ const NANP_NATIONAL_DIGITS = NANP_NSN_DIGITS + NANP_TRUNK_PREFIX.length;
 const NANP_NSN_PATTERN = /^[2-9]\d{2}[2-9]\d{6}$/;
 
 const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
-
-const NANP_ISO_COUNTRIES = Object.freeze([
-  "US", "CA", "AG", "AI", "AS", "BB", "BM", "BS", "DM", "DO", "GD", "GU", "JM", "KN",
-  "KY", "LC", "MP", "MS", "PR", "SX", "TC", "TT", "VC", "VG", "VI",
-]);
-
-export function isNanpCountry(countryIso) {
-  return typeof countryIso === "string" && NANP_ISO_COUNTRIES.includes(countryIso.toUpperCase());
-}
 
 const NO_NATIONAL_ELEVEN_RANGE_COUNTRIES = ["+49", "+33"];
 
