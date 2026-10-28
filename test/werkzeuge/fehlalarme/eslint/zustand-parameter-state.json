@@ -1,0 +1,11 @@
+{
+  "titel": "Zustandsfunktion ändert Eigenschaften des Parameters state",
+  "dateien": {
+    "src/store/zustand/rotprobe.js": [
+      "export function setze(state) {",
+      "  state.wert = true;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-param-reassign\""
+}

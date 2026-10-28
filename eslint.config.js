@@ -580,6 +580,13 @@ export default [
   },
   ...tsBloecke,
   {
+    name: "zustand-parameter-state",
+    files: [`src/store/zustand/**/*.${ENDUNGEN}`],
+    rules: {
+      "no-param-reassign": ["error", { props: true, ignorePropertyModificationsFor: ["state", "tenant"] }],
+    },
+  },
+  {
     files: ["apps/web/**/*.js"],
     languageOptions: { globals: { ...globals.browser } },
   },

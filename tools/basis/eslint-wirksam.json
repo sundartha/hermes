@@ -6411,6 +6411,510 @@
       ]
     }
   },
+  "src/store/zustand": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+          "name": "telnyx-belegabruf",
+          "nurIn": [
+            "src/billing/cost-truing.js",
+            "src/telephony/adapters/telnyx/voice.js"
+          ]
+        },
+        {
+          "meldung": "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+          "name": "kein-anrufzeit-gate",
+          "nurIn": [
+            "src/billing/cancellation-mail.js",
+            "src/claude.js",
+            "src/elevenlabs/inbound-initiation.js",
+            "src/elevenlabs/nanp-area-codes.js",
+            "src/elevenlabs/outbound.js",
+            "src/elevenlabs/time-context.js",
+            "src/geo/resolve.js",
+            "src/store.js",
+            "src/store/defaults.js",
+            "src/store/json.js",
+            "src/store/pg.js",
+            "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
+            "src/web-auth.js"
+          ]
+        },
+        {
+          "meldung": "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
+          "name": "trunk-beleg-felder",
+          "nurIn": [
+            "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
+            "src/store/pg.js",
+            "src/elevenlabs/inbound-path-decision.js"
+          ]
+        },
+        {
+          "meldung": "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+          "name": "anthropic-vokabular",
+          "nurIn": [
+            "src/llm/adapters/anthropic.js",
+            "src/llm/adapters/deepseek.js"
+          ]
+        },
+        {
+          "meldung": "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+          "name": "keine-aufnahme",
+          "nurIn": []
+        },
+        {
+          "meldung": "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+          "name": "tote-wahlwege",
+          "nurIn": []
+        },
+        {
+          "art": "aufruf",
+          "meldung": "Sprachkosten bucht nur src/billing/metering.js über store.addVoiceUsageCostCents (KV-P1-10); ein zweiter Aufrufer wäre eine mögliche Doppelbelastung.",
+          "name": "sprachkosten-buchen",
+          "nurIn": [
+            "src/billing/metering.js",
+            "src/store/json.js",
+            "src/store/pg.js"
+          ]
+        },
+        {
+          "art": "aufruf",
+          "meldung": "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+          "name": "anruf-starten",
+          "nurIn": [
+            "src/routes/api-calls.js"
+          ]
+        },
+        {
+          "meldung": "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+          "name": "inbound-tarif",
+          "nurIn": [
+            "src/billing/cost-calibration.js",
+            "src/billing/metering.js",
+            "src/config.js"
+          ]
+        },
+        {
+          "meldung": "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
+          "name": "altpfad-dashboard",
+          "nurIn": [
+            "src/portal-paths.js"
+          ]
+        }
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "ignorePropertyModificationsFor": [
+            "state",
+            "tenant"
+          ],
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        },
+        {
+          "message": "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+          "selector": "AssignmentExpression[left.property.name=\"costCents\"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] AssignmentExpression)"
+        },
+        {
+          "message": "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+          "selector": "UpdateExpression[argument.property.name=\"costCents\"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
   "src/telephony": {
     "linterOptions": {
       "noInlineConfig": true,
@@ -15493,6 +15997,1832 @@
         {
           "message": "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
           "selector": "UpdateExpression[argument.property.name=\"costCents\"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)"
+        }
+      ],
+      "no-return-await": [
+        0
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        0
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        0
+      ],
+      "no-throw-literal": [
+        0
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        0,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        0,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-expressions": [
+        0,
+        {
+          "allowShortCircuit": false,
+          "allowTaggedTemplates": false,
+          "allowTernary": false,
+          "enforceForJSX": false,
+          "ignoreDirectives": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        0,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        0
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-var": [
+        2
+      ],
+      "no-with": [
+        0
+      ],
+      "prefer-const": [
+        2,
+        {
+          "destructuring": "any",
+          "ignoreReadBeforeAssign": false
+        }
+      ],
+      "prefer-promise-reject-errors": [
+        0,
+        {
+          "allowEmptyReject": false
+        }
+      ],
+      "prefer-rest-params": [
+        2
+      ],
+      "prefer-spread": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-await": [
+        0
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "src/store/zustand (.ts)": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "@typescript-eslint/adjacent-overload-signatures": [
+        2
+      ],
+      "@typescript-eslint/array-type": [
+        2
+      ],
+      "@typescript-eslint/await-thenable": [
+        2
+      ],
+      "@typescript-eslint/ban-ts-comment": [
+        2,
+        {
+          "ts-check": true,
+          "ts-expect-error": true,
+          "ts-ignore": true,
+          "ts-nocheck": true
+        }
+      ],
+      "@typescript-eslint/ban-tslint-comment": [
+        2
+      ],
+      "@typescript-eslint/class-literal-property-style": [
+        2
+      ],
+      "@typescript-eslint/consistent-generic-constructors": [
+        2
+      ],
+      "@typescript-eslint/consistent-indexed-object-style": [
+        2
+      ],
+      "@typescript-eslint/consistent-type-assertions": [
+        2,
+        {
+          "assertionStyle": "never"
+        }
+      ],
+      "@typescript-eslint/consistent-type-definitions": [
+        2
+      ],
+      "@typescript-eslint/dot-notation": [
+        2,
+        {
+          "allowIndexSignaturePropertyAccess": false,
+          "allowKeywords": true,
+          "allowPattern": "",
+          "allowPrivateClassPropertyAccess": false,
+          "allowProtectedClassPropertyAccess": false
+        }
+      ],
+      "@typescript-eslint/explicit-module-boundary-types": [
+        2
+      ],
+      "@typescript-eslint/no-array-constructor": [
+        2
+      ],
+      "@typescript-eslint/no-array-delete": [
+        2
+      ],
+      "@typescript-eslint/no-base-to-string": [
+        2
+      ],
+      "@typescript-eslint/no-confusing-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-confusing-void-expression": [
+        2
+      ],
+      "@typescript-eslint/no-deprecated": [
+        2
+      ],
+      "@typescript-eslint/no-duplicate-enum-values": [
+        2
+      ],
+      "@typescript-eslint/no-duplicate-type-constituents": [
+        2
+      ],
+      "@typescript-eslint/no-dynamic-delete": [
+        2
+      ],
+      "@typescript-eslint/no-empty-function": [
+        2,
+        {
+          "allow": []
+        }
+      ],
+      "@typescript-eslint/no-empty-object-type": [
+        2
+      ],
+      "@typescript-eslint/no-explicit-any": [
+        2
+      ],
+      "@typescript-eslint/no-extra-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-extraneous-class": [
+        2
+      ],
+      "@typescript-eslint/no-floating-promises": [
+        2,
+        {
+          "allowForKnownSafeCalls": [
+            {
+              "from": "package",
+              "name": [
+                "test",
+                "describe",
+                "it",
+                "suite"
+              ],
+              "package": "node:test"
+            }
+          ],
+          "ignoreVoid": false
+        }
+      ],
+      "@typescript-eslint/no-for-in-array": [
+        2
+      ],
+      "@typescript-eslint/no-generated-empty-object-type": [
+        2
+      ],
+      "@typescript-eslint/no-implied-eval": [
+        2
+      ],
+      "@typescript-eslint/no-inferrable-types": [
+        2
+      ],
+      "@typescript-eslint/no-invalid-void-type": [
+        2
+      ],
+      "@typescript-eslint/no-meaningless-void-operator": [
+        2
+      ],
+      "@typescript-eslint/no-misused-new": [
+        2
+      ],
+      "@typescript-eslint/no-misused-promises": [
+        2
+      ],
+      "@typescript-eslint/no-misused-spread": [
+        2
+      ],
+      "@typescript-eslint/no-mixed-enums": [
+        2
+      ],
+      "@typescript-eslint/no-namespace": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-asserted-nullish-coalescing": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-asserted-optional-chain": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-redundant-type-constituents": [
+        2
+      ],
+      "@typescript-eslint/no-require-imports": [
+        2
+      ],
+      "@typescript-eslint/no-this-alias": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-boolean-literal-compare": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-condition": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-template-expression": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-arguments": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-constraint": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-conversion": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-parameters": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-argument": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-call": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-declaration-merging": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-enum-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-enum-comparison": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-function-type": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-member-access": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-return": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-type-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-unary-minus": [
+        2
+      ],
+      "@typescript-eslint/no-unused-expressions": [
+        2,
+        {
+          "allowShortCircuit": false,
+          "allowTaggedTemplates": false,
+          "allowTernary": false
+        }
+      ],
+      "@typescript-eslint/no-unused-vars": [
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
+      ],
+      "@typescript-eslint/no-useless-constructor": [
+        2
+      ],
+      "@typescript-eslint/no-useless-default-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-wrapper-object-types": [
+        2
+      ],
+      "@typescript-eslint/non-nullable-type-assertion-style": [
+        2
+      ],
+      "@typescript-eslint/only-throw-error": [
+        2
+      ],
+      "@typescript-eslint/prefer-as-const": [
+        2
+      ],
+      "@typescript-eslint/prefer-find": [
+        2
+      ],
+      "@typescript-eslint/prefer-for-of": [
+        2
+      ],
+      "@typescript-eslint/prefer-function-type": [
+        2
+      ],
+      "@typescript-eslint/prefer-includes": [
+        2
+      ],
+      "@typescript-eslint/prefer-literal-enum-member": [
+        2
+      ],
+      "@typescript-eslint/prefer-namespace-keyword": [
+        2
+      ],
+      "@typescript-eslint/prefer-nullish-coalescing": [
+        2
+      ],
+      "@typescript-eslint/prefer-optional-chain": [
+        2
+      ],
+      "@typescript-eslint/prefer-promise-reject-errors": [
+        2
+      ],
+      "@typescript-eslint/prefer-reduce-type-parameter": [
+        2
+      ],
+      "@typescript-eslint/prefer-regexp-exec": [
+        2
+      ],
+      "@typescript-eslint/prefer-return-this-type": [
+        2
+      ],
+      "@typescript-eslint/prefer-string-starts-ends-with": [
+        2
+      ],
+      "@typescript-eslint/related-getter-setter-pairs": [
+        2
+      ],
+      "@typescript-eslint/require-await": [
+        2
+      ],
+      "@typescript-eslint/restrict-plus-operands": [
+        2,
+        {
+          "allowAny": false,
+          "allowBoolean": false,
+          "allowNullish": false,
+          "allowNumberAndString": false,
+          "allowRegExp": false
+        }
+      ],
+      "@typescript-eslint/restrict-template-expressions": [
+        2,
+        {
+          "allowAny": false,
+          "allowBoolean": false,
+          "allowNever": false,
+          "allowNullish": false,
+          "allowNumber": false,
+          "allowRegExp": false
+        }
+      ],
+      "@typescript-eslint/return-await": [
+        2,
+        "error-handling-correctness-only"
+      ],
+      "@typescript-eslint/triple-slash-reference": [
+        2
+      ],
+      "@typescript-eslint/unbound-method": [
+        2
+      ],
+      "@typescript-eslint/unified-signatures": [
+        2
+      ],
+      "@typescript-eslint/use-unknown-in-catch-callback-variable": [
+        2
+      ],
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        0
+      ],
+      "dot-notation": [
+        0,
+        {
+          "allowKeywords": true,
+          "allowPattern": ""
+        }
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        0,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+          "name": "telnyx-belegabruf",
+          "nurIn": [
+            "src/billing/cost-truing.js",
+            "src/telephony/adapters/telnyx/voice.js"
+          ]
+        },
+        {
+          "meldung": "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+          "name": "kein-anrufzeit-gate",
+          "nurIn": [
+            "src/billing/cancellation-mail.js",
+            "src/claude.js",
+            "src/elevenlabs/inbound-initiation.js",
+            "src/elevenlabs/nanp-area-codes.js",
+            "src/elevenlabs/outbound.js",
+            "src/elevenlabs/time-context.js",
+            "src/geo/resolve.js",
+            "src/store.js",
+            "src/store/defaults.js",
+            "src/store/json.js",
+            "src/store/pg.js",
+            "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
+            "src/web-auth.js"
+          ]
+        },
+        {
+          "meldung": "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
+          "name": "trunk-beleg-felder",
+          "nurIn": [
+            "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
+            "src/store/pg.js",
+            "src/elevenlabs/inbound-path-decision.js"
+          ]
+        },
+        {
+          "meldung": "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+          "name": "anthropic-vokabular",
+          "nurIn": [
+            "src/llm/adapters/anthropic.js",
+            "src/llm/adapters/deepseek.js"
+          ]
+        },
+        {
+          "meldung": "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+          "name": "keine-aufnahme",
+          "nurIn": []
+        },
+        {
+          "meldung": "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+          "name": "tote-wahlwege",
+          "nurIn": []
+        },
+        {
+          "art": "aufruf",
+          "meldung": "Sprachkosten bucht nur src/billing/metering.js über store.addVoiceUsageCostCents (KV-P1-10); ein zweiter Aufrufer wäre eine mögliche Doppelbelastung.",
+          "name": "sprachkosten-buchen",
+          "nurIn": [
+            "src/billing/metering.js",
+            "src/store/json.js",
+            "src/store/pg.js"
+          ]
+        },
+        {
+          "art": "aufruf",
+          "meldung": "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+          "name": "anruf-starten",
+          "nurIn": [
+            "src/routes/api-calls.js"
+          ]
+        },
+        {
+          "meldung": "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+          "name": "inbound-tarif",
+          "nurIn": [
+            "src/billing/cost-calibration.js",
+            "src/billing/metering.js",
+            "src/config.js"
+          ]
+        },
+        {
+          "meldung": "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
+          "name": "altpfad-dashboard",
+          "nurIn": [
+            "src/portal-paths.js"
+          ]
+        }
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-array-constructor": [
+        0
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        0
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        0
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        0
+      ],
+      "no-dupe-class-members": [
+        0
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        0
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-function": [
+        0,
+        {
+          "allow": []
+        }
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        0
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-implied-eval": [
+        0
+      ],
+      "no-import-assign": [
+        0
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        0
+      ],
+      "no-new-symbol": [
+        0
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        0
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "ignorePropertyModificationsFor": [
+            "state",
+            "tenant"
+          ],
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        0,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        },
+        {
+          "message": "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+          "selector": "AssignmentExpression[left.property.name=\"costCents\"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] AssignmentExpression)"
+        },
+        {
+          "message": "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+          "selector": "UpdateExpression[argument.property.name=\"costCents\"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)"
+        }
+      ],
+      "no-return-await": [
+        0
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        0
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        0
+      ],
+      "no-throw-literal": [
+        0
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        0,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        0,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-expressions": [
+        0,
+        {
+          "allowShortCircuit": false,
+          "allowTaggedTemplates": false,
+          "allowTernary": false,
+          "enforceForJSX": false,
+          "ignoreDirectives": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        0,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        0
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-var": [
+        2
+      ],
+      "no-with": [
+        0
+      ],
+      "prefer-const": [
+        2,
+        {
+          "destructuring": "any",
+          "ignoreReadBeforeAssign": false
+        }
+      ],
+      "prefer-promise-reject-errors": [
+        0,
+        {
+          "allowEmptyReject": false
+        }
+      ],
+      "prefer-rest-params": [
+        2
+      ],
+      "prefer-spread": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-await": [
+        0
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "src/store/zustand (.d.ts)": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "@typescript-eslint/adjacent-overload-signatures": [
+        2
+      ],
+      "@typescript-eslint/array-type": [
+        2
+      ],
+      "@typescript-eslint/await-thenable": [
+        2
+      ],
+      "@typescript-eslint/ban-ts-comment": [
+        2,
+        {
+          "ts-check": true,
+          "ts-expect-error": true,
+          "ts-ignore": true,
+          "ts-nocheck": true
+        }
+      ],
+      "@typescript-eslint/ban-tslint-comment": [
+        2
+      ],
+      "@typescript-eslint/class-literal-property-style": [
+        2
+      ],
+      "@typescript-eslint/consistent-generic-constructors": [
+        2
+      ],
+      "@typescript-eslint/consistent-indexed-object-style": [
+        2
+      ],
+      "@typescript-eslint/consistent-type-assertions": [
+        2,
+        {
+          "assertionStyle": "never"
+        }
+      ],
+      "@typescript-eslint/consistent-type-definitions": [
+        2
+      ],
+      "@typescript-eslint/dot-notation": [
+        2,
+        {
+          "allowIndexSignaturePropertyAccess": false,
+          "allowKeywords": true,
+          "allowPattern": "",
+          "allowPrivateClassPropertyAccess": false,
+          "allowProtectedClassPropertyAccess": false
+        }
+      ],
+      "@typescript-eslint/explicit-module-boundary-types": [
+        2
+      ],
+      "@typescript-eslint/no-array-constructor": [
+        2
+      ],
+      "@typescript-eslint/no-array-delete": [
+        2
+      ],
+      "@typescript-eslint/no-base-to-string": [
+        2
+      ],
+      "@typescript-eslint/no-confusing-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-confusing-void-expression": [
+        2
+      ],
+      "@typescript-eslint/no-deprecated": [
+        2
+      ],
+      "@typescript-eslint/no-duplicate-enum-values": [
+        2
+      ],
+      "@typescript-eslint/no-duplicate-type-constituents": [
+        2
+      ],
+      "@typescript-eslint/no-dynamic-delete": [
+        2
+      ],
+      "@typescript-eslint/no-empty-function": [
+        2,
+        {
+          "allow": []
+        }
+      ],
+      "@typescript-eslint/no-empty-object-type": [
+        2
+      ],
+      "@typescript-eslint/no-explicit-any": [
+        2
+      ],
+      "@typescript-eslint/no-extra-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-extraneous-class": [
+        2
+      ],
+      "@typescript-eslint/no-floating-promises": [
+        2,
+        {
+          "allowForKnownSafeCalls": [
+            {
+              "from": "package",
+              "name": [
+                "test",
+                "describe",
+                "it",
+                "suite"
+              ],
+              "package": "node:test"
+            }
+          ],
+          "ignoreVoid": false
+        }
+      ],
+      "@typescript-eslint/no-for-in-array": [
+        2
+      ],
+      "@typescript-eslint/no-generated-empty-object-type": [
+        2
+      ],
+      "@typescript-eslint/no-implied-eval": [
+        2
+      ],
+      "@typescript-eslint/no-inferrable-types": [
+        2
+      ],
+      "@typescript-eslint/no-invalid-void-type": [
+        2
+      ],
+      "@typescript-eslint/no-meaningless-void-operator": [
+        2
+      ],
+      "@typescript-eslint/no-misused-new": [
+        2
+      ],
+      "@typescript-eslint/no-misused-promises": [
+        2
+      ],
+      "@typescript-eslint/no-misused-spread": [
+        2
+      ],
+      "@typescript-eslint/no-mixed-enums": [
+        2
+      ],
+      "@typescript-eslint/no-namespace": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-asserted-nullish-coalescing": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-asserted-optional-chain": [
+        2
+      ],
+      "@typescript-eslint/no-non-null-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-redundant-type-constituents": [
+        2
+      ],
+      "@typescript-eslint/no-require-imports": [
+        2
+      ],
+      "@typescript-eslint/no-this-alias": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-boolean-literal-compare": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-condition": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-template-expression": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-arguments": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-constraint": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-conversion": [
+        2
+      ],
+      "@typescript-eslint/no-unnecessary-type-parameters": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-argument": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-call": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-declaration-merging": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-enum-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-enum-comparison": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-function-type": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-member-access": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-return": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-type-assertion": [
+        2
+      ],
+      "@typescript-eslint/no-unsafe-unary-minus": [
+        2
+      ],
+      "@typescript-eslint/no-unused-expressions": [
+        2,
+        {
+          "allowShortCircuit": false,
+          "allowTaggedTemplates": false,
+          "allowTernary": false
+        }
+      ],
+      "@typescript-eslint/no-unused-vars": [
+        2,
+        {
+          "args": "after-used",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all"
+        }
+      ],
+      "@typescript-eslint/no-useless-constructor": [
+        2
+      ],
+      "@typescript-eslint/no-useless-default-assignment": [
+        2
+      ],
+      "@typescript-eslint/no-wrapper-object-types": [
+        2
+      ],
+      "@typescript-eslint/non-nullable-type-assertion-style": [
+        2
+      ],
+      "@typescript-eslint/only-throw-error": [
+        2
+      ],
+      "@typescript-eslint/prefer-as-const": [
+        2
+      ],
+      "@typescript-eslint/prefer-find": [
+        2
+      ],
+      "@typescript-eslint/prefer-for-of": [
+        2
+      ],
+      "@typescript-eslint/prefer-function-type": [
+        2
+      ],
+      "@typescript-eslint/prefer-includes": [
+        2
+      ],
+      "@typescript-eslint/prefer-literal-enum-member": [
+        2
+      ],
+      "@typescript-eslint/prefer-namespace-keyword": [
+        2
+      ],
+      "@typescript-eslint/prefer-nullish-coalescing": [
+        2
+      ],
+      "@typescript-eslint/prefer-optional-chain": [
+        2
+      ],
+      "@typescript-eslint/prefer-promise-reject-errors": [
+        2
+      ],
+      "@typescript-eslint/prefer-reduce-type-parameter": [
+        2
+      ],
+      "@typescript-eslint/prefer-regexp-exec": [
+        2
+      ],
+      "@typescript-eslint/prefer-return-this-type": [
+        2
+      ],
+      "@typescript-eslint/prefer-string-starts-ends-with": [
+        2
+      ],
+      "@typescript-eslint/related-getter-setter-pairs": [
+        2
+      ],
+      "@typescript-eslint/require-await": [
+        2
+      ],
+      "@typescript-eslint/restrict-plus-operands": [
+        2,
+        {
+          "allowAny": false,
+          "allowBoolean": false,
+          "allowNullish": false,
+          "allowNumberAndString": false,
+          "allowRegExp": false
+        }
+      ],
+      "@typescript-eslint/restrict-template-expressions": [
+        2,
+        {
+          "allowAny": false,
+          "allowBoolean": false,
+          "allowNever": false,
+          "allowNullish": false,
+          "allowNumber": false,
+          "allowRegExp": false
+        }
+      ],
+      "@typescript-eslint/return-await": [
+        2,
+        "error-handling-correctness-only"
+      ],
+      "@typescript-eslint/triple-slash-reference": [
+        2
+      ],
+      "@typescript-eslint/unbound-method": [
+        2
+      ],
+      "@typescript-eslint/unified-signatures": [
+        2
+      ],
+      "@typescript-eslint/use-unknown-in-catch-callback-variable": [
+        2
+      ],
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        0
+      ],
+      "dot-notation": [
+        0,
+        {
+          "allowKeywords": true,
+          "allowPattern": ""
+        }
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        0,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes-typen/keine-typwaechter": [
+        2,
+        {
+          "message": "Ein Typwächter (wert is T, asserts wert is T, asserts wert) behauptet dem Typprüfer einen Typ, den niemand prüft, wie ein as in anderer Form. Den Wert an der Grenze prüfen und den geprüften Typ zurückgeben.",
+          "selector": "TSTypePredicate"
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "hermes/speicher-fassade": [
+        2,
+        {
+          "fassade": "src/store.js",
+          "speicher": [
+            {
+              "datei": "src/store/pg.js",
+              "fabrik": "makePgStore"
+            },
+            {
+              "datei": "src/store/json.js"
+            }
+          ]
+        }
+      ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+          "name": "telnyx-belegabruf",
+          "nurIn": [
+            "src/billing/cost-truing.js",
+            "src/telephony/adapters/telnyx/voice.js"
+          ]
+        },
+        {
+          "meldung": "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+          "name": "kein-anrufzeit-gate",
+          "nurIn": [
+            "src/billing/cancellation-mail.js",
+            "src/claude.js",
+            "src/elevenlabs/inbound-initiation.js",
+            "src/elevenlabs/nanp-area-codes.js",
+            "src/elevenlabs/outbound.js",
+            "src/elevenlabs/time-context.js",
+            "src/geo/resolve.js",
+            "src/store.js",
+            "src/store/defaults.js",
+            "src/store/json.js",
+            "src/store/pg.js",
+            "src/store/state-ops.js",
+            "src/store/zustand/mandant.js",
+            "src/web-auth.js"
+          ]
+        },
+        {
+          "meldung": "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
+          "name": "trunk-beleg-felder",
+          "nurIn": [
+            "src/store/state-ops.js",
+            "src/store/zustand/nummern.js",
+            "src/store/pg.js",
+            "src/elevenlabs/inbound-path-decision.js"
+          ]
+        },
+        {
+          "meldung": "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+          "name": "anthropic-vokabular",
+          "nurIn": [
+            "src/llm/adapters/anthropic.js",
+            "src/llm/adapters/deepseek.js"
+          ]
+        },
+        {
+          "meldung": "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+          "name": "keine-aufnahme",
+          "nurIn": []
+        },
+        {
+          "meldung": "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+          "name": "tote-wahlwege",
+          "nurIn": []
+        },
+        {
+          "art": "aufruf",
+          "meldung": "Sprachkosten bucht nur src/billing/metering.js über store.addVoiceUsageCostCents (KV-P1-10); ein zweiter Aufrufer wäre eine mögliche Doppelbelastung.",
+          "name": "sprachkosten-buchen",
+          "nurIn": [
+            "src/billing/metering.js",
+            "src/store/json.js",
+            "src/store/pg.js"
+          ]
+        },
+        {
+          "art": "aufruf",
+          "meldung": "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+          "name": "anruf-starten",
+          "nurIn": [
+            "src/routes/api-calls.js"
+          ]
+        },
+        {
+          "meldung": "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+          "name": "inbound-tarif",
+          "nurIn": [
+            "src/billing/cost-calibration.js",
+            "src/billing/metering.js",
+            "src/config.js"
+          ]
+        },
+        {
+          "meldung": "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
+          "name": "altpfad-dashboard",
+          "nurIn": [
+            "src/portal-paths.js"
+          ]
+        }
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-array-constructor": [
+        0
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        0
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        0
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        0
+      ],
+      "no-dupe-class-members": [
+        0
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        0
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-function": [
+        0,
+        {
+          "allow": []
+        }
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        0
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-implied-eval": [
+        0
+      ],
+      "no-import-assign": [
+        0
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        0
+      ],
+      "no-new-symbol": [
+        0
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        0
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "ignorePropertyModificationsFor": [
+            "state",
+            "tenant"
+          ],
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        0,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Eine eigene Typdeklaration behauptet Typen, ohne sie zu prüfen, wie ein as in anderer Form. Den Nachbarn selbst typisieren oder den Wert an der Grenze prüfen.",
+          "selector": "Program"
         }
       ],
       "no-return-await": [
