@@ -53,8 +53,9 @@ test("kein Bereich mit Muster ist geschützt, Agenten im Auftragsweg arbeiten do
 });
 
 test("der Bau-Agent bekommt genau das Muster mit dem längsten passenden Präfix samt Regel, auch wenn der Auftrag noch ein Vorbild nennt", (context) => {
-  const gezeigt = ["src/routes/neu.js", "src/telephony/", "src/store/", "scripts/neu.mjs"].map((bereich) => gezeigteMuster(bauPromptFuer(context, bereich)));
-  assert.deepEqual(gezeigt, [["Route"], ["Telefonie"], ["Modul"], ["Skript"]]);
+  const bereiche = ["src/routes/neu.js", "src/telephony/", "src/telephony/adapters/telnyx/neu.js", "src/consult/", "src/store/", "scripts/neu.mjs"];
+  const gezeigt = bereiche.map((bereich) => gezeigteMuster(bauPromptFuer(context, bereich)));
+  assert.deepEqual(gezeigt, [["Route"], ["Telefonie"], ["Telefonie-Adapter"], ["Modul"], ["Modul"], ["Skript"]]);
   const route = bauPromptFuer(context, "src/routes/neu.js");
   assert.ok(route.includes(inhalt("Route")), route);
   assert.ok(route.includes(`\n${REGEL}\n`), route);

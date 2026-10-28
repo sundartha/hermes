@@ -1,11 +1,12 @@
 {
   "regel": "Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster.",
   "bau": [
-    { "art": "Route", "praefix": "src/routes/", "datei": "src/routes/intern-anrufpause.js" },
+    { "art": "Route", "praefix": "src/routes/", "datei": "src/routes/api-inbox.js", "form": "router" },
+    { "art": "Telefonie-Adapter", "praefix": "src/telephony/adapters/", "datei": "src/telephony/adapters/telnyx/config-read.js" },
     { "art": "Telefonie", "praefix": "src/telephony/", "datei": "src/telephony/outage-detection.js" },
     { "art": "Abrechnung", "praefix": "src/billing/", "datei": "src/billing/kostenarten.js" },
     { "art": "ElevenLabs", "praefix": "src/elevenlabs/", "datei": "src/elevenlabs/b1-doppelankaendigung.js" },
-    { "art": "Modul", "praefix": "src/", "datei": "src/diagnostic-retention.js" },
+    { "art": "Modul", "praefix": "src/", "datei": "src/consult/question.js" },
     { "art": "Skript", "praefix": "scripts/", "datei": "scripts/check-elevenlabs-drift.mjs" }
   ],
   "test": [
