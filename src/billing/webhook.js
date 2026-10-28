@@ -75,60 +75,77 @@ export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }
   return parsed.v1.some((candidate) => safeHexEqual(candidate, expected));
 }
 
+function ignoredEvent() {
+  return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
+}
+
+function interpretSubscriptionChange(object) {
+  if (!CONFIRMED_SUBSCRIPTION_STATUS.has(object.status)) return ignoredEvent();
+  const period = periodFieldsOf(object);
+  const shared = {
+    tenantRef: tenantRefOf(object),
+    subscriptionId: object.id ?? null,
+    planSlug: planSlugOf(object),
+    currentPeriodEnd: period.currentPeriodEnd ?? null,
+    currentPeriodStart: period.currentPeriodStart ?? null,
+    customerId: object.customer ?? null,
+    paymentMethodId: paymentMethodIdOf(object.default_payment_method),
+    paymentMethodType: paymentMethodTypeOf(object.default_payment_method),
+  };
+  if (object.cancel_at_period_end === true) {
+    return { action: WEBHOOK_ACTION.CANCEL_SCHEDULED, ...shared, cancelAtPeriodEnd: true };
+  }
+  return {
+    action: WEBHOOK_ACTION.ACTIVATE,
+    ...shared,
+    ...(object.cancel_at_period_end === false ? { cancelAtPeriodEnd: false } : {}),
+  };
+}
+
+function interpretSubscriptionDeleted(object) {
+  return {
+    action: WEBHOOK_ACTION.SUSPEND,
+    suspendReason: SUSPEND_REASON.SUBSCRIPTION_DELETED,
+    tenantRef: tenantRefOf(object),
+    subscriptionId: object.id ?? null,
+  };
+}
+
+function interpretPaymentFailed(object) {
+  return {
+    action: WEBHOOK_ACTION.SUSPEND,
+    suspendReason: SUSPEND_REASON.PAYMENT_FAILED,
+    tenantRef: tenantRefOf(object),
+    subscriptionId: object.subscription ?? null,
+  };
+}
+
+function interpretMoneyEvent(type, object) {
+  const money = moneyActionFor(type);
+  if (!money) return ignoredEvent();
+  return {
+    action: WEBHOOK_ACTION.MONEY,
+    tenantRef: tenantRefOf(object),
+    subscriptionId: moneyEventSubscriptionId(type, object),
+    customerId: object.customer ?? null,
+    moneyAction: money.action,
+    moneyAlarm: money.alarm,
+  };
+}
+
 export function interpretStripeEvent(event) {
   const object = (event && event.data && event.data.object) || {};
-  switch (event && event.type) {
+  const type = event && event.type;
+  switch (type) {
     case SUBSCRIPTION_EVENT.CREATED:
-    case SUBSCRIPTION_EVENT.UPDATED: {
-      if (!CONFIRMED_SUBSCRIPTION_STATUS.has(object.status)) {
-        return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
-      }
-      const period = periodFieldsOf(object);
-      const shared = {
-        tenantRef: tenantRefOf(object),
-        subscriptionId: object.id ?? null,
-        planSlug: planSlugOf(object),
-        currentPeriodEnd: period.currentPeriodEnd ?? null,
-        currentPeriodStart: period.currentPeriodStart ?? null,
-        customerId: object.customer ?? null,
-        paymentMethodId: paymentMethodIdOf(object.default_payment_method),
-        paymentMethodType: paymentMethodTypeOf(object.default_payment_method),
-      };
-      if (object.cancel_at_period_end === true) {
-        return { action: WEBHOOK_ACTION.CANCEL_SCHEDULED, ...shared, cancelAtPeriodEnd: true };
-      }
-      return {
-        action: WEBHOOK_ACTION.ACTIVATE,
-        ...shared,
-        ...(object.cancel_at_period_end === false ? { cancelAtPeriodEnd: false } : {}),
-      };
-    }
+    case SUBSCRIPTION_EVENT.UPDATED:
+      return interpretSubscriptionChange(object);
     case SUBSCRIPTION_EVENT.DELETED:
-      return {
-        action: WEBHOOK_ACTION.SUSPEND,
-        suspendReason: SUSPEND_REASON.SUBSCRIPTION_DELETED,
-        tenantRef: tenantRefOf(object),
-        subscriptionId: object.id ?? null,
-      };
+      return interpretSubscriptionDeleted(object);
     case SUBSCRIPTION_EVENT.PAYMENT_FAILED:
-      return {
-        action: WEBHOOK_ACTION.SUSPEND,
-        suspendReason: SUSPEND_REASON.PAYMENT_FAILED,
-        tenantRef: tenantRefOf(object),
-        subscriptionId: object.subscription ?? null,
-      };
-    default: {
-      const money = moneyActionFor(event && event.type);
-      if (!money) return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
-      return {
-        action: WEBHOOK_ACTION.MONEY,
-        tenantRef: tenantRefOf(object),
-        subscriptionId: moneyEventSubscriptionId(event.type, object),
-        customerId: object.customer ?? null,
-        moneyAction: money.action,
-        moneyAlarm: money.alarm,
-      };
-    }
+      return interpretPaymentFailed(object);
+    default:
+      return interpretMoneyEvent(type, object);
   }
 }
 

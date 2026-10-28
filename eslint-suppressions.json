@@ -506,7 +506,7 @@
   },
   "src/billing/webhook.js": {
     "complexity": {
-      "count": 2
+      "count": 1
     },
     "id-length": {
       "count": 3
