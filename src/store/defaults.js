@@ -43,8 +43,8 @@ export const REQUEST_NUMBER_REASON = Object.freeze({
   GLOBAL_CAP: GLOBAL_CAP_REASON,
 });
 
-export function shouldPersistProvisionResult(r) {
-  return r.ok || r.reason === GLOBAL_CAP_REASON;
+export function shouldPersistProvisionResult(provisionResult) {
+  return provisionResult.ok || provisionResult.reason === GLOBAL_CAP_REASON;
 }
 
 export const PROVISION_NUMBER_JOB = "provision_number";
@@ -107,14 +107,14 @@ export const MICRO_CENTS_PER_CENT = 1_000_000;
 
 export const USAGE_CORRUPT_REASON = "usage_korrupt";
 
-export function isBookableCents(x) {
-  return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
+export function isBookableCents(cents) {
+  return Number.isFinite(cents) && Number.isInteger(cents) && cents >= 0;
 }
 
 export const PROVIDER_RATE_SCALE = 1_000_000;
 
-export function isCorrectionCents(x) {
-  return Number.isFinite(x) && Number.isInteger(x);
+export function isCorrectionCents(cents) {
+  return Number.isFinite(cents) && Number.isInteger(cents);
 }
 
 export function isProviderMicroCents(wert) {
@@ -259,11 +259,11 @@ export function defaultSettings() {
 }
 
 export function demoCalendar() {
-  return DEMO_EVENTS.map((e) => ({
-    id: e.id,
-    title: e.title,
-    start: nextWeekday(e.daysAhead, e.startHour),
-    end: nextWeekday(e.daysAhead, e.endHour),
+  return DEMO_EVENTS.map((demoEvent) => ({
+    id: demoEvent.id,
+    title: demoEvent.title,
+    start: nextWeekday(demoEvent.daysAhead, demoEvent.startHour),
+    end: nextWeekday(demoEvent.daysAhead, demoEvent.endHour),
   }));
 }
 
@@ -314,8 +314,8 @@ export const PROFILE_FIELDS = {
   maxCallsPerHour: "number?",
 };
 
-export function normNum(n) {
-  return typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "";
+export function normNum(rawNumber) {
+  return typeof rawNumber === "string" ? rawNumber.replace(/[\s\-()]/g, "") : "";
 }
 
 export const E164 = /^\+[1-9]\d{6,14}$/;
@@ -352,7 +352,7 @@ export function hasTrunkZeroAfterCountryCode(e164) {
 export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
   for (const num of candidateNumbers) {
     if (typeof num !== "string") continue;
-    const code = DIALING_HOME_COUNTRY_CODES.find((c) => num.startsWith(c));
+    const code = DIALING_HOME_COUNTRY_CODES.find((dialingCode) => num.startsWith(dialingCode));
     if (!code) continue;
     if (code === NANP_COUNTRY_CODE && !isNanpCountry(tenantCountryIso)) continue;
     return code;
@@ -411,7 +411,7 @@ export function allowedPrivateNumberCodes(countryIso) {
 }
 
 const CALLING_CODES_LONGEST_FIRST = Object.freeze(
-  Object.values(CALLING_CODE_FOR_COUNTRY).sort((a, b) => b.length - a.length),
+  Object.values(CALLING_CODE_FOR_COUNTRY).sort((codeA, codeB) => codeB.length - codeA.length),
 );
 const COUNTRY_FOR_CALLING_CODE = Object.freeze(
   Object.fromEntries(Object.entries(CALLING_CODE_FOR_COUNTRY).map(([iso, code]) => [code, iso])),
@@ -419,13 +419,13 @@ const COUNTRY_FOR_CALLING_CODE = Object.freeze(
 
 export function countryForE164(e164) {
   if (typeof e164 !== "string" || !E164.test(e164)) return null;
-  const code = CALLING_CODES_LONGEST_FIRST.find((c) => e164.startsWith(c));
+  const code = CALLING_CODES_LONGEST_FIRST.find((callingCode) => e164.startsWith(callingCode));
   return code ? COUNTRY_FOR_CALLING_CODE[code] : null;
 }
 
 export function countryAllowed(e164, allowedCodes = DEFAULT_PRIVATE_NUMBER_CODES) {
   if (typeof e164 !== "string" || !e164) return false;
-  return allowedCodes.includes("*") || allowedCodes.some((c) => e164.startsWith(c));
+  return allowedCodes.includes("*") || allowedCodes.some((prefix) => e164.startsWith(prefix));
 }
 
 export function sanitizeProfile(patch) {
