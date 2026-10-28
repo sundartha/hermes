@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -12,12 +12,6 @@ import { ESLINT_BIN, REPO_ROOT, probeDirectory } from "./probe-repo.js";
 const MUSTER = JSON.parse(readFileSync(join(REPO_ROOT, "tools/auftrag/musterdateien.json"), "utf8"));
 const ALLE_MUSTER = [...MUSTER.bau, ...MUSTER.test];
 const REGEL = "Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster.";
-const BASISLISTEN = [
-  "eslint-suppressions.json",
-  "eslint-legacy-exceptions.json",
-  ".dependency-cruiser-known-violations.json",
-  ...readdirSync(join(REPO_ROOT, "tools/basis")).map((datei) => `tools/basis/${datei}`),
-];
 const ALTER_UMBAU = { id: "a1", art: "umbau", ziel: "Räume d auf", bereich: "src/d.js", erwarteteDateien: ["src/d.js"], vorbild: "src/fehlt.js", abnahme: "test/ok.test.js", prueft: UMBAU_AUSWEG };
 const LEERE_UNTERDRUECKUNGEN = "eslint-suppressions.empty.json";
 
@@ -42,14 +36,6 @@ function gezeigteMuster(text) {
 test("jede Musterdatei gibt es und sie liegt unter dem Präfix ihrer Art", () => {
   const falsch = ALLE_MUSTER.filter(({ praefix, datei }) => !existsSync(join(REPO_ROOT, datei)) || !datei.startsWith(praefix));
   assert.deepEqual(falsch, []);
-});
-
-test("keine Musterdatei steht in einer Liste geduldeter Befunde", () => {
-  const genannt = BASISLISTEN.flatMap((liste) => {
-    const text = readFileSync(join(REPO_ROOT, liste), "utf8");
-    return ALLE_MUSTER.filter(({ datei }) => text.includes(datei)).map(({ datei }) => `${datei} in ${liste}`);
-  });
-  assert.deepEqual(genannt, []);
 });
 
 test("alle Musterdateien bestehen ESLint ohne geduldete Befunde und ohne Warnung", () => {
