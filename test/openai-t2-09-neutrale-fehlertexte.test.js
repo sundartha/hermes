@@ -499,3 +499,146 @@ test("T8b: fehlende Uebersetzung oder fehlendes Text-Buendel -> neutraler EN-Rue
   }
   assert.equal(toolErrorText({ reason: "frozen" }, undefined), LAST_RESORT_TEXT);
 });
+
+const UNKNOWN_ERROR_MESSAGE = "connect ECONNREFUSED 10.20.30.40:5432 geheim-intern";
+const UNKNOWN_ERROR_ADDRESS = "10.20.30.40";
+const UNKNOWN_ERROR_PORT = 5432;
+const UNKNOWN_ERROR_STACK_MARKER = "at interneFunktion (/srv/hermes/src/geheim.js:12:34)";
+
+function unknownToolError() {
+  const err = new Error(UNKNOWN_ERROR_MESSAGE);
+  err.address = UNKNOWN_ERROR_ADDRESS;
+  err.port = UNKNOWN_ERROR_PORT;
+  err.stack = `Error: ${UNKNOWN_ERROR_MESSAGE}\n    ${UNKNOWN_ERROR_STACK_MARKER}`;
+  return err;
+}
+
+function assertNoErrorInternals(text, label) {
+  assert.ok(!text.includes(UNKNOWN_ERROR_MESSAGE), `${label}: Fehlermeldung im Text`);
+  assert.ok(!text.includes(UNKNOWN_ERROR_ADDRESS), `${label}: Adresse im Text`);
+  assert.ok(!text.includes(UNKNOWN_ERROR_STACK_MARKER), `${label}: Stapel im Text`);
+  assert.doesNotMatch(text, /ECONNREFUSED|geheim|\/srv\//, `${label}: Interna im Text`);
+}
+
+test("[NIE1] ein unbekannter Werkzeugfehler zeigt in jeder Sprache nur den neutralen UPSTREAM_UNREACHABLE-Text", (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = toolErrorText(unknownToolError(), MCP_TEXTS[lang]);
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assertNoErrorInternals(text, lang);
+  }
+});
+
+test("[NIE1] ein unerreichbares Gateway zeigt dem Modell ueber registerTools weder Meldung, Stapel noch Adresse", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = await networkErrorText({ language: lang });
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assert.doesNotMatch(
+      text,
+      /fetch failed|ECONNREFUSED|127\.0\.0\.1|\n\s+at /,
+      `${lang}: Interna im Text`,
+    );
+  }
+});
+
+const RAW_DENIAL_ERROR = "Interner Ablehnungsgrund (OUTBOUND_FROZEN, HTTP 402, Tarif starter).";
+
+test("[NIE1] ein Ablehnungsgrund des Servers wird ueber registerTools zum Tabellentext der Aufrufersprache, nie roh", async () => {
+  for (const reason of Object.keys(MCP_TEXTS.en.denials)) {
+    await withFixedGateway(
+      { status: HTTP_PAYMENT_REQUIRED, body: { error: RAW_DENIAL_ERROR, reason } },
+      async () => {
+        for (const lang of SUPPORTED_LANGUAGES) {
+          const result = await captureTools({ language: lang }).get("get_call_status")({
+            call_id: "x",
+          });
+          assert.equal(result.isError, true, `${lang}/${reason}`);
+          const text = result.content[0].text;
+          assert.equal(text, MCP_TEXTS[lang].denials[reason], `${lang}/${reason}`);
+          assert.ok(!text.includes(RAW_DENIAL_ERROR), `${lang}/${reason}: Rohtext durchgereicht`);
+          assert.notEqual(text, reason, `${lang}/${reason}: rohe Kennung durchgereicht`);
+        }
+      },
+    );
+  }
+});
+
+const UNKNOWN_DENIAL_RAW = "Voellig_NEU-42 x_ablehnung_mit_sehr_langer_interner_kennung";
+const UNKNOWN_DENIAL_LOGGED = "voellig_neux_ablehnung_mit_sehr_langer_i";
+const UNKNOWN_DENIAL_LOG_PREFIX = "[mcp] unbekannter Ablehnungsgrund:";
+const UNKNOWN_ERROR_LOG_PREFIX = "[mcp] Tool-Fehler ohne bekannte Kennung:";
+
+test("toolErrorText: unbekannter Ablehnungsgrund -> DENIAL_UNKNOWN der Aufrufersprache, bereinigte Kennung im Server-Log", (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const text = toolErrorText(
+    { reason: UNKNOWN_DENIAL_RAW, httpStatus: HTTP_PAYMENT_REQUIRED },
+    MCP_TEXTS.de,
+  );
+  assert.equal(text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN]);
+  assert.deepEqual(
+    warn.mock.calls.map((call) => call.arguments),
+    [[UNKNOWN_DENIAL_LOG_PREFIX, UNKNOWN_DENIAL_LOGGED]],
+  );
+});
+
+test("toolErrorText: ohne Fehlerobjekt neutraler Text der Aufrufersprache, kein Wurf, Log ohne Inhalt", (t) => {
+  const error = t.mock.method(console, "error", () => {});
+  for (const err of [undefined, null]) {
+    assert.equal(
+      toolErrorText(err, MCP_TEXTS.de),
+      MCP_TEXTS.de.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+      String(err),
+    );
+  }
+  assert.deepEqual(
+    error.mock.calls.map((call) => call.arguments),
+    [
+      [UNKNOWN_ERROR_LOG_PREFIX, undefined, undefined],
+      [UNKNOWN_ERROR_LOG_PREFIX, undefined, undefined],
+    ],
+  );
+});
+
+test("toolErrorText: ein unbekannter Fehler landet mit Name und Meldung nur im Server-Log", (t) => {
+  const error = t.mock.method(console, "error", () => {});
+  const text = toolErrorText(new TypeError("fetch failed"), MCP_TEXTS.de);
+  assert.equal(text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]);
+  assert.deepEqual(
+    error.mock.calls.map((call) => call.arguments),
+    [[UNKNOWN_ERROR_LOG_PREFIX, "TypeError", "fetch failed"]],
+  );
+});
+
+const LAST_STATUS_BEFORE_CLIENT_ERRORS = 399;
+const MIDDLE_CLIENT_ERROR_STATUS = 450;
+const LAST_CLIENT_ERROR_STATUS = 499;
+
+const STATUS_TEXT_CASES = [
+  [HTTP_OK, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [LAST_STATUS_BEFORE_CLIENT_ERRORS, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [HTTP_BAD_REQUEST, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [MIDDLE_CLIENT_ERROR_STATUS, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [LAST_CLIENT_ERROR_STATUS, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [HTTP_SERVER_ERROR, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [String(MIDDLE_CLIENT_ERROR_STATUS), MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+];
+
+test("toolErrorText: HTTP-Status ohne Grund -> REQUEST_REJECTED genau fuer Zahlen von 400 bis 499", (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const [httpStatus, code] of STATUS_TEXT_CASES) {
+    assert.equal(
+      toolErrorText({ httpStatus }, MCP_TEXTS.de),
+      MCP_TEXTS.de.errors[code],
+      `httpStatus=${JSON.stringify(httpStatus)}`,
+    );
+  }
+});
+
+const INPUT_HINT = "objective ist zu lang (max. 300 Zeichen).";
+
+test("toolErrorText: ein 400-Eingabehinweis des Servers geht wortgleich an das Modell", () => {
+  assert.equal(
+    toolErrorText({ httpStatus: HTTP_BAD_REQUEST, inputHint: INPUT_HINT }, MCP_TEXTS.de),
+    INPUT_HINT,
+  );
+});
