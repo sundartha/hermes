@@ -1,15 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { posix } from "node:path";
-import { argv } from "node:process";
+import { argv, cwd } from "node:process";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { ESLint } from "eslint";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
+import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { RELATIVE_QUELLE, inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
-import { ersteAbweichung, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
+import { ersteAbweichung, fakten, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
 
 const QUELLDATEI = /\.[cm]?[jt]s$/;
 const GEAENDERT = "M";
@@ -27,6 +28,7 @@ const PUFFER = 268_435_456;
 const EXIT_ABBRUCH = 2;
 const STATISCHE_QUELLEN = new Set(["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration"]);
 const PAKET_ODER_NODE = /^(?:node:|[@\w][^:]*$)/;
+export const AUSLAGERUNG = "reine-auslagerung";
 const AUFRUF = "Aufruf: node tools/vorbereitung-pruefen.mjs --basis <commit> [--bis <commit>] [--bereich <json-datei>]";
 
 function felder(text) {
@@ -92,7 +94,18 @@ export async function vergleicheVorbereitung({ pfad, vorher, nachher, kreisfrei 
   return { gleich: false, befund: `${pfad}:${zeile}: Änderung, die keine Umformung aus tools/vorbereitung/katalog.json ist` };
 }
 
-async function dateiBefund({ art, datei }, { basis, bis, umbenannt, eslint }) {
+async function ausgelagerteDateien({ basis, bis }, eslint) {
+  const auslagerung = await reineQuellauslagerung({ von: basis, bis }, cwd());
+  if (auslagerung === null) return new Set();
+  const vorher = await laufzeitBaum({ pfad: auslagerung.hilfe, text: inhalt(basis, auslagerung.hilfe) }, eslint);
+  return fakten(vorher).unsicher ? new Set() : new Set([auslagerung.hilfe, ...auslagerung.neue]);
+}
+
+async function dateiBefund({ art, datei }, { basis, bis, umbenannt, ausgelagert, eslint }) {
+  if (ausgelagert.has(datei)) {
+    console.log(`${datei}: gleichwertig (${AUSLAGERUNG})`);
+    return undefined;
+  }
   if (art !== GEAENDERT) {
     const nurTypen = (umbenannt.vorher(datei) ?? umbenannt.nurTypen(datei)) !== undefined;
     return nurTypen ? undefined : `${datei}: ${ARTEN.get(art) ?? `Art ${art}`}; das ist keine Umformung aus dem Katalog`;
@@ -111,8 +124,9 @@ export async function vorbereitungsBefunde({ basis, bis, bereich }) {
   const dateien = geaenderteDateien(basis, bis).filter(({ datei }) => QUELLDATEI.test(datei) && imBereich(datei));
   if (dateien.length === 0) return [];
   const umbenannt = await umbenennungen({ von: basis, bis }, eslint);
+  const ausgelagert = await ausgelagerteDateien({ basis, bis }, eslint);
   const befunde = [];
-  for (const eintrag of dateien) befunde.push(await dateiBefund(eintrag, { basis, bis, umbenannt, eslint }));
+  for (const eintrag of dateien) befunde.push(await dateiBefund(eintrag, { basis, bis, umbenannt, ausgelagert, eslint }));
   const geloeschtOderNeu = dateien.some(({ art }, stelle) => ARTEN.has(art) && befunde[stelle] !== undefined);
   return [...befunde.filter(Boolean), ...(geloeschtOderNeu ? [ZWEI_PHASEN] : [])];
 }
