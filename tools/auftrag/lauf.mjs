@@ -413,7 +413,7 @@ class AuftragsLauf {
     const laeuftNicht = werkzeug === undefined ? [] : werkzeugBefunde(root, [werkzeug]);
     const [fehlt] = zweckIdsAusBloecken(laeuftNicht);
     if (fehlt !== undefined) return this.scheitert(laeuftNicht[0], fehlt);
-    return this.gruen(name, [execPath, BASIS_VERGLEICH, unterbefehl, "--basis", this.basis], befundOhneZweck);
+    return this.gruen(name, [execPath, BASIS_VERGLEICH, unterbefehl, "--basis", this.basis, "--je-auftrag"], befundOhneZweck);
   }
 
   einmalHinweisen(hinweis) {
