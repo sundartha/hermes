@@ -197,6 +197,12 @@ test("erkundung: die Wenn-Meldung nennt den Weg über eine bestehende Testdatei 
   genau(testwertLauf(context, ["test/vorhanden.test.js"]), "steht er schon wörtlich in einer bestehenden Testdatei, melde sie unter tests");
 });
 
+test("erkundung: die Wenn-Meldung nennt neben dem Weg über eine neue Datei den Weg keine Änderung und den eigenen Anteil an den Zeilen", (context) => {
+  const befunde = testwertLauf(context, ["test/vorhanden.test.js"]);
+  genau(befunde, "„keine Änderung, weil <Grund>“");
+  genau(befunde, "nennt jede ihren eigenen Anteil");
+});
+
 test("erkundung: ein ganzer Name aus dem Wenn, der wörtlich in einer unter tests gemeldeten Testdatei steht, ist belegt", (context) => {
   const soll = sollMitText("Gegeben ein Kunde\nWenn der Agent `place_call` aufruft\nDann kommt eine Antwort");
   const weitere = { "test/werkzeug.test.js": 'rufe("place_call");\n' };
@@ -379,6 +385,12 @@ test("eine neue Datei oder Funktion ohne neue Zeile ist ein Befund", (context) =
   genau(datei.befunde, "braucht mindestens eine neue Zeile");
   const funktion = einzeln(context, { aenderungen: [{ datei: "src/logik.js", funktion: "rechneNeu", neu: "funktion", neueZeilen: 0 }] });
   genau(funktion.befunde, "braucht mindestens eine neue Zeile");
+});
+
+test("der Befund zu einer neuen Datei ohne neue Zeile nennt beide Wege: den eigenen Anteil an den Zeilen schätzen oder keine Änderung melden", (context) => {
+  const { befunde } = einzeln(context, { aenderungen: [{ datei: "src/neu.js", neu: "datei", neueZeilen: 0 }] });
+  genau(befunde, "nennt jede ihren eigenen Anteil");
+  genau(befunde, "„keine Änderung, weil <Grund>“");
 });
 
 test("eine bestehende Änderung mit neueZeilen 0 ist grün", (context) => {

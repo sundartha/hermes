@@ -26,7 +26,7 @@ import {
   zerlegungBefunde,
 } from "./antworten.mjs";
 import { ERKUNDUNG, Kostenbuch, WEGPRUEFER, gemesseneKosten, ohneGliederung } from "./deckel.mjs";
-import { aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
+import { EIGENER_ANTEIL, KEINE_AENDERUNG, aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
 import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
@@ -56,7 +56,7 @@ export const VORLAGE = ".claude/skills/pitch/phase-vorlage.md";
 const VORLAGE_ENTWURF = "## Entwurf je Bereich";
 const ERKUNDER_KONTEXT = ["CLAUDE.md", "tools/bereiche.json"];
 const GELESEN = [...new Set([...PLANER_KONTEXT, ...ERKUNDER_KONTEXT, VORLAGE])];
-const NEUER_NAME = "Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit `datei` und `ausweg` „nicht gefunden, weil `<Name>` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei.";
+const NEUER_NAME = `Gibt es eine Route oder einen Namen noch nicht, meldest du ihn als Eingang mit \`datei\` und \`ausweg\` „nicht gefunden, weil \`<Name>\` entsteht neu in <Datei>“, der den Namen wörtlich nennt, und dazu eine Änderung in genau dieser Datei, für die du die Zeilen schätzt, die die Nummer selbst dort braucht; ${EIGENER_ANTEIL}. Steht der Name schon wörtlich in einer bestehenden Testdatei und ändert sich für die Nummer nichts, meldest du diese Testdatei unter \`tests\`. Dann ${KEINE_AENDERUNG}.`;
 const PITCH_NUR_NEUSCHNITT = "„Pitch ändern“ gibt es nur beim Neuschnitt; antworte mit der Antwort, die an dieser Stelle verlangt ist, oder mit „Zerlegung passt nicht: …“";
 const KEIN_JSON = "die Antwort enthält kein JSON in der verlangten Form";
 const WEG = "weg:";

@@ -23,6 +23,8 @@ const IN_BACKTICKS = /`([^`]+)`/g;
 const ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
 const WERT = /^[^\s:"]+:\s*("[^"]+")$/;
 export const PLATZHALTER = "<AUSFUELLEN>";
+export const EIGENER_ANTEIL = "teilen sich mehrere Nummern dieselbe neue Stelle, nennt jede ihren eigenen Anteil an den Zeilen (nicht 0 und nicht die ganze Stelle)";
+export const KEINE_AENDERUNG = "schreib aenderungen als Text „keine Änderung, weil <Grund>“, sofern die Nummer sonst keine Stelle hat";
 export const NUTZEN = "nutzen";
 const KEIN_TREFFER_PASST = /^kein Treffer passt, weil(.*)$/su;
 
@@ -124,8 +126,14 @@ function neueDateiBefund(ort, datei, kontext) {
   return existsSync(join(kontext.root, datei)) ? `${ort}: Datei ${datei} gibt es schon` : null;
 }
 
+function ohneZeileBefund(art, nummer) {
+  const dort = `für ${nummer} dort`;
+  const noetig = `eine neue ${art} braucht mindestens eine neue Zeile; mit neueZeilen 0 entsteht sie nicht.`;
+  return `${noetig} Zwei gleichrangige Wege: (a) Entsteht ${dort} wirklich etwas Neues, schätze die Zeilen, die ${nummer} selbst braucht; ${EIGENER_ANTEIL}. (b) Entsteht ${dort} nichts Neues, nimm die Stelle nicht auf und ${KEINE_AENDERUNG}.`;
+}
+
 function neueStelleBefund(ort, stelle, kontext) {
-  if (stelle.neueZeilen < 1) return `${ort}: eine neue ${stelle.neu} braucht mindestens eine neue Zeile`;
+  if (stelle.neueZeilen < 1) return `${ort}: ${ohneZeileBefund(stelle.neu, kontext.nummer)}`;
   if (stelle.neu === "datei") return neueDateiBefund(ort, stelle.datei, kontext);
   const befund = dateiBefund(ort, stelle, kontext);
   if (befund !== null) return befund;
@@ -314,8 +322,9 @@ function wennBefunde(ort, kontext) {
   const tests = testTexte(kontext);
   const szenario = kontext.soll.get(kontext.nummer);
   const fehlend = namenImWenn(szenario?.text).filter((name) => !kommtVor(texte, [name, ROUTE.exec(name)?.[1]]) && !kommtVor(tests, [name, WERT.exec(name)?.[1]]));
-  const weiter = "; steht er schon wörtlich in einer bestehenden Testdatei, melde sie unter tests; entsteht er erst neu, melde ihn als Eingang mit datei und ausweg „nicht gefunden, weil";
-  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")}) und in keiner unter tests gemeldeten Testdatei${weiter} \`${name}\` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei`);
+  const weiter = `; steht er schon wörtlich in einer bestehenden Testdatei, melde sie unter tests; ändert sich für die Nummer nichts, ${KEINE_AENDERUNG}; entsteht er erst neu, melde ihn als Eingang mit datei und ausweg „nicht gefunden, weil`;
+  const zeilen = `für die du die Zeilen schätzt, die ${ort} selbst dort braucht; ${EIGENER_ANTEIL}`;
+  return fehlend.map((name) => `${ort}: \`${name}\` aus dem Wenn steht in keiner gemeldeten Eingangsdatei (${dateien.join(", ")}) und in keiner unter tests gemeldeten Testdatei${weiter} \`${name}\` entsteht neu in <Datei>“ und mit einer Änderung in dieser Datei, ${zeilen}`);
 }
 
 function nummerBefunde(nummer, angaben, kontext) {
