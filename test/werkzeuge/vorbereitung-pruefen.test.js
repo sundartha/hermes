@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { REGELN } from "../../tools/vorbereitung/normalform.mjs";
-import { vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
+import { AUSLAGERUNG, vergleicheVorbereitung } from "../../tools/vorbereitung-pruefen.mjs";
 import { nachCommitAufrufen, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 import { REPO_ROOT, commitAll, runIn, writeFiles } from "./probe-repo.js";
 
@@ -373,4 +373,134 @@ test("vorbereitung-pruefen: über Git gilt zahl-konstante nicht, wenn die Datei 
   const lauf = mitBereich(repo, ["src/a.js"], nachher);
   assert.equal(lauf.status, EXIT_ROT, lauf.output);
   assert.match(lauf.output, /^src\/a\.js:\d+: Änderung, die keine Umformung/m);
+});
+
+const ALT = "src/store/defaults.js";
+const NEU = "src/store/begriffe-nummern.js";
+const AUSLAGERUNG_BEREICH = [NEU, ALT];
+const ROT_IN_ALT = /^src\/store\/defaults\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m;
+
+const KOPF = 'import { HINWEISE } from "../hinweise.js";';
+const MIETER = 'export const BOOTSTRAP_TENANT_ID = "owner";';
+const STATUS = 'export const NUMBER_STATUS = Object.freeze({\n  REQUESTED: "requested",\n  ACTIVE: "active",\n  RELEASED: "released",\n});';
+const UEBERGAENGE = [
+  "export const NUMBER_TRANSITIONS = Object.freeze({",
+  "  [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.ACTIVE],",
+  "  [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.RELEASED],",
+  "  [NUMBER_STATUS.RELEASED]: [],",
+  "});",
+].join("\n");
+const HINWEIS = "export function hinweis(sprache) {\n  return HINWEISE[sprache];\n}";
+const JOBS = 'export const PROVISIONING_JOB_STATUS = Object.freeze({\n  QUEUED: "queued",\n  DONE: "done",\n});';
+const JOB = 'export const PROVISION_NUMBER_JOB = "provision_number";';
+const NAMEN = "NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS";
+const WEITER = `export { ${NAMEN} } from "./begriffe-nummern.js";`;
+
+function datei(...teile) {
+  return `${teile.join("\n\n")}\n`;
+}
+
+const BASIS = {
+  "src/hinweise.js": datei('export const HINWEISE = Object.freeze({ de: "Hinweis" });'),
+  [ALT]: datei(KOPF, MIETER, STATUS, UEBERGAENGE, HINWEIS, JOBS, JOB),
+};
+
+function auslagern(context, { alt = datei(KOPF, WEITER, MIETER, HINWEIS, JOB), neu = datei(STATUS, UEBERGAENGE, JOBS), basis = {}, dazu = {} } = {}) {
+  const repo = repoMitBasis(context, { ...BASIS, ...basis, "liste.json": `${JSON.stringify(AUSLAGERUNG_BEREICH)}\n` });
+  return nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { [ALT]: alt, [NEU]: neu, ...dazu });
+}
+
+function rot(lauf) {
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, ROT_IN_ALT);
+  assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+}
+
+test("vorbereitung-pruefen: reine Auslagerung: der Katalog beschreibt die reine Auslagerung als Datei-Umformung mit Bedingung und Begründung", () => {
+  assert.deepEqual(KATALOG.dateiUmformungen.map(({ id }) => id), [AUSLAGERUNG]);
+  for (const eintrag of KATALOG.dateiUmformungen) {
+    for (const feld of ["vorher", "nachher", "bedingung", "grund"]) assert.ok(eintrag[feld]?.trim(), `${eintrag.id}.${feld}`);
+  }
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: drei Nummernbegriffe Wort für Wort in eine neue Datei verschoben und unter demselben Namen weitergereicht sind gleichwertig, alte und neue Datei", (context) => {
+  const lauf = auslagern(context);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.output);
+  assert.match(lauf.output, /^src\/store\/defaults\.js: gleichwertig \(reine-auslagerung\)$/m);
+  assert.match(lauf.output, /^src\/store\/begriffe-nummern\.js: gleichwertig \(reine-auslagerung\)$/m);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine beim Auslagern veränderte Zeile ist rot", (context) => {
+  rot(auslagern(context, { neu: datei(STATUS.replace('"active"', '"aktiv"'), UEBERGAENGE, JOBS) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ohne Weiterleitung in der alten Datei ist rot", (context) => {
+  rot(auslagern(context, { alt: datei(KOPF, MIETER, HINWEIS, JOB) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine Weiterleitung unter anderem Namen ist rot", (context) => {
+  const umbenannt = 'export { NUMBER_STATUS as NUMMER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";';
+  rot(auslagern(context, { alt: datei(KOPF, umbenannt, MIETER, HINWEIS, JOB) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine zusätzliche Änderung in der alten Datei im selben Commit ist rot", (context) => {
+  rot(auslagern(context, { alt: datei(KOPF, WEITER, MIETER.replace('"owner"', '"besitzer"'), HINWEIS, JOB) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine neue Datei mit mehr als den verschobenen Anweisungen ist rot", (context) => {
+  rot(auslagern(context, { neu: datei(STATUS, UEBERGAENGE, JOBS, 'export const EXTRA = "extra";') }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine weitere geänderte Quelldatei im selben Commit ist rot, auch wenn sie für sich gleichwertig ist", (context) => {
+  const lauf = auslagern(context, { basis: { "src/b.js": datei("export const t = (n) => `n=${n - 1}`;") }, dazu: { "src/b.js": datei("export const t = (n) => `n=${String(n - 1)}`;") } });
+  rot(lauf);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: enthält die alte Datei eval, ist die Auslagerung rot", (context) => {
+  const roh = "export function roh(text) {\n  return eval(text);\n}";
+  rot(auslagern(context, { basis: { [ALT]: datei(KOPF, MIETER, STATUS, UEBERGAENGE, HINWEIS, JOBS, JOB, roh) }, alt: datei(KOPF, WEITER, MIETER, HINWEIS, JOB, roh) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: mit --bis zählt nur die Auslagerung bis zu diesem Commit, eine spätere Änderung an einer anderen Quelldatei nicht", (context) => {
+  const repo = repoMitBasis(context, { ...BASIS, "src/b.js": datei("export const f = (a, d) => a || d;"), "liste.json": `${JSON.stringify(AUSLAGERUNG_BEREICH)}\n` });
+  writeFiles(repo.directory, { [ALT]: datei(KOPF, WEITER, MIETER, HINWEIS, JOB), [NEU]: datei(STATUS, UEBERGAENGE, JOBS) });
+  commitAll(repo.directory, "Auslagerung");
+  const bis = runIn(repo.directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  writeFiles(repo.directory, { "src/b.js": datei("export const f = (a, d) => a ?? d;") });
+  commitAll(repo.directory, "Danach");
+  const lauf = runIn(repo.directory, process.execPath, [WERKZEUG, "--basis", repo.basis, "--bis", bis, "--bereich", "liste.json"]);
+  assert.equal(lauf.status, EXIT_GRUEN, `${lauf.stdout}${lauf.stderr}`);
+  assert.match(lauf.stdout, /^src\/store\/defaults\.js: gleichwertig \(reine-auslagerung\)$/m);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine Weiterleitung, die nicht alle verschobenen Namen weiterreicht, ist rot", (context) => {
+  const teilweise = 'export { NUMBER_STATUS, NUMBER_TRANSITIONS } from "./begriffe-nummern.js";';
+  rot(auslagern(context, { alt: datei(KOPF, teilweise, MIETER, HINWEIS, JOB) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine Weiterleitung, die zwei Namen vertauscht, ist rot, obwohl dieselben Namen exportiert werden", (context) => {
+  const vertauscht = 'export { NUMBER_STATUS as NUMBER_TRANSITIONS, NUMBER_TRANSITIONS as NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";';
+  rot(auslagern(context, { alt: datei(KOPF, vertauscht, MIETER, HINWEIS, JOB) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine neue Datei, die die alte nur lädt und nicht mit export … from weiterreicht, ist rot", (context) => {
+  const tot = 'const INTERN = Object.freeze({ an: "an" });';
+  const basis = { [ALT]: datei(KOPF, MIETER, STATUS, UEBERGAENGE, HINWEIS, JOBS, tot, JOB) };
+  const alt = datei(`${KOPF}\nimport "./intern.js";`, WEITER, MIETER, HINWEIS, JOB);
+  rot(auslagern(context, { basis, alt, dazu: { "src/store/intern.js": datei(tot) } }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine gelöschte Quelldatei außerhalb des Bereichs im selben Commit ist rot", (context) => {
+  const repo = repoMitBasis(context, { ...BASIS, "src/weg.js": datei("export const WEG = 1;"), "liste.json": `${JSON.stringify(AUSLAGERUNG_BEREICH)}\n` });
+  runIn(repo.directory, "git", ["rm", "-q", "src/weg.js"]);
+  rot(nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { [ALT]: datei(KOPF, WEITER, MIETER, HINWEIS, JOB), [NEU]: datei(STATUS, UEBERGAENGE, JOBS) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: alles in eine neue Datei umgezogen und die alte gelöscht ist rot", (context) => {
+  const repo = repoMitBasis(context, { ...BASIS, "liste.json": `${JSON.stringify(AUSLAGERUNG_BEREICH)}\n` });
+  runIn(repo.directory, "git", ["rm", "-q", ALT]);
+  const lauf = nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { [NEU]: BASIS[ALT] });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/store\/defaults\.js: gelöscht; das ist keine Umformung aus dem Katalog$/m);
+  assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
 });
