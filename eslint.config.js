@@ -313,7 +313,8 @@ const dateiBloecke = [
   },
   {
     name: "cent-schreibstellen",
-    files: [`src/store/state-ops.${ENDUNGEN}`],
+    files: [`src/store/**/*.${ENDUNGEN}`],
+    ignores: [`src/store/json.${ENDUNGEN}`, `src/store/pg.${ENDUNGEN}`],
     rules: {
       "no-restricted-syntax": [
         "error",
