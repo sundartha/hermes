@@ -15,7 +15,7 @@ const GEBUEHR = `  let summe = 0;
 }
 `;
 const FRUEHERE_KOPIE = { "src/eins.js": `export function eins(liste) {\n${GEBUEHR}`, "src/zwei.js": `export function eins(liste) {\n${GEBUEHR}` };
-const EIGENE_KOPIE = `export function brutto(liste) {\n${GEBUEHR}\nexport function netto(liste) {\n${GEBUEHR}`;
+const EIGENE_KOPIE = `${BASIS["src/text.js"]}\nexport function brutto(liste) {\n${GEBUEHR}\nexport function netto(liste) {\n${GEBUEHR}`;
 
 function fruehererAuftrag(repo) {
   writeFiles(repo, FRUEHERE_KOPIE);
