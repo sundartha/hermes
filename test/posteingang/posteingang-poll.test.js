@@ -362,3 +362,21 @@ test("INBOX-P2 R7: die Audit-Zeile traegt NUR Zaehler, keine Rufnummer/Inhalte/C
     await srv.stop();
   }
 });
+
+test("INBOX-P2 A6: Aufruf ohne gelesenen Body (kein Parser) liefert 200 und holt nur ungesehene Eintraege", async () => {
+  const store = makeMockStore({ entries: [], remaining: 0, marked: 0 });
+  const app = express();
+  app.use(makeInboxRoutes({ store, audit: () => {}, tenant: makeAllowTenant() }));
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, () => resolve(listener));
+  });
+  try {
+    const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/inbox/poll`, {
+      method: "POST",
+    });
+    assert.equal(res.status, HTTP_OK, "Ohne Body muss die Route mit 200 antworten");
+    assert.deepEqual(store.pollCalls[0].options, { limit: INBOX_MAX_ENTRIES, includeSeen: false });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
