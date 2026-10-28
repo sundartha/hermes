@@ -1,0 +1,247 @@
+{
+  "phase": "E-2302-mcp-zerlegen",
+  "issue": 2302,
+  "absicht": "src/mcp-tools.js (13 Verantwortungen in 1.228 Zeilen) wird vollständig nach der Bausteinkarte in Dateien unter src/mcp/ zerlegt, damit jedes neue Werkzeug einen klaren Ort hat und die Datei nicht mehr wächst; die Transkriptauswahl zieht in src/call-result.js. Was dafür geändert werden muss (ein export, ein Parameter statt Modulzustand, registerTools je Werkzeug aufgeteilt, neue Dateien ohne Lint-Unterdrückung), wird richtig umgebaut und durch die Mutationsprüfung abgesichert. Nicht gewollt sind Verhaltensänderungen, geänderte oder geschwächte Tests, gelockerte Prüfungen oder Listen, Doppelungen und eine ausgelassene Zieldatei. Im Zweifel die sauberere Struktur und ein Absicherungstest mehr; bestehende Tests ändern sich nicht.",
+  "entwurf": {
+    "src/": "Was sich ändert: src/mcp-tools.js wird zum dünnen Eingang des Bausteins mcp. Seine Verantwortungen ziehen, je Zieldatei ein Auftrag, nach src/mcp/; die Transkriptauswahl samt Anrufstatus zieht nach src/call-result.js. Es ändert sich nur der Aufbau des Codes.\n\nZielstruktur (Namen der obersten Ebene wie auf master nach IDM #2297; Aufträge a1 bis a14 laufen in dieser Reihenfolge, Blätter zuerst; jeder baut auf dem Stand des vorigen auf und lässt alle bestehenden Tests grün):\na1 src/mcp/fehler.js: ToolError und toolErrorText samt Kette (NOT_FOUND_STATUS, NOT_PERMITTED_STATUS, CLIENT_ERROR_STATUS_MIN, CLIENT_ERROR_STATUS_MAX, DENIAL_WARN_MAX_LEN, sanitizedDenialReason, knownToolErrorCodeText, denialReasonText, httpStatusClassText, resolvedToolErrorText, LAST_RESORT_ERROR_TEXT, withTextTables, isNonEmptyText). Exportiert ToolError und toolErrorText; mcp-tools.js reicht toolErrorText unter demselben Namen weiter.\na2 src/mcp/ausgabe.js: text, errText, makeDateFormatter, notAccepted und neu jsonText(wert) = JSON.stringify(wert, null, 2) mit benannter Konstante für die Einrückung. text() nutzt jsonText; die übrigen JSON.stringify(…, null, 2)-Stellen stellt der Auftrag um, der sie verschiebt (die Aufträge a9 und a10, a12 bis a14).\na3 src/mcp/eingabe.js: RESTRICTED_CATEGORY_ERROR_CODE, CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData (wirft ToolError aus fehler.js).\na4 src/mcp/gateway.js: api (nicht exportiert), BAD_REQUEST_STATUS, ABORT_ERROR_NAMES, isAbortError, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS, boundedHop, SERVER_ERROR_STATUS_MIN, SERVER_ERROR_STATUS_MAX, HTTP_SERVICE_UNAVAILABLE_STATUS, isServerErrorWithoutReason, placeCallHop, isConfirmationUnavailable, confirmCallHop, requireFields und pollConsultHop (die Closure pollConsult samt NO_CONSULT_EVENT; identity und scopedTenant als Parameter statt aus der Closure). mcp-tools.js reicht die zwei Fristen unter denselben Namen weiter. Der Grund-String confirmation_unavailable (CONFIRMATION_UNAVAILABLE_REASON) bleibt hier als eigene Konstante: er ist der Draht-Vertrag der Route src/routes/api-call-confirmations.js, und ihn mit call-confirmation.js zu teilen verlangte eine Änderung an dieser Route.\na5 src/mcp/schemata.js: alle zod-Schemata der Werkzeuge: CALL_STATUS_OUTPUT, RESULT_CARD_OUTPUT, CALL_RESULT_OUTPUT, AWAIT_EVENT_OUTPUT, ANSWER_CONSULT_OUTPUT, CONTEXT_RECEIVED_OUTPUT, CALL_OUTPUT, PREPARE_CALL_OUTPUT, AGENT_STATUS_OUTPUT, MY_NUMBER_OUTPUT, CALL_LIST_ENTRY, CALLS_OUTPUT, INBOX_ENTRY, INBOX_OUTPUT, INCLUDE_SEEN_FIELD, OPEN_QUESTIONS_FIELD, dazu die Eingabeschemata: placeCallRequestSchema(begriffe) (bisher PLACE_CALL_REQUEST_SCHEMA), die place_call-Erweiterung um confirmation_code, die Eingaben von await_call_event, answer_consult(begriffe) und die call_id-Eingabe, die heute fünfmal wörtlich vorkommt (await_call_event, answer_consult, get_call_status, get_call_result, cancel_call) und danach einmal steht. Gemeinsam genutzte Teilschemata baust du als Fabrikfunktion, nicht als eine Instanz, die in einem Werkzeugschema zweimal vorkommt: der Konverter des SDK machte daraus ein $ref statt des Typs, und test/mcp-kompatibilitaetsvertrag.test.js muss grün bleiben. mcp-tools.js importiert kein zod mehr.\na6 src/mcp/beschreibungen.js: die Werkzeugbeschreibungen CHECK_INBOX_DESCRIPTION, PLACE_CALL_DESCRIPTION, PREPARE_CALL_DESCRIPTION, PLACE_CALL_CONSULT_LOOP, placeCallDescription, CANCEL_CALL_DESCRIPTION, AWAIT_CALL_EVENT_DESCRIPTION, CALL_RESULT_DESCRIPTION, AGENT_STATUS_DESCRIPTION, answerConsultDescription(keyFactsLimits) (bisher ANSWER_CONSULT_DESCRIPTION) und als benannte Konstanten die vier heute im Aufruf stehenden Beschreibungen von get_call_status, get_agent_number, list_calls und list_action_items.\na7 src/mcp/metadaten.js: TOOL_ANNOTATIONS, OPENAI_INVOKING_KEY, OPENAI_INVOKED_KEY, TOOL_INVOCATION_STATUS, withOpenAiToolMetadata, widgetResourceOptions, withWidgetLocale.\na8 src/mcp/kontext.js: createToolContext(server, optionen, begriffe) liefert den Werkzeug-Kontext, den bisher registerTools als Closure aufbaut: identity, scopedTenant, consultAllowed, begriffe, call, pollConsult, placeCallHopCall, loc, formatDate, enableWidgetUi, uiTool (mit wrapHandler) und callWidgetUi = enableWidgetUi(WIDGET_CALL), der vor jeder Werkzeugregistrierung ausgewertet wird wie heute.\na9 src/mcp/anruf-starten.js: registerPrepareCall, registerPlaceCall, registerCancelCall (je ctx) samt ihrer Hilfen (CONFIRMATION_CODE_META_KEY, CONFIRMATION_EXPIRES_META_KEY, CALL_DATA_NOTICE_META_KEY, CONFIRMATION_USED_STATUS, prepareCallCardMeta, confirmationUsedResult, unconfirmedResult, normalizeContextReceived). cancel_call steht hier, weil es wie place_call am Anruf schreibt; es bleibt aber an seiner Stelle in der Registrierreihenfolge.\na10 src/mcp/status.js: registerGetAgentNumber, registerGetAgentStatus samt pickMyNumber, permissionsSummary, pickAgentStatus, planUsageLine.\na11 src/call-result.js zusätzlich: mapStatus, callOutcomeView, AWAIT_SUMMARY_PLACEHOLDER, pickTranscript, maskResultCardFields, maskedResultCard (importiert maskRestrictedText aus src/restricted-data.js und failureReasonBase aus src/telephony/failure-reason.js; mapStatus, callOutcomeView, pickTranscript und maskedResultCard werden exportiert, maskResultCardFields nur, wenn eine Datei außerhalb von call-result.js es braucht). mcp-tools.js reicht pickTranscript unter demselben Namen weiter. In den Baustein sperrdaten zieht nichts: src/restricted-data.js kennt weder ToolError noch die Ergebniskarte, und ein Import aus mcp wäre ein Import von unten nach oben.\na12 src/mcp/anruf-lesen.js: registerGetCallStatus, registerGetCallResult, registerListCalls samt LAST_TRANSCRIPT_LINES, durationS (benannte Konstante statt 1000), pickCallStatus, callStatusResult, pickCall, callTextLine.\na13 src/mcp/rueckfrage.js: registerAwaitCallEvent, registerAnswerConsult samt awaitEventView, CONSULT_ANSWER_REJECTED_STATUS, CONSULT_ANSWER_CONFLICT_STATUS. Das Abwarten der Rückfrage bleibt im Gateway (pollConsultHop): es ist ein Gateway-Aufruf mit Frist, und CONSULT_EVENT und CONSULT_POLL_ABORT_MS kommen weiter aus src/consult/delivery.js.\na14 src/mcp/posteingang.js: registerCheckInbox, registerListActionItems samt inboxEntryForModel, inboxTextLine, actionItemsText. Danach besteht registerTools nur noch aus createToolContext, den zwölf Registrierungen in der heutigen Reihenfolge (await_call_event und answer_consult weiter nur bei consultAllowed) und dem Aufbau von begriffe.\n\nRegeln für jeden Auftrag:\n1. Verhalten Zeichen für Zeichen gleich: Werkzeugnamen und Registrierreihenfolge (prepare_call, place_call, mit consultAllowed await_call_event und answer_consult, get_call_status, get_call_result, cancel_call, get_agent_number, list_calls, check_inbox, list_action_items, get_agent_status), Beschreibungen, Schemata samt describe-Texten, Annotationen, _meta, Antwort- und Fehlertexte, Fristen, und die Reihenfolge der Widget-Registrierung (enableWidgetUi(WIDGET_CALL) vor dem ersten Werkzeug, die übrigen an der Stelle ihres Werkzeugs).\n2. src/mcp-tools.js exportiert danach genau registerTools, pickTranscript, toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS und MCP_HOP_TIMEOUT_MS, keinen sechsten Namen (tools/basis/sammeldatei-exporte.json bleibt unverändert).\n3. Was in eine neue Datei wandert, trägt dort keine Lint-Unterdrückung und keinen Legacy-Eintrag: Befunde (no-magic-numbers, zu tiefe Aufrufketten bei den zod-Schemata, id-length) werden beim Umzug behoben, etwa durch benannte Konstanten und benannte Teilschemata. Die Einträge für src/mcp-tools.js in eslint-suppressions.json und eslint-legacy-exceptions.json dürfen nur kürzer werden, es kommt kein Eintrag für eine neue Datei dazu, und es gibt kein eslint-disable.\n4. Einen eingefrorenen Altverstoß gibt es nur für src/mcp-tools.js → src/store/defaults.js (Regel speicher-nur-ueber-fassade); die Liste darf nicht wachsen. Deshalb importiert weiterhin allein src/mcp-tools.js aus src/store/defaults.js und reicht MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES, KEY_FACTS_LIMITS und CONSULT_ANSWER_MODE als Objekt begriffe in die Dateien unter src/mcp/. Keine Datei unter src/mcp/ importiert aus src/store/.\n5. Keine Kommentare im Code, keine Datei, die nur weiterleitet, keine Doppelung: Gemeinsames steht einmal. Meldet jscpd, die Abhängigkeitsprüfung, Lint oder eine andere Prüfung einen Befund, den nur Umformen oder Verschieben an eine Stelle behöbe, die die Prüfung nicht sieht, hält der Auftrag mit „Auftrag passt nicht: <Grund>“ an.\n6. Importe zwischen Bausteinen laufen nur über die Eingänge aus tools/bausteine.json und in Schichtrichtung; keine neue Datei außerhalb von src/mcp/ außer den Ergänzungen in src/call-result.js und src/call-confirmation.js.\n7. Bestehende Tests ändern sich nicht. Absicherungstests entstehen nur in lauf bei überlebenden Mutanten und über die Eingänge (registerTools, toolErrorText, pickTranscript, die zwei Fristen), nie über eine Datei in src/mcp/.\n\nBleibt gleich: jedes beobachtbare Verhalten der zwölf Werkzeuge über MCP (HTTP und stdio): Namen, Reihenfolge, Beschreibungen, Schemata, Annotationen, Antworten, Fehlertexte und Fristen; place_call setzt keinen Anruf ab, solange der Server den Bestätigungscode nicht als bestätigt zurückgibt; Argumente mit Karten-, Kennnummer- oder Zugangsdaten erreichen das Gateway nicht; Ergebnisse, Status und Posteingang tragen kein Rohtranskript und kein Audio und sind maskiert; ein unbekannter Fehler zeigt keine Interna.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün; Absicherungstests des alten Stands sind erlaubt (je Auftrag ein bestehender Test, der die verschobenen Namen über registerTools, toolErrorText, pickTranscript oder die Fristen ausübt; dazu bleiben alle Testdateien grün, die src/mcp-tools.js laden).\nNicht-Ziele: keine Änderung am Verhalten, weil es ein Umbau ist; keine Änderung an einem bestehenden Test, einer Prüfung, einer Basisliste oder Karte (außer dem kürzeren Listeneintrag), weil das Lockerungen wären; kein Verschieben von rejectRestrictedData, ToolError oder des Rückfrage-Abwartens in die Bausteine sperrdaten und rueckfrage, weil beide dort eine Abhängigkeit von unten nach oben auf mcp hätten; keine Umbenennung nach .ts, weil das ein eigener zweiter Umbau ist; kein Eingriff in src/store/defaults.js, weil der Altverstoß dort ein eigenes Paket (Begriffe-Dateien) ist; kein Umbau von src/routes/mcp.js, src/mcp-server.js, src/mcp-no-tenant.js, weil sie nur registerTools rufen.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil a4 und a8 identity und scopedTenant neu verdrahten, geht ein Gateway-Aufruf (etwa GET /api/calls/<id>/consult für await_call_event) ohne X-Internal-Identity oder X-Internal-Tenant hinaus, landet im Betreiber-Kanal und findet den Anruf des Kunden nicht; die Rückfrage des Agenten erreicht den Auftraggeber nie, ein Admin liest im falschen Mandanten. Kein bestehender Test prüft die Kopfzeilen (alle Werkzeugtests laufen mit identity null), und die Mutationsprüfung erzeugt keinen Mutanten, der eine einzelne Eigenschaft aus dem Anfrageobjekt entfernt. | Test: zweiter Satz in wasDarfNiePassieren von a4 (Kopfzeilen jedes Gateway-Aufrufs aller zwölf Werkzeuge) |\n| PM2 | Weil die Registrierungen auf sechs Dateien verteilt werden, ändert sich unbemerkt die Reihenfolge von tools/list und der Widget-Ressourcen (etwa wenn registerPlaceCall registerCancelCall gleich mitruft); kein Test prüft die vollständige Folge, und die Mutationsprüfung kennt keinen Mutanten, der Anweisungen umstellt. | Test: Satz in wasDarfNiePassieren von a8 (genaue Folge von Werkzeugen und Ressourcen mit und ohne consultAllowed) |\n| PM3 | Weil a5 zu tiefe zod-Ketten in benannte Teilschemata zerlegt, gibt der Konverter des SDK bei einer Instanz, die in einem Werkzeugschema zweimal vorkommt, ein $ref statt des Typs aus, und Hosts bekämen ein anderes Ausgabeschema. | hingenommen: test/mcp-kompatibilitaetsvertrag.test.js wird mit allen zwölf Werkzeugen rot, bevor etwas live geht; a5 trägt den Hinweis, Teilschemata als Fabrikfunktion zu bauen |\n| PM4 | Weil der Entwurf die call_id-Eingabe viermal nannte, sie aber an fünf Stellen steht, bleibt eine Kopie stehen oder a5 hält mit „Auftrag passt nicht“ an und a6 bis a14 laufen nicht. | hingenommen: der Entwurf nennt jetzt alle fünf Stellen; es ist kein Verhalten betroffen |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "umbau",
+      "ziel": "Fehlertexte und ToolError nach src/mcp/fehler.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/fehler.js",
+        "test/openai-t2-09-neutrale-fehlertexte.test.js"
+      ],
+      "abnahme": "test/openai-t2-09-neutrale-fehlertexte.test.js",
+      "wasDarfNiePassieren": [
+        "Ein unbekannter Fehler eines Werkzeugs zeigt dem Modell nach dem Umbau weder Meldung, Stapel noch Adresse des Fehlers, sondern den neutralen Text für UPSTREAM_UNREACHABLE in der Sprache des Aufrufers; ein Ablehnungsgrund des Servers wird zum Tabellentext seiner Sprache und nie roh durchgereicht."
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "umbau",
+      "ziel": "Ausgabehilfen nach src/mcp/ausgabe.js auslagern",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/ausgabe.js",
+        "test/mcp-tools-language.test.js"
+      ],
+      "abnahme": "test/mcp-tools-language.test.js",
+      "abhaengigVon": [
+        "a1"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a3",
+      "art": "umbau",
+      "ziel": "Sperrdaten-Prüfung der Eingabe nach src/mcp/eingabe.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/eingabe.js",
+        "test/openai-t2-15-restricted-data.test.js"
+      ],
+      "abnahme": "test/openai-t2-15-restricted-data.test.js",
+      "abhaengigVon": [
+        "a2"
+      ],
+      "wasDarfNiePassieren": [
+        "prepare_call und place_call lassen nach dem Umbau kein Argument mit einer Zahlungskartennummer, einer behördlichen Kennnummer oder einem Zugangsgeheimnis zum Gateway durch: der Aufruf endet mit dem Fehlertext der Kategorie, bevor eine Anfrage an /api/call-confirmations oder /api/calls geht; die Schlüssel to, confirmation_code und language werden dabei nicht durchsucht.",
+        "answer_consult leitet nach dem Umbau keine Antwort mit eingeschränkten Daten an das Gateway weiter: der Aufruf endet mit dem Fehlertext der Kategorie, ohne dass /api/calls/<id>/consult/answer aufgerufen wird."
+      ]
+    },
+    {
+      "id": "a4",
+      "art": "umbau",
+      "ziel": "Gateway-Aufrufe mit Frist nach src/mcp/gateway.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/gateway.js",
+        "test/openai-t2-08-hop-frist.test.js"
+      ],
+      "abnahme": "test/openai-t2-08-hop-frist.test.js",
+      "abhaengigVon": [
+        "a3"
+      ],
+      "wasDarfNiePassieren": [
+        "Bleibt die Antwort auf POST /api/calls aus, meldet place_call den Anruf nach dem Umbau als unbestätigt (CALL_START_UNCONFIRMED) statt als nicht gestartet, ein 5xx ohne Grund als abgelehnt (CALL_START_REJECTED), und place_call schickt den POST nie ein zweites Mal.",
+        "Jeder Gateway-Aufruf eines der zwölf Werkzeuge trägt nach dem Umbau dieselben Kopfzeilen X-Internal-Identity und X-Internal-Tenant wie vorher, aus identity und scopedTenant des Aufrufs von registerTools, auch das Abwarten einer Rückfrage (GET /api/calls/<id>/consult) und der folgende Abruf des Anrufs; ein Aufruf ohne diese Kopfzeilen erreicht das Gateway nie, wenn identity oder scopedTenant gesetzt sind."
+      ]
+    },
+    {
+      "id": "a5",
+      "art": "umbau",
+      "ziel": "Zod-Schemata der Werkzeuge nach src/mcp/schemata.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/schemata.js",
+        "test/openai-p2-tool-metadaten.test.js"
+      ],
+      "abnahme": "test/openai-p2-tool-metadaten.test.js",
+      "abhaengigVon": [
+        "a4"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a6",
+      "art": "umbau",
+      "ziel": "Werkzeugbeschreibungen nach src/mcp/beschreibungen.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/beschreibungen.js",
+        "test/p15-mcp-tool-descriptions-en.test.js"
+      ],
+      "abnahme": "test/p15-mcp-tool-descriptions-en.test.js",
+      "abhaengigVon": [
+        "a5"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a7",
+      "art": "umbau",
+      "ziel": "OpenAI- und Widget-Metadaten nach src/mcp/metadaten.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/metadaten.js",
+        "test/mcp-tool-annotations.test.js"
+      ],
+      "abnahme": "test/mcp-tool-annotations.test.js",
+      "abhaengigVon": [
+        "a6"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a8",
+      "art": "umbau",
+      "ziel": "Werkzeug-Kontext aus registerTools nach src/mcp/kontext.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/kontext.js",
+        "test/mcp-tools.test.js"
+      ],
+      "abnahme": "test/mcp-tools.test.js",
+      "abhaengigVon": [
+        "a7"
+      ],
+      "wasDarfNiePassieren": [
+        "registerTools registriert nach dem Umbau Werkzeuge und Widget-Ressourcen in genau der heutigen Folge: Ressource call, prepare_call, place_call, mit consultAllowed await_call_event und answer_consult, get_call_status, get_call_result, cancel_call, Ressource my-number, get_agent_number, Ressource calls, list_calls, check_inbox, list_action_items, Ressource agent-status, get_agent_status."
+      ]
+    },
+    {
+      "id": "a9",
+      "art": "umbau",
+      "ziel": "Anruf starten, bestätigen, abbrechen nach src/mcp/anruf-starten.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/anruf-starten.js",
+        "test/place-call-context-bridge.test.js"
+      ],
+      "abnahme": "test/place-call-context-bridge.test.js",
+      "abhaengigVon": [
+        "a8"
+      ],
+      "wasDarfNiePassieren": [
+        "place_call setzt nach dem Umbau keinen Anruf ab (kein POST /api/calls), solange der Server den confirmation_code nicht als bestätigt zurückgibt; ein bereits verbrauchter Code liefert confirmation_used statt eines zweiten Anrufs."
+      ]
+    },
+    {
+      "id": "a10",
+      "art": "umbau",
+      "ziel": "Status-Werkzeuge nach src/mcp/status.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/status.js",
+        "test/mcp-tools-language.test.js"
+      ],
+      "abnahme": "test/mcp-tools-language.test.js",
+      "abhaengigVon": [
+        "a9"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a11",
+      "art": "umbau",
+      "ziel": "Anrufstatus und Transkriptauswahl nach src/call-result.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/call-result.js",
+        "test/mcp-fehlergrund-rueckweg.test.js"
+      ],
+      "abnahme": "test/mcp-fehlergrund-rueckweg.test.js",
+      "abhaengigVon": [
+        "a10"
+      ],
+      "wasDarfNiePassieren": [
+        "get_call_result, await_call_event und get_call_status liefern nach dem Umbau weder Rohtranskript noch Audio; get_call_status zeigt höchstens die letzten sechs Zeilen, und Zusammenfassung, Ergebniskarte und Transkriptzeilen sind von Kartennummern, behördlichen Kennnummern und Zugangsdaten bereinigt."
+      ]
+    },
+    {
+      "id": "a12",
+      "art": "umbau",
+      "ziel": "Anruf lesen und auflisten nach src/mcp/anruf-lesen.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/anruf-lesen.js",
+        "test/mcp-tools.test.js"
+      ],
+      "abnahme": "test/mcp-tools.test.js",
+      "abhaengigVon": [
+        "a11"
+      ],
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a13",
+      "art": "umbau",
+      "ziel": "Rückfrage-Werkzeuge nach src/mcp/rueckfrage.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/rueckfrage.js",
+        "test/al-p13-consult-channel.test.js"
+      ],
+      "abnahme": "test/al-p13-consult-channel.test.js",
+      "abhaengigVon": [
+        "a12"
+      ],
+      "wasDarfNiePassieren": [
+        "await_call_event liefert nach dem Umbau ohne Ereignis binnen CONSULT_POLL_ABORT_MS event=none statt eines Fehlers, und ohne Rückfrage-Freigabe (consultAllowed) sind await_call_event und answer_consult nicht registriert."
+      ]
+    },
+    {
+      "id": "a14",
+      "art": "umbau",
+      "ziel": "Posteingang-Werkzeuge nach src/mcp/posteingang.js",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/mcp-tools.js",
+        "src/mcp/posteingang.js",
+        "test/inbox-mcp-tool.test.js"
+      ],
+      "abnahme": "test/inbox-mcp-tool.test.js",
+      "abhaengigVon": [
+        "a13"
+      ],
+      "wasDarfNiePassieren": []
+    }
+  ]
+}
