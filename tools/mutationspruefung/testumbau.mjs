@@ -10,6 +10,7 @@ import { gruppen } from "./gruppen.mjs";
 import { auslagerungsZeile, reineAuslagerung, reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 import { mutantenzahl } from "./vorplanung.mjs";
+import { weitergeleitet } from "./weiterleitung.mjs";
 
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTSEITE = /^test\//;
@@ -19,10 +20,12 @@ const EXIT_ROT = 1;
 
 async function importe() {
   const { output } = await cruise(["src", "test"], CRUISE_OPTIONEN);
-  return new Map(output.modules.map(({ source, dependencies }) => [source, dependencies.map(({ resolved }) => resolved)]));
+  const abhaengigkeiten = new Map(output.modules.map(({ source, dependencies }) => [source, dependencies]));
+  const graph = new Map([...abhaengigkeiten].map(([source, dependencies]) => [source, dependencies.map(({ resolved }) => resolved)]));
+  return { graph, weiterleitung: (datei) => weitergeleitet(datei, abhaengigkeiten.get(datei) ?? []) };
 }
 
-export function direkteQuellen(tests, graph) {
+export function direkteQuellen(tests, { graph, weiterleitung = () => [] }) {
   const besucht = new Set(tests);
   const quellen = new Set();
   for (const datei of besucht) {
@@ -31,6 +34,7 @@ export function direkteQuellen(tests, graph) {
       else if (TESTSEITE.test(ziel)) besucht.add(ziel);
     }
   }
+  for (const quelle of quellen) for (const ziel of weiterleitung(quelle)) quellen.add(ziel);
   return [...quellen].sort();
 }
 
