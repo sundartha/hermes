@@ -53,7 +53,7 @@ async function api({ method, path, body, identity, scopedTenant, timeoutMs = nul
 const text = (s) => ({
   content: [{ type: "text", text: typeof s === "string" ? s : JSON.stringify(s, null, 2) }],
 });
-const errText = (s) => ({ content: [{ type: "text", text: s }], isError: true });
+const errText = (message) => ({ content: [{ type: "text", text: message }], isError: true });
 const makeDateFormatter = (dateLocale) => (iso) =>
   new Date(iso).toLocaleString(dateLocale, {
     weekday: "short",
@@ -74,13 +74,13 @@ class ToolError extends Error {
 function requireFields(obj, specs) {
   if (obj == null || typeof obj !== "object") throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INVALID);
   for (const [field, type] of Object.entries(specs)) {
-    const v = obj[field];
+    const value = obj[field];
     const ok =
       type === "array"
-        ? Array.isArray(v)
+        ? Array.isArray(value)
         : type === "object"
-          ? v != null && typeof v === "object"
-          : typeof v === type;
+          ? value != null && typeof value === "object"
+          : typeof value === type;
     if (!ok) throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INCOMPLETE);
   }
   return obj;
@@ -100,14 +100,14 @@ function callOutcomeView(call) {
   return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
 
-function pickCallStatus(callId, c, texts) {
+function pickCallStatus(callId, call, texts) {
   return {
     call_id: callId,
-    ...callOutcomeView(c),
-    duration_s: durationS(c),
-    last_transcript_lines: c.transcript
+    ...callOutcomeView(call),
+    duration_s: durationS(call),
+    last_transcript_lines: call.transcript
       .slice(-LAST_TRANSCRIPT_LINES)
-      .map((t) => maskRestrictedText(`${t.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${t.text}`)),
+      .map((transcriptLine) => maskRestrictedText(`${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`)),
   };
 }
 
@@ -122,14 +122,14 @@ const CALL_STATUS_OUTPUT = {
 const AWAIT_SUMMARY_PLACEHOLDER =
   "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)";
 
-export function pickTranscript(callId, c, texts = null) {
+export function pickTranscript(callId, call, texts = null) {
   const failureSummary =
-    texts && mapStatus(c) === "failed" ? texts.callFailedSummary(c.failureReason) : null;
+    texts && mapStatus(call) === "failed" ? texts.callFailedSummary(call.failureReason) : null;
   return {
     call_id: callId,
-    result_summary: maskRestrictedText(c.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER),
-    objective_achieved: c.objectiveAchieved ?? "unclear",
-    ...maskedResultCard(c.result),
+    result_summary: maskRestrictedText(call.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER),
+    objective_achieved: call.objectiveAchieved ?? "unclear",
+    ...maskedResultCard(call.result),
   };
 }
 
@@ -397,13 +397,13 @@ function permissionsSummary(settings, labels) {
   );
 }
 
-function pickAgentStatus(s, texts) {
+function pickAgentStatus(state, texts) {
   return {
-    number: s.agent.number ?? null,
-    owner: s.agent.owner ?? null,
-    calls: s.usage.calls,
-    planUsagePercent: s.usage.planUsagePercent ?? null,
-    permissions: permissionsSummary(s.settings, texts.permissionLabels),
+    number: state.agent.number ?? null,
+    owner: state.agent.owner ?? null,
+    calls: state.usage.calls,
+    planUsagePercent: state.usage.planUsagePercent ?? null,
+    permissions: permissionsSummary(state.settings, texts.permissionLabels),
   };
 }
 
@@ -415,20 +415,20 @@ const AGENT_STATUS_OUTPUT = {
   permissions: z.string(),
 };
 
-function pickMyNumber(s) {
-  return { number: s.agent.number ?? null };
+function pickMyNumber(state) {
+  return { number: state.agent.number ?? null };
 }
 const MY_NUMBER_OUTPUT = { number: z.string().nullable() };
 
-function pickCall(c, formatDate) {
+function pickCall(call, formatDate) {
   const entry = {
-    id: c.id,
-    direction: c.direction,
-    counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null,
-    status: mapStatus(c),
-    startedAt: formatDate(c.startedAt),
+    id: call.id,
+    direction: call.direction,
+    counterparty: (call.direction === "outbound" ? call.to : call.from) ?? null,
+    status: mapStatus(call),
+    startedAt: formatDate(call.startedAt),
   };
-  if (c.summary) entry.summary = maskRestrictedText(c.summary);
+  if (call.summary) entry.summary = maskRestrictedText(call.summary);
   return entry;
 }
 const CALL_LIST_ENTRY = z.object({
@@ -441,9 +441,9 @@ const CALL_LIST_ENTRY = z.object({
 });
 const CALLS_OUTPUT = { calls: z.array(CALL_LIST_ENTRY) };
 
-function callTextLine(e) {
-  const arrow = e.direction === "outbound" ? "->" : "<-";
-  return `[${e.id}] ${arrow} ${e.counterparty} | ${e.status} | ${e.startedAt}${e.summary ? " | " + e.summary : ""}`;
+function callTextLine(entry) {
+  const arrow = entry.direction === "outbound" ? "->" : "<-";
+  return `[${entry.id}] ${arrow} ${entry.counterparty} | ${entry.status} | ${entry.startedAt}${entry.summary ? " | " + entry.summary : ""}`;
 }
 
 const INBOX_ENTRY = z.object({
@@ -1006,14 +1006,14 @@ export function registerTools(
       async ({ call_id, event_id, status, answers }) => {
         rejectRestrictedData({ answers }, []);
         try {
-          const r = await call("POST", `/api/calls/${call_id}/consult/answer`, { event_id, status, answers });
+          const answerResponse = await call("POST", `/api/calls/${call_id}/consult/answer`, { event_id, status, answers });
           if (status === CONSULT_ANSWER_MODE.WORKING) {
             return {
               content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
               structuredContent: { accepted: true, merged_facts: 0 },
             };
           }
-          const mergedFacts = typeof r?.merged_facts === "number" ? r.merged_facts : 0;
+          const mergedFacts = typeof answerResponse?.merged_facts === "number" ? answerResponse.merged_facts : 0;
           return {
             content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
             structuredContent: { accepted: true, merged_facts: mergedFacts },
@@ -1144,9 +1144,9 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_CALLS),
     },
     async () => {
-      const s = await call("GET", "/api/state");
-      requireFields(s, { calls: "array" });
-      const entries = s.calls.map((c) => pickCall(c, formatDate));
+      const state = await call("GET", "/api/state");
+      requireFields(state, { calls: "array" });
+      const entries = state.calls.map((callRecord) => pickCall(callRecord, formatDate));
       const txt = entries.length ? entries.map(callTextLine).join("\n") : loc.mcp.emptyCalls;
       return {
         content: [{ type: "text", text: txt }],
@@ -1185,9 +1185,9 @@ export function registerTools(
       inputSchema: {},
     },
     async () => {
-      const s = await call("GET", "/api/state");
-      requireFields(s, { actionItems: "array" });
-      const open = s.actionItems.filter((item) => !item.done);
+      const state = await call("GET", "/api/state");
+      requireFields(state, { actionItems: "array" });
+      const open = state.actionItems.filter((item) => !item.done);
       return open.length ? text(actionItemsText(open, loc.mcp)) : text(loc.mcp.emptyActionItems);
     },
   );
@@ -1206,19 +1206,19 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_AGENT_STATUS),
     },
     async () => {
-      const s = await call("GET", "/api/state");
-      requireFields(s, { agent: "object", usage: "object", settings: "object" });
-      const data = pickAgentStatus(s, loc.mcp);
-      const A = loc.mcp.agentStatus;
+      const state = await call("GET", "/api/state");
+      requireFields(state, { agent: "object", usage: "object", settings: "object" });
+      const data = pickAgentStatus(state, loc.mcp);
+      const agentStatusTexts = loc.mcp.agentStatus;
       return {
         content: [
           {
             type: "text",
             text:
-              `${A.number}: ${data.number}\n${A.owner}: ${data.owner}\n` +
-              `${A.calls}: ${data.calls}\n` +
-              `${planUsageLine(data.planUsagePercent, A)}\n` +
-              `${A.permissions}: ${data.permissions}`,
+              `${agentStatusTexts.number}: ${data.number}\n${agentStatusTexts.owner}: ${data.owner}\n` +
+              `${agentStatusTexts.calls}: ${data.calls}\n` +
+              `${planUsageLine(data.planUsagePercent, agentStatusTexts)}\n` +
+              `${agentStatusTexts.permissions}: ${data.permissions}`,
           },
         ],
         structuredContent: data,
