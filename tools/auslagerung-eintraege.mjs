@@ -4,9 +4,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import { ESLint } from "eslint";
 
+import { aufDerBasis } from "./abhaengigkeiten/bestaende.mjs";
 import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 
 export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+export const ALTVERSTOESSE = ".dependency-cruiser-known-violations.json";
 const LEERE_UNTERDRUECKUNGEN = "eslint-suppressions.empty.json";
 const FEHLER = 2;
 const EINRUECKUNG = 2;
@@ -74,4 +76,35 @@ export async function unterdrueckungenAusgelagert({ basis, root }) {
   if (liste === undefined || isDeepStrictEqual(liste, vorher)) return undefined;
   const anzahl = [...herkunft.keys()].flatMap((neu) => Object.values(liste[neu] ?? {})).reduce((summe, { count }) => summe + count, 0);
   return { neu: JSON.stringify(geordnet(liste), null, EINRUECKUNG), anzahl };
+}
+
+function kopieFuer(eintrag, neu, importe) {
+  const treffer = importe.find(({ ziel }) => ziel === eintrag.to);
+  if (treffer === undefined) return [];
+  return [{ ...eintrag, from: neu, ...(eintrag.unresolvedTo === undefined ? {} : { unresolvedTo: treffer.quelle }) }];
+}
+
+export function altverstoesseDerNeuen(auslagerung, eintraege) {
+  if (auslagerung === null) return [];
+  const alte = eintraege.filter(({ type, from }) => type === "dependency" && from === auslagerung.hilfe);
+  return alte.flatMap((eintrag) => auslagerung.neue.flatMap((neu) => kopieFuer(eintrag, neu, auslagerung.importe[neu] ?? [])));
+}
+
+const SCHLUESSELTRENNER = "\0";
+
+export function altverstossSchluessel({ rule, from, to }) {
+  return [rule.name, from, to].join(SCHLUESSELTRENNER);
+}
+
+export async function altverstoesseAusgelagert({ basis, root }) {
+  const pfad = join(root, ALTVERSTOESSE);
+  if (!existsSync(pfad)) return undefined;
+  const auslagerung = await reineQuellauslagerung({ von: basis }, root);
+  const kopien = altverstoesseDerNeuen(auslagerung, aufDerBasis(basis, ALTVERSTOESSE) ?? []);
+  const liste = JSON.parse(readFileSync(pfad, "utf8"));
+  const vorhanden = new Set(liste.map(altverstossSchluessel));
+  const neue = kopien.filter((kopie) => !vorhanden.has(altverstossSchluessel(kopie)));
+  if (neue.length === 0) return undefined;
+  const stelle = liste.findLastIndex(({ from }) => from === auslagerung.hilfe) + 1;
+  return { neu: `${JSON.stringify([...liste.slice(0, stelle), ...neue, ...liste.slice(stelle)], null, EINRUECKUNG)}\n`, anzahl: neue.length };
 }

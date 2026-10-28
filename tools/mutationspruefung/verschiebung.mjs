@@ -409,12 +409,18 @@ function ausgelagerteAnweisungen([vorher, nachher, ...neue], weiterreichen) {
   return gleicherGraph(vorher, nachher, neue) && gleicheExporte(vorher, nachher, neue) && ohneVerlorenenNamen(vorher, [nachher, ...neue]) ? verschoben.flat().length : null;
 }
 
+function importZiele({ pfad, baum }) {
+  return importeVon(baum).map(({ source }) => ({ ziel: zielDer(pfad, source.value), quelle: source.value }));
+}
+
 export async function auslagerungAus({ hilfe, neue, vorher, lesen }, { root, weiterreichen = false }) {
   const texte = [{ pfad: hilfe, text: vorher }, ...[hilfe, ...neue].map((pfad) => ({ pfad, text: lesen(pfad) }))];
   if (texte.some(({ text }) => text === undefined)) return null;
   const gelesen = await gelesenAlle(texte, { root, eslint: new ESLint({ cwd: root }) });
   const anweisungen = gelesen === null ? null : ausgelagerteAnweisungen(gelesen, weiterreichen);
-  return anweisungen === null ? null : { hilfe, neue, anweisungen };
+  const [, , ...gelesenNeue] = gelesen ?? [];
+  const importe = Object.fromEntries(gelesenNeue.map((datei) => [datei.pfad, importZiele(datei)]));
+  return anweisungen === null ? null : { hilfe, neue, anweisungen, importe };
 }
 
 export async function reineAuslagerung(basis, root) {

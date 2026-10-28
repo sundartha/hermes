@@ -4,7 +4,7 @@ import { argv } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { UNTERDRUECKUNGEN, unterdrueckungenAusgelagert } from "../auslagerung-eintraege.mjs";
+import { ALTVERSTOESSE, UNTERDRUECKUNGEN, altverstoesseAusgelagert, unterdrueckungenAusgelagert } from "../auslagerung-eintraege.mjs";
 import { LISTENPFADE, lesbar, listenNachUmzug } from "./bestandslisten.mjs";
 import { aenderungenSeit, vormerken } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
@@ -12,6 +12,20 @@ import { nurTypenNachgezogen } from "./importendungen.mjs";
 export const LISTENUMZUG = fileURLToPath(import.meta.url);
 const EXIT_GRUEN = 0;
 const EXIT_AUFRUF = 2;
+const AUSGELAGERTE_LISTEN = [
+  { pfad: UNTERDRUECKUNGEN, umziehen: unterdrueckungenAusgelagert, meldung: (anzahl) => `${anzahl} Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen` },
+  { pfad: ALTVERSTOESSE, umziehen: altverstoesseAusgelagert, meldung: (anzahl) => `${anzahl} Altverstöße der alten Datei für die ausgelagerte Datei übernommen` },
+];
+
+async function ausgelagerteListenUmziehen({ basis, root }) {
+  for (const { pfad, umziehen, meldung } of AUSGELAGERTE_LISTEN) {
+    const ausgelagert = await umziehen({ basis, root });
+    if (ausgelagert === undefined) continue;
+    writeFileSync(join(root, pfad), ausgelagert.neu);
+    vormerken([pfad], root);
+    console.log(`${pfad}: ${meldung(ausgelagert.anzahl)}.`);
+  }
+}
 
 export async function listenUmziehen({ basis, root }) {
   vormerken(aenderungenSeit(basis, root).map(({ pfad }) => pfad), root);
@@ -26,11 +40,7 @@ export async function listenUmziehen({ basis, root }) {
   }
   vormerken(umgezogen.map(({ pfad }) => pfad), root);
   console.log(`${umgezogen.length} Listen für ${paare.length} nur-Typen-Umbenennungen umgezogen.`);
-  const ausgelagert = paare.length === 0 ? await unterdrueckungenAusgelagert({ basis, root }) : undefined;
-  if (ausgelagert === undefined) return EXIT_GRUEN;
-  writeFileSync(join(root, UNTERDRUECKUNGEN), ausgelagert.neu);
-  vormerken([UNTERDRUECKUNGEN], root);
-  console.log(`${UNTERDRUECKUNGEN}: ${ausgelagert.anzahl} Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen.`);
+  if (paare.length === 0) await ausgelagerteListenUmziehen({ basis, root });
   return EXIT_GRUEN;
 }
 

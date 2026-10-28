@@ -9,7 +9,9 @@ import { run } from "./abhaengigkeiten/prozess.mjs";
 import { sammeldateiBefunde, sammeldateiZusammenfassung } from "./abhaengigkeiten/sammeldatei-exporte.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
+import { ALTVERSTOESSE, altverstoesseDerNeuen, altverstossSchluessel as violationKey } from "./auslagerung-eintraege.mjs";
 import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung.mjs";
+import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { TYPESCRIPT } from "./umbenennung.mjs";
 
 const CONFIG_PATH = ".dependency-cruiser.cjs";
@@ -33,7 +35,6 @@ const FROZEN_LISTS = [
     zweck: "basis/test-importe",
   },
 ];
-const KEY_SEPARATOR = "\0";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
@@ -42,10 +43,6 @@ const USAGE = "Aufruf: node tools/abhaengigkeiten.mjs --basis <commit>";
 function optionValue(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
-}
-
-function violationKey({ rule, from, to }) {
-  return [rule.name, from, to].join(KEY_SEPARATOR);
 }
 
 function ruleComments() {
@@ -99,13 +96,13 @@ function describe(violation, comments) {
   return `${from} → ${to} verstößt gegen „${rule.name}“. ${comments.get(rule.name)}`;
 }
 
-function findingsFor({ path, violations, known, basisKnown }, { comments, oldPath }) {
+function findingsFor({ path, violations, known, basisKnown }, { comments, oldPath, ausgelagert }) {
   const newViolations = missingFrom(violations, known).map(
     (violation) => `Neuer Verstoß: ${describe(violation, comments)}`,
   );
   const asBefore = ({ rule, from, to }) =>
     violationKey({ rule, from: oldPath(from), to: oldPath(to) });
-  const allowed = (basisKnown ?? known).map(violationKey);
+  const allowed = [...(basisKnown ?? known), ...ausgelagert].map(violationKey);
   const grownEntries = aufgeteilt(known, allowed, asBefore).darueber.map(
     (violation) =>
       `${path} darf nur kürzer werden, neu eingefroren ist: ${describe(violation, comments)}`,
@@ -115,17 +112,21 @@ function findingsFor({ path, violations, known, basisKnown }, { comments, oldPat
 
 function summary({ path, label, violations, known, basisKnown }) {
   const fixed = missingFrom(known, violations).length;
+  const gewachsen = known.length - (basisKnown?.length ?? known.length);
   const basisNote =
     basisKnown === undefined
       ? "die Basis hat noch keine eingefrorene Liste"
-      : "die Liste ist gegenüber der Basis nicht gewachsen";
+      : gewachsen > 0
+        ? `die Liste ist gegenüber der Basis um ${gewachsen} Altverstoß einer reinen Auslagerung gewachsen`
+        : "die Liste ist gegenüber der Basis nicht gewachsen";
   return `${violations.length} ${label}, alle eingefroren in ${path}; ${fixed} eingefrorene Einträge sind behoben und können gestrichen werden; ${basisNote}`;
 }
 
 export const BEFUNDQUELLEN = [
   ...FROZEN_LISTS.map(({ zweck }, index) => ({
     zweck,
-    befunde: ({ states, comments, oldPath }) => findingsFor(states[index], { comments, oldPath }),
+    befunde: ({ states, comments, oldPath, ausgelagert }) =>
+      findingsFor(states[index], { comments, oldPath, ausgelagert: ausgelagert[index] }),
   })),
   {
     zweck: "basis/testregel-bestaende",
@@ -160,7 +161,9 @@ async function main() {
   const oldPath = await oldPathOf(basis, states, bestaendeNurKuerzer(basis));
   const order = await testordnung(basis);
   const bausteine = bausteinBefunde(modules);
-  const context = { basis, states, comments, oldPath, order, bausteine };
+  const auslagerung = await reineQuellauslagerung({ von: basis }, process.cwd());
+  const ausgelagert = states.map(({ path, basisKnown }) => (path === ALTVERSTOESSE ? altverstoesseDerNeuen(auslagerung, basisKnown ?? []) : []));
+  const context = { basis, states, comments, oldPath, order, bausteine, ausgelagert };
   const sources = BEFUNDQUELLEN.map(({ zweck, befunde }) => ({ zweck, befunde: befunde(context) }));
   if (reportFindings(sources) > 0) return EXIT_FINDING;
   for (const state of states) console.log(summary(state));
