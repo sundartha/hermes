@@ -12,7 +12,7 @@ import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs"
 import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { releaseSections } from "./freigabe-markdown.mjs";
 import { listenkuerzungen } from "./freigabe-listenkuerzung.mjs";
-import { pfadumzuege } from "./freigabe-pfadumzug.mjs";
+import { auslagerungsumzuege, pfadumzuege } from "./freigabe-pfadumzug.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
   DURCHGELASSEN,
@@ -349,11 +349,11 @@ async function setKindLabel(pull, kind) {
   }
 }
 
-function classify(basis) {
+async function classify(basis) {
   const patterns = ownerPatterns(basis);
   const files = changedFiles(basis);
   const strenger = stricterCases(basis, files) ?? [];
-  const umzuege = pfadumzuege(basis, files);
+  const umzuege = new Set([...pfadumzuege(basis, files), ...(await auslagerungsumzuege(basis, files))]);
   const kuerzungen = listenkuerzungen(basis, files);
   const nachgerechnet = (path) => umzuege.has(path) || kuerzungen.has(path);
   const kindFor = (path) => (nachgerechnet(path) ? "code" : kindOf(patterns, path));
@@ -467,7 +467,7 @@ async function measure(basis, changes) {
 }
 
 async function evaluate({ basis, sources }) {
-  const { changes, packages, strenger, kind } = classify(basis);
+  const { changes, packages, strenger, kind } = await classify(basis);
   const measured = await measure(basis, changes);
   const texts = textChanges(basis);
   const pakete = await Promise.all(
