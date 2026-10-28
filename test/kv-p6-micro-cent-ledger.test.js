@@ -8,8 +8,12 @@ import {
   tokenCostMicroCents,
   usageFor,
   inputTokensOf,
+  globalUsageTotals,
+  callCostEvidence,
+  PLATFORM_TTS_COST_CENTER_ID,
+  actualCostMicroCentsForMonth,
 } from "../src/store/state-ops.js";
-import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
+import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT, PROVIDER } from "../src/store/defaults.js";
 import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "./_prices.js";
 
 const TENANT = "kvp6_kern";
@@ -97,4 +101,84 @@ test("KV-P6-3b Grenzfall: fehlender Wert bleibt NULL (additiv-nullable), kein '0
     costCents: 10,
   });
   assert.equal(ev.costMicroCents, null, "Default bleibt null, nie 0");
+});
+
+const ZWEITER_TENANT = "kvp6_zweiter";
+
+test("KV-P6-Absicherung: globalUsageTotals summiert Token, Anrufe und Mikro-Cents ueber alle Mandanten", () => {
+  const state = makeDefaultState();
+  state.usage[TENANT] = {
+    inputTokens: 10,
+    outputTokens: 4,
+    calls: 2,
+    costCents: 3,
+    costMicroCentsRem: 600_000,
+  };
+  state.usage[ZWEITER_TENANT] = {
+    inputTokens: 5,
+    outputTokens: 1,
+    calls: 1,
+    costCents: 2,
+    costMicroCentsRem: 700_000,
+  };
+  assert.deepEqual(
+    globalUsageTotals(state),
+    {
+      inputTokens: 15,
+      outputTokens: 5,
+      calls: 3,
+      costCents: 6,
+      costMicroCentsRem: 300_000,
+    },
+    "Summe aus 3,6 Cent und 2,7 Cent sind 6 Cent plus 300000 Mikro-Cent Rest",
+  );
+});
+
+test("KV-P6-Absicherung: globalUsageTotals zaehlt einen Eimer ohne Rest als Rest 0", () => {
+  const state = makeDefaultState();
+  state.usage[TENANT] = { inputTokens: 1, outputTokens: 1, calls: 1, costCents: 4 };
+  const summe = globalUsageTotals(state);
+  assert.equal(summe.costCents, 4);
+  assert.equal(summe.costMicroCentsRem, 0);
+});
+
+test("KV-P6-Absicherung: callCostEvidence liefert nur die Zeilen des Anrufs, nach Traeger sortiert", () => {
+  const state = makeDefaultState();
+  state.callCostEvidence.push(
+    { callId: "call_a", traeger: "telnyx" },
+    { callId: "call_b", traeger: "anthropic" },
+    { callId: "call_a", traeger: "elevenlabs" },
+  );
+  assert.deepEqual(
+    callCostEvidence(state, "call_a").map((zeile) => zeile.traeger),
+    ["elevenlabs", "telnyx"],
+  );
+  assert.deepEqual(callCostEvidence(state, "call_unbekannt"), []);
+});
+
+test("KV-P6-Absicherung: die Plattform-Kostenstelle fuer Wiedergabe-TTS heisst platform:play-tts", () => {
+  assert.equal(PLATFORM_TTS_COST_CENTER_ID, "platform:play-tts");
+});
+
+test("KV-P6-Absicherung: actualCostMicroCentsForMonth summiert nur belegte, nicht negative Telnyx-Kosten des Monats", () => {
+  const MONAT = "2026-03";
+  const VORMONAT = "2026-02";
+  const ANRUF_KOSTEN = 1000;
+  const state = makeDefaultState();
+  const anruf = (aenderung) => ({
+    provider: PROVIDER.TELNYX,
+    costTruedAt: "2026-03-05T00:00:00.000Z",
+    actualCostMicroCents: ANRUF_KOSTEN,
+    estimatedCostSpendMonthKey: MONAT,
+    ...aenderung,
+  });
+  state.calls.push(
+    anruf({}),
+    anruf({ actualCostMicroCents: 0 }),
+    anruf({ actualCostMicroCents: -500 }),
+    anruf({ provider: "elevenlabs" }),
+    anruf({ costTruedAt: null }),
+    anruf({ estimatedCostSpendMonthKey: VORMONAT }),
+  );
+  assert.equal(actualCostMicroCentsForMonth(state, MONAT), ANRUF_KOSTEN);
 });
