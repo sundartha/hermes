@@ -107,6 +107,7 @@
       "zweck": "MCP-Werkzeuge: Eingabe prüfen, Gateway rufen, Ergebnis aufbereiten.",
       "quellen": [
         "src/mcp-tools.js",
+        "src/mcp/",
         "src/mcp-server-info.js",
         "src/mcp-rate-limit.js",
         "src/mcp-no-tenant.js",
