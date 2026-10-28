@@ -1,13 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import request from "./gemeinsam/testserver-anfrage.mjs";
-import express from "express";
-import { makePgTestStore } from "./pg-helpers.js";
-import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import {
+  request,
+  express,
+  makePgTestStore,
+  SESSION_COOKIE_NAME,
+  webAuth,
+  makeAccounts,
+  makeSessions,
+  signValue,
+  makeSelfServiceRoutes,
+  withConfigNamespaces,
+} from "./gemeinsam/kuendigung-importkopf.js";
 import { makeAuditStore } from "../src/audit-store.js";
-import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "312k-p3-web-secret-0123456789";
 const SUB_C = "sub-c";
