@@ -44,6 +44,7 @@ export {
   spendMonthEndDate,
 } from "./begriffe-abrechnung.js";
 export { E164, isNanpCountry, normNum } from "./begriffe-rufnummern.js";
+export { MAX_NOTIFICATIONS, WEBHOOK_ANCHOR_HISTORY } from "./begriffe-speicher.js";
 export {
   DEFAULT_PROVIDER,
   GLOBAL_CAP_REASON,
@@ -68,10 +69,6 @@ const DEMO_EVENTS = [
   { id: "ev2", title: "Mittagessen mit Alex", daysAhead: 2, startHour: 12, endHour: 13 },
   { id: "ev3", title: "Projekt-Review", daysAhead: 3, startHour: 15, endHour: 16.5 },
 ];
-
-export const MAX_NOTIFICATIONS = 50;
-
-export const WEBHOOK_ANCHOR_HISTORY = 6;
 
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
 
