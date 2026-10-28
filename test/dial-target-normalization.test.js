@@ -310,6 +310,72 @@ test("Annahme: Default-Owner-Testnummer ist ein NANP-Heimatland", () => {
   assert.equal(homeCountryCode([OWNER_TEST_NUMBER.e164], "US"), "+1");
 });
 
+import {
+  allowedPrivateNumberCodes,
+  countryAllowed,
+  countryForE164,
+} from "../src/store/defaults.js";
+
+test("[NIE1] countryAllowed: nur erlaubte Vorwahl oder '*', leer und Nicht-String abgelehnt", () => {
+  assert.equal(countryAllowed("+491713920012", ["+49"]), true);
+  assert.equal(countryAllowed("+41791234567", ["+49"]), false);
+  assert.equal(countryAllowed("+41791234567", ["+49", "+41"]), true);
+  assert.equal(countryAllowed("+99123456789", ["*"]), true);
+  assert.equal(countryAllowed("+491713920012"), true);
+  assert.equal(countryAllowed("+41791234567"), false);
+  assert.equal(countryAllowed("", ["*"]), false);
+  assert.equal(countryAllowed("", ["+49"]), false);
+  assert.equal(countryAllowed(null, ["*"]), false);
+  assert.equal(countryAllowed(undefined, ["*"]), false);
+  assert.equal(countryAllowed(491713920012, ["*"]), false);
+  assert.equal(countryAllowed(["+49"], ["*"]), false);
+});
+
+test("[NIE1] allowedPrivateNumberCodes: NANP +1, sechs Laender eigene Vorwahl, sonst +49", () => {
+  assert.deepEqual(allowedPrivateNumberCodes("US"), ["+1"]);
+  assert.deepEqual(allowedPrivateNumberCodes("ca"), ["+1"]);
+  assert.deepEqual(allowedPrivateNumberCodes("DE"), ["+49"]);
+  assert.deepEqual(allowedPrivateNumberCodes("AT"), ["+43"]);
+  assert.deepEqual(allowedPrivateNumberCodes("CH"), ["+41"]);
+  assert.deepEqual(allowedPrivateNumberCodes("FR"), ["+33"]);
+  assert.deepEqual(allowedPrivateNumberCodes("GB"), ["+44"]);
+  assert.deepEqual(allowedPrivateNumberCodes("IE"), ["+353"]);
+  assert.deepEqual(allowedPrivateNumberCodes("fr"), ["+33"]);
+  assert.deepEqual(allowedPrivateNumberCodes("JP"), ["+49"]);
+  assert.deepEqual(allowedPrivateNumberCodes(undefined), ["+49"]);
+  assert.deepEqual(allowedPrivateNumberCodes(null), ["+49"]);
+});
+
+test("[NIE2] normalizeDialTarget: 011 bleibt in +49 und +33, NANP-Formen und Randfaelle", () => {
+  assert.equal(normalizeDialTarget("011441234567", "+49"), "011441234567");
+  assert.equal(normalizeDialTarget("011441234567", "+33"), "011441234567");
+  assert.equal(normalizeDialTarget("011441234567", "+44"), "+4411441234567");
+  assert.equal(normalizeDialTarget("2125550123", "+1"), "+12125550123");
+  assert.equal(normalizeDialTarget("12125550123", "+1"), "+12125550123");
+  assert.equal(normalizeDialTarget("22125550123", "+1"), "22125550123");
+  assert.equal(normalizeDialTarget("+12125550123", "+1"), "+12125550123");
+  assert.equal(normalizeDialTarget("0049171392001", "+1"), "+49171392001");
+  assert.equal(normalizeDialTarget("0612345678", "+33"), "+33612345678");
+  assert.equal(normalizeDialTarget("00491713920012", "+33"), "+491713920012");
+});
+
+test("[NIE3] countryForE164: Land je Vorwahl, null fuer Ungueltiges", () => {
+  assert.equal(countryForE164("+491713920012"), "DE");
+  assert.equal(countryForE164("+436641234567"), "AT");
+  assert.equal(countryForE164("+41791234567"), "CH");
+  assert.equal(countryForE164("+33612345678"), "FR");
+  assert.equal(countryForE164("+447911123456"), "GB");
+  assert.equal(countryForE164("+353871234567"), "IE");
+  assert.equal(countryForE164("+15005550006"), null);
+  assert.equal(countryForE164("+49abc"), null);
+  assert.equal(countryForE164("491713920012"), null);
+  assert.equal(countryForE164("+0491713920012"), null);
+  assert.equal(countryForE164(""), null);
+  assert.equal(countryForE164(null), null);
+  assert.equal(countryForE164(491713920012), null);
+  assert.equal(countryForE164({ toString: () => "+491713920012" }), null);
+});
+
 test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form nicht (Review-Fix Runde 1)", async (t) => {
   const HTTP_ENV_ITU = {
     ALLOWED_NUMBERS: DE_TARGET_E164,
