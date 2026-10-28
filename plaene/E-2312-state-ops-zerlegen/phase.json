@@ -22,19 +22,6 @@
       ]
     },
     {
-      "id": "a3",
-      "art": "umbau",
-      "ziel": "Einstellungen aus state-ops.js nach zustand/einstellungen.js auslagern",
-      "bereich": "src/store/",
-      "erwarteteDateien": [
-        "src/store/state-ops.js",
-        "src/store/zustand/einstellungen.js",
-        "test/tenant-settings-calendar-map.test.js"
-      ],
-      "abnahme": "test/tenant-settings-calendar-map.test.js",
-      "wasDarfNiePassieren": []
-    },
-    {
       "id": "a4",
       "art": "umbau",
       "ziel": "Mandant aus state-ops.js nach zustand/mandant.js auslagern",
@@ -84,6 +71,19 @@
         "test/newsletter-recipients-model.test.js"
       ],
       "abnahme": "test/newsletter-recipients-model.test.js",
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a3",
+      "art": "umbau",
+      "ziel": "Einstellungen aus state-ops.js nach zustand/einstellungen.js auslagern",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/state-ops.js",
+        "src/store/zustand/einstellungen.js",
+        "test/tenant-settings-calendar-map.test.js"
+      ],
+      "abnahme": "test/tenant-settings-calendar-map.test.js",
       "wasDarfNiePassieren": []
     },
     {
