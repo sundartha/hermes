@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { bausteinBefunde } from "./abhaengigkeiten/bausteine.mjs";
 import { aufDerBasis, bestaendeNurKuerzer, imArbeitsbaum } from "./abhaengigkeiten/bestaende.mjs";
 import { run } from "./abhaengigkeiten/prozess.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
@@ -55,13 +56,14 @@ function checkedDirectories() {
   return existsSync(TEST_DIRECTORY) ? [SOURCE_DIRECTORY, TEST_DIRECTORY] : [SOURCE_DIRECTORY];
 }
 
-function currentViolations() {
+function currentGraph() {
   const args = [DEPCRUISE_BIN, ...checkedDirectories(), "--config", CONFIG_PATH];
-  const result = run(process.execPath, [...args, "--output-type", "baseline"]);
+  const result = run(process.execPath, [...args, "--output-type", "json"]);
   if (result.status !== EXIT_OK) {
     throw new Error(`dependency-cruiser ist gescheitert:\n${result.stderr}`);
   }
-  return JSON.parse(result.stdout);
+  const { modules, summary } = JSON.parse(result.stdout);
+  return { modules, violations: summary.violations };
 }
 
 function checkBasis(basis) {
@@ -129,6 +131,9 @@ export const BEFUNDQUELLEN = [
     befunde: ({ basis, oldPath }) => bestaendeNurKuerzer(basis, oldPath),
   },
   { zweck: "basis/testordnung", befunde: ({ order }) => order.befunde },
+  { zweck: "basis/bausteine-zuordnung", befunde: ({ bausteine }) => bausteine.zuordnung },
+  { zweck: "basis/bausteine-eingaenge", befunde: ({ bausteine }) => bausteine.eingaenge },
+  { zweck: "basis/bausteine-richtung", befunde: ({ bausteine }) => bausteine.richtung },
 ];
 
 function reportFindings(sources) {
@@ -147,16 +152,18 @@ async function main() {
     return EXIT_USAGE;
   }
   checkBasis(basis);
-  const violations = currentViolations();
+  const { modules, violations } = currentGraph();
   const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
   const comments = ruleComments();
   const oldPath = await oldPathOf(basis, states, bestaendeNurKuerzer(basis));
   const order = await testordnung(basis);
-  const context = { basis, states, comments, oldPath, order };
+  const bausteine = bausteinBefunde(modules);
+  const context = { basis, states, comments, oldPath, order, bausteine };
   const sources = BEFUNDQUELLEN.map(({ zweck, befunde }) => ({ zweck, befunde: befunde(context) }));
   if (reportFindings(sources) > 0) return EXIT_FINDING;
   for (const state of states) console.log(summary(state));
   console.log(order.zusammenfassung);
+  if (bausteine.zusammenfassung !== undefined) console.log(bausteine.zusammenfassung);
   return EXIT_OK;
 }
 

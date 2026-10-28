@@ -1,0 +1,13 @@
+{
+  "titel": "Import aus einem anderen Baustein auf eine Datei, die kein Eingang ist",
+  "vorher": {
+    "src/billing/decline.js": ["export const abgelehnt = true;"]
+  },
+  "dateien": {
+    "src/telephony/sperre.js": [
+      "import { abgelehnt } from \"../billing/decline.js\";",
+      "export const sperre = abgelehnt;"
+    ]
+  },
+  "erwartet": "src/billing/decline.js ist kein Eingang von abrechnung"
+}

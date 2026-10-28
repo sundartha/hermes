@@ -182,6 +182,26 @@ test("ein neuer Verstoß gegen eine Abhängigkeitsregel nennt nach den Befunden 
   }
 });
 
+const KARTE_EIN_BAUSTEIN = {
+  schichten: [["alles"]],
+  bausteine: [{ baustein: "alles", zweck: "Probe.", quellen: ["src/store/", "src/store.js", "src/routes/"], eingaenge: "alle", nutzt: [] }],
+  altlast: [],
+};
+
+test("eine neue Datei ohne Baustein nennt nach den Befunden genau den Block der Bausteinzuordnung", (context) => {
+  const verzeichnis = probeRepository(context, { ...ABHAENGIGKEITEN, "tools/bausteine.json": `${JSON.stringify(KARTE_EIN_BAUSTEIN)}\n` });
+  writeFiles(verzeichnis, { "src/neu.js": "export const neu = 1;\n" });
+  commitAll(verzeichnis, "Neue Datei");
+  const lauf = runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD~1"]);
+  assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
+  const befunde = nachBefunden(lauf.stderr, "basis/bausteine-zuordnung");
+  assert.equal(befunde.length, 1, lauf.stderr);
+  assert.match(befunde[0], /^Neue Datei direkt in src\/: src\/neu\.js gehört zu keinem Baustein/);
+  for (const andere of ["basis/abhaengigkeitsregeln", "basis/bausteine-eingaenge", "basis/bausteine-richtung"]) {
+    assert.ok(!lauf.stderr.includes(zweckBlock(andere)[0]), andere);
+  }
+});
+
 test("ein grüner Lauf von tools/abhaengigkeiten.mjs nennt keinen Block", (context) => {
   const verzeichnis = probeRepository(context, ABHAENGIGKEITEN);
   const lauf = runIn(verzeichnis, process.execPath, [DEPENDENCY_TOOL, "--basis", "HEAD"]);
