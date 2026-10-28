@@ -21,7 +21,8 @@ import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 import { ToolError, toolErrorText } from "./mcp/fehler.js";
 import { errText, makeDateFormatter, notAccepted, text } from "./mcp/ausgabe.js";
-import { RESTRICTED_CATEGORY, firstRestrictedField, maskRestrictedText } from "./restricted-data.js";
+import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./mcp/eingabe.js";
+import { maskRestrictedText } from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
@@ -227,19 +228,6 @@ async function placeCallHop({ identity, scopedTenant, body }) {
 
 function isConfirmationUnavailable(err) {
   return err?.httpStatus === HTTP_SERVICE_UNAVAILABLE_STATUS && err?.reason === CONFIRMATION_UNAVAILABLE_REASON;
-}
-
-const RESTRICTED_CATEGORY_ERROR_CODE = Object.freeze({
-  [RESTRICTED_CATEGORY.PAYMENT_CARD]: MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD,
-  [RESTRICTED_CATEGORY.GOVERNMENT_ID]: MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID,
-  [RESTRICTED_CATEGORY.CREDENTIAL_SECRET]: MCP_ERROR_CODE.RESTRICTED_CREDENTIAL,
-});
-
-const CALL_ARGS_EXEMPT_KEYS = Object.freeze(["to", "confirmation_code", "language"]);
-
-function rejectRestrictedData(body, exemptKeys) {
-  const hit = firstRestrictedField(body, exemptKeys);
-  if (hit) throw new ToolError(RESTRICTED_CATEGORY_ERROR_CODE[hit.category], hit.field);
 }
 
 async function confirmCallHop({ identity, scopedTenant, body }) {
