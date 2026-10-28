@@ -47,7 +47,6 @@
   "src/routes/voice.js",
   "src/routes/webhooks-elevenlabs-init.js",
   "src/routes/webhooks-elevenlabs.js",
-  "src/store/defaults.js",
   "src/store/views.js",
   "src/telephony/adapters/telnyx/config-read.js",
   "src/telephony/adapters/telnyx/cost-parse.js",
