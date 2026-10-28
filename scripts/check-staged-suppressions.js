@@ -587,12 +587,13 @@ async function raisedCountsStatus(beforeRevision, afterRevision, lookups) {
     Object.keys(after).filter((file) => !before[file]),
   );
   const oldPathOf = await oldPathsFromRenameModule(newFiles, lookups);
+  const renamedOnly = oldPathOf.kind === MOVED ? noRename : oldPathOf;
   const moved = await movesFor(newFiles, lookups);
   const unmatched = await unmatchedMoves(lists[0].after, moved, afterRevision);
   const reports = lists
     .map(({ relativePath, findRaised, before, after }) => ({
       relativePath,
-      raised: findRaised(before, after, oldPathOf),
+      raised: findRaised(before, after, relativePath === SUPPRESSIONS_REL ? oldPathOf : renamedOnly),
     }))
     .filter(({ raised }) => raised.length > 0);
   if (reports.length === 0 && unmatched.length === 0) return 0;

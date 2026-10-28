@@ -151,6 +151,22 @@ test("CI-Weg: gelten für die neue Datei andere Regeln als für die alte, zieht 
   assert.match(ergebnis.ausgabe, /^ {2}src\/rechnen\.js -> id-length: 0 -> 1$/m);
 });
 
+function altlastPin(pfad) {
+  const pin = { reason: "Altlast", date: "2026-10-28", findings: { "id-length :: Identifier name 'x' is too short (< 2).": 1 } };
+  return { "eslint-legacy-exceptions.json": `${JSON.stringify({ [pfad]: pin })}\n` };
+}
+
+test("CI-Weg: ein Altlast-Pin zieht nicht mit der ausgelagerten Funktion um und ist für die neue Datei rot", (context) => {
+  const repo = basisRepo(context, KONFIG);
+  writeFiles(repo, altlastPin(HILFE));
+  commitAll(repo, "Pin");
+  writeFiles(repo, { ...AUSGELAGERT, ...liste(VERSCHOBEN), ...altlastPin(NEU) });
+  commitAll(repo, "Auslagerung");
+  const ergebnis = lauf(repo, ["--basis", "HEAD~1"]);
+  istRot(ergebnis);
+  assert.match(ergebnis.ausgabe, /^ {2}src\/rechnen\.js -> Altlast-Eintrag: 0 -> 1$/m);
+});
+
 const LISTENUMZUG = join(REPO_ROOT, "tools/auftrag/listenumzug.mjs");
 
 function umzugImArbeitsbaum(context, { dateien = AUSGELAGERT, konfig = KONFIG } = {}) {
