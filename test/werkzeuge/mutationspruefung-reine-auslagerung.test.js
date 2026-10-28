@@ -99,6 +99,14 @@ function mitKopf(teil, kopf) {
   return { ...teil, kopf };
 }
 
+function nachherOhne(...weg) {
+  return mitKopf(NACHHER, NACHHER.kopf.filter((anweisung) => !weg.includes(anweisung)));
+}
+
+function nachherMit(alt, neu) {
+  return mitKopf(NACHHER, NACHHER.kopf.map((anweisung) => (anweisung === alt ? neu : anweisung)));
+}
+
 function ausgelagertMit(...rumpf) {
   return { [NEU]: aufgebaut(mitRumpf(AUSGELAGERT, rumpf)) };
 }
@@ -121,7 +129,7 @@ test("Reine Auslagerung: dieselbe Auslagerung mit benannter Weiterreichung start
 });
 
 test("Reine Auslagerung: verliert die Hilfe eine ganze Importanweisung, deren Modul die neue Hilfe lädt, führt das zur vollen Testumbau-Mutation", async (context) => {
-  vollGerechnet(await nachAuslagerung(context, { nachher: mitKopf(NACHHER, [QUELLE, AUS_NEU]) }));
+  vollGerechnet(await nachAuslagerung(context, { nachher: nachherOhne(WERTE_OHNE_NAMEN) }));
 });
 
 test("Reine Auslagerung: ein geändertes Literal in einer verschobenen Anweisung führt zur vollen Testumbau-Mutation", async (context) => {
@@ -197,11 +205,11 @@ test("Reine Auslagerung: ein exportierter Name der Hilfe, der nicht weitergereic
 });
 
 test("Reine Auslagerung: eine verschobene Funktion, die einen Namen der alten Hilfe ohne eigenen Import nutzt, führt zur vollen Testumbau-Mutation", async (context) => {
-  vollGerechnet(await nachAuslagerung(context, { neu: { [NEU]: aufgebaut(mitKopf(AUSGELAGERT, [SICHER])) } }));
+  vollGerechnet(await nachAuslagerung(context, { nachher: nachherMit(WERTE_OHNE_NAMEN, WERTE_IN_HILFE), neu: { [NEU]: aufgebaut(mitKopf(AUSGELAGERT, [SICHER])) } }));
 });
 
 test("Reine Auslagerung: eine verbliebene Anweisung, die einen verschobenen Namen ohne Import nutzt, führt zur vollen Testumbau-Mutation", async (context) => {
-  vollGerechnet(await nachAuslagerung(context, { nachher: mitKopf(NACHHER, [QUELLE]) }));
+  vollGerechnet(await nachAuslagerung(context, { nachher: nachherOhne(AUS_NEU) }));
 });
 
 test("Reine Auslagerung: ein zusätzlich geänderter Test führt zur vollen Testumbau-Mutation", async (context) => {
@@ -219,7 +227,7 @@ test("Reine Auslagerung: eine gelöschte Datei neben der Auslagerung führt zur 
 
 test("Reine Auslagerung: eine neue Hilfe, die als Test läuft, führt zur vollen Testumbau-Mutation", async (context) => {
   const alsTest = "test/gemeinsam/ohne-quelle.test.js";
-  const nachher = { kopf: [QUELLE, AUS_NEU.replace("ohne-quelle.js", "ohne-quelle.test.js")], rumpf: [ALLES_WEITER.replace("ohne-quelle.js", "ohne-quelle.test.js"), NEGATIV] };
+  const nachher = mitRumpf(nachherMit(AUS_NEU, AUS_NEU.replace("ohne-quelle.js", "ohne-quelle.test.js")), [ALLES_WEITER.replace("ohne-quelle.js", "ohne-quelle.test.js"), NEGATIV]);
   vollGerechnet(await nachAuslagerung(context, { nachher, neu: { [alsTest]: aufgebaut(AUSGELAGERT) } }));
 });
 
@@ -262,7 +270,7 @@ test("Reine Auslagerung: eine neue Hilfe mit einem Import ohne Namen führt zur 
 });
 
 test("Reine Auslagerung: ein Import der Hilfe, den nachher weder die Hilfe noch eine neue Hilfe hat, führt zur vollen Testumbau-Mutation", async (context) => {
-  const vorher = mitKopf(VORHER, [...VORHER.kopf, 'import { ANDERS } from "../../src/anders.js";']);
+  const vorher = mitKopf(VORHER, [...VORHER.kopf, 'import "../../src/anders.js";']);
   vollGerechnet(await nachAuslagerung(context, { vorher }));
 });
 
@@ -273,7 +281,7 @@ test("Reine Auslagerung: eine Weiterreichung, die zwei verschobene Namen vertaus
 
 test("Reine Auslagerung: ein Import aus der neuen Hilfe unter anderem Namen führt zur vollen Testumbau-Mutation", async (context) => {
   const umbenannt = 'import { doppelt as GRENZEN } from "../gemeinsam/ohne-quelle.js";';
-  vollGerechnet(await nachAuslagerung(context, { nachher: mitKopf(NACHHER, [QUELLE, umbenannt]) }));
+  vollGerechnet(await nachAuslagerung(context, { nachher: nachherMit(AUS_NEU, umbenannt) }));
 });
 
 test("Reine Auslagerung: eine neue Hilfe, die die alte Hilfe nicht lädt, nimmt deren Import nicht mit und führt zur vollen Testumbau-Mutation", async (context) => {
@@ -281,5 +289,5 @@ test("Reine Auslagerung: eine neue Hilfe, die die alte Hilfe nicht lädt, nimmt 
   const ungenutzt = "function anders() {\n  return ANDERS;\n}";
   const vorher = { kopf: [...VORHER.kopf, anders], rumpf: [...VORHER.rumpf, ungenutzt] };
   const neu = { [NEU]: aufgebaut(AUSGELAGERT), "test/gemeinsam/ungeladen.js": aufgebaut({ kopf: ['import { ANDERS } from "../../src/anders.js";'], rumpf: [ungenutzt] }) };
-  vollGerechnet(await nachAuslagerung(context, { vorher, neu }));
+  vollGerechnet(await nachAuslagerung(context, { vorher, nachher: nachherMit(AUS_NEU, `${anders}\n${AUS_NEU}`), neu }));
 });

@@ -83,7 +83,7 @@ const TAKT_NEU = datei('import { TAKT } from "../store/defaults.js";', TAKT);
 const REINE_AUSLAGERUNG = { vorher: TAKT_VORHER, nachher: TAKT_NACHHER, neu: TAKT_NEU };
 const OHNE_ZIEL_IMPORT = {
   vorher: datei('import { STUFE } from "./store/defaults.js";\nimport { NAME } from "./store/begriffe.js";', NAME, STUFE),
-  nachher: datei('import { STUFE } from "./store/defaults.js";', 'export { name } from "./konfiguration/rechnen.js";', STUFE),
+  nachher: datei('import { STUFE } from "./store/defaults.js";\nimport "./store/begriffe.js";', 'export { name } from "./konfiguration/rechnen.js";', STUFE),
   neu: datei('import { NAME } from "../store/begriffe.js";', NAME),
 };
 const NEUER_EINTRAG_ZU_VIEL = /darf nur kürzer werden, neu eingefroren ist: src\/konfiguration\/rechnen\.js → src\/store\/defaults\.js/;

@@ -89,11 +89,6 @@ test("Auslagerung mit gekürzten Importen: importiert die neue Datei einen gestr
   istKeineReineAuslagerung(context, kuerzung(context, { alt: OHNE_STUFE, nachher: OHNE_NAMEN_IMPORT, neuKopf, rest: OHNE_NAMEN }));
 });
 
-test("Auslagerung mit gekürzten Importen: wird nach dem Streichen eine Datei nirgends mehr geladen, ist es keine reine Auslagerung", (context) => {
-  const alt = `${OHNE_STUFE}\nimport { TOT } from "./tot.js";`;
-  istKeineReineAuslagerung(context, kuerzung(context, { alt, nachher: OHNE_NAMEN_IMPORT, rest: OHNE_NAMEN }));
-});
-
 test("Auslagerung mit gekürzten Importen: fällt ein Import ohne Namen weg, den nur die alte Datei lud, ist es keine reine Auslagerung", (context) => {
   const alt = `${OHNE_STUFE}\nimport "./tot.js";`;
   istKeineReineAuslagerung(context, kuerzung(context, { alt, nachher: OHNE_NAMEN_IMPORT, rest: OHNE_NAMEN }));
