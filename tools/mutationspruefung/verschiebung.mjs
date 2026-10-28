@@ -19,6 +19,8 @@ const VERZEICHNIS = "__dirname";
 const ERFORDERN = "require";
 const IMPORT = "ImportDeclaration";
 const OHNE_WIRKUNG = new Set(["Literal", "ArrowFunctionExpression", "FunctionExpression"]);
+const VERWEIS = new Set(["Identifier", "MemberExpression"]);
+const SCHLUESSELARTEN = new Set(["string", "number"]);
 const WEITERREICHUNG = new Set(["ExportAllDeclaration", "ExportNamedDeclaration"]);
 const GLEICHNAMIG = new Set(["ImportSpecifier", "ExportSpecifier"]);
 const EINFRIEREN = { objekt: "Object", methode: "freeze" };
@@ -211,22 +213,65 @@ function verteilt(folge, ziele) {
   return ziele.every((liste, stelle) => zeiger[stelle] === liste.length);
 }
 
-function istEingefroren({ type, callee, arguments: argumente }) {
+function istFreeze({ type, callee, arguments: argumente }) {
   const freeze = type === "CallExpression" && callee.type === "MemberExpression" && !callee.computed && istBezeichner(callee.object, EINFRIEREN.objekt) && istBezeichner(callee.property, EINFRIEREN.methode);
-  return freeze && argumente.length === 1 && wirktNichtBeimLaden(argumente[0]);
+  return freeze && argumente.length === 1;
 }
 
-function wirktNichtBeimLaden(ausdruck) {
+function istEingefroren(ausdruck, bekannt) {
+  return istFreeze(ausdruck) && wirktNichtBeimLaden(ausdruck.arguments[0], bekannt);
+}
+
+function schluesselName({ type, kind, computed, key }) {
+  if (type !== "Property" || kind !== "init" || computed) return undefined;
+  return key.type === "Identifier" ? key.name : String(key.value);
+}
+
+function eigenschaftIn({ properties }, gesucht) {
+  const namen = properties.map(schluesselName);
+  const treffer = properties.filter((_eigenschaft, index) => namen[index] === gesucht);
+  return namen.includes(undefined) || treffer.length !== 1 ? undefined : treffer[0].value;
+}
+
+function aufgeloest(ausdruck, bekannt) {
+  if (ausdruck.type === "Identifier") return bekannt.get(ausdruck.name);
+  if (ausdruck.type !== "MemberExpression" || ausdruck.computed || ausdruck.optional) return undefined;
+  const objekt = aufgeloest(ausdruck.object, bekannt);
+  const eingefroren = objekt !== undefined && istFreeze(objekt) && objekt.arguments[0].type === "ObjectExpression";
+  return eingefroren ? eigenschaftIn(objekt.arguments[0], ausdruck.property.name) : undefined;
+}
+
+function festerSchluessel(eigenschaft, bekannt) {
+  if (!eigenschaft.computed) return true;
+  const schluessel = VERWEIS.has(eigenschaft.key.type) ? aufgeloest(eigenschaft.key, bekannt) : eigenschaft.key;
+  return schluessel?.type === "Literal" && SCHLUESSELARTEN.has(typeof schluessel.value);
+}
+
+function wirktNichtBeimLaden(ausdruck, bekannt) {
   if (OHNE_WIRKUNG.has(ausdruck.type)) return true;
-  if (ausdruck.type === "ArrayExpression") return ausdruck.elements.every((element) => element !== null && wirktNichtBeimLaden(element));
-  if (ausdruck.type === "ObjectExpression") return ausdruck.properties.every((eigenschaft) => eigenschaft.type === "Property" && !eigenschaft.computed && wirktNichtBeimLaden(eigenschaft.value));
-  return istEingefroren(ausdruck);
+  if (VERWEIS.has(ausdruck.type)) return aufgeloest(ausdruck, bekannt) !== undefined;
+  if (ausdruck.type === "ArrayExpression") return ausdruck.elements.every((element) => element !== null && wirktNichtBeimLaden(element, bekannt));
+  if (ausdruck.type === "ObjectExpression") return ausdruck.properties.every((eigenschaft) => eigenschaft.type === "Property" && festerSchluessel(eigenschaft, bekannt) && wirktNichtBeimLaden(eigenschaft.value, bekannt));
+  return istEingefroren(ausdruck, bekannt);
 }
 
-function istDeklarationOhneWirkung(anweisung) {
-  const deklaration = anweisung.type === "ExportNamedDeclaration" ? anweisung.declaration : anweisung;
+function deklarationIn(anweisung) {
+  return anweisung.type === "ExportNamedDeclaration" ? anweisung.declaration : anweisung;
+}
+
+function istDeklarationOhneWirkung(anweisung, bekannt) {
+  const deklaration = deklarationIn(anweisung);
   if (deklaration?.type === "FunctionDeclaration") return true;
-  return deklaration?.type === "VariableDeclaration" && deklaration.kind === "const" && deklaration.declarations.every(({ id, init }) => id.type === "Identifier" && wirktNichtBeimLaden(init));
+  return deklaration?.type === "VariableDeclaration" && deklaration.kind === "const" && deklaration.declarations.every(({ id, init }) => id.type === "Identifier" && wirktNichtBeimLaden(init, bekannt));
+}
+
+function ohneWirkungBeimLaden(anweisungen) {
+  const bekannt = new Map();
+  for (const anweisung of anweisungen) {
+    if (!istDeklarationOhneWirkung(anweisung, bekannt)) return false;
+    for (const { id, init } of deklarationIn(anweisung).declarations ?? []) bekannt.set(id.name, init);
+  }
+  return true;
 }
 
 function ortsfest(baum) {
@@ -309,7 +354,7 @@ function verschobeneAnweisungen(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
   const bleibt = nachher.baum.body.filter((anweisung) => !istImport(anweisung) && !istWeiterreichung(nachher.pfad, anweisung, neuePfade));
   const ausgelagert = neue.map(({ baum }) => baum.body.filter((anweisung) => !istImport(anweisung)));
-  return verteilt(vorher.baum.body.filter((anweisung) => !istImport(anweisung)), [bleibt, ...ausgelagert]) ? ausgelagert.flat() : null;
+  return verteilt(vorher.baum.body.filter((anweisung) => !istImport(anweisung)), [bleibt, ...ausgelagert]) ? ausgelagert : null;
 }
 
 function gleicheExporte(vorher, nachher, neue) {
@@ -317,25 +362,36 @@ function gleicheExporte(vorher, nachher, neue) {
   return isDeepStrictEqual(exportNamen(vorher.pfad, vorher.baum), exportNamen(nachher.pfad, nachher.baum, exporteDerNeuen));
 }
 
-function ausgelagerteAnweisungen([vorher, nachher, ...neue]) {
+function gleicherGraph(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
+  return neue.every((datei) => importeAusVorher(vorher, datei)) && importeDerHilfe(vorher, nachher, neuePfade) && nichtsFaelltWeg(vorher, nachher, neue);
+}
+
+function jedeNeueWeitergereicht(nachher, neue) {
+  return neue.every(({ pfad }) => nachher.baum.body.some((anweisung) => istWeiterreichung(nachher.pfad, anweisung, [pfad])));
+}
+
+function ausgelagerteAnweisungen([vorher, nachher, ...neue], weiterreichen) {
   const verschoben = verschobeneAnweisungen(vorher, nachher, neue);
-  if (verschoben === null || !verschoben.every(istDeklarationOhneWirkung) || !neue.every(({ baum }) => ortsfest(baum))) return null;
-  const gleicherGraph = neue.every((datei) => importeAusVorher(vorher, datei)) && importeDerHilfe(vorher, nachher, neuePfade) && nichtsFaelltWeg(vorher, nachher, neue);
-  return gleicherGraph && gleicheExporte(vorher, nachher, neue) && ohneVerlorenenNamen(vorher, [nachher, ...neue]) ? verschoben.length : null;
+  if (verschoben === null || !verschoben.every(ohneWirkungBeimLaden) || !neue.every(({ baum }) => ortsfest(baum))) return null;
+  if (weiterreichen && !jedeNeueWeitergereicht(nachher, neue)) return null;
+  return gleicherGraph(vorher, nachher, neue) && gleicheExporte(vorher, nachher, neue) && ohneVerlorenenNamen(vorher, [nachher, ...neue]) ? verschoben.flat().length : null;
+}
+
+export async function auslagerungAus({ hilfe, neue, vorher, lesen }, { root, weiterreichen = false }) {
+  const texte = [{ pfad: hilfe, text: vorher }, ...[hilfe, ...neue].map((pfad) => ({ pfad, text: lesen(pfad) }))];
+  if (texte.some(({ text }) => text === undefined)) return null;
+  const gelesen = await gelesenAlle(texte, { root, eslint: new ESLint({ cwd: root }) });
+  const anweisungen = gelesen === null ? null : ausgelagerteAnweisungen(gelesen, weiterreichen);
+  return anweisungen === null ? null : { hilfe, neue, anweisungen };
 }
 
 export async function reineAuslagerung(basis, root) {
   const aenderung = nurTesthilfenUndTests(basis, root);
   if (aenderung === null || !auslagerbar(aenderung, root)) return null;
   const [hilfe] = aenderung.angepasst;
-  const texte = [
-    { pfad: hilfe, text: git(["show", `${basis}:${hilfe}`], { cwd: root }) },
-    ...[hilfe, ...aenderung.hinzugefuegt].map((pfad) => ({ pfad, text: readFileSync(join(root, pfad), "utf8") })),
-  ];
-  const gelesen = await gelesenAlle(texte, { root, eslint: new ESLint({ cwd: root }) });
-  const anweisungen = gelesen === null ? null : ausgelagerteAnweisungen(gelesen);
-  return anweisungen === null ? null : { hilfe, neue: aenderung.hinzugefuegt, anweisungen };
+  const vorher = git(["show", `${basis}:${hilfe}`], { cwd: root });
+  return auslagerungAus({ hilfe, neue: aenderung.hinzugefuegt, vorher, lesen: (pfad) => readFileSync(join(root, pfad), "utf8") }, { root });
 }
 
 export function auslagerungsZeile({ hilfe, neue, anweisungen }) {
