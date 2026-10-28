@@ -1,48 +1,20 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import {
+  EXIT_AUFRUF,
+  EXIT_OK,
+  EXIT_VORHANDEN,
+  frischeWurzel,
+  neu,
+  raeumeWurzelnAuf,
+} from "./neu-hilfen.js";
 
-const REPO = fileURLToPath(new URL("../../", import.meta.url));
-const EINSTIEG = join(REPO, "tools/neu/neu.mjs");
-const EXIT_OK = 0;
-const EXIT_VORHANDEN = 1;
-const EXIT_AUFRUF = 2;
-const KARTEN = ["tools/bausteine.json", "tools/bereiche.json"];
-const wurzeln = [];
-
-function frischeWurzel() {
-  const wurzel = mkdtempSync(join(tmpdir(), "neu-test-art-"));
-  wurzeln.push(wurzel);
-  mkdirSync(join(wurzel, "tools"), { recursive: true });
-  for (const karte of KARTEN) cpSync(join(REPO, karte), join(wurzel, karte));
-  mkdirSync(join(wurzel, "test/anrufe"), { recursive: true });
-  return wurzel;
-}
-
-function neu(wurzel, ...argumente) {
-  return spawnSync(process.execPath, [EINSTIEG, "--wurzel", wurzel, ...argumente], {
-    encoding: "utf8",
-  });
-}
-
-after(() => {
-  for (const wurzel of wurzeln) rmSync(wurzel, { recursive: true, force: true });
-});
+after(raeumeWurzelnAuf);
 
 test("neu test legt test/<bereich>/<name>.test.js an und nennt die Datei", () => {
-  const wurzel = frischeWurzel();
+  const wurzel = frischeWurzel("neu-test-art-");
   const lauf = neu(wurzel, "test", "anrufe", "rueckruf-zusage");
   assert.equal(lauf.status, EXIT_OK, "npm run neu legt keinen Test an: " + lauf.stderr);
   const datei = join(wurzel, "test/anrufe/rueckruf-zusage.test.js");
@@ -52,8 +24,9 @@ test("neu test legt test/<bereich>/<name>.test.js an und nennt die Datei", () =>
 });
 
 test("neu test überschreibt keine vorhandene Datei", () => {
-  const wurzel = frischeWurzel();
+  const wurzel = frischeWurzel("neu-test-art-");
   const datei = join(wurzel, "test/anrufe/vorhanden.test.js");
+  mkdirSync(join(wurzel, "test/anrufe"), { recursive: true });
   writeFileSync(datei, "meine Arbeit\n");
   const lauf = neu(wurzel, "test", "anrufe", "vorhanden");
   assert.equal(lauf.status, EXIT_VORHANDEN);
@@ -62,7 +35,7 @@ test("neu test überschreibt keine vorhandene Datei", () => {
 });
 
 test("neu test lehnt ungültige Namen und unbekannte Bereiche ab, ohne etwas anzulegen", () => {
-  const wurzel = frischeWurzel();
+  const wurzel = frischeWurzel("neu-test-art-");
   const faelle = [
     ["anrufe", "../ausbruch"],
     ["anrufe", "Gross"],
