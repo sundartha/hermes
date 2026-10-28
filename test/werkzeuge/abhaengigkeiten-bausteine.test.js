@@ -7,8 +7,9 @@ import { KONFIGURATION, istGruen, istRot, pruefe } from "./abhaengigkeiten-probe
 import { REPO_ROOT, commitAll, probeRepository, writeFiles } from "./probe-repo.js";
 
 const KARTE = "tools/bausteine.json";
+const EXIT_ABBRUCH = 2;
 
-function karte(aenderung = {}) {
+function karte(aenderung = {}, schichten = [["werk"], ["kasse", "fach"], ["start"]]) {
   const bausteine = [
     { baustein: "start", zweck: "Baut zusammen.", quellen: ["src/app.js"], eingaenge: [], nutzt: [], importiertJedeDatei: true },
     { baustein: "werk", zweck: "Hilfen.", quellen: ["src/werk/", "src/alt/"], eingaenge: "alle", nutzt: [] },
@@ -16,7 +17,7 @@ function karte(aenderung = {}) {
     { baustein: "fach", zweck: "Fach.", quellen: ["src/fach/", "src/kasse/sonder.js"], eingaenge: ["src/fach/tor.js"], nutzt: ["kasse"] },
   ].map((eintrag) => ({ ...eintrag, ...aenderung[eintrag.baustein] }));
   const roh = {
-    schichten: [["werk"], ["kasse", "fach"], ["start"]],
+    schichten,
     bausteine,
     altlast: [{ von: "werk", nach: "fach" }],
   };
@@ -88,6 +89,11 @@ test("bausteine: ein Import auf eine Datei, die kein Eingang ist, ist rot und ne
   istRot(ergebnis, /src\/fach\/tor\.js → src\/kasse\/innen\.js: src\/kasse\/innen\.js ist kein Eingang von kasse\. Importiere über einen Eingang von kasse \(etwa src\/kasse\/tor\.js;/);
 });
 
+test("bausteine: ein Import auf einen Baustein ohne Eingänge nennt, dass er heute keinen hat", (context) => {
+  const ergebnis = nachAenderung(context, { [KARTE]: karte({ fach: { eingaenge: [] } }) });
+  istRot(ergebnis, /src\/alt\/alt\.js → src\/fach\/tor\.js: src\/fach\/tor\.js ist kein Eingang von fach\. Importiere über einen Eingang von fach \(er hat heute keinen; alle stehen in tools\/bausteine\.json\)/);
+});
+
 test("bausteine: jede Datei eines Grundbausteins ist Eingang, und start importiert jede Datei", (context) => {
   istGruen(
     nachAenderung(context, {
@@ -107,6 +113,12 @@ test("bausteine: ein Import gegen die Schichtfolge ist rot und nennt, was der Ba
 test("bausteine: ein Fachbaustein nutzt einen anderen derselben Schicht nur, wenn nutzt ihn nennt", (context) => {
   const ergebnis = nachAenderung(context, { [KARTE]: karte({ fach: { nutzt: [] } }) });
   istRot(ergebnis, /src\/fach\/tor\.js → src\/kasse\/tor\.js: fach darf kasse nicht nutzen; .*\(fach nutzt: werk\)/);
+});
+
+test("bausteine: ein Baustein, der in keiner Schicht der Karte steht, bricht die Prüfung mit Exit 2 ab und nennt ihn", (context) => {
+  const ergebnis = nachAenderung(context, { [KARTE]: karte({}, [["werk"], ["kasse", "fach"]]) });
+  assert.equal(ergebnis.status, EXIT_ABBRUCH, ergebnis.stderr);
+  assert.match(ergebnis.stderr, /tools\/bausteine\.json: start steht in keiner Schicht\./);
 });
 
 test("bausteine: Altlast gilt je Bausteinpaar; ein weiterer Import auf dem Paar braucht trotzdem einen Eingang", (context) => {
