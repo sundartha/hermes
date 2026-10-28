@@ -230,8 +230,8 @@ export function createCall(
   return call;
 }
 
-export function getCall(s, id) {
-  return s.calls.find((c) => c.id === id || c.twilioSid === id) || null;
+export function getCall(state, id) {
+  return state.calls.find((call) => call.id === id || call.twilioSid === id) || null;
 }
 
 export function addTranscript(s, callId, role, text) {
@@ -241,16 +241,16 @@ export function addTranscript(s, callId, role, text) {
   return true;
 }
 
-export function purgeTranscript(s, callId) {
-  const call = getCall(s, callId);
+export function purgeTranscript(state, callId) {
+  const call = getCall(state, callId);
   if (!call || call.transcript.length === 0) return false;
   call.transcript = [];
   return true;
 }
 
-export function tenantCallScope(s, tenantId) {
-  const calls = s.calls.filter((c) => c.tenantId === tenantId);
-  return { calls, callIds: new Set(calls.map((c) => c.id)) };
+export function tenantCallScope(state, tenantId) {
+  const calls = state.calls.filter((call) => call.tenantId === tenantId);
+  return { calls, callIds: new Set(calls.map((call) => call.id)) };
 }
 
 export function eraseTenantData(s, tenantId) {
@@ -277,15 +277,15 @@ export function eraseTenantData(s, tenantId) {
   return removed;
 }
 
-export function exportTenantData(s, tenantId) {
-  const { calls, callIds } = tenantCallScope(s, tenantId);
+export function exportTenantData(state, tenantId) {
+  const { calls, callIds } = tenantCallScope(state, tenantId);
   return {
     tenantId,
     exportedAt: new Date().toISOString(),
-    privateNumber: findTenant(s, tenantId)?.privateNumber ?? null,
+    privateNumber: findTenant(state, tenantId)?.privateNumber ?? null,
     calls,
-    actionItems: s.actionItems.filter((a) => callIds.has(a.callId)),
-    notifications: s.notifications.filter((n) => callIds.has(n.callId)),
+    actionItems: state.actionItems.filter((actionItem) => callIds.has(actionItem.callId)),
+    notifications: state.notifications.filter((notification) => callIds.has(notification.callId)),
   };
 }
 
@@ -298,8 +298,8 @@ function setOnceTimestamp(call, fieldName, atIso = new Date().toISOString()) {
   return { call, changed };
 }
 
-export function markAnswered(s, callId) {
-  return setOnceTimestamp(getCall(s, callId), "answeredAt");
+export function markAnswered(state, callId) {
+  return setOnceTimestamp(getCall(state, callId), "answeredAt");
 }
 
 export function trueUpAnsweredAt(state, callId, answeredAtIso) {
@@ -322,20 +322,20 @@ export function setCallEndedAt(s, callId, status, endedAtIso) {
   return { call, changed };
 }
 
-export function endCallRecord(s, callId, status = "completed") {
-  return setCallEndedAt(s, callId, status, new Date().toISOString());
+export function endCallRecord(state, callId, status = "completed") {
+  return setCallEndedAt(state, callId, status, new Date().toISOString());
 }
 
-export function markSummarySmsSent(s, callId) {
-  return setOnceTimestamp(getCall(s, callId), "summarySmsSentAt");
+export function markSummarySmsSent(state, callId) {
+  return setOnceTimestamp(getCall(state, callId), "summarySmsSentAt");
 }
 
-export function markSummaryMailSent(s, callId) {
-  return setOnceTimestamp(getCall(s, callId), "summaryMailSentAt");
+export function markSummaryMailSent(state, callId) {
+  return setOnceTimestamp(getCall(state, callId), "summaryMailSentAt");
 }
 
-export function markBilled(s, callId) {
-  return setOnceTimestamp(getCall(s, callId), "billedAt");
+export function markBilled(state, callId) {
+  return setOnceTimestamp(getCall(state, callId), "billedAt");
 }
 
 function istKanonischerIsoZeitpunkt(wert) {
@@ -430,8 +430,8 @@ export function chargeAnchorsOfCall(call) {
 
 export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
 
-export function recordCallEstimatedCostCents(s, callId, { costCents, chargeAnchors }) {
-  const call = getCall(s, callId);
+export function recordCallEstimatedCostCents(state, callId, { costCents, chargeAnchors }) {
+  const call = getCall(state, callId);
   if (!call || call.estimatedCostCents !== null || !isBookableCents(costCents))
     return { call: call || null, changed: false };
   call.estimatedCostCents = costCents;
@@ -445,8 +445,8 @@ export function nextCostTruingAttempt(call) {
   return (Number.isSafeInteger(attempts) && attempts >= 0 ? attempts : 0) + 1;
 }
 
-export function recordCallCostTruingResult(s, callId, { source, actualCostMicroCents, closedAt }) {
-  const call = getCall(s, callId);
+export function recordCallCostTruingResult(state, callId, { source, actualCostMicroCents, closedAt }) {
+  const call = getCall(state, callId);
   if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
     return { call: call || null, changed: false };
   call.costTruingAttempts = nextCostTruingAttempt(call);
@@ -504,8 +504,8 @@ export function carrierEndMsOf(call, nowMs) {
   return Math.min(nowMs, Date.parse(nachlaufStartIso));
 }
 
-export function recordFailureReason(s, callId, reason) {
-  const call = getCall(s, callId);
+export function recordFailureReason(state, callId, reason) {
+  const call = getCall(state, callId);
   let changed = false;
   if (call && reason && !call.failureReason) {
     call.failureReason = reason;
@@ -600,8 +600,8 @@ export function recordCalleeConfirmedTimezone(state, callId, { timezone, origin,
   return { call, changed: true };
 }
 
-export function countCallerTurn(s, callId) {
-  const call = getCall(s, callId);
+export function countCallerTurn(state, callId) {
+  const call = getCall(state, callId);
   if (!call) return { call: null, changed: false };
   call.callerTurns = (Number.isSafeInteger(call.callerTurns) ? call.callerTurns : 0) + 1;
   return { call, changed: true };
@@ -621,11 +621,11 @@ export function isConsultEventId(eventId) {
 }
 
 function cleanQuestions(questions) {
-  return Array.isArray(questions) ? questions.filter((q) => typeof q === "string" && q) : [];
+  return Array.isArray(questions) ? questions.filter((question) => typeof question === "string" && question) : [];
 }
 
-export function emitConsult(s, callId, questions) {
-  const call = getCall(s, callId);
+export function emitConsult(state, callId, questions) {
+  const call = getCall(state, callId);
   const asked = cleanQuestions(questions);
   if (!call || !asked.length) return { call: call || null, changed: false, consult: null };
   const chain = (call.consults ||= []);
@@ -642,13 +642,13 @@ export function emitConsult(s, callId, questions) {
   return { call, changed: true, consult };
 }
 
-export function pendingConsult(s, callId, afterEventId) {
-  const call = getCall(s, callId);
+export function pendingConsult(state, callId, afterEventId) {
+  const call = getCall(state, callId);
   if (!call || !Array.isArray(call.consults)) return null;
   const afterSeq = consultSeqOf(afterEventId);
   return (
     call.consults.find(
-      (c) => c.status === CONSULT_STATUS.OPEN && (afterSeq === null || c.seq > afterSeq),
+      (consult) => consult.status === CONSULT_STATUS.OPEN && (afterSeq === null || consult.seq > afterSeq),
     ) ?? null
   );
 }
@@ -678,12 +678,12 @@ function consultAlive(ageMs, openMs) {
   return Number.isFinite(ageMs) && Number.isFinite(openMs) && ageMs < openMs;
 }
 
-function openConsultFor(s, callId, eventId) {
-  const call = getCall(s, callId);
+function openConsultFor(state, callId, eventId) {
+  const call = getCall(state, callId);
   if (!call || call.status !== "active")
     return { call: call || null, consult: null, outcome: CONSULT_ANSWER.CALL_ENDED };
   const consult = Array.isArray(call.consults)
-    ? call.consults.find((c) => c.id === eventId)
+    ? call.consults.find((consultEntry) => consultEntry.id === eventId)
     : null;
   if (!consult) return { call, consult: null, outcome: CONSULT_ANSWER.UNKNOWN_EVENT };
   if (consult.status !== CONSULT_STATUS.OPEN)
@@ -691,9 +691,9 @@ function openConsultFor(s, callId, eventId) {
   return { call, consult, outcome: null };
 }
 
-export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
-  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
-  const reject = (o) => ({ call: call || null, changed: false, outcome: o, mergedFacts: 0 });
+export function answerConsult(state, callId, { eventId, facts, nowMs, openMs }) {
+  const { call, consult, outcome } = openConsultFor(state, callId, eventId);
+  const reject = (rejectedOutcome) => ({ call: call || null, changed: false, outcome: rejectedOutcome, mergedFacts: 0 });
   if (outcome) return reject(outcome);
   if (isInCallConsult(call, consult) && !consultAlive(consultAgeMs(consult, nowMs), openMs))
     return reject(CONSULT_ANSWER.DEADLINE_PASSED);
@@ -706,15 +706,15 @@ export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED, mergedFacts };
 }
 
-export function addLookupFacts(s, callId, facts) {
-  const call = getCall(s, callId);
+export function addLookupFacts(state, callId, facts) {
+  const call = getCall(state, callId);
   if (!call) return { call: null, changed: false, added: 0 };
   const added = mergeContextFacts(call, facts);
   return { call, changed: added > 0, added };
 }
 
-export function countCallLookup(s, callId) {
-  const call = getCall(s, callId);
+export function countCallLookup(state, callId) {
+  const call = getCall(state, callId);
   if (!call) return 0;
   call.lookups = (call.lookups || 0) + 1;
   return call.lookups;
@@ -757,8 +757,8 @@ export function elevenLabsLookupCount(call) {
   return Array.isArray(call?.lookupLog) ? call.lookupLog.length : 0;
 }
 
-export function expireOpenConsults(s, callId) {
-  const call = getCall(s, callId);
+export function expireOpenConsults(state, callId) {
+  const call = getCall(state, callId);
   if (!call || !Array.isArray(call.consults)) return { call: call || null, changed: false };
   let changed = false;
   for (const consult of call.consults) {
@@ -812,8 +812,8 @@ export function consultAnswerAwaitingDelivery(call) {
   return inCallConsults(call).some(answerAwaitsDelivery);
 }
 
-export function markConsultAnswerDelivered(s, callId) {
-  const call = getCall(s, callId);
+export function markConsultAnswerDelivered(state, callId) {
+  const call = getCall(state, callId);
   if (!call) return { call: null, changed: false, marked: 0 };
   const deliveredAt = new Date().toISOString();
   let marked = 0;
@@ -825,10 +825,10 @@ export function markConsultAnswerDelivered(s, callId) {
   return { call, changed: marked > 0, marked };
 }
 
-export function markConsultAskDelivered(s, callId, eventId) {
-  const call = getCall(s, callId);
+export function markConsultAskDelivered(state, callId, eventId) {
+  const call = getCall(state, callId);
   const consult = Array.isArray(call?.consults)
-    ? call.consults.find((c) => c.id === eventId)
+    ? call.consults.find((consultEntry) => consultEntry.id === eventId)
     : null;
   if (!consult || consult.status !== CONSULT_STATUS.OPEN || consult.askDeliveredAt)
     return { call: call || null, changed: false };
@@ -836,17 +836,17 @@ export function markConsultAskDelivered(s, callId, eventId) {
   return { call, changed: true };
 }
 
-export function ackConsult(s, callId, { eventId }) {
-  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
+export function ackConsult(state, callId, { eventId }) {
+  const { call, consult, outcome } = openConsultFor(state, callId, eventId);
   if (outcome) return { call: call || null, changed: false, outcome };
   if (consult.ackedAt) return { call, changed: false, outcome: CONSULT_ANSWER.ACCEPTED };
   consult.ackedAt = new Date().toISOString();
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED };
 }
 
-export function timeOutStagedConsult(s, callId, { consultId, reason, nowMs, stageMs }) {
-  const call = getCall(s, callId);
-  const consult = call?.consults?.find((c) => c.id === consultId) ?? null;
+export function timeOutStagedConsult(state, callId, { consultId, reason, nowMs, stageMs }) {
+  const call = getCall(state, callId);
+  const consult = call?.consults?.find((consultEntry) => consultEntry.id === consultId) ?? null;
   const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
   if (!consult || consult.status !== CONSULT_STATUS.OPEN) return idle;
   if (consultAlive(consultAgeMs(consult, nowMs), stageMs)) return idle;
@@ -855,18 +855,18 @@ export function timeOutStagedConsult(s, callId, { consultId, reason, nowMs, stag
   return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
 }
 
-export function noteConsultPoll(s, callId, nowMs = Date.now()) {
-  const call = getCall(s, callId);
+export function noteConsultPoll(state, callId, nowMs = Date.now()) {
+  const call = getCall(state, callId);
   if (call) call.consultPolledAtMs = nowMs;
 }
 
-export function advanceInCallConsult(s, callId, { nowMs, waitMs, openMs }) {
-  const call = getCall(s, callId);
+export function advanceInCallConsult(state, callId, { nowMs, waitMs, openMs }) {
+  const call = getCall(state, callId);
   const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
   if (!call) return idle;
   if (consultAnswerAwaitingDelivery(call))
     return { call, changed: false, wait: CONSULT_WAIT.ANSWERED };
-  const consult = inCallConsults(call).find((c) => c.status === CONSULT_STATUS.OPEN);
+  const consult = inCallConsults(call).find((consultEntry) => consultEntry.status === CONSULT_STATUS.OPEN);
   if (!consult) return idle;
   const ageMs = consultAgeMs(consult, nowMs);
   if (!consultAlive(ageMs, openMs)) {
@@ -884,35 +884,35 @@ export function advanceInCallConsult(s, callId, { nowMs, waitMs, openMs }) {
   return idle;
 }
 
-export function countNoSpeechTurn(s, callId) {
-  const call = getCall(s, callId);
+export function countNoSpeechTurn(state, callId) {
+  const call = getCall(state, callId);
   if (!call) return 0;
   call.noSpeechStreak = (call.noSpeechStreak || 0) + 1;
   return call.noSpeechStreak;
 }
 
-export function clearNoSpeechStreak(s, callId) {
-  const call = getCall(s, callId);
+export function clearNoSpeechStreak(state, callId) {
+  const call = getCall(state, callId);
   if (call) call.noSpeechStreak = 0;
 }
 
 export function countOutboundCallsSince(
-  s,
+  state,
   sinceIso,
   { requestedBy = null, tenantId = null, to = null } = {},
 ) {
-  return s.calls.filter(
-    (c) =>
-      c.direction === "outbound" &&
-      c.startedAt >= sinceIso &&
-      (requestedBy == null || c.requestedBy === requestedBy) &&
-      (tenantId == null || c.tenantId === tenantId) &&
-      (to == null || c.to === to),
+  return state.calls.filter(
+    (call) =>
+      call.direction === "outbound" &&
+      call.startedAt >= sinceIso &&
+      (requestedBy == null || call.requestedBy === requestedBy) &&
+      (tenantId == null || call.tenantId === tenantId) &&
+      (to == null || call.to === to),
   ).length;
 }
 
-export function activeCallsFor(s, tenantId) {
-  return s.calls.filter((c) => c.tenantId === tenantId && c.status === "active");
+export function activeCallsFor(state, tenantId) {
+  return state.calls.filter((call) => call.tenantId === tenantId && call.status === "active");
 }
 
 export function counterpartyMemory(s, tenantId, e164) {
@@ -942,8 +942,8 @@ function actionItemKey(text) {
     .replace(ACTION_ITEM_TRAILING_PUNCTUATION, "");
 }
 
-function existingActionItem(s, callId, key) {
-  return s.actionItems.find((a) => a.callId === callId && actionItemKey(a.text) === key) || null;
+function existingActionItem(state, callId, key) {
+  return state.actionItems.find((actionItem) => actionItem.callId === callId && actionItemKey(actionItem.text) === key) || null;
 }
 
 export function addActionItem(s, callId, text, type = "todo") {
@@ -963,12 +963,12 @@ export function addActionItem(s, callId, text, type = "todo") {
   return { item, duplicate: false };
 }
 
-export function callActionItems(s, callId) {
-  return s.actionItems.filter((item) => item.callId === callId).reverse();
+export function callActionItems(state, callId) {
+  return state.actionItems.filter((item) => item.callId === callId).reverse();
 }
 
-export function toggleActionItem(s, id) {
-  const item = s.actionItems.find((a) => a.id === id);
+export function toggleActionItem(state, id) {
+  const item = state.actionItems.find((actionItem) => actionItem.id === id);
   if (item) item.done = !item.done;
   return item;
 }
@@ -977,13 +977,13 @@ export function calendarFor(s, tenantId) {
   return (s.calendar[tenantId] ||= []);
 }
 
-export function getCalendar(s, tenantId) {
-  return calendarFor(s, tenantId).sort((a, b) => a.start.localeCompare(b.start));
+export function getCalendar(state, tenantId) {
+  return calendarFor(state, tenantId).sort((entryA, entryB) => entryA.start.localeCompare(entryB.start));
 }
 
-export function addCalendarEvent(s, { tenantId, title, startIso, endIso }) {
+export function addCalendarEvent(state, { tenantId, title, startIso, endIso }) {
   const ev = { id: newId("ev"), title, start: startIso, end: endIso };
-  calendarFor(s, tenantId).push(ev);
+  calendarFor(state, tenantId).push(ev);
   return ev;
 }
 
@@ -991,18 +991,18 @@ export function findConflict(s, tenantId, startIso, endIso) {
   return getCalendar(s, tenantId).find((ev) => ev.start < endIso && startIso < ev.end) || null;
 }
 
-export function numberRecordByE164(s, e164) {
+export function numberRecordByE164(state, e164) {
   if (!e164) return null;
-  return s.numbers.find((n) => n.e164 === e164 && n.status === NUMBER_STATUS.ACTIVE) || null;
+  return state.numbers.find((number) => number.e164 === e164 && number.status === NUMBER_STATUS.ACTIVE) || null;
 }
 
-export function findTenantByNumber(s, e164) {
-  return numberRecordByE164(s, e164)?.tenantId ?? null;
+export function findTenantByNumber(state, e164) {
+  return numberRecordByE164(state, e164)?.tenantId ?? null;
 }
 
-export function resolveCallLanguage(s, { tenantId, numberRecord }) {
-  const settingsLang = settingsFor(s, tenantId).language;
-  const tenant = findTenant(s, tenantId);
+export function resolveCallLanguage(state, { tenantId, numberRecord }) {
+  const settingsLang = settingsFor(state, tenantId).language;
+  const tenant = findTenant(state, tenantId);
   return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
 }
 
@@ -1040,8 +1040,8 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
-export function seedBootstrapIdpSubject(s, rawSub, tenantId) {
-  const owner = findTenant(s, tenantId);
+export function seedBootstrapIdpSubject(state, rawSub, tenantId) {
+  const owner = findTenant(state, tenantId);
   if (!owner || owner.idpSubject) return false;
   const sub = typeof rawSub === "string" ? rawSub.trim() : "";
   if (!sub) return false;
@@ -1053,25 +1053,25 @@ export function canTransitionNumber(from, to) {
   return (NUMBER_TRANSITIONS[from] || []).includes(to);
 }
 
-export function findNumber(s, id) {
-  return s.numbers.find((n) => n.id === id) || null;
+export function findNumber(state, id) {
+  return state.numbers.find((number) => number.id === id) || null;
 }
 
-export const tenantsOf = (s) => s.tenants || [];
+export const tenantsOf = (state) => state.tenants || [];
 
-export function findTenant(s, id) {
-  return tenantsOf(s).find((t) => t.id === id) || null;
+export function findTenant(state, id) {
+  return tenantsOf(state).find((tenant) => tenant.id === id) || null;
 }
 
-export function tenantContext(s, ownerName, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantContext(state, ownerName, tenantId) {
+  const tenant = findTenant(state, tenantId);
   const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
   return {
     tenantId,
     ownerName: effectiveOwner,
     firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
-    settings: settingsFor(s, tenantId),
-    calendar: calendarFor(s, tenantId),
+    settings: settingsFor(state, tenantId),
+    calendar: calendarFor(state, tenantId),
   };
 }
 
@@ -1087,103 +1087,103 @@ export function applyOwnerIdentity(tenant, firstName, lastName) {
   if (full) tenant.ownerName = full;
 }
 
-export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } = {}) {
-  const tenant = findTenant(s, tenantId);
+export function setTenantIdentityIfAbsent(state, tenantId, { firstName, lastName } = {}) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || tenant.ownerName) return false;
   applyOwnerIdentity(tenant, firstName, lastName);
   return Boolean(tenant.ownerName);
 }
 
-function tenantBudgetRow(s, tenantId) {
-  return s.tenantBudgets.find((b) => b.tenantId === tenantId) || null;
+function tenantBudgetRow(state, tenantId) {
+  return state.tenantBudgets.find((budget) => budget.tenantId === tenantId) || null;
 }
 
-function seedTenantDefaultBudget(s, tenantId, defaultBudgetCents) {
+function seedTenantDefaultBudget(state, tenantId, defaultBudgetCents) {
   if (!defaultBudgetCents) return;
-  if (tenantBudgetRow(s, tenantId)) return;
-  setTenantBudget(s, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
+  if (tenantBudgetRow(state, tenantId)) return;
+  setTenantBudget(state, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
 }
 
 export function registerTenant(
-  s,
+  state,
   id,
   { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
 ) {
   const e164 = normalizePrivateNumber(privateNumber, country);
-  const existing = findTenant(s, id);
+  const existing = findTenant(state, id);
   if (existing) {
     if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
     if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
     if (e164 && !existing.privateNumber) existing.privateNumber = e164;
-    seedTenantDefaultBudget(s, id, defaultBudgetCents);
+    seedTenantDefaultBudget(state, id, defaultBudgetCents);
     return existing;
   }
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
   applyOwnerIdentity(tenant, firstName, lastName);
   if (idpSubject) tenant.idpSubject = idpSubject;
   if (e164) tenant.privateNumber = e164;
-  s.tenants.push(tenant);
-  seedTenantDefaultBudget(s, id, defaultBudgetCents);
+  state.tenants.push(tenant);
+  seedTenantDefaultBudget(state, id, defaultBudgetCents);
   return tenant;
 }
 
-export function setKycLevel(s, tenantId, level) {
+export function setKycLevel(state, tenantId, level) {
   if (!KYC_ORDER.includes(level)) throw new Error(`setKycLevel: unbekannte KYC-Stufe ${level}`);
-  const tenant = findTenant(s, tenantId);
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`setKycLevel: Tenant ${tenantId} nicht gefunden`);
   tenant.kycLevel = level;
   return tenant;
 }
 
-export function seedBootstrapKyc(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function seedBootstrapKyc(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || tenant.kycLevel != null) return false;
-  setKycLevel(s, tenantId, KYC_LEVEL.ID_VERIFIED);
+  setKycLevel(state, tenantId, KYC_LEVEL.ID_VERIFIED);
   return true;
 }
 
-export function kycReached(s, tenantId, minLevel) {
-  const tenant = findTenant(s, tenantId);
+export function kycReached(state, tenantId, minLevel) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || tenant.kycLevel == null) return false;
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
-export function tenantActiveSubscriber(s, tenantId, minLevel) {
-  const tenant = findTenant(s, tenantId);
+export function tenantActiveSubscriber(state, tenantId, minLevel) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return false;
   if (tenant.kycLevel == null) return false;
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
-export function tenantInactive(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantInactive(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return !!tenant && tenant.status !== TENANT_STATUS.ACTIVE;
 }
 
-export function setSuspendedAtIfAbsent(s, tenantId, nowIso) {
-  const tenant = findTenant(s, tenantId);
+export function setSuspendedAtIfAbsent(state, tenantId, nowIso) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || tenant.suspendedAt) return { tenant, changed: false };
   tenant.suspendedAt = nowIso;
   return { tenant, changed: true };
 }
 
-export function clearSuspendedAt(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function clearSuspendedAt(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant || !tenant.suspendedAt) return { tenant, changed: false };
   tenant.suspendedAt = null;
   return { tenant, changed: true };
 }
 
-export function tenantSuspendedAt(s, tenantId) {
-  return findTenant(s, tenantId)?.suspendedAt ?? null;
+export function tenantSuspendedAt(state, tenantId) {
+  return findTenant(state, tenantId)?.suspendedAt ?? null;
 }
 
 export function setTenantStripe(
-  s,
+  state,
   tenantId,
   { customerId, paymentMethodId, paymentMethodType } = {},
 ) {
-  const tenant = findTenant(s, tenantId);
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`setTenantStripe: Tenant ${tenantId} nicht gefunden`);
   if (customerId !== undefined) tenant.stripeCustomerId = customerId;
   if (paymentMethodId !== undefined) tenant.stripePaymentMethodId = paymentMethodId;
@@ -1191,8 +1191,8 @@ export function setTenantStripe(
   return tenant;
 }
 
-export function tenantStripe(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantStripe(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return {
     customerId: tenant?.stripeCustomerId ?? null,
     paymentMethodId: tenant?.stripePaymentMethodId ?? null,
@@ -1230,8 +1230,8 @@ export function setTenantSubscription(
   return tenant;
 }
 
-export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
-  const tenant = findTenant(s, tenantId);
+export function deriveTenantBudgetFromPlan(state, tenantId, cfg) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return;
   const slug = tenant.stripePlanSlug;
   if (!slug) return;
@@ -1250,7 +1250,7 @@ export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
     );
     return;
   }
-  setTenantBudget(s, tenantId, { budgetCents: capCents, hardCapCents: capCents });
+  setTenantBudget(state, tenantId, { budgetCents: capCents, hardCapCents: capCents });
 }
 
 export function tenantSubscription(s, tenantId) {
@@ -1267,36 +1267,36 @@ export function tenantSubscription(s, tenantId) {
   };
 }
 
-export function findTenantBySubscription(s, subscriptionId) {
+export function findTenantBySubscription(state, subscriptionId) {
   if (!subscriptionId) return null;
-  return s.tenants.find((t) => t.stripeSubscriptionId === subscriptionId) ?? null;
+  return state.tenants.find((tenant) => tenant.stripeSubscriptionId === subscriptionId) ?? null;
 }
 
-export function findTenantByCustomer(s, customerId) {
+export function findTenantByCustomer(state, customerId) {
   if (!customerId) return null;
-  return s.tenants.find((t) => t.stripeCustomerId === customerId) ?? null;
+  return state.tenants.find((tenant) => tenant.stripeCustomerId === customerId) ?? null;
 }
 
 export function tenantExists(state, tenantId) {
   return findTenant(state, tenantId) !== null;
 }
 
-export function setBillingHold(s, tenantId, { reason, dueAtIso = null } = {}) {
-  const tenant = findTenant(s, tenantId);
+export function setBillingHold(state, tenantId, { reason, dueAtIso = null } = {}) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return;
   tenant.billingHold = reason;
   tenant.billingHoldDueAt = dueAtIso;
 }
 
-export function clearBillingHold(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function clearBillingHold(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return;
   tenant.billingHold = null;
   tenant.billingHoldDueAt = null;
 }
 
-export function billingHoldActive(s, tenantId, nowIso) {
-  const tenant = findTenant(s, tenantId);
+export function billingHoldActive(state, tenantId, nowIso) {
+  const tenant = findTenant(state, tenantId);
   const reason = tenant?.billingHold ?? null;
   if (!reason) return null;
   const dueAtIso = tenant.billingHoldDueAt;
@@ -1314,8 +1314,8 @@ export function normalizePrivateNumber(raw, tenantCountryIso) {
   return e164;
 }
 
-export function setPrivateNumber(s, tenantId, raw) {
-  const tenant = findTenant(s, tenantId);
+export function setPrivateNumber(state, tenantId, raw) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`setPrivateNumber: Tenant ${tenantId} nicht gefunden`);
   const e164 = normalizePrivateNumber(raw, tenant.country);
   if (e164 === null) delete tenant.privateNumber;
@@ -1323,13 +1323,13 @@ export function setPrivateNumber(s, tenantId, raw) {
   return tenant;
 }
 
-export function tenantPrivateNumber(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantPrivateNumber(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return tenant?.privateNumber ?? null;
 }
 
-export function setTenantGeo(s, tenantId, { country, defaultLanguage, timezone } = {}) {
-  const tenant = findTenant(s, tenantId);
+export function setTenantGeo(state, tenantId, { country, defaultLanguage, timezone } = {}) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`setTenantGeo: Tenant ${tenantId} nicht gefunden`);
   if (country !== undefined) tenant.country = country;
   if (defaultLanguage !== undefined) tenant.defaultLanguage = defaultLanguage;
@@ -1337,25 +1337,25 @@ export function setTenantGeo(s, tenantId, { country, defaultLanguage, timezone }
   return tenant;
 }
 
-export function tenantGeo(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantGeo(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return { country: tenant?.country ?? null, defaultLanguage: tenant?.defaultLanguage ?? null };
 }
 
-export function tenantTimezone(s, tenantId) {
-  return findTenant(s, tenantId)?.timezone ?? null;
+export function tenantTimezone(state, tenantId) {
+  return findTenant(state, tenantId)?.timezone ?? null;
 }
 
 function occupiesCapacity(number) {
   return number.status !== NUMBER_STATUS.RELEASED && number.status !== NUMBER_STATUS.FAILED;
 }
 
-function liveNumbers(s, tenantId = null) {
-  return s.numbers.filter((n) => occupiesCapacity(n) && (tenantId == null || n.tenantId === tenantId));
+function liveNumbers(state, tenantId = null) {
+  return state.numbers.filter((number) => occupiesCapacity(number) && (tenantId == null || number.tenantId === tenantId));
 }
 
-export function tenantHasLiveNumber(s, tenantId) {
-  return liveNumbers(s, tenantId).length > 0;
+export function tenantHasLiveNumber(state, tenantId) {
+  return liveNumbers(state, tenantId).length > 0;
 }
 
 function markNumberProvisionSkipped(tenant, reason) {
@@ -1382,8 +1382,8 @@ export function markTenantNeedsManualReconcile(state, tenantId) {
   return { tenant, changed: true };
 }
 
-export function tenantMayRequestNumber(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantMayRequestNumber(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return false;
   if (tenant.status === TENANT_STATUS.ACTIVE) return true;
   if (tenant.status === TENANT_STATUS.CLOSED) return false;
@@ -1392,7 +1392,7 @@ export function tenantMayRequestNumber(s, tenantId) {
 }
 
 export function requestNumber(
-  s,
+  state,
   {
     tenantId,
     provider = DEFAULT_PROVIDER,
@@ -1402,14 +1402,14 @@ export function requestNumber(
     maxNumbersPerTenant,
   },
 ) {
-  const tenant = findTenant(s, tenantId);
-  if (!tenantMayRequestNumber(s, tenantId))
+  const tenant = findTenant(state, tenantId);
+  if (!tenantMayRequestNumber(state, tenantId))
     return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
-  if (liveNumbers(s).length >= maxNumbers) {
+  if (liveNumbers(state).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
     return { ok: false, reason: GLOBAL_CAP_REASON };
   }
-  if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant)
+  if (liveNumbers(state, tenantId).length >= maxNumbersPerTenant)
     return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_CAP };
   const number = {
     id: newId("num"),
@@ -1422,7 +1422,7 @@ export function requestNumber(
     providerNumberId: null,
     paymentIntentId: null,
   };
-  s.numbers.push(number);
+  state.numbers.push(number);
   clearNumberProvisionSkip(tenant);
   return { ok: true, number };
 }
@@ -1552,13 +1552,13 @@ export function closeOutageAlert(state, { code, nowMs }) {
 
 const NUMBER_OUT_OF_SERVICE = new Set([NUMBER_STATUS.RELEASED, NUMBER_STATUS.SUSPENDED]);
 
-export function transitionNumber(s, numberId, toStatus) {
-  const number = findNumber(s, numberId);
+export function transitionNumber(state, numberId, toStatus) {
+  const number = findNumber(state, numberId);
   if (!number) throw new Error(`transitionNumber: Nummer ${numberId} nicht gefunden`);
   if (!canTransitionNumber(number.status, toStatus))
     throw new Error(`transitionNumber: illegaler Uebergang ${number.status} -> ${toStatus}`);
   if (NUMBER_OUT_OF_SERVICE.has(toStatus)) {
-    const busy = numberBusyReason(s, number);
+    const busy = numberBusyReason(state, number);
     if (busy)
       throw new Error(
         `transitionNumber: Nummer ${numberId} ist gesperrt (${busy}) - Uebergang nach ${toStatus} abgelehnt`,
@@ -1568,12 +1568,12 @@ export function transitionNumber(s, numberId, toStatus) {
   return number;
 }
 
-export function beginProvisioning(s, numberId) {
-  return transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+export function beginProvisioning(state, numberId) {
+  return transitionNumber(state, numberId, NUMBER_STATUS.PROVISIONING);
 }
 
-export function attachNumberPaymentIntent(s, numberId, paymentIntentId) {
-  const number = findNumber(s, numberId);
+export function attachNumberPaymentIntent(state, numberId, paymentIntentId) {
+  const number = findNumber(state, numberId);
   if (!number) throw new Error(`attachNumberPaymentIntent: Nummer ${numberId} nicht gefunden`);
   number.paymentIntentId = paymentIntentId;
   return number;
@@ -1610,16 +1610,16 @@ export function clearNumberElInboundTrunkBeleg(state, numberId) {
   return { number, changed: true };
 }
 
-export function beginCapturing(s, numberId) {
-  return transitionNumber(s, numberId, NUMBER_STATUS.CAPTURING);
+export function beginCapturing(state, numberId) {
+  return transitionNumber(state, numberId, NUMBER_STATUS.CAPTURING);
 }
 
-export function activateNumber(s, numberId, { e164, providerNumberId, monthlyCostCents = null }) {
-  const number = transitionNumber(s, numberId, NUMBER_STATUS.ACTIVE);
+export function activateNumber(state, numberId, { e164, providerNumberId, monthlyCostCents = null }) {
+  const number = transitionNumber(state, numberId, NUMBER_STATUS.ACTIVE);
   number.e164 = e164;
   number.providerNumberId = providerNumberId ?? null;
   if (monthlyCostCents !== null) number.monthlyCostCents = monthlyCostCents;
-  s.numberAssignments.push({
+  state.numberAssignments.push({
     id: newId("asg"),
     numberId: number.id,
     tenantId: number.tenantId,
@@ -1629,22 +1629,22 @@ export function activateNumber(s, numberId, { e164, providerNumberId, monthlyCos
   return number;
 }
 
-export function failNumber(s, numberId) {
-  return transitionNumber(s, numberId, NUMBER_STATUS.FAILED);
+export function failNumber(state, numberId) {
+  return transitionNumber(state, numberId, NUMBER_STATUS.FAILED);
 }
 
-export function releaseNumber(s, numberId) {
-  const number = transitionNumber(s, numberId, NUMBER_STATUS.RELEASED);
+export function releaseNumber(state, numberId) {
+  const number = transitionNumber(state, numberId, NUMBER_STATUS.RELEASED);
   number.e164 = null;
   number.providerAgentPhoneNumberId = null;
   for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
-  const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
+  const asg = state.numberAssignments.find((assignment) => assignment.numberId === numberId && !assignment.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;
 }
 
-export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey }) {
-  const existing = s.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
+export function recordProvisioningJob(state, { numberId, tenantId, idempotencyKey }) {
+  const existing = state.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
   if (existing) return existing;
   const job = {
     id: newId("job"),
@@ -1657,7 +1657,7 @@ export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey })
     lastError: null,
     createdAt: new Date().toISOString(),
   };
-  s.provisioningJobs.push(job);
+  state.provisioningJobs.push(job);
   return job;
 }
 
@@ -1684,11 +1684,11 @@ export function redriveAgeHoldReason(job, nowMs, maxAgeMs) {
   return null;
 }
 
-export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel }) {
+export function classifyQueuedProvisioningJobs(state, { nowMs, maxAgeMs, kycMinLevel }) {
   const buckets = { close: [], hold: [], redrive: [] };
-  for (const job of s.provisioningJobs) {
+  for (const job of state.provisioningJobs) {
     if (job.status !== PROVISIONING_JOB_STATUS.QUEUED) continue;
-    const number = findNumber(s, job.numberId);
+    const number = findNumber(state, job.numberId);
     if (!number || PROVISION_CLOSE_NUMBER_STATUS.has(number.status)) {
       buckets.close.push(job);
       continue;
@@ -1697,7 +1697,7 @@ export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel
       buckets.hold.push({ job, reason: `mid_flight_${number.status}` });
       continue;
     }
-    if (!tenantActiveSubscriber(s, job.tenantId, kycMinLevel)) {
+    if (!tenantActiveSubscriber(state, job.tenantId, kycMinLevel)) {
       buckets.hold.push({ job, reason: "no_active_subscriber" });
       continue;
     }
@@ -1713,27 +1713,27 @@ export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel
 
 export const RELEASE_VERDICT = Object.freeze({ RELEASE: "release", HOLD: "hold", SKIP: "skip" });
 
-export function numberReleaseVerdict(s, number, { nowMs, graceMs }) {
+export function numberReleaseVerdict(state, number, { nowMs, graceMs }) {
   if (number.status !== NUMBER_STATUS.ACTIVE)
     return { action: RELEASE_VERDICT.SKIP, reason: `not_active_${number.status}` };
-  const suspendedAt = tenantSuspendedAt(s, number.tenantId);
+  const suspendedAt = tenantSuspendedAt(state, number.tenantId);
   if (!suspendedAt) return { action: RELEASE_VERDICT.SKIP, reason: "tenant_not_suspended" };
   const suspendedMs = Date.parse(suspendedAt);
   if (Number.isNaN(suspendedMs))
     return { action: RELEASE_VERDICT.SKIP, reason: "suspended_at_unparsebar" };
   if (nowMs - suspendedMs <= graceMs)
     return { action: RELEASE_VERDICT.SKIP, reason: "grace_not_reached" };
-  const busy = numberBusyReason(s, number, { forTenantId: number.tenantId });
+  const busy = numberBusyReason(state, number, { forTenantId: number.tenantId });
   if (busy) return { action: RELEASE_VERDICT.HOLD, reason: busy };
   if (number.provider !== PROVIDER.TELNYX)
     return { action: RELEASE_VERDICT.HOLD, reason: NUMBER_HOLD_REASON.NON_TELNYX };
   return { action: RELEASE_VERDICT.RELEASE, reason: null };
 }
 
-export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
+export function classifyNumbersForRelease(state, { nowMs, graceMs }) {
   const buckets = { release: [], hold: [], skip: [] };
-  for (const number of s.numbers) {
-    const { action, reason } = numberReleaseVerdict(s, number, { nowMs, graceMs });
+  for (const number of state.numbers) {
+    const { action, reason } = numberReleaseVerdict(state, number, { nowMs, graceMs });
     if (action === RELEASE_VERDICT.RELEASE) buckets.release.push(number);
     else if (action === RELEASE_VERDICT.HOLD) buckets.hold.push({ number, reason });
     else buckets.skip.push({ number, reason });
@@ -1741,41 +1741,41 @@ export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
   return buckets;
 }
 
-export function tenantNumbersForErase(s, tenantId) {
+export function tenantNumbersForErase(state, tenantId) {
   const buckets = { release: [], hold: [] };
-  for (const n of s.numbers) {
-    if (n.tenantId !== tenantId) continue;
-    if (n.status !== NUMBER_STATUS.ACTIVE) continue;
-    if (n.provider !== PROVIDER.TELNYX) continue;
-    const busy = numberBusyReason(s, n, { forTenantId: tenantId });
-    if (busy) buckets.hold.push({ number: n, reason: busy });
-    else buckets.release.push(n);
+  for (const number of state.numbers) {
+    if (number.tenantId !== tenantId) continue;
+    if (number.status !== NUMBER_STATUS.ACTIVE) continue;
+    if (number.provider !== PROVIDER.TELNYX) continue;
+    const busy = numberBusyReason(state, number, { forTenantId: tenantId });
+    if (busy) buckets.hold.push({ number: number, reason: busy });
+    else buckets.release.push(number);
   }
   return buckets;
 }
 
 export function setContractEndCleanupPending(
-  s,
+  state,
   tenantId,
   { numberReleasePending, workosDeletePending } = {},
 ) {
-  const tenant = findTenant(s, tenantId);
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return null;
   if (numberReleasePending !== undefined) tenant.numberReleasePending = numberReleasePending;
   if (workosDeletePending !== undefined) tenant.workosDeletePending = workosDeletePending;
   return tenant;
 }
 
-export function contractEndCleanupPending(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function contractEndCleanupPending(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return {
     numberReleasePending: tenant?.numberReleasePending ?? false,
     workosDeletePending: tenant?.workosDeletePending ?? false,
   };
 }
 
-export function tenantsPendingContractEndCleanup(s) {
-  return tenantsOf(s).filter((t) => t.numberReleasePending || t.workosDeletePending);
+export function tenantsPendingContractEndCleanup(state) {
+  return tenantsOf(state).filter((tenant) => tenant.numberReleasePending || tenant.workosDeletePending);
 }
 
 export function platformHoldEscalationCandidates(state, { nowMs, maxAgeMs }) {
@@ -1811,32 +1811,32 @@ export function allTenantIds(state) {
   return tenantsOf(state).map((tenant) => tenant.id);
 }
 
-export function tenantIdpSubject(s, tenantId) {
-  return findTenant(s, tenantId)?.idpSubject ?? null;
+export function tenantIdpSubject(state, tenantId) {
+  return findTenant(state, tenantId)?.idpSubject ?? null;
 }
 
-export function setCancellationMailPending(s, tenantId, { pending, receivedAt } = {}) {
-  const tenant = findTenant(s, tenantId);
+export function setCancellationMailPending(state, tenantId, { pending, receivedAt } = {}) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) return null;
   if (pending !== undefined) tenant.cancellationMailPending = pending;
   if (receivedAt !== undefined) tenant.cancellationMailReceivedAt = receivedAt;
   return tenant;
 }
 
-export function cancellationMailPending(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function cancellationMailPending(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return {
     pending: tenant?.cancellationMailPending ?? false,
     receivedAt: tenant?.cancellationMailReceivedAt ?? null,
   };
 }
 
-export function tenantsPendingCancellationMail(s) {
-  return tenantsOf(s).filter((t) => t.cancellationMailPending);
+export function tenantsPendingCancellationMail(state) {
+  return tenantsOf(state).filter((tenant) => tenant.cancellationMailPending);
 }
 
-export function tenantsForStripeReconcile(s) {
-  return tenantsOf(s).filter((t) => t.stripeSubscriptionId && !t.suspendedAt);
+export function tenantsForStripeReconcile(state) {
+  return tenantsOf(state).filter((tenant) => tenant.stripeSubscriptionId && !tenant.suspendedAt);
 }
 
 export function tenantsForStaleSubscriptionReconcile(state) {
@@ -1851,39 +1851,39 @@ export function tenantsForPaymentMethodTypeReconcile(state) {
   );
 }
 
-export function setNewsletterConsent(s, tenantId, consent) {
+export function setNewsletterConsent(state, tenantId, consent) {
   if (typeof consent !== "boolean")
     throw new Error("setNewsletterConsent: consent muss boolean sein");
-  const tenant = findTenant(s, tenantId);
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`setNewsletterConsent: Tenant ${tenantId} nicht gefunden`);
   tenant.newsletterConsent = consent;
   tenant.newsletterConsentAt = new Date().toISOString();
   return tenant;
 }
 
-export function tenantNewsletterConsent(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
+export function tenantNewsletterConsent(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
   return {
     consent: tenant?.newsletterConsent === true,
     consentAt: tenant?.newsletterConsentAt ?? null,
   };
 }
 
-export function tenantNewsletterRecipients(s, tenantId) {
-  return findTenant(s, tenantId)?.newsletterRecipients ?? [];
+export function tenantNewsletterRecipients(state, tenantId) {
+  return findTenant(state, tenantId)?.newsletterRecipients ?? [];
 }
 
-export function confirmedNewsletterRecipients(s, tenantId) {
-  return tenantNewsletterRecipients(s, tenantId).filter((r) => r.status === "confirmed");
+export function confirmedNewsletterRecipients(state, tenantId) {
+  return tenantNewsletterRecipients(state, tenantId).filter((recipient) => recipient.status === "confirmed");
 }
 
-export function dailyNewsletterConfirmMailCount(s, tenantId, sinceIso) {
-  const tenant = findTenant(s, tenantId);
-  return (tenant?.newsletterConfirmMailLog ?? []).filter((t) => t >= sinceIso).length;
+export function dailyNewsletterConfirmMailCount(state, tenantId, sinceIso) {
+  const tenant = findTenant(state, tenantId);
+  return (tenant?.newsletterConfirmMailLog ?? []).filter((sentAt) => sentAt >= sinceIso).length;
 }
 
-export function addNewsletterRecipient(s, tenantId, { email, tokenHash, tokenExpiresAt, unsubToken, now }) {
-  const tenant = findTenant(s, tenantId);
+export function addNewsletterRecipient(state, tenantId, { email, tokenHash, tokenExpiresAt, unsubToken, now }) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`addNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
   const nowIso = now ?? new Date().toISOString();
   tenant.newsletterRecipients ??= [];
@@ -1898,27 +1898,27 @@ export function addNewsletterRecipient(s, tenantId, { email, tokenHash, tokenExp
   });
   const cutoff = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
   tenant.newsletterConfirmMailLog = (tenant.newsletterConfirmMailLog ?? [])
-    .filter((t) => t >= cutoff)
+    .filter((sentAt) => sentAt >= cutoff)
     .concat(nowIso);
   return tenant.newsletterRecipients[tenant.newsletterRecipients.length - 1];
 }
 
-export function removeNewsletterRecipient(s, tenantId, email) {
-  const tenant = findTenant(s, tenantId);
+export function removeNewsletterRecipient(state, tenantId, email) {
+  const tenant = findTenant(state, tenantId);
   if (!tenant) throw new Error(`removeNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
   const before = (tenant.newsletterRecipients ?? []).length;
-  tenant.newsletterRecipients = (tenant.newsletterRecipients ?? []).filter((r) => r.email !== email);
+  tenant.newsletterRecipients = (tenant.newsletterRecipients ?? []).filter((recipient) => recipient.email !== email);
   return tenant.newsletterRecipients.length !== before;
 }
 
-export function confirmNewsletterRecipientByToken(s, tokenHash, nowIso) {
-  for (const tenant of tenantsOf(s)) {
+export function confirmNewsletterRecipientByToken(state, tokenHash, nowIso) {
+  for (const tenant of tenantsOf(state)) {
     const match = (tenant.newsletterRecipients ?? []).find(
-      (r) =>
-        r.status === "pending" &&
-        r.tokenHash &&
-        safeEqual(r.tokenHash, tokenHash) &&
-        r.tokenExpiresAt > nowIso,
+      (recipient) =>
+        recipient.status === "pending" &&
+        recipient.tokenHash &&
+        safeEqual(recipient.tokenHash, tokenHash) &&
+        recipient.tokenExpiresAt > nowIso,
     );
     if (match) {
       match.status = "confirmed";
@@ -1931,10 +1931,10 @@ export function confirmNewsletterRecipientByToken(s, tokenHash, nowIso) {
   return null;
 }
 
-export function unsubscribeNewsletterRecipientByToken(s, token) {
-  for (const tenant of tenantsOf(s)) {
+export function unsubscribeNewsletterRecipientByToken(state, token) {
+  for (const tenant of tenantsOf(state)) {
     const recipients = tenant.newsletterRecipients ?? [];
-    const idx = recipients.findIndex((r) => r.unsubToken && safeEqual(r.unsubToken, token));
+    const idx = recipients.findIndex((recipient) => recipient.unsubToken && safeEqual(recipient.unsubToken, token));
     if (idx !== -1) {
       const [removed] = recipients.splice(idx, 1);
       return { tenantId: tenant.id, email: removed.email };
@@ -1947,16 +1947,16 @@ export function usageFor(s, tenantId) {
   return (s.usage[tenantId] ||= emptyUsage());
 }
 
-export function usageOf(s, tenantId) {
-  return usageFor(s, tenantId);
+export function usageOf(state, tenantId) {
+  return usageFor(state, tenantId);
 }
 
-export function globalUsageTotals(s) {
+export function globalUsageTotals(state) {
   let inputTokens = 0,
     outputTokens = 0,
     calls = 0,
     microTotal = 0;
-  for (const bucket of Object.values(s.usage)) {
+  for (const bucket of Object.values(state.usage)) {
     inputTokens += bucket.inputTokens;
     outputTokens += bucket.outputTokens;
     calls += bucket.calls;
@@ -2092,8 +2092,8 @@ export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
   return usage;
 }
 
-function addUsageCostCents(s, { tenantId, costCents, nowIso, quelle }) {
-  const usage = usageFor(s, tenantId);
+function addUsageCostCents(state, { tenantId, costCents, nowIso, quelle }) {
+  const usage = usageFor(state, tenantId);
   if (!isBookableCents(costCents))
     return discardCorruptWrite(usage, `${quelle} tenant:${tenantId}`, costCents);
   bookCents(usage, costCents, nowIso);
@@ -2143,8 +2143,8 @@ function applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso }) {
     usage.budgetPeriodBaselineCents = Math.max(0, usage.budgetPeriodBaselineCents + wirksam);
 }
 
-export function bookCostCorrectionCents(s, { tenantId, deltaCents, chargeAnchors, nowIso }) {
-  const usage = usageFor(s, tenantId);
+export function bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnchors, nowIso }) {
+  const usage = usageFor(state, tenantId);
   if (!isCorrectionCents(deltaCents))
     return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
   if (deltaCents > 0) bookCents(usage, deltaCents, nowIso);
@@ -2169,8 +2169,8 @@ export function applyCostCorrectionCents(s, tenantId,
   return { usage, booked: true, deltaCents };
 }
 
-function effectiveCapCents(s, tenantId, cfg) {
-  const budget = tenantBudgetRow(s, tenantId);
+function effectiveCapCents(state, tenantId, cfg) {
+  const budget = tenantBudgetRow(state, tenantId);
   if (budget) return budget.hardCapCents;
   const tenantDefaultCents = cfg.defaultTenantBudgetCents;
   return tenantDefaultCents > 0 ? tenantDefaultCents : globalCapCents(cfg);
@@ -2181,9 +2181,9 @@ function budgetPeriodUsageCents(bucket) {
   return Math.max(0, bucket.costCents - bucket.budgetPeriodBaselineCents);
 }
 
-export function stampBudgetPeriod(s, tenantId, periodStartIso) {
+export function stampBudgetPeriod(state, tenantId, periodStartIso) {
   if (!periodStartIso) return { changed: false };
-  const bucket = usageFor(s, tenantId);
+  const bucket = usageFor(state, tenantId);
   if (laterMonotonicKey(bucket.budgetPeriodKey, periodStartIso) !== periodStartIso)
     return { changed: false };
   if (bucket.budgetPeriodKey === periodStartIso) return { changed: false };
@@ -2197,12 +2197,12 @@ export function gateUsageCents(s, tenantId, cfg, nowIso) {
   return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : budgetPeriodUsageCents(bucket);
 }
 
-function platformSpendMonthCents(s, nowIso) {
-  return Object.values(s.usage).reduce((sum, bucket) => sum + spendMonthUsageCents(bucket, nowIso), 0);
+function platformSpendMonthCents(state, nowIso) {
+  return Object.values(state.usage).reduce((sum, bucket) => sum + spendMonthUsageCents(bucket, nowIso), 0);
 }
 
-export function gatePlatformUsageCents(s, cfg, nowIso) {
-  return cfg.budgetMonthEnabled ? platformSpendMonthCents(s, nowIso) : globalUsageTotals(s).costCents;
+export function gatePlatformUsageCents(state, cfg, nowIso) {
+  return cfg.budgetMonthEnabled ? platformSpendMonthCents(state, nowIso) : globalUsageTotals(state).costCents;
 }
 
 function usageAxesBookable({ gateCents, lifetimeCents }) {
@@ -2254,15 +2254,15 @@ export function tenantBudgetSnapshot(s, tenantId, cfg, nowIso) {
   return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(s, tenantId) };
 }
 
-export function setTenantBudget(s, tenantId, { budgetCents, hardCapCents }) {
-  const existing = tenantBudgetRow(s, tenantId);
+export function setTenantBudget(state, tenantId, { budgetCents, hardCapCents }) {
+  const existing = tenantBudgetRow(state, tenantId);
   if (existing) {
     existing.budgetCents = budgetCents;
     existing.hardCapCents = hardCapCents;
     return existing;
   }
   const row = { tenantId, budgetCents, hardCapCents };
-  s.tenantBudgets.push(row);
+  state.tenantBudgets.push(row);
   return row;
 }
 
@@ -2271,7 +2271,7 @@ export function aiCostCents(tokens, cfg) {
 }
 
 export function recordUsageEvent(
-  s,
+  state,
   {
     tenantId,
     callId = null,
@@ -2297,93 +2297,93 @@ export function recordUsageEvent(
     occurredAt,
     stripeMeterSent: false,
   };
-  s.usageEvents.push(event);
+  state.usageEvents.push(event);
   return event;
 }
 
-export function dailySmsCount(s, tenantId, sinceIso) {
-  return s.usageEvents.filter(
-    (e) => e.kind === USAGE_EVENT_KIND.SMS && e.tenantId === tenantId && e.occurredAt >= sinceIso,
+export function dailySmsCount(state, tenantId, sinceIso) {
+  return state.usageEvents.filter(
+    (usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.SMS && usageEvent.tenantId === tenantId && usageEvent.occurredAt >= sinceIso,
   ).length;
 }
 
-export function voiceMinutesUsedSince(s, tenantId, sinceIso) {
-  return s.usageEvents
+export function voiceMinutesUsedSince(state, tenantId, sinceIso) {
+  return state.usageEvents
     .filter(
-      (e) =>
-        e.kind === USAGE_EVENT_KIND.VOICE_MINUTE &&
-        e.tenantId === tenantId &&
-        e.occurredAt >= sinceIso,
+      (usageEvent) =>
+        usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE &&
+        usageEvent.tenantId === tenantId &&
+        usageEvent.occurredAt >= sinceIso,
     )
-    .reduce((sum, e) => sum + e.quantity, 0);
+    .reduce((sum, usageEvent) => sum + usageEvent.quantity, 0);
 }
 
-export function numbersDueForMonthMeter(s, { nowIso, tenantId = null }) {
+export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   const monthKey = spendMonthKeyOf(nowIso);
   if (!monthKey) return [];
   const gebucht = new Set();
-  for (const e of s.usageEvents) {
-    if (e.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
-    if (!e.numberId) continue;
-    if (spendMonthKeyOf(e.occurredAt) !== monthKey) continue;
-    gebucht.add(e.numberId);
+  for (const usageEvent of state.usageEvents) {
+    if (usageEvent.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
+    if (!usageEvent.numberId) continue;
+    if (spendMonthKeyOf(usageEvent.occurredAt) !== monthKey) continue;
+    gebucht.add(usageEvent.numberId);
   }
-  return s.numbers.filter(
-    (n) =>
-      n.status === NUMBER_STATUS.ACTIVE &&
-      (tenantId === null || n.tenantId === tenantId) &&
-      !gebucht.has(n.id),
+  return state.numbers.filter(
+    (number) =>
+      number.status === NUMBER_STATUS.ACTIVE &&
+      (tenantId === null || number.tenantId === tenantId) &&
+      !gebucht.has(number.id),
   );
 }
 
-export function planMinutesExceeded(s, tenantId, { includedMinutes, periodStartIso } = {}) {
+export function planMinutesExceeded(state, tenantId, { includedMinutes, periodStartIso } = {}) {
   if (!periodStartIso || !Number.isFinite(includedMinutes)) return true;
-  return voiceMinutesUsedSince(s, tenantId, periodStartIso) >= includedMinutes;
+  return voiceMinutesUsedSince(state, tenantId, periodStartIso) >= includedMinutes;
 }
 
-export function pendingMeterEvents(s) {
-  return s.usageEvents.filter((e) => !e.stripeMeterSent);
+export function pendingMeterEvents(state) {
+  return state.usageEvents.filter((usageEvent) => !usageEvent.stripeMeterSent);
 }
 
 export const METER_FLUSH_SKIP = Object.freeze({ NO_EPOCH: "no_flush_epoch" });
 
-export function flushableMeterEvents(s, { flushEpochIso } = {}) {
-  const pending = pendingMeterEvents(s);
+export function flushableMeterEvents(state, { flushEpochIso } = {}) {
+  const pending = pendingMeterEvents(state);
   const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
   if (!epoch)
     return { events: [], skipped: pending.length, skipReason: METER_FLUSH_SKIP.NO_EPOCH };
   const epochIso = epoch.toISOString();
-  const events = pending.filter((e) => e.occurredAt >= epochIso);
+  const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
   return { events, skipped: pending.length - events.length, skipReason: null };
 }
 
-export function markMeterEventsSent(s, eventIds) {
+export function markMeterEventsSent(state, eventIds) {
   const ids = new Set(eventIds);
-  let n = 0;
-  for (const e of s.usageEvents) {
-    if (ids.has(e.id) && !e.stripeMeterSent) {
-      e.stripeMeterSent = true;
-      n++;
+  let sentCount = 0;
+  for (const usageEvent of state.usageEvents) {
+    if (ids.has(usageEvent.id) && !usageEvent.stripeMeterSent) {
+      usageEvent.stripeMeterSent = true;
+      sentCount++;
     }
   }
-  return n;
+  return sentCount;
 }
 
-function findCostEvidence(s, callId, traeger) {
-  return s.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
+function findCostEvidence(state, callId, traeger) {
+  return state.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
 }
 
-export function recordCallCostEvidence(s, eingabe) {
+export function recordCallCostEvidence(state, eingabe) {
   const { callId, traeger, reife } = eingabe;
-  const call = getCall(s, callId);
+  const call = getCall(state, callId);
   if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
   assertCostEvidenceInput(eingabe);
-  const vorhanden = findCostEvidence(s, callId, traeger);
+  const vorhanden = findCostEvidence(state, callId, traeger);
   if (!vorhanden) {
     const zeile = buildCostEvidenceRow({
       id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
     });
-    s.callCostEvidence.push(zeile);
+    state.callCostEvidence.push(zeile);
     return { evidence: zeile, changed: true };
   }
   if (!canSetEvidenceMaturity(vorhanden.reife, reife))
@@ -2398,18 +2398,18 @@ export function recordCallCostEvidence(s, eingabe) {
   return { evidence: vorhanden, changed: true };
 }
 
-export function callCostEvidence(s, callId) {
-  return s.callCostEvidence
+export function callCostEvidence(state, callId) {
+  return state.callCostEvidence
     .filter((zeile) => zeile.callId === callId)
     .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
-export function reservationFor(s, tenantId) {
-  return s.reservations[tenantId] || 0;
+export function reservationFor(state, tenantId) {
+  return state.reservations[tenantId] || 0;
 }
 
-export function reservationsTotal(s) {
-  return Object.values(s.reservations).reduce((sum, cents) => sum + cents, 0);
+export function reservationsTotal(state) {
+  return Object.values(state.reservations).reduce((sum, cents) => sum + cents, 0);
 }
 
 export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg, nowIso) {
@@ -2439,8 +2439,8 @@ function scaledThresholdCrossed(value, base, percent) {
   return value * PERCENT_SCALE >= base * percent;
 }
 
-function platformSpendObservedCents(s, cfg, nowIso) {
-  const total = gatePlatformUsageCents(s, cfg, nowIso) + reservationsTotal(s);
+function platformSpendObservedCents(state, cfg, nowIso) {
+  const total = gatePlatformUsageCents(state, cfg, nowIso) + reservationsTotal(state);
   return isBookableCents(total) ? total : null;
 }
 
@@ -2497,52 +2497,52 @@ export function recordTtsCharacters(s, chars, cfg, nowIso) {
   return result;
 }
 
-export function recordRelayTtsCharacters(s, { tenantId, chars, cfg, nowIso }) {
-  const tenant = recordTenantTtsCharacters(s, tenantId, chars);
+export function recordRelayTtsCharacters(state, { tenantId, chars, cfg, nowIso }) {
+  const tenant = recordTenantTtsCharacters(state, tenantId, chars);
   if (!tenant.changed) return { changed: false, warning: null };
-  return { changed: true, warning: bumpPlatformTtsQuota(s, chars, cfg, nowIso).warning };
+  return { changed: true, warning: bumpPlatformTtsQuota(state, chars, cfg, nowIso).warning };
 }
 
-export function platformTtsUsageView(s, cfg, nowIso) {
-  const row = s.platformTtsUsage;
+export function platformTtsUsageView(state, cfg, nowIso) {
+  const row = state.platformTtsUsage;
   const key = ttsCycleWindowKey(row, cfg, nowIso);
   const characters = key === row.cycleKey ? row.characters : 0;
   return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
 }
 
-export function crossCheckDueMonthKey(s, nowIso) {
+export function crossCheckDueMonthKey(state, nowIso) {
   const dueMonthKey = previousMonthKeyOf(nowIso);
   if (dueMonthKey === null) return null;
-  const checked = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, dueMonthKey);
-  return checked === s.costCrossCheck.lastCheckedMonthKey && checked !== null ? null : dueMonthKey;
+  const checked = laterMonotonicKey(state.costCrossCheck.lastCheckedMonthKey, dueMonthKey);
+  return checked === state.costCrossCheck.lastCheckedMonthKey && checked !== null ? null : dueMonthKey;
 }
 
 export function markCrossCheckAttempted(s, monthKey) {
   s.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, monthKey);
 }
 
-export function actualCostMicroCentsForMonth(s, monthKey) {
-  return s.calls
+export function actualCostMicroCentsForMonth(state, monthKey) {
+  return state.calls
     .filter(
-      (c) =>
-        c.provider === PROVIDER.TELNYX &&
-        c.costTruedAt !== null &&
-        Number.isSafeInteger(c.actualCostMicroCents) &&
-        c.actualCostMicroCents >= 0 &&
-        c.estimatedCostSpendMonthKey === monthKey,
+      (call) =>
+        call.provider === PROVIDER.TELNYX &&
+        call.costTruedAt !== null &&
+        Number.isSafeInteger(call.actualCostMicroCents) &&
+        call.actualCostMicroCents >= 0 &&
+        call.estimatedCostSpendMonthKey === monthKey,
     )
-    .reduce((sum, c) => sum + c.actualCostMicroCents, 0);
+    .reduce((sum, call) => sum + call.actualCostMicroCents, 0);
 }
 
-export function carrierGateCostCentsForMonth(s, monthKey) {
-  return s.usageEvents
-    .filter((e) => e.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(e.occurredAt) === monthKey)
-    .reduce((sum, e) => sum + e.costCents, 0);
+export function carrierGateCostCentsForMonth(state, monthKey) {
+  return state.usageEvents
+    .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
+    .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
 }
 
-export function recordTenantTtsCharacters(s, tenantId, chars) {
+export function recordTenantTtsCharacters(state, tenantId, chars) {
   if (!Number.isSafeInteger(chars) || chars <= 0) return { changed: false };
-  usageFor(s, tenantId).ttsCharacters += chars;
+  usageFor(state, tenantId).ttsCharacters += chars;
   return { changed: true };
 }
 
@@ -2580,35 +2580,35 @@ function pruneExpiredRecords(s, days) {
   return removed;
 }
 
-export function purgeExpiredDiagnosticTranscripts(s, days) {
+export function purgeExpiredDiagnosticTranscripts(state, days) {
   const cutoff = new Date(Date.now() - Math.max(days, 0) * MS_PER_DAY).toISOString();
   let purged = 0;
-  for (const call of s.calls) {
+  for (const call of state.calls) {
     if (call.diagnostic !== true || !call.endedAt || call.endedAt >= cutoff) continue;
-    if (purgeTranscript(s, call.id)) purged++;
+    if (purgeTranscript(state, call.id)) purged++;
   }
   return purged;
 }
 
-export function purgeExpiredResultEvidence(s, days) {
+export function purgeExpiredResultEvidence(state, days) {
   const cutoff = new Date(Date.now() - Math.max(days, 0) * MS_PER_DAY).toISOString();
   let purged = 0;
-  for (const call of s.calls) {
+  for (const call of state.calls) {
     if (!call.endedAt || call.endedAt >= cutoff) continue;
     if (stripResultEvidence(call)) purged++;
   }
   return purged;
 }
 
-export function pruneOldData(s, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays }) {
-  const removed = pruneExpiredRecords(s, retentionDays);
-  removed.diagnosticTranscripts = purgeExpiredDiagnosticTranscripts(s, diagnosticRetentionDays);
-  removed.resultEvidence = purgeExpiredResultEvidence(s, evidenceRetentionDays);
+export function pruneOldData(state, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays }) {
+  const removed = pruneExpiredRecords(state, retentionDays);
+  removed.diagnosticTranscripts = purgeExpiredDiagnosticTranscripts(state, diagnosticRetentionDays);
+  removed.resultEvidence = purgeExpiredResultEvidence(state, evidenceRetentionDays);
   return removed;
 }
 
 export function hasPrunedSomething(removed) {
-  return Object.values(removed).some((n) => n > 0);
+  return Object.values(removed).some((count) => count > 0);
 }
 
 export function settingsFor(s, tenantId) {
@@ -2629,10 +2629,10 @@ const OPTIONAL_ENUM_FIELDS = Object.freeze({
 
 const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
 
-export function updateSettings(s, tenantId, patch) {
+export function updateSettings(state, tenantId, patch) {
   const allowed = defaultSettings();
   const changed = [];
-  const target = settingsFor(s, tenantId);
+  const target = settingsFor(state, tenantId);
   for (const [key, value] of Object.entries(patch || {})) {
     if (!(key in allowed)) continue;
     const enumValues = OPTIONAL_ENUM_FIELDS[key];
@@ -2651,27 +2651,27 @@ export function updateSettings(s, tenantId, patch) {
   return { settings: target, changed };
 }
 
-export function resolveProfile(s, tenantId) {
-  return resolveProfileFrom(tenantId, tenantId ? s.profiles[tenantId] : undefined);
+export function resolveProfile(state, tenantId) {
+  return resolveProfileFrom(tenantId, tenantId ? state.profiles[tenantId] : undefined);
 }
 
-const subIndexOf = (s) => s.subIndex || {};
+const subIndexOf = (state) => state.subIndex || {};
 
 export function bindSubToTenant(s, sub, tenantId) {
   if (!sub || !tenantId) return;
   (s.subIndex ||= {})[sub] = tenantId;
 }
 
-export function resolveTenant(s, idpSubject) {
+export function resolveTenant(state, idpSubject) {
   if (!idpSubject) return null;
-  const merged = subIndexOf(s)[idpSubject];
+  const merged = subIndexOf(state)[idpSubject];
   if (merged) return merged;
-  const tenant = tenantsOf(s).find((t) => t.idpSubject === idpSubject);
+  const tenant = tenantsOf(state).find((tenantEntry) => tenantEntry.idpSubject === idpSubject);
   return tenant ? tenant.id : null;
 }
 
-export function listProfiles(s) {
-  return s.profiles;
+export function listProfiles(state) {
+  return state.profiles;
 }
 
 export function setProfile(s, tenantId, patch) {
