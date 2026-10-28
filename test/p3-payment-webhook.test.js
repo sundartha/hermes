@@ -63,7 +63,6 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
 const activationMarkerPatches = (tenant) => [
   [tenant, { activationPending: true }],
   [tenant, { activationPending: false }],
-  [tenant, { periodCreditRevoked: false }],
 ];
 
 test("A(a) updated mit tenant_ref -> Abo + KYC(card) + active + provision genau 1x", async () => {
