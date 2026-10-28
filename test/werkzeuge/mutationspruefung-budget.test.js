@@ -11,11 +11,16 @@ import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-la
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const EINE_SEKUNDE = fileURLToPath(new URL("mutationspruefung-budget-ersatz.mjs", import.meta.url));
 const HAENGER = fileURLToPath(new URL("mutationspruefung-budget-haenger-ersatz.mjs", import.meta.url));
+const ENDE_ZUERST = fileURLToPath(new URL("mutationspruefung-budget-ende-ersatz.mjs", import.meta.url));
 const HAENGER_BUDGET_MS = 5000;
 const LOGORDNER = ".mutationspruefung/log";
 const VIELE_ZEILEN = 600;
 const URTEIL = /^(?:grün|rot): /m;
 const ABBRUCH_BUDGET = /^Abbruch: Budget/m;
+const ABBRUCH_SCHAETZUNG = /^Abbruch: Budget: Schätzung/m;
+const TIMER_ERREICHT = /^Abbruch: Budget der .+ erreicht/m;
+const NORMAL = ["--basis", "HEAD"];
+const TESTUMBAU = ["--basis", "HEAD~1", "--testumbau"];
 const EIN_PLATZ = 1;
 const BUDGET_UMGEBUNG = [
   "BUDGET",
@@ -260,4 +265,52 @@ test("hält die normale Mutation während der Löschprobe am Budget an, bleibt k
   angehalten(lauf, repo);
   assert.match(lauf.stderr, LOESCHPROBE, lauf.stderr);
   keinArbeitsordner(repo);
+});
+
+function mitSchaetzungVorTimer(context, { repo, argumente, uhr }) {
+  const env = { ...umgebung(context, EIN_PLATZ), BUDGET_UHR: uhr };
+  return mitBudget(context, { ersatz: ENDE_ZUERST, repo, env }, argumente);
+}
+
+function einzigesEnde(repo) {
+  const eintraege = logeintraege(repo);
+  const reihenfolge = JSON.stringify(eintraege.map(({ art }) => art));
+  assert.equal(arten(eintraege, "vorschau").length, 1, reihenfolge);
+  assert.equal(arten(eintraege, "ende").length, 1, reihenfolge);
+  assert.deepEqual([eintraege.at(-1).art, eintraege.at(-1).exit], ["ende", EXIT_ABBRUCH], reihenfolge);
+  return eintraege;
+}
+
+function budgetVorEnde(lauf, repo) {
+  angehalten(lauf, repo);
+  assert.match(lauf.stderr, TIMER_ERREICHT, lauf.stderr);
+  einzigesEnde(repo);
+}
+
+function endeBleibtLetztes(lauf, repo) {
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, ABBRUCH_SCHAETZUNG, lauf.stderr);
+  assert.match(lauf.stderr, TIMER_ERREICHT, lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, URTEIL, lauf.stdout);
+  einzigesEnde(repo);
+}
+
+test("ist das Budget der normalen Mutation bei der Schätzung schon aufgebraucht, steht budget vor dem einzigen ende im Zeit-Log", async (context) => {
+  const repo = kleinesRepo(context);
+  budgetVorEnde(await mitSchaetzungVorTimer(context, { repo, argumente: NORMAL, uhr: "echt" }), repo);
+});
+
+test("ist das Budget der Testumbau-Mutation bei der Schätzung schon aufgebraucht, steht budget vor dem einzigen ende im Zeit-Log", async (context) => {
+  const repo = kleinerTestumbau(context);
+  budgetVorEnde(await mitSchaetzungVorTimer(context, { repo, argumente: TESTUMBAU, uhr: "echt" }), repo);
+});
+
+test("feuert der Budget-Timer erst nach dem Abbruch der normalen Mutation durch die Schätzung, bleibt ende die letzte Zeile des Zeit-Logs", async (context) => {
+  const repo = kleinesRepo(context);
+  endeBleibtLetztes(await mitSchaetzungVorTimer(context, { repo, argumente: NORMAL, uhr: "eingefroren" }), repo);
+});
+
+test("feuert der Budget-Timer erst nach dem Abbruch der Testumbau-Mutation durch die Schätzung, bleibt ende die letzte Zeile des Zeit-Logs", async (context) => {
+  const repo = kleinerTestumbau(context);
+  endeBleibtLetztes(await mitSchaetzungVorTimer(context, { repo, argumente: TESTUMBAU, uhr: "eingefroren" }), repo);
 });
