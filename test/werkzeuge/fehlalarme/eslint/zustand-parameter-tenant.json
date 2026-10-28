@@ -1,0 +1,11 @@
+{
+  "titel": "Zustandsfunktion ändert Eigenschaften des Parameters tenant",
+  "dateien": {
+    "src/store/zustand/rotprobe.js": [
+      "export function setze(tenant) {",
+      "  tenant.wert = true;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-param-reassign\""
+}

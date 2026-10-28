@@ -1,0 +1,11 @@
+{
+  "titel": "Zustandsfunktion weist den Parameter state selbst neu zu",
+  "dateien": {
+    "src/store/zustand/rotprobe.js": [
+      "export function setze(state) {",
+      "  state = {};",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-param-reassign\""
+}
