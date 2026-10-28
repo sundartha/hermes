@@ -114,6 +114,7 @@ function ausgelagertMit(...rumpf) {
 function verschobenMit(context, anweisung, kopf = []) {
   return nachAuslagerung(context, {
     vorher: { kopf: [...VORHER.kopf, ...kopf], rumpf: [anweisung, ...VORHER.rumpf] },
+    nachher: mitKopf(NACHHER, [...nachherOhne(AUS_NEU).kopf, ...kopf, AUS_NEU]),
     neu: { [NEU]: aufgebaut({ kopf: [...AUSGELAGERT.kopf, ...kopf], rumpf: [anweisung, ...AUSGELAGERT.rumpf] }) },
   });
 }
@@ -249,7 +250,8 @@ test("Reine Auslagerung: eine neue Hilfe, die sich nicht lesen lässt, führt zu
 });
 
 test("Reine Auslagerung: eine Änderung nur an der Hilfe ohne neue Hilfe führt zur vollen Testumbau-Mutation", async (context) => {
-  vollGerechnet(await nachAuslagerung(context, { nachher: mitKopf(VORHER, [QUELLE, SICHER, WERTE_IN_HILFE]), neu: {} }));
+  const eingerueckt = NEGATIV.replace("  return", "    return");
+  vollGerechnet(await nachAuslagerung(context, { nachher: mitRumpf(VORHER, [GRENZEN, DOPPELT, GLEICH, eingerueckt]), neu: {} }));
 });
 
 test("Reine Auslagerung: eine eingefrorene Konstante mit berechnetem Schlüssel führt zur vollen Testumbau-Mutation", async (context) => {
