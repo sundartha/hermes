@@ -17,7 +17,8 @@ const MUSTER = "new RegExp(";
 const WOZU = zweckBlock(SEMGREP)[0];
 const ABSATZ = `Zweck ${SEMGREP}: Drehbuchtext des Ersatz-Agenten.`;
 const LISTEN = { ...KOPIEN_LISTE, "tools/basis/semgrep.json": `${JSON.stringify({ version: VERSION, befunde: [] })}\n` };
-const ZUR_LAUFZEIT = "export function passt(text, wort) {\n  return new RegExp(wort).test(text);\n}\n";
+const GROSS = "export function gross(wort) {\n  return wort.toUpperCase();\n}\n";
+const ZUR_LAUFZEIT = `export function passt(text, wort) {\n  return new RegExp(wort).test(text);\n}\n\n${GROSS}`;
 const TEST_ZUR_LAUFZEIT = `${ROTER_TEST}test("passt", () => assert.ok(new RegExp(String(4)).test(String(verdopple(2)))));\n`;
 
 function ersatzSemgrep(nurEinmal) {
@@ -54,10 +55,10 @@ function lauf(context, { auftrag, drehbuch, dateien = LISTEN, nurEinmal }) {
   return starte(context, { auftrag, drehbuch, dateien, umgebung: { PATH: mitSemgrep(context, { nurEinmal }) } });
 }
 
-function folgtAufJscpd(ergebnis) {
+function laeuftNachDenSchnellen(ergebnis) {
   const liste = namen(ergebnis.beleg);
   assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
-  assert.equal(liste[liste.indexOf(JSCPD) + 1], SEMGREP, liste.join(", "));
+  assert.ok(liste.indexOf(JSCPD) < liste.indexOf(SEMGREP), liste.join(", "));
   assert.equal(pruefung(ergebnis.beleg, SEMGREP), 0, JSON.stringify(ergebnis.beleg.pruefungen));
   return liste;
 }
@@ -67,9 +68,11 @@ function zweiteRunde({ werkzeug }, rolle, teile) {
   for (const teil of teile) assert.ok(prompt.includes(teil), `${teil}\n${prompt}`);
 }
 
-test("semgrep läuft im Bau direkt nach jscpd und ist grün, wenn der Bau keinen neuen Befund schreibt", (context) => {
-  const liste = folgtAufJscpd(lauf(context, { auftrag: UMBAU, drehbuch: { bau: { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" } } }));
+test("semgrep läuft im Bau nach den schnellen Prüfungen und ist grün, wenn der Bau keinen neuen Befund schreibt", (context) => {
+  const liste = laeuftNachDenSchnellen(lauf(context, { auftrag: UMBAU, drehbuch: { bau: { "src/text.js": GROSS } } }));
   assert.equal(liste[liste.indexOf("feste-pfade") + 1], JSCPD, liste.join(", "));
+  for (const schnell of ["lint", "abnahme"]) assert.ok(liste.indexOf(schnell) < liste.indexOf(SEMGREP), liste.join(", "));
+  assert.equal(liste[liste.indexOf(SEMGREP) + 1], "betroffene tests", liste.join(", "));
 });
 
 test("baut der Bau-Agent einen regulären Ausdruck zur Laufzeit zusammen, wird die Runde an semgrep rot, und die zweite Runde des Bau-Agenten bekommt Befund und Zweck-Text", (context) => {
@@ -78,10 +81,11 @@ test("baut der Bau-Agent einen regulären Ausdruck zur Laufzeit zusammen, wird d
   zweiteRunde(ergebnis, "bau", [`src/text.js:2 ${REGEL}`, WOZU, `dem Bau-Agenten: ${SEMGREP}`]);
 });
 
-test("semgrep läuft nach dem Test-Agenten direkt nach jscpd, vor dem Rot-Lauf", (context) => {
+test("semgrep läuft nach dem Test-Agenten nach den schnellen Prüfungen, vor dem Rot-Lauf", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
-  const liste = folgtAufJscpd(lauf(context, { auftrag: funktion("2 !== 4"), drehbuch }));
-  assert.ok(liste.indexOf(SEMGREP) < liste.indexOf("rot"), liste.join(", "));
+  const liste = laeuftNachDenSchnellen(lauf(context, { auftrag: funktion("2 !== 4"), drehbuch }));
+  assert.ok(liste.indexOf("schutztests") < liste.indexOf(SEMGREP), liste.join(", "));
+  assert.equal(liste[liste.indexOf(SEMGREP) + 1], "rot", liste.join(", "));
 });
 
 test("baut der Test-Agent einen regulären Ausdruck zur Laufzeit zusammen, hält lauf vor dem Bau an und gibt dem Test-Agenten Befund und Zweck-Text", (context) => {
@@ -101,7 +105,7 @@ test("fehlt tools/basis/semgrep.json schon auf der Basis, entfällt semgrep in b
 });
 
 test("läuft semgrep im Auftrag nicht mehr, wird die Runde rot mit der Meldung und dem Einrichtungsschritt vom Phasenende statt still grün", (context) => {
-  const ergebnis = lauf(context, { auftrag: UMBAU, drehbuch: { bau: { "src/text.js": "export const text = 1;\n" } }, nurEinmal: true });
+  const ergebnis = lauf(context, { auftrag: UMBAU, drehbuch: { bau: { "src/text.js": `export const text = 1;\n${GROSS}` } }, nurEinmal: true });
   assert.equal(ergebnis.lauf.status, EXIT_ROT, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
   assert.equal(pruefung(ergebnis.beleg, SEMGREP), undefined, JSON.stringify(ergebnis.beleg.pruefungen));
   assert.ok(ergebnis.beleg.grund.startsWith(MELDUNG_OHNE_SEMGREP), ergebnis.beleg.grund);

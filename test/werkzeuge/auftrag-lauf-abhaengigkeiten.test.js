@@ -69,7 +69,7 @@ test("ein Bau-Agent, der eine verbotene Abhängigkeit einführt, bekommt den Ver
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.equal(kopf, basis);
   const ergebnis = { abhaengigkeiten: pruefung(beleg, ABHAENGIGKEITEN), lint: pruefung(beleg, "lint"), commit: pruefung(beleg, "commit") };
-  assert.deepEqual(ergebnis, { abhaengigkeiten: EXIT_ROT, lint: undefined, commit: undefined }, JSON.stringify(beleg.pruefungen));
+  assert.deepEqual(ergebnis, { abhaengigkeiten: EXIT_ROT, lint: 0, commit: undefined }, JSON.stringify(beleg.pruefungen));
   const zweiteRunde = readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8");
   enthaeltAlles(zweiteRunde, [
     `${ABHAENGIGKEITEN}:`,
