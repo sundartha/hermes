@@ -53,7 +53,7 @@ function melde(text) {
 }
 
 function schreibe(art, daten) {
-  if (log.datei === null) return;
+  if (log.datei === null || !log.begonnen) return;
   const jetzt = Date.now();
   const eintrag = { art, zeit: new Date(jetzt).toISOString(), ms_seit_start: jetzt - log.beginn, ...daten };
   try {
@@ -252,9 +252,9 @@ export function notiereBudget(halt) {
 
 export function beendeLog(exit) {
   if (!log.begonnen) return;
-  log.begonnen = false;
   const ms = Date.now() - log.beginn;
   schreibe("ende", { ms, exit, phasen: log.phasen });
+  log.begonnen = false;
   const anteile = Object.entries(PHASEN).map(([phase, name]) => `${name} ${anteil(log.phasen[phase], ms)}`);
   melde(`Ende nach ${dauer(ms)}, Exit ${exit}: ${anteile.join(", ")}`);
 }

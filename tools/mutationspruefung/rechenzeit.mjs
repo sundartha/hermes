@@ -70,7 +70,9 @@ export function vorschau(umfang) {
   const unbekannt = unzaehlbar > 0 ? `, Mutanten in ${unzaehlbar} Quelldateien nicht zählbar, Schätzung mindestens` : "";
   console.log(`Vorschau ${seite}: ${quelldateien} Quelldateien, ${testdateien} Testdateien, ${testgruppen} Testgruppen, ${mutanten} Mutanten${unbekannt}; Schätzung ${rechnung}; ${budgetText()}, davon frei ${dauer(frei)}.`);
   notiereVorschau({ ...umfang, schaetzung_ms: ms, budget_ms: BUDGET_MS[uhr.art], frei_ms: frei });
-  if (ms > frei) throw new Error(`Budget: Schätzung ${dauer(ms)} liegt über dem ${budgetText()} (frei ${dauer(frei)}); kein Start, kein Urteil.`);
+  if (ms <= frei) return;
+  halteWennBudgetErschoepft(frei);
+  throw new Error(`Budget: Schätzung ${dauer(ms)} liegt über dem ${budgetText()} (frei ${dauer(frei)}); kein Start, kein Urteil.`);
 }
 
 function nachkommen() {
@@ -115,6 +117,10 @@ function beendeNachLeeren() {
   };
   setTimeout(ende, LEEREN_HOECHSTENS_MS);
   schreiben[0]("", () => schreiben[1]("", ende));
+}
+
+function halteWennBudgetErschoepft(frei) {
+  if (frei <= 0) halte();
 }
 
 function halte() {
