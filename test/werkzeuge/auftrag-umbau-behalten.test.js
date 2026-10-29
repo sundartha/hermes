@@ -345,14 +345,27 @@ test("auftrag-umbau-behalten: ohne Sätze in wasDarfNiePassieren und ohne überl
   assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
 });
 
-test("auftrag-umbau-behalten: schreibt der Test-Agent zu einem Satz aus wasDarfNiePassieren keinen Schutztest, bleibt der Umbau rot und unkommittet", (context) => {
-  const ohneSchutztest = { dateien: OHNE_UEBERLEBENDE, antwort: SCHUTZ_ABSATZ };
-  const drehbuch = { nie: [SATZ], bau: [BAU, BAU], test: [ohneSchutztest, ohneSchutztest], notiz: [{ antwort: "Notiz des Ersatzes." }] };
+const OHNE_SCHUTZTEST = { dateien: OHNE_UEBERLEBENDE, antwort: SCHUTZ_ABSATZ };
+
+function bleibtRotOhneEigenenSchutztest(context, vorLauf) {
+  const drehbuch = { nie: [SATZ], bau: [BAU, BAU], test: [OHNE_SCHUTZTEST, OHNE_SCHUTZTEST], notiz: [{ antwort: "Notiz des Ersatzes." }], vorLauf };
   const { repo, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
   assert.equal(lauf.status, EXIT_ROT, ausgabe);
   assert.ok(agentenMit(beleg, "test").length > 0, "der Test-Agent lief nicht");
   assert.equal(exitCodes(beleg, "schutztests")[0], EXIT_ROT, JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
   assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
+}
+
+function bleibtGruenOhneNeuenTestAgenten(context, vorLauf) {
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], vorLauf }, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
+}
+
+test("auftrag-umbau-behalten: schreibt der Test-Agent zu einem Satz aus wasDarfNiePassieren keinen Schutztest, bleibt der Umbau rot und unkommittet", (context) => {
+  bleibtRotOhneEigenenSchutztest(context);
 });
 
 test("auftrag-umbau-behalten: stehen die Schutztests aus einer roten Runde schon im Branch, verlangt die nächste Runde sie nicht noch einmal", (context) => {
@@ -402,19 +415,18 @@ function fremderCommit(repo) {
 }
 
 test("auftrag-umbau-behalten: Neustart nach dem Absicherungs-Commit des Auftrags und einem fremden Commit darüber zählt die Schutztests des Auftrags und ruft den Test-Agenten nicht noch einmal", (context) => {
-  const vorLauf = (repo) => {
+  bleibtGruenOhneNeuenTestAgenten(context, (repo) => {
     festgehalten(repo, "A1");
     fremderCommit(repo);
-  };
-  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], vorLauf }, OHNE_UEBERLEBENDE);
-  assert.equal(lauf.status, 0, ausgabe);
-  assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
-  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
-  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
-  assert.equal(beleg.ergebnis, "grün");
+  });
 });
 
-const OHNE_SCHUTZTEST = { dateien: OHNE_UEBERLEBENDE, antwort: SCHUTZ_ABSATZ };
+function mitFremdemCommit(vorLauf) {
+  return (repo) => {
+    vorLauf(repo);
+    fremderCommit(repo);
+  };
+}
 
 function schutztestAusMaster(repo) {
   writeFiles(repo, MIT_SCHUTZTEST.dateien);
@@ -426,49 +438,31 @@ function festgehaltenInAndererPhase(repo) {
   commitAll(repo, "Halte Verhalten vor Umbau A1 fest\n\nAuftrag: andere/A1\n");
 }
 
-function bleibtRotOhneEigenenSchutztest(context, vorLauf) {
-  const vorher = (probe) => {
-    vorLauf(probe);
-    fremderCommit(probe);
-  };
-  const drehbuch = { nie: [SATZ], bau: [BAU, BAU], test: [OHNE_SCHUTZTEST, OHNE_SCHUTZTEST], notiz: [{ antwort: "Notiz des Ersatzes." }], vorLauf: vorher };
-  const { repo, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
-  assert.equal(lauf.status, EXIT_ROT, ausgabe);
-  assert.ok(agentenMit(beleg, "test").length > 0, "der Test-Agent lief nicht");
-  assert.equal(exitCodes(beleg, "schutztests")[0], EXIT_ROT, JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
-  assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
-}
-
 test("auftrag-umbau-behalten: ein Schutztest aus master ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, schutztestAusMaster);
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit(schutztestAusMaster));
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit eines anderen Auftrags ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, (repo) => festgehalten(repo, "A2"));
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit((repo) => festgehalten(repo, "A2")));
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags einer anderen Phase ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, festgehaltenInAndererPhase);
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit(festgehaltenInAndererPhase));
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags, der schon in master steht, ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, (repo) => {
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit((repo) => {
     festgehalten(repo, "A1");
     mitUpstreamMaster(repo);
-  });
+  }));
 });
 
 test("auftrag-umbau-behalten: Neustart nach zwei Absicherungs-Commits des Auftrags mit einem fremden Commit dazwischen zählt die Schutztests der ersten Runde", (context) => {
-  const vorLauf = (repo) => {
+  bleibtGruenOhneNeuenTestAgenten(context, (repo) => {
     festgehalten(repo, "A1");
     fremderCommit(repo);
     writeFiles(repo, { "test/text.test.js": `${MIT_SCHUTZTEST.dateien["test/text.test.js"]}${FAELLE.nichts}\n` });
     commitAll(repo, "Halte Verhalten vor Umbau A1 fest\n\nAuftrag: probe/A1\n");
     fremderCommit(repo);
-  };
-  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], vorLauf }, OHNE_UEBERLEBENDE);
-  assert.equal(lauf.status, 0, ausgabe);
-  assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
-  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
-  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
+  });
 });
