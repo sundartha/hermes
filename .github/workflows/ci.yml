@@ -398,6 +398,7 @@ jobs:
           GLEICH: ${{ steps.gleich.outputs.gleich }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           ALTER_STAND: ${{ inputs.alter_stand }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -407,7 +408,8 @@ jobs:
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
-            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" ${zusatz:+"$zusatz"}
+            npm run test:mutation -- --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json"
+            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten "$RUNNER_TEMP/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
             teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
             anzahl=$(jq -e .anzahl "$RUNNER_TEMP/mutationsplan.json")
             printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
@@ -415,6 +417,16 @@ jobs:
             echo "Mutationsprüfung nicht nötig: Ereignis $EVENT_NAME, gleicher Stand ${GLEICH:-ohne Angabe}"
             printf 'messen=nein\nteile=[0]\nanzahl=0\n' >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Laufzeiten hochladen
+        if: steps.plan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-laufzeiten
+          path: ${{ runner.temp }}/mutation-laufzeiten.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
 
   mutationspruefung:
     name: Mutationsprüfung ${{ matrix.teil }}
@@ -437,6 +449,13 @@ jobs:
         with:
           web: "false"
 
+      - name: Laufzeiten laden
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutation-laufzeiten
+          path: ${{ runner.temp }}/laufzeiten
+
       - name: Mutationsprüfung
         if: needs.mutationsplan.outputs.messen == 'ja'
         env:
@@ -448,7 +467,7 @@ jobs:
           set -euo pipefail
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" ${zusatz:+"$zusatz"}
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
 
       - name: Zeit-Log hochladen
         if: always() && needs.mutationsplan.outputs.messen == 'ja'
@@ -495,6 +514,13 @@ jobs:
           path: ${{ runner.temp }}/mutation
           merge-multiple: true
 
+      - name: Laufzeiten laden
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutation-laufzeiten
+          path: ${{ runner.temp }}/laufzeiten
+
       - name: Mutationsurteil
         if: needs.mutationsplan.outputs.messen == 'ja'
         env:
@@ -506,7 +532,7 @@ jobs:
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           mkdir -p "$RUNNER_TEMP/urteil"
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
           code=${PIPESTATUS[0]}
           echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
           exit "$code"
