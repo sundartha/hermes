@@ -11,6 +11,7 @@ import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-la
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const EINE_SEKUNDE = fileURLToPath(new URL("mutationspruefung-budget-ersatz.mjs", import.meta.url));
 const HAENGER = fileURLToPath(new URL("mutationspruefung-budget-haenger-ersatz.mjs", import.meta.url));
+const KLEINES_BUDGET = fileURLToPath(new URL("mutationspruefung-budget-schaetzung-ersatz.mjs", import.meta.url));
 const ENDE_ZUERST = fileURLToPath(new URL("mutationspruefung-budget-ende-ersatz.mjs", import.meta.url));
 const HAENGER_BUDGET_MS = 5000;
 const LOGORDNER = ".mutationspruefung/log";
@@ -22,6 +23,10 @@ const TIMER_ERREICHT = /^Abbruch: Budget der .+ erreicht/m;
 const NORMAL = ["--basis", "HEAD"];
 const TESTUMBAU = ["--basis", "HEAD~1", "--testumbau"];
 const EIN_PLATZ = 1;
+const MS_JE_MINUTE = 60_000;
+const SECHS_STUNDEN_MS = 360 * MS_JE_MINUTE;
+const EINE_STUNDE_MS = 60 * MS_JE_MINUTE;
+const FUENFZEHN_MINUTEN_MS = 15 * MS_JE_MINUTE;
 const BUDGET_UMGEBUNG = [
   "BUDGET",
   "BUDGET_MS",
@@ -72,8 +77,8 @@ function grosseQuelleTestUmgebaut(context, marke) {
   return repo;
 }
 
-async function ohneWarten(context, { repo, env }, argumente) {
-  const lauf = starte([WERKZEUG, ...argumente], { env, cwd: repo });
+async function ohneWarten(context, { repo, env, vorab = [] }, argumente) {
+  const lauf = starte([...vorab, WERKZEUG, ...argumente], { env, cwd: repo });
   context.after(() => lauf.kind.kill("SIGKILL"));
   const gewartet = zeile(lauf.kind.stderr, WARTET).then(() => assert.fail(`Lauf wartet auf die Sperre: ${lauf.stderr}`));
   const [code] = await Promise.race([lauf.ende, gewartet]);
@@ -98,7 +103,7 @@ test("liegt die Schätzung der normalen Mutation über dem Budget, startet sie n
   await halter(context, env);
   const marke = join(probeDirectory(context, {}), "testlauf");
   const repo = grosseQuelleGeaendert(context, marke);
-  const vorschau = ohneStart(await ohneWarten(context, { repo, env }, ["--basis", "HEAD"]), { repo, marke });
+  const vorschau = ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke });
   assert.deepEqual([vorschau.quelldateien, vorschau.testdateien, vorschau.testgruppen], [1, 1, 1], JSON.stringify(vorschau));
 });
 
@@ -107,8 +112,33 @@ test("liegt die Schätzung der Testumbau-Mutation über dem Budget, startet sie 
   await halter(context, env);
   const marke = join(probeDirectory(context, {}), "testlauf");
   const repo = grosseQuelleTestUmgebaut(context, marke);
-  const vorschau = ohneStart(await ohneWarten(context, { repo, env }, ["--basis", "HEAD~1", "--testumbau"]), { repo, marke });
+  const vorschau = ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD~1", "--testumbau"]), { repo, marke });
   assert.deepEqual([vorschau.quelldateien, vorschau.testdateien], [1, 1], JSON.stringify(vorschau));
+});
+
+async function bisZurSperre(context, repo, argumente) {
+  const env = umgebung(context, EIN_PLATZ);
+  await halter(context, env);
+  const lauf = starte([WERKZEUG, ...argumente], { env, cwd: repo });
+  context.after(() => lauf.kind.kill("SIGKILL"));
+  await wartet(lauf);
+  const [vorschau] = arten(logeintraege(repo), "vorschau");
+  assert.deepEqual(arten(logeintraege(repo), "stryker"), []);
+  return vorschau;
+}
+
+test("eine normale Mutation mit einer Schätzung von über 15 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
+  const repo = grosseQuelleGeaendert(context, join(probeDirectory(context, {}), "testlauf"));
+  const vorschau = await bisZurSperre(context, repo, ["--basis", "HEAD"]);
+  assert.ok(vorschau.schaetzung_ms > FUENFZEHN_MINUTEN_MS, JSON.stringify(vorschau));
+  assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
+});
+
+test("eine Testumbau-Mutation mit einer Schätzung von über 60 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
+  const repo = grosseQuelleTestUmgebaut(context, join(probeDirectory(context, {}), "testlauf"));
+  const vorschau = await bisZurSperre(context, repo, ["--basis", "HEAD~1", "--testumbau"]);
+  assert.ok(vorschau.schaetzung_ms > EINE_STUNDE_MS, JSON.stringify(vorschau));
+  assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
 });
 
 test("Umgebungsvariablen heben das Budget nicht an: die Schätzung über dem Budget startet auch mit ihnen nicht", async (context) => {
@@ -118,7 +148,7 @@ test("Umgebungsvariablen heben das Budget nicht an: die Schätzung über dem Bud
   const budgets = [];
   for (const env of [ohne, mit]) {
     const repo = grosseQuelleGeaendert(context, marke);
-    budgets.push(ohneStart(await ohneWarten(context, { repo, env }, ["--basis", "HEAD"]), { repo, marke }).budget_ms);
+    budgets.push(ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke }).budget_ms);
   }
   assert.equal(budgets[1], budgets[0]);
 });
