@@ -17,6 +17,10 @@ on:
         description: Statt der neuen Seite den alten Stand prüfen wie mit --alter-stand
         type: boolean
         default: false
+      testumbau:
+        description: Statt der neuen Seite den Testumbau prüfen wie mit --testumbau (nicht zusammen mit alter_stand)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -398,6 +402,7 @@ jobs:
           GLEICH: ${{ steps.gleich.outputs.gleich }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           ALTER_STAND: ${{ inputs.alter_stand }}
+          TESTUMBAU: ${{ inputs.testumbau }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -405,8 +410,13 @@ jobs:
             echo "basis muss eine Commit-SHA aus 40 Zeichen 0-9a-f sein"
             exit 1
           fi
+          if [ "$ALTER_STAND" = "true" ] && [ "${TESTUMBAU:-}" = "true" ]; then
+            echo "alter_stand und testumbau schließen sich aus"
+            exit 1
+          fi
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
+          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
             npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
             teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
@@ -462,10 +472,12 @@ jobs:
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
           ALTER_STAND: ${{ inputs.alter_stand }}
+          TESTUMBAU: ${{ inputs.testumbau }}
         run: |
           set -euo pipefail
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
+          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
           npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
 
       - name: Zeit-Log hochladen
@@ -525,11 +537,13 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           ALTER_STAND: ${{ inputs.alter_stand }}
+          TESTUMBAU: ${{ inputs.testumbau }}
         run: |
           set -uo pipefail
           set +e
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
+          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
           mkdir -p "$RUNNER_TEMP/urteil"
           npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
           code=${PIPESTATUS[0]}

@@ -183,3 +183,36 @@ test("das abgelegte Urteil wird auch bei rotem Urteil als Artefakt mutationsurte
   assert.ok(zeilen.includes("name: mutationsurteil"));
   assert.ok(zeilen.includes("path: ${{ runner.temp }}/urteil/"));
 });
+
+const TESTUMBAU = "--testumbau";
+
+test("der Abruf von Hand nimmt den Testumbau als Schalter, der aus ist, und Plan, Teil und Urteil lesen ihn aus derselben Eingabe", () => {
+  assert.deepEqual(abrufEingaben().testumbau.default, "false");
+  assert.equal(abrufEingaben().testumbau.type, "boolean");
+  for (const name of MUTATIONSSCHRITTE) assert.ok(workflowStepLines(CI, name).map((zeile) => zeile.trim()).includes("TESTUMBAU: ${{ inputs.testumbau }}"), name);
+});
+
+function messaufruf(lauf) {
+  const aufrufe = lauf.aufrufe.filter((aufruf) => aufruf.includes("--basis"));
+  assert.equal(aufrufe.length, 1, lauf.meldung);
+  return aufrufe[0];
+}
+
+test("Plan, Teil und Urteil hängen den Testumbau genau dann an, wenn der Schalter an ist", (context) => {
+  for (const name of MUTATIONSSCHRITTE) {
+    const an = messaufruf(schritt(context, name, { EVENT_NAME: ABRUF, TESTUMBAU: "true" }));
+    assert.ok(an.includes(TESTUMBAU), `${name}: ${an}`);
+    assert.ok(!an.includes(ALTER_STAND), `${name}: ${an}`);
+    for (const aus of ["false", ""]) {
+      const aufruf = messaufruf(schritt(context, name, { TESTUMBAU: aus }));
+      assert.ok(!aufruf.includes(TESTUMBAU), `${name} ${aus}: ${aufruf}`);
+    }
+  }
+});
+
+test("der Mutationsplan bricht beim Abruf ab, wenn alter Stand und Testumbau zusammen verlangt sind, und startet kein Werkzeug", (context) => {
+  const lauf = schritt(context, PLAN, { EVENT_NAME: ABRUF, ALTER_STAND: "true", TESTUMBAU: "true" });
+  assert.equal(lauf.status, EXIT_ROT, lauf.meldung);
+  assert.deepEqual(lauf.aufrufe, []);
+  assert.match(lauf.meldung, /alter_stand und testumbau schließen sich aus/);
+});
