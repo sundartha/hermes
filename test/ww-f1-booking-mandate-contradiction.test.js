@@ -1,7 +1,12 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, MANDATE_OUT_OF_SCOPE } from "../src/store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  MANDATE_OUT_OF_SCOPE,
+  MANDATE_OUT_OF_SCOPE_DEFAULT,
+  MANDATE_OUT_OF_SCOPE_VALUES,
+} from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 const SCOPE = "Termin an einem Werktag zwischen 9 und 12 Uhr, bis 60 Euro";
@@ -196,4 +201,9 @@ test("WW-F1-7: Sprachreinheit - die Mandats-Variante mischt die Sprachen nicht",
       );
     }
   }
+});
+
+test("[NIE1] Mandat-Werteliste bleibt take_message, decline, accept_best mit Standard take_message", () => {
+  assert.deepEqual([...MANDATE_OUT_OF_SCOPE_VALUES], ["take_message", "decline", "accept_best"]);
+  assert.equal(MANDATE_OUT_OF_SCOPE_DEFAULT, "take_message");
 });
