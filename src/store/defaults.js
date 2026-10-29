@@ -2,7 +2,6 @@ import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 import { MANDATE_OUT_OF_SCOPE } from "./begriffe-anrufe.js";
 import { emptyUsage } from "./begriffe-leerzustaende.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
-import { normNum } from "./begriffe-rufnummern.js";
 
 export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
 export {
@@ -80,6 +79,7 @@ export {
   emptyUsage,
 } from "./begriffe-leerzustaende.js";
 export { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone } from "./begriffe-sprache-zeit.js";
+export { PROFILE_FIELDS, resolveProfileFrom, sanitizeProfile } from "./begriffe-profil.js";
 
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
@@ -145,65 +145,4 @@ export function calendarMap() {
 
 export function emptyUsageMap() {
   return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
-}
-
-export const PROFILE_FIELDS = {
-  allowedNumbers: "string[]",
-  allowedCountryCodes: "string[]",
-  unrestricted: "boolean",
-  allowCalendar: "boolean",
-  allowConsult: "boolean",
-  allowLookup: "boolean",
-  allowBooking: "boolean",
-  maxCallsPerHour: "number?",
-};
-
-export function sanitizeProfile(patch) {
-  const clean = {};
-  for (const [key, value] of Object.entries(patch || {})) {
-    const type = PROFILE_FIELDS[key];
-    if (!type) continue;
-    if (type === "string[]") {
-      if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
-        clean[key] =
-          key === "allowedNumbers"
-            ? value.map(normNum).filter(Boolean)
-            : value.map((c) => c.trim()).filter(Boolean);
-      }
-    } else if (type === "number?") {
-      if (value === null || typeof value === "number") clean[key] = value;
-    } else if (typeof value === type) {
-      clean[key] = value;
-    }
-  }
-  return clean;
-}
-
-const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 0;
-
-const OWNER_PROFILE = {
-  allowedNumbers: [],
-  allowedCountryCodes: [],
-  unrestricted: false,
-  allowCalendar: true,
-  allowConsult: true,
-  allowLookup: true,
-  allowBooking: true,
-  maxCallsPerHour: null,
-};
-
-const DEFAULT_PROFILE = {
-  allowedNumbers: [],
-  allowedCountryCodes: [],
-  unrestricted: false,
-  allowCalendar: false,
-  allowConsult: false,
-  allowLookup: false,
-  allowBooking: false,
-  maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
-};
-
-export function resolveProfileFrom(tenantId, storedProfile) {
-  if (tenantId === BOOTSTRAP_TENANT_ID) return { ...OWNER_PROFILE };
-  return storedProfile ? { ...DEFAULT_PROFILE, ...storedProfile } : { ...DEFAULT_PROFILE };
 }
