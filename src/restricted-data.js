@@ -106,7 +106,7 @@ const CARD_CONTEXT_STEMS = Object.freeze(["card", "carte", "karte"]);
 function isExemptByContext(candidate, before) {
   if (/\D/.test(candidate.raw) && !isDigitwise(candidate.raw)) return false;
   const isPhone = PHONE_CONTEXT_PATTERN.test(before) && candidate.raw.length <= PHONE_MAX_DIGITS;
-  const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw);
+  const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw.replace(/\D/g, ""));
   return isPhone || isReference;
 }
 
@@ -116,6 +116,8 @@ function requiredCardDigits(text, candidate) {
   const surrounding = `${before} ${after}`.toLowerCase();
   if (CARD_CONTEXT_STEMS.some((stem) => surrounding.includes(stem))) return CARD_MIN_DIGITS;
   if (isExemptByContext(candidate, before)) return null;
+  const isBrandedReference = isDigitwise(candidate.raw) && REFERENCE_CONTEXT_PATTERN.test(before);
+  if (isBrandedReference && hasCardBrandPrefix(candidate.raw.replace(/\D/g, ""))) return CARD_MIN_DIGITS;
   const isDigitwisePhone = isDigitwise(candidate.raw) && PHONE_CONTEXT_PATTERN.test(before);
   return isDigitwisePhone ? DIGITWISE_PHONE_MIN_DIGITS : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
 }
