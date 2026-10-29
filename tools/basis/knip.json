@@ -61,7 +61,6 @@
     "exports|src/call-confirmation.js|ACCEPTED_WINDOWS",
     "exports|src/call-confirmation.js|DERIVATION_VERSION",
     "exports|src/call-memory.js|MEMORY_MAX_ENTRY_CHARS",
-    "exports|src/cookie-consent-log.js|scheduleCookieConsentRetention",
     "exports|src/elevenlabs/inbound-rueckfall.js|EL_DIAL_ANSWER_ON_BRIDGE",
     "exports|src/elevenlabs/inbound-rueckfall.js|elBeinUrl",
     "exports|src/i18n/failure-reason-texts.js|makeFailureSentence",
