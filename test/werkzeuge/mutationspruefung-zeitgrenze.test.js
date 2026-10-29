@@ -10,6 +10,7 @@ import { isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./p
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-zeitgrenze-ersatz.mjs", import.meta.url));
 const ZWEITE_TESTDATEI = "test/zahl-zwei.test.js";
+const TOETENDE_TESTDATEI = "test/zahl-drei.test.js";
 const ABBRUCH_ZEITGRENZE = /^Abbruch: Erstlauf über der Zeitgrenze: (.+)$/gm;
 
 function probe(context, tests = {}) {
@@ -28,6 +29,13 @@ function mitZeitgrenze(repo, umgebung) {
 
 function abbruchzeilen(ausgabe) {
   return [...ausgabe.matchAll(ABBRUCH_ZEITGRENZE)].map(([, datei]) => datei);
+}
+
+function pruefeAbbruchOhneHalbierung(lauf) {
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, /Teilen geprüft/);
+  assert.deepEqual(abbruchzeilen(lauf.stderr), []);
+  assert.match(lauf.stderr, /^Abbruch: Something went wrong in the initial test run$/m);
 }
 
 test("zwei Testdateien über der Zeitgrenze werden in zwei Teilen geprüft und die Teile vereint, ohne Abbruchzeile", (context) => {
@@ -49,4 +57,16 @@ test("meldet der Erstlauf neben der Zeitgrenze einen Fehler-Status, bricht er ab
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.deepEqual(abbruchzeilen(lauf.stderr), []);
   assert.match(lauf.stderr, /^Abbruch: Something went wrong in the initial test run$/m);
+});
+
+test("scheitert die Wiederholung der Zeitüberschreitungen an der Zeitgrenze, wird die Testgruppe nicht halbiert", (context) => {
+  const repo = probe(context, { [ZWEITE_TESTDATEI]: testdatei([1, "positiv"]) });
+  const lauf = mitZeitgrenze(repo, { ERSTLAUF_ZEITUEBERSCHREITUNG: "1", FOLGELAUF_ZEITGRENZE: "1" });
+  pruefeAbbruchOhneHalbierung(lauf);
+});
+
+test("scheitert der Bestätigungslauf an der Zeitgrenze, wird die Testgruppe nicht halbiert", (context) => {
+  const repo = probe(context, { [TOETENDE_TESTDATEI]: testdatei([1, "positiv"]) });
+  const lauf = mitZeitgrenze(repo, { FOLGELAUF_ZEITGRENZE: "1" });
+  pruefeAbbruchOhneHalbierung(lauf);
 });
