@@ -733,14 +733,6 @@
       "count": 2
     }
   },
-  "src/store/defaults.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "src/store/greeting-notice-migration.js": {
     "id-length": {
       "count": 1

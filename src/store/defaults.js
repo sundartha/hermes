@@ -1,7 +1,3 @@
-import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
-import { emptyUsage } from "./begriffe-leerzustaende.js";
-import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
-
 export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
 export {
   CONSULT_ANSWER,
@@ -74,73 +70,21 @@ export {
   MAX_CALL_DURATION_CAP_S,
 } from "./begriffe-anrufe.js";
 export {
+  DEFAULT_GREETING,
+  calendarMap,
+  defaultSettings,
+  defaultSettingsMap,
+  demoCalendar,
   emptyCostCrossCheck,
   emptyPlatformTtsUsage,
   emptyUsage,
+  emptyUsageMap,
 } from "./begriffe-leerzustaende.js";
 export { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone } from "./begriffe-sprache-zeit.js";
 export { PROFILE_FIELDS, resolveProfileFrom, sanitizeProfile } from "./begriffe-profil.js";
-
-const DEMO_EVENTS = [
-  { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
-  { id: "ev2", title: "Mittagessen mit Alex", daysAhead: 2, startHour: 12, endHour: 13 },
-  { id: "ev3", title: "Projekt-Review", daysAhead: 3, startHour: 15, endHour: 16.5 },
-];
-
-function nextWeekday(daysAhead, hour) {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  const wholeHours = Math.floor(hour);
-  const minutes = (hour % 1) * 60;
-  d.setHours(wholeHours, minutes, 0, 0);
-  return d.toISOString();
-}
-
-export const DEFAULT_GREETING = withInboundNotice(
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
-  INBOUND_NOTICES.de,
-);
 
 export let DEFAULT_LANGUAGE = "en";
 
 export function setWorldDefaultLanguageEnabled(enabled) {
   DEFAULT_LANGUAGE = enabled ? "en" : "de";
-}
-
-export function defaultSettings() {
-  return {
-    agentName: "Hermes",
-    greeting: DEFAULT_GREETING,
-    allowCalendar: true,
-    allowBooking: true,
-    allowSummaries: true,
-    smsSummaryOptIn: true,
-    allowPersonalData: false,
-    allowBankData: false,
-    allowResearch: false,
-    allowCallMemory: false,
-    language: null,
-    agentStyle: null,
-  };
-}
-
-export function demoCalendar() {
-  return DEMO_EVENTS.map((demoEvent) => ({
-    id: demoEvent.id,
-    title: demoEvent.title,
-    start: nextWeekday(demoEvent.daysAhead, demoEvent.startHour),
-    end: nextWeekday(demoEvent.daysAhead, demoEvent.endHour),
-  }));
-}
-
-export function defaultSettingsMap() {
-  return { [BOOTSTRAP_TENANT_ID]: defaultSettings() };
-}
-
-export function calendarMap() {
-  return { [BOOTSTRAP_TENANT_ID]: demoCalendar() };
-}
-
-export function emptyUsageMap() {
-  return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
 }
