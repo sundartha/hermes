@@ -519,7 +519,7 @@ function hitKey(hit) {
 
 function isUnsafeAtCut(hit, cut, keptKeys) {
   if (hit.start >= cut) return false;
-  return hit.end > cut || !keptKeys.has(hitKey(hit));
+  return !keptKeys.has(hitKey(hit));
 }
 
 export function clampWithoutSplittingRestrictedData(text, maxChars) {
