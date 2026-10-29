@@ -94,6 +94,15 @@ export function abgeschlossenerAnruf(felder) {
   });
 }
 
+export function beendeterBeispielanruf(id, zusammenfassung, ergebnis) {
+  return abgeschlossenerAnruf({
+    id,
+    summary: zusammenfassung,
+    objectiveAchieved: true,
+    result: { outcome: ergebnis, commitments: [], counterpartyCommitments: [], openPoints: [], nextStep: "-" },
+  });
+}
+
 export function anrufeJeGruppe(praefix, gruppen, zielNummer) {
   return Object.fromEntries(
     Object.entries(gruppen).map(([gruppe, zeilen]) => [
