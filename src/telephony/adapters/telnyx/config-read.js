@@ -2,9 +2,13 @@ import { assertTelnyxOk } from "./errors.js";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url, telnyxJson } from "./http.js";
 
 const NUMBERS_PATH = "/v2/phone_numbers";
+const TELNYX_LESEFRIST_MS = 4000;
 
 async function getJson(path, op) {
-  const res = await fetch(url(path), { headers: authHeaders() });
+  const res = await fetch(url(path), {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(TELNYX_LESEFRIST_MS),
+  });
   await assertTelnyxOk(res, op);
   return telnyxJson(res);
 }
