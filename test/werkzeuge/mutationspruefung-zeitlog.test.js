@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
 
 import { BASIS, EXIT_ROT, NEGATIV, NULL, pruefe, quelle, schluessel, UEBERLEBT } from "./mutationspruefung-hilfen.js";
-import { probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
 
 const LOGORDNER = ".mutationspruefung/log";
 const PRAEFIX = "Mutationslog: ";
@@ -17,6 +18,7 @@ const UEBERLEBEND = ["Survived", "NoCoverage"];
 const GETOETET = "Killed";
 const BESTAETIGUNGSLAUF = "im Bestätigungslauf";
 const ERSTER_LAUF = "erster Lauf";
+const LASTMITTEL = 3;
 
 function logs(repo) {
   const ordner = join(repo, LOGORDNER);
@@ -47,6 +49,13 @@ function rotesRepo(context) {
   return repo;
 }
 
+function rotLaufMitLog(context) {
+  const repo = rotesRepo(context);
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  return { repo, lauf, eintraege: logDer(repo, "normal") };
+}
+
 function pruefeStrykerlauf(lauf) {
   assert.equal(lauf.datei, "src/zahl.js");
   assert.equal(lauf.testdateien, 1);
@@ -59,10 +68,7 @@ function pruefeStrykerlauf(lauf) {
 }
 
 test("ein Mutationslauf schreibt ein Zeit-Log mit Start, Warten an der Sperre, Testauswahl, je Datei Mutanten und Dauern und Ende", (context) => {
-  const repo = rotesRepo(context);
-  const lauf = pruefe(repo, "--basis", "HEAD");
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  const eintraege = logDer(repo, "normal");
+  const { repo, lauf, eintraege } = rotLaufMitLog(context);
   const [start] = eintraege;
   assert.equal(start.basis, "HEAD");
   assert.equal(start.commit, runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim());
@@ -171,4 +177,67 @@ test("der Testumbau schreibt ein Zeit-Log mit den Stryker-Läufen beider Stände
   const dateien = arten(eintraege, "stryker").map(({ datei }) => datei);
   assert.ok(dateien.length >= 2 && dateien.every((datei) => datei === "src/zahl.js"), JSON.stringify(eintraege));
   assert.equal(eintraege.at(-1).art, "ende");
+});
+
+test("das Zeit-Log hält vor und nach jedem Stryker-Lauf Last und Prozesse fest, je Prozess nur Kennzahlen und höchstens 120 Zeichen Argumente", (context) => {
+  const { eintraege } = rotLaufMitLog(context);
+  const strykerlaeufe = arten(eintraege, "stryker");
+  const prozesse = arten(eintraege, "prozesse");
+  for (const zeitpunkt of ["vor", "nach"]) {
+    assert.equal(prozesse.filter((eintrag) => eintrag.zeitpunkt === zeitpunkt).length, strykerlaeufe.length, JSON.stringify(prozesse));
+  }
+  for (const eintrag of prozesse) {
+    assert.equal(eintrag.datei, "src/zahl.js");
+    assert.equal(eintrag.last.length, LASTMITTEL, JSON.stringify(eintrag));
+    assert.ok(eintrag.last.every(Number.isFinite), JSON.stringify(eintrag));
+    for (const prozess of eintrag.prozesse) {
+      assert.deepEqual(Object.keys(prozess).sort(), ["alter_s", "argumente", "befehl", "cpu", "pid", "ppid"], JSON.stringify(prozess));
+      assert.ok(prozess.argumente.length <= 120, JSON.stringify(prozess));
+      assert.ok([prozess.pid, prozess.ppid, prozess.alter_s, prozess.cpu].every(Number.isFinite), JSON.stringify(prozess));
+      assert.match(prozess.befehl, /node|stryker|tap/);
+    }
+  }
+  assert.ok(prozesse.some((eintrag) => eintrag.prozesse.some(({ befehl }) => befehl === "node")), JSON.stringify(prozesse));
+});
+
+function prozesszeilen(repo) {
+  return arten(logDer(repo, "normal"), "prozesse");
+}
+
+function mitErsatzPs(context, skript, vorbereiten = () => {}) {
+  const repo = rotesRepo(context);
+  vorbereiten(repo);
+  const werkzeuge = probeDirectory(context, {});
+  writeFileSync(join(werkzeuge, "ps"), `#!/bin/sh\n${skript}\n`);
+  chmodSync(join(werkzeuge, "ps"), 0o755);
+  const lauf = spawnSync(process.execPath, [join(REPO_ROOT, "tools/mutationspruefung.mjs"), "--basis", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+    env: { ...isolatedEnvironment(), PATH: `${werkzeuge}${delimiter}${process.env.PATH}` },
+  });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  return repo;
+}
+
+test("scheitert das Auslesen der Prozesse, läuft die Prüfung unverändert weiter und das Zeit-Log lässt die Prozesszeilen aus", (context) => {
+  assert.deepEqual(prozesszeilen(mitErsatzPs(context, "exit 1")), []);
+});
+
+test("das Zeit-Log rechnet das Alter eines Prozesses mit und ohne Tagesanteil in Sekunden und nimmt nur node, stryker und tap auf", (context) => {
+  const ausgabe = ["  4242     1 3-02:03:04  1.5 node /opt/lauf.js --eins", "  4243  4242       05:06  0.0 /usr/bin/node arbeiter.js", "  4244     1       00:07  9.0 nodemon lauf.js"];
+  const [erste] = prozesszeilen(mitErsatzPs(context, `cat <<'ENDE'\n${ausgabe.join("\n")}\nENDE`));
+  assert.deepEqual(erste.prozesse, [
+    { pid: 4242, ppid: 1, alter_s: 266_584, cpu: 1.5, befehl: "node", argumente: "/opt/lauf.js --eins" },
+    { pid: 4243, ppid: 4242, alter_s: 306, cpu: 0, befehl: "node", argumente: "arbeiter.js" },
+  ]);
+});
+
+test("kann das Zeit-Log nicht geschrieben werden, wird auch kein ps gestartet", (context) => {
+  const aufruf = join(probeDirectory(context, {}), "ps-aufgerufen");
+  mitErsatzPs(context, `echo "$*" >> "${aufruf}"\nexit 1`, (repo) => {
+    mkdirSync(join(repo, ".mutationspruefung"));
+    writeFileSync(join(repo, LOGORDNER), "keine Ordner hier");
+  });
+  const aufrufe = existsSync(aufruf) ? readFileSync(aufruf, "utf8") : "";
+  assert.doesNotMatch(aufrufe, /etime=/);
 });
