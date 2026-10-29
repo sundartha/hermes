@@ -48,19 +48,6 @@
       "wasDarfNiePassieren": []
     },
     {
-      "id": "a7",
-      "art": "umbau",
-      "ziel": "Listen aus state-ops.js nach zustand/listen.js auslagern",
-      "bereich": "src/store/",
-      "erwarteteDateien": [
-        "src/store/state-ops.js",
-        "src/store/zustand/listen.js",
-        "test/newsletter-recipients-model.test.js"
-      ],
-      "abnahme": "test/newsletter-recipients-model.test.js",
-      "wasDarfNiePassieren": []
-    },
-    {
       "id": "a3",
       "art": "umbau",
       "ziel": "Einstellungen aus state-ops.js nach zustand/einstellungen.js auslagern",
@@ -97,6 +84,19 @@
         "test/number-lifecycle.test.js"
       ],
       "abnahme": "test/number-lifecycle.test.js",
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a7",
+      "art": "umbau",
+      "ziel": "Listen aus state-ops.js nach zustand/listen.js auslagern",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/state-ops.js",
+        "src/store/zustand/listen.js",
+        "test/newsletter-recipients-model.test.js"
+      ],
+      "abnahme": "test/newsletter-recipients-model.test.js",
       "wasDarfNiePassieren": []
     }
   ]
