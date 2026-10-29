@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASIS, bisBeendet, EXIT_ABBRUCH, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
+import { BASIS, bisBeendet, EXIT_ABBRUCH, logeintraege, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
 import { commitAll, outputLines, probeDirectory, probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
 import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-lauf.js";
 
@@ -13,7 +13,6 @@ const EINE_SEKUNDE = fileURLToPath(new URL("mutationspruefung-budget-ersatz.mjs"
 const HAENGER = fileURLToPath(new URL("mutationspruefung-budget-haenger-ersatz.mjs", import.meta.url));
 const ENDE_ZUERST = fileURLToPath(new URL("mutationspruefung-budget-ende-ersatz.mjs", import.meta.url));
 const HAENGER_BUDGET_MS = 5000;
-const LOGORDNER = ".mutationspruefung/log";
 const VIELE_ZEILEN = 600;
 const URTEIL = /^(?:grün|rot): /m;
 const ABBRUCH_BUDGET = /^Abbruch: Budget/m;
@@ -46,13 +45,6 @@ function vieleMutanten() {
 
 function markierenderTest(marke) {
   return ['import { appendFileSync } from "node:fs";', `appendFileSync(${JSON.stringify(marke)}, "lief\\n");`, testdatei([-1, "negativ"], [1, "positiv"])].join("\n");
-}
-
-function logeintraege(repo) {
-  const ordner = join(repo, LOGORDNER);
-  const dateien = existsSync(ordner) ? readdirSync(ordner).filter((name) => name.endsWith(".jsonl")) : [];
-  assert.equal(dateien.length, 1, JSON.stringify(dateien));
-  return outputLines(readFileSync(join(ordner, dateien[0]), "utf8")).map((zeile) => JSON.parse(zeile));
 }
 
 function arten(eintraege, art) {

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { GRUPPE } from "../../tools/mutationspruefung/gruppen.mjs";
 import { echtWarten } from "../echt-warten.js";
-import { REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { outputLines, REPO_ROOT, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
+const LOGORDNER = ".mutationspruefung/log";
 const PRUEFABSTAND_MS = 100;
 const PRUEFUNGEN_BIS_AUFGABE = 50;
 export const EXIT_ROT = 1;
@@ -13,6 +15,13 @@ export const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 export const ANGENOMMEN = /^Hinweis: als gleichwertig angenommen: (.+)$/gm;
 export const GRUND = ", weil die Null wie eine positive Zahl gelten darf";
 export const AUFTRAGSWEG = "Auftrag: probe/a1";
+
+export function logeintraege(repo) {
+  const ordner = join(repo, LOGORDNER);
+  const dateien = existsSync(ordner) ? readdirSync(ordner).filter((name) => name.endsWith(".jsonl")) : [];
+  assert.equal(dateien.length, 1, JSON.stringify(dateien));
+  return outputLines(readFileSync(join(ordner, dateien[0]), "utf8")).map((zeile) => JSON.parse(zeile));
+}
 
 export function schluessel(ausgabe, muster) {
   return [...ausgabe.matchAll(muster)].map(([, gefunden]) => gefunden).sort();
