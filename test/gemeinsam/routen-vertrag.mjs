@@ -4,6 +4,7 @@ import { startRouterApp } from "../operator-route-app.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 
 const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
 const OWNER_TENANT = "owner";
 
@@ -15,12 +16,12 @@ const abgelehnterMandant = {
   },
 };
 
-async function mitRoute({ baueRouter, pfad, tenant }, pruefung) {
+async function mitRoute({ baueRouter, pfad, tenant }, pruefung, optionen = {}) {
   const audits = [];
   const router = baueRouter({ audit: (...args) => audits.push(args), tenant });
   const srv = await startRouterApp(router);
   try {
-    const antwort = await abrufMitFrist(`${srv.base}${pfad}`, { method: "POST" });
+    const antwort = await abrufMitFrist(`${srv.base}${pfad}`, { method: "POST", ...optionen });
     await pruefung(antwort, audits);
   } finally {
     await srv.close();
@@ -39,4 +40,14 @@ export function pruefeRoutenVertrag(route) {
       assert.equal(antwort.status, HTTP_FORBIDDEN);
       assert.equal(audits.length, 0);
     }));
+
+  test("Routenvertrag: ein Array als Körper bleibt abgelehnt und ohne Audit-Eintrag", () =>
+    mitRoute(
+      { ...route, tenant: erlaubterMandant },
+      (antwort, audits) => {
+        assert.equal(antwort.status, HTTP_BAD_REQUEST);
+        assert.equal(audits.length, 0);
+      },
+      { headers: { "content-type": "application/json" }, body: "[]" },
+    ));
 }
