@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
-import { cwd, pid } from "node:process";
+import { loadavg } from "node:os";
+import { basename, isAbsolute, join, relative } from "node:path";
+import { cwd, env, pid } from "node:process";
 
 export const ZEITLOG = "zeitlog";
 export const LOGORDNER = "log";
@@ -24,6 +26,16 @@ const MS_JE_MINUTE = 60_000;
 const SEKUNDEN_BIS = 120_000;
 const LANGSAMSTE = 5;
 const PROZENT = 100;
+const PS_SPALTEN = "pid=,ppid=,etime=,pcpu=,args=";
+const PS_ZEILE = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/;
+const PS_UMGEBUNG = { LC_ALL: "C" };
+const PS_FRIST_MS = 5000;
+const ARGUMENTE_ZEICHEN = 120;
+const MESSBARE_PROZESSE = /^(node|stryker|tap)$/;
+const SEKUNDEN_JE_MINUTE = 60;
+const SEKUNDEN_JE_STUNDE = 3600;
+const SEKUNDEN_JE_TAG = 86_400;
+const SEKUNDEN_JE_STUFE = [1, SEKUNDEN_JE_MINUTE, SEKUNDEN_JE_STUNDE];
 export const PHASEN = { sperre: "Sperre", testauswahl: "Testauswahl", sandbox: "Sandbox", erstlauf: "Erstlauf", mutanten: "Mutantenläufe", loeschprobe: "Löschprobe" };
 
 const log = { datei: null, begonnen: false, beginn: Date.now(), letzteZeile: Date.now(), phasen: leerePhasen(), laeufe: new Map(), aktuell: null, fertig: leeresTeilergebnis() };
@@ -50,6 +62,36 @@ export function anteil(ms, gesamt) {
 
 function melde(text) {
   console.error(`${PRAEFIX}${text}`);
+}
+
+function alterInSekunden(etime) {
+  const [tage, uhr] = etime.includes("-") ? etime.split("-") : [0, etime];
+  const teile = String(uhr).split(":").reverse().map(Number);
+  return teile.reduce((summe, wert, stelle) => summe + wert * SEKUNDEN_JE_STUFE[stelle], Number(tage) * SEKUNDEN_JE_TAG);
+}
+
+function prozess(zeile) {
+  const treffer = PS_ZEILE.exec(zeile);
+  if (treffer === null) return [];
+  const [, pidText, ppid, etime, cpu, aufruf, argumente] = treffer;
+  const befehl = basename(aufruf);
+  if (!MESSBARE_PROZESSE.test(befehl)) return [];
+  return [{ pid: Number(pidText), ppid: Number(ppid), alter_s: alterInSekunden(etime), cpu: Number(cpu), befehl, argumente: argumente.slice(0, ARGUMENTE_ZEICHEN) }];
+}
+
+function prozessliste() {
+  try {
+    return execFileSync("ps", ["-axo", PS_SPALTEN], { encoding: "utf8", env: { ...env, ...PS_UMGEBUNG }, timeout: PS_FRIST_MS, stdio: ["ignore", "pipe", "ignore"] }).split("\n").flatMap(prozess);
+  } catch {
+    return null;
+  }
+}
+
+function notiereProzesse(zeitpunkt, { datei, anlass }) {
+  if (log.datei === null || !log.begonnen) return;
+  const prozesse = prozessliste();
+  if (prozesse === null) return;
+  schreibe("prozesse", { zeitpunkt, datei, anlass, last: loadavg(), prozesse });
 }
 
 function schreibe(art, daten) {
@@ -228,12 +270,14 @@ function laufFertig(lauf, ergebnisse, fehler) {
 
 export function strykerLauf({ datei, anlass, testdateien }, ueberlebt) {
   const kennung = randomUUID();
+  notiereProzesse("vor", { datei, anlass });
   const lauf = { datei, anlass, testdateien, ueberlebt, beginn: Date.now(), erstlaufEnde: undefined, erstlaufMs: 0, tests: 0, geplant: 0, getestet: 0, langsamste: [] };
   log.laeufe.set(kennung, lauf);
   const fertig = (ergebnisse, fehler) => {
     const stand = log.laeufe.get(kennung);
     log.laeufe.delete(kennung);
     laufFertig(stand, ergebnisse, fehler);
+    notiereProzesse("nach", stand);
   };
   return {
     optionen: { [OPTION]: kennung, reporters: [ZEITLOG] },
