@@ -2,6 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { cpSync, existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { env } from "node:process";
+import { createInterface } from "node:readline";
 
 import { omitKeys } from "../../src/utils/object.js";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
@@ -23,6 +24,8 @@ const ZEITABLAUF = "Timeout";
 const ABSTURZ = "RuntimeError";
 const EXIT_GRUEN = 0;
 const EXIT_ROTER_TEST = 1;
+const ROTER_TEST_ZEILE = /^not ok /;
+const OFFENER_TEST = / # TODO\b/;
 const TESTKONTEXT = "NODE_TEST_CONTEXT";
 const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
@@ -80,20 +83,35 @@ function ohneTestkontext() {
   return omitKeys(env, [TESTKONTEXT]);
 }
 
-function laufstatus({ status, signal, error }) {
+function rot(zeile) {
+  return ROTER_TEST_ZEILE.test(zeile) && !OFFENER_TEST.test(zeile);
+}
+
+function laufstatus({ status, signal, error, rotGesehen }) {
   if (status === EXIT_GRUEN || status === EXIT_PROZESS_UEBRIG) return UEBERLEBT;
-  if (status === EXIT_ROTER_TEST) return ERKANNT;
+  if (status === EXIT_ROTER_TEST || rotGesehen) return ERKANNT;
   return signal !== null || error !== undefined ? ZEITABLAUF : ABSTURZ;
+}
+
+function beiRotemTest(kind, beiRot) {
+  createInterface({ input: kind.stdout }).on("line", (zeile) => {
+    if (rot(zeile)) beiRot();
+  });
 }
 
 function testlauf(verzeichnis, tests) {
   return new Promise((fertig) => {
-    const kind = spawn(process.execPath, [TESTGRUPPE, "--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
+    const kind = spawn(process.execPath, [TESTGRUPPE, "--test", "--test-reporter=tap", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
       cwd: verzeichnis,
       env: ohneTestkontext(),
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "ignore"],
     });
-    const lage = { error: undefined };
+    const lage = { error: undefined, rotGesehen: false };
+    beiRotemTest(kind, () => {
+      if (lage.rotGesehen) return;
+      lage.rotGesehen = true;
+      kind.kill();
+    });
     const uhr = setTimeout(() => {
       lage.error = new Error(ZEITABLAUF_FEHLER);
       kind.kill();
@@ -105,7 +123,7 @@ function testlauf(verzeichnis, tests) {
     kind.on("error", (error) => {
       if (kind.pid === undefined) ende({ status: null, signal: null, error });
     });
-    kind.on("close", (status, signal) => ende({ status, signal, error: lage.error }));
+    kind.on("exit", (status, signal) => ende({ status, signal, error: lage.error, rotGesehen: lage.rotGesehen }));
   });
 }
 
