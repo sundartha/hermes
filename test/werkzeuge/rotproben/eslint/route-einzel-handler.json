@@ -1,0 +1,11 @@
+{
+  "titel": "Exportierter Einzel-Handler in einer Routendatei",
+  "dateien": {
+    "src/routes/rotprobe.js": [
+      "export function rotprobeHandler(req, res) {",
+      "  res.json({});",
+      "}"
+    ]
+  },
+  "erwartet": "Eine Route steht in Router-Form"
+}

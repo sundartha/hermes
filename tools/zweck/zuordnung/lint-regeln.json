@@ -209,7 +209,8 @@
       "(E1-15)": "lint/sonde",
       "Auflege-Stufen": "lint/auflegestufen",
       "uebersprungener Test": "lint/uebersprungene-tests",
-      "eigene Typdeklaration": "lint/typen-behauptung"
+      "eigene Typdeklaration": "lint/typen-behauptung",
+      "Eine Route steht in Router-Form": "lint/route-router-form"
     },
     "hermes-typen/keine-typwaechter": {
       "Ein Typwächter": "lint/typen-behauptung"
