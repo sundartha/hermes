@@ -399,3 +399,98 @@ test("await_call_event: Zeitablauf beim Abwarten meldet kein Ereignis und keine 
     assert.deepEqual(result.structuredContent.questions, []);
   });
 });
+
+const DE_MCP = MCP_TEXTS.de;
+const GESTARTET_ID = "c_gestartet";
+const gestartetText = JSON.stringify({ call_id: GESTARTET_ID, status: "dialing" }, null, 2);
+
+test("place_call: Antwort ohne textliche callId ist UPSTREAM_INCOMPLETE", async () => {
+  for (const body of [{}, { callId: 42 }]) {
+    await withGateway(placeCallGateway(jsonAntwort(HTTP_OK, body)), async () => {
+      const result = await deHandlers("tenant_ohne_callid").get("place_call")(ANRUF_ARGS);
+      assert.equal(result.isError, true, `${JSON.stringify(body)}: isError`);
+      assert.equal(result.content[0].text, DE_FEHLER[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE], `${JSON.stringify(body)}: Text`);
+    });
+  }
+});
+
+test("place_call: der Antworttext ist der Start und darunter je Hinweis eine Zeile, ohne Leerzeilen", async () => {
+  const faelle = [
+    { name: "ohne Hinweis", extra: {}, body: { callId: GESTARTET_ID }, expected: gestartetText },
+    {
+      name: "laufender Anruf mit Rueckfragen",
+      extra: { consultAllowed: true },
+      body: { callId: GESTARTET_ID, deduplicated: true },
+      expected: `${gestartetText}\n${DE_MCP.callAlreadyRunningHint}\n${DE_MCP.consultPermissionHint}`,
+    },
+  ];
+  for (const { name, extra, body, expected } of faelle) {
+    await withGateway(placeCallGateway(jsonAntwort(HTTP_OK, body)), async () => {
+      const result = await deHandlers("tenant_starttext", extra).get("place_call")(ANRUF_ARGS);
+      assert.notEqual(result.isError, true, `${name}: darf nicht scheitern`);
+      assert.deepEqual(result.content, [{ type: "text", text: expected }], `${name}: Antworttext`);
+    });
+  }
+});
+
+const KEIN_EREIGNIS = jsonAntwort(HTTP_OK, { event: CONSULT_EVENT.NONE, eventId: null, questions: [] });
+
+test("await_call_event: after_event_id geht kodiert als after an das Abwarten der Rueckfrage", async () => {
+  const faelle = [
+    { args: { call_id: "c_after" }, expectedPath: "/api/calls/c_after/consult" },
+    { args: { call_id: "c_after", after_event_id: "e 1/2" }, expectedPath: "/api/calls/c_after/consult?after=e%201%2F2" },
+  ];
+  for (const { args, expectedPath } of faelle) {
+    await withGateway(() => KEIN_EREIGNIS, async (requests) => {
+      const result = await deHandlers("tenant_after", { consultAllowed: true }).get("await_call_event")(args);
+      assert.equal(result.structuredContent.event, CONSULT_EVENT.NONE);
+      assert.deepEqual(
+        requests.map(({ method, path }) => `${method} ${path}`),
+        [`GET ${expectedPath}`],
+        `${JSON.stringify(args)}: Pfad des Abwartens`,
+      );
+    });
+  }
+});
+
+const answerConsult = (args) =>
+  deHandlers("tenant_antwort", { consultAllowed: true }).get("answer_consult")({
+    call_id: "c_antwort",
+    event_id: "e_antwort",
+    ...args,
+  });
+
+test("answer_consult: die Quittung mit status working ist Text und accepted ohne Angaben", async () => {
+  await withGateway(() => jsonAntwort(HTTP_OK, { merged_facts: 5 }), async () => {
+    const result = await answerConsult({ status: "working" });
+    assert.deepEqual(result.content, [{ type: "text", text: DE_MCP.consultAckAccepted }]);
+    assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
+  });
+});
+
+test("answer_consult: ohne Zahl merged_facts in der Antwort zaehlen die uebergebenen Angaben 0", async () => {
+  const faelle = [
+    { name: "Zahl", answer: jsonAntwort(HTTP_OK, { merged_facts: 2 }), expected: 2 },
+    { name: "leeres Objekt", answer: jsonAntwort(HTTP_OK, {}), expected: 0 },
+    { name: "Text statt Zahl", answer: jsonAntwort(HTTP_OK, { merged_facts: "2" }), expected: 0 },
+    { name: "null als Koerper", answer: rohAntwort(HTTP_OK, "null"), expected: 0 },
+  ];
+  for (const { name, answer, expected } of faelle) {
+    await withGateway(() => answer, async () => {
+      const result = await answerConsult({ status: "final", answers: ["Ja"] });
+      assert.notEqual(result.isError, true, `${name}: darf nicht scheitern`);
+      assert.deepEqual(result.content, [{ type: "text", text: DE_MCP.consultAnswerAccepted(expected) }], `${name}: Text`);
+      assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: expected }, `${name}: Ergebnis`);
+    });
+  }
+});
+
+test("get_agent_number: ein Zustand ohne Objekt agent ist UPSTREAM_INCOMPLETE", async () => {
+  for (const state of [{}, { agent: "+4930123456" }]) {
+    await withGateway(() => jsonAntwort(HTTP_OK, state), async () => {
+      const result = await deHandlers("tenant_ohne_agent").get("get_agent_number")({});
+      assert.equal(result.isError, true, `${JSON.stringify(state)}: isError`);
+      assert.equal(result.content[0].text, DE_FEHLER[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE], `${JSON.stringify(state)}: Text`);
+    });
+  }
+});
