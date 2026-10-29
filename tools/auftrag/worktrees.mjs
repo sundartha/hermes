@@ -58,6 +58,24 @@ export function legeIntegrationAn(root, phase) {
   return pfad;
 }
 
+export function absicherungsBranch({ phase }) {
+  return `absicherung/${phase}`;
+}
+
+function branchDa(root, branch) {
+  return spawnSync("git", ["rev-parse", "--verify", "-q", `refs/heads/${branch}`], { cwd: root }).status === 0;
+}
+
+export function legeAbsicherungAn(root, phase) {
+  const pfad = join(root, WORKTREES, `absicherung-${phase.phase}`);
+  if (existsSync(pfad)) return pfad;
+  const branch = absicherungsBranch(phase);
+  const anlegen = branchDa(root, branch) ? [pfad, branch] : ["-b", branch, pfad, "HEAD"];
+  git(["worktree", "add", "-q", ...anlegen], { cwd: root });
+  einrichten(root, pfad);
+  return pfad;
+}
+
 export function legeAuftragAn(ort, kennung) {
   const pfad = auftragsPfad(ort, kennung);
   git(["worktree", "add", "-q", "-b", `worktree-${auftragsName(ort, kennung)}`, pfad, "HEAD"], { cwd: ort.integration });

@@ -552,6 +552,12 @@ jobs:
           echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
           exit "$code"
 
+      - name: Absicherungsbeleg schreiben
+        if: always() && needs.mutationsplan.outputs.messen == 'ja' && inputs.alter_stand
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
+        run: node tools/mutationspruefung/beleg.mjs "$PR_BASE_SHA" "$RUNNER_TEMP/urteil"
+
       - name: Mutationsurteil hochladen
         if: always() && needs.mutationsplan.outputs.messen == 'ja'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
