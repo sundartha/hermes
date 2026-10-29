@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
   startIdp,
@@ -11,11 +10,9 @@ import {
   mcpPost,
   toolCall,
   readToolResult,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const RESOURCES_LIST_BODY = { jsonrpc: "2.0", id: 2, method: "resources/list" };
@@ -62,21 +59,11 @@ async function httpInitializeInstructions(baseUrl, token) {
 }
 
 function withStdioClient(env, run) {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: { ...BASE_ENV, ...env },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport(env);
   const client = new Client({ name: "t2-11-stdio-client", version: "0.0.0" });
   return client
     .connect(transport)
-    .then(() => run(client, () => stderrOutput, transport))
+    .then(() => run(client, () => stderr.text, transport))
     .finally(() => client.close());
 }
 

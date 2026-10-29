@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { NOT_PLACED, failureReasonBase } from "../src/telephony/failure-reason.js";
@@ -17,8 +16,7 @@ import {
   mcpPost,
   toolCall,
   readToolResult,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
@@ -171,17 +169,7 @@ test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failu
   await new Promise((resolve) => mockServer.listen(0, "127.0.0.1", resolve));
   const gatewayUrl = `http://127.0.0.1:${mockServer.address().port}`;
 
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gatewayUrl },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport({ GATEWAY_URL: gatewayUrl });
   const client = new Client({ name: "hermes-p5b-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
@@ -189,7 +177,7 @@ test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failu
       name: "get_call_status",
       arguments: { call_id: CALL_ID },
     });
-    assert.notEqual(result.isError, true, `Erfolgslauf ist kein Fehler (stderr: ${stderrOutput})`);
+    assert.notEqual(result.isError, true, `Erfolgslauf ist kein Fehler (stderr: ${stderr.text})`);
     assert.equal(result.structuredContent.failure_reason, NOT_PLACED);
   } finally {
     await client.close();

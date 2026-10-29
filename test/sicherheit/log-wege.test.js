@@ -7,7 +7,7 @@ import readline from "node:readline";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASE_ENV, startServer, waitForLog } from "../helpers.js";
+import { BASE_ENV, startServer, waitForLog, MCP_STDIO_ARGS } from "../helpers.js";
 import { maskRestrictedText } from "../../src/restricted-data.js";
 import { hashEmail, maskNumber, maskNumbersInText } from "../../src/util.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -185,7 +185,7 @@ test("SG-13 Server-Log enthält weder Nummer noch Token noch E-Mail im Klartext"
 });
 
 test("SG-13 stdio-MCP-Server liefert eine lange Kennung unverändert auf stdout", async () => {
-  const kind = spawn(process.execPath, [path.join("src", "mcp-server.js")], {
+  const kind = spawn(process.execPath, MCP_STDIO_ARGS, {
     cwd: ROOT,
     env: { ...BASE_ENV, PATH: process.env.PATH },
     stdio: ["pipe", "pipe", "ignore"],

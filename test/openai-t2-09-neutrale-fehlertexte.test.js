@@ -1,13 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools, toolErrorText } from "../src/mcp-tools.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
 import { MCP_DENIAL_TEXTS } from "../src/i18n/mcp-denial-texts.js";
 import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
-import { startServer, startIdp, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, PLAN_PRICE_BOOT_ENV, stdioServerTransport } from "./helpers.js";
 import { makeDefaultState, settingsFor } from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
@@ -256,19 +255,11 @@ function makeSequentialGateway(placeCallResponses) {
 }
 
 async function withStdioClient(gatewayUrl, run) {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gatewayUrl },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => (stderrOutput += chunk.toString()));
+  const { transport, stderr } = stdioServerTransport({ GATEWAY_URL: gatewayUrl });
   const client = new Client({ name: "hermes-t2-09-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
-    return await run(client, () => stderrOutput);
+    return await run(client, () => stderr.text);
   } finally {
     await client.close();
   }

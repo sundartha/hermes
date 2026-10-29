@@ -1,26 +1,22 @@
 import { rmSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { planProfileFor } from "../src/plans.js";
 import {
-  BASE_ENV,
   startServer,
   startIdp,
   seedState,
   mcpPost,
   readToolResult,
+  stdioServerTransport,
 } from "../test/helpers.js";
 
-const REPO_WURZEL = fileURLToPath(new URL("..", import.meta.url));
 const WERKZEUGLISTE_ANFRAGE = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const RUECKFRAGE_EINGESCHALTET = { ASSISTANT_CONTEXT_ENABLED: "true", CONSULT_ENABLED: "true" };
 export const METADATEN_PFAD = "/.well-known/oauth-protected-resource";
 export const VOLLE_KONFIGURATION = "K1";
 const KEINE_RUECKFRAGE = {};
 const OHNE_TOKEN = null;
-const STDIO_EINSTIEG = "src/mcp-server.js";
 const STDIO_ANTWORT = z.object({ tools: z.array(z.any()) });
 const STDIO_CLIENT = { name: "openai-doku-pruefen", version: "0.0.0" };
 const BEZAHLTER_TARIF = "starter";
@@ -86,13 +82,7 @@ async function messeOauth() {
 }
 
 async function messeStdio() {
-  const kanal = new StdioClientTransport({
-    command: process.execPath,
-    args: [STDIO_EINSTIEG],
-    cwd: REPO_WURZEL,
-    env: { ...BASE_ENV },
-    stderr: "pipe",
-  });
+  const { transport: kanal } = stdioServerTransport();
   const client = new Client(STDIO_CLIENT);
   try {
     await client.connect(kanal);

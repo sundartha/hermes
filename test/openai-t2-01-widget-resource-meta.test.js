@@ -2,17 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
   startIdp,
   mcpPost,
   readToolResult,
   toolCall,
-  ROOT,
-  BASE_ENV,
   externalIp,
   quelltexteUnter,
+  stdioServerTransport,
 } from "./helpers.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -24,7 +22,6 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 const WIDGET_COUNT = 4;
 const WIDGET_TOOL_COUNT = 5;
 const HTTP_OK = 200;
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const EXTERNAL_IP = externalIp();
 const PROBE_ORIGIN = "https://probe.example";
 const EXPECTED_META = {
@@ -81,21 +78,11 @@ async function httpResourceReadWithCapabilities(baseUrl, uri, capabilities) {
 }
 
 async function withStdioClient(env, run) {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: { ...BASE_ENV, ...env },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport(env);
   const client = new Client({ name: "t2-01-stdio-client", version: "0.0.0" }, { capabilities: {} });
   try {
     await client.connect(transport);
-    await run(client, () => stderrOutput);
+    await run(client, () => stderr.text);
   } finally {
     await client.close();
   }

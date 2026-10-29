@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
   startIdp,
@@ -13,8 +12,7 @@ import {
   waitForLog,
   assertReauthChallenge,
   TOOL_COUNT_WITHOUT_CONSULT,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { registerNoTenantStubs, buildNoTenantResult, _noTenantFacade } from "../src/mcp-no-tenant.js";
@@ -26,7 +24,6 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const MCP_WWW_AUTHENTICATE = "mcp/www_authenticate";
 const CHALLENGE_PREFIX = 'Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource"';
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
 const INITIALIZE_BODY = {
   jsonrpc: "2.0",
@@ -335,13 +332,7 @@ test("T05-7: Legacy-Modus unveraendert - 401 ohne resource_metadata, kein JSON-R
 
 test("T05-8: stdio unveraendert - echter Handler laeuft, KEINE Challenge, tools/list = TOOL_COUNT_WITHOUT_CONSULT", async () => {
   const spy = await startSpyGateway();
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: spy.url },
-    stderr: "pipe",
-  });
+  const { transport } = stdioServerTransport({ GATEWAY_URL: spy.url });
   const client = new Client({ name: "hermes-t2-05-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
