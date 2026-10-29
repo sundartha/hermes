@@ -10,10 +10,9 @@ import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";
+import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.js";
 
 const CARD_ON_FILE_STATUS = "card_on_file";
-
-const HTTP_SERVER_ERROR = 500;
 
 export function makeBillingRoutes({
   config,
@@ -77,10 +76,11 @@ export function makeBillingRoutes({
     const elevenLabsCents =
       providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
     if (elevenLabsCents === null) {
-      return res.status(HTTP_SERVER_ERROR).json({
-        error:
-          "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
-      });
+      return antworteFehler(
+        res,
+        HTTP_SERVER_ERROR,
+        "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
+      );
     }
     const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
     const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
@@ -110,12 +110,12 @@ export function makeBillingRoutes({
     if (!tenant) return;
     const sessionId = req.query.session_id;
     if (!sessionId || typeof sessionId !== "string")
-      return res.status(400).json({ error: "session_id ist Pflicht" });
+      return antworteFehler(res, HTTP_BAD_REQUEST, "session_id ist Pflicht");
 
     const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
     if (!ok) {
       audit("billing_card_mismatch", req, `tenant=${tenant}`);
-      return res.status(403).json({ error: "Customer-Mismatch" });
+      return antworteFehler(res, HTTP_FORBIDDEN, "Customer-Mismatch");
     }
     audit("billing_card_saved", req, `tenant=${tenant}`);
     res.json({ status: CARD_ON_FILE_STATUS });

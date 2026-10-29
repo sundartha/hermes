@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { internalOnly } from "../wiring/internal-only.js";
+import { HTTP_BAD_REQUEST, antworteFehler } from "../utils/http.js";
 
 export const INBOX_MAX_ENTRIES = 20;
-const HTTP_BAD_REQUEST = 400;
 
 export function makeInboxRoutes({ store, audit, tenant }) {
   const { requireTenant } = tenant;
@@ -15,7 +15,7 @@ export function makeInboxRoutes({ store, audit, tenant }) {
     const includeSeen = seen === true;
     const skip = includeSeen && offset !== undefined ? offset : 0;
     if (!Number.isSafeInteger(skip) || skip < 0) {
-      return res.status(HTTP_BAD_REQUEST).json({ error: "offset muss eine ganze Zahl ab 0 sein" });
+      return antworteFehler(res, HTTP_BAD_REQUEST, "offset muss eine ganze Zahl ab 0 sein");
     }
     const page = store.takeInboxEntries(
       tenantId,

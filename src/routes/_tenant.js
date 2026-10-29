@@ -1,6 +1,5 @@
 import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
-
-const HTTP_FORBIDDEN = 403;
+import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.js";
 
 export const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
@@ -44,7 +43,7 @@ export function makeTenantResolver({ store }) {
   function requireTenant(req, res) {
     const tenant = requestTenant(req);
     if (tenant === TENANT_REJECT) {
-      res.status(HTTP_FORBIDDEN).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+      antworteFehler(res, HTTP_FORBIDDEN, "Keine Tenant-Zuordnung fuer diese Identitaet.");
       return null;
     }
     return tenant;

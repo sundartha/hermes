@@ -1,0 +1,11 @@
+export const HTTP_BAD_REQUEST = 400;
+export const HTTP_UNAUTHORIZED = 401;
+export const HTTP_FORBIDDEN = 403;
+export const HTTP_CONFLICT = 409;
+export const HTTP_TOO_MANY_REQUESTS = 429;
+export const HTTP_SERVER_ERROR = 500;
+export const HTTP_SERVICE_UNAVAILABLE = 503;
+
+export function antworteFehler(res, status, code) {
+  return res.status(status).json({ error: code });
+}
