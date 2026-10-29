@@ -137,7 +137,7 @@ function loescheIn(context, dateien, aufrufe) {
   });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const worktrees = runIn(repo, "git", ["worktree", "list"]).stdout.trim().split("\n");
-  return { ...JSON.parse(lauf.stdout), repo, worktrees, uebrig: readdirSync(kopien) };
+  return { ...JSON.parse(lauf.stdout), repo, worktrees, uebrig: readdirSync(kopien), stderr: lauf.stderr };
 }
 
 function pruefung(marken, alle, zeilen = ALLE_ZEILEN) {
@@ -233,6 +233,11 @@ test("startet der Testlauf nicht, bricht die Löschprobe am Grundlauf ab und bau
   assert.equal(lauf.fehler, `Grundlauf rot, Löschprobe nicht aussagekräftig: ${ERSTE}`);
   assert.equal(lauf.worktrees.length, 1, lauf.worktrees.join("\n"));
   assert.deepEqual(lauf.uebrig, []);
+});
+
+test("startet der Testlauf nicht, nennt die Löschprobe den Startfehler als Ausgang des Grundlaufs", (context) => {
+  const lauf = loesche(context, ZWEITE_VERLANGT_C, [{ ...pruefung(ordner(context, "loeschprobe-marken-"), [ERSTE]), ohneNode: true }]);
+  assert.match(lauf.stderr, /^Grundlauf rot, Ausgang: Exit null, Signal null, spawn .*kein-node ENOENT$/m);
 });
 
 const UEBRIGE_GRUPPEN = 4;
