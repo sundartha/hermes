@@ -167,10 +167,11 @@ function isDigitwiseCard(digits) {
 
 function digitwiseWindows(groups, minDigits) {
   const windows = [];
+  const allDigits = groups.map((group) => group.digit).join("");
   const maxSize = Math.min(groups.length, CARD_MAX_DIGITS);
   for (let size = maxSize; size >= minDigits; size--) {
     for (let first = 0; first + size <= groups.length; first++) {
-      const digits = groups.slice(first, first + size).map((group) => group.digit).join("");
+      const digits = allDigits.slice(first, first + size);
       if (isDigitwiseCard(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
     }
   }
