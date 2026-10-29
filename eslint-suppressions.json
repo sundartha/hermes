@@ -773,10 +773,10 @@
   },
   "src/store/state-ops.js": {
     "complexity": {
-      "count": 3
+      "count": 1
     },
     "id-length": {
-      "count": 59
+      "count": 57
     },
     "max-params": {
       "count": 23
@@ -788,7 +788,7 @@
       "count": 1
     },
     "no-param-reassign": {
-      "count": 33
+      "count": 31
     },
     "no-restricted-syntax": {
       "count": 11
