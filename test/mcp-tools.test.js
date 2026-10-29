@@ -257,3 +257,145 @@ test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedA
     await mock.close();
   }
 });
+
+function captureRegistrationOrder(ctx) {
+  const order = [];
+  const fakeServer = {
+    registerTool(name) {
+      order.push(name);
+    },
+    registerResource(name) {
+      order.push(`Ressource ${name}`);
+    },
+  };
+  registerTools(fakeServer, { uiHost: { enabled: true }, ...ctx });
+  return order;
+}
+
+const REGISTRIERFOLGE_VOR_RUECKFRAGE = ["Ressource call", "prepare_call", "place_call"];
+const RUECKFRAGE_WERKZEUGE = ["await_call_event", "answer_consult"];
+const REGISTRIERFOLGE_NACH_RUECKFRAGE = [
+  "get_call_status",
+  "get_call_result",
+  "cancel_call",
+  "Ressource my-number",
+  "get_agent_number",
+  "Ressource calls",
+  "list_calls",
+  "check_inbox",
+  "list_action_items",
+  "Ressource agent-status",
+  "get_agent_status",
+];
+
+test("[NIE1] registerTools registriert Werkzeuge und Widget-Ressourcen in der festen Folge, mit und ohne consultAllowed", () => {
+  assert.deepEqual(captureRegistrationOrder({ consultAllowed: true }), [
+    ...REGISTRIERFOLGE_VOR_RUECKFRAGE,
+    ...RUECKFRAGE_WERKZEUGE,
+    ...REGISTRIERFOLGE_NACH_RUECKFRAGE,
+  ]);
+  assert.deepEqual(captureRegistrationOrder({ consultAllowed: false }), [
+    ...REGISTRIERFOLGE_VOR_RUECKFRAGE,
+    ...REGISTRIERFOLGE_NACH_RUECKFRAGE,
+  ]);
+});
+
+const KOPF_CALL_ID = "call_kopf";
+
+const KOPF_GATEWAY_ANTWORT = {
+  preview: { status: "awaiting_confirmation" },
+  confirmed: true,
+  callId: KOPF_CALL_ID,
+  event: "done",
+  eventId: null,
+  questions: [],
+  status: "completed",
+  startedAt: "2026-06-26T10:00:00.000Z",
+  endedAt: "2026-06-26T10:01:00.000Z",
+  transcript: [],
+  calls: [],
+  actionItems: [],
+  entries: [],
+};
+
+const KOPF_ANRUF_ARGS = { to: "+4917212345678", objective: "Testanruf" };
+
+const KOPF_WERKZEUG_AUFRUFE = [
+  ["prepare_call", KOPF_ANRUF_ARGS],
+  ["place_call", { ...KOPF_ANRUF_ARGS, confirmation_code: "123456" }],
+  ["await_call_event", { call_id: KOPF_CALL_ID }],
+  ["answer_consult", { call_id: KOPF_CALL_ID, event_id: "evt_1", answers: ["Ja"] }],
+  ["get_call_status", { call_id: KOPF_CALL_ID }],
+  ["get_call_result", { call_id: KOPF_CALL_ID }],
+  ["cancel_call", { call_id: KOPF_CALL_ID }],
+  ["get_agent_number", {}],
+  ["list_calls", {}],
+  ["check_inbox", {}],
+  ["list_action_items", {}],
+  ["get_agent_status", {}],
+];
+
+const KOPF_KONTEXTE = [
+  { identity: "ident-kunde", scopedTenant: "tenant-kunde" },
+  { identity: "ident-allein", scopedTenant: null },
+  { identity: null, scopedTenant: "tenant-allein" },
+];
+
+async function withRecordingGateway(body, run) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({
+      route: `${req.method} ${req.url}`,
+      identity: req.headers["x-internal-identity"],
+      tenant: req.headers["x-internal-tenant"],
+    });
+    sendJson(res, { body });
+  });
+  const gateway = await listen(server);
+  const previousUrl = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = gateway.url;
+  try {
+    return await run(requests);
+  } finally {
+    if (previousUrl === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = previousUrl;
+    await gateway.close();
+  }
+}
+
+async function requestsPerTool(ctx) {
+  return withRecordingGateway(KOPF_GATEWAY_ANTWORT, async (requests) => {
+    const handlers = captureTools({ ...ctx, consultAllowed: true });
+    const perTool = new Map();
+    for (const [name, args] of KOPF_WERKZEUG_AUFRUFE) {
+      const before = requests.length;
+      await handlers.get(name)(args);
+      perTool.set(name, requests.slice(before));
+    }
+    return perTool;
+  });
+}
+
+test("[NIE2] jeder Gateway-Aufruf der zwoelf Werkzeuge traegt X-Internal-Identity und X-Internal-Tenant aus registerTools", async () => {
+  for (const ctx of KOPF_KONTEXTE) {
+    const perTool = await requestsPerTool(ctx);
+    assert.deepEqual(
+      [...perTool.keys()],
+      KOPF_WERKZEUG_AUFRUFE.map(([name]) => name),
+    );
+    for (const [name, requests] of perTool) {
+      assert.ok(requests.length > 0, `${name} erreicht das Gateway`);
+      for (const request of requests) {
+        assert.deepEqual(
+          { identity: request.identity, tenant: request.tenant },
+          { identity: ctx.identity ?? undefined, tenant: ctx.scopedTenant ?? undefined },
+          `${name} ${request.route} mit ${JSON.stringify(ctx)}`,
+        );
+      }
+    }
+    assert.deepEqual(
+      perTool.get("await_call_event").map((request) => request.route),
+      [`GET /api/calls/${KOPF_CALL_ID}/consult`, `GET /api/calls/${KOPF_CALL_ID}`],
+    );
+  }
+});
