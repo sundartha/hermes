@@ -35,8 +35,8 @@ import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeCallConfirmationRoutes } from "./routes/api-call-confirmations.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
-import { ANRUFE_LAUFEND_PATH, anrufeLaufendHandler } from "./routes/intern-anrufe-laufend.js";
-import { ANRUFPAUSE_PATH, anrufpauseLesenHandler, anrufpauseSetzenHandler } from "./routes/intern-anrufpause.js";
+import { makeInternAnrufeLaufendRoutes } from "./routes/intern-anrufe-laufend.js";
+import { makeInternAnrufpauseRoutes } from "./routes/intern-anrufpause.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
@@ -284,9 +284,8 @@ export async function buildApp(deps) {
   const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
   registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
-  app.get(ANRUFE_LAUFEND_PATH, anrufeLaufendHandler({ config, store }));
-  app.get(ANRUFPAUSE_PATH, anrufpauseLesenHandler({ config, store }));
-  app.post(ANRUFPAUSE_PATH, anrufpauseSetzenHandler({ config, store }));
+  app.use(makeInternAnrufeLaufendRoutes({ config, store }));
+  app.use(makeInternAnrufpauseRoutes({ config, store }));
 
   let operatorAuth = null;
   if (config.auth.sessionSecret && config.store.storeBackend === "pg") {

@@ -4,38 +4,48 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { DEPLOY_TOKEN_MIN_LENGTH } from "../../src/routes/intern-anrufe-laufend.js";
+import {
+  ANRUFE_LAUFEND_PATH,
+  DEPLOY_TOKEN_MIN_LENGTH,
+  makeInternAnrufeLaufendRoutes,
+} from "../../src/routes/intern-anrufe-laufend.js";
 import {
   ANRUFPAUSE_PATH,
-  anrufpauseLesenHandler,
-  anrufpauseSetzenHandler,
+  makeInternAnrufpauseRoutes,
 } from "../../src/routes/intern-anrufpause.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { mitRoutenServer } from "./routen-server.js";
+import { echtWarten } from "../echt-warten.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const ANTWORT_FRIST_MS = 2000;
+const FRIST_VOR_FREIGABE_MS = 100;
 const NUR_LESEN = 0o500;
 const VOLLZUGRIFF = 0o700;
 const TOKEN = "p".repeat(DEPLOY_TOKEN_MIN_LENGTH);
 const FALSCHES_TOKEN = "q".repeat(DEPLOY_TOKEN_MIN_LENGTH);
-const AUFRUFER_IP = "203.0.113.27";
+const AUFRUFER_IP = "127.0.0.1";
 const FEHLERDETAIL = "speicher_v6_kaputt";
 const KEIN_ZWISCHENSPEICHER = "no-store";
 const UNGUELTIG = Object.freeze({ error: "invalid_body" });
 const NICHT_GESPEICHERT = Object.freeze({ error: "persist_failed" });
 const UNGUELTIGE_KOERPER = Object.freeze([
   ["fehlt", undefined],
-  ["null", null],
   ["leer", {}],
   ["Text statt Boolean", { an: "true" }],
   ["Zahl statt Boolean", { an: 1 }],
   ["null statt Boolean", { an: null }],
   ["zusaetzlicher Schluessel", { an: true, grund: "wartung" }],
   ["Liste", [true]],
+  ["leere Liste", []],
+  ["null", null],
+  ["Zahl", 7],
+  ["Text", "an"],
 ]);
+const MILDER_PARSER = Object.freeze({ strict: false });
 const STANDIN_NAMEN = [
   "callFinish lifecycle provisioning outboundGates callQuotaDenial requestTenant requireTenant",
   "conversationWatchdog ttsStore directiveSynth voiceRender costTruing messaging consultDelivery",
@@ -96,10 +106,6 @@ function attrappenSpeicher({ wirft = false } = {}) {
   return attrappe;
 }
 
-function anfrage(koerper, authorization = `Bearer ${TOKEN}`) {
-  return { headers: { authorization }, path: ANRUFPAUSE_PATH, ip: AUFRUFER_IP, body: koerper };
-}
-
 function antwortSammler() {
   const antwort = { status: HTTP_OK, kopf: {}, koerper: undefined, weiter: [] };
   const merken = (feld) => (wert) => {
@@ -114,56 +120,122 @@ function antwortSammler() {
   return { antwort, res, next: (fehler) => antwort.weiter.push(fehler) };
 }
 
-async function setzen(store, koerper, authorization) {
-  const { antwort, res, next } = antwortSammler();
-  const handler = anrufpauseSetzenHandler({ config: { auth: { deployToken: TOKEN } }, store });
-  const laeuft = handler(anfrage(koerper, authorization), res, next);
-  await new Promise((weiter) => setImmediate(weiter));
-  return { antwort, laeuft };
+function routen(store) {
+  return makeInternAnrufpauseRoutes({ config: { auth: { deployToken: TOKEN } }, store });
 }
 
-async function setzenUndFreigeben(store, koerper) {
-  return mitMitschnitt(async () => {
-    const { antwort, laeuft } = await setzen(store, koerper);
-    const vorFreigabe = antwort.koerper;
-    store.freigeben();
-    await laeuft;
-    return { antwort, vorFreigabe };
+function mitFehlerSammler(router, fehler) {
+  return (req, res, weiter) =>
+    router(req, res, (fehlerDerRoute) => {
+      if (fehlerDerRoute) fehler.push(fehlerDerRoute);
+      weiter();
+    });
+}
+
+function aufruf(basis, { method, koerper, authorization = `Bearer ${TOKEN}` }) {
+  return abrufMitFrist(`${basis}${ANRUFPAUSE_PATH}`, {
+    method,
+    headers: { authorization, "content-type": "application/json" },
+    body: koerper === undefined ? undefined : JSON.stringify(koerper),
   });
 }
 
-test("Anrufpause: GET liefert genau {an} mit dem Wert des Speichers und no-store", () => {
+async function pausenAntwort(antwort) {
+  return {
+    status: antwort.status,
+    kopf: antwort.headers.get("cache-control"),
+    koerper: await antwort.json().catch(() => undefined),
+  };
+}
+
+function lesen(store) {
+  return mitRoutenServer(routen(store), async (basis) =>
+    pausenAntwort(await aufruf(basis, { method: "GET" })),
+  );
+}
+
+function setzen(store, koerper, authorization) {
+  return mitRoutenServer(
+    routen(store),
+    async (basis) => pausenAntwort(await aufruf(basis, { method: "POST", koerper, authorization })),
+    MILDER_PARSER,
+  );
+}
+
+async function setzenUndFreigeben(store, koerper) {
+  return mitMitschnitt(() =>
+    mitRoutenServer(routen(store), async (basis) => {
+      let vorFreigabe;
+      const laeuft = aufruf(basis, { method: "POST", koerper }).then(pausenAntwort);
+      laeuft.then((antwort) => {
+        vorFreigabe = antwort;
+      });
+      while (store.freigeben === null && vorFreigabe === undefined)
+        await new Promise((weiter) => setImmediate(weiter));
+      const frueheAntwort =
+        vorFreigabe ?? (await Promise.race([laeuft, echtWarten(FRIST_VOR_FREIGABE_MS)]));
+      store.freigeben?.();
+      return { antwort: await laeuft, vorFreigabe: frueheAntwort };
+    }),
+  );
+}
+
+test("Anrufpause: GET liefert genau {an} mit dem Wert des Speichers und no-store", async () => {
   const store = attrappenSpeicher();
-  const handler = anrufpauseLesenHandler({ config: { auth: { deployToken: TOKEN } }, store });
   for (const an of [false, true]) {
     store.an = an;
-    const { antwort, res } = antwortSammler();
-    handler(anfrage(undefined), res);
+    const antwort = await lesen(store);
     assert.equal(antwort.status, HTTP_OK);
     assert.deepEqual(antwort.koerper, { an });
-    assert.deepEqual(antwort.kopf, { "cache-control": KEIN_ZWISCHENSPEICHER });
+    assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
   }
 });
 
 test("Anrufpause: POST ohne genau {an: <boolean>} gibt 400 und setzt nichts", async () => {
   for (const [fall, koerper] of UNGUELTIGE_KOERPER) {
     const store = attrappenSpeicher();
-    const { ergebnis, zeilen } = await mitMitschnitt(() => setzen(store, koerper));
-    assert.equal(ergebnis.antwort.status, HTTP_BAD_REQUEST, fall);
-    assert.deepEqual(ergebnis.antwort.koerper, UNGUELTIG, fall);
-    assert.equal(ergebnis.antwort.kopf["cache-control"], KEIN_ZWISCHENSPEICHER, fall);
+    const { ergebnis: antwort, zeilen } = await mitMitschnitt(() => setzen(store, koerper));
+    assert.equal(antwort.status, HTTP_BAD_REQUEST, fall);
+    assert.deepEqual(antwort.koerper, UNGUELTIG, fall);
+    assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER, fall);
     assert.deepEqual(store.aufrufe, [], fall);
     assert.deepEqual(zeilen, [], fall);
   }
 });
 
-test("Anrufpause: POST mit falschem Token gibt 401 und setzt nichts", async () => {
+test("Anrufpause: ein ungueltiger Koerper endet mit 400 und erreicht die Fehlerbehandlung nicht", async () => {
+  for (const [fall, koerper] of UNGUELTIGE_KOERPER) {
+    const fehler = [];
+    const antwort = await mitRoutenServer(
+      mitFehlerSammler(routen(attrappenSpeicher()), fehler),
+      async (basis) => pausenAntwort(await aufruf(basis, { method: "POST", koerper })),
+      MILDER_PARSER,
+    );
+    assert.equal(antwort.status, HTTP_BAD_REQUEST, fall);
+    assert.deepEqual(antwort.koerper, UNGUELTIG, fall);
+    assert.deepEqual(fehler, [], fall);
+  }
+});
+
+test("Anrufpause: POST mit falschem Token gibt 401 und setzt nichts, auch bei ungueltigem Koerper", async () => {
+  for (const koerper of [{ an: true }, {}]) {
+    const store = attrappenSpeicher();
+    const { ergebnis: antwort } = await mitMitschnitt(() =>
+      setzen(store, koerper, `Bearer ${FALSCHES_TOKEN}`),
+    );
+    assert.equal(antwort.status, HTTP_UNAUTHORIZED);
+    assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
+    assert.deepEqual(store.aufrufe, []);
+  }
+});
+
+test("Anrufpause: GET mit falschem Token gibt 401 mit no-store", async () => {
   const store = attrappenSpeicher();
-  const { ergebnis } = await mitMitschnitt(() =>
-    setzen(store, { an: true }, `Bearer ${FALSCHES_TOKEN}`),
+  const antwort = await mitRoutenServer(routen(store), async (basis) =>
+    pausenAntwort(await aufruf(basis, { method: "GET", authorization: `Bearer ${FALSCHES_TOKEN}` })),
   );
-  assert.equal(ergebnis.antwort.status, HTTP_UNAUTHORIZED);
-  assert.deepEqual(store.aufrufe, []);
+  assert.equal(antwort.status, HTTP_UNAUTHORIZED);
+  assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
 });
 
 test("Anrufpause: gueltiges POST antwortet erst nach dem Setzen mit genau {an} und schreibt eine Audit-Zeile", async () => {
@@ -175,8 +247,8 @@ test("Anrufpause: gueltiges POST antwortet erst nach dem Setzen mit genau {an} u
     assert.equal(ergebnis.antwort.status, HTTP_OK);
     assert.deepEqual(ergebnis.antwort.koerper, { an });
     assert.deepEqual(Object.keys(ergebnis.antwort.koerper), ["an"]);
-    assert.equal(ergebnis.antwort.kopf["cache-control"], KEIN_ZWISCHENSPEICHER);
-    assert.deepEqual(ergebnis.antwort.weiter, []);
+    assert.equal(ergebnis.antwort.kopf, KEIN_ZWISCHENSPEICHER);
+    assert.equal(store.an, an);
     assert.deepEqual(zeilen, [`[audit] anrufpause_gesetzt ip=system an=${an}`]);
   }
 });
@@ -187,8 +259,7 @@ test("Anrufpause: scheitert das Setzen, antwortet POST mit 503 persist_failed oh
   assert.equal(ergebnis.vorFreigabe, undefined);
   assert.equal(ergebnis.antwort.status, HTTP_SERVICE_UNAVAILABLE);
   assert.deepEqual(ergebnis.antwort.koerper, NICHT_GESPEICHERT);
-  assert.equal(ergebnis.antwort.kopf["cache-control"], KEIN_ZWISCHENSPEICHER);
-  assert.deepEqual(ergebnis.antwort.weiter, []);
+  assert.equal(ergebnis.antwort.kopf, KEIN_ZWISCHENSPEICHER);
   assert.equal(store.an, false);
   assert.deepEqual(zeilen, ["[audit] anrufpause_fehlgeschlagen ip=system an=true"]);
   const text = JSON.stringify([ergebnis.antwort, zeilen]);
@@ -239,7 +310,8 @@ test("Anrufpause: die echte App liest und setzt /intern/anrufpause mit Konfigura
     server.closeAllConnections();
     server.close();
   });
-  const adresse = `http://127.0.0.1:${server.address().port}${ANRUFPAUSE_PATH}`;
+  const basis = `http://127.0.0.1:${server.address().port}`;
+  const adresse = `${basis}${ANRUFPAUSE_PATH}`;
   const authorization = `Bearer ${TOKEN}`;
   const lesen = async () =>
     (
@@ -249,6 +321,12 @@ test("Anrufpause: die echte App liest und setzt /intern/anrufpause mit Konfigura
       })
     ).json();
   assert.deepEqual(await lesen(), { an: false });
+  const laufend = await abrufMitFrist(`${basis}${ANRUFE_LAUFEND_PATH}`, {
+    headers: { authorization },
+    signal: AbortSignal.timeout(ANTWORT_FRIST_MS),
+  });
+  assert.equal(laufend.status, HTTP_OK);
+  assert.deepEqual(await laufend.json(), { laufend: 0 });
   const { ergebnis: gesetzt } = await mitMitschnitt(() =>
     abrufMitFrist(adresse, {
       method: "POST",
@@ -275,15 +353,11 @@ test("Anrufpause: ist der Datenordner schreibgeschuetzt, wirft das Setzen und de
 
 const crypto = await import("node:crypto");
 const express = (await import("express")).default;
-const { mitRoutenServer, postJson } = await import("./routen-server.js");
+const { postJson } = await import("./routen-server.js");
 const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
 const { makeBillingRoutes } = await import("../../src/routes/api-billing.js");
 const { makeInboxRoutes } = await import("../../src/routes/api-inbox.js");
 const { makeStripeWebhookRoute } = await import("../../src/routes/stripe-webhook.js");
-const { ANRUFE_LAUFEND_PATH, anrufeLaufendHandler } = await import(
-  "../../src/routes/intern-anrufe-laufend.js"
-);
-
 const HTTP_FORBIDDEN = 403;
 const HTTP_CONFLICT = 409;
 const HTTP_TOO_MANY_REQUESTS = 429;
@@ -559,8 +633,8 @@ test("[NIE3] die Statuscodes der Onboarding-Routen kommen unveraendert an", asyn
 test("[NIE3] die Statuscodes der Deploy-Token-Routen kommen unveraendert an", async (kontext) => {
   const abhaengigkeiten = { config: { auth: { deployToken: TOKEN } }, store: speicher };
   const router = express.Router();
-  router.get(ANRUFE_LAUFEND_PATH, anrufeLaufendHandler(abhaengigkeiten));
-  router.post(ANRUFPAUSE_PATH, anrufpauseSetzenHandler(abhaengigkeiten));
+  router.use(makeInternAnrufeLaufendRoutes(abhaengigkeiten));
+  router.use(makeInternAnrufpauseRoutes(abhaengigkeiten));
   kontext.after(() => fs.chmodSync(DATENORDNER, VOLLZUGRIFF));
   const pauseSetzen = async (adresse, koerper) =>
     (

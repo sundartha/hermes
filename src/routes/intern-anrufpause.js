@@ -1,14 +1,15 @@
+import { Router } from "express";
+import { z } from "zod";
 import { audit } from "../util.js";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
-import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
+import { pruefeKoerper } from "./_validation.js";
+import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
 
 export const ANRUFPAUSE_PATH = "/intern/anrufpause";
 
-const UNGUELTIG = "invalid_body";
 const NICHT_GESPEICHERT = "persist_failed";
 
-const istPausenKoerper = (koerper) =>
-  typeof koerper?.an === "boolean" && Object.keys(koerper).length === 1;
+const PAUSEN_KOERPER = z.object({ an: z.boolean() }).strict();
 
 async function umschalten(store, an, res) {
   try {
@@ -21,17 +22,20 @@ async function umschalten(store, an, res) {
   return res.json({ an });
 }
 
-export function anrufpauseLesenHandler({ config, store }) {
-  return function anrufpauseLesen(req, res) {
-    if (deployTokenAbgewiesen(config, req, res)) return undefined;
-    return res.json({ an: store.anrufpauseAktiv() });
-  };
-}
+export function makeInternAnrufpauseRoutes({ config, store }) {
+  const router = Router();
 
-export function anrufpauseSetzenHandler({ config, store }) {
-  return function anrufpauseSetzen(req, res, next) {
-    if (deployTokenAbgewiesen(config, req, res)) return undefined;
-    if (!istPausenKoerper(req.body)) return antworteFehler(res, HTTP_BAD_REQUEST, UNGUELTIG);
-    return umschalten(store, req.body.an, res).catch(next);
-  };
+  router.get(ANRUFPAUSE_PATH, (req, res) => {
+    if (deployTokenAbgewiesen(config, req, res)) return;
+    res.json({ an: store.anrufpauseAktiv() });
+  });
+
+  router.post(ANRUFPAUSE_PATH, (req, res, next) => {
+    if (deployTokenAbgewiesen(config, req, res)) return;
+    const koerper = pruefeKoerper(res, PAUSEN_KOERPER, req.body);
+    if (koerper === undefined) return;
+    umschalten(store, koerper.an, res).catch(next);
+  });
+
+  return router;
 }

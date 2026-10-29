@@ -1,3 +1,4 @@
+import { Router } from "express";
 import { AUTH_FAILED_GRUND, auditAuthFailed, safeEqual } from "../util.js";
 import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.js";
 
@@ -33,9 +34,13 @@ export function deployTokenAbgewiesen(config, req, res) {
   return true;
 }
 
-export function anrufeLaufendHandler({ config, store }) {
-  return function anrufeLaufend(req, res) {
-    if (deployTokenAbgewiesen(config, req, res)) return undefined;
-    return res.json({ laufend: laufendeAnrufe(store, Date.now()) });
-  };
+export function makeInternAnrufeLaufendRoutes({ config, store }) {
+  const router = Router();
+
+  router.get(ANRUFE_LAUFEND_PATH, (req, res) => {
+    if (deployTokenAbgewiesen(config, req, res)) return;
+    res.json({ laufend: laufendeAnrufe(store, Date.now()) });
+  });
+
+  return router;
 }
