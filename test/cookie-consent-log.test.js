@@ -8,6 +8,7 @@ import {
   makeCookieConsentLog,
   makeCookieConsentRoutes,
   parseConsentRecord,
+  scheduleCookieConsentRetention,
   siteFromOrigin,
 } from "../src/cookie-consent-log.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
@@ -188,4 +189,33 @@ test("POST mit Schreibfehler -> 500 ohne Fehlerdetail", async () => {
   } finally {
     console.error = error;
   }
+});
+
+test("[NIE1] die Aufbewahrungs-Bereinigung laeuft genau einmal je 86 400 000 ms", async (t) => {
+  const { db, log } = await freshLog();
+  const remaining = async () => {
+    const { rows } = await db.query(`SELECT count(*)::int AS remaining FROM cookie_consent_log`);
+    return rows[0].remaining;
+  };
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { log: info } = console;
+  console.log = () => {};
+  t.after(() => {
+    console.log = info;
+  });
+  scheduleCookieConsentRetention(log);
+  await remaining();
+  await db.query(
+    `INSERT INTO cookie_consent_log (at, consent_id, version, statistics, marketing, site)
+     VALUES (now() - make_interval(days => $1), $2, 1, false, false, 'sundartha.com')`,
+    [DAYS_OVER_RETENTION, CONSENT_ID],
+  );
+  const DAY = 86_400_000;
+  t.mock.timers.tick(60_000);
+  const afterOneMinute = await remaining();
+  t.mock.timers.tick(DAY - 60_000 - 1);
+  const justBeforeOneDay = await remaining();
+  t.mock.timers.tick(1);
+  const afterOneDay = await remaining();
+  assert.deepEqual([afterOneMinute, justBeforeOneDay, afterOneDay], [1, 1, 0]);
 });

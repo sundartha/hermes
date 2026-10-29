@@ -16,6 +16,7 @@ import {
   confirmedNewsletterRecipients,
   dailyNewsletterConfirmMailCount,
 } from "../src/store/state-ops.js";
+import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
 const TENANT = "t_nl_recipients";
 
@@ -217,4 +218,32 @@ test("removeNewsletterRecipient: entfernt Eintrag, idempotent (zweiter Aufruf ->
 test("removeNewsletterRecipient: unbekannter Tenant -> throw", () => {
   const s = makeDefaultState();
   assert.throws(() => removeNewsletterRecipient(s, "t_unknown", "a@x.de"), /nicht gefunden/);
+});
+
+test("[NIE2] die Tageskappe der Bestaetigungsmails zaehlt genau das letzte 24-Stunden-Fenster", async () => {
+  const { store } = await makePgTestStore();
+  const sentAt = Date.parse("2026-08-14T12:00:00.000Z");
+  for (let i = 0; i < NEWSLETTER_CONFIRM_MAIL_DAILY_CAP; i++) {
+    store.addNewsletterRecipient(BOOTSTRAP_TENANT_ID, {
+      email: `fenster${i}@example.test`,
+      tokenHash: "h",
+      tokenExpiresAt: "x",
+      unsubToken: "u",
+      now: new Date(sentAt).toISOString(),
+    });
+    store.removeNewsletterRecipient(BOOTSTRAP_TENANT_ID, `fenster${i}@example.test`);
+  }
+  const reasonAfter = (ms) =>
+    planAddNewsletterRecipient({
+      store,
+      tenantId: BOOTSTRAP_TENANT_ID,
+      rawEmail: "neu@example.test",
+      accountEmail: null,
+      now: new Date(sentAt + ms),
+    }).reason;
+  const DAY = 86_400_000;
+  assert.deepEqual(
+    [reasonAfter(60_000), reasonAfter(DAY / 2), reasonAfter(DAY), reasonAfter(DAY + 1)],
+    ["daily_limit", "daily_limit", "daily_limit", undefined],
+  );
 });

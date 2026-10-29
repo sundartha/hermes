@@ -179,3 +179,30 @@ test("B4A-STALE-2: einen Tag VOR der Hoechstdauer schweigt der Guard (T5-Rand)",
     [],
   );
 });
+
+test("[NIE1] eine Preisstaffel ist erst ab dem 91. Tag veraltet, nicht frueher und nicht spaeter", () => {
+  assert.equal(MODEL_PRICE_MAX_AGE_DAYS, 90);
+  assert.deepEqual(
+    stalePriceFindings(STALE_PRICES, "2026-11-06"),
+    [],
+    "Tag 90 nach dem Anker schweigt",
+  );
+  assert.equal(
+    stalePriceFindings(STALE_PRICES, "2026-11-07").length,
+    1,
+    "Tag 91 nach dem Anker meldet",
+  );
+});
+
+test("[NIE3] die Tageswerte aus config.js bleiben 86 400 000 ms", () => {
+  const DAY = 86_400_000;
+  assert.deepEqual(
+    [
+      config.billing.costAlertDebounceMs,
+      config.billing.priceDriftMinIntervalMs,
+      config.safety.perTargetWindowMs,
+      config.provisioning.provisioningRetryMinIntervalMs,
+    ],
+    [DAY, DAY, DAY, DAY],
+  );
+});
