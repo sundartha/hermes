@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { internalOnly } from "../wiring/internal-only.js";
-import { HTTP_BAD_REQUEST, antworteFehler } from "../utils/http.js";
+import { lehneEingabeAb } from "../utils/http.js";
 
 export const INBOX_MAX_ENTRIES = 20;
 
@@ -14,9 +14,7 @@ export function makeInboxRoutes({ store, audit, tenant }) {
     const { include_seen: seen, offset } = req.body ?? {};
     const includeSeen = seen === true;
     const skip = includeSeen && offset !== undefined ? offset : 0;
-    if (!Number.isSafeInteger(skip) || skip < 0) {
-      return antworteFehler(res, HTTP_BAD_REQUEST, "offset muss eine ganze Zahl ab 0 sein");
-    }
+    if (lehneEingabeAb(res, !Number.isSafeInteger(skip) || skip < 0, "offset muss eine ganze Zahl ab 0 sein")) return;
     const page = store.takeInboxEntries(
       tenantId,
       skip > 0

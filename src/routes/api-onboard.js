@@ -23,6 +23,7 @@ import {
   HTTP_SERVICE_UNAVAILABLE,
   HTTP_TOO_MANY_REQUESTS,
   antworteFehler,
+  lehneEingabeAb,
 } from "../utils/http.js";
 
 const ONBOARD_REASON_STATUS = {
@@ -45,23 +46,22 @@ const RETRY_REASON_MESSAGE = {
 };
 
 function requireValidTenantId(res, tenantId) {
-  if (validIdentity(tenantId)) return true;
-  antworteFehler(
+  return !lehneEingabeAb(
     res,
-    HTTP_BAD_REQUEST,
+    !validIdentity(tenantId),
     `tenantId ist Pflicht (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)`,
   );
-  return false;
 }
 
 function onboardIdentitaet(req, res) {
   const { tenantId: bodyTenantId, idpSubject } = req.body || {};
-  if (idpSubject !== undefined && !validIdentity(idpSubject)) {
-    antworteFehler(
+  if (
+    lehneEingabeAb(
       res,
-      HTTP_BAD_REQUEST,
+      idpSubject !== undefined && !validIdentity(idpSubject),
       `idpSubject ungueltig (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)`,
-    );
+    )
+  ) {
     return null;
   }
   const sub = idpSubject ?? null;
