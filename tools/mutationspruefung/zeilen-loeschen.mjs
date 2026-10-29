@@ -244,18 +244,20 @@ async function verteilt(zeilen, kopie, pruefen) {
   return zeilen.map((zeile) => zeile.urteil().ergebnis);
 }
 
-function pruefer({ verzeichnis, gruen, laufen }) {
-  const grundlauf = async (tests) => {
+async function grundlaufAusfuehren(laufen, tests) {
+  const lauf = await laufen(tests, true);
+  if (lauf.status === UEBERLEBT) return;
+  for (const zeile of lauf.rote) console.error(`Grundlauf rot, roter Test: ${zeile}`);
+  for (const zeile of lauf.stderr) console.error(`Grundlauf rot, stderr: ${zeile}`);
+  console.error(`Grundlauf rot, Ausgang: ${lauf.ausgang}`);
+  throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
+}
+
+function pruefer({ verzeichnis, grundlaeufe, laufen }) {
+  const grundlauf = (tests) => {
     const kennung = tests.join(ZEILENENDE);
-    if (gruen.has(kennung)) return;
-    const lauf = await laufen(tests, true);
-    if (lauf.status !== UEBERLEBT) {
-      for (const zeile of lauf.rote) console.error(`Grundlauf rot, roter Test: ${zeile}`);
-      for (const zeile of lauf.stderr) console.error(`Grundlauf rot, stderr: ${zeile}`);
-      console.error(`Grundlauf rot, Ausgang: ${lauf.ausgang}`);
-      throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
-    }
-    gruen.add(kennung);
+    if (!grundlaeufe.has(kennung)) grundlaeufe.set(kennung, grundlaufAusfuehren(laufen, tests));
+    return grundlaeufe.get(kennung);
   };
   return async (datei, zeile, gruppe) => {
     await grundlauf(gruppe);
@@ -271,9 +273,9 @@ function pruefer({ verzeichnis, gruen, laufen }) {
 
 export function loeschprobe(verzeichnisAnlegen) {
   const kopien = new Map();
-  const gruen = new Set();
+  const grundlaeufe = new Map();
   const kopie = (platz) => {
-    if (!kopien.has(platz)) kopien.set(platz, { verzeichnis: gepruefterStand(verzeichnisAnlegen()), gruen });
+    if (!kopien.has(platz)) kopien.set(platz, { verzeichnis: gepruefterStand(verzeichnisAnlegen()), grundlaeufe });
     return kopien.get(platz);
   };
   return {

@@ -186,9 +186,16 @@ test("zwei gelöschte Zeilen derselben Datei laufen nie in derselben Arbeitskopi
   const protokoll = laeufe(marken);
   assert.ok(protokoll.every(([, fehlend]) => fehlend.length <= 1), protokoll.join("\n"));
   const mitLoeschung = new Set(protokoll.filter(([, fehlend]) => fehlend.length === 1).map(([kopie]) => kopie));
-  const mitGrundlauf = new Set(protokoll.filter(([, fehlend]) => fehlend.length === 0).map(([kopie]) => kopie));
   assert.ok(mitLoeschung.size > 1, protokoll.join("\n"));
-  assert.deepEqual([...mitLoeschung].filter((kopie) => !mitGrundlauf.has(kopie)), []);
+  const ersteLoeschung = protokoll.findIndex(([, fehlend]) => fehlend.length === 1);
+  const grundlauf = protokoll.findIndex(([, fehlend]) => fehlend.length === 0);
+  assert.ok(grundlauf >= 0 && grundlauf < ersteLoeschung, protokoll.join("\n"));
+});
+
+test("laufen die drei Arbeitskopien gleichzeitig an, läuft der Grundlauf der ersten Gruppe nur einmal, und die anderen warten auf ihn", (context) => {
+  const { marken } = beideGruppen(context);
+  const protokoll = laeufe(marken);
+  assert.equal(protokoll.filter(([, fehlend]) => fehlend === "").length, 1, protokoll.join("\n"));
 });
 
 test("ist der Grundlauf einer späteren Gruppe rot, bricht die Löschprobe mit dieser Gruppe ab und baut alle Arbeitskopien ab", (context) => {
