@@ -1,9 +1,9 @@
 import express from "express";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
-export async function mitRoutenServer(router, aufruf) {
+export async function mitRoutenServer(router, aufruf, jsonOptionen = {}) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json(jsonOptionen));
   app.use(router);
   const server = await new Promise((resolve) => {
     const laufend = app.listen(0, "127.0.0.1", () => resolve(laufend));

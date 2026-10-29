@@ -1,6 +1,15 @@
 import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../store/defaults.js";
+import { lehneEingabeAb } from "../utils/http.js";
 export { E164 } from "../store/defaults.js";
 export { KEY_FACTS_LIMITS } from "../store/defaults.js";
+
+const UNGUELTIGER_KOERPER = "invalid_body";
+
+export function pruefeKoerper(res, schema, koerper) {
+  const ergebnis = schema.safeParse(koerper);
+  if (lehneEingabeAb(res, !ergebnis.success, UNGUELTIGER_KOERPER)) return undefined;
+  return ergebnis.data;
+}
 
 export const IDENTITY_MAX_LEN = 254;
 export const validIdentity = (e) =>
