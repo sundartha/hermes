@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import {
   AGENT,
   COUNTERPARTY,
+  KARTE_MASTERCARD_16,
+  KARTE_VISA_16,
   anrufeJeGruppe,
   bestaetigungsServerOptionen,
   einzeln,
   einzigeAusgabezeile,
   hatLuhnFensterMitKartenanfang,
+  laengsteZiffernfolge,
   luhnGueltig,
   starteServer,
 } from "./kartenmaskierung.js";
@@ -22,13 +25,6 @@ const ZIEL_NUMMER = "+4915112340077";
 const BESTAETIGUNGS_GEHEIMNIS = "vorangestellte-ziffern-test-secret-min-32-zeichen";
 
 const ABLAUFDATUM = "1227";
-const KARTE_VISA_16 = "4111111111111111";
-const KARTE_MASTERCARD_16 = "5555555555554444";
-
-function laengsteZiffernfolge(text) {
-  const ohneTrennzeichen = text.replace(/(?<=\d)[^0-9A-Za-zäöüÄÖÜß]+(?=\d)/g, "");
-  return Math.max(0, ...(ohneTrennzeichen.match(/\d+/g) ?? []).map((folge) => folge.length));
-}
 
 const ZIFFERN_MIT_FORTSETZUNG = 20;
 const ZIFFERN_AM_LIMIT = 19;

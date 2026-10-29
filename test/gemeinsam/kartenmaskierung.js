@@ -23,6 +23,14 @@ export function einzeln(ziffern, trenner = " ") {
   return ziffern.split("").join(trenner);
 }
 
+export const KARTE_VISA_16 = "4111111111111111";
+export const KARTE_MASTERCARD_16 = "5555555555554444";
+
+export function laengsteZiffernfolge(text) {
+  const ohneTrennzeichen = text.replace(/(?<=\d)[^0-9A-Za-zäöüÄÖÜß]+(?=\d)/g, "");
+  return Math.max(0, ...(ohneTrennzeichen.match(/\d+/g) ?? []).map((folge) => folge.length));
+}
+
 export function luhnGueltig(ziffern) {
   let summe = 0;
   for (const [position, zeichen] of [...ziffern].reverse().entries()) {
