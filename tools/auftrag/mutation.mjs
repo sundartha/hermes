@@ -246,8 +246,8 @@ function istTestCommit({ root, phase, auftrag }, stand) {
 function umbauAnfang(lauf) {
   const { root, auftrag } = lauf.kontext;
   const von = phasenbasis(root);
-  const verlauf = von === null ? lauf.basis : `${von}..${lauf.basis}`;
-  const kandidaten = git(["rev-list", "--fixed-strings", `--grep=${testBetreff(auftrag)}`, verlauf], { cwd: root }).split("\n").filter(Boolean);
+  if (von === null) return lauf.basis;
+  const kandidaten = git(["rev-list", "--fixed-strings", `--grep=${testBetreff(auftrag)}`, `${von}..${lauf.basis}`], { cwd: root }).split("\n").filter(Boolean);
   const aeltester = kandidaten.findLast((stand) => istTestCommit(lauf.kontext, stand));
   return aeltester === undefined ? lauf.basis : git(["rev-parse", `${aeltester}^`], { cwd: root }).trim();
 }
