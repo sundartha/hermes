@@ -330,6 +330,248 @@ test("[NIE4] Uebergang in unbekannten Status wird aus keinem Status angenommen",
   }
 });
 
+import {
+  attachNumberPaymentIntent,
+  attachNumberRegistration,
+  markNumberElInboundTrunkBelegt,
+  clearNumberElInboundTrunkBeleg,
+  recordProvisioningJob,
+  redriveAgeHoldReason,
+  RELEASE_VERDICT,
+  numberReleaseVerdict,
+  setContractEndCleanupPending,
+  contractEndCleanupPending,
+  tenantsPendingContractEndCleanup,
+  platformHoldEscalationCandidates,
+  paidWithoutNumberCandidates,
+  bindPlatformNumber,
+  setSuspendedAtIfAbsent,
+  setKycLevel,
+  setTenantSubscription,
+} from "../src/store/state-ops.js";
+import { KYC_LEVEL, PROVIDER } from "../src/store/defaults.js";
+
+const GRACE_MS = 60_000;
+const MAX_AGE_MS = 120_000;
+const SUSPENDED_ISO = "2026-01-01T00:00:00.000Z";
+const SUSPENDED_MS = Date.parse(SUSPENDED_ISO);
+
+const aktiveNummer = (s, tenantId, e164) => {
+  registerTenant(s, tenantId);
+  const { number } = requestNumber(s, { tenantId, ...CAPS });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164, providerNumberId: `tnx_${tenantId}` });
+  return findNumber(s, number.id);
+};
+
+test("transitionNumber: unbekannte Nummer wirft 'nicht gefunden'", () => {
+  const s = makeDefaultState();
+  assert.throws(
+    () => transitionNumber(s, "num_gibt_es_nicht", NUMBER_STATUS.ACTIVE),
+    /nicht gefunden/,
+  );
+});
+
+test("transitionNumber: Sperre durch Fremd-Bindung blockt suspended, nicht die Rueckkehr nach active", () => {
+  const s = makeDefaultState();
+  const number = aktiveNummer(s, "t_busy", "+4915755500101");
+  bindPlatformNumber(s, {
+    e164: number.e164,
+    purpose: "fremdnutzung",
+    provider: PROVIDER.TELNYX,
+    tenantId: null,
+  });
+  assert.throws(
+    () => transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED),
+    /gesperrt .*abgelehnt/,
+  );
+  const frei = aktiveNummer(s, "t_frei", "+4915755500102");
+  transitionNumber(s, frei.id, NUMBER_STATUS.SUSPENDED);
+  bindPlatformNumber(s, {
+    e164: frei.e164,
+    purpose: "fremdnutzung",
+    provider: PROVIDER.TELNYX,
+    tenantId: null,
+  });
+  transitionNumber(s, frei.id, NUMBER_STATUS.ACTIVE);
+  assert.equal(findNumber(s, frei.id).status, NUMBER_STATUS.ACTIVE);
+});
+
+test("attachNumberPaymentIntent und attachNumberRegistration: unbekannte Nummer wirft, Registrierung bleibt beim ersten Wert", () => {
+  const s = makeDefaultState();
+  assert.throws(() => attachNumberPaymentIntent(s, "num_x", "pi_1"), /nicht gefunden/);
+  assert.throws(() => attachNumberRegistration(s, "num_x", "reg_1"), /nicht gefunden/);
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  assert.equal(attachNumberPaymentIntent(s, number.id, "pi_1").paymentIntentId, "pi_1");
+  attachNumberRegistration(s, number.id, "reg_1");
+  attachNumberRegistration(s, number.id, "reg_2");
+  assert.equal(findNumber(s, number.id).providerAgentPhoneNumberId, "reg_1");
+});
+
+test("clearNumberElInboundTrunkBeleg: ein einzelnes gesetztes Belegfeld zaehlt, null-Felder nicht", () => {
+  const s = makeDefaultState();
+  const number = aktiveNummer(s, "t_beleg", "+4915755500103");
+  number.elInboundTrunkBelegtAt = null;
+  number.elInboundTrunkZugangFp = null;
+  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, false);
+  number.elInboundTrunkZugangFp = "fp_eins";
+  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, true);
+  assert.equal("elInboundTrunkZugangFp" in findNumber(s, number.id), false);
+  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, false);
+  const belegt = { nowIso: SUSPENDED_ISO, zugangFp: "fp_zwei" };
+  assert.equal(markNumberElInboundTrunkBelegt(s, number.id, belegt).changed, true);
+});
+
+test("activateNumber und recordProvisioningJob: Kennungen tragen Praefix asg_ und job_", () => {
+  const s = makeDefaultState();
+  aktiveNummer(s, "t_ids", "+4915755500104");
+  assert.match(s.numberAssignments[0].id, /^asg_/);
+  const job = recordProvisioningJob(s, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" });
+  assert.match(job.id, /^job_/);
+  assert.equal(
+    recordProvisioningJob(s, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" }),
+    job,
+  );
+});
+
+test("releaseNumber: schliesst nur die offene Zuordnung der eigenen Nummer", () => {
+  const s = makeDefaultState();
+  const erste = aktiveNummer(s, "t_erste", "+4915755500105");
+  const zweite = aktiveNummer(s, "t_zweite", "+4915755500106");
+  releaseNumber(s, zweite.id);
+  const zuErster = s.numberAssignments.find((a) => a.numberId === erste.id);
+  const zuZweiter = s.numberAssignments.find((a) => a.numberId === zweite.id);
+  assert.equal(zuErster.releasedAt, null);
+  assert.ok(zuZweiter.releasedAt);
+});
+
+test("redriveAgeHoldReason: fehlender oder unlesbarer Zeitstempel, zu alt, Grenze", () => {
+  const nowMs = SUSPENDED_MS;
+  const vor = (alterMs) => ({ createdAt: new Date(nowMs - alterMs).toISOString() });
+  assert.equal(redriveAgeHoldReason({}, nowMs, MAX_AGE_MS), "unknown_age");
+  assert.equal(redriveAgeHoldReason({ createdAt: "kein-datum" }, nowMs, MAX_AGE_MS), "unknown_age");
+  assert.equal(redriveAgeHoldReason(vor(MAX_AGE_MS + 1), nowMs, MAX_AGE_MS), "too_old");
+  assert.equal(redriveAgeHoldReason(vor(MAX_AGE_MS), nowMs, MAX_AGE_MS), null);
+});
+
+test("numberReleaseVerdict: Werte skip/hold/release, Karenz-Grenze und eigene vs fremde Bindung", () => {
+  assert.equal(RELEASE_VERDICT.HOLD, "hold");
+  assert.equal(RELEASE_VERDICT.SKIP, "skip");
+  assert.equal(RELEASE_VERDICT.RELEASE, "release");
+  const s = makeDefaultState();
+  const number = aktiveNummer(s, "t_verdict", "+4915755500107");
+  setSuspendedAtIfAbsent(s, "t_verdict", SUSPENDED_ISO);
+  assert.deepEqual(
+    numberReleaseVerdict(s, number, { nowMs: SUSPENDED_MS + GRACE_MS, graceMs: GRACE_MS }),
+    { action: "skip", reason: "grace_not_reached" },
+  );
+  const abgelaufen = { nowMs: SUSPENDED_MS + GRACE_MS + 1, graceMs: GRACE_MS };
+  assert.deepEqual(numberReleaseVerdict(s, number, abgelaufen), {
+    action: "release",
+    reason: null,
+  });
+  bindPlatformNumber(s, {
+    e164: number.e164,
+    purpose: "eigene_nutzung",
+    provider: PROVIDER.TELNYX,
+    tenantId: "t_verdict",
+  });
+  assert.equal(numberReleaseVerdict(s, number, abgelaufen).action, "release");
+  bindPlatformNumber(s, {
+    e164: number.e164,
+    purpose: "fremde_nutzung",
+    provider: PROVIDER.TELNYX,
+    tenantId: null,
+  });
+  assert.deepEqual(numberReleaseVerdict(s, number, abgelaufen), {
+    action: "hold",
+    reason: "platform_number_in_use",
+  });
+});
+
+test("Vertragsende-Aufraeumen: setzen, nur genannte Felder aendern, Standard false", () => {
+  const s = makeDefaultState();
+  assert.equal(
+    setContractEndCleanupPending(s, "t_unbekannt", { numberReleasePending: true }),
+    null,
+  );
+  const keineFlags = { numberReleasePending: false, workosDeletePending: false };
+  assert.deepEqual(contractEndCleanupPending(s, "t_unbekannt"), keineFlags);
+  registerTenant(s, "t_cleanup");
+  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), keineFlags);
+  assert.equal(setContractEndCleanupPending(s, "t_cleanup").id, "t_cleanup");
+  setContractEndCleanupPending(s, "t_cleanup", { numberReleasePending: true });
+  setContractEndCleanupPending(s, "t_cleanup", { workosDeletePending: true });
+  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), {
+    numberReleasePending: true,
+    workosDeletePending: true,
+  });
+  setContractEndCleanupPending(s, "t_cleanup", { numberReleasePending: false });
+  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), {
+    numberReleasePending: false,
+    workosDeletePending: true,
+  });
+});
+
+test("tenantsPendingContractEndCleanup: genau die Mandanten mit mindestens einem offenen Flag", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_nummer");
+  registerTenant(s, "t_workos");
+  registerTenant(s, "t_nichts");
+  setContractEndCleanupPending(s, "t_nummer", { numberReleasePending: true });
+  setContractEndCleanupPending(s, "t_workos", { workosDeletePending: true });
+  assert.deepEqual(
+    tenantsPendingContractEndCleanup(s).map((tenant) => tenant.id),
+    ["t_nummer", "t_workos"],
+  );
+});
+
+test("platformHoldEscalationCandidates: nur Nummer-Freigabe, alt genug, Halt durch Plattform-Nutzung", () => {
+  const s = makeDefaultState();
+  const nowMs = SUSPENDED_MS + MAX_AGE_MS;
+  const fremd = { provider: PROVIDER.TELNYX, tenantId: null };
+  const festgehalten = aktiveNummer(s, "t_halt", "+4915755500108");
+  setSuspendedAtIfAbsent(s, "t_halt", SUSPENDED_ISO);
+  setContractEndCleanupPending(s, "t_halt", { numberReleasePending: true });
+  bindPlatformNumber(s, { e164: festgehalten.e164, purpose: "p", ...fremd });
+
+  const nurWorkos = aktiveNummer(s, "t_workos", "+4915755500109");
+  setSuspendedAtIfAbsent(s, "t_workos", SUSPENDED_ISO);
+  setContractEndCleanupPending(s, "t_workos", { workosDeletePending: true });
+  bindPlatformNumber(s, { e164: nurWorkos.e164, purpose: "p", ...fremd });
+
+  const imGespraech = aktiveNummer(s, "t_call", "+4915755500110");
+  setSuspendedAtIfAbsent(s, "t_call", SUSPENDED_ISO);
+  setContractEndCleanupPending(s, "t_call", { numberReleasePending: true });
+  s.calls.push({ id: "call_x", status: "active", from: imGespraech.e164, to: "+4915700000000" });
+
+  const ids = (grenze) =>
+    platformHoldEscalationCandidates(s, { nowMs: grenze, maxAgeMs: MAX_AGE_MS }).map((n) => n.id);
+  assert.deepEqual(ids(nowMs + 1), [festgehalten.id]);
+  assert.deepEqual(ids(nowMs), []);
+});
+
+test("paidWithoutNumberCandidates: zahlender Abonnent ohne Live-Nummer nach Karenz, Grenze exakt", () => {
+  const s = makeDefaultState();
+  const paidSinceSec = SUSPENDED_MS / 1000;
+  const bezahlt = (tenantId) => {
+    registerTenant(s, tenantId);
+    setKycLevel(s, tenantId, KYC_LEVEL.CARD);
+    setTenantSubscription(s, tenantId, { currentPeriodStart: paidSinceSec });
+  };
+  bezahlt("t_ohne");
+  bezahlt("t_mit");
+  requestNumber(s, { tenantId: "t_mit", ...CAPS });
+  registerTenant(s, "t_ohne_abo");
+  setTenantSubscription(s, "t_ohne_abo", { currentPeriodStart: paidSinceSec });
+  const kyc = { graceMs: GRACE_MS, kycMinLevel: KYC_LEVEL.CARD };
+  assert.deepEqual(paidWithoutNumberCandidates(s, { nowMs: SUSPENDED_MS + GRACE_MS, ...kyc }), []);
+  assert.deepEqual(paidWithoutNumberCandidates(s, { nowMs: SUSPENDED_MS + GRACE_MS + 1, ...kyc }), [
+    { tenantId: "t_ohne", paidSinceIso: SUSPENDED_ISO },
+  ]);
+});
+
 test("requestNumber vergibt eine Kennung mit Praefix num_", () => {
   const state = makeDefaultState();
   seedTenant(state);
