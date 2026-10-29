@@ -1,0 +1,354 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { env, version } from "node:process";
+import { isDeepStrictEqual } from "node:util";
+
+import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
+import { gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
+import { bestaetigungAbgestuerzt } from "./bestaetigung.mjs";
+import { werkzeugEingaben } from "./vorher-speicher.mjs";
+
+const MAX_GIT_AUSGABE = 268_435_456;
+const TESTORDNER = "test/";
+const ARBEITSORDNER = ".mutationspruefung/";
+const NUR_COMMIT = "^{commit}";
+const WORKFLOW_PFAD = ".github/workflows/ci.yml";
+const ABRUF_ZWEIG = "lauf-mutation/";
+const ABRUF_EREIGNIS = "workflow_dispatch";
+const ABRUF_AUFTRAG = /^Auftrag: lauf\/in-ci$/m;
+const VORLAUF_ZEILE = /^Vorlauf: ([1-9]\d*)$/m;
+const COMMIT = /^[0-9a-f]{40}$/;
+const ABGESCHLOSSEN = new Set(["success", "failure"]);
+const ARTEFAKTE = "mutation-teil-*";
+const TEILDATEI = /^mutation-teil-\d+\.json$/;
+const BESTAETIGT = "getoetet";
+const GETOETET = "Killed";
+const MELDUNG_ZEICHEN = 160;
+const LEERRAUM = /\s+/g;
+
+function git(argumente) {
+  return execFileSync("git", argumente, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function einzeiler(text) {
+  return String(text).replace(LEERRAUM, " ").trim().slice(0, MELDUNG_ZEICHEN);
+}
+
+function aufgeloest(ref) {
+  return git(["rev-parse", "--verify", ref + NUR_COMMIT]).trim();
+}
+
+function dateienVon(commit) {
+  const dateien = new Map();
+  for (const zeile of git(["ls-tree", "-r", "-z", commit]).split("\0").filter(Boolean)) {
+    const tab = zeile.indexOf("\t");
+    dateien.set(zeile.slice(tab + 1), zeile.slice(0, tab).split(" ")[2]);
+  }
+  return dateien;
+}
+
+function werkzeugInTests() {
+  return new Set(werkzeugEingaben(".").filter((pfad) => pfad.startsWith(TESTORDNER)));
+}
+
+function ausserhalbVonTests(dateien) {
+  const werkzeug = werkzeugInTests();
+  return [...dateien].filter(([pfad]) => werkzeug.has(pfad) || (!pfad.startsWith(TESTORDNER) && !pfad.startsWith(ARBEITSORDNER))).sort(([links], [rechts]) => (links < rechts ? -1 : 1));
+}
+
+function baumHash(dateien) {
+  return createHash("sha256").update(JSON.stringify(ausserhalbVonTests(dateien))).digest("hex");
+}
+
+function testBlobs(dateien) {
+  return Object.fromEntries([...dateien].filter(([pfad]) => pfad.startsWith(TESTORDNER)));
+}
+
+function hashJeCommit(commit, zwischenspeicher) {
+  if (commit === null) return { hash: null, dateien: new Map() };
+  if (!zwischenspeicher.has(commit)) {
+    const dateien = dateienVon(commit);
+    zwischenspeicher.set(commit, { hash: baumHash(dateien), dateien });
+  }
+  return zwischenspeicher.get(commit);
+}
+
+export function standVon({ seite, von, bis }, kopf) {
+  const zwischenspeicher = new Map();
+  const [vonCommit, bisCommit] = [aufgeloest(von), bis === undefined || bis === null ? null : aufgeloest(bis)];
+  const prueft = seite === "alt" ? vonCommit : kopf;
+  return {
+    seite,
+    von: vonCommit,
+    bis: bisCommit,
+    quellen: { kopf: hashJeCommit(kopf, zwischenspeicher).hash, von: hashJeCommit(vonCommit, zwischenspeicher).hash, bis: hashJeCommit(bisCommit, zwischenspeicher).hash },
+    tests: testBlobs(hashJeCommit(prueft, zwischenspeicher).dateien),
+  };
+}
+
+export function lauffaehig(stand, zugesagt) {
+  const gleich = (name) => isDeepStrictEqual(stand[name], zugesagt[name]);
+  if (!gleich("seite")) return "andere Seite der Prüfung";
+  if (!gleich("quellen")) return "Dateien außerhalb von test/ geändert";
+  return null;
+}
+
+function arbeitsbaumSauber() {
+  return git(["status", "--porcelain"]).trim() === "";
+}
+
+function auffaellig(eintrag) {
+  return bestaetigungAbgestuerzt(eintrag) || eintrag.hinweis !== undefined || eintrag.befund !== undefined;
+}
+
+function fuerUebernahme(bisher, eintrag) {
+  if (bisher === undefined || auffaellig(bisher)) return bisher ?? eintrag;
+  if (auffaellig(eintrag)) return eintrag;
+  return bestaetigtGetoetet(eintrag) && !bestaetigtGetoetet(bisher) ? eintrag : bisher;
+}
+
+function eintragsListe(berichte, index) {
+  const nachSchluessel = new Map();
+  for (const bericht of berichte) {
+    for (const eintrag of bericht.messungen.filter(({ pruefung }) => pruefung === index).flatMap(({ ergebnisse }) => ergebnisse)) {
+      if (eintrag.lage === undefined) continue;
+      nachSchluessel.set(eintrag.schluessel, fuerUebernahme(nachSchluessel.get(eintrag.schluessel), eintrag));
+    }
+  }
+  return [...nachSchluessel.values()];
+}
+
+export function bestaetigtGetoetet(eintrag) {
+  const sauber = eintrag.hinweis === undefined && eintrag.befund === undefined;
+  return sauber && eintrag.status === GETOETET && eintrag.bestaetigung === BESTAETIGT && Array.isArray(eintrag.toeter) && eintrag.toeter.length > 0;
+}
+
+function dateiVon(schluessel) {
+  return schluessel.split(":")[0];
+}
+
+function jeDatei(eintraege) {
+  const karte = {};
+  for (const eintrag of eintraege) (karte[dateiVon(eintrag.schluessel)] ??= []).push(eintrag);
+  return karte;
+}
+
+function kennungVon(inhalt) {
+  return createHash("sha256").update(JSON.stringify(inhalt)).digest("hex");
+}
+
+export function teilMetadaten(pruefungen, vorergebnis) {
+  return {
+    kopf: aufgeloest("HEAD"),
+    umgebung: version,
+    pruefungen: pruefungen.map(({ seite, von, bis }) => ({ seite, von: aufgeloest(von), bis: bis === undefined ? null : aufgeloest(bis) })),
+    vorergebnis: vorergebnis.kennung ?? null,
+  };
+}
+
+function ohneVorergebnis(grund) {
+  return { lauf: null, grund };
+}
+
+export function keinVorergebnisZeile(grund) {
+  return `Mutationsprüfung: kein Vorergebnis (${grund}), voller Neulauf.`;
+}
+
+function dateiLesen(pfad) {
+  try {
+    return JSON.parse(readFileSync(pfad, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function leseVorergebnis(pfad) {
+  if (pfad === undefined) return ohneVorergebnis("kein Vorergebnis angegeben");
+  if (!existsSync(pfad)) throw new Error(`Vorergebnisdatei fehlt: ${pfad}`);
+  const inhalt = dateiLesen(pfad);
+  if (typeof inhalt !== "object" || inhalt === null) return ohneVorergebnis("Vorergebnisdatei unlesbar");
+  if (inhalt.lauf === null || !Array.isArray(inhalt.pruefungen)) return ohneVorergebnis(typeof inhalt.grund === "string" && inhalt.grund !== "" ? inhalt.grund : "leer");
+  return inhalt;
+}
+
+function stimmtUeberein(vorergebnis, pruefungen) {
+  if (vorergebnis.lauf === null) return vorergebnis.grund;
+  if (vorergebnis.umgebung !== version) return `andere Node-Version (${vorergebnis.umgebung})`;
+  if (vorergebnis.pruefungen.length !== pruefungen.length) return "andere Zahl von Prüfungen";
+  if (!arbeitsbaumSauber()) return "Arbeitsbaum nicht sauber";
+  return null;
+}
+
+export function kontexteFuer(vorergebnis, pruefungen) {
+  const grund = stimmtUeberein(vorergebnis, pruefungen);
+  if (grund !== null) return { kontexte: pruefungen.map(() => null), zeile: keinVorergebnisZeile(grund) };
+  const kopf = aufgeloest("HEAD");
+  const gruende = [];
+  const kontexte = pruefungen.map((pruefung, index) => {
+    const zugesagt = vorergebnis.pruefungen[index];
+    const jetzt = standVon(pruefung, kopf);
+    const abweichung = lauffaehig(jetzt, zugesagt);
+    if (abweichung !== null) gruende.push(abweichung);
+    return abweichung === null ? { lauf: vorergebnis.lauf, eintraege: jeDatei(zugesagt.eintraege), vorher: zugesagt.tests, jetzt: jetzt.tests } : null;
+  });
+  const zeile = gruende.length > 0 ? `Mutationsprüfung: Vorergebnis passt nicht zum Stand (${[...new Set(gruende)].join("; ")}), voller Neulauf.` : null;
+  return { kontexte, zeile };
+}
+
+function geaendert(vorher, jetzt) {
+  const pfade = new Set([...Object.keys(vorher), ...Object.keys(jetzt)]);
+  const abweichend = [...pfade].filter((pfad) => vorher[pfad] !== jetzt[pfad]);
+  return { neu: abweichend.filter((pfad) => jetzt[pfad] !== undefined), geloescht: abweichend.filter((pfad) => jetzt[pfad] === undefined) };
+}
+
+function betroffeneTests(kontext, erreichende) {
+  const { neu, geloescht } = geaendert(kontext.vorher, kontext.jetzt);
+  if (geloescht.length > 0) return null;
+  const betroffen = new Set();
+  for (const pfad of neu) {
+    const tests = erreichende(pfad);
+    if (tests.length === 0) return null;
+    for (const test of tests) betroffen.add(test);
+  }
+  return betroffen;
+}
+
+function imBereich(eintrag, bereiche) {
+  const [von, bis] = eintrag.zeilen;
+  return bereiche.some(([anfang, ende]) => von >= anfang && bis <= ende);
+}
+
+function bleibtGetoetet(eintrag, { betroffen, alle }) {
+  return bestaetigtGetoetet(eintrag) && eintrag.toeter.every((test) => !betroffen.has(test) && alle.includes(test));
+}
+
+export function uebernommen(kontext, datei, { alle, erreichende, zeilen }) {
+  const bisher = kontext?.eintraege[datei];
+  if (bisher === undefined || !bisher.every((eintrag) => imBereich(eintrag, zeilen))) return null;
+  const betroffen = betroffeneTests(kontext, erreichende);
+  if (betroffen === null) return null;
+  const pruefung = { betroffen, alle };
+  const behalten = bisher.filter((eintrag) => bleibtGetoetet(eintrag, pruefung));
+  if (behalten.length === 0) return null;
+  return { lauf: kontext.lauf, betroffen, uebernommen: behalten, offen: bisher.filter((eintrag) => !behalten.includes(eintrag)).map(({ lage }) => lage) };
+}
+
+export function zusammengefuehrt(teilung, datei, neu) {
+  const frisch = new Set(neu.map(({ schluessel }) => schluessel));
+  const behalten = teilung.uebernommen.filter(({ schluessel }) => !frisch.has(schluessel));
+  if (behalten.length > 0) console.log(`${datei}: ${behalten.length} Mutanten aus Lauf ${teilung.lauf} übernommen, ${neu.length} neu geprüft`);
+  return [...behalten, ...neu];
+}
+
+function laufPruefen(lauf, id) {
+  const repo = ghRepo();
+  const bedingungen = [
+    [lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion), "ist nicht mit Urteil abgeschlossen"],
+    [lauf.path === WORKFLOW_PFAD && lauf.event === ABRUF_EREIGNIS, "gehört nicht zum Abruf des Workflows CI"],
+    [String(lauf.head_branch).startsWith(ABRUF_ZWEIG), "lief nicht auf einem lauf-mutation-Zweig"],
+    [lauf.repository?.full_name === repo && lauf.head_repository?.full_name === repo, "stammt nicht aus diesem Repository"],
+    [COMMIT.test(String(lauf.head_sha)), "nennt keinen Commit"],
+  ];
+  const verletzt = bedingungen.find(([erfuellt]) => !erfuellt);
+  return verletzt === undefined ? null : `der Lauf ${id} ${verletzt[1]}`;
+}
+
+function commitHolen(commit) {
+  try {
+    aufgeloest(commit);
+  } catch {
+    git(["fetch", "--quiet", "--no-tags", "origin", commit]);
+    aufgeloest(commit);
+  }
+}
+
+function geladeneTeildateien(ordner) {
+  const namen = readdirSync(ordner, { recursive: true }).map(String).filter((name) => TEILDATEI.test(basename(name)));
+  return namen.map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")));
+}
+
+function pruefungenBrauchbar(pruefungen) {
+  const commit = (wert) => wert === null || COMMIT.test(String(wert));
+  return pruefungen.every(({ seite, von, bis }) => ["alt", "neu"].includes(seite) && COMMIT.test(String(von)) && commit(bis));
+}
+
+function altesFormat(bericht) {
+  return !Number.isInteger(bericht.teile) || !Array.isArray(bericht.pruefungen) || typeof bericht.umgebung !== "string";
+}
+
+function nummernVollstaendig(berichte, teile) {
+  const nummern = berichte.map(({ teil }) => teil).sort((links, rechts) => links - rechts);
+  return nummern.length === teile && nummern.every((nummer, index) => nummer === index + 1);
+}
+
+function berichteVollstaendig(berichte, lauf) {
+  if (berichte.length === 0) return "enthält keine Teilergebnisse";
+  const erster = berichte[0];
+  if (altesFormat(erster)) return "hat Teilergebnisse in einem älteren Format";
+  if (!pruefungenBrauchbar(erster.pruefungen)) return "nennt unbrauchbare Prüfungen";
+  const gleich = (bericht) =>
+    bericht.pruefsumme === erster.pruefsumme && bericht.kopf === lauf.head_sha && bericht.teile === erster.teile && bericht.umgebung === erster.umgebung && isDeepStrictEqual(bericht.pruefungen, erster.pruefungen);
+  if (!berichte.every(gleich)) return "hat Teilergebnisse, die nicht zu einem Plan und Commit gehören";
+  return nummernVollstaendig(berichte, erster.teile) ? null : "hat nicht alle Teilergebnisse";
+}
+
+function zugesagtVonLauf(berichte, lauf) {
+  const stand = (pruefung) => standVon(pruefung, lauf.head_sha);
+  return berichte[0].pruefungen.map((pruefung, index) => {
+    const festgestellt = stand(pruefung);
+    return { seite: festgestellt.seite, quellen: festgestellt.quellen, tests: festgestellt.tests, eintraege: eintragsListe(berichte, index) };
+  });
+}
+
+function abrufen(id) {
+  const repo = ghRepo();
+  const lauf = JSON.parse(gh(["api", `repos/${repo}/actions/runs/${id}`]));
+  const unpassend = laufPruefen(lauf, id);
+  if (unpassend !== null) return ohneVorergebnis(unpassend);
+  commitHolen(lauf.head_sha);
+  const ordner = neuerTempOrdner("vorergebnis-");
+  try {
+    gh(["run", "download", String(id), "-R", repo, "-D", ordner, "-p", ARTEFAKTE]);
+    const berichte = geladeneTeildateien(ordner);
+    const luecke = berichteVollstaendig(berichte, lauf);
+    if (luecke !== null) return ohneVorergebnis(`der Lauf ${id} ${luecke}`);
+    for (const { von, bis } of berichte[0].pruefungen) [von, bis].filter(Boolean).forEach(commitHolen);
+    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, pruefungen: zugesagtVonLauf(berichte, lauf) };
+    return { ...inhalt, kennung: kennungVon(inhalt) };
+  } finally {
+    entferneTempOrdner(ordner);
+  }
+}
+
+function laufNummer(umgebung) {
+  const nachricht = git(["log", "-1", "--format=%B", "HEAD"]);
+  if (umgebung.GITHUB_EVENT_NAME !== ABRUF_EREIGNIS || !String(umgebung.GITHUB_REF_NAME).startsWith(ABRUF_ZWEIG)) return { grund: "kein Abruf der Mutationsprüfung" };
+  const treffer = VORLAUF_ZEILE.exec(nachricht);
+  if (!ABRUF_AUFTRAG.test(nachricht) || treffer === null) return { grund: "der Commit nennt keinen Vorlauf" };
+  if (Number(treffer[1]) >= Number(umgebung.GITHUB_RUN_ID)) return { grund: "der genannte Lauf ist nicht älter als dieser" };
+  return { id: Number(treffer[1]) };
+}
+
+function abgerufen(umgebung) {
+  try {
+    const { id, grund } = laufNummer(umgebung);
+    return id === undefined ? ohneVorergebnis(grund) : abrufen(id);
+  } catch (fehler) {
+    return ohneVorergebnis(`Abruf fehlgeschlagen: ${einzeiler(fehler.message)}`);
+  }
+}
+
+export function schreibeOhneVorergebnis(ziel, grund) {
+  writeFileSync(ziel, `${JSON.stringify(ohneVorergebnis(grund))}\n`);
+  return keinVorergebnisZeile(grund);
+}
+
+export function holeVorergebnis(ziel, umgebung = env) {
+  const ergebnis = abgerufen(umgebung);
+  writeFileSync(ziel, `${JSON.stringify(ergebnis)}\n`);
+  if (ergebnis.lauf === null) return keinVorergebnisZeile(ergebnis.grund);
+  const zahl = ergebnis.pruefungen.reduce((summe, { eintraege }) => summe + eintraege.filter(bestaetigtGetoetet).length, 0);
+  return `Mutationsprüfung: Vorergebnis aus Lauf ${ergebnis.lauf}, ${zahl} bestätigt getötete Mutanten.`;
+}
