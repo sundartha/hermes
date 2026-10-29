@@ -6,6 +6,7 @@ import { erlaubteNamen, KARTE, karteAus } from "./abhaengigkeiten/bausteine.mjs"
 export const GENERATE_COMMAND = "npm run hinweise";
 export const FOLDER_INSTRUCTIONS = "CLAUDE.md";
 const HEADING_PREFIX = "## Baustein ";
+const PURPOSE_PREFIX = "- Zweck: ";
 const LINE_BREAK = "\n";
 const LIST_SEPARATOR = ", ";
 const GROUP_SEPARATOR = "; ";
@@ -44,7 +45,7 @@ function strangersText(map, entry, folder) {
 function sharedLines(map, entry, folder) {
   const [first] = entry.ordner;
   if (folder === first)
-    return [`- Zweck: ${entry.zweck}`, `- Darf nutzen: ${erlaubteNamen(map, entry)}`];
+    return [`${PURPOSE_PREFIX}${entry.zweck}`, `- Darf nutzen: ${erlaubteNamen(map, entry)}`];
   return [
     `- Zweck und Darf nutzen: stehen in \`${first}${FOLDER_INSTRUCTIONS}\`, dem ersten Ordner von ${entry.baustein}.`,
   ];
@@ -129,7 +130,9 @@ export function coveredLines(root, blocks) {
     const lines = splitLines(readFileSync(join(root, path), "utf8"));
     if (!blockMatches(lines, expected)) continue;
     const { start, end } = findBlock(lines);
-    for (let index = start; index < end; index += 1) covered.add(`${path}:${index + 1}`);
+    for (let index = start; index < end; index += 1) {
+      if (!lines[index].startsWith(PURPOSE_PREFIX)) covered.add(`${path}:${index + 1}`);
+    }
   }
   return covered;
 }

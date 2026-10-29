@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -11,6 +11,7 @@ const GENERATE_COMMAND = "npm run hinweise";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const MAP_FILE = "tools/bausteine.json";
+const BASELINE_FILE = "tools/basis/anweisungen.json";
 const HAND_TEXT = "Handgeschriebene Regel.\n";
 const FREE_LINE = "Freie neue Regel.\n";
 const MAP = {
@@ -65,14 +66,19 @@ function generate(directory) {
   );
 }
 
-function probe(context) {
-  const directory = probeRepository(context, FILES);
+function createBaseline(directory) {
+  rmSync(join(directory, BASELINE_FILE), { force: true });
   const created = runIn(directory, process.execPath, [
     COMPARE_TOOL,
     "anweisungen",
     "--basis-anlegen",
   ]);
   assert.equal(created.status, EXIT_OK, created.stderr);
+}
+
+function probe(context) {
+  const directory = probeRepository(context, FILES);
+  createBaseline(directory);
   return directory;
 }
 
@@ -83,6 +89,7 @@ function read(directory, path) {
 function generated(context) {
   const directory = probe(context);
   generate(directory);
+  createBaseline(directory);
   return directory;
 }
 
@@ -126,6 +133,10 @@ test("anweisungen: fehlt der Kartenteil, ist es rot und die Meldung nennt den Be
   assert.ok(before.output.includes("src/neu"), before.output);
   assert.ok(before.output.includes(GENERATE_COMMAND), before.output);
   generate(directory);
+  const purposeOnly = compare(directory);
+  assert.equal(purposeOnly.status, EXIT_FINDING, purposeOnly.output);
+  assert.ok(!purposeOnly.output.includes(GENERATE_COMMAND), purposeOnly.output);
+  createBaseline(directory);
   const after = compare(directory);
   assert.equal(after.status, EXIT_OK, after.output);
 });
@@ -135,13 +146,13 @@ test("anweisungen: eine Änderung der Karte ohne neues Erzeugen ist rot, danach 
   const changed = {
     ...MAP,
     bausteine: MAP.bausteine.map((eintrag) =>
-      eintrag.baustein === "fach" ? { ...eintrag, zweck: "Andere Abläufe." } : eintrag,
+      eintrag.baustein === "neu" ? { ...eintrag, eingaenge: ["src/neu/n.js"] } : eintrag,
     ),
   };
   writeFiles(directory, { [MAP_FILE]: `${JSON.stringify(changed, null, 2)}\n` });
   const stale = compare(directory);
   assert.equal(stale.status, EXIT_FINDING, stale.output);
-  assert.ok(stale.output.includes("src/fach"), stale.output);
+  assert.ok(stale.output.includes("src/neu"), stale.output);
   assert.ok(stale.output.includes(GENERATE_COMMAND), stale.output);
   generate(directory);
   const fresh = compare(directory);
@@ -227,4 +238,28 @@ test("hinweise: ein Ordner der Karte, den es nicht gibt, bekommt keine Datei und
   assert.ok(first.includes("Fachliche Abläufe."), first);
   assert.ok(!second.includes("src/fehlt/"), second);
   assert.ok(second.includes("src/fach/CLAUDE.md"), second);
+});
+
+function withPurpose(baustein, purpose) {
+  const bausteine = MAP.bausteine.map((entry) =>
+    entry.baustein === baustein ? { ...entry, zweck: purpose } : entry,
+  );
+  return { [MAP_FILE]: `${JSON.stringify({ ...MAP, bausteine }, null, 2)}\n` };
+}
+
+test("anweisungen: ein geänderter Zweck in der Karte ist nach dem Erzeugen rot wie eine neue Zeile", (context) => {
+  const directory = generated(context);
+  writeFiles(directory, withPurpose("fach", "Neue Anweisung für jeden Agenten."));
+  generate(directory);
+  const result = compare(directory);
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.ok(result.output.includes("src/fach/CLAUDE.md:"), result.output);
+});
+
+test("anweisungen: derselbe Zweck, neu erzeugt, bleibt grün", (context) => {
+  const directory = generated(context);
+  writeFiles(directory, withPurpose("fach", MAP.bausteine[1].zweck));
+  generate(directory);
+  const result = compare(directory);
+  assert.equal(result.status, EXIT_OK, result.output);
 });
