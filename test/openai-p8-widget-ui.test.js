@@ -4,7 +4,6 @@ import crypto from "node:crypto";
 import http from "node:http";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
   seedState,
@@ -12,8 +11,7 @@ import {
   toolCall,
   readToolResult,
   startIdp,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
@@ -25,7 +23,6 @@ const WIDGET_TOOL_COUNT = 5;
 const WIDGET_RESOURCE_COUNT = 4;
 const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 const CHATGPT_UI_MIME = "text/html+skybridge";
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const HTTP_OK = 200;
 const EXPECTED_WIDGET_DOMAIN = "https://agent.test";
 const EXPECTED_RESOURCE_META = {
@@ -78,21 +75,11 @@ async function httpResourceRead(baseUrl, uri) {
 }
 
 async function withStdioClient(env, capabilities, run) {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: { ...BASE_ENV, ...env },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport(env);
   const client = new Client({ name: "p8-test-stdio-client", version: "0.0.0" }, { capabilities });
   try {
     await client.connect(transport);
-    await run(client, () => stderrOutput);
+    await run(client, () => stderr.text);
   } finally {
     await client.close();
   }

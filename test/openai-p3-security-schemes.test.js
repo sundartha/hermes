@@ -6,7 +6,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { applyToolSecuritySchemes } from "../src/mcp-security-schemes.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import {
@@ -15,12 +14,11 @@ import {
   seedState,
   mcpPost,
   readToolResult,
-  ROOT,
-  BASE_ENV,
   MCP_AUDIENCE,
   TOOL_COUNT_WITH_CONSULT,
   TOOL_COUNT_WITHOUT_CONSULT,
   TOOLS_WITH_OUTPUT_SCHEMA,
+  stdioServerTransport,
 } from "./helpers.js";
 
 const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["openid", "email", "offline_access"] }];
@@ -28,7 +26,6 @@ const EXPECTED_NOAUTH_SECURITY_SCHEMES = [{ type: "noauth" }];
 const LIST_TOOLS_METHOD = "tools/list";
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
 async function rawToolsList(client) {
   return client.request({ method: LIST_TOOLS_METHOD }, RAW_TOOLS_LIST_RESULT);
@@ -253,17 +250,7 @@ test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securit
 });
 
 test("P3 (Schritt 7, T-15-Korrektur): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) traegt securitySchemes an KEINEM Werkzeug - stdio hat keine Client-Auth, oauth2 waere dort eine Falschangabe", async () => {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: BASE_ENV,
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport();
   const client = new Client({ name: "hermes-p3-stdio-entrypoint-client", version: "0.0.0" });
   try {
     await client.connect(transport);
@@ -271,7 +258,7 @@ test("P3 (Schritt 7, T-15-Korrektur): der echte stdio-Einstieg (Kindprozess src/
     assert.equal(
       result.tools.length,
       TOOL_COUNT_WITHOUT_CONSULT,
-      `stdio-Einstieg ohne Consult-Faehigkeit liefert zehn Werkzeuge (stderr: ${stderrOutput})`,
+      `stdio-Einstieg ohne Consult-Faehigkeit liefert zehn Werkzeuge (stderr: ${stderr.text})`,
     );
     assertNoSecuritySchemesOnAnyTool(result.tools);
   } finally {

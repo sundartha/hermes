@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
-import { startServer, seedState, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import { startServer, seedState, mcpPost, toolCall, readToolResult, stdioServerTransport } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
@@ -143,23 +142,13 @@ test("P5a (O-13 Teil 1, Beschreibung): die ausgelieferte tools/list-Beschreibung
 });
 
 test("P5a (O-13 Teil 1, stdio, DP-1): der echte stdio-Kindprozess liefert get_agent_status ohne voiceEngine/model im outputSchema", async () => {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: BASE_ENV,
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport();
   const client = new Client({ name: "hermes-p5a-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
     const tool = tools.find((entry) => entry.name === "get_agent_status");
-    assert.ok(tool, `get_agent_status erscheint in tools/list (stderr: ${stderrOutput})`);
+    assert.ok(tool, `get_agent_status erscheint in tools/list (stderr: ${stderr.text})`);
     assert.ok(tool.outputSchema, "outputSchema ist deklariert");
 
     const props = tool.outputSchema.properties || {};

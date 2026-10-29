@@ -8,12 +8,14 @@ import net from "node:net";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { testkostenZaehler } from "./testkosten.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
 import { mitAktivemMutanten } from "../tools/mutationspruefung/zustand.mjs";
+import { MCP_STDIO_ARGS } from "../tools/mutationspruefung/ppid-waechter.mjs";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -24,6 +26,22 @@ import {
 } from "../src/elevenlabs/inbound-path-decision.js";
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+export { MCP_STDIO_ARGS };
+
+export function stdioServerTransport(zusatz = {}) {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: MCP_STDIO_ARGS,
+    cwd: ROOT,
+    env: { ...BASE_ENV, ...zusatz },
+    stderr: "pipe",
+  });
+  const stderr = { text: "" };
+  transport.stderr?.on("data", (chunk) => {
+    stderr.text += chunk.toString();
+  });
+  return { transport, stderr };
+}
 const STARTUP_TIMEOUT_MS = 15000;
 
 export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "telnyx" });

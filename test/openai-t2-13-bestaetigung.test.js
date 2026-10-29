@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
@@ -15,8 +14,7 @@ import {
   toolCall,
   readToolResult,
   seedState,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 
 const TEST_SECRET = "openai-t2-13-abnahme-test-secret-mind-32-zeichen";
@@ -216,23 +214,13 @@ test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber 
       CALL_CONFIRMATION_SECRET: TEST_SECRET,
     },
   });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
   const client = new Client({ name: "hermes-t2-13-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
     const before = gateway.readStore().calls.length;
     const prep = await client.callTool({ name: "prepare_call", arguments: { to: TARGET, objective: OBJECTIVE } });
-    assert.notEqual(prep.isError, true, `prepare_call ueber stdio (stderr: ${stderrOutput})`);
+    assert.notEqual(prep.isError, true, `prepare_call ueber stdio (stderr: ${stderr.text})`);
     const code = prep._meta?.[CONFIRMATION_META_KEY];
     assert.match(code, CODE_PATTERN, "stdio bekommt den Code (MCP_UI_ENABLED=true im Kind)");
 
@@ -240,7 +228,7 @@ test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber 
       name: "place_call",
       arguments: { to: TARGET, objective: OBJECTIVE, confirmation_code: code },
     });
-    assert.notEqual(placed.isError, true, `place_call ueber stdio (stderr: ${stderrOutput})`);
+    assert.notEqual(placed.isError, true, `place_call ueber stdio (stderr: ${stderr.text})`);
     assert.ok(placed.structuredContent.call_id, "call_id vorhanden");
     assert.equal(gateway.readStore().calls.length, before + 1, "genau EIN Anruf entstanden");
   } finally {
@@ -433,13 +421,7 @@ test("(f) am Draht, HTTP OAuth (echtes Token): Annotationen und confirmation_cod
 
 test("(f) am Draht, stdio (echter Kindprozess): Annotationen und confirmation_code optional im Schema", async () => {
   const gateway = await startServer({ env: { CALL_CONFIRMATION_SECRET: TEST_SECRET } });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
-    stderr: "pipe",
-  });
+  const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
   const client = new Client({ name: "hermes-t2-13-stdio-list", version: "0.0.0" });
   try {
     await client.connect(transport);

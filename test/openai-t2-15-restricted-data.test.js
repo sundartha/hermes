@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { findRestrictedData, maskRestrictedText, firstRestrictedField } from "../src/restricted-data.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
@@ -13,8 +12,8 @@ import {
   readToolResult,
   seedState,
   seedCall,
-  ROOT,
   BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 import {
   LANGE_TOKEN,
@@ -647,13 +646,7 @@ test("T7 (Draht stdio): prepare_call mit Karte/SSN/Passwort -> isError; get_call
     env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", CALL_CONFIRMATION_SECRET: TEST_SECRET },
     seed: seededTranscriptState(),
   });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
-    stderr: "pipe",
-  });
+  const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
   const client = new Client({ name: "hermes-t2-15-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);

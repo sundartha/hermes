@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
   startIdp,
@@ -8,11 +7,9 @@ import {
   mcpPost,
   readToolResult,
   readRpcMessage,
-  ROOT,
-  BASE_ENV,
+  stdioServerTransport,
 } from "./helpers.js";
 
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 export const CONSULT_ON = Object.freeze({ CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" });
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const INITIALIZE_ID = 2;
@@ -151,13 +148,7 @@ async function stdioRessourcen(client, zusatzUris) {
 }
 
 export async function stdioSnapshot(env, { ressourcen = false, zusatzUris = [] } = {}) {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
-    cwd: ROOT,
-    env: { ...BASE_ENV, ...env },
-    stderr: "pipe",
-  });
+  const { transport } = stdioServerTransport(env);
   const client = new Client({ name: "mcp-draht-pfade-stdio", version: "0.0.0" });
   try {
     await client.connect(transport);

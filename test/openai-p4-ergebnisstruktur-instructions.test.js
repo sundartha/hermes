@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import {
@@ -18,9 +17,8 @@ import {
   mcpPost,
   toolCall,
   readToolResult,
-  ROOT,
-  BASE_ENV,
   TOOLS_WITH_OUTPUT_SCHEMA,
+  stdioServerTransport,
 } from "./helpers.js";
 
 const INITIALIZE_BODY = {
@@ -219,17 +217,7 @@ test("P4 (T-21): initialize ohne Consult-Freigabe traegt den Basis-Block, nicht 
 });
 
 test("P4 (T-21 stdio, DP-1): der echte stdio-Kindprozess traegt instructions im initialize-Handshake", async () => {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: BASE_ENV,
-    stderr: "pipe",
-  });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
+  const { transport, stderr } = stdioServerTransport();
   const client = new Client({ name: "hermes-p4-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
@@ -237,9 +225,9 @@ test("P4 (T-21 stdio, DP-1): der echte stdio-Kindprozess traegt instructions im 
     assert.equal(
       typeof instructions,
       "string",
-      `stdio-initialize traegt instructions (stderr: ${stderrOutput})`,
+      `stdio-initialize traegt instructions (stderr: ${stderr.text})`,
     );
-    assert.ok(instructions.length > 0, `instructions ist nicht leer (stderr: ${stderrOutput})`);
+    assert.ok(instructions.length > 0, `instructions ist nicht leer (stderr: ${stderr.text})`);
     assert.equal(
       instructions,
       MCP_BASE_INSTRUCTIONS,

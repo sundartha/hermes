@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import http from "node:http";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG } from "../src/ui/widget-bind.js";
@@ -12,7 +11,7 @@ import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
-import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, ROOT, BASE_ENV, externalIp } from "./helpers.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, externalIp, stdioServerTransport } from "./helpers.js";
 
 const EXTERNAL_IP = externalIp();
 
@@ -847,13 +846,7 @@ test("(e-stdio) Draht-Rundlauf stdio (echter Kindprozess): derselbe Rundlauf ueb
   const gateway = await startServer({
     env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", CALL_CONFIRMATION_SECRET: E2E_SECRET },
   });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/mcp-server.js"],
-    cwd: ROOT,
-    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
-    stderr: "pipe",
-  });
+  const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
   const client = new Client({ name: "hermes-t2-14-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);

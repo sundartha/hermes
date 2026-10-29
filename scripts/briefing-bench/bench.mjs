@@ -1,19 +1,18 @@
 import { createHash } from "node:crypto";
-import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { z } from "zod";
+import { MCP_STDIO_ARGS } from "../../tools/mutationspruefung/ppid-waechter.mjs";
 import { SCENARIOS } from "./szenarien.mjs";
 import { CALL_TOOLS, evaluateReply, summarize, totals } from "./metriken.mjs";
 
-const MCP_SERVER_ENTRYPOINT = path.join("src", "mcp-server.js");
 const RAW_TOOLS_RESULT = z.object({ tools: z.array(z.any()) });
 const SNAPSHOT_BASE_ENV = Object.freeze({ NODE_ENV: "test", MCP_UI_ENABLED: "true" });
 
 export async function snapshotTools(repoDir, extraEnv = {}) {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [MCP_SERVER_ENTRYPOINT],
+    args: MCP_STDIO_ARGS,
     cwd: repoDir,
     env: { ...SNAPSHOT_BASE_ENV, ...extraEnv },
     stderr: "pipe",

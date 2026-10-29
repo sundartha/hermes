@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mcpServerOptions } from "../src/mcp-server-info.js";
 import { UI_CAPABILITY_KEY } from "../src/ui/contract.js";
-import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV, MCP_STDIO_ARGS } from "./helpers.js";
 
-const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const RAW_STDIO_TIMEOUT_MS = 8000;
 const CAPABILITIES_KEY = "capabilities";
 
@@ -23,7 +22,7 @@ function initializeBody(id) {
 }
 
 async function rawStdioInitialize(env) {
-  const child = spawn(process.execPath, [MCP_SERVER_ENTRYPOINT], {
+  const child = spawn(process.execPath, MCP_STDIO_ARGS, {
     cwd: ROOT,
     env: { ...BASE_ENV, ...env },
     stdio: ["pipe", "pipe", "pipe"],
