@@ -5,8 +5,8 @@ import {
   COUNTERPARTY,
   KARTE_MASTERCARD_16,
   KARTE_VISA_16,
-  abgeschlossenerAnruf,
   anrufeJeGruppe,
+  beendeterBeispielanruf,
   bestaetigungsServerOptionen,
   einzeln,
   einzigeAusgabezeile,
@@ -59,12 +59,11 @@ const CALLS = anrufeJeGruppe(
   },
   ZIEL_NUMMER,
 );
-const ERGEBNIS_CALL = abgeschlossenerAnruf({
-  id: "call_zusatz_ergebnis",
-  summary: `Kunde nannte ${ERGEBNIS_ZEILE}.`,
-  objectiveAchieved: true,
-  result: { outcome: ERGEBNIS_ZEILE, commitments: [], counterpartyCommitments: [], openPoints: [], nextStep: "-" },
-});
+const ERGEBNIS_CALL = beendeterBeispielanruf(
+  "call_zusatz_ergebnis",
+  `Kunde nannte ${ERGEBNIS_ZEILE}.`,
+  ERGEBNIS_ZEILE,
+);
 
 const srv = starteServer(() =>
   bestaetigungsServerOptionen({ ...CALLS, ergebnis: [ERGEBNIS_CALL] }, BESTAETIGUNGS_GEHEIMNIS),
