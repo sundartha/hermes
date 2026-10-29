@@ -7,6 +7,7 @@ import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
 import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
+import { phasenbasis } from "./phasenende.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -243,9 +244,12 @@ function istTestCommit({ root, phase, auftrag }, stand) {
 }
 
 function umbauAnfang(lauf) {
-  let stand = lauf.basis;
-  while (istTestCommit(lauf.kontext, stand)) stand = git(["rev-parse", `${stand}^`], { cwd: lauf.kontext.root }).trim();
-  return stand;
+  const { root, auftrag } = lauf.kontext;
+  const von = phasenbasis(root);
+  const verlauf = von === null ? lauf.basis : `${von}..${lauf.basis}`;
+  const kandidaten = git(["rev-list", "--fixed-strings", `--grep=${testBetreff(auftrag)}`, verlauf], { cwd: root }).split("\n").filter(Boolean);
+  const aeltester = kandidaten.findLast((stand) => istTestCommit(lauf.kontext, stand));
+  return aeltester === undefined ? lauf.basis : git(["rev-parse", `${aeltester}^`], { cwd: root }).trim();
 }
 
 function testsFesthalten(lauf, runde) {
