@@ -1,11 +1,9 @@
+import { oneMonthBack } from "../utils/month.js";
+
 export const MS_PER_SECOND = 1000;
 
 export function periodStartFromEnd(endSec) {
-  const start = new Date(endSec * MS_PER_SECOND);
-  const letzterTagVormonat = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 0)).getUTCDate();
-  start.setUTCDate(Math.min(start.getUTCDate(), letzterTagVormonat));
-  start.setUTCMonth(start.getUTCMonth() - 1);
-  return start;
+  return oneMonthBack(new Date(endSec * MS_PER_SECOND));
 }
 
 export function resolvePeriodStartIso({ currentPeriodStart, currentPeriodEnd } = {}) {
