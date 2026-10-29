@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { KOPIEN_LISTE, exitCodes } from "./auftrag-lauf-hilfen.js";
 import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
-import { REPO_ROOT, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -133,6 +133,7 @@ function starte(context, drehbuch, dateien = {}) {
   const repo = mitUpstreamMaster(probeRepository(context, { ...BASIS, ...dateien }));
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
+  drehbuch.vorLauf?.(repo);
   const werkzeug = probeDirectory(context, {
     "phase.json": JSON.stringify(phaseMit(drehbuch.nie)),
     "drehbuch.json": JSON.stringify(drehbuch),
@@ -388,4 +389,64 @@ test("auftrag-umbau-behalten: bricht der eingespielte Umbau einen Schutztest, de
   assert.deepEqual(exitCodes(beleg, "schutztests"), [EXIT_ROT], JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
   assert.ok(exitCodes(beleg, "abnahme").every((exitCode) => exitCode === 0), "der Umbau scheiterte schon an der Abnahme");
   assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
+});
+
+function festgehalten(repo, auftrag) {
+  writeFiles(repo, MIT_SCHUTZTEST.dateien);
+  commitAll(repo, `Halte Verhalten vor Umbau ${auftrag} fest\n\nAuftrag: probe/${auftrag}\n`);
+}
+
+function fremderCommit(repo) {
+  writeFiles(repo, { "notiz.txt": "fremd\n" });
+  commitAll(repo, "Erhöhe ein Zeitlimit");
+}
+
+test("auftrag-umbau-behalten: Neustart nach dem Absicherungs-Commit des Auftrags und einem fremden Commit darüber zählt die Schutztests des Auftrags und ruft den Test-Agenten nicht noch einmal", (context) => {
+  const vorLauf = (repo) => {
+    festgehalten(repo, "A1");
+    fremderCommit(repo);
+  };
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], vorLauf }, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
+  assert.equal(beleg.ergebnis, "grün");
+});
+
+const OHNE_SCHUTZTEST = { dateien: OHNE_UEBERLEBENDE, antwort: SCHUTZ_ABSATZ };
+
+function schutztestAusMaster(repo) {
+  writeFiles(repo, MIT_SCHUTZTEST.dateien);
+  commitAll(repo, "Schutztest aus master");
+}
+
+function festgehaltenInAndererPhase(repo) {
+  writeFiles(repo, MIT_SCHUTZTEST.dateien);
+  commitAll(repo, "Halte Verhalten vor Umbau A1 fest\n\nAuftrag: andere/A1\n");
+}
+
+function bleibtRotOhneEigenenSchutztest(context, vorLauf) {
+  const vorher = (probe) => {
+    vorLauf(probe);
+    fremderCommit(probe);
+  };
+  const drehbuch = { nie: [SATZ], bau: [BAU, BAU], test: [OHNE_SCHUTZTEST, OHNE_SCHUTZTEST], notiz: [{ antwort: "Notiz des Ersatzes." }], vorLauf: vorher };
+  const { repo, lauf, basis, beleg, ausgabe } = starte(context, drehbuch, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, EXIT_ROT, ausgabe);
+  assert.ok(agentenMit(beleg, "test").length > 0, "der Test-Agent lief nicht");
+  assert.equal(exitCodes(beleg, "schutztests")[0], EXIT_ROT, JSON.stringify(beleg.pruefungen.map(({ name }) => name)));
+  assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
+}
+
+test("auftrag-umbau-behalten: ein Schutztest aus master ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
+  bleibtRotOhneEigenenSchutztest(context, schutztestAusMaster);
+});
+
+test("auftrag-umbau-behalten: der Absicherungs-Commit eines anderen Auftrags ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
+  bleibtRotOhneEigenenSchutztest(context, (repo) => festgehalten(repo, "A2"));
+});
+
+test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags einer anderen Phase ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
+  bleibtRotOhneEigenenSchutztest(context, festgehaltenInAndererPhase);
 });
