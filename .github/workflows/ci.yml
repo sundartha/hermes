@@ -408,8 +408,7 @@ jobs:
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
-            npm run test:mutation -- --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json"
-            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten "$RUNNER_TEMP/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
+            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
             teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
             anzahl=$(jq -e .anzahl "$RUNNER_TEMP/mutationsplan.json")
             printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
