@@ -3,15 +3,16 @@ import { appendFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { env } from "node:process";
 
-const BUDGET = new URL("../../tools/mutationspruefung/budget.mjs", import.meta.url).href;
+import { leiteBudgetUm } from "./mutationspruefung-budget-umleitung.mjs";
+
 const PAKET = "@stryker-mutator/core";
 const FUENF_SEKUNDEN_MS = 5000;
 
+leiteBudgetUm(import.meta.url);
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === PAKET) return { url: import.meta.url, shortCircuit: true };
-    const ziel = nextResolve(specifier, context);
-    return ziel.url === BUDGET ? { url: import.meta.url, shortCircuit: true } : ziel;
+    return specifier === PAKET ? { url: import.meta.url, shortCircuit: true } : nextResolve(specifier, context);
   },
 });
 
