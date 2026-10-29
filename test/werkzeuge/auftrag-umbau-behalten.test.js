@@ -397,7 +397,7 @@ function festgehalten(repo, auftrag) {
 }
 
 function fremderCommit(repo) {
-  writeFiles(repo, { "notiz.txt": "fremd\n" });
+  writeFiles(repo, { "notiz.txt": `fremd nach ${gitAusgabe(repo, "rev-parse", "HEAD")}` });
   commitAll(repo, "Erhöhe ein Zeitlimit");
 }
 
@@ -449,4 +449,26 @@ test("auftrag-umbau-behalten: der Absicherungs-Commit eines anderen Auftrags ers
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags einer anderen Phase ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
   bleibtRotOhneEigenenSchutztest(context, festgehaltenInAndererPhase);
+});
+
+test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags, der schon in master steht, ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
+  bleibtRotOhneEigenenSchutztest(context, (repo) => {
+    festgehalten(repo, "A1");
+    mitUpstreamMaster(repo);
+  });
+});
+
+test("auftrag-umbau-behalten: Neustart nach zwei Absicherungs-Commits des Auftrags mit einem fremden Commit dazwischen zählt die Schutztests der ersten Runde", (context) => {
+  const vorLauf = (repo) => {
+    festgehalten(repo, "A1");
+    fremderCommit(repo);
+    writeFiles(repo, { "test/text.test.js": `${MIT_SCHUTZTEST.dateien["test/text.test.js"]}${FAELLE.nichts}\n` });
+    commitAll(repo, "Halte Verhalten vor Umbau A1 fest\n\nAuftrag: probe/A1\n");
+    fremderCommit(repo);
+  };
+  const { repo, werkzeug, lauf, basis, beleg, ausgabe } = starte(context, { nie: [SATZ], bau: [BAU], vorLauf }, OHNE_UEBERLEBENDE);
+  assert.equal(lauf.status, 0, ausgabe);
+  assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
+  assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
+  assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
 });
