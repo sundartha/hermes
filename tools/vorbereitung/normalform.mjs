@@ -1,46 +1,33 @@
 import { VisitorKeys } from "espree";
 
+import {
+  EINZIGE,
+  EXPORTE,
+  FUNKTIONEN,
+  ZAHL_LESEZIEL,
+  ZWEI,
+  bereichVon,
+  eingebaut,
+  einmalGebunden,
+  einzigesArgument,
+  festerName,
+  lesestelle,
+  lokalAn,
+  mitEltern,
+  namenImMuster,
+} from "./ast.mjs";
+import { fehlerImportEntfernt, fehlerantwort, httpFakten, statusImporteEntfernt, statusKonstante } from "./http-umformungen.mjs";
+
 const POSITIONSFELDER = new Set(["range", "start", "end", "loc", "comments", "tokens"]);
 const REINE_OPERATOREN = new Set(["typeof", "!", "===", "!==", "&&", "||"]);
 const NIE_SYMBOL = new Set(["Literal", "TemplateLiteral", "UnaryExpression", "BinaryExpression", "UpdateExpression"]);
 const ZWEIG_PAARE = { LogicalExpression: ["left", "right"], ConditionalExpression: ["consequent", "alternate"] };
-const BINDUNG_IN_LISTE = { ObjectPattern: "properties", ArrayPattern: "elements" };
-const BINDUNG_IN_FELD = { Property: "value", AssignmentPattern: "left", RestElement: "argument" };
-const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const NUR_NAME = { VariableDeclarator: "id", ClassDeclaration: "id", ClassExpression: "id", CatchClause: "param" };
 const IMPORTE = new Set(["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"]);
-const EXPORTE = new Set(["ExportNamedDeclaration", "ExportDefaultDeclaration"]);
 const SCHLEIFEN = new Set(["ForInStatement", "ForOfStatement"]);
 const UNSICHERE_NAMEN = new Set(["eval", "arguments"]);
 const VAR_GRENZEN = new Set([...FUNKTIONEN, "StaticBlock", "Program"]);
-const EINZIGE = 1;
-const ZWEI = 2;
 const LAENGE = "length";
-const ZAHL_DURCHLASS = new Set(["BinaryExpression", "LogicalExpression", "UnaryExpression", "ConditionalExpression"]);
-const ZAHL_LESEZIEL = {
-  CallExpression: "arguments",
-  NewExpression: "arguments",
-  ReturnStatement: "argument",
-  ArrowFunctionExpression: "body",
-  IfStatement: "test",
-};
-
-function namenImMuster(muster) {
-  if (!muster) return [];
-  if (muster.type === "Identifier") return [muster.name];
-  const liste = BINDUNG_IN_LISTE[muster.type];
-  if (liste) return muster[liste].flatMap(namenImMuster);
-  const feld = BINDUNG_IN_FELD[muster.type];
-  return feld ? namenImMuster(muster[feld]) : [];
-}
-
-function mitEltern(knoten, eltern = [], gesammelt = []) {
-  gesammelt.push({ knoten, eltern });
-  for (const schluessel of VisitorKeys[knoten.type] ?? []) {
-    for (const kind of [knoten[schluessel]].flat().filter(Boolean)) mitEltern(kind, [...eltern, knoten], gesammelt);
-  }
-  return gesammelt;
-}
 
 function umgebung(eltern, tiefe) {
   const elter = eltern.at(-tiefe);
@@ -142,22 +129,8 @@ function zahlKandidaten(programm) {
   return kandidaten;
 }
 
-function imFeld(elter, feld, kind) {
-  return feld !== undefined && [elter[feld]].flat().includes(kind);
-}
-
-function zahlLesestelle({ knoten, eltern }) {
-  let kind = knoten;
-  for (const elter of eltern.toReversed()) {
-    if (imFeld(elter, ZAHL_LESEZIEL[elter.type], kind)) return true;
-    if (!ZAHL_DURCHLASS.has(elter.type)) return false;
-    kind = elter;
-  }
-  return false;
-}
-
-function bereichVon(knoten) {
-  return String(knoten.range);
+function zahlLesestelle(eintrag) {
+  return lesestelle(eintrag, ZAHL_LESEZIEL);
 }
 
 function zahlKonstantenAus(programm, eintraege, kreisfrei) {
@@ -179,13 +152,13 @@ function orteJeName(bindungen) {
   return orte;
 }
 
-export function fakten(programm, { kreisfrei = false } = {}) {
+export function fakten(programm, { kreisfrei = false, http, lokalErlaubt } = {}) {
   const eintraege = mitEltern(programm);
   const knoten = eintraege.map((eintrag) => eintrag.knoten);
   const deklarationen = obersteDeklarationen(programm);
   const hilfen = deklarationen.map(hilfeAus).filter(Boolean);
   const unsicher = knoten.some(({ type, name }) => type === "WithStatement" || UNSICHERE_NAMEN.has(name));
-  return {
+  const stand = {
     gebunden: orteJeName(eintraege.flatMap(gebundeneNamen)),
     geschrieben: new Set(knoten.flatMap(geschriebeneNamen)),
     konstanten: konstantenAus(deklarationen),
@@ -193,27 +166,12 @@ export function fakten(programm, { kreisfrei = false } = {}) {
     unsicher,
     zahlen: zahlKonstantenAus(programm, eintraege, kreisfrei && !unsicher),
   };
-}
-
-function einmalGebunden(stand, name) {
-  return stand.gebunden.get(name)?.length === EINZIGE;
-}
-
-function lokalAn(stand, stelle) {
-  if (stand.unsicher || !stelle.range) return false;
-  const orte = stand.gebunden.get(stelle.name) ?? [];
-  return orte.some(({ range: bereich }) => bereich[0] <= stelle.range[0] && stelle.range[1] <= bereich[1]);
-}
-
-function einzigesArgument(aufruf) {
-  const [argument, ...rest] = aufruf.arguments;
-  return rest.length === 0 && argument !== undefined && argument.type !== "SpreadElement" ? argument : undefined;
+  return { ...stand, http: httpFakten({ programm, eintraege, stand, kreisfrei, http, lokalErlaubt }) };
 }
 
 function eingebauterAufruf(knoten, name, stand) {
   if (knoten.type !== "CallExpression" || knoten.optional || knoten.callee.type !== "Identifier") return false;
-  const eingebaut = !stand.gebunden.has(name) && !stand.geschrieben.has(name) && !stand.unsicher;
-  return knoten.callee.name === name && eingebaut && einzigesArgument(knoten) !== undefined;
+  return knoten.callee.name === name && eingebaut(stand, name) && einzigesArgument(knoten) !== undefined;
 }
 
 function konstanteNieSymbol(knoten, stand, besucht) {
@@ -286,10 +244,6 @@ function eingesetzt(ausdruck, parameter, argument) {
   return kopie;
 }
 
-function festerName(stand, stelle) {
-  return lokalAn(stand, stelle) && !stand.geschrieben.has(stelle.name);
-}
-
 function hilfeZu(knoten, stand) {
   if (knoten.type !== "CallExpression" || knoten.optional || stand.unsicher) return undefined;
   return knoten.callee.type === "Identifier" ? stand.hilfen.get(knoten.callee.name) : undefined;
@@ -319,6 +273,8 @@ export const REGELN = {
   "laenge-optional": laengeOptional,
   "hilfe-einsetzen": hilfeEinsetzen,
   "zahl-konstante": zahlKonstante,
+  "status-konstante": (knoten, stand) => statusKonstante(knoten, stand.http) ?? statusImporteEntfernt(knoten, stand.http),
+  fehlerantwort: (knoten, stand) => fehlerantwort(knoten, stand.http) ?? fehlerImportEntfernt(knoten, stand.http),
 };
 
 function regelAnwenden(knoten, lauf) {
@@ -350,7 +306,8 @@ function umgeformt(knoten, lauf) {
 
 export function normalform(programm, optionen = {}) {
   const lauf = { stand: fakten(programm, optionen), genutzt: new Map() };
-  return { baum: umgeformt(programm, lauf), genutzt: lauf.genutzt };
+  const { importiert } = lauf.stand.http.konstanten;
+  return { baum: umgeformt(programm, lauf), genutzt: lauf.genutzt, importierteStatus: importiert };
 }
 
 export function vergleichstext(wert) {
