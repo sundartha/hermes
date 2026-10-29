@@ -16,12 +16,15 @@ const EXIT_ROT = 1;
 const LINT_FEHLER = "export const WERT = nichtDefiniert;\n";
 const ABFRAGE_MS = 50;
 const FRIST_MS = 60_000;
+const FREIRAUM_MS = 1500;
+const PARALLEL_FRIST_MS = 180_000;
+const ERSATZ_FRIST_MS = 90_000;
 const SPEICHER_ATTRAPPE = {
   "src/store.js": "export const WERT = 1;\n",
   "src/store/json.js": "export const WERT = 1;\n",
   "src/store/pg.js": "export function makePgStore() {\n  return { WERT: 1 };\n}\n",
 };
-const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85, ciGruen: 86, ciRot: 87 };
+const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85, ciGruen: 86, ciRot: 87, gleichzeitig: 88, nachbarn: 89, testdatei: 90, ausserhalb: 91, deckel: 92 };
 const LIMIT_SEKUNDEN = 2;
 const VOLLER_KONTEXT = { type: "assistant", message: { usage: { input_tokens: 100_000 }, content: [] } };
 
@@ -44,7 +47,7 @@ for (const [pfad, inhalt] of Object.entries(dateien)) {
   writeFileSync(pfad, inhalt);
 }
 writeFileSync(marke(name), "");
-const frist = Date.now() + 20000;
+const frist = Date.now() + Number(process.env.ERSATZ_FRIST_MS ?? 20000);
 while (warteAuf && !existsSync(marke(warteAuf)) && Date.now() < frist) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
 const zeige = (ereignis) => process.stdout.write(JSON.stringify(ereignis) + "\\n");
 zeilen.forEach(zeige);
@@ -88,7 +91,7 @@ function phase({ repo, werkzeug }, [name, issue, ...auftraege]) {
   const datei = join(werkzeug, `${name}.json`);
   const entwurf = Object.fromEntries(auftraege.map(({ bereich }) => [bereich, "Entwurf."]));
   writeFileSync(datei, JSON.stringify({ phase: name, issue, entwurf, auftraege }));
-  const umgebung = { HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), HERMES_SPERRE_WARTEN_MS: "100", ...mitErsatzWerkzeugen(werkzeug) };
+  const umgebung = { HOME: werkzeug, HERMES_CLAUDE: join(werkzeug, "claude.mjs"), HERMES_SPERRE_WARTEN_MS: "100", ERSATZ_FRIST_MS: String(ERSATZ_FRIST_MS), ...mitErsatzWerkzeugen(werkzeug) };
   const env = { ...isolatedEnvironment(), ...umgebung, ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json") };
   return spawn(process.execPath, [EINSTIEG, "phase", datei], { cwd: repo, env });
 }
@@ -255,6 +258,157 @@ test("ist ci-lokal am Ende der Phase rot, lädt phase nichts hoch, behält den P
   assert.deepEqual(liste(probe.remote, ["for-each-ref", "refs/heads/phase/", "refs/sperren/"]), []);
   assert.ok(ausgabe.includes("phase/87-d bleibt lokal"), ausgabe);
   assert.equal(runIn(probe.repo, "git", ["rev-list", "--count", "HEAD..phase/87-d"]).stdout.trim(), "1");
+});
+
+function quelleM(eins, zwei, drei) {
+  return [eins, zwei, drei].map((wert, index) => `export function ${["eins", "zwei", "drei"][index]}() {\n  return ${wert};\n}\n`).join("\n");
+}
+
+const NACHBARN = "export const NA = 1;\nexport const NB = 1;\n";
+const TESTDATEI_ZEILEN = Array.from({ length: 12 }, (leer, index) => `test("t${index}", () => {});\n`);
+
+function testQuelle(ersetzt = {}) {
+  const kopf = 'import assert from "node:assert/strict";\nimport { test } from "node:test";\n';
+  return kopf + TESTDATEI_ZEILEN.map((zeile, index) => `\n${ersetzt[index] ?? zeile}`).join("");
+}
+
+function wertTest(name, datei) {
+  return `test("t-${name}", async () => {\n  const modul = await import("../src/${datei}.js");\n  assert.equal(modul.${name}, 2);\n});\n`;
+}
+
+function mitBetrifft(einzel, betrifft) {
+  return { ...einzel, betrifft };
+}
+
+async function warteAufStarts(probe, namen) {
+  const datei = join(probe.werkzeug, "starts.txt");
+  const vollstaendig = () => existsSync(datei) && namen.every((name) => readFileSync(datei, "utf8").includes(`${name} `));
+  while (!vollstaendig()) await schlafen(ABFRAGE_MS);
+}
+
+function startsVon(probe, name) {
+  const datei = join(probe.werkzeug, "starts.txt");
+  return existsSync(datei) ? readFileSync(datei, "utf8").split("\n").filter((zeile) => zeile.startsWith(`${name} `)) : [];
+}
+
+test("zwei Aufträge mit betrifft an verschiedenen Deklarationen derselben Datei laufen gleichzeitig und landen beide", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    {
+      "88-G1": { warteAuf: "88-G2", dateien: { "src/m.js": quelleM(10, 2, 3) } },
+      "88-G2": { warteAuf: "88-G1", dateien: { "src/m.js": quelleM(1, 2, 30) } },
+    },
+    { "src/m.js": quelleM(1, 2, 3) },
+  );
+  const eins = mitBetrifft(auftrag("G1", "src/m.js"), { "src/m.js": ["eins"] });
+  const drei = mitBetrifft(auftrag("G2", "src/m.js"), { "src/m.js": ["drei"] });
+  const { code, ausgabe } = await ende(phase(probe, ["g", ISSUE.gleichzeitig, eins, drei]));
+  assert.equal(code, 0, ausgabe);
+  assert.equal(runIn(probe.remote, "git", ["show", "phase/88-g:src/m.js"]).stdout, quelleM(10, 2, 30));
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/g/G2.json"), "utf8")).neustarts, 0);
+});
+
+test("zwei Aufträge ohne betrifft in derselben Datei laufen nacheinander", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    { "88-S1": { dateien: { "src/m.js": quelleM(10, 2, 3) } }, "88-S2": { dateien: { "src/m.js": quelleM(11, 2, 30) } } },
+    { "src/m.js": quelleM(1, 2, 3) },
+  );
+  const { code, ausgabe } = await ende(phase(probe, ["s", ISSUE.gleichzeitig, auftrag("S1", "src/m.js"), auftrag("S2", "src/m.js")]));
+  assert.equal(code, 0, ausgabe);
+  assert.equal(runIn(probe.remote, "git", ["show", "phase/88-s:src/m.js"]).stdout, quelleM(11, 2, 30));
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/s/S2.json"), "utf8")).neustarts, 0);
+});
+
+test("stoßen zwei Aufträge mit betrifft an benachbarten Zeilen aneinander, baut der spätere auf dem zusammengeführten Stand neu", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    {
+      "89-N1": { warteAuf: "89-N2", dateien: { "src/n.js": "export const NA = 2;\nexport const NB = 1;\n" } },
+      "89-N2": {
+        bau: [
+          { warteAuf: "89-N1", dateien: { "src/n.js": "export const NA = 1;\nexport const NB = 2;\n" } },
+          { dateien: { "src/n.js": "export const NA = 2;\nexport const NB = 2;\n" } },
+        ],
+      },
+    },
+    { "src/n.js": NACHBARN },
+  );
+  const erster = mitBetrifft(auftrag("N1", "src/n.js"), { "src/n.js": ["NA"] });
+  const zweiter = mitBetrifft(auftrag("N2", "src/n.js"), { "src/n.js": ["NB"] });
+  const { code, ausgabe } = await ende(phase(probe, ["n", ISSUE.nachbarn, erster, zweiter]));
+  assert.equal(code, 0, ausgabe);
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/n/N2.json"), "utf8")).neustarts, 1);
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/n/N1.json"), "utf8")).neustarts, 0);
+  assert.equal(runIn(probe.remote, "git", ["show", "phase/89-n:src/n.js"]).stdout, "export const NA = 2;\nexport const NB = 2;\n");
+});
+
+test("ändern zwei Aufträge dieselbe Testdatei an getrennten Zeilen, startet der spätere erst nach der Übernahme des früheren und baut nicht neu", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const erstesP = { 1: wertTest("P", "p") };
+  const beide = { ...erstesP, 10: wertTest("Q", "q") };
+  const probe = aufbau(
+    context,
+    {
+      "90-T1": { test: [{ dateien: { "test/t.test.js": testQuelle(erstesP) } }], bau: [{ dateien: { "src/p.js": "export const P = 2;\n" } }] },
+      "90-T2": {
+        test: [{ dateien: { "test/t.test.js": testQuelle(beide) } }],
+        bau: [{ dateien: { "src/q.js": "export const Q = 2;\n" } }],
+      },
+    },
+    { "src/p.js": "export const P = 1;\n", "src/q.js": "export const Q = 1;\n", "test/t.test.js": testQuelle() },
+  );
+  const funktion = (id, datei) => ({ ...auftrag(id, datei, [datei, "test/t.test.js"]), art: "funktion", abnahme: "test/t.test.js", erwarteterFehler: "1 !== 2", wasDarfNiePassieren: [] });
+  const { code, ausgabe } = await ende(phase(probe, ["t", ISSUE.testdatei, funktion("T1", "src/p.js"), funktion("T2", "src/q.js")]));
+  assert.equal(code, 0, ausgabe);
+  assert.doesNotMatch(ausgabe, /Neustart/);
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/t/T2.json"), "utf8")).neustarts, 0);
+  assert.equal(runIn(probe.remote, "git", ["show", "phase/90-t:test/t.test.js"]).stdout, testQuelle(beide));
+});
+
+test("ändert ein Auftrag Zeilen außerhalb von betrifft, startet der nächste erst nach seiner Übernahme", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    {
+      "91-X0": { warteAuf: "gesperrt", dateien: { "src/d.js": "export const WERT = 2;\n" } },
+      "91-X1": { dateien: { "src/m.js": quelleM(10, 20, 3) } },
+      "91-X2": { dateien: { "src/m.js": quelleM(10, 21, 3) } },
+    },
+    { "src/m.js": quelleM(1, 2, 3) },
+  );
+  const kind = phase(probe, ["x", ISSUE.ausserhalb, auftrag("X0", "src/d.js"), mitBetrifft(auftrag("X1", "src/m.js"), { "src/m.js": ["eins"] }), mitBetrifft(auftrag("X2", "src/m.js"), { "src/m.js": ["zwei"] })]);
+  let gemeldet = false;
+  const lauf = ende(kind, (text) => {
+    gemeldet ||= text.includes("Auftrag X1: ändert Zeilen außerhalb von betrifft");
+    return false;
+  });
+  while (!gemeldet) await Promise.race([lauf, schlafen(ABFRAGE_MS)]);
+  await schlafen(FREIRAUM_MS);
+  assert.deepEqual(startsVon(probe, "91-X2"), []);
+  writeFileSync(join(probe.werkzeug, "start-gesperrt"), "");
+  const { code, ausgabe } = await lauf;
+  assert.equal(code, 0, ausgabe);
+  assert.match(ausgabe, /Auftrag X1: ändert Zeilen außerhalb von betrifft \(src\/m\.js\)/);
+  assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/x/X2.json"), "utf8")).neustarts, 0);
+});
+
+test("von drei unabhängigen Aufträgen laufen höchstens zwei zugleich", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    {
+      "92-D1": { warteAuf: "gesperrt", dateien: { "src/d.js": "export const WERT = 2;\n" } },
+      "92-D2": { warteAuf: "gesperrt", dateien: { "src/c.js": "export const KOPIE = 2;\n" } },
+      "92-D3": { dateien: { "src/store/a.js": "export const WERT = 2;\n" } },
+    },
+    {},
+  );
+  const lauf = ende(phase(probe, ["d", ISSUE.deckel, auftrag("D1", "src/d.js"), auftrag("D2", "src/c.js"), auftrag("D3", "src/store/a.js")]));
+  await warteAufStarts(probe, ["92-D1", "92-D2"]);
+  await schlafen(FREIRAUM_MS);
+  assert.deepEqual(startsVon(probe, "92-D3"), []);
+  writeFileSync(join(probe.werkzeug, "start-gesperrt"), "");
+  const { code, ausgabe } = await lauf;
+  assert.equal(code, 0, ausgabe);
+  assert.equal(startsVon(probe, "92-D3").length, 1);
 });
 
 test("systemstand meldet eine Sperre, deren Phasen-Issue geschlossen ist", async () => {
