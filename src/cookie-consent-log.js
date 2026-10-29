@@ -1,15 +1,11 @@
 import express from "express";
+import { MS_PER_DAY } from "./utils/timer.js";
 
 export const COOKIE_CONSENT_PATH = "/api/cookie-consent";
 
 const DAYS_PER_YEAR = 365;
 const RETENTION_YEARS = 3;
 export const COOKIE_CONSENT_RETENTION_DAYS = RETENTION_YEARS * DAYS_PER_YEAR;
-const HOURS_PER_DAY = 24;
-const MINUTES_PER_HOUR = 60;
-const SECONDS_PER_MINUTE = 60;
-const MS_PER_SECOND = 1000;
-const MS_PER_DAY = HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const RETENTION_SWEEP_INTERVAL_MS = MS_PER_DAY;
 
 const BODY_LIMIT = "1kb";

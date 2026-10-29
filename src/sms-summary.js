@@ -1,6 +1,5 @@
 import { findActiveNumber } from "./store/views.js";
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { MS_PER_DAY } from "./utils/timer.js";
 
 export function planSummarySms(store, config, call) {
   const to = store.tenantPrivateNumber(call.tenantId);
