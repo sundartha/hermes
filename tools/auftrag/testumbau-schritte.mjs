@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { testumbauPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { git } from "./git.mjs";
+import { mutationsBefehl } from "./mutation.mjs";
 import { zusicherungenGleich } from "./testtitel.mjs";
 import { ENTFERNT } from "./testumbau.mjs";
 import { GRUND, PRUEFUNG } from "./zweck.mjs";
@@ -50,7 +51,7 @@ function vorbauNurErgaenzt(lauf) {
 
 function mutationNichtSchlechter(lauf) {
   if (hatSkript(lauf.kontext.root, MUTATION)) {
-    return lauf.gruen(PRUEFUNG.MUTATION_TESTUMBAU, ["npm", "--silent", "run", MUTATION, "--", "--basis", lauf.basis, "--testumbau"]);
+    return lauf.gruen(PRUEFUNG.MUTATION_TESTUMBAU, mutationsBefehl(lauf, ["--basis", lauf.basis, "--testumbau"]));
   }
   lauf.hinweise.push(`Mutationsprüfung: package.json hat kein Skript ${MUTATION}.`);
   return true;
