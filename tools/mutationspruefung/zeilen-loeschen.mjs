@@ -25,6 +25,9 @@ const ABSTURZ = "RuntimeError";
 const EXIT_GRUEN = 0;
 const EXIT_ROTER_TEST = 1;
 const ROTER_TEST_ZEILE = /^not ok /;
+const ROTE_ZEILE_MIT_EINRUECKUNG = /^\s*not ok /;
+const ORT_ZEILE = /^\s*location: /;
+const LETZTE_ZEILEN = 20;
 const OFFENER_TEST = / # TODO\b/;
 const TESTKONTEXT = "NODE_TEST_CONTEXT";
 const MS_JE_MINUTE = 60_000;
@@ -83,8 +86,20 @@ function ohneTestkontext() {
   return omitKeys(env, [TESTKONTEXT]);
 }
 
-function rot(zeile) {
+function roterTestOben(zeile) {
   return ROTER_TEST_ZEILE.test(zeile) && !OFFENER_TEST.test(zeile);
+}
+
+function ausgang({ status, signal, error }) {
+  return [`Exit ${status}`, `Signal ${signal}`, error?.message].filter(Boolean).join(", ");
+}
+
+function roteZeileBeliebigerTiefe(zeile) {
+  return ROTE_ZEILE_MIT_EINRUECKUNG.test(zeile) && !OFFENER_TEST.test(zeile);
+}
+
+function merke(zeilen, zeile) {
+  return [...zeilen, zeile].slice(-LETZTE_ZEILEN);
 }
 
 function laufstatus({ status, signal, error, rotGesehen }) {
@@ -93,37 +108,47 @@ function laufstatus({ status, signal, error, rotGesehen }) {
   return signal !== null || error !== undefined ? ZEITABLAUF : ABSTURZ;
 }
 
-function beiRotemTest(kind, beiRot) {
-  createInterface({ input: kind.stdout }).on("line", (zeile) => {
-    if (rot(zeile)) beiRot();
-  });
+function lies(strom, beiZeile) {
+  createInterface({ input: strom }).on("line", beiZeile);
 }
 
-function testlauf(verzeichnis, tests) {
+function sammle(kind, bisZumEnde) {
+  const lage = { error: undefined, rotGesehen: false, ortOffen: false, rote: [], stderr: [] };
+  lies(kind.stdout, (zeile) => {
+    if (roteZeileBeliebigerTiefe(zeile) || (lage.ortOffen && ORT_ZEILE.test(zeile))) {
+      lage.ortOffen = !lage.ortOffen;
+      lage.rote = merke(lage.rote, zeile.trim());
+    }
+    if (!roterTestOben(zeile) || lage.rotGesehen) return;
+    lage.rotGesehen = true;
+    if (!bisZumEnde) kind.kill();
+  });
+  lies(kind.stderr, (zeile) => {
+    lage.stderr = merke(lage.stderr, zeile);
+  });
+  return lage;
+}
+
+function testlauf(verzeichnis, tests, bisZumEnde) {
   return new Promise((fertig) => {
     const kind = spawn(process.execPath, [TESTGRUPPE, "--test", "--test-reporter=tap", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
       cwd: verzeichnis,
       env: ohneTestkontext(),
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    const lage = { error: undefined, rotGesehen: false };
-    beiRotemTest(kind, () => {
-      if (lage.rotGesehen) return;
-      lage.rotGesehen = true;
-      kind.kill();
-    });
+    const lage = sammle(kind, bisZumEnde);
     const uhr = setTimeout(() => {
       lage.error = new Error(ZEITABLAUF_FEHLER);
       kind.kill();
     }, ZEITGRENZE_MINUTEN * MS_JE_MINUTE);
     const ende = (lauf) => {
       clearTimeout(uhr);
-      fertig(laufstatus(lauf));
+      fertig({ status: laufstatus(lauf), rote: lage.rote, stderr: lage.stderr, ausgang: ausgang(lauf) });
     };
     kind.on("error", (error) => {
       if (kind.pid === undefined) ende({ status: null, signal: null, error });
     });
-    kind.on("exit", (status, signal) => ende({ status, signal, error: lage.error, rotGesehen: lage.rotGesehen }));
+    kind.on("close", (status, signal) => ende({ status, signal, error: lage.error, rotGesehen: lage.rotGesehen }));
   });
 }
 
@@ -190,9 +215,9 @@ async function verteilt(zeilen, kopie, pruefen) {
   const lage = { fehler: [] };
   const abbrechbar = (stand) => ({
     ...stand,
-    laufen: (tests) => {
+    laufen: (tests, bisZumEnde = false) => {
       if (lage.fehler.length > 0) throw new Error(ABGEBROCHEN);
-      return testlauf(stand.verzeichnis, tests);
+      return testlauf(stand.verzeichnis, tests, bisZumEnde);
     },
   });
   const laufende = new Set();
@@ -223,7 +248,11 @@ function pruefer({ verzeichnis, gruen, laufen }) {
   const grundlauf = async (tests) => {
     const kennung = tests.join(ZEILENENDE);
     if (gruen.has(kennung)) return;
-    if ((await laufen(tests)) !== UEBERLEBT) {
+    const lauf = await laufen(tests, true);
+    if (lauf.status !== UEBERLEBT) {
+      for (const zeile of lauf.rote) console.error(`Grundlauf rot, roter Test: ${zeile}`);
+      for (const zeile of lauf.stderr) console.error(`Grundlauf rot, stderr: ${zeile}`);
+      console.error(`Grundlauf rot, Ausgang: ${lauf.ausgang}`);
       throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
     }
     gruen.add(kennung);
@@ -231,7 +260,7 @@ function pruefer({ verzeichnis, gruen, laufen }) {
   return async (datei, zeile, gruppe) => {
     await grundlauf(gruppe);
     const beobachte = async () => {
-      const status = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe));
+      const { status } = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe));
       return { status, toeter: status === ERKANNT ? gruppe : [] };
     };
     const verlauf = [await beobachte()];
