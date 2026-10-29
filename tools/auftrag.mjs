@@ -1,6 +1,7 @@
 import { cwd } from "node:process";
 import { parseArgs } from "node:util";
 
+import { absichern } from "./auftrag/absichern.mjs";
 import { ROLLEN, genutzt, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { faelle } from "./auftrag/faelle.mjs";
 import { importendungen } from "./auftrag/importendungen.mjs";
@@ -26,6 +27,7 @@ const AUFRUF = [
   "Aufruf: node tools/auftrag.mjs pruefe <phasendatei>",
   "        node tools/auftrag.mjs lauf <phasendatei>",
   "        node tools/auftrag.mjs teillauf <phasendatei>",
+  "        node tools/auftrag.mjs absichern <phasendatei>   (führt die Mutationsprüfung am alten Stand für die offenen Aufträge ohne Verbindung zum laufenden vorab in einem eigenen Worktree; schreibt Testcommits und Beleg-Vermerke in den Branch absicherung/<phase>)",
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs genutzt <phasendatei> <auftrag> --basis <commit>",
@@ -75,6 +77,7 @@ const BEFEHLE = {
   pruefe: { argumente: 1, fuehreAus: ([phasendatei], root) => pruefe(phasendatei, root) },
   lauf: { argumente: 1, fuehreAus: ([phasendatei], root) => lauf(phasendatei, root) },
   teillauf: { argumente: 1, fuehreAus: ([phasendatei], root) => lauf(phasendatei, root, { amPhasenende: false }) },
+  absichern: { argumente: 1, fuehreAus: ([phasendatei], root) => absichern(phasendatei, root) },
   phase: { argumente: 1, fuehreAus: ([phasendatei], root) => phase(phasendatei, root) },
   aufraeumen: { argumente: 0, fuehreAus: (keine, root) => aufraeumen(root) },
   rot: { argumente: 2, fuehreAus: ([phasendatei, kennung], root) => rot(phasendatei, kennung, root) },

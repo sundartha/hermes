@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
+import { uebernimmAbsicherung } from "./absicherung-uebernahme.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { VORBEREITUNG_BEREICH } from "./anrufbereich.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
@@ -627,7 +628,7 @@ class AuftragsLauf {
   }
 }
 
-function gebauteAuftraege(phase, root) {
+export function gebauteAuftraege(phase, root) {
   const commits = auftragsTrailer(root);
   const gebaut = (auftrag) => commits.some((trailer) => herkunftsZeilen(phase, auftrag).every((zeile) => trailer.has(zeile)));
   return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));
@@ -694,6 +695,20 @@ function phasenende({ phase, fertig, vorher, amPhasenende }, root) {
   return fertig.size > vorher ? ciLokal(phase, root) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
 }
 
+function meldeFertige(fertig) {
+  for (const kennung of fertig) console.log(`Auftrag ${kennung}: schon gebaut, übersprungen.`);
+}
+
+function absicherungUebernommen(root, phase) {
+  const befunde = uebernimmAbsicherung(root, phase);
+  for (const befund of befunde) console.error(befund);
+  return befunde.length === 0;
+}
+
+export function neuerAuftragsLauf(angaben) {
+  return new AuftragsLauf(angaben);
+}
+
 export function auftragsKontext(phase, auftrag, root) {
   return { phase, auftrag, root, design: designPfad(phase) };
 }
@@ -706,8 +721,9 @@ export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
   }
   const fertig = gebauteAuftraege(phase, root);
   const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
-  for (const kennung of plan.fertig) console.log(`Auftrag ${kennung}: schon gebaut, übersprungen.`);
+  meldeFertige(plan.fertig);
   for (;;) {
+    if (!absicherungUebernommen(root, plan.phase)) return EXIT_ROT;
     const { ordnung } = reihenfolge(plan.phase.auftraege);
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
     if (auftrag === undefined) return phasenende(plan, root);

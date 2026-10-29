@@ -14,20 +14,34 @@ function bereichVon(beginn, anzahl) {
   return anzahl === EINFUEGUNG ? [beginn, beginn + EINE_ZEILE] : [beginn, beginn + anzahl - EINE_ZEILE];
 }
 
-export function geaenderteBereiche(diff) {
+function abschnittVon(zeile) {
+  const abschnitt = ABSCHNITT.exec(zeile);
+  if (abschnitt === null) return null;
+  const anzahl = abschnitt[2] === undefined ? EINE_ZEILE : Number(abschnitt[2]);
+  return { anzahl, bereich: bereichVon(Number(abschnitt[1]), anzahl) };
+}
+
+function dateiVon(kopfzeile) {
+  const kopf = DIFF_KOPF.exec(kopfzeile);
+  return kopf === null ? UNLESBAR : kopf[1];
+}
+
+function traegeEin({ nachDatei, datei }, zeile, einfuegungen) {
+  const abschnitt = abschnittVon(zeile);
+  if (abschnitt === null || datei === null || datei === UNLESBAR) return;
+  if (abschnitt.anzahl !== EINFUEGUNG || einfuegungen) nachDatei.get(datei).push(abschnitt.bereich);
+}
+
+export function geaenderteBereiche(diff, { einfuegungen = true } = {}) {
   const nachDatei = new Map();
   let datei = null;
   for (const zeile of diff.split("\n")) {
     if (zeile.startsWith(DIFF_ANFANG)) {
-      const kopf = DIFF_KOPF.exec(zeile);
-      datei = kopf === null ? UNLESBAR : kopf[1];
+      datei = dateiVon(zeile);
       if (!nachDatei.has(datei)) nachDatei.set(datei, datei === UNLESBAR ? GANZE_DATEI : []);
-      continue;
+    } else {
+      traegeEin({ nachDatei, datei }, zeile, einfuegungen);
     }
-    const abschnitt = ABSCHNITT.exec(zeile);
-    if (abschnitt === null || datei === null || datei === UNLESBAR) continue;
-    const anzahl = abschnitt[2] === undefined ? EINE_ZEILE : Number(abschnitt[2]);
-    nachDatei.get(datei).push(bereichVon(Number(abschnitt[1]), anzahl));
   }
   return nachDatei;
 }
@@ -47,8 +61,9 @@ export function kollisionen(eigene, fremde) {
   return befunde;
 }
 
-export function bereicheZwischen({ cwd, von, bis }) {
-  return geaenderteBereiche(git([...DIFF_OPTIONEN, von, bis], { cwd }));
+export function bereicheZwischen({ cwd, von, bis, einfuegungen }) {
+  const stand = bis === undefined ? [von] : [von, bis];
+  return geaenderteBereiche(git([...DIFF_OPTIONEN, ...stand], { cwd }), { einfuegungen });
 }
 
 export function kollisionenSeit({ cwd, basis, stand, commit }) {

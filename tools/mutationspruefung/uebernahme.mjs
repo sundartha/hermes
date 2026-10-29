@@ -6,7 +6,7 @@ import { env, version } from "node:process";
 import { isDeepStrictEqual } from "node:util";
 
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
-import { gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
+import { abrufLaufBefund, gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
 import { bestaetigungAbgestuerzt } from "./bestaetigung.mjs";
 import { werkzeugEingaben } from "./vorher-speicher.mjs";
 
@@ -14,7 +14,6 @@ const MAX_GIT_AUSGABE = 268_435_456;
 const TESTORDNER = "test/";
 const ARBEITSORDNER = ".mutationspruefung/";
 const NUR_COMMIT = "^{commit}";
-const WORKFLOW_PFAD = ".github/workflows/ci.yml";
 const ABRUF_ZWEIG = "lauf-mutation/";
 const ABRUF_EREIGNIS = "workflow_dispatch";
 const ABRUF_AUFTRAG = /^Auftrag: lauf\/in-ci$/m;
@@ -243,16 +242,9 @@ export function zusammengefuehrt(teilung, datei, neu) {
 }
 
 function laufPruefen(lauf, id) {
-  const repo = ghRepo();
-  const bedingungen = [
-    [lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion), "ist nicht mit Urteil abgeschlossen"],
-    [lauf.path === WORKFLOW_PFAD && lauf.event === ABRUF_EREIGNIS, "gehört nicht zum Abruf des Workflows CI"],
-    [String(lauf.head_branch).startsWith(ABRUF_ZWEIG), "lief nicht auf einem lauf-mutation-Zweig"],
-    [lauf.repository?.full_name === repo && lauf.head_repository?.full_name === repo, "stammt nicht aus diesem Repository"],
-    [COMMIT.test(String(lauf.head_sha)), "nennt keinen Commit"],
-  ];
-  const verletzt = bedingungen.find(([erfuellt]) => !erfuellt);
-  return verletzt === undefined ? null : `der Lauf ${id} ${verletzt[1]}`;
+  const abgeschlossen = lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion);
+  const befund = abgeschlossen ? abrufLaufBefund(lauf, ghRepo()) : "ist nicht mit Urteil abgeschlossen";
+  return befund === null ? null : `der Lauf ${id} ${befund}`;
 }
 
 function commitHolen(commit) {
