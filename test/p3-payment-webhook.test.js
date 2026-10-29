@@ -10,8 +10,27 @@ import {
   tenantHasLiveNumber,
   setKycLevel,
   tenantActiveSubscriber,
+  numberRecordByE164,
+  canTransitionNumber,
+  kycReached,
+  setTenantStripe,
+  tenantStripe,
+  setTenantSubscription,
+  tenantSubscription,
+  findTenantBySubscription,
+  findTenantByCustomer,
+  setBillingHold,
+  clearBillingHold,
+  billingHoldActive,
+  normalizePrivateNumber,
+  failedNumberCount,
 } from "../src/store/state-ops.js";
-import { KYC_LEVEL, KYC_OUTBOUND_MIN, NUMBER_STATUS } from "../src/store/defaults.js";
+import {
+  KYC_LEVEL,
+  KYC_OUTBOUND_MIN,
+  NUMBER_STATUS,
+  NUMBER_TRANSITIONS,
+} from "../src/store/defaults.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
 
 const HIGH_CAP = 100;
@@ -344,4 +363,115 @@ test("A(l) Suspend stempelt suspended_at (setSuspendedAtIfAbsent), Activate loes
   );
   assert.deepEqual(act.calls.clearSuspend, ["t_l"], "Reaktivierung loescht den Grace-Anker");
   assert.deepEqual(act.calls.suspend, [], "Activate stempelt nicht");
+});
+
+const UNBEKANNTER_MANDANT = "t_gibt_es_nicht";
+const UNBEKANNTE_STUFE = "stufe_unbekannt";
+
+test("C(a) numberRecordByE164: nur aktive Nummer mit dieser E.164, ohne Angabe nie ein Treffer", () => {
+  const s = makeDefaultState();
+  s.numbers.push({ id: "num_ohne", tenantId: "t_c", status: NUMBER_STATUS.ACTIVE });
+  s.numbers.push({ id: "num_a", tenantId: "t_c", status: NUMBER_STATUS.ACTIVE, e164: "+4930111" });
+  s.numbers.push({ id: "num_r", tenantId: "t_c", status: NUMBER_STATUS.RELEASED, e164: "+4930222" });
+  assert.equal(numberRecordByE164(s, undefined), null, "ohne Angabe kein Treffer");
+  assert.equal(numberRecordByE164(s, ""), null);
+  assert.equal(numberRecordByE164(s, "+4930111").id, "num_a");
+  assert.equal(numberRecordByE164(s, "+4930222"), null, "nicht aktive Nummer zaehlt nicht");
+});
+
+test("C(b) canTransitionNumber: erlaubter Uebergang ja, unbekannter Ausgangsstatus nie", () => {
+  assert.equal(canTransitionNumber(NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED), true);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.RELEASED, NUMBER_STATUS.ACTIVE), false);
+  assert.equal(Object.keys(NUMBER_TRANSITIONS).includes(UNBEKANNTE_STUFE), false);
+  assert.equal(canTransitionNumber(UNBEKANNTE_STUFE, "Stryker was here"), false);
+});
+
+test("C(c) kycReached/tenantActiveSubscriber: ohne Mandant oder ohne KYC-Stufe nie erreicht", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_ohne_kyc", {});
+  assert.equal(kycReached(s, UNBEKANNTER_MANDANT, KYC_LEVEL.NONE), false, "kein Mandant");
+  assert.equal(kycReached(s, "t_ohne_kyc", UNBEKANNTE_STUFE), false, "ohne Stufe nie erreicht");
+  assert.equal(
+    tenantActiveSubscriber(s, "t_ohne_kyc", UNBEKANNTE_STUFE),
+    false,
+    "ohne Stufe kein Abonnent",
+  );
+  setKycLevel(s, "t_ohne_kyc", KYC_LEVEL.CARD);
+  assert.equal(kycReached(s, "t_ohne_kyc", KYC_LEVEL.CARD), true);
+  assert.equal(kycReached(s, "t_ohne_kyc", KYC_LEVEL.ID_VERIFIED), false);
+});
+
+test("C(d) Stripe-Daten: Teil-Update laesst Rest stehen, unbekannter Mandant liefert null", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_str", {});
+  setTenantStripe(s, "t_str", { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
+  setTenantStripe(s, "t_str", { customerId: "cus_2" });
+  assert.deepEqual(tenantStripe(s, "t_str"), {
+    customerId: "cus_2",
+    paymentMethodId: "pm_1",
+    paymentMethodType: "card",
+  });
+  assert.deepEqual(tenantStripe(s, UNBEKANNTER_MANDANT), {
+    customerId: null,
+    paymentMethodId: null,
+    paymentMethodType: null,
+  });
+});
+
+test("C(e) Abo-Daten: unbekannter Mandant wirft, leerer Plan erlaubt, Standardwerte, Suche ohne Id", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_abo", {});
+  assert.throws(
+    () => setTenantSubscription(s, UNBEKANNTER_MANDANT, { subscriptionId: "sub_x" }),
+    /setTenantSubscription: Tenant t_gibt_es_nicht nicht gefunden/,
+  );
+  assert.doesNotThrow(() => setTenantSubscription(s, "t_abo", { planSlug: "" }));
+  assert.deepEqual(tenantSubscription(s, "t_abo"), {
+    subscriptionId: null,
+    planSlug: "",
+    currentPeriodEnd: null,
+    currentPeriodStart: null,
+    numberSetupFeeExempt: false,
+    activationPending: false,
+    periodCreditRevoked: false,
+    cancelAtPeriodEnd: false,
+  });
+  assert.equal(tenantSubscription(s, UNBEKANNTER_MANDANT).activationPending, false);
+  setTenantStripe(s, "t_abo", { customerId: "cus_abo" });
+  setTenantSubscription(s, "t_abo", { subscriptionId: "sub_abo" });
+  assert.equal(findTenantBySubscription(s, "sub_abo").id, "t_abo");
+  assert.equal(findTenantBySubscription(s, undefined), null);
+  assert.equal(findTenantByCustomer(s, "cus_abo").id, "t_abo");
+  assert.equal(findTenantByCustomer(s, undefined), null);
+});
+
+test("C(f) Billing-Hold: unbekannter Mandant stoert nicht, Faelligkeit ab genau dem Zeitpunkt aktiv", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_hold", {});
+  const faellig = "2030-01-01T00:00:00.000Z";
+  assert.doesNotThrow(() => setBillingHold(s, UNBEKANNTER_MANDANT, { reason: "x" }));
+  assert.doesNotThrow(() => clearBillingHold(s, UNBEKANNTER_MANDANT));
+  assert.equal(billingHoldActive(s, UNBEKANNTER_MANDANT, faellig), null);
+  assert.equal(billingHoldActive(s, "t_hold", faellig), null, "ohne Hold null");
+  setBillingHold(s, "t_hold", { reason: "zahlung", dueAtIso: faellig });
+  assert.equal(billingHoldActive(s, "t_hold", "2029-12-31T23:59:59.999Z"), null, "vor Faelligkeit");
+  assert.equal(billingHoldActive(s, "t_hold", faellig), "zahlung", "genau zur Faelligkeit aktiv");
+  assert.equal(billingHoldActive(s, "t_hold", "2030-01-02T00:00:00.000Z"), "zahlung");
+});
+
+test("C(g) normalizePrivateNumber: leer -> null, ungueltig wirft, tenantGeo/failedNumberCount", () => {
+  assert.equal(normalizePrivateNumber("   ", "DE"), null, "nur Leerzeichen -> keine Nummer");
+  assert.equal(normalizePrivateNumber(null, "DE"), null);
+  assert.equal(normalizePrivateNumber("+49 30 123456", "DE"), "+4930123456");
+  assert.throws(() => normalizePrivateNumber("abc", "DE"), /ungueltiges E\.164-Format/);
+  assert.throws(() => normalizePrivateNumber(12345, "DE"), /ungueltiges E\.164-Format/);
+
+  const s = makeDefaultState();
+  assert.deepEqual(tenantGeo(s, UNBEKANNTER_MANDANT), { country: null, defaultLanguage: null });
+  s.numbers.push({ id: "n1", tenantId: "t_x", status: NUMBER_STATUS.FAILED });
+  s.numbers.push({ id: "n2", tenantId: "t_x", status: NUMBER_STATUS.FAILED });
+  s.numbers.push({ id: "n3", tenantId: "t_x", status: NUMBER_STATUS.ACTIVE });
+  s.numbers.push({ id: "n4", tenantId: "t_y", status: NUMBER_STATUS.FAILED });
+  s.numbers.push({ id: "n5", tenantId: "t_y", status: NUMBER_STATUS.ACTIVE });
+  assert.equal(failedNumberCount(s, "t_x"), 2, "nur eigene fehlgeschlagene Nummern");
 });
