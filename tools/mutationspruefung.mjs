@@ -20,6 +20,7 @@ import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
+import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
 import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
@@ -138,8 +139,11 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --schutzwirkung [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
+  "   oder: node tools/mutationspruefung.mjs --laufzeiten-holen <datei>",
+  "   Mit --plan, --teil und --urteil: --laufzeiten <datei> (Tabelle aus --laufzeiten-holen) verteilt die Testdateien nach gemessener Dauer.",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
+const LAUFZEITEN_HOLEN = "laufzeiten-holen";
 const TESTUMBAU = "testumbau";
 const SCHUTZWIRKUNG = "schutzwirkung";
 const ALTER_SCHUTZ = "alter-schutz";
@@ -766,7 +770,7 @@ async function pruefe(pruefung, gleichwertige) {
   return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung), zugriffe });
 }
 
-async function planen(pruefungen) {
+async function planen(pruefungen, laufzeiten) {
   const einheiten = [];
   for (const [pruefung, stand] of pruefungen.entries()) {
     await imStand(stand, (bestand, graph) => {
@@ -777,7 +781,9 @@ async function planen(pruefungen) {
     });
   }
   const teile = aufteilen(einheiten);
-  return { teile, pruefsumme: pruefsumme(teile, git(["rev-parse", "HEAD"]).trim()) };
+  if (laufzeiten.dauern === null) console.log(rueckfallZeile(laufzeiten.grund));
+  const kopf = git(["rev-parse", "HEAD"]).trim();
+  return { teile, pruefsumme: pruefsumme(teile, laufzeiten.kennung === null ? kopf : `${kopf}:${laufzeiten.kennung}`) };
 }
 
 function zeigePlan({ teile }) {
@@ -785,8 +791,8 @@ function zeigePlan({ teile }) {
   for (const [index, teil] of teile.entries()) console.log(`Teil ${index + 1} von ${teile.length}: ${teil.map(einheitName).join("; ")}`);
 }
 
-async function schreibePlan(pruefungen, ziel) {
-  const plan = await planen(pruefungen);
+async function schreibePlan(pruefungen, ziel, laufzeiten) {
+  const plan = await planen(pruefungen, laufzeiten);
   zeigePlan(plan);
   writeFileSync(ziel, JSON.stringify({ anzahl: plan.teile.length, teile: matrix(plan.teile), pruefsumme: plan.pruefsumme }));
   return EXIT_GRUEN;
@@ -800,14 +806,14 @@ function teilnummer({ teil, teile }, anzahl) {
   return nummer;
 }
 
-async function messeTeil(pruefungen, optionen) {
-  const { teile, pruefsumme: summe } = await planen(pruefungen);
+async function messeTeil(pruefungen, optionen, laufzeiten) {
+  const { teile, pruefsumme: summe } = await planen(pruefungen, laufzeiten);
   const nummer = teilnummer(optionen, teile.length);
   const eigene = teile[nummer - 1] ?? [];
   console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
   const messungen = [];
   for (const [index, stand] of pruefungen.entries()) {
-    const auswahl = eigene.filter(({ pruefung }) => pruefung === index);
+    const auswahl = eigene.filter(({ pruefung }) => pruefung === index).map((einheit) => ({ ...einheit, dauern: laufzeiten.dauern }));
     if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl) });
   }
   const alle = messungen.flatMap(({ ergebnisse }) => ergebnisse);
@@ -840,8 +846,8 @@ function vereineAnteile(berichte, pruefung) {
   return [...nachSchluessel.values()];
 }
 
-async function urteilen(pruefungen, { urteil, gleichwertige }) {
-  const plan = await planen(pruefungen);
+async function urteilen(pruefungen, { urteil, gleichwertige }, laufzeiten) {
+  const plan = await planen(pruefungen, laufzeiten);
   const berichte = teilberichte(urteil, plan);
   const rot = new Set();
   for (const [index, pruefung] of pruefungen.entries()) {
@@ -910,9 +916,11 @@ function aufrufGueltig(values) {
 function messAufrufGueltig(values) {
   if (NUR_VORHER.some((name) => values[name] !== undefined)) return false;
   const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
-  const betriebsarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length + Number(values.testumbau);
+  const messarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length;
+  const betriebsarten = messarten + Number(values.testumbau);
   const doppelt = values.testumbau && (values["alter-stand"] || values.gleichwertig.length > 0);
-  return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && betriebsarten <= BETRIEBSARTEN_HOECHSTENS && !doppelt;
+  const laufzeitenOhneMessart = values.laufzeiten !== undefined && messarten === 0;
+  return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && betriebsarten <= BETRIEBSARTEN_HOECHSTENS && !doppelt && !laufzeitenOhneMessart;
 }
 
 function schreibeJson(ziel, inhalt) {
@@ -994,6 +1002,21 @@ function werteLogAus(values) {
   return EXIT_GRUEN;
 }
 
+function laufzeitenHolen(values) {
+  if (!nurAngegeben(values, [LAUFZEITEN_HOLEN])) {
+    console.error(AUFRUF);
+    return EXIT_ABBRUCH;
+  }
+  console.log(holeLaufzeiten(values[LAUFZEITEN_HOLEN]));
+  return EXIT_GRUEN;
+}
+
+function hilfsablaufFuer(values) {
+  if (values[LOG_AUSWERTUNG] !== undefined) return werteLogAus(values);
+  if (values[LAUFZEITEN_HOLEN] !== undefined) return laufzeitenHolen(values);
+  return undefined;
+}
+
 async function urteilAusCi(values) {
   const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], gleichwertige: values.gleichwertig });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
@@ -1038,9 +1061,12 @@ async function main() {
       ergebnis: { type: "string" },
       urteil: { type: "string" },
       [LOG_AUSWERTUNG]: { type: "string" },
+      laufzeiten: { type: "string" },
+      [LAUFZEITEN_HOLEN]: { type: "string" },
     },
   });
-  if (values[LOG_AUSWERTUNG] !== undefined) return werteLogAus(values);
+  const hilfsablauf = hilfsablaufFuer(values);
+  if (hilfsablauf !== undefined) return hilfsablauf;
   if (!aufrufGueltig(values)) {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
@@ -1062,9 +1088,10 @@ async function main() {
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
     : [{ von: values.basis, seite: "neu" }, ...umbauCommits(values.basis).map((commit) => ({ von: `${commit}^`, bis: commit, seite: "alt" }))];
-  if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan);
-  if (values.teil !== undefined) return messeTeil(pruefungen, values);
-  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige });
+  const laufzeiten = leseLaufzeiten(values.laufzeiten);
+  if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan, laufzeiten);
+  if (values.teil !== undefined) return messeTeil(pruefungen, values, laufzeiten);
+  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige }, laufzeiten);
   starteBudget(NORMAL);
   return gesamtlauf(pruefungen, gleichwertige);
 }
