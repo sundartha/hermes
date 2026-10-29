@@ -13,8 +13,13 @@ const uhr = { art: null, verbraucht: 0, gewartet: 0, seit: null, zeitgeber: null
 const offen = new Set();
 const sperrhalter = new Set();
 
+function unbegrenzt() {
+  return BUDGET_MS[uhr.art] === null;
+}
+
 function laufe() {
   uhr.seit = Date.now();
+  if (unbegrenzt()) return;
   uhr.zeitgeber = setTimeout(halte, Math.max(0, BUDGET_MS[uhr.art] - uhr.verbraucht));
   uhr.zeitgeber.unref();
 }
@@ -58,19 +63,20 @@ export function schaetzung({ aufrufe, mutanten }) {
 }
 
 function budgetText() {
-  return `Budget ${PRUEFUNG[uhr.art]} ${dauer(BUDGET_MS[uhr.art])} Rechenzeit`;
+  return `Budget ${PRUEFUNG[uhr.art]} ${unbegrenzt() ? "unbegrenzt" : `${dauer(BUDGET_MS[uhr.art])} Rechenzeit`}`;
 }
 
 export function vorschau(umfang) {
   if (!budgetLaeuft()) return;
   const { seite, quelldateien, testdateien, testgruppen, aufrufe, mutanten, unzaehlbar } = umfang;
   const ms = schaetzung(umfang);
-  const frei = BUDGET_MS[uhr.art] - rechenzeit();
+  const frei = unbegrenzt() ? null : BUDGET_MS[uhr.art] - rechenzeit();
   const rechnung = `${aufrufe} Stryker-Aufrufe × ${dauer(SCHAETZUNG_MS.aufruf)} + ${mutanten} Mutanten × ${dauer(SCHAETZUNG_MS.mutant)} = ${dauer(ms)}`;
   const unbekannt = unzaehlbar > 0 ? `, Mutanten in ${unzaehlbar} Quelldateien nicht zählbar, Schätzung mindestens` : "";
-  console.log(`Vorschau ${seite}: ${quelldateien} Quelldateien, ${testdateien} Testdateien, ${testgruppen} Testgruppen, ${mutanten} Mutanten${unbekannt}; Schätzung ${rechnung}; ${budgetText()}, davon frei ${dauer(frei)}.`);
+  const verfuegbar = frei === null ? "" : `, davon frei ${dauer(frei)}`;
+  console.log(`Vorschau ${seite}: ${quelldateien} Quelldateien, ${testdateien} Testdateien, ${testgruppen} Testgruppen, ${mutanten} Mutanten${unbekannt}; Schätzung ${rechnung}; ${budgetText()}${verfuegbar}.`);
   notiereVorschau({ ...umfang, schaetzung_ms: ms, budget_ms: BUDGET_MS[uhr.art], frei_ms: frei });
-  if (ms <= frei) return;
+  if (frei === null || ms <= frei) return;
   halteWennBudgetErschoepft(frei);
   throw new Error(`Budget: Schätzung ${dauer(ms)} liegt über dem ${budgetText()} (frei ${dauer(frei)}); kein Start, kein Urteil.`);
 }
