@@ -263,3 +263,11 @@ test("anweisungen: derselbe Zweck, neu erzeugt, bleibt grün", (context) => {
   const result = compare(directory);
   assert.equal(result.status, EXIT_OK, result.output);
 });
+
+test("hinweise: eine Handzeile direkt unter dem Kartenteil bleibt beim erneuten Erzeugen stehen", (context) => {
+  const directory = generated(context);
+  const text = read(directory, "src/fach/CLAUDE.md");
+  writeFiles(directory, { "src/fach/CLAUDE.md": `${text}${FREE_LINE}` });
+  generate(directory);
+  assert.ok(read(directory, "src/fach/CLAUDE.md").includes(FREE_LINE));
+});

@@ -7,6 +7,19 @@ export const GENERATE_COMMAND = "npm run hinweise";
 export const FOLDER_INSTRUCTIONS = "CLAUDE.md";
 const HEADING_PREFIX = "## Baustein ";
 const PURPOSE_PREFIX = "- Zweck: ";
+const SHARED_PREFIX = "- Zweck und Darf nutzen: ";
+const ALLOWED_PREFIX = "- Darf nutzen: ";
+const PLACE_PREFIX = "- Ort für Neues: ";
+const ENTRANCE_PREFIX = "- Eingang: ";
+const STRANGERS_PREFIX = "- Andere Bausteine in diesem Ordner: ";
+const BLOCK_LINE_PREFIXES = [
+  PURPOSE_PREFIX,
+  SHARED_PREFIX,
+  ALLOWED_PREFIX,
+  PLACE_PREFIX,
+  ENTRANCE_PREFIX,
+  STRANGERS_PREFIX,
+];
 const LINE_BREAK = "\n";
 const LIST_SEPARATOR = ", ";
 const GROUP_SEPARATOR = "; ";
@@ -45,9 +58,9 @@ function strangersText(map, entry, folder) {
 function sharedLines(map, entry, folder) {
   const [first] = entry.ordner;
   if (folder === first)
-    return [`${PURPOSE_PREFIX}${entry.zweck}`, `- Darf nutzen: ${erlaubteNamen(map, entry)}`];
+    return [`${PURPOSE_PREFIX}${entry.zweck}`, `${ALLOWED_PREFIX}${erlaubteNamen(map, entry)}`];
   return [
-    `- Zweck und Darf nutzen: stehen in \`${first}${FOLDER_INSTRUCTIONS}\`, dem ersten Ordner von ${entry.baustein}.`,
+    `${SHARED_PREFIX}stehen in \`${first}${FOLDER_INSTRUCTIONS}\`, dem ersten Ordner von ${entry.baustein}.`,
   ];
 }
 
@@ -56,9 +69,9 @@ function blockLines(map, entry, folder) {
   return [
     `${HEADING_PREFIX}${entry.baustein} (erzeugt aus ${KARTE} mit ${GENERATE_COMMAND})`,
     ...sharedLines(map, entry, folder),
-    `- Ort für Neues: ${placeText(entry, folder)}`,
-    `- Eingang: ${entranceText(entry, folder)}`,
-    ...(strangers === "" ? [] : [`- Andere Bausteine in diesem Ordner: ${strangers}`]),
+    `${PLACE_PREFIX}${placeText(entry, folder)}`,
+    `${ENTRANCE_PREFIX}${entranceText(entry, folder)}`,
+    ...(strangers === "" ? [] : [`${STRANGERS_PREFIX}${strangers}`]),
   ];
 }
 
@@ -83,8 +96,11 @@ export function splitLines(text) {
 export function findBlock(lines) {
   const start = lines.findIndex((line) => line.startsWith(HEADING_PREFIX));
   if (start === -1) return undefined;
-  const blank = lines.findIndex((line, index) => index > start && line.trim() === "");
-  return { start, end: blank === -1 ? lines.length : blank };
+  const foreign = lines.findIndex(
+    (line, index) =>
+      index > start && !BLOCK_LINE_PREFIXES.some((prefix) => line.startsWith(prefix)),
+  );
+  return { start, end: foreign === -1 ? lines.length : foreign };
 }
 
 export function blockMatches(lines, expected) {
