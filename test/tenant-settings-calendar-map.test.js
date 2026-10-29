@@ -11,7 +11,16 @@ import {
   findConflict,
   tenantContext,
 } from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, defaultSettings, demoCalendar } from "../src/store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  DEFAULT_GREETING,
+  calendarMap,
+  defaultSettings,
+  defaultSettingsMap,
+  demoCalendar,
+  emptyUsage,
+  emptyUsageMap,
+} from "../src/store/defaults.js";
 
 const TENANT_A = "alex";
 const TENANT_B = "maria";
@@ -162,4 +171,54 @@ test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantI
     jsonBackend.getCalendar(BOOTSTRAP_TENANT_ID).some((e) => e.title === "Fassaden-Termin"),
     true,
   );
+});
+
+const JAHR = 2027;
+const JANUAR = 0;
+const lokal = (tagImMonat, stunde, minute) =>
+  new Date(JAHR, JANUAR, tagImMonat, stunde, minute).toISOString();
+
+test("[NIE1] demoCalendar: Uhr 30.01.2027 09:00, drei Termine in Ortszeit, jedes Mal frische Objekte", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(JAHR, JANUAR, 30, 9, 0) });
+  const kalender = demoCalendar();
+  assert.deepEqual(kalender, [
+    { id: "ev1", title: "Team-Meeting", start: lokal(31, 10, 0), end: lokal(31, 11, 0) },
+    { id: "ev2", title: "Mittagessen mit Alex", start: lokal(32, 12, 0), end: lokal(32, 13, 0) },
+    { id: "ev3", title: "Projekt-Review", start: lokal(33, 15, 0), end: lokal(33, 16, 30) },
+  ]);
+  const zweiter = demoCalendar();
+  assert.notEqual(zweiter, kalender);
+  assert.notEqual(zweiter[0], kalender[0]);
+});
+
+test("[NIE2] defaultSettings: Rechte aus, language/agentStyle null, frisches Objekt, Begrüßung nennt KI und Transkription", () => {
+  const einstellungen = defaultSettings();
+  for (const feld of ["allowPersonalData", "allowBankData", "allowResearch", "allowCallMemory"]) {
+    assert.equal(einstellungen[feld], false, feld);
+  }
+  assert.equal(einstellungen.language, null);
+  assert.equal(einstellungen.agentStyle, null);
+  assert.equal(einstellungen.greeting, DEFAULT_GREETING);
+  assert.notEqual(defaultSettings(), einstellungen);
+  assert.match(DEFAULT_GREETING, /KI/);
+  assert.match(DEFAULT_GREETING, /transkribiert/);
+});
+
+test("[NIE3] defaultSettingsMap, calendarMap, emptyUsageMap führen nur owner und liefern neue Objekte", () => {
+  const erwarteteWerte = [
+    [defaultSettingsMap, defaultSettings()],
+    [emptyUsageMap, emptyUsage()],
+  ];
+  for (const [fabrik, erwartet] of erwarteteWerte) {
+    const karte = fabrik();
+    assert.deepEqual(Object.keys(karte), [BOOTSTRAP_TENANT_ID]);
+    assert.deepEqual(karte[BOOTSTRAP_TENANT_ID], erwartet);
+    assert.notEqual(fabrik(), karte);
+    assert.notEqual(fabrik()[BOOTSTRAP_TENANT_ID], karte[BOOTSTRAP_TENANT_ID]);
+  }
+  const kalender = calendarMap();
+  assert.deepEqual(Object.keys(kalender), [BOOTSTRAP_TENANT_ID]);
+  assert.equal(kalender[BOOTSTRAP_TENANT_ID].length, demoCalendar().length);
+  assert.notEqual(calendarMap(), kalender);
+  assert.notEqual(calendarMap()[BOOTSTRAP_TENANT_ID], kalender[BOOTSTRAP_TENANT_ID]);
 });
