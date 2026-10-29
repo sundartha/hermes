@@ -11,6 +11,7 @@ import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { reineQuellauslagerung, zieldateien } from "./mutationspruefung/quellauslagerung.mjs";
 import { RELATIVE_QUELLE, inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
+import { httpModul } from "./vorbereitung/http-modul.mjs";
 import { ersteAbweichung, fakten, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
 
 const QUELLDATEI = /\.[cm]?[jt]s$/;
@@ -31,6 +32,7 @@ const STATISCHE_QUELLEN = new Set(["ImportDeclaration", "ExportNamedDeclaration"
 const PAKET_ODER_NODE = /^(?:node:|[@\w][^:]*$)/;
 export const AUSLAGERUNG = "reine-auslagerung";
 export const UMBENENNUNG = "lokale-umbenennung";
+const HTTP_PFAD = "src/utils/http.js";
 const AUFRUF = "Aufruf: node tools/vorbereitung-pruefen.mjs --basis <commit> [--bis <commit>] [--bereich <json-datei>]";
 
 function felder(text) {
@@ -78,17 +80,30 @@ async function importKreisfrei(datei, stand, eslint) {
   return true;
 }
 
-async function normalformen(alt, neu, kreisfrei) {
-  const ohneZahlen = [normalform(alt), normalform(neu)];
-  const [links, rechts] = ohneZahlen;
-  if (vergleichstext(links.baum) === vergleichstext(rechts.baum) || !(await kreisfrei())) return ohneZahlen;
-  return [alt, neu].map((baum) => normalform(baum, { kreisfrei: true }));
+async function httpSeite(pfad, text, eslint) {
+  const baum = text === undefined ? undefined : await laufzeitBaum({ pfad: HTTP_PFAD, text }, eslint);
+  const quelle = (angabe) => RELATIVE_QUELLE.test(angabe) && posix.join(posix.dirname(pfad), angabe) === HTTP_PFAD;
+  return { modul: baum === undefined ? undefined : httpModul(baum, fakten(baum)), quelle };
 }
 
-export async function vergleicheVorbereitung({ pfad, vorher, nachher, kreisfrei = async () => false }, eslint = new ESLint()) {
+function beideNormalformen(seiten, optionen) {
+  const erste = seiten.map(({ baum, http }) => normalform(baum, { ...optionen, http }));
+  const gegenueber = erste.toReversed();
+  return seiten.map(({ baum, http }, index) => normalform(baum, { ...optionen, http, lokalErlaubt: gegenueber[index].importierteStatus }));
+}
+
+async function normalformen(seiten, kreisfrei) {
+  const ohneZahlen = beideNormalformen(seiten, {});
+  const [links, rechts] = ohneZahlen;
+  if (vergleichstext(links.baum) === vergleichstext(rechts.baum) || !(await kreisfrei())) return ohneZahlen;
+  return beideNormalformen(seiten, { kreisfrei: true });
+}
+
+export async function vergleicheVorbereitung({ pfad, vorher, nachher, kreisfrei = async () => false, http = {} }, eslint = new ESLint()) {
   const [alt, neu] = await Promise.all([vorher, nachher].map((text) => laufzeitBaum({ pfad, text }, eslint)));
   if (alt === undefined || neu === undefined) return { gleich: false, befund: `${pfad}: nicht lesbar` };
-  const [links, rechts] = await normalformen(alt, neu, kreisfrei);
+  const [httpAlt, httpNeu] = await Promise.all([http.vorher, http.nachher].map((text) => httpSeite(pfad, text, eslint)));
+  const [links, rechts] = await normalformen([{ baum: alt, http: httpAlt }, { baum: neu, http: httpNeu }], kreisfrei);
   const ids = new Set([...links.genutzt.keys(), ...rechts.genutzt.keys()]);
   const genutzt = [...ids].filter((id) => links.genutzt.get(id) !== rechts.genutzt.get(id)).toSorted();
   if (vergleichstext(links.baum) === vergleichstext(rechts.baum)) return { gleich: true, genutzt };
@@ -127,7 +142,8 @@ async function dateiBefund({ art, datei }, { basis, bis, umbenannt, ausgelagert,
   if (COMMONJS.test(datei)) return `${datei}: CommonJS läuft ohne strict mode; die Katalog-Bedingungen sind dafür nicht geprüft`;
   const kreisfrei = async () => (await importKreisfrei(datei, basis, eslint)) && importKreisfrei(datei, bis, eslint);
   const texte = { vorher: inhalt(basis, datei), nachher: inhalt(bis, datei) };
-  const vergleich = await vergleicheVorbereitung({ pfad: datei, ...texte, kreisfrei }, eslint);
+  const http = { vorher: inhalt(basis, HTTP_PFAD), nachher: inhalt(bis, HTTP_PFAD) };
+  const vergleich = await vergleicheVorbereitung({ pfad: datei, ...texte, kreisfrei, http }, eslint);
   return gleichwertigMeldenOderBefund(datei, texte, vergleich);
 }
 
