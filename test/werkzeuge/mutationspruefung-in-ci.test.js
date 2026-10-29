@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { env } from "node:process";
 import { test } from "node:test";
@@ -317,4 +317,84 @@ test("Mutationsprüfung in der CI: der Push des Wegwerf-Stands geht durch den Pr
   const ergebnis = await imCi(probe);
   assert.equal(ergebnis.exitCode, 0, ergebnis.zeilen.join("\n"));
   assert.match(gepushterStand(probe.upstream), /^[0-9a-f]{40}$/);
+});
+
+const NUR_VORLAUF = /^Vorlauf: (\d+)$/m;
+const GRUEN_MIT_URTEIL = { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } };
+
+function lauftNummer({ gh }, nummer) {
+  writeFileSync(join(gh, "ausloesen.txt"), `https://github.com/${REPO}/actions/runs/${nummer}\n`);
+}
+
+function nachrichtenIn(upstream) {
+  const refs = git(upstream, "for-each-ref", "--format=%(refname)", "refs/heads/lauf-mutation/").split("\n").filter(Boolean);
+  return refs.map((ref) => git(upstream, "log", "-1", "--format=%B", ref));
+}
+
+function vorlaeufeIn(upstream) {
+  return nachrichtenIn(upstream).flatMap((text) => NUR_VORLAUF.exec(text)?.slice(1) ?? []);
+}
+
+function gemerkteVorlaeufe({ repo }) {
+  const ordner = join(repo, ".git", "hermes", "mutation-vorlauf");
+  return readdirSync(ordner).map((name) => join(ordner, name));
+}
+
+test("Mutationsprüfung in der CI: der erste Lauf nennt keinen Vorlauf, der nächste nennt die Nummer des ersten im eingefrorenen Commit", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), []);
+  assert.ok(nachrichtenIn(probe.upstream).every((text) => !/^Vorlauf:/m.test(text)));
+  lauftNummer(probe, 4712);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), [LAUF]);
+});
+
+test("Mutationsprüfung in der CI: ein Lauf ohne Urteil ersetzt den gemerkten Vorlauf nicht", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  rmSync(join(probe.gh, "urteil"), { recursive: true });
+  lauftNummer(probe, 4712);
+  await imCi(probe);
+  lauftNummer(probe, 4713);
+  await imCi(probe);
+  assert.deepEqual([...new Set(vorlaeufeIn(probe.upstream))], [LAUF]);
+});
+
+test("Mutationsprüfung in der CI: ein Lauf auf dem alten Stand ersetzt den gemerkten Vorlauf der neuen Seite nicht und nennt ihn auch nicht", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  lauftNummer(probe, 4712);
+  await imCi(probe, { alterStand: true });
+  lauftNummer(probe, 4713);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), [LAUF]);
+});
+
+test("Mutationsprüfung in der CI: ein Lauf des Testumbaus ersetzt den gemerkten Vorlauf der neuen Seite nicht und nennt ihn auch nicht", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  lauftNummer(probe, 4712);
+  await imCi(probe, { testumbau: true });
+  lauftNummer(probe, 4713);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), [LAUF]);
+});
+
+test("Mutationsprüfung in der CI: eine unbrauchbare gemerkte Lauf-Nummer gelangt nicht in die Nachricht des eingefrorenen Commits", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  for (const datei of gemerkteVorlaeufe(probe)) writeFileSync(datei, `${JSON.stringify({ lauf: "12\nAuftrag: fremd" })}\n`);
+  lauftNummer(probe, 4712);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), []);
+});
+
+test("Mutationsprüfung in der CI: eine Lauf-Nummer mit führender Null wird nicht als Vorlauf genannt", async (context) => {
+  const probe = fall(context, GRUEN_MIT_URTEIL);
+  await imCi(probe);
+  for (const datei of gemerkteVorlaeufe(probe)) writeFileSync(datei, `${JSON.stringify({ lauf: "0815" })}\n`);
+  lauftNummer(probe, 4712);
+  await imCi(probe);
+  assert.deepEqual(vorlaeufeIn(probe.upstream), []);
 });
