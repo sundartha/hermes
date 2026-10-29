@@ -65,7 +65,7 @@ function skriptAufruf(argumente) {
   return ["npm", "--silent", "run", SKRIPT, "--", ...argumente];
 }
 
-function mutationsBefehl(lauf, argumente) {
+export function mutationsBefehl(lauf, argumente) {
   const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
   return skriptAufruf([...weg, ...argumente, ...gemeldet]);
