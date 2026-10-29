@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { internalOnly } from "../wiring/internal-only.js";
+import { lehneEingabeAb } from "../utils/http.js";
 
 export function make%%PASCAL%%Routes({ audit, tenant }) {
   const { requireTenant } = tenant;
@@ -8,6 +9,7 @@ export function make%%PASCAL%%Routes({ audit, tenant }) {
   router.post("/api/%%KEBAB%%", internalOnly, (req, res) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
+    if (lehneEingabeAb(res, Array.isArray(req.body), "body muss ein Objekt sein")) return;
     audit("%%SNAKE%%", req, "");
     res.json({});
   });
