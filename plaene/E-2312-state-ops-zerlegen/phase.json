@@ -48,19 +48,6 @@
       "wasDarfNiePassieren": []
     },
     {
-      "id": "a6",
-      "art": "umbau",
-      "ziel": "Nummern (Teil 2) aus state-ops.js nach zustand/nummern.js auslagern",
-      "bereich": "src/store/",
-      "erwarteteDateien": [
-        "src/store/state-ops.js",
-        "src/store/zustand/nummern.js",
-        "test/number-lifecycle.test.js"
-      ],
-      "abnahme": "test/number-lifecycle.test.js",
-      "wasDarfNiePassieren": []
-    },
-    {
       "id": "a7",
       "art": "umbau",
       "ziel": "Listen aus state-ops.js nach zustand/listen.js auslagern",
@@ -97,6 +84,19 @@
         "test/kv-p6-micro-cent-ledger.test.js"
       ],
       "abnahme": "test/kv-p6-micro-cent-ledger.test.js",
+      "wasDarfNiePassieren": []
+    },
+    {
+      "id": "a6",
+      "art": "umbau",
+      "ziel": "Nummern (Teil 2) aus state-ops.js nach zustand/nummern.js auslagern",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/state-ops.js",
+        "src/store/zustand/nummern.js",
+        "test/number-lifecycle.test.js"
+      ],
+      "abnahme": "test/number-lifecycle.test.js",
       "wasDarfNiePassieren": []
     }
   ]
