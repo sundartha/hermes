@@ -116,10 +116,10 @@ test("liegt die Schätzung der Testumbau-Mutation über dem Budget, startet sie 
   assert.deepEqual([vorschau.quelldateien, vorschau.testdateien], [1, 1], JSON.stringify(vorschau));
 });
 
-async function bisZurSperre(context, repo, argumente) {
+async function bisZurSperre(context, { repo, zusatz = {} }, argumente) {
   const env = umgebung(context, EIN_PLATZ);
   await halter(context, env);
-  const lauf = starte([WERKZEUG, ...argumente], { env, cwd: repo });
+  const lauf = starte([WERKZEUG, ...argumente], { env: { ...env, ...zusatz }, cwd: repo });
   context.after(() => lauf.kind.kill("SIGKILL"));
   await wartet(lauf);
   const [vorschau] = arten(logeintraege(repo), "vorschau");
@@ -129,14 +129,14 @@ async function bisZurSperre(context, repo, argumente) {
 
 test("eine normale Mutation mit einer Schätzung von über 15 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
   const repo = grosseQuelleGeaendert(context, join(probeDirectory(context, {}), "testlauf"));
-  const vorschau = await bisZurSperre(context, repo, ["--basis", "HEAD"]);
+  const vorschau = await bisZurSperre(context, { repo }, ["--basis", "HEAD"]);
   assert.ok(vorschau.schaetzung_ms > FUENFZEHN_MINUTEN_MS, JSON.stringify(vorschau));
   assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
 });
 
 test("eine Testumbau-Mutation mit einer Schätzung von über 60 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
   const repo = grosseQuelleTestUmgebaut(context, join(probeDirectory(context, {}), "testlauf"));
-  const vorschau = await bisZurSperre(context, repo, ["--basis", "HEAD~1", "--testumbau"]);
+  const vorschau = await bisZurSperre(context, { repo }, ["--basis", "HEAD~1", "--testumbau"]);
   assert.ok(vorschau.schaetzung_ms > EINE_STUNDE_MS, JSON.stringify(vorschau));
   assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
 });
@@ -149,6 +149,16 @@ test("Umgebungsvariablen heben das Budget nicht an: die Schätzung über dem Bud
   for (const env of [ohne, mit]) {
     const repo = grosseQuelleGeaendert(context, marke);
     budgets.push(ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke }).budget_ms);
+  }
+  assert.equal(budgets[1], budgets[0]);
+});
+
+test("Umgebungsvariablen heben das echte Budget nicht an: die Vorschau nennt mit ihnen dasselbe Budget wie ohne sie", async (context) => {
+  const gesetzt = Object.fromEntries(BUDGET_UMGEBUNG.map((name) => [name, SEHR_VIEL]));
+  const budgets = [];
+  for (const zusatz of [{}, gesetzt]) {
+    const repo = grosseQuelleGeaendert(context, join(probeDirectory(context, {}), "testlauf"));
+    budgets.push((await bisZurSperre(context, { repo, zusatz }, ["--basis", "HEAD"])).budget_ms);
   }
   assert.equal(budgets[1], budgets[0]);
 });
