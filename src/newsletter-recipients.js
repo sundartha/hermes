@@ -1,11 +1,11 @@
 import crypto from "crypto";
+import { MS_PER_DAY } from "./utils/timer.js";
 
 export const MAX_NEWSLETTER_RECIPIENTS = 5;
 
 export const NEWSLETTER_CONFIRM_MAIL_DAILY_CAP = 10;
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
-const ONE_DAY_MS = 24 * ONE_HOUR_MS;
 
 export const NEWSLETTER_CONFIRM_TOKEN_TTL_MS = 48 * ONE_HOUR_MS;
 
@@ -52,7 +52,7 @@ export function planAddNewsletterRecipient({ store, tenantId, rawEmail, accountE
   const existing = store.tenantNewsletterRecipients(tenantId);
   if (existing.some((r) => r.email === email)) return { ok: false, reason: "duplicate" };
   if (existing.length >= MAX_NEWSLETTER_RECIPIENTS) return { ok: false, reason: "cap_reached" };
-  const sinceIso = new Date(now.getTime() - ONE_DAY_MS).toISOString();
+  const sinceIso = new Date(now.getTime() - MS_PER_DAY).toISOString();
   if (store.dailyNewsletterConfirmMailCount(tenantId, sinceIso) >= NEWSLETTER_CONFIRM_MAIL_DAILY_CAP)
     return { ok: false, reason: "daily_limit" };
   return { ok: true, email };

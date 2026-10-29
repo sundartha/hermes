@@ -644,7 +644,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 6
+      "count": 5
     }
   },
   "src/plans.js": {
@@ -751,11 +751,6 @@
     },
     "no-magic-numbers": {
       "count": 13
-    }
-  },
-  "src/sms-summary.js": {
-    "no-magic-numbers": {
-      "count": 4
     }
   },
   "src/smtp-mail.js": {

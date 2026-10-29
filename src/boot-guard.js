@@ -12,6 +12,7 @@ import { CONFIRMATION_SECRET_MIN_LENGTH } from "./call-confirmation.js";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
 import { normalisierterOrigin } from "./middleware.js";
+import { MS_PER_DAY } from "./utils/timer.js";
 
 export async function guardedBoot(label, fn) {
   try {
@@ -137,7 +138,6 @@ export function unpricedPlanSlugs(slugs, priceIdOf) {
 }
 
 export const MODEL_PRICE_MAX_AGE_DAYS = 90;
-const MS_PER_DAY = 86_400_000;
 
 export function stalePriceFindings(modelPricesUsd, todayIso) {
   return Object.entries(modelPricesUsd)
