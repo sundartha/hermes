@@ -12,7 +12,7 @@ const ALLOWED_PREFIX = "- Darf nutzen: ";
 const PLACE_PREFIX = "- Ort für Neues: ";
 const ENTRANCE_PREFIX = "- Eingang: ";
 const STRANGERS_PREFIX = "- Andere Bausteine in diesem Ordner: ";
-const BLOCK_LINE_PREFIXES = [
+const BLOCK_LINE_ORDER = [
   PURPOSE_PREFIX,
   SHARED_PREFIX,
   ALLOWED_PREFIX,
@@ -93,25 +93,24 @@ export function splitLines(text) {
   return text.split(LINE_BREAK);
 }
 
-function lineKind(line = "") {
-  return BLOCK_LINE_PREFIXES.find((prefix) => line.startsWith(prefix));
+function lineRank(line = "") {
+  return BLOCK_LINE_ORDER.findIndex((prefix) => line.startsWith(prefix));
 }
 
-export function findBlock(lines, expected) {
+export function findBlock(lines) {
   const start = lines.findIndex((line) => line.startsWith(HEADING_PREFIX));
   if (start === -1) return undefined;
   let end = start + 1;
-  while (
-    end - start < expected.length &&
-    lineKind(lines[end]) === lineKind(expected[end - start])
-  ) {
+  let rank = -1;
+  while (lineRank(lines[end]) > rank) {
+    rank = lineRank(lines[end]);
     end += 1;
   }
   return { start, end };
 }
 
 export function blockMatches(lines, expected) {
-  const found = findBlock(lines, expected);
+  const found = findBlock(lines);
   if (found === undefined) return false;
   const actual = lines.slice(found.start, found.end).map((line) => line.trimEnd());
   return (
@@ -138,7 +137,7 @@ export function blockFindings(root, blocks) {
     const lines = splitLines(readFileSync(join(root, path), "utf8"));
     if (blockMatches(lines, expected)) return [];
     const text =
-      findBlock(lines, expected) === undefined
+      findBlock(lines) === undefined
         ? `hat keinen Kartenteil; ${GENERATE_COMMAND} erzeugt ihn aus ${KARTE}`
         : `hat einen Kartenteil, der nicht zu ${KARTE} passt; ${GENERATE_COMMAND} erzeugt ihn neu`;
     return [karteFinding(path, folder, text)];
@@ -152,7 +151,7 @@ export function coveredLines(root, blocks) {
     if (!existsSync(join(root, path))) continue;
     const lines = splitLines(readFileSync(join(root, path), "utf8"));
     if (!blockMatches(lines, expected)) continue;
-    const { start, end } = findBlock(lines, expected);
+    const { start, end } = findBlock(lines);
     for (let index = start; index < end; index += 1) {
       if (!lines[index].startsWith(PURPOSE_PREFIX)) covered.add(`${path}:${index + 1}`);
     }
@@ -162,7 +161,7 @@ export function coveredLines(root, blocks) {
 
 export function withBlock(text, expected) {
   const lines = splitLines(text);
-  const found = findBlock(lines, expected);
+  const found = findBlock(lines);
   if (found !== undefined)
     return [...lines.slice(0, found.start), ...expected, ...lines.slice(found.end)].join(
       LINE_BREAK,
