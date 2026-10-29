@@ -232,3 +232,52 @@ test("nennt ein anderer Abbruch nur in der Vorschau das Budget, läuft die Mutat
   assert.deepEqual(exitCodes(beleg, "mutation"), [2, 2]);
   assert.ok(beleg.entscheidung.text.includes("Ein Werkzeug ist 2-mal abgebrochen"), beleg.entscheidung.text);
 });
+
+const OHNE_PFAD = NEU_MUTANT.slice(NEU_MUTANT.indexOf(":") + 1);
+const NACHFRAGE = "## Meldung ohne genauen Schlüssel";
+const GRUND_OHNE_PFAD = "die Sieben ohne Sonderfall dasselbe Ergebnis hätte";
+
+function mitMeldung(context, { erste, zweite, naechsteRunde = {} }) {
+  const zusatz = { ...naechsteRunde, "bau-nachrunde-antwort": erste, nach: NACHFRAGE, ...(zweite === undefined ? {} : { "bau-nach-antwort": zweite }) };
+  const ergebnis = mitSieben(context, zusatz);
+  const nachfrage = join(ergebnis.werkzeug, "prompt-bau-nach.txt");
+  return { ...ergebnis, nachfrage: existsSync(nachfrage) ? readFileSync(nachfrage, "utf8") : null };
+}
+
+test("meldet der Bau-Agent einen Mutanten ohne Dateipfad als gleichwertig, fragt der Lauf in derselben Sitzung nach den genauen Schlüsseln und nimmt die Meldung mit Pfad an", (context) => {
+  const erste = `Gleichwertig: ${OHNE_PFAD}, weil ${GRUND_OHNE_PFAD}`;
+  const { lauf, beleg, nachfrage } = mitMeldung(context, { erste, zweite: GLEICHWERTIG_MIT_GRUND });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(nachfrage !== null, "keine Nachfrage gestellt");
+  assert.ok(nachfrage.includes(erste) && nachfrage.includes(`- ${NEU_MUTANT}\n`), nachfrage);
+  const [ersterBau] = beleg.agenten.filter(({ rolle }) => rolle === "bau");
+  assert.deepEqual(beleg.nachfragen.map(({ sitzung }) => sitzung), [ersterBau.sitzung]);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [EXIT_ROT]);
+  assert.equal(pruefung(beleg, "mutation nach Bau"), 0);
+  const { zeilen } = beleg.pruefungen.findLast(({ name }) => name === "mutation nach Bau");
+  assert.ok(zeilen.includes(`${GLEICHWERTIG_ANGENOMMEN}: ${NEU_MUTANT}`), zeilen.join("\n"));
+});
+
+test("steht die Meldung auch nach der Nachfrage ohne genauen Schlüssel, endet der Lauf mit der Zeile und startet keine weitere Mutationsprüfung", (context) => {
+  const erste = `Gleichwertig: ${OHNE_PFAD}, weil ${GRUND_OHNE_PFAD}`;
+  const { lauf, beleg } = mitMeldung(context, { erste, zweite: erste, naechsteRunde: { "bau-antwort": ABSATZ_MUTATION } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(beleg.grund.includes(OHNE_PFAD) && beleg.grund.includes(GRUND_OHNE_PFAD), beleg.grund);
+  assert.deepEqual(beleg.pruefungen.filter(({ name }) => name.startsWith("mutation")).map(({ name }) => name), ["mutation"]);
+});
+
+test("ändert der Bau-Agent bei der Nachfrage zur Meldung eine Datei, endet der Lauf damit und startet keine weitere Mutationsprüfung", (context) => {
+  const erste = `Gleichwertig: ${OHNE_PFAD}, weil ${GRUND_OHNE_PFAD}`;
+  const geaendert = { "src/text.js": "export function gross(text) {\n  return text.toUpperCase().trim();\n}\n" };
+  const naechsteRunde = { "bau-antwort": ABSATZ_MUTATION, "bau-nach": geaendert };
+  const { lauf, beleg } = mitMeldung(context, { erste, zweite: GLEICHWERTIG_MIT_GRUND, naechsteRunde });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(beleg.grund, "Die Nachfrage zur Meldung hat Dateien geändert.");
+  assert.deepEqual(beleg.pruefungen.filter(({ name }) => name.startsWith("mutation")).map(({ name }) => name), ["mutation"]);
+});
+
+test("passt jede Meldung der Nachrunde genau auf einen überlebenden Mutanten, fragt der Lauf nicht nach", (context) => {
+  const { lauf, nachfrage } = mitMeldung(context, { erste: GLEICHWERTIG_MIT_GRUND });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(nachfrage, null);
+});
