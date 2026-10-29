@@ -1,19 +1,24 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
-import { bestandsDatei } from "./hermes-regeln-probe.js";
-import { probeDirectory } from "./probe-repo.js";
-import { befundTexte, befundZeilen } from "./testregeln-probe.js";
+import { bestandFriertGenauEin, bestandsDatei } from "./hermes-regeln-probe.js";
+import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
+import { befundTexte, befundZeilen, konfigurationMitTestregeln } from "./testregeln-probe.js";
 
 const REGEL = "hermes-tests/anfrage-mit-frist";
+const WERKZEUG = "anfrage-mit-frist";
 const BESTAND = "tools/basis/anfrage-mit-frist.json";
 const DATEI = "src/billing/probe.js";
 const ANDERE_DATEI = "src/billing/andere.js";
 const TEST_DATEI = "test/anrufe/probe.test.js";
+const QUELL_DATEIEN = ["src/**"];
 const ABRUF = 'await fetch(url(PAYMENT_INTENTS_PATH), { method: "POST", headers, body });';
 const ABRUF_TEXT = 'fetch(url(PAYMENT_INTENTS_PATH), { method: "POST", headers, body })';
 const ANDERER_ABRUF = "await fetch(url(REFUNDS_PATH), { method: 'POST', body });";
+const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
+const EXIT_OK = 0;
 
 function befunde(verzeichnis, zeilen, datei = DATEI) {
   return befundZeilen({ verzeichnis, datei, regel: REGEL, bestand: BESTAND }, zeilen);
@@ -72,11 +77,33 @@ test("anfrage-mit-frist im Produktcode: die Meldung unter src/ nennt AbortSignal
 });
 
 test("anfrage-mit-frist im Produktcode: unter test/ meldet die Regel ohne Bestand weiter jeden Aufruf", (context) => {
-  const verzeichnis = probeDirectory(context, {
-    [BESTAND]: bestandsDatei([befundSchluessel(TEST_DATEI, ABRUF_TEXT)]),
-  });
+  const verzeichnis = probeDirectory(context, {});
   assert.deepEqual(
     befundZeilen({ verzeichnis, datei: TEST_DATEI, regel: REGEL }, [ABRUF]),
     [ABRUF],
   );
+});
+
+test("anfrage-mit-frist im Produktcode: die Basislinie aus basis-vergleich friert genau den Bestand unter src/ ein", (context) => {
+  bestandFriertGenauEin(context, {
+    werkzeug: WERKZEUG,
+    konfiguration: { files: QUELL_DATEIEN, rules: { [REGEL]: ["error", { bestand: BESTAND }] } },
+    vorher: {
+      "eslint.config.mjs": konfigurationMitTestregeln(REGEL, BESTAND, QUELL_DATEIEN),
+      "src/alt.js": `${ABRUF}\n`,
+    },
+    neu: { "src/neu.js": `\n${ANDERER_ABRUF}\n` },
+    ort: "src/neu.js:2",
+  });
+});
+
+test("anfrage-mit-frist im Produktcode: ein Aufruf unter test/ gehört nicht zur Basislinie", (context) => {
+  const verzeichnis = probeDirectory(context, {
+    "eslint.config.mjs": konfigurationMitTestregeln(REGEL, BESTAND, QUELL_DATEIEN),
+    "src/alt.js": `${ABRUF}\n`,
+    "test/alt.test.js": `${ABRUF}\n`,
+  });
+  const angelegt = runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, WERKZEUG, "--basis-anlegen"]);
+  assert.equal(angelegt.status, EXIT_OK, angelegt.stderr);
+  assert.match(angelegt.stdout, /mit 1 Befunden angelegt/);
 });

@@ -31,12 +31,12 @@ export function befundTexte(ort, zeilen) {
   return befunde(ort, zeilen).map(({ message }) => message);
 }
 
-export function konfigurationMitTestregeln(regel, bestand) {
+export function konfigurationMitTestregeln(regel, bestand, dateien = ["test/**"]) {
   const regeln = JSON.stringify({ [regel]: ["error", { bestand }] });
   return [
     `import testRegeln from ${JSON.stringify(TESTREGELN_URL)};`,
     `const plugins = { ${JSON.stringify(TESTREGELN_PLUGIN)}: testRegeln };`,
-    `export default [{ files: ["test/**"], plugins, rules: ${regeln} }];`,
+    `export default [{ files: ${JSON.stringify(dateien)}, plugins, rules: ${regeln} }];`,
     "",
   ].join("\n");
 }

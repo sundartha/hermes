@@ -27,6 +27,13 @@
     "nichtAngenommen": "Die Attrappe unter anderem Namen, über eine Variable als Schlüssel oder in einer Hilfsdatei bauen, die die Regel nicht erkennt, oder einen Eintrag in tools/basis/keine-speicher-attrappe.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Liegt die Attrappe in einem bestehenden Test außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit dem Test ins Issue. Einen neuen Eintrag nimmt der Bestand nicht an, auch nicht mit Approve; hältst du die Regel hier für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue."
   },
+  "basis/anfrage-mit-frist": {
+    "liste": "B8 (Anfragen ohne Antwortfrist)",
+    "wozu": "Eine Anfrage im Produktcode ohne Antwortfrist hängt ohne Ende, wenn Stripe, Telnyx, Brevo oder ein anderer Dienst nicht antwortet, und mit ihr der Anruf- oder Abrechnungsweg, der darauf wartet. tools/basis/anfrage-mit-frist.json hält nur die alten Stellen unter src/.",
+    "behebung": "Der Anfrage signal: AbortSignal.timeout(<benannte Frist in ms>) mitgeben.",
+    "nichtAngenommen": "Die Frist über einen selbst gebauten Abbruch-Controller mit Zeitgeber setzen, den die Regel nicht erkennt, die Anfrage über eine Hülle stellen, die die Regel nicht sieht, oder einen Eintrag in tools/basis/anfrage-mit-frist.json ergänzen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Liegt die Anfrage in einer bestehenden Datei außerhalb deines Bereichs, hörst du auf und schreibst in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Datei ins Issue. Einen neuen Eintrag nimmt der Bestand nicht an, auch nicht mit Approve; hältst du die Regel hier für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue."
+  },
   "basis/knip": {
     "liste": "B2",
     "wozu": "Unbenutzter Code, unbenutzte Exporte, Dateien und Pakete bleiben sonst liegen: Spätere Agenten halten sie für gültig, pflegen sie mit oder kopieren sie als Vorlage, und ein unbenutztes Paket bleibt ohne Nutzen in der Lieferkette.",
@@ -85,10 +92,10 @@
   },
   "basis/testregel-bestaende": {
     "liste": "B8",
-    "wozu": "tools/basis/selbstpruefung.json, tools/basis/fester-importpfad.json und tools/basis/keine-speicher-attrappe.json halten nur die alten Verstöße gegen die Testregeln keine-selbstpruefung, fester-importpfad und keine-speicher-attrappe. Wird dort ein neuer Fall eingefroren, gibt es einen weiteren Test, der nichts prüft, die Importregel umgeht oder die Speicher-Sperre vortäuscht, und ein Fehler geht trotz grüner Tests live.",
-    "behebung": "Den neuen Eintrag streichen und den Befund im Test beheben: das Ergebnis des Codes prüfen, den Importpfad als festen Text schreiben oder den echten Teststore mit seiner Sperre nehmen.",
+    "wozu": "tools/basis/selbstpruefung.json, tools/basis/fester-importpfad.json, tools/basis/keine-speicher-attrappe.json und tools/basis/anfrage-mit-frist.json halten nur die alten Verstöße gegen die Regeln keine-selbstpruefung, fester-importpfad, keine-speicher-attrappe und anfrage-mit-frist. Wird dort ein neuer Fall eingefroren, gibt es einen weiteren Test, der nichts prüft, die Importregel umgeht oder die Speicher-Sperre vortäuscht, oder eine weitere Anfrage im Produktcode, die ohne Antwortfrist endlos hängt, und ein Fehler geht trotz grüner Tests live.",
+    "behebung": "Den neuen Eintrag streichen und den Befund im Test beheben: das Ergebnis des Codes prüfen, den Importpfad als festen Text schreiben, den echten Teststore mit seiner Sperre nehmen oder der Anfrage im Produktcode eine Frist mit signal: AbortSignal.timeout(…) geben.",
     "nichtAngenommen": "Den Fund in eine Liste derselben Art verschieben, die hier nicht verglichen wird (wie tools/basis/quelltext-als-text.json), oder den Test so umschreiben, dass die Regel ihn nicht mehr erkennt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: Diese drei Listen nehmen keinen neuen Eintrag an, auch nicht mit Approve; den Befund im Test zu beheben ist der einzige Weg zu Grün. Hältst du die Regel an dieser Stelle für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue, und der PR wartet auf Antonio."
+    "ausweg": "entfällt: Diese vier Listen nehmen keinen neuen Eintrag an, auch nicht mit Approve; den Befund im Test zu beheben ist der einzige Weg zu Grün. Hältst du die Regel an dieser Stelle für falsch, gehören Fundstelle und Grund als Entscheidungsnotiz ins Issue, und der PR wartet auf Antonio."
   },
   "basis/versionswechsel": {
     "liste": "B1 und B3 (Versionsabgleich)",

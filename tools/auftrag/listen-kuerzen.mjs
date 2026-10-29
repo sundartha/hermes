@@ -23,7 +23,7 @@ const GRUPPE_ZU = ")";
 const ODER = "|";
 const TRENNER = ", ";
 const EINZEILIGE_LISTE = /^(\s*"(?:[^"\\]|\\.)*": )(\[.*\])(,?)$/;
-const BASISLISTEN = ["knip", "anweisungen", "jscpd", "semgrep", "selbstpruefung", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text"];
+const BASISLISTEN = ["knip", "anweisungen", "jscpd", "semgrep", "selbstpruefung", "fester-importpfad", "keine-speicher-attrappe", "anfrage-mit-frist", "quelltext-als-text"];
 
 function dateien(args, root) {
   return git(args, { cwd: root }).split(NUL).filter(Boolean);
