@@ -23,6 +23,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -521,6 +527,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -1009,6 +1021,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -1501,6 +1519,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -1989,6 +2013,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -2481,6 +2511,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -2969,6 +3005,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -3461,6 +3503,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -3949,6 +3997,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -4441,6 +4495,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -4929,6 +4989,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -5421,6 +5487,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -5909,6 +5981,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -6409,6 +6487,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -6897,6 +6981,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -7389,6 +7479,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -7877,6 +7973,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -8369,6 +8471,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -8857,6 +8965,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes/keine-kommentare": [
@@ -13269,6 +13383,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes-typen/keine-typwaechter": [
         2,
         {
@@ -14172,6 +14292,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
+        }
+      ],
       "hermes-typen/keine-typwaechter": [
         2,
         {
@@ -15073,6 +15199,12 @@
         0,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes-tests/anfrage-mit-frist": [
+        2,
+        {
+          "bestand": "tools/basis/anfrage-mit-frist.json"
         }
       ],
       "hermes-typen/keine-typwaechter": [

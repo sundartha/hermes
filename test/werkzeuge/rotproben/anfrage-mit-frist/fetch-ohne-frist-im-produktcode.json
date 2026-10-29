@@ -1,0 +1,9 @@
+{
+  "titel": "Produktcode schickt fetch an einen Dienst ohne Antwortfrist",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const antwort = await fetch(\"https://api.example.test/v1/zahlung\", { method: \"POST\", body: \"{}\" });"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}

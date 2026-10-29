@@ -1,0 +1,18 @@
+{
+  "titel": "Derselbe Dienstaufruf ohne Antwortfrist ein zweites Mal in einer Datei mit eingefrorener Stelle",
+  "vorher": {
+    "tools/basis/anfrage-mit-frist.json": [
+      "{ \"befunde\": [\"src/rotprobe.js|cd06c323088ca3b8\"] }"
+    ],
+    "src/rotprobe.js": [
+      "export const alt = await fetch(\"https://api.example.test/v1/zahlung\", { method: \"POST\", body });"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const alt = await fetch(\"https://api.example.test/v1/zahlung\", { method: \"POST\", body });",
+      "export const neu = await fetch(\"https://api.example.test/v1/zahlung\", { method: \"POST\", body });"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/anfrage-mit-frist\""
+}
