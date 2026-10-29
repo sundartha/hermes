@@ -5,11 +5,13 @@ import { env, execPath } from "node:process";
 import { setTimeout as schlafen } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
+import { abhaengigkeitsgraph, ausserhalbBetrifft, vermesse } from "./abhaengigkeitsgraph.mjs";
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase, issueBefunde } from "./befehle.mjs";
 import { sperrSchluessel } from "./bereiche.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { istVertraulich, reihenfolge } from "./format.mjs";
-import { git, kopf } from "./git.mjs";
+import { gibtEsIn, git, kopf } from "./git.mjs";
+import { bereicheZwischen, kollisionenSeit } from "./kollision.mjs";
 import { ciLokalAmPhasenende } from "./phasenende.mjs";
 import { IssueNichtLesbar, issueAbsichtBefunde } from "./planung/absicht.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
@@ -29,6 +31,8 @@ import { MELDUNG, ohneZweck, zweckBlock } from "./zweck.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MAX_NEUSTARTS = 2;
+const MAX_GLEICHZEITIG = 2;
+const GANZE_DATEI = [[0, 0]];
 const WARTEN_MS = 60_000;
 const WARTEND = "wartend";
 const LAEUFT = "läuft";
@@ -52,6 +56,8 @@ class Phasenlauf {
     const eintraege = ort.phase.auftraege.map((auftrag) => [auftrag.id, { auftrag, zustand: WARTEND, neustarts: 0 }]);
     this.stand = new Map(eintraege);
     this.laufend = new Map();
+    this.ungemessen = new Set();
+    this.graph = new Map();
     this.naechster = 0;
   }
 
@@ -59,17 +65,30 @@ class Phasenlauf {
     return this.stand.get(kennung).zustand;
   }
 
-  dateien(kennung) {
-    const { auftrag } = this.stand.get(kennung);
-    return auftrag.erwarteteDateien;
+  quelltext(datei, stand) {
+    const cwd = this.ort.integration;
+    return gibtEsIn(stand, datei, cwd) ? git(["show", `${stand}:${datei}`], { cwd }) : null;
+  }
+
+  baueGraph() {
+    const offene = this.ordnung.filter((kennung) => this.zustand(kennung) !== UEBERNOMMEN);
+    const auftraege = offene.map((kennung) => {
+      const { auftrag } = this.stand.get(kennung);
+      return this.ungemessen.has(kennung) ? { ...auftrag, betrifft: undefined } : auftrag;
+    });
+    return abhaengigkeitsgraph(auftraege, (datei) => this.quelltext(datei, "HEAD"));
+  }
+
+  vorgaenger(kennung) {
+    const gruende = this.graph.get(kennung);
+    return [...gruende.keys()];
   }
 
   startbereit(kennung) {
-    const { auftrag, zustand } = this.stand.get(kennung);
+    const { zustand } = this.stand.get(kennung);
     if (zustand !== WARTEND || this.ordnung.some((andere) => this.zustand(andere) === ROT)) return false;
-    const erledigt = (auftrag.abhaengigVon ?? []).every((vorher) => this.zustand(vorher) === UEBERNOMMEN);
-    const belegt = [...this.laufend.keys()].flatMap((andere) => this.dateien(andere));
-    return erledigt && !auftrag.erwarteteDateien.some((pfad) => belegt.includes(pfad));
+    if (this.laufend.size >= MAX_GLEICHZEITIG) return false;
+    return this.vorgaenger(kennung).every((vorher) => this.zustand(vorher) === UEBERNOMMEN);
   }
 
   starte(kennung) {
@@ -97,7 +116,23 @@ class Phasenlauf {
     if (exitCode !== EXIT_GRUEN) return this.verwirf(kennung, `lauf endete mit Exit ${exitCode}.`);
     eintrag.zustand = FERTIG;
     eintrag.commit = kopf(eintrag.pfad);
+    this.pruefeBetrifft(kennung);
     return undefined;
+  }
+
+  ausserhalbVonBetrifft(eintrag, datei, namen) {
+    const messung = vermesse(this.quelltext(datei, eintrag.basis) ?? "", namen);
+    if (messung === null) return GANZE_DATEI;
+    const geaendert = bereicheZwischen({ cwd: this.ort.integration, von: eintrag.basis, bis: eintrag.commit }).get(datei) ?? [];
+    return ausserhalbBetrifft(messung, geaendert);
+  }
+
+  pruefeBetrifft(kennung) {
+    const eintrag = this.stand.get(kennung);
+    const abweichend = Object.entries(eintrag.auftrag.betrifft ?? {}).filter(([datei, namen]) => this.ausserhalbVonBetrifft(eintrag, datei, namen).length > 0);
+    if (abweichend.length === 0) return;
+    this.ungemessen.add(kennung);
+    console.log(`Auftrag ${kennung}: ändert Zeilen außerhalb von betrifft (${abweichend.map(([datei]) => datei).join(", ")}); für ihn gilt ab jetzt die Dateiregel.`);
   }
 
   schreibe(kennung, zusatz) {
@@ -119,15 +154,15 @@ class Phasenlauf {
     eintrag.beleg = { ...eintrag.beleg, pruefungen: [...eintrag.beleg.pruefungen, ...schritte] };
   }
 
-  neustart(kennung) {
+  neustart(kennung, ursache = "Konflikt mit dem Phasen-Branch") {
     const eintrag = this.stand.get(kennung);
     if (eintrag.neustarts >= MAX_NEUSTARTS) {
-      return this.verwirf(kennung, `Konflikt mit dem Phasen-Branch auch nach ${MAX_NEUSTARTS} Neustarts.`);
+      return this.verwirf(kennung, `${ursache} auch nach ${MAX_NEUSTARTS} Neustarts.`);
     }
     entferneAuftrag(this.ort, kennung);
     eintrag.neustarts += 1;
     eintrag.zustand = WARTEND;
-    console.log(`Auftrag ${kennung}: Konflikt mit dem Phasen-Branch, Neustart ${eintrag.neustarts}.`);
+    console.log(`Auftrag ${kennung}: ${ursache}, Neustart ${eintrag.neustarts}.`);
     return undefined;
   }
 
@@ -141,6 +176,8 @@ class Phasenlauf {
     const probe = this.pruefe("merge-tree", ["git", "merge-tree", "--write-tree", `--merge-base=${basis}`, "HEAD", commit]);
     this.protokolliere(kennung, [probe]);
     if (probe.exitCode !== 0) return this.neustart(kennung);
+    const kollidiert = kollisionenSeit({ cwd: this.ort.integration, basis, stand: "HEAD", commit });
+    if (kollidiert.length > 0) return this.neustart(kennung, `Zeilen oder Tests geändert (${kollidiert.join("; ")})`);
     const vorher = kopf(this.ort.integration);
     const uebernahme = this.pruefe("cherry-pick", ["git", "cherry-pick", `${basis}..${commit}`]);
     const pruefleiter = this.pruefe("prüfleiter", ["npm", "--silent", "run", "pruefleiter", "--", "--basis", this.basis]);
@@ -170,6 +207,7 @@ class Phasenlauf {
   async fuehreAus() {
     this.basis = kopf(this.ort.integration);
     for (;;) {
+      this.graph = this.baueGraph();
       for (const kennung of this.ordnung) if (this.startbereit(kennung)) this.starte(kennung);
       if (this.laufend.size === 0) return this.ordnung.every((kennung) => this.zustand(kennung) === UEBERNOMMEN);
       this.nachLauf(await Promise.race([...this.laufend.values()].map(({ ende }) => ende)));
