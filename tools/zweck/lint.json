@@ -22,9 +22,9 @@
   },
   "lint/anfrage-mit-frist": {
     "liste": "L20",
-    "wozu": "Eine Testanfrage ohne Antwortfrist hängt bei einem Mutanten, der die Antwort verschluckt, bis zum Zeitlimit des Tests; die Mutationsprüfung dauert dann viel länger, und jeder PR wartet länger auf ihr Ergebnis.",
-    "behebung": "abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs nutzen.",
-    "nichtAngenommen": "Ein eigenes Abbruchsignal ohne echte Frist übergeben oder die Anfrage über eine Hülle stellen, die die Regel nicht kennt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "wozu": "Eine Testanfrage ohne Antwortfrist hängt bei einem Mutanten, der die Antwort verschluckt, bis zum Zeitlimit des Tests; die Mutationsprüfung dauert dann viel länger, und jeder PR wartet länger auf ihr Ergebnis. Im Produktcode unter src/ hängt eine Anfrage ohne Antwortfrist ohne Ende, wenn Stripe, Telnyx, Brevo oder ein anderer Dienst nicht antwortet, und mit ihr der Anruf- oder Abrechnungsweg, der darauf wartet; die Altstellen stehen in tools/basis/anfrage-mit-frist.json.",
+    "behebung": "In Tests abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs nutzen. Im Produktcode der Anfrage signal: AbortSignal.timeout(<benannte Frist in ms>) mitgeben.",
+    "nichtAngenommen": "Ein eigenes Abbruchsignal ohne echte Frist übergeben, die Frist per Hand-Controller mit Zeitgeber bauen, die Anfrage über eine Hülle stellen, die die Regel nicht kennt, einen Eintrag in tools/basis/anfrage-mit-frist.json ergänzen oder die Erkennung lockern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Im Auftragsweg steigt der Test-Agent mit der eigenen letzten Zeile „Auftrag passt nicht: <Regel> passt hier nicht, weil <Grund>“ aus. In einer Paket-Sitzung schreibst du „Voraussetzung fehlt:“ mit dem Test ins Issue, wenn die Behebung einen bestehenden Test oder eine Datei außerhalb deines Bereichs braucht. Hältst du die Regel an dieser Stelle für falsch, gehören Regel, Fundstelle und Grund als Entscheidungsnotiz ins Issue; eine Änderung an eslint.config.js braucht ein Fehlalarm-Beispiel unter test/werkzeuge/fehlalarme/eslint/ und Antonios Approve."
   },
   "lint/auflegestufen": {

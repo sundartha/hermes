@@ -19,6 +19,7 @@ import { knotenSchluessel, pfadAusSchluessel, pfadInDerWurzel } from "./eslint-r
 import { importeMitPlatzhalter } from "./eslint-rules/fester-importpfad.js";
 import { quelltextLesestellen } from "./eslint-rules/kein-quelltext-als-text.js";
 import { speicherAttrappen } from "./eslint-rules/keine-speicher-attrappe.js";
+import { anfragenOhneFrist } from "./eslint-rules/anfrage-mit-frist.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import { aenderungenSeit, gibtEsIn, legeWorktreeAn } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
@@ -69,6 +70,7 @@ const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
 const TEST_FILES = ["test/**"];
+const SOURCE_FILES = ["src/**"];
 const LESSONS_FILE = "docs/lessons.md";
 const FORMER_LESSONS_FILE = "tasks/lessons.md";
 const LINE_BREAK = "\n";
@@ -300,9 +302,9 @@ function nodeKeys(nodesOf) {
   };
 }
 
-function testRuleFindings(ruleName, nodesOf) {
+function regelBefunde(ruleName, nodesOf, files = TEST_FILES) {
   return (root) =>
-    eslintCollectorFindings(root, ruleName, { keysOf: nodeKeys(nodesOf), files: TEST_FILES });
+    eslintCollectorFindings(root, ruleName, { keysOf: nodeKeys(nodesOf), files });
 }
 
 function misplacedLessons(root) {
@@ -367,24 +369,29 @@ export const TOOLS = {
     zweck: "basis/semgrep",
   },
   "quelltext-als-text": {
-    findings: testRuleFindings("quelltext-als-text", quelltextLesestellen),
+    findings: regelBefunde("quelltext-als-text", quelltextLesestellen),
     ...PER_FILE,
     zweck: "basis/quelltext-als-text",
   },
   selbstpruefung: {
-    findings: testRuleFindings("selbstpruefung", selbstpruefungen),
+    findings: regelBefunde("selbstpruefung", selbstpruefungen),
     ...PER_FILE,
     zweck: "basis/selbstpruefung",
   },
   "fester-importpfad": {
-    findings: testRuleFindings("fester-importpfad", importeMitPlatzhalter),
+    findings: regelBefunde("fester-importpfad", importeMitPlatzhalter),
     ...PER_FILE,
     zweck: "basis/fester-importpfad",
   },
   "keine-speicher-attrappe": {
-    findings: testRuleFindings("keine-speicher-attrappe", speicherAttrappen),
+    findings: regelBefunde("keine-speicher-attrappe", speicherAttrappen),
     ...PER_FILE,
     zweck: "basis/keine-speicher-attrappe",
+  },
+  "anfrage-mit-frist": {
+    findings: regelBefunde("anfrage-mit-frist", anfragenOhneFrist, SOURCE_FILES),
+    ...PER_FILE,
+    zweck: "basis/anfrage-mit-frist",
   },
   lessons: { findings: lessonsFindings, ...PER_FILE, zweck: "basis/lessons" },
   anweisungen: { findings: instructionFindings, ...PATH_KEYED, zweck: "basis/anweisungen" },

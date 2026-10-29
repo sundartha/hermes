@@ -30,6 +30,7 @@ export const OLD_FINDING_LISTS = new Map([
   ["tools/basis/selbstpruefung.json", "befunde"],
   ["tools/basis/fester-importpfad.json", "befunde"],
   ["tools/basis/keine-speicher-attrappe.json", "befunde"],
+  ["tools/basis/anfrage-mit-frist.json", "befunde"],
   ["tools/basis/test-importe.json", WHOLE_FILE],
   ["tools/basis/sammeldatei-exporte.json", WHOLE_FILE],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
