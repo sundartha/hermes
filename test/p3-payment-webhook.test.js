@@ -475,3 +475,33 @@ test("C(g) normalizePrivateNumber: leer -> null, ungueltig wirft, tenantGeo/fail
   s.numbers.push({ id: "n5", tenantId: "t_y", status: NUMBER_STATUS.ACTIVE });
   assert.equal(failedNumberCount(s, "t_x"), 2, "nur eigene fehlgeschlagene Nummern");
 });
+
+import { findTenant, setPrivateNumber } from "../src/store/state-ops.js";
+
+test("C(h) Schreiber geben den gespeicherten Mandantensatz zurueck", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_ret", {});
+  const gespeichert = () => findTenant(s, "t_ret");
+  assert.equal(setKycLevel(s, "t_ret", KYC_LEVEL.CARD), gespeichert());
+  assert.equal(setTenantStripe(s, "t_ret", { customerId: "cus_ret" }), gespeichert());
+  assert.equal(setTenantSubscription(s, "t_ret", { subscriptionId: "sub_ret" }), gespeichert());
+  assert.equal(setPrivateNumber(s, "t_ret", "+49 30 123456"), gespeichert());
+  assert.equal(setTenantGeo(s, "t_ret", { timezone: "Europe/Berlin" }), gespeichert());
+});
+
+test("C(i) Widerruf des Perioden-Guthabens wird gespeichert und zurueckgelesen", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_widerruf", {});
+  setTenantSubscription(s, "t_widerruf", { periodCreditRevoked: true });
+  assert.equal(tenantSubscription(s, "t_widerruf").periodCreditRevoked, true);
+  assert.equal(findTenant(s, "t_widerruf").stripePeriodCreditRevoked, true);
+});
+
+test("C(j) clearBillingHold loescht Hold und Faelligkeit im Mandantensatz", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_clear", {});
+  setBillingHold(s, "t_clear", { reason: "zahlung", dueAtIso: "2030-01-01T00:00:00.000Z" });
+  clearBillingHold(s, "t_clear");
+  assert.equal(findTenant(s, "t_clear").billingHold, null);
+  assert.equal(findTenant(s, "t_clear").billingHoldDueAt, null);
+});
