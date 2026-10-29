@@ -19,6 +19,18 @@ const LAUF_URL = `https://github.com/${REPO}/actions/runs/${LAUF}`;
 const FERTIG_ROT = { status: "completed", conclusion: "failure" };
 const FERTIG_GRUEN = { status: "completed", conclusion: "success" };
 const LAEUFT = { status: "in_progress", conclusion: "" };
+const PLAN_FERTIG = { databaseId: 11, name: "Mutationsplan", status: "completed", conclusion: "success" };
+const TEIL_1_GESCHEITERT = { databaseId: 12, name: "Mutationsprüfung 1", status: "completed", conclusion: "failure" };
+const TEIL_2_LAEUFT = { databaseId: 13, name: "Mutationsprüfung 2", status: "in_progress", conclusion: "" };
+const TEIL_3_ABGESTUERZT = { databaseId: 14, name: "Mutationsprüfung 3", status: "completed", conclusion: "cancelled" };
+const TEIL_2_FERTIG = { ...TEIL_2_LAEUFT, status: "completed", conclusion: "success" };
+const TEIL_2_ZEITUEBERSCHREITUNG = { ...TEIL_2_LAEUFT, status: "completed", conclusion: "timed_out" };
+const OHNE_NUMMER_GESCHEITERT = { databaseId: 16, name: "Mutationsprüfung Vorlauf", status: "completed", conclusion: "failure" };
+const TEIL_4_UNFERTIG = { databaseId: 17, name: "Mutationsprüfung 4", status: "in_progress", conclusion: "failure" };
+const TESTS_GESCHEITERT = { databaseId: 15, name: "Tests 1/5", status: "completed", conclusion: "failure" };
+const ABBRUCH_HOCHRECHNUNG = "Abbruch: Hochrechnung 150 min über Grenze 120 min (Vorlauf 5,0 min + 100 Mutanten × 1,0 min + 0 Löschprobe-Zeilen × 1,0 min); kein Urteil.";
+const ABBRUCH_ANDERER_TEIL = "Abbruch: Erstlauf rot: test/b.test.js › fall";
+const teilLog = (zeile, job = "Mutationsprüfung 1") => `${job}\tMutationsprüfung\t2026-10-29T02:33:07.5047799Z ${zeile}\n${job}\tMutationsprüfung\t2026-10-29T02:33:08.0000000Z Process completed with exit code 2.\n`;
 const KURZE_ZEITEN = { taktMs: 5, hoechstMs: 60, suchabstandMs: 1 };
 const MEHRERE_ABFRAGEN = { taktMs: 5, hoechstMs: 1500, suchabstandMs: 1 };
 const FRIST = { timeout: 20_000 };
@@ -49,6 +61,12 @@ const GH_ATTRAPPE = [
   'const nach = (option) => argumente[argumente.indexOf(option) + 1];',
   'if (befehl === "workflow run") process.stdout.write(lies("ausloesen.txt") ?? "");',
   'else if (befehl === "run list") process.stdout.write(lies("liste.json"));',
+  'else if (befehl === "run cancel") process.exit(Number(lies("abbrechen-exit.txt") ?? 0));',
+  'else if (argumente[0] === "api" && /\\/actions\\/jobs\\/\\d+\\/logs$/.test(argumente[1])) {',
+  '  const joblog = lies(`joblog-${argumente[1].split("/").at(-2)}.txt`);',
+  "  if (joblog === null) process.exit(1);",
+  "  process.stdout.write(joblog);",
+  "}",
   'else if (befehl === "run view" && argumente.includes("--log-failed")) {',
   '  if (lies("log.txt") === null) process.exit(1);',
   '  process.stdout.write(lies("log.txt"));',
@@ -82,11 +100,13 @@ function git(repo, ...argumente) {
   return lauf.stdout.trim();
 }
 
-function ghAttrappe(context, { staende = [FERTIG_GRUEN], urteil, log, ausloesen = `${LAUF_URL}\n`, liste }) {
+function ghAttrappe(context, { staende = [FERTIG_GRUEN], urteil, log, ausloesen = `${LAUF_URL}\n`, liste, joblogs = {}, abbrechenExit }) {
   const ordner = probeDirectory(context, { gh: GH_ATTRAPPE, "aufrufe.jsonl": "", "staende.json": JSON.stringify(staende), "ausloesen.txt": ausloesen });
   chmodSync(join(ordner, "gh"), AUSFUEHRBAR);
   if (log !== undefined) writeFileSync(join(ordner, "log.txt"), log);
   if (liste !== undefined) writeFileSync(join(ordner, "liste.json"), JSON.stringify(liste));
+  if (abbrechenExit !== undefined) writeFileSync(join(ordner, "abbrechen-exit.txt"), String(abbrechenExit));
+  for (const [kennung, text] of Object.entries(joblogs)) writeFileSync(join(ordner, `joblog-${kennung}.txt`), text);
   if (urteil !== undefined) {
     mkdirSync(join(ordner, "urteil"));
     writeFileSync(join(ordner, "urteil", "ausgabe.txt"), `${urteil.ausgabe}\n`);
@@ -161,8 +181,84 @@ test("Mutationsprüfung in der CI: ein Lauf, der bis zur Höchstzeit nicht ferti
   const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
   assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
   assert.match(ergebnis.zeilen[1], /\(in_progress, \)$/);
-  const abfragen = ghAufrufe(probe.gh).filter((argumente) => argumente[1] === "view" && !argumente.includes("--log-failed"));
+  const abfragen = ansichten(probe.gh);
   assert.ok(abfragen.length > 1, `${abfragen.length} Abfragen`);
+});
+
+function pruefeZweigGeloescht(probe) {
+  const zweig = `lauf-mutation/${gepushterStand(probe.upstream).slice(0, 12)}`;
+  assert.deepEqual(ghAufrufe(probe.gh).at(-1), ["api", "-X", "DELETE", `repos/${REPO}/git/refs/heads/${zweig}`]);
+}
+
+function ansichten(ordner) {
+  return ghAufrufe(ordner).filter((argumente) => argumente[1] === "view" && !argumente.includes("--log-failed"));
+}
+
+function aufrufe(ordner, befehl) {
+  return ghAufrufe(ordner).filter((argumente) => argumente.slice(0, 2).join(" ") === befehl);
+}
+
+test("Mutationsprüfung in der CI: scheitert ein Teil-Job, während der Lauf weiterläuft, endet sie sofort ohne Urteil mit dem Grund des ersten gescheiterten Teils und bricht den Lauf ab", FRIST, async (context) => {
+  const staende = [{ ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_1_GESCHEITERT, TEIL_2_LAEUFT, TEIL_3_ABGESTUERZT] }];
+  const probe = fall(context, { staende, urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 }, joblogs: { 12: teilLog(ABBRUCH_HOCHRECHNUNG), 14: teilLog(ABBRUCH_ANDERER_TEIL, "Mutationsprüfung 3") } });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
+  assert.match(ergebnis.zeilen[1], new RegExp(`^Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${LAUF_URL} \\(Mutationsprüfung 1: failure`));
+  assert.deepEqual(ergebnis.zeilen.slice(2), [ABBRUCH_HOCHRECHNUNG]);
+  assert.equal(ansichten(probe.gh).length, 1);
+  assert.deepEqual(aufrufe(probe.gh, "run cancel"), [["run", "cancel", LAUF, "-R", REPO]]);
+  pruefeZweigGeloescht(probe);
+});
+
+test("Mutationsprüfung in der CI: ein abgestürzter Teil ohne Abbruch-Zeile im Log endet ohne Urteil mit Name und Ausgang des Teil-Jobs", FRIST, async (context) => {
+  const staende = [{ ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_2_LAEUFT, TEIL_3_ABGESTUERZT] }];
+  const probe = fall(context, { staende, joblogs: { 14: "Mutationsprüfung 3\tSchritt\tFATAL ERROR: JavaScript heap out of memory\n" } });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
+  assert.match(ergebnis.zeilen[1], /\(Mutationsprüfung 3: cancelled/);
+  assert.equal(ergebnis.zeilen.length, 2);
+  assert.equal(aufrufe(probe.gh, "run cancel").length, 1);
+});
+
+test("Mutationsprüfung in der CI: ein Teil, der am Zeitlimit des Jobs endet, beendet das Warten ohne Urteil", FRIST, async (context) => {
+  const staende = [{ ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_2_ZEITUEBERSCHREITUNG] }];
+  const probe = fall(context, { staende });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
+  assert.match(ergebnis.zeilen[1], /\(Mutationsprüfung 2: timed_out/);
+  assert.equal(aufrufe(probe.gh, "run cancel").length, 1);
+});
+
+test("Mutationsprüfung in der CI: lässt sich der Lauf nicht abbrechen, endet sie trotzdem ohne Urteil und nennt das", FRIST, async (context) => {
+  const staende = [{ ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_1_GESCHEITERT, TEIL_2_LAEUFT] }];
+  const probe = fall(context, { staende, abbrechenExit: 1, joblogs: { 12: teilLog(ABBRUCH_HOCHRECHNUNG) } });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
+  assert.match(ergebnis.zeilen.at(-1), new RegExp(`^Hinweis: Lauf ${LAUF} nicht abgebrochen: `));
+});
+
+test("Mutationsprüfung in der CI: ein Lauf, dessen Teile grün enden, wartet auf das Ende und liefert das Urteil wie bisher, ohne den Lauf abzubrechen", FRIST, async (context) => {
+  const staende = [
+    { ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_2_LAEUFT] },
+    { ...LAEUFT, jobs: [PLAN_FERTIG, TEIL_2_FERTIG] },
+    { ...FERTIG_ROT, jobs: [PLAN_FERTIG, TEIL_2_FERTIG] },
+  ];
+  const probe = fall(context, { staende, urteil: { ausgabe: ROTES_URTEIL, exitCode: EXIT_ROT } });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, EXIT_ROT);
+  assert.equal(ergebnis.zeilen.at(-1), ROTES_URTEIL);
+  assert.equal(ansichten(probe.gh).length, 3);
+  assert.deepEqual(aufrufe(probe.gh, "run cancel"), []);
+});
+
+test("Mutationsprüfung in der CI: ein gescheiterter Job, der kein Teil der Mutationsprüfung ist, und ein Teil-Job, der noch läuft, beenden das Warten nicht", FRIST, async (context) => {
+  const fremde = [TESTS_GESCHEITERT, OHNE_NUMMER_GESCHEITERT, TEIL_4_UNFERTIG];
+  const staende = [{ ...LAEUFT, jobs: [PLAN_FERTIG, ...fremde, TEIL_2_LAEUFT] }, { ...FERTIG_GRUEN, jobs: [PLAN_FERTIG, ...fremde, TEIL_2_FERTIG] }];
+  const probe = fall(context, { staende, urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, 0);
+  assert.equal(ergebnis.zeilen.at(-1), GRUENES_URTEIL);
+  assert.deepEqual(aufrufe(probe.gh, "run cancel"), []);
 });
 
 test("Mutationsprüfung in der CI: der gepushte Stand ist der ganze Arbeitsbaum, Index, HEAD und Status bleiben unverändert", async (context) => {
@@ -204,8 +300,7 @@ test("Mutationsprüfung in der CI: der Wegwerf-Branch wird auch nach einem Abbru
   const probe = fall(context, { staende: [FERTIG_ROT], log: LOG_FEHLGESCHLAGEN });
   const ergebnis = await imCi(probe);
   assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
-  const zweig = `lauf-mutation/${gepushterStand(probe.upstream).slice(0, 12)}`;
-  assert.deepEqual(ghAufrufe(probe.gh).at(-1), ["api", "-X", "DELETE", `repos/${REPO}/git/refs/heads/${zweig}`]);
+  pruefeZweigGeloescht(probe);
 });
 
 test("Mutationsprüfung in der CI: ohne Lauf-Adresse vom Abruf gilt der neueste Lauf des Branches, der nach dem Abruf angelegt wurde", async (context) => {
