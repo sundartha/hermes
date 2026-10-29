@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import http from "node:http";
 import path from "node:path";
 import express from "express";
+
+import { starteAnbieterServer } from "./gemeinsam/anbieter-attrappe.mjs";
 
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { emergencyBrakeSeconds } from "../src/call-duration.js";
@@ -584,18 +585,12 @@ test("IEL-B8-18: E19 - die Erstantwort synthetisiert nichts; der Fehlersatz spri
 });
 
 async function starteModellAttrappe(text) {
-  const bodies = [];
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (teil) => (body += teil));
-    req.on("end", () => {
-      bodies.push(body);
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify({ id: "msg_b8", type: "message", role: "assistant", model: "claude-haiku-4-5", content: [{ type: "text", text }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }));
-    });
+  const { url, anfragen: bodies, close } = await starteAnbieterServer(({ body, res, vermerke }) => {
+    vermerke(body);
+    res.writeHead(HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify({ id: "msg_b8", type: "message", role: "assistant", model: "claude-haiku-4-5", content: [{ type: "text", text }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${server.address().port}`, bodies, close: () => new Promise((resolve) => server.close(resolve)) };
+  return { url, bodies, close };
 }
 
 async function mitAttrappen({ modellText, conversation }, run) {
@@ -684,19 +679,13 @@ test("IEL-B8-21: Neustart waehrend RUECKFALL - erneute Rueckfall-Zustellung legt
 });
 
 async function starteTelnyxAttrappe() {
-  const anfragen = [];
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (teil) => (body += teil));
-    req.on("end", () => {
-      const form = Object.fromEntries(new URLSearchParams(body));
-      anfragen.push({ method: req.method, pfad: req.url, form });
-      res.writeHead(form.Url ? HTTP_SERVER_ERROR : HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify({ sid: CALL_SID }));
-    });
+  return starteAnbieterServer((anbieterAnfrage) => {
+    const { req, body, res, vermerke } = anbieterAnfrage;
+    const form = Object.fromEntries(new URLSearchParams(body));
+    vermerke({ method: req.method, pfad: req.url, form });
+    res.writeHead(form.Url ? HTTP_SERVER_ERROR : HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify({ sid: CALL_SID }));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${server.address().port}`, anfragen, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 test("IEL-B8-22: Neustart waehrend WARTET, abgelaufene Frist - Umleitung scheitert, dann wird aufgelegt (nie Stille)", async () => {
