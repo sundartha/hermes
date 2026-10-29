@@ -11,6 +11,9 @@ const QUELLE = "src/zahl.js";
 const ZEILE = 3;
 const SPALTE_VON = 2;
 const SPALTE_BIS = 10;
+const ZEITUEBERSCHREITUNG = "Timeout";
+
+let erstesTimeout;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -36,6 +39,7 @@ export class Stryker {
 
   constructor(optionen) {
     this.#optionen = optionen;
+    erstesTimeout ??= optionen.timeoutMS;
   }
 
   async runMutationTest() {
@@ -45,6 +49,13 @@ export class Stryker {
       if (env.ZEITGRENZE_FEHLER !== undefined) process.stdout.write(FEHLER_STATUS);
       throw new Error(GESCHEITERT);
     }
-    return this.#optionen.mutate.map(() => mutant(tests));
+    const wiederholung = this.#optionen.timeoutMS > erstesTimeout;
+    if (wiederholung && env.FOLGELAUF_ZEITGRENZE !== undefined) {
+      process.stdout.write(ZEITGRENZE);
+      throw new Error(GESCHEITERT);
+    }
+    const ergebnisse = this.#optionen.mutate.map(() => mutant(tests));
+    if (wiederholung || env.ERSTLAUF_ZEITUEBERSCHREITUNG === undefined) return ergebnisse;
+    return ergebnisse.map((ergebnis) => ({ ...ergebnis, status: ZEITUEBERSCHREITUNG, killedBy: undefined }));
   }
 }
