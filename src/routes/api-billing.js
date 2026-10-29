@@ -10,7 +10,7 @@ import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";
-import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler, lehneEingabeAb } from "../utils/http.js";
 
 const CARD_ON_FILE_STATUS = "card_on_file";
 
@@ -109,8 +109,7 @@ export function makeBillingRoutes({
     const tenant = requireTenant(req, res);
     if (!tenant) return;
     const sessionId = req.query.session_id;
-    if (!sessionId || typeof sessionId !== "string")
-      return antworteFehler(res, HTTP_BAD_REQUEST, "session_id ist Pflicht");
+    if (lehneEingabeAb(res, !sessionId || typeof sessionId !== "string", "session_id ist Pflicht")) return;
 
     const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
     if (!ok) {

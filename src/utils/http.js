@@ -9,3 +9,8 @@ export const HTTP_SERVICE_UNAVAILABLE = 503;
 export function antworteFehler(res, status, code) {
   return res.status(status).json({ error: code });
 }
+
+export function lehneEingabeAb(res, ungueltig, meldung) {
+  if (ungueltig) antworteFehler(res, HTTP_BAD_REQUEST, meldung);
+  return ungueltig;
+}
