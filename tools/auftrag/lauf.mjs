@@ -218,11 +218,18 @@ class AuftragsLauf {
     return true;
   }
 
-  nachgefragt(rolle, nachher) {
+  fragtNach(rolle, prompt, { nachher, geaendert, id }) {
     const arbeit = this.agenten.findLast((eintrag) => eintrag.rolle === rolle);
-    const weg = this.eingesetzt(rolle, nachfrage(this.fehlendeAbsaetze(rolle)), { fortsetzung: arbeit.sitzung, sitzungen: this.nachfragen });
+    const weg = this.eingesetzt(rolle, prompt, { fortsetzung: arbeit.sitzung, sitzungen: this.nachfragen });
+    if (weg === null) return null;
+    if (arbeitsstand(this.kontext.root) === nachher) return weg;
+    this.scheitert(geaendert, id);
+    return null;
+  }
+
+  nachgefragt(rolle, nachher) {
+    const weg = this.fragtNach(rolle, nachfrage(this.fehlendeAbsaetze(rolle)), { nachher, geaendert: "Die Nachfrage zum Zweck hat Dateien geändert.", id: GRUND.ZWECK_ABSATZ });
     if (weg === null) return false;
-    if (arbeitsstand(this.kontext.root) !== nachher) return this.scheitert("Die Nachfrage zum Zweck hat Dateien geändert.", GRUND.ZWECK_ABSATZ);
     const offen = this.fehlendeAbsaetze(rolle);
     return offen.length === 0 || this.scheitert(`Begründung fehlt: Zweck ${offen.join(", ")}`, GRUND.ZWECK_ABSATZ);
   }

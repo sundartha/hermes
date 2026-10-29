@@ -8,8 +8,12 @@ export const GLEICHWERTIG_ANGENOMMEN = "Hinweis: als gleichwertig angenommen";
 export const ABSCHALTUNG_VERSTOSS =
   "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
 
+export function meldungsZeile({ art, mutant, grund }) {
+  return `${art}: ${mutant}, weil ${grund}`;
+}
+
 export function gleichwertigZeile(mutant, grund) {
-  return `Gleichwertig: ${mutant}, weil ${grund}`;
+  return meldungsZeile({ art: "Gleichwertig", mutant, grund });
 }
 
 export function gleichwertigGemeldet(text) {

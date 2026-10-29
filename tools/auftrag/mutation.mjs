@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { testAgentPrompt } from "./agenten.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
-import { gemeint, gleichwertigGemeldet, gleichwertigZeile, nachbewertet } from "./gleichwertig.mjs";
+import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
 import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
 import { phasenbasis } from "./phasenende.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
@@ -115,6 +115,7 @@ function bauNachrunde(ueberlebende) {
     "",
     liste(ueberlebende),
     "",
+    "Schreibe <Mutant> in jeder Meldung wörtlich so, wie er in der Liste steht, mit Dateipfad.",
     "Ist die Zeile nötig und fehlt nur ein Test, der sie verlangt, änderst du sie nicht und antwortest mit einer Zeile je Mutant:",
     "Nötig: <Mutant>, weil <ein Satz>",
     "Streichen oder vereinfachen darfst du eine Zeile nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher. Tests änderst du nicht.",
@@ -152,13 +153,61 @@ function testNachrunde(kontext, ueberlebende, vorgabe) {
   return [testAgentPrompt(kontext), ...mutantenTeil, ...schutzAbschnitt(auftrag, vorgabe.offen ?? [])].join("\n");
 }
 
+function meldungsZeilen(weg) {
+  return [...weg.noetig.map((meldung) => ({ art: "Nötig", ...meldung })), ...weg.gleichwertig.map((meldung) => ({ art: "Gleichwertig", ...meldung }))];
+}
+
+function ohneSchluessel(weg, ueberlebende) {
+  return meldungsZeilen(weg).filter(({ mutant }) => !ueberlebende.includes(mutant));
+}
+
+function meldungNachfrage(zeilen, ueberlebende) {
+  return [
+    "## Meldung ohne genauen Schlüssel",
+    "",
+    "Diese Zeilen deiner letzten Antwort nennen keinen Mutanten aus der Liste, wörtlich und mit Dateipfad:",
+    "",
+    liste(zeilen.map(meldungsZeile)),
+    "",
+    "Die genauen Schlüssel der Mutanten, die in deinen neuen Zeilen überleben:",
+    "",
+    liste(ueberlebende),
+    "",
+    "Wiederhole jede dieser Zeilen mit dem Schlüssel wörtlich aus dieser Liste, sonst ändert sich nichts. Ändere dabei keine Datei.",
+    "",
+  ].join("\n");
+}
+
+function neuGemeldet(erste, zweite) {
+  const nachMutant = (meldungen) => [...new Map([...meldungen].map((meldung) => [meldung.mutant, meldung])).values()];
+  return { noetig: nachMutant([...erste.noetig, ...zweite.noetig]), gleichwertig: nachMutant([...erste.gleichwertig, ...zweite.gleichwertig]) };
+}
+
+function genaueMeldungen(lauf, weg, ueberlebende) {
+  const zeilen = ohneSchluessel(weg, ueberlebende);
+  if (zeilen.length === 0) return weg;
+  const nachher = arbeitsstand(lauf.kontext.root);
+  const antwort = lauf.fragtNach("bau", meldungNachfrage(zeilen, ueberlebende), { nachher, geaendert: "Die Nachfrage zur Meldung hat Dateien geändert." });
+  if (antwort === null) return null;
+  for (const zeile of zeilen) lauf.hinweise.push(`Hinweis: Meldung ohne genauen Schlüssel, nachgefragt: ${meldungsZeile(zeile)}`);
+  const weiter = ohneSchluessel(antwort, ueberlebende);
+  if (weiter.length > 0) {
+    lauf.scheitert(`Meldung passt zu keinem überlebenden Mutanten: ${weiter.map(meldungsZeile).join(" | ")}`);
+    return null;
+  }
+  const passend = (meldungen) => meldungen.filter(({ mutant }) => ueberlebende.includes(mutant));
+  return neuGemeldet({ noetig: passend(weg.noetig), gleichwertig: passend(weg.gleichwertig) }, antwort);
+}
+
 function bauNachrundeGemeldet(lauf, ueberlebende) {
   const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
   lauf.meldet(PRUEFUNG.MUTATION, "bau");
-  const weg = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende), sitzung);
+  const erste = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende), sitzung);
+  if (erste === null) return null;
+  const weg = genaueMeldungen(lauf, erste, ueberlebende);
   if (weg === null) return null;
-  const noetig = weg.noetig.filter(({ mutant }) => ueberlebende.includes(mutant));
-  const gleichwertig = weg.gleichwertig.filter(({ mutant }) => ueberlebende.includes(mutant) && !noetig.some((eintrag) => eintrag.mutant === mutant));
+  const { noetig } = weg;
+  const gleichwertig = weg.gleichwertig.filter(({ mutant }) => !noetig.some((eintrag) => eintrag.mutant === mutant));
   for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(gleichwertigZeile(mutant, grund));
   return noetig;
 }
