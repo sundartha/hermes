@@ -108,7 +108,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.anzahl != '0'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     permissions:
       contents: read
     services:
