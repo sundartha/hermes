@@ -1,5 +1,4 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
-import { MANDATE_OUT_OF_SCOPE } from "./begriffe-anrufe.js";
 import { emptyUsage } from "./begriffe-leerzustaende.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
 
@@ -71,6 +70,7 @@ export {
   KEY_FACTS_LIMITS,
   MANDATE_OUT_OF_SCOPE,
   MANDATE_OUT_OF_SCOPE_DEFAULT,
+  MANDATE_OUT_OF_SCOPE_VALUES,
   MAX_CALL_DURATION_CAP_S,
 } from "./begriffe-anrufe.js";
 export {
@@ -86,8 +86,6 @@ const DEMO_EVENTS = [
   { id: "ev2", title: "Mittagessen mit Alex", daysAhead: 2, startHour: 12, endHour: 13 },
   { id: "ev3", title: "Projekt-Review", daysAhead: 3, startHour: 15, endHour: 16.5 },
 ];
-
-export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
 
 function nextWeekday(daysAhead, hour) {
   const d = new Date();

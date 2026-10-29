@@ -9,3 +9,5 @@ export const MANDATE_OUT_OF_SCOPE = Object.freeze({
 export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
 
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
+
+export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
