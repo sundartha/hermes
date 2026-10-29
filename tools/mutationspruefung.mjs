@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, normalize } from "node:path";
 import { chdir, cwd, env } from "node:process";
@@ -21,14 +21,16 @@ import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindab
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
-import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme } from "./mutationspruefung/teile.mjs";
+import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnummer } from "./mutationspruefung/teile.mjs";
+import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
 import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
+import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { quellauslagerungsZeile, reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
 import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
-import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
+import { planZeilen, stueckAus, testsAus, vorherPlan, vorherStueck, vorherZusammen, zusammenZeilen } from "./mutationspruefung/vorher-verteilt.mjs";
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
@@ -126,7 +128,7 @@ const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const VORHER_AUS_CI = "vorher-aus-ci";
 const IN_CI = "in-ci";
-const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig"];
+const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig", "testumbau"];
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
@@ -798,14 +800,6 @@ async function schreibePlan(pruefungen, ziel, laufzeiten) {
   return EXIT_GRUEN;
 }
 
-function teilnummer({ teil, teile }, anzahl) {
-  const [nummer, erwartet] = [Number(teil), Number(teile)];
-  if (erwartet !== anzahl) throw new Error(`der Plan hat ${anzahl} Teile, aufgerufen mit --teile ${teile}`);
-  const gueltig = anzahl === 0 ? nummer === 0 : Number.isInteger(nummer) && nummer >= 1 && nummer <= anzahl;
-  if (!gueltig) throw new Error(`Teil ${teil} gibt es im Plan mit ${anzahl} Teilen nicht`);
-  return nummer;
-}
-
 async function messeTeil(pruefungen, optionen, laufzeiten) {
   const { teile, pruefsumme: summe } = await planen(pruefungen, laufzeiten);
   const nummer = teilnummer(optionen, teile.length);
@@ -821,19 +815,6 @@ async function messeTeil(pruefungen, optionen, laufzeiten) {
   console.log(`Teil ${nummer}: ${alle.length} Ergebnisse, ${offen} in diesen Testdateien nicht getötet; das Urteil fällt im Job Mutationsurteil.`);
   writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, messungen }));
   return EXIT_GRUEN;
-}
-
-function teilberichte(ordner, { teile, pruefsumme: summe }) {
-  const berichte = readdirSync(ordner)
-    .filter((name) => ERGEBNISDATEI.test(name))
-    .map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")));
-  const fremd = berichte.filter((bericht) => bericht.pruefsumme !== summe);
-  if (fremd.length > 0) throw new Error(`${fremd.length} Teilergebnisse gehören zu einem anderen Plan`);
-  const gefunden = berichte.map(({ teil }) => teil).sort((links, rechts) => links - rechts);
-  if (JSON.stringify(gefunden) !== JSON.stringify(matrix(teile))) {
-    throw new Error(`erwartet die Teile ${matrix(teile).join(", ")}, gefunden ${gefunden.join(", ") || "keine"}`);
-  }
-  return berichte;
 }
 
 function vereineAnteile(berichte, pruefung) {
@@ -896,8 +877,12 @@ function ausCiAufrufGueltig(values) {
   return values.basis !== undefined && allein && ohneAndereBetriebsart(values);
 }
 
+function testumbauMitAnderemZusatz(values) {
+  return values.testumbau && (values["alter-stand"] || values.gleichwertig.length > 0);
+}
+
 function inCiAufrufGueltig(values) {
-  return values.basis !== undefined && nurAngegeben(values, IN_CI_OPTIONEN);
+  return values.basis !== undefined && nurAngegeben(values, IN_CI_OPTIONEN) && !testumbauMitAnderemZusatz(values);
 }
 
 function schutzAufrufGueltig(values) {
@@ -923,9 +908,7 @@ function messAufrufGueltig(values) {
   if (NUR_VORHER.some((name) => values[name] !== undefined)) return false;
   const teilAufruf = [values.teil, values.teile, values.ergebnis].filter((wert) => wert !== undefined).length;
   const messarten = [values.plan, values.teil, values.urteil].filter((wert) => wert !== undefined).length;
-  const betriebsarten = messarten + Number(values.testumbau);
-  const doppelt = values.testumbau && (values["alter-stand"] || values.gleichwertig.length > 0);
-  return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && betriebsarten <= BETRIEBSARTEN_HOECHSTENS && !doppelt && laufzeitenGueltig(values, messarten);
+  return values.basis !== undefined && [0, TEILANGABEN].includes(teilAufruf) && messarten <= BETRIEBSARTEN_HOECHSTENS && !testumbauMitAnderemZusatz(values) && laufzeitenGueltig(values, messarten);
 }
 
 function schreibeJson(ziel, inhalt) {
@@ -1030,7 +1013,7 @@ function hilfsablaufFuer(values) {
 }
 
 async function urteilAusCi(values) {
-  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], gleichwertige: values.gleichwertig });
+  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
   return ergebnis.lokal === undefined ? ergebnis.exitCode : undefined;
 }
@@ -1049,6 +1032,19 @@ function schutzwerkzeug(basis) {
     stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
     freigabe: sperreVorTestprozessen,
   };
+}
+
+function testumbauAblauf(values) {
+  const werkzeug = { alterStand, durchgang, ueberlebt, freigabe, sperre: sperreVorTestprozessen };
+  const basis = git(["rev-parse", "--verify", values.basis + NUR_COMMIT]).trim();
+  if (values.plan !== undefined) {
+    if (values[LAUFZEITEN_HOLEN] !== undefined) console.log(holeLaufzeiten(values[LAUFZEITEN_HOLEN]));
+    return schreibeTestumbauPlan(basis, values.plan, werkzeug);
+  }
+  if (values.teil !== undefined) return messeTestumbauTeil(basis, values, werkzeug);
+  if (values.urteil !== undefined) return urteileTestumbau(basis, values.urteil, werkzeug);
+  starteBudget(TESTUMBAU);
+  return testumbauPruefung(values.basis, werkzeug);
 }
 
 async function main() {
@@ -1092,10 +1088,7 @@ async function main() {
     starteBudget(NORMAL);
     return schutzwirkungPruefung(values.basis, values[ALTER_SCHUTZ], schutzwerkzeug(values.basis));
   }
-  if (values.testumbau) {
-    starteBudget(TESTUMBAU);
-    return testumbauPruefung(values.basis, { alterStand, durchgang, ueberlebt, freigabe });
-  }
+  if (values.testumbau) return testumbauAblauf(values);
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]

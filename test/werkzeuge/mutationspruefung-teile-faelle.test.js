@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { TESTDATEIEN_JE_ANTEIL } from "../../tools/mutationspruefung/teile.mjs";
-import { quelltexttest } from "./mutationspruefung-hilfen.js";
+import { aufgeteilt, befundzeilen, quelltexttest } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
 import { commitAll, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
@@ -39,25 +39,7 @@ const BASIS = {
 };
 
 function befunde(lauf) {
-  const zeilen = [...lauf.stdout.matchAll(BEFUND)].map(([zeile]) => zeile);
-  return zeilen.sort();
-}
-
-function aufgeteilt(context, repo, { basis, zwischen = () => {} }) {
-  const ordner = probeDirectory(context, {});
-  const planDatei = join(ordner, "plan.txt");
-  const planLauf = werkzeug(repo, basis, "--plan", planDatei);
-  assert.equal(planLauf.status, 0, planLauf.stdout + planLauf.stderr);
-  const plan = JSON.parse(readFileSync(planDatei, "utf8"));
-  const laeufe = [];
-  for (const teil of plan.teile) {
-    const ergebnis = join(ordner, `mutation-teil-${teil}.json`);
-    const lauf = werkzeug(repo, basis, "--teil", String(teil), "--teile", String(plan.anzahl), "--ergebnis", ergebnis);
-    assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-    laeufe.push(lauf);
-  }
-  zwischen();
-  return { plan, laeufe, urteil: werkzeug(repo, basis, "--urteil", ordner) };
+  return befundzeilen(lauf, BEFUND);
 }
 
 function gleichesUrteil(context, repo, basis = "HEAD") {

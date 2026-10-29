@@ -217,6 +217,16 @@ test("Mutationsprüfung in der CI: der Abruf nennt die volle Basis und den alten
   assert.ok(abrufe[1].includes("alter_stand=true"));
 });
 
+test("Mutationsprüfung in der CI: der Abruf nennt den Testumbau genau dann, wenn er verlangt ist, und nie zusammen mit dem alten Stand", async (context) => {
+  const probe = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  await imCi(probe, { testumbau: true });
+  const [abruf] = ghAufrufe(probe.gh).filter((argumente) => argumente.slice(0, 2).join(" ") === "workflow run");
+  assert.ok(abruf.includes("testumbau=true"));
+  assert.ok(!abruf.includes("alter_stand=true"));
+  assert.equal(werkzeug(probe.repo, probe.basis, "--in-ci", "--testumbau", "--alter-stand").status, EXIT_ABBRUCH);
+  assert.equal(werkzeug(probe.repo, probe.basis, "--in-ci", "--testumbau", "--gleichwertig", "x").status, EXIT_ABBRUCH);
+});
+
 test("Mutationsprüfung in der CI: der Wegwerf-Branch wird auch nach einem Abbruch gelöscht", async (context) => {
   const probe = fall(context, { staende: [FERTIG_ROT], log: LOG_FEHLGESCHLAGEN });
   const ergebnis = await imCi(probe);
@@ -239,7 +249,7 @@ test("Mutationsprüfung in der CI: ohne Lauf-Adresse vom Abruf gilt der neueste 
 
 test("Mutationsprüfung in der CI: --in-ci zusammen mit einer anderen Betriebsart oder ohne Basis bricht mit dem Aufruftext ab", (context) => {
   const { repo, basis, gh } = fall(context);
-  const andere = [["--plan", "x"], ["--teil", "1", "--teile", "1", "--ergebnis", "x"], ["--urteil", "x"], ["--testumbau"], ["--vorher-aus-ci", "1"], ["--tests", "a", "--vorher-plan", "x"]];
+  const andere = [["--plan", "x"], ["--teil", "1", "--teile", "1", "--ergebnis", "x"], ["--urteil", "x"], ["--vorher-aus-ci", "1"], ["--tests", "a", "--vorher-plan", "x"]];
   for (const argumente of andere) {
     const lauf = werkzeug(repo, basis, "--in-ci", ...argumente);
     assert.equal(lauf.status, EXIT_ABBRUCH, argumente.join(" "));

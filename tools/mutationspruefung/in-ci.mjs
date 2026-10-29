@@ -79,9 +79,9 @@ async function sucheLauf(suche, suchabstandMs, versuch = 1) {
   return sucheLauf(suche, suchabstandMs, versuch + 1);
 }
 
-function loeseAus({ repo, zweig, basis, alterStand }, suchabstandMs) {
+function loeseAus({ repo, zweig, basis, alterStand, testumbau }, suchabstandMs) {
   const seit = Math.floor(Date.now() / MS_JE_SEKUNDE) * MS_JE_SEKUNDE;
-  const schalter = alterStand ? ["-f", "alter_stand=true"] : [];
+  const schalter = [...(alterStand ? ["-f", "alter_stand=true"] : []), ...(testumbau ? ["-f", "testumbau=true"] : [])];
   const ausgabe = gh(["workflow", "run", WORKFLOW, "-R", repo, "--ref", zweig, "-f", `basis=${basis}`, ...schalter]);
   const treffer = LAUF_URL.exec(ausgabe);
   return treffer ? treffer[1] : sucheLauf({ repo, zweig, seit }, suchabstandMs);
@@ -137,7 +137,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const stand = friereEin(root, gleichwertige);
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
@@ -146,7 +146,7 @@ export async function mutationInCi({ root, basis, alterStand, gleichwertige }, {
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand }, kopf, { taktMs, hoechstMs, suchabstandMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau }, kopf, { taktMs, hoechstMs, suchabstandMs });
   } finally {
     loescheZweig(repo, zweig);
   }

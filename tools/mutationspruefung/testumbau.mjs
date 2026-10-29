@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { cwd } from "node:process";
+import { cwd, env } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
+import { POSTGRES_VARIABLE } from "../auftrag/werkzeuge.mjs";
 
 import { bestaetigungAbgestuerzt, nurHaenger } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
@@ -17,6 +18,7 @@ const TESTSEITE = /^test\//;
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+const POSTGRES_AUFRUF = /(?<!function )\bechteDatenbank\(/;
 
 async function importe() {
   const { output } = await cruise(["src", "test"], CRUISE_OPTIONEN);
@@ -106,9 +108,30 @@ async function nachherVerloren(getoetet, tests, werkzeug) {
 }
 
 async function vorherNieGetoetet(verloren, vorherStand, werkzeug) {
-  if (verloren.length === 0 || !verloren.every(nurHaenger)) return [];
+  if (verloren.length === 0) return [];
   const ueberlebt = await imVorherStand(vorherStand, werkzeug, ({ tests }) => schluesselNachLage(verloren, { tests, werkzeug }, werkzeug.ueberlebt));
   return verloren.filter(({ schluessel }) => ueberlebt.has(schluessel));
+}
+
+export async function nachherSeite(getoetet, vorherStand, werkzeug) {
+  const tests = await betroffeneTests(vorherStand.tests, cwd());
+  const { verloren, abgestuerzte } = await nachherVerloren(getoetet, tests, werkzeug);
+  const haenger = verloren.filter(nurHaenger);
+  const echteVerluste = verloren.length - haenger.length;
+  const entfallenMoeglich = echteVerluste === 0 ? await vorherNieGetoetet(haenger, vorherStand, werkzeug) : [];
+  return {
+    getoetet: getoetet.length,
+    verloren: verloren.map(({ schluessel }) => schluessel),
+    echteVerluste,
+    entfallenMoeglich: entfallenMoeglich.map(({ schluessel }) => schluessel),
+    abgestuerzte: abgestuerzte.map(({ befund }) => befund),
+  };
+}
+
+export function urteilsMengen(berichte) {
+  const alle = (feld) => berichte.flatMap((bericht) => bericht[feld]);
+  const entfallen = berichte.every(({ echteVerluste }) => echteVerluste === 0) ? alle("entfallenMoeglich") : [];
+  return { entfallen, verloren: alle("verloren").filter((schluessel) => !entfallen.includes(schluessel)) };
 }
 
 function rotGruende(verloren, abgestuerzte, umfang) {
@@ -124,37 +147,67 @@ function gruenZeile(umfang, getoetet, entfallen) {
   return `grün: ${weiter} von ${umfang} werden nach dem Testumbau weiter getötet; ${entfallen} waren vorher nur Hänger und überleben in der Neuberechnung.`;
 }
 
-export async function testumbauPruefung(basis, werkzeug) {
-  const verschiebung = await reineVerschiebung(basis, cwd());
-  if (verschiebung !== null) {
-    console.log(verschiebungsZeile(verschiebung));
+export function ohneQuelleZeile(tests) {
+  return `grün: die betroffenen Tests (${tests}) importieren keine Quelldatei unter src/; es gibt keinen Mutanten zu vergleichen.`;
+}
+
+export function meldeUrteil({ quellen, getoetet, entfallen, verloren, abgestuerzte }) {
+  for (const schluessel of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);
+  for (const schluessel of verloren) console.log(`Verstoß: Mutant nicht mehr getötet: ${schluessel}`);
+  for (const befund of abgestuerzte) console.log(befund);
+  const umfang = `${getoetet} vorher getötete Mutanten in ${quellen.length} Quelldateien (${quellen.join(", ")})`;
+  if (verloren.length + abgestuerzte.length === 0) {
+    console.log(gruenZeile(umfang, getoetet, entfallen.length));
     return EXIT_GRUEN;
   }
+  console.log(`rot: ${rotGruende(verloren, abgestuerzte, umfang).join("; ")}.`);
+  return EXIT_ROT;
+}
+
+export async function ohneMutanten(basis) {
+  const verschiebung = await reineVerschiebung(basis, cwd());
+  if (verschiebung !== null) return verschiebungsZeile(verschiebung);
   const auslagerung = await reineAuslagerung(basis, cwd());
-  if (auslagerung !== null) {
-    console.log(auslagerungsZeile(auslagerung));
+  return auslagerung === null ? null : auslagerungsZeile(auslagerung);
+}
+
+async function postgresDateien(tests) {
+  const { graph } = await importe();
+  const besucht = new Set(tests);
+  for (const datei of besucht) {
+    for (const ziel of graph.get(datei) ?? []) if (TESTSEITE.test(ziel)) besucht.add(ziel);
+  }
+  return [...besucht].filter((datei) => POSTGRES_AUFRUF.test(readFileSync(datei, "utf8"))).sort();
+}
+
+export async function ohnePostgresPruefbar(basis, geaendert, werkzeug) {
+  if (env[POSTGRES_VARIABLE]) return;
+  const vorher = await imVorherStand({ basis, tests: geaendert }, werkzeug, ({ tests }) => postgresDateien(tests));
+  const dateien = [...new Set([...vorher, ...(await postgresDateien(await betroffeneTests(geaendert, cwd())))])].sort();
+  if (dateien.length === 0) return;
+  throw new Error(`${dateien.join(", ")} brauchen Postgres und überspringen ohne ${POSTGRES_VARIABLE}; der Testumbau wäre dort nicht aussagekräftig, kein Urteil.`);
+}
+
+export async function testumbauPruefung(basis, werkzeug) {
+  const ohne = await ohneMutanten(basis);
+  if (ohne !== null) {
+    console.log(ohne);
     return EXIT_GRUEN;
   }
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
   const vorher = await mitVorherSpeicher({ basis, geaendert, root: cwd() }, () => vorherGetoetet(basis, geaendert, werkzeug));
   if (vorher.quellen.length === 0) {
-    console.log(`grün: die betroffenen Tests (${vorher.tests.length}) importieren keine Quelldatei unter src/; es gibt keinen Mutanten zu vergleichen.`);
+    console.log(ohneQuelleZeile(vorher.tests.length));
     return EXIT_GRUEN;
   }
   const tests = await betroffeneTests(geaendert, cwd());
   const quellen = [...new Set(vorher.getoetet.map(({ datei }) => datei))];
   await freigeben(werkzeug, "Nachher-Seite", { tests, quellen, mutanten: () => ({ mutanten: vorher.getoetet.length, unzaehlbar: 0 }) });
-  const { verloren: nachher, abgestuerzte } = await nachherVerloren(vorher.getoetet, tests, werkzeug);
-  const entfallen = await vorherNieGetoetet(nachher, { basis, tests: geaendert }, werkzeug);
-  for (const { schluessel } of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);
-  const verloren = nachher.filter((eintrag) => !entfallen.includes(eintrag));
-  for (const { schluessel } of verloren) console.log(`Verstoß: Mutant nicht mehr getötet: ${schluessel}`);
-  for (const { befund } of abgestuerzte) console.log(befund);
-  const umfang = `${vorher.getoetet.length} vorher getötete Mutanten in ${vorher.quellen.length} Quelldateien (${vorher.quellen.join(", ")})`;
-  if (verloren.length + abgestuerzte.length === 0) {
-    console.log(gruenZeile(umfang, vorher.getoetet.length, entfallen.length));
-    return EXIT_GRUEN;
-  }
-  console.log(`rot: ${rotGruende(verloren, abgestuerzte, umfang).join("; ")}.`);
-  return EXIT_ROT;
+  const seite = await nachherSeite(vorher.getoetet, { basis, tests: geaendert }, werkzeug);
+  return meldeUrteil({
+    quellen: vorher.quellen,
+    getoetet: seite.getoetet,
+    ...urteilsMengen([seite]),
+    abgestuerzte: seite.abgestuerzte,
+  });
 }
