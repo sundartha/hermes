@@ -616,13 +616,10 @@
   },
   "src/mcp-tools.js": {
     "id-length": {
-      "count": 5
-    },
-    "max-lines-per-function": {
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 6
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 18
