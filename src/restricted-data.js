@@ -17,6 +17,7 @@ function digitCount(raw) {
 
 const CARD_MIN_DIGITS = 13;
 const CARD_MAX_DIGITS = 19;
+const CARD_USUAL_DIGITS = 16;
 const CARD_GROUP_SIZE = 4;
 const CARD_GROUP_MIN_SIZE = 2;
 const AMEX_MIDDLE_GROUP_SIZE = 6;
@@ -167,11 +168,19 @@ function isDigitwiseCard(digits) {
   return iinOk && luhnValid(digits);
 }
 
-function digitwiseWindows(groups, minDigits) {
+function windowSizes(maxSize, minDigits, usualFirst) {
+  const sizes = [];
+  const usualMax = usualFirst ? Math.min(maxSize, CARD_USUAL_DIGITS) : maxSize;
+  for (let size = usualMax; size >= minDigits; size--) sizes.push(size);
+  for (let size = maxSize; usualFirst && size > usualMax; size--) sizes.push(size);
+  return sizes;
+}
+
+function digitwiseWindows(groups, minDigits, usualFirst) {
   const windows = [];
   const allDigits = groups.map((group) => group.digit).join("");
   const maxSize = Math.min(groups.length, CARD_MAX_DIGITS);
-  for (let size = maxSize; size >= minDigits; size--) {
+  for (const size of windowSizes(maxSize, minDigits, usualFirst)) {
     for (let first = 0; first + size <= groups.length; first++) {
       const digits = allDigits.slice(first, first + size);
       if (isDigitwiseCard(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
@@ -180,9 +189,9 @@ function digitwiseWindows(groups, minDigits) {
   return windows;
 }
 
-function bestDigitwiseWindow(raw, minDigits) {
+function bestDigitwiseWindow(raw, minDigits, usualFirst = false) {
   const groups = [...raw.matchAll(/\d/g)].map((group) => ({ start: group.index, digit: group[0] }));
-  const windows = digitwiseWindows(groups, minDigits);
+  const windows = digitwiseWindows(groups, minDigits, usualFirst);
   if (!windows.length) return null;
   if (groups.length <= CARD_MAX_DIGITS) return windows[0];
   return {
@@ -191,8 +200,16 @@ function bestDigitwiseWindow(raw, minDigits) {
   };
 }
 
+function digitwisePrefix(raw) {
+  const groupStart = raw.search(/\d\d/);
+  return groupStart > 0 ? raw.slice(0, groupStart).replace(/\D+$/, "") : "";
+}
+
 function bestCardWindow(raw, minDigits) {
   if (isDigitwise(raw)) return bestDigitwiseWindow(raw, minDigits);
+  const prefix = digitwisePrefix(raw);
+  const prefixWindow = digitCount(prefix) >= minDigits ? bestDigitwiseWindow(prefix, minDigits, true) : null;
+  if (prefixWindow) return prefixWindow;
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
