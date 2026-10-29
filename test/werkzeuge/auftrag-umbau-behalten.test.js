@@ -362,6 +362,7 @@ function bleibtGruenOhneNeuenTestAgenten(context, vorLauf) {
   assert.equal(existsSync(join(werkzeug, "prompt-test-0.txt")), false, "der Test-Agent wurde noch einmal gerufen");
   assert.deepEqual(exitCodes(beleg, "schutztests"), [0]);
   assert.deepEqual(commitBetreffe(repo, basis), [UMBAU_COMMIT]);
+  assert.equal(beleg.ergebnis, "grün");
 }
 
 test("auftrag-umbau-behalten: schreibt der Test-Agent zu einem Satz aus wasDarfNiePassieren keinen Schutztest, bleibt der Umbau rot und unkommittet", (context) => {
@@ -404,9 +405,9 @@ test("auftrag-umbau-behalten: bricht der eingespielte Umbau einen Schutztest, de
   assert.doesNotMatch(gitAusgabe(repo, "log", `${basis}..HEAD`, "--format=%B"), /^Art: umbau$/m);
 });
 
-function festgehalten(repo, auftrag) {
+function festgehalten(repo, auftrag, phase = "probe") {
   writeFiles(repo, MIT_SCHUTZTEST.dateien);
-  commitAll(repo, `Halte Verhalten vor Umbau ${auftrag} fest\n\nAuftrag: probe/${auftrag}\n`);
+  commitAll(repo, `Halte Verhalten vor Umbau ${auftrag} fest\n\nAuftrag: ${phase}/${auftrag}\n`);
 }
 
 function fremderCommit(repo) {
@@ -433,13 +434,11 @@ function schutztestAusMaster(repo) {
   commitAll(repo, "Schutztest aus master");
 }
 
-function festgehaltenInAndererPhase(repo) {
-  writeFiles(repo, MIT_SCHUTZTEST.dateien);
-  commitAll(repo, "Halte Verhalten vor Umbau A1 fest\n\nAuftrag: andere/A1\n");
-}
-
 test("auftrag-umbau-behalten: ein Schutztest aus master ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit(schutztestAusMaster));
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit((repo) => {
+    schutztestAusMaster(repo);
+    mitUpstreamMaster(repo);
+  }));
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit eines anderen Auftrags ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
@@ -447,7 +446,7 @@ test("auftrag-umbau-behalten: der Absicherungs-Commit eines anderen Auftrags ers
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags einer anderen Phase ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
-  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit(festgehaltenInAndererPhase));
+  bleibtRotOhneEigenenSchutztest(context, mitFremdemCommit((repo) => festgehalten(repo, "A1", "andere")));
 });
 
 test("auftrag-umbau-behalten: der Absicherungs-Commit desselben Auftrags, der schon in master steht, ersetzt den Schutztest des Auftrags nicht, der Umbau bleibt rot und unkommittet", (context) => {
