@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import {
-  defaultSettings,
   defaultSettingsMap,
   calendarMap,
   emptyUsage,
@@ -8,8 +7,6 @@ import {
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
   BOOTSTRAP_TENANT_ID,
-  sanitizeProfile,
-  resolveProfileFrom,
   MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
@@ -47,13 +44,12 @@ import {
   costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "./cost-evidence.js";
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
+import { languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
 import { resolvePeriodStartIso } from "../billing/period.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isKnownPlanSlug } from "../plans.js";
-import { hasInboundNotice } from "../i18n/inbound-notice.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { safeEqual } from "../util.js";
@@ -108,6 +104,17 @@ export {
   tenantMayRequestNumber,
 } from "./zustand/mandant.js";
 import { tenantHasLiveNumber, numberBusyReason, openOutageAlert } from "./zustand/nummern.js";
+import { settingsFor } from "./zustand/einstellungen.js";
+export {
+  settingsFor,
+  updateSettings,
+  resolveProfile,
+  bindSubToTenant,
+  resolveTenant,
+  listProfiles,
+  setProfile,
+  deleteProfile,
+} from "./zustand/einstellungen.js";
 export {
   tenantHasLiveNumber,
   markTenantNeedsManualReconcile,
@@ -2219,79 +2226,4 @@ export function pruneOldData(state, { retentionDays, diagnosticRetentionDays, ev
 
 export function hasPrunedSomething(removed) {
   return Object.values(removed).some((count) => count > 0);
-}
-
-export function settingsFor(s, tenantId) {
-  return (s.settings[tenantId] ||= defaultSettings());
-}
-
-function resolveOptionalEnumOverride(value, allowedValues) {
-  if (value === null || value === "") return { accepted: true, value: null };
-  if (typeof value !== "string") return { accepted: false, value: null };
-  const canonical = allowedValues.find((allowed) => allowed.toLowerCase() === value.toLowerCase());
-  return canonical === undefined ? { accepted: false, value: null } : { accepted: true, value: canonical };
-}
-
-const OPTIONAL_ENUM_FIELDS = Object.freeze({
-  language: SUPPORTED_LANGUAGES,
-  agentStyle: PERSONA_STYLE_IDS,
-});
-
-const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
-
-export function updateSettings(state, tenantId, patch) {
-  const allowed = defaultSettings();
-  const changed = [];
-  const target = settingsFor(state, tenantId);
-  for (const [key, value] of Object.entries(patch || {})) {
-    if (!(key in allowed)) continue;
-    const enumValues = OPTIONAL_ENUM_FIELDS[key];
-    if (enumValues) {
-      const override = resolveOptionalEnumOverride(value, enumValues);
-      if (!override.accepted) continue;
-      target[key] = override.value;
-      changed.push(key);
-    } else if (typeof value === typeof allowed[key]) {
-      const guard = FIELD_GUARDS[key];
-      if (guard && !guard(value)) continue;
-      target[key] = value;
-      changed.push(key);
-    }
-  }
-  return { settings: target, changed };
-}
-
-export function resolveProfile(state, tenantId) {
-  return resolveProfileFrom(tenantId, tenantId ? state.profiles[tenantId] : undefined);
-}
-
-const subIndexOf = (state) => state.subIndex || {};
-
-export function bindSubToTenant(s, sub, tenantId) {
-  if (!sub || !tenantId) return;
-  (s.subIndex ||= {})[sub] = tenantId;
-}
-
-export function resolveTenant(state, idpSubject) {
-  if (!idpSubject) return null;
-  const merged = subIndexOf(state)[idpSubject];
-  if (merged) return merged;
-  const tenant = tenantsOf(state).find((tenantEntry) => tenantEntry.idpSubject === idpSubject);
-  return tenant ? tenant.id : null;
-}
-
-export function listProfiles(state) {
-  return state.profiles;
-}
-
-export function setProfile(s, tenantId, patch) {
-  const clean = sanitizeProfile(patch);
-  s.profiles[tenantId] = { ...(s.profiles[tenantId] || {}), ...clean };
-  return { profile: s.profiles[tenantId], changed: Object.keys(clean) };
-}
-
-export function deleteProfile(s, tenantId) {
-  if (!(tenantId in s.profiles)) return false;
-  delete s.profiles[tenantId];
-  return true;
 }
