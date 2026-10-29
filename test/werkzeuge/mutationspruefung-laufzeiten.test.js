@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { anteilig } from "../../tools/mutationspruefung/teile.mjs";
 import { EXIT_ABBRUCH, testdateien } from "./mutationspruefung-hilfen.js";
 import { werkzeug } from "./mutationspruefung-probe.js";
-import { REPO_ROOT, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const REIHUM = "Mutationsplan: ohne Laufzeitdaten, reihum";
@@ -250,4 +250,36 @@ test("das Holen schreibt bei jedem Misserfolg eine Tabelle mit Grund und ohne Da
     assert.equal(tabelle.lauf, null);
     assert.match(lauf.stdout, /Mutationsplan: keine Laufzeiten geholt/);
   }
+});
+
+function planMitHolen(context, { umgebung, zusatz = [] }) {
+  const repo = geaendert(planRepo(context));
+  const ordner = probeDirectory(context, {});
+  const tabelle = join(ordner, "mutation-laufzeiten.json");
+  const lauf = spawnSync(process.execPath, [WERKZEUG, "--basis", "HEAD", "--plan", join(ordner, "plan.json"), "--laufzeiten-holen", tabelle, ...zusatz], {
+    cwd: repo,
+    encoding: "utf8",
+    env: { ...isolatedEnvironment(), ...umgebung },
+  });
+  return { lauf, tabelle };
+}
+
+test("der Plan holt die Laufzeiten im selben Aufruf, plant mit der geholten Tabelle und fällt bei jedem Misserfolg mit Grund auf reihum zurück", (context) => {
+  const gefunden = planMitHolen(context, { umgebung: falschesGh(context, "ok") });
+  assert.equal(gefunden.lauf.status, 0, gefunden.lauf.stdout + gefunden.lauf.stderr);
+  assert.match(gefunden.lauf.stdout, /^Mutationsplan: Laufzeiten aus Lauf 4242, 2 Testdateien$/m);
+  assert.ok(!gefunden.lauf.stdout.includes(REIHUM), gefunden.lauf.stdout);
+  assert.equal(JSON.parse(readFileSync(gefunden.tabelle, "utf8")).lauf, 4242);
+  const gescheitert = planMitHolen(context, { umgebung: falschesGh(context, "fehler") });
+  assert.equal(gescheitert.lauf.status, 0, gescheitert.lauf.stdout + gescheitert.lauf.stderr);
+  assert.match(gescheitert.lauf.stdout, /^Mutationsplan: ohne Laufzeitdaten, reihum \(Abruf fehlgeschlagen: .*HTTP 502.*\)$/m);
+  assert.match(JSON.parse(readFileSync(gescheitert.tabelle, "utf8")).grund, /^Abruf fehlgeschlagen: /);
+});
+
+test("das Holen im Plan zusammen mit einer angegebenen Laufzeitdatei oder mit Teil oder Urteil wird abgelehnt", (context) => {
+  const tabelle = ablage(context, { lauf: BELIEBIGER_LAUF, dauern: { [PFLICHTTEST]: LANGE_DAUER_MS } });
+  const doppelt = planMitHolen(context, { umgebung: falschesGh(context, "ok"), zusatz: ["--laufzeiten", tabelle] });
+  assert.equal(doppelt.lauf.status, EXIT_ABBRUCH, doppelt.lauf.stdout + doppelt.lauf.stderr);
+  const mitTeil = planMitHolen(context, { umgebung: falschesGh(context, "ok"), zusatz: ["--teil", "1", "--teile", "2"] });
+  assert.equal(mitTeil.lauf.status, EXIT_ABBRUCH, mitTeil.lauf.stdout + mitTeil.lauf.stderr);
 });
