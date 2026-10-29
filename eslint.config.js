@@ -287,6 +287,23 @@ const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "ti
 const demeterChainMessage =
   "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
 const demeterRegel = { selector: demeterChainSelector, message: demeterChainMessage };
+const HANDLER_EXPORT_SELECTOR = [
+  "ExportNamedDeclaration > FunctionDeclaration[id.name=/Handler$/]",
+  "ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.name=/Handler$/]",
+  "ExportNamedDeclaration > ClassDeclaration[id.name=/Handler$/]",
+  "ExportNamedDeclaration > VariableDeclaration > VariableDeclarator > :matches(ObjectPattern, ArrayPattern) Identifier[name=/Handler$/]:not(Property > Identifier.key, AssignmentPattern > Identifier.right)",
+  "ExportDefaultDeclaration > FunctionDeclaration[id.name=/Handler$/]",
+  "ExportDefaultDeclaration > ClassDeclaration[id.name=/Handler$/]",
+  "ExportDefaultDeclaration > Identifier[name=/Handler$/]",
+  "ExportSpecifier[local.name=/Handler$/]",
+  "ExportAllDeclaration[exported.name=/Handler$/]",
+  "ExportAllDeclaration[exported.value=/Handler$/]",
+  "ExportDefaultDeclaration > :matches(FunctionExpression, ClassExpression)[id.name=/Handler$/]",
+  "ExportSpecifier[exported.name=/Handler$/]",
+  "ExportSpecifier[exported.value=/Handler$/]",
+].join(", ");
+const ROUTER_FORM_MELDUNG =
+  "Eine Route steht in Router-Form: `export function make<Name>Routes(…)` gibt einen `Router()` zurück (Muster: der Eintrag „Route“ in `tools/auftrag/musterdateien.json`, `npm run neu -- route …`); Eingabe prüfst du mit einem Schema über den Helfer in `src/routes/_validation.js`.";
 const NUR_LESEN_MELDUNG =
   "Dieses Skript liest nur: kein Dateisystem-Schreiben und keine schreibende HTTP-Methode.";
 const DATEISYSTEM_MODULE = ["fs", "node:fs", "fs/promises", "node:fs/promises"];
@@ -339,6 +356,20 @@ const dateiBloecke = [
             'UpdateExpression[argument.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)',
           message:
             "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+        },
+      ],
+    },
+  },
+  {
+    name: "route-in-router-form",
+    files: [`src/routes/**/*.${ENDUNGEN}`],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        {
+          selector: HANDLER_EXPORT_SELECTOR,
+          message: ROUTER_FORM_MELDUNG,
         },
       ],
     },
