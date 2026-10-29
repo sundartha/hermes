@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { env } from "node:process";
 import { setTimeout as warte } from "node:timers/promises";
 
+import { gemeinsamerOrdner } from "../auftrag/git.mjs";
 import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
@@ -28,6 +30,8 @@ const SUCHABSTAND_MS = 10_000;
 const SUCHVERSUCHE = 3;
 const SUCHLISTE = "5";
 const LAUF_URL = /\/actions\/runs\/(\d+)/;
+const LAUFNUMMER = /^[1-9]\d*$/;
+const VORLAUF_ABLAGE = join("hermes", "mutation-vorlauf");
 const ABBRUCHZEILE = /(Abbruch: .*)$/;
 const NACHRICHT = ["Mutationsprüfung auf Abruf", "", "Auftrag: lauf/in-ci"];
 const GEMELDET = "in lauf gemeldet";
@@ -42,18 +46,48 @@ function git(argumente, root, umgebung = env) {
   throw new Error(`git ${argumente.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`);
 }
 
-function nachricht(gleichwertige) {
-  return [...NACHRICHT, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
+function nachricht(gleichwertige, vorlauf) {
+  const vorlaufZeile = vorlauf === null ? [] : [`Vorlauf: ${vorlauf}`];
+  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
 }
 
-function friereEin(root, gleichwertige) {
+function vorlaufDatei(root, art) {
+  const kennung = createHash("sha256").update(root).digest("hex").slice(0, KURZ);
+  return gemeinsamerOrdner(root, VORLAUF_ABLAGE, `${art}-${kennung}.json`);
+}
+
+function vorlaufArt({ alterStand, testumbau }) {
+  if (alterStand) return "alt";
+  return testumbau ? "testumbau" : "neu";
+}
+
+function gemerkterVorlauf(root, art) {
+  try {
+    const lauf = JSON.parse(readFileSync(vorlaufDatei(root, art), "utf8")).lauf;
+    return LAUFNUMMER.test(String(lauf)) ? String(lauf) : null;
+  } catch {
+    return null;
+  }
+}
+
+function merkeVorlauf({ root, ...art }, lauf) {
+  try {
+    const datei = vorlaufDatei(root, vorlaufArt(art));
+    mkdirSync(dirname(datei), { recursive: true });
+    writeFileSync(datei, JSON.stringify({ lauf }) + "\n");
+  } catch (fehler) {
+    console.error(`Hinweis: Vorlauf ${lauf} nicht gemerkt: ${fehler.message}`);
+  }
+}
+
+function friereEin(root, gleichwertige, vorlauf) {
   const ordner = neuerTempOrdner();
   const eigenerIndex = { ...env, GIT_INDEX_FILE: join(ordner, "index") };
   git(["read-tree", "HEAD"], root, eigenerIndex);
   git(["add", "-A"], root, eigenerIndex);
   const baum = git(["write-tree"], root, eigenerIndex);
   const datei = join(ordner, "nachricht");
-  writeFileSync(datei, nachricht(gleichwertige));
+  writeFileSync(datei, nachricht(gleichwertige, vorlauf));
   return git(["commit-tree", baum, "-p", "HEAD", "-F", datei], root);
 }
 
@@ -132,21 +166,24 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const stand = await warteAufLauf(repo, lauf, { taktMs: zeiten.taktMs, ende: Date.now() + zeiten.hoechstMs });
   const urteil = stand.status === LAUF_FERTIG ? abgelegtesUrteil(repo, lauf) : null;
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
-  if (urteil) return { exitCode: urteil.exitCode, zeilen: [kopfzeile, urteil.ausgabe] };
+  if (urteil) {
+    merkeVorlauf(abruf, lauf);
+    return { exitCode: urteil.exitCode, zeilen: [kopfzeile, urteil.ausgabe] };
+  }
   const ohneUrteil = `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${url} (${stand.status}, ${stand.conclusion})`;
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
 }
 
 export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
-  const stand = friereEin(root, gleichwertige);
+  const stand = friereEin(root, gleichwertige, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
   const abgelehnt = abgelehnterPush(root, stand, zweig);
   if (abgelehnt !== null) return { lokal: `Hinweis: Mutationsprüfung läuft lokal, weil der Push nach ${REMOTE} abgelehnt wurde: ${abgelehnt}` };
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau }, kopf, { taktMs, hoechstMs, suchabstandMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root }, kopf, { taktMs, hoechstMs, suchabstandMs });
   } finally {
     loescheZweig(repo, zweig);
   }
