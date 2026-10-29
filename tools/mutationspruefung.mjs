@@ -31,12 +31,12 @@ import { ERGEBNISDATEI, planZeilen, stueckAus, testsAus, vorherPlan, vorherStuec
 import { vorlageEinstellen } from "./mutationspruefung/vorlage.mjs";
 import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitablauf.mjs";
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
-import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
+import { beendeLog, beginneHochrechnung, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, hochrechnungLaeuft, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, notiereUmfang, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
-import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
-import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
+import { hatMutanten, mutantenzahl, teilumfang } from "./mutationspruefung/vorplanung.mjs";
+import { anDerSperre, beimHalt, brichAb, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -651,12 +651,19 @@ async function vorschauDerSeite(gemessen, { nachDatei, graph, seite }) {
   });
 }
 
+async function umfangMelden(gemessen, { nachDatei, seite }) {
+  if (!hochrechnungLaeuft()) return;
+  const dateien = gemessen.map(({ datei }) => ({ datei, bereiche: nachDatei.get(datei).bereiche }));
+  notiereUmfang(await teilumfang(dateien, { mitLoeschprobe: seite === "neu" }));
+}
+
 async function messe(einheiten, { graph, auswahl, seite }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
   if (gemessen.length === 0) return ergebnisse;
   await vorschauDerSeite(gemessen, { nachDatei, graph, seite });
+  await umfangMelden(gemessen, { nachDatei, seite });
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   const abmelden = loeschung === null ? null : beimHalt(loeschung.abbauen);
   try {
@@ -803,6 +810,7 @@ function teilnummer({ teil, teile }, anzahl) {
 async function messeTeil(pruefungen, optionen) {
   const { teile, pruefsumme: summe } = await planen(pruefungen);
   const nummer = teilnummer(optionen, teile.length);
+  beginneHochrechnung(brichAb);
   const eigene = teile[nummer - 1] ?? [];
   console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
   const messungen = [];

@@ -17,6 +17,8 @@ const NICHT_GELAUFEN = "Ignored";
 const GETOETET = "Killed";
 const ZEITUEBERSCHREITUNG = "Timeout";
 export const ERSTER_LAUF = "erster Lauf";
+export const JOB_GRENZE_MINUTEN = 120;
+export const MINDEST_MUTANTEN = 20;
 const EINZELN_IM_ERSTEN_LAUF = new Set(["Survived", "NoCoverage", ZEITUEBERSCHREITUNG]);
 const SANDBOXPFAD = /^.*\/sandbox-[^/]+\//;
 const DATEINAME_OHNE = /:/g;
@@ -38,7 +40,7 @@ const SEKUNDEN_JE_TAG = 86_400;
 const SEKUNDEN_JE_STUFE = [1, SEKUNDEN_JE_MINUTE, SEKUNDEN_JE_STUNDE];
 export const PHASEN = { sperre: "Sperre", testauswahl: "Testauswahl", sandbox: "Sandbox", erstlauf: "Erstlauf", mutanten: "Mutantenläufe", loeschprobe: "Löschprobe" };
 
-const log = { datei: null, begonnen: false, beginn: Date.now(), letzteZeile: Date.now(), phasen: leerePhasen(), laeufe: new Map(), aktuell: null, fertig: leeresTeilergebnis() };
+const log = { datei: null, begonnen: false, beginn: Date.now(), letzteZeile: Date.now(), phasen: leerePhasen(), laeufe: new Map(), aktuell: null, fertig: leeresTeilergebnis(), teil: null };
 
 function leeresTeilergebnis() {
   return { laeufe: 0, mutanten: 0, getoetet: 0, dateien: 0 };
@@ -146,6 +148,7 @@ export function notiereVorschau(umfang) {
 export function notiereLoeschprobe(ms, { datei }) {
   notierePhase("loeschprobe", ms, { datei });
   melde(`Löschprobe ${datei} in ${dauer(ms)}`);
+  log.teil?.loeschzeilen.delete(datei);
 }
 
 function ort(datei) {
@@ -174,6 +177,68 @@ export function fortschrittFaellig({ letzte, jetzt }) {
 export function hochrechnung({ getestet, geplant, ms }) {
   if (getestet === 0 || ms <= 0) return { jeMinute: 0, restMs: null };
   return { jeMinute: (getestet * MS_JE_MINUTE) / ms, restMs: ((geplant - getestet) * ms) / getestet };
+}
+
+export function teilDauer({ bisherMs, mutanten, msJeMutant, loeschzeilen, grundlaufMs }) {
+  return bisherMs + mutanten * msJeMutant + loeschzeilen * grundlaufMs;
+}
+
+export function beginneHochrechnung(abbruch) {
+  log.teil = { abbruch, mutanten: 0, loeschzeilen: new Map(), erledigt: 0, messMs: 0, letzteRechnung: 0 };
+}
+
+export function hochrechnungLaeuft() {
+  return log.teil !== null;
+}
+
+export function notiereUmfang({ dateien }) {
+  const loeschzeilen = new Map(log.teil.loeschzeilen);
+  for (const { datei, loeschzeilen: zeilen } of dateien) loeschzeilen.set(datei, (loeschzeilen.get(datei) ?? 0) + zeilen);
+  const mutanten = dateien.reduce((summe, eintrag) => summe + eintrag.mutanten, log.teil.mutanten);
+  log.teil = { ...log.teil, mutanten, loeschzeilen };
+}
+
+function summe(zahlen) {
+  return [...zahlen].reduce((gesamt, zahl) => gesamt + zahl, 0);
+}
+
+function getestetImTeil(lauf) {
+  return log.teil.erledigt + lauf.getestet;
+}
+
+function zaehltFuerRate(lauf) {
+  return log.teil !== null && lauf.anlass === ERSTER_LAUF && lauf.erstlaufEnde !== undefined;
+}
+
+function messbar(lauf) {
+  return zaehltFuerRate(lauf) && getestetImTeil(lauf) >= MINDEST_MUTANTEN;
+}
+
+function hochgerechneteTeildauer(lauf, jetzt) {
+  const { mutanten, loeschzeilen, messMs } = log.teil;
+  const getestet = getestetImTeil(lauf);
+  const msJeMutant = (messMs + jetzt - lauf.erstlaufEnde) / getestet;
+  const daten = { bisherMs: jetzt - log.beginn, mutanten: Math.max(0, mutanten - getestet), msJeMutant, loeschzeilen: summe(loeschzeilen.values()), grundlaufMs: lauf.erstlaufMs };
+  const ms = teilDauer(daten);
+  const minuten = Math.ceil(ms / MS_JE_MINUTE);
+  const rechnung = `bisher ${dauer(daten.bisherMs)} + ${daten.mutanten} offene Mutanten × ${dauer(msJeMutant)} + ${daten.loeschzeilen} offene Löschprobe-Zeilen × ${dauer(daten.grundlaufMs)}`;
+  return { daten, ms, minuten, rechnung };
+}
+
+function meldeHochrechnung({ daten, ms, minuten, rechnung }, jetzt, ueberGrenze) {
+  const { letzteRechnung } = log.teil;
+  if (!ueberGrenze && jetzt - letzteRechnung < MS_JE_MINUTE) return;
+  log.teil = { ...log.teil, letzteRechnung: jetzt };
+  schreibe("hochrechnung", { ...daten, ms, minuten, grenze_minuten: JOB_GRENZE_MINUTEN });
+  melde(`Hochrechnung Teil: ${minuten} min bei Grenze ${JOB_GRENZE_MINUTEN} min (${rechnung})`);
+}
+
+function rechneTeilHoch(lauf, jetzt) {
+  if (!messbar(lauf)) return;
+  const stand = hochgerechneteTeildauer(lauf, jetzt);
+  const ueberGrenze = stand.minuten > JOB_GRENZE_MINUTEN;
+  meldeHochrechnung(stand, jetzt, ueberGrenze);
+  if (ueberGrenze) log.teil.abbruch(`Hochrechnung ${stand.minuten} min über Grenze ${JOB_GRENZE_MINUTEN} min (${stand.rechnung}); kein Urteil.`);
 }
 
 function fortschritt(lauf, jetzt) {
@@ -209,6 +274,7 @@ function mutantGetestet(kennung, { status }) {
   if (status === NICHT_GELAUFEN) return;
   aendere(kennung, ({ getestet }) => ({ getestet: getestet + 1 }));
   const jetzt = Date.now();
+  rechneTeilHoch(log.laeufe.get(kennung), jetzt);
   if (!fortschrittFaellig({ letzte: log.letzteZeile, jetzt })) return;
   log.letzteZeile = jetzt;
   fortschritt(log.laeufe.get(kennung), jetzt);
@@ -255,6 +321,9 @@ function laufFertig(lauf, ergebnisse, fehler) {
   const jetzt = Date.now();
   const zeiten = dauern(lauf, jetzt);
   verbuche(lauf.datei, zeiten);
+  if (zaehltFuerRate(lauf)) {
+    log.teil = { ...log.teil, erledigt: log.teil.erledigt + lauf.getestet, messMs: log.teil.messMs + jetzt - lauf.erstlaufEnde };
+  }
   const { datei, anlass, testdateien, tests, geplant, langsamste } = lauf;
   for (const { schluessel, lage, art, status, toeter } of ergebnisse.filter((eintrag) => einzeln(anlass, eintrag))) {
     schreibe("mutant", { anlass, schluessel, datei, lage, mutator: art, status, toeter: toeter.length > 0 ? toeter : null });

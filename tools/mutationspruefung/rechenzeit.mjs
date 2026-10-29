@@ -123,6 +123,20 @@ function halteWennBudgetErschoepft(frei) {
   if (frei <= 0) halte();
 }
 
+function beendeOhneUrteil(meldung) {
+  uhr.angehalten = true;
+  beendeNachkommen();
+  raeumeAuf();
+  console.error(meldung());
+  beendeLog(EXIT_ABBRUCH);
+  beendeNachLeeren();
+}
+
+export function brichAb(grund) {
+  if (uhr.angehalten) return;
+  beendeOhneUrteil(() => `Abbruch: ${grund}`);
+}
+
 function halte() {
   if (uhr.angehalten) return;
   const ms = rechenzeit();
@@ -131,12 +145,9 @@ function halte() {
     laufe();
     return;
   }
-  uhr.angehalten = true;
-  beendeNachkommen();
-  raeumeAuf();
-  const teilergebnis = notiereBudget({ pruefung: uhr.art, budget_ms: BUDGET_MS[uhr.art], rechenzeit_ms: ms, warten_ms: uhr.gewartet });
-  const ursache = `${dauer(ms)} Rechenzeit bei ${dauer(BUDGET_MS[uhr.art])} Budget, dazu ${dauer(uhr.gewartet)} Warten an der Sperre`;
-  console.error(`Abbruch: Budget ${PRUEFUNG[uhr.art]} erreicht: ${ursache}; ${teilergebnis}; kein Urteil.`);
-  beendeLog(EXIT_ABBRUCH);
-  beendeNachLeeren();
+  beendeOhneUrteil(() => {
+    const teilergebnis = notiereBudget({ pruefung: uhr.art, budget_ms: BUDGET_MS[uhr.art], rechenzeit_ms: ms, warten_ms: uhr.gewartet });
+    const ursache = `${dauer(ms)} Rechenzeit bei ${dauer(BUDGET_MS[uhr.art])} Budget, dazu ${dauer(uhr.gewartet)} Warten an der Sperre`;
+    return `Abbruch: Budget ${PRUEFUNG[uhr.art]} erreicht: ${ursache}; ${teilergebnis}; kein Urteil.`;
+  });
 }

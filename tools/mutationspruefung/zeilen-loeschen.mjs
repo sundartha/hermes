@@ -50,7 +50,7 @@ function loeschbar(text) {
   return zeile.endsWith(ANWEISUNGSENDE) && !DEKLARATION.test(zeile);
 }
 
-function zeilenOhneMutant(datei, bereiche, ergebnisse) {
+export function zeilenOhneMutant(datei, bereiche, ergebnisse) {
   const zeilen = readFileSync(datei, "utf8").split(ZEILENENDE);
   return bereichsZeilen(bereiche).filter(
     (zeile) => !eigenerMutant(zeile, ergebnisse) && loeschbar(zeilen[zeile - 1] ?? ""),

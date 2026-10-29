@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { Instrumenter } from "@stryker-mutator/instrumenter";
 
+import { zeilenOhneMutant } from "./zeilen-loeschen.mjs";
+
 const STUMM = { debug() {}, info() {}, warn() {}, isDebugEnabled: () => false };
 const OPTIONEN = { plugins: null, ignorers: [], excludedMutations: [] };
 const ZEILENENDE = Number.MAX_SAFE_INTEGER;
@@ -10,10 +12,18 @@ function strykerBereich([von, bis]) {
   return { start: { line: von - 1, column: 0 }, end: { line: bis - 1, column: ZEILENENDE } };
 }
 
-async function zaehle(datei, bereiche) {
+async function instrumentiere(datei, bereiche) {
   const quelle = { name: datei, content: readFileSync(datei, "utf8"), mutate: bereiche.map(strykerBereich) };
   const { mutants } = await new Instrumenter(STUMM).instrument([quelle], OPTIONEN);
-  return mutants.length;
+  return mutants;
+}
+
+async function zaehle(datei, bereiche) {
+  return (await instrumentiere(datei, bereiche)).length;
+}
+
+function alsErgebnisse(mutanten) {
+  return mutanten.map(({ mutatorName, location: { start, end } }) => ({ zeilen: [start.line + 1, end.line + 1], art: mutatorName }));
 }
 
 export async function hatMutanten(datei, bereiche) {
@@ -36,4 +46,18 @@ export async function mutantenzahl(dateien) {
     }
   }
   return summe;
+}
+
+export async function teilumfang(dateien, { mitLoeschprobe }) {
+  const umfang = [];
+  for (const { datei, bereiche } of dateien) {
+    try {
+      const mutanten = await instrumentiere(datei, bereiche);
+      const loeschzeilen = mitLoeschprobe ? zeilenOhneMutant(datei, bereiche, alsErgebnisse(mutanten)).length : 0;
+      umfang.push({ datei, mutanten: mutanten.length, loeschzeilen });
+    } catch (fehler) {
+      console.log(`${datei}: Mutanten und Löschprobe-Zeilen für die Hochrechnung nicht zählbar (${fehler.message}); die Hochrechnung ist eine Untergrenze.`);
+    }
+  }
+  return { dateien: umfang };
 }
