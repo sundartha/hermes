@@ -13,10 +13,13 @@ const MODUL = pathToFileURL(join(REPO_ROOT, "tools/mutationspruefung/zeilen-loes
 const DATEI = "src/zahl.js";
 const ERSTE = "test/erste.test.js";
 const ZWEITE = "test/zweite.test.js";
+const DRITTE = "test/dritte.test.js";
+const OFFEN = "test/offen.test.js";
 const BUCHSTABEN = ["a", "b", "c", "d", "e", "f"];
 const ZEILEN_VOR_DEM_ERSTEN = 2;
 const LAUFPROTOKOLL = "laeufe";
 const SKRIPT_FRIST_MS = 120_000;
+const ROT_FRIST_MS = 40_000;
 const HAENGER_TAKT_MS = 1000;
 const ZWEITE_VERLANGT_C = 'assert.ok(zahl.protokoll.includes("c"));';
 
@@ -90,11 +93,11 @@ function zeitraffer(marken) {
 const probe = loeschprobe(() => mkdtempSync(join(kopien, "loeschprobe-")));
 const ergebnisse = [];
 try {
-  for (const { marken, eingabe, haengen, ohneNode } of aufrufe) {
+  for (const { marken, eingabe, haengen, ohneZeitraffer, ohneNode } of aufrufe) {
     process.env.MARKEN = marken;
     if (haengen) {
       process.env.HAENGEN = "ja";
-      zeitraffer(marken);
+      if (!ohneZeitraffer) zeitraffer(marken);
     }
     if (ohneNode) process.execPath = join(marken, "kein-node");
     ergebnisse.push(await probe.pruefe(eingabe));
@@ -130,7 +133,7 @@ function loescheIn(context, dateien, aufrufe) {
     cwd: repo,
     encoding: "utf8",
     env: isolatedEnvironment(),
-    timeout: SKRIPT_FRIST_MS,
+    timeout: Math.min(...aufrufe.map(({ frist = SKRIPT_FRIST_MS }) => frist)),
   });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const worktrees = runIn(repo, "git", ["worktree", "list"]).stdout.trim().split("\n");
@@ -203,6 +206,26 @@ test("hängt der Testlauf ohne eine Zeile bis zur Zeitgrenze, wird er beendet, w
   assert.equal(lauf.fehler, undefined);
   assert.deepEqual(lauf.ergebnisse, [[zeile("f", "Timeout", HAENGER)]]);
   assert.equal(laeufe(marken).filter(([, fehlend]) => fehlend === "f").length, 2);
+});
+
+test("wird in der Gruppe ein Test rot, während eine andere Testdatei hängt, gilt die Zeile sofort als erkannt statt als Hänger", (context) => {
+  const marken = ordner(context, "loeschprobe-marken-");
+  const nurF = [[zeileVon("f"), zeileVon("f")]];
+  const eingabe = { datei: DATEI, zeilen: nurF, ergebnisse: [], tests: { erste: [DRITTE, ERSTE], alle: [DRITTE, ERSTE] } };
+  const dateien = { [DRITTE]: zweiterTest('assert.ok(zahl.protokoll.includes("f"));') };
+  const lauf = loescheIn(context, dateien, [{ marken, eingabe, haengen: true, ohneZeitraffer: true, frist: ROT_FRIST_MS }]);
+  assert.equal(lauf.fehler, undefined);
+  assert.deepEqual(lauf.ergebnisse, [[zeile("f", "Killed", GETOETET)]]);
+  assert.deepEqual(lauf.uebrig, []);
+});
+
+test("ein als offen markierter Test, der fehlschlägt, beendet den Testlauf nicht und macht keine Zeile zu einer erkannten", (context) => {
+  const offen = 'import { test } from "node:test";\ntest("noch offen", { todo: true }, () => {\n  throw new Error("noch offen");\n});\n';
+  const nurB = [[zeileVon("b"), zeileVon("b")]];
+  const eingabe = { datei: DATEI, zeilen: nurB, ergebnisse: [], tests: { erste: [ERSTE, OFFEN], alle: [ERSTE, OFFEN] } };
+  const lauf = loescheIn(context, { [OFFEN]: offen }, [{ marken: ordner(context, "loeschprobe-marken-"), eingabe }]);
+  assert.equal(lauf.fehler, undefined);
+  assert.deepEqual(lauf.ergebnisse, [[zeile("b", "Survived")]]);
 });
 
 test("startet der Testlauf nicht, bricht die Löschprobe am Grundlauf ab und baut die Arbeitskopie ab", (context) => {
