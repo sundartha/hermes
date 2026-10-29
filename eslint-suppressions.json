@@ -734,11 +734,8 @@
     }
   },
   "src/store/defaults.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
-      "count": 3
+      "count": 1
     },
     "no-magic-numbers": {
       "count": 1
