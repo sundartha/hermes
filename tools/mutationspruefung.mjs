@@ -120,6 +120,7 @@ const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
+const FOLGELAUF_FEHLER = new WeakSet();
 const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const VORHER_AUS_CI = "vorher-aus-ci";
@@ -348,11 +349,20 @@ function ersetze(ergebnisse, neu, betroffen) {
   return ergebnisse.map((eintrag) => (betroffen.includes(eintrag) && nachSchluessel.get(eintrag.schluessel)) || eintrag);
 }
 
+async function folgelauf(lauf) {
+  try {
+    return await stryker(lauf);
+  } catch (fehler) {
+    FOLGELAUF_FEHLER.add(fehler);
+    throw fehler;
+  }
+}
+
 async function ersterLauf(lauf) {
   const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
-  const wiederholt = await stryker({
+  const wiederholt = await folgelauf({
     ...lauf,
     zeilen: zeitueber.map((eintrag) => eintrag.lage),
     faktor: ZEITFAKTOR_WIEDERHOLUNG,
@@ -362,7 +372,7 @@ async function ersterLauf(lauf) {
 
 async function gruppenlauf(lauf) {
   const nachlauf = ({ zeilen, tests }) =>
-    stryker({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
+    folgelauf({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
   return bestaetige(await ersterLauf(lauf), nachlauf, lauf.tests);
 }
 
@@ -393,7 +403,7 @@ function wellen(testgruppen) {
 }
 
 function zeitgrenzeSeit(beginn) {
-  return (fehler) => zeitgrenzeGemeldet(fehler, ERSTLAUF_MITSCHRIFT.slice(beginn));
+  return (fehler) => !FOLGELAUF_FEHLER.has(fehler) && zeitgrenzeGemeldet(fehler, ERSTLAUF_MITSCHRIFT.slice(beginn));
 }
 
 async function geteilterGruppenlauf(lauf) {
