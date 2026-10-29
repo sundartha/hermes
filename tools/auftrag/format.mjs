@@ -13,6 +13,7 @@ const UMBENENNUNG_WEG = "Umformung an der .js in einer ersten Phase, reine Umben
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
 const UMBAU_ARTEN = new Set(["umbau", TESTUMBAU]);
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
+const DEKLARATIONSNAME = /^[A-Za-z_$][\w$]*$/;
 const ABNAHMETEST = /^test\/.+\.test\.[cm]?js$/;
 const TESTDATEI = /(^|\/)test\/|\.test\.[cm]?js$/;
 const AUSFUEHRBARER_TEST = /\.test\.[cm]?js$/;
@@ -318,6 +319,18 @@ function abhaengigkeitBefunde(auftrag, kontext) {
     .map((kennung) => `abhaengigVon nennt ${kennung}, das ist kein anderer Auftrag der Phase`);
 }
 
+function betrifftBefunde(auftrag) {
+  if (auftrag.betrifft === undefined) return [];
+  const { betrifft } = auftrag;
+  if (betrifft === null || typeof betrifft !== "object" || Array.isArray(betrifft)) return ["betrifft muss je Quelldatei eine Liste von Namen sein"];
+  const erwartet = Array.isArray(auftrag.erwarteteDateien) ? auftrag.erwarteteDateien : [];
+  return Object.entries(betrifft).flatMap(([datei, namen]) => {
+    if (!erwartet.includes(datei) || istTestdatei(datei)) return [`betrifft nennt ${datei}, das ist keine Quelldatei aus erwarteteDateien`];
+    const gueltig = Array.isArray(namen) && namen.length > 0 && namen.every((name) => typeof name === "string" && DEKLARATIONSNAME.test(name));
+    return gueltig ? [] : [`betrifft für ${datei} muss eine nicht leere Liste von Deklarationsnamen sein`];
+  });
+}
+
 function umbauNummernBefunde(auftrag) {
   if (auftrag.prueft === UMBAU_AUSWEG && auftrag.szenarien === undefined) return [];
   return [`prueft muss bei einem Umbau genau „${UMBAU_AUSWEG}“ sein, ohne szenarien`];
@@ -355,6 +368,7 @@ function auftragBefunde(auftrag, kontext) {
     ...abnahmeBefunde(auftrag, kontext),
     ...nieBefunde(auftrag),
     ...abhaengigkeitBefunde(auftrag, kontext),
+    ...betrifftBefunde(auftrag),
     ...(kontext.ausPitch ? nummernBefunde(auftrag) : []),
   ];
   return befunde.map((befund) => `${auftrag.id}: ${befund}`);
