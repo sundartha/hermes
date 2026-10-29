@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { planSummarySms } from "../src/sms-summary.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
 const PROV = PROVIDER.TELNYX;
 
@@ -80,4 +81,29 @@ test("kein Absender (keine aktive Nummer) -> send=false, kein reason (Bestandsve
   const plan = planSummarySms(store, cfg(), call("A"));
   assert.equal(plan.send, false);
   assert.equal(plan.reason, null);
+});
+
+test("[NIE2] die SMS-Tageskappe zaehlt genau das letzte 24-Stunden-Fenster", async (t) => {
+  const { store } = await makePgTestStore();
+  store.seedBootstrapNumber("+4915100000001", BOOTSTRAP_TENANT_ID, PROV);
+  store.setPrivateNumber(BOOTSTRAP_TENANT_ID, "+491701234567");
+  const sentAt = Date.parse("2026-08-14T12:00:00.000Z");
+  store.recordUsageEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    kind: "sms",
+    quantity: 1,
+    costCents: 0,
+    occurredAt: new Date(sentAt).toISOString(),
+  });
+  const capOne = withConfigNamespaces({ sendSmsSummary: true, dailySmsCap: 1 });
+  t.mock.timers.enable({ apis: ["Date"], now: sentAt });
+  const reasonAfter = (ms) => {
+    t.mock.timers.setTime(sentAt + ms);
+    return planSummarySms(store, capOne, call(BOOTSTRAP_TENANT_ID)).reason;
+  };
+  const DAY = 86_400_000;
+  assert.deepEqual(
+    [reasonAfter(60_000), reasonAfter(DAY / 2), reasonAfter(DAY), reasonAfter(DAY + 1)],
+    ["daily_cap", "daily_cap", "daily_cap", null],
+  );
 });
