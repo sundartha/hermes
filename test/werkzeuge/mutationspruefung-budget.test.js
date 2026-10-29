@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASIS, bisBeendet, EXIT_ABBRUCH, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
+import { BASIS, bisBeendet, EXIT_ABBRUCH, EXIT_ROT, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
 import { commitAll, outputLines, probeDirectory, probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
 import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-lauf.js";
 
@@ -24,7 +24,6 @@ const NORMAL = ["--basis", "HEAD"];
 const TESTUMBAU = ["--basis", "HEAD~1", "--testumbau"];
 const EIN_PLATZ = 1;
 const MS_JE_MINUTE = 60_000;
-const SECHS_STUNDEN_MS = 360 * MS_JE_MINUTE;
 const EINE_STUNDE_MS = 60 * MS_JE_MINUTE;
 const FUENFZEHN_MINUTEN_MS = 15 * MS_JE_MINUTE;
 const BUDGET_UMGEBUNG = [
@@ -127,18 +126,18 @@ async function bisZurSperre(context, { repo, zusatz = {} }, argumente) {
   return vorschau;
 }
 
-test("eine normale Mutation mit einer Schätzung von über 15 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
+test("eine normale Mutation mit einer Schätzung von über 15 Minuten bricht nicht ab, ihr Budget ist unbegrenzt", async (context) => {
   const repo = grosseQuelleGeaendert(context, join(probeDirectory(context, {}), "testlauf"));
   const vorschau = await bisZurSperre(context, { repo }, ["--basis", "HEAD"]);
   assert.ok(vorschau.schaetzung_ms > FUENFZEHN_MINUTEN_MS, JSON.stringify(vorschau));
-  assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
+  assert.equal(vorschau.budget_ms, null, JSON.stringify(vorschau));
 });
 
-test("eine Testumbau-Mutation mit einer Schätzung von über 60 Minuten bricht nicht ab, ihr Budget beträgt 360 Minuten", async (context) => {
+test("eine Testumbau-Mutation mit einer Schätzung von über 60 Minuten bricht nicht ab, ihr Budget ist unbegrenzt", async (context) => {
   const repo = grosseQuelleTestUmgebaut(context, join(probeDirectory(context, {}), "testlauf"));
   const vorschau = await bisZurSperre(context, { repo }, ["--basis", "HEAD~1", "--testumbau"]);
   assert.ok(vorschau.schaetzung_ms > EINE_STUNDE_MS, JSON.stringify(vorschau));
-  assert.ok(vorschau.budget_ms >= SECHS_STUNDEN_MS, JSON.stringify(vorschau));
+  assert.equal(vorschau.budget_ms, null, JSON.stringify(vorschau));
 });
 
 test("Umgebungsvariablen heben das Budget nicht an: die Schätzung über dem Budget startet auch mit ihnen nicht", async (context) => {
@@ -353,4 +352,35 @@ test("feuert der Budget-Timer erst nach dem Abbruch der normalen Mutation durch 
 test("feuert der Budget-Timer erst nach dem Abbruch der Testumbau-Mutation durch die Schätzung, bleibt ende die letzte Zeile des Zeit-Logs", async (context) => {
   const repo = kleinerTestumbau(context);
   endeBleibtLetztes(await mitSchaetzungVorTimer(context, { repo, argumente: TESTUMBAU, uhr: "eingefroren" }), repo);
+});
+
+const UHR_UEBER_DER_GRENZE = fileURLToPath(new URL("mutationspruefung-budget-uhr-ersatz.mjs", import.meta.url));
+const TEUERE_SCHAETZUNG = fileURLToPath(new URL("mutationspruefung-budget-teuer-ersatz.mjs", import.meta.url));
+const GRUEN_ODER_ROT = new Set([0, EXIT_ROT]);
+const BUDGET_UNBEGRENZT = /^Vorschau Seite neu: .*; Budget der normalen Mutation unbegrenzt\.$/m;
+
+async function bisZumEnde(context, { repo, ersatz }, argumente) {
+  const env = umgebung(context, EIN_PLATZ);
+  await halter(context, env);
+  return mitBudget(context, { ersatz, repo, env }, argumente);
+}
+
+function mitUrteil(lauf) {
+  assert.ok(GRUEN_ODER_ROT.has(lauf.status), `Exit ${lauf.status}\n${lauf.stdout}${lauf.stderr}`);
+  assert.match(lauf.stdout, URTEIL, lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, ABBRUCH_BUDGET, lauf.stderr);
+}
+
+test("eine normale Mutation läuft über die frühere Grenze von 360 Minuten hinaus und endet mit einem Urteil statt mit dem Abbruch am Budget", async (context) => {
+  mitUrteil(await bisZumEnde(context, { repo: kleinesRepo(context), ersatz: UHR_UEBER_DER_GRENZE }, NORMAL));
+});
+
+test("eine Testumbau-Mutation läuft über die frühere Grenze von 360 Minuten hinaus und endet mit einem Urteil statt mit dem Abbruch am Budget", async (context) => {
+  mitUrteil(await bisZumEnde(context, { repo: kleinerTestumbau(context), ersatz: UHR_UEBER_DER_GRENZE }, TESTUMBAU));
+});
+
+test("eine Schätzung weit über jedem früheren Budget sperrt den Start nicht: die Vorschau nennt sie als Hinweis und die Prüfung rechnet bis zum Urteil", async (context) => {
+  const lauf = await bisZumEnde(context, { repo: kleinesRepo(context), ersatz: TEUERE_SCHAETZUNG }, NORMAL);
+  mitUrteil(lauf);
+  assert.match(lauf.stdout, BUDGET_UNBEGRENZT, lauf.stdout);
 });
