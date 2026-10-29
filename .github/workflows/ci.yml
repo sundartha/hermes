@@ -418,7 +418,7 @@ jobs:
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
-            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
+            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json" --vorergebnis-holen "$RUNNER_TEMP/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
             teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
             anzahl=$(jq -e .anzahl "$RUNNER_TEMP/mutationsplan.json")
             printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
@@ -427,12 +427,14 @@ jobs:
             printf 'messen=nein\nteile=[0]\nanzahl=0\n' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Laufzeiten hochladen
+      - name: Vorgaben hochladen
         if: steps.plan.outputs.messen == 'ja'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: mutation-laufzeiten
-          path: ${{ runner.temp }}/mutation-laufzeiten.json
+          name: mutation-vorgaben
+          path: |
+            ${{ runner.temp }}/mutation-laufzeiten.json
+            ${{ runner.temp }}/mutation-vorergebnis.json
           if-no-files-found: error
           overwrite: true
           retention-days: 7
@@ -458,12 +460,12 @@ jobs:
         with:
           web: "false"
 
-      - name: Laufzeiten laden
+      - name: Vorgaben laden
         if: needs.mutationsplan.outputs.messen == 'ja'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: mutation-laufzeiten
-          path: ${{ runner.temp }}/laufzeiten
+          name: mutation-vorgaben
+          path: ${{ runner.temp }}/vorgaben
 
       - name: Mutationsprüfung
         if: needs.mutationsplan.outputs.messen == 'ja'
@@ -478,7 +480,7 @@ jobs:
           zusatz=""
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"}
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
 
       - name: Zeit-Log hochladen
         if: always() && needs.mutationsplan.outputs.messen == 'ja'
@@ -525,12 +527,12 @@ jobs:
           path: ${{ runner.temp }}/mutation
           merge-multiple: true
 
-      - name: Laufzeiten laden
+      - name: Vorgaben laden
         if: needs.mutationsplan.outputs.messen == 'ja'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: mutation-laufzeiten
-          path: ${{ runner.temp }}/laufzeiten
+          name: mutation-vorgaben
+          path: ${{ runner.temp }}/vorgaben
 
       - name: Mutationsurteil
         if: needs.mutationsplan.outputs.messen == 'ja'
@@ -545,7 +547,7 @@ jobs:
           if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
           if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
           mkdir -p "$RUNNER_TEMP/urteil"
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" --laufzeiten "$RUNNER_TEMP/laufzeiten/mutation-laufzeiten.json" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
           code=${PIPESTATUS[0]}
           echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
           exit "$code"
