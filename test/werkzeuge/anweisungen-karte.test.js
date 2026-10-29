@@ -292,3 +292,18 @@ test("hinweise: ein veralteter, kürzerer Kartenteil nimmt eine Handzeile darunt
   generate(directory);
   assert.ok(read(directory, "src/fach/CLAUDE.md").includes(hand));
 });
+
+test("hinweise: wechselt ein Ordner zwischen erstem und weiterem Ordner des Bausteins, ersetzt der Erzeuger den ganzen alten Kartenteil", (context) => {
+  const directory = generated(context);
+  const swapped = {
+    ...MAP,
+    bausteine: MAP.bausteine.map((entry) =>
+      entry.baustein === "fach" ? { ...entry, quellen: ["src/fach-zwei/", "src/fach/"] } : entry,
+    ),
+  };
+  writeFiles(directory, { [MAP_FILE]: `${JSON.stringify(swapped, null, 2)}\n` });
+  generate(directory);
+  createBaseline(directory);
+  const result = compare(directory);
+  assert.equal(result.status, EXIT_OK, result.output);
+});
