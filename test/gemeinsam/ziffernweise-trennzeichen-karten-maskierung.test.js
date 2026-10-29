@@ -181,7 +181,9 @@ test("ziffernweise Karte nach sechs vorangestellten Ziffern mit Bindestrich ohne
   maskiertEndetMitKartenende(`Karte ${ziffernMit(VORANGESTELLTE_ZIFFERN, " ")} ${ziffernMit(MASTERCARD_16, "-")}`);
 });
 
-test("19 ziffernweise Ziffern mit zwei zusammenhängenden Ziffern dahinter bleiben in maskRestrictedText unverändert (bisherige Erkennung)", () => {
+test("19 ziffernweise Ziffern mit zwei zusammenhängenden Ziffern dahinter maskiert maskRestrictedText als Karte", () => {
   const eingabe = `Karte ${ziffernMit(`${MASTERCARD_16}000`, " ")} 12`;
-  assert.equal(maskRestrictedText(eingabe), eingabe);
+  const masked = maskRestrictedText(eingabe);
+  assert.ok(masked.includes(KARTENENDE_MASTERCARD), `Kartenende nicht maskiert: ${masked}`);
+  assert.ok(!masked.includes("5 5 5 5 5") && !masked.includes("5-5-5-5-5"), `Kartennummer im Klartext: ${masked}`);
 });
