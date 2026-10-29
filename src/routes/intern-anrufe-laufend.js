@@ -1,13 +1,13 @@
 import { AUTH_FAILED_GRUND, auditAuthFailed, safeEqual } from "../util.js";
+import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.js";
 
 export const ANRUFE_LAUFEND_PATH = "/intern/anrufe-laufend";
 export const DEPLOY_TOKEN_MIN_LENGTH = 32;
 
 const AKTIVER_STATUS = "active";
-const HTTP_UNAUTHORIZED = 401;
 const BEARER_PRAEFIX = "Bearer ";
 const KEIN_ZWISCHENSPEICHER = "no-store";
-const ABGELEHNT = Object.freeze({ error: "unauthorized" });
+const ABGELEHNT = "unauthorized";
 
 function deployTokenGueltig(config, authorization) {
   const erwartet = config.auth.deployToken;
@@ -29,7 +29,7 @@ export function deployTokenAbgewiesen(config, req, res) {
   res.set("Cache-Control", KEIN_ZWISCHENSPEICHER);
   if (deployTokenGueltig(config, req.headers.authorization)) return false;
   auditAuthFailed(req, AUTH_FAILED_GRUND.DEPLOY_TOKEN);
-  res.status(HTTP_UNAUTHORIZED).json(ABGELEHNT);
+  antworteFehler(res, HTTP_UNAUTHORIZED, ABGELEHNT);
   return true;
 }
 

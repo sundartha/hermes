@@ -16,15 +16,27 @@ import {
   requestNumber,
 } from "../store/state-ops.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
+import {
+  HTTP_BAD_REQUEST,
+  HTTP_CONFLICT,
+  HTTP_FORBIDDEN,
+  HTTP_SERVICE_UNAVAILABLE,
+  HTTP_TOO_MANY_REQUESTS,
+  antworteFehler,
+} from "../utils/http.js";
 
-const ONBOARD_REASON_STATUS = { tenant_inactive: 403, tenant_cap: 409, global_cap: 429 };
+const ONBOARD_REASON_STATUS = {
+  tenant_inactive: HTTP_FORBIDDEN,
+  tenant_cap: HTTP_CONFLICT,
+  global_cap: HTTP_TOO_MANY_REQUESTS,
+};
 
 const RETRY_REASON_STATUS = {
-  already_provisioned: 409,
-  tenant_cap: 409,
-  global_cap: 429,
-  needs_manual_reconcile: 409,
-  persist_error: 503,
+  already_provisioned: HTTP_CONFLICT,
+  tenant_cap: HTTP_CONFLICT,
+  global_cap: HTTP_TOO_MANY_REQUESTS,
+  needs_manual_reconcile: HTTP_CONFLICT,
+  persist_error: HTTP_SERVICE_UNAVAILABLE,
 };
 const RETRY_REASON_MESSAGE = {
   needs_manual_reconcile:
@@ -34,10 +46,72 @@ const RETRY_REASON_MESSAGE = {
 
 function requireValidTenantId(res, tenantId) {
   if (validIdentity(tenantId)) return true;
-  res
-    .status(400)
-    .json({ error: `tenantId ist Pflicht (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)` });
+  antworteFehler(
+    res,
+    HTTP_BAD_REQUEST,
+    `tenantId ist Pflicht (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)`,
+  );
   return false;
+}
+
+function onboardIdentitaet(req, res) {
+  const { tenantId: bodyTenantId, idpSubject } = req.body || {};
+  if (idpSubject !== undefined && !validIdentity(idpSubject)) {
+    antworteFehler(
+      res,
+      HTTP_BAD_REQUEST,
+      `idpSubject ungueltig (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)`,
+    );
+    return null;
+  }
+  const sub = idpSubject ?? null;
+  const tenantId = sub ? tenantIdForSubject(sub) : bodyTenantId;
+  if (!requireValidTenantId(res, tenantId)) return null;
+  return { sub, tenantId };
+}
+
+function onboardStandort(config, geoLookup, req) {
+  const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
+  const country = resolveOnboardCountry({
+    userCountry: req.body?.country,
+    proposedCountry,
+    fallbackCountry: config.provisioning.provisioningCountry,
+  });
+  const geo = tenantGeoForCountry(country);
+  const language = geo.defaultLanguage;
+  const numberCountry = config.provisioning.forceNumberCountry || country;
+  return { country, geo, language, numberCountry };
+}
+
+async function nummerBereitstellen({ config, audit, provisioning }, { req, res }, angebot) {
+  const { tenantId, number, country, language } = angebot;
+  const numberId = number.id;
+  audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
+
+  if (!config.provisioning.provisioningEnabled)
+    return res.json({
+      tenantId,
+      numberId,
+      status: number.status,
+      country,
+      language,
+      provisioning: "disabled",
+    });
+
+  const jobRes = await provisioning.queueProvisioning(numberId, tenantId);
+  if (!jobRes.ok) return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "Persistenz fehlgeschlagen");
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.jobId}`);
+  res.json({
+    tenantId,
+    numberId,
+    status: number.status,
+    country,
+    language,
+    provisioning: "queued",
+    jobId: jobRes.jobId,
+  });
+
+  void provisioning.runProvisioningDrainExclusive();
 }
 
 export function makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }) {
@@ -47,14 +121,10 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
   const geoLookup = geoLookupAdapter();
 
   operator.post("/api/onboard", async (req, res) => {
-    const { tenantId: bodyTenantId, firstName, lastName, privateNumber, idpSubject } = req.body || {};
-    if (idpSubject !== undefined && !validIdentity(idpSubject))
-      return res
-        .status(400)
-        .json({ error: `idpSubject ungueltig (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)` });
-    const sub = idpSubject ?? null;
-    const tenantId = sub ? tenantIdForSubject(sub) : bodyTenantId;
-    if (!requireValidTenantId(res, tenantId)) return;
+    const identitaet = onboardIdentitaet(req, res);
+    if (!identitaet) return;
+    const { sub, tenantId } = identitaet;
+    const { firstName, lastName, privateNumber } = req.body || {};
 
     const onboardGuardHit = checkSubAlreadyMerged({
       sub,
@@ -66,22 +136,16 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
       return res.status(onboardGuardHit.status).json({ error: onboardGuardHit.error });
     }
 
-    const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
-    const country = resolveOnboardCountry({
-      userCountry: req.body?.country,
-      proposedCountry,
-      fallbackCountry: config.provisioning.provisioningCountry,
-    });
-    const geo = tenantGeoForCountry(country);
-    const language = geo.defaultLanguage;
-    const numberCountry = config.provisioning.forceNumberCountry || country;
+    const { country, geo, language, numberCountry } = onboardStandort(config, geoLookup, req);
 
     try {
       normalizePrivateNumber(privateNumber, country);
     } catch {
-      return res
-        .status(400)
-        .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+      return antworteFehler(
+        res,
+        HTTP_BAD_REQUEST,
+        "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)",
+      );
     }
 
     const numberResult = await store
@@ -112,40 +176,15 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
         return { ok: false, reason: "persist_error" };
       });
     if (!numberResult.ok && numberResult.reason === "persist_error")
-      return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
+      return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "Persistenz fehlgeschlagen");
     if (!numberResult.ok) {
       audit("onboard_denied", req, `tenant=${tenantId} grund=${numberResult.reason}`);
       return res
-        .status(ONBOARD_REASON_STATUS[numberResult.reason] || 400)
+        .status(ONBOARD_REASON_STATUS[numberResult.reason] || HTTP_BAD_REQUEST)
         .json({ error: `Nummer-Anfrage abgelehnt (${numberResult.reason})` });
     }
-    const numberId = numberResult.number.id;
-    audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
-
-    if (!config.provisioning.provisioningEnabled)
-      return res.json({
-        tenantId,
-        numberId,
-        status: numberResult.number.status,
-        country,
-        language,
-        provisioning: "disabled",
-      });
-
-    const jobRes = await provisioning.queueProvisioning(numberId, tenantId);
-    if (!jobRes.ok) return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
-    audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.jobId}`);
-    res.json({
-      tenantId,
-      numberId,
-      status: numberResult.number.status,
-      country,
-      language,
-      provisioning: "queued",
-      jobId: jobRes.jobId,
-    });
-
-    void provisioning.runProvisioningDrainExclusive();
+    const angebot = { tenantId, number: numberResult.number, country, language };
+    return nummerBereitstellen({ config, audit, provisioning }, { req, res }, angebot);
   });
 
   operator.post("/api/onboard/retry", async (req, res) => {
@@ -153,15 +192,17 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
     if (!requireValidTenantId(res, tenantId)) return;
     if (!store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) {
       audit("onboard_retry_denied", req, `tenant=${tenantId} grund=kein_aktiver_subscriber`);
-      return res
-        .status(403)
-        .json({ error: "Kein aktiver, verifizierter Subscriber - kein Nummernkauf." });
+      return antworteFehler(
+        res,
+        HTTP_FORBIDDEN,
+        "Kein aktiver, verifizierter Subscriber - kein Nummernkauf.",
+      );
     }
     const result = await provisioning.triggerTenantProvisioning(tenantId);
     audit("onboard_retry", req, `tenant=${tenantId} ok=${result.ok} grund=${result.reason}`);
     if (!result.ok)
       return res
-        .status(RETRY_REASON_STATUS[result.reason] || 400)
+        .status(RETRY_REASON_STATUS[result.reason] || HTTP_BAD_REQUEST)
         .json({
           error: RETRY_REASON_MESSAGE[result.reason] || `Re-Provisioning abgelehnt (${result.reason})`,
         });

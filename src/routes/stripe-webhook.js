@@ -1,6 +1,8 @@
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
+import { HTTP_BAD_REQUEST, antworteFehler } from "../utils/http.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 export function makeStripeWebhookRoute({
   config,
@@ -22,17 +24,17 @@ export function makeStripeWebhookRoute({
       rawBody: req.rawBody,
       signatureHeader: req.headers["stripe-signature"],
       secret: config.billing.stripeWebhookSecret,
-      nowS: Math.floor(Date.now() / 1000),
+      nowS: Math.floor(Date.now() / MS_PER_SECOND),
     });
     if (!ok) {
       audit("stripe_webhook_rejected", req, "signature");
-      return res.status(400).json({ error: "invalid signature" });
+      return antworteFehler(res, HTTP_BAD_REQUEST, "invalid signature");
     }
     let event;
     try {
       event = JSON.parse(req.rawBody.toString("utf8"));
     } catch {
-      return res.status(400).json({ error: "bad payload" });
+      return antworteFehler(res, HTTP_BAD_REQUEST, "bad payload");
     }
     const outcome = await applyStripeWebhookSerialized(event, {
       store, accounts, sessions, audit, req, provision, billing,

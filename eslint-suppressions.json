@@ -677,11 +677,6 @@
       "count": 3
     }
   },
-  "src/routes/api-billing.js": {
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
   "src/routes/api-calls.js": {
     "complexity": {
       "count": 1
@@ -697,17 +692,8 @@
     }
   },
   "src/routes/api-onboard.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
       "count": 3
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 8
     }
   },
   "src/routes/api-read.js": {
@@ -719,11 +705,6 @@
     }
   },
   "src/routes/mcp.js": {
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
-  "src/routes/stripe-webhook.js": {
     "no-magic-numbers": {
       "count": 3
     }
