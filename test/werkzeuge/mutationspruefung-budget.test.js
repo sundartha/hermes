@@ -360,9 +360,7 @@ const GRUEN_ODER_ROT = new Set([0, EXIT_ROT]);
 const BUDGET_UNBEGRENZT = /^Vorschau Seite neu: .*; Budget der normalen Mutation unbegrenzt\.$/m;
 
 async function bisZumEnde(context, { repo, ersatz }, argumente) {
-  const env = umgebung(context, EIN_PLATZ);
-  await halter(context, env);
-  return mitBudget(context, { ersatz, repo, env }, argumente);
+  return mitBudget(context, { ersatz, repo, env: umgebung(context, EIN_PLATZ) }, argumente);
 }
 
 function mitUrteil(lauf) {
