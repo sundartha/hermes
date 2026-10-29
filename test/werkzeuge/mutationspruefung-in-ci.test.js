@@ -22,6 +22,10 @@ const LAEUFT = { status: "in_progress", conclusion: "" };
 const KURZE_ZEITEN = { taktMs: 5, hoechstMs: 60, suchabstandMs: 1 };
 const MEHRERE_ABFRAGEN = { taktMs: 5, hoechstMs: 1500, suchabstandMs: 1 };
 const FRIST = { timeout: 20_000 };
+const MS_JE_MINUTE = 60_000;
+const MINUTEN_JE_ABFRAGE = 15;
+const ABFRAGEN_BIS_ENDE = 30;
+const SCHNELLER_TAKT = { taktMs: 1, suchabstandMs: 1 };
 const VOR_DEM_ABRUF_MS = -600_000;
 const NACH_DEM_ABRUF_MS = 2000;
 const NICHT_ERREICHBAR = "https://127.0.0.1:1/hermes.git";
@@ -163,6 +167,19 @@ test("Mutationsprüfung in der CI: ein Lauf, der bis zur Höchstzeit nicht ferti
   assert.match(ergebnis.zeilen[1], /\(in_progress, \)$/);
   const abfragen = ghAufrufe(probe.gh).filter((argumente) => argumente[1] === "view" && !argumente.includes("--log-failed"));
   assert.ok(abfragen.length > 1, `${abfragen.length} Abfragen`);
+});
+
+test("Mutationsprüfung in der CI: ein Lauf, der 450 Minuten dauert, ergibt sein Urteil statt eines Abbruchs", FRIST, async (context) => {
+  const staende = [...Array.from({ length: ABFRAGEN_BIS_ENDE }, () => LAEUFT), FERTIG_GRUEN];
+  const probe = fall(context, { staende, urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  let minuten = 0;
+  context.mock.method(Date, "now", () => {
+    minuten += MINUTEN_JE_ABFRAGE;
+    return minuten * MS_JE_MINUTE;
+  });
+  const ergebnis = await mutationInCi({ root: probe.repo, basis: probe.basis, alterStand: false, gleichwertige: [] }, SCHNELLER_TAKT);
+  assert.equal(ergebnis.exitCode, 0, ergebnis.zeilen?.join("\n"));
+  assert.equal(ergebnis.zeilen[1], GRUENES_URTEIL);
 });
 
 test("Mutationsprüfung in der CI: der gepushte Stand ist der ganze Arbeitsbaum, Index, HEAD und Status bleiben unverändert", async (context) => {
