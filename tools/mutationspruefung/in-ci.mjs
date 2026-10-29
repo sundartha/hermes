@@ -28,6 +28,8 @@ const SUCHVERSUCHE = 3;
 const SUCHLISTE = "5";
 const LAUF_URL = /\/actions\/runs\/(\d+)/;
 const ABBRUCHZEILE = /(Abbruch: .*)$/;
+const TEIL_JOB = /^Mutationsprüfung \d+$/;
+const TEIL_GESCHEITERT = new Set(["failure", "cancelled", "timed_out"]);
 const NACHRICHT = ["Mutationsprüfung auf Abruf", "", "Auftrag: lauf/in-ci"];
 const GEMELDET = "in lauf gemeldet";
 const NUR_COMMIT = "^{commit}";
@@ -86,9 +88,16 @@ function loeseAus({ repo, zweig, basis, alterStand }, suchabstandMs) {
   return treffer ? treffer[1] : sucheLauf({ repo, zweig, seit }, suchabstandMs);
 }
 
+function gescheiterterTeil(stand) {
+  return (stand.jobs ?? []).find(({ name, status, conclusion }) => TEIL_JOB.test(name) && status === LAUF_FERTIG && TEIL_GESCHEITERT.has(conclusion));
+}
+
 async function warteAufLauf(repo, lauf, frist) {
-  const stand = JSON.parse(gh(["run", "view", lauf, "-R", repo, "--json", "status,conclusion"]));
-  if (stand.status === LAUF_FERTIG || Date.now() >= frist.ende) return stand;
+  const stand = JSON.parse(gh(["run", "view", lauf, "-R", repo, "--json", "status,conclusion,jobs"]));
+  if (stand.status === LAUF_FERTIG) return stand;
+  const gescheitert = gescheiterterTeil(stand);
+  if (gescheitert !== undefined) return { ...stand, gescheitert };
+  if (Date.now() >= frist.ende) return stand;
   await warte(frist.taktMs);
   return warteAufLauf(repo, lauf, frist);
 }
@@ -106,13 +115,32 @@ function abgelegtesUrteil(repo, lauf) {
   return URTEILE.has(exitCode) ? { exitCode: Number(exitCode), ausgabe: readFileSync(ausgabe, "utf8").trimEnd() } : null;
 }
 
+function abbruchAus(ausgabe) {
+  return ausgabe.split("\n").flatMap((zeile) => ABBRUCHZEILE.exec(zeile)?.slice(1) ?? []);
+}
+
 function abbruchZeilen(repo, lauf) {
   try {
-    return gh(["run", "view", lauf, "-R", repo, "--log-failed"])
-      .split("\n")
-      .flatMap((zeile) => ABBRUCHZEILE.exec(zeile)?.slice(1) ?? []);
+    return abbruchAus(gh(["run", "view", lauf, "-R", repo, "--log-failed"]));
   } catch {
     return [];
+  }
+}
+
+function abbruchZeilenDesTeils(repo, teil) {
+  try {
+    return abbruchAus(gh(["api", `repos/${repo}/actions/jobs/${teil.databaseId}/logs`]));
+  } catch {
+    return [];
+  }
+}
+
+function brecheLaufAb(repo, lauf) {
+  try {
+    gh(["run", "cancel", lauf, "-R", repo]);
+    return [];
+  } catch (fehler) {
+    return [`Hinweis: Lauf ${lauf} nicht abgebrochen: ${fehler.message}`];
   }
 }
 
@@ -129,8 +157,15 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
   const stand = await warteAufLauf(repo, lauf, { taktMs: zeiten.taktMs, ende: Date.now() + zeiten.hoechstMs });
-  const urteil = stand.status === LAUF_FERTIG ? abgelegtesUrteil(repo, lauf) : null;
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
+  if (stand.gescheitert !== undefined) {
+    const { name, conclusion } = stand.gescheitert;
+    const hinweis = brecheLaufAb(repo, lauf);
+    const abgebrochen = hinweis.length === 0 ? ", Rest des Laufs abgebrochen" : "";
+    const vorzeitig = `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${url} (${name}: ${conclusion}${abgebrochen})`;
+    return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, vorzeitig, ...abbruchZeilenDesTeils(repo, stand.gescheitert), ...hinweis] };
+  }
+  const urteil = stand.status === LAUF_FERTIG ? abgelegtesUrteil(repo, lauf) : null;
   if (urteil) return { exitCode: urteil.exitCode, zeilen: [kopfzeile, urteil.ausgabe] };
   const ohneUrteil = `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${url} (${stand.status}, ${stand.conclusion})`;
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
