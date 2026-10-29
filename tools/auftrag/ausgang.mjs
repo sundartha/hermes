@@ -5,7 +5,7 @@ const PLATZHALTER = /<[^<>\n]*>/g;
 const INHALT = /[\p{L}\p{N}]/u;
 const ALTER_TEST_FORM = /^(test\/\S+?\.test\.[cm]?js):(.+)$/;
 const BEFUND_FORM = /^(\S+?):(\d+) [–-] (.+)$/;
-const MELDUNG = /^(Gleichwertig|Nötig|Alter Schutz): (.+?), weil (\S.*)$/;
+const MELDUNG = /^(Gleichwertig|Nötig|Widerspruch|Alter Schutz): (.+?), weil (\S.*)$/;
 const AUSSTIEG = "ausstieg";
 const BAU = "bau";
 const AUSSTIEG_KOPF = "Auftrag passt nicht";
@@ -28,7 +28,7 @@ const AUSWEG_BEI_ZEILE = new RegExp(`^${AUSWEG_BEI}(\\S.*)$`, "gm");
 const ZWECK_UNKLAR = /^Zweck der Prüfung (.+?) unklar\b/;
 const TRENNER = / [–-] /g;
 const ZWECK_KOPF = /^Zweck ([^:\s][^:]*):(.*)$/;
-const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, BEFUND_KOPF, "Gleichwertig", "Nötig", "Alter Schutz"].join("|")}):`);
+const ABSATZ_ENDE = new RegExp(`^(?:${[AUSSTIEG_KOPF, VORAUSSETZUNG_KOPF, ALTER_TEST_KOPF, BEFUND_KOPF, "Gleichwertig", "Nötig", "Widerspruch", "Alter Schutz"].join("|")}):`);
 
 function grundNach(kopf, zeile) {
   return zeile.startsWith(kopf) ? NACH_KOPF.exec(zeile.slice(kopf.length))?.[1] : undefined;
@@ -86,12 +86,12 @@ function wegDes(letzter, rolle) {
 }
 
 function meldungen(zeilen) {
-  const gefunden = { Gleichwertig: [], Nötig: [], "Alter Schutz": [] };
+  const gefunden = { Gleichwertig: [], Nötig: [], Widerspruch: [], "Alter Schutz": [] };
   for (const zeile of zeilen) {
     const [, art, mutant, grund] = MELDUNG.exec(zeile) ?? [];
     if (art !== undefined && !nurPlatzhalter(mutant) && !nurPlatzhalter(grund)) gefunden[art].push({ mutant: mutant.trim(), grund: grund.trim() });
   }
-  return { gleichwertig: gefunden.Gleichwertig, noetig: gefunden.Nötig, alterSchutz: gefunden["Alter Schutz"] };
+  return { gleichwertig: gefunden.Gleichwertig, noetig: gefunden.Nötig, widerspruch: gefunden.Widerspruch, alterSchutz: gefunden["Alter Schutz"] };
 }
 
 function zweckAbsaetze(zeilen) {

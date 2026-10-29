@@ -581,12 +581,12 @@ class AuftragsLauf {
     ];
   }
 
-  bauSchritte() {
+  bauSchritte({ aenderungPflicht = true } = {}) {
     return [
       () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
       () => this.importendungen(),
       () => this.grenzen("bau", this.basisBau),
-      () => this.bauHatGeaendert(),
+      () => !aenderungPflicht || this.bauHatGeaendert(),
       () => this.listenUmziehen(),
       () => this.listenKuerzen(),
       () => this.allesVormerken(),
