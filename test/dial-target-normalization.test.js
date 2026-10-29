@@ -403,3 +403,16 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
     }
   });
 });
+
+const NANP_HEIMAT = "+1";
+const US_NUMMER_OHNE_VORWAHL = "2125550123";
+const US_NUMMER_MIT_VORWAHL_1 = "12125550123";
+const US_NUMMER_E164 = "+12125550123";
+
+test("NANP-Heimatland: Nummern mit und ohne Vorwahl 1 werden zu +1 (Absicherung)", () => {
+  assert.equal(normalizeDialTarget(US_NUMMER_OHNE_VORWAHL, NANP_HEIMAT), US_NUMMER_E164);
+  assert.equal(normalizeDialTarget(US_NUMMER_MIT_VORWAHL_1, NANP_HEIMAT), US_NUMMER_E164);
+  assert.equal(normalizeDialTarget("0049+", NANP_HEIMAT), "+49+", "00 wird auch vor einem Plus am Ende zu +");
+  assert.equal(normalizeDialTarget(US_NUMMER_E164, NANP_HEIMAT), US_NUMMER_E164);
+});
+
