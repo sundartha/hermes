@@ -180,7 +180,7 @@ export function vorherZusammen(ordner) {
   return vereineStuecke(lies(PLANDATEI), namen.filter((name) => name !== PLANDATEI).map(lies));
 }
 
-function stueckName({ nummer, datei, zeilen }) {
+export function stueckName({ nummer, datei, zeilen }) {
   return `Stück ${nummer} (${datei}:${zeilen.map((bereich) => bereich.join("-")).join(",")})`;
 }
 

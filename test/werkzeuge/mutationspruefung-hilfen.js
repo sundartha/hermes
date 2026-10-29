@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { GRUPPE } from "../../tools/mutationspruefung/gruppen.mjs";
@@ -257,4 +258,26 @@ export function quelltexttest(name) {
     `test("${name}", () => assert.equal(readFileSync("src/zahl.js", "utf8"), ""));`,
     "",
   ].join("\n");
+}
+
+export function befundzeilen(lauf, muster) {
+  const zeilen = [...lauf.stdout.matchAll(muster)].map(([zeile]) => zeile);
+  return zeilen.sort();
+}
+
+export function aufgeteilt(context, repo, { basis, zwischen = () => {}, zusatz = [] }) {
+  const lauf = (...argumente) => runIn(repo, process.execPath, [WERKZEUG, "--basis", basis, ...zusatz, ...argumente]);
+  const ordner = probeDirectory(context, {});
+  const planDatei = join(ordner, "plan.txt");
+  const planLauf = lauf("--plan", planDatei);
+  assert.equal(planLauf.status, 0, planLauf.stdout + planLauf.stderr);
+  const plan = JSON.parse(readFileSync(planDatei, "utf8"));
+  const laeufe = [];
+  for (const teil of plan.teile) {
+    const teilLauf = lauf("--teil", String(teil), "--teile", String(plan.anzahl), "--ergebnis", join(ordner, `mutation-teil-${teil}.json`));
+    assert.equal(teilLauf.status, 0, teilLauf.stdout + teilLauf.stderr);
+    laeufe.push(teilLauf);
+  }
+  zwischen();
+  return { plan, laeufe, urteil: lauf("--urteil", ordner) };
 }
