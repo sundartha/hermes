@@ -1,7 +1,11 @@
-import { schluesselName, zugriffsName } from "./knoten.js";
+import { BESTAND_OPTION, bestandDerDatei, knotenSchluessel } from "./bestand.js";
+import { alleKnoten, nachAnfang, schluesselName, zugriffsName } from "./knoten.js";
 
 const MELDUNG =
   "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
+const MELDUNG_PRODUKT =
+  "Anfrage nach außen ohne Antwortfrist: gib `signal: AbortSignal.timeout(<benannte Frist in ms>)` mit, sonst hängt der Aufruf endlos, wenn die Gegenseite nicht antwortet.";
+const TEST_ORDNER = "test/";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
 const HTTP_FUNKTIONEN = new Set(["request", "get"]);
 const GLOBALE_HUELLEN = new Set(["globalThis", "global"]);
@@ -184,17 +188,30 @@ function fehltFrist(scope, aufruf) {
   return istHttpAufruf(scope, callee) && !istInHuelle(aufruf);
 }
 
+export function anfragenOhneFrist(sourceCode) {
+  return alleKnoten(sourceCode)
+    .filter(
+      (knoten) =>
+        knoten.type === "CallExpression" && fehltFrist(sourceCode.getScope(knoten), knoten),
+    )
+    .sort(nachAnfang);
+}
+
 export default {
   meta: {
     type: "problem",
-    schema: [],
-    messages: { ohneFrist: MELDUNG },
+    schema: [BESTAND_OPTION],
+    messages: { ohneFrist: MELDUNG, ohneFristImProdukt: MELDUNG_PRODUKT },
   },
   create(context) {
     return {
-      CallExpression(node) {
-        if (fehltFrist(context.sourceCode.getScope(node), node)) {
-          context.report({ node, messageId: "ohneFrist" });
+      Program() {
+        const { sourceCode } = context;
+        const bestand = bestandDerDatei(context);
+        const messageId = bestand.datei.startsWith(TEST_ORDNER) ? "ohneFrist" : "ohneFristImProdukt";
+        for (const aufruf of anfragenOhneFrist(sourceCode)) {
+          const schluessel = knotenSchluessel(sourceCode, bestand.datei, aufruf);
+          if (!bestand.eingefroren(schluessel)) context.report({ node: aufruf, messageId });
         }
       },
     };
