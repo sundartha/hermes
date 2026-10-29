@@ -271,3 +271,24 @@ test("hinweise: eine Handzeile direkt unter dem Kartenteil bleibt beim erneuten 
   generate(directory);
   assert.ok(read(directory, "src/fach/CLAUDE.md").includes(FREE_LINE));
 });
+
+test("hinweise: eine Handzeile mit erzeugtem Präfix direkt unter dem Kartenteil bleibt beim erneuten Erzeugen stehen", (context) => {
+  const directory = generated(context);
+  const text = read(directory, "src/fach/CLAUDE.md");
+  const hand = "- Eingang: Eigene Regel zum Eingang.\n";
+  writeFiles(directory, { "src/fach/CLAUDE.md": `${text}${hand}` });
+  generate(directory);
+  assert.ok(read(directory, "src/fach/CLAUDE.md").includes(hand));
+  const result = compare(directory);
+  assert.equal(result.status, EXIT_FINDING, result.output);
+});
+
+test("hinweise: ein veralteter, kürzerer Kartenteil nimmt eine Handzeile darunter nicht mit", (context) => {
+  const directory = generated(context);
+  const lines = read(directory, "src/fach/CLAUDE.md").trimEnd().split("\n");
+  assert.ok(lines.at(-1).startsWith("- Andere Bausteine in diesem Ordner: "), lines.at(-1));
+  const hand = "- Eingang: Eigene Regel zum Eingang.";
+  writeFiles(directory, { "src/fach/CLAUDE.md": `${[...lines.slice(0, -1), hand].join("\n")}\n` });
+  generate(directory);
+  assert.ok(read(directory, "src/fach/CLAUDE.md").includes(hand));
+});

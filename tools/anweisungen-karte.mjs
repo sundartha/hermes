@@ -93,18 +93,25 @@ export function splitLines(text) {
   return text.split(LINE_BREAK);
 }
 
-export function findBlock(lines) {
+function lineKind(line = "") {
+  return BLOCK_LINE_PREFIXES.find((prefix) => line.startsWith(prefix));
+}
+
+export function findBlock(lines, expected) {
   const start = lines.findIndex((line) => line.startsWith(HEADING_PREFIX));
   if (start === -1) return undefined;
-  const foreign = lines.findIndex(
-    (line, index) =>
-      index > start && !BLOCK_LINE_PREFIXES.some((prefix) => line.startsWith(prefix)),
-  );
-  return { start, end: foreign === -1 ? lines.length : foreign };
+  let end = start + 1;
+  while (
+    end - start < expected.length &&
+    lineKind(lines[end]) === lineKind(expected[end - start])
+  ) {
+    end += 1;
+  }
+  return { start, end };
 }
 
 export function blockMatches(lines, expected) {
-  const found = findBlock(lines);
+  const found = findBlock(lines, expected);
   if (found === undefined) return false;
   const actual = lines.slice(found.start, found.end).map((line) => line.trimEnd());
   return (
@@ -131,7 +138,7 @@ export function blockFindings(root, blocks) {
     const lines = splitLines(readFileSync(join(root, path), "utf8"));
     if (blockMatches(lines, expected)) return [];
     const text =
-      findBlock(lines) === undefined
+      findBlock(lines, expected) === undefined
         ? `hat keinen Kartenteil; ${GENERATE_COMMAND} erzeugt ihn aus ${KARTE}`
         : `hat einen Kartenteil, der nicht zu ${KARTE} passt; ${GENERATE_COMMAND} erzeugt ihn neu`;
     return [karteFinding(path, folder, text)];
@@ -145,7 +152,7 @@ export function coveredLines(root, blocks) {
     if (!existsSync(join(root, path))) continue;
     const lines = splitLines(readFileSync(join(root, path), "utf8"));
     if (!blockMatches(lines, expected)) continue;
-    const { start, end } = findBlock(lines);
+    const { start, end } = findBlock(lines, expected);
     for (let index = start; index < end; index += 1) {
       if (!lines[index].startsWith(PURPOSE_PREFIX)) covered.add(`${path}:${index + 1}`);
     }
@@ -155,7 +162,7 @@ export function coveredLines(root, blocks) {
 
 export function withBlock(text, expected) {
   const lines = splitLines(text);
-  const found = findBlock(lines);
+  const found = findBlock(lines, expected);
   if (found !== undefined)
     return [...lines.slice(0, found.start), ...expected, ...lines.slice(found.end)].join(
       LINE_BREAK,
