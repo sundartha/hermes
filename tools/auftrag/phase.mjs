@@ -40,6 +40,8 @@ const FERTIG = "fertig";
 const UEBERNOMMEN = "übernommen";
 const ABBRUCH_SIGNALE = ["SIGINT", "SIGTERM"];
 const KURZ_SHA = 7;
+const FRUEHERER_ABWEICHT = "Ein früherer Auftrag hat Zeilen außerhalb von betrifft geändert";
+const SELBST_VERALTET = "Der Auftrag hat selbst Zeilen außerhalb von betrifft geändert, während ein früherer noch nicht übernommen war";
 const VERTRAULICH =
   "Die Phase ist vertraulich; phase braucht ein öffentliches Issue und lädt einen Branch hoch. Starte sie mit node tools/auftrag.mjs lauf <phasendatei>.";
 
@@ -57,6 +59,7 @@ class Phasenlauf {
     this.stand = new Map(eintraege);
     this.laufend = new Map();
     this.ungemessen = new Set();
+    this.veraltet = new Map();
     this.graph = new Map();
     this.naechster = 0;
   }
@@ -70,13 +73,20 @@ class Phasenlauf {
     return gibtEsIn(stand, datei, cwd) ? git(["show", `${stand}:${datei}`], { cwd }) : null;
   }
 
-  baueGraph() {
-    const offene = this.ordnung.filter((kennung) => this.zustand(kennung) !== UEBERNOMMEN);
-    const auftraege = offene.map((kennung) => {
+  graphVon(kennungen) {
+    const auftraege = kennungen.map((kennung) => {
       const { auftrag } = this.stand.get(kennung);
       return this.ungemessen.has(kennung) ? { ...auftrag, betrifft: undefined } : auftrag;
     });
     return abhaengigkeitsgraph(auftraege, (datei) => this.quelltext(datei, "HEAD"));
+  }
+
+  graphDerOffenen() {
+    return this.graphVon(this.ordnung.filter((kennung) => this.zustand(kennung) !== UEBERNOMMEN));
+  }
+
+  graphAllerAuftraege() {
+    return this.graphVon(this.ordnung);
   }
 
   vorgaenger(kennung) {
@@ -95,6 +105,7 @@ class Phasenlauf {
     const eintrag = this.stand.get(kennung);
     eintrag.pfad = legeAuftragAn(this.ort, kennung);
     eintrag.basis = kopf(eintrag.pfad);
+    eintrag.vorab = this.ordnung.filter((andere) => this.zustand(andere) === UEBERNOMMEN);
     eintrag.zustand = LAEUFT;
     const datei = join(this.verzeichnis, `${kennung}.phase.json`);
     const einzeln = { ...eintrag.auftrag, abhaengigVon: [] };
@@ -120,7 +131,7 @@ class Phasenlauf {
     return undefined;
   }
 
-  ausserhalbVonBetrifft(eintrag, datei, namen) {
+  geaenderteZeilenAusserhalbBetrifft(eintrag, datei, namen) {
     const messung = vermesse(this.quelltext(datei, eintrag.basis) ?? "", namen);
     if (messung === null) return GANZE_DATEI;
     const geaendert = bereicheZwischen({ cwd: this.ort.integration, von: eintrag.basis, bis: eintrag.commit }).get(datei) ?? [];
@@ -129,10 +140,22 @@ class Phasenlauf {
 
   pruefeBetrifft(kennung) {
     const eintrag = this.stand.get(kennung);
-    const abweichend = Object.entries(eintrag.auftrag.betrifft ?? {}).filter(([datei, namen]) => this.ausserhalbVonBetrifft(eintrag, datei, namen).length > 0);
+    const abweichend = Object.entries(eintrag.auftrag.betrifft ?? {}).filter(([datei, namen]) => this.geaenderteZeilenAusserhalbBetrifft(eintrag, datei, namen).length > 0);
     if (abweichend.length === 0) return;
     this.ungemessen.add(kennung);
+    this.markiereVeraltete(kennung);
     console.log(`Auftrag ${kennung}: ändert Zeilen außerhalb von betrifft (${abweichend.map(([datei]) => datei).join(", ")}); für ihn gilt ab jetzt die Dateiregel.`);
+  }
+
+  markiereVeraltete(kennung) {
+    const graph = this.graphAllerAuftraege();
+    const { vorab } = this.stand.get(kennung);
+    if ([...graph.get(kennung).keys()].some((vorher) => !vorab.includes(vorher))) this.veraltet.set(kennung, SELBST_VERALTET);
+    const spaeter = this.ordnung.slice(this.ordnung.indexOf(kennung) + 1);
+    for (const andere of spaeter) {
+      const gestartet = this.zustand(andere) === LAEUFT || this.zustand(andere) === FERTIG;
+      if (gestartet && graph.get(andere).has(kennung)) this.veraltet.set(andere, FRUEHERER_ABWEICHT);
+    }
   }
 
   schreibe(kennung, zusatz) {
@@ -160,6 +183,7 @@ class Phasenlauf {
       return this.verwirf(kennung, `${ursache} auch nach ${MAX_NEUSTARTS} Neustarts.`);
     }
     entferneAuftrag(this.ort, kennung);
+    this.veraltet.delete(kennung);
     eintrag.neustarts += 1;
     eintrag.zustand = WARTEND;
     console.log(`Auftrag ${kennung}: ${ursache}, Neustart ${eintrag.neustarts}.`);
@@ -173,6 +197,7 @@ class Phasenlauf {
 
   uebernimmEinen(kennung) {
     const { basis, commit } = this.stand.get(kennung);
+    if (this.veraltet.has(kennung)) return this.neustart(kennung, this.veraltet.get(kennung));
     const probe = this.pruefe("merge-tree", ["git", "merge-tree", "--write-tree", `--merge-base=${basis}`, "HEAD", commit]);
     this.protokolliere(kennung, [probe]);
     if (probe.exitCode !== 0) return this.neustart(kennung);
@@ -207,7 +232,7 @@ class Phasenlauf {
   async fuehreAus() {
     this.basis = kopf(this.ort.integration);
     for (;;) {
-      this.graph = this.baueGraph();
+      this.graph = this.graphDerOffenen();
       for (const kennung of this.ordnung) if (this.startbereit(kennung)) this.starte(kennung);
       if (this.laufend.size === 0) return this.ordnung.every((kennung) => this.zustand(kennung) === UEBERNOMMEN);
       this.nachLauf(await Promise.race([...this.laufend.values()].map(({ ende }) => ende)));

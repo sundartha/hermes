@@ -24,7 +24,7 @@ const SPEICHER_ATTRAPPE = {
   "src/store/json.js": "export const WERT = 1;\n",
   "src/store/pg.js": "export function makePgStore() {\n  return { WERT: 1 };\n}\n",
 };
-const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85, ciGruen: 86, ciRot: 87, gleichzeitig: 88, nachbarn: 89, testdatei: 90, ausserhalb: 91, deckel: 92 };
+const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85, ciGruen: 86, ciRot: 87, gleichzeitig: 88, nachbarn: 89, testdatei: 90, ausserhalb: 91, deckel: 92, veraltet: 93, selbstVeraltet: 94, selbstUebernommen: 95 };
 const LIMIT_SEKUNDEN = 2;
 const VOLLER_KONTEXT = { type: "assistant", message: { usage: { input_tokens: 100_000 }, content: [] } };
 
@@ -265,7 +265,10 @@ function quelleM(eins, zwei, drei) {
 }
 
 const NACHBARN = "export const NA = 1;\nexport const NB = 1;\n";
-const TESTDATEI_ZEILEN = Array.from({ length: 12 }, (leer, index) => `test("t${index}", () => {});\n`);
+const ZEILEN_DER_TESTDATEI = 12;
+const ZEILE_FUER_P = 1;
+const ZEILE_FUER_Q = 10;
+const TESTDATEI_ZEILEN = Array.from({ length: ZEILEN_DER_TESTDATEI }, (leer, index) => `test("t${index}", () => {});\n`);
 
 function testQuelle(ersetzt = {}) {
   const kopf = 'import assert from "node:assert/strict";\nimport { test } from "node:test";\n';
@@ -344,8 +347,8 @@ test("stoßen zwei Aufträge mit betrifft an benachbarten Zeilen aneinander, bau
 });
 
 test("ändern zwei Aufträge dieselbe Testdatei an getrennten Zeilen, startet der spätere erst nach der Übernahme des früheren und baut nicht neu", { timeout: PARALLEL_FRIST_MS }, async (context) => {
-  const erstesP = { 1: wertTest("P", "p") };
-  const beide = { ...erstesP, 10: wertTest("Q", "q") };
+  const erstesP = { [ZEILE_FUER_P]: wertTest("P", "p") };
+  const beide = { ...erstesP, [ZEILE_FUER_Q]: wertTest("Q", "q") };
   const probe = aufbau(
     context,
     {
@@ -389,6 +392,53 @@ test("ändert ein Auftrag Zeilen außerhalb von betrifft, startet der nächste e
   assert.equal(code, 0, ausgabe);
   assert.match(ausgabe, /Auftrag X1: ändert Zeilen außerhalb von betrifft \(src\/m\.js\)/);
   assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/x/X2.json"), "utf8")).neustarts, 0);
+});
+
+test("hat ein früherer Auftrag Zeilen außerhalb von betrifft geändert, baut ein schon laufender späterer neu, auch ohne überschneidende Zeilen", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const probe = aufbau(
+    context,
+    {
+      "93-V1": { warteAuf: "93-V2", dateien: { "src/m.js": quelleM(10, 20, 3) } },
+      "93-V2": { bau: [{ warteAuf: "93-V1", dateien: { "src/m.js": quelleM(1, 2, 30) } }, { dateien: { "src/m.js": quelleM(10, 20, 30) } }] },
+    },
+    { "src/m.js": quelleM(1, 2, 3) },
+  );
+  const erster = mitBetrifft(auftrag("V1", "src/m.js"), { "src/m.js": ["eins"] });
+  const zweiter = mitBetrifft(auftrag("V2", "src/m.js"), { "src/m.js": ["drei"] });
+  const { code, ausgabe } = await ende(phase(probe, ["v", ISSUE.veraltet, erster, zweiter]));
+  assert.equal(code, 0, ausgabe);
+  assert.match(ausgabe, /Auftrag V2: Ein früherer Auftrag hat Zeilen außerhalb von betrifft geändert, Neustart 1/);
+  assert.equal(runIn(probe.remote, "git", ["show", "phase/93-v:src/m.js"]).stdout, quelleM(10, 20, 30));
+});
+
+test("ändert ein fertiger Auftrag selbst Zeilen außerhalb von betrifft, baut er neu, wenn ein früherer noch lief oder erst nach seinem Start übernommen wurde", { timeout: PARALLEL_FRIST_MS }, async (context) => {
+  const faelle = [
+    { issue: ISSUE.selbstVeraltet, gesperrt: "94-W1", bis: "Auftrag W2: ändert Zeilen außerhalb von betrifft" },
+    { issue: ISSUE.selbstUebernommen, gesperrt: "95-W2", bis: "Auftrag W1: übernommen" },
+  ];
+  for (const { issue, gesperrt, bis } of faelle) {
+    const probe = aufbau(
+      context,
+      {
+        [`${issue}-W1`]: { warteAuf: gesperrt.endsWith("W1") ? "gesperrt" : undefined, dateien: { "src/m.js": quelleM(10, 2, 3) } },
+        [`${issue}-W2`]: { bau: [{ warteAuf: gesperrt.endsWith("W2") ? "gesperrt" : undefined, dateien: { "src/m.js": quelleM(1, 20, 30) } }, { dateien: { "src/m.js": quelleM(10, 20, 30) } }] },
+      },
+      { "src/m.js": quelleM(1, 2, 3) },
+    );
+    const erster = mitBetrifft(auftrag("W1", "src/m.js"), { "src/m.js": ["eins"] });
+    const zweiter = mitBetrifft(auftrag("W2", "src/m.js"), { "src/m.js": ["drei"] });
+    let gemeldet = false;
+    const lauf = ende(phase(probe, ["w", issue, erster, zweiter]), (text) => {
+      gemeldet ||= text.includes(bis);
+      return false;
+    });
+    while (!gemeldet) await Promise.race([lauf, schlafen(ABFRAGE_MS)]);
+    writeFileSync(join(probe.werkzeug, "start-gesperrt"), "");
+    const { code, ausgabe } = await lauf;
+    assert.equal(code, 0, ausgabe);
+    assert.match(ausgabe, /Auftrag W2: Der Auftrag hat selbst Zeilen außerhalb von betrifft geändert, während ein früherer noch nicht übernommen war, Neustart 1/);
+    assert.equal(runIn(probe.remote, "git", ["show", `phase/${issue}-w:src/m.js`]).stdout, quelleM(10, 20, 30));
+  }
 });
 
 test("von drei unabhängigen Aufträgen laufen höchstens zwei zugleich", { timeout: PARALLEL_FRIST_MS }, async (context) => {
