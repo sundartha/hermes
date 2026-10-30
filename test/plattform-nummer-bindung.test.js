@@ -15,6 +15,8 @@ import {
   findNumber,
   eraseTenantData,
   unbindOwnPlatformBindings,
+  unbindPlatformNumber,
+  openPlatformBindingByPurpose,
 } from "../src/store/state-ops.js";
 import {
   NUMBER_STATUS,
@@ -491,4 +493,94 @@ test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyRe
     1,
     "bindingBelongsTo(binding{tenantId:null}, null) ist wahr - EINE Quelle statt zwei Kopien",
   );
+});
+
+const SECOND_DID = "+4915198765432";
+const UNRELATED_DID = "+4915155500000";
+const OUTBOUND_ANI_BINDING = {
+  purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+  provider: PROVIDER.TELNYX,
+};
+const ALERT_SENDER_BINDING = {
+  purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
+  provider: PROVIDER.TELNYX,
+};
+
+test("bindPlatformNumber gibt die neue Bindung mit Kennung pnu_ zurueck und legt sie im Zustand ab", () => {
+  const state = makeDefaultState();
+  const binding = bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING });
+  assert.ok(binding.id.startsWith("pnu_"));
+  assert.equal(binding, state.platformNumberUse[0]);
+  assert.equal(binding.e164, ANI);
+  assert.equal(binding.purpose, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI);
+  assert.equal(binding.releasedAt, null);
+});
+
+test("bindPlatformNumber legt fuer denselben Zweck auf einer anderen Nummer eine eigene Bindung an", () => {
+  const state = makeDefaultState();
+  const first = bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING });
+  const second = bindPlatformNumber(state, { e164: SECOND_DID, ...OUTBOUND_ANI_BINDING });
+  assert.notEqual(second, first);
+  assert.equal(second.e164, SECOND_DID);
+  assert.equal(state.platformNumberUse.length, 2);
+  assert.equal(bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING }), first);
+});
+
+test("unbindPlatformNumber schliesst nur die Bindung der genannten Nummer und gibt sie zurueck", () => {
+  const state = makeDefaultState();
+  const bound = bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING });
+  assert.equal(unbindPlatformNumber(state, { e164: SECOND_DID, purpose: bound.purpose }), null);
+  assert.equal(bound.releasedAt, null);
+  const closed = unbindPlatformNumber(state, { e164: ANI, purpose: bound.purpose });
+  assert.equal(closed, bound);
+  assert.equal(typeof closed.releasedAt, "string");
+  assert.equal(unbindPlatformNumber(state, { e164: ANI, purpose: bound.purpose }), null);
+});
+
+test("openPlatformBindingByPurpose findet nur die offene Bindung genau dieses Zwecks", () => {
+  const state = makeDefaultState();
+  bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING });
+  unbindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI });
+  const alertBinding = bindPlatformNumber(state, { e164: ALERT_SENDER, ...ALERT_SENDER_BINDING });
+  assert.equal(openPlatformBindingByPurpose(state, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI), undefined);
+  assert.equal(openPlatformBindingByPurpose(state, PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER), alertBinding);
+});
+
+test("numberBusyReason meldet einen aktiven Anruf nur, wenn die Nummer Anrufer oder Angerufene ist", () => {
+  const number = { e164: CUSTOMER_DID, tenantId: "t1" };
+  const reasonWith = (call) => {
+    const state = makeDefaultState();
+    state.calls.push({ id: "c1", tenantId: "t1", ...call });
+    return numberBusyReason(state, number, { forTenantId: "t1" });
+  };
+  assert.equal(reasonWith({ status: "active", from: UNRELATED_DID, to: SECOND_DID }), null);
+  assert.equal(reasonWith({ status: "completed", from: CUSTOMER_DID, to: SECOND_DID }), null);
+  assert.equal(reasonWith({ status: "completed", from: SECOND_DID, to: CUSTOMER_DID }), null);
+  assert.equal(
+    reasonWith({ status: "active", from: CUSTOMER_DID, to: SECOND_DID }),
+    NUMBER_HOLD_REASON.ACTIVE_CALL,
+  );
+  assert.equal(
+    reasonWith({ status: "active", from: SECOND_DID, to: CUSTOMER_DID }),
+    NUMBER_HOLD_REASON.ACTIVE_CALL,
+  );
+});
+
+test("unbindOwnPlatformBindings schliesst nur Bindungen des eigenen Mandanten und nichts ohne Nummer", () => {
+  const state = makeDefaultState();
+  const own = bindPlatformNumber(state, { e164: CUSTOMER_DID, tenantId: "t1", ...OUTBOUND_ANI_BINDING });
+  const foreign = bindPlatformNumber(state, { e164: CUSTOMER_DID, tenantId: "t2", ...ALERT_SENDER_BINDING });
+  assert.deepEqual(unbindOwnPlatformBindings(state, { e164: null, tenantId: "t1" }), []);
+  assert.equal(own.releasedAt, null);
+  assert.deepEqual(unbindOwnPlatformBindings(state, { e164: CUSTOMER_DID, tenantId: "t1" }), [own]);
+  assert.equal(typeof own.releasedAt, "string");
+  assert.equal(foreign.releasedAt, null);
+});
+
+test("syncPlatformBindings gibt nur die offenen Bindungen zurueck", () => {
+  const state = makeDefaultState();
+  syncPlatformBindings(state, [{ e164: ANI, ...OUTBOUND_ANI_BINDING }]);
+  const open = syncPlatformBindings(state, [{ e164: SECOND_DID, ...OUTBOUND_ANI_BINDING }]);
+  assert.equal(state.platformNumberUse.length, 2);
+  assert.deepEqual(open.map((binding) => binding.e164), [SECOND_DID]);
 });
