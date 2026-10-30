@@ -4,7 +4,7 @@ import { argv } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { ALTVERSTOESSE, UNTERDRUECKUNGEN, altverstoesseAusgelagert, unterdrueckungenAusgelagert } from "../auslagerung-eintraege.mjs";
+import { ALTVERSTOESSE, KOPIEN, UNTERDRUECKUNGEN, altverstoesseAusgelagert, kopienAusgelagert, unterdrueckungenAusgelagert } from "../auslagerung-eintraege.mjs";
 import { LISTENPFADE, lesbar, listenNachUmzug } from "./bestandslisten.mjs";
 import { aenderungenSeit, vormerken } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
@@ -15,6 +15,7 @@ const EXIT_AUFRUF = 2;
 const AUSGELAGERTE_LISTEN = [
   { pfad: UNTERDRUECKUNGEN, umziehen: unterdrueckungenAusgelagert, meldung: (anzahl) => `${anzahl} Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen` },
   { pfad: ALTVERSTOESSE, umziehen: altverstoesseAusgelagert, meldung: (anzahl) => `${anzahl} Altverstöße der alten Datei für die ausgelagerte Datei übernommen` },
+  { pfad: KOPIEN, umziehen: kopienAusgelagert, meldung: (anzahl) => `${anzahl} Kopien-Einträge der alten Datei auf die wortgleich ausgelagerte Datei umgezogen` },
 ];
 
 async function ausgelagerteListenUmziehen({ basis, root }) {
