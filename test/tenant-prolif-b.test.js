@@ -286,3 +286,38 @@ test("tenant-prolif-b: abgelehnter Retry ohne eigene Meldung -> 409 mit Grund im
     await onboarding.close();
   }
 });
+
+function bestandAus(zustand) {
+  return {
+    tenants: zustand.tenants.map((t) => t.id).sort(),
+    nummern: zustand.numbers.map((n) => n.id).sort(),
+  };
+}
+
+test("[NIE1] vollstaendige, sonst gueltige Onboard-Anfrage eines gemergten Zweit-sub -> 409 mit dem bisherigen Text, Tenants, Nummern und Nummernkauf bleiben unberuehrt", async () => {
+  const store = await storeMitGemergtemZweitSub();
+  const bestandVorher = bestandAus(store.load());
+  const onboarding = await onboardingStarten({ store });
+  try {
+    const antwort = await onboarding.senden("/api/onboard", {
+      idpSubject: SUB_2,
+      firstName: "Zweit",
+      lastName: "Konto",
+      privateNumber: "+491701234567",
+    });
+    assert.equal(antwort.status, HTTP_CONFLICT);
+    assert.deepEqual(antwort.body, { error: SUB_GEMERGT_TEXT });
+    assert.deepEqual(
+      bestandAus(await frischGeladen(store)),
+      bestandVorher,
+      "Tenants und Nummern unveraendert",
+    );
+    assert.deepEqual(
+      onboarding.provisioning.aufrufe,
+      { queueProvisioning: [], triggerTenantProvisioning: [] },
+      "kein Nummernkauf angestossen",
+    );
+  } finally {
+    await onboarding.close();
+  }
+});
