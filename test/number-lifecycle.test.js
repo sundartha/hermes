@@ -4,6 +4,7 @@ import {
   makeDefaultState,
   registerTenant,
   requestNumber,
+  markTenantNeedsManualReconcile,
   beginProvisioning,
   beginCapturing,
   activateNumber,
@@ -327,4 +328,24 @@ test("[NIE4] Uebergang in unbekannten Status wird aus keinem Status angenommen",
     assert.throws(() => transitionNumber(s, id, unbekannterStatus), /illegaler Uebergang/);
     assert.equal(findNumber(s, id).status, status, "Status unveraendert");
   }
+});
+
+test("requestNumber vergibt eine Kennung mit Praefix num_", () => {
+  const state = makeDefaultState();
+  seedTenant(state);
+  const result = requestNumber(state, { tenantId: "t_user1", ...CAPS });
+  assert.equal(result.ok, true);
+  assert.ok(result.number.id.startsWith("num_"));
+});
+
+test("markTenantNeedsManualReconcile gibt den Mandanten zurueck und aendert ihn nur beim ersten Aufruf", () => {
+  const state = makeDefaultState();
+  seedTenant(state);
+  assert.deepEqual(markTenantNeedsManualReconcile(state, "t_gibt_es_nicht"), { tenant: null, changed: false });
+  const first = markTenantNeedsManualReconcile(state, "t_user1");
+  assert.equal(first.changed, true);
+  assert.equal(first.tenant, findTenant(state, "t_user1"));
+  const second = markTenantNeedsManualReconcile(state, "t_user1");
+  assert.equal(second.changed, false);
+  assert.equal(second.tenant, findTenant(state, "t_user1"));
 });
