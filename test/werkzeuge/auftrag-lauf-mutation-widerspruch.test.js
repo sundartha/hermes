@@ -29,6 +29,10 @@ function rollen(beleg) {
   return beleg.agenten.map(({ rolle }) => rolle);
 }
 
+function ersteRunde(repo) {
+  return JSON.parse(readFileSync(join(repo, ".fortschritt/probe/A1.runde-1.json"), "utf8"));
+}
+
 test("widerspricht der Test-Agent einem „Nötig“, geht der Widerspruch mit seiner Begründung einmal an den Bau-Agenten zurück und dessen Gleichwertig-Meldung gilt nach neuer Messung", (context) => {
   const { repo, werkzeug, lauf, beleg } = mitWiderspruch(context, { [BAU_NACH_WIDERSPRUCH]: GLEICHWERTIG_MIT_GRUND });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
@@ -61,10 +65,10 @@ test("bleibt der Bau-Agent nach dem Widerspruch bei „Nötig“, hält der Lauf
 });
 
 test("widerspricht der Test-Agent einem Mutanten, den der Bau-Agent nicht „Nötig“ nannte, geht nichts zurück und der Mutant bleibt überlebend", (context) => {
-  const { lauf, beleg, werkzeug } = mitSieben(context, { ...NAECHSTE_RUNDE, "test-nachrunde-antwort": WIDERSPRUCH });
+  const { lauf, beleg, werkzeug, repo } = mitSieben(context, { ...NAECHSTE_RUNDE, "test-nachrunde-antwort": WIDERSPRUCH });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.equal(beleg.grund, `Mutant überlebt: ${NEU_MUTANT}`);
-  assert.deepEqual(rollen(beleg), ["test", "bau", "bau", "test"]);
+  assert.deepEqual(rollen(ersteRunde(repo)), ["test", "bau", "bau", "test"]);
   assert.ok(!readFileSync(join(werkzeug, "prompt-test-nachrunde.txt"), "utf8").includes(AUSWEG_TEST_AGENT));
 });
 
@@ -79,11 +83,12 @@ function abgeschaltetNachRueckgabe(zweiteTestAntwort) {
 }
 
 test("nimmt die Messung die Gleichwertig-Meldung nach dem Widerspruch nicht an, bleibt der Mutant überlebend und der Auftrag rot", (context) => {
-  const { lauf, beleg } = mitZaehlenderMutation(context, NUR_ABGESCHALTET, abgeschaltetNachRueckgabe(ABSATZ_MUTATION));
+  const { lauf, beleg, repo } = mitZaehlenderMutation(context, NUR_ABGESCHALTET, abgeschaltetNachRueckgabe(ABSATZ_MUTATION));
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.equal(beleg.grund, `Mutant überlebt: ${ABGESCHALTETER_MUTANT}`, lauf.stdout + lauf.stderr);
-  assert.deepEqual(exitCodes(beleg, "mutation nach Bau"), [EXIT_ROT, EXIT_ROT]);
-  const nachBau = beleg.pruefungen.findLast(({ name }) => name === "mutation nach Bau");
+  const erste = ersteRunde(repo);
+  assert.deepEqual(exitCodes(erste, "mutation nach Bau"), [EXIT_ROT, EXIT_ROT]);
+  const nachBau = erste.pruefungen.findLast(({ name }) => name === "mutation nach Bau");
   assert.ok(nachBau.befehl.includes(`--gleichwertig ${ABGESCHALTETER_MUTANT}`), nachBau.befehl);
   assert.equal(pruefung(beleg, "mutation nach Test"), EXIT_ROT);
 });
@@ -123,9 +128,9 @@ test("widerspricht der Test-Agent nur einem Mutanten, den der Bau-Agent nicht �
     "bau-nachrunde-antwort": { "Nötig: <Mutant>": NOETIG_ABGESCHALTET, "": "" },
     "test-nachrunde-antwort": `Widerspruch: ${ZWEITER_MUTANT}, weil ${ABGESCHALTET_GRUND}`,
   });
-  const { lauf, beleg } = mitZaehlenderMutation(context, { mutanten: ZWEI_ABGESCHALTET }, zusatz);
+  const { lauf, beleg, repo } = mitZaehlenderMutation(context, { mutanten: ZWEI_ABGESCHALTET }, zusatz);
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.deepEqual(rollen(beleg), ["test", "bau", "bau", "test"]);
+  assert.deepEqual(rollen(ersteRunde(repo)), ["test", "bau", "bau", "test"]);
   assert.equal(beleg.grund, `Mutant überlebt: ${ABGESCHALTETER_MUTANT}`, lauf.stdout + lauf.stderr);
 });
 

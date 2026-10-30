@@ -22,7 +22,9 @@ const prompt = readFileSync(0, "utf8");
 const drehbuch = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"));
 const startProtokoll = join(dirname(process.env.ERSATZ_DREHBUCH), "starts.jsonl");
 const fruehereStarts = existsSync(startProtokoll) ? readFileSync(startProtokoll, "utf8").split("\\n").filter(Boolean).map((zeile) => JSON.parse(zeile)) : [];
-const ausfall = (drehbuch[process.env.HERMES_ROLLE + "-ausfall"] ?? [])[fruehereStarts.filter((start) => start.rolle === process.env.HERMES_ROLLE).length];
+const nummer = fruehereStarts.filter((start) => start.rolle === process.env.HERMES_ROLLE).length;
+const ausfall = (drehbuch[process.env.HERMES_ROLLE + "-ausfall"] ?? [])[nummer];
+const stelle = (schluessel) => drehbuch[schluessel + "#" + nummer] ?? drehbuch[schluessel];
 const sperreBis = ausfall?.sperreMs ? Date.now() + ausfall.sperreMs : undefined;
 appendFileSync(startProtokoll, JSON.stringify({ rolle: process.env.HERMES_ROLLE, sitzung, fortsetzung: argumente.includes("--resume"), zeit: Date.now(), sperreBis }) + "\\n");
 if (ausfall) {
@@ -46,15 +48,21 @@ if (ausfall) {
 const nach = drehbuch.nach !== undefined && prompt.includes(drehbuch.nach) ? "-nach" : "";
 const rolle = process.env.HERMES_ROLLE + nach + (prompt.includes("Überlebende Mutanten") ? "-nachrunde" : "");
 writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".txt"), prompt);
-const antwort = drehbuch[rolle + "-antwort"] ?? "";
+if (drehbuch[rolle + "#" + nummer + "-beendet-lauf"]) {
+  const lauf = execFileSync("ps", ["-o", "ppid=", "-p", String(process.ppid)], { encoding: "utf8" }).trim();
+  process.kill(Number(lauf), "SIGKILL");
+  process.exit(1);
+}
+const antwort = stelle(rolle + "-antwort") ?? "";
 const angeboten = typeof antwort === "string" ? antwort : Object.entries(antwort).find(([angebot]) => prompt.includes(angebot))[1];
 console.log(JSON.stringify({ type: "result", result: angeboten }));
 for (const [alt, neu] of drehbuch[rolle + "-umbenennen"] ?? []) execFileSync("git", ["mv", alt, neu]);
 for (const pfad of drehbuch[rolle + "-loeschen"] ?? []) execFileSync("git", ["rm", "-q", pfad]);
-for (const [pfad, inhalt] of Object.entries(drehbuch[rolle] ?? {})) {
+for (const [pfad, inhalt] of Object.entries(stelle(rolle) ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
 }
+for (const [pfad, inhalt] of Object.entries(stelle(rolle + "-anhaengen") ?? {})) appendFileSync(pfad, inhalt);
 const projekt = join(homedir(), ".claude", "projects", process.cwd().replace(/[^A-Za-z0-9]/g, "-"));
 mkdirSync(projekt, { recursive: true });
 const zeile = (id) => JSON.stringify({ message: { id, usage: { input_tokens: 10, output_tokens: 5 } } });
@@ -117,23 +125,28 @@ export function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten =
   writeFileSync(join(werkzeug, "drehbuch.json"), JSON.stringify(drehbuch));
   writeFileSync(join(werkzeug, "claude.mjs"), ERSATZ_CLAUDE);
   chmodSync(join(werkzeug, "claude.mjs"), AUSFUEHRBAR);
-  const kopf = () => runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  const basis = kopf();
-  const lauf = spawnSync(process.execPath, [EINSTIEG, befehl, join(werkzeug, "phase.json")], {
-    cwd: repo,
-    encoding: "utf8",
-    env: {
-      ...isolatedEnvironment(),
-      HOME: werkzeug,
-      HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
-      HERMES_GH: GH_OHNE_WIRKUNG,
-      ...ghMitAbsichtDerPhase(werkzeug, phase),
-      ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
-      ...mitErsatzWerkzeugen(werkzeug),
-      ...umgebung,
-    },
-  });
+  const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  const umgebungDesLaufs = {
+    ...isolatedEnvironment(),
+    HOME: werkzeug,
+    HERMES_CLAUDE: join(werkzeug, "claude.mjs"),
+    HERMES_GH: GH_OHNE_WIRKUNG,
+    ...ghMitAbsichtDerPhase(werkzeug, phase),
+    ERSATZ_DREHBUCH: join(werkzeug, "drehbuch.json"),
+    ...mitErsatzWerkzeugen(werkzeug),
+    ...umgebung,
+  };
+  return { ...fuehreLauf({ repo, werkzeug, befehl, umgebung: umgebungDesLaufs }), repo, werkzeug, basis, umgebung: umgebungDesLaufs };
+}
+
+function fuehreLauf({ repo, werkzeug, befehl, umgebung }) {
+  const lauf = spawnSync(process.execPath, [EINSTIEG, befehl, join(werkzeug, "phase.json")], { cwd: repo, encoding: "utf8", env: umgebung });
   const belegDatei = join(repo, ".fortschritt/probe/A1.json");
   const beleg = existsSync(belegDatei) ? JSON.parse(readFileSync(belegDatei, "utf8")) : null;
-  return { repo, werkzeug, lauf, beleg, basis, kopf: kopf() };
+  return { lauf, beleg, kopf: runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim() };
+}
+
+export function starteNochmal({ repo, werkzeug, umgebung }, drehbuch, befehl = "lauf") {
+  writeFileSync(join(werkzeug, "drehbuch.json"), JSON.stringify(drehbuch));
+  return { ...fuehreLauf({ repo, werkzeug, befehl, umgebung }), repo, werkzeug };
 }
