@@ -21,6 +21,7 @@ const LAUF_ZEILE = /Lauf https:\/\/\S+\/actions\/runs\/(\d+)/;
 const ERSTE_ZEILE = 1;
 const KEIN_FEHLER = 0;
 const STAND = "HEAD";
+const EINZELN = 1;
 
 export function absicherbare(phase, root) {
   const fertig = gebauteAuftraege(phase, root);
@@ -29,6 +30,24 @@ export function absicherbare(phase, root) {
   if (laufend === undefined) return [];
   const graph = abhaengigkeitsgraph(offen, (datei) => dateiAm(STAND, datei, root));
   return wartend.filter((auftrag) => auftrag.art === "umbau" && auftrag.betrifft !== undefined && auftrag.abnahme !== laufend.abnahme && !graph.get(auftrag.id).has(laufend.id));
+}
+
+function teilenName(auftrag, anderer) {
+  return Object.entries(auftrag.betrifft).some(([datei, namen]) => (anderer.betrifft[datei] ?? []).some((name) => namen.includes(name)));
+}
+
+function gruppiere(liste) {
+  const gruppen = liste.reduce((bisher, auftrag) => {
+    const verbunden = bisher.filter((gruppe) => gruppe.some((mitglied) => teilenName(mitglied, auftrag)));
+    return [...bisher.filter((gruppe) => !verbunden.includes(gruppe)), [...verbunden.flat(), auftrag]];
+  }, []);
+  return gruppen.map((gruppe) => gruppe.toSorted((links, rechts) => liste.indexOf(links) - liste.indexOf(rechts))).toSorted((links, rechts) => liste.indexOf(links[0]) - liste.indexOf(rechts[0]));
+}
+
+function vereint(gruppe) {
+  const betrifft = {};
+  for (const auftrag of gruppe) for (const [datei, namen] of Object.entries(auftrag.betrifft)) betrifft[datei] = [...new Set([...(betrifft[datei] ?? []), ...namen])];
+  return { ...gruppe[0], betrifft };
 }
 
 function ohneZeilen(text, bereiche) {
@@ -60,17 +79,25 @@ function nurId(auftrag) {
   return auftrag.id;
 }
 
-function vermerkt({ root, phase }, auftrag, nummer) {
-  const warum = `Warum: Die Mutationsprüfung am alten Stand ist für Auftrag ${auftrag.id} vorab grün; der Auftrag darf sie nur mit diesem Beleg weglassen.`;
-  const nachricht = [`Sichere Auftrag ${auftrag.id} vorab ab`, "", warum, "", trailerZeile(nummer, auftrag.id), vorabHerkunft(phase, auftrag), ""].join("\n");
+function vermerkText(gruppe) {
+  const namen = gruppe.map(nurId).join(", ");
+  if (gruppe.length === EINZELN) return { kopf: `Sichere Auftrag ${namen} vorab ab`, warum: `Warum: Die Mutationsprüfung am alten Stand ist für Auftrag ${namen} vorab grün; der Auftrag darf sie nur mit diesem Beleg weglassen.` };
+  return { kopf: `Sichere ${gruppe.length} Aufträge vorab ab`, warum: `Warum: Die Mutationsprüfung am alten Stand ist für die Aufträge ${namen} in einem Lauf vorab grün; jeder darf sie nur mit diesem Beleg weglassen.` };
+}
+
+function vermerkt({ root, phase }, gruppe, nummer) {
+  const { kopf, warum } = vermerkText(gruppe);
+  const trailer = gruppe.map((auftrag) => trailerZeile(nummer, auftrag.id));
+  const nachricht = [kopf, "", warum, "", ...trailer, vorabHerkunft(phase, gruppe[0]), ""].join("\n");
   const geprueft = pruefeNachricht(nachricht, root);
   if (geprueft.exitCode !== KEIN_FEHLER) return `Commitnachricht abgelehnt: ${geprueft.ausgabe}`;
   const commit = spawnSync("git", ["commit", "-q", "--allow-empty", "-F", "-"], { cwd: root, encoding: "utf8", input: nachricht });
   return commit.status === KEIN_FEHLER ? null : `git commit endete mit Exit ${commit.status}: ${commit.stderr.trim()}`;
 }
 
-function gebaut(ort, auftrag) {
+function gebaut(ort, gruppe) {
   const { root, phase, phasendatei } = ort;
+  const auftrag = vereint(gruppe);
   hartZuruecksetzen(STAND, root);
   if (!wegwerfStand(root, auftrag)) return { grund: "die Zeilen aus betrifft sind nicht vermessbar" };
   const lauf = neuerAuftragsLauf({ ...auftragsKontext(phase, auftrag, root), phasendatei, runde: 1, vorgeschichte: "" });
@@ -80,7 +107,7 @@ function gebaut(ort, auftrag) {
   const nummer = LAUF_ZEILE.exec(ergebnis.ausgabe)?.[1];
   if (nummer === undefined) return { grund: "die Ausgabe nennt keinen CI-Lauf" };
   hartZuruecksetzen(STAND, root);
-  const abgelehnt = vermerkt(ort, auftrag, nummer);
+  const abgelehnt = vermerkt(ort, gruppe, nummer);
   return abgelehnt === null ? { nummer } : { grund: abgelehnt };
 }
 
@@ -88,11 +115,16 @@ function schonVermerkt(root, auftrag) {
   return absicherungsLauf(git(["log", "--format=%B", `${MASTER}..HEAD`], { cwd: root }), auftrag.id);
 }
 
-function bearbeite(ort, auftrag) {
-  const vorhanden = schonVermerkt(ort.root, auftrag);
-  if (vorhanden !== null) return console.log(`Absicherung ${auftrag.id}: schon abgesichert, Lauf ${vorhanden}.`);
-  const { nummer, grund } = gebaut(ort, auftrag);
-  return console.log(nummer === undefined ? `Absicherung ${auftrag.id}: nicht abgesichert, ${grund}.` : `Absicherung ${auftrag.id}: abgesichert, Lauf ${nummer}.`);
+function meldeErgebnis(auftrag, { nummer, grund }) {
+  console.log(nummer === undefined ? `Absicherung ${auftrag.id}: nicht abgesichert, ${grund}.` : `Absicherung ${auftrag.id}: abgesichert, Lauf ${nummer}.`);
+}
+
+function bearbeite(ort, gruppe) {
+  const offen = gruppe.filter((auftrag) => schonVermerkt(ort.root, auftrag) === null);
+  for (const auftrag of gruppe.filter((mitglied) => !offen.includes(mitglied))) console.log(`Absicherung ${auftrag.id}: schon abgesichert, Lauf ${schonVermerkt(ort.root, auftrag)}.`);
+  if (offen.length === 0) return;
+  const ergebnis = gebaut(ort, offen);
+  for (const auftrag of offen) meldeErgebnis(auftrag, ergebnis);
 }
 
 export function absichern(phasendatei, root) {
@@ -107,6 +139,6 @@ export function absichern(phasendatei, root) {
   env[PLAETZE] = begrenztePlaetze(env[PLAETZE]);
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
-  for (const auftrag of liste) bearbeite(ort, auftrag);
+  for (const gruppe of gruppiere(liste)) bearbeite(ort, gruppe);
   return EXIT_GRUEN;
 }
