@@ -448,10 +448,14 @@
       return doc.querySelector('[data-mcp="' + name + '"]');
     }
 
+    function dashIfEmpty(value) {
+      return value === null || value === undefined ? EMDASH : String(value);
+    }
+
     function setSlotText(name, value) {
       var el = slot(name);
       if (!el) return;
-      el.textContent = value === null || value === undefined ? EMDASH : String(value);
+      el.textContent = dashIfEmpty(value);
     }
 
     // Anzeige-Elemente ohne data-mcp (s. Markup-Kommentar bei .rows): werden
@@ -459,7 +463,7 @@
     function setDisplayText(selector, value) {
       var el = doc.querySelector(selector);
       if (!el) return;
-      el.textContent = value === null || value === undefined ? EMDASH : String(value);
+      el.textContent = dashIfEmpty(value);
     }
 
     // Sekunden -> "m:ss" (sprachneutral, tabular-nums im CSS). Anrufe sind
@@ -487,7 +491,7 @@
       if (key && el.setAttribute) el.setAttribute(I18N_ATTR, key);
       else if (el.removeAttribute) el.removeAttribute(I18N_ATTR);
       if (key) el.textContent = t(key);
-      else el.textContent = plain === null || plain === undefined ? EMDASH : String(plain);
+      else el.textContent = dashIfEmpty(plain);
     }
 
     function setKeyedDisplay(selector, key, plain) {

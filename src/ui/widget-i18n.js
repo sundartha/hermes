@@ -1,4 +1,4 @@
-import { METHOD_TOOL_RESULT, METHOD_HOST_CONTEXT_CHANGED, INIT_ID } from "./widget-bind.js";
+import { METHOD_TOOL_RESULT, METHOD_HOST_CONTEXT_CHANGED, INIT_ID, isObject } from "./widget-bind.js";
 
 export const DEFAULT_LOCALE = "en";
 
@@ -180,6 +180,7 @@ function buildI18nScript() {
     `var INIT_ID = ${JSON.stringify(INIT_ID)};`,
     `var WIDGET_LOCALE_META_KEY = ${JSON.stringify(WIDGET_LOCALE_META_KEY)};`,
     `var WIDGET_CONTENT_LOCALE_META_KEY = ${JSON.stringify(WIDGET_CONTENT_LOCALE_META_KEY)};`,
+    isObject.toString(),
     primaryLanguage.toString(),
     resolveLocale.toString(),
     chooseLocale.toString(),
@@ -199,7 +200,6 @@ function buildI18nScript() {
     "  window.HermesI18n.locale = locale;",
     "  localizeDocument();",
     "}",
-    "function isObject(value) { return typeof value === \"object\" && value !== null; }",
     "function observe(meta) {",
     "  if (!isObject(meta)) return;",
     "  if (typeof meta[WIDGET_LOCALE_META_KEY] === \"string\") tenantTag = meta[WIDGET_LOCALE_META_KEY];",
