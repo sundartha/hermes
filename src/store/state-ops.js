@@ -2,7 +2,6 @@ import crypto from "crypto";
 import {
   defaultSettingsMap,
   calendarMap,
-  emptyUsage,
   emptyUsageMap,
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
@@ -104,6 +103,34 @@ export {
   tenantMayRequestNumber,
 } from "./zustand/mandant.js";
 import { tenantHasLiveNumber, numberBusyReason, openOutageAlert } from "./zustand/nummern.js";
+import {
+  usageFor,
+  globalUsageTotals,
+  inputTokensOf,
+  pendingMeterEvents,
+  METER_FLUSH_SKIP,
+  PLATFORM_TTS_COST_CENTER_ID,
+  ttsQuotaExhausted,
+  recordTenantTtsCharacters,
+} from "./zustand/nutzung.js";
+export {
+  usageFor,
+  usageOf,
+  globalUsageTotals,
+  inputTokensOf,
+  recordUsageEvent,
+  dailySmsCount,
+  voiceMinutesUsedSince,
+  planMinutesExceeded,
+  pendingMeterEvents,
+  METER_FLUSH_SKIP,
+  markMeterEventsSent,
+  callCostEvidence,
+  PLATFORM_TTS_COST_CENTER_ID,
+  ttsQuotaExhausted,
+  actualCostMicroCentsForMonth,
+  recordTenantTtsCharacters,
+} from "./zustand/nutzung.js";
 import { settingsFor } from "./zustand/einstellungen.js";
 export {
   settingsFor,
@@ -1560,34 +1587,6 @@ export function unsubscribeNewsletterRecipientByToken(state, token) {
   return null;
 }
 
-export function usageFor(s, tenantId) {
-  return (s.usage[tenantId] ||= emptyUsage());
-}
-
-export function usageOf(state, tenantId) {
-  return usageFor(state, tenantId);
-}
-
-export function globalUsageTotals(state) {
-  let inputTokens = 0,
-    outputTokens = 0,
-    calls = 0,
-    microTotal = 0;
-  for (const bucket of Object.values(state.usage)) {
-    inputTokens += bucket.inputTokens;
-    outputTokens += bucket.outputTokens;
-    calls += bucket.calls;
-    microTotal += bucket.costCents * MICRO_CENTS_PER_CENT + (bucket.costMicroCentsRem || 0);
-  }
-  return {
-    inputTokens,
-    outputTokens,
-    calls,
-    costCents: Math.floor(microTotal / MICRO_CENTS_PER_CENT),
-    costMicroCentsRem: microTotal % MICRO_CENTS_PER_CENT,
-  };
-}
-
 function worstCasePrice(prices) {
   const rates = Object.values(prices);
   if (!rates.length)
@@ -1600,10 +1599,6 @@ function worstCasePrice(prices) {
 
 function priceForModel(model, prices) {
   return Object.hasOwn(prices, model) ? prices[model] : worstCasePrice(prices);
-}
-
-export function inputTokensOf(tokens) {
-  return tokens.inputUncachedTokens + tokens.inputCacheWriteTokens + tokens.inputCacheReadTokens;
 }
 
 function tokenCostUsd(tokens, cfg) {
@@ -1887,54 +1882,6 @@ export function aiCostCents(tokens, cfg) {
   return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
 }
 
-export function recordUsageEvent(
-  state,
-  {
-    tenantId,
-    callId = null,
-    numberId = null,
-    kind,
-    quantity,
-    costCents,
-    costMicroCents = null,
-    occurredAt = new Date().toISOString(),
-  },
-) {
-  if (!Object.values(USAGE_EVENT_KIND).includes(kind))
-    throw new Error(`recordUsageEvent: unbekanntes kind '${kind}'`);
-  const event = {
-    id: newId("ue"),
-    tenantId,
-    callId,
-    numberId,
-    kind,
-    quantity,
-    costCents,
-    costMicroCents,
-    occurredAt,
-    stripeMeterSent: false,
-  };
-  state.usageEvents.push(event);
-  return event;
-}
-
-export function dailySmsCount(state, tenantId, sinceIso) {
-  return state.usageEvents.filter(
-    (usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.SMS && usageEvent.tenantId === tenantId && usageEvent.occurredAt >= sinceIso,
-  ).length;
-}
-
-export function voiceMinutesUsedSince(state, tenantId, sinceIso) {
-  return state.usageEvents
-    .filter(
-      (usageEvent) =>
-        usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE &&
-        usageEvent.tenantId === tenantId &&
-        usageEvent.occurredAt >= sinceIso,
-    )
-    .reduce((sum, usageEvent) => sum + usageEvent.quantity, 0);
-}
-
 export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   const monthKey = spendMonthKeyOf(nowIso);
   if (!monthKey) return [];
@@ -1953,17 +1900,6 @@ export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   );
 }
 
-export function planMinutesExceeded(state, tenantId, { includedMinutes, periodStartIso } = {}) {
-  if (!periodStartIso || !Number.isFinite(includedMinutes)) return true;
-  return voiceMinutesUsedSince(state, tenantId, periodStartIso) >= includedMinutes;
-}
-
-export function pendingMeterEvents(state) {
-  return state.usageEvents.filter((usageEvent) => !usageEvent.stripeMeterSent);
-}
-
-export const METER_FLUSH_SKIP = Object.freeze({ NO_EPOCH: "no_flush_epoch" });
-
 export function flushableMeterEvents(state, { flushEpochIso } = {}) {
   const pending = pendingMeterEvents(state);
   const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
@@ -1972,18 +1908,6 @@ export function flushableMeterEvents(state, { flushEpochIso } = {}) {
   const epochIso = epoch.toISOString();
   const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
   return { events, skipped: pending.length - events.length, skipReason: null };
-}
-
-export function markMeterEventsSent(state, eventIds) {
-  const ids = new Set(eventIds);
-  let sentCount = 0;
-  for (const usageEvent of state.usageEvents) {
-    if (ids.has(usageEvent.id) && !usageEvent.stripeMeterSent) {
-      usageEvent.stripeMeterSent = true;
-      sentCount++;
-    }
-  }
-  return sentCount;
 }
 
 function findCostEvidence(state, callId, traeger) {
@@ -2013,12 +1937,6 @@ export function recordCallCostEvidence(state, eingabe) {
   vorhanden.reife = reife;
   Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
   return { evidence: vorhanden, changed: true };
-}
-
-export function callCostEvidence(state, callId) {
-  return state.callCostEvidence
-    .filter((zeile) => zeile.callId === callId)
-    .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
 export function reservationFor(state, tenantId) {
@@ -2070,12 +1988,6 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
   if (s.platformSpendWarnedMonth === monthKey) return null;
   s.platformSpendWarnedMonth = monthKey;
   return { totalCents, monthKey };
-}
-
-export const PLATFORM_TTS_COST_CENTER_ID = "platform:play-tts";
-
-export function ttsQuotaExhausted({ characters, quota }) {
-  return quota > 0 && characters >= quota;
 }
 
 function ttsCycleKeyOf(nowIso, anchorDay) {
@@ -2138,29 +2050,10 @@ export function markCrossCheckAttempted(s, monthKey) {
   s.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, monthKey);
 }
 
-export function actualCostMicroCentsForMonth(state, monthKey) {
-  return state.calls
-    .filter(
-      (call) =>
-        call.provider === PROVIDER.TELNYX &&
-        call.costTruedAt !== null &&
-        Number.isSafeInteger(call.actualCostMicroCents) &&
-        call.actualCostMicroCents >= 0 &&
-        call.estimatedCostSpendMonthKey === monthKey,
-    )
-    .reduce((sum, call) => sum + call.actualCostMicroCents, 0);
-}
-
 export function carrierGateCostCentsForMonth(state, monthKey) {
   return state.usageEvents
     .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
     .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
-}
-
-export function recordTenantTtsCharacters(state, tenantId, chars) {
-  if (!Number.isSafeInteger(chars) || chars <= 0) return { changed: false };
-  usageFor(state, tenantId).ttsCharacters += chars;
-  return { changed: true };
 }
 
 export function addNotification(s, title, body, callId) {
