@@ -139,7 +139,18 @@
       "abhaengigVon": [
         "a6"
       ],
-      "wasDarfNiePassieren": []
+      "wasDarfNiePassieren": [],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "TOOL_ANNOTATIONS",
+          "OPENAI_INVOKING_KEY",
+          "OPENAI_INVOKED_KEY",
+          "TOOL_INVOCATION_STATUS",
+          "withOpenAiToolMetadata",
+          "widgetResourceOptions",
+          "withWidgetLocale"
+        ]
+      }
     },
     {
       "id": "a8",
@@ -157,7 +168,12 @@
       ],
       "wasDarfNiePassieren": [
         "registerTools registriert nach dem Umbau Werkzeuge und Widget-Ressourcen in genau der heutigen Folge: Ressource call, prepare_call, place_call, mit consultAllowed await_call_event und answer_consult, get_call_status, get_call_result, cancel_call, Ressource my-number, get_agent_number, Ressource calls, list_calls, check_inbox, list_action_items, Ressource agent-status, get_agent_status."
-      ]
+      ],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "createToolContext"
+        ]
+      }
     },
     {
       "id": "a9",
@@ -175,7 +191,22 @@
       ],
       "wasDarfNiePassieren": [
         "place_call setzt nach dem Umbau keinen Anruf ab (kein POST /api/calls), solange der Server den confirmation_code nicht als bestätigt zurückgibt; ein bereits verbrauchter Code liefert confirmation_used statt eines zweiten Anrufs."
-      ]
+      ],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "registerPrepareCall",
+          "registerPlaceCall",
+          "registerCancelCall",
+          "CONFIRMATION_CODE_META_KEY",
+          "CONFIRMATION_EXPIRES_META_KEY",
+          "CALL_DATA_NOTICE_META_KEY",
+          "CONFIRMATION_USED_STATUS",
+          "prepareCallCardMeta",
+          "confirmationUsedResult",
+          "unconfirmedResult",
+          "normalizeContextReceived"
+        ]
+      }
     },
     {
       "id": "a10",
@@ -191,7 +222,17 @@
       "abhaengigVon": [
         "a9"
       ],
-      "wasDarfNiePassieren": []
+      "wasDarfNiePassieren": [],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "registerGetAgentNumber",
+          "registerGetAgentStatus",
+          "pickMyNumber",
+          "permissionsSummary",
+          "pickAgentStatus",
+          "planUsageLine"
+        ]
+      }
     },
     {
       "id": "a11",
@@ -209,7 +250,17 @@
       ],
       "wasDarfNiePassieren": [
         "get_call_result, await_call_event und get_call_status liefern nach dem Umbau weder Rohtranskript noch Audio; get_call_status zeigt höchstens die letzten sechs Zeilen, und Zusammenfassung, Ergebniskarte und Transkriptzeilen sind von Kartennummern, behördlichen Kennnummern und Zugangsdaten bereinigt."
-      ]
+      ],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "mapStatus",
+          "callOutcomeView",
+          "AWAIT_SUMMARY_PLACEHOLDER",
+          "pickTranscript",
+          "maskResultCardFields",
+          "maskedResultCard"
+        ]
+      }
     },
     {
       "id": "a12",
@@ -225,7 +276,20 @@
       "abhaengigVon": [
         "a11"
       ],
-      "wasDarfNiePassieren": []
+      "wasDarfNiePassieren": [],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "registerGetCallStatus",
+          "registerGetCallResult",
+          "registerListCalls",
+          "LAST_TRANSCRIPT_LINES",
+          "durationS",
+          "pickCallStatus",
+          "callStatusResult",
+          "pickCall",
+          "callTextLine"
+        ]
+      }
     },
     {
       "id": "a13",
@@ -243,7 +307,16 @@
       ],
       "wasDarfNiePassieren": [
         "await_call_event liefert nach dem Umbau ohne Ereignis binnen CONSULT_POLL_ABORT_MS event=none statt eines Fehlers, und ohne Rückfrage-Freigabe (consultAllowed) sind await_call_event und answer_consult nicht registriert."
-      ]
+      ],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "registerAwaitCallEvent",
+          "registerAnswerConsult",
+          "awaitEventView",
+          "CONSULT_ANSWER_REJECTED_STATUS",
+          "CONSULT_ANSWER_CONFLICT_STATUS"
+        ]
+      }
     },
     {
       "id": "a14",
@@ -259,7 +332,16 @@
       "abhaengigVon": [
         "a13"
       ],
-      "wasDarfNiePassieren": []
+      "wasDarfNiePassieren": [],
+      "betrifft": {
+        "src/mcp-tools.js": [
+          "registerCheckInbox",
+          "registerListActionItems",
+          "inboxEntryForModel",
+          "inboxTextLine",
+          "actionItemsText"
+        ]
+      }
     }
   ]
 }
