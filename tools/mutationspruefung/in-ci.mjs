@@ -10,6 +10,7 @@ import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
 import { gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
+import { ghMitWiederholung, nurInfrastrukturGescheitert, stoerungsfilter } from "./stoerung.mjs";
 
 const WEGWERF_ZWEIG = "lauf-mutation/";
 const KURZ = 12;
@@ -27,6 +28,9 @@ const TAKT_MS = MS_JE_MINUTE;
 const HOECHSTZEIT_MINUTEN = 480;
 const HOECHSTZEIT_MS = HOECHSTZEIT_MINUTEN * MS_JE_MINUTE;
 const SUCHABSTAND_MS = 10_000;
+const ANFANG_MINUTEN = 5;
+const ANFANG_MS = ANFANG_MINUTEN * MS_JE_MINUTE;
+const LAUF_ROT = "failure";
 const SUCHVERSUCHE = 3;
 const SUCHLISTE = "5";
 const LAUF_URL = /\/actions\/runs\/(\d+)/;
@@ -131,16 +135,16 @@ function loeseAus({ repo, zweig, basis, alterStand, testumbau, plaetze }, suchab
 }
 
 async function warteAufLauf(repo, lauf, frist) {
-  const stand = JSON.parse(gh(["run", "view", lauf, "-R", repo, "--json", "status,conclusion"]));
-  if (stand.status === LAUF_FERTIG || Date.now() >= frist.ende) return stand;
+  const stand = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "status,conclusion,attempt"], frist));
+  if ((stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) || Date.now() >= frist.ende) return stand;
   await warte(frist.taktMs);
   return warteAufLauf(repo, lauf, frist);
 }
 
-function abgelegtesUrteil(repo, lauf) {
+async function abgelegtesUrteil(repo, lauf, frist) {
   const ordner = neuerTempOrdner();
   try {
-    gh(["run", "download", lauf, "-R", repo, "-n", ARTEFAKT, "-D", ordner]);
+    await ghMitWiederholung(["run", "download", lauf, "-R", repo, "-n", ARTEFAKT, "-D", ordner], frist);
   } catch {
     return null;
   }
@@ -148,6 +152,30 @@ function abgelegtesUrteil(repo, lauf) {
   if (!existsSync(ausgabe) || !existsSync(exitDatei)) return null;
   const exitCode = readFileSync(exitDatei, "utf8").trim();
   return URTEILE.has(exitCode) ? { exitCode: Number(exitCode), ausgabe: readFileSync(ausgabe, "utf8").trimEnd() } : null;
+}
+
+async function startetNeu(repo, lauf, { stand, frist }) {
+  if (stand.status !== LAUF_FERTIG || stand.conclusion !== LAUF_ROT) return false;
+  try {
+    const { jobs } = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "jobs"], frist));
+    if (!nurInfrastrukturGescheitert(jobs)) return false;
+    gh(["run", "rerun", lauf, "-R", repo, "--failed"]);
+    return true;
+  } catch (fehler) {
+    console.error(`Hinweis: Lauf ${lauf} nicht neu gestartet: ${fehler.message}`);
+    return false;
+  }
+}
+
+async function standMitUrteil(repo, lauf, { zeiten, darfNeustart, ab }) {
+  const beginn = Date.now();
+  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: beginn + zeiten.hoechstMs, ab };
+  const stand = await warteAufLauf(repo, lauf, frist);
+  const urteil = stand.status === LAUF_FERTIG ? await abgelegtesUrteil(repo, lauf, frist) : null;
+  if (urteil === null && darfNeustart && (await startetNeu(repo, lauf, { stand, frist }))) {
+    return standMitUrteil(repo, lauf, { zeiten, darfNeustart: false, ab: (stand.attempt ?? ab) + 1 });
+  }
+  return { stand, urteil };
 }
 
 function abbruchZeilen(repo, lauf) {
@@ -172,8 +200,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const { repo } = abruf;
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
-  const stand = await warteAufLauf(repo, lauf, { taktMs: zeiten.taktMs, ende: Date.now() + zeiten.hoechstMs });
-  const urteil = stand.status === LAUF_FERTIG ? abgelegtesUrteil(repo, lauf) : null;
+  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten, darfNeustart: true, ab: 1 });
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
   if (urteil) {
     merkeVorlauf(abruf, lauf);
@@ -183,7 +210,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const plaetze = plaetzeSchalter();
   const stand = friereEin(root, gleichwertige, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
@@ -193,7 +220,7 @@ export async function mutationInCi({ root, basis, alterStand, testumbau, gleichw
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs, anfangMs });
   } finally {
     loescheZweig(repo, zweig);
   }
