@@ -408,6 +408,15 @@ test("attachNumberPaymentIntent und attachNumberRegistration: unbekannte Nummer 
   assert.equal(findNumber(s, number.id).providerAgentPhoneNumberId, "reg_1");
 });
 
+test("attachNumberRegistration: gibt den Nummernsatz mit der gesetzten Registrierung zurueck", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const zurueck = attachNumberRegistration(s, number.id, "reg_rueckgabe");
+  assert.equal(zurueck, findNumber(s, number.id), "Rueckgabe ist der Nummernsatz");
+  assert.equal(zurueck.providerAgentPhoneNumberId, "reg_rueckgabe");
+});
+
 test("clearNumberElInboundTrunkBeleg: ein einzelnes gesetztes Belegfeld zaehlt, null-Felder nicht", () => {
   const s = makeDefaultState();
   const number = aktiveNummer(s, "t_beleg", "+4915755500103");
