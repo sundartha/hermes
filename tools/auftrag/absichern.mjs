@@ -14,6 +14,8 @@ import { vorabAbsichern } from "./mutation.mjs";
 import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
 
 const IN_CI = "HERMES_MUTATION_IN_CI";
+const PLAETZE = "HERMES_MUTATION_PLAETZE";
+const STANDARD_PLAETZE = "12";
 const LAUF_ZEILE = /Lauf https:\/\/\S+\/actions\/runs\/(\d+)/;
 const ERSTE_ZEILE = 1;
 const KEIN_FEHLER = 0;
@@ -104,6 +106,7 @@ export function absichern(phasendatei, root) {
   console.log(`Absicherung: ${liste.length} Aufträge ohne Verbindung zum laufenden${liste.length > 0 ? `: ${namen}` : ""}.`);
   if (liste.length === 0) return EXIT_GRUEN;
   env[IN_CI] = "1";
+  env[PLAETZE] ??= STANDARD_PLAETZE;
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
   for (const auftrag of liste) bearbeite(ort, auftrag);

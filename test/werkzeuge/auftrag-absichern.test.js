@@ -24,7 +24,7 @@ function ersatzMutation({ ueberlebtOhne = null, lauf = 777 }) {
   return `import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 mkdirSync(".fortschritt", { recursive: true });
 const standOhneDeklaration = !readFileSync("src/text.js", "utf8").includes("function gross");
-appendFileSync(${JSON.stringify(AUFRUFE)}, JSON.stringify({ argumente: process.argv.slice(2), standOhneDeklaration }) + "\\n");
+appendFileSync(${JSON.stringify(AUFRUFE)}, JSON.stringify({ argumente: process.argv.slice(2), standOhneDeklaration, plaetze: process.env.HERMES_MUTATION_PLAETZE }) + "\\n");
 console.log("Mutationsprüfung in der CI: Lauf https://github.com/eigner/repo/actions/runs/${lauf}, Stand abc");
 const offen = !process.argv.includes("${MUTANT}") && ${JSON.stringify(ueberlebtOhne)} !== null && !readFileSync("test/text.test.js", "utf8").includes(${JSON.stringify(ueberlebtOhne)});
 if (offen) process.exitCode = 1;
@@ -60,6 +60,7 @@ test("ein wartender Umbau ohne Verbindung zum laufenden wird über die CI-Mutati
   assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
   assert.ok(aufrufe[0].argumente.includes("--in-ci") && aufrufe[0].argumente.includes("--alter-stand"), JSON.stringify(aufrufe));
   assert.equal(aufrufe[0].standOhneDeklaration, true);
+  assert.equal(aufrufe[0].plaetze, "12");
   assert.equal(branch.length, 1, lauf.stdout + lauf.stderr);
   assert.ok(branch[0].includes("Absicherung: Lauf 777 Auftrag B1"), branch[0]);
   assert.ok(lauf.stdout.includes("Absicherung B1: abgesichert, Lauf 777."), lauf.stdout);

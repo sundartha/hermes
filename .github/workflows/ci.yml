@@ -21,6 +21,10 @@ on:
         description: Statt der neuen Seite den Testumbau prüfen wie mit --testumbau (nicht zusammen mit alter_stand)
         type: boolean
         default: false
+      plaetze:
+        description: Höchstens so viele Mutationsteile gleichzeitig; 0 heißt ohne Grenze
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -446,6 +450,7 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.plaetze || '256') }}
       matrix:
         teil: ${{ fromJSON(needs.mutationsplan.outputs.teile) }}
     steps:
