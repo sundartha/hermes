@@ -37,6 +37,7 @@ import {
 } from "../elevenlabs/inbound-rueckfall.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.js";
 
 const RUNNING_DOCUMENT_UNTOUCHED = [];
 
@@ -50,9 +51,6 @@ function repeatDeliveryXml(call, deps) {
 
 const TURN_LOG_PREFIX = "[voice/turn]";
 
-const HTTP_NOT_FOUND = 404;
-
-const HTTP_OK = 200;
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
@@ -327,7 +325,7 @@ export function makeVoiceRoutes({
       console.warn(
         `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) || "unknown"})`,
       );
-      return res.status(403).send("invalid inbound signature");
+      return res.status(HTTP_FORBIDDEN).send("invalid inbound signature");
     }
     next();
   });
