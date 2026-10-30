@@ -462,7 +462,7 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: ${{ fromJSON(inputs.plaetze || '256') }}
+      max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 40 }}
       matrix:
         teil: ${{ fromJSON(needs.mutationsplan.outputs.teile) }}
     steps:
