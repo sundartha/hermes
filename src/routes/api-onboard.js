@@ -133,7 +133,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
     });
     if (onboardGuardHit) {
       audit("onboard_denied", req, `tenant=${tenantId} grund=sub_already_merged`);
-      return res.status(onboardGuardHit.status).json({ error: onboardGuardHit.error });
+      return antworteFehler(res, onboardGuardHit.status, onboardGuardHit.error);
     }
 
     const { country, geo, language, numberCountry } = onboardStandort(config, geoLookup, req);
