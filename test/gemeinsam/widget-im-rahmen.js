@@ -16,6 +16,7 @@ const SETTLE_MS = 400;
 const POLL_MS = 50;
 const SETTLE_POLLS = 60;
 const HOST_GROUND = [255, 0, 255];
+const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
 
 function findInCache(cache) {
@@ -179,4 +180,4 @@ export function decodePng(png) {
   return { width, height, at: (x, y) => Array.from(pixels.subarray(y * stride + x * channels, y * stride + x * channels + 3)) };
 }
 
-export const isHostGround = (rgb) => HOST_GROUND.every((channel, i) => Math.abs(channel - rgb[i]) < 60);
+export const isHostGround = (rgb) => HOST_GROUND.every((channel, i) => Math.abs(channel - rgb[i]) < HOST_GROUND_TOLERANCE);
