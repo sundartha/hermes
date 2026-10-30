@@ -21,7 +21,7 @@ import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
-import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeFortsetzung, beendeFortsetzung, ohneFortschritt } from "./fortsetzung.mjs";
+import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeOderVerwirfFortsetzung, beendeFortsetzung, ohneFortschritt } from "./fortsetzung.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
@@ -618,7 +618,7 @@ class AuftragsLauf {
 
   beginneFortsetzung() {
     this.eingang = fortsetzbar(this.kontext.auftrag) ? eingangsstand(this) : null;
-    this.fortsetzung = ladeFortsetzung(this);
+    this.fortsetzung = ladeOderVerwirfFortsetzung(this);
   }
 
   fuehreAus() {
