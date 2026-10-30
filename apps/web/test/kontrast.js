@@ -3,12 +3,8 @@ const CHANNELS = 3;
 const HEX_RADIX = 16;
 const HEX_DIGITS_PER_CHANNEL = 2;
 const FULL = 255;
-const BACKDROP_RED = 0x1b;
-const BACKDROP_GREEN = 0x4f;
-const BACKDROP_BLUE = 0x86;
 const UNPAINTED_LAYERS = new Set(["", "initial", "transparent"]);
 export const LIGHTEST_PAGE_BACKDROP_HEX = "#1b4f86";
-const LIGHTEST_PAGE_BACKDROP = Object.freeze([BACKDROP_RED, BACKDROP_GREEN, BACKDROP_BLUE, 1]);
 const LINEAR_CUTOFF = 0.03928;
 const LINEAR_DIVISOR = 12.92;
 const GAMMA_OFFSET = 0.055;
@@ -33,6 +29,8 @@ function rgba(color) {
   });
   return [...channels, hit[2] ? parseInt(hit[2], HEX_RADIX) / FULL : 1];
 }
+
+const LIGHTEST_PAGE_BACKDROP = Object.freeze(rgba(LIGHTEST_PAGE_BACKDROP_HEX));
 
 function over(top, below) {
   const alpha = top[CHANNELS];
