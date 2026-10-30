@@ -129,8 +129,9 @@ test("neue Kopie, deren Code nicht aus der alten Datei stammt: der Eintrag bleib
 });
 
 test("Code geht in eine Datei, die es auf der Basis schon gab: der Eintrag bleibt, jscpd meldet die Kopie als neu", async (context) => {
-  const { vorher, nachher } = await umgezogen(context, { dazu: { [NEU]: datei("export const NOTIZ = 1;") } });
+  const { repo, vorher, nachher } = await umgezogen(context, { dazu: { [NEU]: datei("export const NOTIZ = 1;") } });
   assert.deepEqual(nachher, vorher);
+  istAlsNeuGemeldet(repo);
 });
 
 test("Auftrag ändert auch den Partner der Kopie: die Kopie ist nicht mehr unverändert, der Eintrag bleibt", async (context) => {
@@ -141,6 +142,12 @@ test("Auftrag ändert auch den Partner der Kopie: die Kopie ist nicht mehr unver
 
 test("Eintrag aus einer anderen jscpd-Version: die Tokenzahlen sind nicht vergleichbar, der Eintrag bleibt", async (context) => {
   const { vorher, nachher } = await umgezogen(context, { aendern: ({ befunde }) => ["0.0.1", befunde] });
+  assert.deepEqual(nachher, vorher);
+});
+
+test("Liste ohne jscpd-Version: die Tokenzahlen sind nicht vergleichbar, der Eintrag bleibt", async (context) => {
+  const { vorher, nachher } = await umgezogen(context, { aendern: ({ befunde }) => [undefined, befunde] });
+  assert.equal(vorher.version, undefined);
   assert.deepEqual(nachher, vorher);
 });
 
@@ -229,7 +236,7 @@ test("Kopien-Einträge nach Umzug: ein Fund mit anderem Partner als der alte Ein
   assert.equal(umgezogenNach({ liste: [alt(60)], aktuell: [schluessel(NEU_TABELLE, "test/anderes.test.js", 60)] }), undefined);
 });
 
-test("Kopien-Einträge nach Umzug: steht die alte Datei im Schlüssel hinter dem Partner, bleibt der neue Schlüssel nach Dateinamen geordnet", () => {
+test("Kopien-Einträge nach Umzug: steht die alte Datei im Schlüssel hinter dem Partner, zieht der Eintrag trotzdem um", () => {
   const ergebnis = umgezogenNach({ liste: [schluessel("lib/a.js", HILFE_TABELLE, 60)], aktuell: [schluessel("lib/a.js", NEU_TABELLE, 60)] });
   assert.deepEqual(ergebnis, { neu: [schluessel("lib/a.js", NEU_TABELLE, 60)], anzahl: 1 });
 });
@@ -278,6 +285,10 @@ test("Code aus der alten Datei: gleicher Text in anderer Einrückung und mit zus
 
 test("Code aus der alten Datei: Text, der dort nicht steht, gilt als nicht wortgleich", () => {
   assert.equal(stammtAusAltemText("const A = { x: 2 };", "const A = { x: 1 };\n"), false);
+});
+
+test("Code aus der alten Datei: ein Bezeichner, der mit export beginnt, wird nicht angeschnitten", () => {
+  assert.equal(stammtAusAltemText("exportiereDaten(1);", "iereDaten(1);\nexportiereDaten(2);"), false);
 });
 
 test("Code aus der alten Datei: fehlt die alte Datei auf der Basis, gilt der Code als nicht wortgleich", () => {

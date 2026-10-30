@@ -7,13 +7,13 @@ import { ESLint } from "eslint";
 import { aufDerBasis } from "./abhaengigkeiten/bestaende.mjs";
 import { aenderungenSeit, dateiAm, gibtEsIn } from "./auftrag/git.mjs";
 import { TOOLS } from "./basis-vergleich.mjs";
+import { gezaehlt, kontingent } from "./eslint-rules/bestand.js";
 import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 
 export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 export const ALTVERSTOESSE = ".dependency-cruiser-known-violations.json";
 export const KOPIEN = "tools/basis/jscpd.json";
 const KOPIEN_KONFIGURATION = ".jscpd.json";
-const KOPIEN_TRENNER = "|";
 const LEERE_UNTERDRUECKUNGEN = "eslint-suppressions.empty.json";
 const FEHLER = 2;
 const EINRUECKUNG = 2;
@@ -114,48 +114,20 @@ export async function altverstoesseAusgelagert({ basis, root }) {
   return { neu: `${JSON.stringify([...liste.slice(0, stelle), ...neue, ...liste.slice(stelle)], null, EINRUECKUNG)}\n`, anzahl: neue.length };
 }
 
-function tokensDer(schluessel) {
-  return Number(schluessel.split(KOPIEN_TRENNER).at(-1));
-}
-
-function dateienDer(schluessel) {
-  return schluessel.split(KOPIEN_TRENNER).slice(0, -1);
-}
-
-function kopienSchluessel(dateien, tokens) {
-  return [...dateien.toSorted(), tokens].join(KOPIEN_TRENNER);
-}
-
 function umzugVon(alt, fund, { unveraendert, neueDatei, stammtAus }) {
   const gemeinsam = alt.dateien.filter((datei) => fund.dateien.includes(datei));
   if (gemeinsam.length !== 1 || new Set(fund.dateien).size === 1) return undefined;
   const [partner] = gemeinsam;
   const [von] = alt.dateien.filter((datei) => datei !== partner);
   const [nach] = fund.dateien.filter((datei) => datei !== partner);
-  return unveraendert(partner) && neueDatei(nach) && stammtAus(fund.ort, { von, nach }) ? kopienSchluessel([nach, partner], fund.tokens) : undefined;
-}
-
-function paarDer(schluessel) {
-  return dateienDer(schluessel).join(KOPIEN_TRENNER);
-}
-
-function deckung(liste, aktuell) {
-  const gedeckt = new Set();
-  const unbekannt = aktuell.filter((fund) => {
-    const [kleinster] = liste
-      .map((eintrag, stelle) => ({ stelle, eintrag }))
-      .filter(({ stelle, eintrag }) => !gedeckt.has(stelle) && paarDer(eintrag) === paarDer(fund.key) && tokensDer(eintrag) >= tokensDer(fund.key))
-      .toSorted((links, rechts) => tokensDer(links.eintrag) - tokensDer(rechts.eintrag));
-    if (kleinster !== undefined) gedeckt.add(kleinster.stelle);
-    return kleinster === undefined;
-  });
-  return { gedeckt, unbekannt };
+  return unveraendert(partner) && neueDatei(nach) && stammtAus(fund.ort, { von, nach }) ? fund.key : undefined;
 }
 
 export function kopienNachUmzug({ liste, aktuell, pruefen }) {
-  const { gedeckt, unbekannt } = deckung(liste, aktuell);
-  const offen = liste.flatMap((eintrag, stelle) => (gedeckt.has(stelle) ? [] : [{ stelle, dateien: dateienDer(eintrag), tokens: tokensDer(eintrag) }]));
-  const funde = unbekannt.map(({ key, ort }) => ({ ort, dateien: dateienDer(key), tokens: tokensDer(key) }));
+  const { covered, keys } = TOOLS.jscpd.shrunk(aktuell, liste, () => false);
+  const gedeckt = kontingent(gezaehlt(keys));
+  const offen = liste.flatMap((eintrag, stelle) => (gedeckt(eintrag) ? [] : [{ stelle, dateien: TOOLS.jscpd.pair(eintrag), tokens: TOOLS.jscpd.tokens(eintrag) }]));
+  const funde = aktuell.filter((fund) => !covered.includes(fund)).map(({ key, ort }) => ({ key, ort, dateien: TOOLS.jscpd.pair(key), tokens: TOOLS.jscpd.tokens(key) }));
   const ersatz = new Map();
   for (const fund of funde) {
     const passend = offen.flatMap((alt) => {
@@ -171,7 +143,7 @@ export function kopienNachUmzug({ liste, aktuell, pruefen }) {
 
 const KOPIEN_ORT = /^(?<ersteDatei>[^:]+):(?<ersteVon>\d+)-(?<ersteBis>\d+) gleicht (?<zweiteDatei>[^:]+):(?<zweiteVon>\d+)-(?<zweiteBis>\d+) \(/;
 const LEERRAUM = /\s+/g;
-const VORSPANN = /^export/;
+const VORSPANN = /^\s*export\b\s*/;
 
 export function kopienOrt(location) {
   const gruppen = KOPIEN_ORT.exec(location)?.groups;
@@ -188,7 +160,7 @@ function ohneLeerraum(text) {
 }
 
 export function stammtAusAltemText(neuerText, alterText) {
-  const gesucht = ohneLeerraum(neuerText).replace(VORSPANN, "");
+  const gesucht = ohneLeerraum(neuerText.replace(VORSPANN, ""));
   return alterText !== null && gesucht !== "" && ohneLeerraum(alterText).includes(gesucht);
 }
 
@@ -201,7 +173,7 @@ export async function kopienAusgelagert({ basis, root }) {
   const pfad = join(root, KOPIEN);
   if (!existsSync(pfad)) return undefined;
   const vorher = JSON.parse(readFileSync(pfad, "utf8"));
-  if (vorher.version !== undefined && vorher.version !== TOOLS.jscpd.version()) return undefined;
+  if (vorher.version !== TOOLS.jscpd.version()) return undefined;
   const geaendert = new Set(aenderungenSeit(basis, root).map((aenderung) => aenderung.pfad));
   if (geaendert.has(KOPIEN_KONFIGURATION)) return undefined;
   const aktuell = TOOLS.jscpd.findings(root).map(({ key, location }) => ({ key, ort: kopienOrt(location) }));
