@@ -18,6 +18,8 @@ const AUSGELAGERTE_LISTEN = [
   { pfad: KOPIEN, umziehen: kopienAusgelagert, meldung: (anzahl) => `${anzahl} Kopien-Einträge der alten Datei auf die wortgleich ausgelagerte Datei umgezogen` },
 ];
 
+export const UMZUGSLISTEN = [...new Set([...LISTENPFADE, ...AUSGELAGERTE_LISTEN.map(({ pfad }) => pfad)])];
+
 async function ausgelagerteListenUmziehen({ basis, root }) {
   for (const { pfad, umziehen, meldung } of AUSGELAGERTE_LISTEN) {
     const ausgelagert = await umziehen({ basis, root });
@@ -49,7 +51,7 @@ function listenStand(root, pfade) {
   return new Map(pfade.map((pfad) => [pfad, lesbar(join(root, pfad))]));
 }
 
-export function umzugGemerkt(root, schritt, pfade = LISTENPFADE) {
+export function umzugGemerkt(root, schritt, pfade = UMZUGSLISTEN) {
   const vorher = listenStand(root, pfade);
   const gruen = schritt();
   const nachher = listenStand(root, pfade);
