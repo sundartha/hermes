@@ -70,6 +70,7 @@ import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
 import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 import { probeMailBoot } from "./mail-boot-probe.js";
+import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 
 const MINUTES_PER_HOUR = 60;
 const RETENTION_SWEEP_INTERVAL_HOURS = 6;
@@ -264,6 +265,20 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
+function warnElRegistrationNotWired(config) {
+  if (!config.voice.elevenLabsOutbound.enabled) return;
+  if (sipRegistrarWennAktiv(config)) {
+    console.log("[boot] ElevenLabs-Nummernregistrierung: eingehaengt (neue DIDs werden registriert)");
+    return;
+  }
+  console.warn(
+    "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
+      "(ELEVENLABS_OUTBOUND_ENABLED, PROVISIONING_ENABLED und " +
+      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED muessen alle true sein) - neue DIDs werden nicht " +
+      "bei ElevenLabs registriert, ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
+  );
+}
+
 function warnElRegistrationSipCredsMissing(config) {
   if (!config.voice.elevenLabsOutbound.numberRegistrationEnabled) return;
   if (config.telephony.telnyxSipTrunkUsername && config.telephony.telnyxSipTrunkPassword) return;
@@ -366,6 +381,7 @@ function assertBootGates(config, store, durableAudit) {
   assertElInboundAccess(config);
   assertElInboundScope(config);
   warnElRegistrationSipCredsMissing(config);
+  warnElRegistrationNotWired(config);
 }
 
 export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {

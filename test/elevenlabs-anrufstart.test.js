@@ -15,6 +15,7 @@ import {
   mcpPost,
   readToolResult,
   seedState,
+  OWNER_TEST_REGISTRIERUNG,
   startServer,
   toolCall,
   waitForStoreState,
@@ -37,6 +38,7 @@ const API_KEY_HEADER = "xi-api-key";
 
 const AGENT_ID = "agent_el_test_1";
 const AGENT_PHONE_NUMBER_ID = "phnum_el_test_1";
+const TENANT_A_REGISTRIERUNG = "phnum_tenant_a_test";
 const API_KEY = "el-api-key-testgeheim";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren (EL-START)";
 const OWNER_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
@@ -166,6 +168,7 @@ function seedTenantA({
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
+        providerAgentPhoneNumberId: TENANT_A_REGISTRIERUNG,
       },
     ],
     profiles: { [TENANT_A]: { maxCallsPerHour: null } },
@@ -316,7 +319,7 @@ test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation
 
       await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number", () => {
         assert.equal(anfrage.body.agent_id, AGENT_ID);
-        assert.equal(anfrage.body.agent_phone_number_id, AGENT_PHONE_NUMBER_ID);
+        assert.equal(anfrage.body.agent_phone_number_id, OWNER_TEST_REGISTRIERUNG);
         assert.equal(
           anfrage.body.to_number,
           TELNYX_TEST_PEER_NUMBER,

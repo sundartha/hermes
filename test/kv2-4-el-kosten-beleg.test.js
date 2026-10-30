@@ -23,6 +23,7 @@ import {
   CONVERSATION_DONE_MIT_KOSTEN,
   CONVERSATION_FAILED_INVALID_DESTINATION,
 } from "./fixtures/elevenlabs-conversations.js";
+import { mitRegistrierterDid } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const B2_ANRUF_1_MIKRO_CENTS = 10_420_301;
 const ZWEI_ZEILEN = 2;
@@ -321,7 +322,7 @@ function testConfig() {
 async function outboundFactory(store, terminateAndBillCallOverride) {
   const makeElevenLabsOutbound = await ladeOutbound();
   return makeElevenLabsOutbound({
-    store,
+    store: mitRegistrierterDid(store, { tenantId: BOOTSTRAP, e164: "+4915005550001" }),
     config: testConfig(),
     terminateAndBillCall:
       terminateAndBillCallOverride ||

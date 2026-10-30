@@ -1,7 +1,10 @@
 import { BOOTSTRAP_TENANT_ID, makePgStore } from "../../src/store/pg.js";
 import { setTenantIdentityIfAbsent } from "../../src/store/state-ops.js";
+import { findActiveNumber } from "../../src/store/views.js";
+import { registrierungAnhaengen } from "../../src/store/zustand/nummern.js";
 
 const ANBIETER = "telnyx";
+const STARTBESTAND_REGISTRIERUNG = "phnum_hermes_ctl_start";
 
 export async function startbestandAnlegen(datenbank, { nummer, vorname, nachname }) {
   const runner = {
@@ -14,7 +17,9 @@ export async function startbestandAnlegen(datenbank, { nummer, vorname, nachname
   const store = makePgStore(runner);
   await store.init();
   await store.bootstrapTenant(nummer, BOOTSTRAP_TENANT_ID, ANBIETER);
-  setTenantIdentityIfAbsent(store.load(), BOOTSTRAP_TENANT_ID, {
+  const state = store.load();
+  registrierungAnhaengen(state, findActiveNumber(state, BOOTSTRAP_TENANT_ID).id, STARTBESTAND_REGISTRIERUNG);
+  setTenantIdentityIfAbsent(state, BOOTSTRAP_TENANT_ID, {
     firstName: vorname,
     lastName: nachname,
   });

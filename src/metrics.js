@@ -61,11 +61,6 @@ export function createMetrics({
     log("call_denied", { grund, country, language });
   }
 
-  function logSenderFallback({ grund }) {
-    if (!enabled) return;
-    log("sender_fallback", { grund });
-  }
-
   return {
     llmCall,
     logTurn,
@@ -73,7 +68,6 @@ export function createMetrics({
     logTurnGap,
     logSpeechResult,
     logCallDenied,
-    logSenderFallback,
   };
 }
 
