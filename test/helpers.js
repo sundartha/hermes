@@ -44,6 +44,8 @@ export function stdioServerTransport(zusatz = {}) {
 }
 const STARTUP_TIMEOUT_MS = 15000;
 
+export const OWNER_TEST_REGISTRIERUNG = "phnum_owner_seed";
+export const TELNYX_TEST_TENANT_REGISTRIERUNG = "phnum_telnyx_seed";
 export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "telnyx" });
 
 export const DOMESTIC_TEST_NUMBER = Object.freeze({ e164: "+4930111222333", provider: "telnyx" });
@@ -329,6 +331,7 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
       provider: ownerNumber.provider,
       status: "active",
       providerNumberId: null,
+      providerAgentPhoneNumberId: OWNER_TEST_REGISTRIERUNG,
     });
   }
   return { ...state, tenants: ensureOwnerIdentity(state.tenants), numbers };
@@ -719,6 +722,7 @@ export function seedWithTelnyxNumber({ language } = {}) {
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
+        providerAgentPhoneNumberId: TELNYX_TEST_TENANT_REGISTRIERUNG,
         language,
       },
     ],

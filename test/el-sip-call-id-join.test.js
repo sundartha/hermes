@@ -14,6 +14,7 @@ import {
 } from "./fixtures/elevenlabs-conversations.js";
 import { neuePglite } from "./pglite-helfer.js";
 import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
+import { mitRegistrierterDid } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const OTB_JOINT = JOIN_SCHLUESSEL_ANRUF_2.telnyxDetailRecord.sip_call_id;
 const SCL_JOINT_NICHT = JOIN_SCHLUESSEL_ANRUF_2.startAntwort.sip_call_id;
@@ -64,7 +65,7 @@ function testConfig() {
 
 function outboundFactory(store) {
   return makeElevenLabsOutbound({
-    store,
+    store: mitRegistrierterDid(store, { tenantId: BOOTSTRAP, e164: "+4915005550001" }),
     config: testConfig(),
     terminateAndBillCall: async ({ persistEnd, bill }) => {
       await persistEnd?.();

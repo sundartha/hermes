@@ -185,6 +185,7 @@ export const {
   confirmNewsletterRecipientByToken,
   unsubscribeNewsletterRecipientByToken,
   anrufpauseAktiv,
+  registrierungAnhaengen,
 } = backend;
 
 export function setzeAnrufpause(an) {

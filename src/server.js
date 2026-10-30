@@ -21,8 +21,7 @@ import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
-import { inboundTrunkSchreiberWennErlaubt } from "./elevenlabs/nummern-registrierung.js";
-import { metrics } from "./metrics.js";
+import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
@@ -140,7 +139,7 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   finishCall: callFinish.finishCall,
   consultAllowedForCall,
   lookupAvailableFor: elevenLabsLookupAvailableFor,
-  metrics,
+  sipRegistrar: sipRegistrarWennAktiv(config),
   endCarrierCall,
 });
 

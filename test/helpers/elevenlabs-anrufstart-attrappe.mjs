@@ -10,6 +10,7 @@ const PIN_NUMBER = Object.freeze({
   tenantId: PIN_TENANT,
   status: "active",
   provider: "telnyx",
+  providerAgentPhoneNumberId: "pin-phnum",
 });
 
 const PIN_STATE = Object.freeze({
@@ -119,4 +120,18 @@ export async function sendeAnrufstart(args) {
   const rumpf = koerper.conversation_initiation_client_data;
   assert.ok(rumpf?.dynamic_variables, "dynamic_variables fehlt im gesendeten Rumpf");
   return rumpf.dynamic_variables;
+}
+
+export function mitRegistrierterDid(store, { tenantId, e164 }) {
+  const nummer = {
+    id: "num_registriert_test",
+    e164,
+    tenantId,
+    status: "active",
+    provider: "telnyx",
+    providerAgentPhoneNumberId: "phnum_registriert_test",
+  };
+  return Object.assign(Object.create(store), {
+    load: () => ({ ...store.load(), numbers: [nummer] }),
+  });
 }

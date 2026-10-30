@@ -15,7 +15,7 @@ import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
-import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
+import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
 
 const PROVIDER_DONE = "done";
@@ -279,7 +279,6 @@ function assertConfigured(el) {
   const fehlend = [
     !el.apiKey && "ELEVENLABS_API_KEY",
     !el.agentId && "ELEVENLABS_AGENT_ID",
-    !el.agentPhoneNumberId && "ELEVENLABS_AGENT_PHONE_NUMBER_ID",
   ].filter(Boolean);
   if (fehlend.length)
     throw new Error(
@@ -303,8 +302,6 @@ const GATE_UNAVAILABLE = "unavailable";
 
 const ohneRueckfrageTor = () => false;
 const ohneRechercheTor = () => false;
-
-const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 
 export function dynamicVariables({
   call,
@@ -347,15 +344,49 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
-function absenderFuerAnruf({ store, call, el, metrics }) {
-  const absender = waehleAbsenderRegistrierung({
-    numberRecord: findActiveNumber(store.load(), call.tenantId),
-    fromE164: call.from,
-    rueckfallId: el.agentPhoneNumberId,
-  });
-  if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
-    console.warn(`[el-outbound] Absender-Rueckfall (call=${call.id}): grund=${absender.grund}`);
-    metrics.logSenderFallback({ grund: absender.grund });
+const registrierungenImFlug = new Map();
+
+function holeRegistrierungNach({ store, numberRecord, sipRegistrar }) {
+  if (!registrierungenImFlug.has(numberRecord.id)) {
+    const lauf = (async () => {
+      try {
+        const { phoneNumberId } = await sipRegistrar.ensureRegistration({
+          e164: numberRecord.e164,
+          numberId: numberRecord.id,
+        });
+        store.registrierungAnhaengen(numberRecord.id, phoneNumberId);
+      } catch (err) {
+        console.warn(`[el-outbound] Registrierung nachholen FEHLGESCHLAGEN number=${numberRecord.id}: ${err.message}`);
+      } finally {
+        registrierungenImFlug.delete(numberRecord.id);
+      }
+    })();
+    registrierungenImFlug.set(numberRecord.id, lauf);
+  }
+  return registrierungenImFlug.get(numberRecord.id);
+}
+
+async function absenderFuerAnruf({ store, call, sipRegistrar }) {
+  const waehle = () =>
+    waehleAbsenderRegistrierung({
+      numberRecord: findActiveNumber(store.load(), call.tenantId),
+      fromE164: call.from,
+    });
+  let absender = waehle();
+  if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
+    await holeRegistrierungNach({
+      store,
+      numberRecord: findActiveNumber(store.load(), call.tenantId),
+      sipRegistrar,
+    });
+    absender = waehle();
+  }
+  if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
+    store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
+    throw new Error(
+      `Anruf ohne eigene Absendernummer abgebrochen (call=${call.id}): grund=${absender.grund}` +
+        (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)"),
+    );
   }
   store.recordFromRegistrationSource(call.id, absender.quelle);
   return absender;
@@ -660,7 +691,7 @@ export function makeElevenLabsOutbound({
   finishCall,
   consultAllowedForCall = ohneRueckfrageTor,
   lookupAvailableFor = ohneRechercheTor,
-  metrics = ohneMetrikMeldung,
+  sipRegistrar,
   endCarrierCall,
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
@@ -720,7 +751,7 @@ export function makeElevenLabsOutbound({
     const locale = callLocaleOf({ store, config, call, ownerName });
     const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
     const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
-    const agentPhoneNumberId = absenderFuerAnruf({ store, call, el, metrics }).agentPhoneNumberId;
+    const { agentPhoneNumberId } = await absenderFuerAnruf({ store, call, sipRegistrar });
     const tenantToken = tenantToolToken({
       secret: config.voice.elevenLabsToolToken,
       tenantId: call.tenantId,

@@ -14,6 +14,9 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 const HTTP_OK = 200;
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
+const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
+const NACHGEHOLTE_REGISTRIERUNG = "phnum_nachgeholt_b";
+const HTTP_NOT_PLACED = 500;
 
 const AGENT_ID = "agent_el_test_1";
 const RUECKFALL_AGENT_PHONE_NUMBER_ID = "phnum_global_test";
@@ -46,10 +49,16 @@ function endJson(res, status, payload) {
 
 async function startElevenLabsMock() {
   const startRequests = [];
+  const registrierungen = [];
   const server = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
+      if (req.url === PHONE_NUMBERS_PATH) {
+        if (req.method === "GET") return endJson(res, HTTP_OK, []);
+        registrierungen.push(JSON.parse(raw || "{}"));
+        return endJson(res, HTTP_OK, { phone_number_id: NACHGEHOLTE_REGISTRIERUNG });
+      }
       if (req.url.startsWith(START_PATH)) {
         startRequests.push({ body: JSON.parse(raw || "{}") });
         return endJson(res, HTTP_OK, { success: true, conversation_id: "conv_e5_test_1" });
@@ -63,6 +72,7 @@ async function startElevenLabsMock() {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     startRequests,
+    registrierungen,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
@@ -97,10 +107,17 @@ function seedZweiTenants() {
   });
 }
 
-async function withElevenLabs(run) {
+const REGISTRIERUNG_NACHHOLEN_ENV = Object.freeze({
+  PROVISIONING_ENABLED: "true",
+  ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "true",
+  TELNYX_SIP_TRUNK_USERNAME: "sip-user-test",
+  TELNYX_SIP_TRUNK_PASSWORD: "sip-passwort-test",
+});
+
+async function withElevenLabs(run, extraEnv = {}) {
   const mock = await startElevenLabsMock();
   const srv = await startServer({
-    env: { ...EL_ENV, ELEVENLABS_API_BASE: mock.url },
+    env: { ...EL_ENV, ...extraEnv, ELEVENLABS_API_BASE: mock.url },
     seed: seedZweiTenants(),
   });
   try {
@@ -132,33 +149,29 @@ test("B1: Tenant mit eigener Registrierung -> agent_phone_number_id ist ihre Ken
   });
 });
 
-test("B2: Tenant-Isolation ueber die Route - Tenant B faellt auf den Rueckfall, NIE auf Tenant As Kennung", async () => {
+test("B2: Tenant-Isolation ueber die Route - Tenant B ohne Registrierung startet NIE mit Tenant As Kennung und nicht mit der globalen", async () => {
   await withElevenLabs(async ({ srv, mock }) => {
     const res = await placeCall(srv, SUBJECT_B);
-    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-    assert.equal(mock.startRequests.length, 1, "genau ein Anrufstart");
-    const koerper = mock.startRequests[0].body;
-    assert.equal(koerper.agent_phone_number_id, RUECKFALL_AGENT_PHONE_NUMBER_ID);
-    assert.notEqual(koerper.agent_phone_number_id, REGISTRIERUNG_TENANT_A);
+    assert.equal(res.status, HTTP_NOT_PLACED, "der Anruf wird klar abgelehnt");
+    assert.equal(mock.startRequests.length, 0, "kein Anbieteraufruf, keine Kosten");
   });
 });
 
-test("B3: der Rueckfall ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", async () => {
+test("B3: der Abbruch ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", async () => {
   await withElevenLabs(async ({ srv }) => {
-    const res = await placeCall(srv, SUBJECT_B);
-    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-    assert.match(srv.stdout, /\[el-outbound\] Absender-Rueckfall/);
+    await placeCall(srv, SUBJECT_B);
+    assert.match(srv.stdout, /Anruf ohne eigene Absendernummer abgebrochen/);
     assert.match(srv.stdout, /grund=keine_eigene_registrierung/);
     assert.ok(!srv.stdout.includes(NUMBER_B), "keine Rufnummer im Log");
   });
 });
 
-test("B4: Rueckfall am Datensatz erkennbar - fromRegistrationSource=rueckfall_global", async () => {
+test("B4: Abbruch am Datensatz erkennbar - failed und fromRegistrationSource=abgebrochen:<grund>", async () => {
   await withElevenLabs(async ({ srv }) => {
-    const res = await placeCall(srv, SUBJECT_B);
-    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
+    await placeCall(srv, SUBJECT_B);
     const call = ownCall(srv);
-    assert.equal(call.fromRegistrationSource, "rueckfall_global");
+    assert.equal(call.status, "failed");
+    assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
   });
 });
 
@@ -178,8 +191,41 @@ test("B6: Bestandsschutz - call.from bleibt in BEIDEN Faellen die gebuchte Tenan
     assert.equal(ownCall(srv).from, NUMBER_A);
   });
   await withElevenLabs(async ({ srv }) => {
-    const resB = await placeCall(srv, SUBJECT_B);
-    assert.equal(resB.status, HTTP_OK, JSON.stringify(await resB.json()));
+    await placeCall(srv, SUBJECT_B);
     assert.equal(ownCall(srv).from, NUMBER_B);
   });
+});
+
+test("ANR: Tenant mit aktiver DID ohne eigene Registrierung -> KEIN Anrufstart mit der globalen Kennung", async () => {
+  await withElevenLabs(async ({ srv, mock }) => {
+    await placeCall(srv, SUBJECT_B);
+    const mitGlobalerKennung = mock.startRequests.filter(
+      (anfrage) => anfrage.body.agent_phone_number_id === RUECKFALL_AGENT_PHONE_NUMBER_ID,
+    );
+    assert.equal(mitGlobalerKennung.length, 0, "der Angerufene sah die globale Ersatznummer statt der des Abonnenten");
+  });
+});
+
+test("ANR: fehlende Registrierung wird zur Anrufzeit nachgeholt - der Anruf startet mit der Kennung der eigenen DID", async () => {
+  await withElevenLabs(async ({ srv, mock }) => {
+    const res = await placeCall(srv, SUBJECT_B);
+    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
+    assert.equal(mock.registrierungen.length, 1, "genau eine Registrierung angelegt");
+    assert.equal(mock.registrierungen[0].phone_number, NUMBER_B);
+    assert.equal(mock.startRequests.length, 1);
+    const [start] = mock.startRequests;
+    assert.equal(start.body.agent_phone_number_id, NACHGEHOLTE_REGISTRIERUNG);
+    assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
+    const nummer = srv.readStore().numbers.find((number) => number.e164 === NUMBER_B);
+    assert.equal(nummer.providerAgentPhoneNumberId, NACHGEHOLTE_REGISTRIERUNG, "Kennung dauerhaft gespeichert");
+  }, REGISTRIERUNG_NACHHOLEN_ENV);
+});
+
+test("ANR: Boot meldet woertlich, ob die Nummernregistrierung eingehaengt ist", async () => {
+  await withElevenLabs(async ({ srv }) => {
+    assert.match(srv.stdout, /\[boot\] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
+  });
+  await withElevenLabs(async ({ srv }) => {
+    assert.match(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
+  }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
