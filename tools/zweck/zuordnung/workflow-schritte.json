@@ -188,6 +188,9 @@
     ],
     "beleg": "tools/mutationspruefung.mjs"
   },
+  ".github/workflows/ci.yml › mutationsurteil › Absicherungsbeleg schreiben": {
+    "aufbau": "Schreibt für die Absicherung am alten Stand den Beleg aus Commit, geprüften Zeilen und Exit-Code des Urteils ins Artefakt; ohne Urteil über die Änderung, rot nur bei fehlender oder ungültiger exit-code-Datei."
+  },
   ".github/workflows/ci.yml › ci › Bestandene Tests aller Teile": {
     "meldet": "T12: zählt die bestandenen Tests aller Teile zusammen, ohne Urteil."
   },
