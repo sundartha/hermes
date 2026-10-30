@@ -43,6 +43,26 @@ test("ein Template-Name, der schon auf der Basis stand, macht die statische Test
   assert.doesNotMatch(lauf.stdout, /Wozu:/);
 });
 
+const WEB_TEST = "apps/web/test/schleife.test.js";
+
+test("ein neuer Test der Web-App mit Template-Namen macht die statische Testprüfung rot", (context) => {
+  const lauf = pruefeNach(context, OHNE_EINTRAG, { [WEB_TEST]: SCHLEIFE });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test ohne festen Namen: apps\/web\/test\/schleife\.test\.js › `fall \$\{nummer\}`$/m);
+});
+
+test("ein neuer Test der Web-App mit festem Namen lässt die statische Testprüfung grün", (context) => {
+  const lauf = pruefeNach(context, OHNE_EINTRAG, { [WEB_TEST]: `${KOPF.join("\n")}\n${FESTER_NAME}` });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, /Verstoß:/);
+});
+
+test("ein Template-Name der Web-App, der schon auf der Basis stand, macht die statische Testprüfung nicht rot", (context) => {
+  const lauf = pruefeNach(context, { ...OHNE_EINTRAG, [WEB_TEST]: SCHLEIFE }, { [WEB_TEST]: `${SCHLEIFE}${FESTER_NAME}` });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, /Verstoß:/);
+});
+
 test("echtWarten(300) ohne Eintrag in der Basisliste macht die statische Testprüfung rot", (context) => {
   const lauf = pruefeNach(context, OHNE_EINTRAG, { "test/warte.test.js": WARTET });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
@@ -80,5 +100,5 @@ test("ci:lokal fährt die statische Testprüfung bei jedem Lauf gegen die Basis,
   assert.ok(schritt, JSON.stringify(schritte.map(({ name }) => name)));
   assert.notEqual(schritt.teuer, true);
   assert.equal(schritt.werkzeug, undefined);
-  assert.equal(schritt.ci, undefined);
+  assert.deepEqual(schritt.ci, [".github/workflows/ci.yml › pruefungen › Statische Testprüfung"]);
 });
