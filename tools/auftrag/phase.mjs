@@ -10,7 +10,7 @@ import { EXIT_GRUEN, EXIT_ROT, gueltigePhase, issueBefunde } from "./befehle.mjs
 import { sperrSchluessel } from "./bereiche.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { istVertraulich, reihenfolge } from "./format.mjs";
-import { gibtEsIn, git, kopf } from "./git.mjs";
+import { dateiAm, git, kopf } from "./git.mjs";
 import { bereicheZwischen, kollisionenSeit } from "./kollision.mjs";
 import { ciLokalAmPhasenende } from "./phasenende.mjs";
 import { IssueNichtLesbar, issueAbsichtBefunde } from "./planung/absicht.mjs";
@@ -69,8 +69,7 @@ class Phasenlauf {
   }
 
   quelltext(datei, stand) {
-    const cwd = this.ort.integration;
-    return gibtEsIn(stand, datei, cwd) ? git(["show", `${stand}:${datei}`], { cwd }) : null;
+    return dateiAm(stand, datei, this.ort.integration);
   }
 
   graphVon(kennungen) {

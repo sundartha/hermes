@@ -30,6 +30,15 @@ export function gibtEsIn(commit, pfad, cwd) {
   return spawnSync("git", ["cat-file", "-e", `${commit}:${pfad}`], { cwd }).status === 0;
 }
 
+export function dateiAm(stand, pfad, cwd) {
+  return gibtEsIn(stand, pfad, cwd) ? git(["show", `${stand}:${pfad}`], { cwd }) : null;
+}
+
+export function hartZuruecksetzen(stand, cwd) {
+  git(["reset", "-q", "--hard", stand], { cwd });
+  git(["clean", "-q", "-fd"], { cwd });
+}
+
 export function legeWorktreeAn(commit, ordner, cwd) {
   git(["worktree", "add", "--detach", "-q", ordner, commit], { cwd });
   return () => git(["worktree", "remove", "--force", ordner], { cwd });

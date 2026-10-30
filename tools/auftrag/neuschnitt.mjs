@@ -9,7 +9,7 @@ import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { bereichSchluessel, brauchtRotenTest, istPitchPhase, istTestdatei, ladePhase, phasenBefunde } from "./format.mjs";
-import { festhalten, gemeinsamerOrdner, git, kopf, offenePfade, vormerken } from "./git.mjs";
+import { festhalten, gemeinsamerOrdner, hartZuruecksetzen, kopf, offenePfade, vormerken } from "./git.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { fuehreAus } from "./pruefungen.mjs";
@@ -92,11 +92,6 @@ function neuschnittPrompt({ phase, auftrag, root, plan }, ort, { gestoppt, befun
     abschnitt("Verlauf", [CODEBLOCK, ...gestoppt.verlauf, ...(gestoppt.hinweise ?? []), CODEBLOCK]),
     ...vorher,
   ].join("\n");
-}
-
-function zuruecksetzen(root, stand) {
-  git(["reset", "-q", "--hard", stand], { cwd: root });
-  git(["clean", "-q", "-fd"], { cwd: root });
 }
 
 function vorgaengerNachSchnitt(vorher, schnitt) {
@@ -312,7 +307,7 @@ function planeNeu(kontext, ort, vorher) {
     const eingriff = eingriffBefunde(root, stand);
     ergebnis = eingriff.length > 0 ? { befunde: eingriff } : auswerten(kontext, ort, { lauf, gestoppt: vorher.gestoppt });
   } finally {
-    if (!ergebnis.neu) zuruecksetzen(root, stand.kopf);
+    if (!ergebnis.neu) hartZuruecksetzen(stand.kopf, root);
   }
   const arten = ergebnis.befunde && ergebnis.arten === undefined ? { arten: teamArten(lauf) } : {};
   return { ...ergebnis, ...arten, planung: lauf.planung, sitzungen: lauf.sitzungen ?? [] };
