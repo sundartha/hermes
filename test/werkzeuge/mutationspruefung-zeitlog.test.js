@@ -19,6 +19,7 @@ const GETOETET = "Killed";
 const BESTAETIGUNGSLAUF = "im Bestätigungslauf";
 const ERSTER_LAUF = "erster Lauf";
 const LASTMITTEL = 3;
+const ARGUMENTE_ZEICHEN = 400;
 
 function logs(repo) {
   const ordner = join(repo, LOGORDNER);
@@ -179,7 +180,7 @@ test("der Testumbau schreibt ein Zeit-Log mit den Stryker-Läufen beider Stände
   assert.equal(eintraege.at(-1).art, "ende");
 });
 
-test("das Zeit-Log hält vor und nach jedem Stryker-Lauf Last und Prozesse fest, je Prozess nur Kennzahlen und höchstens 120 Zeichen Argumente", (context) => {
+test("das Zeit-Log hält vor und nach jedem Stryker-Lauf Last und Prozesse fest, je Prozess nur Kennzahlen und höchstens 400 Zeichen Argumente", (context) => {
   const { eintraege } = rotLaufMitLog(context);
   const strykerlaeufe = arten(eintraege, "stryker");
   const prozesse = arten(eintraege, "prozesse");
@@ -192,7 +193,7 @@ test("das Zeit-Log hält vor und nach jedem Stryker-Lauf Last und Prozesse fest,
     assert.ok(eintrag.last.every(Number.isFinite), JSON.stringify(eintrag));
     for (const prozess of eintrag.prozesse) {
       assert.deepEqual(Object.keys(prozess).sort(), ["alter_s", "argumente", "befehl", "cpu", "pid", "ppid"], JSON.stringify(prozess));
-      assert.ok(prozess.argumente.length <= 120, JSON.stringify(prozess));
+      assert.ok(prozess.argumente.length <= ARGUMENTE_ZEICHEN, JSON.stringify(prozess));
       assert.ok([prozess.pid, prozess.ppid, prozess.alter_s, prozess.cpu].every(Number.isFinite), JSON.stringify(prozess));
       assert.match(prozess.befehl, /node|stryker|tap/);
     }
@@ -224,11 +225,13 @@ test("scheitert das Auslesen der Prozesse, läuft die Prüfung unverändert weit
 });
 
 test("das Zeit-Log rechnet das Alter eines Prozesses mit und ohne Tagesanteil in Sekunden und nimmt nur node, stryker und tap auf", (context) => {
-  const ausgabe = ["  4242     1 3-02:03:04  1.5 node /opt/lauf.js --eins", "  4243  4242       05:06  0.0 /usr/bin/node arbeiter.js", "  4244     1       00:07  9.0 nodemon lauf.js"];
+  const langeArgumente = `src/mcp-server.js ${"x".repeat(ARGUMENTE_ZEICHEN)}`;
+  const ausgabe = ["  4242     1 3-02:03:04  1.5 node /opt/lauf.js --eins", "  4243  4242       05:06  0.0 /usr/bin/node arbeiter.js", "  4244     1       00:07  9.0 nodemon lauf.js", `  4245     1       00:08  2.0 node ${langeArgumente}`];
   const [erste] = prozesszeilen(mitErsatzPs(context, `cat <<'ENDE'\n${ausgabe.join("\n")}\nENDE`));
   assert.deepEqual(erste.prozesse, [
     { pid: 4242, ppid: 1, alter_s: 266_584, cpu: 1.5, befehl: "node", argumente: "/opt/lauf.js --eins" },
     { pid: 4243, ppid: 4242, alter_s: 306, cpu: 0, befehl: "node", argumente: "arbeiter.js" },
+    { pid: 4245, ppid: 1, alter_s: 8, cpu: 2, befehl: "node", argumente: langeArgumente.slice(0, ARGUMENTE_ZEICHEN) },
   ]);
 });
 
