@@ -10,6 +10,7 @@ import { BASE_ENV, MCP_STDIO_ARGS, ROOT } from "../helpers.js";
 import { bisBeendet } from "./mutationspruefung-hilfen.js";
 
 const WAECHTER = new URL("../gemeinsam/elternwaechter.mjs", import.meta.url).href;
+const PPID_WAECHTER = new URL("../../tools/mutationspruefung/ppid-waechter.mjs", import.meta.url).href;
 const TESTHILFEN = new URL("../helpers.js", import.meta.url).href;
 const STDIO_SERVER_BEREIT = "MCP-Server bereit";
 const START_FRIST_MS = 20_000;
@@ -17,6 +18,10 @@ const WAECHTER_FRIST_MS = 100;
 const PRUEFTAKT_MS = 50;
 const SCHLEIFE_BEI_STDIN_ENDE = "--import=data:text/javascript,process.stdin.once('end',()=>{for(;;);})";
 const WAECHTER_SCHEITERT = "--import=data:text/javascript,import('node:worker_threads').then((w)=>{if(!w.isMainThread)throw(Error('kein-waechter'))})";
+const WAECHTER_STARTET_ERST_NACH_MS = 1500;
+const VERZOEGERUNG_VOR_WAECHTER = `--import=data:text/javascript,const t=Date.now();while(Date.now()-t<${WAECHTER_STARTET_ERST_NACH_MS});`;
+const PID_EINES_FREMDEN_PROZESSES = process.pid + 1;
+const OHNE_ELTERN_PID = /Elternprozess/;
 const OHNE_PIPE = /Elternwächter ohne stdin-Pipe vom Elternprozess/;
 const OHNE_PPID_ABFRAGE = /Elternwächter ohne ppid-Abfrage: /;
 
@@ -47,7 +52,8 @@ process.stdout.write(zeile, () => process.exit(0));
 
 const ELTERN_MIT_STDIO_SERVER = `
 import { spawn } from "node:child_process";
-const kind = spawn(process.execPath, ${JSON.stringify(MCP_STDIO_ARGS)}, {
+import { MCP_STDIO_ARGS } from ${JSON.stringify(PPID_WAECHTER)};
+const kind = spawn(process.execPath, MCP_STDIO_ARGS, {
   cwd: ${JSON.stringify(ROOT)},
   env: ${JSON.stringify({ ...BASE_ENV, NODE_OPTIONS: SCHLEIFE_BEI_STDIN_ENDE })},
   stdio: ["pipe", "pipe", "pipe"],
@@ -56,6 +62,17 @@ kind.stderr.on("data", (stueck) => {
   if (!String(stueck).includes(${JSON.stringify(STDIO_SERVER_BEREIT)})) return;
   process.stdout.write(JSON.stringify({ pid: kind.pid }) + "\\n", () => process.exit(0));
 });
+`;
+
+const ELTERN_ENDET_VOR_DEM_WAECHTER = `
+import { spawn } from "node:child_process";
+import { MCP_STDIO_ARGS } from ${JSON.stringify(PPID_WAECHTER)};
+const kind = spawn(process.execPath, [${JSON.stringify(VERZOEGERUNG_VOR_WAECHTER)}, ...MCP_STDIO_ARGS], {
+  cwd: ${JSON.stringify(ROOT)},
+  env: ${JSON.stringify({ ...BASE_ENV, NODE_OPTIONS: SCHLEIFE_BEI_STDIN_ENDE })},
+  stdio: ["pipe", "pipe", "ignore"],
+});
+process.stdout.write(JSON.stringify({ pid: kind.pid }) + "\\n", () => process.exit(0));
 `;
 
 const KIND_OHNE_PIPE_MIT_NUR_PROTOKOLLIERENDEM_GUARD = `
@@ -115,8 +132,8 @@ test("ein verwaister stdio-Testserver mit blockierter Ereignisschleife endet von
   await pruefeEndeDerWaise(await verwaistesKind(ELTERN_MIT_STDIO_SERVER));
 });
 
-function starteStdioServer(zusatz = {}) {
-  const kind = spawn(process.execPath, MCP_STDIO_ARGS, { cwd: ROOT, env: { ...BASE_ENV, ...zusatz }, stdio: ["pipe", "pipe", "pipe"] });
+function starteStdioServer(zusatz = {}, args = MCP_STDIO_ARGS) {
+  const kind = spawn(process.execPath, args, { cwd: ROOT, env: { ...BASE_ENV, ...zusatz }, stdio: ["pipe", "pipe", "pipe"] });
   const ausgabe = { text: "" };
   kind.stderr.on("data", (stueck) => (ausgabe.text += stueck));
   return { kind, ausgabe };
@@ -136,6 +153,35 @@ async function beende(kind) {
   kind.kill("SIGKILL");
   await once(kind, "close");
 }
+
+test("ein stdio-Testserver, dessen Elternprozess vor dem Start des Wächters endet, endet von selbst", async () => {
+  await pruefeEndeDerWaise(await verwaistesKind(ELTERN_ENDET_VOR_DEM_WAECHTER));
+});
+
+test("ein stdio-Testserver endet, wenn der Elternprozess nicht der ist, den ihm der Starter nannte", async () => {
+  const [vorlauf, ...rest] = MCP_STDIO_ARGS;
+  const fremd = [`${vorlauf.split("?")[0]}?eltern=${PID_EINES_FREMDEN_PROZESSES}`, ...rest];
+  const server = starteStdioServer({ NODE_OPTIONS: SCHLEIFE_BEI_STDIN_ENDE }, fremd);
+  try {
+    const beendet = await bisBeendet(server.kind.pid);
+    assert.ok(beendet, `stdio-Testserver mit fremder Elternpid lief noch:\n${server.ausgabe.text}`);
+  } finally {
+    await beende(server.kind);
+  }
+});
+
+test("ein stdio-Testserver ohne Angabe seines Elternprozesses bricht laut ab", async () => {
+  const [vorlauf, ...rest] = MCP_STDIO_ARGS;
+  const server = starteStdioServer({}, [vorlauf.split("?")[0], ...rest]);
+  try {
+    const [code] = await once(server.kind, "close", { signal: AbortSignal.timeout(START_FRIST_MS) });
+    assert.notEqual(code, 0);
+    assert.match(server.ausgabe.text, OHNE_ELTERN_PID);
+    assert.ok(!server.ausgabe.text.includes(STDIO_SERVER_BEREIT), server.ausgabe.text);
+  } finally {
+    await beende(server.kind);
+  }
+});
 
 test("ein stdio-Testserver läuft weiter, solange sein Elternprozess lebt", async () => {
   const server = starteStdioServer();
