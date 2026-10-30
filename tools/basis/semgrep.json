@@ -63,6 +63,7 @@
     "tools.basis.javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp|src/restricted-data.js|50410346a087eef2",
     "tools.basis.javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp|tools/feste-pfade/muster.mjs|60892a6a4b7f49a6",
     "tools.basis.javascript.lang.security.audit.detect-redos.detect-redos|.claude/hooks/leise-befehle.mjs|5a8a43693db1427e",
+    "tools.basis.javascript.lang.security.audit.detect-redos.detect-redos|tools/vorbereitung/http-modul.mjs|6dbd04536a57f0bf",
     "tools.basis.javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal|scripts/convo-bench.mjs|20083af2d8fe83ff",
     "tools.basis.javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal|scripts/convo-bench.mjs|a0557a7bfe6500aa",
     "tools.basis.javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal|scripts/convo-bench.mjs|add1256e6e641a4a",
