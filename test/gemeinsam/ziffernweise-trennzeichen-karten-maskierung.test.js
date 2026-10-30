@@ -5,9 +5,7 @@ import { seedState } from "../helpers.js";
 import {
   AGENT,
   COUNTERPARTY,
-  MEGABYTE_CHARS,
   anrufeJeZeile,
-  assertUnveraendertInnerhalbDerGrenze,
   einzeln as ziffernMit,
   einzigeAusgabezeile,
   hatLuhnFensterMitKartenanfang,
@@ -15,6 +13,7 @@ import {
   pruefeMaskiert,
   starteServer,
 } from "./kartenmaskierung.js";
+import { pruefeLaufzeitVerdopplung } from "./laufzeit-verdopplung.js";
 
 const MIN_KARTENZIFFERN_FUER_RUFNUMMERNWORT = 16;
 
@@ -144,20 +143,20 @@ test("Luhn-gültige Ziffernfolgen mit ungleichen Gruppen (4-2-4-4, Einzelziffern
   }
 });
 
-test("1 MB aus der Ziffer 1 getrennt mit Bindestrich und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1 - ".repeat(MEGABYTE_CHARS / 4));
+test("1 MB aus der Ziffer 1 getrennt mit Bindestrich und Leerzeichen braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1 - ", maskRestrictedText);
 });
 
-test("1 MB aus der Ziffer 1 getrennt mit Unterstrich wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1_".repeat(MEGABYTE_CHARS / 2));
+test("1 MB aus der Ziffer 1 getrennt mit Unterstrich braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1_", maskRestrictedText);
 });
 
-test("1 MB aus der Ziffer 1 getrennt mit Komma und Leerzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1, ".repeat(MEGABYTE_CHARS / 3));
+test("1 MB aus der Ziffer 1 getrennt mit Komma und Leerzeichen braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1, ", maskRestrictedText);
 });
 
-test("1 MB aus der Ziffer 1 mit gemischten Trennzeichen wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze(maskRestrictedText, "1 - 1_1, 1-".repeat(MEGABYTE_CHARS / 11));
+test("1 MB aus der Ziffer 1 mit gemischten Trennzeichen braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1 - 1_1, 1-", maskRestrictedText);
 });
 
 const VORANGESTELLTE_ZIFFERN = "092600";
