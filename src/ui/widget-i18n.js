@@ -147,7 +147,7 @@ export function resolveLocale(candidates, dict) {
   return DEFAULT_LOCALE;
 }
 
-export function chooseLocale(userTag, contentTags, dict) {
+function chooseLocale(userTag, contentTags, dict) {
   const user = primaryLanguage(userTag);
   const fits = contentTags.every((tag) => primaryLanguage(tag) === user);
   return fits ? resolveLocale([userTag], dict) : DEFAULT_LOCALE;
