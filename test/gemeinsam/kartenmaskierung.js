@@ -12,12 +12,9 @@ const PIN_WERT = "4711";
 export const PASSWORT_KENNWORT = "password: ";
 const PASSWORT =PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
 
-const RUNTIME_BUDGET_MS = 2000;
 const HOECHSTE_KARTENZIFFERN = 19;
 const KARTENANFANG = /^[2-6]/;
 const MASKEN = /\*{4}\d{0,4}|\[restricted-credential\]|\[restricted-government-id\]/g;
-
-export const MEGABYTE_CHARS = 1000000;
 
 export function einzeln(ziffern, trenner = " ") {
   return ziffern.split("").join(trenner);
@@ -183,11 +180,4 @@ export async function pruefeNummerNichtGanzImKlartext(anrufe, felderVon, { ziffe
       assert.ok(!feld.includes(gruppiert), meldung);
     }
   }
-}
-
-export function assertUnveraendertInnerhalbDerGrenze(maskiere, text) {
-  const started = Date.now();
-  const masked = maskiere(text);
-  assert.ok(Date.now() - started < RUNTIME_BUDGET_MS, "kein exponentielles Verhalten");
-  assert.equal(masked, text);
 }

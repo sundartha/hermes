@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { maskRestrictedText } from "../../src/restricted-data.js";
 import { startServer, mcpPost, toolCall, readToolResult, seedState, seedCall } from "../helpers.js";
 
-const RUNTIME_BUDGET_MS = 2000;
-const MEGABYTE_CHARS = 1000000;
+import { pruefeLaufzeitVerdopplung } from "./laufzeit-verdopplung.js";
 
 const VISA_16 = "4111111111111111";
 const MASTERCARD_16 = "5555555555554444";
@@ -182,17 +181,10 @@ test("Karte in unregelmäßigen Gruppen mit einer einzelnen Ziffer am Rand bleib
   assert.equal(maskRestrictedText(beginnend), beginnend);
 });
 
-function assertUnveraendertInnerhalbDerGrenze(text) {
-  const started = Date.now();
-  const masked = maskRestrictedText(text);
-  assert.ok(Date.now() - started < RUNTIME_BUDGET_MS, "kein exponentielles Verhalten");
-  assert.equal(masked, text);
-}
-
-test("1 MB aus einzeln mit Leerzeichen getrennten Ziffern ohne Kartennummer wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1 ".repeat(MEGABYTE_CHARS / 2));
+test("1 MB aus einzeln mit Leerzeichen getrennten Ziffern ohne Kartennummer braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1 ", maskRestrictedText);
 });
 
-test("1 MB aus der Ziffer 1 in Vierergruppen mit Komma getrennt wird innerhalb der Laufzeitgrenze verarbeitet", () => {
-  assertUnveraendertInnerhalbDerGrenze("1 1 1 1, ".repeat(MEGABYTE_CHARS / 9));
+test("1 MB aus der Ziffer 1 in Vierergruppen mit Komma getrennt braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
+  pruefeLaufzeitVerdopplung("1 1 1 1, ", maskRestrictedText);
 });
