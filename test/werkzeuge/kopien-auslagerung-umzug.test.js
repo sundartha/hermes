@@ -184,6 +184,24 @@ test("Kopien-Einträge nach Umzug: ist der alte Eintrag noch gültig, ist die Ko
   assert.equal(umgezogenNach({ liste: [alt(60)], aktuell: [alt(60), neu(60)] }), undefined);
 });
 
+test("Kopien-Einträge nach Umzug: findet jscpd das alte Paar noch mit weniger Tokens, bleibt der alte Eintrag gültig und nichts zieht um", () => {
+  assert.equal(umgezogenNach({ liste: [alt(60)], aktuell: [alt(55), neu(58)] }), undefined);
+});
+
+test("Kopien-Einträge nach Umzug: findet jscpd das alte Paar mit mehr Tokens als der Eintrag, deckt das den Eintrag nicht", () => {
+  assert.deepEqual(umgezogenNach({ liste: [alt(60)], aktuell: [alt(61), neu(58)] }), { neu: [neu(58)], anzahl: 1 });
+});
+
+test("Kopien-Einträge nach Umzug: ein Eintrag deckt nur einen Fund, der zweite Fund bleibt unbekannt und ersetzt einen offenen Eintrag", () => {
+  const ergebnis = umgezogenNach({ liste: [alt(70), neu(60)], aktuell: [neu(55), neu(50)] });
+  assert.deepEqual(ergebnis, { neu: [neu(50), neu(60)], anzahl: 1 });
+});
+
+test("Kopien-Einträge nach Umzug: ein geschrumpfter Fund deckt den kleinsten passenden Eintrag, der größere bleibt offen", () => {
+  const ergebnis = umgezogenNach({ liste: [alt(70), alt(60)], aktuell: [alt(55), neu(65)] });
+  assert.deepEqual(ergebnis, { neu: [alt(60), neu(65)], anzahl: 1 });
+});
+
 test("Kopien-Einträge nach Umzug: bei zwei alten Einträgen zieht der nicht mehr gefundene um, der noch gültige bleibt", () => {
   const ergebnis = umgezogenNach({ liste: [alt(52), alt(63)], aktuell: [alt(52), neu(51)] });
   assert.deepEqual(ergebnis, { neu: [alt(52), neu(51)], anzahl: 1 });
