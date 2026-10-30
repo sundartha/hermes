@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { startServer, seedState, seedCall } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_SERVER_ERROR = 500;
 const INNERER_FEHLER_TEXT = "intern";
