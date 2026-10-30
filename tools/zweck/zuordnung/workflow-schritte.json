@@ -143,6 +143,9 @@
   ".github/workflows/ci.yml › tests › Node 22, npm ci und Install-Skripte": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
+  ".github/workflows/ci.yml › tests › Testdateien des Teils": {
+    "meldet": "Wählt nur die Testdateien dieses Teils aus der gemessenen Laufzeit; urteilt nicht über Tests und bricht den Lauf nur ab, wenn kein Teil gebildet werden kann."
+  },
   ".github/workflows/ci.yml › tests › Tests": {
     "zweck": [
       "tests/regression",

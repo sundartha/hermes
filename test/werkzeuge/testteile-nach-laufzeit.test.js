@@ -9,7 +9,7 @@ import { probeDirectory, REPO_ROOT } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/testlaufzeit/teil-dateien.mjs");
 const ERZEUGER = join(REPO_ROOT, "tools/testlaufzeit/laufzeiten-erzeugen.mjs");
-const MESSDATEI_IM_REPO = "tools/basis/testlaufzeiten.json";
+const MESSDATEI_IM_REPO = "tools/testlaufzeit/laufzeiten.json";
 const GH_ATTRAPPE = `#!/bin/sh
 if [ "$2" = "list" ]; then echo "$GH_LISTE"; exit "$GH_LISTE_EXIT"; fi
 if [ "$2" = "download" ]; then
