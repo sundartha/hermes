@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, copyFileSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -24,6 +24,14 @@ const REPORT_DIRECTORY = ".pruefung";
 const REPORT_PATTERN = /^werkzeugteil-\d+\.jsonl$/;
 const ALL_GREEN = { vorpruefung: { result: "success" }, werkzeugtests: { result: "success" } };
 const EXIT_USAGE = 2;
+const EMPTY_PART = TOOL_TEST_FILES.length + 1;
+const MEASURED_FILE = "tools/basis/testlaufzeiten.json";
+const HEAVIEST_MS = 900;
+const SECOND_HEAVIEST_MS = 800;
+const LIGHT_MS = [300, 300, 200];
+const MEASURED_DURATIONS = Object.fromEntries(
+  TOOL_TEST_FILES.map((file, index) => [file, [HEAVIEST_MS, SECOND_HEAVIEST_MS, ...LIGHT_MS][index]]),
+);
 const FOREIGN_TEST_FILE = "test/fremd.test.js";
 
 function packageJson() {
@@ -49,9 +57,10 @@ function toolTestFiles(redFile) {
   );
 }
 
-function probe(context, { redFile } = {}) {
+function probe(context, { redFile, dauern } = {}) {
   return probeRepository(context, {
     ...toolTestFiles(redFile),
+    ...(dauern === undefined ? {} : { [MEASURED_FILE]: JSON.stringify({ dauern }) }),
     "package.json": packageJson(),
     "eslint.config.js": 'export default [{ rules: { "no-debugger": "error" } }];\n',
     [PRODUCT_CHANGE_FILE]: "export const wert = 1;\n",
@@ -290,4 +299,28 @@ test("mit --alle-werkzeugtests fährt der Gesamtlauf auch bei einer reinen Ände
   assert.doesNotMatch(withoutOption.stdout, new RegExp(RED_TOOL_TEST_MARKER));
   assert.notEqual(withOption.status, 0);
   assert.match(withOption.stdout, new RegExp(RED_TOOL_TEST_MARKER));
+});
+
+test("die Werkzeugteile verteilen die Dateien nach der gemessenen Dauer, und die Prüfung der Teile bleibt grün", (context) => {
+  const directory = probe(context, { dauern: MEASURED_DURATIONS });
+  change(directory, TOOL_CHANGE_FILE);
+  const results = runParts(directory);
+
+  assertEveryToolTestRanOnce(directory, results);
+  assert.deepEqual(filesIn(directory, "werkzeugteil-1.jsonl"), [TOOL_TEST_FILES[0]]);
+  assert.deepEqual(filesIn(directory, "werkzeugteil-2.jsonl"), [TOOL_TEST_FILES[1]]);
+  assert.deepEqual(filesIn(directory, "werkzeugteil-3.jsonl").toSorted(), TOOL_TEST_FILES.slice(2));
+  const check = checkParts(directory);
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+});
+
+test("ein Werkzeugteil ohne Datei endet rot und fährt nicht die ganze Suite", (context) => {
+  const directory = probe(context);
+  change(directory, TOOL_CHANGE_FILE);
+
+  const result = runPruefleiter(directory, ["--werkzeugteil", `${EMPTY_PART}/${EMPTY_PART}`]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /enthält keine Testdatei/);
+  assert.ok(!existsSync(join(directory, REPORT_DIRECTORY, `werkzeugteil-${EMPTY_PART}.jsonl`)));
 });

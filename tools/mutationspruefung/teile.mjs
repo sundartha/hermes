@@ -30,7 +30,7 @@ function mittlere(werte) {
   return sortiert[Math.floor(sortiert.length / HAELFTE)];
 }
 
-function nachGewicht(alle, von, dauern) {
+export function nachGewicht(alle, von, dauern) {
   const mittel = mittlere(Object.values(dauern));
   const gewicht = (test) => (Object.hasOwn(dauern, test) ? dauern[test] : mittel);
   const summen = Array.from({ length: von }, () => 0);
