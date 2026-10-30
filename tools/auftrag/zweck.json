@@ -288,7 +288,7 @@
   },
   "umbau einspielen": {
     "liste": "ohne Nummer",
-    "wozu": "Nach den Tests für den alten Stand muss genau der gesicherte Umbau zurückkommen.",
+    "wozu": "Nach den Tests für den alten Stand muss genau der gesicherte Umbau zurückkommen. Bei einer Fortsetzung auf gesichertem Stand müssen es genau der gesicherte Abnahmetest, der gesicherte Bau und die gesicherten Tests der Nachrunde sein.",
     "behebung": "entfällt, das Skript spielt den Umbau ein.",
     "nichtAngenommen": "entfällt.",
     "ausweg": "entfällt."
@@ -309,7 +309,7 @@
   },
   "stopp": {
     "liste": "A16",
-    "wozu": "Nach zwei roten Runden hängt der Auftrag; weitere Runden kosteten nur, und Antonio erführe es nicht.",
+    "wozu": "Nach zwei roten Runden hängt der Auftrag; weitere Runden kosteten nur, und Antonio erführe es nicht. Dasselbe gilt für eine Fortsetzung auf dem gesicherten Stand, die die überlebenden Mutanten nicht senkt.",
     "behebung": "Der Planer schneidet neu, oder Antonio entscheidet.",
     "nichtAngenommen": "In Runde 2 die rote Prüfung um jeden Preis grün machen.",
     "ausweg": "Für den Planer eine eigene Zeile „Zerlegung passt nicht: <Grund>“ oder „Pitch ändern: <Frage>“ mit einer Zeile „Empfehlung: <Vorschlag>“; für den Notiz-Agenten entfällt er."
