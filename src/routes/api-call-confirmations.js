@@ -7,6 +7,7 @@ import { supportedLanguageOf } from "../i18n/locales.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 import { TENANT_REJECT } from "../request-tenant.js";
 import { internalOnly } from "../wiring/internal-only.js";
+import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 import {
   CONFIRMATION_ALREADY_USED_REASON,
   MAX_FAILED_CONFIRMATIONS_PER_WINDOW,
@@ -20,10 +21,6 @@ import {
   windowIndexFor,
 } from "../call-confirmation.js";
 
-const HTTP_BAD_REQUEST = 400;
-const HTTP_FORBIDDEN = 403;
-const HTTP_OK = 200;
-const HTTP_SERVICE_UNAVAILABLE = 503;
 const CONFIRMATION_UNAVAILABLE_BODY = Object.freeze({ reason: "confirmation_unavailable" });
 const PREVIEW_STATUS = "awaiting_confirmation";
 const PREVIEW_OPTIONAL_FIELDS = ["language", "max_duration_s", "briefing", "constraints", "mandate", "context", "diagnostic"];
