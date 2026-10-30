@@ -24,15 +24,16 @@ const DATEIEN = {
   "src/seltsam\tname.js": "alt\n",
 };
 
-function aufbau(context, { lauf = {}, beleg = {}, ohneBeleg = false, trailer = true } = {}) {
-  const repo = probeRepository(context, DATEIEN);
+function aufbau(context, { lauf = {}, beleg = {}, ohneBeleg = false, trailer = true, quelle = ZEILEN, geaendert = null } = {}) {
+  const repo = probeRepository(context, { ...DATEIEN, "src/m.js": `${quelle.join("\n")}\n` });
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
   runIn(repo, "git", ["update-ref", "refs/remotes/upstream/master", basis]);
   if (trailer) runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Testcommit\n\n${trailerZeile(LAUF, "A1")}`]);
-  writeFileSync(join(repo, "src/m.js"), `${[...ZEILEN.slice(0, 2), ...ZEILEN.slice(5)].join("\n")}\n`);
-  legeGhAn(context, { basis, bloecke: [{ datei: "src/m.js", pruefsummen: summen(ZEILEN.concat("")) }], lauf, beleg, ohneBeleg });
+  const neu = geaendert ?? [...quelle.slice(0, 2), ...quelle.slice(5)];
+  writeFileSync(join(repo, "src/m.js"), `${neu.join("\n")}\n`);
+  legeGhAn(context, { basis, bloecke: [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.concat("")) }], lauf, beleg, ohneBeleg });
   return { repo, basis };
 }
 
@@ -116,11 +117,11 @@ test("eine seit dem Beleg gelöschte Testdatei verwirft den Beleg", (context) =>
 
 test("eine geänderte Zeile, die verschoben wird, verwirft den Beleg", (context) => {
   const geprueft = ZEILEN.map((zeile, index) => (index === 3 ? "andere" : zeile)).concat("").map(pruefsumme);
-  istVerworfen(pruefe(context, { beleg: { bloecke: [{ datei: "src/m.js", pruefsummen: geprueft }] } }), /nicht wortgleich/);
+  istVerworfen(pruefe(context, { beleg: { bloecke: [{ datei: "src/m.js", von: 1, pruefsummen: geprueft }] } }), /nicht wortgleich/);
 });
 
 test("ein Beleg für eine andere Datei deckt die verschobenen Zeilen nicht ab", (context) => {
-  istVerworfen(pruefe(context, { beleg: { bloecke: [{ datei: "src/anders.js", pruefsummen: ZEILEN.map(pruefsumme) }] } }), /nicht wortgleich/);
+  istVerworfen(pruefe(context, { beleg: { bloecke: [{ datei: "src/anders.js", von: 1, pruefsummen: ZEILEN.map(pruefsumme) }] } }), /nicht wortgleich/);
 });
 
 test("eine verschobene Datei mit unlesbarem Namen verwirft den Beleg, auch wenn die übrigen Zeilen wortgleich sind", (context) => {
@@ -144,7 +145,7 @@ test("der Beleg der CI nennt Commit, Urteil und nur die entfernten alten Zeilen,
   const beleg = belegZeilen({ root: probe.repo, basis: probe.basis, urteil: 0 });
   assert.equal(beleg.commit, probe.basis);
   assert.equal(beleg.urteil, 0);
-  assert.deepEqual(beleg.bloecke, [{ datei: "src/m.js", pruefsummen: ZEILEN.slice(2, 5).map(pruefsumme) }]);
+  assert.deepEqual(beleg.bloecke, [{ datei: "src/m.js", von: 3, pruefsummen: ZEILEN.slice(2, 5).map(pruefsumme) }]);
 });
 
 test("ein Lauf, der noch nicht beendet ist, verwirft den Beleg", (context) => {
@@ -185,4 +186,37 @@ test("eine seit dem Beleg-Commit geänderte tools/mutationspruefung.mjs verwirft
 
 test("eine neue Datei unter .github seit dem Beleg-Commit verwirft den Beleg", (context) => {
   istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, ".github/workflows/neu.yml"), "x\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine geänderte Zeile mit gleichem Text an einer Stelle, die nicht geprüft wurde, verwirft den Beleg", (context) => {
+  const quelle = ["export function a() {", "  return 1;", "}", "export function b() {", "  return 1;", "}"];
+  const geprueftA = [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.slice(0, 3)) }];
+  const geaendert = quelle.map((zeile, index) => (index === 4 ? "  return 2;" : zeile));
+  istVerworfen(pruefe(context, { quelle, geaendert, beleg: { bloecke: geprueftA } }), /nicht wortgleich/);
+});
+
+test("eine geänderte Zeile, die über das Ende des geprüften Bereichs hinausragt, verwirft den Beleg", (context) => {
+  const quelle = ["export function a() {", "  return 1;", "}", "export function b() {", "  return 1;", "}"];
+  const geprueft = [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.slice(0, 2)) }];
+  const geaendert = quelle.map((zeile, index) => (index === 1 || index === 2 ? `${zeile} //` : zeile));
+  istVerworfen(pruefe(context, { quelle, geaendert, beleg: { bloecke: geprueft } }), /nicht wortgleich/);
+});
+
+test("eine geänderte Zeile vor dem geprüften Bereich verwirft den Beleg", (context) => {
+  const quelle = ["export function a() {", "  return 1;", "}", "export function b() {", "  return 1;", "}"];
+  const geprueft = [{ datei: "src/m.js", von: 2, pruefsummen: summen(quelle.slice(1, 3)) }];
+  const geaendert = quelle.map((zeile, index) => (index === 0 ? "export function c() {" : zeile));
+  istVerworfen(pruefe(context, { quelle, geaendert, beleg: { bloecke: geprueft } }), /nicht wortgleich/);
+});
+
+test("ein Beleg-Block ohne Zeilennummer ist kein gültiger Beleg", (context) => {
+  istVerworfen(pruefe(context, { beleg: { bloecke: [{ datei: "src/m.js", pruefsummen: summen(ZEILEN.concat("")) }] } }), /keinen gültigen Beleg/);
+});
+
+test("eine geänderte Zeile innerhalb des geprüften Bereichs mit gleichem Text an gleicher Stelle lässt die Prüfung weg", (context) => {
+  const quelle = ["export function a() {", "  return 1;", "}", "export function b() {", "  return 1;", "}"];
+  const geprueft = [{ datei: "src/m.js", von: 4, pruefsummen: summen(quelle.slice(3, 6)) }];
+  const geaendert = quelle.map((zeile, index) => (index === 4 ? "  return 2;" : zeile));
+  const ergebnis = pruefe(context, { quelle, geaendert, beleg: { bloecke: geprueft } });
+  assert.equal(ergebnis.weglassen, true, ergebnis.grund);
 });

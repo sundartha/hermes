@@ -34,7 +34,7 @@ function umbau(context, { vermerk = true, beleg = {}, lauf = {}, ohneBeleg = fal
     if (vermerk && branch !== null) imBranch(repo, auftrag, () => branch(repo));
     else if (vermerk) runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Teste vorab\n\n${trailerZeile(LAUF, auftrag.id)}`]);
     danach(repo);
-    legeGhAn(context, { basis: belegCommit, bloecke: [{ datei: "src/text.js", pruefsummen: summen(ALTE_ZEILEN) }], beleg, lauf, ohneBeleg });
+    legeGhAn(context, { basis: belegCommit, bloecke: [{ datei: "src/text.js", von: 1, pruefsummen: summen(ALTE_ZEILEN) }], beleg, lauf, ohneBeleg });
   };
   const dateien = { ...MIT_MUTATION, "mutation.mjs": ERSATZ_MUTATION };
   const probe = starte(context, { auftrag, drehbuch: { bau: UMBAU_QUELLE }, dateien, vorbereiten, mitUpstream: false });
@@ -60,7 +60,7 @@ test("ist das Urteil im Beleg nicht grün, prüft der Lauf den alten Stand voll 
 });
 
 test("ein Beleg, der die verschobenen Zeilen nicht wortgleich abdeckt, lässt die Prüfung am alten Stand nicht weg", (context) => {
-  const { lauf, alterStand, nachricht } = umbau(context, { beleg: { bloecke: [{ datei: "src/text.js", pruefsummen: summen(["export function gross(text) {", "  return text;", "}", ""]) }] } });
+  const { lauf, alterStand, nachricht } = umbau(context, { beleg: { bloecke: [{ datei: "src/text.js", von: 1, pruefsummen: summen(["export function gross(text) {", "  return text;", "}", ""]) }] } });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.equal(alterStand.length, 1);
   assert.ok(nachricht.includes("nicht wortgleich zur geprüften Fassung"), nachricht);

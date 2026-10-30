@@ -45,7 +45,7 @@ export function absicherungsLauf(log, auftragId) {
 }
 
 function istBlock(block) {
-  return block !== null && typeof block === "object" && typeof block.datei === "string" && Array.isArray(block.pruefsummen) && block.pruefsummen.every((summe) => PRUEFSUMME.test(summe));
+  return block !== null && typeof block === "object" && typeof block.datei === "string" && Number.isInteger(block.von) && block.von >= ERSTE_ZEILE && Array.isArray(block.pruefsummen) && block.pruefsummen.every((summe) => PRUEFSUMME.test(summe));
 }
 
 export function gueltigerBeleg(beleg) {
@@ -58,13 +58,13 @@ export function laufBefund(lauf, repo) {
   return erfolgreich ? abrufLaufBefund(lauf, repo) : "ist nicht erfolgreich beendet";
 }
 
-function istTeilfolge(gross, klein) {
-  const stellen = Array.from({ length: gross.length - klein.length + 1 }, (leer, index) => index);
-  return stellen.some((start) => klein.every((summe, index) => gross[start + index] === summe));
+function gedeckt(block, { datei, von, pruefsummen }) {
+  const versatz = von - block.von;
+  return block.datei === datei && pruefsummen.every((summe, index) => block.pruefsummen[versatz + index] === summe);
 }
 
 function ohneBeleg(verschoben, bloecke) {
-  return verschoben.filter(({ datei, pruefsummen }) => !bloecke.some((block) => block.datei === datei && istTeilfolge(block.pruefsummen, pruefsummen)));
+  return verschoben.filter((stelle) => !bloecke.some((block) => gedeckt(block, stelle)));
 }
 
 function nurPfad(aenderung) {
@@ -90,7 +90,7 @@ export function verschobeneZeilen({ root, basis }) {
   return [...bereiche].flatMap(([datei, liste]) => {
     if (liste.length === 0) return [];
     const zeilen = git(["show", `${basis}:${datei}`], { cwd: root }).split("\n");
-    return liste.map(([von, bis]) => ({ datei, pruefsummen: zeilen.slice(von - ERSTE_ZEILE, bis).map(pruefsumme) }));
+    return liste.map(([von, bis]) => ({ datei, von, pruefsummen: zeilen.slice(von - ERSTE_ZEILE, bis).map(pruefsumme) }));
   });
 }
 
