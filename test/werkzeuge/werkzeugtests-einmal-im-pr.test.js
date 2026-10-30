@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { isolatedEnvironment, probeDirectory, REPO_ROOT } from "./probe-repo.js";
 import { workflowStepScript } from "./workflow-dateien.js";
 
-const CI_TESTS = { file: "ci.yml", step: "Tests" };
+const CI_TESTS = { file: "ci.yml", step: "Tests", before: "Testdateien des Teils" };
 const TOOL_TESTS = { file: "pruefleiter.yml", step: "Werkzeugtests" };
 const CHECK_PARTS = { file: "pruefleiter.yml", step: "Alle Teile erfolgreich und vollständig" };
 const WITHOUT_TOOL_TESTS = "--ohne-werkzeugtests";
@@ -22,10 +22,15 @@ const ROUND_ROBIN_PART_FILE = `test/n${CHECKED_PART}.test.js`;
 const ROUND_ROBIN_PART_TOOL_FILE = `test/werkzeuge/w${CHECKED_PART}.test.js`;
 const NPM_STUB = `#!/bin/sh\nprintf '%s\\n' "$@" > "$NPM_ARGUMENTE"\n`;
 
-function stepDirectory(context, { file, step }) {
+function stepScript({ file, step, before }) {
+  const own = workflowStepScript(file, step);
+  return before === undefined ? own : `${workflowStepScript(file, before)}\n${own}`;
+}
+
+function stepDirectory(context, workflowStep) {
   const directory = probeDirectory(context, {
     npm: NPM_STUB,
-    [SCRIPT_FILE]: workflowStepScript(file, step),
+    [SCRIPT_FILE]: stepScript(workflowStep),
     [ARGUMENTS_FILE]: "",
     ...Object.fromEntries(SUITE_FILES.map((suiteFile) => [suiteFile, ""])),
   });

@@ -307,12 +307,22 @@ jobs:
         with:
           web: "false"
 
-      - name: Tests
-        id: tests
+      - name: Testdateien des Teils
         env:
           EVENT_NAME: ${{ github.event_name }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
+        run: |
+          auswahl=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--ohne-werkzeugtests)
+          fi
+          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
+
+      - name: Tests
+        id: tests
+        env:
+          EVENT_NAME: ${{ github.event_name }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
           TESTS_ZWEITER_LAUF: ja
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
@@ -321,7 +331,6 @@ jobs:
           if [ "$EVENT_NAME" = "pull_request" ]; then
             auswahl=(--ohne-werkzeugtests)
           fi
-          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
           dateien=()
           while IFS= read -r datei; do dateien+=("$datei"); done < "$RUNNER_TEMP/teil-dateien.txt"
           npm test -- "${auswahl[@]}" "${dateien[@]}" -- --test-concurrency=4 \

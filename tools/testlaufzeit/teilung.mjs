@@ -3,7 +3,7 @@ import { existsSync, globSync } from "node:fs";
 import { leseLaufzeiten } from "../mutationspruefung/laufzeiten.mjs";
 import { nachGewicht } from "../mutationspruefung/teile.mjs";
 
-export const MESSDATEI = "tools/basis/testlaufzeiten.json";
+export const MESSDATEI = "tools/testlaufzeit/laufzeiten.json";
 const TESTDATEIEN = "test/**/*.test.{js,ts}";
 const WERKZEUGORDNER = "test/werkzeuge/";
 
