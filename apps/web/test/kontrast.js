@@ -6,6 +6,8 @@ const FULL = 255;
 const BACKDROP_RED = 0x1b;
 const BACKDROP_GREEN = 0x4f;
 const BACKDROP_BLUE = 0x86;
+const UNPAINTED_LAYERS = new Set(["", "initial", "transparent"]);
+export const LIGHTEST_PAGE_BACKDROP_HEX = "#1b4f86";
 const LIGHTEST_PAGE_BACKDROP = Object.freeze([BACKDROP_RED, BACKDROP_GREEN, BACKDROP_BLUE, 1]);
 const LINEAR_CUTOFF = 0.03928;
 const LINEAR_DIVISOR = 12.92;
@@ -52,6 +54,7 @@ export function contrastOf(look) {
   let ground = LIGHTEST_PAGE_BACKDROP;
   for (const layer of [...look.backdrop, look.background]) {
     const parsed = rgba(layer);
+    if (!parsed && !UNPAINTED_LAYERS.has(layer)) throw new Error(`Hintergrundschicht nicht lesbar: ${layer}`);
     if (parsed) ground = over(parsed, ground);
   }
   const text = over(rgba(look.color), ground);

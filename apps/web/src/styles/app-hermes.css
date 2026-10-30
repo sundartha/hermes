@@ -63,6 +63,9 @@
   --radius-control: 12px;
   --shadow-card: 0 28px 60px -34px rgba(3, 10, 26, 0.9);
 
+  --app-error: #ffc9c9;
+  --app-error-surface: rgba(255, 120, 120, 0.18);
+
   /* IBM Plex Mono liegt nicht auf dem Server (siehe HANDOVER) — System-Mono. */
   --app-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
@@ -282,13 +285,11 @@ body {
 }
 .billing-msg--ok {
   color: var(--color-status-positive);
-  border-left-color: var(--color-status-positive);
-  background: var(--color-status-positive-surface);
 }
 .billing-msg--err {
-  color: #ffc9c9;
-  border-left-color: #ffc9c9;
-  background: rgba(255, 120, 120, 0.18);
+  color: var(--app-error);
+  border-left-color: var(--app-error);
+  background: var(--app-error-surface);
 }
 
 /* --------------------------------------------------------------- 7. Knöpfe */
@@ -445,7 +446,7 @@ select.field-input option {
   color: #a9e0c4;
 }
 .settings-msg--err {
-  color: #ffc9c9;
+  color: var(--app-error);
 }
 
 /* ------------------------------------------------------- 10. Datenlisten */
