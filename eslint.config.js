@@ -59,7 +59,6 @@ const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "trunk-beleg-felder",
     nurIn: [
-      "src/store/state-ops.js",
       "src/store/zustand/nummern.js",
       "src/store/pg.js",
       "src/elevenlabs/inbound-path-decision.js",
