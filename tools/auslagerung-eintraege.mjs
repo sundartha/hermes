@@ -7,7 +7,6 @@ import { ESLint } from "eslint";
 import { aufDerBasis } from "./abhaengigkeiten/bestaende.mjs";
 import { aenderungenSeit, dateiAm, gibtEsIn } from "./auftrag/git.mjs";
 import { TOOLS } from "./basis-vergleich.mjs";
-import { gezaehlt, kontingent } from "./eslint-rules/bestand.js";
 import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 
 export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
@@ -136,11 +135,27 @@ function umzugVon(alt, fund, { unveraendert, neueDatei, stammtAus }) {
   return unveraendert(partner) && neueDatei(nach) && stammtAus(fund.ort, { von, nach }) ? kopienSchluessel([nach, partner], fund.tokens) : undefined;
 }
 
+function paarDer(schluessel) {
+  return dateienDer(schluessel).join(KOPIEN_TRENNER);
+}
+
+function deckung(liste, aktuell) {
+  const gedeckt = new Set();
+  const unbekannt = aktuell.filter((fund) => {
+    const [kleinster] = liste
+      .map((eintrag, stelle) => ({ stelle, eintrag }))
+      .filter(({ stelle, eintrag }) => !gedeckt.has(stelle) && paarDer(eintrag) === paarDer(fund.key) && tokensDer(eintrag) >= tokensDer(fund.key))
+      .toSorted((links, rechts) => tokensDer(links.eintrag) - tokensDer(rechts.eintrag));
+    if (kleinster !== undefined) gedeckt.add(kleinster.stelle);
+    return kleinster === undefined;
+  });
+  return { gedeckt, unbekannt };
+}
+
 export function kopienNachUmzug({ liste, aktuell, pruefen }) {
-  const gedeckt = kontingent(gezaehlt(aktuell.map(({ key }) => key)));
-  const bekannt = kontingent(gezaehlt(liste));
-  const offen = liste.flatMap((eintrag, stelle) => (gedeckt(eintrag) ? [] : [{ stelle, dateien: dateienDer(eintrag), tokens: tokensDer(eintrag) }]));
-  const funde = aktuell.filter(({ key }) => !bekannt(key)).map(({ key, ort }) => ({ ort, dateien: dateienDer(key), tokens: tokensDer(key) }));
+  const { gedeckt, unbekannt } = deckung(liste, aktuell);
+  const offen = liste.flatMap((eintrag, stelle) => (gedeckt.has(stelle) ? [] : [{ stelle, dateien: dateienDer(eintrag), tokens: tokensDer(eintrag) }]));
+  const funde = unbekannt.map(({ key, ort }) => ({ ort, dateien: dateienDer(key), tokens: tokensDer(key) }));
   const ersatz = new Map();
   for (const fund of funde) {
     const passend = offen.flatMap((alt) => {
