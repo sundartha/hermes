@@ -30,7 +30,7 @@ const PS_SPALTEN = "pid=,ppid=,etime=,pcpu=,args=";
 const PS_ZEILE = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/;
 const PS_UMGEBUNG = { LC_ALL: "C" };
 const PS_FRIST_MS = 5000;
-const ARGUMENTE_ZEICHEN = 120;
+const ARGUMENTE_ZEICHEN = 400;
 const MESSBARE_PROZESSE = /^(node|stryker|tap)$/;
 const SEKUNDEN_JE_MINUTE = 60;
 const SEKUNDEN_JE_STUNDE = 3600;
