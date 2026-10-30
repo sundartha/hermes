@@ -25,7 +25,7 @@ function ersatzMutation({ ueberlebtOhne = null, lauf = 777 }) {
   return `import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 mkdirSync(".fortschritt", { recursive: true });
 const standOhneDeklaration = !readFileSync("src/text.js", "utf8").includes("function gross");
-appendFileSync(${JSON.stringify(AUFRUFE)}, JSON.stringify({ argumente: process.argv.slice(2), standOhneDeklaration, plaetze: process.env.HERMES_MUTATION_PLAETZE }) + "\\n");
+appendFileSync(${JSON.stringify(AUFRUFE)}, JSON.stringify({ argumente: process.argv.slice(2), standOhneDeklaration, standOhneKlein: !readFileSync("src/text.js", "utf8").includes("function klein"), plaetze: process.env.HERMES_MUTATION_PLAETZE }) + "\\n");
 console.log("Mutationsprüfung in der CI: Lauf https://github.com/eigner/repo/actions/runs/${lauf}, Stand abc");
 const offen = !process.argv.includes("${MUTANT}") && ${JSON.stringify(ueberlebtOhne)} !== null && !readFileSync("test/text.test.js", "utf8").includes(${JSON.stringify(ueberlebtOhne)});
 if (offen) process.exitCode = 1;
@@ -156,4 +156,16 @@ test("ist von zwei Aufträgen mit demselben Block einer schon vermerkt, prüft d
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stdout.includes("Absicherung B1: schon abgesichert, Lauf 555.") && lauf.stdout.includes("Absicherung B2: abgesichert, Lauf 777."), lauf.stdout);
+});
+
+test("teilen zwei Aufträge einen Namen und hat jeder einen eigenen, entfernt der gemeinsame Lauf die Zeilen beider, auch über eine Kette von Aufträgen", (context) => {
+  const text = `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n`;
+  const beide = { ...WARTENDER, id: "B2", betrifft: { "src/text.js": ["gross", "klein"] } };
+  const nurKlein = { ...WARTENDER, id: "B3", betrifft: { "src/text.js": ["klein"] } };
+  const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, beide, nurKlein], dateien: { "src/text.js": text } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  for (const id of ["B1", "B2", "B3"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
 });
