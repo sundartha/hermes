@@ -312,3 +312,73 @@ test("Gegenprobe: WEB_DIST_DIR mit index.html -> assertConfig true, kein WEB_DIS
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const mitAnmeldung = (anmeldung) => ({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, ...anmeldung } });
+
+test("Issuer-Pruefung: nackter localhost-Issuer ohne Port und Pfad bleibt erlaubt", () => {
+  for (const oauthIssuerUrl of ["http://localhost", "http://127.0.0.1", "http://[::1]"]) {
+    assert.deepEqual(productionFootguns(mitAnmeldung({ oauthIssuerUrl }), true), [], oauthIssuerUrl);
+  }
+});
+
+test("Issuer-Pruefung: localhost erst hinter einem fremden http-Host ist fatal", () => {
+  const issuerMitLocalhostImPfad = "http://idp.example/weiter?ziel=http://localhost/";
+  assert.deepEqual(productionFootguns(mitAnmeldung({ oauthIssuerUrl: issuerMitLocalhostImPfad }), true), [
+    "OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).",
+  ]);
+});
+
+test("Footgun-Befunde: jeder Befund hat seinen vollstaendigen Wortlaut", () => {
+  const faelle = [
+    {
+      cfg: mitAnmeldung({ dashboardPassword: "" }),
+      befund:
+        "DASHBOARD_PASSWORD fehlt - seit AUTH-P7 liest keine Route mehr diese Variable; Boot-Pflicht bleibt bis AUTH-P8 ausschliesslich als Rollback-Sicherung (ein Rollback auf einen Commit vor AUTH-P7 findet damit ein scharfes Gate vor).",
+    },
+    {
+      cfg: mitAnmeldung({ mcpAuth: "off" }),
+      befund: "MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).",
+    },
+    {
+      cfg: { ...SAFE_PROD, safety: { skipTwilioSignatureCheck: true } },
+      befund: "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
+    },
+    {
+      cfg: { ...SAFE_PROD, store: { storeBackend: "json" } },
+      befund:
+        "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
+    },
+    {
+      cfg: mitAnmeldung({ oauthAudience: "https://fremd.example/mcp" }),
+      befund:
+        "OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience (PUBLIC_URL + /mcp) ab - Wert leeren (kanonischer Default) oder exakt darauf setzen.",
+    },
+    {
+      cfg: { ...SAFE_PROD, server: { ...SAFE_PROD.server, publicUrlExplicit: false } },
+      befund:
+        "PUBLIC_URL fehlt - der angekuendigte Origin faellt sonst still auf den Hosting-Host zurueck. Pflichtform: https://<host>[:<port>], ohne Pfad/Query/Slash am Ende, und exakt der Origin der OpenAI-Einreichung (nicht der Hosting-Host): ein Origin-Wechsel nach der Publikation verlangt ein neues Plugin.",
+    },
+  ];
+  for (const { cfg, befund } of faelle) {
+    assert.deepEqual(productionFootguns(cfg, true), [befund]);
+  }
+});
+
+test("Footgun-Befunde: DEV_LOGIN_ENABLED=true in Produktion meldet den Login-Shim", () => {
+  const gemerkt = process.env.DEV_LOGIN_ENABLED;
+  process.env.DEV_LOGIN_ENABLED = "true";
+  try {
+    assert.deepEqual(productionFootguns(SAFE_PROD, true), [
+      "DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).",
+    ]);
+  } finally {
+    if (gemerkt === undefined) delete process.env.DEV_LOGIN_ENABLED;
+    else process.env.DEV_LOGIN_ENABLED = gemerkt;
+  }
+});
+
+test("Auth-Hinweis: statischer Bearer in Produktion meldet den vollstaendigen Hinweistext", () => {
+  assert.deepEqual(productionAuthHints(mitAnmeldung({ mcpAuth: "token" }), true), [
+    "[Sicherheit] MCP_AUTH ist nicht 'oauth' - /mcp laeuft im Hosting mit statischem Bearer statt OAuth 2.1; Claude-/ChatGPT-Connectoren erhalten 401 (T-5). Kein Boot-Stopp (Hinweis).",
+  ]);
+});
