@@ -11,6 +11,9 @@ const ZEILEN = Array.from({ length: 10 }, (leer, index) => `zeile${index + 1}`);
 const QUELLE = `${ZEILEN.join("\n")}\n`;
 const DATEIEN = {
   ".github/workflows/ci.yml": "name: CI\n",
+  ".github/actions/node-npm-ci/action.yml": "name: Node\n",
+  "package.json": "{}\n",
+  "package-lock.json": "{}\n",
   "tools/mutationspruefung.mjs": "export const A = 1;\n",
   "tools/mutationspruefung/x.mjs": "export const B = 1;\n",
   "tools/auftrag/x.mjs": "export const C = 1;\n",
@@ -141,4 +144,20 @@ test("der Beleg der CI nennt Commit, Urteil und nur die entfernten alten Zeilen,
   assert.equal(beleg.commit, probe.basis);
   assert.equal(beleg.urteil, 0);
   assert.deepEqual(beleg.bloecke, [{ datei: "src/m.js", pruefsummen: ZEILEN.slice(2, 5).map(pruefsumme) }]);
+});
+
+test("eine seit dem Beleg-Commit geänderte package.json verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, "package.json"), "geändert\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine seit dem Beleg-Commit geänderte package-lock.json verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, "package-lock.json"), "geändert\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine seit dem Beleg-Commit geänderte Aktion unter .github verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, ".github/actions/node-npm-ci/action.yml"), "geändert\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine neue Datei unter .github seit dem Beleg-Commit verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, ".github/workflows/neu.yml"), "x\n")), /^Werkzeugstand weicht ab$/);
 });
