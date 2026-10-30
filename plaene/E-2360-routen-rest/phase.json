@@ -116,6 +116,11 @@
         "src/routes/api-onboard.js"
       ],
       "abnahme": "test/tenant-prolif-b.test.js",
+      "betrifft": {
+        "src/routes/api-onboard.js": [
+          "makeOnboardRoutes"
+        ]
+      },
       "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
       "wasDarfNiePassieren": [
         "Ein Konto, dessen Anmeldung schon einem anderen Tenant zugeordnet ist, bekommt am Onboarding den bisherigen Status 409 mit dem Text, dass der Account bereits einem Tenant zugeordnet ist, und es entsteht weder ein Tenant noch eine Nummer noch ein Nummernkauf."
