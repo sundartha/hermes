@@ -6,6 +6,8 @@ import { test } from "node:test";
 import { listenUmziehen } from "../../tools/auftrag/listenumzug.mjs";
 import { geklonterText, kopienNachUmzug, kopienOrt, stammtAusAltemText } from "../../tools/auslagerung-eintraege.mjs";
 
+import { datei } from "./auslagerung-hilfen.js";
+import { BLEIBT, FREMD, WAEHLE, WEITERGEREICHT, ZWEI } from "./kopien-umzug-fall.js";
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
@@ -17,27 +19,6 @@ const PARTNER = "test/waehlen.test.js";
 const SKRIPT = "scripts/waehlen.js";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
-
-const WAEHLE = [
-  "export function waehle(eintraege, grenze) {",
-  "  const treffer = eintraege.filter((eintrag) => eintrag.wert > grenze);",
-  "  const sortiert = treffer.toSorted((links, rechts) => links.wert - rechts.wert);",
-  "  return sortiert.map((eintrag) => ({ name: eintrag.name, wert: eintrag.wert }));",
-  "}",
-].join("\n");
-const FREMD = [
-  "export function sammle(zeilen, trenner) {",
-  "  const teile = zeilen.map((zeile) => String(zeile).trim());",
-  "  return teile.filter((teil) => teil.length > 0 && teil !== trenner).join(trenner);",
-  "}",
-].join("\n");
-const ZWEI = "export function zwei(wert) {\n  return wert * 2;\n}";
-const BLEIBT = "export function bleibt(wert) {\n  return wert;\n}";
-const WEITERGEREICHT = 'export { waehle, zwei } from "./waehlen.js";';
-
-function datei(...teile) {
-  return `${teile.join("\n\n")}\n`;
-}
 
 function liste(version, befunde) {
   return `${JSON.stringify({ version, befunde }, null, 2)}\n`;

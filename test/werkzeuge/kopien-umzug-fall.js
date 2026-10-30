@@ -14,7 +14,3 @@ export const FREMD = [
 export const ZWEI = "export function zwei(wert) {\n  return wert * 2;\n}";
 export const BLEIBT = "export function bleibt(wert) {\n  return wert;\n}";
 export const WEITERGEREICHT = 'export { waehle, zwei } from "./waehlen.js";';
-
-export function datei(...teile) {
-  return `${teile.join("\n\n")}\n`;
-}
