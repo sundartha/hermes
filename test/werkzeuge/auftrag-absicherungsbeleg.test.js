@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { env } from "node:process";
 
 import { belegZeilen, pruefsumme, trailerZeile, vorabGeprueft, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
 import { LAUF, legeGhAn, summen } from "./absicherungsbeleg-hilfen.js";
@@ -146,6 +147,22 @@ test("der Beleg der CI nennt Commit, Urteil und nur die entfernten alten Zeilen,
   assert.deepEqual(beleg.bloecke, [{ datei: "src/m.js", pruefsummen: ZEILEN.slice(2, 5).map(pruefsumme) }]);
 });
 
+test("ein Lauf, der noch nicht beendet ist, verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, { lauf: { status: "in_progress" } }), /nicht erfolgreich/);
+});
+
+test("ein Lauf aus einem fremden Quell-Repository verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, { lauf: { head_repository: { full_name: "fremd/repo" } } }), /nicht aus diesem Repository/);
+});
+
+test("ein Beleg mit anderer Version verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, { beleg: { version: 2 } }), /keinen gültigen Beleg/);
+});
+
+test("ein Beleg, der kein gültiges JSON ist, verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, () => writeFileSync(env.GH_BELEG, "{kein json")), /Beleg nicht abrufbar/);
+});
+
 test("eine seit dem Beleg-Commit geänderte package.json verwirft den Beleg", (context) => {
   istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, "package.json"), "geändert\n")), /^Werkzeugstand weicht ab$/);
 });
@@ -156,6 +173,14 @@ test("eine seit dem Beleg-Commit geänderte package-lock.json verwirft den Beleg
 
 test("eine seit dem Beleg-Commit geänderte Aktion unter .github verwirft den Beleg", (context) => {
   istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, ".github/actions/node-npm-ci/action.yml"), "geändert\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine seit dem Beleg-Commit geänderte stryker.config.json verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, "stryker.config.json"), "geändert\n")), /^Werkzeugstand weicht ab$/);
+});
+
+test("eine seit dem Beleg-Commit geänderte tools/mutationspruefung.mjs verwirft den Beleg", (context) => {
+  istVerworfen(pruefe(context, {}, (repo) => writeFileSync(join(repo, "tools/mutationspruefung.mjs"), "geändert\n")), /^Werkzeugstand weicht ab$/);
 });
 
 test("eine neue Datei unter .github seit dem Beleg-Commit verwirft den Beleg", (context) => {
