@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 
 import { FAKE_REST_CHUNK } from "../helpers/fake-tts-stream.mjs";
 import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";
@@ -21,6 +22,8 @@ const LANGE_GESAMTFRIST_MS = 30000;
 const ANTWORT_RESERVE_MS = 3000;
 const ANTWORT_OBERGRENZE_MS = KURZE_GESAMTFRIST_MS + ANTWORT_RESERVE_MS;
 const TESTFRIST_LANG_MS = 25000;
+const SPRACHMODELL_VERZOEGERUNG_MS = 2000;
+const HTTP_BAD_REQUEST = 400;
 
 const SYNTHESE_ENDE = Object.freeze({ HAENGT: "haengt", REISST_AB: "reisst_ab", VOLLSTAENDIG: "vollstaendig" });
 
@@ -51,6 +54,20 @@ async function mitSynthese({ ende, env, gesamtfristMs = KURZE_GESAMTFRIST_MS }, 
     await srv.stop();
     await origin.close();
   }
+}
+
+async function startLangsamesSprachmodell(verzoegerungMs) {
+  const server = http.createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      AbortSignal.timeout(verzoegerungMs).addEventListener("abort", () => {
+        res.writeHead(HTTP_BAD_REQUEST, { "content-type": "application/json" });
+        res.end("{}");
+      });
+    });
+  });
+  await new Promise((bereit) => server.listen(0, "127.0.0.1", bereit));
+  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((fertig) => server.close(fertig)) };
 }
 
 function pruefeSayDannHangup(texml) {
@@ -116,5 +133,39 @@ test(
         pruefeSayDannHangup(texml);
       },
     );
+  },
+);
+
+test(
+  "Sprachmodell braucht vor dem Fehler 2 s: die Ansage vor dem Auflegen kommt trotzdem vor der Webhook-Frist, die Frist zaehlt ab dem Eingang",
+  { timeout: TESTFRIST_LANG_MS },
+  async () => {
+    const sprachmodell = await startLangsamesSprachmodell(SPRACHMODELL_VERZOEGERUNG_MS);
+    try {
+      await mitSynthese(
+        {
+          ende: SYNTHESE_ENDE.HAENGT,
+          env: { ANTHROPIC_BASE_URL: sprachmodell.url },
+          gesamtfristMs: LANGE_GESAMTFRIST_MS,
+        },
+        async (srv) => {
+          await incomingAntwort(srv, "CAeingangsfrist");
+          const [{ id: callId }] = srv.readStore().calls;
+          const beginn = Date.now();
+          const res = await abrufMitFrist(
+            `${srv.localUrl}/voice/turn?callId=${callId}`,
+            { method: "POST", body: new URLSearchParams({ SpeechResult: "Hallo" }) },
+            { wartezeitMs: PROVIDER_WEBHOOK_HARDCUT_MS },
+          );
+          assert.ok(Date.now() - beginn < PROVIDER_WEBHOOK_HARDCUT_MS, "die Antwort kommt vor der Webhook-Frist");
+          assert.equal(res.status, HTTP_OK);
+          const texml = await res.text();
+          assert.ok(!texml.includes("<Play>"), `kein Play bei unvollstaendiger Synthese: ${texml}`);
+          assert.match(texml, /<Say [^>]*>[^<]+<\/Say><Hangup\/><\/Response>$/);
+        },
+      );
+    } finally {
+      await sprachmodell.close();
+    }
   },
 );
