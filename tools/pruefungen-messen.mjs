@@ -173,7 +173,7 @@ export async function runCase(context, probe, fall) {
   }
 }
 
-function eslintCount({ stdout }) {
+function eslintCount({ stdout }, { regel }) {
   const perRule = {};
   const errors = JSON.parse(stdout)
     .flatMap(({ messages }) => messages)
@@ -182,7 +182,7 @@ function eslintCount({ stdout }) {
     const rule = ruleId ?? "Parser";
     perRule[rule] = (perRule[rule] ?? 0) + 1;
   }
-  return { count: errors.length, perRule };
+  return { count: regel === undefined ? errors.length : (perRule[regel] ?? 0), perRule };
 }
 
 function stderrLineCount({ stderr }) {
