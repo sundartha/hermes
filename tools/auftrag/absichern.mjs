@@ -15,7 +15,8 @@ import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
 
 const IN_CI = "HERMES_MUTATION_IN_CI";
 const PLAETZE = "HERMES_MUTATION_PLAETZE";
-const STANDARD_PLAETZE = "12";
+const HOECHSTE_PLAETZE = 12;
+const KLEINSTE_PLAETZE = 1;
 const LAUF_ZEILE = /Lauf https:\/\/\S+\/actions\/runs\/(\d+)/;
 const ERSTE_ZEILE = 1;
 const KEIN_FEHLER = 0;
@@ -48,6 +49,11 @@ function wegwerfStand(root, auftrag) {
   for (const { datei, text } of aenderungen) writeFileSync(join(root, datei), text);
   vormerken(aenderungen.map(({ datei }) => datei), root);
   return true;
+}
+
+function begrenztePlaetze(wert) {
+  const zahl = Number(wert);
+  return String(Number.isInteger(zahl) && zahl >= KLEINSTE_PLAETZE && zahl <= HOECHSTE_PLAETZE ? zahl : HOECHSTE_PLAETZE);
 }
 
 function nurId(auftrag) {
@@ -98,7 +104,7 @@ export function absichern(phasendatei, root) {
   console.log(`Absicherung: ${liste.length} Aufträge ohne Verbindung zum laufenden${liste.length > 0 ? `: ${namen}` : ""}.`);
   if (liste.length === 0) return EXIT_GRUEN;
   env[IN_CI] = "1";
-  env[PLAETZE] ??= STANDARD_PLAETZE;
+  env[PLAETZE] = begrenztePlaetze(env[PLAETZE]);
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
   for (const auftrag of liste) bearbeite(ort, auftrag);
