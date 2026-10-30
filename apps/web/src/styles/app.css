@@ -228,6 +228,40 @@
   color: var(--color-muted);
 }
 
+.billing-msg--ok,
+.billing-msg--err {
+  padding: var(--space-cozy);
+  border-left: 4px solid;
+  border-radius: var(--radius-control);
+  font-weight: var(--weight-label);
+}
+
+.billing-msg--ok {
+  color: var(--color-status-positive);
+  border-left-color: var(--color-status-positive);
+  background: var(--color-status-positive-surface);
+}
+
+.billing-msg--err {
+  color: var(--color-status-critical);
+  border-left-color: var(--color-status-critical);
+  background: var(--color-status-critical-surface);
+}
+
+.billing-msg--ok::before,
+.billing-msg--err::before {
+  margin-right: 0.5em;
+  font-weight: 700;
+}
+
+.billing-msg--ok::before {
+  content: "\2713";
+}
+
+.billing-msg--err::before {
+  content: "\2715";
+}
+
 /* P2: Abo-Region + Plan-Kacheln (Subscribe). Konsistent mit der Karten-Bildsprache
    (Surface/Border/Radius) -- AUSSCHLIESSLICH semantische Tokens (Strategie 2.5). Das
    Kachel-Raster spiegelt .shell-cols: zwei gleich breite Spalten, unter dem 768px-

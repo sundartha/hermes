@@ -90,6 +90,38 @@ function toneOf(element) {
   return NEUTRAL_TONE;
 }
 
+function glyphOf(document, element) {
+  let glyph = "";
+  for (const sheet of document.styleSheets) {
+    for (const rule of sheet.cssRules) {
+      const content = rule.style?.content;
+      if (!content || !String(rule.selectorText).includes(":before")) continue;
+      const bases = rule.selectorText.split(",").map((selector) => selector.replace(/::?before$/, ""));
+      if (bases.some((selector) => element.matches(selector))) glyph = content;
+    }
+  }
+  return glyph;
+}
+
+function lookOf(window, element) {
+  const own = window.getComputedStyle(element);
+  const glyph = glyphOf(window.document, element);
+  const backdrop = [];
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    backdrop.unshift(window.getComputedStyle(node).backgroundColor);
+  }
+  return {
+    color: own.color,
+    background: own.backgroundColor,
+    fontWeight: own.fontWeight,
+    borderColor: own.borderLeftColor,
+    borderWidth: own.borderLeftWidth,
+    borderStyle: own.borderLeftStyle,
+    glyph,
+    backdrop,
+  };
+}
+
 async function settle(window, ready) {
   const end = Date.now() + DEADLINE_MS;
   for (;;) {
@@ -146,6 +178,7 @@ async function openShell(dir, target) {
       text: msg ? msg.textContent : null,
       shown: msg ? isShown(window, msg) && msg.textContent !== "" : false,
       tone: msg ? toneOf(msg) : null,
+      look: msg ? lookOf(window, msg) : null,
       cardShown: card() ? isShown(window, card()) : false,
       cardStatus: document.getElementById("billing-card-status")?.textContent ?? null,
       search: window.location.search,
