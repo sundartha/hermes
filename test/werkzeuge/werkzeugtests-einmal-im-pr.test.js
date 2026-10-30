@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -17,10 +17,9 @@ const SCRIPT_FILE = "schritt.sh";
 const CHECKED_PART = 2;
 const PARTS = 6;
 const PART_ARGUMENT = `${CHECKED_PART}/${PARTS}`;
-const PART_TOOL_FILES = ["tools/testlaufzeit/teilung.mjs", "tools/testlaufzeit/teil-dateien.mjs"];
-const SUITE_FILES = [1, 2, 3, 4, 5, 6].flatMap((number) => [`test/n${number}.test.js`, `test/werkzeuge/w${number}.test.js`]);
-const PART_FILE = "test/n2.test.js";
-const PART_TOOL_FILE = "test/werkzeuge/w2.test.js";
+const SUITE_FILES = Array.from({ length: PARTS }, (_, index) => [`test/n${index + 1}.test.js`, `test/werkzeuge/w${index + 1}.test.js`]).flat();
+const ROUND_ROBIN_PART_FILE = `test/n${CHECKED_PART}.test.js`;
+const ROUND_ROBIN_PART_TOOL_FILE = `test/werkzeuge/w${CHECKED_PART}.test.js`;
 const NPM_STUB = `#!/bin/sh\nprintf '%s\\n' "$@" > "$NPM_ARGUMENTE"\n`;
 
 function stepDirectory(context, { file, step }) {
@@ -28,10 +27,10 @@ function stepDirectory(context, { file, step }) {
     npm: NPM_STUB,
     [SCRIPT_FILE]: workflowStepScript(file, step),
     [ARGUMENTS_FILE]: "",
-    ...Object.fromEntries(PART_TOOL_FILES.map((tool) => [tool, readFileSync(join(REPO_ROOT, tool), "utf8")])),
     ...Object.fromEntries(SUITE_FILES.map((suiteFile) => [suiteFile, ""])),
   });
   chmodSync(join(directory, "npm"), 0o755);
+  symlinkSync(join(REPO_ROOT, "tools"), join(directory, "tools"));
   return directory;
 }
 
@@ -71,19 +70,19 @@ function testRunnerArguments(argumentsList) {
 test("CI: im pull_request lassen die Testteile test/werkzeuge aus", (context) => {
   const argumentsList = npmArguments(context, CI_TESTS, "pull_request");
 
-  assert.deepEqual(testRunnerArguments(argumentsList), [WITHOUT_TOOL_TESTS, PART_FILE]);
+  assert.deepEqual(testRunnerArguments(argumentsList), [WITHOUT_TOOL_TESTS, ROUND_ROBIN_PART_FILE]);
 });
 
 test("CI: bei push auf master fahren die Testteile die volle Suite samt test/werkzeuge", (context) => {
   const argumentsList = npmArguments(context, CI_TESTS, "push");
 
-  assert.deepEqual(testRunnerArguments(argumentsList), [PART_FILE, PART_TOOL_FILE]);
+  assert.deepEqual(testRunnerArguments(argumentsList), [ROUND_ROBIN_PART_FILE, ROUND_ROBIN_PART_TOOL_FILE]);
 });
 
 test("CI: in der Merge-Queue fahren die Testteile die volle Suite samt test/werkzeuge", (context) => {
   const argumentsList = npmArguments(context, CI_TESTS, "merge_group");
 
-  assert.deepEqual(testRunnerArguments(argumentsList), [PART_FILE, PART_TOOL_FILE]);
+  assert.deepEqual(testRunnerArguments(argumentsList), [ROUND_ROBIN_PART_FILE, ROUND_ROBIN_PART_TOOL_FILE]);
 });
 
 test("Prüfleiter: im pull_request fahren die Werkzeugteile alle Werkzeugtests", (context) => {

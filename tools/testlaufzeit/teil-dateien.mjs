@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 
-import { alleTestdateien, dateienDesTeils, leererTeilZeile, MESSDATEI, rueckfallZeile } from "./teilung.mjs";
+import { alleTestdateien, MESSDATEI, waehleTeil } from "./teilung.mjs";
 
 const EXIT_OK = 0;
 const EXIT_FEHLER = 1;
@@ -31,13 +31,9 @@ function main() {
     return EXIT_AUFRUF;
   }
   const dateien = alleTestdateien({ ohneWerkzeugtests: werte["ohne-werkzeugtests"] });
-  const ergebnis = dateienDesTeils({ dateien, teil, anzahl, messdatei: werte.messdatei });
-  if (ergebnis.rueckfall !== null) console.error(rueckfallZeile(ergebnis.rueckfall));
-  if (ergebnis.dateien.length === 0) {
-    console.error(leererTeilZeile(teil, anzahl));
-    return EXIT_FEHLER;
-  }
-  console.log(ergebnis.dateien.join("\n"));
+  const gewaehlt = waehleTeil({ dateien, teil, anzahl, messdatei: werte.messdatei });
+  if (gewaehlt === null) return EXIT_FEHLER;
+  console.log(gewaehlt.join("\n"));
   return EXIT_OK;
 }
 

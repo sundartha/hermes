@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { dateienDesTeils, leseDauern, schneide } from "../../tools/testlaufzeit/teilung.mjs";
+import { dateienDesTeils, gerundeteTabelle, leseDauern, schneide } from "../../tools/testlaufzeit/teilung.mjs";
 import { probeDirectory, REPO_ROOT } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/testlaufzeit/teil-dateien.mjs");
+const ERZEUGER = join(REPO_ROOT, "tools/testlaufzeit/laufzeiten-erzeugen.mjs");
+const MESSDATEI_IM_REPO = "tools/basis/testlaufzeiten.json";
+const GH_ATTRAPPE = `#!/bin/sh
+if [ "$2" = "list" ]; then echo "$GH_LISTE"; exit "$GH_LISTE_EXIT"; fi
+if [ "$2" = "download" ]; then
+  while [ $# -gt 0 ]; do if [ "$1" = "-D" ]; then ziel="$2"; fi; shift; done
+  mkdir -p "$ziel/testlaufzeit-teil-1"
+  printf '{"datei":"test/a.test.js","dauer_ms":12.6}\\n' > "$ziel/testlaufzeit-teil-1/dateien.jsonl"
+  exit 0
+fi
+exit 1
+`;
+const VORHER = `${JSON.stringify({ lauf: 1, dauern: { "test/alt.test.js": 1 } })}\n`;
 const MESSDATEI = "messung.json";
 const EXIT_OK = 0;
 const EXIT_FEHLER = 1;
@@ -54,24 +68,24 @@ const MESSDATEIEN = {
   "ohne Datei": () => undefined,
 };
 
-for (const [fall, inhalt] of Object.entries(MESSDATEIEN)) {
-  test(`Testteile ${fall}: jede Datei läuft in genau einem Teil`, (context) => {
+test("Testteile: bei jeder Art Messdatei läuft jede Datei in genau einem Teil", (context) => {
+  for (const [fall, inhalt] of Object.entries(MESSDATEIEN)) {
     const pfad = messdatei(context, inhalt());
     const dateien = fall.includes("neuen") ? [...DATEIEN, ...NEU] : DATEIEN;
     const teile = Array.from({ length: TEILE }, (_, index) => dateienDesTeils({ dateien, teil: index + 1, anzahl: TEILE, messdatei: pfad }).dateien);
 
     vollstaendig(teile, dateien);
-  });
-}
+  }
+});
 
 test("Testteile: eine doppelt gelieferte Datei läuft trotzdem nur einmal", () => {
-  const { teile } = schneide([...DATEIEN, DATEIEN[0]], TEILE, new Map(Object.entries(GEMESSEN)));
+  const { teile } = schneide([...DATEIEN, DATEIEN[0]], TEILE, GEMESSEN);
 
   vollstaendig(teile, DATEIEN);
 });
 
 test("Testteile: die Dauern gleichen die Teile aus", () => {
-  const { teile, rueckfall } = schneide(DATEIEN, TEILE, new Map(Object.entries(GEMESSEN)));
+  const { teile, rueckfall } = schneide(DATEIEN, TEILE, GEMESSEN);
 
   assert.equal(rueckfall, null);
   assert.deepEqual(teile, [
@@ -83,22 +97,23 @@ test("Testteile: die Dauern gleichen die Teile aus", () => {
 
 test("Testteile: viele kleine Dateien füllen die Lücken neben den schweren", () => {
   const dauern = Object.fromEntries(SCHWERE.map((ms, index) => [`test/s${index}.test.js`, ms]));
-  const { teile } = schneide(Object.keys(dauern), TEILE, new Map(Object.entries(dauern)));
+  const { teile, rueckfall } = schneide(Object.keys(dauern), TEILE, dauern);
   const lasten = teile.map((teil) => summe(teil, dauern));
   const mittel = lasten.reduce((gesamt, last) => gesamt + last, 0) / TEILE;
 
+  assert.equal(rueckfall, null);
   assert.ok(Math.max(...lasten) <= mittel * ERLAUBTE_ABWEICHUNG, lasten.join(" "));
 });
 
 test("Testteile: dieselben Dateien ergeben unabhängig von der Reihenfolge dieselben Teile", () => {
-  const dauern = new Map(Object.entries(GEMESSEN));
+  const dauern = GEMESSEN;
 
   assert.deepEqual(schneide(DATEIEN, TEILE, dauern), schneide([...DATEIEN].reverse(), TEILE, dauern));
 });
 
 test("Testteile: eine neue Datei ohne Messwert zählt mit dem Median der gemessenen", () => {
-  const dauern = new Map(Object.entries({ "test/gross.test.js": 300, "test/s1.test.js": 100, "test/s2.test.js": 100, "test/s3.test.js": 100 }));
-  const { teile } = schneide([...dauern.keys(), "test/0-neu.test.js"], 2, dauern);
+  const dauern = { "test/gross.test.js": 300, "test/s1.test.js": 100, "test/s2.test.js": 100, "test/s3.test.js": 100 };
+  const { teile } = schneide([...Object.keys(dauern), "test/0-neu.test.js"], 2, dauern);
 
   assert.deepEqual(teile, [
     ["test/gross.test.js", "test/s3.test.js"],
@@ -106,10 +121,10 @@ test("Testteile: eine neue Datei ohne Messwert zählt mit dem Median der gemesse
   ]);
 });
 
-for (const [fall, inhalt] of [["fehlender", undefined], ["leerer", messung({})], ["kaputter", "{ kein json"]]) {
-  test(`Testteile: bei ${fall} Messdatei gilt der Schnitt reihum und der Hinweis nennt es`, (context) => {
+test("Testteile: ohne brauchbare Messdatei gilt der Schnitt reihum und der Hinweis nennt es", (context) => {
+  const sortiert = [...DATEIEN].sort();
+  for (const inhalt of [undefined, messung({}), "{ kein json"]) {
     const pfad = messdatei(context, inhalt);
-    const sortiert = [...DATEIEN].sort();
     const ergebnis = Array.from({ length: TEILE }, (_, index) => dateienDesTeils({ dateien: DATEIEN, teil: index + 1, anzahl: TEILE, messdatei: pfad }));
 
     assert.deepEqual(
@@ -117,11 +132,11 @@ for (const [fall, inhalt] of [["fehlender", undefined], ["leerer", messung({})],
       Array.from({ length: TEILE }, (_, teil) => sortiert.filter((_datei, index) => index % TEILE === teil)),
     );
     assert.ok(ergebnis.every(({ rueckfall }) => typeof rueckfall === "string" && rueckfall.includes(MESSDATEI)));
-  });
-}
+  }
+});
 
 test("Testteile: Messwerte nur für andere Dateien ergeben den Schnitt reihum", () => {
-  const { teile, rueckfall } = schneide(NEU, 2, new Map([["test/a.test.js", 5]]));
+  const { teile, rueckfall } = schneide(NEU, 2, { "test/a.test.js": 5 });
 
   assert.deepEqual(teile, [[NEU[0]], [NEU[1]]]);
   assert.match(rueckfall, /Messwerte/);
@@ -131,7 +146,7 @@ test("Testteile: leseDauern übernimmt nur gültige Dauern", (context) => {
   const { dauern, grund } = leseDauern(messdatei(context, messung({ "test/a.test.js": 5, "test/b.test.js": "x", "test/c.test.js": -1 })));
 
   assert.equal(grund, null);
-  assert.deepEqual([...dauern], [["test/a.test.js", 5]]);
+  assert.deepEqual(dauern, { "test/a.test.js": 5 });
 });
 
 function werkzeug(context, argumente, dateien) {
@@ -159,4 +174,36 @@ test("Testteile: das Werkzeug meldet den Rückfall und liefert nie einen leeren 
   assert.equal(leer.status, EXIT_FEHLER);
   assert.equal(leer.stdout, "");
   assert.equal(falsch.status, EXIT_AUFRUF);
+});
+
+test("Testteile: die Messdatei hält ganze Millisekunden und den Lauf", () => {
+  assert.deepEqual(gerundeteTabelle({ lauf: 7, dauern: { "test/a.test.js": 12.6, "test/b.test.js": 0.4 } }), {
+    lauf: 7,
+    dauern: { "test/a.test.js": 13, "test/b.test.js": 0 },
+  });
+});
+
+function erzeuger(context, umgebung) {
+  const ordner = probeDirectory(context, { gh: GH_ATTRAPPE, [MESSDATEI_IM_REPO]: VORHER });
+  chmodSync(join(ordner, "gh"), 0o755);
+  const lauf = spawnSync(process.execPath, [ERZEUGER], {
+    cwd: ordner,
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${ordner}:${process.env.PATH}`, GITHUB_REPOSITORY: "ziel/repo", ...umgebung },
+  });
+  return { lauf, datei: readFileSync(join(ordner, MESSDATEI_IM_REPO), "utf8") };
+}
+
+test("Testteile: der Erzeuger schreibt die Dauern des letzten grünen Laufs gerundet", (context) => {
+  const { lauf, datei } = erzeuger(context, { GH_LISTE: '[{"databaseId":5}]', GH_LISTE_EXIT: "0" });
+
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.deepEqual(JSON.parse(datei), { lauf: 5, dauern: { "test/a.test.js": 13 } });
+});
+
+test("Testteile: der Erzeuger lässt die Messdatei ohne grünen Lauf unverändert und endet rot", (context) => {
+  const { lauf, datei } = erzeuger(context, { GH_LISTE: "[]", GH_LISTE_EXIT: "0" });
+
+  assert.equal(lauf.status, EXIT_FEHLER);
+  assert.equal(datei, VORHER);
 });
