@@ -100,7 +100,9 @@ function inboundPfadFuer({ config, tenantId, numberRecord }) {
 async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, render }) {
   const locale = localeFor(call?.language);
   const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
-  const outDirectives = call ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
+  const outDirectives = call
+    ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives, res.locals.eingangMs)
+    : errorDirectives;
   res.type("text/xml").send(render(outDirectives, provider));
 }
 
@@ -250,7 +252,7 @@ export function makeVoiceRoutes({
   const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
 
   async function sendVoiceXml(res, call, directives) {
-    const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives);
+    const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives, res.locals.eingangMs);
     res.type("text/xml").send(render(audio, call.provider));
   }
 

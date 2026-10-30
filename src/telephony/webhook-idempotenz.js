@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
+import { ergebnisOderNull } from "./ergebnis-oder-null.js";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";
 
 export const TURN_TOKEN_PARAM = "turnToken";
@@ -51,16 +52,7 @@ function makeDeferredAnswer() {
   return { answer, settle };
 }
 
-function answerWithinProviderDeadline(pending) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), PROVIDER_WEBHOOK_HARDCUT_MS);
-    timer.unref?.();
-    pending.then((answer) => {
-      clearTimeout(timer);
-      resolve(answer);
-    });
-  });
-}
+const answerWithinProviderDeadline = (pending) => ergebnisOderNull(pending, PROVIDER_WEBHOOK_HARDCUT_MS);
 
 function replayAnswer(res, answer) {
   res.status(answer.status);

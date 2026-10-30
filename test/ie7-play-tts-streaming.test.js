@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say } from "../src/telephony/directives.js";
@@ -18,6 +17,7 @@ import {
 } from "../src/turn-budget.js";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { playTtsEnv, startSyntheseOrigin } from "./gemeinsam/play-tts-server.mjs";
 
 const PUBLIC_URL = "https://agent.test";
 const TOKEN = "ie7-token";
@@ -169,24 +169,18 @@ const HTTP_OK = 200;
 
 async function startLangsamenOrigin() {
   const timers = new Set();
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      res.setHeader("content-type", "audio/mpeg");
-      res.write(Buffer.from(FAKE_FIRST_CHUNK));
-      const timer = setTimeout(() => {
-        timers.delete(timer);
-        res.end(Buffer.from(FAKE_REST_CHUNK));
-      }, LANGSAMER_REST_MS);
-      timers.add(timer);
-    });
+  const origin = await startSyntheseOrigin((res) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      res.end(Buffer.from(FAKE_REST_CHUNK));
+    }, LANGSAMER_REST_MS);
+    timers.add(timer);
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
-    url: `http://127.0.0.1:${server.address().port}`,
+    url: origin.url,
     close: async () => {
       for (const timer of timers) clearTimeout(timer);
-      await new Promise((resolve) => server.close(resolve));
+      await origin.close();
     },
   };
 }
@@ -195,12 +189,7 @@ test("Flag AN, langsamer Fake-Origin: /voice/incoming antwortet, bevor der Origi
   const origin = await startLangsamenOrigin();
   const srv = await startServer({
     seed: seedWithTelnyxNumber({ language: "de" }),
-    env: {
-      ELEVENLABS_PLAY_TTS_ENABLED: "true",
-      ELEVENLABS_API_KEY: "test-elevenlabs-key",
-      ELEVENLABS_VOICE_ID: "voice-1",
-      ELEVENLABS_API_BASE: origin.url,
-    },
+    env: playTtsEnv(origin.url),
   });
   try {
     const startedAt = Date.now();

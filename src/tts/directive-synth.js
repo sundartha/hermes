@@ -1,32 +1,44 @@
 import { synthesizeSpeechStream } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
+import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.js";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.js";
+
+function textDer(direktive) {
+  if (direktive.kind === DIRECTIVE.GATHER) return direktive.promptText;
+  return direktive.kind === DIRECTIVE.SAY ? direktive.text : "";
+}
 
 export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) {
   function warnQuotaDegradation({ characters, quota, cycleKey }) {
     console.warn(`[play-tts] Kontingent erschoepft (${characters}/${quota}, Zyklus ${cycleKey}) -> Azure-Fallback`);
   }
 
-  async function synthesizeDirectiveAudio(call, directives) {
+  async function synthesizeDirectiveAudio(call, directives, eingangMs = Date.now()) {
     const cfg = config.voice.elevenLabsPlayTts;
     if (!cfg.enabled || !providerSupports(call.provider, CAPABILITY.PLAY_AUDIO_TTS)) return directives;
+    const beendetAnruf = directives.some((direktive) => direktive.kind === DIRECTIVE.HANGUP);
+    const abgabeMs = eingangMs + PROVIDER_WEBHOOK_HARDCUT_MS - TURN_NETWORK_RESERVE_MS;
+    const ablage = beendetAnruf ? (result) => ablegenVollstaendig(result, abgabeMs) : ablegenStreamend;
     const out = [];
-    for (const d of directives) out.push(await withPlayAudio(d, cfg));
+    for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
     return out;
   }
 
-  async function withPlayAudio(d, cfg) {
-    const text = d.kind === DIRECTIVE.GATHER ? d.promptText : d.kind === DIRECTIVE.SAY ? d.text : "";
-    if (!text) return d;
-    const voiceId = d.voiceId || elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
-    const url = await synthToServeUrl(text, { ...cfg, voiceId });
-    if (!url) return d;
-    return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
+  async function withPlayAudio(direktive, cfg, ablage) {
+    const text = textDer(direktive);
+    if (!text) return direktive;
+    const voiceId = direktive.voiceId || elevenLabsVoiceIdFor(cfg.voiceId, direktive.voiceProfile);
+    const url = await synthToServeUrl(text, { ...cfg, voiceId }, ablage);
+    if (!url) return direktive;
+    return direktive.kind === DIRECTIVE.GATHER
+      ? { ...direktive, promptAudioUrl: url }
+      : { ...direktive, audioUrl: url };
   }
 
-  async function synthToServeUrl(text, cfg) {
+  async function synthToServeUrl(text, cfg, ablage) {
     const nowIso = new Date().toISOString();
     const usage = store.platformTtsUsageView?.(nowIso);
     if (usage && ttsQuotaExhausted(usage)) {
@@ -55,17 +67,35 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       return null;
     }
     if (warning) onQuotaWarning(warning);
-    const token = ttsStore.put({ contentType: result.contentType, bytes: loggedAudioBytes(result) });
+    return ablage(result);
+  }
+
+  function ablegenStreamend(result) {
+    return legeAb(result, loggedAudio(result));
+  }
+
+  async function ablegenVollstaendig(result, abgabeMs) {
+    const audio = loggedAudio(result);
+    const fertig = await ergebnisOderNull(audio, abgabeMs - Date.now());
+    if (fertig === null || !fertig.complete) {
+      console.warn("[play-tts] Satz vor dem Auflegen unvollstaendig oder zu spaet -> Azure-Fallback");
+      return null;
+    }
+    return legeAb(result, audio);
+  }
+
+  function legeAb(result, audio) {
+    const token = ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
     return `${config.server.publicUrl}/voice/tts/${token}`;
   }
 
-  async function loggedAudioBytes(result) {
+  async function loggedAudio(result) {
     const audio = await result.audio;
     console.log(
       `[play-tts] Synthese ${audio.complete ? "vollstaendig" : "abgebrochen"} ` +
         `(erstes Audio ${result.firstChunkMs} ms, Gesamt ${audio.totalMs} ms)`,
     );
-    return audio.bytes;
+    return audio;
   }
 
   return { synthesizeDirectiveAudio };

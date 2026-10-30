@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../src/turn-budget.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "./helpers/play-tts-stimm-probe.mjs";
-import { recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
+import { deferred, recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
 const UNSUPPORTED_PROVIDER = "twilio";
 
@@ -179,4 +180,44 @@ test("Telnyx + Flag AN + nicht-sprechende Direktive gemischt mit sprechender -> 
   assert.equal(out[0], hangupDirective, "hangup unveraendert");
   assert.equal(out[1].audioUrl, `${PUBLIC_URL}/voice/tts/${FIXED_TOKEN}`);
   assert.equal(ttsStore.putCalls.length, 1, "genau ein Synth-Call fuer die eine sprechende Direktive");
+});
+
+async function synthMitStrom(directives, { eingangMs, beendeStrom, vorher = true }) {
+  const ttsStore = fakeTtsStore();
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
+  const restGate = deferred();
+  const { fetchImpl } = recordingStreamFetch({ restGate: restGate.promise });
+  if (vorher) beendeStrom(restGate);
+  const out = await withFakeFetch(fetchImpl, () => synthesizeDirectiveAudio({ provider: "telnyx" }, directives, eingangMs));
+  if (!vorher) beendeStrom(restGate);
+  return { out, ttsStore };
+}
+
+const reisstAb = (restGate) => restGate.reject(new Error("stream broke"));
+const endetNormal = (restGate) => restGate.resolve();
+
+test("Dokument endet mit Hangup, Strom reisst ab -> kein Play, der Azure-Say bleibt (Fehlersatz, Verabschiedung)", async () => {
+  const directives = [say("Auf Wiedersehen"), hangup()];
+  const { out, ttsStore } = await synthMitStrom(directives, { beendeStrom: reisstAb });
+  assert.equal(out[0], directives[0]);
+  assert.equal(ttsStore.putCalls.length, 0);
+});
+
+test("Dokument ohne Hangup, Strom reisst ab -> Play streamt weiter (Gespraechsrunde)", async () => {
+  const { out, ttsStore } = await synthMitStrom([say("Guten Tag")], { beendeStrom: reisstAb });
+  assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/${FIXED_TOKEN}`);
+  assert.equal(ttsStore.putCalls.length, 1);
+});
+
+test("Dokument endet mit Hangup, Strom noch offen, Webhook-Eingang liegt schon lange zurueck -> kein Play, der Say bleibt", async () => {
+  const eingangMs = Date.now() - PROVIDER_WEBHOOK_HARDCUT_MS;
+  const directives = [say("Auf Wiedersehen"), hangup()];
+  const { out, ttsStore } = await synthMitStrom(directives, { eingangMs, beendeStrom: endetNormal, vorher: false });
+  assert.equal(out[0], directives[0]);
+  assert.equal(ttsStore.putCalls.length, 0);
 });
