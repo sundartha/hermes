@@ -693,6 +693,8 @@ function summaryLanguageOf(callRecord, tenantLanguage) {
   return callRecord.summary ? null : tenantLanguage;
 }
 
+const JSON_INDENT_SPACES = 2;
+
 function callResultReply(callId, callRecord, loc) {
   const data = pickTranscript(callId, callRecord, loc.mcp);
   const text = JSON.stringify(
@@ -706,7 +708,7 @@ function callResultReply(callId, callRecord, loc) {
       next_step: data.next_step,
     },
     null,
-    2,
+    JSON_INDENT_SPACES,
   );
   return {
     content: [{ type: "text", text }],
@@ -1117,10 +1119,10 @@ export function registerTools(
       outputSchema: CALL_RESULT_OUTPUT,
     },
     async ({ call_id }) => {
-      const c = await call("GET", `/api/calls/${call_id}`);
-      if (c.status === "active") return errText(loc.mcp.callStillRunning);
-      requireFields(c, { transcript: "array" });
-      return callResultReply(call_id, c, loc);
+      const callRecord = await call("GET", `/api/calls/${call_id}`);
+      if (callRecord.status === "active") return errText(loc.mcp.callStillRunning);
+      requireFields(callRecord, { transcript: "array" });
+      return callResultReply(call_id, callRecord, loc);
     },
   );
 
