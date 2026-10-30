@@ -110,6 +110,7 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Zusammenfassung nicht verfuegbar (technischer Fehler).",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
+    awaitSummary: "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
     consultPermissionHint:
       "Hinweis: Live-Rueckfragen waehrend des Anrufs erreichen diesen Chat nur, wenn die " +
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
@@ -221,6 +222,7 @@ export const MCP_TEXTS = Object.freeze({
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
+    awaitSummary: "(No summary available yet - wait about 5 seconds and call again if needed.)",
     consultPermissionHint:
       "Note: live questions during the call only reach this chat if the connector's tool " +
       "permission is granted.",
@@ -333,6 +335,7 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
+    awaitSummary: "(Pas encore de résumé disponible - attendez environ 5 secondes et réessayez si besoin.)",
     consultPermissionHint:
       "Remarque : les questions en direct pendant l'appel n'arrivent dans cette " +
       "conversation que si l'autorisation d'outil du connecteur est accordée.",

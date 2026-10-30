@@ -1,4 +1,4 @@
-import { METHOD_TOOL_RESULT } from "./widget-bind.js";
+import { METHOD_TOOL_RESULT, METHOD_HOST_CONTEXT_CHANGED, INIT_ID } from "./widget-bind.js";
 
 export const DEFAULT_LOCALE = "en";
 
@@ -12,6 +12,8 @@ export const WIDGET_DICT = {
     "Recent calls": "Letzte Anrufe",
     "Number": "Nummer",
     "Calls": "Anrufe",
+    "Outbound": "Ausgehend",
+    "Inbound": "Eingehend",
     "Monthly usage (%)": "Monatsnutzung (%)",
     "Permissions": "Berechtigungen",
     "Connecting": "Verbindung",
@@ -73,6 +75,8 @@ export const WIDGET_DICT = {
     "Recent calls": "Appels récents",
     "Number": "Numéro",
     "Calls": "Appels",
+    "Outbound": "Sortant",
+    "Inbound": "Entrant",
     "Monthly usage (%)": "Utilisation mensuelle (%)",
     "Permissions": "Autorisations",
     "Connecting": "Connexion",
@@ -128,6 +132,7 @@ export const WIDGET_DICT = {
 };
 
 export const WIDGET_LOCALE_META_KEY = "hermes/locale";
+export const WIDGET_CONTENT_LOCALE_META_KEY = "hermes/content_locale";
 
 export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];
@@ -140,6 +145,12 @@ export function resolveLocale(candidates, dict) {
     if (lang && Object.prototype.hasOwnProperty.call(dict, lang)) return lang;
   }
   return DEFAULT_LOCALE;
+}
+
+export function chooseLocale(userTag, contentTags, dict) {
+  const user = primaryLanguage(userTag);
+  const fits = contentTags.every((tag) => primaryLanguage(tag) === user);
+  return fits ? resolveLocale([userTag], dict) : DEFAULT_LOCALE;
 }
 
 export function translate(dict, locale, key) {
@@ -165,34 +176,57 @@ function buildI18nScript() {
     `var DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};`,
     `var WIDGET_DICT = ${JSON.stringify(WIDGET_DICT)};`,
     `var METHOD_TOOL_RESULT = ${JSON.stringify(METHOD_TOOL_RESULT)};`,
+    `var METHOD_HOST_CONTEXT_CHANGED = ${JSON.stringify(METHOD_HOST_CONTEXT_CHANGED)};`,
+    `var INIT_ID = ${JSON.stringify(INIT_ID)};`,
     `var WIDGET_LOCALE_META_KEY = ${JSON.stringify(WIDGET_LOCALE_META_KEY)};`,
+    `var WIDGET_CONTENT_LOCALE_META_KEY = ${JSON.stringify(WIDGET_CONTENT_LOCALE_META_KEY)};`,
     primaryLanguage.toString(),
     resolveLocale.toString(),
+    chooseLocale.toString(),
     translate.toString(),
     localizeStaticLabels.toString(),
-    incomingLocale.toString(),
     `var locale = ${JSON.stringify(DEFAULT_LOCALE)};`,
+    "var tenantTag = null;",
+    "var hostTag = null;",
+    "var contentTags = [];",
     "function t(key) { return translate(WIDGET_DICT, locale, key); }",
     "function localizeDocument() {",
     "  document.documentElement.lang = locale;",
     "  localizeStaticLabels(document, t);",
     "}",
-    "window.HermesI18n = { locale: locale, t: t };",
+    "function applyLocale() {",
+    "  locale = chooseLocale(tenantTag !== null ? tenantTag : hostTag, contentTags, WIDGET_DICT);",
+    "  window.HermesI18n.locale = locale;",
+    "  localizeDocument();",
+    "}",
+    "function isObject(value) { return typeof value === \"object\" && value !== null; }",
+    "function observe(meta) {",
+    "  if (!isObject(meta)) return;",
+    "  if (typeof meta[WIDGET_LOCALE_META_KEY] === \"string\") tenantTag = meta[WIDGET_LOCALE_META_KEY];",
+    "  if (WIDGET_CONTENT_LOCALE_META_KEY in meta) {",
+    "    var tag = meta[WIDGET_CONTENT_LOCALE_META_KEY];",
+    "    contentTags.push(typeof tag === \"string\" ? tag : null);",
+    "  }",
+    "  applyLocale();",
+    "}",
+    "function observeHost(hostContext) {",
+    "  if (!isObject(hostContext) || typeof hostContext.locale !== \"string\") return;",
+    "  hostTag = hostContext.locale;",
+    "  applyLocale();",
+    "}",
+    "window.HermesI18n = { locale: locale, t: t, observe: observe };",
     'if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localizeDocument);',
     "else localizeDocument();",
     "window.addEventListener(\"message\", function (event) {",
     "  var message = event && event.data;",
-    "  if (!message || typeof message !== \"object\") return;",
-    "  if (message.method !== METHOD_TOOL_RESULT) return;",
-    "  var params = message.params;",
-    "  if (!params || typeof params !== \"object\") return;",
-    "  var meta = params._meta;",
-    "  if (!meta || typeof meta !== \"object\") return;",
-    "  var next = incomingLocale(meta[WIDGET_LOCALE_META_KEY], WIDGET_DICT);",
-    "  if (next === null) return;",
-    "  locale = next;",
-    "  window.HermesI18n.locale = next;",
-    "  localizeDocument();",
+    "  if (!isObject(message)) return;",
+    "  if (message.method === METHOD_TOOL_RESULT) {",
+    "    if (isObject(message.params)) observe(message.params._meta);",
+    "  } else if (message.method === METHOD_HOST_CONTEXT_CHANGED) {",
+    "    observeHost(message.params);",
+    "  } else if (message.id === INIT_ID && isObject(message.result)) {",
+    "    observeHost(message.result.hostContext);",
+    "  }",
     "});",
   ].join("\n");
   return `<script>\n(function () {\n${body}\n})();\n</script>`;
