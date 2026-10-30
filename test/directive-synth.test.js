@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
@@ -206,6 +206,17 @@ test("Dokument endet mit Hangup, Strom reisst ab -> kein Play, der Azure-Say ble
   const { out, ttsStore } = await synthMitStrom(directives, { beendeStrom: reisstAb });
   assert.equal(out[0], directives[0]);
   assert.equal(ttsStore.putCalls.length, 0);
+});
+
+test("Dokument endet mit Hangup, Strom reisst ab -> Warnzeile nennt den Grund und den Azure-Fallback", async () => {
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    await synthMitStrom([say("Auf Wiedersehen"), hangup()], { beendeStrom: reisstAb });
+    const zeilen = warn.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
+    assert.ok(zeilen.some((zeile) => /Satz vor dem Auflegen unvollstaendig oder zu spaet -> Azure-Fallback/.test(zeile)), zeilen.join("\n"));
+  } finally {
+    warn.mock.restore();
+  }
 });
 
 test("Dokument ohne Hangup, Strom reisst ab -> Play streamt weiter (Gespraechsrunde)", async () => {
