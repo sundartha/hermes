@@ -12,7 +12,7 @@ import { MASTER } from "./worktrees.mjs";
 
 export const BELEG_ARTEFAKT = "mutationsurteil";
 export const BELEG_DATEI = "beleg.json";
-export const WERKZEUG_PFADE = [".github/workflows/ci.yml", "tools/mutationspruefung.mjs", "tools/mutationspruefung/", "tools/auftrag/", "stryker.config.json"];
+export const WERKZEUG_PFADE = [".github/", "package.json", "package-lock.json", "tools/mutationspruefung.mjs", "tools/mutationspruefung/", "tools/auftrag/", "stryker.config.json"];
 export const WERKZEUG_ABGEWICHEN = "Werkzeugstand weicht ab";
 const ERFOLG = "success";
 const URTEIL_GRUEN = 0;
