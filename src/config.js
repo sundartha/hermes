@@ -31,8 +31,10 @@ import {
   modellpreiseAufloesen,
   todayIsoDate,
 } from "./konfiguration/preise.js";
+import { gatewayUrlMit } from "./konfiguration/gateway-url.js";
 
 export { csvEnv, stripTrailingSlash, todayIsoDate };
+export { gatewayUrlForPort } from "./konfiguration/gateway-url.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV !== "test") {
@@ -759,23 +761,12 @@ function buildNamespaceSurface(storage, namespaces) {
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 
+export const { setBoundGatewayPort, resolveGatewayUrl } = gatewayUrlMit(
+  process.env,
+  () => config.server.port,
+);
+
 setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
-
-export function gatewayUrlForPort(port) {
-  return `http://localhost:${port}`;
-}
-
-let boundGatewayUrl = null;
-
-export function setBoundGatewayPort(port) {
-  boundGatewayUrl = gatewayUrlForPort(port);
-}
-
-export function resolveGatewayUrl() {
-  return stripTrailingSlash(
-    process.env.GATEWAY_URL || boundGatewayUrl || gatewayUrlForPort(config.server.port),
-  );
-}
 
 function isInsecureHttpIssuer(issuerUrl) {
   return (
