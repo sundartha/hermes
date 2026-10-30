@@ -17,6 +17,7 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
+import { makeKeyedSingleFlight } from "../single-flight.js";
 
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
@@ -344,52 +345,42 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
-const registrierungenImFlug = new Map();
+function makeAbsenderBeschaffung({ store, sipRegistrar }) {
+  async function registriereUndSpeichere(numberRecord) {
+    try {
+      const { phoneNumberId } = await sipRegistrar.ensureRegistration({
+        e164: numberRecord.e164,
+        numberId: numberRecord.id,
+      });
+      store.registrierungAnhaengen(numberRecord.id, phoneNumberId);
+    } catch (err) {
+      console.warn(`[el-outbound] Registrierung nachholen FEHLGESCHLAGEN number=${numberRecord.id}: ${err.message}`);
+    }
+  }
 
-function holeRegistrierungNach({ store, numberRecord, sipRegistrar }) {
-  if (!registrierungenImFlug.has(numberRecord.id)) {
-    const lauf = (async () => {
-      try {
-        const { phoneNumberId } = await sipRegistrar.ensureRegistration({
-          e164: numberRecord.e164,
-          numberId: numberRecord.id,
-        });
-        store.registrierungAnhaengen(numberRecord.id, phoneNumberId);
-      } catch (err) {
-        console.warn(`[el-outbound] Registrierung nachholen FEHLGESCHLAGEN number=${numberRecord.id}: ${err.message}`);
-      } finally {
-        registrierungenImFlug.delete(numberRecord.id);
-      }
-    })();
-    registrierungenImFlug.set(numberRecord.id, lauf);
-  }
-  return registrierungenImFlug.get(numberRecord.id);
-}
+  const holeRegistrierungNach = makeKeyedSingleFlight(
+    registriereUndSpeichere,
+    (numberRecord) => numberRecord.id,
+  );
 
-async function absenderFuerAnruf({ store, call, sipRegistrar }) {
-  const waehle = () =>
-    waehleAbsenderRegistrierung({
-      numberRecord: findActiveNumber(store.load(), call.tenantId),
-      fromE164: call.from,
-    });
-  let absender = waehle();
-  if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
-    await holeRegistrierungNach({
-      store,
-      numberRecord: findActiveNumber(store.load(), call.tenantId),
-      sipRegistrar,
-    });
-    absender = waehle();
-  }
-  if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
-    store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
-    throw new Error(
-      `Anruf ohne eigene Absendernummer abgebrochen (call=${call.id}): grund=${absender.grund}` +
-        (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)"),
-    );
-  }
-  store.recordFromRegistrationSource(call.id, absender.quelle);
-  return absender;
+  return async function beschaffeAbsenderOderBrichAb(call) {
+    const eigeneNummer = () => findActiveNumber(store.load(), call.tenantId);
+    const waehle = () => waehleAbsenderRegistrierung({ numberRecord: eigeneNummer(), fromE164: call.from });
+    let absender = waehle();
+    if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
+      await holeRegistrierungNach(eigeneNummer());
+      absender = waehle();
+    }
+    if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
+      store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
+      throw new Error(
+        `Anruf ohne eigene Absendernummer abgebrochen (call=${call.id}): grund=${absender.grund}` +
+          (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)"),
+      );
+    }
+    store.recordFromRegistrationSource(call.id, absender.quelle);
+    return absender;
+  };
 }
 
 function recordAbsenderMessung(store, callId, conversation) {
@@ -695,6 +686,7 @@ export function makeElevenLabsOutbound({
   endCarrierCall,
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
+  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
@@ -751,7 +743,7 @@ export function makeElevenLabsOutbound({
     const locale = callLocaleOf({ store, config, call, ownerName });
     const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
     const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
-    const { agentPhoneNumberId } = await absenderFuerAnruf({ store, call, sipRegistrar });
+    const { agentPhoneNumberId } = await beschaffeAbsenderOderBrichAb(call);
     const tenantToken = tenantToolToken({
       secret: config.voice.elevenLabsToolToken,
       tenantId: call.tenantId,
