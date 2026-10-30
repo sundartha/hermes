@@ -5,9 +5,17 @@ import { env } from "node:process";
 import { test } from "node:test";
 
 import { mutationInCi } from "../../tools/mutationspruefung/in-ci.mjs";
-import { probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { SCHRITTE_IM_WORKFLOW } from "../../tools/mutationspruefung/lauf-einordnung.mjs";
+import { probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
+const EXIT_GRUENES_URTEIL = 0;
+const EXIT_ROTES_URTEIL = 1;
+const EXIT_HALT_OHNE_URTEIL = 2;
+const WIEDERHOLUNGEN_JE_AUFRUF = 3;
+const ERSTER_VERSUCH_UND_WIEDERHOLUNGEN = 1 + WIEDERHOLUNGEN_JE_AUFRUF;
+const WORKFLOW = join(REPO_ROOT, ".github/workflows/ci.yml");
+const SCHRITTE_DER_PRUEFUNG = ["Mutationsplan", "Mutationsprüfung", "Mutationsurteil"];
 const REPO = "probe/repo";
 const LAUF = "4711";
 const LAUF_URL = `https://github.com/${REPO}/actions/runs/${LAUF}`;
@@ -95,7 +103,7 @@ function lauf(context, buch, urteile = {}) {
 async function haeltOhneNeustart(context, jobsAntwort, stand = ROT_ATTEMPT_1) {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [stand], "ansicht-jobs": [jobsAntwort], "run-download": [KEIN_ARTEFAKT] });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 2);
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
   assert.match(ergebnis.zeilen.join("\n"), /ohne Urteil/);
   assert.equal(anzahl(ordner, "run rerun"), 0);
   return ordner;
@@ -108,7 +116,7 @@ function reihenfolge(ordner) {
 test("Mutationsprüfung in der CI: ein HTTP 404 von gh run view direkt nach dem Start bricht den Lauf nicht ab", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [NICHT_GEFUNDEN, NICHT_GEFUNDEN, GRUEN_ATTEMPT_2], "run-download": [MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 0);
+  assert.equal(ergebnis.exitCode, EXIT_GRUENES_URTEIL);
   assert.equal(ergebnis.zeilen.at(-1), GRUENES_URTEIL.ausgabe);
   assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), 3);
   assert.equal(anzahl(ordner, "run rerun"), 0);
@@ -117,7 +125,7 @@ test("Mutationsprüfung in der CI: ein HTTP 404 von gh run view direkt nach dem 
 test("Mutationsprüfung in der CI: eine Störung von gh run view über die Wiederholungen hinaus bricht den Lauf ab", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [BAD_GATEWAY] });
   await assert.rejects(ausfuehren(), /HTTP 502/);
-  assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), 4);
+  assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), ERSTER_VERSUCH_UND_WIEDERHOLUNGEN);
   assert.equal(anzahl(ordner, "run download"), 0);
 });
 
@@ -130,7 +138,7 @@ test("Mutationsprüfung in der CI: ein HTTP 404 von gh run view nach dem Anfangs
 test("Mutationsprüfung in der CI: ein fehlgeschlagener Artefakt-Download mit HTTP 502 wird wiederholt und das Urteil gilt", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [GRUEN_ATTEMPT_2], "run-download": [BAD_GATEWAY, MIT_URTEIL("rot")] }, { rot: ROTES_URTEIL });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 1);
+  assert.equal(ergebnis.exitCode, EXIT_ROTES_URTEIL);
   assert.equal(ergebnis.zeilen.at(-1), ROTES_URTEIL.ausgabe);
   assert.equal(anzahl(ordner, "run download"), 2);
 });
@@ -138,7 +146,7 @@ test("Mutationsprüfung in der CI: ein fehlgeschlagener Artefakt-Download mit HT
 test("Mutationsprüfung in der CI: ein fehlendes Artefakt wird nicht wiederholt", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [GRUEN_ATTEMPT_2], "run-download": [KEIN_ARTEFAKT] });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 2);
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
   assert.match(ergebnis.zeilen.join("\n"), /ohne Urteil/);
   assert.equal(anzahl(ordner, "run download"), 1);
 });
@@ -146,7 +154,7 @@ test("Mutationsprüfung in der CI: ein fehlendes Artefakt wird nicht wiederholt"
 test("Mutationsprüfung in der CI: ein Job, der in Set up job scheitert, wird genau einmal neu gestartet und danach gilt das Urteil", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1, NEUER_VERSUCH_LAEUFT, GRUEN_ATTEMPT_2], "ansicht-jobs": [jobs(job("Mutationsplan", "success"), START_SCHEITERT, SAMMELJOB_ROT)], "run-download": [KEIN_ARTEFAKT, MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 0);
+  assert.equal(ergebnis.exitCode, EXIT_GRUENES_URTEIL);
   assert.equal(ergebnis.zeilen.at(-1), GRUENES_URTEIL.ausgabe);
   assert.equal(anzahl(ordner, "run rerun"), 1);
   assert.deepEqual(protokoll(ordner).find((aufruf) => aufruf.art === "run rerun").rest, [LAUF, "-R", REPO, "--failed"]);
@@ -155,7 +163,7 @@ test("Mutationsprüfung in der CI: ein Job, der in Set up job scheitert, wird ge
 test("Mutationsprüfung in der CI: nach dem Neustart wird erst der neue Versuch abgewartet, nicht der alte Stand gelesen", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1, ROT_ATTEMPT_1, ROT_ATTEMPT_1, GRUEN_ATTEMPT_2], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT, MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 0);
+  assert.equal(ergebnis.exitCode, EXIT_GRUENES_URTEIL);
   const ablauf = reihenfolge(ordner);
   assert.deepEqual(ablauf.slice(ablauf.indexOf("run rerun") + 1, -1), ["view-stand", "view-stand", "view-stand", "run download"]);
 });
@@ -180,7 +188,7 @@ test("Mutationsprüfung in der CI: ein abgebrochener Lauf wird nicht neu gestart
 test("Mutationsprüfung in der CI: ein rotes Urteil im Artefakt gilt ohne Neustart, auch wenn Jobs außerhalb der Prüfung scheiterten", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-download": [MIT_URTEIL("rot")] }, { rot: ROTES_URTEIL });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 1);
+  assert.equal(ergebnis.exitCode, EXIT_ROTES_URTEIL);
   assert.equal(ergebnis.zeilen.at(-1), ROTES_URTEIL.ausgabe);
   assert.equal(anzahl(ordner, "run rerun"), 0);
 });
@@ -188,7 +196,7 @@ test("Mutationsprüfung in der CI: ein rotes Urteil im Artefakt gilt ohne Neusta
 test("Mutationsprüfung in der CI: eine zweite Störung außerhalb der Prüfung nach dem Neustart hält ohne zweiten Neustart", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1, ROT_ATTEMPT_2], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT] });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 2);
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
   assert.match(ergebnis.zeilen.join("\n"), /ohne Urteil/);
   assert.equal(anzahl(ordner, "run rerun"), 1);
 });
@@ -196,7 +204,7 @@ test("Mutationsprüfung in der CI: eine zweite Störung außerhalb der Prüfung 
 test("Mutationsprüfung in der CI: scheitert der Neustart selbst, bleibt es beim Halt ohne Urteil", async (context) => {
   const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-rerun": [{ exit: 1, stderr: "HTTP 403: Resource not accessible" }], "run-download": [KEIN_ARTEFAKT] });
   const ergebnis = await ausfuehren();
-  assert.equal(ergebnis.exitCode, 2);
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
   assert.equal(anzahl(ordner, "run rerun"), 1);
 });
 
@@ -206,4 +214,10 @@ test("Mutationsprüfung in der CI: ein abgebrochener Job neben einem Fehler in S
 
 test("Mutationsprüfung in der CI: ein roter Job ohne gescheiterten Schritt führt nicht zum Neustart", async (context) => {
   await haeltOhneNeustart(context, jobs(job("Mutationsprüfung 5", "failure")));
+});
+
+test("Mutationsprüfung in der CI: die Schritte außerhalb der Prüfung heißen im Workflow ci.yml so und die Prüfschritte stehen nicht darunter", () => {
+  const schritte = new Set([...readFileSync(WORKFLOW, "utf8").matchAll(/^\s+- name: (.+)$/gm)].map((treffer) => treffer[1]));
+  assert.deepEqual([...SCHRITTE_IM_WORKFLOW].filter((name) => !schritte.has(name)), []);
+  assert.deepEqual(SCHRITTE_DER_PRUEFUNG.filter((name) => !schritte.has(name) || SCHRITTE_IM_WORKFLOW.has(name)), []);
 });

@@ -10,7 +10,8 @@ import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
 import { gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
-import { ghMitWiederholung, nurInfrastrukturGescheitert, stoerungsfilter } from "./stoerung.mjs";
+import { nurInfrastrukturGescheitert } from "./lauf-einordnung.mjs";
+import { ghMitWiederholung, stoerungsfilter } from "./stoerung.mjs";
 
 const WEGWERF_ZWEIG = "lauf-mutation/";
 const KURZ = 12;
