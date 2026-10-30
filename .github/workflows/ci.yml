@@ -325,7 +325,10 @@ jobs:
           if [ "$EVENT_NAME" = "pull_request" ]; then
             auswahl=(--ohne-werkzeugtests)
           fi
-          npm test -- "${auswahl[@]}" -- --test-concurrency=4 --test-shard="$TEIL/$TEILE" \
+          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
+          dateien=()
+          while IFS= read -r datei; do dateien+=("$datei"); done < "$RUNNER_TEMP/teil-dateien.txt"
+          npm test -- "${auswahl[@]}" "${dateien[@]}" -- --test-concurrency=4 \
             --test-reporter-destination=stdout \
             --test-reporter=./tools/testlaufzeit-reporter.mjs \
             --test-reporter-destination=.pruefung/dateien.jsonl

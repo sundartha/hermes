@@ -8,6 +8,7 @@ import { TOOL_TEST_DIRECTORY, TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs"
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { changedFiles } from "./betroffene-tests.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
+import { dateienDesTeils, leererTeilZeile, rueckfallZeile } from "./testlaufzeit/teilung.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -106,16 +107,30 @@ function partReportPath({ index }) {
 function partFlags(part) {
   if (part === undefined) return [];
   return [
-    `--test-shard=${part.index}/${part.total}`,
     "--test-reporter-destination=stdout",
     `--test-reporter=${FILE_REPORTER}`,
     `--test-reporter-destination=${partReportPath(part)}`,
   ];
 }
 
+function partFiles(part) {
+  const { dateien, rueckfall } = dateienDesTeils({
+    dateien: globSync(TOOL_TEST_GLOB),
+    teil: part.index,
+    anzahl: part.total,
+  });
+  if (rueckfall !== null) console.error(rueckfallZeile(rueckfall));
+  return dateien;
+}
+
 function toolTests(part) {
+  const files = part === undefined ? [TOOL_TEST_GLOB] : partFiles(part);
+  if (files.length === 0) {
+    console.error(leererTeilZeile(part.index, part.total));
+    return EXIT_FAILURE;
+  }
   const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`, ...partFlags(part)];
-  const result = spawnSync(process.execPath, [RUNNER, TOOL_BANK, TOOL_TEST_GLOB, ...flags], {
+  const result = spawnSync(process.execPath, [RUNNER, TOOL_BANK, ...files, ...flags], {
     stdio: "inherit",
   });
   return result.status ?? EXIT_FAILURE;
