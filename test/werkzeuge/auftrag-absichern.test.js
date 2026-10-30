@@ -33,6 +33,12 @@ console.log(offen ? "Verstoß: Mutant überlebt: ${MUTANT}" : "grün: keiner üb
 `;
 }
 
+function mitVermerkB1(repo) {
+  runIn(repo, "git", ["switch", "-q", "-c", "absicherung/probe"]);
+  runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Sichere vorab ab\n\nAbsicherung: Lauf 555 Auftrag B1\nPaket: PAS`]);
+  runIn(repo, "git", ["switch", "-q", "-"]);
+}
+
 function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFENDER, WARTENDER], dateien = {}, davor = () => {}, umgebung = {} } = {}) {
   const gesamt = {
     ...ERSATZ_PAKET,
@@ -112,12 +118,7 @@ test("ein wartender Auftrag mit demselben Abnahmetest wie der laufende wird nich
 });
 
 test("ein Auftrag, den der Branch schon vermerkt, wird beim zweiten Aufruf nicht noch einmal geprüft", (context) => {
-  const davor = (repo) => {
-    runIn(repo, "git", ["switch", "-q", "-c", "absicherung/probe"]);
-    runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Sichere vorab ab\n\nAbsicherung: Lauf 555 Auftrag B1\nPaket: PAS`]);
-    runIn(repo, "git", ["switch", "-q", "-"]);
-  };
-  const { lauf, aufrufe } = absichern(context, { davor });
+  const { lauf, aufrufe } = absichern(context, { davor: mitVermerkB1 });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(aufrufe, []);
   assert.ok(lauf.stdout.includes("Absicherung B1: schon abgesichert, Lauf 555."), lauf.stdout);
@@ -127,4 +128,32 @@ test("der Absicherungslauf setzt die Plätze bei vorbelegter Umgebung immer auf 
   const vorbelegt = ["", "999", "13", "abc", "0", "-3", "5.5"];
   const plaetze = [...vorbelegt, "5"].map((wert) => absichern(context, { umgebung: { HERMES_MUTATION_PLAETZE: wert } }).aufrufe[0]?.plaetze);
   assert.deepEqual(plaetze, [...vorbelegt.map(() => HOECHSTE_PLAETZE), "5"]);
+});
+
+test("zwei wartende Aufträge, deren betrifft denselben Block nennen, teilen einen Lauf und einen Beleg, den der Branch für beide vermerkt", (context) => {
+  const zweiter = { ...WARTENDER, id: "B2" };
+  const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, zweiter] });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  assert.ok(branch[0].includes("Absicherung: Lauf 777 Auftrag B1") && branch[0].includes("Absicherung: Lauf 777 Auftrag B2"), branch[0]);
+  assert.ok(lauf.stdout.includes("Absicherung B1: abgesichert, Lauf 777.") && lauf.stdout.includes("Absicherung B2: abgesichert, Lauf 777."), lauf.stdout);
+});
+
+test("zwei wartende Aufträge mit verschiedenen Blöcken derselben Datei bekommen je einen eigenen Lauf und Beleg", (context) => {
+  const zweiter = { ...WARTENDER, id: "B2", betrifft: { "src/text.js": ["klein"] } };
+  const dateien = { "src/text.js": `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n` };
+  const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, zweiter], dateien });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe.length, 2, lauf.stdout + lauf.stderr);
+  assert.equal(branch.length, 2, branch.join("\n"));
+  assert.ok(branch.some((eintrag) => eintrag.includes("Auftrag B1") && !eintrag.includes("Auftrag B2")), branch.join("\n"));
+  assert.ok(branch.some((eintrag) => eintrag.includes("Auftrag B2") && !eintrag.includes("Auftrag B1")), branch.join("\n"));
+});
+
+test("ist von zwei Aufträgen mit demselben Block einer schon vermerkt, prüft der Lauf nur den anderen", (context) => {
+  const { lauf, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, { ...WARTENDER, id: "B2" }], davor: mitVermerkB1 });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.includes("Absicherung B1: schon abgesichert, Lauf 555.") && lauf.stdout.includes("Absicherung B2: abgesichert, Lauf 777."), lauf.stdout);
 });
