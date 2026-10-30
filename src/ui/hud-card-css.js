@@ -15,18 +15,15 @@ export const HUD_CARD_CSS = `
     --color-accent-light-glow:rgba(var(--color-accent-light-rgb),.5);
     --wing-glow-filter:drop-shadow(0 0 16px var(--color-accent-light-glow)) drop-shadow(0 2px 8px rgba(3,10,24,.6));
   }
-  body{margin:0;font-family:var(--font-sans);color:var(--color-white);background:transparent}
+  body{margin:0;width:fit-content;font-family:var(--font-sans);color:var(--color-white);background:transparent}
   .card{
-    position:relative;max-width:min(480px,100%);padding:22px 24px 18px;
+    position:relative;box-sizing:border-box;width:min(530px,100vw);padding:22px 24px 18px;
     border-radius:var(--radius-card);overflow:hidden;
     background:
       radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.14) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
       linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
     border:1px solid rgba(var(--color-accent-light-rgb),.26);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,.06) inset,
-      0 22px 44px -20px rgba(3,10,24,.7),
-      0 0 48px -18px var(--color-accent-light-glow);
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset;
   }
   .card::after{
     /* feines Scanline-Overlay wie call.html - rein dekorativ, keine Animation
