@@ -1,6 +1,7 @@
 const FOLGEJOB = "CI";
 const GESCHEITERT = "failure";
 const UNGEPRUEFT_OK = new Set(["success", "skipped", "neutral"]);
+const SCHRITT_OHNE_BEFUND = new Set(["success", "skipped"]);
 const VOM_RUNNER = new Set(["Set up job", "Complete job"]);
 const NACH_SCHRITT = "Post ";
 export const SCHRITTE_IM_WORKFLOW = new Set([
@@ -21,8 +22,9 @@ function ausserhalbDerPruefung(name) {
 }
 
 function nurAusserhalbDerPruefung(job) {
-  const gescheiterte = (job.steps ?? []).filter((schritt) => schritt.conclusion === GESCHEITERT);
-  return gescheiterte.length > 0 && gescheiterte.every((schritt) => ausserhalbDerPruefung(schritt.name));
+  const auffaellige = (job.steps ?? []).filter((schritt) => !SCHRITT_OHNE_BEFUND.has(schritt.conclusion));
+  const gescheitert = auffaellige.some((schritt) => schritt.conclusion === GESCHEITERT);
+  return gescheitert && auffaellige.every((schritt) => ausserhalbDerPruefung(schritt.name));
 }
 
 export function nurInfrastrukturGescheitert(jobs) {
