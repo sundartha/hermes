@@ -170,7 +170,7 @@ async function startetNeu(repo, lauf, { stand, frist }) {
 
 async function standMitUrteil(repo, lauf, { zeiten, darfNeustart, ab }) {
   const beginn = Date.now();
-  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: beginn + zeiten.hoechstMs, ab };
+  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: zeiten.ende, ab };
   const stand = await warteAufLauf(repo, lauf, frist);
   const urteil = stand.status === LAUF_FERTIG ? await abgelegtesUrteil(repo, lauf, frist) : null;
   if (urteil === null && darfNeustart && (await startetNeu(repo, lauf, { stand, frist }))) {
@@ -201,7 +201,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const { repo } = abruf;
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
-  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten, darfNeustart: true, ab: 1 });
+  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: Date.now() + zeiten.hoechstMs }, darfNeustart: true, ab: 1 });
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
   if (urteil) {
     merkeVorlauf(abruf, lauf);

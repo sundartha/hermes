@@ -30,6 +30,8 @@ const ROT_ATTEMPT_1 = { stdout: JSON.stringify({ status: "completed", conclusion
 const ROT_ATTEMPT_2 = { stdout: JSON.stringify({ status: "completed", conclusion: "failure", attempt: 2 }) };
 const GRUEN_ATTEMPT_2 = { stdout: JSON.stringify({ status: "completed", conclusion: "success", attempt: 2 }) };
 const ABGEBROCHEN = { stdout: JSON.stringify({ status: "completed", conclusion: "cancelled", attempt: 1 }) };
+const ROT_NACH_WARTEZEIT = { warte: 250, ...ROT_ATTEMPT_1 };
+const KNAPPE_HOECHSTZEIT = { ...ZEITEN, hoechstMs: 150 };
 const NEUER_VERSUCH_LAEUFT = { stdout: JSON.stringify({ status: "in_progress", conclusion: "", attempt: 2 }) };
 const MIT_URTEIL = (urteil) => ({ urteil });
 const DREHBUCH_SKRIPT = [
@@ -46,6 +48,7 @@ const DREHBUCH_SKRIPT = [
   "const antworten = buch[art] ?? [{}];",
   "const antwort = antworten[Math.min(bisher, antworten.length - 1)];",
   'if (antwort.urteil) fs.cpSync(__dirname + "/urteil-" + antwort.urteil, rest[rest.indexOf("-D") + 1], { recursive: true });',
+  "if (antwort.warte) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, antwort.warte);",
   "if (antwort.stdout) process.stdout.write(antwort.stdout);",
   "if (antwort.stderr) process.stderr.write(antwort.stderr);",
   "process.exit(antwort.exit ?? 0);",
@@ -61,6 +64,14 @@ function job(name, conclusion, ...gescheiterteSchritte) {
   return { name, conclusion, steps: [{ name: "Checkout", conclusion: "success" }, ...steps] };
 }
 
+const MUTATION_ABGEBROCHEN = {
+  name: "Mutationsprüfung 5",
+  conclusion: "failure",
+  steps: [
+    { name: "Mutationsprüfung", conclusion: "cancelled" },
+    { name: "Zeit-Log hochladen", conclusion: "failure" },
+  ],
+};
 const SAMMELJOB_ROT = job("CI", "failure", "Alle Jobs erfolgreich");
 const START_SCHEITERT = job("Mutationsprüfung 5", "failure", "Set up job");
 const MUTATION_SCHEITERT = job("Mutationsprüfung 5", "failure", "Mutationsprüfung");
@@ -220,4 +231,16 @@ test("Mutationsprüfung in der CI: die Schritte außerhalb der Prüfung heißen 
   const schritte = new Set([...readFileSync(WORKFLOW, "utf8").matchAll(/^\s+- name: (.+)$/gm)].map((treffer) => treffer[1]));
   assert.deepEqual([...SCHRITTE_IM_WORKFLOW].filter((name) => !schritte.has(name)), []);
   assert.deepEqual(SCHRITTE_DER_PRUEFUNG.filter((name) => !schritte.has(name) || SCHRITTE_IM_WORKFLOW.has(name)), []);
+});
+
+test("Mutationsprüfung in der CI: ein abgebrochener Mutationsschritt neben einem gescheiterten Hochladen führt nicht zum Neustart", async (context) => {
+  await haeltOhneNeustart(context, jobs(MUTATION_ABGEBROCHEN));
+});
+
+test("Mutationsprüfung in der CI: die Höchstzeit gilt für den ganzen Lauf einschließlich des Neustarts", async (context) => {
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_NACH_WARTEZEIT, NEUER_VERSUCH_LAEUFT], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT] });
+  const ergebnis = await ausfuehren(KNAPPE_HOECHSTZEIT);
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.equal(anzahl(ordner, "run rerun"), 1);
+  assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), 2);
 });
