@@ -120,8 +120,9 @@ function meldeErgebnis(auftrag, { nummer, grund }) {
 }
 
 function bearbeite(ort, gruppe) {
-  const offen = gruppe.filter((auftrag) => schonVermerkt(ort.root, auftrag) === null);
-  for (const auftrag of gruppe.filter((mitglied) => !offen.includes(mitglied))) console.log(`Absicherung ${auftrag.id}: schon abgesichert, Lauf ${schonVermerkt(ort.root, auftrag)}.`);
+  const stand = gruppe.map((auftrag) => ({ auftrag, vorhanden: schonVermerkt(ort.root, auftrag) }));
+  for (const { auftrag, vorhanden } of stand) if (vorhanden !== null) console.log(`Absicherung ${auftrag.id}: schon abgesichert, Lauf ${vorhanden}.`);
+  const offen = stand.filter(({ vorhanden }) => vorhanden === null).map(({ auftrag }) => auftrag);
   if (offen.length === 0) return;
   const ergebnis = gebaut(ort, offen);
   for (const auftrag of offen) meldeErgebnis(auftrag, ergebnis);
