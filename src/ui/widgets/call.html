@@ -300,6 +300,7 @@
 
     var TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
     var EMDASH = "—";
+    var I18N_ATTR = "data-i18n";
 
     // Lokalisierung: window.HermesI18n kommt aus dem im <head> injizierten
     // I18N_SCRIPT (widget-i18n.js) und ist hier synchron verfuegbar. Faellt es
@@ -310,7 +311,7 @@
 
     // Anzeige-Labels (reine Praesentation) fuer die failure_reason-Basis-Token aus
     // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS - die Klassifikation lebt
-    // nur dort; unbekannt -> "Failed" (failureReasonLabel). Ein neues Token braucht hier
+    // nur dort; unbekannt -> "Failed" (failureReasonKey). Ein neues Token braucht hier
     // eine Zeile, sonst schlaegt der zugehoerige Test (test/mcp-ui-widget-i18n.test.js) fehl.
     var FAILURE_REASON_LABELS = {
       "no-answer": "No answer",
@@ -469,22 +470,32 @@
       return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
     }
 
-    // "failed:487" -> Label von "failed". Ein unbekanntes Token erreicht den Nutzer NIE roh,
-    // sondern als "Failed" (fuer jeden Grund wahr). split(":") = defensive Normalisierung
-    // eines host-gepushten Fremdwerts.
-    function failureReasonLabel(raw) {
-      if (raw === null || raw === undefined) return raw;
-      var mapped = FAILURE_REASON_LABELS[String(raw).split(":")[0]];
-      return t(mapped || "Failed");
+    function failureReasonKey(raw) {
+      if (raw === null || raw === undefined) return null;
+      return FAILURE_REASON_LABELS[String(raw).split(":")[0]] || "Failed";
     }
 
-    // objective_achieved ist bool ODER String (get_call_result-Kontrakt,
-    // src/mcp-tools.js) - bool/"unclear" lokalisiert, andere Strings roh.
-    function objectiveLabel(value) {
-      if (value === true) return t("Yes");
-      if (value === false) return t("No");
-      if (value === "unclear") return t("Unclear");
-      return value;
+    function objectiveKey(value) {
+      if (value === true) return "Yes";
+      if (value === false) return "No";
+      if (value === "unclear") return "Unclear";
+      return null;
+    }
+
+    function setKeyedText(el, key, plain) {
+      if (!el) return;
+      if (key && el.setAttribute) el.setAttribute(I18N_ATTR, key);
+      else if (el.removeAttribute) el.removeAttribute(I18N_ATTR);
+      if (key) el.textContent = t(key);
+      else el.textContent = plain === null || plain === undefined ? EMDASH : String(plain);
+    }
+
+    function setKeyedDisplay(selector, key, plain) {
+      setKeyedText(doc.querySelector(selector), key, plain);
+    }
+
+    function observeLocale(meta) {
+      if (window.HermesI18n && typeof window.HermesI18n.observe === "function") window.HermesI18n.observe(meta);
     }
 
     function setRowVisible(rowKey, visible) {
@@ -560,7 +571,7 @@
 
     function showConfirmHint(text) {
       setElementVisible("[data-confirm-hint]", true);
-      setDisplayText("[data-confirm-hint-text]", text);
+      setKeyedDisplay("[data-confirm-hint-text]", text, text);
     }
 
     function updateConfirmButtonState() {
@@ -580,7 +591,7 @@
 
     // "unklar" statt "fehlgeschlagen" (ein Host-Fehler/-Timeout beweist keinen Fehlschlag).
     function enterUncertainState() {
-      enterConfirmEndState("uncertain", t(UNCERTAIN_HINT));
+      enterConfirmEndState("uncertain", UNCERTAIN_HINT);
       sendUncertainMessage();
     }
 
@@ -647,11 +658,11 @@
         }
       }
       if (confirmState === "used") {
-        showConfirmHint(t(CONFIRMATION_USED_HINT));
+        showConfirmHint(CONFIRMATION_USED_HINT);
       } else if (confirmCodeUsable()) {
         setElementVisible("[data-confirm-hint]", false);
       } else {
-        showConfirmHint(t("Confirmation code unavailable — ask for a new prepare_call."));
+        showConfirmHint("Confirmation code unavailable — ask for a new prepare_call.");
       }
       updateConfirmButtonState();
     }
@@ -749,7 +760,7 @@
       }
       if (wasTimedOut) return;
       if (isRecord(structured) && structured.status === STATUS_CONFIRMATION_USED) {
-        enterConfirmEndState("used", t(CONFIRMATION_USED_HINT));
+        enterConfirmEndState("used", CONFIRMATION_USED_HINT);
         return;
       }
       enterConfirmEndState("rejected", serverRejectionText(result));
@@ -758,7 +769,7 @@
     // Nie der Code.
     function serverRejectionText(result) {
       var first = isRecord(result) && Array.isArray(result.content) ? result.content[0] : undefined;
-      return (first && typeof first.text === "string" && first.text.trim()) || t("Call was not started — ask for a new prepare_call.");
+      return (first && typeof first.text === "string" && first.text.trim()) || "Call was not started — ask for a new prepare_call.";
     }
 
     function onConfirmResponseTimeout() {
@@ -773,7 +784,7 @@
     function onConfirmButtonClick() {
       if (confirmState !== "awaiting") return;
       if (!confirmCodeUsable()) {
-        enterConfirmEndState("expired", t("Confirmation expired — ask for a new prepare_call."));
+        enterConfirmEndState("expired", "Confirmation expired — ask for a new prepare_call.");
         return;
       }
       var callArgs = Object.assign({}, pendingConfirmation.args); // schon gefiltert
@@ -828,7 +839,7 @@
       var label = doc.querySelector("[data-status-label]");
       if (pill) pill.className = view ? view.pillClass : "pill pill--muted";
       if (dot) dot.style.display = view && view.dot ? "" : "none";
-      if (label) label.textContent = view ? t(view.pillLabel) : EMDASH;
+      setKeyedText(label, view ? view.pillLabel : null);
     }
 
     // Status-abgeleitete HUD-Unterzeile - wie die Status-Pill eine reine
@@ -837,7 +848,7 @@
     function updateHudPhase(status) {
       var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
-      if (el) el.textContent = view ? t(view.hudPhase) : EMDASH;
+      setKeyedText(el, view ? view.hudPhase : null);
     }
 
     function updateRingForStatus(status) {
@@ -887,7 +898,7 @@
       if (data.call_id) setSlotText("call_id", data.call_id);
       if (typeof data.duration_s === "number") setDisplayText("[data-duration-display]", formatDuration(data.duration_s));
       if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
-      if ("failure_reason" in data) setDisplayText("[data-failure-display]", failureReasonLabel(data.failure_reason));
+      if ("failure_reason" in data) setKeyedDisplay("[data-failure-display]", failureReasonKey(data.failure_reason));
       if (data.status) {
         setSlotText("status", data.status);
         updateForStatus(data.status);
@@ -899,7 +910,7 @@
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
       if ("result_summary" in data) setSlotText("result_summary", data.result_summary);
-      if ("objective_achieved" in data) setDisplayText("[data-objective-display]", objectiveLabel(data.objective_achieved));
+      if ("objective_achieved" in data) setKeyedDisplay("[data-objective-display]", objectiveKey(data.objective_achieved), data.objective_achieved);
       // Die beiden skalaren Karten-Felder.
       applyResultRow("outcome", data.outcome);
       applyResultRow("next_step", data.next_step);
@@ -1015,6 +1026,7 @@
       var pendingTool = m.id != null ? pendingRequests[m.id] : null;
       if (!pendingTool) return;
       delete pendingRequests[m.id];
+      if (isRecord(m.result)) observeLocale(m.result._meta);
       // place_call hat eine eigene Zustandsmaschine, nicht die generische Poll-Fehlerbremse.
       if (pendingTool === TOOL_PLACE_CALL) {
         handlePlaceCallResponse(m);
