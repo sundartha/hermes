@@ -26,6 +26,10 @@ const TRAILER = /^Absicherung: Lauf ([1-9]\d*) Auftrag (\S+)$/gm;
 const STATUS_ZEILE = /^([A-Z])\t(.+)$/;
 const EXIT_GLEICH = 0;
 const NUR_COMMIT = "^{commit}";
+const EINMAL = 1;
+const SCHRITT = 1;
+const MINDEST_INHALT = 2;
+const OHNE_INHALT = /^[\s\p{P}\p{S}]*$/u;
 
 export function pruefsumme(zeile) {
   return createHash("sha256").update(zeile).digest("hex");
@@ -48,9 +52,13 @@ function istBlock(block) {
   return block !== null && typeof block === "object" && typeof block.datei === "string" && Number.isInteger(block.von) && block.von >= ERSTE_ZEILE && Array.isArray(block.pruefsummen) && block.pruefsummen.every((summe) => PRUEFSUMME.test(summe));
 }
 
+function istStand(dateien) {
+  return dateien !== null && typeof dateien === "object" && Object.values(dateien).every((summen) => Array.isArray(summen) && summen.every((summe) => PRUEFSUMME.test(summe)));
+}
+
 export function gueltigerBeleg(beleg) {
   const form = beleg !== null && typeof beleg === "object" && beleg.version === BELEG_VERSION && COMMIT.test(beleg.commit) && Number.isInteger(beleg.urteil);
-  return form && Array.isArray(beleg.bloecke) && beleg.bloecke.every(istBlock);
+  return form && Array.isArray(beleg.bloecke) && beleg.bloecke.every(istBlock) && istStand(beleg.dateien);
 }
 
 export function laufBefund(lauf, repo) {
@@ -58,13 +66,32 @@ export function laufBefund(lauf, repo) {
   return erfolgreich ? abrufLaufBefund(lauf, repo) : "ist nicht erfolgreich beendet";
 }
 
-function gedeckt(block, { datei, von, pruefsummen }) {
+function anGleicherStelle(block, { datei, von, pruefsummen }) {
   const versatz = von - block.von;
   return block.datei === datei && pruefsummen.every((summe, index) => block.pruefsummen[versatz + index] === summe);
 }
 
-function ohneBeleg(verschoben, bloecke) {
-  return verschoben.filter((stelle) => !bloecke.some((block) => gedeckt(block, stelle)));
+function vorkommen(folge, summen) {
+  const starts = Array.from({ length: Math.max(summen.length - folge.length + SCHRITT, 0) }, (leer, index) => index);
+  return starts.filter((start) => folge.every((summe, index) => summen[start + index] === summe)).length;
+}
+
+function mitInhalt(zeilen) {
+  return zeilen.filter((zeile) => !OHNE_INHALT.test(zeile)).length >= MINDEST_INHALT;
+}
+
+function nachInhalt({ bloecke, dateien }, { datei, pruefsummen, inhaltlich, imStand }) {
+  if (!inhaltlich || imStand !== EINMAL || vorkommen(pruefsummen, dateien[datei] ?? []) !== EINMAL) return false;
+  const gleiche = bloecke.filter((block) => block.datei === datei);
+  return gleiche.reduce((summe, block) => summe + vorkommen(pruefsummen, block.pruefsummen), 0) === EINMAL;
+}
+
+function gedeckt(beleg, stelle) {
+  return beleg.bloecke.some((block) => anGleicherStelle(block, stelle)) || nachInhalt(beleg, stelle);
+}
+
+function ohneBeleg(verschoben, beleg) {
+  return verschoben.filter((stelle) => !gedeckt(beleg, stelle));
 }
 
 function nurPfad(aenderung) {
@@ -80,7 +107,7 @@ export function weglassBefund({ beleg, verschoben, testAenderungen }) {
   if (beleg.urteil !== URTEIL_GRUEN) return `das Urteil des Belegs ist nicht grün (Exit ${beleg.urteil})`;
   const fremde = testAenderungen.filter(({ status }) => status !== HINZUGEFUEGT).map(nurPfad);
   if (fremde.length > 0) return `seit dem Beleg ist unter ${TEST_ORDNER} geändert oder gelöscht: ${fremde.join(", ")}`;
-  const offen = ohneBeleg(verschoben, beleg.bloecke);
+  const offen = ohneBeleg(verschoben, beleg);
   const dateien = [...new Set(offen.map(nurDatei))].join(", ");
   return offen.length === 0 ? null : `Zeilen in ${dateien} sind nicht wortgleich zur geprüften Fassung`;
 }
@@ -90,8 +117,16 @@ export function verschobeneZeilen({ root, basis }) {
   return [...bereiche].flatMap(([datei, liste]) => {
     if (liste.length === 0) return [];
     const zeilen = git(["show", `${basis}:${datei}`], { cwd: root }).split("\n");
-    return liste.map(([von, bis]) => ({ datei, von, pruefsummen: zeilen.slice(von - ERSTE_ZEILE, bis).map(pruefsumme) }));
+    const summen = zeilen.map(pruefsumme);
+    return liste.map(([von, bis]) => {
+      const pruefsummen = summen.slice(von - ERSTE_ZEILE, bis);
+      return { datei, von, pruefsummen, inhaltlich: mitInhalt(zeilen.slice(von - ERSTE_ZEILE, bis)), imStand: vorkommen(pruefsummen, summen) };
+    });
   });
+}
+
+function alsBlock({ datei, von, pruefsummen }) {
+  return { datei, von, pruefsummen };
 }
 
 export function testAenderungenSeit({ root, commit }) {
@@ -158,7 +193,12 @@ export function vorabGeprueft({ root, basis, auftragId }) {
   }
 }
 
+function standDerDatei({ root, basis }, datei) {
+  return git(["show", `${basis}:${datei}`], { cwd: root }).split("\n").map(pruefsumme);
+}
+
 export function belegZeilen({ root, basis, urteil }) {
-  const bloecke = verschobeneZeilen({ root, basis });
-  return { version: BELEG_VERSION, commit: git(["rev-parse", "HEAD"], { cwd: root }).trim(), urteil, bloecke };
+  const bloecke = verschobeneZeilen({ root, basis }).map(alsBlock);
+  const dateien = Object.fromEntries([...new Set(bloecke.map(nurDatei))].map((datei) => [datei, standDerDatei({ root, basis }, datei)]));
+  return { version: BELEG_VERSION, commit: git(["rev-parse", "HEAD"], { cwd: root }).trim(), urteil, bloecke, dateien };
 }

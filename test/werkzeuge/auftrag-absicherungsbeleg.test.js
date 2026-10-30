@@ -4,44 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { env } from "node:process";
 
-import { belegZeilen, pruefsumme, trailerZeile, vorabGeprueft, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
-import { LAUF, legeGhAn, summen } from "./absicherungsbeleg-hilfen.js";
-import { probeRepository, runIn } from "./probe-repo.js";
-
-const ZEILEN = Array.from({ length: 10 }, (leer, index) => `zeile${index + 1}`);
-const QUELLE = `${ZEILEN.join("\n")}\n`;
-const DATEIEN = {
-  ".github/workflows/ci.yml": "name: CI\n",
-  ".github/actions/node-npm-ci/action.yml": "name: Node\n",
-  "package.json": "{}\n",
-  "package-lock.json": "{}\n",
-  "tools/mutationspruefung.mjs": "export const A = 1;\n",
-  "tools/mutationspruefung/x.mjs": "export const B = 1;\n",
-  "tools/auftrag/x.mjs": "export const C = 1;\n",
-  "stryker.config.json": "{}\n",
-  "test/a.test.js": "a\n",
-  "src/m.js": QUELLE,
-  "src/seltsam\tname.js": "alt\n",
-};
-
-function aufbau(context, { lauf = {}, beleg = {}, ohneBeleg = false, trailer = true, quelle = ZEILEN, geaendert = null } = {}) {
-  const repo = probeRepository(context, { ...DATEIEN, "src/m.js": `${quelle.join("\n")}\n` });
-  runIn(repo, "git", ["config", "user.name", "Probe"]);
-  runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
-  const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  runIn(repo, "git", ["update-ref", "refs/remotes/upstream/master", basis]);
-  if (trailer) runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Testcommit\n\n${trailerZeile(LAUF, "A1")}`]);
-  const neu = geaendert ?? [...quelle.slice(0, 2), ...quelle.slice(5)];
-  writeFileSync(join(repo, "src/m.js"), `${neu.join("\n")}\n`);
-  legeGhAn(context, { basis, bloecke: [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.concat("")) }], lauf, beleg, ohneBeleg });
-  return { repo, basis };
-}
-
-function pruefe(context, optionen, aenderung = () => {}) {
-  const probe = aufbau(context, optionen);
-  aenderung(probe.repo);
-  return vorabGeprueft({ root: probe.repo, basis: probe.basis, auftragId: "A1" });
-}
+import { belegZeilen, pruefsumme, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
+import { LAUF, ZEILEN, aufbau, pruefe, summen } from "./absicherungsbeleg-hilfen.js";
 
 function istVerworfen(ergebnis, muster) {
   assert.equal(ergebnis.weglassen, false);
