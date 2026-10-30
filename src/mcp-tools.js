@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
 import { UI_META_KEY } from "./ui/contract.js";
-import { WIDGET_LOCALE_META_KEY } from "./ui/widget-i18n.js";
+import { WIDGET_LOCALE_META_KEY, WIDGET_CONTENT_LOCALE_META_KEY } from "./ui/widget-i18n.js";
 import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
 import {
   WIDGET_MY_NUMBER,
@@ -127,7 +127,7 @@ export function pickTranscript(callId, call, texts = null) {
     texts && mapStatus(call) === "failed" ? texts.callFailedSummary(call.failureReason) : null;
   return {
     call_id: callId,
-    result_summary: maskRestrictedText(call.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER),
+    result_summary: maskRestrictedText(call.summary || failureSummary || texts?.awaitSummary || AWAIT_SUMMARY_PLACEHOLDER),
     objective_achieved: call.objectiveAchieved ?? "unclear",
     ...maskedResultCard(call.result),
   };
@@ -680,11 +680,55 @@ function widgetResourceOptions(uiHost) {
 function withWidgetLocale(config, handler, language) {
   const resourceUri = config._meta?.[UI_META_KEY]?.resourceUri;
   if (!resourceUri) return handler;
+  const tenantMeta = { [WIDGET_LOCALE_META_KEY]: language, [WIDGET_CONTENT_LOCALE_META_KEY]: language };
   return async (...args) => {
     const result = await handler(...args);
     if (result?.isError) return result;
-    return { ...result, _meta: { ...result?._meta, [WIDGET_LOCALE_META_KEY]: language } };
+    return { ...result, _meta: { ...tenantMeta, ...result?._meta } };
   };
+}
+
+function summaryLanguageOf(callRecord, tenantLanguage) {
+  if (callRecord.result) return localeFor(callRecord.language).language;
+  return callRecord.summary ? null : tenantLanguage;
+}
+
+function callResultReply(callId, callRecord, loc) {
+  const data = pickTranscript(callId, callRecord, loc.mcp);
+  const text = JSON.stringify(
+    {
+      result_summary: data.result_summary,
+      objective_achieved: data.objective_achieved,
+      outcome: data.outcome,
+      commitments: data.commitments,
+      counterparty_commitments: data.counterparty_commitments,
+      open_points: data.open_points,
+      next_step: data.next_step,
+    },
+    null,
+    2,
+  );
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: data,
+    _meta: summaryContentMeta([callRecord], loc.language),
+  };
+}
+
+function callsListReply(calls, loc, formatDate) {
+  const entries = calls.map((callRecord) => pickCall(callRecord, formatDate));
+  const text = entries.length ? entries.map(callTextLine).join("\n") : loc.mcp.emptyCalls;
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: { calls: entries },
+    _meta: summaryContentMeta(calls, loc.language),
+  };
+}
+
+function summaryContentMeta(calls, tenantLanguage) {
+  const languages = new Set(calls.map((callRecord) => summaryLanguageOf(callRecord, tenantLanguage)));
+  const language = languages.size === 0 ? tenantLanguage : languages.size === 1 ? [...languages][0] : null;
+  return { [WIDGET_CONTENT_LOCALE_META_KEY]: language };
 }
 
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
@@ -1076,28 +1120,7 @@ export function registerTools(
       const c = await call("GET", `/api/calls/${call_id}`);
       if (c.status === "active") return errText(loc.mcp.callStillRunning);
       requireFields(c, { transcript: "array" });
-      const data = pickTranscript(call_id, c, loc.mcp);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              {
-                result_summary: data.result_summary,
-                objective_achieved: data.objective_achieved,
-                outcome: data.outcome,
-                commitments: data.commitments,
-                counterparty_commitments: data.counterparty_commitments,
-                open_points: data.open_points,
-                next_step: data.next_step,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-        structuredContent: data,
-      };
+      return callResultReply(call_id, c, loc);
     },
   );
 
@@ -1146,12 +1169,7 @@ export function registerTools(
     async () => {
       const state = await call("GET", "/api/state");
       requireFields(state, { calls: "array" });
-      const entries = state.calls.map((callRecord) => pickCall(callRecord, formatDate));
-      const txt = entries.length ? entries.map(callTextLine).join("\n") : loc.mcp.emptyCalls;
-      return {
-        content: [{ type: "text", text: txt }],
-        structuredContent: { calls: entries },
-      };
+      return callsListReply(state.calls, loc, formatDate);
     },
   );
 
