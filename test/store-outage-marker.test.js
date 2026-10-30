@@ -90,3 +90,25 @@ test("verschiedene Eimer (codes) sind unabhaengige Marker", () => {
   assert.equal(openOutageAlert(state, "not-placed:invite-403"), undefined);
   assert.ok(openOutageAlert(state, "not-placed:start-403"), "der andere Eimer bleibt unberuehrt");
 });
+
+test("claimOutageAlert legt neue Zeilen mit Kennung otg_ an", () => {
+  const state = makeDefaultState();
+  const marker = claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS });
+  assert.ok(marker.id.startsWith("otg_"));
+});
+
+test("claimOutageAlert(sent=true) ohne Kanaele setzt lastAttemptAt, aber weder reportedAt noch deliveredChannels", () => {
+  const state = makeDefaultState();
+  const marker = claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS, sent: true });
+  assert.equal(marker.lastAttemptAt, T0_ISO);
+  assert.equal(marker.reportedAt, null);
+  assert.equal(marker.deliveredChannels, null);
+});
+
+test("claimOutageAlert(sent=true) verbindet mehrere Kanaele mit Komma", () => {
+  const state = makeDefaultState();
+  const marker = claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS, sent: true, channels: ["mail", "sms"] });
+  assert.equal(marker.reportedAt, T0_ISO);
+  assert.equal(marker.deliveredChannels, "mail,sms");
+});
+
