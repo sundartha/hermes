@@ -14,7 +14,7 @@ import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
-import { MS_PER_MINUTE } from "./utils/timer.js";
+import { MS_PER_HOUR, MS_PER_MINUTE } from "./utils/timer.js";
 import { merkeLogGeheimnisse } from "./log-maske.js";
 import {
   csvEnv,
@@ -23,6 +23,7 @@ import {
   trimmedUpper,
   umgebungMit,
 } from "./konfiguration/umgebung.js";
+import { MS_PER_DAY } from "./konfiguration/zeitspannen.js";
 
 export { csvEnv, stripTrailingSlash };
 
@@ -50,11 +51,6 @@ export function configFatalErrors() {
 }
 
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
-
-const MINUTES_PER_HOUR = 60;
-const HOURS_PER_DAY = 24;
-const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
-const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
