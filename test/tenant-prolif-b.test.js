@@ -119,3 +119,170 @@ test("checkSubAlreadyMerged: isoliert ohne Store - unbekannter sub -> null, sub-
   });
   assert.equal(noSub, null, "Operator-Pfad ohne idpSubject bleibt byte-identisch (kein Guard)");
 });
+
+import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
+import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, makePgTestStore } from "./pg-helpers.js";
+import { operatorAuthPassThrough, startRouterApp } from "./operator-route-app.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { postJson } from "./anrufe/routen-server.js";
+
+const HTTP_FORBIDDEN = 403;
+const HTTP_CONFLICT = 409;
+const SUB_GEMERGT_TEXT = "Dieser Account ist bereits einem Tenant zugeordnet.";
+const TENANT_2 = tenantIdForSubject(SUB_2);
+
+function onboardKonfiguration({ maxNumbersPerTenant = 1 } = {}) {
+  return withConfigNamespaces({
+    maxNumbers: 5,
+    maxNumbersPerTenant,
+    provisioningEnabled: true,
+    provisioningCountry: "DE",
+    forceNumberCountry: "",
+    geoEnabled: false,
+    defaultTenantBudgetCents: 0,
+  });
+}
+
+function anbieterMitRetryErgebnis(retryErgebnis) {
+  const aufrufe = { queueProvisioning: [], triggerTenantProvisioning: [] };
+  return {
+    aufrufe,
+    queueProvisioning: async (numberId, tenantId) => {
+      aufrufe.queueProvisioning.push({ numberId, tenantId });
+      return { ok: true, jobId: "job_prolif" };
+    },
+    runProvisioningDrainExclusive: async () => {},
+    triggerTenantProvisioning: async (tenantId) => {
+      aufrufe.triggerTenantProvisioning.push(tenantId);
+      return retryErgebnis;
+    },
+  };
+}
+
+async function onboardingStarten({ store, konfiguration = onboardKonfiguration(), retryErgebnis = null }) {
+  const protokoll = [];
+  const provisioning = anbieterMitRetryErgebnis(retryErgebnis);
+  const router = makeOnboardRoutes({
+    store,
+    config: konfiguration,
+    audit: (aktion, _req, detail) => protokoll.push([aktion, detail]),
+    provisioning,
+    operatorAuth: operatorAuthPassThrough(),
+  });
+  const app = await startRouterApp(router);
+  const senden = async (pfad, body) => {
+    const res = await postJson(`${app.base}${pfad}`, body);
+    return { status: res.status, body: await res.json() };
+  };
+  return { senden, protokoll, provisioning, close: app.close };
+}
+
+async function storeMitGemergtemZweitSub() {
+  const { store, runner } = await makePgTestStore();
+  const accounts = makeAccounts(runner);
+  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
+  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL });
+  await store.init();
+  return store;
+}
+
+async function frischGeladen(store) {
+  await store.drainFlushes();
+  await store.init();
+  return store.load();
+}
+
+test("[NIE1] Onboarding mit gemergtem Zweit-sub -> 409 mit dem bisherigen Text, kein Tenant, keine Nummer, kein Nummernkauf", async () => {
+  const store = await storeMitGemergtemZweitSub();
+  const nummernVorher = store.load().numbers.length;
+  const onboarding = await onboardingStarten({ store });
+  try {
+    const antwort = await onboarding.senden("/api/onboard", { idpSubject: SUB_2 });
+    assert.deepEqual(antwort, { status: HTTP_CONFLICT, body: { error: SUB_GEMERGT_TEXT } });
+    assert.equal(store.load().tenants.some((t) => t.id === TENANT_2), false, "kein Zweit-Tenant im Speicher");
+    assert.equal(store.load().numbers.length, nummernVorher, "keine Nummer angefragt");
+    assert.deepEqual(onboarding.provisioning.aufrufe.queueProvisioning, [], "kein Nummernkauf angestossen");
+    const geladen = await frischGeladen(store);
+    assert.equal(geladen.tenants.some((t) => t.id === TENANT_2), false, "kein Zweit-Tenant nach Neuladen");
+    assert.equal(geladen.numbers.length, nummernVorher, "keine Nummer nach Neuladen");
+  } finally {
+    await onboarding.close();
+  }
+});
+
+test("tenant-prolif-b: abgewiesener gemergter Zweit-sub wird als onboard_denied mit Grund sub_already_merged protokolliert", async () => {
+  const store = await storeMitGemergtemZweitSub();
+  const onboarding = await onboardingStarten({ store });
+  try {
+    await onboarding.senden("/api/onboard", { idpSubject: SUB_2 });
+    assert.deepEqual(onboarding.protokoll, [
+      ["onboard_denied", `tenant=${TENANT_2} grund=sub_already_merged`],
+    ]);
+  } finally {
+    await onboarding.close();
+  }
+});
+
+test("tenant-prolif-b: Nummer-Anfrage ueber der Tenant-Grenze -> 409, Protokoll mit Grund, abgewiesener Tenant wird nicht gespeichert", async () => {
+  const { store } = await makePgTestStore();
+  const onboarding = await onboardingStarten({
+    store,
+    konfiguration: onboardKonfiguration({ maxNumbersPerTenant: 0 }),
+  });
+  try {
+    const antwort = await onboarding.senden("/api/onboard", { tenantId: "t_grenze" });
+    assert.deepEqual(antwort, {
+      status: HTTP_CONFLICT,
+      body: { error: "Nummer-Anfrage abgelehnt (tenant_cap)" },
+    });
+    assert.deepEqual(onboarding.protokoll, [["onboard_denied", "tenant=t_grenze grund=tenant_cap"]]);
+    const geladen = await frischGeladen(store);
+    assert.equal(
+      geladen.tenants.some((t) => t.id === "t_grenze"),
+      false,
+      "abgewiesene Anfrage hinterlaesst keinen gespeicherten Tenant",
+    );
+  } finally {
+    await onboarding.close();
+  }
+});
+
+test("tenant-prolif-b: Retry ohne aktiven, verifizierten Subscriber -> 403 und Protokoll onboard_retry_denied", async () => {
+  const { store } = await makePgTestStore();
+  const onboarding = await onboardingStarten({ store });
+  try {
+    const antwort = await onboarding.senden("/api/onboard/retry", { tenantId: "t_ohne_abo" });
+    assert.deepEqual(antwort, {
+      status: HTTP_FORBIDDEN,
+      body: { error: "Kein aktiver, verifizierter Subscriber - kein Nummernkauf." },
+    });
+    assert.deepEqual(onboarding.protokoll, [
+      ["onboard_retry_denied", "tenant=t_ohne_abo grund=kein_aktiver_subscriber"],
+    ]);
+    assert.deepEqual(onboarding.provisioning.aufrufe.triggerTenantProvisioning, []);
+  } finally {
+    await onboarding.close();
+  }
+});
+
+test("tenant-prolif-b: abgelehnter Retry ohne eigene Meldung -> 409 mit Grund im Text und Protokoll onboard_retry", async () => {
+  const { store } = await makePgTestStore();
+  store.setKycLevel(BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN);
+  const onboarding = await onboardingStarten({
+    store,
+    retryErgebnis: { ok: false, reason: "already_provisioned" },
+  });
+  try {
+    const antwort = await onboarding.senden("/api/onboard/retry", { tenantId: BOOTSTRAP_TENANT_ID });
+    assert.deepEqual(antwort, {
+      status: HTTP_CONFLICT,
+      body: { error: "Re-Provisioning abgelehnt (already_provisioned)" },
+    });
+    assert.deepEqual(onboarding.protokoll, [
+      ["onboard_retry", `tenant=${BOOTSTRAP_TENANT_ID} ok=false grund=already_provisioned`],
+    ]);
+  } finally {
+    await onboarding.close();
+  }
+});
