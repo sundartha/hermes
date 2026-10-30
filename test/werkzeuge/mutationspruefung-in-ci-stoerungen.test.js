@@ -103,6 +103,8 @@ function anzahl(ordner, art, enthaelt) {
 function lauf(context, buch, urteile = {}) {
   const repo = probeRepository(context, { "package.json": '{ "type": "module" }\n', "alt.txt": "alt\n" });
   const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  runIn(repo, "git", ["config", "user.name", "Probe"]);
+  runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const upstream = probeDirectory(context, {});
   runIn(upstream, "git", ["init", "-q", "--bare"]);
   runIn(repo, "git", ["remote", "add", "upstream", upstream]);
