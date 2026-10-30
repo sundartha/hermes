@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   CONFIG_NAMESPACES,
+  attachNamespaces,
   config,
   gatewayUrlForPort,
   isSelfServiceLive,
@@ -244,4 +245,49 @@ test("isSelfServiceLive: beide Flags aus -> false", () => {
 test("isSelfServiceLive: liefert immer einen echten Boolean (kein truthy-Objekt-Leak)", () => {
   assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: true } }), true);
   assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: false } }), false);
+});
+
+test("Guard: Lesen eines unbekannten Keys nennt Pfad und Ausweg im vollen Wortlaut", () => {
+  assert.throws(() => config.safety.nope, {
+    name: "TypeError",
+    message:
+      "config.safety.nope existiert nicht (verschobener/entfernter Config-Key? " +
+      "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
+  });
+});
+
+test("Guard: Schreiben eines unbekannten Keys nennt Pfad und Ausweg im vollen Wortlaut", () => {
+  assert.throws(
+    () => {
+      config.safety.nope = 1;
+    },
+    {
+      name: "TypeError",
+      message:
+        "config.safety.nope kann nicht gesetzt werden (flache Oberflaeche entfernt; " +
+        "config.<namespace>.<key> nutzen).",
+    },
+  );
+});
+
+test("Guard: Symbol-Schluessel lassen sich setzen und wieder lesen, ohne zu werfen", () => {
+  const marke = Symbol("konfiguration-oberflaeche");
+  assert.doesNotThrow(() => {
+    config.safety[marke] = "gesetzt";
+  });
+  assert.equal(config.safety[marke], "gesetzt");
+});
+
+const BEISPIEL_STUNDENLIMIT = 7;
+const GEAENDERTES_STUNDENLIMIT = 9;
+
+test("attachNamespaces: zweimal auf dasselbe Ziel angewendet, liefern die Gruppen weiter den Speicher", () => {
+  const ziel = { maxCallsPerHour: BEISPIEL_STUNDENLIMIT };
+  const namensraeume = { safety: ["maxCallsPerHour"] };
+  attachNamespaces(ziel, namensraeume);
+  assert.doesNotThrow(() => attachNamespaces(ziel, namensraeume));
+  assert.equal(ziel.safety.maxCallsPerHour, BEISPIEL_STUNDENLIMIT);
+  ziel.safety.maxCallsPerHour = GEAENDERTES_STUNDENLIMIT;
+  assert.equal(ziel.maxCallsPerHour, GEAENDERTES_STUNDENLIMIT);
+  assert.deepEqual(Object.keys(ziel), ["maxCallsPerHour"]);
 });
