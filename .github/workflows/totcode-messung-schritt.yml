@@ -63,7 +63,7 @@ jobs:
         run: git fetch --no-tags origin "$KOPF"
 
       - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 22
 
@@ -73,14 +73,14 @@ jobs:
 
       - name: Plan laden
         if: inputs.schritt != 'ermitteln' && inputs.schritt != 'plan'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: plan
           path: /tmp/totcode/daten/plan
 
       - name: Basis des Pakets laden
         if: inputs.schritt == 'kopf'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: basis-${{ inputs.paket }}
           path: /tmp/totcode/daten/basis-${{ inputs.paket }}
@@ -120,7 +120,7 @@ jobs:
 
       - name: Ergebnis hochladen
         if: inputs.schritt != 'ermitteln' && (success() || failure())
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ inputs.paket == '' && inputs.schritt || format('{0}-{1}', inputs.schritt, inputs.paket) }}
           path: /tmp/totcode/${{ inputs.paket == '' && inputs.schritt || format('{0}-{1}', inputs.schritt, inputs.paket) }}
