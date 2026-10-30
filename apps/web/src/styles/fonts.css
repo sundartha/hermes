@@ -1,9 +1,8 @@
 /* ===== Norse — Display / Headings / Wortmarke (runisch) =====
- * HINWEIS: Die Norse-Schriftdateien (Norse.otf / Norsebold.otf) muessen noch
- * nach apps/web/public/assets/fonts/ gelegt werden (Binaer, nicht aus dem
- * Design-Projekt ziehbar). Bis dahin greift in den Display-Tokens die Bruecke
- * auf Instrument Serif (font-display: swap laesst die fehlende Datei still
- * zurueckfallen). Sobald die Datei liegt, rendert Norse automatisch. */
+ * Norse.otf / Norsebold.otf liegen unveraendert in apps/web/public/assets/fonts/
+ * (Joel Carrouche, Freeware via FontSpace). Die Lizenz verbietet Aenderungen an
+ * den Dateien, darum bleiben sie OTF (keine woff2-Konvertierung). Instrument
+ * Serif bleibt die Bruecke in den Display-Tokens, solange die Datei laedt. */
 @font-face {
   font-family: "Norse";
   font-style: normal;
