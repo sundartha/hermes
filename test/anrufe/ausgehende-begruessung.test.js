@@ -8,6 +8,7 @@ import {
 } from "../_outbound-harness.js";
 import { starteAttrappe } from "./attrappen-server.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { playTtsEnv } from "../gemeinsam/play-tts-server.mjs";
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
@@ -69,21 +70,12 @@ async function startFakeElevenLabsOrigin() {
   return { ...ursprung, requests };
 }
 
-const PLAY_TTS_ENV_BASE = {
-  ELEVENLABS_API_KEY: "test-elevenlabs-key",
-  ELEVENLABS_VOICE_ID: "voice-1",
-};
-
 test("Flag AN: /voice/outbound (Telnyx) rendert <Play> statt <Say>; Token liefert die Bytes GENAU EINMAL", async () => {
   const origin = await startFakeElevenLabsOrigin();
   try {
     const { body, srv } = await runOutboundKeepOpen({
       provider: "telnyx",
-      env: {
-        ...PLAY_TTS_ENV_BASE,
-        ELEVENLABS_PLAY_TTS_ENABLED: "true",
-        ELEVENLABS_API_BASE: origin.url,
-      },
+      env: playTtsEnv(origin.url),
     });
     try {
       assert.match(body, /<Play>https:\/\/agent\.test\/voice\/tts\/[A-Za-z0-9_-]+<\/Play>/);

@@ -892,11 +892,6 @@
       "count": 1
     }
   },
-  "src/tts/directive-synth.js": {
-    "id-length": {
-      "count": 2
-    }
-  },
   "src/tts/store.js": {
     "id-length": {
       "count": 1
