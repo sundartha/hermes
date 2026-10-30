@@ -7,7 +7,7 @@ import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNoti
 import { auswegBei, nenntAltenTest, zweckUnklar } from "./ausgang.mjs";
 import { frage } from "./einsatz.mjs";
 import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, istVertraulich, phasenBefunde } from "./format.mjs";
-import { git } from "./git.mjs";
+import { git, hartZuruecksetzen } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { NEU_GESCHNITTEN, planbar, schneideNeu } from "./neuschnitt.mjs";
 import { issueBefunde } from "./phase.mjs";
@@ -32,11 +32,6 @@ const ECHTES_VERHALTEN = "Verhalten:";
 const MEHRDEUTIG = "Die Antwort des Plan-Agenten ist mehrdeutig: Sie hat eine Zeile „Verhalten:“ und einen abschließenden ```json-Block; das Skript liest daraus keinen Umbau.";
 const AUSWEG_SCHLUSS =
   "Hältst du eine dieser Prüfungen hier für falsch, nimm den Ausweg aus ihrem Block statt einer Umgehung. Ein Ausstieg zählt nicht als rote Runde, aber sein Grund geht wörtlich an den Planer oder an Antonio und wird dort geprüft. „Voraussetzung fehlt“ und „Alter Test hält altes Verhalten fest“ liest das Skript nur beim Bau-Agenten.";
-
-function verwerfe(basis, root) {
-  git(["reset", "-q", "--hard", basis], { cwd: root });
-  git(["clean", "-q", "-fd"], { cwd: root });
-}
 
 function abschnitt(titel, zeilen) {
   return ["", `## ${titel}`, "", ...zeilen, ""].join("\n");
@@ -263,7 +258,7 @@ class Runden {
   rot(ergebnis) {
     if (ergebnis.testbefund) return this.testNeuSchreiben(ergebnis);
     if (nurAbgebrochen(ergebnis)) {
-      verwerfe(ergebnis.basis, this.kontext.root);
+      hartZuruecksetzen(ergebnis.basis, this.kontext.root);
       const imSchritt = ergebnis.roteIds.includes(GRUND.MUTATION_ABBRUCH) ? [`Runde ${ergebnis.runde}: Die Mutationsprüfung ist abgebrochen und lief auf demselben Stand noch einmal.`] : [];
       this.abbrueche.push(...imSchritt, `Runde ${ergebnis.runde}: ${ergebnis.grund}`);
       return this.abbrueche.length > MAX_WIEDERHOLUNGEN ? this.entscheidung(ergebnis, this.abgebrochen()) : null;
@@ -271,7 +266,7 @@ class Runden {
     this.fehler.push(fehlerausgabe(ergebnis));
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
     if (this.fehler.length === MAX_RUNDEN) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
-    verwerfe(ergebnis.basis, this.kontext.root);
+    hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     return null;
   }
 
@@ -279,7 +274,7 @@ class Runden {
     const { zaehler, root } = this.kontext;
     if (zaehler.testbefunde > 0) return this.ausgestiegen({ ...ergebnis, ausstieg: ergebnis.testbefund.zeile });
     zaehler.testbefunde += 1;
-    verwerfe(ergebnis.basis, root);
+    hartZuruecksetzen(ergebnis.basis, root);
     this.befund = ergebnis.testbefund;
     return null;
   }
@@ -291,7 +286,7 @@ class Runden {
 
   voraussetzungFehlt(ergebnis) {
     const { zaehler, root } = this.kontext;
-    verwerfe(ergebnis.basis, root);
+    hartZuruecksetzen(ergebnis.basis, root);
     if (istUmbau(this.kontext.auftrag)) {
       return this.zurueckInDenEntwurf(ergebnis, `Umbau meldet fehlende Voraussetzung: ${ergebnis.voraussetzung}`);
     }
@@ -312,7 +307,7 @@ class Runden {
     const ohne = ohneTestumbau(auftrag, alterTest, zaehler);
     if (ohne !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${ohne}.`);
     zaehler.vorbauten += 1;
-    verwerfe(ergebnis.basis, root);
+    hartZuruecksetzen(ergebnis.basis, root);
     const plan = this.planeUmbau(vorbauAnlass(alterTest));
     const abgelehnt = vorbauBefund(plan, alterTest.datei);
     if (abgelehnt !== null) return this.legeAltenTestAntonioVor(ergebnis, `Kein ${TESTUMBAU} vorweg: ${abgelehnt}. Der Plan steht im Beleg ${auftrag.id}-plan.`);
@@ -387,7 +382,7 @@ class Runden {
   }
 
   ausgestiegen(ergebnis) {
-    verwerfe(ergebnis.basis, this.kontext.root);
+    hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
     const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
     const unklar = zweckUnklar(ergebnis.ausstieg);
@@ -399,7 +394,7 @@ class Runden {
   }
 
   legeAltenTestAntonioVor(ergebnis, vorbau) {
-    verwerfe(ergebnis.basis, this.kontext.root);
+    hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     const { phase, auftrag } = this.kontext;
     const { zeile, datei, rot } = ergebnis.alterTest;
     const kopf = [
@@ -418,7 +413,7 @@ class Runden {
 
   zurueckAnDiePlanung(ergebnis, gestoppt) {
     if (!planbar(this.kontext)) return this.entscheidung(ergebnis, gestoppt);
-    verwerfe(ergebnis.basis, this.kontext.root);
+    hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     const neuschnitt = schneideNeu(this.kontext, gestoppt);
     return neuschnitt.neu ? NEU_GESCHNITTEN : this.entscheidung(ergebnis, neuschnitt.gestoppt);
   }

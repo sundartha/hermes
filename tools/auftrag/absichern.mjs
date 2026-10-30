@@ -8,7 +8,7 @@ import { absicherungsLauf, trailerZeile, vorabHerkunft } from "./absicherungsbel
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase } from "./befehle.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { reihenfolge } from "./format.mjs";
-import { gibtEsIn, git, vormerken } from "./git.mjs";
+import { dateiAm, git, hartZuruecksetzen, vormerken } from "./git.mjs";
 import { auftragsKontext, gebauteAuftraege, neuerAuftragsLauf } from "./lauf.mjs";
 import { vorabAbsichern } from "./mutation.mjs";
 import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
@@ -19,17 +19,14 @@ const STANDARD_PLAETZE = "12";
 const LAUF_ZEILE = /Lauf https:\/\/\S+\/actions\/runs\/(\d+)/;
 const ERSTE_ZEILE = 1;
 const KEIN_FEHLER = 0;
-
-function quelltext(root, datei) {
-  return gibtEsIn("HEAD", datei, root) ? git(["show", `HEAD:${datei}`], { cwd: root }) : null;
-}
+const STAND = "HEAD";
 
 export function absicherbare(phase, root) {
   const fertig = gebauteAuftraege(phase, root);
   const offen = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
   const [laufend, ...wartend] = offen;
   if (laufend === undefined) return [];
-  const graph = abhaengigkeitsgraph(offen, (datei) => quelltext(root, datei));
+  const graph = abhaengigkeitsgraph(offen, (datei) => dateiAm(STAND, datei, root));
   return wartend.filter((auftrag) => auftrag.art === "umbau" && auftrag.betrifft !== undefined && auftrag.abnahme !== laufend.abnahme && !graph.get(auftrag.id).has(laufend.id));
 }
 
@@ -43,7 +40,7 @@ function ohneZeilen(text, bereiche) {
 
 function wegwerfStand(root, auftrag) {
   const aenderungen = Object.entries(auftrag.betrifft).map(([datei, namen]) => {
-    const text = quelltext(root, datei);
+    const text = dateiAm(STAND, datei, root);
     const messung = text === null ? null : vermesse(text, namen);
     return messung === null ? null : { datei, text: ohneZeilen(text, messung.bereiche) };
   });
@@ -57,11 +54,6 @@ function nurId(auftrag) {
   return auftrag.id;
 }
 
-function sauber(root) {
-  git(["reset", "-q", "--hard", "HEAD"], { cwd: root });
-  git(["clean", "-q", "-fd"], { cwd: root });
-}
-
 function vermerkt({ root, phase }, auftrag, nummer) {
   const warum = `Warum: Die Mutationsprüfung am alten Stand ist für Auftrag ${auftrag.id} vorab grün; der Auftrag darf sie nur mit diesem Beleg weglassen.`;
   const nachricht = [`Sichere Auftrag ${auftrag.id} vorab ab`, "", warum, "", trailerZeile(nummer, auftrag.id), vorabHerkunft(phase, auftrag), ""].join("\n");
@@ -73,7 +65,7 @@ function vermerkt({ root, phase }, auftrag, nummer) {
 
 function gebaut(ort, auftrag) {
   const { root, phase, phasendatei } = ort;
-  sauber(root);
+  hartZuruecksetzen(STAND, root);
   if (!wegwerfStand(root, auftrag)) return { grund: "die Zeilen aus betrifft sind nicht vermessbar" };
   const lauf = neuerAuftragsLauf({ ...auftragsKontext(phase, auftrag, root), phasendatei, runde: 1, vorgeschichte: "" });
   const ergebnis = vorabAbsichern(lauf);
@@ -81,7 +73,7 @@ function gebaut(ort, auftrag) {
   if (ergebnis.gleichwertig.length > 0) return { grund: `Gleichwertig gemeldet (${ergebnis.gleichwertig.length}); das prüft der Auftrag selbst` };
   const nummer = LAUF_ZEILE.exec(ergebnis.ausgabe)?.[1];
   if (nummer === undefined) return { grund: "die Ausgabe nennt keinen CI-Lauf" };
-  sauber(root);
+  hartZuruecksetzen(STAND, root);
   const abgelehnt = vermerkt(ort, auftrag, nummer);
   return abgelehnt === null ? { nummer } : { grund: abgelehnt };
 }
