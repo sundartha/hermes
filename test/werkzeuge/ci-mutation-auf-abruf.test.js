@@ -27,7 +27,7 @@ const JOB_BEDINGUNG = /^ {4}if: /;
 const ABRUF = "workflow_dispatch";
 const EINGABE = /^ {6}([a-z_]+):$/;
 const EINGABE_FELD = /^ {8}([a-z]+): (.+)$/;
-const ABRUF_EINGABEN = { basis: { type: "string", required: "true" }, alter_stand: { type: "boolean", default: "false" } };
+const ABRUF_EINGABEN = { basis: { type: "string", required: "true" }, alter_stand: { type: "boolean", default: "false" }, plaetze: { type: "number", default: "0" } };
 const SKRIPT_BEGINN = "        run: |";
 const SKRIPTZEILE = /^(?: {10}|$)/;
 const SKRIPT_EINRUECKUNG = 10;
@@ -111,6 +111,11 @@ test("der Abruf von Hand nimmt eine Basis als Pflichtangabe und den alten Stand 
     assert.ok(eingaben[name], `Eingabe ${name} fehlt`);
     for (const [feld, wert] of Object.entries(erwartet)) assert.equal(eingaben[name][feld], wert, `${name}.${feld}`);
   }
+});
+
+test("die Mutationsteile laufen höchstens so viele gleichzeitig, wie der Abruf als Plätze nennt, sonst ohne Grenze", () => {
+  const zeilen = workflowJobLines(CI, "mutationspruefung").map((zeile) => zeile.trim());
+  assert.ok(zeilen.includes("max-parallel: ${{ fromJSON(inputs.plaetze || '256') }}"));
 });
 
 test("beim Abruf von Hand laufen Prüfungen und Tests nicht, die drei Mutationsjobs und der Sammeljob CI schon", () => {

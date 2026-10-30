@@ -38,6 +38,8 @@ const GEMELDET = "in lauf gemeldet";
 const NUR_COMMIT = "^{commit}";
 const KEIN_SCHREIBRECHT = /Permission to \S+ denied|returned error: 403|Authentication failed|could not read Username|terminal prompts disabled|Repository not found|does not appear to be a git repository|\[remote rejected\] \S+ -> \S+ \((?:permission denied|[\w -]*hook declined)\)/;
 const ZEILENUMBRUCH = /\n/g;
+const PLAETZE_VARIABLE = "HERMES_MUTATION_PLAETZE";
+const PLAETZE_MUSTER = /^[1-9]\d{0,2}$/;
 const NUR_LAUF_MUTATION = { GIT_TERMINAL_PROMPT: "0", HERMES_PUSH_LAUF_MUTATION: "1" };
 
 function git(argumente, root, umgebung = env) {
@@ -113,10 +115,17 @@ async function sucheLauf(suche, suchabstandMs, versuch = 1) {
   return sucheLauf(suche, suchabstandMs, versuch + 1);
 }
 
-function loeseAus({ repo, zweig, basis, alterStand, testumbau }, suchabstandMs) {
+function plaetzeSchalter() {
+  const plaetze = env[PLAETZE_VARIABLE];
+  if (plaetze === undefined || plaetze === "") return [];
+  if (!PLAETZE_MUSTER.test(plaetze)) throw new Error(`${PLAETZE_VARIABLE} muss eine positive ganze Zahl bis 999 sein, ist aber ${plaetze}`);
+  return ["-f", `plaetze=${plaetze}`];
+}
+
+function loeseAus({ repo, zweig, basis, alterStand, testumbau, plaetze }, suchabstandMs) {
   const seit = Math.floor(Date.now() / MS_JE_SEKUNDE) * MS_JE_SEKUNDE;
   const schalter = [...(alterStand ? ["-f", "alter_stand=true"] : []), ...(testumbau ? ["-f", "testumbau=true"] : [])];
-  const ausgabe = gh(["workflow", "run", WORKFLOW, "-R", repo, "--ref", zweig, "-f", `basis=${basis}`, ...schalter]);
+  const ausgabe = gh(["workflow", "run", WORKFLOW, "-R", repo, "--ref", zweig, "-f", `basis=${basis}`, ...schalter, ...plaetze]);
   const treffer = LAUF_URL.exec(ausgabe);
   return treffer ? treffer[1] : sucheLauf({ repo, zweig, seit }, suchabstandMs);
 }
@@ -176,6 +185,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
 
 export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
+  const plaetze = plaetzeSchalter();
   const stand = friereEin(root, gleichwertige, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
   const abgelehnt = abgelehnterPush(root, stand, zweig);
@@ -183,7 +193,7 @@ export async function mutationInCi({ root, basis, alterStand, testumbau, gleichw
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root }, kopf, { taktMs, hoechstMs, suchabstandMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs });
   } finally {
     loescheZweig(repo, zweig);
   }

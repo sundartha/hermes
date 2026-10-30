@@ -227,6 +227,26 @@ test("Mutationsprüfung in der CI: der Abruf nennt den Testumbau genau dann, wen
   assert.equal(werkzeug(probe.repo, probe.basis, "--in-ci", "--testumbau", "--gleichwertig", "x").status, EXIT_ABBRUCH);
 });
 
+test("Mutationsprüfung in der CI: der Abruf nennt die Plätze genau dann, wenn die Grenze gesetzt ist, und verwirft eine ungültige", async (context) => {
+  const probe = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  context.after(() => delete env.HERMES_MUTATION_PLAETZE);
+  await imCi(probe);
+  env.HERMES_MUTATION_PLAETZE = "7";
+  await imCi(probe);
+  const abrufe = ghAufrufe(probe.gh).filter((argumente) => argumente.slice(0, 2).join(" ") === "workflow run");
+  assert.equal(abrufe.length, 2);
+  assert.ok(!abrufe[0].some((argument) => argument.startsWith("plaetze=")));
+  assert.ok(abrufe[1].includes("plaetze=7"));
+  const zweige = () => git(probe.upstream, "for-each-ref", "--format=%(refname)", "refs/heads/lauf-mutation/");
+  const vorher = zweige();
+  for (const ungueltig of ["0", "-3", "viel", "1000"]) {
+    env.HERMES_MUTATION_PLAETZE = ungueltig;
+    await assert.rejects(imCi(probe), /HERMES_MUTATION_PLAETZE/);
+  }
+  assert.equal(ghAufrufe(probe.gh).filter((argumente) => argumente.slice(0, 2).join(" ") === "workflow run").length, 2);
+  assert.equal(zweige(), vorher);
+});
+
 test("Mutationsprüfung in der CI: der Wegwerf-Branch wird auch nach einem Abbruch gelöscht", async (context) => {
   const probe = fall(context, { staende: [FERTIG_ROT], log: LOG_FEHLGESCHLAGEN });
   const ergebnis = await imCi(probe);
