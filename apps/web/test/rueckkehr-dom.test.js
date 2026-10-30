@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { CHECKOUT_RETURN } from "../../../src/portal-paths.js";
 import { STRINGS } from "../src/lib/i18n.js";
-import { AA_NORMAL_TEXT, RATIO_DECIMALS, contrastOf } from "./kontrast.js";
+import { AA_NORMAL_TEXT, LIGHTEST_PAGE_BACKDROP_HEX, RATIO_DECIMALS, contrastOf } from "./kontrast.js";
 import { ERR_TONE, LANG, NEUTRAL_TONE, OK_TONE, SHELL_HTML } from "./rueckkehr-dom-shell.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -82,6 +82,8 @@ async function looksOf(dir, names) {
 }
 
 async function assertSuccessAndErrorLookApart(dir) {
+  const styles = readFileSync(cssFileWith(dir, "--app-error"), "utf8").toLowerCase();
+  assert.ok(styles.includes(LIGHTEST_PAGE_BACKDROP_HEX), `Seitengrund ${LIGHTEST_PAGE_BACKDROP_HEX} nicht mehr im Gestalt-CSS`);
   const looks = await looksOf(dir, ["CARD_OK", "CARD_ERROR"]);
   const [ok, err] = [looks.CARD_OK, looks.CARD_ERROR];
   assert.notEqual(ok.color, err.color, "Erfolg und Fehler: gleiche Schriftfarbe");
@@ -241,17 +243,21 @@ const PAGE_MUTATIONS = [
   ["Schleier bleibt stehen", replaceOnce(/<html /, "<html data-cancel-arrival=\"\" "), CARD_OK_HIDDEN],
 ];
 
-const CSS_MUTATIONS = [
-  ["Regeln für Erfolg und Fehler entfernt", (source) => source.replace(/\.billing-msg--(ok|err)[^{]*\{[^}]*\}/g, ""), /gleiche Schriftfarbe/],
-  ["Fehlerfarbe zu dunkel", replaceOnce(/\.billing-msg--err\{color:#ffc9c9/, ".billing-msg--err{color:#304060"), /Fehler: Kontrast/],
-];
+const REMOVE_MESSAGE_RULES = (source) => source.replace(/\.billing-msg--(ok|err)[^{]*\{[^}]*\}/g, "");
+const DARKEN_ERROR_COLOR = replaceOnce(/--app-error:#ffc9c9/, "--app-error:#304060");
 
-for (const [index, [label, mutate, reason]] of CSS_MUTATIONS.entries()) {
-  test(`Rotprobe ${label}: veränderte Gestaltung macht die Prüfung rot`, async () => {
-    const dir = mutatedCopy(`gestaltung-${index}`, mutate, (copy) => cssFileWith(copy, "billing-msg--err"));
-    await assert.rejects(assertSuccessAndErrorLookApart(dir), { name: "AssertionError", message: reason });
-  });
+async function assertLookRedAfter(label, mutate, reason) {
+  const dir = mutatedCopy(label, mutate, (copy) => cssFileWith(copy, "billing-msg--err"));
+  await assert.rejects(assertSuccessAndErrorLookApart(dir), { name: "AssertionError", message: reason });
 }
+
+test("Rotprobe Regeln für Erfolg und Fehler entfernt: veränderte Gestaltung macht die Prüfung rot", async () => {
+  await assertLookRedAfter("gestaltung-regeln-entfernt", REMOVE_MESSAGE_RULES, /gleiche Schriftfarbe/);
+});
+
+test("Rotprobe Fehlerfarbe zu dunkel: veränderte Gestaltung macht die Prüfung rot", async () => {
+  await assertLookRedAfter("gestaltung-fehlerfarbe-dunkel", DARKEN_ERROR_COLOR, /Fehler: Kontrast/);
+});
 
 for (const [index, [label, mutate, reason]] of PAGE_MUTATIONS.entries()) {
   test(`Rotprobe ${label}: veränderte Seite macht die Prüfung rot`, async () => {
