@@ -5,7 +5,8 @@ import { test } from "node:test";
 
 import { ABSATZ_ALTER_STAND, ABSATZ_MUTATION } from "./auftrag-lauf-hilfen.js";
 import { BASIS, starte } from "./auftrag-lauf-probe.js";
-import { BLEIBT, FREMD, WAEHLE, WEITERGEREICHT, ZWEI, datei } from "./kopien-umzug-fall.js";
+import { datei } from "./auslagerung-hilfen.js";
+import { BLEIBT, FREMD, WAEHLE, WEITERGEREICHT, ZWEI } from "./kopien-umzug-fall.js";
 import { REPO_ROOT, probeRepository, runIn } from "./probe-repo.js";
 
 const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
