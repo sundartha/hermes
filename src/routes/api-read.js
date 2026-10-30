@@ -2,6 +2,7 @@ import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../wiring/internal-only.js";
+import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.js";
 
 export const STATE_CALLS = 30,
   STATE_ACTION_ITEMS = 50,
@@ -50,9 +51,9 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
 
   router.get("/api/calls/:id", internalOnly, (req, res) => {
     const call = store.getCall(req.params.id);
-    if (!call) return res.status(404).json({ error: "not found" });
+    if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!tenantOwnsCall(call, requestTenant(req)))
-      return res.status(404).json({ error: "not found" });
+      return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     res.json(publicCall(call));
   });
 

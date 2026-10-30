@@ -688,7 +688,7 @@
       "count": 2
     },
     "no-magic-numbers": {
-      "count": 14
+      "count": 6
     }
   },
   "src/routes/api-onboard.js": {
@@ -699,9 +699,6 @@
   "src/routes/api-read.js": {
     "id-length": {
       "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 2
     }
   },
   "src/routes/mcp.js": {
