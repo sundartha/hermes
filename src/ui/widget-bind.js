@@ -50,18 +50,18 @@ export function rowFields(container) {
   return raw.split(FIELD_SEP).map((f) => f.trim()).filter(Boolean);
 }
 
-export function tokenKey(field, value) {
+function tokenKey(field, value) {
   const keys = ROW_TOKEN_KEYS[field];
   if (!keys) return null;
   return Object.hasOwn(keys, value) ? keys[value] : ROW_TOKEN_UNKNOWN_KEYS[field] || null;
 }
 
-export function translateKey(doc, key) {
+function translateKey(doc, key) {
   const i18n = doc.defaultView && doc.defaultView.HermesI18n;
   return i18n && typeof i18n.t === "function" ? i18n.t(key) : key;
 }
 
-export function renderCell(doc, field, value) {
+function renderCell(doc, field, value) {
   const cell = doc.createElement("span");
   cell.className = CELL_CLASS;
   if (cell.setAttribute) cell.setAttribute(FIELD_ATTR, field);
