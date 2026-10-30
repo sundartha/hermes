@@ -14,7 +14,8 @@
       "--format",
       "json"
     ],
-    "zaehlen": "eslint-json"
+    "zaehlen": "eslint-json",
+    "regel": "hermes/keine-kommentare"
   },
   "probe": {
     "mitnehmen": [
