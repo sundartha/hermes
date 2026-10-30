@@ -13,6 +13,7 @@ export const PASSWORT_KENNWORT = "password: ";
 const PASSWORT =PASSWORT_KENNWORT + PASSWORT_BEISPIEL;
 
 const HOECHSTE_KARTENZIFFERN = 19;
+const MAX_ZIFFERN_IM_KLARTEXT = 11;
 const KARTENANFANG = /^[2-6]/;
 const MASKEN = /\*{4}\d{0,4}|\[restricted-credential\]|\[restricted-government-id\]/g;
 
@@ -136,6 +137,15 @@ export function bestaetigungsServerOptionen(anrufe, bestaetigungsGeheimnis) {
     },
     seed: seedState({ calls: Object.values(anrufe).flat() }),
   };
+}
+
+export function pruefeMaskiertOhneKlartext(masked, eingabe, meldung) {
+  assert.ok(masked.includes("****"), `${meldung}: ${eingabe} -> ${masked}`);
+  assert.ok(laengsteZiffernfolge(masked) <= MAX_ZIFFERN_IM_KLARTEXT, `${meldung}: ${eingabe} -> ${masked}`);
+}
+
+export function starteServerMitErgebnisanruf(anrufe, ergebnisAnruf, bestaetigungsGeheimnis) {
+  return starteServer(() => bestaetigungsServerOptionen({ ...anrufe, ergebnis: [ergebnisAnruf] }, bestaetigungsGeheimnis));
 }
 
 export function starteServer(optionen) {

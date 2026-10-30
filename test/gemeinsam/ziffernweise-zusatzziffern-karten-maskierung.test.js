@@ -7,19 +7,17 @@ import {
   KARTE_VISA_16,
   anrufeJeGruppe,
   beendeterBeispielanruf,
-  bestaetigungsServerOptionen,
   einzeln,
   einzigeAusgabezeile,
-  laengsteZiffernfolge,
+  pruefeMaskiertOhneKlartext,
   rufeWerkzeug,
-  starteServer,
+  starteServerMitErgebnisanruf,
 } from "./kartenmaskierung.js";
 import { pruefeLaufzeitVerdopplung } from "./laufzeit-verdopplung.js";
 
 const KLARTEXT_ABNAHME = "Ziffernweise Karte mit angehängter Gruppe im Klartext";
 const KLARTEXT = "Kartenziffern im Klartext";
 const FREMDE_ZIFFERN_MASKIERT = "Fremde Ziffern ohne Karte maskiert";
-const MAX_ZIFFERN_IM_KLARTEXT = 11;
 const ZIEL_NUMMER = "+4915112340077";
 const BESTAETIGUNGS_GEHEIMNIS = "zusatzziffern-test-secret-min-32-zeichen";
 
@@ -65,14 +63,7 @@ const ERGEBNIS_CALL = beendeterBeispielanruf(
   ERGEBNIS_ZEILE,
 );
 
-const srv = starteServer(() =>
-  bestaetigungsServerOptionen({ ...CALLS, ergebnis: [ERGEBNIS_CALL] }, BESTAETIGUNGS_GEHEIMNIS),
-);
-
-function pruefeMaskiertOhneKlartext(masked, eingabe, meldung) {
-  assert.ok(masked.includes("****"), `${meldung}: ${eingabe} -> ${masked}`);
-  assert.ok(laengsteZiffernfolge(masked) <= MAX_ZIFFERN_IM_KLARTEXT, `${meldung}: ${eingabe} -> ${masked}`);
-}
+const srv = starteServerMitErgebnisanruf(CALLS, ERGEBNIS_CALL, BESTAETIGUNGS_GEHEIMNIS);
 
 test("ziffernweise Karte mit drei Zusatzziffern und angehängter Gruppe erscheint in get_call_status ohne 12 Kartenziffern im Klartext", async () => {
   const line = await einzigeAusgabezeile(srv, CALLS.gegenueber[0].id);
