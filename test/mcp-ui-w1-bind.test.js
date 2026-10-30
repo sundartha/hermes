@@ -243,15 +243,16 @@ test("T-Wb-BIND2: renderRows - je Objekt eine Row mit Zellen je Feld; fehlend ->
 
   assert.equal(container.children.length, 2, "zwei Rows");
   assert.deepEqual(container.children.map((r) => r.className), ["row", "row"]);
-  const row0 = container.children[0];
+  const [row0, row1] = container.children;
   assert.deepEqual(row0.children.map((c) => c.className), ["cell", "cell", "cell"]);
   assert.deepEqual(row0.children.map((c) => c.getAttribute("data-field")), fields, "data-field je Zelle");
   assert.deepEqual(row0.children.map((c) => c.textContent), ["+49170", "Completed", "Termin"]);
-  assert.equal(container.children[1].children[2].textContent, "", "fehlendes Feld -> leere Zelle");
+  assert.equal(row1.children[2].textContent, "", "fehlendes Feld -> leere Zelle");
 
   renderRows(doc, container, [{ counterparty: "+49150", status: "failed" }]);
   assert.equal(container.children.length, 1, "vorher geleert");
-  assert.deepEqual(container.children[0].children.map((c) => c.getAttribute("data-field")), fields, "Felder weiter aus data-mcp-row");
+  const [verbleibend] = container.children;
+  assert.deepEqual(verbleibend.children.map((c) => c.getAttribute("data-field")), fields, "Felder weiter aus data-mcp-row");
 });
 
 test("T-Wb-BIND3: renderRows XSS - Feldwert landet als textContent, nie als Markup", () => {
@@ -271,8 +272,9 @@ test("T-Wb-BIND4: applyField-Dispatch - Objekt-Liste (data-mcp-row) -> Rows; Ska
   applyField(rowDoc, "calls", [{ counterparty: "+49170", status: "completed" }]);
   const container = slot(rowDoc, "calls");
   assert.equal(container.children.length, 1, "eine Row");
-  assert.equal(container.children[0].className, "row");
-  assert.deepEqual(container.children[0].children.map((c) => c.textContent), ["+49170", "Completed"]);
+  const [zeile] = container.children;
+  assert.equal(zeile.className, "row");
+  assert.deepEqual(zeile.children.map((c) => c.textContent), ["+49170", "Completed"]);
 
   const lineDoc = makeDoc(["last_transcript_lines"]);
   applyField(lineDoc, "last_transcript_lines", ["Agent: hi", "Gegenseite: yo"]);
