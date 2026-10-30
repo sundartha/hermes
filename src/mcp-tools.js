@@ -14,61 +14,29 @@ import {
   KEY_FACTS_LIMITS,
   CONSULT_ANSWER_MODE,
 } from "./store/defaults.js";
-import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
-import { resolveGatewayUrl } from "./config.js";
+import { CONSULT_EVENT } from "./consult/delivery.js";
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
-import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
-import { ToolError, toolErrorText } from "./mcp/fehler.js";
+import { toolErrorText } from "./mcp/fehler.js";
 import { errText, jsonText, makeDateFormatter, notAccepted, text } from "./mcp/ausgabe.js";
-import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./mcp/eingabe.js";
+import { rejectRestrictedData } from "./mcp/eingabe.js";
+import {
+  boundedHop,
+  confirmCallHop,
+  MCP_HOP_TIMEOUT_MS,
+  placeCallHop,
+  PLACE_CALL_HOP_TIMEOUT_MS,
+  pollConsultHop,
+  requireFields,
+} from "./mcp/gateway.js";
 import { maskRestrictedText } from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 
-export { toolErrorText };
+export { MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS, toolErrorText };
 
 const LAST_TRANSCRIPT_LINES = 6;
-
-const BAD_REQUEST_STATUS = 400;
-
-async function api({ method, path, body, identity, scopedTenant, timeoutMs = null }) {
-  const headers = { "Content-Type": "application/json" };
-  if (identity) headers["X-Internal-Identity"] = identity;
-  if (scopedTenant) headers["X-Internal-Tenant"] = scopedTenant;
-  const res = await fetch(resolveGatewayUrl() + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error("upstream_status");
-    err.httpStatus = res.status;
-    if (typeof json.reason === "string") err.reason = json.reason;
-    else if (res.status === BAD_REQUEST_STATUS && typeof json.error === "string")
-      err.inputHint = json.error;
-    throw err;
-  }
-  return json;
-}
-
-function requireFields(obj, specs) {
-  if (obj == null || typeof obj !== "object") throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INVALID);
-  for (const [field, type] of Object.entries(specs)) {
-    const value = obj[field];
-    const ok =
-      type === "array"
-        ? Array.isArray(value)
-        : type === "object"
-          ? value != null && typeof value === "object"
-          : typeof value === type;
-    if (!ok) throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INCOMPLETE);
-  }
-  return obj;
-}
 
 function mapStatus(call) {
   if (call.status === "active") return call.answeredAt ? "in_progress" : "dialing";
@@ -178,81 +146,6 @@ const ANSWER_CONSULT_OUTPUT = {
 
 const CONSULT_ANSWER_REJECTED_STATUS = 400;
 const CONSULT_ANSWER_CONFLICT_STATUS = 409;
-
-const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
-const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
-
-export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
-
-export const MCP_HOP_TIMEOUT_MS = 60000;
-
-async function boundedHop(request) {
-  try {
-    return await api({ ...request, timeoutMs: MCP_HOP_TIMEOUT_MS });
-  } catch (err) {
-    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
-    throw err;
-  }
-}
-
-const SERVER_ERROR_STATUS_MIN = 500;
-const SERVER_ERROR_STATUS_MAX = 599;
-const HTTP_SERVICE_UNAVAILABLE_STATUS = 503;
-const CONFIRMATION_UNAVAILABLE_REASON = "confirmation_unavailable";
-
-function isServerErrorWithoutReason(err) {
-  return (
-    typeof err?.reason !== "string" &&
-    typeof err?.httpStatus === "number" &&
-    err.httpStatus >= SERVER_ERROR_STATUS_MIN &&
-    err.httpStatus <= SERVER_ERROR_STATUS_MAX
-  );
-}
-
-async function placeCallHop({ identity, scopedTenant, body }) {
-  try {
-    return await api({
-      method: "POST",
-      path: "/api/calls",
-      body,
-      identity,
-      scopedTenant,
-      timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
-    });
-  } catch (err) {
-    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
-    if (isServerErrorWithoutReason(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_REJECTED);
-    throw err;
-  }
-}
-
-function isConfirmationUnavailable(err) {
-  return err?.httpStatus === HTTP_SERVICE_UNAVAILABLE_STATUS && err?.reason === CONFIRMATION_UNAVAILABLE_REASON;
-}
-
-async function confirmCallHop({ identity, scopedTenant, body }) {
-  rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
-  try {
-    return await api({
-      method: "POST",
-      path: "/api/call-confirmations",
-      body,
-      identity,
-      scopedTenant,
-      timeoutMs: MCP_HOP_TIMEOUT_MS,
-    });
-  } catch (err) {
-    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
-    if (isConfirmationUnavailable(err)) throw new ToolError(MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE);
-    throw err;
-  }
-}
-
-const NO_CONSULT_EVENT = Object.freeze({
-  event: CONSULT_EVENT.NONE,
-  eventId: null,
-  questions: [],
-});
 
 const CONTEXT_RECEIVED_OUTPUT = z.object({
   active: z.boolean(),
@@ -729,20 +622,7 @@ function createToolContext(
   begriffe,
 ) {
   const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
-  const pollConsult = async (path) => {
-    try {
-      return await api({
-        method: "GET",
-        path,
-        identity,
-        scopedTenant,
-        timeoutMs: CONSULT_POLL_ABORT_MS,
-      });
-    } catch (err) {
-      if (isAbortError(err)) return NO_CONSULT_EVENT;
-      throw err;
-    }
-  };
+  const pollConsult = (path) => pollConsultHop({ identity, scopedTenant, path });
   const placeCallHopCall = (body) => placeCallHop({ identity, scopedTenant, body });
   const loc = localeFor(language);
   const formatDate = makeDateFormatter(loc.dateLocale);

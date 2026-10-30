@@ -494,3 +494,24 @@ test("get_agent_number: ein Zustand ohne Objekt agent ist UPSTREAM_INCOMPLETE", 
     });
   }
 });
+
+test("await_call_event: ein Gateway-Fehler beim Abwarten der Rueckfrage wird zum Text seines HTTP-Status, ohne Folgeabruf", async () => {
+  const faelle = [
+    { answer: jsonAntwort(404, {}), expected: DE_FEHLER[MCP_ERROR_CODE.NOT_FOUND] },
+    { answer: jsonAntwort(403, {}), expected: DE_FEHLER[MCP_ERROR_CODE.NOT_PERMITTED] },
+  ];
+  for (const { answer, expected } of faelle) {
+    await withGateway(() => answer, async (requests) => {
+      const result = await deHandlers("tenant_abwarten_fehler", { consultAllowed: true }).get("await_call_event")({
+        call_id: "c_abwarten_fehler",
+      });
+      assert.equal(result.isError, true, `Status ${answer.status}: isError`);
+      assert.equal(result.content[0].text, expected, `Status ${answer.status}: Text`);
+      assert.deepEqual(
+        requests.map(({ method, path }) => `${method} ${path}`),
+        ["GET /api/calls/c_abwarten_fehler/consult"],
+        `Status ${answer.status}: nur das Abwarten geht hinaus`,
+      );
+    });
+  }
+});
