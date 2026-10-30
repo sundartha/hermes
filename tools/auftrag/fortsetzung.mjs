@@ -192,7 +192,7 @@ function ungueltig(lauf, stand) {
   return einspielbar(lauf.kontext.root, eingespielteTeile(stand).map(([, eintrag]) => eintrag.datei));
 }
 
-export function ladeFortsetzung(lauf) {
+export function ladeOderVerwirfFortsetzung(lauf) {
   const { kontext } = lauf;
   if (lauf.eingang === null || !existsSync(ablagePfad(kontext, STAND))) return null;
   const stand = lies(ablagePfad(kontext, STAND));

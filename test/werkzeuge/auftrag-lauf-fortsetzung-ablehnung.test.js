@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { namen } from "./auftrag-lauf-hilfen.js";
-import { ACHT_TEST, GRUNDLAGE, GRUND_VERWORFEN, RECHNEN, ZWEI_MUTANTEN, abgebrochen, aufgeraeumt, gesichert, mitPruefsumme, rollen } from "./auftrag-lauf-fortsetzung-hilfen.js";
+import { ACHT_TEST, NACHRUNDE_NACH_NEUBAU, GRUNDLAGE, GRUND_VERWORFEN, RECHNEN, ZWEI_MUTANTEN, abgebrochen, aufgeraeumt, gesichert, mitPruefsumme, rollen } from "./auftrag-lauf-fortsetzung-hilfen.js";
 import { starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
@@ -46,7 +46,7 @@ function abgelehnt(context, fall) {
   const erster = abgebrochen(context, { dateien: ZWEI_MUTANTEN });
   aufgeraeumt(erster);
   vorbereiten(erster);
-  const { lauf, beleg, repo } = starteNochmal(erster, { ...GRUNDLAGE, "test-nachrunde#4": { [RECHNEN]: ACHT_TEST } });
+  const { lauf, beleg, repo } = starteNochmal(erster, { ...GRUNDLAGE, [NACHRUNDE_NACH_NEUBAU]: { [RECHNEN]: ACHT_TEST } });
   assert.match(lauf.stderr, GRUND_VERWORFEN, lauf.stdout + lauf.stderr);
   assert.ok(GRUND_VERWORFEN.exec(lauf.stderr)[1].startsWith(grund), lauf.stderr);
   assert.doesNotMatch(lauf.stderr, /Fortsetzung auf gesichertem Stand/);
