@@ -6,6 +6,7 @@ import { testPrompt } from "./agenten.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, hinweiseDesBaus, hinweiseFuerNotiz, notizAuszug, schreibeBeleg } from "./bericht.mjs";
 import { auswegBei, nenntAltenTest, zweckUnklar } from "./ausgang.mjs";
 import { frage } from "./einsatz.mjs";
+import { loescheFortsetzung } from "./fortsetzung.mjs";
 import { TESTUMBAU, UMBAU_AUSWEG, istTestbereich, istUmbau, istVertraulich, phasenBefunde } from "./format.mjs";
 import { git, hartZuruecksetzen } from "./git.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
@@ -265,7 +266,7 @@ class Runden {
     }
     this.fehler.push(fehlerausgabe(ergebnis));
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
-    if (this.fehler.length === MAX_RUNDEN) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
+    if (this.fehler.length === MAX_RUNDEN || ergebnis.ohneFortschritt) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt(ergebnis));
     hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     return null;
   }
@@ -353,10 +354,15 @@ class Runden {
     return { kopf, anlass, verlauf: [...this.fehler, ...this.abbrueche], zweck: zweckBlock(MELDUNG.WERKZEUGABBRUCH) };
   }
 
-  gestoppt() {
+  gestoppt({ ohneFortschritt } = {}) {
     const { phase, auftrag } = this.kontext;
+    const zweck = zweckBlock(MELDUNG.STOPP);
+    if (ohneFortschritt) {
+      const grund = `Die Fortsetzung auf dem gesicherten Stand hat die überlebenden Mutanten nicht gesenkt (vorher ${ohneFortschritt.vorher}, jetzt ${ohneFortschritt.jetzt}).`;
+      return { kopf: `Auftrag ${auftrag.id} der Phase ${phase.phase} ist gestoppt. ${grund}`, anlass: `Der Auftrag ist gestoppt. ${grund}`, verlauf: this.fehler, zweck };
+    }
     const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
-    return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler, zweck: zweckBlock(MELDUNG.STOPP) };
+    return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler, zweck };
   }
 
   nurFormGestoppt() {
@@ -415,7 +421,9 @@ class Runden {
     if (!planbar(this.kontext)) return this.entscheidung(ergebnis, gestoppt);
     hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     const neuschnitt = schneideNeu(this.kontext, gestoppt);
-    return neuschnitt.neu ? NEU_GESCHNITTEN : this.entscheidung(ergebnis, neuschnitt.gestoppt);
+    if (!neuschnitt.neu) return this.entscheidung(ergebnis, neuschnitt.gestoppt);
+    loescheFortsetzung(this.kontext);
+    return NEU_GESCHNITTEN;
   }
 
   notiz(gestoppt) {
@@ -427,6 +435,7 @@ class Runden {
 
   entscheidung(ergebnis, gestoppt) {
     const { phase, auftrag, root } = this.kontext;
+    loescheFortsetzung(this.kontext);
     const notiz = this.notiz(gestoppt);
     const hinweise = hinweiseFuerNotiz(ergebnis.agenten);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");

@@ -5,7 +5,8 @@ import { env } from "node:process";
 import { testAgentPrompt } from "./agenten.mjs";
 import { vorabGeprueft, vorabHerkunft } from "./absicherungsbeleg.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { aenderungenSeit, arbeitsstand, gemeinsamerOrdner, git, kopf } from "./git.mjs";
+import { PATCH_FORMAT, ablagePfad, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
+import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
 import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
 import { phasenbasis } from "./phasenende.mjs";
@@ -23,8 +24,6 @@ const SCHUTZ_HINWEIS = new RegExp(`^((?:${SCHUTZ_NICHT_PRUEFBAR}|${SCHUTZ_UNERRE
 const UMBAU_UNGEPRUEFT = "Hinweis: Wirkung der Schutztests im Umbau nicht geprüft.";
 const SCHUTZFALL = "[NIE";
 const BUDGET_ZEILEN = /^((?:Vorschau |Abbruch: Budget\b|Mutationslog: Ende nach ).*)$/gm;
-const ABLAGE = "auftrag-umbau";
-const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
 const MELDEN = [
   "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt eines Tests mit einer Zeile je Mutant:",
   "Gleichwertig: <Mutant>, weil <ein Satz>",
@@ -247,9 +246,9 @@ function nachgeholtUndAbgenommen(lauf, nachrunde, { festhalten = true } = {}) {
   return weg !== null && lauf.allesVormerken() && lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)) ? weg : null;
 }
 
-function testNachgeholt(lauf, ueberlebende, { festhalten = true, ...runde }) {
+function testNachgeholt(lauf, ueberlebende, { festhalten = true, vorab = () => true, ...runde }) {
   const vorgabe = { stand: "in den neuen Zeilen", melden: false, ...runde, zweck: PRUEFUNG.MUTATION };
-  return nachgeholtUndAbgenommen(lauf, () => testErgaenzt(lauf, ueberlebende, vorgabe), { festhalten });
+  return nachgeholtUndAbgenommen(lauf, () => (vorab() ? testErgaenzt(lauf, ueberlebende, vorgabe) : null), { festhalten });
 }
 
 function zurueckzugeben(noetig, widerspruch) {
@@ -310,17 +309,24 @@ function neueZeilen(lauf) {
   stand = (vorgemerkterCodestand(lauf) === vorher ? nachBauAbgeleitet(lauf, stand.ausgabe) : null) ?? pruefen(PRUEFUNG.MUTATION_NACH_BAU);
   if (stand.ende !== undefined) return stand.ende;
   const vorzeitig = testNachgeholtMitRueckgabe(lauf, stand.ueberlebende, noetig);
-  if (vorzeitig !== null) return vorzeitig;
-  stand = pruefen(PRUEFUNG.MUTATION_NACH_TEST);
-  return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
+  return vorzeitig === null ? nachTest(lauf, noetig) : vorzeitig;
 }
 
-function ablage({ root, phase, auftrag }) {
-  return gemeinsamerOrdner(root, ABLAGE, phase.phase, `${auftrag.id}.patch`);
+function nachTest(lauf, noetig) {
+  const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", lauf.basis]);
+  if (stand.ende !== undefined) return stand.ende;
+  lauf.merkeUeberlebende(stand.ueberlebende, noetig);
+  return lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
+}
+
+function neueZeilenFortgesetzt(lauf) {
+  const { ueberlebende, noetig } = lauf.fortsetzung;
+  const weg = testNachgeholt(lauf, ueberlebende, { noetig, widerspruch: false, vorab: () => spieleNachrundeEin(lauf) });
+  return weg === null ? false : nachTest(lauf, noetig);
 }
 
 function sichern(lauf, basis) {
-  const datei = ablage(lauf.kontext);
+  const datei = ablagePfad(lauf.kontext, ".patch");
   mkdirSync(dirname(datei), { recursive: true });
   lauf.allesVormerken();
   git(["diff", "--cached", "--binary", ...PATCH_FORMAT, `--output=${datei}`, basis], { cwd: lauf.kontext.root });
@@ -329,7 +335,9 @@ function sichern(lauf, basis) {
 
 function neueZeilenGesichert(lauf) {
   const basis = lauf.basisBau;
-  return neueZeilen(lauf) || lauf.gesichert(sichern(lauf, basis));
+  if (lauf.fortsetzung === null ? neueZeilen(lauf) : neueZeilenFortgesetzt(lauf)) return true;
+  if (lauf.ueberlebt !== null) sichereFortsetzung(lauf, basis);
+  return lauf.gesichert(sichern(lauf, basis));
 }
 
 function zurueckstellen(lauf) {

@@ -21,6 +21,7 @@ import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
+import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeFortsetzung, beendeFortsetzung, ohneFortschritt } from "./fortsetzung.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
@@ -159,6 +160,10 @@ class AuftragsLauf {
     this.grund = null;
     this.roteIds = [];
     this.commit = null;
+    this.eingang = null;
+    this.fortsetzung = null;
+    this.ueberlebt = null;
+    this.ohneFortschritt = null;
   }
 
   scheitert(grund, id) {
@@ -386,6 +391,20 @@ class AuftragsLauf {
     return false;
   }
 
+  merkeUeberlebende(ueberlebende, noetig) {
+    this.ueberlebt = { ueberlebende, noetig: noetig.filter(({ mutant }) => ueberlebende.includes(mutant)) };
+    this.ohneFortschritt = ohneFortschritt(this.fortsetzung, ueberlebende);
+  }
+
+  stelleFortsetzungHer() {
+    const { zweck, gleichwertig, listenumzug } = this.fortsetzung;
+    Object.assign(this.zweck.bau, zweck.bau);
+    Object.assign(this.zweck.test, zweck.test);
+    this.berichtszeilen.push(...gleichwertig.filter((zeile) => !this.berichtszeilen.includes(zeile)));
+    this.listenumzug = listenumzug;
+    return true;
+  }
+
   entscheidungNoetig(entscheidung) {
     this.entscheidung = entscheidung;
     return this.scheitert(entscheidung.anlass);
@@ -546,7 +565,8 @@ class AuftragsLauf {
           () => bisektion(this),
         ]
       : [() => this.vorherGruen()];
-    return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
+    const bau = this.fortsetzung === null ? [...vorBau, ...this.bauSchritte()] : fortgesetzteSchritte(this, vorBau);
+    return [...bau, ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
   }
 
   schnelleTestpruefungen() {
@@ -596,8 +616,15 @@ class AuftragsLauf {
     ];
   }
 
+  beginneFortsetzung() {
+    this.eingang = fortsetzbar(this.kontext.auftrag) ? eingangsstand(this) : null;
+    this.fortsetzung = ladeFortsetzung(this);
+  }
+
   fuehreAus() {
+    this.beginneFortsetzung();
     const gruen = this.schritte().every((schritt) => schritt());
+    beendeFortsetzung(this, gruen);
     const { phase, auftrag, root } = this.kontext;
     const ergebnis = {
       phase: phase.phase,
@@ -615,6 +642,8 @@ class AuftragsLauf {
       testbefund: this.testbefund,
       entscheidung: this.entscheidung,
       patch: this.patch,
+      ohneFortschritt: this.ohneFortschritt,
+      fortgesetzt: this.fortsetzung !== null,
       commit: this.commit,
       agenten: this.agenten,
       nachfragen: this.nachfragen,
