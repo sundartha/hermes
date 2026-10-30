@@ -125,8 +125,12 @@ function jscpdFinding(root, { firstFile, secondFile, tokens }) {
 
 const JSCPD_PAIR_PARTS = 2;
 
+function jscpdFiles(key) {
+  return key.split(KEY_SEPARATOR).slice(0, JSCPD_PAIR_PARTS);
+}
+
 function jscpdPair(key) {
-  return key.split(KEY_SEPARATOR).slice(0, JSCPD_PAIR_PARTS).join(KEY_SEPARATOR);
+  return jscpdFiles(key).join(KEY_SEPARATOR);
 }
 
 function jscpdTokens(key) {
@@ -351,6 +355,8 @@ export const TOOLS = {
     findings: jscpdFindings,
     version: jscpdVersion,
     path: keyPart(0),
+    pair: jscpdFiles,
+    tokens: jscpdTokens,
     back: paarZurueck(JSCPD_PAIR_PARTS),
     shrunk: jscpdShrunk,
     renamedBasis: true,
@@ -434,7 +440,7 @@ function pureRenames(basis) {
 function onlyUnchangedFiles(root, basis, renames) {
   const renamed = new Set(renames.flatMap(({ alt, neu }) => [alt, neu]));
   const changed = new Set(changedSince(root, basis).filter((path) => !renamed.has(path)));
-  return (key) => jscpdPair(key).split(KEY_SEPARATOR).every((path) => !changed.has(path));
+  return (key) => jscpdFiles(key).every((path) => !changed.has(path));
 }
 
 function unchangedKnownPair({ root, basis, toolName, tool }, baseline) {
