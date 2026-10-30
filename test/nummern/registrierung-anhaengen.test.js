@@ -38,3 +38,27 @@ test("registrierungAnhaengen: eine vorhandene andere Kennung bleibt in Speicher 
   assert.equal(numbers.find((nummer) => nummer.id === nummernId).providerAgentPhoneNumberId, "phnum_alt");
   assert.equal(await kennungInDatenbank(), "phnum_alt");
 });
+
+function zaehleSpeichern(store) {
+  const zaehler = { anzahl: 0 };
+  const echtes = store.save;
+  Object.assign(store, {
+    save: (...argumente) => {
+      zaehler.anzahl += 1;
+      return echtes.apply(store, argumente);
+    },
+  });
+  return zaehler;
+}
+
+test("registrierungAnhaengen: liefert die Nummer, speichert die neue Kennung und eine abgelehnte andere Kennung nicht", async () => {
+  const { store, nummernId } = await speicherMitNummer();
+  const speichern = zaehleSpeichern(store);
+  const erste = store.registrierungAnhaengen(nummernId, "phnum_neu");
+  assert.equal(erste.id, nummernId);
+  assert.equal(erste.providerAgentPhoneNumberId, "phnum_neu");
+  assert.equal(speichern.anzahl, 1, "die neue Kennung wird gespeichert");
+  const zweite = store.registrierungAnhaengen(nummernId, "phnum_andere");
+  assert.equal(zweite.providerAgentPhoneNumberId, "phnum_neu", "die vorhandene Kennung bleibt");
+  assert.equal(speichern.anzahl, 1, "eine abgelehnte Kennung loest kein Speichern aus");
+});
