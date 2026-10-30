@@ -118,11 +118,12 @@ const REGISTRIERUNG_NACHHOLEN_ENV = Object.freeze({
   TELNYX_SIP_TRUNK_PASSWORD: "sip-passwort-test",
 });
 
-async function withElevenLabs(run, extraEnv = {}, mockOptionen = {}) {
+async function withElevenLabs(run, extraEnv = {}, optionen = {}) {
+  const { seed = seedZweiTenants(), ...mockOptionen } = optionen;
   const mock = await startElevenLabsMock(mockOptionen);
   const srv = await startServer({
     env: { ...EL_ENV, ...extraEnv, ELEVENLABS_API_BASE: mock.url },
-    seed: seedZweiTenants(),
+    seed,
   });
   try {
     return await run({ srv, mock });
@@ -276,4 +277,124 @@ test("ANR: scheitert das Nachholen, endet der Anruf ohne Anbieteraufruf und mit 
     REGISTRIERUNG_NACHHOLEN_ENV,
     { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
   );
+});
+
+function stdoutZeile(srv, muster) {
+  return srv.stdout.split("\n").find((zeile) => muster.test(zeile));
+}
+
+test("ANR: Boot nennt bei nicht eingehaengter Registrierung die drei Schalter und die Folge fuer ausgehende Anrufe", async () => {
+  await withElevenLabs(async ({ srv }) => {
+    const zeile = stdoutZeile(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
+    assert.ok(zeile, "keine Boot-Warnung");
+    for (const schalter of ["ELEVENLABS_OUTBOUND_ENABLED", "PROVISIONING_ENABLED", "ELEVENLABS_NUMBER_REGISTRATION_ENABLED"]) {
+      assert.ok(zeile.includes(schalter), `${schalter} fehlt in der Warnung`);
+    }
+    assert.match(zeile, /ausgehende Anrufe von DIDs ohne Registrierung brechen ab/);
+  });
+});
+
+test("ANR: Boot meldet NICHT eingehaengt und nie zugleich eingehaengt, auch wenn die Zugangsdaten gesetzt sind", async () => {
+  await withElevenLabs(
+    async ({ srv }) => {
+      assert.match(srv.stdout, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
+      assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
+    },
+    { ...REGISTRIERUNG_NACHHOLEN_ENV, ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false" },
+  );
+});
+
+test("ANR: Boot meldet eingehaengt nur mit Benutzer UND Passwort des SIP-Zugangs", async () => {
+  for (const fehlend of ["TELNYX_SIP_TRUNK_USERNAME", "TELNYX_SIP_TRUNK_PASSWORD"]) {
+    await withElevenLabs(
+      async ({ srv }) => {
+        assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/, fehlend);
+        const zeile = stdoutZeile(srv, /ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne/);
+        assert.ok(zeile, `${fehlend}: keine Warnung zum fehlenden Zugang`);
+        assert.match(zeile, /ausgehende Anrufe von DIDs ohne Registrierung brechen ab/);
+      },
+      { ...REGISTRIERUNG_NACHHOLEN_ENV, [fehlend]: "" },
+    );
+  }
+});
+
+test("ANR: Boot sagt nichts zur Nummernregistrierung, solange ElevenLabs-Outbound aus ist", async () => {
+  const srv = await startServer({ seed: seedZweiTenants() });
+  try {
+    assert.doesNotMatch(srv.stdout, /ElevenLabs-Nummernregistrierung/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("ANR: scheitert das Nachholen, steht die Nummer und der Grund in einer benannten Log-Zeile", async () => {
+  await withElevenLabs(
+    async ({ srv }) => {
+      await placeCall(srv, SUBJECT_B);
+      assert.match(srv.stdout, /\[el-outbound\] Registrierung nachholen FEHLGESCHLAGEN number=num_b: \S/);
+      assert.ok(!srv.stdout.includes(REGISTRIERUNG_NACHHOLEN_ENV.TELNYX_SIP_TRUNK_PASSWORD), "Passwort im Log");
+    },
+    REGISTRIERUNG_NACHHOLEN_ENV,
+    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
+  );
+});
+
+test("ANR: ohne eingehaengte Registrierung wird nichts nachgeholt und der Abbruch nennt den Grund", async () => {
+  await withElevenLabs(async ({ srv, mock }) => {
+    await placeCall(srv, SUBJECT_B);
+    assert.equal(mock.registrierungen.length, 0);
+    assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
+    assert.match(srv.stdout, /grund=keine_eigene_registrierung \(Nummernregistrierung nicht eingehaengt/);
+  });
+});
+
+test("ANR: zwei gleichzeitige Anrufe verschiedener DIDs holen je ihre eigene Registrierung nach", async () => {
+  const ohneRegistrierung = seedZweiTenants();
+  ohneRegistrierung.numbers = ohneRegistrierung.numbers.map((nummer) => ({
+    ...nummer,
+    providerAgentPhoneNumberId: undefined,
+  }));
+  await withElevenLabs(
+    async ({ srv, mock }) => {
+      const antworten = await Promise.all([placeCall(srv, SUBJECT_A), placeCall(srv, SUBJECT_B, ZWEITES_ZIEL)]);
+      assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
+      assert.deepEqual(mock.registrierungen.map((anfrage) => anfrage.phone_number).sort(), [NUMBER_A, NUMBER_B]);
+      assert.equal(mock.startRequests.length, 2);
+      const { numbers } = srv.readStore();
+      const gespeichert = numbers
+        .filter((nummer) => [NUMBER_A, NUMBER_B].includes(nummer.e164))
+        .map((nummer) => nummer.providerAgentPhoneNumberId);
+      assert.deepEqual(gespeichert, [NACHGEHOLTE_REGISTRIERUNG, NACHGEHOLTE_REGISTRIERUNG]);
+    },
+    REGISTRIERUNG_NACHHOLEN_ENV,
+    { seed: ohneRegistrierung },
+  );
+});
+
+function abbruchZeile(srv) {
+  return stdoutZeile(srv, /Anruf ohne eigene Absendernummer abgebrochen/);
+}
+
+test("ANR: mit eingehaengter Registrierung nennt der Abbruch den Grund ohne den Hinweis auf fehlende Einhaengung", async () => {
+  await withElevenLabs(
+    async ({ srv }) => {
+      await placeCall(srv, SUBJECT_B);
+      const zeile = abbruchZeile(srv);
+      assert.ok(zeile, "keine Abbruch-Zeile");
+      assert.match(zeile, /grund=keine_eigene_registrierung$/);
+    },
+    REGISTRIERUNG_NACHHOLEN_ENV,
+    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
+  );
+});
+
+test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrierung nicht erneut registriert", async () => {
+  await withElevenLabs(async ({ srv, mock }) => {
+    const res = await placeCall(srv, SUBJECT_A);
+    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
+    assert.deepEqual(mock.registrierungen, []);
+    const [start] = mock.startRequests;
+    assert.equal(start.body.agent_phone_number_id, REGISTRIERUNG_TENANT_A);
+    assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
+  }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
