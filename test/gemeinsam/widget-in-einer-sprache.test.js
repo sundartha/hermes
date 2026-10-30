@@ -1,14 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import {
-  WIDGET_DICT,
-  WIDGET_LOCALE_META_KEY,
-  WIDGET_CONTENT_LOCALE_META_KEY,
-  I18N_SCRIPT,
-} from "../src/ui/widget-i18n.js";
-import { METHOD_TOOL_RESULT, renderRows } from "../src/ui/widget-bind.js";
-import { WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL, widgetHtml } from "../src/ui/widget-catalog.js";
+import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
+
+const WIDGET_LOCALE_META_KEY = "hermes/locale";
+const WIDGET_CONTENT_LOCALE_META_KEY = "hermes/content_locale";
+const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+const WIDGET_AGENT_STATUS = "agent-status";
+const WIDGET_MY_NUMBER = "my-number";
+const WIDGET_CALLS = "calls";
+const WIDGET_CALL = "call";
+const SKRIPT_BLOCK = /<script>([\s\S]*?)<\/script>/g;
+const WIDGETS = await ausgelieferteWidgets();
+const widgetHtml = (id) => WIDGETS[id];
+const skriptMit = (html, teil) => [...html.matchAll(SKRIPT_BLOCK)].map(([, code]) => code).find((code) => code.includes(teil));
+const I18N_SKRIPT = skriptMit(widgetHtml("call"), "HermesI18n = {");
+const WIDGET_DICT = JSON.parse(I18N_SKRIPT.match(/var WIDGET_DICT = (.*);\n/)[1]);
 
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 const UI_INITIALIZE_ID = 1;
@@ -42,7 +49,7 @@ function startI18n(labelKeys = ["Duration", "Call ended"]) {
     listeners[type] = handler;
   };
   vm.createContext(sandbox);
-  vm.runInContext(I18N_SCRIPT.match(/<script>([\s\S]*)<\/script>/)[1], sandbox);
+  vm.runInContext(I18N_SKRIPT, sandbox);
   const send = (data) => listeners.message({ data });
   return {
     labels,
@@ -201,82 +208,90 @@ test("WSP-6 (Text im Markup) - ausserhalb von data-i18n steht in keinem Widget e
   }
 });
 
-function zeilenDokument(i18n) {
-  const container = {
-    children: [],
-    firstChild: null,
-    removeChild() {},
-    appendChild(child) {
-      this.children.push(child);
-      this.firstChild = this.children[0];
+function anrufListeImBrowser() {
+  const alle = [];
+  const neuesElement = () => {
+    const element = schlichtesElement();
+    alle.push(element);
+    return element;
+  };
+  const container = neuesElement();
+  container.setAttribute("data-mcp-row", "direction,counterparty,status,startedAt,summary");
+  const listeners = [];
+  const sandbox = { parent: { postMessage() {} } };
+  sandbox.window = sandbox;
+  sandbox.document = {
+    documentElement: { lang: "" },
+    readyState: "complete",
+    body: schlichtesElement(),
+    defaultView: sandbox,
+    querySelector: () => null,
+    querySelectorAll: (selektor) => {
+      if (selektor === "[data-i18n]") return alle.filter((element) => element.getAttribute("data-i18n") !== null);
+      return selektor === '[data-mcp="calls"]' ? [container] : [];
     },
-    getAttribute: () => "direction,counterparty,status,startedAt,summary",
+    createElement: neuesElement,
+    addEventListener() {},
   };
-  const zelle = () => {
-    const attrs = {};
-    return {
-      textContent: "",
-      children: [],
-      appendChild(child) {
-        this.children.push(child);
-      },
-      setAttribute: (name, value) => {
-        attrs[name] = value;
-      },
-      getAttribute: (name) => attrs[name] ?? null,
-    };
+  sandbox.addEventListener = (type, handler) => {
+    if (type === "message") listeners.push(handler);
   };
-  const doc = { defaultView: { HermesI18n: i18n }, createElement: zelle };
-  return { doc, container };
+  vm.createContext(sandbox);
+  vm.runInContext(I18N_SKRIPT, sandbox);
+  vm.runInContext(skriptMit(widgetHtml(WIDGET_CALLS), "function renderRows"), sandbox);
+  return {
+    emit: (params) => listeners.forEach((handler) => handler({ data: { method: METHOD_TOOL_RESULT, params } })),
+    zeilen: () => container.children.map((zeile) => zellenwerte(zeile, (zelle) => zelle.textContent)),
+  };
 }
 
 function zellenwerte(zeile, lese) {
   return Object.fromEntries(zeile.children.map((zelle) => [zelle.getAttribute("data-field"), lese(zelle)]));
 }
 
-const zellentexte = (zeile) => zellenwerte(zeile, (zelle) => zelle.textContent);
-const zellenschluessel = (zeile) => zellenwerte(zeile, (zelle) => zelle.getAttribute("data-i18n"));
+const EINTRAEGE = [
+  { direction: "outbound", counterparty: "+4930", status: "completed", startedAt: "30.10.", summary: "Termin" },
+  { direction: "inbound", counterparty: "+4931", status: "in_progress", startedAt: "30.10." },
+  { direction: "outbound", counterparty: "+4932", status: "dialing", startedAt: "30.10." },
+  { direction: "outbound", counterparty: "+4933", status: "failed", startedAt: "30.10." },
+  { direction: "outbound", counterparty: "+4934", status: "cancelled", startedAt: "30.10." },
+  { direction: "outbound", counterparty: "+4935", status: "neuer_status", startedAt: "30.10." },
+];
+const LISTE_ERWARTET = {
+  en: {
+    richtung: ["Outbound", "Inbound", "Outbound", "Outbound", "Outbound", "Outbound"],
+    status: ["Completed", "In call", "Placing call", "Failed", "Cancelled", "Result unknown"],
+  },
+  de: {
+    richtung: ["Ausgehend", "Eingehend", "Ausgehend", "Ausgehend", "Ausgehend", "Ausgehend"],
+    status: ["Abgeschlossen", "Im Gespräch", "Anruf wird platziert", "Fehlgeschlagen", "Abgebrochen", "Ergebnis unbekannt"],
+  },
+  fr: {
+    richtung: ["Sortant", "Entrant", "Sortant", "Sortant", "Sortant", "Sortant"],
+    status: ["Terminé", "En communication", "Numérotation en cours", "Échec", "Annulé", "Résultat inconnu"],
+  },
+};
 
 test("WSP-7 (Anrufliste) - Richtung und Status erscheinen als Beschriftung der Widget-Sprache, nie als Roh-Token", () => {
-  const eintraege = [
-    { direction: "outbound", counterparty: "+4930", status: "completed", startedAt: "30.10.", summary: "Termin" },
-    { direction: "inbound", counterparty: "+4931", status: "in_progress", startedAt: "30.10." },
-    { direction: "outbound", counterparty: "+4932", status: "dialing", startedAt: "30.10." },
-    { direction: "outbound", counterparty: "+4933", status: "failed", startedAt: "30.10." },
-    { direction: "outbound", counterparty: "+4934", status: "cancelled", startedAt: "30.10." },
-    { direction: "outbound", counterparty: "+4935", status: "neuer_status", startedAt: "30.10." },
-  ];
-  for (const sprache of ["en", ...SPRACHEN]) {
-    const t = (key) => (sprache === "en" ? key : WIDGET_DICT[sprache][key] ?? `FEHLT:${key}`);
-    const { doc, container } = zeilenDokument({ t });
-    renderRows(doc, container, eintraege);
-    const zeilen = container.children.map(zellentexte);
-    const erwartet = {
-      en: ["Outbound", "Inbound", "Outbound", "Outbound", "Outbound", "Outbound"],
-      de: ["Ausgehend", "Eingehend", "Ausgehend", "Ausgehend", "Ausgehend", "Ausgehend"],
-      fr: ["Sortant", "Entrant", "Sortant", "Sortant", "Sortant", "Sortant"],
-    }[sprache];
-    assert.deepEqual(zeilen.map((z) => z.direction), erwartet, `${sprache}: Richtung`);
-    assert.deepEqual(
-      zeilen.map((z) => z.status),
-      ["completed", "in_progress", "dialing", "failed", "cancelled", "neuer_status"].map((token) =>
-        t({ completed: "Completed", in_progress: "In call", dialing: "Placing call", failed: "Failed", cancelled: "Cancelled" }[token] ?? "Result unknown"),
-      ),
-      `${sprache}: Status`,
-    );
+  for (const [sprache, erwartet] of Object.entries(LISTE_ERWARTET)) {
+    const liste = anrufListeImBrowser();
+    liste.emit({ _meta: tenant(sprache), structuredContent: { calls: EINTRAEGE } });
+    const zeilen = liste.zeilen();
+    assert.deepEqual(zeilen.map((zeile) => zeile.direction), erwartet.richtung, `${sprache}: Richtung`);
+    assert.deepEqual(zeilen.map((zeile) => zeile.status), erwartet.status, `${sprache}: Status`);
     assert.equal(zeilen[0].counterparty, "+4930", `${sprache}: Rufnummer bleibt unveraendert`);
     assert.equal(zeilen[0].summary, "Termin", `${sprache}: Inhalt bleibt unveraendert`);
   }
 });
 
-test("WSP-8 (Anrufliste) - Zeilen tragen den Schluessel, damit ein Sprachwechsel sie neu uebersetzt", () => {
-  const { doc, container } = zeilenDokument({ t: (key) => key });
-  renderRows(doc, container, [{ direction: "outbound", status: "completed" }]);
-  const [zeile] = container.children;
-  const felder = zellenschluessel(zeile);
-  assert.equal(felder.direction, "Outbound");
-  assert.equal(felder.status, "Completed");
-  assert.equal(felder.counterparty, null, "Inhalt ist kein Schluessel");
+test("WSP-8 (Anrufliste) - schon gezeichnete Zeilen folgen einem Sprachwechsel, auch dem auf Englisch durch Fremdinhalt", () => {
+  const liste = anrufListeImBrowser();
+  liste.emit({ _meta: tenant("de"), structuredContent: { calls: EINTRAEGE } });
+  assert.equal(liste.zeilen()[0].status, "Abgeschlossen");
+  liste.emit({ _meta: content(null) });
+  const zeilen = liste.zeilen();
+  assert.deepEqual(zeilen.map((zeile) => zeile.direction), LISTE_ERWARTET.en.richtung);
+  assert.deepEqual(zeilen.map((zeile) => zeile.status), LISTE_ERWARTET.en.status);
 });
 
 function schlichtesElement() {
@@ -337,9 +352,8 @@ function callWidgetImBrowser() {
   vm.createContext(sandbox);
   const html = widgetHtml(WIDGET_CALL);
   const bloecke = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, code]) => code);
-  const i18n = bloecke.find((code) => code.includes("HermesI18n = {"));
-  const eigenes = bloecke.find((code) => code.includes("function init()"));
-  vm.runInContext(i18n, sandbox);
+    const eigenes = bloecke.find((code) => code.includes("function init()"));
+  vm.runInContext(I18N_SKRIPT, sandbox);
   vm.runInContext(eigenes, sandbox);
   element('[data-mcp="call_id"]').textContent = "call_1";
   return {
