@@ -12,6 +12,7 @@ const AUFRUFE = ".fortschritt/aufrufe.txt";
 const LAUFENDER = { ...UMBAU, id: "A0", ziel: "Räume rechnen auf", erwarteteDateien: ["src/rechnen.js"], vorbild: "src/text.js", abnahme: "test/rechnen.test.js", betrifft: { "src/rechnen.js": ["verdopple"] } };
 const WARTENDER = { ...UMBAU, id: "B1", betrifft: { "src/text.js": ["gross"] } };
 const VORAB_TEST = `${BASIS["test/text.test.js"]}test("leer", () => assert.equal(gross(""), ""));\n`;
+const HOECHSTE_PLAETZE = "12";
 const GRUND = "der Aufruf dasselbe Ergebnis liefert";
 const MUTANT = "src/text.js:2:10 MethodExpression → text";
 const ERSATZ_PAKET = {
@@ -32,7 +33,7 @@ console.log(offen ? "Verstoß: Mutant überlebt: ${MUTANT}" : "grün: keiner üb
 `;
 }
 
-function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFENDER, WARTENDER], dateien = {}, davor = () => {} } = {}) {
+function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFENDER, WARTENDER], dateien = {}, davor = () => {}, umgebung = {} } = {}) {
   const gesamt = {
     ...ERSATZ_PAKET,
     "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs","lint"'),
@@ -44,7 +45,7 @@ function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFEND
     runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
     davor(repo);
   };
-  const probe = starte(context, { auftrag: LAUFENDER, drehbuch, dateien: gesamt, vorbereiten, phase: { auftraege, paket: "PAS" }, befehl: "absichern" });
+  const probe = starte(context, { auftrag: LAUFENDER, drehbuch, dateien: gesamt, vorbereiten, phase: { auftraege, paket: "PAS" }, befehl: "absichern", umgebung });
   const verlauf = runIn(probe.repo, "git", ["log", "--format=%s%n%b%x00", "upstream/master..absicherung/probe"]);
   const eintraege = verlauf.stdout.split("\0").map((eintrag) => eintrag.trim());
   const branch = eintraege.filter(Boolean);
@@ -60,7 +61,7 @@ test("ein wartender Umbau ohne Verbindung zum laufenden wird über die CI-Mutati
   assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
   assert.ok(aufrufe[0].argumente.includes("--in-ci") && aufrufe[0].argumente.includes("--alter-stand"), JSON.stringify(aufrufe));
   assert.equal(aufrufe[0].standOhneDeklaration, true);
-  assert.equal(aufrufe[0].plaetze, "12");
+  assert.equal(aufrufe[0].plaetze, HOECHSTE_PLAETZE);
   assert.equal(branch.length, 1, lauf.stdout + lauf.stderr);
   assert.ok(branch[0].includes("Absicherung: Lauf 777 Auftrag B1"), branch[0]);
   assert.ok(lauf.stdout.includes("Absicherung B1: abgesichert, Lauf 777."), lauf.stdout);
@@ -120,4 +121,10 @@ test("ein Auftrag, den der Branch schon vermerkt, wird beim zweiten Aufruf nicht
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(aufrufe, []);
   assert.ok(lauf.stdout.includes("Absicherung B1: schon abgesichert, Lauf 555."), lauf.stdout);
+});
+
+test("der Absicherungslauf setzt die Plätze bei vorbelegter Umgebung immer auf höchstens 12: leer, ungültig oder größer ergibt 12, ein kleinerer Wert bleibt", (context) => {
+  const vorbelegt = ["", "999", "13", "abc", "0", "-3", "5.5"];
+  const plaetze = [...vorbelegt, "5"].map((wert) => absichern(context, { umgebung: { HERMES_MUTATION_PLAETZE: wert } }).aufrufe[0]?.plaetze);
+  assert.deepEqual(plaetze, [...vorbelegt.map(() => HOECHSTE_PLAETZE), "5"]);
 });
