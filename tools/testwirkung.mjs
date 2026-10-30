@@ -21,11 +21,14 @@ const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const AUFRUF = "Aufruf: node tools/testwirkung.mjs --basis <commit>";
 const VERGLEICHBAR = /\.[cm]?[jt]s$/;
+const WEB_PRAEFIX = /^apps\/web\//;
+const TESTLAUF_ORDNER = ["test/"];
+const ALLE_TEST_ORDNER = [...TESTLAUF_ORDNER, "apps/web/test/"];
 const KEIN_LAUF = { ergebnisse: new Map(), uebersprungen: new Set() };
 
-function geaenderteTestdateien(basis) {
-  const liste = git(["diff", "--name-only", "-z", "--no-renames", "--diff-filter=d", basis, "--", "test/"]);
-  return liste.split("\0").filter((datei) => TESTDATEI.test(datei));
+function geaenderteTestdateien(basis, ordner) {
+  const liste = git(["diff", "--name-only", "-z", "--no-renames", "--diff-filter=d", basis, "--", ...ordner]);
+  return liste.split("\0").filter((datei) => TESTDATEI.test(datei.replace(WEB_PRAEFIX, "")));
 }
 
 async function wieAufDerBasis(datei, umbenannt) {
@@ -77,14 +80,14 @@ function neueTests(basis, geaendert) {
   };
 }
 
-async function neueTestsSeit(basis) {
+async function neueTestsSeit(basis, ordner) {
   const umbenannt = await umbenennungen({ von: basis });
-  const geaendert = await ohneNurTypen(umbenannt, geaenderteTestdateien(basis));
+  const geaendert = await ohneNurTypen(umbenannt, geaenderteTestdateien(basis, ordner));
   return { umbenannt, geaendert: new Set(geaendert), ...neueTests(basis, geaendert) };
 }
 
 export async function testsOhneFestenNamen(basis) {
-  const { ohneNamen } = await neueTestsSeit(basis);
+  const { ohneNamen } = await neueTestsSeit(basis, ALLE_TEST_ORDNER);
   return neueTestsVerstoesse(ohneNamen, []).flatMap(([, liste]) => liste);
 }
 
@@ -287,7 +290,7 @@ async function main() {
     return EXIT_ABBRUCH;
   }
   await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
-  const { umbenannt, geaendert, tests, ohneNamen } = await neueTestsSeit(values.basis);
+  const { umbenannt, geaendert, tests, ohneNamen } = await neueTestsSeit(values.basis, TESTLAUF_ORDNER);
   const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const inGeaenderten = alleTestsIn([...geaendert]);

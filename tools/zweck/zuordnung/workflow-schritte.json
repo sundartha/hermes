@@ -96,6 +96,10 @@
     "zweck": "lint/neue-kommentare",
     "beleg": "tools/neue-kommentare.mjs"
   },
+  ".github/workflows/ci.yml › pruefungen › Statische Testprüfung": {
+    "zweck": "tests/statisch",
+    "beleg": "tools/auftrag/zweck.mjs"
+  },
   ".github/workflows/ci.yml › pruefungen › Syntax (.js und .mjs; .ts prüft die Typprüfung)": {
     "zweck": "lint/syntax",
     "beleg": ".github/workflows/ci.yml"
