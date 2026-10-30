@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
+import { ABSCHALTUNG_VERSTOSS, MUTANT_UEBERLEBT } from "../../tools/auftrag/gleichwertig.mjs";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT, commitAll, writeFiles } from "./probe-repo.js";
 
@@ -121,4 +122,33 @@ export function scheitertAnPinPruefung(lauf, beleg) {
   const nachLint = beleg.pruefungen[beleg.pruefungen.findIndex(({ name }) => name === "lint") + 1];
   const ergebnis = { status: lauf.status, nachLint: nachLint?.name, exitCode: nachLint?.exitCode, grund: beleg.grund };
   assert.deepEqual(ergebnis, { status: EXIT_ROT, nachLint: "pin-prüfung", exitCode: EXIT_ROT, grund: `pin-prüfung endete mit Exit ${EXIT_ROT}.` }, lauf.stdout + lauf.stderr);
+}
+
+export const ZWEITER_MUTANT = "src/rechnen.js:3:10 ArithmeticOperator → zahl / 2";
+export const ABGESCHALTETER_MUTANT = "src/rechnen.js:2:3 IfStatement → false";
+
+const ZAEHLENDE_MUTATION = [
+  'import { appendFileSync, readFileSync } from "node:fs";',
+  'appendFileSync(".git/mutation-aufrufe", "aufruf\\n");',
+  'const { mutanten, abschaltung, ueberlebt, verstoesse = [], rotOhneZeile = false } = JSON.parse(readFileSync("mutanten.json", "utf8"));',
+  'const getestet = readFileSync("test/rechnen.test.js", "utf8").includes("(7)");',
+  "const offen = getestet ? [] : mutanten.filter(({ mutant, annehmbar }) => !(annehmbar && process.argv.includes(mutant)));",
+  'for (const { mutant, abgeschaltet } of offen) if (abgeschaltet) console.log(abschaltung + ": " + mutant);',
+  'for (const { mutant } of offen) console.log(ueberlebt + ": " + mutant);',
+  "const weitere = getestet ? [] : verstoesse;",
+  "for (const zeile of weitere) console.log(zeile);",
+  "process.exitCode = offen.length + weitere.length > 0 || (rotOhneZeile && !getestet) ? 1 : 0;",
+  "",
+].join("\n");
+
+export function mitZaehlenderMutation(context, ausgabe, zusatz) {
+  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...nachgeholt, ...zusatz };
+  const liste = JSON.stringify({ mutanten: [], ...ausgabe, abschaltung: ABSCHALTUNG_VERSTOSS, ueberlebt: MUTANT_UEBERLEBT });
+  const ergebnis = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": ZAEHLENDE_MUTATION, "mutanten.json": liste } });
+  const aufrufe = readFileSync(join(ergebnis.repo, ".git/mutation-aufrufe"), "utf8").split("aufruf\n").length - 1;
+  const { pruefungen } = ergebnis.beleg;
+  const nachBau = pruefungen.filter(({ name }) => name === "mutation nach Bau");
+  const promptDatei = join(ergebnis.werkzeug, "prompt-test-nachrunde.txt");
+  return { ...ergebnis, aufrufe, nachBau, testPrompt: existsSync(promptDatei) ? readFileSync(promptDatei, "utf8") : "" };
 }
