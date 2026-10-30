@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { CHECKOUT_RETURN } from "../../../src/portal-paths.js";
 import { STRINGS } from "../src/lib/i18n.js";
+import { AA_NORMAL_TEXT, RATIO_DECIMALS, contrastOf } from "./kontrast.js";
 import { ERR_TONE, LANG, NEUTRAL_TONE, OK_TONE, SHELL_HTML } from "./rueckkehr-dom-shell.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -26,6 +27,8 @@ const EXPECTED = Object.freeze({
   SUB_OK: { key: "subBooked", tone: OK_TONE },
   SUB_FAILED: { key: "subFailed", tone: ERR_TONE },
 });
+
+const CSS_BUNDLE = /\.css$/;
 
 let distDir;
 let workDir;
@@ -67,10 +70,43 @@ async function assertAllReturnMessages(dir) {
   for (const name of Object.keys(CHECKOUT_RETURN)) await assertReturnMessage(dir, name);
 }
 
+async function looksOf(dir, names) {
+  const looks = {};
+  for (const name of names) {
+    const seen = await openShell(dir, CHECKOUT_RETURN[name]);
+    assertRunsClean(seen, name);
+    assert.equal(seen.shown, true, `${name}: keine sichtbare Meldung`);
+    looks[name] = seen.look;
+  }
+  return looks;
+}
+
+async function assertSuccessAndErrorLookApart(dir) {
+  const looks = await looksOf(dir, ["CARD_OK", "CARD_ERROR"]);
+  const [ok, err] = [looks.CARD_OK, looks.CARD_ERROR];
+  assert.notEqual(ok.color, err.color, "Erfolg und Fehler: gleiche Schriftfarbe");
+  assert.notEqual(ok.background, err.background, "Erfolg und Fehler: gleiche Fläche");
+  for (const [label, look] of Object.entries({ Erfolg: ok, Fehler: err })) {
+    assert.ok(look.glyph, `${label}: kein Zeichen vor dem Text`);
+    assert.equal(look.borderStyle, "solid", `${label}: kein Balken neben dem Text`);
+    assert.notEqual(look.borderWidth, "0px", `${label}: Balken ohne Breite`);
+    assert.ok(contrastOf(look) >= AA_NORMAL_TEXT, `${label}: Kontrast ${contrastOf(look).toFixed(RATIO_DECIMALS)} unter ${AA_NORMAL_TEXT}`);
+  }
+  assert.notEqual(ok.glyph, err.glyph, "Erfolg und Fehler: gleiches Zeichen");
+}
+
 function copyOfBuild(label) {
   const dir = join(workDir, label);
   cpSync(distDir, dir, { recursive: true });
   return dir;
+}
+
+function cssFileWith(dir, needle) {
+  const names = readdirSync(join(dir, ASSET_DIR)).filter(
+    (name) => CSS_BUNDLE.test(name) && readFileSync(join(dir, ASSET_DIR, name), "utf8").includes(needle),
+  );
+  assert.equal(names.length, 1, `genau eine Stildatei mit ${needle} erwartet, gefunden: ${names.length}`);
+  return join(dir, ASSET_DIR, names[0]);
 }
 
 function mutatedCopy(label, mutate, fileOf = (dir) => join(dir, ASSET_DIR, bundleName(dir))) {
@@ -110,6 +146,10 @@ for (const name of Object.keys(CHECKOUT_RETURN)) {
     await assertReturnMessage(distDir, name);
   });
 }
+
+test("gebaute Shell setzt Erfolg und Fehler der Rückkehr sichtbar voneinander ab", async () => {
+  await assertSuccessAndErrorLookApart(distDir);
+});
 
 test("gebaute Shell ohne Rückkehr-Parameter zeigt keine Meldung", async () => {
   const seen = await openShell(distDir, "/app");
@@ -200,6 +240,18 @@ const PAGE_MUTATIONS = [
   ],
   ["Schleier bleibt stehen", replaceOnce(/<html /, "<html data-cancel-arrival=\"\" "), CARD_OK_HIDDEN],
 ];
+
+const CSS_MUTATIONS = [
+  ["Regeln für Erfolg und Fehler entfernt", (source) => source.replace(/\.billing-msg--(ok|err)[^{]*\{[^}]*\}/g, ""), /gleiche Schriftfarbe/],
+  ["Fehlerfarbe zu dunkel", replaceOnce(/\.billing-msg--err\{color:#ffc9c9/, ".billing-msg--err{color:#304060"), /Fehler: Kontrast/],
+];
+
+for (const [index, [label, mutate, reason]] of CSS_MUTATIONS.entries()) {
+  test(`Rotprobe ${label}: veränderte Gestaltung macht die Prüfung rot`, async () => {
+    const dir = mutatedCopy(`gestaltung-${index}`, mutate, (copy) => cssFileWith(copy, "billing-msg--err"));
+    await assert.rejects(assertSuccessAndErrorLookApart(dir), { name: "AssertionError", message: reason });
+  });
+}
 
 for (const [index, [label, mutate, reason]] of PAGE_MUTATIONS.entries()) {
   test(`Rotprobe ${label}: veränderte Seite macht die Prüfung rot`, async () => {
