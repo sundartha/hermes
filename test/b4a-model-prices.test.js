@@ -206,3 +206,110 @@ test("[NIE3] die Tageswerte aus config.js bleiben 86 400 000 ms", () => {
     [DAY, DAY, DAY, DAY],
   );
 });
+
+const DEEPSEEK = "deepseek-v4-pro";
+const DEEPSEEK_AS_OF = "2026-08-07";
+const BEFORE_SWITCH_DAY = "2026-08-20";
+const AFTER_SWITCH_DAY = "2026-10-30";
+const dayAfter = (isoDay, days) =>
+  new Date(Date.parse(isoDay) + days * MS_PER_DAY).toISOString().slice(0, ANCHOR_DAY.length);
+
+async function configOn(t, isoDay, loadFresh) {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(`${isoDay}T12:00:00Z`) });
+  const fresh = await loadFresh();
+  const today = fresh.todayIsoDate();
+  t.mock.timers.reset();
+  return { today, prices: fresh.config.llm.modelPricesUsd };
+}
+
+function staleEdge(prices, modelId, asOf) {
+  const single = { [modelId]: prices[modelId] };
+  return [
+    stalePriceFindings(single, dayAfter(asOf, MODEL_PRICE_MAX_AGE_DAYS)).length,
+    stalePriceFindings(single, dayAfter(asOf, MODEL_PRICE_MAX_AGE_DAYS + 1)).length,
+  ];
+}
+
+test("B4A-TAB-3: am 20.08. gilt die Anker-Staffel von claude-sonnet-5 und jede ausgelieferte Staffel veraltet erst am 91. Tag nach ihrem Abruf", async (t) => {
+  const { today, prices } = await configOn(
+    t,
+    BEFORE_SWITCH_DAY,
+    () => import("../src/config.js?b4a-stichtag-vor-umschaltung"),
+  );
+  assert.equal(today, BEFORE_SWITCH_DAY);
+  assert.deepEqual(Object.keys(prices).sort(), [HAIKU, SONNET, DEEPSEEK].sort());
+  assert.deepEqual(ratesOf(prices[SONNET]), [2.0, 2.5, 0.2, 10.0]);
+  assert.equal(prices[SONNET].nextValidFrom, SWITCH_DAY);
+  assert.deepEqual(staleEdge(prices, HAIKU, ANCHOR_DAY), [0, 1]);
+  assert.deepEqual(staleEdge(prices, SONNET, ANCHOR_DAY), [0, 1]);
+  assert.deepEqual(staleEdge(prices, DEEPSEEK, DEEPSEEK_AS_OF), [0, 1]);
+});
+
+test("B4A-TAB-4: am 30.10. gilt die Umschalt-Staffel von claude-sonnet-5 und auch sie veraltet erst am 91. Tag nach ihrem Abruf", async (t) => {
+  const { today, prices } = await configOn(
+    t,
+    AFTER_SWITCH_DAY,
+    () => import("../src/config.js?b4a-stichtag-nach-umschaltung"),
+  );
+  assert.equal(today, AFTER_SWITCH_DAY);
+  assert.deepEqual(ratesOf(prices[SONNET]), [3.0, 3.75, 0.3, 15.0]);
+  assert.equal(prices[SONNET].nextValidFrom, null);
+  assert.deepEqual(staleEdge(prices, SONNET, ANCHOR_DAY), [0, 1]);
+});
+
+test("B4A-RES-10: ein validFrom mit Vor- oder Nachsatz und ein leerer Staffel-Eintrag brechen benannt ab", () => {
+  for (const validFrom of [`${ANCHOR_DAY}x`, `x${ANCHOR_DAY}`, `${ANCHOR_DAY}T00:00`]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [entry({ validFrom })] }, ANCHOR_DAY),
+      /ohne gueltiges validFrom/,
+      `validFrom ${validFrom} ist kein Kalendertag`,
+    );
+  }
+  for (const empty of [null, undefined]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [empty] }, ANCHOR_DAY),
+      /modelPricesUsd: Staffel 'claude-haiku-4-5' ohne gueltiges validFrom/,
+    );
+  }
+});
+
+test("B4A-RES-11: eine Rate von genau 0 ist gueltig und wird ausgeliefert", () => {
+  const prices = resolveModelPrices({ [HAIKU]: [entry({ cacheReadPerMTok: 0 })] }, ANCHOR_DAY);
+  assert.equal(prices[HAIKU].cacheReadPerMTok, 0);
+});
+
+test("B4A-RES-12: nach der Umschaltung gilt bei absteigender Notation die juengste faellige Staffel", () => {
+  const descending = { [SONNET]: [...SCHEDULES[SONNET]].reverse() };
+  assert.deepEqual(
+    ratesOf(resolveModelPrices(descending, SWITCH_DAY)[SONNET]),
+    [3.0, 3.75, 0.3, 15.0],
+  );
+});
+
+test("B4A-RES-13: zwei Staffeln mit demselben validFrom - es gilt die zuerst notierte", () => {
+  const prices = resolveModelPrices(
+    { [HAIKU]: [entry({ inPerMTok: 1.0 }), entry({ inPerMTok: 9.0 })] },
+    ANCHOR_DAY,
+  );
+  assert.equal(prices[HAIKU].inPerMTok, 1.0);
+});
+
+test("B4A-RES-14: nextValidFrom ist die frueheste kuenftige Staffel, egal in welcher Reihenfolge notiert", () => {
+  const future = ["2026-10-01", "2026-09-15", "2026-12-01"];
+  const prices = resolveModelPrices(
+    { [HAIKU]: [entry(), ...future.map((validFrom) => entry({ validFrom }))] },
+    LAST_DAY_OLD_RATE,
+  );
+  assert.equal(prices[HAIKU].nextValidFrom, "2026-09-15");
+});
+
+test("B4A-RES-15: ohne faellige Staffel nennt die Meldung Modell, Tag und Ursache im Wortlaut", () => {
+  assert.throws(
+    () => resolveModelPrices({ [HAIKU]: [entry({ validFrom: SWITCH_DAY })] }, ANCHOR_DAY),
+    {
+      message:
+        "modelPricesUsd: Modell 'claude-haiku-4-5' hat am 2026-08-08 keine gueltige Preisstaffel " +
+        "(kein validFrom liegt in der Vergangenheit)",
+    },
+  );
+});
