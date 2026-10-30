@@ -32,9 +32,11 @@ import {
   todayIsoDate,
 } from "./konfiguration/preise.js";
 import { gatewayUrlMit } from "./konfiguration/gateway-url.js";
+import { buildNamespaceSurface, guardedConfig } from "./konfiguration/oberflaeche.js";
 
 export { csvEnv, stripTrailingSlash, todayIsoDate };
 export { gatewayUrlForPort } from "./konfiguration/gateway-url.js";
+export { attachNamespaces } from "./konfiguration/oberflaeche.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV !== "test") {
@@ -678,32 +680,6 @@ const rawConfig = {
   webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
-const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
-
-function guardedConfig(target, path = "config") {
-  return new Proxy(target, {
-    get(obj, prop, receiver) {
-      if (typeof prop === "symbol" || prop in obj) {
-        const value = Reflect.get(obj, prop, receiver);
-        const isNestedGroup = value && typeof value === "object" && !Array.isArray(value);
-        return isNestedGroup ? guardedConfig(value, `${path}.${String(prop)}`) : value;
-      }
-      if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
-      throw new TypeError(
-        `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
-          "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
-      );
-    },
-    set(obj, prop, value) {
-      if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value);
-      throw new TypeError(
-        `${path}.${String(prop)} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
-          "config.<namespace>.<key> nutzen).",
-      );
-    },
-  });
-}
-
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "mcpAllowedOrigins", "mcpOriginEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
@@ -722,42 +698,6 @@ export const CONFIG_NAMESPACES = Object.freeze({
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
   werkzeug: ["renderApiKey"],
 });
-
-function makeNamespaceGroup(keys, storage) {
-  const group = {};
-  for (const key of keys) {
-    Object.defineProperty(group, key, {
-      enumerable: true,
-      get: () => storage[key],
-      set: (value) => {
-        Object.assign(storage, { [key]: value });
-      },
-    });
-  }
-  return group;
-}
-
-export function attachNamespaces(target, namespaces) {
-  for (const [namespace, keys] of Object.entries(namespaces)) {
-    Object.defineProperty(target, namespace, {
-      enumerable: false,
-      configurable: true,
-      value: makeNamespaceGroup(keys, target),
-    });
-  }
-}
-
-function buildNamespaceSurface(storage, namespaces) {
-  const surface = {};
-  for (const [namespace, keys] of Object.entries(namespaces)) {
-    Object.defineProperty(surface, namespace, {
-      enumerable: true,
-      configurable: true,
-      value: makeNamespaceGroup(keys, storage),
-    });
-  }
-  return surface;
-}
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 
