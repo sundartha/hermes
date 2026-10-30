@@ -25,8 +25,8 @@ Code-Aenderung, sobald der Cutover unten gefahren ist.
 |---|---|---|
 | V1 | `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true` + `TELNYX_SIP_TRUNK_USERNAME`/`TELNYX_SIP_TRUNK_PASSWORD` im Render-Dashboard, Deploy erfolgt | `/healthz`-Feld `commit` (`config.server.deployedCommit`) stimmt mit dem erwarteten Deploy-Commit ueberein, UND die Boot-Log-Zeile `[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne TELNYX_SIP_TRUNK_USERNAME/...` (`warnElRegistrationSipCredsMissing`, `src/boot.js:396-404`) bleibt beim naechsten Start AUS. **NICHT** `configHash`: `configFingerprint` (`src/config-fingerprint.js:25-36`) hasht genau sieben Achsen (`allowedCountryCodes`, `maxCallsPerHour`, `budgetMonthEnabled`, `multiTenant`, `paymentCurrency`, `platformSpendCapCents`, `defaultTenantBudgetCents`) - weder `ELEVENLABS_NUMBER_REGISTRATION_ENABLED` noch die SIP-Zugangsdaten gehen ein, der Hash ist vor und nach V1 byte-identisch (Lehre "configHash belegt Modell-Flips NICHT"). |
 | V2 | **Pilot:** eine Nummer registriert (`npm run elevenlabs:nummern -- --anlegen --ja-wirklich --nur=<numberId>`), `GET /v1/convai/phone-numbers/{id}` gelesen, Testanruf gefuehrt, Rechnung geprueft | schliesst die UNBELEGT-Punkte (Registrierungskosten, `inbound_trunk_config` optional?) aus |
-| V3 | **Jede aktive DID hat eine Registrierung, keine Waisen ausser der globalen Rueckfall-Registrierung** | `npm run elevenlabs:nummern` (Default `--pruefen`) ⇒ Exit `0`, „0 aktive DIDs ohne Registrierung, 0 abweichend, 0 Waise(n) beim Anbieter". Die globale Rueckfall-Registrierung (`ELEVENLABS_AGENT_PHONE_NUMBER_ID`, s. V4) zaehlt NICHT als Waise — sie ist Betriebszustand. Bei `--nur=<numberId>` (Pilot) wird die Waisen-Pruefung trotzdem gegen ALLE aktiven DIDs gefahren, nicht nur die gewaehlte. |
-| V4 | **Die globale Rueckfall-Registrierung (`ELEVENLABS_AGENT_PHONE_NUMBER_ID`) traegt eine KONTOEIGENE Nummer** | heute traegt sie die am 24.08. freigegebene `+15739090177`. **Ohne V4 endet jeder Rueckfall-Anruf nach dem Cutover in SIP 403 D51** — heute maskiert der ANI-Override das. Owner: neue Registrierung fuer die Plattform-DID anlegen und `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen. |
+| V3 | **Jede aktive DID hat eine Registrierung, keine Waisen ausser der globalen Registrierung** | `npm run elevenlabs:nummern` (Default `--pruefen`) ⇒ Exit `0`, „0 aktive DIDs ohne Registrierung, 0 abweichend, 0 Waise(n) beim Anbieter". Die globale Registrierung (`ELEVENLABS_AGENT_PHONE_NUMBER_ID`, s. V4) zaehlt NICHT als Waise — sie ist Betriebszustand, aber kein Absender mehr. Bei `--nur=<numberId>` (Pilot) wird die Waisen-Pruefung trotzdem gegen ALLE aktiven DIDs gefahren, nicht nur die gewaehlte. |
+| V4 | **Kein Anruf laeuft ueber die globale Registrierung** | seit Paket ANR bricht ein Anruf ohne eigene Registrierung der DID vor dem Anbieteraufruf ab (Anruf `failed`, `fromRegistrationSource=abgebrochen:<grund>`). V1-V3 muessen vor dem Merge gelten, sonst scheitern Anrufe von Abonnenten ohne Registrierung hart. Nach V3 darf die Log-Zeile `Anruf ohne eigene Absendernummer abgebrochen` nicht auftreten. |
 
 **Ist-Stand sichern (GET, kostenlos):**
 
@@ -72,8 +72,8 @@ curl -s -X PATCH \
 ```
 
 Zweite, unabhaengige Rueckbau-Achse (Code-Seite): `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false`
-+ Neustart ⇒ keine neuen Registrierungen; die Auswahl faellt fuer jede DID ohne Kennung auf
-den Bestand (globale Rueckfall-Registrierung) zurueck.
++ Neustart ⇒ keine neuen Registrierungen und kein Nachholen zur Anrufzeit; Anrufe von DIDs ohne Kennung
+brechen ab, bis der Reparaturlauf sie nachgetragen hat.
 
 ### Reparaturlauf (Bestands-DIDs, Backfill)
 
