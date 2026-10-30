@@ -193,6 +193,7 @@ test("Anti-Spoof: gespoofte To ohne gueltige Signatur -> 403, kein Routing/Call-
     });
     assert.equal(res.status, 403, "ohne gueltige Signatur kein Zugriff aufs Routing");
     assert.equal(srv.readStore().calls.length, 0);
+    assert.equal(await res.text(), "invalid inbound signature");
   } finally {
     await srv.stop();
   }
