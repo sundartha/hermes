@@ -22,6 +22,21 @@ after(() => {
   setWorldDefaultLanguageEnabled(true);
 });
 
+test("[NIE1] Weltstandard en, Umschalten auf de und zurück auf en ist über defaults.js sofort sichtbar", async () => {
+  const lesen = async () => (await import("../src/store/defaults.js")).DEFAULT_LANGUAGE;
+  try {
+    assert.equal(await lesen(), "en");
+    setWorldDefaultLanguageEnabled(false);
+    assert.equal(await lesen(), "de");
+    assert.equal(DEFAULT_LANGUAGE, "de");
+    setWorldDefaultLanguageEnabled(true);
+    assert.equal(await lesen(), "en");
+    assert.equal(DEFAULT_LANGUAGE, "en");
+  } finally {
+    setWorldDefaultLanguageEnabled(true);
+  }
+});
+
 test("Aktivierungsfenster: render.yaml haelt WORLD_DEFAULT_LANGUAGE_ENABLED auf 'false', bis P13 abgenommen ist", () => {
   assert.equal(
     RENDER_ENV.WORLD_DEFAULT_LANGUAGE_ENABLED,
