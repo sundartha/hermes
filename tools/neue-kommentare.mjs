@@ -4,6 +4,7 @@ import { ESLint } from "eslint";
 import { zweckBlock } from "./auftrag/zweck.mjs";
 
 import keineKommentare from "./eslint-rules/keine-kommentare.js";
+import { istCssOderHtml, kommentareImCssOderHtml } from "./kommentare-css-html.mjs";
 import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
 import {
   dateiInhalt,
@@ -68,15 +69,21 @@ function lesbar(zeilen) {
   return { zeilen, unlesbar: [] };
 }
 
-function textKommentarZeilen(werkzeug, datei) {
+function textLeser(datei) {
+  if (istCssOderHtml(datei)) return kommentareImCssOderHtml;
+  return istYamlOderShell(datei) ? kommentareImText : undefined;
+}
+
+function textKommentarZeilen(werkzeug, datei, lesen) {
   const text = dateiInhalt("HEAD", datei, werkzeug.root);
-  return lesbar(kommentareImText(datei, text).map(({ zeile }) => zeile));
+  return lesbar(lesen(datei, text).map(({ zeile }) => zeile));
 }
 
 async function kommentarZeilen(werkzeug, datei, zeilen) {
   if (LEHREN_DATEIEN.has(datei)) return lesbar(zeilen.map(({ zeile }) => zeile));
   if (werkzeug.js.has(datei)) return jsKommentarZeilen(werkzeug, datei);
-  return istYamlOderShell(datei) ? textKommentarZeilen(werkzeug, datei) : lesbar([]);
+  const lesen = textLeser(datei);
+  return lesen === undefined ? lesbar([]) : textKommentarZeilen(werkzeug, datei, lesen);
 }
 
 function hinzugefuegt({ basis, root, nurTypen }, datei) {

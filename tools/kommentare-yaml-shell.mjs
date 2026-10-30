@@ -44,7 +44,7 @@ function istLeer(zeile) {
   return zeile.trim() === "";
 }
 
-function bisEnde(zeile, index, ende) {
+export function bisEnde(zeile, index, ende) {
   const gefunden = zeile.indexOf(ende, index);
   return gefunden === -1 ? zeile.length : gefunden + ende.length;
 }
