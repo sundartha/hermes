@@ -22,7 +22,7 @@ import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen } from "../elevenlabs/inbound-bridge-state.js";
-import { inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
+import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
 import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
@@ -95,6 +95,12 @@ const INBOUND_PFAD = Object.freeze({
 });
 function inboundPfadFuer({ config, tenantId, numberRecord }) {
   return INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
+}
+
+function sendKostendeckeAbweisung({ res, provider, locale, to }, { render }) {
+  console.log(`${INBOUND_LOG_PREFIX} kostendecke to=${e164Endung(to)}`);
+  const ansage = sayD(locale.budgetExhaustedHangup, locale.voiceProfile);
+  res.type("text/xml").send(render([ansage, hangupD()], provider));
 }
 
 async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, render }) {
@@ -344,11 +350,8 @@ export function makeVoiceRoutes({
       const language = store.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 
-      if (store.budgetExceeded(tenantId, config.billing)) {
-        return res
-          .type("text/xml")
-          .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
-      }
+      if (store.budgetExceeded(tenantId, config.billing))
+        return sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);
 
       const pfad = inboundPfadFuer({ config, tenantId, numberRecord });
       const inboundLeg = {

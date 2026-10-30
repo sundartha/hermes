@@ -6,6 +6,12 @@ import { TS_HEADER } from "./adapters/telnyx/signature.js";
 export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
+const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
+const REPLAY_ART = Object.freeze({
+  ANTWORT_WIEDERHOLT: "antwort_wiederholt",
+  NEU_VERARBEITET: "neu_verarbeitet",
+  KEEPALIVE: "keepalive",
+});
 
 export function newTurnToken() {
   return crypto.randomBytes(TURN_TOKEN_BYTES).toString("hex");
@@ -89,7 +95,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
           });
           remember(req, anchors);
         } catch (err) {
-          console.error("[webhook-idempotenz]", err.message);
+          console.error(REPLAY_LOG_PREFIX, err.message);
         }
         return send(body);
       },
@@ -97,17 +103,25 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
     res.on("close", () => deferred.settle(null));
   }
 
-  function makeGuard({ anchorsOf, seenBefore, remember }) {
+  function logWiederholung(weg, art) {
+    console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}`);
+  }
+
+  function makeGuard({ weg, anchorsOf, seenBefore, remember }) {
     return async function webhookIdempotenzGuard(req, res, next) {
       const anchors = anchorsOf(req);
       if (!anchors.length) return next();
       const pending = pendingFor(anchors);
       if (pending) {
         const answer = await answerWithinProviderDeadline(pending);
+        logWiederholung(weg, answer ? REPLAY_ART.ANTWORT_WIEDERHOLT : REPLAY_ART.NEU_VERARBEITET);
         return answer ? replayAnswer(res, answer) : next();
       }
       const known = seenBefore(req, anchors);
-      if (known) return res.type("text/xml").send(keepAliveXml(known));
+      if (known) {
+        logWiederholung(weg, REPLAY_ART.KEEPALIVE);
+        return res.type("text/xml").send(keepAliveXml(known));
+      }
       const deferred = makeDeferredAnswer();
       claimAnchors(anchors, deferred.answer);
       rememberAnswerOnSend({ req, res, anchors, deferred, remember });
@@ -116,12 +130,14 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   }
 
   const forIncoming = makeGuard({
+    weg: "incoming",
     anchorsOf: incomingAnchors,
     seenBefore: (req) => store.getCall(req.body?.CallSid || ""),
     remember: () => {},
   });
 
   const forTurn = makeGuard({
+    weg: "turn",
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
       const call = store.getCall(req.query?.callId || "");
@@ -133,8 +149,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   });
 
   const ohneNeustartSchicht = { seenBefore: () => null, remember: () => {} };
-  const forElRueckfall = makeGuard({ anchorsOf: elRueckfallAnchors, ...ohneNeustartSchicht });
-  const forElBein = makeGuard({ anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
+  const forElRueckfall = makeGuard({ weg: "el-rueckfall", anchorsOf: elRueckfallAnchors, ...ohneNeustartSchicht });
+  const forElBein = makeGuard({ weg: "el-bein", anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
 
   return { forIncoming, forTurn, forElRueckfall, forElBein };
 }

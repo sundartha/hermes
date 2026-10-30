@@ -47,6 +47,7 @@ import {
   OWNER_ID,
   tenantOwnsCall,
 } from "./request-tenant.js";
+import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
 const BODY_LIMIT = "100kb";
@@ -69,15 +70,24 @@ const captureRawBody = (req, _res, buf) => {
     Object.assign(req, { rawBody: buf });
 };
 
+const isClientError = (err) => err?.status >= HTTP_BAD_REQUEST && err.status < HTTP_SERVER_ERROR;
+
 function respondToParserError(err, res, next) {
   if (!err) return next();
-  if (!err.status || err.status < HTTP_BAD_REQUEST || err.status >= HTTP_SERVER_ERROR)
-    return next(err);
+  if (!isClientError(err)) return next(err);
   res.status(err.status).json({ error: err.type || "bad request" });
 }
 
+function logRejectedVoiceBody(err, req) {
+  if (!isClientError(err) || !req.path.startsWith(VOICE_PATH_PREFIX)) return;
+  console.log(`[voice] body_abgelehnt status=${err.status} typ=${err.type || "unbekannt"}`);
+}
+
 const withParserErrors = (parser) => (req, res, next) =>
-  parser(req, res, (err) => respondToParserError(err, res, next));
+  parser(req, res, (err) => {
+    logRejectedVoiceBody(err, req);
+    respondToParserError(err, res, next);
+  });
 
 function makeInitTokenSchranke(config) {
   const zaehler = makeFixedWindowCounter({
@@ -90,6 +100,7 @@ function makeInitTokenSchranke(config) {
 
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
+  app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
 
   const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
   const initSchranke = makeInitTokenSchranke(config);
