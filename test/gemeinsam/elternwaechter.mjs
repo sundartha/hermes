@@ -41,8 +41,8 @@ export function starteElternwaechter() {
   starteWaechter({ rolle: ROLLE_WAECHTER }, OHNE_STDIN_PIPE);
 }
 
-export function starteElternwaechterPerPpid() {
-  starteWaechter({ rolle: ROLLE_PPID_WAECHTER, eltern: process.ppid }, OHNE_PPID_ABFRAGE);
+export function starteElternwaechterPerPpid(eltern) {
+  starteWaechter({ rolle: ROLLE_PPID_WAECHTER, eltern }, OHNE_PPID_ABFRAGE);
 }
 
 if (!isMainThread && workerData?.rolle === ROLLE_WAECHTER) wacheUeberStdin();
