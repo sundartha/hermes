@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   CONFIG_NAMESPACES,
   attachNamespaces,
@@ -8,7 +9,9 @@ import {
   isSelfServiceLive,
   resolveGatewayUrl,
 } from "../../src/config.js";
-import { makeConfigOverrides } from "../helpers.js";
+import { makeConfigOverrides, ROOT } from "../helpers.js";
+import { gebauteKonfiguration } from "./gebaute-konfiguration.js";
+import { importNachUmgebung } from "./umgebung-import.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
@@ -290,4 +293,152 @@ test("attachNamespaces: zweimal auf dasselbe Ziel angewendet, liefern die Gruppe
   ziel.safety.maxCallsPerHour = GEAENDERTES_STUNDENLIMIT;
   assert.equal(ziel.maxCallsPerHour, GEAENDERTES_STUNDENLIMIT);
   assert.deepEqual(Object.keys(ziel), ["maxCallsPerHour"]);
+});
+
+const STANDARD_SUCHGEBUEHR_CENT = 1;
+const STANDARD_ABSCHALTFRIST_MS = 8000;
+const STANDARD_AUFBEWAHRUNG_TAGE = 30;
+const STANDARD_SMTP_PORT = 465;
+
+const UNGESETZTE_ROHWERTE = Object.freeze({
+  RESEARCH_ENABLED: undefined,
+  RESEARCH_SEARCH_FEE_CENTS: undefined,
+  LOOKUP_ENABLED: undefined,
+  LOOKUP_SEARCH_FEE_CENTS: undefined,
+  EXA_API_KEY: undefined,
+  EXA_API_BASE: undefined,
+  METRICS_ENABLED: undefined,
+  RENDER_API_KEY: undefined,
+  STORE_BACKEND: undefined,
+  DATABASE_URL: undefined,
+  PUBLIC_URL: undefined,
+  RENDER_EXTERNAL_URL: undefined,
+  SHUTDOWN_DRAIN_TIMEOUT_MS: undefined,
+  RETENTION_DAYS: undefined,
+  SMTP_PORT: undefined,
+  SMTP_USER: undefined,
+  SMTP_PASSWORD: undefined,
+  MAIL_FROM: undefined,
+  DATA_DIR: undefined,
+});
+
+test("Rohwerte: ohne gesetzte Variablen liefert config die festen Standardwerte", () => {
+  const erwartet = {
+    "research.researchEnabled": false,
+    "research.researchSearchFeeCents": STANDARD_SUCHGEBUEHR_CENT,
+    "research.lookupEnabled": false,
+    "research.lookupSearchFeeCents": STANDARD_SUCHGEBUEHR_CENT,
+    "research.exaApiKey": "",
+    "research.exaApiBase": "https://api.exa.ai",
+    "metrics.metricsEnabled": false,
+    "werkzeug.renderApiKey": "",
+    "store.storeBackend": "json",
+    "store.databaseUrl": "",
+    "server.publicUrl": "",
+    "server.publicUrlExplicit": false,
+    "server.shutdownDrainTimeoutMs": STANDARD_ABSCHALTFRIST_MS,
+    "privacy.retentionDays": STANDARD_AUFBEWAHRUNG_TAGE,
+    "mail.smtpPort": STANDARD_SMTP_PORT,
+    "mail.smtpUser": "",
+    "mail.smtpPassword": "",
+    "mail.mailFrom": "",
+  };
+  const gebaut = gebauteKonfiguration(UNGESETZTE_ROHWERTE, [
+    ...Object.keys(erwartet),
+    "server.dataDir",
+  ]);
+  const { "server.dataDir": datenverzeichnis, ...werte } = gebaut;
+  assert.deepEqual(werte, erwartet);
+  assert.equal(path.resolve(datenverzeichnis), path.join(ROOT, "data"));
+});
+
+test("Rohwerte: gesetzte Variablen kommen getrimmt und unverändert in config an", () => {
+  const gebaut = gebauteKonfiguration(
+    {
+      EXA_API_KEY: "  exa-schluessel \n",
+      EXA_API_BASE: " https://exa.example.test/ ",
+      RENDER_API_KEY: " render-schluessel ",
+      DATABASE_URL: "postgres://hermes@db.example.test/hermes",
+      PUBLIC_URL: "   ",
+      RENDER_EXTERNAL_URL: undefined,
+      SMTP_USER: "versand",
+      SMTP_PASSWORD: "smtp-geheim",
+      MAIL_FROM: "hermes@example.test",
+    },
+    [
+      "research.exaApiKey",
+      "research.exaApiBase",
+      "werkzeug.renderApiKey",
+      "store.databaseUrl",
+      "server.publicUrlExplicit",
+      "mail.smtpUser",
+      "mail.smtpPassword",
+      "mail.mailFrom",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "research.exaApiKey": "exa-schluessel",
+    "research.exaApiBase": "https://exa.example.test",
+    "werkzeug.renderApiKey": "render-schluessel",
+    "store.databaseUrl": "postgres://hermes@db.example.test/hermes",
+    "server.publicUrlExplicit": false,
+    "mail.smtpUser": "versand",
+    "mail.smtpPassword": "smtp-geheim",
+    "mail.mailFrom": "hermes@example.test",
+  });
+});
+
+async function frischGeladenMit(umgebung) {
+  const bisher = Object.fromEntries(Object.keys(umgebung).map((name) => [name, process.env[name]]));
+  try {
+    const [frisch] = await importNachUmgebung(
+      umgebung,
+      () => import("../../src/config.js?a6-rohwerte-ungueltig"),
+    );
+    return frisch;
+  } finally {
+    await importNachUmgebung(bisher);
+  }
+}
+
+test("Rohwerte: jeder ungültige Wert erzeugt einen Fatal-Befund, der seine Variable nennt", async () => {
+  const ungueltig = {
+    RESEARCH_ENABLED: "vielleicht",
+    RESEARCH_SEARCH_FEE_CENTS: "eins",
+    LOOKUP_ENABLED: "vielleicht",
+    LOOKUP_SEARCH_FEE_CENTS: "eins",
+    METRICS_ENABLED: "vielleicht",
+    PORT: "achtzig",
+    SHUTDOWN_DRAIN_TIMEOUT_MS: "acht",
+    RETENTION_DAYS: "dreissig",
+    DIAGNOSTIC_RETENTION_DAYS: "sieben",
+    EVIDENCE_RETENTION_DAYS: "keine",
+    SMTP_PORT: "fuenf",
+  };
+  const frisch = await frischGeladenMit(ungueltig);
+  const befunde = frisch.configFatalErrors();
+  for (const [name, wert] of Object.entries(ungueltig)) {
+    assert.ok(
+      befunde.some((befund) => befund.startsWith(`${name}="${wert}"`)),
+      `Fatal-Befund für ${name} fehlt`,
+    );
+  }
+});
+
+const STUNDEN_UND_ZIEL_LIMITS = Object.freeze(["maxCallsPerHour", "perTargetCallCap"]);
+
+test("[NIE1] jeder Schlüssel aus CONFIG_NAMESPACES ist in config definiert, Stunden- und Pro-Ziel-Limit sind Zahlen", () => {
+  const ohneWert = [];
+  for (const [namespace, keys] of Object.entries(CONFIG_NAMESPACES)) {
+    for (const key of keys) {
+      if (config[namespace][key] === undefined) ohneWert.push(`${namespace}.${key}`);
+    }
+  }
+  assert.deepEqual(ohneWert, []);
+  assert.equal(Object.values(CONFIG_NAMESPACES).flat().length, EXPECTED_TOTAL_KEYS);
+  assert.equal(config.billing.flushEpochIso, null);
+  assert.equal(config.server.webDistDir, "");
+  for (const key of STUNDEN_UND_ZIEL_LIMITS) {
+    assert.ok(Number.isFinite(config.safety[key]), `safety.${key} muss eine Zahl sein`);
+  }
 });
