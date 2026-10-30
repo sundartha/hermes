@@ -33,6 +33,7 @@ const AUFTRAG = Object.freeze({
 });
 
 const ZIELARTEN = Object.freeze(["fremd", "eigentuemer"]);
+const ABDRUCK_ABSENDER = "abdruck-absender";
 const CONSULT_STUFEN = Object.freeze(["consult-an", "consult-aus"]);
 
 function stummeMethode(name) {
@@ -40,7 +41,13 @@ function stummeMethode(name) {
 }
 
 export function abdruckSpeicher(sprache) {
-  const nummer = Object.freeze({ e164: EIGENE_NUMMER, tenantId: MANDANT, status: "active", provider: "telnyx" });
+  const nummer = Object.freeze({
+    e164: EIGENE_NUMMER,
+    tenantId: MANDANT,
+    status: "active",
+    provider: "telnyx",
+    providerAgentPhoneNumberId: ABDRUCK_ABSENDER,
+  });
   const zustand = Object.freeze({
     tenants: [{ id: MANDANT, defaultLanguage: sprache }],
     settings: {},
@@ -66,7 +73,7 @@ export function abdruckEinstellungen() {
       elevenLabsOutbound: {
         apiKey: "abdruck-anbieter-zugang",
         agentId: "abdruck-agent",
-        agentPhoneNumberId: "abdruck-absender",
+        agentPhoneNumberId: ABDRUCK_ABSENDER,
         apiBase: "https://abdruck.invalid",
         resultPollMs: POLL_NIE_MS,
         environment: "production",

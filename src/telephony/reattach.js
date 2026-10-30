@@ -1,16 +1,7 @@
 import { classifyCallTime } from "../store/state-ops.js";
+import { makeKeyedSingleFlight } from "../single-flight.js";
 
-const inFlightByCallId = new Map();
-
-export function reattachActiveCall(callId, deps) {
-  const inFlight = inFlightByCallId.get(callId);
-  if (inFlight) return inFlight;
-  const attempt = runReattach(callId, deps).finally(() => {
-    inFlightByCallId.delete(callId);
-  });
-  inFlightByCallId.set(callId, attempt);
-  return attempt;
-}
+export const reattachActiveCall = makeKeyedSingleFlight(runReattach);
 
 async function runReattach(
   callId,

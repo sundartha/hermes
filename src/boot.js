@@ -265,18 +265,20 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
-function warnElRegistrationNotWired(config) {
+function meldeElNummernregistrierung(config) {
   if (!config.voice.elevenLabsOutbound.enabled) return;
-  if (sipRegistrarWennAktiv(config)) {
-    console.log("[boot] ElevenLabs-Nummernregistrierung: eingehaengt (neue DIDs werden registriert)");
+  if (!sipRegistrarWennAktiv(config)) {
+    console.warn(
+      "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
+        "(ELEVENLABS_OUTBOUND_ENABLED, PROVISIONING_ENABLED und " +
+        "ELEVENLABS_NUMBER_REGISTRATION_ENABLED muessen alle true sein) - neue DIDs werden nicht " +
+        "bei ElevenLabs registriert, ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
+    );
     return;
   }
-  console.warn(
-    "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
-      "(ELEVENLABS_OUTBOUND_ENABLED, PROVISIONING_ENABLED und " +
-      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED muessen alle true sein) - neue DIDs werden nicht " +
-      "bei ElevenLabs registriert, ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
-  );
+  const { telnyxSipTrunkUsername, telnyxSipTrunkPassword } = config.telephony;
+  if (!telnyxSipTrunkUsername || !telnyxSipTrunkPassword) return;
+  console.log("[boot] ElevenLabs-Nummernregistrierung: eingehaengt (neue DIDs werden registriert)");
 }
 
 function warnElRegistrationSipCredsMissing(config) {
@@ -286,7 +288,7 @@ function warnElRegistrationSipCredsMissing(config) {
     "[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne " +
       "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD - das Anlegen neuer " +
       "ElevenLabs-Nummernregistrierungen schlaegt fail-closed fehl (benannte Log-Zeile je " +
-      "DID), bestehende DIDs bleiben nutzbar.",
+      "DID), ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
   );
 }
 
@@ -381,7 +383,7 @@ function assertBootGates(config, store, durableAudit) {
   assertElInboundAccess(config);
   assertElInboundScope(config);
   warnElRegistrationSipCredsMissing(config);
-  warnElRegistrationNotWired(config);
+  meldeElNummernregistrierung(config);
 }
 
 export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {

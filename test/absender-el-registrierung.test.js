@@ -10,6 +10,7 @@ import {
 } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "./fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { echtWarten } from "./echt-warten.js";
 
 const HTTP_OK = 200;
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
@@ -17,6 +18,7 @@ const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const NACHGEHOLTE_REGISTRIERUNG = "phnum_nachgeholt_b";
 const HTTP_NOT_PLACED = 500;
+const REGISTRIERUNG_DAUER_MS = 100;
 
 const AGENT_ID = "agent_el_test_1";
 const RUECKFALL_AGENT_PHONE_NUMBER_ID = "phnum_global_test";
@@ -47,7 +49,7 @@ function endJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-async function startElevenLabsMock() {
+async function startElevenLabsMock({ registrierungStatus = HTTP_OK } = {}) {
   const startRequests = [];
   const registrierungen = [];
   const server = http.createServer((req, res) => {
@@ -57,7 +59,9 @@ async function startElevenLabsMock() {
       if (req.url === PHONE_NUMBERS_PATH) {
         if (req.method === "GET") return endJson(res, HTTP_OK, []);
         registrierungen.push(JSON.parse(raw || "{}"));
-        return endJson(res, HTTP_OK, { phone_number_id: NACHGEHOLTE_REGISTRIERUNG });
+        return void echtWarten(REGISTRIERUNG_DAUER_MS).then(() =>
+          endJson(res, registrierungStatus, { phone_number_id: NACHGEHOLTE_REGISTRIERUNG }),
+        );
       }
       if (req.url.startsWith(START_PATH)) {
         startRequests.push({ body: JSON.parse(raw || "{}") });
@@ -114,8 +118,8 @@ const REGISTRIERUNG_NACHHOLEN_ENV = Object.freeze({
   TELNYX_SIP_TRUNK_PASSWORD: "sip-passwort-test",
 });
 
-async function withElevenLabs(run, extraEnv = {}) {
-  const mock = await startElevenLabsMock();
+async function withElevenLabs(run, extraEnv = {}, mockOptionen = {}) {
+  const mock = await startElevenLabsMock(mockOptionen);
   const srv = await startServer({
     env: { ...EL_ENV, ...extraEnv, ELEVENLABS_API_BASE: mock.url },
     seed: seedZweiTenants(),
@@ -128,11 +132,11 @@ async function withElevenLabs(run, extraEnv = {}) {
   }
 }
 
-function placeCall(srv, identity) {
+function placeCall(srv, identity, to = TELNYX_TEST_PEER_NUMBER) {
   return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Identity": identity },
-    body: JSON.stringify({ to: TELNYX_TEST_PEER_NUMBER, objective: OBJECTIVE }),
+    body: JSON.stringify({ to, objective: OBJECTIVE }),
   });
 }
 
@@ -228,4 +232,48 @@ test("ANR: Boot meldet woertlich, ob die Nummernregistrierung eingehaengt ist", 
   await withElevenLabs(async ({ srv }) => {
     assert.match(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
   }, REGISTRIERUNG_NACHHOLEN_ENV);
+  await withElevenLabs(
+    async ({ srv }) => {
+      assert.match(
+        srv.stdout,
+        /Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne TELNYX_SIP_TRUNK_USERNAME/,
+      );
+      assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
+    },
+    { ...REGISTRIERUNG_NACHHOLEN_ENV, TELNYX_SIP_TRUNK_USERNAME: "", TELNYX_SIP_TRUNK_PASSWORD: "" },
+  );
+});
+
+const ZWEITES_ZIEL = "+4915005559100";
+const REGISTRIERUNG_ABGELEHNT = 500;
+
+test("ANR: zwei gleichzeitige Anrufe derselben DID legen genau eine Registrierung an", async () => {
+  await withElevenLabs(
+    async ({ srv, mock }) => {
+      const antworten = await Promise.all([
+        placeCall(srv, SUBJECT_B),
+        placeCall(srv, SUBJECT_B, ZWEITES_ZIEL),
+      ]);
+      assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
+      assert.equal(mock.registrierungen.length, 1, "ein geteilter Versuch, nicht zwei Registrierungen");
+      assert.equal(mock.startRequests.length, 2);
+    },
+    REGISTRIERUNG_NACHHOLEN_ENV,
+  );
+});
+
+test("ANR: scheitert das Nachholen, endet der Anruf ohne Anbieteraufruf und mit dem Grund im Datensatz", async () => {
+  await withElevenLabs(
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, SUBJECT_B);
+      assert.equal(res.status, HTTP_NOT_PLACED);
+      assert.equal(mock.registrierungen.length, 1, "der Versuch fand statt");
+      assert.equal(mock.startRequests.length, 0, "kein Anrufstart beim Anbieter");
+      const call = ownCall(srv);
+      assert.equal(call.status, "failed");
+      assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
+    },
+    REGISTRIERUNG_NACHHOLEN_ENV,
+    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
+  );
 });
