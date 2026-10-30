@@ -367,3 +367,12 @@ test("confirmNewsletterRecipientByToken: Ablauf genau jetzt, falscher Token und 
   tenantNewsletterRecipients(ohneToken, TENANT)[0].tokenHash = null;
   assert.equal(confirmNewsletterRecipientByToken(ohneToken, "null", "2026-08-15T12:00:00.000Z"), null);
 });
+
+import { setNewsletterConsent, findTenant } from "../src/store/state-ops.js";
+
+test("setNewsletterConsent: gibt den geaenderten Mandantensatz zurueck", () => {
+  const s = freshTenantState();
+  const geaendert = setNewsletterConsent(s, TENANT, true);
+  assert.equal(geaendert, findTenant(s, TENANT));
+  assert.equal(geaendert.newsletterConsent, true);
+});
