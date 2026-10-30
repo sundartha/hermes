@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
 import { UI_META_KEY } from "./ui/contract.js";
 import { WIDGET_LOCALE_META_KEY } from "./ui/widget-i18n.js";
@@ -16,7 +15,7 @@ import {
 } from "./store/defaults.js";
 import { CONSULT_EVENT } from "./consult/delivery.js";
 import { resultCardView } from "./call-result.js";
-import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
+import { localeFor } from "./i18n/locales.js";
 import { toolErrorText } from "./mcp/fehler.js";
 import { errText, jsonText, makeDateFormatter, notAccepted, text } from "./mcp/ausgabe.js";
 import { rejectRestrictedData } from "./mcp/eingabe.js";
@@ -29,6 +28,24 @@ import {
   pollConsultHop,
   requireFields,
 } from "./mcp/gateway.js";
+import {
+  AGENT_STATUS_OUTPUT,
+  ANSWER_CONSULT_OUTPUT,
+  answerConsultInputSchema,
+  AWAIT_EVENT_OUTPUT,
+  awaitCallEventInputSchema,
+  CALL_OUTPUT,
+  CALL_RESULT_OUTPUT,
+  CALL_STATUS_OUTPUT,
+  callIdInputSchema,
+  CALLS_OUTPUT,
+  INBOX_OUTPUT,
+  INCLUDE_SEEN_FIELD,
+  MY_NUMBER_OUTPUT,
+  placeCallInputSchema,
+  placeCallRequestSchema,
+  PREPARE_CALL_OUTPUT,
+} from "./mcp/schemata.js";
 import { maskRestrictedText } from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
@@ -63,14 +80,6 @@ function pickCallStatus(callId, call, texts) {
   };
 }
 
-const CALL_STATUS_OUTPUT = {
-  call_id: z.string(),
-  status: z.string(),
-  duration_s: z.number(),
-  last_transcript_lines: z.array(z.string()),
-  failure_reason: z.string().nullable(),
-};
-
 const AWAIT_SUMMARY_PLACEHOLDER =
   "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)";
 
@@ -99,32 +108,6 @@ function maskedResultCard(result) {
   return maskResultCardFields(resultCardView(result));
 }
 
-const RESULT_CARD_OUTPUT = {
-  outcome: z.string().nullable(),
-  commitments: z.array(z.string()),
-  counterparty_commitments: z.array(z.string()),
-  open_points: z.array(z.string()),
-  next_step: z.string().nullable(),
-};
-
-const CALL_RESULT_OUTPUT = {
-  call_id: z.string(),
-  result_summary: z.string(),
-  objective_achieved: z.union([z.boolean(), z.string()]),
-  ...RESULT_CARD_OUTPUT,
-};
-
-const AWAIT_EVENT_OUTPUT = {
-  event: z.string(),
-  event_id: z.string().nullable(),
-  questions: z.array(z.string()),
-  status: z.string().nullable(),
-  failure_reason: z.string().nullable(),
-  result_summary: z.string().nullable(),
-  objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
-  ...RESULT_CARD_OUTPUT,
-};
-
 function awaitEventView({ callId, event, finished, texts }) {
   const done = finished ? pickTranscript(callId, finished, texts) : null;
   const outcome = finished ? callOutcomeView(finished) : { status: null, failure_reason: null };
@@ -139,29 +122,8 @@ function awaitEventView({ callId, event, finished, texts }) {
   };
 }
 
-const ANSWER_CONSULT_OUTPUT = {
-  accepted: z.boolean(),
-  merged_facts: z.number(),
-};
-
 const CONSULT_ANSWER_REJECTED_STATUS = 400;
 const CONSULT_ANSWER_CONFLICT_STATUS = 409;
-
-const CONTEXT_RECEIVED_OUTPUT = z.object({
-  active: z.boolean(),
-  summary: z.boolean(),
-  key_facts_count: z.number(),
-  recipient_relationship: z.boolean(),
-  desired_outcome: z.boolean(),
-});
-
-const CALL_OUTPUT = {
-  ...CALL_STATUS_OUTPUT,
-  result_summary: z.string().nullable(),
-  objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
-  context_received: CONTEXT_RECEIVED_OUTPUT,
-  deduplicated: z.boolean(),
-};
 
 function normalizeContextReceived(cr) {
   return {
@@ -172,19 +134,6 @@ function normalizeContextReceived(cr) {
     desired_outcome: !!cr?.desired_outcome,
   };
 }
-
-const PREPARE_CALL_OUTPUT = {
-  status: z.string(),
-  to: z.string(),
-  objective: z.string(),
-  language: z.string().optional(),
-  max_duration_s: z.number().optional(),
-  briefing: z.string().optional(),
-  constraints: z.string().optional(),
-  mandate: z.record(z.string(), z.unknown()).optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-  diagnostic: z.boolean().optional(),
-};
 
 function permissionsSummary(settings, labels) {
   return (
@@ -203,18 +152,9 @@ function pickAgentStatus(state, texts) {
   };
 }
 
-const AGENT_STATUS_OUTPUT = {
-  number: z.string().nullable(),
-  owner: z.string().nullable(),
-  calls: z.number(),
-  planUsagePercent: z.number().nullable(),
-  permissions: z.string(),
-};
-
 function pickMyNumber(state) {
   return { number: state.agent.number ?? null };
 }
-const MY_NUMBER_OUTPUT = { number: z.string().nullable() };
 
 function pickCall(call, formatDate) {
   const entry = {
@@ -227,32 +167,11 @@ function pickCall(call, formatDate) {
   if (call.summary) entry.summary = maskRestrictedText(call.summary);
   return entry;
 }
-const CALL_LIST_ENTRY = z.object({
-  id: z.string(),
-  direction: z.string(),
-  counterparty: z.string().nullable(),
-  status: z.string(),
-  startedAt: z.string(),
-  summary: z.string().optional(),
-});
-const CALLS_OUTPUT = { calls: z.array(CALL_LIST_ENTRY) };
 
 function callTextLine(entry) {
   const arrow = entry.direction === "outbound" ? "->" : "<-";
   return `[${entry.id}] ${arrow} ${entry.counterparty} | ${entry.status} | ${entry.startedAt}${entry.summary ? " | " + entry.summary : ""}`;
 }
-
-const INBOX_ENTRY = z.object({
-  call_id: z.string(),
-  caller: z.string().nullable(),
-  at: z.string().nullable(),
-  summary: z.string().nullable(),
-  summary_unavailable: z.boolean(),
-  ...RESULT_CARD_OUTPUT,
-  action_items: z.array(z.string()),
-  action_required: z.boolean(),
-});
-const INBOX_OUTPUT = { entries: z.array(INBOX_ENTRY), remaining: z.number() };
 
 function inboxEntryForModel(entry, formatDate) {
   const { started_at: startedAt, ...rest } = entry;
@@ -285,18 +204,6 @@ const CHECK_INBOX_DESCRIPTION =
   "what they wanted, what was promised, and what to do now. CONSUMING: entries returned " +
   "here are marked as seen and will NOT appear again. Do NOT use this to browse or re-read " +
   "call history - use list_calls for that.";
-
-const INCLUDE_SEEN_FIELD = z
-  .boolean()
-  .optional()
-  .describe("Re-read entries that were already marked as seen. Changes NO marker.");
-
-const OPEN_QUESTIONS_FIELD = z
-  .array(z.string())
-  .optional()
-  .describe(
-    "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
-  );
 
 const PLACE_CALL_DESCRIPTION =
   "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status. " + CALL_PURPOSE_SHORT_RULE;
@@ -505,111 +412,6 @@ function unconfirmedResult(loc, confirmResult) {
   return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
 }
 
-const PLACE_CALL_REQUEST_SCHEMA = {
-  to: z
-    .string()
-    .describe(
-      "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
-    ),
-  objective: z
-    .string()
-    .describe(
-      "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
-    ),
-  briefing: z
-    .string()
-    .optional()
-    .describe(
-      "Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone. SUMMARISE instead of copying in raw. NO secrets, passwords or payment data. Sensitive details only as needed. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call from your own tools and context? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the principal's personal AI assistant, not as you; phrase the context from their perspective.",
-    ),
-  constraints: z
-    .string()
-    .optional()
-    .describe(
-      "Hard limits the agent must not cross in the conversation, e.g. 'Not before 10 am, at most 40 euros, do not promise a deposit.'",
-    ),
-  mandate: z
-    .object({
-      decide_freely: z
-        .string()
-        .optional()
-        .describe(
-          "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Never invent one: take the frame from what the user has already said, otherwise leave the field out. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
-        ),
-      fallback_order: z
-        .string()
-        .optional()
-        .describe(
-          "Preference order the agent works through on its own if the first choice does not work, e.g. 'Thursday morning first, otherwise Friday, otherwise next week'. Without this field it will not try any alternative on its own.",
-        ),
-      on_out_of_scope: z
-        .enum(MANDATE_OUT_OF_SCOPE_VALUES)
-        .optional()
-        .describe(
-          "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them. Not applied on every call path.",
-        ),
-    })
-    .optional()
-    .describe(
-      "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
-    ),
-  context: z
-    .object({
-      summary: z
-        .string()
-        .optional()
-        .describe(
-          "Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat.",
-        ),
-      key_facts: z
-        .array(z.string())
-        .optional()
-        .describe(
-          "Only facts the agent must state correctly, e.g. names, dates; max. 10 short items. NO secrets/passwords/payment data.",
-        ),
-      recipient_relationship: z
-        .string()
-        .optional()
-        .describe("Only if it sets the tone: how the principal knows the called party, e.g. 'regular hairdresser'."),
-      desired_outcome: z
-        .string()
-        .optional()
-        .describe("Only so the agent knows when it is done: the result the principal wants, briefly."),
-      open_questions: OPEN_QUESTIONS_FIELD,
-    })
-    .optional()
-    .describe(
-      "Optional structured BACKGROUND, only for what the briefing lacks: fill a subfield only when this call needs it. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; sensitive details only as needed.",
-    ),
-  language: z
-    .string()
-    .optional()
-    .describe(
-      `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
-        "Leave it out unless the user asked for a particular language: without it the call " +
-        "is held in the principal's own language. An unsupported code is REJECTED with an " +
-        "error instead of being ignored. This does NOT change the language of the mandatory " +
-        "AI disclosure - that always follows the person being called.",
-    ),
-  max_duration_s: z
-    .number()
-    .int()
-    .positive()
-    .max(MAX_CALL_DURATION_CAP_S)
-    .optional()
-    .describe(
-      "Optional upper bound for the call duration in seconds. The server derives the " +
-        "effective limit from the remaining credit and only ever applies a SHORTER value " +
-        "than that; it never extends a call.",
-    ),
-  diagnostic: z
-    .boolean()
-    .optional()
-    .describe(
-      "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
-    ),
-};
-
 function createToolContext(
   server,
   {
@@ -669,13 +471,13 @@ function createToolContext(
   };
 }
 
-function registerPrepareCall({ identity, scopedTenant, loc, uiTool, callWidgetUi }) {
+function registerPrepareCall({ identity, scopedTenant, begriffe, loc, uiTool, callWidgetUi }) {
   uiTool(
     "prepare_call",
     {
       description: PREPARE_CALL_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.prepare_call,
-      inputSchema: PLACE_CALL_REQUEST_SCHEMA,
+      inputSchema: placeCallRequestSchema(begriffe),
       outputSchema: PREPARE_CALL_OUTPUT,
       ...callWidgetUi,
     },
@@ -702,6 +504,7 @@ function registerPlaceCall({
   identity,
   scopedTenant,
   consultAllowed,
+  begriffe,
   placeCallHopCall,
   loc,
   uiTool,
@@ -712,15 +515,7 @@ function registerPlaceCall({
     {
       description: placeCallDescription(consultAllowed),
       annotations: TOOL_ANNOTATIONS.place_call,
-      inputSchema: {
-        ...PLACE_CALL_REQUEST_SCHEMA,
-        confirmation_code: z
-          .string()
-          .optional()
-          .describe(
-            "Only the Hermes card can supply this, once the user confirms prepare_call (SAME arguments incl. briefing/context) - never guess or invent it. REQUIRED - without it the call is NOT placed.",
-          ),
-      },
+      inputSchema: placeCallInputSchema(begriffe),
       outputSchema: CALL_OUTPUT,
       ...callWidgetUi,
     },
@@ -767,15 +562,7 @@ function registerAwaitCallEvent({ call, pollConsult, loc, uiTool }) {
     {
       description: AWAIT_CALL_EVENT_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.await_call_event,
-      inputSchema: {
-        call_id: z.string().describe("The call_id from place_call"),
-        after_event_id: z
-          .string()
-          .optional()
-          .describe(
-            "The event_id you last handled. Pass it so you do not receive the same question twice.",
-          ),
-      },
+      inputSchema: awaitCallEventInputSchema(),
       outputSchema: AWAIT_EVENT_OUTPUT,
     },
     async ({ call_id, after_event_id }) => {
@@ -799,23 +586,7 @@ function registerAnswerConsult({ begriffe, call, loc, uiTool }) {
     {
       description: ANSWER_CONSULT_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.answer_consult,
-      inputSchema: {
-        call_id: z.string().describe("The call_id from place_call"),
-        event_id: z.string().describe("The event_id from await_call_event"),
-        status: z
-          .enum([answerMode.WORKING, answerMode.FINAL])
-          .optional()
-          .describe(
-            '"working" = acknowledge immediately, no answers needed. "final" (default) = the answer.',
-          ),
-        answers: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "One short answer per open question, in the order the questions were given. " +
-              'Required unless status is "working".',
-          ),
-      },
+      inputSchema: answerConsultInputSchema(begriffe),
       outputSchema: ANSWER_CONSULT_OUTPUT,
     },
     async ({ call_id, event_id, status, answers }) => {
@@ -874,7 +645,7 @@ function registerGetCallStatus(ctx) {
       description:
         "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.",
       annotations: TOOL_ANNOTATIONS.get_call_status,
-      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
+      inputSchema: callIdInputSchema(),
       outputSchema: CALL_STATUS_OUTPUT,
     },
     async ({ call_id }) => callStatusResult(ctx, call_id),
@@ -887,7 +658,7 @@ function registerGetCallResult({ call, loc, uiTool }) {
     {
       description: CALL_RESULT_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.get_call_result,
-      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
+      inputSchema: callIdInputSchema(),
       outputSchema: CALL_RESULT_OUTPUT,
     },
     async ({ call_id }) => {
@@ -922,7 +693,7 @@ function registerCancelCall({ call, uiTool }) {
     {
       description: CANCEL_CALL_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.cancel_call,
-      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
+      inputSchema: callIdInputSchema(),
     },
     async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
