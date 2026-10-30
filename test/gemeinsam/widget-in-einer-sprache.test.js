@@ -13,7 +13,8 @@ const WIDGET_CALL = "call";
 const WIDGETS = await ausgelieferteWidgets();
 const widgetHtml = (id) => WIDGETS[id];
 const SKRIPT_BLOCK = /<script>\n([\s\S]*?)\n\s*<\/script>/g;
-const skriptMit = (html, teil) => [...html.matchAll(SKRIPT_BLOCK)].map(([, code]) => code).find((code) => code.includes(teil));
+const skriptbloecke = (html) => [...html.matchAll(SKRIPT_BLOCK)].map(([, code]) => code);
+const skriptMit = (html, teil) => skriptbloecke(html).find((code) => code.includes(teil));
 const I18N_SKRIPT = skriptMit(widgetHtml("call"), "HermesI18n = {");
 const WIDGET_DICT = JSON.parse(I18N_SKRIPT.match(/var WIDGET_DICT = (.*);\n/)[1]);
 
@@ -155,14 +156,19 @@ function schluesselAusMarkup(html) {
   return [...ohneSkripte.matchAll(/data-i18n="([^"]+)"/g)].map(([, key]) => key);
 }
 
+const TEXT = String.raw`"((?:[^"\\]|\\.)+)"`;
+const SCHLUESSEL_MUSTER = [
+  new RegExp(String.raw`\bt\(${TEXT}\)`, "g"),
+  new RegExp(String.raw`(?:pillLabel|hudPhase):\s*${TEXT}`, "g"),
+  new RegExp(String.raw`_HINT\s*=\s*${TEXT}`, "g"),
+  new RegExp(String.raw`showConfirmHint\(${TEXT}\)`, "g"),
+  new RegExp(String.raw`enterConfirmEndState\("[a-z]+",\s*${TEXT}\)`, "g"),
+  new RegExp(String.raw`trim\(\)\)\s*\|\|\s*${TEXT}`, "g"),
+];
+
 function schluesselAusSkript(html) {
-  const treffer = [];
-  for (const block of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
-    for (const t of block[1].matchAll(/\bt\("((?:[^"\\]|\\.)+)"\)/g)) treffer.push(JSON.parse(`"${t[1]}"`));
-    for (const label of block[1].matchAll(/(?:pillLabel|hudPhase):\s*"((?:[^"\\]|\\.)+)"/g)) treffer.push(label[1]);
-    for (const konstante of block[1].matchAll(/_HINT\s*=\s*"((?:[^"\\]|\\.)+)"/g)) treffer.push(konstante[1]);
-  }
-  return treffer;
+  const code = skriptbloecke(html).join("\n");
+  return SCHLUESSEL_MUSTER.flatMap((muster) => [...code.matchAll(muster)].map(([, text]) => JSON.parse(`"${text}"`)));
 }
 
 test("WSP-4 (Vollstaendigkeit) - jeder im Widget verwendete Beschriftungsschluessel hat in JEDER Sprache eine Uebersetzung", () => {

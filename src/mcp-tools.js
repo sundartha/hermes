@@ -119,8 +119,7 @@ const CALL_STATUS_OUTPUT = {
   failure_reason: z.string().nullable(),
 };
 
-const AWAIT_SUMMARY_PLACEHOLDER =
-  "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)";
+const AWAIT_SUMMARY_PLACEHOLDER = localeFor("de").mcp.awaitSummary;
 
 export function pickTranscript(callId, call, texts = null) {
   const failureSummary =
