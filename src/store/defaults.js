@@ -80,11 +80,11 @@ export {
   emptyUsage,
   emptyUsageMap,
 } from "./begriffe-leerzustaende.js";
-export { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone } from "./begriffe-sprache-zeit.js";
+export {
+  DEFAULT_COUNTRY,
+  DEFAULT_LANGUAGE,
+  DEFAULT_TIMEZONE,
+  resolveTimezone,
+  setWorldDefaultLanguageEnabled,
+} from "./begriffe-sprache-zeit.js";
 export { PROFILE_FIELDS, resolveProfileFrom, sanitizeProfile } from "./begriffe-profil.js";
-
-export let DEFAULT_LANGUAGE = "en";
-
-export function setWorldDefaultLanguageEnabled(enabled) {
-  DEFAULT_LANGUAGE = enabled ? "en" : "de";
-}
