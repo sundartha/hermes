@@ -6,6 +6,7 @@ import path from "node:path";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_OPEN_POLLS_PER_CALL } from "../src/consult/delivery.js";
+import { CONFIRMATION_SECRET_MIN_LENGTH } from "../src/call-confirmation.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { neuePglite } from "./pglite-helfer.js";
 
@@ -246,6 +247,318 @@ test("EL-CONSULT BL-4: mehr gleichzeitige Rueckfragen am selben Anruf als erlaub
         `hoechstens ${MAX_OPEN_POLLS_PER_CALL} Consults erwartet, waren ${angelegt}`,
       );
     });
+  } finally {
+    await srv.stop();
+  }
+});
+
+const { elInboundInitSpawnEnv, initBindungsKoerper, spawnSeedWartenderElCall } = await import(
+  "./_iel-inbound-harness.js"
+);
+const { OWNER_TEST_NUMBER } = await import("./helpers.js");
+
+const SCHUTZ_HTTP_OK = 200;
+const SCHUTZ_HTTP_BAD_REQUEST = 400;
+const SCHUTZ_HTTP_PAYMENT_REQUIRED = 402;
+const SCHUTZ_HTTP_FORBIDDEN = 403;
+const SCHUTZ_HTTP_SERVER_ERROR = 500;
+const SCHUTZ_HTTP_SERVICE_UNAVAILABLE = 503;
+
+const LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
+const SCHUTZ_CALL_ID = "call_el_schutz";
+const SCHUTZ_CONVERSATION_ID = "conv_el_schutz_1";
+const DEFEKT_CALL_ID = "call_el_schutz_defekt";
+const DEFEKT_CONVERSATION_ID = "conv_el_schutz_defekt_1";
+const UNBEKANNTE_CONVERSATION_ID = "conv_el_schutz_unbekannt";
+const FALSCHES_TOOL_TOKEN = "el-tool-token-falsch";
+const LOOKUP_QUERY = "opening hours Grove Street Auto Repair Portland";
+const GERISSENE_DECKE_EUR = 99;
+
+const SCHUTZ_WEBHOOK_ENV = Object.freeze({
+  ...CONSULT_ON_ENV,
+  LOOKUP_ENABLED: "true",
+  EXA_API_KEY: "exa-test-key",
+  ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
+  MULTI_TENANT: "true",
+});
+
+const schutzSeed = () =>
+  seedState({
+    calls: [
+      laufenderAnruf({
+        id: SCHUTZ_CALL_ID,
+        direction: "outbound",
+        elevenlabsConversationId: SCHUTZ_CONVERSATION_ID,
+      }),
+      laufenderAnruf({
+        id: DEFEKT_CALL_ID,
+        direction: "outbound",
+        elevenlabsConversationId: DEFEKT_CONVERSATION_ID,
+        consults: {},
+        lookupLog: {},
+      }),
+    ],
+  });
+
+const webhookAntwort = async (srv, { pfad, token = TOOL_TOKEN, body }) => {
+  const res = await abrufMitFrist(`${srv.localUrl}${pfad}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: token },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+};
+
+const frage = (conversationId, question, token = TOOL_TOKEN) => ({
+  pfad: CONSULT_PATH,
+  token,
+  body: { conversation_id: conversationId, question },
+});
+
+const recherche = (conversationId, query, token = TOOL_TOKEN) => ({
+  pfad: LOOKUP_PATH,
+  token,
+  body: { conversation_id: conversationId, query },
+});
+
+test("[NIE1] Konsultations- und Recherche-Webhook antworten mit 403, 404, 400 und 500 samt bisherigem Text, nie mit 200", async () => {
+  const srv = await startServer({ env: SCHUTZ_WEBHOOK_ENV, seed: schutzSeed() });
+  try {
+    const verweigert = { status: SCHUTZ_HTTP_FORBIDDEN, body: { error: "token" } };
+    const ohneAnruf = { status: HTTP_NOT_FOUND, body: { error: "kein_laufender_anruf" } };
+    const intern = { status: SCHUTZ_HTTP_SERVER_ERROR, body: { error: "intern" } };
+    const faelle = [
+      [frage(SCHUTZ_CONVERSATION_ID, QUESTION, FALSCHES_TOOL_TOKEN), verweigert],
+      [recherche(SCHUTZ_CONVERSATION_ID, LOOKUP_QUERY, FALSCHES_TOOL_TOKEN), verweigert],
+      [frage(UNBEKANNTE_CONVERSATION_ID, QUESTION), ohneAnruf],
+      [recherche(UNBEKANNTE_CONVERSATION_ID, LOOKUP_QUERY), ohneAnruf],
+      [
+        frage(SCHUTZ_CONVERSATION_ID, "   "),
+        { status: SCHUTZ_HTTP_BAD_REQUEST, body: { error: "keine_frage" } },
+      ],
+      [
+        recherche(SCHUTZ_CONVERSATION_ID, undefined),
+        { status: SCHUTZ_HTTP_BAD_REQUEST, body: { error: "keine_anfrage" } },
+      ],
+      [frage(DEFEKT_CONVERSATION_ID, QUESTION), intern],
+      [recherche(DEFEKT_CONVERSATION_ID, LOOKUP_QUERY), intern],
+    ];
+    for (const [anfrage, erwartet] of faelle) {
+      const antwort = await webhookAntwort(srv, anfrage);
+      const fall = `${anfrage.pfad} mit ${JSON.stringify(anfrage.body)}`;
+      assert.notEqual(antwort.status, SCHUTZ_HTTP_OK, `${fall} darf nie mit 200 antworten`);
+      assert.deepEqual(antwort, erwartet, fall);
+    }
+    assert.equal(
+      consultCount(callOf(srv, SCHUTZ_CALL_ID)),
+      0,
+      "keine abgelehnte Rueckfrage legt einen Consult an",
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("[NIE1] Konsultations- und Recherche-Webhook antworten bei erschoepftem Guthaben mit 402 und budget_tenant", async () => {
+  const seed = schutzSeed();
+  seed.usage = {
+    [BOOTSTRAP_TENANT_ID]: {
+      inputTokens: 0,
+      outputTokens: 0,
+      costEur: GERISSENE_DECKE_EUR,
+      calls: 1,
+    },
+  };
+  const srv = await startServer({ env: SCHUTZ_WEBHOOK_ENV, seed });
+  try {
+    const consult = await webhookAntwort(srv, {
+      pfad: CONSULT_PATH,
+      body: { conversation_id: SCHUTZ_CONVERSATION_ID, question: QUESTION },
+    });
+    assert.deepEqual(consult, {
+      status: SCHUTZ_HTTP_PAYMENT_REQUIRED,
+      body: { error: "budget_tenant" },
+    });
+
+    const lookup = await webhookAntwort(srv, {
+      pfad: LOOKUP_PATH,
+      body: { conversation_id: SCHUTZ_CONVERSATION_ID, query: LOOKUP_QUERY },
+    });
+    assert.deepEqual(lookup, {
+      status: SCHUTZ_HTTP_PAYMENT_REQUIRED,
+      body: { error: "budget_tenant" },
+    });
+
+    assert.equal(
+      consultCount(callOf(srv, SCHUTZ_CALL_ID)),
+      0,
+      "bei gerissener Decke entsteht kein Consult",
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
+const BINDUNGS_TOKEN_LAENGE = 32;
+const INIT_PATH = "/webhooks/elevenlabs/init";
+const INIT_TOKEN_HEADER = "x-hermes-init-token";
+const INIT_AGENT_ID = "agent_el_schutz";
+const INIT_CALL_ID = "call_el_init_schutz";
+const INIT_BINDUNGS_TOKEN = "b".repeat(BINDUNGS_TOKEN_LAENGE);
+const UNBEKANNTES_BINDUNGS_TOKEN = "c".repeat(BINDUNGS_TOKEN_LAENGE);
+const INIT_CONVERSATION_ID = "conv_el_init_schutz";
+const FRISCH_BEANTWORTET_S = 2;
+
+const initSeedMitDefekterNummernliste = () => {
+  const seed = spawnSeedWartenderElCall({
+    callId: INIT_CALL_ID,
+    bindungsToken: INIT_BINDUNGS_TOKEN,
+    answeredVorS: FRISCH_BEANTWORTET_S,
+  });
+  seed.numbers = [
+    {
+      id: "num_owner_seed",
+      e164: OWNER_TEST_NUMBER.e164,
+      tenantId: BOOTSTRAP_TENANT_ID,
+      provider: OWNER_TEST_NUMBER.provider,
+      status: "active",
+      providerNumberId: null,
+    },
+    null,
+  ];
+  return seed;
+};
+
+const initAntwort = async (srv, { token, bindung }) => {
+  const res = await abrufMitFrist(`${srv.localUrl}${INIT_PATH}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", [INIT_TOKEN_HEADER]: token },
+    body: JSON.stringify(
+      initBindungsKoerper({
+        bindung,
+        agentId: INIT_AGENT_ID,
+        conversationId: INIT_CONVERSATION_ID,
+      }),
+    ),
+  });
+  return { status: res.status, body: await res.json() };
+};
+
+test("[NIE2] Init-Webhook antwortet mit 403 verweigert, 404 kein_laufender_anruf und 500 intern", async () => {
+  const env = elInboundInitSpawnEnv(INIT_AGENT_ID);
+  const srv = await startServer({ env, seed: initSeedMitDefekterNummernliste() });
+  try {
+    const falschesToken = await initAntwort(srv, {
+      token: "f".repeat(env.ELEVENLABS_INIT_WEBHOOK_TOKEN.length),
+      bindung: INIT_BINDUNGS_TOKEN,
+    });
+    assert.deepEqual(falschesToken, {
+      status: SCHUTZ_HTTP_FORBIDDEN,
+      body: { error: "verweigert" },
+    });
+
+    const ohneWartendenAnruf = await initAntwort(srv, {
+      token: env.ELEVENLABS_INIT_WEBHOOK_TOKEN,
+      bindung: UNBEKANNTES_BINDUNGS_TOKEN,
+    });
+    assert.deepEqual(ohneWartendenAnruf, {
+      status: HTTP_NOT_FOUND,
+      body: { error: "kein_laufender_anruf" },
+    });
+
+    const innererFehler = await initAntwort(srv, {
+      token: env.ELEVENLABS_INIT_WEBHOOK_TOKEN,
+      bindung: INIT_BINDUNGS_TOKEN,
+    });
+    assert.deepEqual(innererFehler, {
+      status: SCHUTZ_HTTP_SERVER_ERROR,
+      body: { error: "intern" },
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+const CONFIRMATION_PATH = "/api/call-confirmations";
+const CONFIRMATION_SECRET = "s".repeat(CONFIRMATION_SECRET_MIN_LENGTH);
+const CONFIRMATION_TO = "+4915112345678";
+const CONFIRMATION_OBJECTIVE = "Termin beim Friseur vereinbaren";
+const FALSCHER_CODE = "000000";
+const IDENTITAET_OHNE_TENANT = "sub-ohne-tenant-schutz";
+
+const bestaetigung = async (srv, body, headers = {}) => {
+  const res = await abrufMitFrist(`${srv.localUrl}${CONFIRMATION_PATH}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+};
+
+test("[NIE3] Anrufbestaetigung antwortet mit 400, 403 und 503, Sprachroute mit 404 fuer fehlendes Audio und 403 ohne Signatur", async () => {
+  const srv = await startServer({
+    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", MULTI_TENANT: "true" },
+  });
+  try {
+    const ohneObjective = await bestaetigung(srv, { to: CONFIRMATION_TO });
+    assert.deepEqual(ohneObjective, {
+      status: SCHUTZ_HTTP_BAD_REQUEST,
+      body: { error: "to und objective sind Pflicht" },
+    });
+
+    const ohneTenant = await bestaetigung(
+      srv,
+      { to: CONFIRMATION_TO, objective: CONFIRMATION_OBJECTIVE },
+      { "X-Internal-Identity": IDENTITAET_OHNE_TENANT },
+    );
+    assert.deepEqual(ohneTenant, {
+      status: SCHUTZ_HTTP_FORBIDDEN,
+      body: { error: "Kein Tenant fuer diese Identitaet." },
+    });
+
+    const ohneGeheimnis = await bestaetigung(srv, {
+      to: CONFIRMATION_TO,
+      objective: CONFIRMATION_OBJECTIVE,
+    });
+    assert.deepEqual(ohneGeheimnis, {
+      status: SCHUTZ_HTTP_SERVICE_UNAVAILABLE,
+      body: { reason: "confirmation_unavailable" },
+    });
+
+    const audio = await abrufMitFrist(`${srv.localUrl}/voice/tts/unbekanntes-audio-token`);
+    assert.equal(audio.status, HTTP_NOT_FOUND, "fehlendes Audio ist 404");
+    assert.equal(await audio.text(), "", "fehlendes Audio hat keinen Koerper");
+
+    const ohneSignatur = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, { method: "POST" });
+    assert.equal(ohneSignatur.status, SCHUTZ_HTTP_FORBIDDEN, "ungueltige Inbound-Signatur ist 403");
+    assert.equal(await ohneSignatur.text(), "invalid inbound signature");
+
+    assert.equal(srv.readStore().calls.length, 0, "keine Ablehnung waehlt einen Anruf");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("[NIE3] Anrufbestaetigung antwortet bei Erfolg mit 200, und ohne gueltige Bestaetigung wird nicht gewaehlt", async () => {
+  const srv = await startServer({ env: { CALL_CONFIRMATION_SECRET: CONFIRMATION_SECRET } });
+  try {
+    const anfrage = { to: CONFIRMATION_TO, objective: CONFIRMATION_OBJECTIVE };
+    const ausgestellt = await bestaetigung(srv, anfrage);
+    assert.equal(ausgestellt.status, SCHUTZ_HTTP_OK);
+    assert.equal(typeof ausgestellt.body.confirmation?.code, "string", "ein Code wird ausgestellt");
+
+    const falsch = await bestaetigung(srv, { ...anfrage, confirmation_code: FALSCHER_CODE });
+    assert.equal(falsch.status, SCHUTZ_HTTP_OK);
+    assert.equal(falsch.body.confirmed, false, "ein falscher Code bestaetigt nicht");
+
+    const richtig = await bestaetigung(srv, {
+      ...anfrage,
+      confirmation_code: ausgestellt.body.confirmation.code,
+    });
+    assert.equal(richtig.status, SCHUTZ_HTTP_OK);
+    assert.equal(richtig.body.confirmed, true, "der ausgestellte Code bestaetigt");
+
+    assert.equal(srv.readStore().calls.length, 0, "die Bestaetigung allein waehlt keinen Anruf");
   } finally {
     await srv.stop();
   }
