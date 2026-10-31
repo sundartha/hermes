@@ -40,6 +40,7 @@ const UNKNOWN_BASIS = "0123456789abcdef0123456789abcdef01234567";
 const ORPHAN_BRANCH = "waise";
 const SIDE_BRANCH = "nebenzweig";
 const MASTER_REF = "refs/remotes/origin/master";
+const UPSTREAM_MASTER_REF = "refs/remotes/upstream/master";
 const NO_BRANCH_POINT = /Abzweigstelle[^\n]*nicht bestimmbar/;
 
 function testFile(cases) {
@@ -402,14 +403,14 @@ function changeNameExpectation(directory) {
   });
 }
 
-function masterMovedOn(context) {
+function masterMovedOn(context, masterRef = MASTER_REF) {
   const repo = probe(context);
   const trunk = git(repo.directory, ["rev-parse", "--abbrev-ref", "HEAD"]);
   git(repo.directory, ["switch", "-q", "-c", PR_BRANCH]);
   git(repo.directory, ["switch", "-q", trunk]);
   changeNameExpectation(repo.directory);
   const masterTip = git(repo.directory, ["rev-parse", "HEAD"]);
-  git(repo.directory, ["update-ref", MASTER_REF, masterTip]);
+  if (masterRef !== null) git(repo.directory, ["update-ref", masterRef, masterTip]);
   git(repo.directory, ["switch", "-q", PR_BRANCH]);
   return { ...repo, trunk, masterTip, branchPoint: repo.basis };
 }
@@ -417,6 +418,12 @@ function masterMovedOn(context) {
 function openMergeOf(repo, start) {
   git(repo.directory, ["switch", "-q", "-c", QUEUE_BRANCH, start]);
   mergeBranch(repo.directory, PR_BRANCH);
+}
+
+async function checkMergeWithStaleBasis(repo) {
+  changeSumExpectation(repo.directory);
+  openMergeOf(repo, repo.masterTip);
+  return check({ ...repo, basis: repo.branchPoint }, linkedIssue({ names: [SUM_TEST, NAME_TEST] }));
 }
 
 function assertOnlySumTestReported(result) {
@@ -459,12 +466,7 @@ test("tests-nur-ergaenzt: eine Zusammenführung der Warteschlange wird wie bishe
 
 test("tests-nur-ergaenzt: ein PR-Merge-Commit auf neuerem master als die gemeldete Basis meldet nur die Änderung des PR", async (context) => {
   const repo = masterMovedOn(context);
-  changeSumExpectation(repo.directory);
-  openMergeOf(repo, repo.masterTip);
-  const result = await check(
-    { ...repo, basis: repo.branchPoint },
-    linkedIssue({ names: [SUM_TEST] }),
-  );
+  const result = await checkMergeWithStaleBasis(repo);
   assertOnlySumTestReported(result);
 });
 
@@ -505,4 +507,18 @@ test("tests-nur-ergaenzt: ein Merge aus PR-Zweig und Nebenzweig verdeckt die Tes
   const result = await check(repo, linkedIssue({ names: [NAME_TEST] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /Testfall „rechnet eins plus eins“/);
+});
+
+test("tests-nur-ergaenzt: ein PR-Merge-Commit misst auch ab einem Elternteil, der nur über upstream/master erreichbar ist", async (context) => {
+  const repo = masterMovedOn(context, UPSTREAM_MASTER_REF);
+  const result = await checkMergeWithStaleBasis(repo);
+  assertOnlySumTestReported(result);
+});
+
+test("tests-nur-ergaenzt: ohne master-Referenz misst ein PR-Merge-Commit ab dem gemeinsamen Vorfahren und meldet auch die Änderung von master", async (context) => {
+  const repo = masterMovedOn(context, null);
+  const result = await checkMergeWithStaleBasis(repo);
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /Testfall „rechnet eins plus eins“/);
+  assert.match(result.output, /Testfall „kennt den Namen“/);
 });
