@@ -151,13 +151,15 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
 
 test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
   const html = readDist("index.html");
-  const joined = (pick) => PLAN_CATALOG.map(pick).join("|");
-  const en = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "en"));
-  const de = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "de"));
-  const minutes = joined((plan) => plan.includedMinutes);
-  assert.ok(html.includes(`data-prices-en="${en}"`), `Handy: englische Katalogpreise ${en} fehlen`);
-  assert.ok(html.includes(`data-prices-de="${de}"`), `Handy: deutsche Katalogpreise ${de} fehlen`);
-  assert.ok(html.includes(`data-minutes="${minutes}"`), `Handy: Inklusivminuten ${minutes} fehlen`);
+  // Je Tarif eine Karte: Preis (EN sichtbar, DE als Fassung) und Minuten aus dem Katalog.
+  for (const plan of PLAN_CATALOG) {
+    const en = formatPlanPrice(plan.amountCents, plan.currency, "en");
+    const de = formatPlanPrice(plan.amountCents, plan.currency, "de");
+    const card = html.slice(html.indexOf(`mh-card--${plan.slug}`));
+    const body = card.slice(0, card.indexOf("mh-card__brand"));
+    assert.ok(body.includes(`<b data-mh-de="${de}">${en}</b>`), `Handy: Karte ${plan.name} zeigt nicht ${en} / ${de}`);
+    assert.ok(body.includes(`<b>${plan.includedMinutes}</b>`), `Handy: Karte ${plan.name} zeigt nicht ${plan.includedMinutes} Minuten`);
+  }
 });
 
 test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link je Sprache", () => {

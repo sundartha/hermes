@@ -9,71 +9,37 @@ import {
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { typeableLength, typedSplit } from "../lib/mobile-code.js";
 
-const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px)))";
+const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait)";
+// Screen 2 (Anker #so-funktionierts, test/home-anchors.test.js): Use Cases.
 const SCREEN_HOW = 1;
 const SCREEN_PRICE = 2;
 const SCREEN_DEV = 3;
-const AUTOPLAY_MS = 6500;
 const COPIED_MS = 1600;
-const ARRIVE_WINDOW_MS = 300;
-const ARRIVE_DELAY_MS = 520;
-const COUNT_BASE_MS = 450;
-const COUNT_PER_SEGMENT_MS = 150;
-const SWIPE_MIN_PX = 40;
 const AXIS_LOCK_PX = 8;
 const VELOCITY_WINDOW_MS = 100;
 const MIN_SAMPLES = 2;
 const SETTLE_MS = 140;
 const PROGRESS_DIGITS = 4;
 const EASE_POWER = 3;
-const NUMBER_EMPTY_MS = 380;
-const NUMBER_FILL_MS = 420;
-const NUMBER_TYPE_MS = 1860;
-const NUMBER_LIVE_MS = 2810;
-const MCP_LOCK_MS = 1700;
-const MCP_DONE_MS = 2560;
-const WAVE_DONE_MS = 3200;
-const NUMBER_CHAR_MS = 55;
-const MCP_CHAR_MS = 40;
-const RING = Object.freeze([
-  Object.freeze({
-    phases: [NUMBER_EMPTY_MS, NUMBER_FILL_MS, NUMBER_TYPE_MS, NUMBER_LIVE_MS],
-    doneAt: 4,
-    typeAt: 3,
-    charMs: NUMBER_CHAR_MS,
-  }),
-  Object.freeze({ phases: [MCP_LOCK_MS, MCP_DONE_MS], doneAt: 1, typeAt: 1, charMs: MCP_CHAR_MS }),
-  Object.freeze({ phases: [WAVE_DONE_MS], doneAt: 1, typeAt: 0, charMs: 0 }),
-]);
 const CODE_ARRIVE_MS = 560;
 const CODE_SWITCH_MS = 140;
 const CODE_CHAR_MS = 12;
 const CODE_TICK_MS = 24;
-const RUN_VARIANTS = 2;
 
 const mobile = window.matchMedia(MOBILE_QUERY);
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const state = {
   active: -1,
-  step: 0,
-  run: 0,
   plan: 0,
   way: 0,
   typed: Infinity,
   lang: "en",
-  arrivedAt: 0,
-  countValue: 0,
-  countLive: false,
 };
 const el = {};
-const vizTimers = new Set();
 const enHtml = new Map();
-let autoTimer = 0;
 let copiedTimer = 0;
-let arriveTimer = 0;
 let typeTimer = 0;
-let countFrame = 0;
 let scrollFrame = 0;
 const pager = {
   frame: 0,
@@ -92,7 +58,6 @@ const relOf = (index, current) => {
 };
 const setRel = (nodes, current) =>
   nodes.forEach((node, index) => node.setAttribute("data-rel", relOf(index, current)));
-const autoplay = () => mobile.matches && !reduced.matches;
 const langAttr = (base) => `${base}-${state.lang === "de" ? "de" : "en"}`;
 
 function onScroll() {
@@ -257,116 +222,12 @@ function wirePager() {
 
 function setActive(index) {
   state.active = index;
-  state.arrivedAt = performance.now();
   el.root.setAttribute("data-screen", String(index));
   el.screens.forEach((screen, i) => screen.setAttribute("data-active", i === index ? "1" : "0"));
-  if (index === SCREEN_HOW) state.step = 0;
-  state.run += 1;
   setCopied(false);
-  renderSteps(true);
   renderPlan();
   if (index === SCREEN_DEV) startTyping(CODE_ARRIVE_MS);
   else stopTyping();
-}
-
-function setStep(index) {
-  state.step = index;
-  state.run += 1;
-  renderSteps(false);
-}
-
-function renderSteps(arriving) {
-  const { how } = el;
-  how.setAttribute("data-step", String(state.step));
-  how.setAttribute("data-run", state.run % RUN_VARIANTS ? "b" : "a");
-  how.setAttribute("data-auto", autoplay() ? "1" : "0");
-  setRel(el.steps, state.step);
-  el.bars.forEach((bar, i) => {
-    const phase = relOf(i, state.step);
-    bar.setAttribute("data-state", { before: "done", cur: "cur", after: "todo" }[phase]);
-    if (phase === "cur") bar.setAttribute("aria-current", "step");
-    else bar.removeAttribute("aria-current");
-  });
-  mountRing(arriving);
-  scheduleAutoplay();
-}
-
-function scheduleAutoplay() {
-  clearTimeout(autoTimer);
-  if (state.active !== SCREEN_HOW || !autoplay() || document.hidden) return;
-  autoTimer = setTimeout(() => setStep((state.step + 1) % el.steps.length), AUTOPLAY_MS);
-}
-
-function clearViz() {
-  for (const id of vizTimers) clearTimeout(id);
-  vizTimers.clear();
-}
-
-function later(ms, run) {
-  const id = setTimeout(() => {
-    vizTimers.delete(id);
-    run();
-  }, ms);
-  vizTimers.add(id);
-}
-
-function mountRing(arriving) {
-  clearViz();
-  const { viz, typed } = el;
-  const timing = RING[state.step];
-  if (!timing) return;
-  if (arriving) viz.setAttribute("data-reset", "");
-  const settled = reduced.matches;
-  viz.setAttribute("data-phase", String(settled ? timing.phases.length : 0));
-  viz.setAttribute("data-done", settled ? "1" : "0");
-  typed.replaceChildren(settled ? ringText() : "");
-  if (arriving) {
-    void viz.offsetWidth;
-    viz.removeAttribute("data-reset");
-  }
-  if (settled || state.active !== SCREEN_HOW) return;
-  timing.phases.forEach((ms, i) => later(ms, () => enterPhase(i + 1, timing)));
-}
-
-const ringText = () => el.typed.getAttribute(`data-type-${state.step}`) || "";
-
-function enterPhase(phase, timing) {
-  el.viz.setAttribute("data-phase", String(phase));
-  if (phase === timing.doneAt) el.viz.setAttribute("data-done", "1");
-  if (phase === timing.typeAt) typeRingLine(timing.charMs);
-}
-
-function typeRingLine(speed) {
-  const text = ringText();
-  if (!text) return;
-  let count = 0;
-  const id = setInterval(() => {
-    count += 1;
-    el.typed.replaceChildren(text.slice(0, count));
-    if (count < text.length) return;
-    clearInterval(id);
-    vizTimers.delete(id);
-  }, speed);
-  vizTimers.add(id);
-}
-
-function wireSwipe() {
-  let start = null;
-  el.swipe.addEventListener("pointerdown", (event) => {
-    start = { left: event.clientX, top: event.clientY };
-  });
-  el.swipe.addEventListener("pointercancel", () => {
-    start = null;
-  });
-  el.swipe.addEventListener("pointerup", (event) => {
-    if (start == null) return;
-    const dx = event.clientX - start.left;
-    const dy = event.clientY - start.top;
-    start = null;
-    if (Math.abs(dx) <= SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
-    const next = state.step + (dx < 0 ? 1 : -1);
-    if (next >= 0 && next < el.steps.length) setStep(next);
-  });
 }
 
 function setPlan(index) {
@@ -375,96 +236,33 @@ function setPlan(index) {
   renderPlan();
 }
 
-function arrivalDelay() {
-  const fresh = performance.now() - state.arrivedAt < ARRIVE_WINDOW_MS;
-  return fresh && !reduced.matches && state.active === SCREEN_PRICE ? ARRIVE_DELAY_MS : 0;
-}
-
 function renderPlan() {
-  const { price } = el;
-  const on = state.active === SCREEN_PRICE;
-  const lit = litSegments(state.plan);
-  const delay = arrivalDelay();
-  price.setAttribute("data-plan", String(state.plan));
+  el.price.setAttribute("data-plan", String(state.plan));
   el.planToggle.setAttribute("data-sel", String(state.plan));
-  el.planTabs.forEach((tab, i) => tab.setAttribute("aria-selected", String(i === state.plan)));
-  el.priceNum
-    .querySelectorAll(".mh-roll")
-    .forEach((roll) => setRel([...roll.children], state.plan));
-  el.benefitRows.forEach((row) => setRel([...row.children], state.plan));
+  el.planTabs.forEach((tab) =>
+    tab.setAttribute("aria-selected", String(Number(tab.getAttribute("data-mh-plan")) === state.plan)),
+  );
   setRel(el.ctaNames, state.plan);
   sizeCta();
-  clearTimeout(arriveTimer);
-  price.toggleAttribute("data-arrive", delay > 0);
-  if (delay > 0)
-    arriveTimer = setTimeout(() => price.removeAttribute("data-arrive"), ARRIVE_WINDOW_MS);
-  el.segments.forEach((segment, j) => segment.classList.toggle("is-on", on && j < lit));
-  renderCount(on, lit, delay);
-  if (el.priceFallback) el.priceNum.replaceChildren(el.priceFallback[state.plan] || "");
 }
 
-function litSegments(plan) {
-  const most = Math.max(1, ...el.minutes);
-  return Math.round(el.minutes[plan] / (most / el.segments.length));
-}
+// Tarif-Karten: waagerecht wischen wechselt die Karte (Pager ist senkrecht).
+const SWIPE_MIN_PX = 40;
 
-function renderCount(on, lit, delay) {
-  cancelAnimationFrame(countFrame);
-  const target = el.minutes[state.plan];
-  if (!on) {
-    state.countLive = false;
-    state.countValue = target;
-    el.count.replaceChildren(String(target));
-    return;
-  }
-  if (!state.countLive) {
-    state.countLive = true;
-    state.countValue = 0;
-    el.count.replaceChildren("0");
-  }
-  const duration = reduced.matches ? 0 : COUNT_BASE_MS + lit * COUNT_PER_SEGMENT_MS;
-  countTo(target, duration, delay);
-}
-
-function countTo(target, duration, delay) {
-  const from = state.countValue;
-  const start = performance.now() + delay;
-  const tick = (now) => {
-    const ratio = duration > 0 ? clamp((now - start) / duration, 0, 1) : 1;
-    const eased = 1 - Math.pow(1 - ratio, EASE_POWER);
-    state.countValue = Math.round(from + (target - from) * eased);
-    el.count.replaceChildren(String(state.countValue));
-    if (ratio < 1) countFrame = requestAnimationFrame(tick);
-  };
-  countFrame = requestAnimationFrame(tick);
-}
-
-function priceSlots(list) {
-  if (!list.every((price) => price.length === list[0].length)) return null;
-  return Array.from(list[0], (_ch, pos) => list.map((price) => price[pos]));
-}
-
-function slotNode(chars) {
-  const node = document.createElement("span");
-  if (chars.every((ch) => ch === chars[0])) {
-    node.textContent = chars[0];
-    return node;
-  }
-  node.className = "mh-roll";
-  chars.forEach((ch, index) => {
-    const layer = document.createElement("span");
-    layer.textContent = ch;
-    layer.setAttribute("data-rel", relOf(index, state.plan));
-    node.append(layer);
+function wireCards() {
+  let start = null;
+  el.planToggle.addEventListener("pointerdown", (event) => {
+    start = { x: event.clientX, y: event.clientY };
   });
-  return node;
-}
-
-function buildPrice() {
-  const list = (el.priceNum.getAttribute(langAttr("data-prices")) || "").split("|");
-  const slots = priceSlots(list);
-  el.priceFallback = slots ? null : list;
-  el.priceNum.replaceChildren(...(slots ? slots.map(slotNode) : []));
+  el.planToggle.addEventListener("pointerup", (event) => {
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    start = null;
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy)) return;
+    const last = el.planTabs.reduce((most, tab) => Math.max(most, Number(tab.getAttribute("data-mh-plan"))), 0);
+    setPlan(clamp(state.plan + (dx < 0 ? 1 : -1), 0, last));
+  });
 }
 
 function buildCta() {
@@ -599,18 +397,11 @@ function applyLang(next) {
     if (!enHtml.has(node)) enHtml.set(node, node.innerHTML);
     node.innerHTML = lang === "de" ? node.getAttribute("data-mh-de") : enHtml.get(node);
   }
-  for (const bar of el.bars) {
-    if (!enHtml.has(bar)) enHtml.set(bar, bar.getAttribute("aria-label"));
-    bar.setAttribute(
-      "aria-label",
-      lang === "de" ? bar.getAttribute("data-mh-de-label") : enHtml.get(bar),
-    );
-  }
-  buildPrice();
   buildCta();
   renderPlan();
   renderAllCode();
   setCopied(false);
+  fitScenes();
 }
 
 const KEY_STEPS = Object.freeze({ ArrowDown: 1, PageDown: 1, ArrowUp: -1, PageUp: -1 });
@@ -648,13 +439,159 @@ function onKey(event) {
 function stopAll() {
   stopGlide();
   pager.drag = null;
-  clearTimeout(autoTimer);
-  clearViz();
-  cancelAnimationFrame(countFrame);
   stopTyping();
 }
 
+// Buehne auf Screen 2: je Szene die Zeilen, die den Verlauf bis zum unteren
+// Element fuellen (MobileHome.astro, opt/alt). Von allen Kombinationen gewinnt
+// die mit dem kleinsten Rest >= 0; eine ausgelassene wichtige Zeile (opt 1-2)
+// zaehlt wie FIT_PENALTY px Rest je Stufe. Passt nichts, steht das Kuerzeste.
+const FIT_PENALTY = 3;
+const FIT_LEAST = 3;
+
+function boxHeight(node, inner) {
+  const style = getComputedStyle(node);
+  const height = parseFloat(style.height) || 0;
+  const edges = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"].reduce(
+    (sum, key) => sum + parseFloat(style[key]),
+    0,
+  );
+  if (inner) return style.boxSizing === "border-box" ? height - edges : height;
+  return style.boxSizing === "border-box" ? height : height + edges;
+}
+
+const fitSkip = (node) => (FIT_LEAST - (Number(node.getAttribute("data-opt")) || FIT_LEAST)) * FIT_PENALTY;
+
+// Je Wahl eine Liste von Varianten: [{ on: [Knoten], height, lines, cost }].
+// Optionale Kalenderzeilen zaehlen in ihren Kalender hinein (ohne eigene Luecke).
+function fitSlots(chat, rows) {
+  const slots = [...rows].map(([row, height]) => [
+    { on: [], height: 0, lines: 0, cost: fitSkip(row) },
+    { on: [row], height, lines: 0, cost: 0 },
+  ]);
+  const groups = new Map();
+  for (const line of chat.children) {
+    const alt = line.getAttribute("data-alt");
+    if (alt) groups.set(alt, [...(groups.get(alt) || []), line]);
+    else if (line.hasAttribute("data-opt")) groups.set(line, [line]);
+  }
+  for (const members of groups.values()) {
+    const variants = members.map((line) => ({ on: [line], height: boxHeight(line), lines: 1, cost: 0 }));
+    if (members.every((line) => line.hasAttribute("data-opt"))) {
+      variants.unshift({ on: [], height: 0, lines: 0, cost: fitSkip(members[0]) });
+    }
+    slots.push(variants);
+  }
+  return slots;
+}
+
+function fitChat(chat) {
+  // Ohne Hoehe (Handy-Fassung ausgeblendet) bleibt die letzte Wahl stehen.
+  if (boxHeight(chat, true) <= 0) return;
+  const choosable = chat.querySelectorAll("[data-opt], [data-alt]");
+  choosable.forEach((node) => node.removeAttribute("data-off"));
+  // Kalenderzeilen zuerst messen, dann aus dem Kalender nehmen: dessen Hoehe
+  // gilt so ohne sie.
+  const rows = new Map(
+    [...chat.querySelectorAll(".mh-cal__row[data-opt]")].map((row) => [
+      row,
+      boxHeight(row) + (parseFloat(getComputedStyle(row.parentElement).rowGap) || 0),
+    ]),
+  );
+  rows.forEach((_, row) => row.setAttribute("data-off", ""));
+  const avail = boxHeight(chat, true);
+  chat.style.removeProperty("row-gap");
+  const gap = parseFloat(getComputedStyle(chat).rowGap) || 0;
+  const core = [...chat.children].filter((line) => !line.hasAttribute("data-opt") && !line.hasAttribute("data-alt"));
+  const base = core.reduce((sum, line) => sum + boxHeight(line), 0);
+  const slots = fitSlots(chat, rows);
+  let best = null;
+  let shortest = null;
+  const visit = (index, picked) => {
+    if (index < slots.length) {
+      for (const variant of slots[index]) visit(index + 1, [...picked, variant]);
+      return;
+    }
+    const count = core.length + picked.reduce((sum, variant) => sum + variant.lines, 0);
+    const used = base + picked.reduce((sum, variant) => sum + variant.height, 0) + gap * (count - 1);
+    const rest = avail - used;
+    const cost = rest + picked.reduce((sum, variant) => sum + variant.cost, 0);
+    if (rest >= 0 && (!best || cost < best.cost)) best = { cost, picked, rest, count };
+    if (!shortest || used < shortest.used) shortest = { used, picked };
+  };
+  visit(0, []);
+  const on = new Set((best || shortest).picked.flatMap((variant) => variant.on));
+  choosable.forEach((node) => node.toggleAttribute("data-off", !on.has(node)));
+  // Was an Rest bleibt (kleiner als eine Zeile), geht gleichmaessig in die
+  // Luecken - so steht nie ein Loch ueber dem unteren Element.
+  if (best && best.count > 1) chat.style.rowGap = `${gap + best.rest / (best.count - 1)}px`;
+}
+
+// Szenen-Knopf: springt zur Szene k. Die Runde ist reines CSS (ein Durchlauf,
+// 68 s, Szene i beginnt bei 0.6 s + i x 17 s); alle Animationen des Screens
+// werden auf den Beginn der Szene gesetzt, Blasen, Balken und Anzeiger laufen
+// von dort bis zum Ende weiter. Der erste Knopf startet alles von vorn: die
+// vollen Balken der Folge-Szenen sind dann wieder leer.
+// Bei reduzierter Bewegung gibt es keine Runde, dort steht die Szene still.
+const SCENE_MS = 17000;
+const SCENE_START_MS = 600;
+const ROUND_MS = 4 * SCENE_MS;
+
+function pickScene(k) {
+  const uses = el.uses;
+  if (reduced.matches) {
+    uses.setAttribute("data-pick", String(k));
+    return;
+  }
+  const time = SCENE_START_MS + k * SCENE_MS;
+  for (const animation of uses.getAnimations({ subtree: true })) {
+    // Nur die Runde (68 s); der pulsierende Punkt der Anruf-Zeile laeuft eigenstaendig.
+    if (animation.effect && animation.effect.getTiming().duration === ROUND_MS) {
+      animation.currentTime = time;
+      // Nach dem Durchlauf steht die Runde (finished): wieder anlaufen lassen.
+      if (animation.playState === "finished") animation.play();
+    }
+  }
+}
+
+function fitScenes() {
+  el.chats.forEach(fitChat);
+  numberSteps();
+  fitDev();
+}
+
+// Seite 4: das Fenster zeigt so viel Inhalt, wie hineinpasst. Stufen vom
+// vollsten zum knappsten; die erste ohne Ueberlauf gilt.
+const DEV_FITS = [
+  "",
+  "tight",
+  "tight nores",
+  "tight nogain",
+  "tight nosub",
+  "tight nosub nores",
+  "tight nosub nogain",
+];
+function fitDev() {
+  const dev = document.querySelector(".mh-dev");
+  const win = dev && dev.querySelector(".mh-window");
+  if (!win) return;
+  for (const fit of DEV_FITS) {
+    dev.setAttribute("data-fit", fit);
+    if (win.scrollHeight <= win.clientHeight + 1) return;
+  }
+}
+
+// --mh-step zaehlt nur die sichtbaren Blasen einer Szene: eine ausgelassene
+// Zeile hinterlaesst keine Pause in der Abfolge.
+function numberSteps() {
+  for (const chat of el.chats) {
+    const shown = [...chat.children].filter((msg) => getComputedStyle(msg).display !== "none");
+    shown.forEach((msg, i) => msg.style.setProperty("--mh-step", String(i)));
+  }
+}
+
 function realign() {
+  fitScenes();
   if (!mobile.matches || state.active < 0) return;
   const index = pager.frame ? pager.target : state.active;
   stopGlide();
@@ -678,42 +615,30 @@ function refresh() {
 }
 
 function collect(root) {
-  const how = root.querySelector(".mh-how");
   const price = root.querySelector(".mh-price");
   const dev = root.querySelector(".mh-dev");
-  const minutes = price.querySelector("[data-minutes]");
   const cta = price.querySelector(".mh-cta");
   Object.assign(el, {
     root,
-    how,
     price,
     dev,
     cta,
     scroller: root.querySelector(".mh-scroll"),
     screens: [...root.querySelectorAll(".mh-screen")],
-    steps: [...how.querySelectorAll(".mh-step")],
-    bars: [...how.querySelectorAll("[data-mh-step]")],
-    viz: how.querySelector(".mh-viz"),
-    typed: how.querySelector(".mh-viz__typed"),
-    swipe: how.querySelector("[data-mh-swipe]"),
-    priceNum: price.querySelector(".mh-price__num"),
-    planToggle: price.querySelector(".mh-toggle"),
+    planToggle: price.querySelector(".mh-cards"),
     planTabs: [...price.querySelectorAll("[data-mh-plan]")],
-    benefitRows: [...price.querySelectorAll(".mh-benefit-row")],
     ctaPre: cta.querySelector(".mh-cta__pre"),
     ctaSuf: cta.querySelector(".mh-cta__suf"),
     ctaRoll: cta.querySelector(".mh-cta__roll"),
     ctaNames: [...cta.querySelectorAll(".mh-cta__name")],
-    segments: [...price.querySelectorAll(".mh-seg")],
-    count: price.querySelector(".mh-count"),
-    minutes: minutes.getAttribute("data-minutes").split("|").map(Number),
     wayToggle: dev.querySelector(".mh-toggle"),
     wayTabs: [...dev.querySelectorAll("[data-mh-way]")],
     ways: [...dev.querySelectorAll(".mh-way")],
     copy: dev.querySelector("[data-mh-copy]"),
     copySr: dev.querySelector("[data-mh-copy-sr]"),
     i18n: [...root.querySelectorAll("[data-mh-de]")],
-    priceFallback: null,
+    chats: [...root.querySelectorAll(".mh-chat")],
+    uses: root.querySelector(".mh-uses"),
   });
   state.plan = Number(price.getAttribute("data-plan")) || 0;
 }
@@ -723,19 +648,25 @@ function wire(root) {
   for (const btn of root.querySelectorAll("[data-mh-go]")) {
     btn.addEventListener("click", () => jump(Number(btn.getAttribute("data-mh-go"))));
   }
-  el.bars.forEach((bar, i) => bar.addEventListener("click", () => setStep(i)));
-  el.planTabs.forEach((tab, i) => tab.addEventListener("click", () => setPlan(i)));
+  for (const btn of root.querySelectorAll("[data-mh-scene]")) {
+    btn.addEventListener("click", () => pickScene(Number(btn.getAttribute("data-mh-scene"))));
+  }
+  el.planTabs.forEach((tab) =>
+    tab.addEventListener("click", () => setPlan(Number(tab.getAttribute("data-mh-plan")))),
+  );
+  wireCards();
   el.wayTabs.forEach((tab, i) => tab.addEventListener("click", () => setWay(i)));
   el.copy.addEventListener("click", copyActive);
-  wireSwipe();
   wirePager();
   document.addEventListener("keydown", onKey);
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && state.active === SCREEN_HOW) setStep(state.step);
-  });
   window.addEventListener("resize", realign);
   for (const query of [mobile, reduced]) query.addEventListener("change", refresh);
-  if (document.fonts) document.fonts.ready.then(sizeCta);
+  if (document.fonts) {
+    document.fonts.ready.then(() => {
+      sizeCta();
+      fitScenes();
+    });
+  }
   new MutationObserver(() => applyLang(document.documentElement.lang)).observe(
     document.documentElement,
     {
@@ -750,9 +681,9 @@ function init() {
   if (!root) return;
   collect(root);
   wire(root);
-  buildPrice();
   buildCta();
   applyLang(document.documentElement.lang);
+  fitScenes();
   root.setAttribute("data-ready", "");
   root.setAttribute("data-pager", "");
   openAnchor();
