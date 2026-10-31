@@ -13,7 +13,7 @@ import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { releaseSections } from "./freigabe-markdown.mjs";
 import { ausnahmeUmzug } from "./ausnahme-umzug.mjs";
 import { listenkuerzungen } from "./freigabe-listenkuerzung.mjs";
-import { auslagerungsumzuege, pfadumzuege } from "./freigabe-pfadumzug.mjs";
+import { auslagerungsumzuege, fristumzuege, pfadumzuege } from "./freigabe-pfadumzug.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import {
   DURCHGELASSEN,
@@ -354,7 +354,7 @@ async function classify(basis) {
   const patterns = ownerPatterns(basis);
   const files = changedFiles(basis);
   const strenger = stricterCases(basis, files) ?? [];
-  const umzuege = new Set([...pfadumzuege(basis, files), ...(await auslagerungsumzuege(basis, files))]);
+  const umzuege = new Set([...pfadumzuege(basis, files), ...(await auslagerungsumzuege(basis, files)), ...(await fristumzuege(basis, files))]);
   const kuerzungen = listenkuerzungen(basis, files);
   const nachgerechnet = (path) => umzuege.has(path) || kuerzungen.has(path);
   const kindFor = (path) => (nachgerechnet(path) ? "code" : kindOf(patterns, path));

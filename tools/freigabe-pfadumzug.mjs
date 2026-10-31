@@ -1,7 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 
 import {
+  FRIST_LISTE,
   abhaengigkeitenUmgezogen,
+  fristListeNachUmzug,
   schluesselUmgezogen,
 } from "./auftrag/listen-eintraege-umzug.mjs";
 import { UNTERDRUECKUNGEN, auslagerungsHerkunft, listeNachAuslagerung } from "./auslagerung-eintraege.mjs";
@@ -81,6 +83,22 @@ export async function auslagerungsumzuege(basis, changes) {
   if (!changes.some(({ path }) => path === UNTERDRUECKUNGEN)) return new Set();
   try {
     return (await auslagerungNachgerechnet(basis, process.cwd())) ? new Set([UNTERDRUECKUNGEN]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+async function fristEintraegeNachgerechnet(basis, root) {
+  const [vorher, nachher] = [basis, KOPF].map((commit) => gelesen(commit, FRIST_LISTE));
+  if (!istObjekt(vorher) || !istObjekt(nachher) || !Array.isArray(vorher.befunde)) return false;
+  const umgezogen = await fristListeNachUmzug({ liste: vorher.befunde, basis, root });
+  return umgezogen !== undefined && isDeepStrictEqual({ ...vorher, befunde: umgezogen.neu }, nachher);
+}
+
+export async function fristumzuege(basis, changes) {
+  if (!changes.some(({ path }) => path === FRIST_LISTE)) return new Set();
+  try {
+    return (await fristEintraegeNachgerechnet(basis, process.cwd())) ? new Set([FRIST_LISTE]) : new Set();
   } catch {
     return new Set();
   }

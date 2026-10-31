@@ -1,4 +1,4 @@
-import { realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { argv } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,17 +8,29 @@ import { ALTVERSTOESSE, KOPIEN, UNTERDRUECKUNGEN, altverstoesseAusgelagert, kopi
 import { LISTENPFADE, lesbar, listenNachUmzug } from "./bestandslisten.mjs";
 import { aenderungenSeit, vormerken } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
+import { FRIST_LISTE, fristListeNachUmzug } from "./listen-eintraege-umzug.mjs";
 
 export const LISTENUMZUG = fileURLToPath(import.meta.url);
 const EXIT_GRUEN = 0;
 const EXIT_AUFRUF = 2;
+const EINRUECKUNG = 2;
 const AUSGELAGERTE_LISTEN = [
   { pfad: UNTERDRUECKUNGEN, umziehen: unterdrueckungenAusgelagert, meldung: (anzahl) => `${anzahl} Einträge mit ihren wortgleich ausgelagerten Funktionen umgezogen` },
   { pfad: ALTVERSTOESSE, umziehen: altverstoesseAusgelagert, meldung: (anzahl) => `${anzahl} Altverstöße der alten Datei für die ausgelagerte Datei übernommen` },
   { pfad: KOPIEN, umziehen: kopienAusgelagert, meldung: (anzahl) => `${anzahl} Kopien-Einträge der alten Datei auf die wortgleich ausgelagerte Datei umgezogen` },
+  { pfad: FRIST_LISTE, umziehen: fristEintraegeAusgelagert, meldung: (anzahl) => `${anzahl} Einträge der Regel „Anfrage mit Frist“ mit ihrer wortgleich ausgelagerten Stelle umgezogen` },
 ];
 
 export const UMZUGSLISTEN = [...new Set([...LISTENPFADE, ...AUSGELAGERTE_LISTEN.map(({ pfad }) => pfad)])];
+
+async function fristEintraegeAusgelagert({ basis, root }) {
+  const pfad = join(root, FRIST_LISTE);
+  if (!existsSync(pfad)) return undefined;
+  const vorher = JSON.parse(readFileSync(pfad, "utf8"));
+  const umgezogen = await fristListeNachUmzug({ liste: vorher.befunde, basis, root });
+  if (umgezogen === undefined) return undefined;
+  return { neu: `${JSON.stringify({ ...vorher, befunde: umgezogen.neu }, null, EINRUECKUNG)}\n`, anzahl: umgezogen.anzahl };
+}
 
 async function ausgelagerteListenUmziehen({ basis, root }) {
   for (const { pfad, umziehen, meldung } of AUSGELAGERTE_LISTEN) {

@@ -123,6 +123,11 @@ function umzugVon(alt, fund, { unveraendert, neueDatei, stammtAus }) {
   return unveraendert(partner) && neueDatei(nach) && stammtAus(fund.ort, { von, nach }) ? fund.key : undefined;
 }
 
+export function listeMitErsatz(liste, ersatz) {
+  if (ersatz.size === 0) return undefined;
+  return { neu: liste.map((eintrag, stelle) => ersatz.get(stelle) ?? eintrag).toSorted(), anzahl: ersatz.size };
+}
+
 export function kopienNachUmzug({ liste, aktuell, pruefen }) {
   const { covered, keys } = TOOLS.jscpd.shrunk(aktuell, liste, () => false);
   const gedeckt = kontingent(gezaehlt(keys));
@@ -137,8 +142,7 @@ export function kopienNachUmzug({ liste, aktuell, pruefen }) {
     const [kleinster] = passend.toSorted((links, rechts) => links.alt.tokens - rechts.alt.tokens);
     if (kleinster !== undefined) ersatz.set(kleinster.alt.stelle, kleinster.schluessel);
   }
-  if (ersatz.size === 0) return undefined;
-  return { neu: liste.map((eintrag, stelle) => ersatz.get(stelle) ?? eintrag).toSorted(), anzahl: ersatz.size };
+  return listeMitErsatz(liste, ersatz);
 }
 
 const KOPIEN_ORT = /^(?<ersteDatei>[^:]+):(?<ersteVon>\d+)-(?<ersteBis>\d+) gleicht (?<zweiteDatei>[^:]+):(?<zweiteVon>\d+)-(?<zweiteBis>\d+) \(/;
