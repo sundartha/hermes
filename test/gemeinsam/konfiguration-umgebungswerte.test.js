@@ -13,6 +13,7 @@ import {
 } from "../../src/config.js";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
+import { gebauteKonfiguration } from "./gebaute-konfiguration.js";
 
 const BUDGET_EUR_GUELTIG = 12.5;
 const NEUNUNDZWANZIG_CENT_IN_EUR = 0.29;
@@ -364,4 +365,222 @@ test("VOICE_TARIFF_GRUNDBETRAG_CENTS: 0 ist gueltig, Nachkomma und negative Cent
     'VOICE_TARIFF_GRUNDBETRAG_CENTS="telnyx_inbound_budget:-1" ist keine gueltige Karte profil:ganze-cent ' +
       `(gueltige Profile: ${GRUNDBETRAG_ROUTEN}).`,
   ]);
+});
+
+function ungesetzt(namen) {
+  return Object.fromEntries(namen.map((name) => [name, undefined]));
+}
+
+function mitUmgebungen(werte, laden) {
+  return Object.entries(werte).reduce(
+    (innen, [name, wert]) => () => mitUmgebung(name, wert, innen),
+    laden,
+  )();
+}
+
+const ELEVENLABS_STANDARD_BASIS = "https://api.elevenlabs.io";
+const ELEVENLABS_STANDARD_MODELL = "eleven_v3_conversational";
+const ELEVENLABS_STANDARD_FORMAT = "mp3_44100_128";
+const SYNTHESE_FRIST_STANDARD_MS = 2000;
+const SYNTHESE_GESAMTFRIST_STANDARD_MS = 10000;
+const TOKEN_LEBENSDAUER_STANDARD_MS = 60000;
+const ERGEBNIS_ABFRAGE_STANDARD_MS = 5000;
+const ANRUFE_JE_STUNDE_STANDARD = 6;
+const ANRUFE_JE_ZIEL_STANDARD = 3;
+const ABSCHIED_VORLAUF_STANDARD_MS = 20000;
+const RESERVE_FREIGABE_STANDARD_MS = 15000;
+const ANFRAGEN_JE_MINUTE_STANDARD = 120;
+const SMS_JE_TAG_STANDARD = 20;
+
+test("[NIE1] ohne gesetzte Variablen gelten im Namensraum safety die heutigen Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "MAX_CALLS_PER_HOUR",
+      "PER_TARGET_CALL_CAP",
+      "PER_TARGET_WINDOW_MS",
+      "ALLOWED_COUNTRY_CODES",
+      "CAP_FAREWELL_LEAD_MS",
+      "RESERVE_RELEASE_GRACE_MS",
+      "RATE_LIMIT_PER_MIN",
+      "OUTBOUND_FROZEN",
+      "SKIP_TWILIO_SIGNATURE_CHECK",
+      "CSRF_ENFORCE",
+      "MCP_ORIGIN_ENFORCE",
+    ]),
+    [
+      "safety.maxCallsPerHour",
+      "safety.perTargetCallCap",
+      "safety.perTargetWindowMs",
+      "safety.allowedCountryCodes",
+      "safety.capFarewellLeadMs",
+      "safety.reserveReleaseGraceMs",
+      "safety.rateLimitPerMin",
+      "safety.outboundFrozen",
+      "safety.skipTwilioSignatureCheck",
+      "safety.csrfEnforce",
+      "safety.mcpOriginEnforce",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "safety.maxCallsPerHour": ANRUFE_JE_STUNDE_STANDARD,
+    "safety.perTargetCallCap": ANRUFE_JE_ZIEL_STANDARD,
+    "safety.perTargetWindowMs": MS_JE_TAG,
+    "safety.allowedCountryCodes": ["+49", "+33", "+44"],
+    "safety.capFarewellLeadMs": ABSCHIED_VORLAUF_STANDARD_MS,
+    "safety.reserveReleaseGraceMs": RESERVE_FREIGABE_STANDARD_MS,
+    "safety.rateLimitPerMin": ANFRAGEN_JE_MINUTE_STANDARD,
+    "safety.outboundFrozen": false,
+    "safety.skipTwilioSignatureCheck": false,
+    "safety.csrfEnforce": true,
+    "safety.mcpOriginEnforce": true,
+  });
+});
+
+test("[NIE2] ohne gesetzte Variablen bleiben die SMS-Tagesgrenze 20 und die SMS-Zusammenfassung an", () => {
+  const gebaut = gebauteKonfiguration(ungesetzt(["DAILY_SMS_CAP", "SEND_SMS_SUMMARY"]), [
+    "voice.dailySmsCap",
+    "voice.sendSmsSummary",
+  ]);
+  assert.deepEqual(gebaut, { "voice.dailySmsCap": SMS_JE_TAG_STANDARD, "voice.sendSmsSummary": true });
+});
+
+test("ohne gesetzte ElevenLabs- und Schaltervariablen liefert die Konfiguration die Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "ELEVENLABS_API_KEY",
+      "ELEVENLABS_API_BASE",
+      "ELEVENLABS_PLAY_TTS_ENABLED",
+      "ELEVENLABS_VOICE_ID",
+      "ELEVENLABS_MODEL",
+      "ELEVENLABS_OUTPUT_FORMAT",
+      "ELEVENLABS_SYNTH_TIMEOUT_MS",
+      "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+      "ELEVENLABS_TTS_TOKEN_TTL_MS",
+      "ELEVENLABS_TOOL_TOKEN",
+      "ELEVENLABS_OUTBOUND_ENABLED",
+      "ELEVENLABS_AGENT_ID",
+      "ELEVENLABS_AGENT_PHONE_NUMBER_ID",
+      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+      "ELEVENLABS_RESULT_POLL_MS",
+      "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+      "ELEVENLABS_ENVIRONMENT",
+      "OWNER_SELF_CALL_ENABLED",
+      "INBOUND_OWNER_GREETING_ENABLED",
+      "FAKE_ORIGINATE_ELEVENLABS",
+      "OUTBOUND_ANI_GATE_ENABLED",
+    ]),
+    [
+      "voice.elevenLabsPlayTts",
+      "voice.elevenLabsToolToken",
+      "voice.elevenLabsOutbound",
+      "voice.ownerSelfCallEnabled",
+      "voice.inboundOwnerGreetingEnabled",
+      "safety.fakeOriginateElevenlabs",
+      "safety.outboundAniGateEnabled",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "voice.elevenLabsPlayTts": {
+      enabled: false,
+      apiKey: "",
+      voiceId: "",
+      model: ELEVENLABS_STANDARD_MODELL,
+      apiBase: ELEVENLABS_STANDARD_BASIS,
+      outputFormat: ELEVENLABS_STANDARD_FORMAT,
+      synthTimeoutMs: SYNTHESE_FRIST_STANDARD_MS,
+      synthTotalTimeoutMs: SYNTHESE_GESAMTFRIST_STANDARD_MS,
+      tokenTtlMs: TOKEN_LEBENSDAUER_STANDARD_MS,
+    },
+    "voice.elevenLabsToolToken": "",
+    "voice.elevenLabsOutbound": {
+      enabled: false,
+      agentId: "",
+      agentPhoneNumberId: "",
+      numberRegistrationEnabled: false,
+      resultPollMs: ERGEBNIS_ABFRAGE_STANDARD_MS,
+      apiKey: "",
+      apiBase: ELEVENLABS_STANDARD_BASIS,
+      openingLineLlm: true,
+      environment: "production",
+    },
+    "voice.ownerSelfCallEnabled": false,
+    "voice.inboundOwnerGreetingEnabled": false,
+    "safety.fakeOriginateElevenlabs": false,
+    "safety.outboundAniGateEnabled": false,
+  });
+});
+
+test("ElevenLabs-Zugangswerte und STT_PROFILE werden ohne Rand-Whitespace uebernommen", async () => {
+  const fresh = await mitUmgebungen(
+    {
+      ELEVENLABS_API_KEY: " schluessel ",
+      ELEVENLABS_VOICE_ID: " stimme ",
+      ELEVENLABS_MODEL: " modell ",
+      ELEVENLABS_OUTPUT_FORMAT: " format ",
+      ELEVENLABS_TOOL_TOKEN: " werkzeug ",
+      ELEVENLABS_AGENT_ID: " agent ",
+      ELEVENLABS_AGENT_PHONE_NUMBER_ID: " nummer ",
+      STT_PROFILE: " accurate ",
+    },
+    () => import("../../src/config.js?elevenlabs-getrimmt"),
+  );
+  const { elevenLabsPlayTts, elevenLabsOutbound } = fresh.config.voice;
+  assert.deepEqual(
+    [elevenLabsPlayTts.apiKey, elevenLabsPlayTts.voiceId, elevenLabsPlayTts.model, elevenLabsPlayTts.outputFormat],
+    ["schluessel", "stimme", "modell", "format"],
+  );
+  assert.deepEqual(
+    [elevenLabsOutbound.apiKey, elevenLabsOutbound.agentId, elevenLabsOutbound.agentPhoneNumberId],
+    ["schluessel", "agent", "nummer"],
+  );
+  assert.equal(fresh.config.voice.elevenLabsToolToken, "werkzeug");
+  assert.equal(fresh.config.voice.sttProfile, "accurate");
+});
+
+test("ein ungueltiger Wert einer safety- oder voice-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "ELEVENLABS_PLAY_TTS_ENABLED",
+    "ELEVENLABS_SYNTH_TIMEOUT_MS",
+    "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+    "ELEVENLABS_TTS_TOKEN_TTL_MS",
+    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
+    "ELEVENLABS_OUTBOUND_ENABLED",
+    "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+    "ELEVENLABS_RESULT_POLL_MS",
+    "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+    "SEND_SMS_SUMMARY",
+    "DAILY_SMS_CAP",
+    "OUTBOUND_FROZEN",
+    "MAX_CALLS_PER_HOUR",
+    "PER_TARGET_CALL_CAP",
+    "PER_TARGET_WINDOW_MS",
+    "CAP_FAREWELL_LEAD_MS",
+    "RESERVE_RELEASE_GRACE_MS",
+    "BUDGET_WATCHDOG_INTERVAL_MS",
+    "STT_SPEECH_TIMEOUT_SEC",
+    "MAX_EMPTY_TURNS",
+    "CALLER_SUBSTANCE_MIN_LEN",
+    "THINKING_SIGNAL_ENABLED",
+    "TOOL_FOLLOW_UP_ENABLED",
+    "OWNER_SELF_CALL_ENABLED",
+    "INBOUND_OWNER_GREETING_ENABLED",
+    "RATE_LIMIT_PER_MIN",
+    "CSRF_ENFORCE",
+    "MCP_ORIGIN_ENFORCE",
+    "SKIP_TWILIO_SIGNATURE_CHECK",
+    "FAKE_ORIGINATE",
+    "FAKE_ORIGINATE_ELEVENLABS",
+    "OUTBOUND_ANI_GATE_ENABLED",
+    "OUTBOUND_ANI_GATE_MAX_AGE_MS",
+  ];
+  const fresh = await mitUmgebungen(
+    Object.fromEntries(namen.map((name) => [name, "kaputt"])),
+    () => import("../../src/config.js?safety-voice-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
 });
