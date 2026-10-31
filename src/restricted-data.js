@@ -159,11 +159,10 @@ function isCardNumber(raw, minDigits) {
   if (!hasUniformSeparator(raw) || !hasCardGroupShape(raw)) return false;
   const digits = raw.replace(/\D/g, "");
   const lengthOk = digits.length >= minDigits && digits.length <= CARD_MAX_DIGITS;
-  const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
-  return lengthOk && iinOk && luhnValid(digits);
+  return lengthOk && hasCardIinAndChecksum(digits);
 }
 
-function isDigitwiseCard(digits) {
+function hasCardIinAndChecksum(digits) {
   const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
   return iinOk && luhnValid(digits);
 }
@@ -183,7 +182,7 @@ function digitwiseWindows(groups, minDigits, usualFirst) {
   for (const size of windowSizes(maxSize, minDigits, usualFirst)) {
     for (let first = 0; first + size <= groups.length; first++) {
       const digits = allDigits.slice(first, first + size);
-      if (isDigitwiseCard(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
+      if (hasCardIinAndChecksum(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
     }
   }
   return windows;
