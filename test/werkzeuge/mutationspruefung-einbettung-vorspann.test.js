@@ -9,7 +9,7 @@ import { EINBETTUNG_VORSPANN } from "../../tools/mutationspruefung/zustand.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const ZUSTAND = new URL("../../tools/mutationspruefung/zustand.mjs", import.meta.url).href;
-const AKTIVER_MUTANT = ["__STRY", "KER_ACTIVE_MUT", "ANT__"].join("");
+const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const ORIGINAL = ["export function f(x) {", "  return x + 1;", "}", "function g(x) {", "  return x * 2;", "}", ""].join("\n");
 const AUSGABE = "process.stdout.write(JSON.stringify({ f: f.toString(), g: g.toString(), abdeckung: globalThis.__stryker__?.mutantCoverage, gewoehnlich: [function gewoehnlich() { return 1; }, (zahl) => zahl, class Klasse {}, Math.max].map(String), vorspann: process.env.MUTATIONSPRUEFUNG_EINBETTUNG_VORSPANN }));";
 const KIND = [
