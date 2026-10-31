@@ -504,3 +504,35 @@ test("vorbereitung-pruefen: reine Auslagerung: alles in eine neue Datei umgezoge
   assert.match(lauf.output, /^src\/store\/defaults\.js: gelöscht; das ist keine Umformung aus dem Katalog$/m);
   assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
 });
+
+const ANRUF_ZIEL = "src/call-result.js";
+const ANRUF_KOPF = 'export const RESULT_LIST_MAX_ITEMS = 3;';
+const ANRUF_FUNKTION = "export function evidenceRetentionEnabled(privacy) {\n  return privacy.evidenceRetentionDays > 0;\n}";
+const ANRUF_WEITER = `export { ${NAMEN} } from "../call-result.js";`;
+
+function anhaengen(context, { ziel = datei(ANRUF_KOPF, ANRUF_FUNKTION, STATUS, UEBERGAENGE, JOBS), alt = datei(KOPF, ANRUF_WEITER, MIETER, HINWEIS, JOB) } = {}) {
+  const repo = repoMitBasis(context, { ...BASIS, [ANRUF_ZIEL]: datei(ANRUF_KOPF, ANRUF_FUNKTION), "liste.json": `${JSON.stringify(BEREICH)}\n` });
+  return nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { [ALT]: alt, [ANRUF_ZIEL]: ziel });
+}
+
+test("vorbereitung-pruefen: reine Auslagerung: drei Nummernbegriffe Wort für Wort ans Ende der bestehenden Datei des Anrufbereichs verschoben sind gleichwertig, alte und bestehende Datei", (context) => {
+  assert.ok(BEREICH.includes(ANRUF_ZIEL) && BEREICH.includes(ALT));
+  const lauf = anhaengen(context);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.output);
+  assert.match(lauf.output, /^src\/store\/defaults\.js: gleichwertig \(reine-auslagerung\)$/m);
+  assert.match(lauf.output, /^src\/call-result\.js: gleichwertig \(reine-auslagerung\)$/m);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: eine geänderte Zeile im alten Inhalt der bestehenden Datei ist rot", (context) => {
+  const lauf = anhaengen(context, { ziel: datei(ANRUF_KOPF.replace("3", "4"), ANRUF_FUNKTION, STATUS, UEBERGAENGE, JOBS) });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/call-result\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m);
+  assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein angehängter Teil, der nicht Wort für Wort der gestrichene ist, ist rot", (context) => {
+  const lauf = anhaengen(context, { ziel: datei(ANRUF_KOPF, ANRUF_FUNKTION, STATUS.replace("active", "aktiv"), UEBERGAENGE, JOBS) });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.match(lauf.output, /^src\/call-result\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m);
+  assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+});

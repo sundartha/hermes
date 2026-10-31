@@ -9,6 +9,11 @@ import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFile
 const WERTE = "src/werte.js";
 const STATUS_DATEI = "src/status.js";
 const ERKANNT = /^reine Auslagerung: keine Mutanten nötig \(aus src\/werte\.js nach src\/status\.js: 2 Anweisungen\)\. Grund: /m;
+
+function angehaengtErkannt(anzahl = 2) {
+  return new RegExp(`^reine Auslagerung: keine Mutanten nötig \\(aus src/werte\\.js nach src/status\\.js \\(bestehende Datei, angehängt\\): ${anzahl} Anweisungen\\)\\. Grund: `, "m");
+}
+
 const KEIN_TEIL = /^Plan: keine geänderte Zeile unter src\/ mit Mutanten oder Abschaltung\.$/m;
 const UMBAU = "Lagere aus\n\nWarum: kleiner.\n\nArt: umbau\nPaket: 1";
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -43,9 +48,9 @@ function ausgelagert(context, { werte = datei(KOPF, WEITER, ZUSTAND), status = d
   return repo;
 }
 
-function erkannt(context, repo) {
+function erkannt(context, repo, muster = ERKANNT) {
   const ausgabe = plan(context, repo);
-  assert.match(ausgabe, ERKANNT);
+  assert.match(ausgabe, muster);
   assert.match(ausgabe, KEIN_TEIL);
   return ausgabe;
 }
@@ -54,6 +59,22 @@ function vollGerechnet(context, repo) {
   const ausgabe = plan(context, repo);
   assert.doesNotMatch(ausgabe, /^reine Auslagerung/m);
   assert.match(ausgabe, /^Teil 1 von \d+: .*src\/(werte|status)\.js/m);
+}
+
+const ZIEL_KOPF = 'import "./zahl.js";';
+const FRUEHER = 'export const FRUEHER = "frueher";';
+const FRUEHER_FUNKTION = "export function frueher() {\n  return FRUEHER;\n}";
+const ZIEL_ALT = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION);
+const ZIEL_NEU = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, STATUS, UEBERGAENGE);
+
+function angehaengt(context, { ziel = ZIEL_NEU, zielAlt = ZIEL_ALT, basisDazu = {}, ...weitere } = {}) {
+  return ausgelagert(context, { status: ziel, basisDazu: { [STATUS_DATEI]: zielAlt, ...basisDazu }, ...weitere });
+}
+
+function mitAnhang(context, namen, ...konstanten) {
+  const werte = datei(KOPF, `export { ${["STATUS", ...namen].join(", ")} } from "./status.js";`, ZUSTAND);
+  const ziel = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, STATUS, ...konstanten);
+  return angehaengt(context, { vorher: datei(KOPF, STATUS, ...konstanten, ZUSTAND), werte, ziel });
 }
 
 function mitKonstanten(context, namen, ...konstanten) {
@@ -184,4 +205,217 @@ test("Quellauslagerung: hat der Umbau-Commit eine geänderte Zeile in der neuen 
   const ausgabe = plan(context, repo);
   assert.equal(ausgabe.match(new RegExp(ERKANNT.source, "gm"))?.length, 1, ausgabe);
   assert.match(ausgabe, /^Teil 1 von \d+: .*src\/(werte|status)\.js/m);
+});
+
+test("Quellauslagerung: Anweisungen wandern Wort für Wort ans Ende einer bestehenden Datei, deren alter Inhalt unverändert bleibt; der Plan hat keinen Teil, die Zeilengrenze zählt nur die Weiterreichung", (context) => {
+  const repo = angehaengt(context);
+  erkannt(context, repo, angehaengtErkannt());
+  const ausgabe = grenzen(context, repo);
+  assert.match(ausgabe, /^grün: 2 Dateien geändert, 1 neue Zeilen Produktcode, Rolle bau\.$/m);
+  assert.match(ausgabe, /^Hinweis: reine Auslagerung aus src\/werte\.js nach src\/status\.js \(bestehende Datei, angehängt\) \(2 Anweisungen Wort für Wort verschoben und weitergereicht\); deren Zeilen zählen nicht als neue Zeilen Produktcode\.$/m);
+});
+
+const ALLES = 'export { STATUS, UEBERGAENGE, zustand } from "./status.js";';
+const ZUSTAND_MIT_STATUS = ZUSTAND.replace('"aus" : "an"', "STATUS.AUS : STATUS.AN");
+const ZIEL_MIT_EINORDNEN = datei(ZIEL_KOPF, 'import { einordnen } from "./zahl.js";', FRUEHER, FRUEHER_FUNKTION, STATUS, UEBERGAENGE, ZUSTAND);
+const ALTER_IMPORT = 'import { frueher } from "./status.js";';
+const NEUER_IMPORT = 'import { frueher, STATUS } from "./status.js";';
+
+test("Quellauslagerung: wandert auch eine Funktion mit, die einen Import der Quelle liest, bekommt die bestehende Zieldatei diesen Import dazu und die Quelle behält von ihrem Import nur den Rest", (context) => {
+  const werte = datei('import "./zahl.js";', ALLES);
+  erkannt(context, angehaengt(context, { werte, ziel: ZIEL_MIT_EINORDNEN }), angehaengtErkannt(3));
+});
+
+test("Quellauslagerung: liest die bestehende Zieldatei schon dieselbe Bindung, die die verschobene Funktion braucht, bleibt sie ohne zweiten Import erkannt", (context) => {
+  const alt = datei(ZIEL_KOPF, 'import { einordnen } from "./zahl.js";', FRUEHER, FRUEHER_FUNKTION);
+  const werte = datei('import "./zahl.js";', ALLES);
+  const ziel = datei(ZIEL_KOPF, 'import { einordnen } from "./zahl.js";', FRUEHER, FRUEHER_FUNKTION, STATUS, UEBERGAENGE, ZUSTAND);
+  erkannt(context, angehaengt(context, { werte, ziel, zielAlt: alt }), angehaengtErkannt(3));
+});
+
+test("Quellauslagerung: nutzt die Quelle einen verschobenen Namen selbst, holt sie ihn aus der bestehenden Zieldatei und reicht ihn weiter", (context) => {
+  const vorher = datei(KOPF, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS);
+  const werte = datei(`${KOPF}\nimport { STATUS } from "./status.js";`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  erkannt(context, angehaengt(context, { vorher, werte }), angehaengtErkannt());
+});
+
+test("Quellauslagerung: hatte die Quelle die bestehende Zieldatei schon geladen, darf sie ihren Import an derselben Stelle um die verschobenen Namen erweitern", (context) => {
+  const vorher = datei(`${KOPF}\n${ALTER_IMPORT}`, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS);
+  const werte = datei(`${KOPF}\n${NEUER_IMPORT}`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  erkannt(context, angehaengt(context, { vorher, werte }), angehaengtErkannt());
+});
+
+test("Quellauslagerung: als Umbau-Commit plant das Anhängen auch auf dem alten Stand nichts", (context) => {
+  const vorher = datei(KOPF, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS);
+  const werte = datei(`${KOPF}\nimport { STATUS } from "./status.js";`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  const ausgabe = erkannt(context, angehaengt(context, { vorher, werte, nachricht: UMBAU }), angehaengtErkannt());
+  assert.equal(ausgabe.match(new RegExp(angehaengtErkannt().source, "gm")).length, 2, ausgabe);
+});
+
+test("Quellauslagerung: eine geänderte Zeile oder ein geänderter, fehlender oder ersetzter Import im alten Inhalt der bestehenden Zieldatei rechnet voll, auch ein Leerzeichen", (context) => {
+  const geaendert = [ZIEL_NEU.replace('"frueher"', '"spaeter"'), ZIEL_NEU.replace("return FRUEHER;", "return  FRUEHER;"), ZIEL_NEU.replace(`${ZIEL_KOPF}\n\n`, ""), ZIEL_NEU.replace(ZIEL_KOPF, 'import "./leer.js";')];
+  for (const ziel of geaendert) vollGerechnet(context, angehaengt(context, { ziel, basisDazu: { "src/leer.js": "export {};\n" } }));
+});
+
+test("Quellauslagerung: ein angehängter Teil, der nicht Wort für Wort der gestrichene Teil ist, rechnet voll", (context) => {
+  const abgewandelt = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, STATUS.replace('"aus"', '"ab"'), UEBERGAENGE);
+  const mehr = datei(ZIEL_NEU, 'export const EXTRA = "extra";');
+  const weniger = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, STATUS);
+  for (const ziel of [abgewandelt, mehr, weniger]) vollGerechnet(context, angehaengt(context, { ziel }));
+});
+
+test("Quellauslagerung: ändert neben der Quelle und der bestehenden Zieldatei eine dritte Datei, ein Test oder eine gelöschte Datei den Stand, rechnet es voll", (context) => {
+  const geloescht = (repo) => rmSync(join(repo, "src/alt.js"));
+  vollGerechnet(context, angehaengt(context, { dazu: { "src/zahl.js": `${BASIS["src/zahl.js"]}export const NULL = 0;\n` } }));
+  vollGerechnet(context, angehaengt(context, { dazu: { "test/werte.test.js": `${WERTE_TEST}// umgebaut\n` } }));
+  vollGerechnet(context, angehaengt(context, { basisDazu: { "src/alt.js": "export const ALT = 1;\n" }, vorDemCommit: geloescht }));
+});
+
+test("Quellauslagerung: eine verschobene Anweisung, die beim Laden etwas bewirkt, rechnet voll", (context) => {
+  vollGerechnet(context, mitAnhang(context, ["SEITE"], "export const SEITE = [1].map(String);"));
+});
+
+test("Quellauslagerung: ein neuer Import in der bestehenden Zieldatei, den die Quelle nicht hatte, rechnet voll", (context) => {
+  const mit = (zeile) => datei(ZIEL_KOPF, zeile, FRUEHER, FRUEHER_FUNKTION, STATUS, UEBERGAENGE);
+  for (const zeile of ['import "./leer.js";', 'import { fremd } from "./fremd.js";']) vollGerechnet(context, angehaengt(context, { ziel: mit(zeile), basisDazu: { "src/leer.js": "export {};\n", "src/fremd.js": "export const fremd = 1;\n" } }));
+});
+
+test("Quellauslagerung: reicht die Quelle nichts weiter und holt nichts aus der bestehenden Zieldatei, rechnet es voll", (context) => {
+  vollGerechnet(context, angehaengt(context, { werte: datei(KOPF, ZUSTAND) }));
+});
+
+test("Quellauslagerung: ist die bestehende Zieldatei eine symbolische Verknüpfung oder eine .ts-Datei, rechnet es voll", (context) => {
+  const verknuepft = (repo) => {
+    rmSync(join(repo, STATUS_DATEI));
+    symlinkSync("../vorlage/status.js", join(repo, STATUS_DATEI));
+  };
+  vollGerechnet(context, angehaengt(context, { dazu: { "vorlage/status.js": ZIEL_NEU }, vorDemCommit: verknuepft }));
+  const werte = datei(KOPF, 'export { STATUS, UEBERGAENGE } from "./status.ts";', ZUSTAND);
+  const ausgabe = plan(context, ausgelagert(context, { werte, status: null, basisDazu: { "src/status.ts": ZIEL_ALT }, dazu: { "src/status.ts": ZIEL_NEU } }));
+  assert.doesNotMatch(ausgabe, /^reine Auslagerung/m);
+});
+
+test("Quellauslagerung: steht der angehängte Teil vor dem alten Inhalt oder mitten darin, rechnet es voll", (context) => {
+  const davor = datei(ZIEL_KOPF, STATUS, UEBERGAENGE, FRUEHER, FRUEHER_FUNKTION);
+  const mitten = datei(ZIEL_KOPF, FRUEHER, STATUS, UEBERGAENGE, FRUEHER_FUNKTION);
+  for (const ziel of [davor, mitten]) vollGerechnet(context, angehaengt(context, { ziel }));
+});
+
+test("Quellauslagerung: steht ein Import mitten im angehängten Teil, rechnet es voll", (context) => {
+  const ziel = datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, STATUS, 'import { einordnen } from "./zahl.js";', UEBERGAENGE);
+  vollGerechnet(context, angehaengt(context, { ziel }));
+});
+
+test("Quellauslagerung: liest die verschobene Funktion einen Namen, den die bestehende Zieldatei anders bindet, rechnet es voll", (context) => {
+  const eigener = 'const process = { env: {} };';
+  const lesen = "export function modus() {\n  return process.env.MODUS;\n}";
+  const vorher = datei(KOPF, lesen, ZUSTAND);
+  const werte = datei(KOPF, 'export { modus } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher, werte, zielAlt: datei(eigener, FRUEHER), ziel: datei(eigener, FRUEHER, lesen) }));
+  const anderswo = 'import { einordnen } from "./anderes.js";';
+  const ausQuelle = "export function ordne(wert) {\n  return einordnen(wert);\n}";
+  const quelle = datei(KOPF, ausQuelle, ZUSTAND);
+  const weiter = datei(KOPF, 'export { ordne } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher: quelle, werte: weiter, zielAlt: datei(anderswo, FRUEHER), ziel: datei(anderswo, FRUEHER, ausQuelle), basisDazu: { "src/anderes.js": "export const einordnen = 1;\n" } }));
+});
+
+test("Quellauslagerung: liest die verschobene Funktion einen Namen, den die Quelle nicht mitnimmt, rechnet es voll", (context) => {
+  const grenze = "const LIMIT = 3;";
+  const begrenzt = "export function begrenzt(wert) {\n  return wert < LIMIT;\n}";
+  const vorher = datei(KOPF, grenze, begrenzt, ZUSTAND);
+  const werte = datei(KOPF, grenze, 'export { begrenzt } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher, werte, ziel: datei(ZIEL_KOPF, FRUEHER, FRUEHER_FUNKTION, begrenzt) }));
+});
+
+test("Quellauslagerung: deckt ein verschobener Name oder ein neuer Import einen Namen, den der alte Inhalt der Zieldatei als globalen liest, rechnet es voll", (context) => {
+  const liest = "export function modus() {\n  return process.env.MODUS;\n}";
+  const prozess = "export const process = Object.freeze({ env: Object.freeze({}) });";
+  const verdeckt = datei(KOPF, STATUS, prozess, ZUSTAND);
+  const weiterProzess = datei(KOPF, 'export { STATUS, process } from "./status.js";', ZUSTAND);
+  const ziel = datei(ZIEL_KOPF, liest, STATUS, prozess);
+  vollGerechnet(context, angehaengt(context, { vorher: verdeckt, werte: weiterProzess, zielAlt: datei(ZIEL_KOPF, liest), ziel }));
+  const holt = 'import { process } from "./zahl.js";';
+  const nutzt = "export function laeuft() {\n  return process;\n}";
+  const quelle = datei(KOPF, holt, nutzt, ZUSTAND);
+  const weiter = datei(KOPF, 'import "./zahl.js";', 'export { laeuft } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher: quelle, werte: weiter, zielAlt: datei(ZIEL_KOPF, liest), ziel: datei(ZIEL_KOPF, holt, liest, nutzt) }));
+});
+
+test("Quellauslagerung: lädt die bestehende Zieldatei die Quelle, auch über eine dritte Datei, entsteht ein Zyklus und es rechnet voll", (context) => {
+  const direkt = datei('import "./werte.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { zielAlt: direkt, ziel: datei(direkt, STATUS, UEBERGAENGE) }));
+  const ueber = datei('import "./mittler.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { zielAlt: ueber, ziel: datei(ueber, STATUS, UEBERGAENGE), basisDazu: { "src/mittler.js": 'import "./werte.js";\n' } }));
+});
+
+test("Quellauslagerung: reicht die bestehende Zieldatei mit export * weiter, rechnet es voll", (context) => {
+  const alt = datei('export * from "./zahl.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { zielAlt: alt, ziel: datei(alt, STATUS, UEBERGAENGE) }));
+});
+
+test("Quellauslagerung: verschiebt sich nur ein Import und kommt keine Anweisung dazu, rechnet es voll", (context) => {
+  const werte = datei(KOPF, 'export {} from "./status.js";', STATUS, UEBERGAENGE, ZUSTAND);
+  const ziel = datei(ZIEL_KOPF, 'import { einordnen } from "./zahl.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { werte, ziel }));
+});
+
+test("Quellauslagerung: wird der bestehende Import der Zieldatei in der Quelle umgestellt oder die Zieldatei vorn geladen, rechnet es voll", (context) => {
+  const vorher = datei(`${KOPF}\n${ALTER_IMPORT}`, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS);
+  const umgestellt = datei(`${NEUER_IMPORT}\n${KOPF}`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  vollGerechnet(context, angehaengt(context, { vorher, werte: umgestellt }));
+  const davor = datei(`import { STATUS } from "./status.js";\n${KOPF}`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  vollGerechnet(context, angehaengt(context, { vorher: datei(KOPF, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS), werte: davor }));
+});
+
+test("Quellauslagerung: liest die Quelle einen verschobenen Namen ohne Import, rechnet es voll", (context) => {
+  const werte = datei(KOPF, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  vollGerechnet(context, angehaengt(context, { vorher: datei(KOPF, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS), werte }));
+});
+
+test("Quellauslagerung: streicht die Quelle einen Importnamen, den der angehängte Teil nicht liest, rechnet es voll", (context) => {
+  const vorher = datei(`import { einordnen, NULL_WERT } from "./zahl.js";`, STATUS, UEBERGAENGE, ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher }));
+});
+
+const DAVOR = "export function davor() {\n  return frueher();\n}";
+
+test("Quellauslagerung: liest die verschobene Funktion einen Namen, den die Quelle aus der bestehenden Zieldatei selbst importiert hatte, bleibt es erkannt", (context) => {
+  const vorher = datei(`${KOPF}\n${ALTER_IMPORT}`, DAVOR, ZUSTAND);
+  const werte = datei(`${KOPF}\n${ALTER_IMPORT}`, 'export { davor } from "./status.js";', ZUSTAND);
+  erkannt(context, angehaengt(context, { vorher, werte, ziel: datei(ZIEL_ALT, DAVOR) }), angehaengtErkannt(1));
+});
+
+test("Quellauslagerung: liest die verschobene Funktion einen Namen, den die Quelle aus einer anderen Datei holte und die bestehende Zieldatei selbst deklariert, rechnet es voll", (context) => {
+  const vorher = datei(KOPF, 'import { frueher } from "./zahl.js";', DAVOR, ZUSTAND);
+  const werte = datei(KOPF, 'import { frueher } from "./zahl.js";', 'export { davor } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher, werte, ziel: datei(ZIEL_ALT, DAVOR) }));
+});
+
+test("Quellauslagerung: lädt die bestehende Zieldatei eine Datei, die sich nicht lesen lässt, kann kein Zyklus ausgeschlossen werden und es rechnet voll", (context) => {
+  const kaputt = datei('import "./kaputt.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { zielAlt: kaputt, ziel: datei(kaputt, STATUS, UEBERGAENGE), basisDazu: { "src/kaputt.js": "export const = ;\n" } }));
+  const fehlt = datei('import "./fehlt.js";', FRUEHER, FRUEHER_FUNKTION);
+  vollGerechnet(context, angehaengt(context, { zielAlt: fehlt, ziel: datei(fehlt, STATUS, UEBERGAENGE) }));
+});
+
+test("Quellauslagerung: eine verschobene Anweisung, die den eigenen Pfad der Datei oder einen dynamischen Import liest, rechnet voll", (context) => {
+  for (const wert of ["() => import.meta.url", "() => __dirname", '() => import("./zahl.js")']) vollGerechnet(context, mitAnhang(context, ["WO"], `export const WO = ${wert};`));
+});
+
+test("Quellauslagerung: reicht die Quelle nicht alle verschobenen Namen weiter, rechnet es voll", (context) => {
+  vollGerechnet(context, angehaengt(context, { werte: datei(KOPF, 'export { UEBERGAENGE } from "./status.js";', ZUSTAND) }));
+});
+
+test("Quellauslagerung: lädt die Quelle die bestehende Zieldatei nur und reicht die unexportierte verschobene Funktion nicht weiter, rechnet es voll", (context) => {
+  const ungenutzt = "function ungenutzt() {\n  return 1;\n}";
+  const vorher = datei(KOPF, ungenutzt, ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher, werte: datei(`${KOPF}\nimport "./status.js";`, ZUSTAND), ziel: datei(ZIEL_ALT, ungenutzt) }));
+});
+
+test("Quellauslagerung: bekommt die Quelle eine andere Ladeanweisung dazu oder tauscht zwei, rechnet es voll", (context) => {
+  const leer = 'import "./leer.js";';
+  const basisDazu = { "src/leer.js": "export {};\n" };
+  vollGerechnet(context, angehaengt(context, { werte: datei(`${KOPF}\n${leer}`, WEITER, ZUSTAND), basisDazu }));
+  const vorher = datei(`${KOPF}\n${leer}`, STATUS, UEBERGAENGE, ZUSTAND);
+  vollGerechnet(context, angehaengt(context, { vorher, werte: datei(`${leer}\n${KOPF}`, WEITER, ZUSTAND), basisDazu }));
 });

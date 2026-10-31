@@ -27,7 +27,7 @@ import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
-import { quellauslagerungsZeile, reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
+import { quellauslagerungsZeile, reineQuellauslagerung, zieldateien } from "./mutationspruefung/quellauslagerung.mjs";
 import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
 import { SCHLUESSEL_ANZEIGE, werkzeugStand } from "./mutationspruefung/vorher-speicher.mjs";
@@ -562,7 +562,7 @@ async function ohneAuslagerung(zeilen, pruefung) {
   const uebrig = new Map(zeilen);
   const auslagerung = zeilen.size === 0 ? null : await reineQuellauslagerung(pruefung, cwd());
   if (auslagerung === null) return uebrig;
-  for (const datei of [auslagerung.hilfe, ...auslagerung.neue]) uebrig.delete(datei);
+  for (const datei of [auslagerung.hilfe, ...zieldateien(auslagerung)]) uebrig.delete(datei);
   console.log(quellauslagerungsZeile(auslagerung));
   return uebrig;
 }
