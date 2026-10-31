@@ -355,11 +355,15 @@ export function losesProbe(result) {
   return result.proben.some(({ basis, pr }) => basis === GESTOPPT && pr !== GESTOPPT);
 }
 
+function withoutMoved({ basis, umgezogen }) {
+  return basis?.count === undefined ? basis : { count: basis.count - umgezogen };
+}
+
 function judge(result) {
   if (result.neu) return NEU;
   const lostProbe = losesProbe(result);
   const newProbe = result.proben.some(({ basis, pr }) => basis !== GESTOPPT && pr === GESTOPPT);
-  const hits = trend(result.treffer.basis, result.treffer.pr);
+  const hits = trend(withoutMoved(result.treffer), result.treffer.pr);
   const counted = trend(result.ausnahmen.basis, result.ausnahmen.pr);
   const exceptions = result.ausnahmen.nurAusweitung ? 0 : counted;
   if (lostProbe || hits < 0 || exceptions > 0) return LOCKERER;
@@ -388,6 +392,17 @@ async function isGrowthOnlyWidening(definition, ausnahmen, measuring) {
   return isOnlyWidening(definition, measuring);
 }
 
+async function movedHits(manifest, { contexts, basis, umzug, changedFiles }) {
+  const countsEslint = manifest.treffer?.zaehlen === "eslint-json";
+  if (umzug === undefined || !countsEslint || contexts.basis === undefined) return 0;
+  return umzug({
+    basis,
+    hilfe: contexts.basis.root,
+    pr: contexts.pr.root,
+    dateien: changedFiles,
+  });
+}
+
 async function measureCheck(id, manifest, measuring) {
   const { contexts, roots, basis } = measuring;
   const own = `${ROTPROBEN_DIR}/${id}`;
@@ -402,7 +417,11 @@ async function measureCheck(id, manifest, measuring) {
     titel: manifest.titel,
     neu: roots.basis === undefined,
     fehlt: missing ? manifest.benoetigt : undefined,
-    treffer: { basis: await hits(contexts.basis), pr: await hits(contexts.pr) },
+    treffer: {
+      basis: await hits(contexts.basis),
+      pr: await hits(contexts.pr),
+      umgezogen: await movedHits(manifest, measuring),
+    },
     ausnahmen: {
       bezeichnung: manifest.ausnahmen?.bezeichnung,
       basis: countExceptions(roots.basis, manifest.ausnahmen),
@@ -429,7 +448,7 @@ export function fakeGitHub() {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
-async function measureAll(basis, { changedFiles, checkFiles, worktree, fake }) {
+async function measureAll(basis, { changedFiles, checkFiles, worktree, fake, umzug }) {
   const basisManifests = manifests(worktree);
   const prManifests = manifests(".");
   const ids = [...new Set([...basisManifests.keys(), ...prManifests.keys()])].sort();
@@ -443,18 +462,24 @@ async function measureAll(basis, { changedFiles, checkFiles, worktree, fake }) {
       basis: basisRoot && { root: basisRoot, fake, basis },
       pr: { root: roots.pr, fake, basis },
     };
-    const measuring = { contexts, roots, basis, fake, changedFiles, checkFiles };
+    const measuring = { contexts, roots, basis, fake, changedFiles, checkFiles, umzug };
     results.push(await measureCheck(id, manifest, measuring));
   }
   return { results, all: [...basisManifests, ...prManifests] };
 }
 
-export async function measureChecks(basis, { changedFiles, checkFiles }) {
+export async function measureChecks(basis, { changedFiles, checkFiles, umzug }) {
   const worktree = worktreeWithBasisFiles(basis, checkFiles);
   const server = await fakeGitHub();
   try {
     const fake = `http://127.0.0.1:${server.address().port}`;
-    const { results, all } = await measureAll(basis, { changedFiles, checkFiles, worktree, fake });
+    const { results, all } = await measureAll(basis, {
+      changedFiles,
+      checkFiles,
+      worktree,
+      fake,
+      umzug,
+    });
     const covered = (path) => all.some(([id, manifest]) => isAffected(id, manifest, [path]));
     return { pruefungen: results, ohneMessung: checkFiles.filter((path) => !covered(path)) };
   } finally {
