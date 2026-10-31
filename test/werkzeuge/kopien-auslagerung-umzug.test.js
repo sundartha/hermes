@@ -3,14 +3,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { listenUmziehen } from "../../tools/auftrag/listenumzug.mjs";
 import { geklonterText, kopienNachUmzug, kopienOrt, stammtAusAltemText } from "../../tools/auslagerung-eintraege.mjs";
 
 import { datei } from "./auslagerung-hilfen.js";
 import { BLEIBT, FREMD, WAEHLE, WEITERGEREICHT, ZWEI } from "./kopien-umzug-fall.js";
+import { BASIS_VERGLEICH, auslagernMit, gateFuer, umziehen } from "./listenumzug-hilfen.js";
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
-const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 const LISTE = "tools/basis/jscpd.json";
 const KONFIGURATION = ".jscpd.json";
 const HILFE = "src/werte.js";
@@ -51,21 +50,11 @@ function basisRepo(context, { aendern = ({ version, befunde }) => [version, befu
 }
 
 function auslagern(repo, dateien = {}) {
-  writeFiles(repo, { [HILFE]: datei(WEITERGEREICHT, BLEIBT), [NEU]: datei(WAEHLE, ZWEI), ...dateien });
-  commitAll(repo, "Auslagerung");
-}
-
-async function umziehen(context, repo) {
-  const meldungen = [];
-  context.mock.method(console, "log", (zeile) => meldungen.push(zeile));
-  const ergebnis = await listenUmziehen({ basis: "HEAD~1", root: repo });
-  assert.equal(ergebnis, EXIT_GRUEN, meldungen.join("\n"));
-  return meldungen.join("\n");
+  auslagernMit(repo, { [HILFE]: datei(WEITERGEREICHT, BLEIBT), [NEU]: datei(WAEHLE, ZWEI), ...dateien });
 }
 
 function gate(repo) {
-  const lauf = runIn(repo, process.execPath, [BASIS_VERGLEICH, "jscpd", "--basis", "HEAD~1"]);
-  return { status: lauf.status, ausgabe: `${lauf.stdout}${lauf.stderr}` };
+  return gateFuer(repo, "jscpd");
 }
 
 async function umgezogen(context, { aendern, dateien, partner, dazu }) {
