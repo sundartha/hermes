@@ -11,10 +11,24 @@ const METHOD_INITIALIZE = "ui/initialize";
 const METHOD_INITIALIZED = "ui/notifications/initialized";
 export const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
 const METHOD_SIZE_CHANGED = "ui/notifications/size-changed";
-const INIT_ID = 1;
+export const METHOD_HOST_CONTEXT_CHANGED = "ui/notifications/host-context-changed";
+export const INIT_ID = 1;
 
 export const UI_READY_FLAG = "__hermesUiReady";
 export const UI_READY_EVENT = "hermes:ui-ready";
+
+const ROW_TOKEN_KEYS = {
+  direction: { outbound: "Outbound", inbound: "Inbound" },
+  status: {
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    dialing: "Placing call",
+    in_progress: "In call",
+  },
+};
+const ROW_TOKEN_UNKNOWN_KEYS = { status: "Result unknown" };
+const I18N_ATTR = "data-i18n";
 
 export function isObject(value) {
   return typeof value === "object" && value !== null;
@@ -36,20 +50,38 @@ export function rowFields(container) {
   return raw.split(FIELD_SEP).map((f) => f.trim()).filter(Boolean);
 }
 
+function tokenKey(field, value) {
+  const keys = ROW_TOKEN_KEYS[field];
+  if (!keys) return null;
+  return Object.hasOwn(keys, value) ? keys[value] : ROW_TOKEN_UNKNOWN_KEYS[field] || null;
+}
+
+function translateKey(doc, key) {
+  const i18n = doc.defaultView && doc.defaultView.HermesI18n;
+  return i18n && typeof i18n.t === "function" ? i18n.t(key) : key;
+}
+
+function renderCell(doc, field, value) {
+  const cell = doc.createElement("span");
+  cell.className = CELL_CLASS;
+  if (cell.setAttribute) cell.setAttribute(FIELD_ATTR, field);
+  if (value === null || value === undefined) {
+    cell.textContent = "";
+    return cell;
+  }
+  const key = tokenKey(field, String(value));
+  if (key && cell.setAttribute) cell.setAttribute(I18N_ATTR, key);
+  cell.textContent = key ? translateKey(doc, key) : String(value);
+  return cell;
+}
+
 export function renderRows(doc, container, items) {
   const fields = rowFields(container);
   while (container.firstChild) container.removeChild(container.firstChild);
   for (const item of items) {
     const row = doc.createElement("div");
     row.className = ROW_CLASS;
-    for (const field of fields) {
-      const cell = doc.createElement("span");
-      cell.className = CELL_CLASS;
-      if (cell.setAttribute) cell.setAttribute(FIELD_ATTR, field);
-      const value = isObject(item) ? item[field] : undefined;
-      cell.textContent = value === null || value === undefined ? "" : String(value);
-      row.appendChild(cell);
-    }
+    for (const field of fields) row.appendChild(renderCell(doc, field, isObject(item) ? item[field] : undefined));
     container.appendChild(row);
   }
 }
@@ -145,6 +177,9 @@ function buildBindScript() {
     `var ROW_FIELDS_ATTR = ${JSON.stringify(ROW_FIELDS_ATTR)};`,
     `var FIELD_ATTR = ${JSON.stringify(FIELD_ATTR)};`,
     `var FIELD_SEP = ${JSON.stringify(FIELD_SEP)};`,
+    `var ROW_TOKEN_KEYS = ${JSON.stringify(ROW_TOKEN_KEYS)};`,
+    `var ROW_TOKEN_UNKNOWN_KEYS = ${JSON.stringify(ROW_TOKEN_UNKNOWN_KEYS)};`,
+    `var I18N_ATTR = ${JSON.stringify(I18N_ATTR)};`,
     `var UI_PROTOCOL_VERSION = ${JSON.stringify(UI_PROTOCOL_VERSION)};`,
     `var METHOD_INITIALIZE = ${JSON.stringify(METHOD_INITIALIZE)};`,
     `var METHOD_INITIALIZED = ${JSON.stringify(METHOD_INITIALIZED)};`,
@@ -156,6 +191,9 @@ function buildBindScript() {
     isObject.toString(),
     renderLines.toString(),
     rowFields.toString(),
+    tokenKey.toString(),
+    translateKey.toString(),
+    renderCell.toString(),
     renderRows.toString(),
     applyField.toString(),
     bind.toString(),
