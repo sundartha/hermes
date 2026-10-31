@@ -137,9 +137,14 @@ test("wort-nur-in: die Beleg-Felder sind außerhalb von Store und Weiche rot", a
     `2 ${BELEG}`,
     `3 ${BELEG}`,
   ]);
+  assert.deepEqual(await repoTreffer("src/store/state-ops.js", zeilen), [
+    `1 ${BELEG}`,
+    `2 ${BELEG}`,
+    `3 ${BELEG}`,
+  ]);
   for (const datei of [
     "src/store/pg.js",
-    "src/store/state-ops.js",
+    "src/store/zustand/nummern.js",
     "src/elevenlabs/inbound-path-decision.js",
   ]) {
     assert.deepEqual(await repoTreffer(datei, zeilen), [], datei);
