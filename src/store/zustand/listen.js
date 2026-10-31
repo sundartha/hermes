@@ -1,6 +1,7 @@
 import { TENANT_STATUS } from "../defaults.js";
 import { safeEqual } from "../../util.js";
-import { MS_PER_DAY, tenantsOf } from "./grundlagen.js";
+import { MS_PER_DAY } from "../../utils/timer.js";
+import { tenantsOf } from "./grundlagen.js";
 import { findTenant } from "./mandant.js";
 
 export function allTenantIds(state) {
