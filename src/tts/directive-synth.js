@@ -19,9 +19,14 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     const beendetAnruf = directives.some((direktive) => direktive.kind === DIRECTIVE.HANGUP);
     const abgabeMs = eingangMs + PROVIDER_WEBHOOK_HARDCUT_MS - TURN_NETWORK_RESERVE_MS;
     const ablage = beendetAnruf ? (result) => ablegenVollstaendig(result, abgabeMs) : ablegenStreamend;
-    const out = [];
-    for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
-    return out;
+    try {
+      const out = [];
+      for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
+      return out;
+    } catch (err) {
+      console.error(`[play-tts] Synthese geworfen (${err.message}) -> Azure-Fallback`);
+      return directives;
+    }
   }
 
   async function withPlayAudio(direktive, cfg, ablage) {
