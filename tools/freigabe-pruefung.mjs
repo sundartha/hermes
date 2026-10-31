@@ -11,6 +11,7 @@ import {
 import { instructionFindings, lineFingerprint } from "./anweisungen-befunde.mjs";
 import { FREIGABE_GRUENDE, grund, zweckZeilen } from "./freigabe-gruende.mjs";
 import { releaseSections } from "./freigabe-markdown.mjs";
+import { ausnahmeUmzug } from "./ausnahme-umzug.mjs";
 import { listenkuerzungen } from "./freigabe-listenkuerzung.mjs";
 import { auslagerungsumzuege, pfadumzuege } from "./freigabe-pfadumzug.mjs";
 import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
@@ -462,7 +463,7 @@ async function measure(basis, changes) {
   const checkFiles = changes.filter((change) => change.kind === "pruefung").map(({ path }) => path);
   if (checkFiles.length === 0) return { pruefungen: [], ohneMessung: [] };
   const changedFiles = changes.map(({ path }) => path);
-  const measured = await measureChecks(basis, { changedFiles, checkFiles });
+  const measured = await measureChecks(basis, { changedFiles, checkFiles, umzug: ausnahmeUmzug });
   return withNewInstructionLines(basis, changes, measured);
 }
 
