@@ -400,6 +400,7 @@ async function movedHits(manifest, { contexts, basis, umzug, changedFiles }) {
     hilfe: contexts.basis.root,
     pr: contexts.pr.root,
     dateien: changedFiles,
+    gezaehlteRegel: manifest.treffer.regel,
   });
 }
 

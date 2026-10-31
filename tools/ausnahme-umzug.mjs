@@ -45,19 +45,22 @@ async function zeilenInDerNeuenDatei(wurzeln, { datei, name }) {
   return getroffeneZeilen(text, messages, name);
 }
 
-async function zeilenInDerAltenDatei(wurzeln, { pfad, name }) {
-  const text = dateiAm(wurzeln.basis, pfad, wurzeln.pr);
+async function zeilenImBasisText(eslint, { root, pfad, text, name }) {
   if (text === null) return [];
-  const eslint = wurzeln.eslint.get(wurzeln.pr);
-  const [{ messages }] = await eslint.lintText(text, { filePath: join(wurzeln.pr, pfad) });
+  const [{ messages }] = await eslint.lintText(text, { filePath: join(root, pfad) });
   return getroffeneZeilen(text, messages, name);
 }
 
+function zeilenInDerAltenDatei(wurzeln, { pfad, name }) {
+  const text = dateiAm(wurzeln.basis, pfad, wurzeln.pr);
+  const eslint = wurzeln.eslint.get(wurzeln.pr);
+  return zeilenImBasisText(eslint, { root: wurzeln.pr, pfad, text, name });
+}
+
 async function bestandstrefferDerZieldatei(wurzeln, { text, datei, name }) {
-  if (text === null) return 0;
   const eslint = eslintOhneUnterdrueckungen(wurzeln.hilfe);
-  const [{ messages }] = await eslint.lintText(text, { filePath: join(wurzeln.hilfe, datei) });
-  return getroffeneZeilen(text, messages, name).length;
+  const zeilen = await zeilenImBasisText(eslint, { root: wurzeln.hilfe, pfad: datei, text, name });
+  return zeilen.length;
 }
 
 async function vorratDerAlten(wurzeln, { weg, name }) {
@@ -89,7 +92,7 @@ function textNach(wurzeln, pfade) {
   return vorhanden.map((pfad) => readFileSync(pfad, "utf8")).join("\n");
 }
 
-async function umgezogeneTrefferJeEintrag(wurzeln, { name, weg, datei }) {
+async function verbraucheUmgezogeneTreffer(wurzeln, { name, weg, datei }) {
   const zeilen = await zeilenInDerNeuenDatei(wurzeln, { datei, name });
   const vorrat = await vorratDerAlten(wurzeln, { weg, name });
   const neu = textNach(wurzeln, weg);
@@ -113,12 +116,13 @@ async function umgezogeneTrefferJeDatei(wurzeln, datei) {
     const alt = vorher.find((eintrag) => eintrag.name === name)?.nurIn;
     if (alt?.length !== nurIn.length) continue;
     const weg = alt.filter((pfad) => !nurIn.includes(pfad));
-    summe += await umgezogeneTrefferJeEintrag(wurzeln, { name, weg, datei });
+    summe += await verbraucheUmgezogeneTreffer(wurzeln, { name, weg, datei });
   }
   return summe;
 }
 
-export async function ausnahmeUmzug({ basis, hilfe, pr, dateien }) {
+export async function ausnahmeUmzug({ basis, hilfe, pr, dateien, gezaehlteRegel }) {
+  if (gezaehlteRegel !== undefined && gezaehlteRegel !== REGEL) return 0;
   const eslint = new Map([hilfe, pr].map((root) => [root, new ESLint({ cwd: root })]));
   const wurzeln = { basis, hilfe, pr, eslint, vorrat: new Map() };
   let summe = 0;

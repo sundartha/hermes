@@ -56,26 +56,31 @@ function konfiguration(listen, { weitere = "", stufe = "error" } = {}) {
   );
 }
 
-const manifest = `${JSON.stringify(
-  {
-    titel: "ESLint-Regeln",
-    pfade: ["eslint.config.*"],
-    treffer: {
-      befehl: [
-        "node",
-        "{wurzel}/node_modules/eslint/bin/eslint.js",
-        ".",
-        "--suppressions-location",
-        "eslint-suppressions.empty.json",
-        "--format",
-        "json",
-      ],
-      zaehlen: "eslint-json",
+function pruefungsManifest(regel) {
+  return `${JSON.stringify(
+    {
+      titel: "ESLint-Regeln",
+      pfade: ["eslint.config.*"],
+      treffer: {
+        befehl: [
+          "node",
+          "{wurzel}/node_modules/eslint/bin/eslint.js",
+          ".",
+          "--suppressions-location",
+          "eslint-suppressions.empty.json",
+          "--format",
+          "json",
+        ],
+        zaehlen: "eslint-json",
+        ...(regel === undefined ? {} : { regel }),
+      },
     },
-  },
-  null,
-  EINRUECKUNG,
-)}\n`;
+    null,
+    EINRUECKUNG,
+  )}\n`;
+}
+
+const manifest = pruefungsManifest();
 
 const BASIS = {
   ".gitignore": "node_modules\n",
@@ -315,4 +320,32 @@ test("die neue Datei verlängert eine umgezogene Zeile um weiteren Code: lockere
     ...UMZUG,
     "src/y.js": zeilen(erste, zweite, `${dritte} sendeAn();`),
   });
+});
+
+const WORT_REGEL = "hermes/wort-nur-in";
+const KOMMENTAR_REGEL = "hermes/keine-kommentare";
+const KOMMENTARE = ["// eins", "// zwei", "// drei"];
+const KOMMENTARE_AN = `{ files: ["src/**/*.js"], rules: { "${KOMMENTAR_REGEL}": "error" } },`;
+const KOMMENTARE_AUS = `{ files: ["src/k.js"], rules: { "${KOMMENTAR_REGEL}": "off" } },`;
+
+test("die Prüfung zählt nur Kommentare, der Umzug versteckt keine gelockerte Kommentar-Regel: lockerer", async (context) => {
+  const basisDateien = {
+    ...BASIS,
+    [MANIFEST]: pruefungsManifest(KOMMENTAR_REGEL),
+    "eslint.config.js": konfiguration(
+      { [ANRUFZEIT]: ["src/x.js"], [TRUNK]: TRUNK_DATEIEN },
+      { weitere: KOMMENTARE_AN },
+    ),
+    "src/k.js": zeilen(...KOMMENTARE, REST),
+  };
+  const liste = konfiguration(
+    { [ANRUFZEIT]: ["src/y.js"], [TRUNK]: TRUNK_DATEIEN },
+    { weitere: `${KOMMENTARE_AN}\n${KOMMENTARE_AUS}` },
+  );
+  await wirdLockerer(context, { ...UMZUG, "eslint.config.js": liste }, basisDateien);
+});
+
+test("die Prüfung zählt genau die Regel des umgezogenen Eintrags: der Umzug ist gleich", async (context) => {
+  const basisDateien = { ...BASIS, [MANIFEST]: pruefungsManifest(WORT_REGEL) };
+  await bleibtGleich(context, UMZUG, basisDateien);
 });
