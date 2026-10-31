@@ -38,7 +38,7 @@ const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--inclu
 const AUFTRAGSBASIS_SUCHTIEFE = 100;
 const GATE_TESTS = new URL("../gate-tests.json", import.meta.url);
 const GATE_ANKER = "#";
-export const KRITISCH_OHNE_GATE_TEST = [
+const KRITISCH_OHNE_GATE_TEST_ROH = [
   "src/middleware.js",
   "src/boot-guard.js",
   "src/process-guards.js",
@@ -53,17 +53,41 @@ export const KRITISCH_OHNE_GATE_TEST = [
   "src/queue/",
   "src/plans.js",
   "src/elevenlabs/",
-].map((pfad) => vorhandenerPfad(pfad, REPO_WURZEL));
+];
+const aufgeloesteListe = [];
+let listeGefuellt = false;
+
+function fuelleAufgeloesteListe() {
+  if (listeGefuellt) return;
+  listeGefuellt = true;
+  aufgeloesteListe.push(...KRITISCH_OHNE_GATE_TEST_ROH.map((pfad) => vorhandenerPfad(pfad, REPO_WURZEL)));
+}
+
+const ERST_BEIM_ZUGRIFF = Object.fromEntries(
+  ["get", "has", "ownKeys", "getOwnPropertyDescriptor"].map((falle) => [
+    falle,
+    (...argumente) => {
+      fuelleAufgeloesteListe();
+      return Reflect[falle](...argumente);
+    },
+  ]),
+);
+export const KRITISCH_OHNE_GATE_TEST = new Proxy(aufgeloesteListe, ERST_BEIM_ZUGRIFF);
 
 function gatePfade() {
   const gates = Object.values(JSON.parse(readFileSync(GATE_TESTS, "utf8")));
   return gates.flatMap(({ module, tests }) => [...module, ...tests]).map((pfad) => pfad.split(GATE_ANKER)[0]);
 }
 
-const KRITISCHE_PFADE = [...new Set([...gatePfade(), ...KRITISCH_OHNE_GATE_TEST])];
+let kritischePfade;
+
+function kritischePfadeListe() {
+  kritischePfade ??= [...new Set([...gatePfade(), ...KRITISCH_OHNE_GATE_TEST])];
+  return kritischePfade;
+}
 
 function istKritischerEintrag(eintrag) {
-  return KRITISCHE_PFADE.some((pfad) => eintrag.startsWith(pfad) || pfad.startsWith(eintrag));
+  return kritischePfadeListe().some((pfad) => eintrag.startsWith(pfad) || pfad.startsWith(eintrag));
 }
 
 export function istKritisch(bereich) {
