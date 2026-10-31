@@ -442,3 +442,211 @@ test("[NIE1] jeder Schlüssel aus CONFIG_NAMESPACES ist in config definiert, Stu
     assert.ok(Number.isFinite(config.safety[key]), `safety.${key} muss eine Zahl sein`);
   }
 });
+
+const MS_JE_TAG = 86_400_000;
+const STANDARD_MAX_NUMMERN = 5;
+const STANDARD_WIEDERHOLUNGEN = 3;
+const STANDARD_ERKENNUNGSFRIST_S = 5;
+const HOECHSTE_ERKENNUNGSFRIST_S = 30;
+const STANDARD_RUECKFRAGE_WARTEN_MS = 4000;
+const STANDARD_RUECKFRAGE_OFFEN_MS = 47000;
+const STANDARD_RUECKFRAGE_STUFE_MS = 5000;
+const STANDARD_RUECKFRAGE_ANTWORT_MS = 30000;
+const HOECHSTE_RUECKFRAGE_WARTEN_MS = 60_000;
+const HOECHSTE_RUECKFRAGE_OFFEN_MS = 300_000;
+const HOECHSTE_RUECKFRAGE_STUFE_MS = 55_000;
+const GESETZTE_FREIGABETAGE = 2;
+
+const UNGESETZTE_TELEFONIE_WERTE = Object.freeze({
+  TELNYX_API_KEY: undefined,
+  TELNYX_PUBLIC_KEY: undefined,
+  TELNYX_API_BASE: undefined,
+  TELNYX_CONNECTION_ID: undefined,
+  TELNYX_ACCOUNT_SID: undefined,
+  TELNYX_SIP_TRUNK_USERNAME: undefined,
+  TELNYX_SIP_TRUNK_PASSWORD: undefined,
+  MACHINE_DETECTION_ENABLED: undefined,
+  MACHINE_DETECTION_TIMEOUT_S: undefined,
+  OWNER_NUMBER_SEED: undefined,
+  BOOTSTRAP_E164: undefined,
+  BOOTSTRAP_PROVIDER: undefined,
+  PLATFORM_ANI_E164: undefined,
+  PROFILES_JSON: undefined,
+  MAX_NUMBERS: undefined,
+  MAX_NUMBERS_PER_TENANT: undefined,
+  PROVISIONING_ENABLED: undefined,
+  PROVISIONING_REDRIVE_MAX_AGE_MS: undefined,
+  PROVISIONING_RETRY_MAX_ATTEMPTS: undefined,
+  PROVISIONING_RETRY_MIN_INTERVAL_MS: undefined,
+  RELEASE_GRACE_DAYS: undefined,
+  PROVISIONING_COUNTRY: undefined,
+  GEO_ENABLED: undefined,
+  GEO_DB_PATH: undefined,
+  WORLD_DEFAULT_LANGUAGE_ENABLED: undefined,
+  MULTI_TENANT: undefined,
+  MCP_UI_ENABLED: undefined,
+  ASSISTANT_CONTEXT_ENABLED: undefined,
+  SELF_SERVICE_ENABLED: undefined,
+  PRECALL_BRIEFING_ENABLED: undefined,
+  CONSULT_ENABLED: undefined,
+  IN_CALL_CONSULT_ENABLED: undefined,
+  CONSULT_WAIT_MS: undefined,
+  CONSULT_OPEN_MS: undefined,
+  EL_CONSULT_DELIVERY_MS: undefined,
+  EL_CONSULT_ACK_MS: undefined,
+  EL_CONSULT_ANSWER_MS: undefined,
+});
+
+test("Rohwerte telephony, provisioning, tenancy: ohne gesetzte Variablen gelten die festen Standardwerte", () => {
+  const erwartet = {
+    "telephony.telnyxApiKey": "",
+    "telephony.telnyxPublicKey": "",
+    "telephony.telnyxApiBase": "https://api.telnyx.com",
+    "telephony.telnyxConnectionId": "",
+    "telephony.telnyxAccountSid": "",
+    "telephony.telnyxSipTrunkUsername": "",
+    "telephony.telnyxSipTrunkPassword": "",
+    "telephony.machineDetection.enabled": false,
+    "telephony.machineDetection.timeoutS": STANDARD_ERKENNUNGSFRIST_S,
+    "provisioning.maxNumbers": STANDARD_MAX_NUMMERN,
+    "provisioning.maxNumbersPerTenant": 1,
+    "provisioning.provisioningEnabled": false,
+    "provisioning.provisioningRedriveMaxAgeMs": 0,
+    "provisioning.provisioningRetryMaxAttempts": STANDARD_WIEDERHOLUNGEN,
+    "provisioning.provisioningRetryMinIntervalMs": MS_JE_TAG,
+    "provisioning.releaseGraceMs": 0,
+    "provisioning.provisioningCountry": "DE",
+    "provisioning.geoEnabled": false,
+    "provisioning.geoDbPath": "",
+    "provisioning.worldDefaultLanguageEnabled": false,
+    "provisioning.ownerNumberSeed": "",
+    "provisioning.bootstrapE164": "",
+    "provisioning.bootstrapProvider": "",
+    "provisioning.platformAniE164": "",
+    "tenancy.multiTenant": false,
+    "tenancy.mcpUiEnabled": true,
+    "tenancy.assistantContextEnabled": true,
+    "tenancy.selfServiceEnabled": false,
+    "tenancy.profilesSeed": "",
+    "tenancy.precallBriefingEnabled": false,
+    "tenancy.consultEnabled": false,
+    "tenancy.inCallConsultEnabled": false,
+    "tenancy.consultWaitMs": STANDARD_RUECKFRAGE_WARTEN_MS,
+    "tenancy.consultOpenMs": STANDARD_RUECKFRAGE_OFFEN_MS,
+    "tenancy.elConsultDeliveryMs": STANDARD_RUECKFRAGE_STUFE_MS,
+    "tenancy.elConsultAckMs": STANDARD_RUECKFRAGE_STUFE_MS,
+    "tenancy.elConsultAnswerMs": STANDARD_RUECKFRAGE_ANTWORT_MS,
+  };
+  assert.deepEqual(
+    gebauteKonfiguration(UNGESETZTE_TELEFONIE_WERTE, Object.keys(erwartet)),
+    erwartet,
+  );
+});
+
+test("Rohwerte telephony, provisioning, tenancy: gesetzte Variablen kommen getrimmt, umgerechnet und gedeckelt an", () => {
+  const gebaut = gebauteKonfiguration(
+    {
+      TELNYX_API_BASE: "https://telnyx.example.test/",
+      TELNYX_SIP_TRUNK_USERNAME: "  trunk-nutzer \n",
+      TELNYX_SIP_TRUNK_PASSWORD: "trunk-geheim",
+      MACHINE_DETECTION_ENABLED: "true",
+      MACHINE_DETECTION_TIMEOUT_S: "99",
+      PLATFORM_ANI_E164: " +4930123456 ",
+      RELEASE_GRACE_DAYS: String(GESETZTE_FREIGABETAGE),
+      PROVISIONING_COUNTRY: "FR",
+      FORCE_NUMBER_COUNTRY: " at ",
+      GEO_DB_PATH: "/srv/geo.mmdb",
+      CONSULT_WAIT_MS: "999999",
+      CONSULT_OPEN_MS: "999999",
+      EL_CONSULT_ACK_MS: "999999",
+    },
+    [
+      "telephony.telnyxApiBase",
+      "telephony.telnyxSipTrunkUsername",
+      "telephony.telnyxSipTrunkPassword",
+      "telephony.machineDetection.enabled",
+      "telephony.machineDetection.timeoutS",
+      "provisioning.platformAniE164",
+      "provisioning.releaseGraceMs",
+      "provisioning.provisioningCountry",
+      "provisioning.forceNumberCountry",
+      "provisioning.geoDbPath",
+      "tenancy.consultWaitMs",
+      "tenancy.consultOpenMs",
+      "tenancy.elConsultAckMs",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "telephony.telnyxApiBase": "https://telnyx.example.test",
+    "telephony.telnyxSipTrunkUsername": "trunk-nutzer",
+    "telephony.telnyxSipTrunkPassword": "trunk-geheim",
+    "telephony.machineDetection.enabled": true,
+    "telephony.machineDetection.timeoutS": HOECHSTE_ERKENNUNGSFRIST_S,
+    "provisioning.platformAniE164": "+4930123456",
+    "provisioning.releaseGraceMs": GESETZTE_FREIGABETAGE * MS_JE_TAG,
+    "provisioning.provisioningCountry": "FR",
+    "provisioning.forceNumberCountry": "AT",
+    "provisioning.geoDbPath": "/srv/geo.mmdb",
+    "tenancy.consultWaitMs": HOECHSTE_RUECKFRAGE_WARTEN_MS,
+    "tenancy.consultOpenMs": HOECHSTE_RUECKFRAGE_OFFEN_MS,
+    "tenancy.elConsultAckMs": HOECHSTE_RUECKFRAGE_STUFE_MS,
+  });
+});
+
+const UNGUELTIGE_TELEFONIE_WERTE = Object.freeze({
+  MACHINE_DETECTION_ENABLED: "vielleicht",
+  MACHINE_DETECTION_TIMEOUT_S: "fuenf",
+  MAX_NUMBERS: "fuenf",
+  MAX_NUMBERS_PER_TENANT: "eins",
+  PROVISIONING_ENABLED: "vielleicht",
+  PROVISIONING_REDRIVE_MAX_AGE_MS: "nie",
+  PROVISIONING_RETRY_MAX_ATTEMPTS: "drei",
+  PROVISIONING_RETRY_MIN_INTERVAL_MS: "taeglich",
+  RELEASE_GRACE_DAYS: "zwei",
+  MULTI_TENANT: "vielleicht",
+  MCP_UI_ENABLED: "vielleicht",
+  ASSISTANT_CONTEXT_ENABLED: "vielleicht",
+  PRECALL_BRIEFING_ENABLED: "vielleicht",
+  CONSULT_ENABLED: "vielleicht",
+  IN_CALL_CONSULT_ENABLED: "vielleicht",
+  CONSULT_WAIT_MS: "kurz",
+  CONSULT_OPEN_MS: "lang",
+  EL_CONSULT_DELIVERY_MS: "bald",
+  EL_CONSULT_ACK_MS: "gleich",
+  EL_CONSULT_ANSWER_MS: "spaeter",
+  SELF_SERVICE_ENABLED: "vielleicht",
+  GEO_ENABLED: "vielleicht",
+  WORLD_DEFAULT_LANGUAGE_ENABLED: "vielleicht",
+});
+
+function aktuelleWerte(namen) {
+  return Object.fromEntries(namen.map((name) => [name, process.env[name]]));
+}
+
+test("Rohwerte telephony, provisioning, tenancy: jeder ungültige Wert nennt seine Variable und fällt auf den Standard", async (t) => {
+  const vorher = aktuelleWerte(Object.keys(UNGUELTIGE_TELEFONIE_WERTE));
+  t.after(() => importNachUmgebung(vorher));
+  const [geladen] = await importNachUmgebung(
+    UNGUELTIGE_TELEFONIE_WERTE,
+    () => import("../../src/config.js?a7-rohwerte-ungueltig"),
+  );
+  const befunde = geladen.configFatalErrors();
+  const ohneBefund = Object.entries(UNGUELTIGE_TELEFONIE_WERTE)
+    .filter(([name, wert]) => !befunde.some((befund) => befund.startsWith(`${name}="${wert}"`)))
+    .map(([name]) => name);
+  assert.deepEqual(ohneBefund, [], "Fatal-Befund fehlt");
+  assert.deepEqual(
+    [
+      geladen.config.telephony.machineDetection,
+      geladen.config.provisioning.releaseGraceMs,
+      geladen.config.tenancy.mcpUiEnabled,
+      geladen.config.tenancy.consultWaitMs,
+    ],
+    [
+      { enabled: false, timeoutS: STANDARD_ERKENNUNGSFRIST_S },
+      0,
+      true,
+      STANDARD_RUECKFRAGE_WARTEN_MS,
+    ],
+  );
+});
