@@ -23,13 +23,18 @@ const HOLE = "export async function hole(url) {\n  const antwort = await fetch(u
 const HOLE_ANDERS = "export async function hole(url) {\n  const antwort = await fetch(url, { method: \"GET\" });\n  return antwort.text();\n}";
 const SENDE = "export async function sende(url, daten) {\n  return fetch(url, { method: \"POST\", body: daten });\n}";
 const BLEIBT = "export function bleibt(wert) {\n  return wert;\n}";
+const HOLE_REPARIERT = "export async function hole(url) {\n  const antwort = await fetch(url, { signal: AbortSignal.timeout(5000) });\n  return antwort.text();\n}";
+const LADE = "export async function lade(url) {\n  const antwort = await fetch(url);\n  return antwort.json();\n}";
+const SAMMLE = "export function sammle(urls) {\n  return urls.map((url) => fetch(url));\n}";
+const SAMMLE_REPARIERT = "export function sammle(urls) {\n  return urls.map((url) => fetch(url, { signal: AbortSignal.timeout(5000) }));\n}";
+const SAMMLE_NEU = "export function laden(urls) {\n  return urls.map((url) => fetch(url));\n}";
 const WEITERGEREICHT = 'export { hole } from "./holen.js";';
 
 const HASH_HOLE = "1111111111111111";
 const HASH_SENDE = "2222222222222222";
 const eintrag = (pfad, hash) => `${pfad}|${hash}`;
 const fund = (pfad, hash) => ({ key: eintrag(pfad, hash), text: `${pfad} ${hash}` });
-const alles = { neueDatei: () => true, stammtAus: () => true };
+const alles = { neueDatei: () => true, stammtAus: () => true, nochDort: () => false };
 
 function umgezogenNach({ liste, aktuell, pruefen = {} }) {
   return fristEintraegeNachUmzug({ liste, aktuell, pruefen: { ...alles, ...pruefen } });
@@ -95,11 +100,23 @@ test("Frist-Einträge nach Umzug: stammt der Text der Stelle nicht aus der alten
   assert.equal(umgezogenNach({ liste: [eintrag(ALT, HASH_HOLE)], aktuell: [fund(NEU, HASH_HOLE)], pruefen: { stammtAus } }), undefined);
 });
 
+test("Frist-Einträge nach Umzug: steht der Text der Stelle noch in der alten Datei, zieht nichts um", () => {
+  const nochDort = () => true;
+  assert.equal(umgezogenNach({ liste: [eintrag(ALT, HASH_HOLE)], aktuell: [fund(NEU, HASH_HOLE)], pruefen: { nochDort } }), undefined);
+});
+
 test("Frist-Einträge nach Umzug: die Prüfung bekommt den Text des Funds, die alte und die neue Datei", () => {
   const gesehen = [];
   const stammtAus = (text, dateien) => gesehen.push({ text, dateien });
   umgezogenNach({ liste: [eintrag(ALT, HASH_HOLE)], aktuell: [fund(NEU, HASH_HOLE)], pruefen: { stammtAus } });
   assert.deepEqual(gesehen, [{ text: `${NEU} ${HASH_HOLE}`, dateien: { von: ALT, nach: NEU } }]);
+});
+
+test("Frist-Einträge nach Umzug: die Prüfung auf Reste fragt nach dem Text des Funds in der alten Datei", () => {
+  const gesehen = [];
+  const nochDort = (text, dateien) => gesehen.push({ text, dateien });
+  umgezogenNach({ liste: [eintrag(ALT, HASH_HOLE)], aktuell: [fund(NEU, HASH_HOLE)], pruefen: { nochDort } });
+  assert.deepEqual(gesehen, [{ text: `${NEU} ${HASH_HOLE}`, dateien: { von: ALT } }]);
 });
 
 test("Frist-Einträge nach Umzug: ohne Funde bleibt die Liste", () => {
@@ -191,6 +208,26 @@ test("zwei neue Dateien mit der Stelle, ein offener Eintrag: einer zieht um, die
   const pruefung = gate(repo);
   assert.equal(pruefung.status, EXIT_ROT, pruefung.ausgabe);
   assert.match(pruefung.ausgabe, /src\/laden\.js/);
+});
+
+test("umschließende Funktion anders, alte Stelle repariert: der Eintrag zieht nicht zu der neuen Stelle ohne Frist", async (context) => {
+  const ergebnis = await ausgelagert(context, { dateien: { [ALT]: datei(HOLE_REPARIERT, BLEIBT), [NEU]: datei(LADE) } });
+  assert.equal(ergebnis.vorher.length, 2);
+  bleibtRot(ergebnis, /src\/holen\.js/);
+});
+
+test("verschachtelte Anfrage, alte Stelle repariert: nicht die Anweisung, die ganze äußere Funktion muss wortgleich umziehen", async (context) => {
+  const dazu = { [ALT]: datei(SAMMLE, BLEIBT) };
+  const dateien = { [ALT]: datei(SAMMLE_REPARIERT, BLEIBT), [NEU]: datei(SAMMLE_NEU) };
+  bleibtRot(await ausgelagert(context, { dazu, dateien }), /src\/holen\.js/);
+});
+
+test("verschachtelte Anfrage in wortgleich umgezogener Funktion: der Eintrag zieht um, die Prüfung meldet nichts Neues", async (context) => {
+  const dazu = { [ALT]: datei(SAMMLE, BLEIBT) };
+  const ergebnis = await ausgelagert(context, { dazu, dateien: { [ALT]: datei(WEITERGEREICHT, BLEIBT), [NEU]: datei(SAMMLE) } });
+  assert.equal(ergebnis.nachher.filter((text) => text.startsWith(`${NEU}|`)).length, 1);
+  const pruefung = gate(ergebnis.repo);
+  assert.equal(pruefung.status, EXIT_GRUEN, pruefung.ausgabe);
 });
 
 const LISTE_SCHLUESSEL = (pfad, text) => befundSchluessel(pfad, text);
