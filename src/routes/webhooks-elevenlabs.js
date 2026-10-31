@@ -13,6 +13,14 @@ import {
 } from "../research/registry.js";
 import { consultQuotaUsed, elevenLabsLookupCount } from "../store/state-ops.js";
 import { safeEqual } from "../util.js";
+import {
+  HTTP_BAD_REQUEST,
+  HTTP_FORBIDDEN,
+  HTTP_NOT_FOUND,
+  HTTP_PAYMENT_REQUIRED,
+  HTTP_SERVER_ERROR,
+  antworteFehler,
+} from "../utils/http.js";
 
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
 export const ELEVENLABS_LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
@@ -22,12 +30,6 @@ const LOOKUP_LOG_TAG = "el-lookup";
 const EL_LOOKUP_TIMEOUT_MS = 6000;
 
 const CONSULT_TIMEOUT_AUDIT_ACTION = "consult_timeout";
-
-const HTTP_BAD_REQUEST = 400;
-const HTTP_PAYMENT_REQUIRED = 402;
-const HTTP_FORBIDDEN = 403;
-const HTTP_NOT_FOUND = 404;
-const HTTP_SERVER_ERROR = 500;
 
 const DENIAL_NO_ADDRESSABLE_CALL = "kein_laufender_anruf";
 
@@ -78,7 +80,7 @@ function activeCallBoundTo(store, conversationId) {
 
 function toolDenied({ res, tag, status, logGrund, antwortGrund = logGrund, callId = null }) {
   console.log(`[${tag}] abgelehnt grund=${logGrund}${callId ? ` call=${callId}` : ""}`);
-  return res.status(status).json({ error: antwortGrund });
+  return antworteFehler(res, status, antwortGrund);
 }
 
 function denyBoundCall({ res, tag, logGrund, callId = null }) {
@@ -301,7 +303,7 @@ export function makeElevenLabsWebhookRoutes({
     } catch (err) {
       console.error(`[${CONSULT_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
       if (res.headersSent) return res.end();
-      return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
+      return antworteFehler(res, HTTP_SERVER_ERROR, "intern");
     }
   });
 
@@ -311,7 +313,7 @@ export function makeElevenLabsWebhookRoutes({
     } catch (err) {
       console.error(`[${LOOKUP_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
       if (res.headersSent) return res.end();
-      return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
+      return antworteFehler(res, HTTP_SERVER_ERROR, "intern");
     }
   });
 

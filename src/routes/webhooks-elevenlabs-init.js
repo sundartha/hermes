@@ -11,6 +11,7 @@ import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
 import { normNum } from "../store/defaults.js";
 import { safeEqual } from "../util.js";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.js";
 
 export const ELEVENLABS_INIT_PATH = "/webhooks/elevenlabs/init";
 export const INIT_TOKEN_HEADER = "x-hermes-init-token";
@@ -34,9 +35,6 @@ export const INIT_GRUND = Object.freeze({
 });
 
 const INIT_LOG_TAG = "el-init";
-const HTTP_FORBIDDEN = 403;
-const HTTP_NOT_FOUND = 404;
-const HTTP_SERVER_ERROR = 500;
 const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";

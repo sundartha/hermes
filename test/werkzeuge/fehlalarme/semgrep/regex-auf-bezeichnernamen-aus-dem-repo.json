@@ -1,0 +1,14 @@
+{
+  "titel": "Regex mit durch Unterstrich getrennten Segmenten gegen einen Bezeichnernamen aus dem eigenen Repo",
+  "dateien": {
+    "tools/vorbereitung/http-modul.mjs": [
+      "const STATUS_NAME = /^HTTP_[A-Z]+(?:_[A-Z]+)*$/;",
+      "",
+      "export function statusDeklaration(deklaration) {",
+      "  const { id, init } = einzelneConst(deklaration) ?? {};",
+      "  return id?.type === \"Identifier\" && STATUS_NAME.test(id.name) && statuszahl(init) ? [id.name, init] : undefined;",
+      "}"
+    ]
+  },
+  "erwartet": "detect-redos"
+}

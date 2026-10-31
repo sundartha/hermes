@@ -24,9 +24,14 @@ import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
-
-const HTTP_BAD_REQUEST = 400;
-const HTTP_CONFLICT = 409;
+import {
+  antworteFehler,
+  HTTP_BAD_REQUEST,
+  HTTP_CONFLICT,
+  HTTP_FORBIDDEN,
+  HTTP_NOT_FOUND,
+  HTTP_OK,
+} from "../utils/http.js";
 
 function contextReceivedMeta(context, config) {
   return {
@@ -77,7 +82,7 @@ function invalidConsultAnswerStatus(status) {
 function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
   const { outcome } = store.ackConsult(call.id, { eventId });
   audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
-  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: 0 });
 }
 
@@ -96,8 +101,7 @@ function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) 
     req,
     `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
   );
-  if (outcome !== CONSULT_ANSWER.ACCEPTED)
-    return res.status(HTTP_CONFLICT).json({ error: outcome });
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: mergedFacts });
 }
 
@@ -139,7 +143,6 @@ function denialResponseBody(denial) {
 }
 
 const HTTP_SERVICE_UNAVAILABLE = 503;
-const HTTP_OK = 200;
 
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
@@ -377,9 +380,9 @@ export function makeCallRoutes({
   router.get("/api/calls/:id/consult", internalOnly, async (req, res) => {
     const call = store.getCall(req.params.id);
     const tenantId = requestTenant(req);
-    if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
+    if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
-      return res.status(404).json({ error: "not found" });
+      return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     store.noteConsultPoll(call.id);
     const event = await consultDelivery.waitForEvent({
       callId: call.id,
@@ -396,16 +399,16 @@ export function makeCallRoutes({
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const call = store.getCall(req.params.id);
-    if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
+    if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return res
-        .status(403)
+        .status(HTTP_FORBIDDEN)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
     const { event_id: eventId, answers, status } = req.body || {};
     if (!isConsultEventId(eventId))
-      return res.status(400).json({ error: "event_id ist ungueltig" });
+      return antworteFehler(res, HTTP_BAD_REQUEST, "event_id ist ungueltig");
     const statusError = invalidConsultAnswerStatus(status);
-    if (statusError) return res.status(400).json({ error: statusError });
+    if (statusError) return antworteFehler(res, HTTP_BAD_REQUEST, statusError);
     if (status === CONSULT_ANSWER_MODE.WORKING)
       return ackWorkingConsult({ store, audit, req, res, call, eventId });
     return answerConsultFinal({ store, audit, req, res, call, eventId, answers });
@@ -414,7 +417,7 @@ export function makeCallRoutes({
   router.post("/api/calls/:id/cancel", internalOnly, async (req, res) => {
     const call = store.getCall(req.params.id);
     if (!callVisibleTo(call, requestTenant(req)))
-      return res.status(404).json({ error: "not found" });
+      return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (call.status !== "active") return res.json({ status: call.status });
     audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) || OWNER_ID}`);
     const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
