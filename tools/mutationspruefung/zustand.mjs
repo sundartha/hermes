@@ -7,6 +7,7 @@ export const MUTANTEN_ZUSTAND = [
 
 export const KINDABDECKUNG_ORDNER = "MUTATIONSPRUEFUNG_KINDABDECKUNG";
 export const KINDABDECKUNG_TESTDATEI = "MUTATIONSPRUEFUNG_KINDABDECKUNG_TESTDATEI";
+export const EINBETTUNG_VORSPANN = "MUTATIONSPRUEFUNG_EINBETTUNG_VORSPANN";
 
 const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const KINDABDECKUNG_HOOK = new URL("./kindabdeckung-hook.mjs", import.meta.url).href;
@@ -22,7 +23,13 @@ function mitKindabdeckung(kindUmgebung) {
   };
 }
 
+function mitEinbettung(kindUmgebung) {
+  const vorspann = env[EINBETTUNG_VORSPANN];
+  if (vorspann === undefined) return kindUmgebung;
+  return { ...kindUmgebung, NODE_OPTIONS: [kindUmgebung.NODE_OPTIONS, `--import=${vorspann}`].filter(Boolean).join(" ") };
+}
+
 export function mitAktivemMutanten(kindUmgebung) {
   const mutant = env[AKTIVER_MUTANT];
-  return mitKindabdeckung(mutant === undefined ? kindUmgebung : { ...kindUmgebung, [AKTIVER_MUTANT]: mutant });
+  return mitKindabdeckung(mitEinbettung(mutant === undefined ? kindUmgebung : { ...kindUmgebung, [AKTIVER_MUTANT]: mutant }));
 }

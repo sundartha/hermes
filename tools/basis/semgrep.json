@@ -40,6 +40,8 @@
     "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|src/ui/wing-markup.js|f5c50ca888230423",
     "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|tools/abhaengigkeiten.mjs|75ecfb40262190c1",
     "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|tools/abhaengigkeiten.mjs|bfb4538136544816",
+    "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|tools/mutationspruefung/einbettung-text.mjs|01a757c030a9d2a5",
+    "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|tools/mutationspruefung/einbettung-text.mjs|48b53114f40ed2e2",
     "tools.basis.javascript.lang.correctness.missing-template-string-indicator.missing-template-string-indicator|tools/testschutz/freigabe.mjs|383a2b49d5296be4",
     "tools.basis.javascript.lang.correctness.no-replaceall.no-replaceall|scripts/elevenlabs-key-setzen.mjs|d046e47efee88c41",
     "tools.basis.javascript.lang.correctness.no-replaceall.no-replaceall|scripts/elevenlabs-key-setzen.mjs|e4aca10f440eb91d",

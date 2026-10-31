@@ -16,6 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
+import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
@@ -93,6 +94,9 @@ const ZUSTANDSBEREICH = [
   ":(exclude)tools/mutationspruefung/",
   ":(exclude)test/werkzeuge/ausmisten/stryker-ersatz.mjs",
   ":(exclude)test/werkzeuge/ausmisten/totcode.mjs",
+  ":(exclude)test/werkzeuge/mutationspruefung-einbettung-text.test.js",
+  ":(exclude)test/werkzeuge/mutationspruefung-einbettung-vorspann.test.js",
+  ":(exclude)test/werkzeuge/mutationspruefung-stdio-umgebung.test.js",
 ];
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
 const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
@@ -334,7 +338,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     ...nurSchutzfaelle(namensmuster),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
