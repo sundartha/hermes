@@ -34,6 +34,11 @@ const GATE = "Denylist";
 const EXAMPLE_FILE = "test/beispiel.test.js";
 const GATE_FILE = "test/gate.test.js";
 const HELPER_FILE = "test/helfer.js";
+const PR_BRANCH = "pr";
+const QUEUE_BRANCH = "zusammenfuehrung";
+const UNKNOWN_BASIS = "0123456789abcdef0123456789abcdef01234567";
+const ORPHAN_BRANCH = "waise";
+const NO_BRANCH_POINT = /Abzweigstelle[^\n]*nicht bestimmbar/;
 
 function testFile(cases) {
   return [
@@ -360,4 +365,123 @@ test("tests-nur-ergaenzt: eine geänderte Funktionskarte mit Label und genannter
   const result = await check(repo, linkedIssue({ names: [CARD_FILE], events: [labeled(ANTONIO)] }));
   assert.equal(result.status, EXIT_OK, result.output);
   assert.match(result.output, /durch Issue #12 freigegeben/);
+});
+
+function git(directory, args) {
+  const result = runIn(directory, "git", args);
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function mergeBranch(directory, branch) {
+  git(directory, [
+    "-c",
+    "user.name=Probe",
+    "-c",
+    "user.email=probe@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "merge",
+    "--no-ff",
+    "-q",
+    "-m",
+    "Führe zusammen",
+    branch,
+  ]);
+}
+
+function changeNameExpectation(directory) {
+  change(directory, {
+    file: EXAMPLE_FILE,
+    from: 'assert.equal("Hermes".length, 6);',
+    to: 'assert.equal("Hermes".length > 0, true);',
+  });
+}
+
+function masterMovedOn(context) {
+  const repo = probe(context);
+  const trunk = git(repo.directory, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  git(repo.directory, ["switch", "-q", "-c", PR_BRANCH]);
+  git(repo.directory, ["switch", "-q", trunk]);
+  changeNameExpectation(repo.directory);
+  const masterTip = git(repo.directory, ["rev-parse", "HEAD"]);
+  git(repo.directory, ["switch", "-q", PR_BRANCH]);
+  return { ...repo, trunk, masterTip, branchPoint: repo.basis };
+}
+
+function openMergeOf(repo, start) {
+  git(repo.directory, ["switch", "-q", "-c", QUEUE_BRANCH, start]);
+  mergeBranch(repo.directory, PR_BRANCH);
+}
+
+function assertOnlySumTestReported(result) {
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /Testfall „rechnet eins plus eins“/);
+  assert.doesNotMatch(result.output, /Testfall „kennt den Namen“/);
+}
+
+test("tests-nur-ergaenzt: eine Teständerung auf master nach der Abzweigung wird dem PR nicht angelastet", async (context) => {
+  const repo = masterMovedOn(context);
+  appendFileSync(join(repo.directory, EXAMPLE_FILE), testFile([["ist neu", "assert.ok(true);"]]));
+  commitAll(repo.directory, "Hänge einen Test an");
+  const result = await check({ ...repo, basis: repo.masterTip });
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.match(result.output, /keine bestehende Testzeile geändert oder gelöscht/);
+  assert.deepEqual(result.requests, []);
+});
+
+test("tests-nur-ergaenzt: ein PR, der selbst einen Test ändert, wird trotz bewegtem master gemeldet", async (context) => {
+  const repo = masterMovedOn(context);
+  changeSumExpectation(repo.directory);
+  const result = await check(
+    { ...repo, basis: repo.masterTip },
+    linkedIssue({ names: [SUM_TEST] }),
+  );
+  assertOnlySumTestReported(result);
+  assert.match(result.output, /Zeilen 5:/);
+});
+
+test("tests-nur-ergaenzt: eine Zusammenführung der Warteschlange wird wie bisher gemessen", async (context) => {
+  const repo = masterMovedOn(context);
+  changeSumExpectation(repo.directory);
+  openMergeOf(repo, repo.masterTip);
+  const result = await check(
+    { ...repo, basis: repo.masterTip },
+    linkedIssue({ names: [SUM_TEST] }),
+  );
+  assertOnlySumTestReported(result);
+});
+
+test("tests-nur-ergaenzt: ein PR-Merge-Commit auf neuerem master als die gemeldete Basis meldet nur die Änderung des PR", async (context) => {
+  const repo = masterMovedOn(context);
+  changeSumExpectation(repo.directory);
+  openMergeOf(repo, repo.masterTip);
+  const result = await check(
+    { ...repo, basis: repo.branchPoint },
+    linkedIssue({ names: [SUM_TEST] }),
+  );
+  assertOnlySumTestReported(result);
+});
+
+test("tests-nur-ergaenzt: eine unbekannte Basis stoppt mit Meldung zur Abzweigstelle", async (context) => {
+  const repo = masterMovedOn(context);
+  changeSumExpectation(repo.directory);
+  const result = await check({ ...repo, basis: UNKNOWN_BASIS }, linkedIssue({ names: [SUM_TEST] }));
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, NO_BRANCH_POINT);
+});
+
+test("tests-nur-ergaenzt: eine Basis ohne gemeinsame Geschichte stoppt mit Meldung zur Abzweigstelle", async (context) => {
+  const repo = masterMovedOn(context);
+  changeSumExpectation(repo.directory);
+  git(repo.directory, ["switch", "-q", "--orphan", ORPHAN_BRANCH]);
+  writeFileSync(join(repo.directory, "fremd.txt"), "fremd\n");
+  commitAll(repo.directory, "Fremde Geschichte");
+  const basis = git(repo.directory, ["rev-parse", "HEAD"]);
+  git(repo.directory, ["switch", "-q", PR_BRANCH]);
+  const result = await check({ ...repo, basis }, linkedIssue({ names: [SUM_TEST] }));
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, NO_BRANCH_POINT);
 });
