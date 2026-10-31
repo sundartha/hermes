@@ -13,7 +13,7 @@ import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
-import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
+import { LLM_PROVIDER } from "./llm/provider.js";
 import { MS_PER_HOUR, MS_PER_MINUTE } from "./utils/timer.js";
 import { merkeLogGeheimnisse } from "./log-maske.js";
 import {
@@ -23,13 +23,7 @@ import {
   umgebungMit,
 } from "./konfiguration/umgebung.js";
 import { MS_PER_DAY } from "./konfiguration/zeitspannen.js";
-import {
-  EXCHANGE_RATE_DEFAULTS,
-  FX_MICRO_PER_UNIT,
-  MODEL_PRICE_SCHEDULES,
-  modellpreiseAufloesen,
-  todayIsoDate,
-} from "./konfiguration/preise.js";
+import { modellpreiseAufloesen, todayIsoDate } from "./konfiguration/preise.js";
 import { gatewayUrlMit } from "./konfiguration/gateway-url.js";
 import { buildNamespaceSurface, guardedConfig } from "./konfiguration/oberflaeche.js";
 import { researchRohwerte } from "./konfiguration/rohwerte-research.js";
@@ -43,6 +37,8 @@ import { serverRohwerte } from "./konfiguration/rohwerte-server.js";
 import { telephonyRohwerte } from "./konfiguration/rohwerte-telephony.js";
 import { tenancyRohwerte } from "./konfiguration/rohwerte-tenancy.js";
 import { provisioningRohwerte } from "./konfiguration/rohwerte-provisioning.js";
+import { authRohwerte } from "./konfiguration/rohwerte-auth.js";
+import { llmRohwerte } from "./konfiguration/rohwerte-llm.js";
 
 export { csvEnv, stripTrailingSlash, todayIsoDate };
 export { gatewayUrlForPort } from "./konfiguration/gateway-url.js";
@@ -71,7 +67,6 @@ const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
 const INBOUND_OUTAGE_ALERT_WINDOW_HOURS_DEFAULT = 6;
-const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
 const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
 const PAID_WITHOUT_NUMBER_GRACE_HOURS_DEFAULT = 1;
@@ -92,54 +87,10 @@ const ELEVENLABS_API_BASE = stripTrailingSlash(
 );
 
 const rawConfig = {
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
-  llmProvider: enumEnv("LLM_PROVIDER", process.env.LLM_PROVIDER, {
-    allowed: LLM_PROVIDER_VALUES,
-    fallback: DEFAULT_LLM_PROVIDER,
-  }),
-  deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
-  llmProviderFallback: enumEnv("LLM_PROVIDER_FALLBACK", process.env.LLM_PROVIDER_FALLBACK, {
-    allowed: LLM_PROVIDER_VALUES,
-    fallback: "",
-  }),
-  claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
+  ...llmRohwerte(umgebung, { resolveModelPrices }),
   platformSpendCapCents: eurToCents(
     numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 30, min: 0, integer: false }),
   ),
-
-  llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, {
-    fallback: 3500,
-    min: 1,
-  }),
-  llmMaxRetries: numEnv("LLM_MAX_RETRIES", process.env.LLM_MAX_RETRIES, { fallback: 2, min: 0 }),
-  llmBackoffMs: numEnv("LLM_BACKOFF_MS", process.env.LLM_BACKOFF_MS, { fallback: 250, min: 0 }),
-  llmBreakerThreshold: numEnv("LLM_BREAKER_THRESHOLD", process.env.LLM_BREAKER_THRESHOLD, {
-    fallback: 5,
-    min: 1,
-  }),
-  llmBreakerWindowMs: numEnv("LLM_BREAKER_WINDOW_MS", process.env.LLM_BREAKER_WINDOW_MS, {
-    fallback: 10000,
-    min: 1,
-  }),
-  llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, {
-    fallback: 30000,
-    min: 1,
-  }),
-  llmBillingLatchCooldownMs: numEnv("LLM_BILLING_LATCH_COOLDOWN_MS", process.env.LLM_BILLING_LATCH_COOLDOWN_MS, {
-    fallback: LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT * MS_PER_MINUTE,
-    min: 1,
-  }),
-
-  briefingModel: process.env.PRECALL_BRIEFING_MODEL || "claude-sonnet-5",
-  briefingTimeoutMs: numEnv("PRECALL_BRIEFING_TIMEOUT_MS", process.env.PRECALL_BRIEFING_TIMEOUT_MS, {
-    fallback: 6000,
-    min: 1,
-  }),
-
-  summaryTimeoutMs: numEnv("CALL_SUMMARY_TIMEOUT_MS", process.env.CALL_SUMMARY_TIMEOUT_MS, {
-    fallback: 20000,
-    min: 1,
-  }),
 
   ...researchRohwerte(umgebung),
 
@@ -401,8 +352,6 @@ const rawConfig = {
 
   ...provisioningRohwerte(umgebung),
 
-  ownerIdpSubject: process.env.OWNER_IDP_SUBJECT || "",
-
   ...storeRohwerte(umgebung),
 
   ...serverRohwerte(umgebung, {
@@ -410,7 +359,6 @@ const rawConfig = {
     publicDir: path.join(__dirname, "..", "public"),
     webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
   }),
-  dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
   dailySmsCap: numEnv("DAILY_SMS_CAP", process.env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
 
@@ -429,9 +377,6 @@ const rawConfig = {
     min: 1,
   }),
   ...tenancyRohwerte(umgebung),
-  devLoginEnabled:
-    boolEnv("DEV_LOGIN_ENABLED", process.env.DEV_LOGIN_ENABLED, { fallback: false }) &&
-    !process.env.RENDER_EXTERNAL_URL,
   capFarewellLeadMs: numEnv("CAP_FAREWELL_LEAD_MS", process.env.CAP_FAREWELL_LEAD_MS, {
     fallback: 20000,
     min: 0,
@@ -504,31 +449,7 @@ const rawConfig = {
 
   ...privacyRohwerte(umgebung),
 
-  mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",
-  mcpAuth: (process.env.MCP_AUTH || "").toLowerCase(),
-  oauthIssuerUrl: stripTrailingSlash(process.env.OAUTH_ISSUER_URL || ""),
-  oauthAudience: process.env.OAUTH_AUDIENCE || "",
-
-  sessionSecret: process.env.SESSION_SECRET || "",
-  oidcClientId: process.env.OIDC_CLIENT_ID || "",
-  oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "",
-  callConfirmationSecret: process.env.CALL_CONFIRMATION_SECRET || "",
-  deployToken: (process.env.HERMES_DEPLOY_TOKEN || "").trim(),
-  workosApiBase: stripTrailingSlash(process.env.WORKOS_API_BASE || "https://api.workos.com"),
-  workosManagementApiKey: process.env.WORKOS_MANAGEMENT_API_KEY || "",
-  adminEmails: csvEnv(process.env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
-  loginRateLimitPerMin: numEnv("LOGIN_RATE_LIMIT_PER_MIN", process.env.LOGIN_RATE_LIMIT_PER_MIN, {
-    fallback: 10,
-    min: 0,
-  }),
-  sessionTtlSeconds: numEnv("SESSION_TTL_SECONDS", process.env.SESSION_TTL_SECONDS, {
-    fallback: 3600,
-    min: 0,
-  }),
-  loginCookieTtlSeconds: numEnv("LOGIN_COOKIE_TTL_SECONDS", process.env.LOGIN_COOKIE_TTL_SECONDS, {
-    fallback: 1800,
-    min: 0,
-  }),
+  ...authRohwerte(umgebung),
 
   ...mailRohwerte(umgebung),
 
@@ -537,13 +458,6 @@ const rawConfig = {
   sttProfile: (process.env.STT_PROFILE || DEFAULT_STT_PROFILE).trim(),
 
   ...telephonyRohwerte(umgebung),
-
-  modelPricesUsd: resolveModelPrices(MODEL_PRICE_SCHEDULES, todayIsoDate()),
-  usdToEur:
-    numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", process.env.PROVIDER_TO_BUCKET_RATE_MICRO, {
-      fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_MICRO_PER_UNIT),
-      min: 1,
-    }) / FX_MICRO_PER_UNIT,
 };
 
 export const CONFIG_NAMESPACES = Object.freeze({
