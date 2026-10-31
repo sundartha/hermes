@@ -15,7 +15,7 @@ import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
 
 const IN_CI = "HERMES_MUTATION_IN_CI";
 const PLAETZE = "HERMES_MUTATION_PLAETZE";
-const HOECHSTE_PLAETZE = 12;
+const HOECHSTE_PLAETZE = 50;
 const KLEINSTE_PLAETZE = 1;
 const LAUF_ZEILE = /Lauf https:\/\/\S+\/actions\/runs\/(\d+)/;
 const ERSTE_ZEILE = 1;
