@@ -414,15 +414,10 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
       </div>
     </section>
 
-    <!-- Screen 2: Was Hermes kann (Use Cases) -->
     <section class="mh-screen mh-s-content mh-uses" data-active="0" aria-labelledby="mh-uses-title">
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.usesLabel}>{T.en.usesLabel}</p>
       <h2 class="mh-h2 mh-h2--uses" id="mh-uses-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.uses}>{T.en.uses}</span></h2>
 
-      <!-- Die Buehne: vier Szenen wechseln durch (CSS, je 7 s), jede ein kurzer
-           Verlauf aus Blasen und kleinen Bildern (Anruf-Zeile, Kalender), die
-           nacheinander erscheinen (hermes-mobile-motion.css). Darunter vier Icon-Punkte als Fortschritt. Ohne Bewegung
-           steht die erste Szene fertig da. -->
       <div class="mh-stage mh-r mh-d3" aria-hidden="true">
         {T.en.scenes.map((scene, si) => (
           <div class="mh-scene" data-scene={si}>
@@ -451,8 +446,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
           </div>
         ))}
       </div>
-      <!-- Vorlese-Fassung: die Buehne ist aria-hidden, hier steht je Szene die
-           Ausgangslage und das Ergebnis als ganzer Satz. -->
       <ul class="mh-sr">
         {T.en.scenes.map((scene, si) => (
           <li data-mh-de={sceneSr(T.de.scenes[si])}>{sceneSr(scene)}</li>

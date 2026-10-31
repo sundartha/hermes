@@ -403,6 +403,48 @@
   .mh .mh-s-hero .mh-how-link {
     font-size: 17px;
   }
+  /* Inhalts-Screens und Kopfleiste: dieselbe Handy-Fassung, nur groesser
+     (Owner 2026-10-31). zoom skaliert alles proportional, Abstaende,
+     Karten und Schrift; die Spalte waechst mit (--mh-side rechnet in
+     gezoomten px). Faktor ~ Hoehe / 844 (Handy-Referenz), in Stufen nach
+     Hoehe. Die Anpassung der Szenen (hermes-mobile.js) rechnet in CSS-px
+     und bleibt damit gueltig. Start und letzter Screen haben ihr eigenes
+     Tablet-Raster oben und werden nicht gezoomt. */
+  .mh {
+    --mh-tz: 1.12;
+  }
+  .mh-s-content {
+    zoom: var(--mh-tz);
+  }
+  .mh-head {
+    zoom: 1.2;
+  }
+}
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) and (min-height: 1000px) {
+  .mh {
+    --mh-tz: 1.2;
+  }
+}
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) and (min-height: 1100px) {
+  .mh {
+    --mh-tz: 1.3;
+  }
+  .mh-head {
+    zoom: 1.25;
+  }
+}
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) and (min-height: 1170px) {
+  .mh {
+    --mh-tz: 1.38;
+  }
+}
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) and (min-height: 1300px) {
+  .mh {
+    --mh-tz: 1.5;
+  }
+  .mh-head {
+    zoom: 1.35;
+  }
 }
 .mh-s-close {
   justify-content: flex-end;

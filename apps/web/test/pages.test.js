@@ -151,7 +151,6 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
 
 test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
   const html = readDist("index.html");
-  // Je Tarif eine Karte: Preis (EN sichtbar, DE als Fassung) und Minuten aus dem Katalog.
   for (const plan of PLAN_CATALOG) {
     const en = formatPlanPrice(plan.amountCents, plan.currency, "en");
     const de = formatPlanPrice(plan.amountCents, plan.currency, "de");
