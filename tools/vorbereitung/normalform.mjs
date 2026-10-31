@@ -16,6 +16,7 @@ import {
   mitEltern,
   namenImMuster,
 } from "./ast.mjs";
+import { hilfeZerlegen, keineZerlegung, zerlegungsPlaene } from "./zerlegen.mjs";
 import { fehlerImportEntfernt, fehlerantwort, httpFakten, statusImporteEntfernt, statusKonstante } from "./http-umformungen.mjs";
 
 const POSITIONSFELDER = new Set(["range", "start", "end", "loc", "comments", "tokens"]);
@@ -156,8 +157,9 @@ export function fakten(programm, { kreisfrei = false, http, lokalErlaubt } = {})
   const eintraege = mitEltern(programm);
   const knoten = eintraege.map((eintrag) => eintrag.knoten);
   const deklarationen = obersteDeklarationen(programm);
-  const hilfen = deklarationen.map(hilfeAus).filter(Boolean);
   const unsicher = knoten.some(({ type, name }) => type === "WithStatement" || UNSICHERE_NAMEN.has(name));
+  const zerlegung = unsicher ? keineZerlegung() : zerlegungsPlaene(programm, eintraege);
+  const hilfen = deklarationen.map(hilfeAus).filter((hilfe) => hilfe && !zerlegung.helfer.has(hilfe.name));
   const stand = {
     gebunden: orteJeName(eintraege.flatMap(gebundeneNamen)),
     geschrieben: new Set(knoten.flatMap(geschriebeneNamen)),
@@ -165,6 +167,7 @@ export function fakten(programm, { kreisfrei = false, http, lokalErlaubt } = {})
     hilfen: new Map(hilfen.map((hilfe) => [hilfe.name, hilfe])),
     unsicher,
     zahlen: zahlKonstantenAus(programm, eintraege, kreisfrei && !unsicher),
+    zerlegung,
   };
   return { ...stand, http: httpFakten({ programm, eintraege, stand, kreisfrei, http, lokalErlaubt }) };
 }
@@ -273,6 +276,7 @@ export const REGELN = {
   "laenge-optional": laengeOptional,
   "hilfe-einsetzen": hilfeEinsetzen,
   "zahl-konstante": zahlKonstante,
+  "hilfe-zerlegen": hilfeZerlegen,
   "status-konstante": (knoten, stand) => statusKonstante(knoten, stand.http) ?? statusImporteEntfernt(knoten, stand.http),
   fehlerantwort: (knoten, stand) => fehlerantwort(knoten, stand.http) ?? fehlerImportEntfernt(knoten, stand.http),
 };
