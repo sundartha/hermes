@@ -5,6 +5,7 @@ import dns from "node:dns";
 import fs from "fs";
 import http from "node:http";
 import net from "node:net";
+import { mock } from "node:test";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -273,6 +274,19 @@ export function externalIp() {
     }
   }
   return null;
+}
+
+export const FESTE_UHR_MS = Date.UTC(2026, 9, 31, 12, 0, 0);
+
+export function mitFesterUhr(testKoerper) {
+  return async (...args) => {
+    mock.timers.enable({ apis: ["Date"], now: FESTE_UHR_MS });
+    try {
+      return await testKoerper(...args);
+    } finally {
+      mock.timers.reset();
+    }
+  };
 }
 
 export function tempDataDir(seedState, rawStore) {

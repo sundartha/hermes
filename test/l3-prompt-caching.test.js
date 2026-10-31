@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { tempDataDir, seedState, seedCall, mitFesterUhr } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
@@ -56,7 +56,7 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-test("T-L3-1 Request-Form System: 1-Element-text-Block mit cache_control, Inhalt byte-identisch", async () => {
+test("T-L3-1 Request-Form System: 1-Element-text-Block mit cache_control, Inhalt byte-identisch", mitFesterUhr(async () => {
   const call = store.getCall(CALL_ID);
   nextUsage = { input_tokens: 10, output_tokens: 5 };
   await agentTurn(call, "Passt Freitag?");
@@ -66,7 +66,7 @@ test("T-L3-1 Request-Form System: 1-Element-text-Block mit cache_control, Inhalt
   assert.equal(lastBody.system[0].type, "text", "System-Block ist ein text-Block");
   assert.equal(lastBody.system[0].text, systemPrompt(call), "System-Inhalt muss byte-identisch sein");
   assert.deepEqual(lastBody.system[0].cache_control, EPHEMERAL, "System-Block traegt cache_control");
-});
+}));
 
 test("T-L3-2 Request-Form Tools: nur der letzte Tool traegt cache_control, Inhalt byte-identisch", async () => {
   const call = store.getCall(CALL_ID);

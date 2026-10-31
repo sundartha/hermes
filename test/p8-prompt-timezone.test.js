@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { tempDataDir, seedState, seedCall, mitFesterUhr } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_TIMEZONE } from "../src/store/defaults.js";
 
 const T_AUCKLAND = "t_auckland";
@@ -38,7 +38,7 @@ test("unterschiedliche Tenant-Zeitzonen faerben die 'Heute ist'-Zeile unterschie
   assert.notEqual(auckland, berlin, "unterschiedliche IANA-Zonen muessen unterschiedliche Uhrzeiten ergeben");
 });
 
-test("Muell-Zeitzone -> Prompt baut ohne Throw, Ergebnis stimmt mit DEFAULT_TIMEZONE ueberein", () => {
+test("Muell-Zeitzone -> Prompt baut ohne Throw, Ergebnis stimmt mit DEFAULT_TIMEZONE ueberein", mitFesterUhr(() => {
   assert.doesNotThrow(() => systemPrompt(call(T_GARBAGE)));
   const garbage = nowLine(systemPrompt(call(T_GARBAGE)));
   const expected = new Date().toLocaleString("de-DE", {
@@ -46,10 +46,10 @@ test("Muell-Zeitzone -> Prompt baut ohne Throw, Ergebnis stimmt mit DEFAULT_TIME
     weekday: "long", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
   assert.equal(garbage, `Heute ist ${expected}.`);
-});
+}));
 
-test("Tenant ohne timezone -> identisch zu Europe/Berlin (Bestands-Neutralitaet fuer DE)", () => {
+test("Tenant ohne timezone -> identisch zu Europe/Berlin (Bestands-Neutralitaet fuer DE)", mitFesterUhr(() => {
   const noTz = nowLine(systemPrompt(call(T_NO_TZ)));
   const berlin = nowLine(systemPrompt(call(T_BERLIN)));
   assert.equal(noTz, berlin);
-});
+}));
