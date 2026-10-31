@@ -3,6 +3,7 @@ import { cwd, env } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
+import { aenderungsReichweite } from "../auftrag/reichweite.mjs";
 import { betroffeneTests, beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 import { POSTGRES_VARIABLE } from "../auftrag/werkzeuge.mjs";
 
@@ -44,10 +45,10 @@ export function ganzeDatei(datei) {
   return [[1, readFileSync(datei, "utf8").split("\n").length]];
 }
 
-export async function imVorherStand({ basis, tests: geaendert }, werkzeug, arbeit) {
+export async function imVorherStand({ basis, tests: geaendert, reichweite = aenderungsReichweite(basis, geaendert, cwd()) }, werkzeug, arbeit) {
   const zurueck = werkzeug.alterStand(basis);
   try {
-    const tests = await betroffeneTests(geaendert, cwd());
+    const tests = await betroffeneTests(geaendert, cwd(), reichweite);
     return await arbeit({ tests, quellen: direkteQuellen(tests, await importe()) });
   } finally {
     zurueck();
@@ -114,7 +115,7 @@ async function vorherNieGetoetet(verloren, vorherStand, werkzeug) {
 }
 
 export async function nachherSeite(getoetet, vorherStand, werkzeug) {
-  const tests = await betroffeneTests(vorherStand.tests, cwd());
+  const tests = await betroffeneTests(vorherStand.tests, cwd(), vorherStand.reichweite ?? aenderungsReichweite(vorherStand.basis, vorherStand.tests, cwd()));
   const { verloren, abgestuerzte } = await nachherVerloren(getoetet, tests, werkzeug);
   const haenger = verloren.filter(nurHaenger);
   const echteVerluste = verloren.length - haenger.length;
@@ -183,7 +184,8 @@ async function postgresDateien(tests) {
 export async function ohnePostgresPruefbar(basis, geaendert, werkzeug) {
   if (env[POSTGRES_VARIABLE]) return;
   const vorher = await imVorherStand({ basis, tests: geaendert }, werkzeug, ({ tests }) => postgresDateien(tests));
-  const dateien = [...new Set([...vorher, ...(await postgresDateien(await betroffeneTests(geaendert, cwd())))])].sort();
+  const nachher = await betroffeneTests(geaendert, cwd(), aenderungsReichweite(basis, geaendert, cwd()));
+  const dateien = [...new Set([...vorher, ...(await postgresDateien(nachher))])].sort();
   if (dateien.length === 0) return;
   throw new Error(`${dateien.join(", ")} brauchen Postgres und überspringen ohne ${POSTGRES_VARIABLE}; der Testumbau wäre dort nicht aussagekräftig, kein Urteil.`);
 }
@@ -200,7 +202,7 @@ export async function testumbauPruefung(basis, werkzeug) {
     console.log(ohneQuelleZeile(vorher.tests.length));
     return EXIT_GRUEN;
   }
-  const tests = await betroffeneTests(geaendert, cwd());
+  const tests = await betroffeneTests(geaendert, cwd(), aenderungsReichweite(basis, geaendert, cwd()));
   const quellen = [...new Set(vorher.getoetet.map(({ datei }) => datei))];
   await freigeben(werkzeug, "Nachher-Seite", { tests, quellen, mutanten: () => ({ mutanten: vorher.getoetet.length, unzaehlbar: 0 }) });
   const seite = await nachherSeite(vorher.getoetet, { basis, tests: geaendert }, werkzeug);
