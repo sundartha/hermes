@@ -1,11 +1,6 @@
+import { once } from "node:events";
+
 export function ergebnisOderNull(versprechen, ms) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), Math.max(0, ms));
-    timer.unref?.();
-    const beende = (ergebnis) => {
-      clearTimeout(timer);
-      resolve(ergebnis);
-    };
-    versprechen.then(beende, () => beende(null));
-  });
+  const frist = once(AbortSignal.timeout(Math.max(0, ms)), "abort").then(() => null);
+  return Promise.race([versprechen, frist]);
 }
