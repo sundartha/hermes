@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
+import { tempDataDir, seedState, seedCall, makeConfigOverrides, mitFesterUhr } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
@@ -25,7 +25,7 @@ before(async () => {
 const callFor = (language) =>
   seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language, direction: "outbound" });
 
-test("AL-P7b-6: Flag aus -> Prompt byte-identisch zu einem Lauf ohne Block, kein thinkingSignal-Text drin", () => {
+test("AL-P7b-6: Flag aus -> Prompt byte-identisch zu einem Lauf ohne Block, kein thinkingSignal-Text drin", mitFesterUhr(() => {
   const call = callFor("de");
   const withoutFlag = withConfigOverrides({ thinkingSignalEnabled: false }, () => systemPrompt(call));
   const withFlag = withConfigOverrides({ thinkingSignalEnabled: true }, () => systemPrompt(call));
@@ -38,7 +38,7 @@ test("AL-P7b-6: Flag aus -> Prompt byte-identisch zu einem Lauf ohne Block, kein
   const afterBlockStart = withFlag.indexOf("\n\n", blockStart) + 2;
   const afterBlock = withFlag.slice(afterBlockStart);
   assert.equal(beforeBlock + "\n\n" + afterBlock, withoutFlag);
-});
+}));
 
 test("AL-P7b-7: Flag an, DE/EN/FR - Block genau einmal, Verbot drin, DE mit echten Umlauten, Sprachen getrennt", () => {
   const languages = { de: DE_HEADING, en: EN_HEADING, fr: FR_HEADING };
