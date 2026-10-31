@@ -188,3 +188,16 @@ test("1 MB aus einzeln mit Leerzeichen getrennten Ziffern ohne Kartennummer brau
 test("1 MB aus der Ziffer 1 in Vierergruppen mit Komma getrennt braucht höchstens das Dreifache der Zeit von 0,5 MB derselben Eingabe", () => {
   pruefeLaufzeitVerdopplung("1 1 1 1, ", maskRestrictedText);
 });
+
+function inVierergruppen(ziffern) {
+  return ziffern.match(/\d{4}/g).join(" ");
+}
+
+test("Karte mit erster Ziffer 6 in Vierergruppen wird zu ****1117 maskiert", () => {
+  assert.equal(maskRestrictedText(`Karte ${inVierergruppen(DISCOVER_16)}.`), "Karte ****1117.");
+});
+
+test("Luhn-gültige Folge mit erster Ziffer 7 in Vierergruppen bleibt unmaskiert", () => {
+  const text = `Karte ${inVierergruppen(IIN_7_LUHN_VALID_16)}.`;
+  assert.equal(maskRestrictedText(text), text);
+});
