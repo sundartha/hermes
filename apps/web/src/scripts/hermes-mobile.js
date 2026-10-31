@@ -9,7 +9,8 @@ import {
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { typeableLength, typedSplit } from "../lib/mobile-code.js";
 
-const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait)";
+const WIDE_QUERY = "(min-width: 768px) and (min-height: 600px) and (not ((pointer: coarse) and (max-width: 1024px) and (orientation: portrait)))";
+const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait), (min-width: 768px) and (min-height: 600px)";
 const SCREEN_HOW = 1;
 const SCREEN_PRICE = 2;
 const SCREEN_DEV = 3;
@@ -26,6 +27,7 @@ const CODE_CHAR_MS = 12;
 const CODE_TICK_MS = 24;
 
 const mobile = window.matchMedia(MOBILE_QUERY);
+const wide = window.matchMedia(WIDE_QUERY);
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const state = {
@@ -442,6 +444,7 @@ function stopAll() {
 
 const FIT_PENALTY = 3;
 const FIT_LEAST = 3;
+const FIT_LONG = 1;
 
 function boxHeight(node, inner) {
   const style = getComputedStyle(node);
@@ -468,7 +471,8 @@ function fitSlots(chat, rows) {
     else if (line.hasAttribute("data-opt")) groups.set(line, [line]);
   }
   for (const members of groups.values()) {
-    const variants = members.map((line) => ({ on: [line], height: boxHeight(line), lines: 1, cost: 0 }));
+    const longer = wide.matches ? FIT_LONG : 0;
+    const variants = members.map((line, index) => ({ on: [line], height: boxHeight(line), lines: 1, cost: -index * longer }));
     if (members.every((line) => line.hasAttribute("data-opt"))) {
       variants.unshift({ on: [], height: 0, lines: 0, cost: fitSkip(members[0]) });
     }

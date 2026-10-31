@@ -35,7 +35,6 @@
   filter: none;
 }
 
-/* Footer auf Screen 5 blendet nur, ohne Versatz. */
 .mh[data-ready] .mh-footer {
   transform: none;
   transition: opacity 0.8s ease;
@@ -232,18 +231,7 @@
   }
 }
 
-/* ------------------------------------------- 4. Buehne auf Screen 2 */
 
-/* Vier Szenen je 17 s, alles CSS, EIN Durchlauf (68 s, Szene i beginnt bei
-   0.6 s + i x 17 s): die Szene blendet ein, ihre Blasen erscheinen nacheinander
-   (je 1.25 s), ab 16 s blendet sie aus - nur die letzte bleibt stehen. Die
-   Balken unter der Buehne fuellen sich je Szene und bleiben voll (fill-mode
-   both), am Ende stehen alle vier voll und die letzte Szene bleibt. Von vorn
-   geht es erst, wenn der erste Anzeiger angetippt wird (hermes-mobile.js,
-   pickScene) oder der Screen neu betreten wird. Prozentwerte beziehen sich auf
-   die 68 s: 25 % = eine Szene. Vor dem Start gilt das erste Bild
-   (unsichtbar), so blitzt keine Blase zu frueh auf. Ohne Skript steht die
-   erste Szene fertig da (Abschnitt 8). */
 .mh-scene[data-scene="1"],
 .mh-dot[data-scene="1"] .mh-dot__icon,
 .mh-dot[data-scene="1"] .mh-dot__bar b {
@@ -284,7 +272,6 @@
 .mh[data-ready] .mh-uses[data-active="1"] .mh-dot[data-scene="3"] .mh-dot__icon {
   animation-name: mhDotLast;
 }
-/* Balken: fuellt sich linear ueber die eigene Szene (25 %) und bleibt voll. */
 .mh[data-ready] .mh-uses[data-active="1"] .mh-dot__bar b {
   animation-name: mhBar;
 }
@@ -322,8 +309,6 @@
     opacity: 1;
   }
 }
-/* Eine Blase steht nach 0.8 % (gut 0.5 s) und bleibt; ihre Szene blendet sie
-   aus (mhScene), so beginnt sie beim erneuten Antippen wieder bei null. */
 @keyframes mhMsg {
   0% {
     opacity: 0;
@@ -336,8 +321,6 @@
   }
 }
 
-/* Ohne Skript laeuft keine Runde: die erste Szene steht fertig da (die
-   anderen liegen unsichtbar darunter, hermes-mobile.css), ihr Anzeiger leuchtet. */
 .mh:not([data-ready]) .mh-dot[data-scene="0"] .mh-dot__icon {
   color: #0a2245;
   border-color: #fff;
@@ -346,7 +329,6 @@
 .mh:not([data-ready]) .mh-dot[data-scene="0"] .mh-dot__bar b {
   transform: none;
 }
-/* Der gruene Punkt der Anruf-Zeile pulsiert, solange der Screen aktiv ist. */
 .mh[data-ready] .mh-uses[data-active="1"] .mh-msg__dot {
   animation: mhPulse 1.2s ease-in-out infinite;
 }
@@ -374,7 +356,6 @@
     background: #fff;
   }
 }
-/* Der letzte Anzeiger bleibt aktiv, die Runde endet bei ihm. */
 @keyframes mhDotLast {
   0% {
     color: rgba(219, 233, 249, 0.55);
@@ -552,7 +533,6 @@
   .mh-bloom {
     display: none;
   }
-  /* Buehne: keine Runde, die erste Szene steht fertig da. */
   .mh-scene,
   .mh-msg,
   .mh-msg__dot,
@@ -572,7 +552,6 @@
   .mh-dot[data-scene="0"] .mh-dot__bar b {
     transform: none;
   }
-  /* Angetippte Szene (data-pick, hermes-mobile.js): sie steht statt der ersten. */
   .mh .mh-uses[data-pick] .mh-scene,
   .mh .mh-uses[data-pick] .mh-scene .mh-msg {
     opacity: 0;
