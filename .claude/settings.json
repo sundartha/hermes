@@ -157,6 +157,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/leise-befehle.mjs\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/worktree-pflicht.mjs\"",
+            "timeout": 30
           }
         ]
       }
