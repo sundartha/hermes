@@ -9,9 +9,19 @@ import { stammtAusAltemText } from "./auslagerung-eintraege.mjs";
 const REGEL = "hermes/wort-nur-in";
 const OHNE_UNTERDRUECKUNGEN = "eslint-suppressions.empty.json";
 const FEHLER = 2;
+const OHNE_KONFIGURATION = "config-file-missing";
+
+async function konfigurationDer(eslint, root, datei) {
+  try {
+    return await eslint.calculateConfigForFile(join(root, datei));
+  } catch (fehler) {
+    if (fehler.messageTemplate === OHNE_KONFIGURATION) return undefined;
+    throw fehler;
+  }
+}
 
 async function optionen(eslint, root, datei) {
-  const konfiguration = await eslint.calculateConfigForFile(join(root, datei));
+  const konfiguration = await konfigurationDer(eslint, root, datei);
   const regel = konfiguration?.rules?.[REGEL];
   return Array.isArray(regel) ? regel.slice(1) : [];
 }
@@ -24,11 +34,12 @@ function getroffeneZeilen(text, meldungen, name) {
   return treffer.map(({ line }) => zeilen[line - 1]);
 }
 
+function eslintOhneUnterdrueckungen(root) {
+  return new ESLint({ cwd: root, suppressionsLocation: join(root, OHNE_UNTERDRUECKUNGEN) });
+}
+
 async function zeilenInDerNeuenDatei(wurzeln, { datei, name }) {
-  const eslint = new ESLint({
-    cwd: wurzeln.hilfe,
-    suppressionsLocation: join(wurzeln.hilfe, OHNE_UNTERDRUECKUNGEN),
-  });
+  const eslint = eslintOhneUnterdrueckungen(wurzeln.hilfe);
   const [{ messages }] = await eslint.lintFiles([join(wurzeln.hilfe, datei)]);
   const text = readFileSync(join(wurzeln.hilfe, datei), "utf8");
   return getroffeneZeilen(text, messages, name);
@@ -40,6 +51,13 @@ async function zeilenInDerAltenDatei(wurzeln, { pfad, name }) {
   const eslint = wurzeln.eslint.get(wurzeln.pr);
   const [{ messages }] = await eslint.lintText(text, { filePath: join(wurzeln.pr, pfad) });
   return getroffeneZeilen(text, messages, name);
+}
+
+async function bestandstrefferDerZieldatei(wurzeln, { text, datei, name }) {
+  if (text === null) return 0;
+  const eslint = eslintOhneUnterdrueckungen(wurzeln.hilfe);
+  const [{ messages }] = await eslint.lintText(text, { filePath: join(wurzeln.hilfe, datei) });
+  return getroffeneZeilen(text, messages, name).length;
 }
 
 async function vorratDerAlten(wurzeln, { weg, name }) {
@@ -76,8 +94,12 @@ async function umgezogeneTrefferJeEintrag(wurzeln, { name, weg, datei }) {
   const vorrat = await vorratDerAlten(wurzeln, { weg, name });
   const neu = textNach(wurzeln, weg);
   const stehtNochInDerAlten = (zeile) => stammtAusAltemText(zeile, neu);
+  const bestand = dateiAm(wurzeln.basis, datei, wurzeln.pr);
+  const stehtSchonInDerZieldatei = (zeile) => stammtAusAltemText(zeile, bestand);
   const rest = ohneZugeordnete(vorrat, zeilen);
   if (rest === undefined || zeilen.some(stehtNochInDerAlten)) return 0;
+  if (zeilen.some(stehtSchonInDerZieldatei)) return 0;
+  if ((await bestandstrefferDerZieldatei(wurzeln, { text: bestand, datei, name })) > 0) return 0;
   wurzeln.vorrat.set(name, rest);
   return zeilen.length;
 }
