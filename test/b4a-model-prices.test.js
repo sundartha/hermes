@@ -303,6 +303,156 @@ test("B4A-RES-14: nextValidFrom ist die frueheste kuenftige Staffel, egal in wel
   assert.equal(prices[HAIKU].nextValidFrom, "2026-09-15");
 });
 
+async function configUnter(umgebung, ladeFrisch) {
+  const gesichert = Object.fromEntries(
+    Object.keys(umgebung).map((name) => [name, process.env[name]]),
+  );
+  const setze = (werte) => {
+    for (const [name, wert] of Object.entries(werte)) {
+      if (wert === undefined) delete process.env[name];
+      else process.env[name] = wert;
+    }
+  };
+  try {
+    setze(umgebung);
+    return await ladeFrisch();
+  } finally {
+    setze(gesichert);
+  }
+}
+
+const AUTH_LLM_UNGESETZT = Object.freeze({
+  ANTHROPIC_API_KEY: undefined,
+  OWNER_IDP_SUBJECT: undefined,
+  DASHBOARD_PASSWORD: undefined,
+  DEV_LOGIN_ENABLED: undefined,
+  RENDER_EXTERNAL_URL: undefined,
+  MCP_AUTH: undefined,
+  SESSION_SECRET: undefined,
+  OIDC_CLIENT_ID: undefined,
+  OIDC_CLIENT_SECRET: undefined,
+  CALL_CONFIRMATION_SECRET: undefined,
+  WORKOS_API_BASE: undefined,
+  WORKOS_MANAGEMENT_API_KEY: undefined,
+  ADMIN_EMAILS: undefined,
+  LLM_BILLING_LATCH_COOLDOWN_MS: undefined,
+});
+
+test("B4A-AUTH-1: ohne gesetzte Variablen liefern auth und llm ihre Standardwerte", async () => {
+  const { config: frisch } = await configUnter(
+    AUTH_LLM_UNGESETZT,
+    () => import("../src/config.js?b4a-auth-llm-standard"),
+  );
+  assert.deepEqual(
+    {
+      anthropicApiKey: frisch.llm.anthropicApiKey,
+      llmBillingLatchCooldownMs: frisch.llm.llmBillingLatchCooldownMs,
+      ownerIdpSubject: frisch.auth.ownerIdpSubject,
+      dashboardPassword: frisch.auth.dashboardPassword,
+      devLoginEnabled: frisch.auth.devLoginEnabled,
+      mcpAuth: frisch.auth.mcpAuth,
+      sessionSecret: frisch.auth.sessionSecret,
+      oidcClientId: frisch.auth.oidcClientId,
+      oidcClientSecret: frisch.auth.oidcClientSecret,
+      callConfirmationSecret: frisch.auth.callConfirmationSecret,
+      workosApiBase: frisch.auth.workosApiBase,
+      workosManagementApiKey: frisch.auth.workosManagementApiKey,
+      adminEmails: frisch.auth.adminEmails,
+    },
+    {
+      anthropicApiKey: "",
+      llmBillingLatchCooldownMs: 900_000,
+      ownerIdpSubject: "",
+      dashboardPassword: "",
+      devLoginEnabled: false,
+      mcpAuth: "",
+      sessionSecret: "",
+      oidcClientId: "",
+      oidcClientSecret: "",
+      callConfirmationSecret: "",
+      workosApiBase: "https://api.workos.com",
+      workosManagementApiKey: "",
+      adminEmails: [],
+    },
+  );
+});
+
+test("B4A-AUTH-2: gesetzte Zugangswerte kommen unveraendert an, Admin-Adressen klein geschrieben", async () => {
+  const { config: frisch } = await configUnter(
+    {
+      ...AUTH_LLM_UNGESETZT,
+      DASHBOARD_PASSWORD: "dashboard-pw",
+      OIDC_CLIENT_ID: "client-a",
+      OIDC_CLIENT_SECRET: "geheim-b",
+      WORKOS_MANAGEMENT_API_KEY: "sk_test_c",
+      DEV_LOGIN_ENABLED: "true",
+      ADMIN_EMAILS: "Chefin@Beispiel.DE, ops@beispiel.de",
+    },
+    () => import("../src/config.js?b4a-auth-gesetzt"),
+  );
+  assert.deepEqual(
+    {
+      dashboardPassword: frisch.auth.dashboardPassword,
+      oidcClientId: frisch.auth.oidcClientId,
+      oidcClientSecret: frisch.auth.oidcClientSecret,
+      workosManagementApiKey: frisch.auth.workosManagementApiKey,
+      devLoginEnabled: frisch.auth.devLoginEnabled,
+      adminEmails: frisch.auth.adminEmails,
+    },
+    {
+      dashboardPassword: "dashboard-pw",
+      oidcClientId: "client-a",
+      oidcClientSecret: "geheim-b",
+      workosManagementApiKey: "sk_test_c",
+      devLoginEnabled: true,
+      adminEmails: ["chefin@beispiel.de", "ops@beispiel.de"],
+    },
+  );
+});
+
+test("B4A-AUTH-3: auf Render bleibt der Dev-Login aus, auch wenn DEV_LOGIN_ENABLED=true", async () => {
+  const { config: frisch } = await configUnter(
+    {
+      ...AUTH_LLM_UNGESETZT,
+      DEV_LOGIN_ENABLED: "true",
+      RENDER_EXTERNAL_URL: "https://hermes.example.invalid",
+    },
+    () => import("../src/config.js?b4a-auth-render"),
+  );
+  assert.equal(frisch.auth.devLoginEnabled, false);
+});
+
+const UNGUELTIG_GELESEN = [
+  ["LLM_PROVIDER_FALLBACK"],
+  ["LLM_REQUEST_TIMEOUT_MS"],
+  ["LLM_MAX_RETRIES"],
+  ["LLM_BACKOFF_MS"],
+  ["LLM_BREAKER_THRESHOLD"],
+  ["LLM_BREAKER_WINDOW_MS"],
+  ["LLM_BREAKER_COOLDOWN_MS"],
+  ["LLM_BILLING_LATCH_COOLDOWN_MS"],
+  ["PRECALL_BRIEFING_TIMEOUT_MS"],
+  ["CALL_SUMMARY_TIMEOUT_MS"],
+  ["DEV_LOGIN_ENABLED"],
+  ["LOGIN_RATE_LIMIT_PER_MIN"],
+  ["SESSION_TTL_SECONDS"],
+  ["LOGIN_COOKIE_TTL_SECONDS"],
+  ["PROVIDER_TO_BUCKET_RATE_MICRO", "PROVIDER_TO_BUCKET_RATE_MICRO"],
+];
+
+test("B4A-AUTH-4: ein ungueltiger auth- oder llm-Wert erzeugt je Lesestelle einen Fatal-Befund mit seinem Namen", async () => {
+  const kaputt = Object.fromEntries(UNGUELTIG_GELESEN.map(([name]) => [name, "kaputt"]));
+  const frisch = await configUnter(
+    { ...AUTH_LLM_UNGESETZT, ...kaputt },
+    () => import("../src/config.js?b4a-auth-llm-kaputt"),
+  );
+  const genannt = frisch
+    .configFatalErrors()
+    .map((befund) => befund.slice(0, befund.indexOf("=")))
+    .sort();
+  assert.deepEqual(genannt, UNGUELTIG_GELESEN.flat().sort());
+});
+
 test("B4A-RES-15: ohne faellige Staffel nennt die Meldung Modell, Tag und Ursache im Wortlaut", () => {
   assert.throws(
     () => resolveModelPrices({ [HAIKU]: [entry({ validFrom: SWITCH_DAY })] }, ANCHOR_DAY),
