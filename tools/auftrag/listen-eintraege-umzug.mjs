@@ -1,8 +1,9 @@
-import { posix } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, posix } from "node:path";
 
-import { stammtAusAltemText } from "../auslagerung-eintraege.mjs";
+import { listeMitErsatz, stammtAusAltemText } from "../auslagerung-eintraege.mjs";
 import { eslintCollectorFindings } from "../basis-vergleich.mjs";
-import { gezaehlt, knotenSchluessel, pfadAusSchluessel } from "../eslint-rules/bestand.js";
+import { gezaehlt, knotenSchluessel, kontingent, pfadAusSchluessel } from "../eslint-rules/bestand.js";
 import { anfragenOhneFrist } from "../eslint-rules/anfrage-mit-frist.js";
 import { dateiAm, gibtEsIn } from "./git.mjs";
 
@@ -44,40 +45,43 @@ function schluesselTeile(schluessel) {
   return { pfad, fingerabdruck: schluessel.slice(pfad.length + SCHLUESSEL_TRENNER.length) };
 }
 
-function offeneEintraege(liste, uebrig) {
-  return liste.flatMap((eintrag, stelle) => {
-    const frei = uebrig.get(eintrag) ?? 0;
-    if (frei <= 0) return [{ stelle, ...schluesselTeile(eintrag) }];
-    uebrig.set(eintrag, frei - 1);
-    return [];
-  });
-}
-
-function unbekannteFunde(aktuell, uebrig) {
-  return aktuell.filter(({ key }) => {
-    const frei = uebrig.get(key) ?? 0;
-    uebrig.set(key, frei - 1);
-    return frei > 0;
-  });
-}
-
 export function fristEintraegeNachUmzug({ liste, aktuell, pruefen }) {
-  const uebrig = gezaehlt(aktuell.map(({ key }) => key));
-  const offen = offeneEintraege(liste, uebrig);
+  const abgedeckt = kontingent(gezaehlt(aktuell.map(({ key }) => key)));
+  const bekannt = kontingent(gezaehlt(liste));
+  const offen = liste.flatMap((eintrag, stelle) => (abgedeckt(eintrag) ? [] : [{ stelle, ...schluesselTeile(eintrag) }]));
   const ersatz = new Map();
-  for (const fund of unbekannteFunde(aktuell, uebrig)) {
+  for (const fund of aktuell.filter(({ key }) => !bekannt(key))) {
     const neu = schluesselTeile(fund.key);
     const alt = offen.find(
       (eintrag) =>
         !ersatz.has(eintrag.stelle) &&
         eintrag.fingerabdruck === neu.fingerabdruck &&
         pruefen.neueDatei(neu.pfad) &&
-        pruefen.stammtAus(fund.text, { von: eintrag.pfad, nach: neu.pfad }),
+        pruefen.stammtAus(fund.text, { von: eintrag.pfad, nach: neu.pfad }) &&
+        !pruefen.nochDort(fund.text, { von: eintrag.pfad }),
     );
     if (alt !== undefined) ersatz.set(alt.stelle, fund.key);
   }
-  if (ersatz.size === 0) return undefined;
-  return { neu: liste.map((eintrag, stelle) => ersatz.get(stelle) ?? eintrag).toSorted(), anzahl: ersatz.size };
+  return listeMitErsatz(liste, ersatz);
+}
+
+const EINHEIT_ENDEN = ["Statement", "Declaration"];
+const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
+function istEinheit(knoten) {
+  return knoten.parent === null || knoten.parent.type === "Program" || EINHEIT_ENDEN.some((ende) => knoten.type.endsWith(ende));
+}
+
+function aeussersteFunktion(knoten) {
+  let aeusserste = knoten;
+  for (let hoch = knoten.parent; hoch !== null; hoch = hoch.parent) if (FUNKTIONEN.has(hoch.type)) aeusserste = hoch;
+  return aeusserste;
+}
+
+export function umschliessendeEinheit(knoten) {
+  let einheit = aeussersteFunktion(knoten);
+  while (!istEinheit(einheit)) einheit = einheit.parent;
+  return einheit;
 }
 
 async function fristFunde(root) {
@@ -85,17 +89,23 @@ async function fristFunde(root) {
     files: FRIST_QUELLEN,
     keysOf: (context, datei) =>
       anfragenOhneFrist(context.sourceCode, datei).map((knoten) => ({
-        key: JSON.stringify({ key: knotenSchluessel(context.sourceCode, datei, knoten), text: context.sourceCode.getText(knoten) }),
+        key: JSON.stringify({ key: knotenSchluessel(context.sourceCode, datei, knoten), text: context.sourceCode.getText(umschliessendeEinheit(knoten)) }),
         loc: knoten.loc,
       })),
   });
   return funde.map(({ key }) => JSON.parse(key));
 }
 
+function dateiJetzt(root, pfad) {
+  const datei = join(root, pfad);
+  return existsSync(datei) ? readFileSync(datei, "utf8") : null;
+}
+
 export async function fristListeNachUmzug({ liste, basis, root }) {
   const pruefen = {
     neueDatei: (datei) => !gibtEsIn(basis, datei, root),
     stammtAus: (text, { von }) => stammtAusAltemText(text, dateiAm(basis, von, root)),
+    nochDort: (text, { von }) => stammtAusAltemText(text, dateiJetzt(root, von)),
   };
   return fristEintraegeNachUmzug({ liste, aktuell: await fristFunde(root), pruefen });
 }
