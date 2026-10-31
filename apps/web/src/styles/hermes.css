@@ -408,8 +408,10 @@ a:hover {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding-bottom: 40px;
+  /* Eine Komposition in allen Breiten: Text sitzt unten (Tempel darueber bzw.
+     rechts daneben), mit demselben Bodenabstand wie im gestapelten Hochformat. */
+  justify-content: flex-end;
+  padding-bottom: clamp(84px, 12vh, 132px);
 }
 .hero-pad {
   width: 100%;
@@ -2340,10 +2342,6 @@ a:hover {
       rgba(8, 20, 44, 0.62) 72%,
       rgba(8, 20, 44, 0.84) 100%
     );
-  }
-  .hero-inner {
-    justify-content: flex-end !important;
-    padding-bottom: clamp(84px, 12vh, 132px) !important;
   }
   .hero-copy {
     margin-inline: auto;

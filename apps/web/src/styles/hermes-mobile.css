@@ -26,7 +26,7 @@
   display: none;
 }
 
-@media (max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))) {
+@media (max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
   .mh {
     display: block;
   }
@@ -143,12 +143,18 @@
 }
 
 /* 2. Tempel: p <= 1: 1 - 1.25p, p > 3: (p - 3.2) / 0.8, dazwischen 0.
-   Herausgezoomt: Breite max(2.05 vw, 0.98 vh), links vw/2 - 0.695 Breite,
+   Herausgezoomt: Breite max(2.05 vw, 0.98 vh) x 1.35, links vw/2 - 0.704 Breite,
    oben min(40px, 0.62 vh - 0.78 Bildhoehe). Bildhoehe = Breite x 720/1280,
    0.78 x 0.5625 = 0.43875. Die ziehenden Wolken (hermes-mobile-motion.css)
-   haengen an denselben Massen, darum stehen sie hier als Variablen. */
+   haengen an denselben Massen, darum stehen sie hier als Variablen.
+   Owner 2026-10-30: x 1.35 (der Tempel wirkte auf dem iPhone zu fern) und
+   0.704 statt 0.695 - die Mitte des Tempels liegt bei 70.4 % der Bildbreite,
+   so steht er genau ueber der Ueberschrift. Auf niedrigen Schirmen (iPhone SE)
+   waechst er nur so weit, dass das Dach mind. 110px unter der Oberkante bleibt
+   (Dach = oben + 0.073 Breite; oben = 62svh - 0.43875 Breite -> Breite <=
+   (62svh - 110px) / 0.366), sonst laege es nach dem Zoom unter der Kopfleiste. */
 .mh-hero {
-  --mh-tw: max(205vw, 98svh);
+  --mh-tw: max(max(205vw, 98svh), min(calc(max(205vw, 98svh) * 1.35), calc((62svh - 110px) * 2.732)));
   --mh-tt: min(40px, calc(62svh - 0.43875 * var(--mh-tw)));
   background: linear-gradient(180deg, #8e9db4 0%, #aab5c6 30%, #9fb0c6 55%, #7f93ae 100%);
   opacity: max(clamp(0, calc(1 - 1.25 * var(--p)), 1), clamp(0, calc((var(--p) - 3.2) / 0.8), 1));
@@ -156,11 +162,10 @@
 }
 
 /* Der Prototyp rundet Breite, links und oben auf ganze Pixel - wo round()
-   verfuegbar ist, hier genauso. -0.001px: der Prototyp rechnet in Gleitkomma,
-   2.05 x 390 ergibt dort 799.4999... und rundet ab. */
+   verfuegbar ist, hier genauso. */
 @supports (width: round(1.5px, 1px)) {
   .mh-hero {
-    --mh-tw: round(max(calc(205vw - 0.001px), calc(98svh - 0.001px)), 1px);
+    --mh-tw: round(max(max(205vw, 98svh), min(calc(max(205vw, 98svh) * 1.35), calc((62svh - 110px) * 2.732))), 1px);
     --mh-tt: round(min(40px, calc(62svh - 0.43875 * var(--mh-tw))), 1px);
   }
 }
@@ -168,7 +173,7 @@
 .mh-temple {
   position: absolute;
   top: var(--mh-tt);
-  left: calc(50vw - 0.695 * var(--mh-tw));
+  left: calc(50vw - 0.704 * var(--mh-tw));
   width: var(--mh-tw);
   height: auto;
   max-width: none;
@@ -177,7 +182,7 @@
 }
 @supports (width: round(1.5px, 1px)) {
   .mh-temple {
-    left: round(calc(50vw - 0.695 * var(--mh-tw)), 1px);
+    left: round(calc(50vw - 0.704 * var(--mh-tw)), 1px);
   }
 }
 
@@ -260,6 +265,144 @@
 .mh-s-hero {
   justify-content: flex-end;
   padding: 92px var(--mh-side) env(safe-area-inset-bottom, 0px);
+}
+/* Start-Screen mit genug Hoehe: solange die Einwilligungs-Karte steht
+   (styles/consent.css, ~170px hoch + 12px Rand), steht der Button mit 28px
+   Abstand ueber ihr (= Fliesstext zu Button). Nur dann (:has); entscheidet der
+   Besucher, gleitet der Text sanft nach unten auf seinen Platz und das Bild
+   zoomt dabei leicht hinein, damit die frei gewordene Flaeche gefuellt wirkt.
+   122px bei 844px Hoehe = 12 + 170 + 28 - 88px (Luft unter dem Button; sie
+   waechst mit der Hoehe, daher der svh-Term). Gemessen 390x844 und 375x667. */
+@media (max-width: 767.98px) and (min-height: 660px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .mh-s-hero {
+    transition: padding-bottom 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
+    padding-bottom: calc(122px + (844px - 100svh) * 0.056 + env(safe-area-inset-bottom, 0px));
+  }
+  /* Tablet (Hochformat, Touch): die Karte ist dort 600px breit (~191px);
+     gemessen 768x1024 und 820x1180 ergibt 146px die 36px des Tablet-Rasters. */
+  @media (min-width: 768px) {
+    body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
+      padding-bottom: calc(146px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+  /* Ein Raster fuer den Start-Screen (Owner 2026-10-30: einheitliche
+     Abstaende): Ueberschrift -> Fliesstext 16px (gehoeren zusammen),
+     Fliesstext -> Button 28px, Button -> Karte 28px (padding-bottom oben).
+     Tablet: 22 / 36 / 36. */
+  .mh .mh-s-hero .mh-lead,
+  .mh .mh-s-close .mh-lead {
+    margin-top: 16px;
+  }
+  .mh .mh-s-hero .mh-actions,
+  .mh .mh-s-close .mh-pill {
+    margin-top: 28px;
+  }
+  /* Der Start-Button etwas schmaler, damit er neben der Ueberschrift nicht wuchtet. */
+  .mh .mh-s-hero .mh-pill,
+  .mh .mh-s-close .mh-pill,
+  .mh .mh-s-hero .mh-pill:hover,
+  .mh .mh-s-close .mh-pill:hover {
+    width: min(100%, 208px);
+    height: 44px;
+    font-size: 15px;
+  }
+}
+/* Bild-Zoom beim Bestaetigen: Tempel + Nebel (.mh-hero) wachsen mit derselben
+   Dauer (0,35 s) und Kurve wie das Text-Gleiten von 1 auf 1.05 und ruecken 10px nach
+   oben (Owner 2026-10-30). Kein Rand: .mh-bg schneidet ab (overflow hidden),
+   die Ebene ragt auch nach dem Anheben unten noch ueber den Rand
+   (0.45 x Hoehe x 0.05 > 10px ab 445px Hoehe). Ohne Bewegung
+   (prefers-reduced-motion) bleibt es bei 1. Start- und letzter Screen stehen
+   gleich: der Tempel kehrt auf dem letzten Screen mit demselben Zoom zurueck. */
+@media (max-width: 767.98px) and (min-height: 660px) and (not ((pointer: coarse) and (max-height: 500px))) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) and (prefers-reduced-motion: no-preference) {
+  .mh-hero {
+    transform-origin: 50% 55%;
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+    will-change: opacity, transform;
+  }
+  .mh:has(.mh-s-hero[data-active="1"]) .mh-hero,
+  .mh:has(.mh-s-close[data-active="1"]) .mh-hero {
+    transform: translate3d(0, -10px, 0) scale(1.05);
+  }
+  body:has(.consent[data-placement="hero"]:not([hidden])) .mh-hero {
+    transform: none;
+  }
+}
+/* Niedrige Handys (iPhone SE, bis 720px Hoehe): solange die Karte steht, ist
+   der Platz knapp - engeres Raster (12 / 20 / 20) und eine kompaktere Karte
+   (styles/consent.css), damit die Ueberschrift unter dem Tempel bleibt. */
+@media (max-width: 767.98px) and (min-height: 660px) and (max-height: 720px) and (not ((pointer: coarse) and (max-height: 500px))) {
+  .mh .mh-s-hero .mh-lead,
+  .mh .mh-s-close .mh-lead {
+    margin-top: 12px;
+  }
+  .mh .mh-s-hero .mh-actions,
+  .mh .mh-s-close .mh-pill {
+    margin-top: 20px;
+  }
+  /* Schrift waechst mit: die Ueberschrift skaliert schon ueber svh (35px statt
+     44px, Faktor ~0.8); Fliesstext und Button ziehen im selben Verhaeltnis mit.
+     Untergrenze 13px fuer Lesbarkeit, Button bleibt 44px hoch (Tippflaeche). */
+  .mh .mh-s-hero .mh-lead,
+  .mh .mh-s-close .mh-lead {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mh .mh-s-hero .mh-pill,
+  .mh .mh-s-close .mh-pill,
+  .mh .mh-s-hero .mh-pill:hover,
+  .mh .mh-s-close .mh-pill:hover {
+    width: min(100%, 168px);
+    font-size: 13px;
+  }
+  .mh .mh-s-hero .mh-how-link {
+    font-size: 13px;
+  }
+  /* Kopfleiste im selben Verhaeltnis (Faktor ~0.88; Owner 2026-10-30:
+     "alles proportional, nur der Kartentext bleibt 13px"). */
+  .mh-head {
+    zoom: 0.88;
+  }
+  body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
+    padding-bottom: calc(102px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Tablet (Hochformat, Touch): dieselbe Startseite, aber der Platz wird genutzt -
+   breitere Spalte (bis 600px), groessere Ueberschrift, Fliesstext und Pille.
+   Die Einwilligungs-Karte steht auf derselben Spalte (styles/consent.css). */
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .mh-s-hero,
+  .mh-s-close {
+    --mh-side: max(56px, calc(50% - 300px));
+  }
+  .mh .mh-s-hero .mh-h1,
+  .mh .mh-s-close .mh-h2--close {
+    font-size: min(9.6vw, 7svh);
+  }
+  .mh .mh-s-hero .mh-lead,
+  .mh .mh-s-close .mh-lead {
+    max-width: 480px;
+    margin-top: 22px;
+    font-size: 19px;
+  }
+  .mh .mh-s-hero .mh-actions,
+  .mh .mh-s-close .mh-pill {
+    margin-top: 36px;
+  }
+  .mh .mh-s-hero .mh-pill,
+  .mh .mh-s-close .mh-pill,
+  .mh .mh-s-hero .mh-pill:hover,
+  .mh .mh-s-close .mh-pill:hover {
+    width: 248px;
+    height: 54px;
+    font-size: 17px;
+  }
+  .mh .mh-s-hero .mh-how-link {
+    font-size: 17px;
+  }
 }
 .mh-s-close {
   justify-content: flex-end;
@@ -410,6 +553,92 @@
   white-space: nowrap;
 }
 
+/* Kapsel veredelt: Glas mit Lichtkante (Verlaufsring), weicher Tiefenschatten,
+   aktive Sprache mit Leuchtpunkt, "Log in" als hellerer Glas-Daumen mit Glanz. */
+.mh-cap {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05) 42%, rgba(8, 26, 54, 0.34));
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow:
+    0 8px 28px rgba(0, 10, 30, 0.32),
+    0 1px 2px rgba(0, 10, 30, 0.2);
+}
+.mh-cap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 38%, rgba(255, 255, 255, 0.04) 62%, rgba(207, 228, 250, 0.38));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+.mh .mh-lang__opt {
+  position: relative;
+}
+.mh .mh-lang__opt[aria-pressed="true"] {
+  text-shadow: 0 0 10px rgba(207, 228, 250, 0.45);
+}
+/* Sprache ohne Daumen und Punkt (Owner 2026-10-31: "am cleansten"): zwei gleich
+   breite Felder, Schraegstrich mittig, aktiv weiss mit leichtem Schein. */
+.mh-lang {
+  padding: 0 3px;
+}
+.mh .mh-lang__opt[data-lang="en"],
+.mh .mh-lang__opt[data-lang="de"] {
+  width: 36px;
+  padding: 0;
+  text-align: center;
+}
+.mh-cap__rule {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0));
+}
+.mh-login__thumb {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(207, 228, 250, 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 2px 8px rgba(0, 10, 30, 0.16);
+  text-shadow: 0 1px 6px rgba(0, 20, 50, 0.3);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+.mh-login__thumb::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 52% 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+/* Schmaler Daumen (Owner 2026-10-31): 30px hoch, ringsum 7px Luft in der Kapsel. */
+.mh-cap {
+  padding-right: 7px;
+}
+/* Trennstrich optisch mittig zwischen "DE" und dem Daumen (je ~11px). */
+.mh-cap__rule {
+  margin: 0 11px 0 -1px;
+}
+.mh-login__thumb {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13.5px;
+}
+.mh .mh-login:active .mh-login__thumb {
+  transform: scale(0.96);
+}
+
 /* ---------------------------------------------------- Pille (Hauptaktion) */
 
 /* 52px hoch, Breite min(100%, 248px), mittig; weiss mit Navy-Text. Gleich auf
@@ -447,7 +676,9 @@
   margin: 0;
   font-family: "Instrument Serif", serif;
   font-weight: 400;
-  font-size: min(14.2vw, 6.6svh);
+  /* 44px bei 390x844 (Owner 2026-10-30: 55px wirkte zu wuchtig); knapp ueber
+     den Folge-Ueberschriften (.mh-h2, 42px). */
+  font-size: min(11.3vw, 5.3svh);
   line-height: 1;
   letter-spacing: -0.005em;
   color: #fff;
@@ -502,6 +733,11 @@
   overflow: hidden;
   background: linear-gradient(180deg, rgba(207, 228, 250, 0), rgba(207, 228, 250, 0.7));
   transform-origin: 50% 0;
+}
+/* Owner 2026-10-30: kein Faden oben auf den Inhalts-Screens - der Faden steht
+   nur unten (Start-Screen, unter "How it works"). */
+.mh-screen > .mh-thread {
+  display: none;
 }
 /* iPhone SE: der Faden entfaellt unter 700px Hoehe. */
 @media (max-height: 699.98px) {
@@ -596,341 +832,620 @@
   pointer-events: none;
 }
 
-/* ------------------------------------------- Screen 2: So funktioniert's */
+/* ------------------------------------------ Screen 2: Was Hermes kann */
 
-.mh-how .mh-focus {
-  display: flex;
-  justify-content: center;
+/* Einzeilige Ueberschrift, darunter die Buehne so hoch wie der Platz: eine
+   Glasflaeche, darauf vier Szenen (je ein kurzer Verlauf aus Blasen), von
+   denen immer eine sichtbar ist (hermes-mobile-motion.css). Darunter vier
+   Icon-Punkte, der aktive leuchtet. Alles absolut uebereinander: kein
+   Springen beim Wechsel. */
+.mh-h2--uses {
+  font-size: clamp(26px, 3.6svh, 32px);
 }
-
-/* Lichtschein und gruenes Aufleuchten: 2.6 x Ring, mittig auf dem Ring. */
-.mh-how .mh-glow,
-.mh-bloom {
-  top: calc(var(--mh-ring) * -0.8);
-  width: calc(var(--mh-ring) * 2.6);
-  height: calc(var(--mh-ring) * 2.6);
-  transform: translateX(-50%);
-}
-.mh-how .mh-glow {
-  background: radial-gradient(
-    closest-side,
-    rgba(170, 204, 242, 0.22),
-    rgba(170, 204, 242, 0.07) 58%,
-    rgba(170, 204, 242, 0)
-  );
-}
-.mh-bloom {
-  position: absolute;
-  left: 50%;
-  border-radius: 50%;
-  background: radial-gradient(
-    closest-side,
-    rgba(143, 240, 192, 0.18),
-    rgba(143, 240, 192, 0.05) 55%,
-    rgba(143, 240, 192, 0)
-  );
-  opacity: 0;
-  pointer-events: none;
-}
-
-.mh-viz {
+.mh-stage {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--mh-ring) * 0.2);
-}
-
-.mh-ring {
-  position: relative;
-  display: block;
-  flex: none;
-  width: var(--mh-ring);
-  height: var(--mh-ring);
-}
-.mh-ring__svg {
-  position: absolute;
-  inset: 0;
-  display: block;
+  flex: 1 1 auto;
   width: 100%;
-  height: 100%;
-  overflow: visible;
+  min-height: 300px;
+  margin: clamp(14px, 2.4svh, 24px) 0 0;
+  border: 1px solid rgba(207, 228, 250, 0.2);
+  border-radius: 28px;
+  background: linear-gradient(165deg, rgba(30, 62, 108, 0.5), rgba(8, 22, 48, 0.62));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 24px 60px -24px rgba(3, 10, 26, 0.8);
 }
-/* Radius wie im Prototyp: halbe Groesse minus 2px (im 148er-Feld 74 - 2 x k).
-   Ohne CSS-r bleibt r = 72. */
-.mh-ring__bg,
-.mh-ring__arc {
-  r: calc(74px - 2px * var(--mh-k));
-}
-.mh-ring__bg {
-  fill: rgba(8, 24, 50, 0.35);
-  stroke: rgba(207, 228, 250, 0.16);
-  stroke-width: calc(1.5px * var(--mh-k));
-}
-.mh-ring__arc {
-  fill: none;
-  stroke: #cfe4fa;
-  stroke-width: calc(2px * var(--mh-k));
-  stroke-linecap: round;
-  stroke-dasharray: 100 100;
-  stroke-dashoffset: 0;
-}
-.mh-ring__check {
-  fill: none;
-  stroke: #fff;
-  stroke-width: calc(2px * var(--mh-k));
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-  opacity: 0;
-}
-.mh-ring__wing {
-  position: absolute;
-  left: 22%;
-  top: 22%;
-  width: 56%;
-  height: 56%;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
-  opacity: 0;
-  transform: scale(0.84);
-}
-/* Neun Wellenbalken im Ring: 3px, Hoehe 0.34 x Ring. */
-.mh-ring__wave {
+.mh-scene {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
+  flex-direction: column;
+  padding: clamp(20px, 2.8svh, 26px) 16px clamp(12px, 1.9svh, 16px);
+}
+/* Ohne Skript steht Szene 1 fertig da; die uebrigen liegen unsichtbar
+   darunter. Mit Skript blendet hermes-mobile-motion.css sie im Wechsel ein. */
+.mh-scene:not([data-scene="0"]) {
   opacity: 0;
 }
-.mh-ring__wave i {
-  display: block;
-  width: 3px;
-  height: calc(var(--mh-ring) * 0.34);
-  border-radius: 3px;
-  background: linear-gradient(#cfe4fa, #8fb6e3);
-  transform: scaleY(0.15);
-}
-
-@supports (width: round(1.5px, 1px)) {
-  .mh-how .mh-glow,
-  .mh-bloom {
-    top: round(calc(var(--mh-ring) / 2 - round(calc(var(--mh-ring) * 2.6), 1px) / 2), 1px);
-    width: round(calc(var(--mh-ring) * 2.6), 1px);
-    height: round(calc(var(--mh-ring) * 2.6), 1px);
-  }
-  .mh-viz {
-    gap: round(calc(var(--mh-ring) * 0.2), 1px);
-  }
-  .mh-ring__wave i {
-    height: round(calc(var(--mh-ring) * 0.34), 1px);
-  }
-}
-
-.mh-viz__txt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.mh-viz__line {
-  display: grid;
-  justify-items: center;
-  min-height: 1.2em;
-  font:
-    500 var(--mh-vtext) / 1.2 "Space Grotesk",
-    sans-serif;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+/* Ein Satz unter dem Titel, Serif: die Ausgangslage in einem Atemzug. */
+.mh-scene__title {
+  flex: none;
+  margin: 0 auto;
+  max-width: 300px;
+  font: 400 clamp(17px, 2.6svh, 23px) / 1.2 "Instrument Serif", serif;
   color: #fff;
-  white-space: nowrap;
 }
-.mh-viz__typed,
-.mh-sum {
-  grid-area: 1 / 1;
-}
-.mh-sum {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 0;
-  transform: translateY(4px);
-}
-.mh-sum__check {
-  font-size: 0.8em;
-  color: #8ff0c0;
-}
-
-.mh-viz__status {
-  display: grid;
-  justify-items: center;
-  min-height: 16px;
-}
-.mh-status {
-  grid-area: 1 / 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font:
-    500 13px/1.2 "Space Grotesk",
-    sans-serif;
-  letter-spacing: 0.02em;
-  color: #8ff0c0;
-  opacity: 0;
-  transform: translateY(4px);
-}
-.mh-status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 99px;
-  background: #4ade96;
-  box-shadow: 0 0 10px #4ade96;
-}
-
-/* Unter der Animation: Titel + 3 Zeilen untereinander, per Wischen oder
-   Leiste wechselbar. */
-.mh-how .mh-controls {
-  display: block;
-  touch-action: pan-y;
-  -webkit-user-select: none;
-  user-select: none;
-}
-.mh-steps {
-  display: grid;
-}
-.mh-step {
-  grid-area: 1 / 1;
-}
-.mh-step__rows {
+.mh-chat {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: clamp(1px, 0.4svh, 4px);
-  margin-top: clamp(6px, 1.1svh, 10px);
+  gap: clamp(6px, 1.4svh, 12px);
+  flex: 1;
+  min-height: 0;
+  text-align: left;
+  /* Die Blasen folgen dem Titel von oben; die Benachrichtigung bzw. das
+     Ergebnis haengt unten an der Kante (margin-top auto) - so ist die Buehne
+     von oben bis unten gefuellt. */
+  justify-content: flex-start;
+  padding-top: clamp(8px, 1.6svh, 14px);
 }
-.mh-step__row {
-  margin: 0;
-  max-width: 336px;
-  font-size: clamp(14px, 1.9svh, 16px);
-  line-height: 1.45;
-  color: rgba(232, 242, 253, 0.86);
+/* Blasen: Anrufer/du links (hell), Hermes rechts (Glas, mit Fluegel), das
+   Hermes-Feld in Claude als Karte mit Knopf, das Ergebnis als weisse Karte. */
+.mh-msg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 84%;
+  padding: clamp(8px, 1.3svh, 11px) 14px;
+  border-radius: 18px;
+  font-size: clamp(13px, 1.8svh, 15px);
+  line-height: 1.38;
+  color: #fff;
+}
+.mh-msg--them,
+.mh-msg--you {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: rgba(207, 228, 250, 0.16);
+}
+.mh-msg--hermes {
+  align-self: flex-end;
+  padding-left: 40px;
+  border: 1px solid rgba(207, 228, 250, 0.26);
+  border-bottom-right-radius: 6px;
+  background: rgba(10, 30, 62, 0.55);
+}
+.mh-msg__wing {
+  position: absolute;
+  top: 11px;
+  left: 13px;
+  width: 17px;
+  height: auto;
+  opacity: 0.9;
+}
+.mh-msg__name {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(214, 229, 248, 0.6);
+}
+/* Keine haengenden Einzelwoerter in der zweiten Zeile einer Blase. */
+.mh-msg__text {
   text-wrap: balance;
 }
-
-/* Schritt-Leiste: 3 Segmente a 3px, Abstand 6, max. 280px, mittig, Tippflaeche
-   44px, keine Labels. Erledigt = weiss, offen = 18% weiss. */
-.mh-bars {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  max-width: 280px;
-  margin: clamp(6px, 1.2svh, 12px) auto 0;
+.mh-msg__chip {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(207, 228, 250, 0.14);
+  font-size: 11.5px;
+  color: #dbe9f9;
 }
-.mh .mh-bar {
-  flex: 1;
-  min-width: 0;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
+.mh-msg--tool {
+  align-self: stretch;
+  max-width: none;
+  border: 1px solid rgba(201, 164, 106, 0.5);
+  background: rgba(201, 164, 106, 0.1);
+}
+.mh-msg--tool .mh-msg__name {
+  color: #e9d5ae;
+}
+.mh-msg__action {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink, #0a2245);
+}
+/* Anruf-/Status-Zeile: Icon, pulsierender Punkt, eine Zeile - wie die
+   Anruf-Anzeige eines Handys. */
+.mh-msg--ring {
+  flex-direction: row;
+  align-items: center;
+  align-self: center;
+  gap: 9px;
+  max-width: none;
+  padding: 8px 14px 8px 12px;
+  border: 1px solid rgba(207, 228, 250, 0.3);
+  border-radius: 999px;
+  background: rgba(10, 30, 62, 0.5);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.mh-msg__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: #dbe9f9;
+}
+.mh-msg__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fe0a8;
+  box-shadow: 0 0 0 3px rgba(127, 224, 168, 0.25);
+}
+/* Kalender: Kopf mit Icon, darunter drei Zeilen - belegt gedimmt, frei hell. */
+.mh-msg--cal {
+  align-self: stretch;
+  max-width: none;
+  gap: 8px;
+  border: 1px solid rgba(207, 228, 250, 0.26);
+  background: rgba(10, 30, 62, 0.55);
+}
+.mh-msg--cal .mh-msg__icon {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+}
+.mh-msg--cal .mh-msg__text {
+  padding-left: 26px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #bcd6f3;
+}
+.mh-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mh-cal__row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
+}
+.mh-cal__time {
+  flex: none;
+  width: 44px;
+  font-variant-numeric: tabular-nums;
+}
+.mh-cal__row--busy {
+  color: rgba(214, 229, 248, 0.45);
+  text-decoration: line-through;
+  text-decoration-color: rgba(214, 229, 248, 0.35);
+}
+.mh-cal__row--call {
+  background: rgba(207, 228, 250, 0.1);
+  color: #e9f2fd;
+}
+.mh-cal__row--free {
+  background: rgba(127, 224, 168, 0.14);
+  color: #d6f5e3;
+}
+/* Benachrichtigung "auf deinem Handy": App-Kachel mit Fluegel, Absender und
+   Zeit, darunter der Text - wie eine Mitteilung auf dem Sperrbildschirm. */
+.mh-msg--notif {
+  align-self: stretch;
+  max-width: none;
+  gap: 6px;
+  margin-top: auto;
+  padding: 11px 14px;
+  border-radius: 16px;
+  background: rgba(234, 242, 252, 0.94);
+  color: var(--ink, #0a2245);
+  box-shadow: 0 14px 34px -14px rgba(3, 10, 26, 0.8);
+}
+.mh-notif__head {
   display: flex;
   align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: rgba(10, 34, 69, 0.6);
 }
-.mh-bar__track {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 3px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.18);
+.mh-notif__app {
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 6px;
+  background: #0a2245;
+  object-fit: contain;
 }
-.mh-bar__done,
-.mh-bar__fill {
-  position: absolute;
-  inset: 0;
+/* Hinweis zwischen den Blasen: was Hermes gerade tut. */
+.mh-msg--note {
+  align-self: center;
+  max-width: 92%;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: center;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: rgba(214, 229, 248, 0.6);
+}
+.mh-msg--card {
+  flex-direction: row;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 9px 16px 9px 13px;
+  border-radius: 999px;
   background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink, #0a2245);
 }
-.mh-bar__done {
-  opacity: 0;
-  transition: opacity 0.4s ease;
+.mh-msg--card .mh-msg__icon {
+  color: var(--ink, #0a2245);
 }
-.mh-bar[data-state="done"] .mh-bar__done,
-.mh-how[data-auto="0"][data-active="1"] .mh-bar[data-state="cur"] .mh-bar__done {
-  opacity: 1;
+/* Niedrige Schirme (iPhone SE): dichter, damit fuenf Schritte in die Buehne
+   passen. */
+@media (max-height: 720px) {
+  .mh-scene {
+    padding-top: 16px;
+  }
+  .mh-chat {
+    gap: 5px;
+    padding-top: 6px;
+  }
+  .mh-msg {
+    padding: 7px 12px;
+    line-height: 1.35;
+  }
+  .mh-msg--note {
+    padding: 0;
+  }
+  .mh-msg--hermes {
+    padding-left: 34px;
+  }
+  .mh-msg__wing {
+    top: 8px;
+    left: 11px;
+  }
+  .mh-cal__row {
+    padding: 4px 8px;
+  }
+  .mh-msg--notif {
+    padding: 8px 12px;
+  }
+  .mh-msg--cal .mh-msg__text,
+  .mh-msg--cal .mh-msg__icon {
+    display: none;
+  }
 }
-.mh-bar__fill {
+/* Wie viel Verlauf eine Szene zeigt, waehlt hermes-mobile.js je Schirm
+   (fitScenes): so fuellt der Verlauf die Buehne bis zum unteren Element - mit
+   Inhalt statt mit Luft, und ohne Ueberlauf. Ohne Skript steht der Kern. */
+.mh-stage [data-off] {
   display: none;
+}
+/* Vier Anzeiger unter der Buehne: Icon im Kreis, darunter ein Balken, der
+   sich waehrend der Szene fuellt (wie Story-Balken). */
+.mh-dots {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: clamp(12px, 2svh, 18px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mh-dot {
+  display: flex;
+}
+/* Der Anzeiger ist ein Knopf: Antippen springt zur Szene. */
+.mh-dot__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-dot__btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 14px;
+}
+@media (hover: hover) {
+  .mh-dot__btn:hover .mh-dot__icon {
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+}
+.mh-dot__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(207, 228, 250, 0.22);
+  border-radius: 50%;
+  color: rgba(219, 233, 249, 0.55);
+}
+.mh-dot__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.mh-dot__bar {
+  display: block;
+  width: 38px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(207, 228, 250, 0.18);
+  overflow: hidden;
+}
+.mh-dot__bar b {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transform: scaleX(0);
   transform-origin: 0 50%;
 }
 
 /* ------------------------------------------------------ Screen 3: Preise */
 
-.mh-price .mh-focus {
+/* Tarif-Karten wie in einer Wallet: je Tarif eine grosse Karte, die
+   gewaehlte vorn, die andere versetzt und kleiner dahinter. Darunter der
+   Umschalter (zugleich Anzeige) und der Knopf. */
+.mh-plan {
+  flex: 1 1 auto;
   width: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: clamp(14px, 2.2svh, 22px);
+  margin: clamp(16px, 2.6svh, 26px) 0 0;
 }
-
-/* Preis und "/ month" stehen zusammen mittig, dahinter ein weicher Lichtschein. */
-.mh-price-row {
+.mh-cards {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 320px;
+  margin: 0 14px;
+  touch-action: pan-y;
+}
+.mh-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: clamp(18px, 2.8svh, 26px) 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(207, 228, 250, 0.28);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 30px 60px -24px rgba(3, 10, 26, 0.9);
+  transition:
+    transform 0.6s cubic-bezier(0.3, 0.7, 0.2, 1),
+    opacity 0.5s ease,
+    filter 0.5s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Starter: kuehles Glas. Pro: tiefes Blau mit goldener Kante. */
+.mh-card--starter {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(170, 204, 242, 0.32), transparent 60%),
+    linear-gradient(160deg, #3c5a86, #1a335a);
+}
+.mh-card--business {
+  border-color: rgba(233, 213, 174, 0.55);
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(233, 213, 174, 0.28), transparent 55%),
+    linear-gradient(160deg, #1d3f73, #08172f);
+}
+/* Lage: die gewaehlte vorn; die andere links oder rechts dahinter. */
+.mh-cards .mh-card {
+  z-index: 1;
+  opacity: 0.55;
+  filter: saturate(0.7);
+}
+.mh-cards[data-sel="0"] .mh-card[data-card="1"] {
+  transform: translateX(16%) scale(0.86) rotate(4deg);
+}
+.mh-cards[data-sel="1"] .mh-card[data-card="0"] {
+  transform: translateX(-16%) scale(0.86) rotate(-4deg);
+}
+.mh-cards[data-sel="0"] .mh-card[data-card="0"],
+.mh-cards[data-sel="1"] .mh-card[data-card="1"] {
+  z-index: 2;
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+.mh-card__wing {
+  position: absolute;
+  right: -30px;
+  bottom: -20px;
+  width: 190px;
+  opacity: 0.07;
+  pointer-events: none;
+}
+.mh-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mh-card__name {
+  font: 400 clamp(36px, 5.4svh, 48px) / 1 "Instrument Serif", serif;
+}
+.mh-card__badge {
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: #e9d5ae;
+  color: #0a2245;
+  font:
+    600 9.5px/1.2 "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.mh-card__line {
+  margin: -6px 0 0;
+  font-size: 14px;
+  color: rgba(214, 229, 248, 0.8);
+}
+.mh-card__price {
   display: flex;
   align-items: baseline;
-  justify-content: center;
+  gap: 8px;
+  margin: 0;
 }
-.mh-glow--price {
-  top: 50%;
-  width: clamp(220px, 36svh, 320px);
-  height: clamp(220px, 36svh, 320px);
-  transform: translate(-50%, -50%);
-  background: radial-gradient(
-    closest-side,
-    rgba(170, 204, 242, 0.2),
-    rgba(170, 204, 242, 0.06) 58%,
-    rgba(170, 204, 242, 0)
-  );
-}
-
-/* Jedes Zeichen in einem eigenen Schacht; nur die Ziffer, die sich zwischen
-   den Tarifen unterscheidet, rollt senkrecht durch. */
-.mh-price__num {
-  position: relative;
-  display: inline-flex;
-  white-space: pre;
-  font-family: "Instrument Serif", serif;
-  font-size: min(21vw, 8.4svh);
-  line-height: 1.08;
+.mh-card__price b {
+  font: 400 clamp(54px, 8.6svh, 76px) / 1 "Instrument Serif", serif;
   letter-spacing: -0.015em;
+}
+.mh-card__price small {
+  font-size: 14px;
+  color: rgba(214, 229, 248, 0.75);
+}
+/* Detail-Raster wie auf einer Karte: kleine Beschriftung, Wert in Serif. */
+.mh-card__min {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mh-card__minrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(214, 229, 248, 0.6);
+}
+.mh-card__minrow b {
+  font: 400 clamp(26px, 3.8svh, 34px) / 1 "Instrument Serif", serif;
+  letter-spacing: 0;
   color: #fff;
 }
-.mh-roll {
-  display: inline-grid;
-  height: 1.08em;
-  overflow: hidden;
+.mh-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(8px, 1.6svh, 14px) 16px;
+  margin: 0;
 }
-.mh-roll > span {
-  grid-area: 1 / 1;
+.mh-card__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.mh-price__per {
+.mh-card__stats dt {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(214, 229, 248, 0.6);
+}
+.mh-card__stats dd {
+  margin: 0;
+  font: 400 clamp(20px, 3svh, 26px) / 1.1 "Instrument Serif", serif;
+}
+/* Markenzeile unten auf der Karte. */
+.mh-card__brand {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(214, 229, 248, 0.5);
+}
+.mh-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.4svh, 12px);
+  margin: 0;
+  padding: clamp(12px, 1.8svh, 16px) 0 0;
+  border-top: 1px solid rgba(207, 228, 250, 0.18);
+  list-style: none;
+  font-size: clamp(14px, 1.9svh, 15px);
+  line-height: 1.35;
+}
+.mh-card__list li {
+  display: flex;
+  gap: 10px;
+}
+.mh-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: #7fe0a8;
+}
+.mh-card--business .mh-check {
+  color: #e9d5ae;
+}
+@media (max-height: 720px) {
+  .mh-card__brand,
+  .mh-card__line {
+    display: none;
+  }
+  .mh-card__price b {
+    font-size: 48px;
+  }
+}
+/* Umschalter unter den Karten: zwei Woerter, das gewaehlte hell mit Strich. */
+.mh-plan-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+.mh .mh-plan-tab {
   position: relative;
-  padding-left: 10px;
-  font-size: 15px;
-  white-space: nowrap;
-  color: rgba(207, 228, 250, 0.8);
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: rgba(207, 228, 250, 0.55);
+  font:
+    500 14px "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
 }
-
-/* Minuten-Leiste: 4 Segmente a 3px, eins = 30 Minuten. */
+.mh .mh-plan-tab[aria-selected="true"] {
+  color: #fff;
+}
+.mh .mh-plan-tab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: #fff;
+  transform: scaleX(0);
+  transition: transform 0.4s ease;
+}
+.mh .mh-plan-tab[aria-selected="true"]::after {
+  transform: scaleX(1);
+}
+/* Minuten-Leiste: ein Segment = 30 Minuten. */
 .mh-segs {
   display: flex;
   gap: 6px;
   width: 100%;
-  max-width: 280px;
-  margin-top: clamp(12px, 2.4svh, 24px);
 }
 .mh-seg {
   position: relative;
@@ -941,49 +1456,43 @@
   overflow: hidden;
   background: rgba(255, 255, 255, 0.18);
 }
-.mh-seg > i {
-  position: absolute;
-  inset: 0;
+.mh-seg.is-on {
   background: #fff;
-  transform-origin: 0 50%;
-  transform: scaleX(0);
 }
-.mh-seg.is-on > i {
-  transform: scaleX(1);
-}
-
-.mh-minutes {
-  margin: clamp(8px, 1.4svh, 12px) 0 0;
-  font-size: 15px;
-  line-height: 1.4;
-  color: rgba(232, 242, 253, 0.82);
-  white-space: nowrap;
-}
-.mh-count {
-  font-variant-numeric: tabular-nums;
-}
-
-.mh-benefits {
-  width: 100%;
-  margin-top: clamp(14px, 2.6svh, 24px);
+.mh-plan__end {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(4px, 0.9svh, 8px);
+  gap: clamp(12px, 1.8svh, 16px);
 }
-.mh-benefit-row {
-  display: grid;
-  width: 100%;
-  justify-items: center;
+/* Zusagen unter dem Knopf: Haken-Zeile und Minuten-Hinweis als ein Block. */
+.mh-plan__trust {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
-.mh-benefit {
-  grid-area: 1 / 1;
+.mh-plan__trust .mh-foot {
   margin: 0;
-  max-width: 330px;
-  font-size: clamp(14px, 1.9svh, 16px);
-  line-height: 1.45;
-  color: rgba(232, 242, 253, 0.9);
-  text-wrap: balance;
+  font-size: 12.5px;
+}
+.mh-plan .mh-cta {
+  width: 100%;
+  box-sizing: border-box;
+}
+.mh-promise {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 13px;
+  color: rgba(207, 228, 250, 0.82);
+}
+.mh-promise > span::before {
+  content: "✓";
+  margin-right: 6px;
+  color: #7fe0a8;
 }
 
 /* Umschalter: 52px, 4px Innenabstand, Segmente 44px, volle Breite. */
@@ -999,6 +1508,7 @@
   box-shadow: inset 0 0 0 1px rgba(207, 228, 250, 0.13);
 }
 .mh-price .mh-toggle {
+  flex: none;
   margin-top: 6px;
 }
 .mh-toggle__thumb {
@@ -1088,8 +1598,231 @@
 
 /* ------------------------------------------------ Screen 4: Entwickler */
 
-.mh-dev .mh-focus {
+/* Ein Terminal-Fenster fuellt den Platz zwischen Ueberschrift und Aktionen:
+   Titelleiste mit drei Punkten, die Wege als Fenster-Tabs, darin Code und
+   drei Schritte. */
+.mh-window {
+  position: relative;
+  flex: 1 1 auto;
   width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  margin: clamp(14px, 2.4svh, 24px) 0 clamp(22px, 3.4svh, 32px);
+  border: 1px solid rgba(207, 228, 250, 0.22);
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(170deg, rgba(14, 34, 66, 0.82), rgba(4, 12, 28, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 30px 60px -24px rgba(3, 10, 26, 0.9);
+  text-align: left;
+}
+/* Fenster-Tabs: der bekannte Umschalter, flacher und ohne Rand. */
+.mh .mh-dev .mh-toggle {
+  width: auto;
+  height: 44px;
+  margin: 10px 10px 0;
+  padding: 3px;
+  background: rgba(4, 14, 32, 0.5);
+}
+.mh .mh-dev .mh-toggle__opt {
+  height: 38px;
+  font-size: 14px;
+}
+.mh-toggle--3 .mh-toggle__thumb {
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+}
+.mh-dev .mh-focus {
+  position: relative;
+  flex: 1;
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: clamp(14px, 2.4svh, 24px) 18px clamp(16px, 2.4svh, 22px);
+  box-sizing: border-box;
+}
+.mh-dev .mh-ways {
+  flex: 1;
+}
+.mh-dev .mh-way {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: clamp(12px, 2svh, 18px);
+}
+.mh-dev .mh-h3 {
+  font-size: clamp(22px, 3.2svh, 28px);
+}
+.mh-dev .mh-code {
+  min-height: 0;
+  margin: 0;
+  align-items: flex-start;
+  text-align: left;
+  border-radius: 14px;
+}
+/* Was kopiert wird: kleine Beschriftung ueber dem Code-Feld (der Knopf
+   "Copy" steht rechts daneben, s. u.). */
+.mh-way__label {
+  margin: 0;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  font:
+    500 10.5px "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(214, 229, 248, 0.62);
+}
+.mh-dev .mh-way__label + .mh-code {
+  margin-top: clamp(8px, 1.6svh, 14px);
+}
+/* Drei Schritte: Nummer im Kreis, Satz und eine Erklaerzeile. */
+.mh-steps {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: clamp(10px, 2svh, 22px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mh-steps li {
+  display: flex;
+  flex: 1 1 auto;
+  max-height: 120px;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(8px, 1.4svh, 12px) 12px;
+  border: 1px solid rgba(207, 228, 250, 0.12);
+  border-radius: 16px;
+  background: rgba(207, 228, 250, 0.05);
+}
+.mh-steps li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mh-steps strong {
+  font-size: clamp(15px, 2svh, 18px);
+  font-weight: 500;
+  color: #fff;
+}
+.mh-steps small {
+  font-size: clamp(13px, 1.65svh, 15px);
+  line-height: 1.35;
+  color: rgba(207, 228, 250, 0.72);
+}
+.mh-steps b {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(207, 228, 250, 0.35);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+}
+.mh-steps li:last-child b {
+  border-color: #7fe0a8;
+  background: #7fe0a8;
+  color: #0a2245;
+}
+/* Der Nutzen: danach sagst du einfach, was du brauchst. Deine Bitte als
+   helle Blase (wie Screen 2), darunter, was Hermes daraus macht. */
+.mh-gain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: clamp(10px, 1.6svh, 14px) 14px;
+  border: 1px solid rgba(233, 213, 174, 0.3);
+  border-radius: 16px;
+  background: rgba(233, 213, 174, 0.07);
+}
+.mh-gain__ask {
+  margin: 0;
+  font-size: clamp(16px, 2.2svh, 19px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  color: #fff;
+}
+.mh-gain__result {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: left;
+  color: #e9d5ae;
+}
+/* Kopieren als kleiner Chip oben rechts im Fenster, auf Hoehe des Weg-Titels:
+   so bleibt das Fenster bei allen drei Wegen gleich gross. */
+.mh .mh-dev .mh-copy,
+.mh .mh-dev[data-way="0"] .mh-copy,
+.mh .mh-dev[data-way="0"] .mh-copy:hover {
+  position: absolute;
+  z-index: 1;
+  top: clamp(14px, 2.4svh, 24px);
+  right: 18px;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 99px;
+  background: rgba(207, 228, 250, 0.14);
+  color: #fff;
+  font:
+    500 13px "Space Grotesk",
+    sans-serif;
+  box-shadow: inset 0 0 0 1px rgba(207, 228, 250, 0.26);
+  cursor: pointer;
+}
+/* Niedrigere Schirme: hermes-mobile.js (fitDev) laesst Zeilen weg, bis das
+   Fenster passt. Ohne JS gelten die festen Stufen. */
+.mh-dev[data-fit~="nosub"] .mh-steps small,
+.mh-dev[data-fit~="nores"] .mh-gain__result {
+  display: none;
+}
+.mh-dev[data-fit~="tight"] .mh-focus {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.mh-dev[data-fit~="tight"] .mh-way {
+  gap: 8px;
+}
+.mh-dev[data-fit~="tight"] .mh-steps {
+  gap: 6px;
+}
+.mh-dev[data-fit~="tight"] .mh-steps li {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.mh-dev[data-fit~="tight"] .mh-gain {
+  gap: 2px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.mh-dev[data-fit~="nogain"] .mh-gain {
+  display: none;
+}
+@media (max-height: 790px) {
+  .mh:not([data-ready]) .mh-steps small {
+    display: none;
+  }
+}
+@media (max-height: 720px) {
+  .mh:not([data-ready]) .mh-gain {
+    display: none;
+  }
+}
+/* Die Schritte nennen den Ablauf schon - der Hinweis unter dem Knopf entfaellt. */
+.mh .mh-dev .mh-connect__hint {
+  display: none;
 }
 .mh-glow--dev {
   top: 58%;
@@ -1204,9 +1937,6 @@
 .mh .mh-copy {
   transition: color 0.3s ease;
 }
-.mh .mh-dev[data-copied="1"] .mh-copy {
-  color: #16784c;
-}
 .mh-copy__roll {
   display: inline-grid;
   justify-items: center;
@@ -1226,9 +1956,6 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-}
-.mh .mh-dev:not([data-way="0"]) .mh-connect {
-  display: none;
 }
 .mh-connect__hint {
   margin: 0;
@@ -1258,23 +1985,11 @@
   color: #fff;
   text-decoration-color: #fff;
 }
-/* Beim Weg "Connector" wird "Copy" zur zweiten Aktion (ChatGPT und andere
-   Clients): Glas statt weiss, 44px. */
-.mh .mh-dev[data-way="0"] .mh-copy,
-.mh .mh-dev[data-way="0"] .mh-copy:hover {
-  height: 44px;
-  background: rgba(207, 228, 250, 0.14);
-  color: #fff;
-  box-shadow:
-    inset 0 0 0 1px rgba(207, 228, 250, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-.mh .mh-dev[data-way="0"][data-copied="1"] .mh-copy {
+.mh .mh-dev[data-copied="1"] .mh-copy {
   color: #8ff0c0;
 }
-/* ... und sagt dort "Copy URL" statt nur "Copy" (kein Kontext mehr, wenn Hinweis
-   und Fussnote auf niedrigen Bildschirmen entfallen). Die Rolle "Copy -> Copied"
-   laeuft mit dem URL-Label wie mit dem ersten. */
+/* Beim Weg "Connector" sagt der Chip "Copy URL" statt nur "Copy". Die Rolle
+   "Copy -> Copied" laeuft mit dem URL-Label wie mit dem ersten. */
 .mh-copy__label--url {
   opacity: 0;
 }
@@ -1298,22 +2013,65 @@
 
 /* ------------------------------------------------- Screen 5: Abschluss */
 
-/* Aufsteigender Faden ueber der Headline. */
-.mh-rise {
-  position: relative;
-  display: block;
-  flex: none;
-  width: 1px;
-  height: clamp(26px, 5.6svh, 52px);
-  margin-bottom: clamp(14px, 2.2svh, 20px);
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(207, 228, 250, 0), rgba(207, 228, 250, 0.55));
-}
 .mh-h2--close {
   margin: 0;
+  font-size: min(11.3vw, 5.3svh);
+  line-height: 1;
+  letter-spacing: -0.005em;
 }
 .mh-s-close .mh-pill {
-  margin-top: clamp(22px, 3.6svh, 32px);
+  margin-top: 28px;
+}
+/* Wie Screen 1: der Textblock steht auf gleicher Hoehe wie dort, wo unter dem
+   Button "How it works" steht (Aussen-Abstand + 12 + Zeile + 10 + Faden). Die
+   kompakte Fusszeile haengt in diesem Raum unten am Rand. */
+.mh-s-close {
+  --mh-how-line: 18px;
+  padding-bottom: calc(clamp(6px, 1.2svh, 12px) + 12px + var(--mh-how-line) + 10px + clamp(22px, 4.4svh, 40px) + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 767.98px) and (min-height: 660px) and (max-height: 720px) and (not ((pointer: coarse) and (max-height: 500px))) {
+  .mh-s-close {
+    --mh-how-line: 15.6px;
+  }
+}
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .mh-s-close {
+    --mh-how-line: 20.4px;
+  }
+}
+.mh-s-close .mh-footer {
+  position: absolute;
+  left: var(--mh-side);
+  right: var(--mh-side);
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  width: auto;
+  margin-top: 0;
+  /* Linie liegt hoeher: mehr Luft zwischen Linie und Links, wo die Hoehe es hergibt. */
+  padding-top: clamp(4px, calc(4px + (100svh - 667px) * 0.03), 10px);
+}
+.mh-s-close .mh-links__row + .mh-links__row {
+  margin-top: 0;
+}
+.mh-s-close .mh-links__row {
+  align-items: center;
+  column-gap: 12px;
+}
+.mh .mh-s-close .mh-link {
+  min-height: 20px;
+}
+.mh-s-close .mh-copyright {
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.mh-footer {
+  position: absolute;
+  left: var(--mh-side);
+  right: var(--mh-side);
+  bottom: calc(clamp(10px, 1.8svh, 18px) + env(safe-area-inset-bottom, 0px));
+  width: auto;
+  margin-top: 0;
 }
 
 .mh-footer {
