@@ -69,7 +69,7 @@ const EINHEIT_ENDEN = ["Statement", "Declaration"];
 const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
 function istEinheit(knoten) {
-  return knoten.parent === null || knoten.parent.type === "Program" || EINHEIT_ENDEN.some((ende) => knoten.type.endsWith(ende));
+  return EINHEIT_ENDEN.some((ende) => knoten.type.endsWith(ende));
 }
 
 function aeussersteFunktion(knoten) {
