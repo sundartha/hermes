@@ -23,7 +23,7 @@ function deklarierteNamen(anweisung) {
   return [];
 }
 
-function bezuegeIn(knoten, gefunden = new Set()) {
+export function bezuegeIn(knoten, gefunden = new Set()) {
   if (knoten === null || typeof knoten !== "object") return gefunden;
   if (Array.isArray(knoten)) {
     for (const kind of knoten) bezuegeIn(kind, gefunden);
@@ -34,7 +34,7 @@ function bezuegeIn(knoten, gefunden = new Set()) {
   return gefunden;
 }
 
-function lies(text) {
+export function lies(text) {
   try {
     return espree.parse(text, PARSER);
   } catch {

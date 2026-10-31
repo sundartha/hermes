@@ -33,8 +33,12 @@ function vergleichbar(schluessel, wert) {
   return typeof wert === "bigint" ? `${wert}n` : wert;
 }
 
+export function baumText(baum) {
+  return JSON.stringify(baum, vergleichbar);
+}
+
 export function gleicherBaum(links, rechts) {
-  return JSON.stringify(links, vergleichbar) === JSON.stringify(rechts, vergleichbar);
+  return baumText(links) === baumText(rechts);
 }
 
 function gleicherSyntaxbaum(vorher, nachher, einstellungen = OHNE_KONFIGURATION) {
