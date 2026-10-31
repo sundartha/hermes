@@ -148,8 +148,8 @@ async function wirdLockerer(context, aenderung, basisDateien) {
   assert.match(lauf.stdout, LOCKERER);
 }
 
-async function bleibtGleich(context, aenderung) {
-  const lauf = await pruefe(context, aenderung);
+async function bleibtGleich(context, aenderung, basisDateien) {
+  const lauf = await pruefe(context, aenderung, basisDateien);
   assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
   assert.ok(lauf.kommentar.includes(GLEICH), lauf.kommentar);
 }
@@ -223,9 +223,7 @@ test("steht die Regel nur auf warn, ändert der Umzug nichts: gleich und nicht s
     "eslint.config.js": warnend({ [ANRUFZEIT]: ["src/x.js"], [TRUNK]: TRUNK_DATEIEN }),
   };
   const liste = warnend({ [ANRUFZEIT]: ["src/y.js"], [TRUNK]: TRUNK_DATEIEN });
-  const lauf = await pruefe(context, { ...UMZUG, "eslint.config.js": liste }, basisDateien);
-  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
-  assert.ok(lauf.kommentar.includes(GLEICH), lauf.kommentar);
+  await bleibtGleich(context, { ...UMZUG, "eslint.config.js": liste }, basisDateien);
 });
 
 test("die Liste bekommt neben der neuen Datei einen weiteren Eintrag und wächst: lockerer", async (context) => {
@@ -261,4 +259,60 @@ test("zwei neue Dateien bekommen beide dieselben umgezogenen Zeilen und teilen s
   const liste = konfiguration({ [ANRUFZEIT]: ["src/y.js", "src/y2.js"], [TRUNK]: TRUNK_DATEIEN });
   const aenderung = { ...UMZUG, "eslint.config.js": liste, "src/y2.js": zeilen(...ZONEN) };
   await wirdLockerer(context, aenderung, basisDateien);
+});
+
+const BESTAND = 'registriere("timezone");';
+
+function ziehtInBestehendeDatei({ vorher, nachher }) {
+  const liste = konfiguration({ [ANRUFZEIT]: ["src/y.js"], [TRUNK]: TRUNK_DATEIEN });
+  return {
+    basisDateien: { ...BASIS, "src/y.js": zeilen(...vorher) },
+    aenderung: {
+      "eslint.config.js": liste,
+      "src/x.js": zeilen(REST),
+      "src/y.js": zeilen(...nachher),
+    },
+  };
+}
+
+async function wirdLockererInBestehenderDatei(context, faelle) {
+  const { aenderung, basisDateien } = ziehtInBestehendeDatei(faelle);
+  await wirdLockerer(context, aenderung, basisDateien);
+}
+
+test("die Zieldatei hatte denselben Treffer schon vorher, der Code der alten Datei fällt weg: lockerer", async (context) => {
+  await wirdLockererInBestehenderDatei(context, {
+    vorher: [BESTAND, REST],
+    nachher: [BESTAND, REST, "export const harmlos = 2;"],
+  });
+});
+
+test("der Code zieht in eine bestehende Datei ohne eigene Treffer: gleich", async (context) => {
+  const { aenderung, basisDateien } = ziehtInBestehendeDatei({
+    vorher: [REST],
+    nachher: [REST, ...ZONEN],
+  });
+  await bleibtGleich(context, aenderung, basisDateien);
+});
+
+test("die Zieldatei hatte einen Treffer mit anderer Schreibweise, die neue Zeile stammt aus der alten Datei: lockerer", async (context) => {
+  await wirdLockererInBestehenderDatei(context, {
+    vorher: ["registriere('timezone');", REST],
+    nachher: [REST, ...ZONEN],
+  });
+});
+
+test("die Zieldatei hatte die Zeile schon vorher, nur nicht als Treffer: lockerer", async (context) => {
+  await wirdLockererInBestehenderDatei(context, {
+    vorher: [`// ${BESTAND}`, REST],
+    nachher: [REST, ...ZONEN],
+  });
+});
+
+test("die neue Datei verlängert eine umgezogene Zeile um weiteren Code: lockerer", async (context) => {
+  const [erste, zweite, dritte] = ZONEN;
+  await wirdLockerer(context, {
+    ...UMZUG,
+    "src/y.js": zeilen(erste, zweite, `${dritte} sendeAn();`),
+  });
 });
