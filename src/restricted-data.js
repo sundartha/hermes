@@ -293,14 +293,21 @@ function extendedCandidate(text, match) {
   return { raw: candidate.raw + more[0], start: candidate.start, end: candidate.end + more[0].length };
 }
 
+function nextGroupStart(match) {
+  const separated = match[0].search(/\D\d/);
+  return separated < 0 ? match.index + match[0].length : match.index + separated + 1;
+}
+
 function findCardSpans(originalText) {
   const text = withoutIbans(originalText);
   const spans = [];
-  for (const match of text.matchAll(CARD_CANDIDATE)) {
+  CARD_CANDIDATE.lastIndex = 0;
+  for (let match = CARD_CANDIDATE.exec(text); match; match = CARD_CANDIDATE.exec(text)) {
     const candidate = extendedCandidate(text, match);
     const minDigits = requiredCardDigits(text, candidate);
     const window = minDigits === null ? null : bestCardWindow(candidate.raw, minDigits);
     if (window) spans.push({ start: candidate.start + window.start, end: candidate.start + window.end });
+    else if (!isDigitwise(match[0]) && digitCount(match[0]) < CARD_MAX_DIGITS) CARD_CANDIDATE.lastIndex = nextGroupStart(match);
   }
   return spans;
 }
