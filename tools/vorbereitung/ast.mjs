@@ -15,13 +15,17 @@ export const ZAHL_LESEZIEL = {
   IfStatement: "test",
 };
 
-export function namenImMuster(muster) {
+export function knotenImMuster(muster) {
   if (!muster) return [];
-  if (muster.type === "Identifier") return [muster.name];
+  if (muster.type === "Identifier") return [muster];
   const liste = BINDUNG_IN_LISTE[muster.type];
-  if (liste) return muster[liste].flatMap(namenImMuster);
+  if (liste) return muster[liste].flatMap(knotenImMuster);
   const feld = BINDUNG_IN_FELD[muster.type];
-  return feld ? namenImMuster(muster[feld]) : [];
+  return feld ? knotenImMuster(muster[feld]) : [];
+}
+
+export function namenImMuster(muster) {
+  return knotenImMuster(muster).map(({ name }) => name);
 }
 
 export function mitEltern(knoten, eltern = [], gesammelt = []) {
