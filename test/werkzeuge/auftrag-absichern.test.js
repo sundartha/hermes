@@ -12,7 +12,7 @@ const AUFRUFE = ".fortschritt/aufrufe.txt";
 const LAUFENDER = { ...UMBAU, id: "A0", ziel: "Räume rechnen auf", erwarteteDateien: ["src/rechnen.js"], vorbild: "src/text.js", abnahme: "test/rechnen.test.js", betrifft: { "src/rechnen.js": ["verdopple"] } };
 const WARTENDER = { ...UMBAU, id: "B1", betrifft: { "src/text.js": ["gross"] } };
 const VORAB_TEST = `${BASIS["test/text.test.js"]}test("leer", () => assert.equal(gross(""), ""));\n`;
-const HOECHSTE_PLAETZE = "12";
+const HOECHSTE_PLAETZE = "50";
 const GRUND = "der Aufruf dasselbe Ergebnis liefert";
 const MUTANT = "src/text.js:2:10 MethodExpression → text";
 const ERSATZ_PAKET = {
@@ -124,10 +124,11 @@ test("ein Auftrag, den der Branch schon vermerkt, wird beim zweiten Aufruf nicht
   assert.ok(lauf.stdout.includes("Absicherung B1: schon abgesichert, Lauf 555."), lauf.stdout);
 });
 
-test("der Absicherungslauf setzt die Plätze bei vorbelegter Umgebung immer auf höchstens 12: leer, ungültig oder größer ergibt 12, ein kleinerer Wert bleibt", (context) => {
-  const vorbelegt = ["", "999", "13", "abc", "0", "-3", "5.5"];
-  const plaetze = [...vorbelegt, "5"].map((wert) => absichern(context, { umgebung: { HERMES_MUTATION_PLAETZE: wert } }).aufrufe[0]?.plaetze);
-  assert.deepEqual(plaetze, [...vorbelegt.map(() => HOECHSTE_PLAETZE), "5"]);
+test("der Absicherungslauf setzt die Plätze bei vorbelegter Umgebung immer auf höchstens 50: leer, ungültig oder größer ergibt 50, ein Wert bis 50 bleibt", (context) => {
+  const vorbelegt = ["", "999", "51", "abc", "0", "-3", "5.5"];
+  const bleibt = ["1", "13", "50"];
+  const plaetze = [...vorbelegt, ...bleibt].map((wert) => absichern(context, { umgebung: { HERMES_MUTATION_PLAETZE: wert } }).aufrufe[0]?.plaetze);
+  assert.deepEqual(plaetze, [...vorbelegt.map(() => HOECHSTE_PLAETZE), ...bleibt]);
 });
 
 test("zwei wartende Aufträge, deren betrifft denselben Block nennen, teilen einen Lauf und einen Beleg, den der Branch für beide vermerkt", (context) => {

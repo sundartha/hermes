@@ -113,9 +113,9 @@ test("der Abruf von Hand nimmt eine Basis als Pflichtangabe und den alten Stand 
   }
 });
 
-test("die Mutationsteile laufen beim Abruf so viele gleichzeitig, wie er als Plätze nennt, sonst höchstens 40", () => {
+test("die Mutationsteile laufen beim Abruf so viele gleichzeitig, wie er als Plätze nennt, sonst höchstens 200", () => {
   const zeilen = workflowJobLines(CI, "mutationspruefung").map((zeile) => zeile.trim());
-  assert.ok(zeilen.includes("max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 40 }}"));
+  assert.ok(zeilen.includes("max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}"));
 });
 
 test("beim Abruf von Hand laufen Prüfungen und Tests nicht, die drei Mutationsjobs und der Sammeljob CI schon", () => {
