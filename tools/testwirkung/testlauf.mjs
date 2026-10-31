@@ -4,7 +4,7 @@ import { relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { omitKeys } from "../../src/utils/object.js";
+import { omitKeys } from "../objekt.mjs";
 import { TESTGRUPPE } from "../testgruppe.mjs";
 
 const TESTPARALLEL = 4;

@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
-import { omitKeys } from "../src/utils/object.js";
+import { omitKeys } from "./objekt.mjs";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN, gleichwertigGemeldet, MUTANT_UEBERLEBT, ohneTestdatei } from "./auftrag/gleichwertig.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";

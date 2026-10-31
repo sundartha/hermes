@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { env } from "node:process";
 import { createInterface } from "node:readline";
 
-import { omitKeys } from "../../src/utils/object.js";
+import { omitKeys } from "../objekt.mjs";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../testgruppe.mjs";
 import { entscheide, unentschieden } from "./bestaetigung.mjs";
