@@ -6,7 +6,7 @@ import { env } from "node:process";
 import { tokenize } from "espree";
 
 import { FAILURE_FILE_VARIABLE } from "../../test/testbaenke-run.mjs";
-import { reineQuellauslagerung } from "../mutationspruefung/quellauslagerung.mjs";
+import { auslagerungsZiele, reineQuellauslagerung, zieldateien } from "../mutationspruefung/quellauslagerung.mjs";
 import { BEREICHE_DATEI, bereichDerDatei, leseBereiche } from "../tests-ausmisten/pfade.mjs";
 import { JAVASCRIPT_DATEI, TYPESCRIPT_DATEI, typescriptParser } from "../ziele/funktionen.mjs";
 
@@ -118,9 +118,9 @@ function bereichNachListe(root) {
 async function ohneAusgelagerteZeilen(aenderungen, { rolle, basis, root }) {
   const auslagerung = rolle === "bau" ? await reineQuellauslagerung({ von: basis }, root) : null;
   if (auslagerung === null) return { gezaehlt: aenderungen, auslagerungsHinweise: [] };
-  const neue = new Set(auslagerung.neue);
+  const neue = new Set(zieldateien(auslagerung));
   const gezaehlt = aenderungen.map((eintrag) => (neue.has(eintrag.pfad) ? { ...eintrag, zeilen: 0 } : eintrag));
-  const hinweis = `Hinweis: reine Auslagerung aus ${auslagerung.hilfe} nach ${auslagerung.neue.join(", ")} (${auslagerung.anweisungen} Anweisungen Wort für Wort verschoben und weitergereicht); deren Zeilen zählen nicht als neue Zeilen Produktcode.`;
+  const hinweis = `Hinweis: reine Auslagerung aus ${auslagerung.hilfe} nach ${auslagerungsZiele(auslagerung)} (${auslagerung.anweisungen} Anweisungen Wort für Wort verschoben und weitergereicht); deren Zeilen zählen nicht als neue Zeilen Produktcode.`;
   return { gezaehlt, auslagerungsHinweise: [hinweis] };
 }
 
