@@ -33,7 +33,7 @@ export function stdioServerTransport(zusatz = {}) {
     command: process.execPath,
     args: MCP_STDIO_ARGS,
     cwd: ROOT,
-    env: { ...BASE_ENV, ...zusatz },
+    env: mitAktivemMutanten({ ...BASE_ENV, ...zusatz }),
     stderr: "pipe",
   });
   const stderr = { text: "" };
