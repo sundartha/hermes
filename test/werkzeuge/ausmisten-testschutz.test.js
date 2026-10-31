@@ -85,9 +85,19 @@ function warteschlange(repo, { basis, kopf }, { zusatz }) {
   return { repo, basis: schlange };
 }
 
+function abgezweigterAufbau(repo, gemessen, fall) {
+  const branch = fall.branch ?? { weg: [DOPPELT] };
+  const kopf = repo.committe(branch.neu ?? {}, branch.weg);
+  repo.git(["checkout", "-q", gemessen]);
+  const basis = repo.committe(fall.master.neu, fall.master.weg);
+  repo.git(["checkout", "-q", kopf]);
+  return { repo, gemessen, basis, kopf };
+}
+
 function aufbau(context, fall) {
   const repo = ausmistenRepo(context, fall.dateien);
   const gemessen = repo.master;
+  if (fall.abgezweigt) return abgezweigterAufbau(repo, gemessen, fall);
   const basis =
     fall.master === undefined ? gemessen : repo.committe(fall.master.neu ?? {}, fall.master.weg);
   const branch = fall.branch ?? { weg: [DOPPELT] };
@@ -664,5 +674,43 @@ test("ausmisten-testschutz: ein Werkzeugpfad nur im Kommentar sperrt nichts", as
     [kommentiert]: `${MIT_QUELLE}// vergleichbar mit 'tools/auftrag.mjs'\nvoid 0;\n`,
   };
   const ergebnis = await pruefe(context, { dateien, branch: { weg: [kommentiert] } });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: eine Änderung von master nach der Abzweigung wird dem PR nicht als Pfadverstoß angelastet", async (context) => {
+  const master = { neu: { "test/werkzeuge/neu.test.js": 'import "node:test";\n' } };
+  const ergebnis = await pruefe(context, { abgezweigt: true, master });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+  assert.match(ergebnis.ausgabe, /1 geänderte oder gelöschte Stellen unter test\/ sind frei/);
+});
+
+test("ausmisten-testschutz: eine nach der Abzweigung auf master geänderte Quelle des Bereichs gibt nichts frei", async (context) => {
+  const master = {
+    neu: { [EINGANG_QUELLE]: "export function eingang(text) {\n  return text;\n}\n" },
+  };
+  const ergebnis = await pruefe(context, { abgezweigt: true, master });
+  erwarteGesperrt(ergebnis, `seit der Messung geändert: ${EINGANG_QUELLE}`);
+});
+
+test("ausmisten-testschutz: eine nach der Abzweigung auf master geänderte Quelle hinter dem gelöschten Test gibt nichts frei", async (context) => {
+  const master = {
+    neu: { [FREMDE_QUELLE]: "export function doppelt(zahl) {\n  return zahl + zahl;\n}\n" },
+  };
+  const ergebnis = await pruefe(context, {
+    abgezweigt: true,
+    master,
+    branch: { weg: [RECHNEN_TEST] },
+  });
+  erwarteGesperrt(ergebnis, `seit der Messung geändert: ${FREMDE_QUELLE}`);
+});
+
+test("ausmisten-testschutz: ein nach der Abzweigung auf master angelegter Test mit geänderter Quelle sperrt die Ausnahme nicht", async (context) => {
+  const master = {
+    neu: {
+      "test/uhr-neu.test.js": 'import "../src/uhr/zeit.js";\n',
+      [UHR_QUELLE]: "export function jetzt() {\n  return 1;\n}\n",
+    },
+  };
+  const ergebnis = await pruefe(context, { abgezweigt: true, master });
   assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
 });
