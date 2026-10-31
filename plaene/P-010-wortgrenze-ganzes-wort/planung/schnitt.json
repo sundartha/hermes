@@ -1,0 +1,133 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Es gibt nur einen Auftrag. Die ganze Änderung liegt in `clampAtWordBoundary` in src/utils/text.js. S2 und B1 (Eingang `POST /voice/outbound`) und S1, B2, B3 (Eingang `POST /webhooks/elevenlabs/lookup`) laufen beide durch diese eine Funktion. Ein eigener Auftrag für S2/B1 müsste dieselbe Datei ändern, und sein Abnahmetest wäre nach a1 schon grün, könnte also nie rot werden. Der Abnahmetest test/anrufe/wortgrenze-letztes-wort.test.js (Pfad wie im Pitch unter „## Geänderte Dateien“) ruft deshalb beide echten Eingänge auf."
+    },
+    {
+      "auftrag": "a1",
+      "text": "„Stelle n“ in den Szenarien ist der 0-basierte Index im Fakt bzw. im Ziel. Nachgezählt: „Praxis Dr. Hoffmann: “ hat 21 Zeichen, damit endet „Brueckentag“ nach 194 Zeichen und „nicht“ nach 200 Zeichen, und der ganze Fakt aus S1 hat 227 Zeichen. In B2 steht an Index 200 das „l“ von „niemals“, `slice(0,200)` endet also auf „niema“. In B3 steht an Index 200 das „s“ von „nichts“, an Index 201 ein Leerzeichen. Die Werte aus Pitch und Design Doc passen damit zusammen."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Für S1 prüft der Abnahmetest das Ende der `answer` genau, also kein Leerzeichen hinter „nicht“, und die Länge des Fakts von genau 200 Zeichen (sicherheit.md, „## 4. Offene Fragen“). Die `answer` ist der Rahmensatz mit `facts.join(\" \")` ohne Anhang. Bei genau einem Exa-Treffer endet sie also am Ende des gekürzten Fakts. Exa ersetzt im Test ein lokaler Fake-Server wie `startExaFake` in test/el-lookup-webhook.test.js; dieser Fake ist nicht exportiert und wird im neuen Test nachgebildet."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Für S2 und B1 legt der Test den Anruf direkt an, wie test/_outbound-harness.js mit `runOutbound` (provider telnyx). Er ruft dann den echten Eingang `POST /voice/outbound` auf. Die Gates von `place_call` gehören nicht zu diesem Verhalten. Geprüft wird am Say-Text im Gather der TeXML-Antwort, nicht an der ganzen Antwort, weil dahinter noch ein Redirect folgt. `trimGoalForSpeech` hängt über die Brücke immer einen Punkt an."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Recherche-Fakt und Ziel im Eröffnungssatz falten Leerraum, bevor sie die Hilfe aufrufen. Der Satz zu Tab, Zeilenumbruch und geschütztem Leerzeichen lässt sich über diese Eingänge deshalb nicht prüfen. Der Abnahmetest prüft ihn als Fachlogik-Tabelle an `clampAtWordBoundary` (nach CLAUDE.md erlaubt) oder über das Denk-Signal, das seinen Text nicht faltet."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Kürzung an der Wortgrenze behält das Wort vor einem Leerzeichen",
+      "bereich": "src/utils/text.js",
+      "erwarteteDateien": [
+        "src/utils/text.js",
+        "test/anrufe/wortgrenze-letztes-wort.test.js"
+      ],
+      "abnahme": "test/anrufe/wortgrenze-letztes-wort.test.js",
+      "erwarteterFehler": "am Brueckentag nicht",
+      "prueft": [
+        "S1",
+        "S2",
+        "B1",
+        "B2",
+        "B3",
+        "T1"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Das Ergebnis ist immer ein Anfang des Textes, nie länger als die Grenze und mindestens so lang wie heute.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: Satzzeichen hinter der Grenze als Wortende zu werten („Brueckentag nicht, auch“ bleibt bei „Brueckentag“), weil Komma und Punkt auch in Zahlen stehen („12,50 €“, „3.000“, „14.30 Uhr“) und ein Schnitt dort einen falschen Wert stehen ließe (Runde 1, Frage 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: andere Leerzeichen als `\" \"` (Tab, Zeilenumbruch, geschütztes Leerzeichen) als Wortende zu werten.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Die Hilfe sucht nur das Leerzeichen `\" \"`, nicht Tabs oder Zeilenumbrüche: So bleibt es; als Wortende zählt hinter der Grenze nur `\" \"`, auch beim Denk-Signal, das seinen Text nicht vorher faltet.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Satzzeichen hinter der Grenze („nicht, auch“, „12,50 €“, „14.30 Uhr“): bewusst nicht behandelt, weil Komma und Punkt auch in Zahlen stehen und ein Schnitt dort „12“ oder „14“ stehen ließe; dort gilt der heutige Schnitt am letzten Leerzeichen (Runde 1, Frage 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Hilfe hat 6 Aufrufstellen in 5 Dateien (`src/claude.js:248`, `src/thinking-signal.js:10`, `src/call-memory.js:21`, `src/research/lookup-guard.js:35` und `:45`, `src/consult/question.js:16`): Geändert wird nur die Hilfe selbst in `src/utils/text.js`; kein Aufrufer, keine Grenze, kein Name und kein Export ändert sich, und es entsteht keine zweite Kürzungshilfe.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Das Gedächtnis ruft die Hilfe mit Grenze minus 1 auf und hängt „…“ an (`src/call-memory.js:19-22`): Behält die Hilfe jetzt ein Wort, ist die Angabe mit „…“ genau so lang wie ihre Grenze; die Grenzen 100, 200 und 600 Zeichen halten weiter.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Ein ganzes Wort mehr in jeder gekürzten Ausgabe: Die Änderung behält höchstens ein ganzes Wort mehr; die Sicherheitsprüfung hat jeden Aufrufer geprüft, das Ergebnis liegt bei der Betreuung. (Runde 1, Frage 6; Runde 2, Frage 3).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Hilfe behält das Wort vor der Grenze, ohne seine Bedeutung zu prüfen: Eine Verneinung, die erst mit dem nächsten Wort ihren Sinn hat, kann allein stehen bleiben („nicht nur vormittags“ → „… nicht“, „kein Problem“ → „… kein.“), wo heute ein neutrales Bruchstück steht (PM2). Das wird hingenommen; es gibt keine Prüfung der Bedeutung und keine Liste von Wörtern (Runde 2, Frage 2).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Der Offenlegungssatz steht im Eröffnungssatz vor dem Ziel und wird nicht gekürzt (`src/claude.js:224-233`): Die Änderung betrifft nur das gekürzte Ziel dahinter (höchstens ein ganzes Wort mehr); Wortlaut, Reihenfolge und Vorhandensein des Offenlegungssatzes bleiben byte-gleich (B1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Bestehende Tests, die die Hilfe über ihre Aufrufer erreichen (~99 Testdateien), bleiben unverändert grün und werden nicht umgeschrieben.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine Verneinung zu erhalten, wenn die Grenze innerhalb des verneinenden Wortes oder auf dem Leerzeichen davor liegt (B2: „Brueckentag niemals“ bleibt bei „Brueckentag“), weil die Änderung nur die Lage schließt, in der das letzte Wort genau an der Grenze endet (PM1, Runde 2, Frage 1).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Bedeutung des behaltenen Wortes zu prüfen (etwa „nicht“ oder „kein“ vor „nur“ oder „Problem“), weil die Hilfe Bedeutung nicht beurteilen kann; diese Fälle sind bewusst gegen die Fälle aus dem Problem abgewogen (PM2, Runde 2, Frage 2).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eigene Szenarien für Rückfrage an den Besitzer, Recherche-Anfrage, Denk-Signal und Gesprächsgedächtnis, weil sie dieselbe Hilfe unverändert aufrufen (Runde 1, Frage 6).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: die Grenzen 75, 120, 200 und die des Gedächtnisses zu ändern.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: andere Kürzungen, die die Hilfe nicht nutzen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [],
+      "eingang": "erreicht"
+    }
+  ]
+}

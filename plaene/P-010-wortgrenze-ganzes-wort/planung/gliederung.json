@@ -1,0 +1,43 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "B2",
+        "B3",
+        "T1"
+      ],
+      "eingang": "Webhook `POST /webhooks/elevenlabs/lookup` (ElevenLabs-Agent bei einem Outbound-Anruf mit eingeschalteter Recherche); die `answer` ist der Rahmensatz, gefolgt von den Fakten. Jeder Fakt entsteht aus Titel und erstem Auszug des Exa-Treffers, verbunden mit „: “, wird auf ein Leerzeichen je Lücke gefaltet und über `clampAtWordBoundary` auf 200 Zeichen gekürzt (`src/research/adapters/exa-search.js:9`, `src/research/lookup-guard.js:38-46`, `src/routes/webhooks-elevenlabs.js:140`, `:157-161`).",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie verläuft der Weg von `POST /webhooks/elevenlabs/lookup` über die Recherche (`src/research/in-call.js` oder direkt), den Exa-Adapter `src/research/adapters/exa-search.js` und `lookupFactsFrom` in `src/research/lookup-guard.js` bis zu `clampAtWordBoundary` in `src/utils/text.js:1-6` und zurück zur `answer`? Nenn je Stelle Datei, Funktion und Zeilen.",
+        "Wie lautet `clampAtWordBoundary(text, maxChars)` heute wörtlich? Geplant ist: Steht an Index `maxChars` (0-basiert) ein `\" \"`, bleibt `text.slice(0, maxChars)` stehen; sonst wie heute Schnitt vor dem letzten `\" \"` in `text.slice(0, maxChars)`, ohne Leerzeichen (oder Leerzeichen an Position 0) hart auf `maxChars`. Ist die Änderung allein in dieser Funktion möglich, ohne Export, Namen oder Signatur zu ändern?",
+        "Wie setzt sich die `answer` genau zusammen: Welcher Rahmensatz steht davor, wie werden mehrere Fakten verbunden, und wird hinter dem letzten Fakt noch etwas angehängt (Punkt, Leerzeichen, Zeilenumbruch, weiterer Satz)? Die Szenarien verlangen, dass die `answer` bei einem einzigen Treffer genau auf das Ende des gekürzten Fakts endet (etwa „… am Brueckentag nicht“).",
+        "Verändert irgendeine Stelle zwischen Exa-Antwort und Kürzung den Text so, dass Titel „Praxis Dr. Hoffmann“ plus „: “ plus ein Auszug von 205 Zeichen nicht genau einen Fakt von 227 Zeichen ergibt (Faltung, Trimmen, Entfernen von Zeichen, Wahl eines anderen Auszugs als des ersten, Filter oder Dublettenprüfung auf Fakten)? Wird der Fakt nach der Kürzung noch geprüft oder verworfen?",
+        "Wie bauen bestehende Tests (etwa `test/el-lookup-webhook.test.js`, `test/al-p10b-lookup.test.js`, `test/al-p10b-lookup-guard.test.js`) diesen Eingang auf: Anlegen eines Outbound-Anrufs auf dem ElevenLabs-Pfad mit eingeschalteter Recherche, Ersetzen von Exa durch einen Stub (Registry, Port, Fetch-Mock), Authentifizierung oder Signatur des Webhooks, Zuordnung der Anfrage zum Anruf, Feldname `status` mit Wert `ok`? Gibt es Testhilfen, die ein neuer Test unter `test/anrufe/` nutzen kann?",
+        "Gibt es bestehende Tests (direkt an `src/utils/text.js` oder über einen der sechs Aufrufer `src/claude.js:248`, `src/thinking-signal.js:10`, `src/call-memory.js:21`, `src/research/lookup-guard.js:35`, `:45`, `src/consult/question.js:16`), deren Eingabe genau an Index `maxChars` ein `\" \"` hat und die deshalb mit der neuen Fassung rot würden? Nenn Datei und Zeilen.",
+        "Hat `clampAtWordBoundary` oder eine andere Funktion in `src/utils/text.js` heute Lint-Befunde, und welche Tests importieren `src/utils/text.js` direkt?"
+      ]
+    },
+    {
+      "nummern": [
+        "S2",
+        "B1"
+      ],
+      "eingang": "Telnyx-Webhook `POST /voice/outbound` für einen über `place_call` gestarteten Anruf auf dem Telnyx-Pfad (ElevenLabs-Outbound aus); die Antwort enthält den Eröffnungstext: Offenlegungssatz aus `LOCALES.de.disclosure`, ein Leerzeichen, dann die Brücke „Es geht um Folgendes: “ mit dem über `clampAtWordBoundary` auf 75 Zeichen gekürzten Ziel (`src/claude.js:215-233`, `:243-248`, `src/i18n/locales.js:132-139`, `src/routes/voice.js:434-436`).",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie verläuft der Weg von `place_call` (Speichern des Ziels) über `POST /voice/outbound` in `src/routes/voice.js` bis zum Aufbau des Eröffnungstexts in `src/claude.js:215-248` und zum Aufruf `clampAtWordBoundary(…, 75)` in `src/claude.js:248`? Nenn je Stelle Datei, Funktion und Zeilen.",
+        "Was macht die Brücke mit dem gekürzten Ziel: Wird ein Punkt angehängt (auch wenn das Ziel schon auf ein Satzzeichen endet), wird das Ziel vor dem Kürzen getrimmt, gefaltet, umformuliert oder in der Groß-/Kleinschreibung geändert? Das Szenario erwartet bei 75 Zeichen „… passt mir nicht.“ als Ende des Eröffnungstexts.",
+        "In welcher Form steht der Eröffnungstext in der Antwort auf `POST /voice/outbound` (TeXML/XML, JSON, Telnyx-Befehl), wird er dort escaped, und steht hinter ihm noch weiterer Text, sodass „endet mit“ und „beginnt byte-gleich mit“ am Eröffnungstext und nicht an der ganzen Antwort geprüft werden müssen?",
+        "Wie lautet `LOCALES.de.disclosure` (`src/i18n/locales.js:132-139`) und wie wird der Besitzername eingesetzt? Welche Bedingung wählt den Offenlegungssatz statt der Begrüßung beim Anruf an den Besitzer selbst (fremde Nummer vs. hinterlegte eigene Nummer, Tenant-Allowlist)?",
+        "Wie bauen bestehende Tests (etwa `test/al-p5-opening.test.js`, `test/g2-opening-turn.test.js`, `test/callee-is-owner-opening.test.js`) diesen Eingang auf: Konto mit Besitzername, Abschalten des ElevenLabs-Outbound, Durchlaufen der Gates von `place_call` (Permit/Abo+KYC, Kostendecke, Denylist, Land-Gate, Bestätigung über `prepare_call`), Telnyx-Signatur im Test, Zuordnung des Webhooks zum Anruf? Gibt es Testhilfen, die ein neuer Test unter `test/anrufe/` nutzen kann?",
+        "Gibt es bestehende Eröffnungs-Tests, deren Ziel an Index 75 (0-basiert) ein `\" \"` hat und die mit einer Fassung von `clampAtWordBoundary`, die dann `text.slice(0, 75)` behält, rot würden? Nenn Datei und Zeilen."
+      ]
+    }
+  ]
+}

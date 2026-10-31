@@ -1,0 +1,25 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/webhooks-elevenlabs.js:160"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/research/lookup-guard.js:45"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/utils/text.js:4"
+    },
+    {
+      "schluessel": "weg:T1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/routes/webhooks-elevenlabs.js:308"
+    }
+  ],
+  "befunde": []
+}
