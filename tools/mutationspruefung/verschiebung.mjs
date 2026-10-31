@@ -530,9 +530,19 @@ function namenBleibenGleich(dateien, anhang) {
   return importe && liestWieVorher(dateien, ausschnitt, hinzu) && verdecktNichts(dateien, ausschnitt, hinzu) && ohneVerlorenenNamen(dateien.quelleAlt, [dateien.quelleNeu]);
 }
 
+function ladeZiele({ pfad, baum }) {
+  return new Set(baum.body.filter(istQuelle).map((anweisung) => zielDer(pfad, anweisung.source.value)));
+}
+
+function altesZielLaedtNichtsNeues(quelleAlt, zielAlt) {
+  if (ersterRang(quelleAlt, zielAlt.pfad) !== null) return true;
+  const bekannt = ladeZiele(quelleAlt);
+  return ohneWirkungBeimLaden(nichtImporte(zielAlt)) && importeVon(zielAlt.baum).every(({ source }) => bekannt.has(zielDer(zielAlt.pfad, source.value)));
+}
+
 async function angehaengteAnweisungen([quelleAlt, quelleNeu, zielAlt, zielNeu], stand) {
   const anhang = angehaengt(zielAlt, zielNeu);
-  if (anhang === null) return null;
+  if (anhang === null || !altesZielLaedtNichtsNeues(quelleAlt, zielAlt)) return null;
   const dateien = { quelleAlt, quelleNeu, zielAlt, zielNeu };
   const ausschnitt = geltungsbereich({ pfad: zielNeu.pfad, text: anhang.text });
   const stimmt = anweisungenWandern(dateien, anhang) && ladereihenfolgeGleich(dateien, ausschnitt) && namenBleibenGleich(dateien, anhang) && gleicheExporte(quelleAlt, quelleNeu, [zielNeu]);
