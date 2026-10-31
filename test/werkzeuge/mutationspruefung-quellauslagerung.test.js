@@ -377,6 +377,37 @@ test("Quellauslagerung: streicht die Quelle einen Importnamen, den der angehäng
   vollGerechnet(context, angehaengt(context, { vorher }));
 });
 
+const SETUP_DATEI = { "src/setup.js": "globalThis.SETUP = true;\n" };
+const SEITENEFFEKT = "globalThis.GELADEN = true;";
+
+function mitAltemZiel(alt, anhang = [STATUS, UEBERGAENGE]) {
+  return { zielAlt: alt, ziel: datei(...alt.trim().split("\n\n"), ...anhang), basisDazu: SETUP_DATEI };
+}
+
+test("Quellauslagerung: lädt die Quelle die bestehende Zieldatei erst seit dem Commit und führt deren alter Inhalt beim Laden Code aus, rechnet es voll", (context) => {
+  for (const alt of [datei(ZIEL_KOPF, FRUEHER, SEITENEFFEKT), datei(ZIEL_KOPF, FRUEHER, "export const GELADEN = [1].map(String);"), datei(ZIEL_KOPF, FRUEHER, "export const WO = import.meta.url;")]) {
+    vollGerechnet(context, angehaengt(context, mitAltemZiel(alt)));
+  }
+});
+
+test("Quellauslagerung: importiert die bestehende Zieldatei, die die Quelle erst seit dem Commit lädt, eine Datei, die die Quelle nicht lud, rechnet es voll", (context) => {
+  for (const kopf of ['import "./setup.js";', 'import { SETUP } from "./setup.js";', 'export { SETUP } from "./setup.js";']) {
+    vollGerechnet(context, angehaengt(context, mitAltemZiel(datei(kopf, FRUEHER, FRUEHER_FUNKTION))));
+  }
+});
+
+test("Quellauslagerung: lädt die Quelle die bestehende Zieldatei erst seit dem Commit, bleibt es erkannt, wenn deren alter Inhalt beim Laden nichts ausführt und nur Dateien importiert, die die Quelle schon lud", (context) => {
+  erkannt(context, angehaengt(context, mitAltemZiel(datei('import "./zahl.js";', FRUEHER, FRUEHER_FUNKTION, "export const WORTE = Object.freeze([\"a\"]);"))), angehaengtErkannt());
+});
+
+test("Quellauslagerung: hatte die Quelle die bestehende Zieldatei schon an derselben Stelle geladen, darf deren alter Inhalt weiter beim Laden Code ausführen", (context) => {
+  const alt = datei(ZIEL_KOPF, FRUEHER, SEITENEFFEKT);
+  const vorher = datei(`${KOPF}\n${ALTER_IMPORT}`, STATUS, UEBERGAENGE, ZUSTAND_MIT_STATUS);
+  const werte = datei(`${KOPF}\n${NEUER_IMPORT}`, 'export { STATUS, UEBERGAENGE } from "./status.js";', ZUSTAND_MIT_STATUS);
+  const alter = datei(alt, 'export function frueher() {\n  return FRUEHER;\n}');
+  erkannt(context, angehaengt(context, { vorher, werte, zielAlt: alter, ziel: datei(alter, STATUS, UEBERGAENGE), basisDazu: SETUP_DATEI }), angehaengtErkannt());
+});
+
 const DAVOR = "export function davor() {\n  return frueher();\n}";
 
 test("Quellauslagerung: liest die verschobene Funktion einen Namen, den die Quelle aus der bestehenden Zieldatei selbst importiert hatte, bleibt es erkannt", (context) => {
