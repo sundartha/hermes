@@ -644,9 +644,15 @@ jobs:
         id: alle
         env:
           NEEDS: ${{ toJSON(needs) }}
+          EREIGNIS: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          nicht_erfolgreich=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          nicht_erfolgreich=$(jq -r --arg ereignis "${EREIGNIS:-}" '
+            ["pruefungen", "tests"] as $beim_abruf_uebersprungen
+            | to_entries[]
+            | select(.value.result != "success")
+            | select(($ereignis == "workflow_dispatch" and .value.result == "skipped" and (.key | IN($beim_abruf_uebersprungen[]))) | not)
+            | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$nicht_erfolgreich" ]; then
             echo "Nicht erfolgreich: $nicht_erfolgreich"
             exit 1
