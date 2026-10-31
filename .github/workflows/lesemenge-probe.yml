@@ -1,0 +1,66 @@
+name: Lesemenge-Probe
+
+on:
+  push:
+    branches: [paket/WPA-werkzeugtests-produkt]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Lesemenge-Probe ${{ matrix.teil }}/${{ strategy.job-total }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22, npm ci und Install-Skripte
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: strace installieren
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends strace
+          strace -V | head -1 | tee -a "$GITHUB_STEP_SUMMARY"
+          dpkg-query -W -f='${Package}=${Version}\n' strace | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Lesemenge mit strace
+        env:
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ strategy.job-total }}
+        run: |
+          mkdir -p .pruefung
+          start=$(date +%s)
+          node tools/testlaufzeit/lesemenge-aufzeichnen.mjs --teil "$TEIL" --teile "$TEILE" --aus ".pruefung/lesemenge-$TEIL.jsonl" --rohordner ".pruefung/roh-$TEIL" --leerlauf
+          echo "Teil $TEIL mit strace: $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Vergleich ohne strace
+        if: always() && matrix.teil == 1
+        env:
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ strategy.job-total }}
+        run: |
+          start=$(date +%s)
+          node tools/testlaufzeit/lesemenge-aufzeichnen.mjs --teil "$TEIL" --teile "$TEILE" --aus ".pruefung/ohne-strace-$TEIL.jsonl" --ohne-strace
+          echo "Teil $TEIL ohne strace: $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Bericht hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lesemenge-probe-${{ matrix.teil }}
+          path: |
+            .pruefung/lesemenge-${{ matrix.teil }}.jsonl
+            .pruefung/ohne-strace-${{ matrix.teil }}.jsonl
+            .pruefung/roh-${{ matrix.teil }}
+          if-no-files-found: ignore
