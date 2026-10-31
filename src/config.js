@@ -20,7 +20,6 @@ import {
   csvEnv,
   detectProduction,
   stripTrailingSlash,
-  trimmedUpper,
   umgebungMit,
 } from "./konfiguration/umgebung.js";
 import { MS_PER_DAY } from "./konfiguration/zeitspannen.js";
@@ -41,6 +40,9 @@ import { storeRohwerte } from "./konfiguration/rohwerte-store.js";
 import { privacyRohwerte } from "./konfiguration/rohwerte-privacy.js";
 import { mailRohwerte } from "./konfiguration/rohwerte-mail.js";
 import { serverRohwerte } from "./konfiguration/rohwerte-server.js";
+import { telephonyRohwerte } from "./konfiguration/rohwerte-telephony.js";
+import { tenancyRohwerte } from "./konfiguration/rohwerte-tenancy.js";
+import { provisioningRohwerte } from "./konfiguration/rohwerte-provisioning.js";
 
 export { csvEnv, stripTrailingSlash, todayIsoDate };
 export { gatewayUrlForPort } from "./konfiguration/gateway-url.js";
@@ -59,10 +61,6 @@ export const { numEnv, boolEnv, enumEnv, isoInstantEnv } = umgebung;
 const { routeCentsEnv } = umgebung;
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-
-const CONSULT_WAIT_MAX_MS = 60_000;
-const CONSULT_OPEN_MAX_MS = 300_000;
-const EL_CONSULT_STAGE_MAX_MS = 55_000;
 
 export function configFatalErrors() {
   return fatalConfigErrors.slice();
@@ -147,13 +145,6 @@ const rawConfig = {
 
   ...metricsRohwerte(umgebung),
 
-  telnyxApiKey: process.env.TELNYX_API_KEY || "",
-  telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "",
-  telnyxApiBase: stripTrailingSlash(process.env.TELNYX_API_BASE || "https://api.telnyx.com"),
-  telnyxConnectionId: process.env.TELNYX_CONNECTION_ID || "",
-  telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
-  telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
-  telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
   ...telnyxRohwerte(umgebung),
 
   elevenLabsPlayTts: {
@@ -408,13 +399,7 @@ const rawConfig = {
     { fallback: 2000, min: 0 },
   ),
 
-  ownerNumberSeed: process.env.OWNER_NUMBER_SEED || "",
-  ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
-
-  bootstrapE164: process.env.BOOTSTRAP_E164 || "",
-  bootstrapProvider: process.env.BOOTSTRAP_PROVIDER || "",
-
-  platformAniE164: (process.env.PLATFORM_ANI_E164 || "").trim(),
+  ...provisioningRohwerte(umgebung),
 
   ownerIdpSubject: process.env.OWNER_IDP_SUBJECT || "",
 
@@ -443,85 +428,10 @@ const rawConfig = {
     fallback: MS_PER_DAY,
     min: 1,
   }),
-  maxNumbers: numEnv("MAX_NUMBERS", process.env.MAX_NUMBERS, { fallback: 5, min: 0 }),
-  maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", process.env.MAX_NUMBERS_PER_TENANT, {
-    fallback: 1,
-    min: 0,
-  }),
-  provisioningEnabled: boolEnv("PROVISIONING_ENABLED", process.env.PROVISIONING_ENABLED, {
-    fallback: false,
-  }),
-  provisioningRedriveMaxAgeMs: numEnv(
-    "PROVISIONING_REDRIVE_MAX_AGE_MS",
-    process.env.PROVISIONING_REDRIVE_MAX_AGE_MS,
-    { fallback: 0, min: 0, max: MS_PER_DAY - 1 },
-  ),
-  provisioningRetryMaxAttempts: numEnv(
-    "PROVISIONING_RETRY_MAX_ATTEMPTS",
-    process.env.PROVISIONING_RETRY_MAX_ATTEMPTS,
-    { fallback: 3, min: 0 },
-  ),
-  provisioningRetryMinIntervalMs: numEnv(
-    "PROVISIONING_RETRY_MIN_INTERVAL_MS",
-    process.env.PROVISIONING_RETRY_MIN_INTERVAL_MS,
-    { fallback: MS_PER_DAY, min: 0 },
-  ),
-  releaseGraceMs:
-    numEnv("RELEASE_GRACE_DAYS", process.env.RELEASE_GRACE_DAYS, { fallback: 0, min: 0 }) *
-    MS_PER_DAY,
-  multiTenant: boolEnv("MULTI_TENANT", process.env.MULTI_TENANT, { fallback: false }),
-  mcpUiEnabled: boolEnv("MCP_UI_ENABLED", process.env.MCP_UI_ENABLED, { fallback: true }),
-  assistantContextEnabled: boolEnv("ASSISTANT_CONTEXT_ENABLED", process.env.ASSISTANT_CONTEXT_ENABLED, {
-    fallback: true,
-  }),
-  precallBriefingEnabled: boolEnv("PRECALL_BRIEFING_ENABLED", process.env.PRECALL_BRIEFING_ENABLED, {
-    fallback: false,
-  }),
-  consultEnabled: boolEnv("CONSULT_ENABLED", process.env.CONSULT_ENABLED, { fallback: false }),
-  inCallConsultEnabled: boolEnv("IN_CALL_CONSULT_ENABLED", process.env.IN_CALL_CONSULT_ENABLED, {
-    fallback: false,
-  }),
-  consultWaitMs: numEnv("CONSULT_WAIT_MS", process.env.CONSULT_WAIT_MS, {
-    fallback: 4000,
-    min: 0,
-    max: CONSULT_WAIT_MAX_MS,
-  }),
-  consultOpenMs: numEnv("CONSULT_OPEN_MS", process.env.CONSULT_OPEN_MS, {
-    fallback: 47000,
-    min: 0,
-    max: CONSULT_OPEN_MAX_MS,
-  }),
-  elConsultDeliveryMs: numEnv("EL_CONSULT_DELIVERY_MS", process.env.EL_CONSULT_DELIVERY_MS, {
-    fallback: 5000,
-    min: 0,
-    max: EL_CONSULT_STAGE_MAX_MS,
-  }),
-  elConsultAckMs: numEnv("EL_CONSULT_ACK_MS", process.env.EL_CONSULT_ACK_MS, {
-    fallback: 5000,
-    min: 0,
-    max: EL_CONSULT_STAGE_MAX_MS,
-  }),
-  elConsultAnswerMs: numEnv("EL_CONSULT_ANSWER_MS", process.env.EL_CONSULT_ANSWER_MS, {
-    fallback: 30000,
-    min: 0,
-    max: EL_CONSULT_STAGE_MAX_MS,
-  }),
-  selfServiceEnabled: boolEnv("SELF_SERVICE_ENABLED", process.env.SELF_SERVICE_ENABLED, {
-    fallback: false,
-  }),
+  ...tenancyRohwerte(umgebung),
   devLoginEnabled:
     boolEnv("DEV_LOGIN_ENABLED", process.env.DEV_LOGIN_ENABLED, { fallback: false }) &&
     !process.env.RENDER_EXTERNAL_URL,
-  provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
-  forceNumberCountry: trimmedUpper(process.env.FORCE_NUMBER_COUNTRY),
-  geoEnabled: boolEnv("GEO_ENABLED", process.env.GEO_ENABLED, { fallback: false }),
-  geoDbPath: process.env.GEO_DB_PATH || "",
-  worldDefaultLanguageEnabled: boolEnv(
-    "WORLD_DEFAULT_LANGUAGE_ENABLED",
-    process.env.WORLD_DEFAULT_LANGUAGE_ENABLED,
-    { fallback: false },
-  ),
-  profilesSeed: process.env.PROFILES_JSON || "",
   capFarewellLeadMs: numEnv("CAP_FAREWELL_LEAD_MS", process.env.CAP_FAREWELL_LEAD_MS, {
     fallback: 20000,
     min: 0,
@@ -626,16 +536,7 @@ const rawConfig = {
 
   sttProfile: (process.env.STT_PROFILE || DEFAULT_STT_PROFILE).trim(),
 
-  machineDetection: {
-    enabled: boolEnv("MACHINE_DETECTION_ENABLED", process.env.MACHINE_DETECTION_ENABLED, {
-      fallback: false,
-    }),
-    timeoutS: numEnv("MACHINE_DETECTION_TIMEOUT_S", process.env.MACHINE_DETECTION_TIMEOUT_S, {
-      fallback: 5,
-      min: 3,
-      max: 30,
-    }),
-  },
+  ...telephonyRohwerte(umgebung),
 
   modelPricesUsd: resolveModelPrices(MODEL_PRICE_SCHEDULES, todayIsoDate()),
   usdToEur:
