@@ -1,0 +1,104 @@
+{
+  "phase": "E-2305-defaults-umbau",
+  "issue": 2305,
+  "absicht": "Hermes soll eine Architektur bekommen, in der der einfachste Weg für einen Agenten immer der richtige ist: src/store/defaults.js wird vollständig in kleine begriffe-Dateien mit je einer Verantwortung zerlegt (Muster: src/store/begriffe-nummern.js), und defaults.js reicht jeden bisherigen Export unter gleichem Namen weiter, sodass sich kein Importeur und kein bestehender Test ändert. Nicht gewollt sind eine Verhaltensänderung, das Schwächen oder Umschreiben eines Tests, das Lockern oder Umgehen einer Prüfung, Code zu verdoppeln statt zu teilen und eine Zieldatei wegzulassen, weil sie Mutanten kostet. Im Zweifel gilt die sauberere Struktur und lieber ein Absicherungstest mehr; lässt sich ein Auftrag nur mit einer Lockerung bauen, hält der Lauf an.",
+  "entwurf": {
+    "src/store/": "Was sich ändert: Zweite Phase der Zerlegung von src/store/defaults.js. Die erste Phase (E-2305-defaults-zerlegen) hat alle Deklarationen, die sich Wort für Wort verschieben lassen, in die begriffe-Dateien unter src/store/ gebracht. Diese Phase bringt den Rest dorthin, der dafür umgebaut werden muss: Er liest oder bildet beim Laden etwas (Object.values, Berechnung, veränderliche Bindung), steht in einer Gruppe mit anderen Deklarationen oder liest Namen aus einer anderen begriffe-Datei. Nach b5 besteht defaults.js nur noch aus export { … } from-Zeilen: keine Deklaration, kein Import, dieselben 79 Namen wie heute. Antonio hat für diese Zerlegung freigegeben, dass src/store/defaults.js nicht im Vorbereitungsbereich (tools/auftrag/vorbereitung-bereich.json) steht; der letzte Commit des PRs trägt sie und alle neuen Dateien wieder ein.\nZuordnung (Reihenfolge der Aufträge; jeder baut auf dem Stand des vorigen auf, alle ändern defaults.js):\nb1 src/store/begriffe-rufnummern.js (hängt an, was a4 angelegt hat): exportiert bleiben nur hasTrunkZeroAfterCountryCode, homeCountryCode, normalizeDialTarget, allowedPrivateNumberCodes, countryForE164 und countryAllowed; ohne export (privat) wandern TRUNK_ZERO_COUNTRY_CODES, NATIONAL_TRUNK_PREFIX, NANP_COUNTRY_CODE, NANP_INTERNATIONAL_PREFIX, NANP_TRUNK_PREFIX, NANP_NSN_DIGITS, NANP_NATIONAL_DIGITS, NANP_NSN_PATTERN, DIALING_HOME_COUNTRY_CODES, NO_NATIONAL_ELEVEN_RANGE_COUNTRIES, INTERNATIONAL_CALL_PREFIX, normalizeNanpTarget, normalizeTrunkZeroTarget, DEFAULT_PRIVATE_NUMBER_CODES, CALLING_CODE_FOR_COUNTRY, CALLING_CODES_LONGEST_FIRST und COUNTRY_FOR_CALLING_CODE. Sie lesen normNum, E164 und isNanpCountry aus derselben Datei. In defaults.js entfallen E164 und isNanpCountry aus der Importzeile aus ./begriffe-rufnummern.js; normNum bleibt importiert, bis b2 sanitizeProfile verschiebt.\nb2 src/store/begriffe-profil.js (neu): PROFILE_FIELDS, sanitizeProfile, DEFAULT_PROFILE_MAX_CALLS_PER_HOUR (privat), OWNER_PROFILE (privat), DEFAULT_PROFILE (privat), resolveProfileFrom; importiert normNum aus ./begriffe-rufnummern.js und BOOTSTRAP_TENANT_ID aus ./begriffe-mandant.js.\nb3 src/store/begriffe-anrufe.js (hängt an): MANDATE_OUT_OF_SCOPE_VALUES; liest MANDATE_OUT_OF_SCOPE aus derselben Datei.\nb4 src/store/begriffe-leerzustaende.js (hängt an): DEMO_EVENTS (privat), DEFAULT_GREETING, nextWeekday (privat), defaultSettings, demoCalendar, defaultSettingsMap, calendarMap, emptyUsageMap; die Importzeile INBOUND_NOTICES, withInboundNotice aus ../i18n/inbound-notice.js wandert mit (sie entfällt in defaults.js); importiert BOOTSTRAP_TENANT_ID aus ./begriffe-mandant.js; emptyUsageMap liest emptyUsage aus derselben Datei. DEFAULT_GREETING bleibt hier, weil defaultSettings es liest und die Datei unter src/store/ (Baustein speicher) liegt; ein Umzug nach texte ist ein eigener späterer Schritt.\nb5 src/store/begriffe-sprache-zeit.js (hängt an): DEFAULT_LANGUAGE (export let), setWorldDefaultLanguageEnabled. Die Live-Bindung bleibt: defaults.js leitet DEFAULT_LANGUAGE mit export { … } from weiter, ein Leser über defaults.js sieht nach dem Setter den neuen Wert.\nRegeln für jeden Auftrag:\n1. Schnitt nach Deklarationsnamen, nie nach Zeilennummern. Jede genannte Deklaration wandert in der Reihenfolge von defaults.js in die Zieldatei; ein Auftrag verschiebt genau seine Namen und nichts sonst. Wo der Auftrag an eine bestehende begriffe-Datei anhängt, bleibt deren bisheriger Inhalt Zeichen für Zeichen stehen.\n2. In defaults.js entfällt jede verschobene Deklaration; die bestehende Weiterleitungszeile für die Zieldatei nennt danach auch die neu exportierten Namen des Auftrags (bei b2 folgt eine neue Zeile export { … } from \"./begriffe-profil.js\"; Prettier-Form, printWidth 100). Importzeilen in defaults.js, die kein verbliebener Rest mehr braucht, entfallen.\n3. Bezüge zwischen den begriffe-Dateien laufen über import aus der anderen begriffe-Datei, nie zurück über defaults.js; es entsteht kein Kreis.\n4. Meldet das Lint der Zieldatei etwas zu verschobenem Code (id-length, no-magic-numbers, no-param-reassign, max-params, complexity), wird es dort verhaltensgleich behoben: sprechender Name statt eines Buchstabens, benannte Konstante statt einer Zahl, kein überschriebener Parameter. Keine Unterdrückung, kein eslint-disable; die Mutationsprüfung sichert jede solche Änderung ab. Vorhandene Unterdrückungen für verschobenen Code zieht der Listenumzug mit, wo er es kann.\n5. Keine Kommentare im Code. Kein Importeur ändert sich, kein bestehender Test ändert sich.\n6. Kein Auftrag fügt einen Export hinzu, den defaults.js heute nicht hat: Was in defaults.js privat war (ohne export), bleibt in der Zieldatei privat; defaults.js ist auf seine 79 Namen eingefroren (tools/basis/sammeldatei-exporte.json).\nBleibt gleich: Jeder Importeur der 79 Namen (alle über src/store/defaults.js) bekommt dieselben Werte, Funktionen und Verhaltensweisen wie heute. Nicht eingefrorene Objekte bleiben nicht eingefroren (PROFILE_FIELDS), eingefrorene bleiben eingefroren, jede Fabrik und resolveProfileFrom liefern weiter bei jedem Aufruf ein neues Objekt auf oberster Ebene, und DEFAULT_LANGUAGE bleibt eine Live-Bindung mit Setter. Die Länder- und Wahlnummernregeln, das Standardprofil ohne Rechte und die Standardbegrüßung mit KI-Hinweis behalten ihren Wortlaut und ihre Werte.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün (je Auftrag der unter abnahme genannte Verhaltenstest, der die verschobenen Namen ausübt, dazu alle Testdateien, die einen verschobenen Namen nennen). Bestehende Tests ändern sich nicht; Absicherungstests des alten Stands sind erlaubt und erwünscht, wo die Mutationsprüfung Mutanten überleben lässt; Absicherungstests zu nextWeekday und demoCalendar halten die Uhr fest (t.mock.timers.enable({ apis: [\"Date\"], now }) oder jumpClock aus test/fake-clock.js, wie ZEITGLIEDER_MELDUNG in eslint.config.js es verlangt), damit sie nicht vom Lauftag abhängen: Die feste Uhr wird lokal gebaut (new Date(2027, 0, 30, 9, 0)), liegt an einem Monatsende ohne Zeitumstellung in den drei Folgetagen, und die Erwartung wird lokal gebildet (new Date(jahr, monat, tag + n, stunde, minute).toISOString()), nie über Millisekunden-Rechnung oder ISO-Literale, weil die CI in UTC und der Lauf in Europe/Berlin rechnet.\nNicht-Ziele: kein Umstellen eines Importeurs und kein Löschen von defaults.js, weil die rund 70 Importeure ein eigener Schritt sind; keine tiefe Kopie in resolveProfileFrom und kein Einfrieren von PROFILE_FIELDS, weil beides Verhalten ändert; kein Umzug von DEFAULT_GREETING nach texte und kein Ordner src/begriffe/, weil das Bausteinzuschnitt und Freigabe betrifft; kein Nachziehen der Doku-Anker, weil docs/ nicht im Bereich liegt; kein neuer Export und keine Freigabe veränderlicher Wahlregel-Tabellen nach außen, weil defaults.js auf 79 Namen eingefroren ist; keine Umbenennung nach .ts; keine Lockerung einer Prüfung und kein eslint-disable.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil resolveProfileFrom nur die oberste Ebene kopiert ({ ...OWNER_PROFILE }, { ...DEFAULT_PROFILE }, { ...DEFAULT_PROFILE, ...storedProfile }), teilen sich die Listen allowedNumbers und allowedCountryCodes zwischen Ergebnis und Standardprofil; ein Schutztest, der „ein neues Objekt“ für die Listen verspräche, würde auf dem alten Stand rot oder verleitete den Umbau zu einer tiefen Kopie, und ein späterer Aufrufer, der einen Eintrag in die geteilte Landesliste schiebt, öffnete das Land-Gate für jeden Tenant ohne gespeichertes Profil. | Test: der zweite Satz zu b2 in wasDarfNiePassieren gilt nur für die oberste Ebene und nennt die geteilten Listen ausdrücklich; Nicht-Ziel: keine tiefe Kopie. |\n| PM2 | Weil nextWeekday und demoCalendar mit new Date(), setDate und setHours in der Ortszeit des Rechners rechnen und die bestehenden Tests den Kalender nur mit demoCalendar() selbst vergleichen, überleben alle Mutanten, und Absicherungstests ohne feste Uhr oder mit einer Erwartung in Millisekunden oder UTC-Literalen hingen vom Lauftag, von der Zeitumstellung und der Zeitzone ab (CI in UTC, Lauf in Europe/Berlin), und die Folge ist ein dauerhaft rotes npm test, das die Merge-Queue für alle Pakete blockiert. | Test: der erste Satz zu b4 in wasDarfNiePassieren legt die Uhr auf den 30. Januar 2027, 09:00 Ortszeit, und die Erwartung wird lokal gebildet; der Abschnitt Abnahme nennt t.mock.timers und jumpClock. |\n| PM3 | Weil sanitizeProfile die Komplexität 11 hat, erlaubt sind 10, und die Unterdrückung nur für defaults.js gilt, muss der Umbau die Funktion in begriffe-profil.js zerlegen, und dabei können sich Fälle ändern, die kein Mutant abbildet: ein Eintrag, der kein String ist, verwirft heute das ganze Feld; allowedCountryCodes wird nur getrimmt, nicht mit normNum bereinigt; geerbte Schlüssel wie constructor, toString und __proto__ aus JSON.parse werden still verworfen, und die Folge wäre ein Start, der am PROFILES_JSON-Seed scheitert, oder eine andere Länderliste für das Land-Gate. | Test: der dritte Satz zu b2 in wasDarfNiePassieren nennt diese Fälle einzeln; Nicht-Ziel: kein gemeinsamer Bereiniger für beide Listen. |\n| PM4 | Weil b1 ohne ausdrückliche Kennzeichnung der privaten Namen verlangen könnte, die Vorwahl-Tabellen und Normalisierer aus begriffe-rufnummern.js zu exportieren und über defaults.js weiterzureichen, hielte der Auftrag an der Freeze-Prüfung von defaults.js (79 Namen), oder die veränderlichen Arrays TRUNK_ZERO_COUNTRY_CODES und NO_NATIONAL_ELEVEN_RANGE_COUNTRIES wären von außen beschreibbar und änderten die Wahlregeln für alle Tenants. | Nicht-Ziel: Regel 6 und die Zuordnung zu b1 nennen die privaten Namen einzeln; kein neuer Export. |\n| PM5 | Weil defaults.js nach b1 normNum für sanitizeProfile noch braucht, wirft eine wörtlich ganz gestrichene Importzeile bei [].map(undefined) schon für den leeren allowedNumbers der Tarife einen TypeError, und die Aktivierung eines Abos scheiterte. | hingenommen: Der Wortlaut zu b1 ist angeglichen (normNum bleibt importiert, bis b2 sanitizeProfile verschiebt); ESLint (no-undef) meldet den Fehler vor dem Commit, und test/profile-a2-activation.test.js führt die Aktivierung mit einem Tarifprofil aus. |\n| PM6 | Weil defaults.js über config.js von jedem Serverstart geladen wird und rund 300 Testdateien es importieren, kann die Mutationsprüfung das Zeitbudget sprengen (wie bei boot.js), und lauf endet mit Exit 2 ohne Urteil. | hingenommen: Bei Exit 2 erzeugt lauf keinen Patch, also landet kein ungeprüfter Umbau; endet ein Auftrag ohne Urteil, halte ich mit BETREUUNG NÖTIG an (Werkzeuglücke) und akzeptiere keine Entscheidungsnotiz ohne Mutationsurteil. |"
+  },
+  "auftraege": [
+    {
+      "id": "b1",
+      "art": "umbau",
+      "ziel": "Rufnummern-Rest aus defaults.js nach begriffe-rufnummern.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-rufnummern.js",
+        "src/store/defaults.js",
+        "test/dial-target-normalization.test.js"
+      ],
+      "abnahme": "test/dial-target-normalization.test.js",
+      "wasDarfNiePassieren": [
+        "countryAllowed lässt eine Nummer nur zu, wenn sie mit einer der erlaubten Landesvorwahlen beginnt oder die Liste \"*\" enthält, und lehnt leere und nicht-String-Werte ab; allowedPrivateNumberCodes liefert für ein NANP-Land +1, für DE, AT, CH, FR, GB und IE die jeweilige Landesvorwahl und für jedes andere Land +49.",
+        "normalizeDialTarget liefert für dieselben Eingaben und Heimatländer dieselbe Zielnummer wie heute: führende Null zur Landesvorwahl, 00 zu Plus, NANP-Nummern mit und ohne Vorwahl 1 zu +1, und 011 bleibt in +49 und +33 unverändert.",
+        "countryForE164 liefert für gültige E.164-Nummern dasselbe Land wie heute, auch bei unterschiedlich langen Landesvorwahlen (die längste gewinnt), und null für alles, was keine gültige E.164-Nummer ist."
+      ],
+      "abhaengigVon": []
+    },
+    {
+      "id": "b2",
+      "art": "umbau",
+      "ziel": "Profil-Begriffe aus defaults.js nach begriffe-profil.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-profil.js",
+        "src/store/defaults.js",
+        "test/a4-default-profile-zero.test.js"
+      ],
+      "abnahme": "test/a4-default-profile-zero.test.js",
+      "wasDarfNiePassieren": [
+        "Ein Tenant außer owner ohne gespeichertes Profil bekommt weiter das Standardprofil ohne Kalender-, Rückfrage-, Nachschlage- und Buchungsrecht und mit maxCallsPerHour 0; der owner bekommt weiter sein festes Profil mit allen vier Rechten und maxCallsPerHour null.",
+        "resolveProfileFrom liefert bei jedem Aufruf ein neues Objekt auf oberster Ebene: ändert ein Aufrufer ein Feld des Ergebnisses, etwa allowCalendar, sieht der nächste Aufruf für denselben Tenant das unveränderte Profil; die Listen allowedNumbers und allowedCountryCodes teilt das Ergebnis wie heute mit dem Standardprofil bzw. dem gespeicherten Profil.",
+        "sanitizeProfile verhält sich Eingabe für Eingabe wie heute: Es übernimmt nur Felder, die PROFILE_FIELDS selbst führt, und nur mit passendem Typ; ein Eintrag in allowedNumbers oder allowedCountryCodes, der kein String ist, verwirft das ganze Feld; allowedNumbers wird mit normNum bereinigt und leere Einträge fallen weg, allowedCountryCodes wird nur getrimmt (kein normNum, innere Leerzeichen bleiben); geerbte Schlüssel wie constructor, toString und __proto__ aus JSON.parse werden still verworfen, ohne dass eine Ausnahme fliegt."
+      ],
+      "abhaengigVon": [
+        "b1"
+      ]
+    },
+    {
+      "id": "b3",
+      "art": "umbau",
+      "ziel": "Mandat-Werteliste aus defaults.js nach begriffe-anrufe.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-anrufe.js",
+        "src/store/defaults.js",
+        "test/ww-f1-booking-mandate-contradiction.test.js"
+      ],
+      "abnahme": "test/ww-f1-booking-mandate-contradiction.test.js",
+      "wasDarfNiePassieren": [
+        "MANDATE_OUT_OF_SCOPE_VALUES enthält genau take_message, decline und accept_best in dieser Reihenfolge, und MANDATE_OUT_OF_SCOPE_DEFAULT bleibt take_message."
+      ],
+      "abhaengigVon": [
+        "b2"
+      ]
+    },
+    {
+      "id": "b4",
+      "art": "umbau",
+      "ziel": "Standard-Einstellungen aus defaults.js nach begriffe-leerzustaende.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-leerzustaende.js",
+        "src/store/defaults.js",
+        "test/tenant-settings-calendar-map.test.js"
+      ],
+      "abnahme": "test/tenant-settings-calendar-map.test.js",
+      "wasDarfNiePassieren": [
+        "demoCalendar liefert bei jedem Aufruf frische Objekte, und steht die Uhr auf dem 30. Januar 2027, 09:00 Uhr Ortszeit, liegen ev1 am 31. Januar von 10:00 bis 11:00 Uhr, ev2 am 1. Februar von 12:00 bis 13:00 Uhr und ev3 am 2. Februar von 15:00 bis 16:30 Uhr, jeweils in der Ortszeit des Rechners (als ISO-Zeit ausgegeben).",
+        "defaultSettings behält die Voreinstellungen allowPersonalData, allowBankData, allowResearch und allowCallMemory auf false und language und agentStyle auf null, liefert bei jedem Aufruf ein frisches Objekt, und die Standardbegrüßung DEFAULT_GREETING nennt weiter, dass eine KI spricht und das Gespräch transkribiert wird.",
+        "defaultSettingsMap, calendarMap und emptyUsageMap führen weiter nur den Mandanten owner und liefern bei jedem Aufruf neue Objekte."
+      ],
+      "abhaengigVon": [
+        "b3"
+      ]
+    },
+    {
+      "id": "b5",
+      "art": "umbau",
+      "ziel": "Weltstandard-Sprache aus defaults.js nach begriffe-sprache-zeit.js",
+      "bereich": "src/store/",
+      "erwarteteDateien": [
+        "src/store/begriffe-sprache-zeit.js",
+        "src/store/defaults.js",
+        "test/p10-world-default-language-switch.test.js"
+      ],
+      "abnahme": "test/p10-world-default-language-switch.test.js",
+      "wasDarfNiePassieren": [
+        "DEFAULT_LANGUAGE ist en; setWorldDefaultLanguageEnabled(false) stellt es auf de und setWorldDefaultLanguageEnabled(true) wieder auf en, und jeder Leser, der DEFAULT_LANGUAGE über defaults.js liest, sieht den neuen Wert sofort."
+      ],
+      "abhaengigVon": [
+        "b4"
+      ]
+    }
+  ]
+}
