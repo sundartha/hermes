@@ -16,7 +16,6 @@ const PFADE_AUS_DEM_NEUEN_STAND = [
   "stryker.config.json",
   "package.json",
   "package-lock.json",
-  "src/utils/object.js",
   "test/testbaenke-run.mjs",
   "test/i18n-catalog-run.mjs",
   "test/abnahme-ausgewandert.json",
