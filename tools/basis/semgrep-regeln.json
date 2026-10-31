@@ -11313,6 +11313,54 @@
             "metavariable": "$STR",
             "regex": ".*[^$]+{[^{}]*}.*"
           }
+        },
+        {
+          "metavariable-regex": {
+            "metavariable": "$STR",
+            "regex": "(?s)^(?:[^`]|`(?:[^`\\\\$]|\\\\.|\\$(?!\\{)|(?&ph))*?(?<!\\$)\\{[^{}]*\\})(?(DEFINE)(?<ph>\\$\\{(?&body)*+\\})(?<body>[^{}`\"'\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*+\"|'(?:[^'\\\\]|\\\\.)*+'|(?&tpl)|\\{(?&body)*+\\})(?<tpl>`(?:[^`\\\\$]|\\\\.|\\$(?!\\{)|(?&ph))*+`))"
+          }
+        },
+        {
+          "pattern-either": [
+            {
+              "patterns": [
+                {
+                  "pattern": "$STR"
+                },
+                {
+                  "metavariable-regex": {
+                    "metavariable": "$STR",
+                    "regex": "^`"
+                  }
+                }
+              ]
+            },
+            {
+              "patterns": [
+                {
+                  "pattern": "$STR"
+                },
+                {
+                  "metavariable-regex": {
+                    "metavariable": "$STR",
+                    "regex": "^[^`]"
+                  }
+                },
+                {
+                  "pattern-not-inside": {
+                    "patterns": [
+                      {
+                        "pattern": "`...${$E}...`"
+                      },
+                      {
+                        "focus-metavariable": "$E"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
         }
       ],
       "languages": ["javascript", "typescript"],

@@ -1,0 +1,7 @@
+{
+  "titel": "Platzhalter ohne Dollarzeichen in einem Template-String innerhalb eines Platzhalters",
+  "dateien": {
+    "src/gruss.js": ["export const gruss = (laut, name) => `Hallo ${laut ? `{name}` : name}`;"]
+  },
+  "erwartet": "missing-template-string-indicator"
+}

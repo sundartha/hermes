@@ -1,0 +1,11 @@
+{
+  "titel": "Platzhalter ohne Dollarzeichen in der Mitte eines mehrzeiligen Template-Strings",
+  "dateien": {
+    "src/gruss.js": [
+      "export const gruss = (anrede) => `Hallo",
+      "${anrede} {name}",
+      "Ende`;"
+    ]
+  },
+  "erwartet": "missing-template-string-indicator"
+}
