@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
+import { KRITISCH_OHNE_GATE_TEST } from "../../tools/auftrag/agenten.mjs";
 import { SCHUTZ, gitSchutzLage, schutzGrund } from "../../tools/ziele/schutz.mjs";
 import { vorhandenerPfad } from "../../tools/zwillingspfad.mjs";
 import { ESLINT_BIN, REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
@@ -33,6 +34,30 @@ const WEITERE_PFLICHTMODULE = [
   "telephony/ani-ownership-recheck.js",
 ];
 const LEERES_MODUL = "export const da = true;\n";
+const LISTEN_ABFRAGE = "listen-abfrage.mjs";
+const LISTEN_ABFRAGE_TEXT = [
+  'import fs from "node:fs";',
+  'import { syncBuiltinESMExports } from "node:module";',
+  'import { argv } from "node:process";',
+  "const gesehen = [];",
+  'for (const name of ["existsSync", "statSync", "lstatSync", "accessSync", "readFileSync", "readdirSync"]) {',
+  "  const echt = fs[name];",
+  "  fs[name] = (pfad, ...rest) => {",
+  "    gesehen.push(String(pfad));",
+  "    return echt(pfad, ...rest);",
+  "  };",
+  "}",
+  "syncBuiltinESMExports();",
+  'const { KRITISCH_OHNE_GATE_TEST: liste, istKritisch } = await import("./tools/auftrag/agenten.mjs");',
+  "const nachImport = gesehen.filter((pfad) => pfad.includes('/src/')).length;",
+  "const flach = [liste].flat();",
+  "const iteration = [];",
+  "for (const eintrag of liste) iteration.push(eintrag);",
+  "const kritisch = argv.slice(2).map(istKritisch);",
+  "const nachLesen = gesehen.filter((pfad) => pfad.includes('/src/')).length;",
+  "console.log(JSON.stringify({ nachImport, nachLesen, flach, iteration, laenge: liste.length, ist: Array.isArray(liste), kritisch }));",
+  "",
+].join("\n");
 
 const GESPRAECH = "src/conversation/elevenlabs-agent-config";
 const SCHUTZLISTEN = {
@@ -187,4 +212,35 @@ test("ziele: neben der vorhandenen .js-Datei der Schutzliste wird ihr .ts-Zwilli
   const dateien = { [`${GESPRAECH}.js`]: LEERES_MODUL, [`${GESPRAECH}.ts`]: LEERES_MODUL };
   assert.equal(geschuetztGrund(context, dateien, `${GESPRAECH}.js`), SCHUTZ.importgraph);
   assert.equal(geschuetztGrund(context, dateien, `${GESPRAECH}.ts`), null);
+});
+
+function listenAbfrage(context, dateien, pfade) {
+  const wurzel = probeMitWerkzeugen(context, { ...dateien, [LISTEN_ABFRAGE]: LISTEN_ABFRAGE_TEXT });
+  const lauf = runIn(wurzel, process.execPath, [LISTEN_ABFRAGE, ...pfade]);
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  return { wurzel, ...JSON.parse(lauf.stdout) };
+}
+
+function ersterJsEintrag() {
+  const eintrag = [...KRITISCH_OHNE_GATE_TEST].find((pfad) => pfad.endsWith(".js"));
+  assert.ok(eintrag, "kein .js-Eintrag mehr in KRITISCH_OHNE_GATE_TEST");
+  return eintrag;
+}
+
+test("agenten: der bloße Import liest nichts unter src/, erst das Lesen der Liste prüft die Pfade", (context) => {
+  const abfrage = listenAbfrage(context, {}, []);
+  assert.equal(abfrage.nachImport, 0);
+  assert.ok(abfrage.nachLesen > 0);
+});
+
+test("agenten: flat, Iteration und length der Liste zeigen den aufgelösten Zwilling, kritisch ist nur er", (context) => {
+  const js = ersterJsEintrag();
+  const ts = js.replace(/\.js$/, ".ts");
+  const abfrage = listenAbfrage(context, { [ts]: LEERES_MODUL }, [ts, js]);
+  const erwartet = [...KRITISCH_OHNE_GATE_TEST].map((pfad) => (pfad === js ? ts : pfad));
+  assert.deepEqual(abfrage.flach, erwartet);
+  assert.deepEqual(abfrage.iteration, erwartet);
+  assert.equal(abfrage.laenge, erwartet.length);
+  assert.equal(abfrage.ist, true);
+  assert.deepEqual(abfrage.kritisch, [true, false]);
 });
