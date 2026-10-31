@@ -779,22 +779,22 @@
   },
   "src/store/state-ops.js": {
     "complexity": {
-      "count": 3
+      "count": 1
     },
     "id-length": {
-      "count": 59
+      "count": 51
     },
     "max-params": {
       "count": 23
     },
     "no-magic-numbers": {
-      "count": 10
+      "count": 2
     },
     "no-negated-condition": {
       "count": 1
     },
     "no-param-reassign": {
-      "count": 33
+      "count": 22
     },
     "no-restricted-syntax": {
       "count": 11

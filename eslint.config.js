@@ -50,6 +50,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/store/json.js",
       "src/store/pg.js",
       "src/store/state-ops.js",
+      "src/store/zustand/mandant.js",
       "src/web-auth.js",
     ],
     meldung:
@@ -57,7 +58,11 @@ const WORT_NUR_IN_EINTRAEGE = [
   },
   {
     name: "trunk-beleg-felder",
-    nurIn: ["src/store/state-ops.js", "src/store/pg.js", "src/elevenlabs/inbound-path-decision.js"],
+    nurIn: [
+      "src/store/zustand/nummern.js",
+      "src/store/pg.js",
+      "src/elevenlabs/inbound-path-decision.js",
+    ],
     meldung:
       "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
   },
@@ -613,6 +618,13 @@ export default [
     },
   },
   ...tsBloecke,
+  {
+    name: "zustand-parameter-state",
+    files: [`src/store/zustand/**/*.${ENDUNGEN}`],
+    rules: {
+      "no-param-reassign": ["error", { props: true, ignorePropertyModificationsFor: ["state", "tenant"] }],
+    },
+  },
   {
     files: ["apps/web/**/*.js"],
     languageOptions: { globals: { ...globals.browser } },
