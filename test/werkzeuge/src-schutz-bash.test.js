@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -22,6 +22,8 @@ const FILES = {
   "docs/n.md": "export const a = 1;\n",
   "src.patch": SRC_PATCH,
   "docs.patch": DOCS_PATCH,
+  "maskiert.patch": SRC_PATCH.replaceAll("src/a.js", '"\\163rc/a.js"'),
+  "plain.patch": SRC_PATCH.replaceAll("src/a.js", "a.js"),
 };
 const BAU = { HERMES_ROLLE: "bau" };
 const OHNE_ROLLE = { HERMES_ROLLE: undefined };
@@ -287,6 +289,111 @@ test("Bash ohne Rolle bau schreibt weiter frei unter test/, docs/ und /tmp", (co
   ]);
 });
 
+test("Bash ohne Rolle bau: ein Patch, dessen Inhalt über stdin oder eine Datei kommt, ändert src/ nicht (git apply, git am, patch)", (context) => {
+  const { worktree } = worktreeProbe(context);
+  assertGesperrt(worktree, [
+    "git apply < src.patch",
+    "git apply -p1 - < src.patch",
+    "cat docs.patch | git apply",
+    "cat docs.patch | git apply -p1 -",
+    "git am < src.patch",
+    "cat docs.patch | git am",
+    "patch -p1 < src.patch",
+    "cat docs.patch | patch -p1",
+    "patch -p1 -i src.patch",
+    "patch -p1 --input=src.patch",
+    "patch -p1 -isrc.patch",
+    "patch docs/n.md src.patch",
+    "patch -p 1 docs/n.md < src.patch",
+    "patch src/a.js docs.patch",
+    "git apply maskiert.patch",
+    "git apply < maskiert.patch",
+    "patch -p1 < maskiert.patch",
+    "git apply <<'EOF'\ndiff --git a/x b/x\n--- a/x\n+++ \"b/\\163rc/a.js\"\nEOF",
+    "git apply fehlt.patch",
+    "patch -p1 < fehlt.patch",
+  ]);
+});
+
+test("Bash ohne Rolle bau wendet Patches für test/ und docs/ weiter an und prüft Patches nur lesend", (context) => {
+  const { worktree } = worktreeProbe(context);
+  assertFrei(worktree, [
+    "git apply < docs.patch",
+    "git am --abort",
+    "patch -p1 < docs.patch",
+    "patch -p1 -i docs.patch",
+    "patch docs/n.md docs.patch",
+    "patch -p1 -idocs.patch",
+    "patch -p1 --input=docs.patch",
+    "patch --dry-run -p1 < src.patch",
+    "git apply --check < src.patch",
+    "git apply --stat < src.patch",
+    "git apply <<'EOF'\ndiff --git a/docs/n.md b/docs/n.md\n--- a/docs/n.md\n+++ b/docs/n.md\nEOF",
+  ]);
+});
+
+test("Bash ohne Rolle bau: git checkout-index, stash und reset --hard schreiben src/ ohne Pfad im Befehl und sind gesperrt", (context) => {
+  const { worktree } = worktreeProbe(context);
+  assertGesperrt(worktree, [
+    "git checkout-index -a -f",
+    "git checkout-index --all --force",
+    "git checkout-index -f -- src/a.js",
+    "git checkout-index -f src/a.js",
+    "git checkout-index -a --prefix=src/",
+    "git checkout-index --stdin",
+    "git stash pop",
+    "git stash apply",
+    "git stash apply stash@{1}",
+    "git stash pop --index",
+    "git stash branch neu",
+    "git stash",
+    "git stash push",
+    "git stash push -m wip",
+    "git stash save wip",
+    "git stash -u",
+    "git stash push docs/n.md",
+    "git stash push --",
+    "git stash push -- src/a.js",
+    "git stash push -- .",
+    "git reset --hard",
+    "git reset --hard HEAD~1",
+    "git reset --hard upstream/master",
+    "git reset --merge",
+    "git reset --keep HEAD~1",
+    "git -C . reset --hard",
+    "git -C src reset --hard",
+  ]);
+});
+
+test("Bash ohne Rolle bau: git reset ohne --hard, stash lesend oder mit Pfad außerhalb src/ und checkout-index mit fremdem Ziel bleiben frei", (context) => {
+  const { worktree } = worktreeProbe(context);
+  assertFrei(worktree, [
+    "git reset",
+    "git reset --soft HEAD~1",
+    "git reset --mixed HEAD~1",
+    "git reset HEAD -- src/a.js",
+    "git stash list",
+    "git stash show -p",
+    "git stash drop",
+    "git stash clear",
+    "git stash create",
+    "git stash push -- docs/n.md",
+    "git stash push -m wip -- docs/n.md test",
+    "git checkout-index --prefix=/tmp/auszug/ -a",
+    "git checkout-index -f -- docs/n.md",
+  ]);
+});
+
+test("Bash mit Rolle planer: patch und git apply mit aenderung.diff ändern src/a.js nicht", (context) => {
+  const directory = realpathSync(probeRepository(context, { ...FILES, "aenderung.diff": SRC_PATCH }));
+  const vorher = readFileSync(join(directory, "src/a.js"), "utf8");
+  for (const befehl of ["patch -p1 < aenderung.diff", "git apply < aenderung.diff"]) {
+    const ergebnis = bash(directory, befehl, { HERMES_ROLLE: "planer" });
+    assert.equal(ergebnis.status, BLOCKING_EXIT_CODE, `${befehl}: ${ergebnis.stderr}`);
+  }
+  assert.equal(readFileSync(join(directory, "src/a.js"), "utf8"), vorher);
+});
+
 test("Bash ohne Rolle bau: Download, Entpacken und Packen schreiben auch mit gebündelten Kurzoptionen nicht unter src/", (context) => {
   const { worktree } = worktreeProbe(context);
   assertGesperrt(worktree, [
@@ -351,6 +458,33 @@ test("Bash ohne Rolle bau lädt, entpackt und packt weiter frei außerhalb von s
     "xz --to-stdout src/a.js > /tmp/a.xz",
     "gzip -dc /tmp/a.gz",
     "gzip -l /tmp/a.gz",
+  ]);
+});
+
+test("Bash ohne Rolle bau: ein Patch ohne src im Kopf ändert src/ nicht, wenn das Arbeitsverzeichnis unter src/ liegt", (context) => {
+  const { worktree } = worktreeProbe(context);
+  assertGesperrt(worktree, [
+    "cd src && patch -p1 < ../plain.patch",
+    "cd s* && patch -p1 < plain.patch",
+    "cd src && patch -p1 -i ../plain.patch",
+    "cd src && patch a.js ../plain.patch",
+    "cd src && cat ../plain.patch | patch -p1",
+    "cd src && git apply ../plain.patch",
+    "cd src && git apply < ../plain.patch",
+    "git -C src apply ../plain.patch",
+    "cd src; patch -p1 < ../plain.patch",
+  ]);
+  assertGesperrt(join(worktree, "src"), [
+    "patch -p1 -i ../plain.patch",
+    "patch -p1 < ../plain.patch",
+    "git apply ../plain.patch",
+    "git apply < ../plain.patch",
+    "git am ../plain.patch",
+  ]);
+  assertFrei(worktree, [
+    "cd docs && patch -p1 < ../plain.patch",
+    "cd test && patch -p1 -i ../plain.patch",
+    "git -C docs apply ../plain.patch",
   ]);
 });
 

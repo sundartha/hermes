@@ -21,6 +21,10 @@ const TAR_ENTPACKT = ["--extract", "--get"];
 const NUR_LESEN_ODER_STDOUT = ["--stdout", "--to-stdout", "--list", "--test"];
 const PACKER = ["gzip", "gunzip", "bzip2", "bunzip2", "xz", "unxz", "lzma", "unlzma", "zstd", "unzstd", "compress", "uncompress"];
 const SED_DATEI = /(?:^|[;\n{}])\s*(?:[\d$]+(?:,[\d$]+)?|\/[^/]*\/)?\s*!?\s*[wW]\s*\S|\bs(.).*?\1.*?\1[a-zA-Z0-9]*[wW]\s*\S/;
+const PATCH_KOPF_MASKIERT = /^(?:diff --git|---|\+\+\+|rename (?:from|to)|copy (?:from|to)) .*["\\]/m;
+const PATCH_EINGABE_OPTION = /^-[A-Za-z0-9]*i$/;
+const PATCH_EINGABE_ANGEHAENGT = /^-i./;
+const PATCH_OPTION_MIT_WERT = new Set(["-p", "-d", "-D", "-F", "-r", "-o", "-z", "-B", "-Y", "-V"]);
 const AWK_SCHREIBT = />|\bsystem\s*\(|\|\s*["']?\w/;
 const UNKLAR = "Ersetzung oder unklarer Aufbau, src/ kommt im Befehl vor oder das Arbeitsverzeichnis liegt in src/";
 const MAX_TIEFE = 8;
@@ -33,7 +37,9 @@ const LESEPROGRAMME = new Set([
   "sleep", "true", "false", "test", "[", "read", "wait", "exit", "kill", "bat", "column", "paste", "comm", "join", "nl", "od",
   "xxd", "hexdump", "strings", "shasum", "which", "type", "whoami", "hostname", "uname", ":",
 ]);
-const GIT_PFAD = new Set(["checkout", "restore", "rm", "mv", "clean", "stash", "checkout-index"]);
+const GIT_PFAD = new Set(["checkout", "restore", "rm", "mv", "clean"]);
+const STASH_LESEND = new Set(["list", "show", "drop", "clear", "create", "store"]);
+const PREFIX_OPTION = "--prefix=";
 const GIT_PATCH = new Set(["apply", "am"]);
 const GIT_NUR_LESEN = ["--check", "--stat", "--numstat", "--summary", "--abort", "--continue", "--skip", "--quit", "--show-current-patch"];
 const FIND_DATEI = new Set(["-fprint", "-fprint0", "-fprintf", "-fls"]);
@@ -77,7 +83,7 @@ function zuordnen(namen, pruefe) {
 }
 
 const PROGRAMM_PRUEFUNGEN = new Map([
-  ...zuordnen(["touch", "mkdir", "truncate", "tee", "patch", "ed", "ex", "vi", "vim", "nvim", "nano", "emacs", "sponge", "split", "csplit", "mktemp", "mkfifo", "rename"], (pruefung, args) => pruefung.alle(args)),
+  ...zuordnen(["touch", "mkdir", "truncate", "tee", "ed", "ex", "vi", "vim", "nvim", "nano", "emacs", "sponge", "split", "csplit", "mktemp", "mkfifo", "rename"], (pruefung, args) => pruefung.alle(args)),
   ...zuordnen(["rm", "rmdir", "unlink", "mv", "chmod", "chown", "chgrp", "shred", "trash"], (pruefung, args) => pruefung.oberhalb(args)),
   ...zuordnen(["cp", "install", "ln", "rsync", "scp", "ditto"], (pruefung, args) => pruefung.zielLetzter(args)),
   ...zuordnen([...WRAPPER.keys()], (pruefung, args, name) => pruefung.wrapper(args, name)),
@@ -92,6 +98,7 @@ const PROGRAMM_PRUEFUNGEN = new Map([
   ["find", (pruefung, args) => pruefung.find(args)],
   ["xargs", (pruefung, args) => pruefung.xargs(args)],
   ["git", (pruefung, args) => pruefung.git(args)],
+  ["patch", (pruefung, args) => pruefung.patch(args)],
   ...zuordnen(["tar", "gtar", "bsdtar"], (pruefung, args) => pruefung.tar(mitStrich(args))),
   ["unzip", (pruefung, args) => pruefung.unzip(args)],
   ["zip", (pruefung, args) => pruefung.zip(args)],
@@ -119,6 +126,13 @@ function hatOption(args, kurz, ...lang) {
     if (wort.text.startsWith("--")) return lang.some((name) => wort.text === name || wort.text.startsWith(`${name}=`));
     return [...wort.text.slice(1)].some((buchstabe) => kurz.includes(buchstabe));
   });
+}
+
+function patchEingabe(wort, folgend) {
+  const { text } = wort;
+  if (PATCH_EINGABE_OPTION.test(text) || text === "--input") return [folgend ?? DYN_WORT];
+  if (text.startsWith("--input=")) return [{ ...wort, text: text.slice("--input=".length) }];
+  return PATCH_EINGABE_ANGEHAENGT.test(text) ? [{ ...wort, text: text.slice(SCHRITT_MIT_WERT) }] : [];
 }
 
 function optionWerte(args, kurz, lang) {
@@ -219,7 +233,7 @@ function findAusfuehrungen(ausdruck) {
 class SrcPruefung {
   constructor(input, roh) {
     const cwd = realPath(startDirectory(input));
-    Object.assign(this, { roh, cwd, orte: new Set([cwd]), ortUnklar: false, bedingt: false, tiefe: 0, treffer: new Map(), wissen: null });
+    Object.assign(this, { roh, cwd, orte: new Set([cwd]), ortUnklar: false, bedingt: false, umleitungen: [], tiefe: 0, treffer: new Map(), wissen: null });
   }
 
   get repo() {
@@ -367,11 +381,22 @@ class SrcPruefung {
     if (wort.dyn) return this.unsicher();
     return [...this.orte].some((ort) => {
       try {
-        return SRC_WORT.test(readFileSync(resolve(ort, wort.text), "utf8"));
+        const inhalt = readFileSync(resolve(ort, wort.text), "utf8");
+        return SRC_WORT.test(inhalt) || PATCH_KOPF_MASKIERT.test(inhalt);
       } catch {
         return true;
       }
     });
+  }
+
+  gitPatch(rest) {
+    if (hatOption(rest, "", ...GIT_NUR_LESEN) && !hatOption(rest, "", "--apply")) return false;
+    if (this.alle(rest)) return true;
+    return this.patchQuelle(operanden(rest));
+  }
+
+  imSrcOrt() {
+    return this.ortUnklar || [...this.orte].some((ort) => this.unterSrc(ort));
   }
 
   tar(args) {
@@ -397,11 +422,28 @@ class SrcPruefung {
     return !hatOption(args, "ctl", ...NUR_LESEN_ODER_STDOUT) && this.alle(args);
   }
 
-  gitPatch(rest) {
-    if (hatOption(rest, "", ...GIT_NUR_LESEN) && !hatOption(rest, "", "--apply")) return false;
-    if (this.alle(rest)) return true;
-    const dateien = operanden(rest);
-    return dateien.length === 0 ? this.unsicher() : dateien.some((wort) => this.patchEnthaeltSrc(wort));
+  patchQuelle(dateien) {
+    if (this.imSrcOrt()) return true;
+    const echte = dateien.filter((wort) => wort.dyn || wort.text !== "-");
+    const vonStdin = dateien.length === 0 || echte.length < dateien.length;
+    return echte.some((wort) => this.patchEnthaeltSrc(wort)) || (vonStdin && this.stdinPatch());
+  }
+
+  stdinPatch() {
+    const eingabe = this.umleitungen.findLast(({ op }) => LESEND.has(op));
+    if (eingabe === undefined) return true;
+    if (eingabe.op === "<" && eingabe.ziel !== null) return this.patchEnthaeltSrc(eingabe.ziel);
+    return eingabe.op !== "<&" && (SRC_WORT.test(this.roh) || PATCH_KOPF_MASKIERT.test(this.roh));
+  }
+
+  patch(args) {
+    if (this.alle(args)) return true;
+    if (hatOption(args, "", "--dry-run")) return false;
+    const eingabe = args.flatMap((wort, nummer) => (wort.dyn ? [] : patchEingabe(wort, args[nummer + 1])));
+    if (eingabe.length > 0) return this.patchQuelle(eingabe);
+    const ohneWerte = args.filter((wort, nummer) => nummer === 0 || wort.dyn || !PATCH_OPTION_MIT_WERT.has(args[nummer - 1].text));
+    const dateien = operanden(ohneWerte);
+    return this.patchQuelle(dateien.length > 1 ? dateien.slice(1) : []);
   }
 
   gitPfade(unter, rest) {
@@ -409,11 +451,29 @@ class SrcPruefung {
       || (unter === "rm" && hatOption(rest, "", "--cached"))
       || (unter === "clean" && hatOption(rest, "n", "--dry-run"));
     if (nurIndex) return false;
-    return (unter === "stash" ? operanden(rest).slice(1) : operanden(rest)).some((wort) => this.trifft(wort, true));
+    return operanden(rest).some((wort) => this.trifft(wort, true));
+  }
+
+  gitStash(rest) {
+    const [aktion] = operanden(rest);
+    if (aktion !== undefined && STASH_LESEND.has(aktion.text)) return false;
+    const ende = rest.findIndex((wort) => !wort.dyn && wort.text === "--");
+    if (ende === -1) return true;
+    const pfade = rest.slice(ende + 1);
+    return pfade.length === 0 || this.oberhalb(pfade);
+  }
+
+  gitCheckoutIndex(rest) {
+    const ziel = rest.find((wort) => !wort.dyn && wort.text.startsWith(PREFIX_OPTION));
+    if (ziel !== undefined) return this.trifft({ ...ziel, text: ziel.text.slice(PREFIX_OPTION.length) }, true);
+    return hatOption(rest, "a", "--all", "--stdin") || this.oberhalb(operanden(rest));
   }
 
   gitUnterbefehl(unter, rest) {
     if (GIT_PATCH.has(unter)) return this.gitPatch(rest);
+    if (unter === "stash") return this.gitStash(rest);
+    if (unter === "checkout-index") return this.gitCheckoutIndex(rest);
+    if (unter === "reset") return hatOption(rest, "", "--hard", "--merge", "--keep");
     return GIT_PFAD.has(unter) && this.gitPfade(unter, rest);
   }
 
@@ -461,6 +521,7 @@ class SrcPruefung {
 
   befehlFund({ woerter, umleitungen, bedingt }) {
     this.bedingt = bedingt;
+    this.umleitungen = umleitungen;
     const umleitung = umleitungen.find((eintrag) => this.umleitungSchreibt(eintrag));
     if (umleitung !== undefined) return `Umleitung ${umleitung.op} ${umleitung.ziel.text}`;
     return this.aufruf(woerter);
