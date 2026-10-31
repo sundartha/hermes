@@ -28,6 +28,15 @@ const LADE = "export async function lade(url) {\n  const antwort = await fetch(u
 const SAMMLE = "export function sammle(urls) {\n  return urls.map((url) => fetch(url));\n}";
 const SAMMLE_REPARIERT = "export function sammle(urls) {\n  return urls.map((url) => fetch(url, { signal: AbortSignal.timeout(5000) }));\n}";
 const SAMMLE_NEU = "export function laden(urls) {\n  return urls.map((url) => fetch(url));\n}";
+const DATEN = 'export const daten = await fetch("https://beispiel.test/daten");';
+const DATEN_REPARIERT = 'export const daten = await fetch("https://beispiel.test/daten", { signal: AbortSignal.timeout(5000) });';
+const DATEN_NEU = 'export const andere = await fetch("https://beispiel.test/daten");';
+const HOLER = 'export const holer = (url) => fetch(url);';
+const HOLER_REPARIERT = 'export const holer = (url) => fetch(url, { signal: AbortSignal.timeout(5000) });';
+const HOLER_NEU = 'export const lader = (url) => fetch(url);';
+const PING = 'await fetch("https://beispiel.test/ping");';
+const PING_REPARIERT = 'await fetch("https://beispiel.test/ping", { signal: AbortSignal.timeout(5000) });';
+const PING_NEU = 'await fetch("https://beispiel.test/ping").catch(() => null);';
 const WEITERGEREICHT = 'export { hole } from "./holen.js";';
 
 const HASH_HOLE = "1111111111111111";
@@ -228,6 +237,41 @@ test("verschachtelte Anfrage in wortgleich umgezogener Funktion: der Eintrag zie
   assert.equal(ergebnis.nachher.filter((text) => text.startsWith(`${NEU}|`)).length, 1);
   const pruefung = gate(ergebnis.repo);
   assert.equal(pruefung.status, EXIT_GRUEN, pruefung.ausgabe);
+});
+
+function neueStelleBleibtRot(context, { alt, repariert, neu }) {
+  return ausgelagert(context, { dazu: { [ALT]: datei(alt, BLEIBT) }, dateien: { [ALT]: datei(repariert, BLEIBT), [NEU]: datei(neu) } }).then((ergebnis) => bleibtRot(ergebnis, /src\/holen\.js/));
+}
+
+async function wortgleichUmgezogen(context, stelle) {
+  const ergebnis = await ausgelagert(context, { dazu: { [ALT]: datei(stelle, BLEIBT) }, dateien: { [ALT]: datei(WEITERGEREICHT, BLEIBT), [NEU]: datei(stelle) } });
+  assert.equal(ergebnis.nachher.filter((text) => text.startsWith(`${NEU}|`)).length, 1);
+  const pruefung = gate(ergebnis.repo);
+  assert.equal(pruefung.status, EXIT_GRUEN, pruefung.ausgabe);
+}
+
+test("Aufruf außerhalb jeder Funktion, wortgleich umgezogen: der Eintrag zieht um", async (context) => {
+  await wortgleichUmgezogen(context, DATEN);
+});
+
+test("Aufruf außerhalb jeder Funktion, andere Anweisung mit gleichem Aufruf: kein Umzug, die alte Stelle ist repariert", async (context) => {
+  await neueStelleBleibtRot(context, { alt: DATEN, repariert: DATEN_REPARIERT, neu: DATEN_NEU });
+});
+
+test("Pfeilfunktion in const-Zuweisung, wortgleich umgezogen: der Eintrag zieht um", async (context) => {
+  await wortgleichUmgezogen(context, HOLER);
+});
+
+test("Pfeilfunktion in const-Zuweisung, andere Zuweisung mit gleichem Aufruf: kein Umzug, die alte Stelle ist repariert", async (context) => {
+  await neueStelleBleibtRot(context, { alt: HOLER, repariert: HOLER_REPARIERT, neu: HOLER_NEU });
+});
+
+test("Aufruf als eigene Anweisung, wortgleich umgezogen: der Eintrag zieht um", async (context) => {
+  await wortgleichUmgezogen(context, PING);
+});
+
+test("Aufruf als eigene Anweisung, andere Anweisung mit gleichem Aufruf: kein Umzug, die alte Stelle ist repariert", async (context) => {
+  await neueStelleBleibtRot(context, { alt: PING, repariert: PING_REPARIERT, neu: PING_NEU });
 });
 
 const LISTE_SCHLUESSEL = (pfad, text) => befundSchluessel(pfad, text);
