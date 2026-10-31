@@ -1,38 +1,11 @@
-import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { env } from "node:process";
 
-import {
-  block,
-  git,
-  isInside,
-  readInput,
-  realPath,
-  repositoryRoot,
-  startDirectory,
-} from "./lib.mjs";
+import { block, isInside, readInput, realPath, startDirectory } from "./lib.mjs";
+import { bashSrcFund } from "./src-schutz-bash.mjs";
+import { AENDERUNG_HINWEIS, BUILD_ROLE, mainCheckout, productCodePath } from "./src-pfad.mjs";
 
 const WORKTREES_DIRECTORY = join(".claude", "worktrees");
-const PRODUCT_CODE = "src/";
-const BUILD_ROLE = "bau";
-
-function mainCheckout(directory) {
-  const common = git(directory, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  return common.ok ? dirname(common.text) : repositoryRoot(directory);
-}
-
-function existingDirectory(path) {
-  const parent = dirname(path);
-  return existsSync(parent) || parent === path ? parent : existingDirectory(parent);
-}
-
-function productCodePath(target, checkout) {
-  const directory = existingDirectory(target);
-  if (realPath(mainCheckout(directory)) !== checkout) return null;
-  const root = realPath(repositoryRoot(directory));
-  const path = relative(root, target).split(sep).join("/");
-  return path.toLowerCase().startsWith(PRODUCT_CODE) ? path : null;
-}
 
 function blockMainCheckout(path, target, checkout) {
   const insideMain = isInside(target, checkout);
@@ -49,12 +22,32 @@ function blockProductCode(target, checkout) {
   if (code === null || env.HERMES_ROLLE === BUILD_ROLE) return;
   block("hooks/src-nur-lauf", [
     `Schreibzugriff auf ${code} blockiert: Code unter src/ schreibt nur der Bau-Agent über lauf.`,
-    "Beginne mit dem Skill aenderung: erst Fragen, dann Einstufung, dann Pitch bzw. Dokumente, dann lauf.",
+    AENDERUNG_HINWEIS,
+  ]);
+}
+
+function bashFund(input, command) {
+  try {
+    return bashSrcFund(input, command);
+  } catch (error) {
+    return `Prüfung abgebrochen: ${error?.message ?? error}`;
+  }
+}
+
+function blockBashProductCode(input, command) {
+  if (env.HERMES_ROLLE === BUILD_ROLE) return;
+  const fund = bashFund(input, command);
+  if (fund === null) return;
+  block("hooks/src-nur-lauf", [
+    `Bash-Befehl blockiert (${fund}): Code unter src/ schreibt nur der Bau-Agent über lauf, auch per Shell.`,
+    AENDERUNG_HINWEIS,
   ]);
 }
 
 function main() {
   const input = readInput();
+  const command = input.tool_input?.command;
+  if (typeof command === "string") return blockBashProductCode(input, command);
   const path = input.tool_input?.file_path;
   if (typeof path !== "string") return;
   const directory = startDirectory(input);
