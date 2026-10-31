@@ -36,9 +36,6 @@ import BiText from "./site/BiText.astro";
 
 const { mcpUrl, mcpCmd, agentGuide, contact, legalDocs } = Astro.props;
 
-// U+2060 (Wortverbinder) hinter dem Bindestrich: "heads-up", "MCP-Server" usw.
-// brechen nicht um (Design-Schema 9).
-const WJ = String.fromCodePoint(0x2060);
 
 // Headlines stehen je Zeile getrennt: jede Zeile blendet einzeln von unscharf
 // nach scharf ein, die zweite ist kursiv und steht als Block darunter.
@@ -46,36 +43,124 @@ const T = {
   en: {
     login: "Log in",
     hero: ["Give your AI a ", "phone number."],
-    heroLead: "Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.",
+    heroLead: "Hermes answers calls and handles them for you — so your AI finally has a voice.",
     getNumber: "Get a number",
     howItWorks: "How it works",
-    how: ["One connection,", "two minutes."],
-    howLead: "One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.",
-    steps: [
-      { title: "Get a number", lines: ["A real phone number", "Active in two minutes", "No contract, no hardware"] },
-      { title: "Connect your AI", lines: ["One connection over MCP", "Claude, Codex or any MCP client", "Your AI knows who called"] },
-      { title: "Let it answer", lines: ["Talks and listens", "Books appointments", "Your 24/7 personal assistant"] },
+    usesLabel: "Use cases",
+    uses: "What Hermes does for you.",
+    usesLead: "Hermes answers when you can't, books appointments and makes calls for you. Afterwards you know exactly what was said.",
+    // Vier Szenen auf der Buehne (Screen 2), je ein kurzer Verlauf: wer
+    // spricht (them = Anrufer, you = du in Claude, hermes = Hermes), zum
+    // Schluss Benachrichtigung bzw. Ergebnis-Karte. Damit der Verlauf die
+    // Buehne bis dorthin fuellt, waehlt hermes-mobile.js je Schirm passende
+    // Zeilen: opt = darf entfallen (1 = am wichtigsten), alt = Fassungen
+    // derselben Zeile, von denen hoechstens eine steht (ohne opt: genau eine;
+    // die erste ist die kuerzeste und gilt ohne Skript). Kern bleibt immer,
+    // auch Hermes' Offenlegung in Szene 3. Die deutsche Fassung folgt
+    // Zeile fuer Zeile derselben Ordnung.
+    dots: ["Someone calls you", "Booking a slot", "Hermes calls for you", "In your dashboard"],
+    scenes: [
+      { tag: "1 · Someone calls you", title: "You're in a meeting. Anna calls.", msgs: [
+        { who: "ring", icon: "answer", text: "Incoming call · Anna · +49 176 ··· 908" },
+        { who: "note", text: "Hermes picks up for you.", opt: 3, alt: "pick" },
+        { who: "note", text: "You stay in your meeting — Hermes picks up and talks to Anna.", opt: 3, alt: "pick" },
+        { who: "them", name: "Anna", text: "Hi, is Jonas there?", alt: "hi" },
+        { who: "them", name: "Anna", text: "Hi, this is Anna from Berger & Co. Is Jonas there?", alt: "hi" },
+        { who: "hermes", text: "Hi Anna, Hermes here — Jonas' assistant. Can I take a message?" },
+        { who: "them", name: "Anna", text: "Tell him the contract is ready." },
+        { who: "them", text: "He can call me back after 4 pm.", opt: 2 },
+        { who: "hermes", text: "Got it — I'll tell him.", opt: 1, alt: "ok" },
+        { who: "hermes", text: "Got it — I'll let him know right away, Anna.", opt: 1, alt: "ok" },
+        { who: "note", text: "Seconds later, on your phone:", alt: "soon" },
+        { who: "note", text: "Seconds later, Hermes sends you the gist — right on your phone:", alt: "soon" },
+        { who: "notif", meta: "Hermes · now", text: "Anna called: the contract is ready." },
+      ] },
+      { tag: "2 · Booking an appointment", title: "Anna asks for a slot. Hermes checks.", msgs: [
+        { who: "them", name: "Anna", text: "Do you have time tomorrow?", alt: "ask" },
+        { who: "them", name: "Anna", text: "Could Jonas meet tomorrow? I'd need half an hour.", alt: "ask" },
+        { who: "note", text: "Hermes looks into your calendar…", alt: "look" },
+        { who: "note", text: "Hermes looks into your calendar — while Anna is still on the line…", alt: "look" },
+        { who: "cal", icon: "book", text: "Tomorrow, Wednesday", rows: [["09:00", "Team call", "busy"], ["11:30", "Lunch with Ben", "busy", 3], ["14:30", "Workshop", "busy"]] },
+        { who: "note", text: "…sees it's full and offers the next free slot", opt: 1 },
+        { who: "hermes", text: "Thursday, 14:30 instead?", alt: "offer" },
+        { who: "hermes", text: "Tomorrow's full — Thursday at 14:30 instead?", alt: "offer" },
+        { who: "them", name: "Anna", text: "Thursday works." },
+        { who: "hermes", text: "Great — you'll get a confirmation.", opt: 2, alt: "conf" },
+        { who: "hermes", text: "Great — I'll send you a confirmation by text right away.", opt: 2, alt: "conf" },
+        { who: "note", text: "Hermes puts it in your calendar:", opt: 3, alt: "put" },
+        { who: "note", text: "Hermes puts it straight into your calendar and lets you know:", opt: 3, alt: "put" },
+        { who: "notif", meta: "Hermes · now", text: "Booked: Thursday 14:30 with Anna." },
+      ] },
+      { tag: "3 · Hermes calls for you", title: "Let Hermes call the hairdresser.", msgs: [
+        { who: "you", name: "You, in Claude", text: "Book me a haircut at Salon Mia on Friday.", alt: "ask" },
+        { who: "you", name: "You, in Claude", text: "Book me a haircut at Salon Mia on Friday — ideally in the morning, please.", alt: "ask" },
+        { who: "tool", name: "Hermes", text: "Call Salon Mia · Friday · haircut", action: "Confirm", alt: "tool" },
+        { who: "tool", name: "Hermes", text: "Call Salon Mia · Friday morning · haircut · about 30 minutes", action: "Confirm", alt: "tool" },
+        { who: "note", text: "You confirm — only then Hermes dials", opt: 1, alt: "ok" },
+        { who: "note", text: "You tap Confirm — only then does Hermes dial. Nothing happens without your OK.", opt: 1, alt: "ok" },
+        { who: "ring", icon: "call", text: "Calling Salon Mia…" },
+        { who: "hermes", text: "Hi, I'm Hermes, Jonas' AI assistant — any slot on Friday?", alt: "ai" },
+        { who: "hermes", text: "Hi, I'm Hermes, an AI assistant calling for Jonas — any slot on Friday?", alt: "ai" },
+        { who: "them", name: "Salon Mia", text: "Friday at 10 is free.", opt: 2, alt: "mia" },
+        { who: "them", name: "Salon Mia", text: "Let me look… Friday at 10 is still free.", opt: 2, alt: "mia" },
+        { who: "note", text: "Minutes later, on your phone:", opt: 3, alt: "late" },
+        { who: "note", text: "A few minutes later, Hermes reports back with the result — on your phone:", opt: 3, alt: "late" },
+        { who: "notif", meta: "Hermes · now", text: "Booked: Friday 10:00 at Salon Mia." },
+      ] },
+      { tag: "4 · Your Hermes dashboard", title: "Everything lands in one place.", msgs: [
+        { who: "ring", icon: "dash", text: "Hermes dashboard · today" },
+        { who: "note", text: "Every call lands here, summarized.", opt: 2, alt: "all" },
+        { who: "note", text: "Every call Hermes takes or makes lands here — summarized in a few lines.", opt: 2, alt: "all" },
+        { who: "cal", icon: "dash", text: "Today · 3 calls", rows: [["10:42", "Anna: contract ready", "call"], ["10:58", "Anna: Thursday 14:30", "call"], ["11:20", "Salon Mia: haircut Fri", "call"]] },
+        { who: "hermes", text: "Anna called — the contract's ready.", opt: 2, alt: "a" },
+        { who: "hermes", text: "Anna called while you were in the meeting — the contract's ready.", opt: 2, alt: "a" },
+        { who: "hermes", text: "Anna booked Thursday 14:30.", opt: 2, alt: "b" },
+        { who: "hermes", text: "Anna booked Thursday 14:30 with you — confirmation sent.", opt: 2, alt: "b" },
+        { who: "hermes", text: "Salon Mia: Friday 10:00.", alt: "c" },
+        { who: "hermes", text: "Salon Mia: haircut booked for Friday 10:00.", alt: "c" },
+        { who: "note", text: "Tap any call for the summary.", opt: 1, alt: "tap" },
+        { who: "note", text: "Tap any call to read what was said and agreed.", opt: 1, alt: "tap" },
+        { who: "card", icon: "dash", text: "3 calls · all summarized" },
+      ] },
     ],
-    live: "Live",
-    connected: "Connected to your AI",
-    summary: "Summary ready",
     pricing: "Pricing",
-    price: ["Two plans,", "no surprises."],
-    priceLead: "Choose the plan that fits you. <strong>Cancel monthly, no hidden costs.</strong>",
+    priceTitle: "Two plans, no surprises.",
+    promise: ["Cancel monthly", "No hidden costs"],
+    // Je Tarif ein Satz in der Kachel: was Hermes in diesem Tarif tut
+    // (lib/plan-benefits.js: Starter nimmt an, Pro nimmt an und ruft an).
+    planLine: { starter: "Answers your calls", business: "Answers and calls for you" },
+    cardMinutes: "Minutes of calls per month",
+    cardStats: ["Number", "Calls out", "Support"],
+    cardYes: "Yes",
+    cardBrand: "Hermes · by Sundartha",
     perMonth: "/ month",
     minWord: "minutes",
     minRest: " of calls per month",
     popular: "Popular",
     // "{}" steht fuer den Tarifnamen: nur er rollt, der Rest bleibt stehen.
     choose: "Choose {}",
-    priceFoot: `Out of minutes? You get a heads-${WJ}up — never an automatic surcharge.`,
-    forDevs: "For developers",
-    dev: ["One endpoint,", "three ways."],
-    devLead: "Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.",
+    priceFoot: "Out of minutes? A heads-up, never a surcharge.",
+    forDevs: "Set up",
+    devTitle: "Ready in one minute.",
+    devAsk: "Give Hermes your first task.",
+    devResult: "Your 24/7 assistant — work off your hands.",
+    // Je Weg: was kopiert wird (title), drei Schritte mit Erklaerung.
     ways: [
-      { tab: "Connector", title: "Add it as a connector" },
-      { tab: "Terminal", title: "With a single command" },
-      { tab: "Your AI", title: "Just ask your AI" },
+      { tab: "Claude", title: "Your Hermes address", steps: [
+        ["Tap “Add to Claude”", "Hermes is already filled in."],
+        ["Confirm with “Add”", "Nothing to type, nothing to install."],
+        ["Sign in to Hermes once", "Done — Hermes works in Claude."],
+      ] },
+      { tab: "Terminal", title: "The command", steps: [
+        ["Copy the command", "One line for Claude Code."],
+        ["Paste it into your terminal", "Claude Code adds Hermes in seconds."],
+        ["Sign in once with /mcp", "Done — ready in Claude Code."],
+      ] },
+      { tab: "Any AI", title: "The sentence", steps: [
+        ["Copy the sentence", "It points your AI to our setup guide."],
+        ["Paste it into your AI chat", "Claude, Codex or any app with MCP."],
+        ["Your AI does the rest", "It follows the guide for you."],
+      ] },
     ],
     connect: "Add to Claude",
     connectHint: "Opens Claude with Hermes already filled in — just click “Add”.",
@@ -84,7 +169,6 @@ const T = {
     copy: "Copy",
     copyUrl: "Copy URL",
     copied: "Copied",
-    devFoot: "Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.",
     privacy: "Privacy",
     imprint: "Imprint",
     terms: "Terms",
@@ -95,35 +179,111 @@ const T = {
   de: {
     login: "Anmelden",
     hero: ["Gib deiner KI eine ", "Telefonnummer."],
-    heroLead: "Hermes nimmt Anrufe an und erledigt sie für dich. Ein Anschluss über <strong>MCP</strong> – und deine KI bekommt eine Stimme.",
+    heroLead: "Hermes nimmt Anrufe an und erledigt sie für dich – so bekommt deine KI endlich eine Stimme.",
     getNumber: "Nummer holen",
     howItWorks: "So funktioniert’s",
-    how: ["Ein Anschluss,", "zwei Minuten."],
-    howLead: "Ein Anschluss über <strong>MCP</strong>, keine Einrichtung – deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.",
-    steps: [
-      { title: "Nummer holen", lines: ["Eine echte Telefonnummer", "In zwei Minuten aktiv", "Kein Vertrag, keine Hardware"] },
-      { title: "KI verbinden", lines: ["Ein Anschluss über MCP", `Claude, Codex oder jeder MCP-${WJ}Client`, "Deine KI weiß, wer angerufen hat"] },
-      { title: "Abnehmen lassen", lines: ["Spricht und hört zu", "Bucht Termine", "Dein persönlicher Assistent, rund um die Uhr"] },
+    usesLabel: "Einsatzfälle",
+    uses: "Was Hermes für dich tut.",
+    usesLead: "Hermes geht ran, wenn du nicht kannst, bucht Termine und ruft für dich an. Danach weißt du genau, was besprochen wurde.",
+    dots: ["Jemand ruft dich an", "Termin vereinbaren", "Hermes ruft für dich an", "In deinem Dashboard"],
+    scenes: [
+      { tag: "1 · Jemand ruft dich an", title: "Du sitzt im Meeting. Anna ruft an.", msgs: [
+        { text: "Eingehender Anruf · Anna · +49 176 ··· 908" },
+        { text: "Hermes nimmt für dich ab." },
+        { text: "Du bleibst im Meeting – Hermes nimmt ab und spricht mit Anna." },
+        { name: "Anna", text: "Hallo, ist Jonas da?" },
+        { name: "Anna", text: "Hallo, hier ist Anna von Berger & Co. Ist Jonas da?" },
+        { text: "Hallo Anna, hier ist Hermes – Jonas’ Assistent. Kann ich etwas ausrichten?" },
+        { name: "Anna", text: "Sag ihm, der Vertrag ist fertig." },
+        { text: "Er kann mich ab 16 Uhr zurückrufen." },
+        { text: "Alles klar – ich sag’s ihm." },
+        { text: "Alles klar – ich sage es ihm gleich, Anna." },
+        { text: "Sekunden später, auf deinem Handy:" },
+        { text: "Sekunden später schickt Hermes dir das Wichtigste – direkt aufs Handy:" },
+        { meta: "Hermes · jetzt", text: "Anna: der Vertrag ist fertig." },
+      ] },
+      { tag: "2 · Termin vereinbaren", title: "Anna will einen Termin. Hermes prüft.", msgs: [
+        { name: "Anna", text: "Hast du morgen Zeit?" },
+        { name: "Anna", text: "Hätte Jonas morgen Zeit? Ich bräuchte eine halbe Stunde." },
+        { text: "Hermes schaut in deinen Kalender…" },
+        { text: "Hermes schaut in deinen Kalender – Anna ist noch am Telefon…" },
+        { text: "Morgen, Mittwoch", rows: [["09:00", "Team-Call"], ["11:30", "Mittagessen mit Ben"], ["14:30", "Workshop"]] },
+        { text: "…sieht: alles voll – und bietet den nächsten freien Termin an" },
+        { text: "Wie wär’s mit Do. 14:30?" },
+        { text: "Morgen ist alles voll – Donnerstag um 14:30?" },
+        { name: "Anna", text: "Donnerstag passt." },
+        { text: "Super – du bekommst eine Bestätigung." },
+        { text: "Super – ich schicke dir gleich eine Bestätigung per SMS." },
+        { text: "Hermes trägt es in deinen Kalender ein:" },
+        { text: "Hermes trägt es direkt in deinen Kalender ein und sagt dir Bescheid:" },
+        { meta: "Hermes · jetzt", text: "Gebucht: Donnerstag 14:30 mit Anna." },
+      ] },
+      { tag: "3 · Hermes ruft für dich an", title: "Lass Hermes beim Friseur anrufen.", msgs: [
+        { name: "Du, in Claude", text: "Buch mir Freitag einen Haarschnitt bei Salon Mia." },
+        { name: "Du, in Claude", text: "Buch mir Freitag einen Haarschnitt bei Salon Mia – am liebsten vormittags." },
+        { name: "Hermes", text: "Anruf · Salon Mia · Freitag", action: "Bestätigen" },
+        { name: "Hermes", text: "Salon Mia anrufen · Freitagvormittag · Haarschnitt · etwa 30 Minuten", action: "Bestätigen" },
+        { text: "Du bestätigst – erst dann wählt Hermes" },
+        { text: "Du tippst auf Bestätigen – erst dann wählt Hermes. Ohne dein OK passiert nichts." },
+        { text: "Rufe Salon Mia an…" },
+        { text: "Hallo, hier ist Hermes, Jonas’ KI-Assistent – ist Freitag frei?" },
+        { text: "Hallo, hier ist Hermes, ein KI-Assistent für Jonas – ist am Freitag etwas frei?" },
+        { name: "Salon Mia", text: "Freitag um 10 ist frei." },
+        { name: "Salon Mia", text: "Moment… Freitag um 10 ist noch frei." },
+        { text: "Minuten später, auf deinem Handy:" },
+        { text: "Ein paar Minuten später meldet sich Hermes mit dem Ergebnis – auf deinem Handy:" },
+        { meta: "Hermes · jetzt", text: "Gebucht: Freitag 10:00, Salon Mia." },
+      ] },
+      { tag: "4 · Dein Hermes-Dashboard", title: "Alles landet an einem Ort.", msgs: [
+        { text: "Hermes-Dashboard · heute" },
+        { text: "Jeder Anruf landet hier – zusammengefasst." },
+        { text: "Jeder Anruf, den Hermes annimmt oder führt, landet hier – in wenigen Zeilen zusammengefasst." },
+        { text: "Heute · 3 Anrufe", rows: [["10:42", "Anna: Vertrag fertig"], ["10:58", "Anna: Do 14:30"], ["11:20", "Salon Mia: Fr 10:00"]] },
+        { text: "Anna hat angerufen – der Vertrag ist fertig." },
+        { text: "Anna hat angerufen, als du im Meeting warst – der Vertrag ist fertig." },
+        { text: "Anna hat Donnerstag 14:30 gebucht." },
+        { text: "Anna hat Donnerstag 14:30 mit dir gebucht – Bestätigung ist raus." },
+        { text: "Salon Mia: Freitag 10:00." },
+        { text: "Salon Mia: Haarschnitt gebucht für Freitag 10:00." },
+        { text: "Tippe einen Anruf an für die Zusammenfassung." },
+        { text: "Tippe einen Anruf an und lies, was gesagt und vereinbart wurde." },
+        { text: "3 Anrufe · alle zusammengefasst" },
+      ] },
     ],
-    live: "Live",
-    connected: "Mit deiner KI verbunden",
-    summary: "Zusammenfassung bereit",
     pricing: "Preise",
-    price: ["Zwei Tarife,", "keine Überraschungen."],
-    priceLead: "Wähle den Tarif, der zu dir passt. <strong>Monatlich kündbar, keine versteckten Kosten.</strong>",
+    priceTitle: "Zwei Tarife, klare Preise.",
+    promise: ["Monatlich kündbar", "Keine versteckten Kosten"],
+    planLine: { starter: "Nimmt deine Anrufe an", business: "Nimmt an und ruft für dich an" },
+    cardMinutes: "Telefonie-Minuten pro Monat",
+    cardStats: ["Nummer", "Ruft an", "Support"],
+    cardYes: "Ja",
+    cardBrand: "Hermes · by Sundartha",
     perMonth: "/ Monat",
     minWord: "Minuten",
     minRest: " Telefonie pro Monat",
     popular: "Beliebt",
     choose: "{} wählen",
-    priceFoot: "Minuten aufgebraucht? Du bekommst Bescheid – nie einen automatischen Aufpreis.",
-    forDevs: "Für Entwickler",
-    dev: ["Ein Endpunkt,", "drei Wege."],
-    devLead: `Hermes ist ein <strong>MCP</strong>-${WJ}Server. Verbinde ihn im KI-${WJ}Tool deiner Wahl oder direkt im Terminal.`,
+    priceFoot: "Minuten alle? Bescheid statt Aufpreis.",
+    forDevs: "Einrichten",
+    devTitle: "In einer Minute startklar.",
+    devAsk: "Gib Hermes die erste Aufgabe.",
+    devResult: "Dein Assistent, 24/7 – nimmt dir Arbeit ab.",
     ways: [
-      { tab: "Connector", title: "Als Connector hinzufügen" },
-      { tab: "Terminal", title: "Mit einem einzigen Befehl" },
-      { tab: "Deine KI", title: "Frag einfach deine KI" },
+      { tab: "Claude", title: "Deine Hermes-Adresse", steps: [
+        ["Tippe auf „Mit Claude verbinden“", "Hermes ist schon eingetragen."],
+        ["Bestätige mit „Hinzufügen“", "Nichts tippen, nichts installieren."],
+        ["Einmal bei Hermes anmelden", "Fertig – Hermes arbeitet in Claude."],
+      ] },
+      { tab: "Terminal", title: "Der Befehl", steps: [
+        ["Kopiere den Befehl", "Eine Zeile für Claude Code."],
+        ["Füge ihn ins Terminal ein", "Hermes ist in Sekunden drin."],
+        ["Einmal anmelden mit /mcp", "Fertig – bereit in Claude Code."],
+      ] },
+      { tab: "Jede KI", title: "Der Satz", steps: [
+        ["Kopiere den Satz", "Er zeigt deiner KI die Anleitung."],
+        ["Füge ihn in deinen KI-Chat ein", "Claude, Codex oder jede App mit MCP."],
+        ["Deine KI macht den Rest", "Sie folgt der Anleitung."],
+      ] },
     ],
     connect: "Mit Claude verbinden",
     connectHint: "Öffnet Claude mit Hermes schon eingetragen – du klickst nur noch auf „Hinzufügen“.",
@@ -132,7 +292,6 @@ const T = {
     copy: "Kopieren",
     copyUrl: "URL kopieren",
     copied: "Kopiert",
-    devFoot: `Streamable HTTP, OAuth beim ersten Verbinden. Funktioniert mit Claude, Codex und jedem MCP-${WJ}Client.`,
     privacy: "Datenschutz",
     imprint: "Impressum",
     terms: "AGB",
@@ -149,7 +308,9 @@ const plans = PLAN_CATALOG.map((plan) => {
   const benefits = PLAN_BENEFITS[plan.slug];
   if (!benefits) throw new Error(`MobileHome: keine Leistungs-Copy fuer Tarif "${plan.slug}"`);
   return {
+    slug: plan.slug,
     name: plan.name,
+    numberCount: plan.numberCount,
     minutes: plan.includedMinutes,
     price: { en: formatPlanPrice(plan.amountCents, plan.currency, "en"), de: formatPlanPrice(plan.amountCents, plan.currency, "de") },
     benefits,
@@ -162,22 +323,27 @@ const plans = PLAN_CATALOG.map((plan) => {
     },
   };
 });
+// Kartendetails je Tarif: Anrufe nach aussen und Support-Art, wie in
+// lib/plans.js (features) und lib/plan-benefits.js beschrieben.
+const PLAN_CARD = {
+  starter: { out: false, support: { en: "Email", de: "E-Mail" } },
+  business: { out: true, support: { en: "Priority", de: "Priority" } },
+};
+const cardStats = (plan) => {
+  const card = PLAN_CARD[plan.slug];
+  if (!card) throw new Error(`MobileHome: keine Kartendetails fuer Tarif "${plan.slug}"`);
+  const yes = { en: T.en.cardYes, de: T.de.cardYes };
+  return [
+    { en: String(plan.numberCount), de: String(plan.numberCount) },
+    card.out ? yes : { en: "—", de: "—" },
+    card.support,
+  ];
+};
 // Start auf dem hervorgehobenen Tarif (Handoff: plan = 1, Pro).
 const featured = Math.max(0, PLAN_CATALOG.findIndex((plan) => plan.featured));
 const rel = (index, current) => (index === current ? "cur" : index < current ? "before" : "after");
 const [ctaPre, ctaSuf] = T.en.choose.split("{}");
 
-// Preis in Schaechte zerlegt: nur die Zeichen, die sich zwischen den Tarifen
-// unterscheiden, rollen (4 -> 9). Gleiche Algorithmik wie in hermes-mobile.js,
-// das die Schaechte beim Sprachwechsel neu baut.
-function priceSlots(list) {
-  if (!list.every((price) => price.length === list[0].length)) return null;
-  return [...list[0]].map((_, pos) => {
-    const chars = list.map((price) => price[pos]);
-    return chars.every((ch) => ch === chars[0]) ? { same: chars[0] } : { roll: chars };
-  });
-}
-const slotsEn = priceSlots(plans.map((plan) => plan.price.en));
 
 // Code-Feld je Weg: Zeilen aus farbigen Teilstuecken (lib/mobile-code.js). Getippt
 // wird per Skript, ohne Skript steht der volle Text. Kopiert wird immer der ganze
@@ -193,7 +359,22 @@ const ways = [
   },
 ];
 const SEGMENTS = 4;
-const WAVE_BARS = 9;
+// Ohne Skript steht nur der Kern einer Szene: optionale Zeilen entfallen, von
+// mehreren Fassungen derselben Zeile steht die erste (kuerzeste). Mit Skript
+// waehlt hermes-mobile.js (fitScenes) neu.
+const offByDefault = (msgs, mi) =>
+  msgs[mi].opt != null || (msgs[mi].alt != null && msgs.findIndex((msg) => msg.alt === msgs[mi].alt) !== mi);
+// Eine Szene als Satz fuer Screenreader: Ausgangslage, dann das Ergebnis (die
+// letzte Blase - Benachrichtigung bzw. Ergebnis-Karte).
+const sceneSr = (scene) => `${scene.title} ${scene.msgs[scene.msgs.length - 1].text}`;
+// Schlichte Linien-Icons (24px-Raster, currentColor), je ein Use Case.
+const USE_ICONS = {
+  answer: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z"/>',
+  dash: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/>',
+  brief: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  book: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/><path d="m9.5 15 2 2 3.5-4"/>',
+  call: '<path d="M14 4h6v6"/><path d="m20 4-7 7"/><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z" transform="translate(-1 0)"/>',
+};
 const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ kind: "cancel" }]), [{ kind: "contact" }, { kind: "cookies" }]];
 ---
 
@@ -235,126 +416,117 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
       </div>
     </section>
 
-    <!-- Screen 2: So funktioniert's -->
-    <section class="mh-screen mh-s-content mh-how" data-active="0" data-step="0" data-run="a" data-auto="1" aria-labelledby="mh-how-title">
-      <span class="mh-thread" aria-hidden="true"><i class="mh-drop"></i></span>
-      <p class="mh-label mh-r mh-d1" data-mh-de={T.de.howItWorks}>{T.en.howItWorks}</p>
-      <h2 class="mh-h2" id="mh-how-title">
-        <span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.how[0]}>{T.en.how[0]}</span>
-        <em class="mh-line mh-r mh-hl mh-d3" data-mh-de={T.de.how[1]}>{T.en.how[1]}</em>
-      </h2>
-      <p class="mh-lead mh-r mh-d4" data-mh-de={T.de.howLead} set:html={T.en.howLead}></p>
+    <section class="mh-screen mh-s-content mh-uses" data-active="0" aria-labelledby="mh-uses-title">
+      <p class="mh-label mh-r mh-d1" data-mh-de={T.de.usesLabel}>{T.en.usesLabel}</p>
+      <h2 class="mh-h2 mh-h2--uses" id="mh-uses-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.uses}>{T.en.uses}</span></h2>
+      <p class="mh-lead mh-lead--wide mh-r mh-d3" data-mh-de={T.de.usesLead}>{T.en.usesLead}</p>
 
-      <div class="mh-zone">
-        <div class="mh-focus mh-r mh-d5" aria-hidden="true">
-          <span class="mh-glow"></span>
-          <span class="mh-bloom"></span>
-          <!-- Ein Ring, der stehen bleibt; nur sein Inhalt wechselt je Schritt
-               (Design-Schema 6.2). Phasen setzt hermes-mobile.js als data-phase. -->
-          <div class="mh-viz" data-phase="0" data-done="0">
-            <span class="mh-ring">
-              <svg class="mh-ring__svg" viewBox="0 0 148 148"><circle class="mh-ring__bg" cx="74" cy="74" r="72"></circle></svg>
-              <svg class="mh-ring__svg mh-ring__spin" viewBox="0 0 148 148"><circle class="mh-ring__arc" cx="74" cy="74" r="72" pathLength="100" transform="rotate(-90 74 74)"></circle></svg>
-              <img class="mh-ring__wing" src="/assets/hermes-wing.png" alt="" />
-              <span class="mh-ring__wave">{Array.from({ length: WAVE_BARS }, () => <i></i>)}</span>
-              <svg class="mh-ring__svg" viewBox="0 0 148 148"><path class="mh-ring__check" d="M50.32 75.48 L66.6 91.76 L99.16 59.2" pathLength="100"></path></svg>
-            </span>
-            <span class="mh-viz__txt">
-              <span class="mh-viz__line">
-                <span class="mh-viz__typed" data-type-0="+49 176 44 12 908" data-type-1="app.sundartha.com/mcp"></span>
-                <span class="mh-sum"><span class="mh-sum__check">✓</span><span data-mh-de={T.de.summary}>{T.en.summary}</span></span>
-              </span>
-              <span class="mh-viz__status">
-                <span class="mh-status mh-status--0"><i class="mh-status__dot"></i><span data-mh-de={T.de.live}>{T.en.live}</span></span>
-                <span class="mh-status mh-status--1"><i class="mh-status__dot"></i><span data-mh-de={T.de.connected}>{T.en.connected}</span></span>
-              </span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div class="mh-controls mh-r mh-d6" data-mh-swipe>
-        <div class="mh-steps">
-          {T.en.steps.map((step, index) => (
-            <div class="mh-step" data-rel={rel(index, 0)}>
-              <h3 class="mh-h3" data-mh-de={T.de.steps[index].title}>{step.title}</h3>
-              <div class="mh-step__rows">
-                {step.lines.map((line, row) => (
-                  <p class="mh-step__row" data-mh-de={T.de.steps[index].lines[row]}>{line}</p>
-                ))}
-              </div>
+      <div class="mh-stage mh-r mh-d3" aria-hidden="true">
+        {T.en.scenes.map((scene, si) => (
+          <div class="mh-scene" data-scene={si}>
+            <span class="mh-scene__tag" data-mh-de={T.de.scenes[si].tag}>{scene.tag}</span>
+            <p class="mh-scene__title" data-mh-de={T.de.scenes[si].title}>{scene.title}</p>
+            <div class="mh-chat">
+              {scene.msgs.map((msg, mi) => (
+                <div class={`mh-msg mh-msg--${msg.who}`} data-opt={msg.opt} data-alt={msg.alt} data-off={offByDefault(scene.msgs, mi) ? "" : undefined}>
+                  {msg.name && <span class="mh-msg__name" data-mh-de={T.de.scenes[si].msgs[mi].name}>{msg.name}</span>}
+                  {msg.who === "hermes" && <img class="mh-msg__wing" src="/assets/hermes-wing.png" alt="" />}
+                  {msg.icon && <svg class="mh-msg__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={USE_ICONS[msg.icon]}></svg>}
+                  {msg.who === "ring" && <i class="mh-msg__dot" aria-hidden="true"></i>}
+                  {msg.who === "notif" && <span class="mh-notif__head"><img class="mh-notif__app" src="/assets/hermes-wing.png" alt="" /><span data-mh-de={T.de.scenes[si].msgs[mi].meta}>{msg.meta}</span></span>}
+                  <span class="mh-msg__text" data-mh-de={T.de.scenes[si].msgs[mi].text}>{msg.text}</span>
+                  {msg.rows && (
+                    <span class="mh-cal">
+                      {msg.rows.map((row, ri) => (
+                        <span class={`mh-cal__row mh-cal__row--${row[2]}`} data-opt={row[3]} data-off={row[3] ? "" : undefined}><span class="mh-cal__time">{row[0]}</span><span class="mh-cal__what" data-mh-de={T.de.scenes[si].msgs[mi].rows[ri][1]}>{row[1]}</span></span>
+                      ))}
+                    </span>
+                  )}
+                  {msg.action && <span class="mh-msg__action" data-mh-de={T.de.scenes[si].msgs[mi].action}>{msg.action}</span>}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div class="mh-bars">
-          {T.en.steps.map((step, index) => (
-            <button class="mh-bar" type="button" data-mh-step={index} data-state={index === 0 ? "cur" : "todo"} aria-label={step.title} data-mh-de-label={T.de.steps[index].title} aria-current={index === 0 ? "step" : undefined}>
-              <span class="mh-bar__track"><i class="mh-bar__done"></i><i class="mh-bar__fill"></i></span>
-            </button>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
+      <ul class="mh-sr">
+        {T.en.scenes.map((scene, si) => (
+          <li data-mh-de={sceneSr(T.de.scenes[si])}>{sceneSr(scene)}</li>
+        ))}
+      </ul>
+      <ol class="mh-dots mh-r mh-d6">
+        {["answer", "book", "call", "dash"].map((icon, k) => (
+          <li class="mh-dot" data-scene={k}>
+            <button class="mh-dot__btn" type="button" data-mh-scene={k}>
+              <span class="mh-sr" data-mh-de={T.de.dots[k]}>{T.en.dots[k]}</span>
+              <span class="mh-dot__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={USE_ICONS[icon]}></svg></span>
+              <i class="mh-dot__bar" aria-hidden="true"><b></b></i>
+            </button>
+          </li>
+        ))}
+      </ol>
     </section>
 
-    <!-- Screen 3: Preise -->
     <section class="mh-screen mh-s-content mh-price" data-active="0" data-plan={featured} aria-labelledby="mh-price-title">
-      <span class="mh-thread" aria-hidden="true"><i class="mh-drop"></i></span>
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.pricing}>{T.en.pricing}</p>
-      <h2 class="mh-h2" id="mh-price-title">
-        <span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.price[0]}>{T.en.price[0]}</span>
-        <em class="mh-line mh-r mh-hl mh-d3" data-mh-de={T.de.price[1]}>{T.en.price[1]}</em>
-      </h2>
-      <p class="mh-lead mh-r mh-d4" data-mh-de={T.de.priceLead} set:html={T.en.priceLead}></p>
+      <h2 class="mh-h2 mh-h2--uses" id="mh-price-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.priceTitle}>{T.en.priceTitle}</span></h2>
 
       <ul class="mh-sr">
         {plans.map((plan) => (
           <li data-mh-de={plan.srText.de}>{plan.srText.en}</li>
         ))}
       </ul>
-      <div class="mh-zone">
-        <div class="mh-focus mh-r mh-d5" aria-hidden="true">
-          <div class="mh-price-row">
-            <span class="mh-glow mh-glow--price"></span>
-            <span class="mh-price__num" data-prices-en={plans.map((plan) => plan.price.en).join("|")} data-prices-de={plans.map((plan) => plan.price.de).join("|")}>{slotsEn ? slotsEn.map((slot) => ("same" in slot ? <span>{slot.same}</span> : <span class="mh-roll">{slot.roll.map((ch, index) => <span data-rel={rel(index, featured)}>{ch}</span>)}</span>)) : <span>{plans[featured].price.en}</span>}</span>
-            <span class="mh-price__per" data-mh-de={T.de.perMonth}>{T.en.perMonth}</span>
-          </div>
-          <div class="mh-segs" aria-hidden="true">
-            {Array.from({ length: SEGMENTS }, () => <span class="mh-seg"><i></i></span>)}
-          </div>
-          <p class="mh-minutes" data-minutes={plans.map((plan) => plan.minutes).join("|")}><strong><span class="mh-count">{plans[featured].minutes}</span> <span data-mh-de={T.de.minWord}>{T.en.minWord}</span></strong><span data-mh-de={T.de.minRest}>{T.en.minRest}</span></p>
-          <div class="mh-benefits">
-            {[0, 1, 2].map((row) => (
-              <div class="mh-benefit-row">
-                {plans.map((plan, index) => (
-                  <p class="mh-benefit" data-rel={rel(index, featured)}><span data-mh-de={plan.benefits.de[row]} set:html={plan.benefits.en[row]}></span></p>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div class="mh-controls mh-r mh-d6">
-        <div class={`mh-toggle mh-toggle--${plans.length}`} role="tablist" data-sel={featured} aria-label={T.en.pricing}>
-          <span class="mh-toggle__thumb" aria-hidden="true"></span>
-          <span class={`mh-badge mh-badge--at-${featured}`} aria-hidden="true" data-mh-de={T.de.popular}>{T.en.popular}</span>
+      <div class="mh-plan mh-r mh-d3">
+        <div class="mh-focus mh-cards" aria-hidden="true" data-sel={featured}>
           {plans.map((plan, index) => (
-            <button class="mh-toggle__opt" type="button" role="tab" data-mh-plan={index} aria-selected={String(index === featured)}>{plan.name}</button>
+            <div class={`mh-card mh-card--${plan.slug}`} data-mh-plan={index} data-card={index}>
+              <img class="mh-card__wing" src="/assets/hermes-wing.png" alt="" />
+              <div class="mh-card__top">
+                <span class="mh-card__name">{plan.name}</span>
+                {index === featured && <span class="mh-card__badge" data-mh-de={T.de.popular}>{T.en.popular}</span>}
+              </div>
+              <p class="mh-card__line" data-mh-de={T.de.planLine[plan.slug]}>{T.en.planLine[plan.slug]}</p>
+              <p class="mh-card__price"><b data-mh-de={plan.price.de}>{plan.price.en}</b><small data-mh-de={T.de.perMonth}>{T.en.perMonth}</small></p>
+              <div class="mh-card__min">
+                <span class="mh-card__minrow"><span data-mh-de={T.de.cardMinutes}>{T.en.cardMinutes}</span><b>{plan.minutes}</b></span>
+                <span class="mh-segs">{Array.from({ length: SEGMENTS }, (_, j) => <span class={`mh-seg${j < Math.round((plan.minutes / Math.max(...plans.map((p) => p.minutes))) * SEGMENTS) ? " is-on" : ""}`}><i></i></span>)}</span>
+              </div>
+              <dl class="mh-card__stats">
+                {cardStats(plan).map((value, k) => (
+                  <div><dt data-mh-de={T.de.cardStats[k]}>{T.en.cardStats[k]}</dt><dd data-mh-de={value.de}>{value.en}</dd></div>
+                ))}
+              </dl>
+              <ul class="mh-card__list">
+                {plan.benefits.en.map((line, row) => (
+                  <li><svg class="mh-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg><span data-mh-de={plan.benefits.de[row]} set:html={line}></span></li>
+                ))}
+              </ul>
+              <span class="mh-card__brand" data-mh-de={T.de.cardBrand}>{T.en.cardBrand}</span>
+            </div>
           ))}
         </div>
-        <!-- "Choose ..." bleibt stehen, nur der Tarifname rollt (Design-Schema 6.3). -->
-        <a class="mh-pill mh-cta" href={LOGIN_URL} data-cta-en={T.en.choose} data-cta-de={T.de.choose}>
-          <span class="mh-cta__in">
-            <span class="mh-cta__pre">{ctaPre}</span>
-            <span class="mh-cta__roll">
-              {plans.map((plan, index) => (
-                <span class="mh-cta__name" data-rel={rel(index, featured)}>{plan.name}</span>
-              ))}
+        <div class="mh-plan-tabs" role="tablist" aria-label={T.en.pricing}>
+          {plans.map((plan, index) => (
+            <button class="mh-plan-tab" type="button" role="tab" data-mh-plan={index} aria-selected={String(index === featured)}>{plan.name}</button>
+          ))}
+        </div>
+        <div class="mh-plan__end">
+          <a class="mh-pill mh-cta" href={LOGIN_URL} data-cta-en={T.en.choose} data-cta-de={T.de.choose}>
+            <span class="mh-cta__in">
+              <span class="mh-cta__pre">{ctaPre}</span>
+              <span class="mh-cta__roll">
+                {plans.map((plan, index) => (
+                  <span class="mh-cta__name" data-rel={rel(index, featured)}>{plan.name}</span>
+                ))}
+              </span>
+              <span class="mh-cta__suf">{ctaSuf}</span>
             </span>
-            <span class="mh-cta__suf">{ctaSuf}</span>
-          </span>
-        </a>
-        <p class="mh-foot" data-mh-de={T.de.priceFoot}>{T.en.priceFoot}</p>
+          </a>
+          <div class="mh-plan__trust">
+            <p class="mh-promise">{T.en.promise.map((item, index) => <span data-mh-de={T.de.promise[index]}>{item}</span>)}</p>
+            <p class="mh-foot" data-mh-de={T.de.priceFoot}>{T.en.priceFoot}</p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -362,19 +534,28 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
     <section class="mh-screen mh-s-content mh-dev" data-active="0" data-way="0" data-copied="0" aria-labelledby="mh-dev-title">
       <span class="mh-thread" aria-hidden="true"><i class="mh-drop"></i></span>
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.forDevs}>{T.en.forDevs}</p>
-      <h2 class="mh-h2" id="mh-dev-title">
-        <span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.dev[0]}>{T.en.dev[0]}</span>
-        <em class="mh-line mh-r mh-hl mh-d3" data-mh-de={T.de.dev[1]}>{T.en.dev[1]}</em>
-      </h2>
-      <p class="mh-lead mh-r mh-d4" data-mh-de={T.de.devLead} set:html={T.en.devLead}></p>
+      <h2 class="mh-h2 mh-h2--uses" id="mh-dev-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.devTitle}>{T.en.devTitle}</span></h2>
 
-      <div class="mh-zone">
-        <div class="mh-focus mh-r mh-d5">
-          <span class="mh-glow mh-glow--dev" aria-hidden="true"></span>
+      <div class="mh-window mh-r mh-d3">
+        <div class="mh-toggle mh-toggle--3" role="tablist" data-sel="0" aria-label={T.en.forDevs}>
+          <span class="mh-toggle__thumb" aria-hidden="true"></span>
+          {T.en.ways.map((way, index) => (
+            <button class="mh-toggle__opt" type="button" role="tab" data-mh-way={index} aria-selected={String(index === 0)} data-mh-de={T.de.ways[index].tab}>{way.tab}</button>
+          ))}
+        </div>
+        <div class="mh-focus">
+          <button class="mh-copy" type="button" data-mh-copy aria-live="polite" data-copy-label-en={T.en.copy} data-copy-label-de={T.de.copy} data-copy-url-label-en={T.en.copyUrl} data-copy-url-label-de={T.de.copyUrl} data-copied-en={T.en.copied} data-copied-de={T.de.copied}>
+            <span class="mh-copy__roll" aria-hidden="true">
+              <span class="mh-copy__label" data-mh-de={T.de.copy}>{T.en.copy}</span>
+              <span class="mh-copy__label mh-copy__label--url" data-mh-de={T.de.copyUrl}>{T.en.copyUrl}</span>
+              <span class="mh-copy__label mh-copy__label--done" data-mh-de={`✓  ${T.de.copied}`}>{`✓  ${T.en.copied}`}</span>
+            </span>
+            <span class="mh-sr" data-mh-copy-sr>{T.en.copy}</span>
+          </button>
           <div class="mh-ways">
             {ways.map((way, index) => (
               <div class="mh-way" data-rel={rel(index, 0)} data-copy-en={way.copy.en} data-copy-de={way.copy.de}>
-                <h3 class="mh-h3" data-mh-de={T.de.ways[index].title}>{T.en.ways[index].title}</h3>
+                <h3 class="mh-way__label" data-mh-de={T.de.ways[index].title}>{T.en.ways[index].title}</h3>
                 <div class={`mh-code${way.mono ? "" : " mh-code--text"}`}>
                   {way.lines.map((line) => (
                     <span class="mh-code__line">
@@ -386,6 +567,15 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
                     </span>
                   ))}
                 </div>
+                <ol class="mh-steps">
+                  {T.en.ways[index].steps.map((step, k) => (
+                    <li><b>{k + 1}</b><span><strong data-mh-de={T.de.ways[index].steps[k][0]}>{step[0]}</strong><small data-mh-de={T.de.ways[index].steps[k][1]}>{step[1]}</small></span></li>
+                  ))}
+                </ol>
+                <div class="mh-gain">
+                  <p class="mh-gain__ask" data-mh-de={T.de.devAsk}>{T.en.devAsk}</p>
+                  <p class="mh-gain__result" data-mh-de={T.de.devResult}>{T.en.devResult}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -393,12 +583,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
       </div>
 
       <div class="mh-controls mh-r mh-d6">
-        <div class="mh-toggle mh-toggle--3" role="tablist" data-sel="0" aria-label={T.en.forDevs}>
-          <span class="mh-toggle__thumb" aria-hidden="true"></span>
-          {T.en.ways.map((way, index) => (
-            <button class="mh-toggle__opt" type="button" role="tab" data-mh-way={index} aria-selected={String(index === 0)} data-mh-de={T.de.ways[index].tab}>{way.tab}</button>
-          ))}
-        </div>
         <!-- Nur beim Weg "Connector" (data-way="0", CSS): echter Link in Claudes
              Connector-Dialog, Name und URL schon eingetragen. "Copy" bleibt der Weg
              fuer ChatGPT und andere Clients und wird dort zur zweiten Aktion. -->
@@ -407,25 +591,16 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
           <p class="mh-connect__hint" data-mh-de={T.de.connectHint}>{T.en.connectHint}</p>
           <a class="mh-connect__admin" href={CLAUDE_ADMIN_CONNECT_URL} target="_blank" rel="noopener noreferrer"><span data-mh-de={T.de.connectAdmin}>{T.en.connectAdmin}</span><span class="mh-sr" data-mh-de={T.de.newTab}>{T.en.newTab}</span></a>
         </div>
-        <button class="mh-pill mh-copy" type="button" data-mh-copy aria-live="polite" data-copy-label-en={T.en.copy} data-copy-label-de={T.de.copy} data-copy-url-label-en={T.en.copyUrl} data-copy-url-label-de={T.de.copyUrl} data-copied-en={T.en.copied} data-copied-de={T.de.copied}>
-          <span class="mh-copy__roll" aria-hidden="true">
-            <span class="mh-copy__label" data-mh-de={T.de.copy}>{T.en.copy}</span>
-            <span class="mh-copy__label mh-copy__label--url" data-mh-de={T.de.copyUrl}>{T.en.copyUrl}</span>
-            <span class="mh-copy__label mh-copy__label--done" data-mh-de={`✓  ${T.de.copied}`}>{`✓  ${T.en.copied}`}</span>
-          </span>
-          <span class="mh-sr" data-mh-copy-sr>{T.en.copy}</span>
-        </button>
-        <p class="mh-foot" data-mh-de={T.de.devFoot}>{T.en.devFoot}</p>
       </div>
     </section>
 
     <!-- Screen 5: Abschluss -->
     <section class="mh-screen mh-s-close" data-active="0" aria-labelledby="mh-close-title">
-      <span class="mh-rise mh-r mh-d0" aria-hidden="true"><i class="mh-drop mh-drop--rise"></i></span>
       <h2 class="mh-h2 mh-h2--close" id="mh-close-title">
         <span class="mh-line mh-r mh-hl mh-d1" data-mh-de={T.de.hero[0]}>{T.en.hero[0]}</span>
         <em class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.hero[1]}>{T.en.hero[1]}</em>
       </h2>
+      <p class="mh-lead mh-lead--hero mh-r mh-d3" data-mh-de={T.de.heroLead} set:html={T.en.heroLead}></p>
       <a class="mh-pill mh-r mh-d3" href={LOGIN_URL} data-mh-de={T.de.getNumber}>{T.en.getNumber}</a>
       <footer class="mh-footer mh-r mh-d4">
         <nav class="mh-links" aria-label="Legal">

@@ -39,7 +39,7 @@
 
 /* Dieselbe Abfrage wie in hermes-mobile.css. Der Wert muss --mh-bottom
    gleichen (test/mobile-viewport.test.js haelt das fest). */
-@media (max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))) {
+@media (max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait), (min-width: 768px) and (min-height: 600px) {
   html:has(.mh),
   html:has(.mh) body {
     background-color: #071833;

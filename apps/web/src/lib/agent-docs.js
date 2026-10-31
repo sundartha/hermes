@@ -83,7 +83,7 @@ function installSection() {
 export function buildHomeMarkdown({ loginUrl }) {
   return `# Hermes by Sundartha: give your AI a phone number
 
-> Hermes answers calls and handles them for you. One connection over MCP, and your AI gets a voice.
+> Hermes answers calls and handles them for you, so your AI finally has a voice.
 
 This is the Markdown version of ${SITE_URL}/ for AI agents. The page itself switches between English and German.
 
