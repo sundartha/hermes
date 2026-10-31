@@ -131,6 +131,8 @@ test(
         const texml = await incomingAntwort(srv, "CAvorauflegenlang", PROVIDER_WEBHOOK_HARDCUT_MS);
         assert.ok(Date.now() - beginn < PROVIDER_WEBHOOK_HARDCUT_MS, "die Antwort wartet nicht ueber die Webhook-Frist hinaus");
         pruefeSayDannHangup(texml);
+        assert.match(srv.stdout, /Satz vor dem Auflegen unvollstaendig oder zu spaet/);
+        assert.ok(!srv.stdout.includes("Synthese geworfen"), "zu spaet ist kein Wurf");
       },
     );
   },
