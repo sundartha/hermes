@@ -38,6 +38,8 @@ const PR_BRANCH = "pr";
 const QUEUE_BRANCH = "zusammenfuehrung";
 const UNKNOWN_BASIS = "0123456789abcdef0123456789abcdef01234567";
 const ORPHAN_BRANCH = "waise";
+const SIDE_BRANCH = "nebenzweig";
+const MASTER_REF = "refs/remotes/origin/master";
 const NO_BRANCH_POINT = /Abzweigstelle[^\n]*nicht bestimmbar/;
 
 function testFile(cases) {
@@ -407,6 +409,7 @@ function masterMovedOn(context) {
   git(repo.directory, ["switch", "-q", trunk]);
   changeNameExpectation(repo.directory);
   const masterTip = git(repo.directory, ["rev-parse", "HEAD"]);
+  git(repo.directory, ["update-ref", MASTER_REF, masterTip]);
   git(repo.directory, ["switch", "-q", PR_BRANCH]);
   return { ...repo, trunk, masterTip, branchPoint: repo.basis };
 }
@@ -484,4 +487,22 @@ test("tests-nur-ergaenzt: eine Basis ohne gemeinsame Geschichte stoppt mit Meldu
   const result = await check({ ...repo, basis }, linkedIssue({ names: [SUM_TEST] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, NO_BRANCH_POINT);
+});
+
+test("tests-nur-ergaenzt: ein Merge aus PR-Zweig und Nebenzweig verdeckt die Teständerung im PR-Zweig nicht", async (context) => {
+  const repo = probe(context);
+  git(repo.directory, ["update-ref", MASTER_REF, repo.basis]);
+  git(repo.directory, ["switch", "-q", "-c", PR_BRANCH]);
+  changeSumExpectation(repo.directory);
+  git(repo.directory, ["switch", "-q", "-c", SIDE_BRANCH, repo.basis]);
+  writeFileSync(
+    join(repo.directory, "test/neben.test.js"),
+    testFile([["ist daneben", "assert.ok(true);"]]),
+  );
+  commitAll(repo.directory, "Lege einen Nebenzweig an");
+  git(repo.directory, ["switch", "-q", PR_BRANCH]);
+  mergeBranch(repo.directory, SIDE_BRANCH);
+  const result = await check(repo, linkedIssue({ names: [NAME_TEST] }));
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /Testfall „rechnet eins plus eins“/);
 });

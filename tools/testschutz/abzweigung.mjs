@@ -2,10 +2,15 @@ import { gitGelingt } from "../tests-ausmisten/pfade.mjs";
 import { git } from "./aenderungen.mjs";
 
 const ELTERN_EINES_MERGES = 2;
+const MASTER_REFS = ["upstream/master", "origin/master"];
 
 function ersterElternteil(stand) {
   const [, ...eltern] = git(["rev-list", "--parents", "-n", "1", stand]).trim().split(" ");
   return eltern.length === ELTERN_EINES_MERGES ? eltern[0] : undefined;
+}
+
+function istMasterStand(stand) {
+  return MASTER_REFS.some((ref) => gitGelingt(["merge-base", "--is-ancestor", stand, ref]));
 }
 
 function gemeinsamerVorfahr(basis) {
@@ -19,7 +24,9 @@ export function abzweigstelle(basis) {
     const stelle = gemeinsamerVorfahr(basis);
     const elternteil = ersterElternteil("HEAD");
     const mergeAufNeuererBasis =
-      elternteil !== undefined && gitGelingt(["merge-base", "--is-ancestor", basis, elternteil]);
+      elternteil !== undefined &&
+      gitGelingt(["merge-base", "--is-ancestor", basis, elternteil]) &&
+      istMasterStand(elternteil);
     return mergeAufNeuererBasis ? elternteil : stelle;
   } catch (fehler) {
     throw new Error(
