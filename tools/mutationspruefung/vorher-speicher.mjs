@@ -4,6 +4,7 @@ import { arch, pid, platform, version } from "node:process";
 import { dirname, join } from "node:path";
 
 import { gemeinsamerOrdner, git } from "../auftrag/git.mjs";
+import { aenderungsReichweite } from "../auftrag/reichweite.mjs";
 
 const ABLAGE = join("hermes", "testumbau-vorher");
 export const SCHLUESSEL_ANZEIGE = 12;
@@ -47,6 +48,7 @@ export function vorherSchluessel(basis, geaendert, root) {
   const teile = {
     basis: git(["rev-parse", `${basis}:`], { cwd: root }).trim(),
     geaendert: [...geaendert].sort(),
+    reichweite: aenderungsReichweite(basis, geaendert, root),
     ...stand,
   };
   return createHash("sha256").update(JSON.stringify(teile)).digest("hex");

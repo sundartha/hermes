@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -9,6 +9,7 @@ import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
 import { laufe } from "./faelle.mjs";
 import { istTestdatei } from "./format.mjs";
 import { NUL, git, legeWorktreeAn } from "./git.mjs";
+import { aenderungsReichweite, direkteImporteure, nenntDatei, testsInReichweite } from "./reichweite.mjs";
 
 export const ENTFERNT = "Entfernt: ";
 const KEIN_TREFFER = 1;
@@ -27,16 +28,32 @@ function erwaehnende(pfad, wurzel) {
   return lauf.stdout.split(NUL).filter((datei) => TEST_FILE.test(datei));
 }
 
-export async function testsJeDatei(geaendert, wurzel) {
-  const graph = await dependentsGraph(wurzel);
+function erreichteTests(pfad, { graph, wurzel, reichweite }) {
+  const eintrag = reichweite[pfad];
+  if (eintrag === undefined || eintrag.alle || TEST_FILE.test(pfad)) return [pfad, ...testsReaching(pfad, graph), ...erwaehnende(pfad, wurzel)];
+  const direkte = new Set(direkteImporteure(graph, pfad));
+  const genannt = erwaehnende(pfad, wurzel).filter((test) => !direkte.has(test) && nenntDatei(readFileSync(join(wurzel, test), "utf8"), pfad));
+  return [...testsInReichweite(pfad, eintrag, { graph, wurzel }), ...genannt];
+}
+
+function jeDatei(geaendert, kontext) {
   return new Map(geaendert.map((pfad) => {
-    const erreicht = [pfad, ...testsReaching(pfad, graph), ...erwaehnende(pfad, wurzel)];
-    return [pfad, [...new Set(erreicht)].filter((test) => TEST_FILE.test(test) && existsSync(join(wurzel, test))).sort()];
+    const erreicht = erreichteTests(pfad, kontext);
+    return [pfad, [...new Set(erreicht)].filter((test) => TEST_FILE.test(test) && existsSync(join(kontext.wurzel, test))).sort()];
   }));
 }
 
-export async function betroffeneTests(geaendert, wurzel) {
-  return vereint(await testsJeDatei(geaendert, wurzel));
+export async function testsJeDatei(geaendert, wurzel, reichweite = {}) {
+  return jeDatei(geaendert, { graph: await dependentsGraph(wurzel), wurzel, reichweite });
+}
+
+async function genauUndBreit(geaendert, wurzel, reichweite) {
+  const graph = await dependentsGraph(wurzel);
+  return { genau: jeDatei(geaendert, { graph, wurzel, reichweite }), breit: jeDatei(geaendert, { graph, wurzel, reichweite: {} }) };
+}
+
+export async function betroffeneTests(geaendert, wurzel, reichweite = {}) {
+  return vereint(await testsJeDatei(geaendert, wurzel, reichweite));
 }
 
 export async function imAltenStand(basis, root, arbeit) {
@@ -89,15 +106,16 @@ function vereint(jeDatei) {
 
 export async function testumbauFaelle({ basis, root }) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, root);
+  const reichweite = aenderungsReichweite(basis, geaendert, root);
   const alt = await imAltenStand(basis, root, async (ordner) => {
-    const jeDatei = await testsJeDatei(geaendert, ordner);
-    return { jeDatei, stand: messe(vereint(jeDatei), ordner) };
+    const { genau, breit } = await genauUndBreit(geaendert, ordner, reichweite);
+    return { breit, stand: messe(vereint(genau), ordner) };
   });
-  const jeDatei = await testsJeDatei(geaendert, root);
+  const { genau: jeDatei, breit } = await genauUndBreit(geaendert, root, reichweite);
   const vorher = alt.stand;
   const nachher = messe(vereint(jeDatei), root);
   const alle = [...new Set([...vorher.keys(), ...nachher.keys()])];
-  const befunde = [...ohneWirkung(geaendert, alt.jeDatei, jeDatei), ...rotBefunde(vorher, "vor"), ...rotBefunde(nachher, "nach")];
+  const befunde = [...ohneWirkung(geaendert, alt.breit, breit), ...rotBefunde(vorher, "vor"), ...rotBefunde(nachher, "nach")];
   const entfernt = entfernteFaelle(vorher, nachher);
   for (const befund of befunde) console.log(`Verstoß: ${befund}`);
   for (const { datei, name } of entfernt) console.log(`${ENTFERNT}${datei}: ${name}`);
