@@ -319,8 +319,8 @@ function bleibtAnDerStelle(alt, anweisung) {
   return istImport(alt) ? istKuerzung(alt, anweisung) : gleicherBaum(alt, anweisung);
 }
 
-function ladeanweisungenDerHilfe(vorher, nachher, neue) {
-  const alte = ladeanweisungen(vorher, []);
+function ladeanweisungenDerHilfe(vorher, nachher, { neue, bisherige = [] }) {
+  const alte = ladeanweisungen(vorher, bisherige);
   const behalten = ladeanweisungen(nachher, neue);
   return behalten.length === alte.length && behalten.every((anweisung, stelle) => bleibtAnDerStelle(alte[stelle], anweisung));
 }
@@ -384,17 +384,16 @@ function gleicheExporte(vorher, nachher, neue) {
   return isDeepStrictEqual(exportNamen(vorher.pfad, vorher.baum), exportNamen(nachher.pfad, nachher.baum, exporteDerNeuen));
 }
 
-function gestrichenWirdVonNeuenGelesen(vorher, nachher, neue) {
+function gestrichenWirdVonNeuenGelesen(vorher, nachher, gelesen) {
   const bleibt = new Set(bindungen(nachher.pfad, nachher.baum));
   const gestrichen = bindungen(vorher.pfad, vorher.baum).filter((bindung) => !bleibt.has(bindung));
-  const gelesen = neue.map((datei) => geltungsbereich(datei).gelesen);
   const ohneAlias = ([, art, importiert, lokal]) => art === "ImportSpecifier" && importiert === lokal;
   return gestrichen.map((bindung) => JSON.parse(bindung)).every((teile) => ohneAlias(teile) && gelesen.some((namen) => namen.has(teile.at(-1))));
 }
 
 function gleicherGraph(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
-  const importe = ladeanweisungenDerHilfe(vorher, nachher, neuePfade) && neueHinterDenLadeanweisungen(nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue);
+  const importe = ladeanweisungenDerHilfe(vorher, nachher, { neue: neuePfade }) && neueHinterDenLadeanweisungen(nachher, neuePfade) && gestrichenWirdVonNeuenGelesen(vorher, nachher, neue.map((datei) => geltungsbereich(datei).gelesen));
   return neue.every((datei) => importeAusVorher(vorher, datei)) && importe && laedtAlleNeuen(nachher, neuePfade);
 }
 
@@ -413,14 +412,155 @@ function importZiele({ pfad, baum }) {
   return importeVon(baum).map(({ source }) => ({ ziel: zielDer(pfad, source.value), quelle: source.value }));
 }
 
-export async function auslagerungAus({ hilfe, neue, vorher, lesen }, { root, weiterreichen = false }) {
+function textVon({ text }, anweisung) {
+  return text.slice(...anweisung.range);
+}
+
+function rumpfText({ text }, anweisungen) {
+  return anweisungen.length === 0 ? "" : text.slice(anweisungen[0].range[0], anweisungen.at(-1).range[1]);
+}
+
+function nichtImporte({ baum }) {
+  return baum.body.filter((anweisung) => !istImport(anweisung));
+}
+
+function hinzugekommeneImporte(alt, neu) {
+  const alte = importeVon(alt.baum).map((anweisung) => textVon(alt, anweisung));
+  const hinzu = [];
+  let zeiger = 0;
+  for (const anweisung of importeVon(neu.baum)) {
+    if (textVon(neu, anweisung) === alte[zeiger]) zeiger += 1;
+    else hinzu.push(anweisung);
+  }
+  return zeiger === alte.length ? hinzu : null;
+}
+
+function importImAnhang(neu, anhang) {
+  const [anfang, ende] = [anhang[0].range[0], anhang.at(-1).range[1]];
+  return importeVon(neu.baum).some(({ range }) => range[0] > anfang && range[0] < ende);
+}
+
+function angehaengt(alt, neu) {
+  const [vorherig, jetzt] = [nichtImporte(alt), nichtImporte(neu)];
+  const importe = hinzugekommeneImporte(alt, neu);
+  const anhang = jetzt.slice(vorherig.length);
+  const altUnveraendert = anhang.length > 0 && rumpfText(alt, vorherig) === rumpfText(neu, jetzt.slice(0, vorherig.length));
+  const ohneStern = !alt.baum.body.some(({ type }) => type === "ExportAllDeclaration");
+  const passt = importe !== null && ohneStern && altUnveraendert && !importImAnhang(neu, anhang);
+  return passt ? { anhang, importe, text: rumpfText(neu, anhang) } : null;
+}
+
+function bindungNachName(datei) {
+  return new Map(bindungen(datei.pfad, datei.baum).map((bindung) => [JSON.parse(bindung).at(-1), bindung]));
+}
+
+function liestWieVorher({ quelleAlt, zielAlt }, ausschnitt, hinzu) {
+  const [ausQuelle, ausZiel] = [bindungNachName(quelleAlt), bindungNachName(zielAlt)];
+  const [quelle, ziel] = [geltungsbereich(quelleAlt), geltungsbereich(zielAlt)];
+  const ausDemZiel = (name) => JSON.stringify([zielAlt.pfad, "ImportSpecifier", name, name]);
+  const gleichGebunden = (name) => (ausZiel.has(name) ? ausZiel.get(name) === ausQuelle.get(name) : ausQuelle.get(name) === ausDemZiel(name));
+  return [...ausschnitt.frei].every((name) => (ziel.namen.has(name) ? gleichGebunden(name) : hinzu.has(name) || !quelle.namen.has(name)));
+}
+
+function verdecktNichts({ zielAlt }, ausschnitt, hinzu) {
+  const frei = geltungsbereich(zielAlt).frei;
+  return ![...ausschnitt.namen, ...hinzu].some((name) => frei.has(name));
+}
+
+function relativeLadeziele({ pfad, baum }) {
+  return baum.body.filter((anweisung) => istQuelle(anweisung) && RELATIVE_QUELLE.test(anweisung.source.value)).map((anweisung) => zielDer(pfad, anweisung.source.value));
+}
+
+async function geladeneDatei(pfad, { lesen, root, eslint }) {
+  try {
+    const baum = await baumIm(lesen(pfad), join(root, pfad), eslint);
+    return baum === undefined ? undefined : { pfad, baum };
+  } catch {
+    return undefined;
+  }
+}
+
+async function fuehrtNichtZurueck(ziel, quelle, stand) {
+  const offen = [ziel];
+  const gesehen = new Set([ziel.pfad]);
+  while (offen.length > 0) {
+    for (const pfad of relativeLadeziele(offen.pop())) {
+      if (pfad === quelle) return false;
+      if (gesehen.has(pfad) || !CODEDATEI.test(pfad)) continue;
+      gesehen.add(pfad);
+      const datei = await geladeneDatei(pfad, stand);
+      if (datei === undefined) return false;
+      offen.push(datei);
+    }
+  }
+  return true;
+}
+
+function ersterRang({ pfad, baum }, ziel) {
+  let andere = 0;
+  for (const anweisung of baum.body.filter(istQuelle)) {
+    if (holtAusNeuer(pfad, anweisung, [ziel])) return andere;
+    andere += 1;
+  }
+  return null;
+}
+
+function zielWirdAnDerStelleGeladen(vorher, nachher, ziel) {
+  const [alt, neu] = [ersterRang(vorher, ziel), ersterRang(nachher, ziel)];
+  return alt === null ? neu === ladeanweisungen(nachher, [ziel]).length : alt === neu;
+}
+
+function anweisungenWandern({ quelleAlt, quelleNeu, zielNeu }, anhang) {
+  const bleibt = nichtImporte(quelleNeu).filter((anweisung) => !istWeiterreichung(quelleNeu.pfad, anweisung, [zielNeu.pfad]));
+  const verschoben = verteilt(nichtImporte(quelleAlt), [bleibt, anhang.anhang]);
+  const wirkungslos = ohneWirkungBeimLaden(anhang.anhang) && ortsfest({ type: "Program", body: anhang.anhang });
+  return verschoben && wirkungslos && jedeNeueWeitergereicht(quelleNeu, [zielNeu]);
+}
+
+function ladereihenfolgeGleich({ quelleAlt, quelleNeu, zielNeu }, ausschnitt) {
+  const ziel = [zielNeu.pfad];
+  const geladen = ladeanweisungenDerHilfe(quelleAlt, quelleNeu, { neue: ziel, bisherige: ziel }) && zielWirdAnDerStelleGeladen(quelleAlt, quelleNeu, zielNeu.pfad);
+  return geladen && gestrichenWirdVonNeuenGelesen(quelleAlt, quelleNeu, [ausschnitt.frei]);
+}
+
+function namenBleibenGleich(dateien, anhang) {
+  const ausschnitt = geltungsbereich({ pfad: dateien.zielNeu.pfad, text: anhang.text });
+  const hinzu = new Set(anhang.importe.flatMap(({ specifiers }) => specifiers.map(({ local }) => local.name)));
+  const importe = importeAusVorher(dateien.quelleAlt, { pfad: dateien.zielNeu.pfad, baum: { body: anhang.importe } });
+  return importe && liestWieVorher(dateien, ausschnitt, hinzu) && verdecktNichts(dateien, ausschnitt, hinzu) && ohneVerlorenenNamen(dateien.quelleAlt, [dateien.quelleNeu]);
+}
+
+async function angehaengteAnweisungen([quelleAlt, quelleNeu, zielAlt, zielNeu], stand) {
+  const anhang = angehaengt(zielAlt, zielNeu);
+  if (anhang === null) return null;
+  const dateien = { quelleAlt, quelleNeu, zielAlt, zielNeu };
+  const ausschnitt = geltungsbereich({ pfad: zielNeu.pfad, text: anhang.text });
+  const stimmt = anweisungenWandern(dateien, anhang) && ladereihenfolgeGleich(dateien, ausschnitt) && namenBleibenGleich(dateien, anhang) && gleicheExporte(quelleAlt, quelleNeu, [zielNeu]);
+  return stimmt && (await fuehrtNichtZurueck(zielNeu, quelleNeu.pfad, stand)) ? anhang.anhang.length : null;
+}
+
+async function anhaengenAn({ hilfe, bestehend, vorher, lesen }, { root }) {
+  const stand = { lesen, root, eslint: new ESLint({ cwd: root }) };
+  const texte = [
+    { pfad: hilfe, text: vorher },
+    { pfad: hilfe, text: lesen(hilfe) },
+    { pfad: bestehend.pfad, text: bestehend.vorher },
+    { pfad: bestehend.pfad, text: lesen(bestehend.pfad) },
+  ];
+  const gelesen = texte.some(({ text }) => text === undefined) ? null : await gelesenAlle(texte, stand);
+  const anweisungen = gelesen === null ? null : await angehaengteAnweisungen(gelesen, stand);
+  return anweisungen === null ? null : { hilfe, neue: [], bestehend: bestehend.pfad, anweisungen, importe: {} };
+}
+
+export async function auslagerungAus({ hilfe, neue, bestehend = null, vorher, lesen }, { root, weiterreichen = false }) {
+  if (bestehend !== null) return anhaengenAn({ hilfe, bestehend, vorher, lesen }, { root });
   const texte = [{ pfad: hilfe, text: vorher }, ...[hilfe, ...neue].map((pfad) => ({ pfad, text: lesen(pfad) }))];
   if (texte.some(({ text }) => text === undefined)) return null;
   const gelesen = await gelesenAlle(texte, { root, eslint: new ESLint({ cwd: root }) });
   const anweisungen = gelesen === null ? null : ausgelagerteAnweisungen(gelesen, weiterreichen);
   const [, , ...gelesenNeue] = gelesen ?? [];
   const importe = Object.fromEntries(gelesenNeue.map((datei) => [datei.pfad, importZiele(datei)]));
-  return anweisungen === null ? null : { hilfe, neue, anweisungen, importe };
+  return anweisungen === null ? null : { hilfe, neue, bestehend: null, anweisungen, importe };
 }
 
 export async function reineAuslagerung(basis, root) {

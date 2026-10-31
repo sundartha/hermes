@@ -9,7 +9,7 @@ import { ESLint } from "eslint";
 
 import { MELDUNG, befundeMeldenUndScheitern } from "./auftrag/zweck.mjs";
 import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
-import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
+import { reineQuellauslagerung, zieldateien } from "./mutationspruefung/quellauslagerung.mjs";
 import { RELATIVE_QUELLE, inhalt, laufzeitBaum, laufzeitText, umbenennungen } from "./umbenennung.mjs";
 import { ersteAbweichung, fakten, normalform, vergleichstext } from "./vorbereitung/normalform.mjs";
 
@@ -100,7 +100,7 @@ async function ausgelagerteDateien({ basis, bis }, eslint) {
   const auslagerung = await reineQuellauslagerung({ von: basis, bis }, cwd());
   if (auslagerung === null) return new Set();
   const vorher = await laufzeitBaum({ pfad: auslagerung.hilfe, text: inhalt(basis, auslagerung.hilfe) }, eslint);
-  return fakten(vorher).unsicher ? new Set() : new Set([auslagerung.hilfe, ...auslagerung.neue]);
+  return fakten(vorher).unsicher ? new Set() : new Set([auslagerung.hilfe, ...zieldateien(auslagerung)]);
 }
 
 function gleichwertigMeldenOderBefund(datei, { vorher, nachher }, vergleich) {
