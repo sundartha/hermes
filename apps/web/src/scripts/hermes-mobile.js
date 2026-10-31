@@ -10,7 +10,6 @@ import { anchorFromHash } from "../lib/home-anchors.js";
 import { typeableLength, typedSplit } from "../lib/mobile-code.js";
 
 const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))), (pointer: coarse) and (min-width: 768px) and (max-width: 1024px) and (orientation: portrait)";
-// Screen 2 (Anker #so-funktionierts, test/home-anchors.test.js): Use Cases.
 const SCREEN_HOW = 1;
 const SCREEN_PRICE = 2;
 const SCREEN_DEV = 3;
@@ -246,18 +245,17 @@ function renderPlan() {
   sizeCta();
 }
 
-// Tarif-Karten: waagerecht wischen wechselt die Karte (Pager ist senkrecht).
 const SWIPE_MIN_PX = 40;
 
 function wireCards() {
   let start = null;
   el.planToggle.addEventListener("pointerdown", (event) => {
-    start = { x: event.clientX, y: event.clientY };
+    start = { left: event.clientX, top: event.clientY };
   });
   el.planToggle.addEventListener("pointerup", (event) => {
     if (!start) return;
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
+    const dx = event.clientX - start.left;
+    const dy = event.clientY - start.top;
     start = null;
     if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy)) return;
     const last = el.planTabs.reduce((most, tab) => Math.max(most, Number(tab.getAttribute("data-mh-plan"))), 0);
@@ -442,10 +440,6 @@ function stopAll() {
   stopTyping();
 }
 
-// Buehne auf Screen 2: je Szene die Zeilen, die den Verlauf bis zum unteren
-// Element fuellen (MobileHome.astro, opt/alt). Von allen Kombinationen gewinnt
-// die mit dem kleinsten Rest >= 0; eine ausgelassene wichtige Zeile (opt 1-2)
-// zaehlt wie FIT_PENALTY px Rest je Stufe. Passt nichts, steht das Kuerzeste.
 const FIT_PENALTY = 3;
 const FIT_LEAST = 3;
 
@@ -462,8 +456,6 @@ function boxHeight(node, inner) {
 
 const fitSkip = (node) => (FIT_LEAST - (Number(node.getAttribute("data-opt")) || FIT_LEAST)) * FIT_PENALTY;
 
-// Je Wahl eine Liste von Varianten: [{ on: [Knoten], height, lines, cost }].
-// Optionale Kalenderzeilen zaehlen in ihren Kalender hinein (ohne eigene Luecke).
 function fitSlots(chat, rows) {
   const slots = [...rows].map(([row, height]) => [
     { on: [], height: 0, lines: 0, cost: fitSkip(row) },
@@ -486,19 +478,16 @@ function fitSlots(chat, rows) {
 }
 
 function fitChat(chat) {
-  // Ohne Hoehe (Handy-Fassung ausgeblendet) bleibt die letzte Wahl stehen.
-  if (boxHeight(chat, true) <= 0) return;
+  if (boxHeight(chat, true) <= 0) return "";
   const choosable = chat.querySelectorAll("[data-opt], [data-alt]");
   choosable.forEach((node) => node.removeAttribute("data-off"));
-  // Kalenderzeilen zuerst messen, dann aus dem Kalender nehmen: dessen Hoehe
-  // gilt so ohne sie.
   const rows = new Map(
     [...chat.querySelectorAll(".mh-cal__row[data-opt]")].map((row) => [
       row,
       boxHeight(row) + (parseFloat(getComputedStyle(row.parentElement).rowGap) || 0),
     ]),
   );
-  rows.forEach((_, row) => row.setAttribute("data-off", ""));
+  rows.forEach((height, row) => row.setAttribute("data-off", ""));
   const avail = boxHeight(chat, true);
   chat.style.removeProperty("row-gap");
   const gap = parseFloat(getComputedStyle(chat).rowGap) || 0;
@@ -522,20 +511,13 @@ function fitChat(chat) {
   visit(0, []);
   const on = new Set((best || shortest).picked.flatMap((variant) => variant.on));
   choosable.forEach((node) => node.toggleAttribute("data-off", !on.has(node)));
-  // Was an Rest bleibt (kleiner als eine Zeile), geht gleichmaessig in die
-  // Luecken - so steht nie ein Loch ueber dem unteren Element.
-  if (best && best.count > 1) chat.style.rowGap = `${gap + best.rest / (best.count - 1)}px`;
+  return best && best.count > 1 ? `${gap + best.rest / (best.count - 1)}px` : "";
 }
 
-// Szenen-Knopf: springt zur Szene k. Die Runde ist reines CSS (ein Durchlauf,
-// 68 s, Szene i beginnt bei 0.6 s + i x 17 s); alle Animationen des Screens
-// werden auf den Beginn der Szene gesetzt, Blasen, Balken und Anzeiger laufen
-// von dort bis zum Ende weiter. Der erste Knopf startet alles von vorn: die
-// vollen Balken der Folge-Szenen sind dann wieder leer.
-// Bei reduzierter Bewegung gibt es keine Runde, dort steht die Szene still.
 const SCENE_MS = 17000;
 const SCENE_START_MS = 600;
-const ROUND_MS = 4 * SCENE_MS;
+const SCENE_COUNT = 4;
+const ROUND_MS = SCENE_COUNT * SCENE_MS;
 
 function pickScene(k) {
   const uses = el.uses;
@@ -545,23 +527,22 @@ function pickScene(k) {
   }
   const time = SCENE_START_MS + k * SCENE_MS;
   for (const animation of uses.getAnimations({ subtree: true })) {
-    // Nur die Runde (68 s); der pulsierende Punkt der Anruf-Zeile laeuft eigenstaendig.
     if (animation.effect && animation.effect.getTiming().duration === ROUND_MS) {
       animation.currentTime = time;
-      // Nach dem Durchlauf steht die Runde (finished): wieder anlaufen lassen.
       if (animation.playState === "finished") animation.play();
     }
   }
 }
 
 function fitScenes() {
-  el.chats.forEach(fitChat);
+  for (const chat of el.chats) {
+    const rowGap = fitChat(chat);
+    if (rowGap) chat.style.rowGap = rowGap;
+  }
   numberSteps();
   fitDev();
 }
 
-// Seite 4: das Fenster zeigt so viel Inhalt, wie hineinpasst. Stufen vom
-// vollsten zum knappsten; die erste ohne Ueberlauf gilt.
 const DEV_FITS = [
   "",
   "tight",
@@ -581,8 +562,6 @@ function fitDev() {
   }
 }
 
-// --mh-step zaehlt nur die sichtbaren Blasen einer Szene: eine ausgelassene
-// Zeile hinterlaesst keine Pause in der Abfolge.
 function numberSteps() {
   for (const chat of el.chats) {
     const shown = [...chat.children].filter((msg) => getComputedStyle(msg).display !== "none");
