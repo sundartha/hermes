@@ -306,3 +306,106 @@ test("T-Wb-BIND6: BIND_SCRIPT projiziert Binding + Handshake (eine Quelle, kein 
   assert.ok(BIND_SCRIPT.includes("run(window);"), "run(window) am Ende");
   assert.ok(!BIND_SCRIPT.includes("innerHTML"), "kein innerHTML (XSS-Gate, S1)");
 });
+
+const FELDER = "direction,counterparty,status";
+const UEBERSETZT = { t: (schluessel) => `de:${schluessel}` };
+
+function element(tag, mitSetAttribute = true) {
+  const attrs = {};
+  const el = {
+    tag,
+    className: "",
+    children: [],
+    _text: "",
+    get firstChild() {
+      return this.children[0] ?? null;
+    },
+    get textContent() {
+      return this._text;
+    },
+    set textContent(value) {
+      this._text = value;
+      this.children = [];
+    },
+    attrs,
+    getAttribute: (name) => attrs[name] ?? null,
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      this.children = this.children.filter((kind) => kind !== child);
+      return child;
+    },
+  };
+  if (mitSetAttribute) {
+    el.setAttribute = (name, value) => {
+      attrs[name] = value;
+    };
+  }
+  return el;
+}
+
+function zeichne(eintraege, { i18n, mitDefaultView = true, mitSetAttribute = true } = {}) {
+  const doc = { createElement: (tag) => element(tag, mitSetAttribute) };
+  if (mitDefaultView) doc.defaultView = { HermesI18n: i18n };
+  const container = element("div");
+  container.attrs["data-mcp-row"] = FELDER;
+  renderRows(doc, container, eintraege);
+  return container.children;
+}
+
+const zellen = (zeilen) => zeilen.map((zeile) => zeile.children);
+const texte = (zeilen) => zellen(zeilen).map((reihe) => reihe.map((zelle) => zelle.textContent));
+const EINTRAG = { direction: "outbound", counterparty: "+4930", status: "completed" };
+
+test("WSP-12 (Anrufzeile, Elemente) - jede Zeile ist ein div, jede Zelle ein span", () => {
+  const zeilen = zeichne([EINTRAG, EINTRAG]);
+  assert.deepEqual(zeilen.map((zeile) => zeile.tag), ["div", "div"]);
+  assert.deepEqual(zellen(zeilen).flat().map((zelle) => zelle.tag), Array(6).fill("span"));
+});
+
+test("WSP-13 (Anrufzeile, Beschriftung) - ohne nutzbares Woerterbuch bleibt die englische Beschriftung stehen, mit ihm erscheint die uebersetzte", () => {
+  const faelle = [
+    { name: "kein HermesI18n", optionen: { i18n: undefined }, erwartet: ["Outbound", "+4930", "Completed"] },
+    { name: "HermesI18n ohne t", optionen: { i18n: {} }, erwartet: ["Outbound", "+4930", "Completed"] },
+    { name: "t ist keine Funktion", optionen: { i18n: { t: "Completed" } }, erwartet: ["Outbound", "+4930", "Completed"] },
+    { name: "kein defaultView", optionen: { mitDefaultView: false }, erwartet: ["Outbound", "+4930", "Completed"] },
+    { name: "uebersetzendes t", optionen: { i18n: UEBERSETZT }, erwartet: ["de:Outbound", "+4930", "de:Completed"] },
+  ];
+  for (const { name, optionen, erwartet } of faelle) {
+    assert.deepEqual(texte(zeichne([EINTRAG], optionen))[0], erwartet, name);
+  }
+});
+
+test("WSP-14 (Anrufzeile, Leerwert) - ein fehlender oder leerer Wert ergibt eine leere Zelle, auch bei Feldern mit Beschriftung", () => {
+  const eintraege = [
+    { direction: null, counterparty: null, status: null },
+    { direction: undefined, counterparty: undefined, status: undefined },
+    {},
+  ];
+  for (const reihe of texte(zeichne(eintraege, { i18n: UEBERSETZT }))) assert.deepEqual(reihe, ["", "", ""]);
+  const [zeile] = zellen(zeichne([{ status: null }], { i18n: UEBERSETZT }));
+  assert.deepEqual(zeile.map((zelle) => zelle.attrs["data-i18n"] ?? null), [null, null, null]);
+});
+
+test("WSP-15 (Anrufzeile, Markierung) - nur Zellen mit Beschriftung tragen data-i18n mit dem englischen Schluessel, Inhalte nie", () => {
+  const eintraege = [EINTRAG, { direction: "inbound", counterparty: "+4931", status: "neuer_status" }, { direction: "weder", counterparty: "x", status: "failed" }];
+  const markierungen = zellen(zeichne(eintraege, { i18n: UEBERSETZT })).map((reihe) => reihe.map((zelle) => zelle.attrs["data-i18n"] ?? null));
+  assert.deepEqual(markierungen, [
+    ["Outbound", null, "Completed"],
+    ["Inbound", null, "Result unknown"],
+    [null, null, "Failed"],
+  ]);
+  assert.deepEqual(texte(zeichne(eintraege, { i18n: UEBERSETZT })).map((reihe) => reihe[0]), ["de:Outbound", "de:Inbound", "weder"]);
+});
+
+test("WSP-16 (Anrufzeile, schlichtes Element) - Zellen ohne setAttribute werden trotzdem gefuellt und uebersetzt, nichts bricht", () => {
+  const eintraege = [EINTRAG, { direction: "weder", counterparty: "x", status: "neuer_status" }, { status: null }];
+  const reihen = texte(zeichne(eintraege, { i18n: UEBERSETZT, mitSetAttribute: false }));
+  assert.deepEqual(reihen, [
+    ["de:Outbound", "+4930", "de:Completed"],
+    ["weder", "x", "de:Result unknown"],
+    ["", "", ""],
+  ]);
+});
