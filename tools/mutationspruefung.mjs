@@ -94,6 +94,9 @@ const ZUSTANDSBEREICH = [
   ":(exclude)tools/mutationspruefung/",
   ":(exclude)test/werkzeuge/ausmisten/stryker-ersatz.mjs",
   ":(exclude)test/werkzeuge/ausmisten/totcode.mjs",
+  ":(exclude)test/werkzeuge/mutationspruefung-einbettung-text.test.js",
+  ":(exclude)test/werkzeuge/mutationspruefung-einbettung-vorspann.test.js",
+  ":(exclude)test/werkzeuge/mutationspruefung-stdio-umgebung.test.js",
 ];
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
 const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-konfiguration.js"]);
