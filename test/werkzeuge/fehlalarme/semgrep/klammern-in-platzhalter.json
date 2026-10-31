@@ -1,0 +1,18 @@
+{
+  "titel": "Geschweifte Klammern innerhalb eines Platzhalters in einem Template-String",
+  "dateien": {
+    "tools/auftrag/listenumzug.mjs": [
+      "export function umgezogen(vorher, umgezogenes) {",
+      "  return { neu: `${JSON.stringify({ ...vorher, befunde: umgezogenes.neu }, null, 2)}\\n`, anzahl: umgezogenes.anzahl };",
+      "}"
+    ],
+    "tools/mutationspruefung/einbettung.mjs": [
+      "const VORSPANN = new URL(\"./einbettung-vorspann.mjs\", import.meta.url).href;",
+      "",
+      "export function einbettungsImport(quelle) {",
+      "  return `--import=${VORSPANN}?${new URLSearchParams({ quelle })}`;",
+      "}"
+    ]
+  },
+  "erwartet": "missing-template-string-indicator"
+}
