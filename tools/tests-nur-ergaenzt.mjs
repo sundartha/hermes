@@ -7,6 +7,7 @@ import {
   gatesByTestFile,
   isCard,
 } from "./testschutz/aenderungen.mjs";
+import { abzweigstelle } from "./testschutz/abzweigung.mjs";
 import { ausmistenFrei } from "./testschutz/ausmisten.mjs";
 import { deletedFinding, mechanicalProofs } from "./testschutz/ausnahmen.mjs";
 import { approval, listHint } from "./testschutz/freigabe.mjs";
@@ -60,15 +61,16 @@ function unitFindings(unit, names, gates) {
 }
 
 async function checkPullRequest({ basis, pullRequest }) {
-  const { open, proven } = await mechanicalProofs(basis, changedExistingTestFiles(basis));
+  const abzweig = abzweigstelle(basis);
+  const { open, proven } = await mechanicalProofs(abzweig, changedExistingTestFiles(abzweig));
   for (const line of proven) console.log(line);
-  const units = open.flatMap((change) => changedUnits(basis, change));
+  const units = open.flatMap((change) => changedUnits(abzweig, change));
   if (units.length === 0) {
     const rest = proven.length > 0 ? "sonst " : "";
     console.log(`Testschutz: ${rest}keine bestehende Testzeile geändert oder gelöscht.`);
     return;
   }
-  if (await ausmistenFrei({ basis, pullRequest, stellen: units.length })) return;
+  if (await ausmistenFrei({ basis, abzweig, pullRequest, stellen: units.length })) return;
   const { names, notes, approvedIssues } = await approval(pullRequest);
   const gates = gatesByTestFile();
   const findings = [...new Set(units.flatMap((unit) => unitFindings(unit, names, gates)))];

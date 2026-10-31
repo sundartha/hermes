@@ -191,14 +191,14 @@ function verlangeUnveraendertSeitMessung(gemessen, basis, menge) {
   verlange(liste.length === 0, `seit der Messung geändert: ${liste.join(", ")}`);
 }
 
-async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
+async function pruefeMessgrundlage({ basis, abzweig }, { bereich, gemessen }) {
   verlangeVorfahr(gemessen, basis);
-  verlangeErlaubtePfade(basis);
-  const menge = await verlangeMessmenge(basis, bereich);
+  verlangeErlaubtePfade(abzweig);
+  const menge = await verlangeMessmenge(abzweig, bereich);
   verlangeUnveraendertSeitMessung(gemessen, basis, menge);
 }
 
-export async function ausmistenFrei({ basis, pullRequest, stellen }) {
+export async function ausmistenFrei({ basis, abzweig, pullRequest, stellen }) {
   try {
     const { full } = repositoryName();
     const pr = await leseMitRecht(RECHT_PULL_REQUESTS, `/repos/${full}/pulls/${pullRequest}`);
@@ -206,7 +206,7 @@ export async function ausmistenFrei({ basis, pullRequest, stellen }) {
     if (!branch.startsWith(BRANCH_PRAEFIX)) return false;
     const angaben = prAngaben(pr, basis);
     const lauf = await gueltigerLauf(full, angaben);
-    await pruefeMessgrundlage(basis, { ...angaben, ...lauf });
+    await pruefeMessgrundlage({ basis, abzweig }, { ...angaben, ...lauf });
     console.log(
       `Testschutz: Ausnahme „${KONTEXT}“ für Bereich ${angaben.bereich}: Lauf ${lauf.adresse} hat ${angaben.kopf} gegen master ${lauf.gemessen} gemessen; ${stellen} geänderte oder gelöschte Stellen unter test/ sind frei.`,
     );
