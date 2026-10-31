@@ -408,8 +408,6 @@ a:hover {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  /* Eine Komposition in allen Breiten: Text sitzt unten (Tempel darueber bzw.
-     rechts daneben), mit demselben Bodenabstand wie im gestapelten Hochformat. */
   justify-content: flex-end;
   padding-bottom: clamp(84px, 12vh, 132px);
 }

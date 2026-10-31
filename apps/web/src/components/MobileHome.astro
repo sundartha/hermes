@@ -48,6 +48,7 @@ const T = {
     howItWorks: "How it works",
     usesLabel: "Use cases",
     uses: "What Hermes does for you.",
+    usesLead: "Hermes answers when you can't, books appointments and makes calls for you. Afterwards you know exactly what was said.",
     // Vier Szenen auf der Buehne (Screen 2), je ein kurzer Verlauf: wer
     // spricht (them = Anrufer, you = du in Claude, hermes = Hermes), zum
     // Schluss Benachrichtigung bzw. Ergebnis-Karte. Damit der Verlauf die
@@ -183,6 +184,7 @@ const T = {
     howItWorks: "So funktioniert’s",
     usesLabel: "Einsatzfälle",
     uses: "Was Hermes für dich tut.",
+    usesLead: "Hermes geht ran, wenn du nicht kannst, bucht Termine und ruft für dich an. Danach weißt du genau, was besprochen wurde.",
     dots: ["Jemand ruft dich an", "Termin vereinbaren", "Hermes ruft für dich an", "In deinem Dashboard"],
     scenes: [
       { tag: "1 · Jemand ruft dich an", title: "Du sitzt im Meeting. Anna ruft an.", msgs: [
@@ -417,6 +419,7 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
     <section class="mh-screen mh-s-content mh-uses" data-active="0" aria-labelledby="mh-uses-title">
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.usesLabel}>{T.en.usesLabel}</p>
       <h2 class="mh-h2 mh-h2--uses" id="mh-uses-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.uses}>{T.en.uses}</span></h2>
+      <p class="mh-lead mh-lead--wide mh-r mh-d3" data-mh-de={T.de.usesLead}>{T.en.usesLead}</p>
 
       <div class="mh-stage mh-r mh-d3" aria-hidden="true">
         {T.en.scenes.map((scene, si) => (
@@ -451,8 +454,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
           <li data-mh-de={sceneSr(T.de.scenes[si])}>{sceneSr(scene)}</li>
         ))}
       </ul>
-      <!-- Vier Knoepfe: Antippen springt zu der Szene (hermes-mobile.js, pickScene).
-           Der Balken fuellt sich waehrend der Szene. -->
       <ol class="mh-dots mh-r mh-d6">
         {["answer", "book", "call", "dash"].map((icon, k) => (
           <li class="mh-dot" data-scene={k}>
@@ -466,9 +467,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
       </ol>
     </section>
 
-    <!-- Screen 3: Preise. Wie Screen 2: einzeilige Ueberschrift, darunter eine
-         Glasflaeche, die den Platz fuellt - oben der Tarif-Umschalter, mittig Preis
-         und Minuten, dann die Leistungen mit Haken, unten der Knopf. -->
     <section class="mh-screen mh-s-content mh-price" data-active="0" data-plan={featured} aria-labelledby="mh-price-title">
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.pricing}>{T.en.pricing}</p>
       <h2 class="mh-h2 mh-h2--uses" id="mh-price-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.priceTitle}>{T.en.priceTitle}</span></h2>
@@ -479,9 +477,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
         ))}
       </ul>
       <div class="mh-plan mh-r mh-d3">
-        <!-- Je Tarif eine Karte (wie in einer Wallet): die gewaehlte liegt vorn,
-             die andere schaut versetzt dahinter hervor. Antippen oder waagerecht
-             wischen wechselt (hermes-mobile.js). Vorgelesen wird die Liste oben. -->
         <div class="mh-focus mh-cards" aria-hidden="true" data-sel={featured}>
           {plans.map((plan, index) => (
             <div class={`mh-card mh-card--${plan.slug}`} data-mh-plan={index} data-card={index}>
@@ -492,7 +487,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
               </div>
               <p class="mh-card__line" data-mh-de={T.de.planLine[plan.slug]}>{T.en.planLine[plan.slug]}</p>
               <p class="mh-card__price"><b data-mh-de={plan.price.de}>{plan.price.en}</b><small data-mh-de={T.de.perMonth}>{T.en.perMonth}</small></p>
-              <!-- Minuten mit Leiste darunter (ein Segment = 30 Minuten). -->
               <div class="mh-card__min">
                 <span class="mh-card__minrow"><span data-mh-de={T.de.cardMinutes}>{T.en.cardMinutes}</span><b>{plan.minutes}</b></span>
                 <span class="mh-segs">{Array.from({ length: SEGMENTS }, (_, j) => <span class={`mh-seg${j < Math.round((plan.minutes / Math.max(...plans.map((p) => p.minutes))) * SEGMENTS) ? " is-on" : ""}`}><i></i></span>)}</span>
@@ -511,14 +505,12 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
             </div>
           ))}
         </div>
-        <!-- Bedienbarer Umschalter unter den Karten (zugleich Punkt-Anzeige). -->
         <div class="mh-plan-tabs" role="tablist" aria-label={T.en.pricing}>
           {plans.map((plan, index) => (
             <button class="mh-plan-tab" type="button" role="tab" data-mh-plan={index} aria-selected={String(index === featured)}>{plan.name}</button>
           ))}
         </div>
         <div class="mh-plan__end">
-          <!-- "Choose ..." bleibt stehen, nur der Tarifname rollt (Design-Schema 6.3). -->
           <a class="mh-pill mh-cta" href={LOGIN_URL} data-cta-en={T.en.choose} data-cta-de={T.de.choose}>
             <span class="mh-cta__in">
               <span class="mh-cta__pre">{ctaPre}</span>
@@ -544,9 +536,6 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
       <p class="mh-label mh-r mh-d1" data-mh-de={T.de.forDevs}>{T.en.forDevs}</p>
       <h2 class="mh-h2 mh-h2--uses" id="mh-dev-title"><span class="mh-line mh-r mh-hl mh-d2" data-mh-de={T.de.devTitle}>{T.en.devTitle}</span></h2>
 
-      <!-- Ein Terminal-Fenster als Mittelpunkt: oben die Wege als Fenster-Tabs,
-           darin der Code (getippt, hermes-mobile.js) und drei Schritte fuer den
-           gewaehlten Weg (data-way am Screen). Darunter die Aktionen. -->
       <div class="mh-window mh-r mh-d3">
         <div class="mh-toggle mh-toggle--3" role="tablist" data-sel="0" aria-label={T.en.forDevs}>
           <span class="mh-toggle__thumb" aria-hidden="true"></span>
