@@ -7,7 +7,7 @@ import { EINBETTUNG_VORSPANN } from "../../tools/mutationspruefung/zustand.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const HELFER = new URL("../helpers.js", import.meta.url).href;
-const AKTIVER_MUTANT = ["__STRY", "KER_ACTIVE_MUT", "ANT__"].join("");
+const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const SKRIPT = [
   `import { stdioServerTransport } from ${JSON.stringify(HELFER)};`,
   "const { transport } = stdioServerTransport();",
