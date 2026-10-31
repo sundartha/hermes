@@ -510,8 +510,8 @@ const ANRUF_KOPF = 'export const RESULT_LIST_MAX_ITEMS = 3;';
 const ANRUF_FUNKTION = "export function evidenceRetentionEnabled(privacy) {\n  return privacy.evidenceRetentionDays > 0;\n}";
 const ANRUF_WEITER = `export { ${NAMEN} } from "../call-result.js";`;
 
-function anhaengen(context, { ziel = datei(ANRUF_KOPF, ANRUF_FUNKTION, STATUS, UEBERGAENGE, JOBS), alt = datei(KOPF, ANRUF_WEITER, MIETER, HINWEIS, JOB) } = {}) {
-  const repo = repoMitBasis(context, { ...BASIS, [ANRUF_ZIEL]: datei(ANRUF_KOPF, ANRUF_FUNKTION), "liste.json": `${JSON.stringify(BEREICH)}\n` });
+function anhaengen(context, { ziel = datei(ANRUF_KOPF, ANRUF_FUNKTION, STATUS, UEBERGAENGE, JOBS), alt = datei(KOPF, ANRUF_WEITER, MIETER, HINWEIS, JOB), zielAlt = datei(ANRUF_KOPF, ANRUF_FUNKTION), dazu = {} } = {}) {
+  const repo = repoMitBasis(context, { ...BASIS, ...dazu, [ANRUF_ZIEL]: zielAlt, "liste.json": `${JSON.stringify(BEREICH)}\n` });
   return nachCommitAufrufen(repo, [WERKZEUG, "--bereich", "liste.json"], { [ALT]: alt, [ANRUF_ZIEL]: ziel });
 }
 
@@ -528,6 +528,19 @@ test("vorbereitung-pruefen: reine Auslagerung: eine geänderte Zeile im alten In
   assert.equal(lauf.status, EXIT_ROT, lauf.output);
   assert.match(lauf.output, /^src\/call-result\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m);
   assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: führt der alte Inhalt der bestehenden Datei, die die alte Datei erst seit dem Commit lädt, beim Laden Code aus oder importiert er eine ungeladene Datei, ist es rot", (context) => {
+  const wirkung = 'globalThis.GELADEN = true;';
+  const faelle = [
+    { zielAlt: datei(ANRUF_KOPF, ANRUF_FUNKTION, wirkung), ziel: datei(ANRUF_KOPF, ANRUF_FUNKTION, wirkung, STATUS, UEBERGAENGE, JOBS) },
+    { zielAlt: datei('import "./setup.js";', ANRUF_KOPF, ANRUF_FUNKTION), ziel: datei('import "./setup.js";', ANRUF_KOPF, ANRUF_FUNKTION, STATUS, UEBERGAENGE, JOBS), dazu: { "src/setup.js": datei("globalThis.SETUP = true;") } },
+  ];
+  for (const fall of faelle) {
+    const lauf = anhaengen(context, fall);
+    assert.equal(lauf.status, EXIT_ROT, lauf.output);
+    assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+  }
 });
 
 test("vorbereitung-pruefen: reine Auslagerung: ein angehängter Teil, der nicht Wort für Wort der gestrichene ist, ist rot", (context) => {
