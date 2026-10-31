@@ -6,10 +6,7 @@ import { ttsQuotaExhausted } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.js";
 
-function textDer(direktive) {
-  if (direktive.kind === DIRECTIVE.GATHER) return direktive.promptText;
-  return direktive.kind === DIRECTIVE.SAY ? direktive.text : "";
-}
+const textDer = (direktive) => (direktive.kind === DIRECTIVE.GATHER ? direktive.promptText : direktive.text);
 
 export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) {
   function warnQuotaDegradation({ characters, quota, cycleKey }) {
