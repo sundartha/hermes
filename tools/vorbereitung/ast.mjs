@@ -4,6 +4,13 @@ export const EINZIGE = 1;
 export const ZWEI = 2;
 export const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 export const EXPORTE = new Set(["ExportNamedDeclaration", "ExportDefaultDeclaration"]);
+export const NAME_ALS_SCHLUESSEL = {
+  MemberExpression: "property",
+  Property: "key",
+  MethodDefinition: "key",
+  PropertyDefinition: "key",
+};
+const SCHLEIFEN = new Set(["ForInStatement", "ForOfStatement"]);
 const BINDUNG_IN_LISTE = { ObjectPattern: "properties", ArrayPattern: "elements" };
 const BINDUNG_IN_FELD = { Property: "value", AssignmentPattern: "left", RestElement: "argument" };
 const ZAHL_DURCHLASS = new Set(["BinaryExpression", "LogicalExpression", "UnaryExpression", "ConditionalExpression"]);
@@ -26,6 +33,18 @@ export function knotenImMuster(muster) {
 
 export function namenImMuster(muster) {
   return knotenImMuster(muster).map(({ name }) => name);
+}
+
+export function geschriebeneKnoten(knoten) {
+  if (knoten.type === "AssignmentExpression") return knotenImMuster(knoten.left);
+  if (knoten.type === "UpdateExpression") return knotenImMuster(knoten.argument);
+  return SCHLEIFEN.has(knoten.type) && knoten.left.type !== "VariableDeclaration"
+    ? knotenImMuster(knoten.left)
+    : [];
+}
+
+export function geschriebeneNamen(knoten) {
+  return geschriebeneKnoten(knoten).map(({ name }) => name);
 }
 
 export function mitEltern(knoten, eltern = [], gesammelt = []) {
