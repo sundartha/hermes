@@ -682,8 +682,8 @@ function withWidgetLocale(config, handler, language) {
   const tenantMeta = { [WIDGET_LOCALE_META_KEY]: language, [WIDGET_CONTENT_LOCALE_META_KEY]: language };
   return async (...args) => {
     const result = await handler(...args);
-    if (result?.isError) return result;
-    return { ...result, _meta: { ...tenantMeta, ...result?._meta } };
+    if (result.isError) return result;
+    return { ...result, _meta: { ...tenantMeta, ...result._meta } };
   };
 }
 
