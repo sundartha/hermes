@@ -414,6 +414,24 @@ test("WSP-10 (Call-Widget) - die Antwort auf den eigenen get_call_result-Aufruf 
   }
 });
 
+test("WSP-18 (Call-Widget) - ein Anzeigefeld, das erst mit Beschriftung und dann ohne geschrieben wird, behaelt beim Sprachwechsel die neue Anzeige", () => {
+  const widget = callWidgetImBrowser();
+  const sende = (params) => widget.emit({ method: METHOD_TOOL_RESULT, params });
+  const ziel = () => widget.element("[data-objective-display]").textContent;
+  const grund = () => widget.element("[data-failure-display]").textContent;
+
+  sende({ _meta: { ...tenant("de"), ...content("de") }, structuredContent: { ...PUSH_STATUS, status: "failed", failure_reason: "busy" } });
+  sende({ structuredContent: PUSH_ERGEBNIS });
+  assert.deepEqual([grund(), ziel()], ["Besetzt", "Ja"], "erst mit Beschriftung");
+
+  sende({ structuredContent: { ...PUSH_STATUS, status: "failed", failure_reason: null } });
+  sende({ structuredContent: { ...PUSH_ERGEBNIS, objective_achieved: "vielleicht" } });
+  assert.deepEqual([grund(), ziel()], ["\u2014", "vielleicht"], "dann ohne Beschriftung");
+
+  sende({ _meta: { ...tenant("fr"), ...content("fr") } });
+  assert.deepEqual([grund(), ziel()], ["\u2014", "vielleicht"], "der Sprachwechsel setzt die alte Beschriftung nicht wieder ein");
+});
+
 const INHALT_AUSGENOMMEN = Object.freeze({
   last_transcript_lines: "Transkript: bleibt in der Originalsprache des Gespraechs",
   "data-confirm-to": "Nutzereingabe: Zielnummer",
