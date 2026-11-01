@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { flushAnfang } from "../utils/pg-pool.js";
+import { flushAnfang, mitStartFrist } from "../utils/pg-pool.js";
 import * as ops from "./state-ops.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
@@ -31,24 +31,9 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
   }
 
   async function init() {
-    await runner.withClient(async (client) => {
-      await setTenant(client, BOOTSTRAP_TENANT_ID);
-      await prepareSchema(client, BOOTSTRAP_TENANT_ID);
-      state = await hydrate(client);
-      const flushBootstrap = () =>
-        flushTenants(
-          client,
-          state.tenants.filter((t) => t.id === BOOTSTRAP_TENANT_ID),
-        );
-      if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
-        await flushBootstrap();
-      if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
-      for (const tenantId of backfillGreetingNotices(state)) {
-        await setTenant(client, tenantId);
-        await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
-      }
-      await setTenant(client, BOOTSTRAP_TENANT_ID);
-    });
+    state = await runner.withClient((client) =>
+      mitStartFrist(client, () => aufbauen(client, prepareSchema)),
+    );
     return state;
   }
 
@@ -645,6 +630,26 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       return ok;
     },
   };
+}
+
+async function aufbauen(client, prepareSchema) {
+  await setTenant(client, BOOTSTRAP_TENANT_ID);
+  await prepareSchema(client, BOOTSTRAP_TENANT_ID);
+  const state = await hydrate(client);
+  const flushBootstrap = () =>
+    flushTenants(
+      client,
+      state.tenants.filter((mandant) => mandant.id === BOOTSTRAP_TENANT_ID),
+    );
+  if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
+    await flushBootstrap();
+  if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
+  for (const tenantId of backfillGreetingNotices(state)) {
+    await setTenant(client, tenantId);
+    await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
+  }
+  await setTenant(client, BOOTSTRAP_TENANT_ID);
+  return state;
 }
 
 async function setTenant(client, tenantId) {
