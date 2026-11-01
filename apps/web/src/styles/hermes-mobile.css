@@ -2216,47 +2216,8 @@
     max-width: none;
   }
   .mh-dots {
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 32px;
-    width: min(100%, 360px);
-  }
-  .mh-dot__btn {
-    position: relative;
-    flex-direction: row;
-    gap: 16px;
-    width: 100%;
-    padding: 8px 0 12px;
-    text-align: left;
-  }
-  .mh-dot__btn .mh-sr {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
-    clip-path: none;
-    white-space: normal;
-    font-size: 17px;
-    color: rgba(232, 242, 253, 0.6);
-    transition: color 0.3s ease;
-  }
-  .mh-dot[data-active="1"] .mh-dot__btn .mh-sr,
-  .mh-dot__btn:hover .mh-sr {
-    color: #fff;
-  }
-  .mh-dot__icon {
-    flex: none;
-    order: -1;
-  }
-  .mh-dot__bar {
-    position: absolute;
-    left: 54px;
-    right: 0;
-    bottom: 4px;
-    width: auto;
-    height: 2px;
+    justify-content: flex-start;
+    margin-top: 36px;
   }
 
   .mh-s-content .mh-cards {
@@ -2316,7 +2277,10 @@
   }
 
   .mh-uses {
+    grid-template-columns: minmax(280px, 400px) minmax(min(640px, 100%), 800px);
     grid-template-rows: 1fr repeat(4, auto) 1fr;
+    justify-content: center;
+    column-gap: clamp(var(--space-block, 48px), 5vw, 88px);
   }
   .mh-uses > .mh-label {
     grid-row: 2;
@@ -2332,9 +2296,10 @@
   }
   .mh-uses > .mh-stage {
     grid-row: 1 / -1;
+    height: min(660px, calc(100svh - 168px));
   }
   .mh .mh-uses .mh-lead--wide {
-    max-width: 440px;
+    max-width: 400px;
     margin-top: 24px;
     font-size: 18px;
     line-height: 1.5;
