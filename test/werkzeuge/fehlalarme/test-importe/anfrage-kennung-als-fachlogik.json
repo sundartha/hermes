@@ -1,0 +1,12 @@
+{
+  "titel": "Neuer Tabellentest prüft die Anfrage-Kennung als reine Fachlogik",
+  "vorher": {
+    "src/utils/anfrage-kennung.js": ["export const wert = 1;"]
+  },
+  "dateien": {
+    "test/gemeinsam/anfrage-kennung-tabelle.test.js": [
+      "import { wert } from \"../../src/utils/anfrage-kennung.js\";",
+      "export const genutzt = wert;"
+    ]
+  }
+}
