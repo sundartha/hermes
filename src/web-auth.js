@@ -224,6 +224,8 @@ function sidFromAccessToken(accessToken) {
   }
 }
 
+const CODETAUSCH_FRIST_MS = 10_000;
+
 export function makeOidc(config, { _fetch = fetch } = {}) {
   const authorizeEndpoint = `${config.auth.workosApiBase}/user_management/authorize`;
   const authenticateEndpoint = `${config.auth.workosApiBase}/user_management/authenticate`;
@@ -243,7 +245,7 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
     },
 
     async exchange({ code, verifier }) {
-      const r = await _fetch(authenticateEndpoint, {
+      const response = await _fetch(authenticateEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -253,9 +255,10 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           client_id: config.auth.oidcClientId,
           client_secret: config.auth.oidcClientSecret,
         }),
+        signal: AbortSignal.timeout(CODETAUSCH_FRIST_MS),
       });
-      if (!r.ok) throw new Error(`authenticate HTTP ${r.status}`);
-      const data = await r.json();
+      if (!response.ok) throw new Error(`authenticate HTTP ${response.status}`);
+      const data = await response.json();
       const user = data && data.user;
       if (!user || typeof user !== "object")
         throw new Error("authenticate: user fehlt in der Antwort");

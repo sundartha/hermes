@@ -1,6 +1,5 @@
 {
   "befunde": [
-    "src/auth.js|fa11c447f204cd9b",
     "src/billing/stripe.js|0bdea5ceff02e685",
     "src/billing/stripe.js|3d5c31b480cfb5b6",
     "src/billing/stripe.js|53a23a05aa7f423a",
@@ -19,9 +18,6 @@
     "src/mcp-tools.js|491513426f08d95a",
     "src/research/adapters/exa-search.js|01d666ac8f4ebe35",
     "src/telephony/adapters/telnyx/numbers.js|04aa5571a304ef0f",
-    "src/telephony/adapters/telnyx/voice.js|0898279ccc0028de",
-    "src/web-auth.js|df90d592b6a7512d",
-    "src/workos-management.js|a7ca0820ab80654e",
-    "src/workos-management.js|bd0ffac4c13e09ef"
+    "src/telephony/adapters/telnyx/voice.js|0898279ccc0028de"
   ]
 }

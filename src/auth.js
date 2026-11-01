@@ -22,12 +22,16 @@ export const ENFORCED_OAUTH_SCOPES = Object.freeze(
   OAUTH_SCOPES.filter((scope) => !GRANT_ONLY_SCOPES.includes(scope)),
 );
 
+const OAUTH_METADATEN_FRIST_MS = 5_000;
+
 async function discoverJwksUri() {
   const paths = ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"];
   let lastErr;
   for (const path of paths) {
     try {
-      const response = await fetch(`${config.auth.oauthIssuerUrl}${path}`);
+      const response = await fetch(`${config.auth.oauthIssuerUrl}${path}`, {
+        signal: AbortSignal.timeout(OAUTH_METADATEN_FRIST_MS),
+      });
       if (!response.ok) {
         lastErr = new Error(`${path} HTTP ${response.status}`);
         continue;

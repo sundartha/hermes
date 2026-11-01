@@ -15,6 +15,7 @@ import {
 import { GERMAN_STOPWORDS } from "./gemeinsam/deutsch-erkennung.mjs";
 import anfrageMitFrist from "./gemeinsam/anfrage-mit-frist.mjs";
 import { abrufMitFrist, mitAntwortfrist } from "./gemeinsam/antwortfrist.mjs";
+import { antwortetNie, mitKurzerFrist } from "./gemeinsam/kurze-antwortfrist.mjs";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -1206,4 +1207,16 @@ test("Login-Fehlerpfad: authorizeUrl wirft -> 500 und login_failed innerhalb der
   } finally {
     await srv.close();
   }
+});
+
+const CODETAUSCH_FRIST_MS = 10_000;
+
+test("WorkOS-Fristen: antwortet WorkOS auf den Codetausch nicht, bricht exchange nach 10 Sekunden ab", async () => {
+  const oidc = makeOidc(OIDC_CFG, { _fetch: antwortetNie });
+
+  const fristen = await mitKurzerFrist(() =>
+    assert.rejects(oidc.exchange({ code: "authcode", verifier: "ver-123" }), { name: "TimeoutError" }),
+  );
+
+  assert.deepEqual(fristen, [CODETAUSCH_FRIST_MS]);
 });
