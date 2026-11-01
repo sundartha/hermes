@@ -59,3 +59,14 @@ export function closedIssueNumbers(body) {
   const matches = (body ?? "").matchAll(CLOSING_REFERENCE_PATTERN);
   return [...new Set([...matches].map((match) => Number(match[1])))];
 }
+
+export function approvedAtHead(reviews, logins, headSha) {
+  const latest = new Map();
+  for (const review of reviews) {
+    const login = review.user?.login;
+    if (logins.includes(login) && review.state !== "COMMENTED") latest.set(login, review);
+  }
+  return [...latest.values()].filter(
+    (review) => review.state === "APPROVED" && review.commit_id === headSha,
+  );
+}

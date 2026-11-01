@@ -4,7 +4,7 @@ import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
-import { auftragsBlock, bauPrompt, testAgentPrompt } from "./agenten.mjs";
+import { auftragsZettel, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { uebernimmAbsicherung } from "./absicherung-uebernahme.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { VORBEREITUNG_BEREICH } from "./anrufbereich.mjs";
@@ -15,7 +15,7 @@ import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, arbeitsstand, auftragsTrailer, aufVorgemerktemStand, festhalten, gibtEsIn, git, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, arbeitsstand, auftragsTrailer, aufVorgemerktemStand, festhalten, gebautIn, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -68,7 +68,6 @@ const OHNE_GRUND = "Ein Schritt der Gruppe war rot und nannte keinen Grund.";
 const BLOB = " blob ";
 const PLAENE = "plaene/";
 const ANLEITUNG = ".md";
-const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const BEGRUENDUNG_DES = { bau: "Bau-Agenten", test: "Test-Agenten" };
 const ZWECK_ZEILE = "„Zweck <ID>:“";
 const OHNE_FREIGABE = "die Phase ist vertraulich; ohne öffentliches Issue gibt lauf keinen alten Test frei.";
@@ -92,10 +91,6 @@ function eintraege(text) {
   return Object.values(JSON.parse(text))
     .flatMap((regeln) => Object.values(regeln))
     .reduce((summe, { count }) => summe + count, 0);
-}
-
-function herkunftsZeilen(phase, { id, art }) {
-  return [`Auftrag: ${phase.phase}/${id}`, `Art: ${art}`];
 }
 
 function nachfrage(ids) {
@@ -520,12 +515,12 @@ class AuftragsLauf {
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
     const absatz = auftrag.art === "fehlerbehebung" ? "Ursache" : "Warum";
     const warum = `${absatz}: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
-    const herkunft = herkunftsZeilen(phase, auftrag);
+    const herkunft = herkunftsZeilen(phase.phase, auftrag);
     const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
     const hinweise = hinweiseDesBaus(this.agenten);
     const abschnitt = hinweise.length > 0 ? [...hinweise, ""] : [];
     const begruendung = this.uebernimmBegruendung(Object.keys(this.zweck));
-    const zettel = [AUFTRAG_LAUT_PHASE, "", ...auftragsBlock(phase, auftrag)];
+    const zettel = auftragsZettel(phase, auftrag);
     return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...begruendung, ...abschnitt, ...zettel, ...herkunft, ...paket, ""].join("\n");
   }
 
@@ -659,8 +654,7 @@ class AuftragsLauf {
 
 export function gebauteAuftraege(phase, root) {
   const commits = auftragsTrailer(root);
-  const gebaut = (auftrag) => commits.some((trailer) => herkunftsZeilen(phase, auftrag).every((zeile) => trailer.has(zeile)));
-  return new Set(phase.auftraege.filter(gebaut).map(({ id }) => id));
+  return new Set(phase.auftraege.filter((auftrag) => gebautIn(commits, phase.phase, auftrag)).map(({ id }) => id));
 }
 
 function startBefunde(phasendatei, root) {
