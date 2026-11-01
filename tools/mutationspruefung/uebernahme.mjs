@@ -335,9 +335,16 @@ function nummernVollstaendig(berichte, teile) {
   return nummern.length === teile && nummern.every((nummer, index) => nummer === index + 1);
 }
 
-function baumStimmt(berichte, lauf) {
-  const baum = baumVon(lauf.head_sha);
-  return berichte.every((bericht) => bericht.baum === baum);
+function elternVon(commit) {
+  return git(["rev-list", "--parents", "-n", "1", commit]).trim().split(LEERRAUM).slice(1);
+}
+
+function geprueftesKopf(berichte, lauf) {
+  const kopf = berichte[0].kopf;
+  if (!COMMIT.test(String(kopf)) || !berichte.every((bericht) => bericht.kopf === kopf)) return null;
+  commitHolen(kopf);
+  if (kopf !== lauf.head_sha && elternVon(kopf)[1] !== lauf.head_sha) return null;
+  return berichte.every((bericht) => bericht.baum === baumVon(kopf)) ? kopf : null;
 }
 
 function berichteVollstaendig(berichte, lauf, imPullRequest) {
@@ -351,8 +358,8 @@ function berichteVollstaendig(berichte, lauf, imPullRequest) {
   return nummernVollstaendig(berichte, erster.teile) ? null : "hat nicht alle Teilergebnisse";
 }
 
-function zugesagtVonLauf(berichte, lauf) {
-  const stand = (pruefung) => standVon(pruefung, lauf.head_sha);
+function zugesagtVonLauf(berichte, kopf) {
+  const stand = (pruefung) => standVon(pruefung, kopf);
   return berichte[0].pruefungen.map((pruefung, index) => {
     const festgestellt = stand(pruefung);
     return { seite: festgestellt.seite, quellen: festgestellt.quellen, geprueft: festgestellt.geprueft, tests: festgestellt.tests, eintraege: eintragsListe(berichte, index) };
@@ -370,11 +377,12 @@ function abrufen({ id, herkunft, echt }) {
     gh(["run", "download", String(id), "-R", repo, "-D", ordner, "-p", ARTEFAKTE]);
     const berichte = geladeneTeildateien(ordner);
     const imPullRequest = herkunft !== undefined;
-    if (imPullRequest && !baumStimmt(berichte, lauf)) return ohneVorergebnis(KOPF_NICHT_NACHPRUEFBAR);
     const luecke = berichteVollstaendig(berichte, lauf, imPullRequest);
     if (luecke !== null) return ohneVorergebnis(`der Lauf ${id} ${luecke}`);
+    const geprueft = imPullRequest ? geprueftesKopf(berichte, lauf) : lauf.head_sha;
+    if (geprueft === null) return ohneVorergebnis(KOPF_NICHT_NACHPRUEFBAR);
     for (const { von, bis } of berichte[0].pruefungen) [von, bis].filter(Boolean).forEach(commitHolen);
-    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt, pruefungen: zugesagtVonLauf(berichte, lauf) };
+    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt, pruefungen: zugesagtVonLauf(berichte, geprueft) };
     return { ...inhalt, kennung: hashVon(inhalt) };
   } finally {
     entferneTempOrdner(ordner);
