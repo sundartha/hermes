@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { maskRestrictedLines, maskRestrictedText } from "../../src/restricted-data.js";
+import { findRestrictedData, maskRestrictedLines, maskRestrictedText } from "../../src/restricted-data.js";
 import { KARTE_MASTERCARD_16, KARTE_VISA_16, einzeln } from "./kartenmaskierung.js";
 
 const KLARTEXT = "Kartenziffern im Klartext";
@@ -65,4 +65,22 @@ test("ziffernweise Karte über mehrere Zeilen wird maskiert, auch wenn eine Zeil
   for (const [zeilen, erwartet] of KARTE_UEBER_ZEILEN) {
     assert.deepEqual(maskRestrictedLines(zeilen.map(ZEILE)), erwartet, `${KLARTEXT}: ${zeilen.join(" | ")}`);
   }
+});
+
+const EINZELZIFFERN_MIT_ZAHL_DAHINTER = [
+  ["4 7 5 9 7 3 5 2 2 2 9 0 7 3 7 1 8 12345", "****3718 12345"],
+  ["5 - 3 - 7 - 8 - 2 - 4 - 6 - 8 - 1 - 3 - 4 - 6 - 8 - 8 - 8 - 1 - 8 - 5 99 foo", "****8185 99 foo"],
+];
+
+const EINZELZIFFERN_OHNE_KARTENLAENGE = "6, 9, 7, 6, 3, 2, 2, 5, 8, 2, 3, 9, 8, 3, 5, 2, 7, 0, 8, 2, 9 12345";
+
+test("Karte aus 17 oder 18 Einzelziffern mit mehrstelliger Zahl dahinter wird vollständig bis auf die letzten vier Ziffern maskiert", () => {
+  for (const [eingabe, erwartet] of EINZELZIFFERN_MIT_ZAHL_DAHINTER) {
+    assert.equal(maskRestrictedText(eingabe), erwartet, `${KLARTEXT}: ${eingabe}`);
+  }
+});
+
+test("Einzelziffern, aus denen sich keine gültige Kartennummer ergibt, bleiben unverändert und werden nicht als Karte gemeldet", () => {
+  assert.equal(maskRestrictedText(EINZELZIFFERN_OHNE_KARTENLAENGE), EINZELZIFFERN_OHNE_KARTENLAENGE);
+  assert.deepEqual(findRestrictedData(EINZELZIFFERN_OHNE_KARTENLAENGE), []);
 });
