@@ -15,9 +15,12 @@ import {
   findNumber,
   findTenant,
   findTenantByNumber,
+  numberRecordByE164,
+  failedNumberCount,
 } from "../src/store/state-ops.js";
 import {
   NUMBER_STATUS,
+  NUMBER_TRANSITIONS,
   TENANT_STATUS,
   BOOTSTRAP_TENANT_ID,
   GLOBAL_CAP_REASON,
@@ -353,110 +356,110 @@ import { KYC_LEVEL, PROVIDER } from "../src/store/defaults.js";
 
 const GRACE_MS = 60_000;
 const MAX_AGE_MS = 120_000;
-const SUSPENDED_ISO = "2026-01-01T00:00:00.000Z";
-const SUSPENDED_MS = Date.parse(SUSPENDED_ISO);
+const BEZUGSZEIT_ISO = "2026-01-01T00:00:00.000Z";
+const BEZUGSZEIT_MS = Date.parse(BEZUGSZEIT_ISO);
 
-const aktiveNummer = (s, tenantId, e164) => {
-  registerTenant(s, tenantId);
-  const { number } = requestNumber(s, { tenantId, ...CAPS });
-  beginProvisioning(s, number.id);
-  activateNumber(s, number.id, { e164, providerNumberId: `tnx_${tenantId}` });
-  return findNumber(s, number.id);
+const aktiveNummer = (zustand, tenantId, e164) => {
+  registerTenant(zustand, tenantId);
+  const { number } = requestNumber(zustand, { tenantId, ...CAPS });
+  beginProvisioning(zustand, number.id);
+  activateNumber(zustand, number.id, { e164, providerNumberId: `tnx_${tenantId}` });
+  return findNumber(zustand, number.id);
 };
 
 test("transitionNumber: unbekannte Nummer wirft 'nicht gefunden'", () => {
-  const s = makeDefaultState();
+  const zustand = makeDefaultState();
   assert.throws(
-    () => transitionNumber(s, "num_gibt_es_nicht", NUMBER_STATUS.ACTIVE),
+    () => transitionNumber(zustand, "num_gibt_es_nicht", NUMBER_STATUS.ACTIVE),
     /nicht gefunden/,
   );
 });
 
 test("transitionNumber: Sperre durch Fremd-Bindung blockt suspended, nicht die Rueckkehr nach active", () => {
-  const s = makeDefaultState();
-  const number = aktiveNummer(s, "t_busy", "+4915755500101");
-  bindPlatformNumber(s, {
+  const zustand = makeDefaultState();
+  const number = aktiveNummer(zustand, "t_busy", "+4915755500101");
+  bindPlatformNumber(zustand, {
     e164: number.e164,
     purpose: "fremdnutzung",
     provider: PROVIDER.TELNYX,
     tenantId: null,
   });
   assert.throws(
-    () => transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED),
+    () => transitionNumber(zustand, number.id, NUMBER_STATUS.SUSPENDED),
     /gesperrt .*abgelehnt/,
   );
-  const frei = aktiveNummer(s, "t_frei", "+4915755500102");
-  transitionNumber(s, frei.id, NUMBER_STATUS.SUSPENDED);
-  bindPlatformNumber(s, {
+  const frei = aktiveNummer(zustand, "t_frei", "+4915755500102");
+  transitionNumber(zustand, frei.id, NUMBER_STATUS.SUSPENDED);
+  bindPlatformNumber(zustand, {
     e164: frei.e164,
     purpose: "fremdnutzung",
     provider: PROVIDER.TELNYX,
     tenantId: null,
   });
-  transitionNumber(s, frei.id, NUMBER_STATUS.ACTIVE);
-  assert.equal(findNumber(s, frei.id).status, NUMBER_STATUS.ACTIVE);
+  transitionNumber(zustand, frei.id, NUMBER_STATUS.ACTIVE);
+  assert.equal(findNumber(zustand, frei.id).status, NUMBER_STATUS.ACTIVE);
 });
 
 test("attachNumberPaymentIntent und attachNumberRegistration: unbekannte Nummer wirft, Registrierung bleibt beim ersten Wert", () => {
-  const s = makeDefaultState();
-  assert.throws(() => attachNumberPaymentIntent(s, "num_x", "pi_1"), /nicht gefunden/);
-  assert.throws(() => attachNumberRegistration(s, "num_x", "reg_1"), /nicht gefunden/);
-  seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
-  assert.equal(attachNumberPaymentIntent(s, number.id, "pi_1").paymentIntentId, "pi_1");
-  attachNumberRegistration(s, number.id, "reg_1");
-  attachNumberRegistration(s, number.id, "reg_2");
-  assert.equal(findNumber(s, number.id).providerAgentPhoneNumberId, "reg_1");
+  const zustand = makeDefaultState();
+  assert.throws(() => attachNumberPaymentIntent(zustand, "num_x", "pi_1"), /nicht gefunden/);
+  assert.throws(() => attachNumberRegistration(zustand, "num_x", "reg_1"), /nicht gefunden/);
+  seedTenant(zustand);
+  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS });
+  assert.equal(attachNumberPaymentIntent(zustand, number.id, "pi_1").paymentIntentId, "pi_1");
+  attachNumberRegistration(zustand, number.id, "reg_1");
+  attachNumberRegistration(zustand, number.id, "reg_2");
+  assert.equal(findNumber(zustand, number.id).providerAgentPhoneNumberId, "reg_1");
 });
 
 test("attachNumberRegistration: gibt den Nummernsatz mit der gesetzten Registrierung zurueck", () => {
-  const s = makeDefaultState();
-  seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
-  const zurueck = attachNumberRegistration(s, number.id, "reg_rueckgabe");
-  assert.equal(zurueck, findNumber(s, number.id), "Rueckgabe ist der Nummernsatz");
+  const zustand = makeDefaultState();
+  seedTenant(zustand);
+  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS });
+  const zurueck = attachNumberRegistration(zustand, number.id, "reg_rueckgabe");
+  assert.equal(zurueck, findNumber(zustand, number.id), "Rueckgabe ist der Nummernsatz");
   assert.equal(zurueck.providerAgentPhoneNumberId, "reg_rueckgabe");
 });
 
 test("clearNumberElInboundTrunkBeleg: ein einzelnes gesetztes Belegfeld zaehlt, null-Felder nicht", () => {
-  const s = makeDefaultState();
-  const number = aktiveNummer(s, "t_beleg", "+4915755500103");
+  const zustand = makeDefaultState();
+  const number = aktiveNummer(zustand, "t_beleg", "+4915755500103");
   number.elInboundTrunkBelegtAt = null;
   number.elInboundTrunkZugangFp = null;
-  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, false);
+  assert.equal(clearNumberElInboundTrunkBeleg(zustand, number.id).changed, false);
   number.elInboundTrunkZugangFp = "fp_eins";
-  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, true);
-  assert.equal("elInboundTrunkZugangFp" in findNumber(s, number.id), false);
-  assert.equal(clearNumberElInboundTrunkBeleg(s, number.id).changed, false);
-  const belegt = { nowIso: SUSPENDED_ISO, zugangFp: "fp_zwei" };
-  assert.equal(markNumberElInboundTrunkBelegt(s, number.id, belegt).changed, true);
+  assert.equal(clearNumberElInboundTrunkBeleg(zustand, number.id).changed, true);
+  assert.equal("elInboundTrunkZugangFp" in findNumber(zustand, number.id), false);
+  assert.equal(clearNumberElInboundTrunkBeleg(zustand, number.id).changed, false);
+  const belegt = { nowIso: BEZUGSZEIT_ISO, zugangFp: "fp_zwei" };
+  assert.equal(markNumberElInboundTrunkBelegt(zustand, number.id, belegt).changed, true);
 });
 
 test("activateNumber und recordProvisioningJob: Kennungen tragen Praefix asg_ und job_", () => {
-  const s = makeDefaultState();
-  aktiveNummer(s, "t_ids", "+4915755500104");
-  assert.match(s.numberAssignments[0].id, /^asg_/);
-  const job = recordProvisioningJob(s, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" });
+  const zustand = makeDefaultState();
+  aktiveNummer(zustand, "t_ids", "+4915755500104");
+  assert.match(zustand.numberAssignments[0].id, /^asg_/);
+  const job = recordProvisioningJob(zustand, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" });
   assert.match(job.id, /^job_/);
   assert.equal(
-    recordProvisioningJob(s, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" }),
+    recordProvisioningJob(zustand, { numberId: "n", tenantId: "t_ids", idempotencyKey: "k1" }),
     job,
   );
 });
 
 test("releaseNumber: schliesst nur die offene Zuordnung der eigenen Nummer", () => {
-  const s = makeDefaultState();
-  const erste = aktiveNummer(s, "t_erste", "+4915755500105");
-  const zweite = aktiveNummer(s, "t_zweite", "+4915755500106");
-  releaseNumber(s, zweite.id);
-  const zuErster = s.numberAssignments.find((a) => a.numberId === erste.id);
-  const zuZweiter = s.numberAssignments.find((a) => a.numberId === zweite.id);
+  const zustand = makeDefaultState();
+  const erste = aktiveNummer(zustand, "t_erste", "+4915755500105");
+  const zweite = aktiveNummer(zustand, "t_zweite", "+4915755500106");
+  releaseNumber(zustand, zweite.id);
+  const zuErster = zustand.numberAssignments.find((a) => a.numberId === erste.id);
+  const zuZweiter = zustand.numberAssignments.find((a) => a.numberId === zweite.id);
   assert.equal(zuErster.releasedAt, null);
   assert.ok(zuZweiter.releasedAt);
 });
 
 test("redriveAgeHoldReason: fehlender oder unlesbarer Zeitstempel, zu alt, Grenze", () => {
-  const nowMs = SUSPENDED_MS;
+  const nowMs = BEZUGSZEIT_MS;
   const vor = (alterMs) => ({ createdAt: new Date(nowMs - alterMs).toISOString() });
   assert.equal(redriveAgeHoldReason({}, nowMs, MAX_AGE_MS), "unknown_age");
   assert.equal(redriveAgeHoldReason({ createdAt: "kein-datum" }, nowMs, MAX_AGE_MS), "unknown_age");
@@ -468,116 +471,116 @@ test("numberReleaseVerdict: Werte skip/hold/release, Karenz-Grenze und eigene vs
   assert.equal(RELEASE_VERDICT.HOLD, "hold");
   assert.equal(RELEASE_VERDICT.SKIP, "skip");
   assert.equal(RELEASE_VERDICT.RELEASE, "release");
-  const s = makeDefaultState();
-  const number = aktiveNummer(s, "t_verdict", "+4915755500107");
-  setSuspendedAtIfAbsent(s, "t_verdict", SUSPENDED_ISO);
+  const zustand = makeDefaultState();
+  const number = aktiveNummer(zustand, "t_verdict", "+4915755500107");
+  setSuspendedAtIfAbsent(zustand, "t_verdict", BEZUGSZEIT_ISO);
   assert.deepEqual(
-    numberReleaseVerdict(s, number, { nowMs: SUSPENDED_MS + GRACE_MS, graceMs: GRACE_MS }),
+    numberReleaseVerdict(zustand, number, { nowMs: BEZUGSZEIT_MS + GRACE_MS, graceMs: GRACE_MS }),
     { action: "skip", reason: "grace_not_reached" },
   );
-  const abgelaufen = { nowMs: SUSPENDED_MS + GRACE_MS + 1, graceMs: GRACE_MS };
-  assert.deepEqual(numberReleaseVerdict(s, number, abgelaufen), {
+  const abgelaufen = { nowMs: BEZUGSZEIT_MS + GRACE_MS + 1, graceMs: GRACE_MS };
+  assert.deepEqual(numberReleaseVerdict(zustand, number, abgelaufen), {
     action: "release",
     reason: null,
   });
-  bindPlatformNumber(s, {
+  bindPlatformNumber(zustand, {
     e164: number.e164,
     purpose: "eigene_nutzung",
     provider: PROVIDER.TELNYX,
     tenantId: "t_verdict",
   });
-  assert.equal(numberReleaseVerdict(s, number, abgelaufen).action, "release");
-  bindPlatformNumber(s, {
+  assert.equal(numberReleaseVerdict(zustand, number, abgelaufen).action, "release");
+  bindPlatformNumber(zustand, {
     e164: number.e164,
     purpose: "fremde_nutzung",
     provider: PROVIDER.TELNYX,
     tenantId: null,
   });
-  assert.deepEqual(numberReleaseVerdict(s, number, abgelaufen), {
+  assert.deepEqual(numberReleaseVerdict(zustand, number, abgelaufen), {
     action: "hold",
     reason: "platform_number_in_use",
   });
 });
 
 test("Vertragsende-Aufraeumen: setzen, nur genannte Felder aendern, Standard false", () => {
-  const s = makeDefaultState();
+  const zustand = makeDefaultState();
   assert.equal(
-    setContractEndCleanupPending(s, "t_unbekannt", { numberReleasePending: true }),
+    setContractEndCleanupPending(zustand, "t_unbekannt", { numberReleasePending: true }),
     null,
   );
   const keineFlags = { numberReleasePending: false, workosDeletePending: false };
-  assert.deepEqual(contractEndCleanupPending(s, "t_unbekannt"), keineFlags);
-  registerTenant(s, "t_cleanup");
-  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), keineFlags);
-  assert.equal(setContractEndCleanupPending(s, "t_cleanup").id, "t_cleanup");
-  setContractEndCleanupPending(s, "t_cleanup", { numberReleasePending: true });
-  setContractEndCleanupPending(s, "t_cleanup", { workosDeletePending: true });
-  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), {
+  assert.deepEqual(contractEndCleanupPending(zustand, "t_unbekannt"), keineFlags);
+  registerTenant(zustand, "t_cleanup");
+  assert.deepEqual(contractEndCleanupPending(zustand, "t_cleanup"), keineFlags);
+  assert.equal(setContractEndCleanupPending(zustand, "t_cleanup").id, "t_cleanup");
+  setContractEndCleanupPending(zustand, "t_cleanup", { numberReleasePending: true });
+  setContractEndCleanupPending(zustand, "t_cleanup", { workosDeletePending: true });
+  assert.deepEqual(contractEndCleanupPending(zustand, "t_cleanup"), {
     numberReleasePending: true,
     workosDeletePending: true,
   });
-  setContractEndCleanupPending(s, "t_cleanup", { numberReleasePending: false });
-  assert.deepEqual(contractEndCleanupPending(s, "t_cleanup"), {
+  setContractEndCleanupPending(zustand, "t_cleanup", { numberReleasePending: false });
+  assert.deepEqual(contractEndCleanupPending(zustand, "t_cleanup"), {
     numberReleasePending: false,
     workosDeletePending: true,
   });
 });
 
 test("tenantsPendingContractEndCleanup: genau die Mandanten mit mindestens einem offenen Flag", () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_nummer");
-  registerTenant(s, "t_workos");
-  registerTenant(s, "t_nichts");
-  setContractEndCleanupPending(s, "t_nummer", { numberReleasePending: true });
-  setContractEndCleanupPending(s, "t_workos", { workosDeletePending: true });
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_nummer");
+  registerTenant(zustand, "t_workos");
+  registerTenant(zustand, "t_nichts");
+  setContractEndCleanupPending(zustand, "t_nummer", { numberReleasePending: true });
+  setContractEndCleanupPending(zustand, "t_workos", { workosDeletePending: true });
   assert.deepEqual(
-    tenantsPendingContractEndCleanup(s).map((tenant) => tenant.id),
+    tenantsPendingContractEndCleanup(zustand).map((tenant) => tenant.id),
     ["t_nummer", "t_workos"],
   );
 });
 
 test("platformHoldEscalationCandidates: nur Nummer-Freigabe, alt genug, Halt durch Plattform-Nutzung", () => {
-  const s = makeDefaultState();
-  const nowMs = SUSPENDED_MS + MAX_AGE_MS;
+  const zustand = makeDefaultState();
+  const nowMs = BEZUGSZEIT_MS + MAX_AGE_MS;
   const fremd = { provider: PROVIDER.TELNYX, tenantId: null };
-  const festgehalten = aktiveNummer(s, "t_halt", "+4915755500108");
-  setSuspendedAtIfAbsent(s, "t_halt", SUSPENDED_ISO);
-  setContractEndCleanupPending(s, "t_halt", { numberReleasePending: true });
-  bindPlatformNumber(s, { e164: festgehalten.e164, purpose: "p", ...fremd });
+  const festgehalten = aktiveNummer(zustand, "t_halt", "+4915755500108");
+  setSuspendedAtIfAbsent(zustand, "t_halt", BEZUGSZEIT_ISO);
+  setContractEndCleanupPending(zustand, "t_halt", { numberReleasePending: true });
+  bindPlatformNumber(zustand, { e164: festgehalten.e164, purpose: "p", ...fremd });
 
-  const nurWorkos = aktiveNummer(s, "t_workos", "+4915755500109");
-  setSuspendedAtIfAbsent(s, "t_workos", SUSPENDED_ISO);
-  setContractEndCleanupPending(s, "t_workos", { workosDeletePending: true });
-  bindPlatformNumber(s, { e164: nurWorkos.e164, purpose: "p", ...fremd });
+  const nurWorkos = aktiveNummer(zustand, "t_workos", "+4915755500109");
+  setSuspendedAtIfAbsent(zustand, "t_workos", BEZUGSZEIT_ISO);
+  setContractEndCleanupPending(zustand, "t_workos", { workosDeletePending: true });
+  bindPlatformNumber(zustand, { e164: nurWorkos.e164, purpose: "p", ...fremd });
 
-  const imGespraech = aktiveNummer(s, "t_call", "+4915755500110");
-  setSuspendedAtIfAbsent(s, "t_call", SUSPENDED_ISO);
-  setContractEndCleanupPending(s, "t_call", { numberReleasePending: true });
-  s.calls.push({ id: "call_x", status: "active", from: imGespraech.e164, to: "+4915700000000" });
+  const imGespraech = aktiveNummer(zustand, "t_call", "+4915755500110");
+  setSuspendedAtIfAbsent(zustand, "t_call", BEZUGSZEIT_ISO);
+  setContractEndCleanupPending(zustand, "t_call", { numberReleasePending: true });
+  zustand.calls.push({ id: "call_x", status: "active", from: imGespraech.e164, to: "+4915700000000" });
 
   const ids = (grenze) =>
-    platformHoldEscalationCandidates(s, { nowMs: grenze, maxAgeMs: MAX_AGE_MS }).map((n) => n.id);
+    platformHoldEscalationCandidates(zustand, { nowMs: grenze, maxAgeMs: MAX_AGE_MS }).map((n) => n.id);
   assert.deepEqual(ids(nowMs + 1), [festgehalten.id]);
   assert.deepEqual(ids(nowMs), []);
 });
 
 test("paidWithoutNumberCandidates: zahlender Abonnent ohne Live-Nummer nach Karenz, Grenze exakt", () => {
-  const s = makeDefaultState();
-  const paidSinceSec = SUSPENDED_MS / 1000;
+  const zustand = makeDefaultState();
+  const paidSinceSec = BEZUGSZEIT_MS / 1000;
   const bezahlt = (tenantId) => {
-    registerTenant(s, tenantId);
-    setKycLevel(s, tenantId, KYC_LEVEL.CARD);
-    setTenantSubscription(s, tenantId, { currentPeriodStart: paidSinceSec });
+    registerTenant(zustand, tenantId);
+    setKycLevel(zustand, tenantId, KYC_LEVEL.CARD);
+    setTenantSubscription(zustand, tenantId, { currentPeriodStart: paidSinceSec });
   };
   bezahlt("t_ohne");
   bezahlt("t_mit");
-  requestNumber(s, { tenantId: "t_mit", ...CAPS });
-  registerTenant(s, "t_ohne_abo");
-  setTenantSubscription(s, "t_ohne_abo", { currentPeriodStart: paidSinceSec });
+  requestNumber(zustand, { tenantId: "t_mit", ...CAPS });
+  registerTenant(zustand, "t_ohne_abo");
+  setTenantSubscription(zustand, "t_ohne_abo", { currentPeriodStart: paidSinceSec });
   const kyc = { graceMs: GRACE_MS, kycMinLevel: KYC_LEVEL.CARD };
-  assert.deepEqual(paidWithoutNumberCandidates(s, { nowMs: SUSPENDED_MS + GRACE_MS, ...kyc }), []);
-  assert.deepEqual(paidWithoutNumberCandidates(s, { nowMs: SUSPENDED_MS + GRACE_MS + 1, ...kyc }), [
-    { tenantId: "t_ohne", paidSinceIso: SUSPENDED_ISO },
+  assert.deepEqual(paidWithoutNumberCandidates(zustand, { nowMs: BEZUGSZEIT_MS + GRACE_MS, ...kyc }), []);
+  assert.deepEqual(paidWithoutNumberCandidates(zustand, { nowMs: BEZUGSZEIT_MS + GRACE_MS + 1, ...kyc }), [
+    { tenantId: "t_ohne", paidSinceIso: BEZUGSZEIT_ISO },
   ]);
 });
 
@@ -599,4 +602,35 @@ test("markTenantNeedsManualReconcile gibt den Mandanten zurueck und aendert ihn 
   const second = markTenantNeedsManualReconcile(state, "t_user1");
   assert.equal(second.changed, false);
   assert.equal(second.tenant, findTenant(state, "t_user1"));
+});
+
+const UNBEKANNTER_AUSGANGSSTATUS = "stufe_unbekannt";
+
+test("C(a) numberRecordByE164: nur aktive Nummer mit dieser E.164, ohne Angabe nie ein Treffer", () => {
+  const zustand = makeDefaultState();
+  zustand.numbers.push({ id: "num_ohne", tenantId: "t_c", status: NUMBER_STATUS.ACTIVE });
+  zustand.numbers.push({ id: "num_a", tenantId: "t_c", status: NUMBER_STATUS.ACTIVE, e164: "+4930111" });
+  zustand.numbers.push({ id: "num_r", tenantId: "t_c", status: NUMBER_STATUS.RELEASED, e164: "+4930222" });
+  assert.equal(numberRecordByE164(zustand, undefined), null, "ohne Angabe kein Treffer");
+  assert.equal(numberRecordByE164(zustand, ""), null);
+  assert.equal(numberRecordByE164(zustand, "+4930111").id, "num_a");
+  assert.equal(numberRecordByE164(zustand, "+4930222"), null, "nicht aktive Nummer zaehlt nicht");
+});
+
+test("C(b) canTransitionNumber: erlaubter Uebergang ja, unbekannter Ausgangsstatus nie", () => {
+  assert.equal(canTransitionNumber(NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED), true);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.RELEASED, NUMBER_STATUS.ACTIVE), false);
+  assert.equal(Object.keys(NUMBER_TRANSITIONS).includes(UNBEKANNTER_AUSGANGSSTATUS), false);
+  assert.equal(canTransitionNumber(UNBEKANNTER_AUSGANGSSTATUS, NUMBER_STATUS.ACTIVE), false);
+  assert.equal(canTransitionNumber(UNBEKANNTER_AUSGANGSSTATUS, NUMBER_STATUS.RELEASED), false);
+});
+
+test("C(g) failedNumberCount: zaehlt nur die fehlgeschlagenen Nummern des eigenen Mandanten", () => {
+  const zustand = makeDefaultState();
+  zustand.numbers.push({ id: "n1", tenantId: "t_x", status: NUMBER_STATUS.FAILED });
+  zustand.numbers.push({ id: "n2", tenantId: "t_x", status: NUMBER_STATUS.FAILED });
+  zustand.numbers.push({ id: "n3", tenantId: "t_x", status: NUMBER_STATUS.ACTIVE });
+  zustand.numbers.push({ id: "n4", tenantId: "t_y", status: NUMBER_STATUS.FAILED });
+  zustand.numbers.push({ id: "n5", tenantId: "t_y", status: NUMBER_STATUS.ACTIVE });
+  assert.equal(failedNumberCount(zustand, "t_x"), 2, "nur eigene fehlgeschlagene Nummern");
 });
