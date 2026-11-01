@@ -25,14 +25,18 @@ export function pruefsumme(teile, kopf) {
   return createHash("sha256").update(JSON.stringify({ kopf, teile })).digest("hex");
 }
 
-export function mittlere(werte) {
+function mittlere(werte) {
   const sortiert = [...werte].sort((links, rechts) => links - rechts);
   return sortiert[Math.floor(sortiert.length / HAELFTE)];
 }
 
-export function nachGewicht(alle, von, dauern) {
+export function gewichtung(dauern) {
   const mittel = mittlere(Object.values(dauern));
-  const gewicht = (test) => (Object.hasOwn(dauern, test) ? dauern[test] : mittel);
+  return (test) => (Object.hasOwn(dauern, test) ? dauern[test] : mittel);
+}
+
+export function nachGewicht(alle, von, dauern) {
+  const gewicht = gewichtung(dauern);
   const summen = Array.from({ length: von }, () => 0);
   const zuordnung = new Map();
   const schwerZuerst = [...alle].sort((links, rechts) => gewicht(rechts) - gewicht(links) || (links < rechts ? -1 : 1));

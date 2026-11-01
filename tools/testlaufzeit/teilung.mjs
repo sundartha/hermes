@@ -1,7 +1,7 @@
 import { existsSync, globSync } from "node:fs";
 
 import { leseLaufzeiten } from "../mutationspruefung/laufzeiten.mjs";
-import { mittlere, nachGewicht } from "../mutationspruefung/teile.mjs";
+import { gewichtung, nachGewicht } from "../mutationspruefung/teile.mjs";
 
 export const MESSDATEI = "tools/testlaufzeit/laufzeiten.json";
 export const WERKZEUG_MESSDATEI = "tools/testlaufzeit/werkzeug-laufzeiten.json";
@@ -62,8 +62,8 @@ export function werkzeugTeilzahl(dateien, messdatei = werkzeugMessdatei()) {
   const obergrenze = Math.max(1, Math.min(WERKZEUG_TEILE_HOECHSTENS, dateien.length));
   const { dauern } = leseDauern(messdatei);
   if (dauern === null) return obergrenze;
-  const mittel = mittlere(Object.values(dauern));
-  const summe = dateien.reduce((gesamt, datei) => gesamt + (Object.hasOwn(dauern, datei) ? dauern[datei] : mittel), 0);
+  const gewicht = gewichtung(dauern);
+  const summe = dateien.reduce((gesamt, datei) => gesamt + gewicht(datei), 0);
   return Math.min(obergrenze, Math.max(1, Math.ceil(summe / WERKZEUG_SUMME_JE_TEIL_MS)));
 }
 

@@ -178,7 +178,7 @@
     "beleg": "tools/testlaufzeit-pruefen.mjs"
   },
   ".github/workflows/ci.yml › tests › Ergebnis festhalten": {
-    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
+    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum, Werkzeugbaum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/ci.yml › tests › Bestandene Tests melden": {
     "meldet": "T12: gibt nur die Zahl bestandener Tests an den Sammeljob weiter."
@@ -257,6 +257,12 @@
     "zweck": "prüfleiter",
     "beleg": "tools/pruefleiter.mjs"
   },
+  ".github/workflows/pruefleiter.yml › teile › Node 22 und npm ci": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci-werkzeuge; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/pruefleiter.yml › teile › Teile nach Laufzeit planen": {
+    "meldet": "Rechnet nur aus der gemessenen Dauer der Werkzeug-Testdateien, die laufen, wie viele Teile die Matrix bekommt; urteilt nicht über Tests, und ob jede Datei genau einmal lief, prüft der Schritt Alle Teile erfolgreich und vollständig."
+  },
   ".github/workflows/pruefleiter.yml › werkzeugtests › Node 22, npm ci und Install-Skripte": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
@@ -278,7 +284,7 @@
     "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/pruefleiter.yml › pruefleiter › Node 22 und npm ci": {
-    "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+    "aufbau": "Lokale Action .github/actions/node-npm-ci-werkzeuge; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
   ".github/workflows/pruefleiter.yml › pruefleiter › Alle Teile erfolgreich und vollständig": {
     "zweck": "prüfleiter",
@@ -361,6 +367,9 @@
   },
   ".github/actions/uebernahme-im-schatten/action.yml › Übernahme im Schatten": {
     "meldet": "Berechnet, welche Testdateien aus einem früheren grünen Lauf am gleichen Git-Baum übernommen werden können, schreibt die Vorhersage als Artefakt und urteilt nicht; nur mit UEBERNAHME=an schreibt sie die Liste der Dateien, die noch laufen, sonst wird nichts ausgelassen; Fehler landen in der Vorhersage, der Schritt endet grün."
+  },
+  ".github/actions/node-npm-ci-werkzeuge/action.yml › Node 22 und npm ci": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci ohne apps/web und ohne Install-Skripte; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
   ".github/actions/node-npm-ci/action.yml › npm ci": {
     "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
