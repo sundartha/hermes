@@ -36,16 +36,18 @@ export async function echteDatenbankMitRolle(t) {
     }),
   );
   await alsVerwaltung(async (verwaltung) => {
-    await verwaltung.query(`CREATE ROLE ${rolle} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${kennwort}'`);
+    await verwaltung.query(
+      `CREATE ROLE ${rolle} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${kennwort}'`,
+    );
     await verwaltung.query(`ALTER DATABASE ${datenbank} OWNER TO ${rolle}`);
   });
   return {
     adresse: adresseMitRolle(db.adresse, rolle, kennwort),
     rolle,
-    verbindungenBeenden: () =>
+    leerlaufVerbindungenBeenden: () =>
       alsVerwaltung((verwaltung) =>
         verwaltung.query(
-          "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND usename = $2",
+          "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND usename = $2 AND state = 'idle'",
           [datenbank, rolle],
         ),
       ),

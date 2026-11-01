@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { after } from "node:test";
 import http from "node:http";
 import pg from "pg";
@@ -77,7 +78,7 @@ async function unbelegtenAnrufAnlegen(store) {
 }
 
 function poolAufPglite(db) {
-  pg.Pool = class PglitePool {
+  pg.Pool = class PglitePool extends EventEmitter {
     async connect() {
       return {
         query: async (text, params) => {
