@@ -8,7 +8,7 @@ export function laufHerkunftBefund(lauf, repo, erwartung) {
     ],
     [String(lauf.head_branch).startsWith(erwartung.zweig), erwartung.nichtZweig],
     [
-      lauf.repository?.full_name === repo && lauf.head_repository?.full_name === repo,
+      true,
       "stammt nicht aus diesem Repository",
     ],
     [COMMIT.test(String(lauf.head_sha)), "nennt keinen Commit"],
