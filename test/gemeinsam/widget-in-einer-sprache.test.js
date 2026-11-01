@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import { parsers } from "prettier/plugins/html";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const WIDGET_LOCALE_META_KEY = "hermes/locale";
@@ -12,9 +13,34 @@ const WIDGET_CALLS = "calls";
 const WIDGET_CALL = "call";
 const WIDGETS = await ausgelieferteWidgets();
 const widgetHtml = (id) => WIDGETS[id];
-const SKRIPT_ELEMENT = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
-const STIL_ELEMENT = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
-const ohneSkriptUndStil = (html) => html.replace(SKRIPT_ELEMENT, "").replace(STIL_ELEMENT, "");
+const NICHT_SICHTBAR = new Set(["script", "style", "svg", "head"]);
+const ANZEIGE_ATTRIBUT = /^data-(?:[a-z_]+-display|status-label|hud-phase|confirm-(?:to|objective|hint-text|notice-text))$/;
+
+function besuche(knoten, besucher, weg = []) {
+  for (const kind of knoten.children ?? []) {
+    besucher(kind, weg, knoten);
+    if (kind.kind === "element") besuche(kind, besucher, [...weg, kind.name]);
+  }
+}
+
+function attributeAllerElemente(html) {
+  const attribute = [];
+  besuche(parsers.html.parse(html, {}), (knoten) => {
+    if (knoten.kind === "element") attribute.push(...knoten.attrs);
+  });
+  return attribute;
+}
+
+function sichtbareTexte(html) {
+  const texte = [];
+  besuche(parsers.html.parse(html, {}), (knoten, weg, eltern) => {
+    if (knoten.kind !== "text" || weg.some((name) => NICHT_SICHTBAR.has(name))) return;
+    if (eltern.attrs?.some((attribut) => attribut.name === "data-i18n")) return;
+    const text = knoten.value.trim();
+    if (text.length > 0) texte.push(text);
+  });
+  return texte;
+}
 const skriptMit = (html, teil) => skriptbloecke(html).find((code) => code.includes(teil));
 const I18N_SKRIPT = skriptMit(widgetHtml("call"), "HermesI18n = {");
 const WIDGET_DICT = JSON.parse(I18N_SKRIPT.match(/var WIDGET_DICT = (.*);\n/)[1]);
@@ -153,7 +179,7 @@ test("WSP-3 (Umschalten) - schon geschriebene Texte folgen einer spaeteren Sprac
 });
 
 function schluesselAusMarkup(html) {
-  return [...ohneSkriptUndStil(html).matchAll(/data-i18n="([^"]+)"/g)].map(([, key]) => key);
+  return attributeAllerElemente(html).filter(({ name }) => name === "data-i18n").map(({ value }) => value);
 }
 
 const TEXT = String.raw`"((?:[^"\\]|\\.)+)"`;
@@ -190,26 +216,10 @@ test("WSP-5 (Vollstaendigkeit) - die Woerterbuecher fuehren dieselben Schluessel
   }
 });
 
-const NICHT_SICHTBAR = [
-  SKRIPT_ELEMENT,
-  STIL_ELEMENT,
-  /<!--[\s\S]*?-->/g,
-  /<svg[\s\S]*?<\/svg>/g,
-  /<head>[\s\S]*?<\/head>/g,
-  /<[^>]*data-i18n="[^"]*"[^>]*>[^<]*<\/[a-z]+>/g,
-];
-
-function sichtbaresMarkup(html) {
-  return NICHT_SICHTBAR.reduce((rest, muster) => rest.replace(muster, ""), html);
-}
-
 test("WSP-6 (Text im Markup) - ausserhalb von data-i18n steht in keinem Widget ein sprachgebundener Text", () => {
   const neutral = /^(?:[—·\s\d:.,%/()+-]*|Hermes)$/;
   for (const id of ALL_WIDGET_IDS) {
-    const texte = [...sichtbaresMarkup(widgetHtml(id)).matchAll(/>([^<]+)</g)]
-      .map(([, text]) => text.trim())
-      .filter((text) => text.length > 0);
-    const sprachgebunden = texte.filter((text) => !neutral.test(text));
+    const sprachgebunden = sichtbareTexte(widgetHtml(id)).filter((text) => !neutral.test(text));
     assert.deepEqual(sprachgebunden, [], `${id}: Text ohne data-i18n im Markup`);
   }
 });
@@ -428,10 +438,11 @@ const IN_NUTZERSPRACHE = Object.freeze({
 });
 
 function angezeigteFelder(html) {
-  const markup = ohneSkriptUndStil(html);
-  const slots = [...markup.matchAll(/data-mcp="([^"]+)"/g)].map(([, name]) => name);
-  const anzeigen = [...markup.matchAll(/\b(data-(?:[a-z_]+-display|status-label|hud-phase|confirm-(?:to|objective|hint-text|notice-text)))\b/g)].map(([, name]) => name);
-  return [...new Set([...slots, ...anzeigen])];
+  const felder = attributeAllerElemente(html).flatMap(({ name, value }) => {
+    if (name === "data-mcp") return [value];
+    return ANZEIGE_ATTRIBUT.test(name) ? [name] : [];
+  });
+  return [...new Set(felder)];
 }
 
 test("WSP-11 (Ausnahmen benannt) - jedes angezeigte Feld des Call-Widgets ist entweder in der Nutzersprache, eine Kennung oder ein ausdruecklich ausgenommener Inhalt", () => {
