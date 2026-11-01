@@ -111,6 +111,7 @@ async function setup({ activated = false } = {}) {
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
   ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
   store.save();
+  await store.drainFlushes();
 
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
   if (activated) await accounts.setStatus(TENANT, "active");
