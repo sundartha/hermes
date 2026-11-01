@@ -2310,6 +2310,66 @@
     grid-row: 1 / -1;
   }
 
+  .mh-uses {
+    grid-template-rows: 1fr repeat(4, auto) 1fr;
+  }
+  .mh-uses > .mh-label {
+    grid-row: 2;
+  }
+  .mh-uses > .mh-h2 {
+    grid-row: 3;
+  }
+  .mh-uses > .mh-lead--wide {
+    grid-row: 4;
+  }
+  .mh-uses > .mh-dots {
+    grid-row: 5;
+  }
+  .mh-uses > .mh-stage {
+    grid-row: 1 / -1;
+  }
+  .mh .mh-uses .mh-h2--uses {
+    margin-top: 20px;
+    font-size: clamp(48px, 7svh, 72px);
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+  }
+  .mh .mh-uses .mh-lead--wide {
+    max-width: 440px;
+    margin-top: 24px;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  .mh .mh-uses .mh-scene {
+    padding: 34px 36px 28px;
+    text-align: left;
+  }
+  .mh-uses .mh-scene__tag {
+    display: block;
+    font:
+      500 11px/12px "Space Grotesk",
+      sans-serif;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #bcd6f3;
+  }
+  .mh .mh-uses .mh-scene__title {
+    margin: 14px 0 0;
+    font-size: 34px;
+    line-height: 1.05;
+  }
+  .mh .mh-uses .mh-chat {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(207, 228, 250, 0.14);
+  }
+  .mh .mh-uses .mh-chat .mh-msg--ring,
+  .mh .mh-uses .mh-chat .mh-msg--note,
+  .mh .mh-uses .mh-chat .mh-msg--card {
+    align-self: flex-start;
+    text-align: left;
+  }
+
   .mh-price {
     --mh-side: max(var(--space-block, 48px), calc(50% - 680px));
     grid-template-columns: minmax(280px, 360px) minmax(min(640px, 100%), 800px);
