@@ -14,14 +14,16 @@ import { pathToFileURL } from "node:url";
 
 import { TOOL_TEST_GLOB } from "../../test/testbaenke-run.mjs";
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
-import { waehleTeil } from "../testlaufzeit/teilung.mjs";
-import { erzeugerFuer, MAX_ALTER_MS, QUELLEN } from "./erzeuger.mjs";
+import { waehleTeil, werkzeugMessdatei } from "../testlaufzeit/teilung.mjs";
+import { readList } from "../werkzeugtests/werkzeugbaum.mjs";
+import { erzeugerFuer, MAX_ALTER_MS, QUELLEN, WERKZEUG_TEILBAUM } from "./erzeuger.mjs";
 import {
   festhaltungsZeile,
   geprueftBaum,
   laufKennung,
   pruefsumme,
   wackeligeDateien,
+  werkzeugBaum,
 } from "./festhaltung.mjs";
 
 const ERSTES_ARGUMENT = 2;
@@ -41,31 +43,46 @@ const ARTEN = [ART_CI, ART_PRUEFLEITER];
 const SCHATTEN_DATEI = ".pruefung/uebernahme-schatten.json";
 const WACKELIG_DATEI = ".pruefung/wackelig.json";
 const UEBERNOMMEN_DATEI = ".pruefung/uebernommen.jsonl";
+const KOPF = "HEAD";
 const AUFRUF =
   "Aufruf: node tools/uebernahme/baum.mjs planen --art ci|pruefleiter --teil <k> --teile <n> [--dateien <liste>] [--rest <liste>] [--gewollt ja|nein]\n" +
-  "        node tools/uebernahme/baum.mjs festhalten --bericht <datei> --name <artefakt>";
+  "        node tools/uebernahme/baum.mjs festhalten --bericht <datei> --name <artefakt> [--mit-werkzeugbaum]";
 
 export function dateienDesTeils({ art, teil, teile, dateienDatei }) {
   if (art === ART_CI) {
     return readFileSync(dateienDatei, "utf8").split("\n").filter((zeile) => zeile !== "");
   }
-  return waehleTeil({ dateien: globSync(TOOL_TEST_GLOB), teil, anzahl: teile });
+  return waehleTeil({ dateien: globSync(TOOL_TEST_GLOB), teil, anzahl: teile, messdatei: werkzeugMessdatei() });
 }
 
 function ursprungDes(zeile, treffer) {
   return zeile.uebernommen ?? { lauf: treffer.lauf, workflow: treffer.workflow, zeitpunkt: treffer.erstellt };
 }
 
-function entscheideDatei(datei, erzeuger, jetzt) {
-  const treffer = erzeuger.flatMap((quelle) =>
-    (quelle.zeilen.get(datei) ?? []).map((zeile) => ({
-      zeile,
-      lauf: quelle.lauf.id,
-      workflow: quelle.workflow,
-      erstellt: quelle.lauf.created_at,
-    })),
-  );
-  if (treffer.length === 0) return { datei, uebernehmbar: false, grund: "kein Ergebnis im Erzeuger" };
+function zaehltFuer(datei, liste) {
+  return ({ zeile, umfang }) => umfang !== WERKZEUG_TEILBAUM || (!liste.has(datei) && zeile.uebernommen === undefined);
+}
+
+function trefferVon(quelle, datei) {
+  const zeilen = quelle.zeilen.get(datei) ?? [];
+  return zeilen.map((zeile) => ({
+    zeile,
+    lauf: quelle.lauf.id,
+    workflow: quelle.workflow,
+    erstellt: quelle.lauf.created_at,
+    umfang: quelle.umfang,
+  }));
+}
+
+function keinTreffer(datei, erzeuger, liste) {
+  const nurTeilbaum = liste.has(datei) && erzeuger.some((quelle) => quelle.zeilen.has(datei));
+  const grund = nurTeilbaum ? "steht in der Liste und braucht den gleichen ganzen Baum" : "kein Ergebnis im Erzeuger";
+  return { datei, uebernehmbar: false, grund };
+}
+
+function entscheideDatei(datei, erzeuger, { jetzt, liste }) {
+  const treffer = erzeuger.flatMap((quelle) => trefferVon(quelle, datei)).filter(zaehltFuer(datei, liste));
+  if (treffer.length === 0) return keinTreffer(datei, erzeuger, liste);
   if (treffer.some(({ zeile }) => zeile.bestanden !== true)) {
     return { datei, uebernehmbar: false, grund: "im Erzeuger nicht bestanden" };
   }
@@ -80,6 +97,7 @@ function entscheideDatei(datei, erzeuger, jetzt) {
     erwartet: { bestanden: true },
     quelle: erstes.lauf,
     workflow: erstes.workflow,
+    umfang: erstes.umfang,
     ursprung,
   };
 }
@@ -102,13 +120,16 @@ async function sammleErzeuger(kontext) {
 
 export async function planeUebernahme(kontext) {
   const { art, teil, dateien, ereignis, kennung } = kontext;
-  const kopf = { format: FORMAT, modus: kontext.modus ?? MODUS_SCHATTEN, art, teil, ereignis, baum: kontext.baum };
-  const erzeuger = kennung === null ? [] : await sammleErzeuger({ ...kontext, erwartet: { baum: kontext.baum, kennung } });
+  const { werkzeugbaum } = kontext;
+  const kopf = { format: FORMAT, modus: kontext.modus ?? MODUS_SCHATTEN, art, teil, ereignis, baum: kontext.baum, werkzeugbaum };
+  const erwartet = { baum: kontext.baum, kennung, werkzeugbaum };
+  const erzeuger = kennung === null ? [] : await sammleErzeuger({ ...kontext, erwartet });
   const brauchbar = erzeuger.filter(({ zeilen }) => zeilen !== undefined);
+  const umstaende = { jetzt: kontext.jetzt, liste: new Set(kontext.liste ?? []) };
   const eintraege = dateien.map((datei) =>
     kennung === null
       ? { datei, uebernehmbar: false, grund: "Runner-Image unbekannt" }
-      : entscheideDatei(datei, brauchbar, kontext.jetzt),
+      : entscheideDatei(datei, brauchbar, umstaende),
   );
   return {
     ...kopf,
@@ -161,9 +182,10 @@ function uebernahmeText(plan, dateien, uebernommen) {
   const laufen = dateien.length - uebernommen.length;
   const kopf = `Übernahme, ${plan.art} Teil ${plan.teil}: ${uebernommen.length} von ${dateien.length} Dateien übernommen, ${laufen} laufen`;
   const grund = plan.fehler ? [ausfallText(plan)] : [];
-  const zeilen = uebernommen.map(
-    ({ datei, ursprung }) => `- ${datei}: Lauf ${ursprung.lauf} (${ursprung.workflow}), Baum ${plan.baum}`,
-  );
+  const zeilen = uebernommen.map(({ datei, ursprung, umfang }) => {
+    const stand = umfang === WERKZEUG_TEILBAUM ? `Werkzeugbaum ${plan.werkzeugbaum}` : `Baum ${plan.baum}`;
+    return `- ${datei}: Lauf ${ursprung.lauf} (${ursprung.workflow}), ${stand}`;
+  });
   return [kopf, ...grund, ...zeilen].join("\n");
 }
 
@@ -191,9 +213,15 @@ function optionen(argumente) {
       gewollt: { type: "string" },
       bericht: { type: "string" },
       name: { type: "string" },
+      "mit-werkzeugbaum": { type: "boolean", default: false },
       ausgabe: { type: "string", default: SCHATTEN_DATEI },
     },
   }).values;
+}
+
+function werkzeugUmstaende(art) {
+  if (art !== ART_PRUEFLEITER) return {};
+  return { werkzeugbaum: werkzeugBaum(KOPF), liste: readList().dateien };
 }
 
 function planungsKontext(werte) {
@@ -202,6 +230,7 @@ function planungsKontext(werte) {
   const dateien = dateienDesTeils({ art: werte.art, teil, teile, dateienDatei: werte.dateien });
   if (dateien === null) throw new Error("Die Testdateien des Teils sind nicht bestimmbar");
   return {
+    ...werkzeugUmstaende(werte.art),
     art: werte.art,
     teil,
     dateien,
@@ -305,6 +334,7 @@ function festhalten(werte) {
       baum: geprueftBaum(),
       kennung,
       wackelig: wackeligeDateien(WACKELIG_DATEI),
+      werkzeugbaum: werte["mit-werkzeugbaum"] ? werkzeugBaum(KOPF) : undefined,
     }),
   );
   return EXIT_OK;

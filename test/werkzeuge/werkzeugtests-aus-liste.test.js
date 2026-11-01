@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { appendFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import {
   failingTest,
+  isolatedEnvironment,
   outputLines,
   passingTest,
   PRUEFLEITER_TOOL,
@@ -12,6 +14,7 @@ import {
   REPO_ROOT,
   runIn,
 } from "./probe-repo.js";
+import { workflowStepScript } from "./workflow-dateien.js";
 
 const PARTS = 2;
 const LIST_FILE = "tools/basis/werkzeugtests-mit-produkt.json";
@@ -315,4 +318,109 @@ test("ohne Basis oder zusammen mit --ohne-werkzeugtests bricht die Auswahl der T
     const result = runIn(directory, process.execPath, [PART_FILES_TOOL, "--teil", "1", "--teile", "1", ...args]);
     assert.equal(result.status, EXIT_USAGE, args.join(" "));
   }
+});
+
+const PLAN_FILE = "plaene/P-1-probe/phase.json";
+const PLAN_READER_MARKER = "liest die Plandatei";
+const MEASUREMENT_FILE = "tools/testlaufzeit/werkzeug-laufzeiten.json";
+const PLANNING_STEP = "Teile nach Laufzeit planen";
+const END_OF_JOB = "\n\n";
+
+function readsPlan(name) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { readFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    `test(${JSON.stringify(name)}, () => {`,
+    `  assert.equal(JSON.parse(readFileSync(${JSON.stringify(PLAN_FILE)}, "utf8")).phase, 1);`,
+    "});",
+    "",
+  ].join("\n");
+}
+
+function planProbe(context, listed) {
+  return probe(context, {
+    listed,
+    extraFiles: {
+      "tools/werkzeug.mjs": "export const werkzeug = 0;\n",
+      [PLAN_FILE]: JSON.stringify({ phase: 1 }),
+      [LISTED_FILE]: readsPlan(PLAN_READER_MARKER),
+    },
+  });
+}
+
+test("eine Änderung unter plaene und src fährt nur die gelistete Werkzeug-Testdatei", (context) => {
+  const directory = probe(context, {
+    extraFiles: { [PLAN_FILE]: "{}\n", [LISTED_FILE]: passingTest("gelisteter Werkzeugtest") },
+  });
+  change(directory, PLAN_FILE);
+  change(directory, PRODUCT_FILE);
+
+  assertAllGreen(runParts(directory));
+
+  assert.deepEqual(filesThatRan(directory), [LISTED_FILE]);
+  assert.deepEqual(selectedPartFiles(directory), [PRODUCT_TEST_FILE, LISTED_FILE].toSorted());
+});
+
+test("der Wächter macht eine Werkzeug-Testdatei außerhalb der Liste rot, die eine Plandatei liest, und lässt sie in der Liste grün", (context) => {
+  for (const [listed, red] of [[[], true], [[LISTED_FILE], false]]) {
+    const directory = planProbe(context, listed);
+    change(directory, "tools/werkzeug.mjs");
+
+    const results = runParts(directory);
+    const text = output(results);
+
+    assert.equal(results.some(({ status }) => status !== 0), red, text);
+    assert.equal(text.includes(`${LISTED_FILE}: ${PRODUCT_READER_NOTICE}`), red, text);
+  }
+});
+
+function measuredProbe(context, milliseconds) {
+  const dauern = Object.fromEntries(ALL_TOOL_TEST_FILES.map((file) => [file, milliseconds]));
+  return probe(context, {
+    extraFiles: {
+      "tools/werkzeug.mjs": "export const werkzeug = 0;\n",
+      [LISTED_FILE]: passingTest("gelisteter Werkzeugtest"),
+      [MEASUREMENT_FILE]: JSON.stringify({ lauf: 1, dauern }),
+    },
+  });
+}
+
+function plannedParts(directory, event) {
+  const result = runPruefleiter(directory, [EVENT_OPTION, event, "--teile-planen"]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  return JSON.parse(result.stdout);
+}
+
+test("die Zahl der Werkzeugteile folgt der gemessenen Dauer der Dateien, die laufen", (context) => {
+  const heavy = measuredProbe(context, 1_000_000);
+  change(heavy, "tools/werkzeug.mjs");
+  const light = measuredProbe(context, 1000);
+  change(light, "tools/werkzeug.mjs");
+  const product = measuredProbe(context, 1_000_000);
+  change(product, PRODUCT_FILE);
+
+  assert.deepEqual(plannedParts(heavy, "merge_group"), [1, 2, 3]);
+  assert.deepEqual(plannedParts(light, "merge_group"), [1]);
+  assert.deepEqual(plannedParts(product, "merge_group"), [1]);
+  assert.deepEqual(plannedParts(product, "pull_request"), [1]);
+});
+
+test("der Schritt Teile nach Laufzeit planen gibt die geplanten Teile als Matrix aus", (context) => {
+  const directory = measuredProbe(context, 1_000_000);
+  const base = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  change(directory, "tools/werkzeug.mjs");
+  const [script] = workflowStepScript("pruefleiter.yml", PLANNING_STEP)
+    .replaceAll("tools/pruefleiter.mjs", JSON.stringify(PRUEFLEITER_TOOL))
+    .split(END_OF_JOB);
+  const outputFile = join(directory, "ausgabe.txt");
+
+  const result = spawnSync("bash", ["-e", "-c", script], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...isolatedEnvironment(), EVENT_NAME: "merge_group", PR_BASE_SHA: base, GITHUB_OUTPUT: outputFile, GITHUB_STEP_SUMMARY: join(directory, "zusammenfassung.md") },
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(outputFile, "utf8"), "teile=[1,2,3]\n");
 });

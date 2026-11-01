@@ -37,8 +37,34 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
         run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --ohne-werkzeugtests
 
+  teile:
+    name: Prüfleiter Teile planen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      teile: ${{ steps.planen.outputs.teile }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci-werkzeuge
+
+      - name: Teile nach Laufzeit planen
+        id: planen
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+        run: |
+          teile=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --fuer-ereignis "$EVENT_NAME" --teile-planen)
+          echo "Prüfleiter-Teile: $teile" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "teile=$teile" >> "$GITHUB_OUTPUT"
+
   werkzeugtests:
     name: Prüfleiter Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
+    needs: teile
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -47,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        teil: [1, 2, 3, 4, 5, 6]
+        teil: ${{ fromJSON(needs.teile.outputs.teile) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -101,7 +127,7 @@ jobs:
       - name: Ergebnis festhalten
         env:
           TEIL: ${{ matrix.teil }}
-        run: node tools/uebernahme/baum.mjs festhalten --bericht ".pruefung/werkzeugteil-$TEIL.jsonl" --name "werkzeugteil-$TEIL"
+        run: node tools/uebernahme/baum.mjs festhalten --bericht ".pruefung/werkzeugteil-$TEIL.jsonl" --name "werkzeugteil-$TEIL" --mit-werkzeugbaum
 
       - name: Bericht des Teils hochladen
         if: always()
@@ -116,7 +142,7 @@ jobs:
   pruefleiter:
     name: Prüfleiter
     if: always()
-    needs: [vorpruefung, werkzeugtests]
+    needs: [vorpruefung, teile, werkzeugtests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -126,10 +152,7 @@ jobs:
           fetch-depth: 0
 
       - name: Node 22 und npm ci
-        uses: ./.github/actions/node-npm-ci
-        with:
-          web: "false"
-          install-skripte: "false"
+        uses: ./.github/actions/node-npm-ci-werkzeuge
 
       - name: Berichte der Teile laden
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c

@@ -2,9 +2,11 @@ import { entpacke } from "../auftrag/pruefer-gedaechtnis.mjs";
 import { laufHerkunftBefund } from "../lauf-herkunft.mjs";
 import { jobFehler, jobsDesLaufs } from "../tests-ausmisten/festgehalten.mjs";
 import { git, prNummerAus } from "../warteschlange/gleicher-stand.mjs";
-import { festhaltungImProtokoll, pruefsumme } from "./festhaltung.mjs";
+import { festhaltungImProtokoll, pruefsumme, werkzeugBaum } from "./festhaltung.mjs";
 
 export const MAX_ALTER_MS = 86_400_000;
+export const GANZER_BAUM = "baum";
+export const WERKZEUG_TEILBAUM = "werkzeugbaum";
 const LAEUFE_JE_ABFRAGE = 100;
 const WARTESCHLANGEN_ZWEIG = "gh-readonly-queue/master/";
 const MERGE_GROUP = "merge_group";
@@ -33,12 +35,14 @@ export const QUELLEN = {
       { workflow: CI, ereignis: PULL_REQUEST },
       { workflow: PRUEFLEITER, ereignis: PULL_REQUEST },
     ],
-    pruefleiter: [{ workflow: PRUEFLEITER, ereignis: PULL_REQUEST }],
+    pruefleiter: [
+      { workflow: PRUEFLEITER, ereignis: PULL_REQUEST },
+      { workflow: PRUEFLEITER, ereignis: MERGE_GROUP },
+    ],
   },
 };
 
-export function baumVon(sha, wurzel) {
-  const lesen = () => git(["rev-parse", `${sha}${NUR_BAUM}`], { root: wurzel }).trim();
+function mitCommit(sha, wurzel, lesen) {
   try {
     return lesen();
   } catch {
@@ -49,6 +53,15 @@ export function baumVon(sha, wurzel) {
       return undefined;
     }
   }
+}
+
+export function baumVon(sha, wurzel) {
+  return mitCommit(sha, wurzel, () => git(["rev-parse", `${sha}${NUR_BAUM}`], { root: wurzel }).trim());
+}
+
+function gleicherStand(lauf, { baum, werkzeugbaum, wurzel }) {
+  if (baumVon(lauf.head_sha, wurzel) === baum) return true;
+  return werkzeugbaum !== undefined && mitCommit(lauf.head_sha, wurzel, () => werkzeugBaum(lauf.head_sha, wurzel)) === werkzeugbaum;
 }
 
 function laufBefund(lauf, repo, { workflow, ereignis }) {
@@ -108,9 +121,16 @@ async function protokollVon(github, jobs, name) {
   return (await github.roh(`/actions/jobs/${job.id}/logs`)).toString("utf8");
 }
 
-function festhaltungBefund(festhaltung, { baum, kennung }) {
+function geprueftUmfang(festhaltung, { baum, werkzeugbaum }) {
+  if (festhaltung.baum === baum) return GANZER_BAUM;
+  if (werkzeugbaum !== undefined && festhaltung.werkzeugbaum === werkzeugbaum) return WERKZEUG_TEILBAUM;
+  return undefined;
+}
+
+function festhaltungBefund(festhaltung, erwartet) {
+  const { kennung } = erwartet;
   if (festhaltung === undefined) return "nennt die Festhaltung nicht genau einmal";
-  if (festhaltung.baum !== baum) return "nennt im Protokoll einen anderen geprüften Baum";
+  if (geprueftUmfang(festhaltung, erwartet) === undefined) return "nennt im Protokoll einen anderen geprüften Baum";
   if (festhaltung.kennung.node !== kennung.node) return "lief mit einer anderen Node-Version";
   if (festhaltung.kennung.image !== kennung.image) return "lief auf einem anderen Runner-Image";
   if (festhaltung.wackelig > 0) return "hatte wackelige Tests";
@@ -147,28 +167,36 @@ async function pruefeTeil(github, lauf, { workflow, jobs, teil, erwartet }) {
   if (pruefsumme(inhalt) !== festhaltung.summe) {
     throw new Error(`Das Artefakt ${workflow.artefakt(teil.teil)} passt nicht zur Prüfsumme im Protokoll`);
   }
-  return berichtZeilen(inhalt);
+  return { zeilen: berichtZeilen(inhalt), umfang: geprueftUmfang(festhaltung, erwartet) };
 }
 
 export async function pruefeLauf(github, lauf, { workflow, erwartet }) {
   try {
     const jobs = await jobsDesLaufs(github, lauf.id);
     const zeilen = new Map();
+    let umfang = GANZER_BAUM;
     for (const teil of teilJobs(jobs, workflow)) {
-      for (const zeile of await pruefeTeil(github, lauf, { workflow, jobs, teil, erwartet })) {
+      const geprueft = await pruefeTeil(github, lauf, { workflow, jobs, teil, erwartet });
+      if (geprueft.umfang === WERKZEUG_TEILBAUM) umfang = WERKZEUG_TEILBAUM;
+      for (const zeile of geprueft.zeilen) {
         zeilen.set(zeile.datei, [...(zeilen.get(zeile.datei) ?? []), zeile]);
       }
     }
-    return { lauf, workflow: workflow.datei, zeilen };
+    return { lauf, workflow: workflow.datei, zeilen, umfang };
   } catch (grund) {
     return { lauf, workflow: workflow.datei, grund: grund.message };
   }
 }
 
-export async function erzeugerFuer(github, quelle, { baum, ref, jetzt, repo, wurzel, erwartet }) {
+function erwartungFuer(quelle, { baum, kennung, werkzeugbaum }) {
+  return quelle.workflow === PRUEFLEITER ? { baum, kennung, werkzeugbaum } : { baum, kennung };
+}
+
+export async function erzeugerFuer(github, quelle, { ref, jetzt, repo, wurzel, erwartet: alleErwartungen }) {
+  const erwartet = erwartungFuer(quelle, alleErwartungen);
   const treffer = [];
   for (const lauf of await kandidaten(github, quelle, { ref, jetzt, repo })) {
-    if (baumVon(lauf.head_sha, wurzel) === baum) treffer.push(lauf);
+    if (gleicherStand(lauf, { ...erwartet, wurzel })) treffer.push(lauf);
   }
   if (treffer.length === 0) {
     return { workflow: quelle.workflow.datei, grund: "kein Lauf mit gleichem Baum gefunden" };

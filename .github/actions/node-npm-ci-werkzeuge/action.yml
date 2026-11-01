@@ -1,0 +1,10 @@
+name: Node 22 und npm ci für Werkzeuge
+description: Richtet nach dem Checkout Node 22 ein und installiert die Pakete ohne apps/web und ohne Install-Skripte, für Jobs, die nur Werkzeuge unter tools/ fahren.
+runs:
+  using: composite
+  steps:
+    - name: Node 22 und npm ci
+      uses: ./.github/actions/node-npm-ci
+      with:
+        web: "false"
+        install-skripte: "false"

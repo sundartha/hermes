@@ -8,7 +8,7 @@ import { parseArgs } from "node:util";
 import { TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
-import { dateienDesTeils, waehleTeil } from "./testlaufzeit/teilung.mjs";
+import { dateienDesTeils, waehleTeil, werkzeugMessdatei, werkzeugTeilzahl } from "./testlaufzeit/teilung.mjs";
 import { planToolTests } from "./werkzeugtests/auswahl.mjs";
 import { guardedRun } from "./werkzeugtests/waechter.mjs";
 
@@ -41,6 +41,7 @@ const EXCLUSIVE_MODES = [
   "werkzeugteil",
   "teile-pruefen",
   "werkzeugtests-gewollt",
+  "teile-planen",
 ];
 const EVENT_SELECTION = { pull_request: "werkzeugtests-aus-liste", schedule: "alle-werkzeugtests" };
 const TOOL_TESTS_WANTED = "ja";
@@ -156,11 +157,16 @@ function toolTestFiles(plan, part, listFile) {
   if (listFile !== undefined) return listedFiles(listFile);
   if (plan.art === LIST_TOOL_TESTS) {
     if (part === undefined) return plan.dateien;
-    return dateienDesTeils({ dateien: plan.dateien, teil: part.index, anzahl: part.total }).dateien;
+    return dateienDesTeils({
+      dateien: plan.dateien,
+      teil: part.index,
+      anzahl: part.total,
+      messdatei: werkzeugMessdatei(),
+    }).dateien;
   }
   const all = globSync(TOOL_TEST_GLOB);
   if (part === undefined) return all;
-  return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total });
+  return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total, messdatei: werkzeugMessdatei() });
 }
 
 function toolTests(plan, part, listFile) {
@@ -172,7 +178,7 @@ function toolTests(plan, part, listFile) {
   }
   mkdirSync(PROTOCOL_DIR, { recursive: true });
   const listed = new Set(plan.liste);
-  const guarded = plan.art === ALL_TOOL_TESTS ? files.filter((file) => !listed.has(file)) : [];
+  const guarded = files.filter((file) => !listed.has(file));
   const direct = files.filter((file) => !guarded.includes(file));
   const report = part === undefined ? undefined : partReportPath(part);
   const directStatus = direct.length === 0 ? 0 : runToolBank(direct, { laufzeit: report });
@@ -190,6 +196,7 @@ function parseOptions() {
       "alle-werkzeugtests": { type: "boolean", default: false },
       "werkzeugtests-aus-liste": { type: "boolean", default: false },
       "werkzeugtests-gewollt": { type: "boolean", default: false },
+      "teile-planen": { type: "boolean", default: false },
       "fuer-ereignis": { type: "string" },
       werkzeugteil: { type: "string" },
       werkzeugdateien: { type: "string" },
@@ -236,7 +243,7 @@ async function partRun(options, part) {
   const plan = await toolTestPlan(options);
   if (plan.art === NO_TOOL_TESTS) {
     console.log(
-      `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
+      `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/ (plaene/ zählt wie src/).`,
     );
     return 0;
   }
@@ -246,6 +253,12 @@ async function partRun(options, part) {
 async function announceToolTests(options) {
   const plan = await toolTestPlan(options);
   console.log(plan.art === NO_TOOL_TESTS ? TOOL_TESTS_NOT_WANTED : TOOL_TESTS_WANTED);
+  return 0;
+}
+
+async function announceParts(options) {
+  const total = werkzeugTeilzahl(expectedToolTestFiles(await toolTestPlan(options)));
+  console.log(JSON.stringify(Array.from({ length: total }, (_leer, index) => index + 1)));
   return 0;
 }
 
@@ -346,6 +359,7 @@ async function main() {
     return EXIT_USAGE;
   }
   if (options["werkzeugtests-gewollt"]) return announceToolTests(options);
+  if (options["teile-planen"]) return announceParts(options);
   await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "), {
     vorrangFuerPush: true,
   });

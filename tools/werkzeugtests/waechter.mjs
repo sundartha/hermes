@@ -13,23 +13,16 @@ import { dirname, join } from "node:path";
 
 import { TOOL_TEST_DIRECTORY } from "../../test/testbaenke-run.mjs";
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
-import { HARNESS_FILES, LIST_FILE } from "./auswahl.mjs";
+import { HIDDEN_DIRECTORIES, isToolTreePath, LIST_FILE } from "./werkzeugbaum.mjs";
 
 const LIST_NAME = LIST_FILE.split("/").at(-1);
 const MESSAGE = `liest Produktcode, gehört in ${LIST_NAME} oder auf ein Beispiel-Repo`;
 const MAX_GIT_OUTPUT_BYTES = 268_435_456;
-const PRODUCT_DIRECTORY = "src/";
 const TEST_DIRECTORY = "test/";
 const NODE_MODULES = "node_modules";
 const PACKAGE_FILE = "package.json";
 const EXIT_FAILURE = 1;
 const TEMP_PREFIX = "werkzeugtests-waechter-";
-
-function isVisible(path) {
-  if (path.startsWith(PRODUCT_DIRECTORY)) return false;
-  if (!path.startsWith(TEST_DIRECTORY)) return true;
-  return path.startsWith(TOOL_TEST_DIRECTORY) || HARNESS_FILES.includes(path);
-}
 
 function trackedFiles(source) {
   const result = spawnSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
@@ -64,12 +57,9 @@ function linkInstalledModules(source, target, files) {
 function copyWithoutProduct(source, target) {
   const files = trackedFiles(source);
   mkdirSync(target, { recursive: true });
-  for (const path of files.filter(isVisible)) copyOne(source, target, path);
-  linkInstalledModules(
-    source,
-    target,
-    files.filter(isVisible),
-  );
+  const visible = files.filter(isToolTreePath);
+  for (const path of visible) copyOne(source, target, path);
+  linkInstalledModules(source, target, visible);
 }
 
 function readRedFiles(file) {
@@ -95,7 +85,7 @@ function runInTree({ files, runBank, laufzeitBericht, work }) {
   const redWithoutProduct = join(work, "rot-ohne-produkt.json");
   const timings = join(work, "laufzeit.jsonl");
   console.log(
-    `Wächter: ${files.length} Werkzeugtest-Dateien außerhalb der Liste laufen ohne ${PRODUCT_DIRECTORY} und ohne ${TEST_DIRECTORY} (außer ${TOOL_TEST_DIRECTORY}).`,
+    `Wächter: ${files.length} Werkzeugtest-Dateien außerhalb der Liste laufen ohne ${HIDDEN_DIRECTORIES.join(", ")} und ohne ${TEST_DIRECTORY} (außer ${TOOL_TEST_DIRECTORY}).`,
   );
   const status = runBank(files, {
     cwd: tree,
