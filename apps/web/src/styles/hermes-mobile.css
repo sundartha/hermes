@@ -2118,7 +2118,7 @@
   .mh-s-close,
   body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
     --mh-hero-x: clamp(var(--mh-edge), 15vw, 360px);
-    --mh-hero-bottom: clamp(var(--space-block, 48px), 10svh, 120px);
+    --mh-hero-bottom: calc(clamp(var(--space-block, 48px), 10svh, 120px) + clamp(0px, calc(20svh - 145px), 6svh));
     justify-content: flex-end;
     align-items: flex-start;
     padding: var(--space-section, 80px) var(--mh-side) var(--mh-hero-bottom) var(--mh-hero-x);
