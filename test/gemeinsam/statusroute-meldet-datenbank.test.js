@@ -162,3 +162,102 @@ test("B2-8: nach gescheiterter Probe startet der naechste Abruf eine neue", asyn
   );
   assert.equal(store.probenAufrufe, 2);
 });
+
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const STATUS_TOKEN_VARIABLE = "HERMES_STATUS_TOKEN";
+const FRIST_FUER_TIMER_MS = 7777;
+
+async function mitMitgeschriebenemLog(arbeit) {
+  const zeilen = [];
+  const { log, warn, error } = console;
+  console.log = (...teile) => zeilen.push(teile.join(" "));
+  console.warn = console.error = () => {};
+  try {
+    return { ergebnis: await arbeit(), zeilen };
+  } finally {
+    Object.assign(console, { log, warn, error });
+  }
+}
+
+async function statusTokenAusUmgebung(umgebungswert, ladeKonfiguration) {
+  const gesichert = process.env[STATUS_TOKEN_VARIABLE];
+  try {
+    if (umgebungswert === undefined) delete process.env[STATUS_TOKEN_VARIABLE];
+    else process.env[STATUS_TOKEN_VARIABLE] = umgebungswert;
+    return (await ladeKonfiguration()).config.auth.statusToken;
+  } finally {
+    if (gesichert === undefined) delete process.env[STATUS_TOKEN_VARIABLE];
+    else process.env[STATUS_TOKEN_VARIABLE] = gesichert;
+  }
+}
+
+test("B2-9: abgelehnter Abruf steht als auth_failed mit Grund status_token im Protokoll, ohne den Schluessel", async () => {
+  const store = attrappenSpeicher();
+  const { zeilen } = await mitMitgeschriebenemLog(() =>
+    mitStatusroute({ store }, (basis) =>
+      statusAbrufen(basis, `Bearer ${"x".repeat(STATUS_TOKEN_MIN_LENGTH)}`),
+    ),
+  );
+  const auditZeilen = zeilen.filter((zeile) => zeile.startsWith("[audit] auth_failed"));
+  assert.equal(auditZeilen.length, 1);
+  assert.match(auditZeilen[0], new RegExp(`path=${STATUS_PATH} grund=status_token$`));
+  assert.equal(
+    zeilen.some((zeile) => zeile.includes(SCHLUESSEL)),
+    false,
+  );
+});
+
+test("B2-10: der Fristtimer der Datenbankprobe wird nach der Antwort abgeraeumt", async (t) => {
+  const setzer = t.mock.method(globalThis, "setTimeout");
+  const loescher = t.mock.method(globalThis, "clearTimeout");
+  const antwort = await mitRoutenServer(
+    makeInternStatusRoutes({
+      config: konfiguration(),
+      store: attrappenSpeicher(),
+      datenbankFristMs: FRIST_FUER_TIMER_MS,
+    }),
+    (basis) => statusAbrufen(basis),
+  );
+  assert.equal(antwort.status, HTTP_OK);
+  const gesetzt = setzer.mock.calls.filter((aufruf) => aufruf.arguments[1] === FRIST_FUER_TIMER_MS);
+  const fristTimer = gesetzt.map((aufruf) => aufruf.result);
+  const abgeraeumt = loescher.mock.calls.map((aufruf) => aufruf.arguments[0]);
+  assert.equal(fristTimer.length, 1);
+  assert.equal(abgeraeumt.includes(fristTimer[0]), true);
+});
+
+test("B2-11: scheitert das Zusammenstellen der Antwort, kommt 500 statt eines haengenden Abrufs", async () => {
+  const config = {
+    auth: { statusToken: SCHLUESSEL },
+    server: {
+      get deployedCommit() {
+        throw new Error(FEHLERDETAIL);
+      },
+    },
+  };
+  const antwort = await stumm(() =>
+    mitStatusroute({ store: attrappenSpeicher(), config }, (basis) => statusAbrufen(basis)),
+  );
+  assert.equal(antwort.status, HTTP_INTERNAL_SERVER_ERROR);
+});
+
+test("B2-12: der Schluessel kommt aus HERMES_STATUS_TOKEN, ohne Rand-Leerraum", async () => {
+  const schluessel = await statusTokenAusUmgebung(
+    `  ${SCHLUESSEL}\n`,
+    () => import("../../src/config.js?b2-status-token-gesetzt"),
+  );
+  assert.equal(schluessel, SCHLUESSEL);
+});
+
+test("B2-13: ohne HERMES_STATUS_TOKEN ist der Schluessel die leere Zeichenkette", async () => {
+  const fehlend = await statusTokenAusUmgebung(
+    undefined,
+    () => import("../../src/config.js?b2-status-token-fehlt"),
+  );
+  const nurLeerraum = await statusTokenAusUmgebung(
+    "  \n",
+    () => import("../../src/config.js?b2-status-token-leerraum"),
+  );
+  assert.equal(fehlend, "");
+  assert.equal(nurLeerraum, "");
+});
