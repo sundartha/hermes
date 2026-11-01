@@ -205,16 +205,20 @@ function festhalten(werte) {
   return EXIT_OK;
 }
 
-const BEFEHLE = { planen, festhalten };
+const BEFEHLE = new Map([
+  ["planen", planen],
+  ["festhalten", festhalten],
+]);
 
 export async function main(argumente) {
   const [befehl, ...rest] = argumente;
-  if (!Object.hasOwn(BEFEHLE, befehl ?? "")) {
+  const ausfuehren = BEFEHLE.get(befehl);
+  if (ausfuehren === undefined) {
     console.error(AUFRUF);
     return EXIT_AUFRUF;
   }
   try {
-    return await BEFEHLE[befehl](optionen(rest));
+    return await ausfuehren(optionen(rest));
   } catch (grund) {
     console.error(grund.message);
     return EXIT_FEHLER;
