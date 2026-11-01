@@ -15,8 +15,6 @@
     "src/billing/stripe.js|ced51cdaef731cdc",
     "src/billing/stripe.js|eb7d48136192fd0e",
     "src/billing/stripe.js|f8e704dace8f1a2c",
-    "src/brevo-mail.js|10ac152ee43e5199",
-    "src/brevo-mail.js|1a901a2e375de479",
     "src/llm/adapters/deepseek.js|2ef6b83bb37354b5",
     "src/mcp-tools.js|491513426f08d95a",
     "src/research/adapters/exa-search.js|01d666ac8f4ebe35",

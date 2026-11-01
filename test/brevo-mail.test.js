@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeBrevoMailer, verifyBrevoAccount } from "../src/brevo-mail.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { antwortetNie, mitKurzerFrist } from "./gemeinsam/kurze-antwortfrist.mjs";
 
 const API_KEY = "xkeysib-should-never-leak-9f8a7b6c5d4e";
 const FROM = "kuendigung@sundartha.example";
@@ -108,4 +109,25 @@ test("verifyBrevoAccount: Provider-Fehler -> wirft mit http_<status>-Code, keine
   });
   assert.equal(_fetch.calls.length, 1);
   assert.equal(_fetch.calls[0].url, "https://api.brevo.com/v3/account");
+});
+
+const MAIL_SENDEN_FRIST_MS = 10_000;
+const KONTO_PRUEFEN_FRIST_MS = 5_000;
+
+test("Brevo-Fristen: antwortet Brevo auf die Mail nicht, bricht sendMail nach 10 Sekunden ab", async () => {
+  const mailer = makeBrevoMailer(mailConfig(), { _fetch: antwortetNie });
+
+  const fristen = await mitKurzerFrist(() =>
+    assert.rejects(mailer.sendMail({ to: TO, subject: "s", text: "t" }), { name: "TimeoutError" }),
+  );
+
+  assert.deepEqual(fristen, [MAIL_SENDEN_FRIST_MS]);
+});
+
+test("Brevo-Fristen: antwortet Brevo auf die Kontoprüfung nicht, bricht verifyBrevoAccount nach 5 Sekunden ab", async () => {
+  const fristen = await mitKurzerFrist(() =>
+    assert.rejects(verifyBrevoAccount(mailConfig(), { _fetch: antwortetNie }), { name: "TimeoutError" }),
+  );
+
+  assert.deepEqual(fristen, [KONTO_PRUEFEN_FRIST_MS]);
 });
