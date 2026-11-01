@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { existsSync } from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
@@ -338,6 +339,15 @@ const rawConfig = {
   exaApiBase: stripTrailingSlash((process.env.EXA_API_BASE || "https://api.exa.ai").trim()),
 
   metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
+
+  telemetryOtlpUrl: (process.env.METRIKEN_OTLP_URL || "").trim(),
+  telemetryOtlpUser: (process.env.METRIKEN_OTLP_BENUTZER || "").trim(),
+  telemetryOtlpToken: (process.env.METRIKEN_OTLP_TOKEN || "").trim(),
+  telemetryInstanceId: (process.env.RENDER_INSTANCE_ID || os.hostname()).trim(),
+  telemetryIntervalMs: numEnv("METRIKEN_INTERVALL_MS", process.env.METRIKEN_INTERVALL_MS, {
+    fallback: MS_PER_MINUTE,
+    min: 10,
+  }),
 
   telnyxApiKey: process.env.TELNYX_API_KEY || "",
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "",
@@ -906,6 +916,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
+  telemetry: ["telemetryOtlpUrl", "telemetryOtlpUser", "telemetryOtlpToken", "telemetryInstanceId", "telemetryIntervalMs"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
   werkzeug: ["renderApiKey"],
