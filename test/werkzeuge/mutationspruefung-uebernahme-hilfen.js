@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { after, before } from "node:test";
 
 import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
-import { HILFE, NEGATIV, NULLTEST, TESTBANK, ZAHLTEST, ghAttrappe, holeVorergebnis, nachrundeRepo, quelle, temporaer, vorlaufRepo, werkzeugLauf } from "./mutationspruefung-nachrunde-hilfen.js";
+import { HILFE, NEGATIV, NULLTEST, TESTBANK, ZAHLTEST, abgewandelt, ghAttrappe, holeVorergebnis, nachrundeRepo, quelle, temporaer, vorlaufRepo, werkzeugLauf } from "./mutationspruefung-nachrunde-hilfen.js";
 
 const GEAENDERT = '  if (zahl <= -1) return "negativ";';
 const AUSFUEHRBAR = 0o755;
@@ -113,6 +113,18 @@ function prAttrappe(vorlauf, aufraeumer, { laeufe, lauf }) {
   writeFiles(ordner, { gh: WEITERLEITUNG, "listung.json": JSON.stringify({ laeufe, original }) });
   chmodSync(join(ordner, "gh"), AUSFUEHRBAR);
   return ordner;
+}
+
+export function mergeVorlauf(vorlauf, aufraeumer, umbau = (teil) => teil) {
+  const baum = rev(vorlauf.repo, `${vorlauf.basis}^{tree}`);
+  const identitaet = ["-c", "user.name=Probe", "-c", "user.email=probe@example.com"];
+  const gemacht = runIn(vorlauf.repo, "git", [...identitaet, "commit-tree", baum, "-p", vorlauf.basis, "-p", vorlauf.kopf, "-m", "Merge des Pull Requests"]);
+  assert.equal(gemacht.status, 0, gemacht.stderr);
+  const merge = gemacht.stdout.trim();
+  const gehalten = runIn(vorlauf.repo, "git", ["update-ref", `refs/heads/merge-${merge.slice(0, 7)}`, merge]);
+  assert.equal(gehalten.status, 0, gehalten.stderr);
+  const eigener = abgewandelt(vorlauf, aufraeumer, (teile) => teile.map((teil) => umbau({ ...teil, kopf: merge, baum })));
+  return { ...eigener, kopfPr: vorlauf.kopf, kopfBasis: vorlauf.basis, merge, baum };
 }
 
 export function holeImPullRequest(vorlauf, aufraeumer, { dateien = {}, laeufe = [prLauf(vorlauf)], lauf = {}, umgebung = {} }) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { abgewandelt } from "./mutationspruefung-nachrunde-hilfen.js";
-import { holeImPullRequest, prLauf, vorlaufJeDatei } from "./mutationspruefung-uebernahme-hilfen.js";
+import { holeImPullRequest, mergeVorlauf, prLauf, vorlaufJeDatei } from "./mutationspruefung-uebernahme-hilfen.js";
 
 const KEIN_VORERGEBNIS = /^Mutationsprüfung: kein Vorergebnis \((.+)\), voller Neulauf\.$/m;
 const AUS_VORLAUF = /^Mutationsprüfung: Vorergebnis aus Lauf (\d+), .+$/m;
@@ -60,6 +60,32 @@ test("ohne früheren Lauf des Pull Requests läuft die Prüfung voll neu mit Log
 
 test("ein Vorlauf, dessen Kopf einen anderen Baum hat als der geprüfte, wird nicht angenommen", FRIST, () => {
   abgelehnt({ laeufe: [prLauf(zustand.vorlauf, { head_sha: zustand.vorlauf.basis })], lauf: { head_sha: zustand.vorlauf.basis } }, /Kopf des Vorlaufs nicht nachprüfbar/);
+});
+
+test("ein Vorlauf, der auf dem Merge-Commit des Pull Requests gemessen hat, wird angenommen, auch wenn der Zweig hinter dem Hauptstand liegt", FRIST, () => {
+  const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer);
+  const lauf = { head_sha: merge.kopfPr };
+  const { geholt } = holeImPullRequest(merge, zustand.aufraeumer, { laeufe: [prLauf(merge, lauf)], lauf });
+  assert.match(geholt.stdout, AUS_VORLAUF);
+});
+
+test("ein Merge-Commit des Vorlaufs, dessen Baum nicht zum Teilergebnis passt, wird nicht angenommen", FRIST, () => {
+  const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer, (teil) => ({ ...teil, baum: "0".repeat(40) }));
+  const lauf = { head_sha: merge.kopfPr };
+  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /Kopf des Vorlaufs nicht nachprüfbar/, merge);
+});
+
+test("ein Merge-Commit des Vorlaufs, der den Kopf des Pull Requests nicht als zweiten Elternteil hat, wird nicht angenommen", FRIST, () => {
+  const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer);
+  const lauf = { head_sha: merge.kopfBasis };
+  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /Kopf des Vorlaufs nicht nachprüfbar/, merge);
+});
+
+test("Teilergebnisse eines Vorlaufs, die auf verschiedenen Commits gemessen haben, werden nicht angenommen", FRIST, () => {
+  const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer);
+  const gemischt = abgewandelt(merge, zustand.aufraeumer, ([erster]) => [{ ...erster, teile: 2, kopf: merge.merge, baum: merge.baum }, { ...erster, teil: 2, teile: 2, kopf: merge.kopfPr, baum: merge.baum }]);
+  const lauf = { head_sha: merge.kopfPr };
+  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /Kopf des Vorlaufs nicht nachprüfbar/, gemischt);
 });
 
 test("Teilergebnisse ohne Angabe des geprüften Baums werden nicht angenommen", FRIST, () => {
