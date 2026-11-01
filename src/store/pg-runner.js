@@ -17,7 +17,6 @@ export async function createPgPoolRunner(connectionString) {
   };
   return {
     runner,
-    close: () => pool.end(),
     poolZustand: () => ({ wartend: pool.waitingCount, offen: pool.totalCount }),
   };
 }
