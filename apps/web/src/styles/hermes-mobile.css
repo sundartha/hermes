@@ -2054,11 +2054,14 @@
 
 
 @media (min-width: 768px) and (min-height: 600px) and (not ((pointer: coarse) and (max-width: 1024px) and (orientation: portrait))) {
+  .mh {
+    --mh-edge: 36px;
+  }
   .mh-screen {
     --mh-side: max(48px, calc(50% - 580px));
   }
   .mh-head {
-    padding: 28px 28px 0 36px;
+    padding: 28px 28px 0 var(--mh-edge);
   }
   .mh-clouds {
     left: calc(50vw - 0.5 * var(--mh-cw));
@@ -2100,14 +2103,24 @@
     height: 52px;
     font-size: 16px;
   }
+  .mh .mh-s-hero .mh-actions {
+    align-items: flex-start;
+  }
   .mh .mh-s-hero .mh-how-link {
+    align-items: flex-start;
+    padding-inline: 0;
     font-size: 16px;
   }
-  .mh-s-hero {
-    padding-bottom: clamp(48px, 9svh, 96px);
+  .mh-s-hero .mh-how-link__thread {
+    display: none;
   }
+  .mh-s-hero,
+  .mh-s-close,
   body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
-    padding-bottom: clamp(48px, 9svh, 96px);
+    justify-content: center;
+    align-items: flex-start;
+    padding: var(--space-section, 80px) var(--mh-side) var(--space-section, 80px) var(--mh-edge);
+    text-align: left;
   }
 
   .mh-s-content {
