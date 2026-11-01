@@ -3,6 +3,7 @@
     { "name": "workflows", "befehl": "node tools/workflows-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Workflows prüfen"] },
     { "name": "codeowners", "befehl": "node tools/codeowners-abgleich.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS"] },
     { "name": "commitlint", "befehl": "npx --no-install commitlint --from \"$BASIS\" --to HEAD --verbose", "ci": [".github/workflows/ci.yml › pruefungen › Commit-Prüfung"] },
+    { "name": "src-nur-lauf", "befehl": "node tools/src-nur-lauf.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Src nur aus lauf"] },
     { "name": "lint", "befehl": "npm run lint -- --format ./tools/lint-format.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Lint"] },
     { "name": "tsc", "befehl": "npx --no-install tsc --noEmit", "ci": [".github/workflows/ci.yml › pruefungen › Typprüfung"] },
     { "name": "typabdeckung", "befehl": "node tools/typabdeckung.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Typabdeckung"] },

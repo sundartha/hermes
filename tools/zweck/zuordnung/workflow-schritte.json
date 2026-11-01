@@ -49,6 +49,10 @@
   ".github/workflows/ci.yml › pruefungen › Zweck der Commit-Prüfung": {
     "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
   },
+  ".github/workflows/ci.yml › pruefungen › Src nur aus lauf": {
+    "zweck": "github/src-nur-lauf",
+    "beleg": "tools/src-nur-lauf.mjs"
+  },
   ".github/workflows/ci.yml › pruefungen › Lint": {
     "gruppen": "tools/zweck/zuordnung/lint-regeln.json",
     "beleg": "tools/lint-format.mjs"

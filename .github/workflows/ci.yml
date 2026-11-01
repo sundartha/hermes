@@ -163,6 +163,17 @@ jobs:
         if: failure() && steps.commitpruefung.outcome == 'failure'
         run: node tools/zweck-zeigen.mjs uebrige/commit-pruefung
 
+      - name: Src nur aus lauf
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        run: node tools/src-nur-lauf.mjs --basis "$PR_BASE_SHA" --kopf "$PR_HEAD_SHA" --ereignis "$EVENT_NAME" --pr "$PR_NUMBER" --queue-ref "$QUEUE_REF"
+
       - name: Lint
         run: npm run lint -- --format ./tools/lint-format.mjs
 
