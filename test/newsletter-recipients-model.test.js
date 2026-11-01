@@ -20,6 +20,8 @@ import {
   cancellationMailPending,
   tenantsPendingCancellationMail,
   confirmNewsletterRecipientByToken,
+  setNewsletterConsent,
+  findTenant,
 } from "../src/store/state-ops.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
@@ -254,74 +256,75 @@ test("[NIE2] die Tageskappe der Bestaetigungsmails zaehlt genau das letzte 24-St
 });
 
 const EIN_TAG_IN_MS = 86_400_000;
+const SEIT_ANBEGINN = "0";
 const UNBEKANNT = "t_unbekannt";
 
 function mitEmpfaenger(emails) {
-  const s = freshTenantState();
+  const zustand = freshTenantState();
   for (const email of emails) {
-    addNewsletterRecipient(s, TENANT, { email, tokenHash: `hash-${email}`, tokenExpiresAt: "2026-08-16T12:00:00.000Z", unsubToken: `u-${email}` });
+    addNewsletterRecipient(zustand, TENANT, { email, tokenHash: `hash-${email}`, tokenExpiresAt: "2026-08-16T12:00:00.000Z", unsubToken: `u-${email}` });
   }
-  return s;
+  return zustand;
 }
 
 test("tenantIdpSubject: liefert den Subject-Wert, sonst null (auch unbekannter Tenant)", () => {
-  const s = freshTenantState();
-  assert.equal(tenantIdpSubject(s, TENANT), null);
-  assert.equal(tenantIdpSubject(s, UNBEKANNT), null);
-  setCancellationMailPending(s, TENANT).idpSubject = "sub-123";
-  assert.equal(tenantIdpSubject(s, TENANT), "sub-123");
+  const zustand = freshTenantState();
+  assert.equal(tenantIdpSubject(zustand, TENANT), null);
+  assert.equal(tenantIdpSubject(zustand, UNBEKANNT), null);
+  findTenant(zustand, TENANT).idpSubject = "sub-123";
+  assert.equal(tenantIdpSubject(zustand, TENANT), "sub-123");
 });
 
 test("setCancellationMailPending: setzt nur die uebergebenen Felder, unbekannter Tenant -> null", () => {
-  const s = freshTenantState();
-  assert.equal(setCancellationMailPending(s, UNBEKANNT, { pending: true }), null);
-  const tenant = setCancellationMailPending(s, TENANT, { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
+  const zustand = freshTenantState();
+  assert.equal(setCancellationMailPending(zustand, UNBEKANNT, { pending: true }), null);
+  const tenant = setCancellationMailPending(zustand, TENANT, { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
   assert.equal(tenant.cancellationMailPending, true);
   assert.equal(tenant.cancellationMailReceivedAt, "2026-08-14T10:00:00.000Z");
-  setCancellationMailPending(s, TENANT, { pending: false });
+  setCancellationMailPending(zustand, TENANT, { pending: false });
   assert.equal(tenant.cancellationMailPending, false);
   assert.equal(tenant.cancellationMailReceivedAt, "2026-08-14T10:00:00.000Z", "receivedAt bleibt");
-  setCancellationMailPending(s, TENANT, { receivedAt: "2026-08-15T10:00:00.000Z" });
+  setCancellationMailPending(zustand, TENANT, { receivedAt: "2026-08-15T10:00:00.000Z" });
   assert.equal(tenant.cancellationMailPending, false, "pending bleibt");
   assert.equal(tenant.cancellationMailReceivedAt, "2026-08-15T10:00:00.000Z");
-  setCancellationMailPending(s, TENANT);
+  setCancellationMailPending(zustand, TENANT);
   assert.equal(tenant.cancellationMailReceivedAt, "2026-08-15T10:00:00.000Z");
 });
 
 test("cancellationMailPending: Standard false/null, sonst die gespeicherten Werte", () => {
-  const s = freshTenantState();
-  assert.deepEqual(cancellationMailPending(s, UNBEKANNT), { pending: false, receivedAt: null });
-  assert.deepEqual(cancellationMailPending(s, TENANT), { pending: false, receivedAt: null });
-  setCancellationMailPending(s, TENANT, { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
-  assert.deepEqual(cancellationMailPending(s, TENANT), { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
+  const zustand = freshTenantState();
+  assert.deepEqual(cancellationMailPending(zustand, UNBEKANNT), { pending: false, receivedAt: null });
+  assert.deepEqual(cancellationMailPending(zustand, TENANT), { pending: false, receivedAt: null });
+  setCancellationMailPending(zustand, TENANT, { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
+  assert.deepEqual(cancellationMailPending(zustand, TENANT), { pending: true, receivedAt: "2026-08-14T10:00:00.000Z" });
 });
 
 test("tenantsPendingCancellationMail: nur Tenants mit ausstehender Kuendigungsmail", () => {
-  const s = freshTenantState();
-  registerTenant(s, "t_nl_other", { firstName: "Anderer", lastName: "N" });
-  assert.deepEqual(tenantsPendingCancellationMail(s), []);
-  setCancellationMailPending(s, TENANT, { pending: true });
-  assert.deepEqual(tenantsPendingCancellationMail(s).map((tenant) => tenant.id), [TENANT]);
+  const zustand = freshTenantState();
+  registerTenant(zustand, "t_nl_other", { firstName: "Anderer", lastName: "N" });
+  assert.deepEqual(tenantsPendingCancellationMail(zustand), []);
+  setCancellationMailPending(zustand, TENANT, { pending: true });
+  assert.deepEqual(tenantsPendingCancellationMail(zustand).map((tenant) => tenant.id), [TENANT]);
 });
 
 test("tenantNewsletterRecipients und dailyNewsletterConfirmMailCount: unbekannter Tenant -> leer bzw. 0", () => {
-  const s = makeDefaultState();
-  assert.deepEqual(tenantNewsletterRecipients(s, UNBEKANNT), []);
-  assert.equal(dailyNewsletterConfirmMailCount(s, UNBEKANNT, "0"), 0);
+  const zustand = makeDefaultState();
+  assert.deepEqual(tenantNewsletterRecipients(zustand, UNBEKANNT), []);
+  assert.equal(dailyNewsletterConfirmMailCount(zustand, UNBEKANNT, SEIT_ANBEGINN), 0);
 });
 
 test("addNewsletterRecipient: Bestaetigungs-Log behaelt Eintraege ab genau 24h, verwirft aeltere", () => {
-  const s = freshTenantState();
+  const zustand = freshTenantState();
   const start = Date.parse("2026-08-10T12:00:00.000Z");
   const addAt = (ms) =>
-    addNewsletterRecipient(s, TENANT, {
+    addNewsletterRecipient(zustand, TENANT, {
       email: `log${ms}@example.test`,
       tokenHash: "h",
       tokenExpiresAt: "x",
       unsubToken: "u",
       now: new Date(start + ms).toISOString(),
     });
-  const logGroesse = () => dailyNewsletterConfirmMailCount(s, TENANT, "0");
+  const logGroesse = () => dailyNewsletterConfirmMailCount(zustand, TENANT, SEIT_ANBEGINN);
   addAt(0);
   assert.equal(logGroesse(), 1);
   addAt(EIN_TAG_IN_MS);
@@ -334,16 +337,16 @@ test("removeNewsletterRecipient: ohne Empfaenger -> false, entfernt nur die gena
   const leer = freshTenantState();
   assert.equal(removeNewsletterRecipient(leer, TENANT, "a@x.de"), false);
   assert.deepEqual(tenantNewsletterRecipients(leer, TENANT), []);
-  const s = mitEmpfaenger(["a@x.de", "b@x.de"]);
-  assert.equal(removeNewsletterRecipient(s, TENANT, "a@x.de"), true);
-  assert.deepEqual(tenantNewsletterRecipients(s, TENANT).map((r) => r.email), ["b@x.de"]);
+  const zustand = mitEmpfaenger(["a@x.de", "b@x.de"]);
+  assert.equal(removeNewsletterRecipient(zustand, TENANT, "a@x.de"), true);
+  assert.deepEqual(tenantNewsletterRecipients(zustand, TENANT).map((r) => r.email), ["b@x.de"]);
 });
 
 test("confirmNewsletterRecipientByToken: bestaetigt pending-Empfaenger mit passendem, gueltigem Token", () => {
-  const s = mitEmpfaenger(["a@x.de"]);
+  const zustand = mitEmpfaenger(["a@x.de"]);
   const jetzt = "2026-08-15T12:00:00.000Z";
-  assert.deepEqual(confirmNewsletterRecipientByToken(s, "hash-a@x.de", jetzt), { tenantId: TENANT, email: "a@x.de" });
-  const [empfaenger] = tenantNewsletterRecipients(s, TENANT);
+  assert.deepEqual(confirmNewsletterRecipientByToken(zustand, "hash-a@x.de", jetzt), { tenantId: TENANT, email: "a@x.de" });
+  const [empfaenger] = tenantNewsletterRecipients(zustand, TENANT);
   assert.equal(empfaenger.status, "confirmed");
   assert.equal(empfaenger.confirmedAt, jetzt);
   assert.equal(empfaenger.tokenHash, null);
@@ -368,11 +371,9 @@ test("confirmNewsletterRecipientByToken: Ablauf genau jetzt, falscher Token und 
   assert.equal(confirmNewsletterRecipientByToken(ohneToken, "null", "2026-08-15T12:00:00.000Z"), null);
 });
 
-import { setNewsletterConsent, findTenant } from "../src/store/state-ops.js";
-
 test("setNewsletterConsent: gibt den geaenderten Mandantensatz zurueck", () => {
-  const s = freshTenantState();
-  const geaendert = setNewsletterConsent(s, TENANT, true);
-  assert.equal(geaendert, findTenant(s, TENANT));
+  const zustand = freshTenantState();
+  const geaendert = setNewsletterConsent(zustand, TENANT, true);
+  assert.equal(geaendert, findTenant(zustand, TENANT));
   assert.equal(geaendert.newsletterConsent, true);
 });
