@@ -6,14 +6,20 @@ import { languageForCountry } from "../i18n/locales.js";
 import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCHEMA_FILE = path.join(__dirname, "schema.sql");
+const AUSGANG_FILE = path.join(__dirname, "migrations", "0001_ausgang.sql");
+
+const MIGRATION_READERS = [() => fs.readFileSync(AUSGANG_FILE, "utf8")];
+
+function migrationTexts() {
+  return MIGRATION_READERS.map((read) => read());
+}
 
 export function schemaDdl() {
-  return fs.readFileSync(SCHEMA_FILE, "utf8");
+  return migrationTexts().join("\n");
 }
 
 export async function applySchema(db) {
-  await db.exec(schemaDdl());
+  for (const text of migrationTexts()) await db.exec(text);
 }
 
 function periodStartSecFromEnd(endSec) {

@@ -31,7 +31,7 @@ function attrappe() {
   const wurzel = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vorlagenkette-")));
   const dateien = {
     "src/db/migrate.js": 'import { STANDARD } from "../store/defaults.js";\nexport const ANWENDEN = STANDARD;\n',
-    "src/db/schema.sql": "CREATE TABLE eins (wert int);\n",
+    "src/db/migrations/0001_ausgang.sql": "CREATE TABLE eins (wert int);\n",
     "src/store/defaults.js": 'import { EINS } from "./grund.js";\nexport const STANDARD = EINS;\n',
     "src/store/grund.js": "export const EINS = 1;\n",
     "src/store/pg.js": 'import { ANWENDEN } from "../db/migrate.js";\nexport const SPEICHER = ANWENDEN;\n',
@@ -84,7 +84,7 @@ test("Vorlage: ohne migrate.js wird eine geerbte Freigabe gelöscht und ohne Cac
   }
 });
 
-test("Kettensumme: ändert sich mit jeder Datei der Kette, auch einer nur mittelbar importierten, und mit schema.sql, nicht mit dem Speicher", async () => {
+test("Kettensumme: ändert sich mit jeder Datei der Kette, auch einer nur mittelbar importierten, und mit der Ausgangsmigration, nicht mit dem Speicher", async () => {
   const wurzel = attrappe();
   try {
     assert.deepEqual(await vorlagenkette(wurzel), ["src/db/migrate.js", "src/store/defaults.js", "src/store/grund.js"]);
@@ -94,7 +94,7 @@ test("Kettensumme: ändert sich mit jeder Datei der Kette, auch einer nur mittel
     assert.notEqual(nachDefaults, anfang);
     const nachGrund = await summeNach(wurzel, "src/store/grund.js", "export const ZWEI = 2;\n");
     assert.notEqual(nachGrund, nachDefaults);
-    assert.notEqual(await summeNach(wurzel, "src/db/schema.sql", "CREATE TABLE zwei (wert int);\n"), nachGrund);
+    assert.notEqual(await summeNach(wurzel, "src/db/migrations/0001_ausgang.sql", "CREATE TABLE zwei (wert int);\n"), nachGrund);
   } finally {
     fs.rmSync(wurzel, { recursive: true, force: true });
   }
@@ -103,9 +103,7 @@ test("Kettensumme: ändert sich mit jeder Datei der Kette, auch einer nur mittel
 test("Kettensumme: ändert sich mit jeder Migrationsdatei, auch im Rückbau-Ordner, und gilt auch ohne schema.sql", async () => {
   const wurzel = attrappe();
   try {
-    fs.rmSync(path.join(wurzel, "src/db/schema.sql"));
     fs.mkdirSync(path.join(wurzel, "src/db/migrations/rueckbau"), { recursive: true });
-    fs.writeFileSync(path.join(wurzel, "src/db/migrations/0001_ausgang.sql"), "CREATE TABLE eins (wert int);\n");
     const anfang = await summeNach(wurzel);
     const nachAusgang = await summeNach(wurzel, "src/db/migrations/0001_ausgang.sql", "CREATE TABLE zwei (wert int);\n");
     assert.notEqual(nachAusgang, anfang);
