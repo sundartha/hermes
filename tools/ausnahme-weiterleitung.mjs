@@ -13,11 +13,13 @@ export function waechstNurUm(alt, neu, datei) {
   );
 }
 
+function istWeiterleitung({ type, source }) {
+  return type === "ExportNamedDeclaration" && source !== null;
+}
+
 function weiterleitungen(baum, { quelle, ziel }) {
   const ordner = posix.dirname(quelle);
-  const weitergeleitet = baum.body.filter(
-    ({ type, source }) => type === "ExportNamedDeclaration" && source !== null,
-  );
+  const weitergeleitet = baum.body.filter(istWeiterleitung);
   const aufZiel = weitergeleitet.filter(({ source }) => posix.join(ordner, source.value) === ziel);
   return aufZiel.map(({ loc }) => loc);
 }
@@ -33,7 +35,7 @@ function liegtIn(stelle, { start, end }) {
 export async function nurWeiterleitungenAuf({ root, eslint, text, meldungen, quelle, ziel }) {
   const einstellungen = await einstellungenFuer(join(root, quelle), eslint);
   const baum = gelesen(text, { ...einstellungen, loc: true });
-  if (baum === undefined) return false;
+  if (baum === undefined || !baum.body.every(istWeiterleitung)) return false;
   const bereiche = weiterleitungen(baum, { quelle, ziel });
   const inWeiterleitung = ({ line, column }) =>
     bereiche.some((bereich) => liegtIn({ line, column: column - ERSTE_SPALTE }, bereich));
