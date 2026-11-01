@@ -473,7 +473,7 @@ jobs:
           ALTER_STAND: ${{ inputs.alter_stand }}
           TESTUMBAU: ${{ inputs.testumbau }}
           GH_TOKEN: ${{ github.token }}
-          MUTATION_UEBERNAHME_PR: schatten
+          MUTATION_UEBERNAHME_PR: an
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
