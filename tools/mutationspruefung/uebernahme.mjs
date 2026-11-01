@@ -26,6 +26,9 @@ const BESTAETIGT = "getoetet";
 const GETOETET = "Killed";
 const MELDUNG_ZEICHEN = 160;
 const LEERRAUM = /\s+/g;
+const REGEL_HEUTE = "quellen";
+const REGEL_GEPRUEFT = "geprueft";
+const schattenUebernehmbar = [];
 
 function git(argumente) {
   return execFileSync("git", argumente, { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE, stdio: ["ignore", "pipe", "pipe"] });
@@ -52,13 +55,26 @@ function werkzeugInTests() {
   return new Set(werkzeugEingaben(".").filter((pfad) => pfad.startsWith(TESTORDNER)));
 }
 
+function nachPfad([links], [rechts]) {
+  return links < rechts ? -1 : 1;
+}
+
+function hashVon(eintraege) {
+  return createHash("sha256").update(JSON.stringify(eintraege)).digest("hex");
+}
+
 function ausserhalbVonTests(dateien) {
   const werkzeug = werkzeugInTests();
-  return [...dateien].filter(([pfad]) => werkzeug.has(pfad) || (!pfad.startsWith(TESTORDNER) && !pfad.startsWith(ARBEITSORDNER))).sort(([links], [rechts]) => (links < rechts ? -1 : 1));
+  return [...dateien].filter(([pfad]) => werkzeug.has(pfad) || (!pfad.startsWith(TESTORDNER) && !pfad.startsWith(ARBEITSORDNER))).sort(nachPfad);
 }
 
 function baumHash(dateien) {
-  return createHash("sha256").update(JSON.stringify(ausserhalbVonTests(dateien))).digest("hex");
+  return hashVon(ausserhalbVonTests(dateien));
+}
+
+function werkzeugHash(dateien) {
+  const werkzeug = new Set(werkzeugEingaben("."));
+  return hashVon([...dateien].filter(([pfad]) => werkzeug.has(pfad)).sort(nachPfad));
 }
 
 function testBlobs(dateien) {
@@ -78,19 +94,21 @@ export function standVon({ seite, von, bis }, kopf) {
   const zwischenspeicher = new Map();
   const [vonCommit, bisCommit] = [aufgeloest(von), bis === undefined || bis === null ? null : aufgeloest(bis)];
   const prueft = seite === "alt" ? vonCommit : kopf;
+  const quellen = { kopf: hashJeCommit(kopf, zwischenspeicher).hash, von: hashJeCommit(vonCommit, zwischenspeicher).hash, bis: hashJeCommit(bisCommit, zwischenspeicher).hash };
   return {
     seite,
     von: vonCommit,
     bis: bisCommit,
-    quellen: { kopf: hashJeCommit(kopf, zwischenspeicher).hash, von: hashJeCommit(vonCommit, zwischenspeicher).hash, bis: hashJeCommit(bisCommit, zwischenspeicher).hash },
+    quellen,
+    geprueft: seite === "alt" ? { ...quellen, kopf: werkzeugHash(hashJeCommit(kopf, zwischenspeicher).dateien) } : quellen,
     tests: testBlobs(hashJeCommit(prueft, zwischenspeicher).dateien),
   };
 }
 
-export function lauffaehig(stand, zugesagt) {
+export function lauffaehig(stand, zugesagt, regel = REGEL_HEUTE) {
   const gleich = (name) => isDeepStrictEqual(stand[name], zugesagt[name]);
   if (!gleich("seite")) return "andere Seite der Prüfung";
-  if (!gleich("quellen")) return "Dateien außerhalb von test/ geändert";
+  if (!gleich(regel)) return "Dateien außerhalb von test/ geändert";
   return null;
 }
 
@@ -108,7 +126,7 @@ function fuerUebernahme(bisher, eintrag) {
   return bestaetigtGetoetet(eintrag) && !bestaetigtGetoetet(bisher) ? eintrag : bisher;
 }
 
-function eintragsListe(berichte, index) {
+export function eintragsListe(berichte, index) {
   const nachSchluessel = new Map();
   for (const bericht of berichte) {
     for (const eintrag of bericht.messungen.filter(({ pruefung }) => pruefung === index).flatMap(({ ergebnisse }) => ergebnisse)) {
@@ -134,8 +152,9 @@ function jeDatei(eintraege) {
   return karte;
 }
 
-function kennungVon(inhalt) {
-  return createHash("sha256").update(JSON.stringify(inhalt)).digest("hex");
+function schattenFeld(vorergebnis) {
+  if (vorergebnis.lauf === null || vorergebnis.echt === REGEL_GEPRUEFT) return {};
+  return { schatten: { uebernehmbar: schattenUebernehmbar } };
 }
 
 export function teilMetadaten(pruefungen, vorergebnis) {
@@ -144,6 +163,7 @@ export function teilMetadaten(pruefungen, vorergebnis) {
     umgebung: version,
     pruefungen: pruefungen.map(({ seite, von, bis }) => ({ seite, von: aufgeloest(von), bis: bis === undefined ? null : aufgeloest(bis) })),
     vorergebnis: vorergebnis.kennung ?? null,
+    ...schattenFeld(vorergebnis),
   };
 }
 
@@ -180,17 +200,30 @@ function stimmtUeberein(vorergebnis, pruefungen) {
   return null;
 }
 
+function kontextNach(regel, { vorergebnis, zugesagt, jetzt }) {
+  const abweichung = lauffaehig(jetzt, zugesagt, regel);
+  const kontext = abweichung === null ? { lauf: vorergebnis.lauf, eintraege: jeDatei(zugesagt.eintraege), vorher: zugesagt.tests, jetzt: jetzt.tests } : null;
+  return { abweichung, kontext };
+}
+
+function schattenNoetig(echt, jetzt) {
+  if (echt === REGEL_GEPRUEFT) return false;
+  return echt === null || !isDeepStrictEqual(jetzt.geprueft, jetzt.quellen);
+}
+
 export function kontexteFuer(vorergebnis, pruefungen) {
   const grund = stimmtUeberein(vorergebnis, pruefungen);
   if (grund !== null) return { kontexte: pruefungen.map(() => null), zeile: keinVorergebnisZeile(grund) };
   const kopf = aufgeloest("HEAD");
+  const echt = vorergebnis.echt === undefined ? REGEL_HEUTE : vorergebnis.echt;
   const gruende = [];
-  const kontexte = pruefungen.map((pruefung, index) => {
-    const zugesagt = vorergebnis.pruefungen[index];
-    const jetzt = standVon(pruefung, kopf);
-    const abweichung = lauffaehig(jetzt, zugesagt);
-    if (abweichung !== null) gruende.push(abweichung);
-    return abweichung === null ? { lauf: vorergebnis.lauf, eintraege: jeDatei(zugesagt.eintraege), vorher: zugesagt.tests, jetzt: jetzt.tests } : null;
+  const kontexte = pruefungen.map((pruefung, pruefungIndex) => {
+    const zugesagt = vorergebnis.pruefungen[pruefungIndex];
+    const lage = { vorergebnis, zugesagt, jetzt: standVon(pruefung, kopf) };
+    const gilt = echt === null ? { abweichung: null, kontext: null } : kontextNach(echt, lage);
+    if (gilt.abweichung !== null) gruende.push(gilt.abweichung);
+    const schatten = schattenNoetig(echt, lage.jetzt) ? kontextNach(REGEL_GEPRUEFT, lage).kontext : null;
+    return gilt.kontext === null && schatten === null ? null : { pruefung: pruefungIndex, echt: gilt.kontext, schatten };
   });
   const zeile = gruende.length > 0 ? `Mutationsprüfung: Vorergebnis passt nicht zum Stand (${[...new Set(gruende)].join("; ")}), voller Neulauf.` : null;
   return { kontexte, zeile };
@@ -223,7 +256,7 @@ function bleibtGetoetet(eintrag, { betroffen, alle }) {
   return bestaetigtGetoetet(eintrag) && eintrag.toeter.every((test) => !betroffen.has(test) && alle.includes(test));
 }
 
-export function uebernommen(kontext, datei, { alle, erreichende, zeilen }) {
+function teilungNach(kontext, datei, { alle, erreichende, zeilen }) {
   const bisher = kontext?.eintraege[datei];
   if (bisher === undefined || !bisher.every((eintrag) => imBereich(eintrag, zeilen))) return null;
   const betroffen = betroffeneTests(kontext, erreichende);
@@ -232,6 +265,27 @@ export function uebernommen(kontext, datei, { alle, erreichende, zeilen }) {
   const behalten = bisher.filter((eintrag) => bleibtGetoetet(eintrag, pruefung));
   if (behalten.length === 0) return null;
   return { lauf: kontext.lauf, betroffen, uebernommen: behalten, offen: bisher.filter((eintrag) => !behalten.includes(eintrag)).map(({ lage }) => lage) };
+}
+
+function uebertragen(teilung) {
+  if (teilung === null) return [];
+  const offeneOrte = new Set(teilung.offen.map((lage) => JSON.stringify(lage)));
+  return teilung.uebernommen.filter(({ lage }) => !offeneOrte.has(JSON.stringify(lage)));
+}
+
+function merkeSchatten({ pruefung, schatten, echt, datei }) {
+  const schonUebernommen = new Set(uebertragen(echt).map(({ schluessel }) => schluessel));
+  const neue = uebertragen(schatten).filter(({ schluessel }) => !schonUebernommen.has(schluessel));
+  const unbekannt = neue.filter(({ schluessel }) => !schattenUebernehmbar.some((eintrag) => eintrag.pruefung === pruefung && eintrag.schluessel === schluessel));
+  schattenUebernehmbar.push(...unbekannt.map(({ schluessel }) => ({ pruefung, schluessel })));
+  if (unbekannt.length > 0) console.log(`${datei}: ${unbekannt.length} Mutanten aus Lauf ${schatten.lauf} wären übernommen worden (Schatten), alle frisch geprüft`);
+}
+
+export function uebernommen(kontext, datei, pruefung) {
+  const echt = teilungNach(kontext?.echt, datei, pruefung);
+  const schatten = teilungNach(kontext?.schatten, datei, pruefung);
+  if (schatten !== null) merkeSchatten({ pruefung: kontext.pruefung, schatten, echt, datei });
+  return echt;
 }
 
 export function zusammengefuehrt(teilung, datei, neu) {
@@ -290,7 +344,7 @@ function zugesagtVonLauf(berichte, lauf) {
   const stand = (pruefung) => standVon(pruefung, lauf.head_sha);
   return berichte[0].pruefungen.map((pruefung, index) => {
     const festgestellt = stand(pruefung);
-    return { seite: festgestellt.seite, quellen: festgestellt.quellen, tests: festgestellt.tests, eintraege: eintragsListe(berichte, index) };
+    return { seite: festgestellt.seite, quellen: festgestellt.quellen, geprueft: festgestellt.geprueft, tests: festgestellt.tests, eintraege: eintragsListe(berichte, index) };
   });
 }
 
@@ -307,8 +361,8 @@ function abrufen(id) {
     const luecke = berichteVollstaendig(berichte, lauf);
     if (luecke !== null) return ohneVorergebnis(`der Lauf ${id} ${luecke}`);
     for (const { von, bis } of berichte[0].pruefungen) [von, bis].filter(Boolean).forEach(commitHolen);
-    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, pruefungen: zugesagtVonLauf(berichte, lauf) };
-    return { ...inhalt, kennung: kennungVon(inhalt) };
+    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt: REGEL_HEUTE, pruefungen: zugesagtVonLauf(berichte, lauf) };
+    return { ...inhalt, kennung: hashVon(inhalt) };
   } finally {
     entferneTempOrdner(ordner);
   }
