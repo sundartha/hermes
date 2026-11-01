@@ -150,6 +150,9 @@
   ".github/workflows/ci.yml › tests › Testdateien des Teils": {
     "meldet": "Wählt nur die Testdateien dieses Teils aus der gemessenen Laufzeit; urteilt nicht über Tests und bricht den Lauf nur ab, wenn kein Teil gebildet werden kann."
   },
+  ".github/workflows/ci.yml › tests › Übernahme im Schatten": {
+    "aufbau": "Lokale Action .github/actions/uebernahme-im-schatten; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
   ".github/workflows/ci.yml › tests › Tests": {
     "zweck": [
       "tests/regression",
@@ -166,6 +169,9 @@
   ".github/workflows/ci.yml › tests › Testlaufzeit": {
     "zweck": "tests/testlaufzeit",
     "beleg": "tools/testlaufzeit-pruefen.mjs"
+  },
+  ".github/workflows/ci.yml › tests › Ergebnis festhalten": {
+    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/ci.yml › tests › Bestandene Tests melden": {
     "meldet": "T12: gibt nur die Zahl bestandener Tests an den Sammeljob weiter."
@@ -247,6 +253,9 @@
   ".github/workflows/pruefleiter.yml › werkzeugtests › Node 22, npm ci und Install-Skripte": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Übernahme im Schatten": {
+    "aufbau": "Lokale Action .github/actions/uebernahme-im-schatten; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
   ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": {
     "zweck": "prüfleiter",
     "beleg": "tools/pruefleiter.mjs"
@@ -254,6 +263,9 @@
   ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit": {
     "zweck": "tests/testlaufzeit",
     "beleg": "tools/testlaufzeit-pruefen.mjs"
+  },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Ergebnis festhalten": {
+    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/pruefleiter.yml › pruefleiter › Node 22 und npm ci": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
@@ -336,6 +348,9 @@
   },
   ".github/workflows/testschutz.yml › neu-auswerten › Testschutz der verknüpften PRs neu starten": {
     "meldet": "Startet nach einer Label-Änderung am Issue den Testschutz der verknüpften PRs neu; urteilt selbst nicht."
+  },
+  ".github/actions/uebernahme-im-schatten/action.yml › Übernahme im Schatten": {
+    "meldet": "Berechnet nur im Schattenmodus, welche Testdateien aus einem früheren grünen Lauf am gleichen Git-Baum übernommen würden, schreibt die Vorhersage als Artefakt und urteilt nicht; Fehler landen in der Vorhersage, der Schritt endet grün."
   },
   ".github/actions/node-npm-ci/action.yml › npm ci": {
     "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."

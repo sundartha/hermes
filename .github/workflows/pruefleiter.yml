@@ -5,9 +5,14 @@ on:
     branches: [master]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "0 3 * * *"
 
 permissions:
   contents: read
+
+env:
+  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
 
 concurrency:
   group: pruefleiter-${{ github.event.pull_request.number || github.sha }}
@@ -29,13 +34,16 @@ jobs:
 
       - name: Lint und betroffene Tests
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
         run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --ohne-werkzeugtests
 
   werkzeugtests:
     name: Prüfleiter Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -49,16 +57,23 @@ jobs:
       - name: Node 22, npm ci und Install-Skripte
         uses: ./.github/actions/node-npm-ci
 
+      - name: Übernahme im Schatten
+        uses: ./.github/actions/uebernahme-im-schatten
+        with:
+          art: pruefleiter
+          teil: ${{ matrix.teil }}
+          teile: ${{ strategy.job-total }}
+
       - name: Werkzeugtests
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "schedule" ]; then
             auswahl=(--alle-werkzeugtests)
           fi
           npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" "${auswahl[@]}"
@@ -71,6 +86,11 @@ jobs:
         run: |
           set -o pipefail
           node tools/testlaufzeit-pruefen.mjs --laufzeiten ".pruefung/werkzeugteil-$TEIL.jsonl" --kosten ".pruefung/testkosten-werkzeugteil-$TEIL.jsonl" --teil "werkzeuge-$TEIL" ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Ergebnis festhalten
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: node tools/uebernahme/baum.mjs festhalten --bericht ".pruefung/werkzeugteil-$TEIL.jsonl" --name "werkzeugteil-$TEIL"
 
       - name: Bericht des Teils hochladen
         if: always()
@@ -110,11 +130,11 @@ jobs:
       - name: Alle Teile erfolgreich und vollständig
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
           JOBS: ${{ toJSON(needs) }}
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "schedule" ]; then
             auswahl=(--alle-werkzeugtests)
           fi
           npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" "${auswahl[@]}"

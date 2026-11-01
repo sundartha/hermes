@@ -1,0 +1,36 @@
+name: Übernahme im Schatten
+description: Berechnet, welche Testdateien dieses Teils aus einem früheren grünen Lauf am gleichen Git-Baum übernommen würden, und lädt die Vorhersage als Artefakt hoch. Es wird nichts übernommen und nichts ausgelassen.
+inputs:
+  art:
+    description: ci für die Tests der CI, pruefleiter für die Werkzeugtests des Prüfleiters.
+    required: true
+  teil:
+    description: Nummer des Teils.
+    required: true
+  teile:
+    description: Anzahl der Teile.
+    required: true
+  dateien:
+    description: Datei mit den Testdateien des Teils, eine je Zeile; nur für art ci.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Übernahme im Schatten
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ART: ${{ inputs.art }}
+        TEIL: ${{ inputs.teil }}
+        TEILE: ${{ inputs.teile }}
+        DATEIEN: ${{ inputs.dateien }}
+      run: node tools/uebernahme/baum.mjs planen --art "$ART" --teil "$TEIL" --teile "$TEILE" --dateien "$DATEIEN"
+
+    - name: Vorhersage der Übernahme hochladen
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: uebernahme-schatten-${{ inputs.art }}-${{ inputs.teil }}
+        path: .pruefung/uebernahme-schatten.json
+        if-no-files-found: ignore
