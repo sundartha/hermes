@@ -9,6 +9,7 @@ const LAEUFE_JE_ABFRAGE = 100;
 const WARTESCHLANGEN_ZWEIG = "gh-readonly-queue/master/";
 const MERGE_GROUP = "merge_group";
 const PULL_REQUEST = "pull_request";
+const NUR_BAUM = "^{tree}";
 const TEIL_JOB = /^(.+) (\d+)\/(\d+)$/;
 
 export const CI = {
@@ -37,7 +38,7 @@ export const QUELLEN = {
 };
 
 export function baumVon(sha, wurzel) {
-  const lesen = () => git(["rev-parse", `${sha}^{tree}`], { root: wurzel }).trim();
+  const lesen = () => git(["rev-parse", `${sha}${NUR_BAUM}`], { root: wurzel }).trim();
   try {
     return lesen();
   } catch {
