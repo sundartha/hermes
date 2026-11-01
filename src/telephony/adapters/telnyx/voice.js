@@ -195,7 +195,18 @@ function rateLimitResetHintMs(res) {
 }
 
 function createPoolFetchRun(throttle) {
-  return { throttle, requests: 0, pages: 0 };
+  let requests = 0;
+  let pages = 0;
+  return {
+    throttle,
+    zaehleAnfrage: () => {
+      requests++;
+    },
+    zaehleSeite: () => {
+      pages++;
+    },
+    stand: () => ({ requests, pages }),
+  };
 }
 
 async function attemptCostRecordPage(recordType, pageNumber, poolRun) {
@@ -206,7 +217,7 @@ async function attemptCostRecordPage(recordType, pageNumber, poolRun) {
   let rateLimit = null;
   try {
     await poolRun.throttle.reserveSlot();
-    poolRun.requests++;
+    poolRun.zaehleAnfrage();
     const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
       headers: headers(),
     });
@@ -253,7 +264,7 @@ async function fetchRecordTypePages(recordType, sinceMs, poolRun) {
   for (let pageNumber = FIRST_PAGE_NUMBER; pageNumber <= lastAllowedPage; pageNumber++) {
     const page = await fetchCostRecordPage(recordType, pageNumber, poolRun);
     if (!page.ok) return page;
-    poolRun.pages++;
+    poolRun.zaehleSeite();
     raw.push(...page.raw);
     if (page.lastPage || isPageBeforeSince(page.raw, recordType, sinceMs))
       return { ok: true, raw, complete: true };
@@ -350,7 +361,7 @@ export const telnyxVoice = {
     const result = config.telephony.telnyxApiKey
       ? await fetchAllCostRecords(parseSinceMs(since), poolRun)
       : { ok: false, reason: "config_missing" };
-    return { ...result, requests: poolRun.requests, pages: poolRun.pages };
+    return { ...result, ...poolRun.stand() };
   },
 
   assignCostRecords(pool, { legId, startedAt, endedAt } = {}) {
