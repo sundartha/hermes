@@ -4,17 +4,12 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 
-import { echtWarten } from "../echt-warten.js";
-
 const CHROME_ENV = "CHROME_BIN";
 const PLAYWRIGHT_CACHE = join(homedir(), "Library", "Caches", "ms-playwright");
 const LINUX_PLAYWRIGHT_CACHE = join(homedir(), ".cache", "ms-playwright");
 const SYSTEM_BROWSERS = ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
 const SHELL_NAME = "chrome-headless-shell";
 const START_TIMEOUT_MS = 15000;
-const SETTLE_MS = 400;
-const POLL_MS = 50;
-const SETTLE_POLLS = 60;
 const HOST_GROUND = [255, 0, 255];
 const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
@@ -43,14 +38,32 @@ function hostPage(widgetHtml, frameWidth, honorWidth) {
   return `<!doctype html><html><body style="margin:0;background:rgb(${HOST_GROUND.join(",")})">
 <iframe id="f" style="display:block;border:0;width:${frameWidth}px;height:10px"></iframe>
 <script>
+const frame = document.getElementById("f");
+const nextFrame = () => new Promise((done) => requestAnimationFrame(() => done()));
+let reports = 0;
+let loaded = false;
+let settleOnce;
+window.__settled = new Promise((resolve) => { settleOnce = resolve; });
+async function settleWhenQuiet() {
+  if (!loaded || reports === 0) return;
+  const seen = reports;
+  await frame.contentDocument.fonts.ready;
+  await nextFrame();
+  await nextFrame();
+  if (seen !== reports) return;
+  const box = frame.getBoundingClientRect();
+  settleOnce({ width: box.width, height: box.height });
+}
 window.addEventListener("message", (event) => {
   const m = event.data;
-  if (m && m.method === "ui/notifications/size-changed") {
-    document.getElementById("f").style.height = m.params.height + "px";
-    if (${honorWidth}) document.getElementById("f").style.width = Math.min(m.params.width, ${frameWidth}) + "px";
-  }
+  if (!m || m.method !== "ui/notifications/size-changed" || !(m.params.height > 0)) return;
+  frame.style.height = m.params.height + "px";
+  if (${honorWidth}) frame.style.width = Math.min(m.params.width, ${frameWidth}) + "px";
+  reports += 1;
+  settleWhenQuiet();
 });
-document.getElementById("f").srcdoc = new TextDecoder().decode(Uint8Array.from(atob("${source}"), (c) => c.charCodeAt(0)));
+frame.addEventListener("load", () => { loaded = true; settleWhenQuiet(); });
+frame.srcdoc = new TextDecoder().decode(Uint8Array.from(atob("${source}"), (c) => c.charCodeAt(0)));
 </script></body></html>`;
 }
 
@@ -83,9 +96,15 @@ function launch(chrome) {
 function connect(url) {
   const socket = new WebSocket(url);
   const pending = new Map();
+  const eventWaiters = new Map();
   let next = 0;
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
+    if (message.method) {
+      for (const done of eventWaiters.get(message.method) || []) done(message.params);
+      eventWaiters.delete(message.method);
+      return;
+    }
     const waiting = pending.get(message.id);
     if (!waiting) return;
     pending.delete(message.id);
@@ -102,26 +121,16 @@ function connect(url) {
       pending.set(next, { resolve, reject });
       socket.send(JSON.stringify({ id: next, method, params, sessionId }));
     });
-  return { opened, send, close: () => socket.close() };
-}
-
-async function evaluate(send, session, expression) {
-  const result = await send("Runtime.evaluate", { expression, returnByValue: true }, session);
-  return result.result.value;
+  const nextEvent = (method) =>
+    new Promise((resolve) => {
+      eventWaiters.set(method, [...(eventWaiters.get(method) || []), resolve]);
+    });
+  return { opened, send, nextEvent, close: () => socket.close() };
 }
 
 async function settledFrameSize(send, session) {
-  const probe = 'document.getElementById("f").getBoundingClientRect().height + "x" + document.getElementById("f").getBoundingClientRect().width';
-  let last = "";
-  let stable = 0;
-  for (let poll = 0; poll < SETTLE_POLLS && stable * POLL_MS < SETTLE_MS; poll += 1) {
-    await echtWarten(POLL_MS);
-    const size = await evaluate(send, session, probe);
-    stable = size === last && !size.startsWith("10x") ? stable + 1 : 0;
-    last = size;
-  }
-  const [height, width] = last.split("x").map(Number);
-  return { height, width };
+  const result = await send("Runtime.evaluate", { expression: "window.__settled", awaitPromise: true, returnByValue: true }, session);
+  return result.result.value;
 }
 
 export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, honorWidth = false }) {
@@ -130,13 +139,15 @@ export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, hon
   try {
     client = connect(await browser.endpoint);
     await client.opened;
-    const { send } = client;
+    const { send, nextEvent } = client;
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
     await send("Emulation.setDeviceMetricsOverride", { width: frameWidth, height: HOST_VIEWPORT_HEIGHT, deviceScaleFactor: 1, mobile: false }, sessionId);
     await send("Page.enable", {}, sessionId);
     const page = hostPage(widgetHtml, frameWidth, honorWidth);
+    const pageLoaded = nextEvent("Page.loadEventFired");
     await send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(page).toString("base64")}` }, sessionId);
+    await pageLoaded;
     const { height, width } = await settledFrameSize(send, sessionId);
     const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } }, sessionId);
     return { width, height, png: Buffer.from(shot.data, "base64") };
