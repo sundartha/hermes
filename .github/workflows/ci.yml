@@ -341,12 +341,15 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
+          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
         run: |
           auswahl=()
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
             auswahl=(--ohne-werkzeugtests)
+          elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$PR_BASE_SHA" ]; then
+            auswahl=(--werkzeugtests-aus-liste --basis "$PR_BASE_SHA")
           fi
           node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
 

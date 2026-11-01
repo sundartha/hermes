@@ -73,7 +73,9 @@ jobs:
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "schedule" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--werkzeugtests-aus-liste)
+          elif [ "$EVENT_NAME" = "schedule" ]; then
             auswahl=(--alle-werkzeugtests)
           fi
           npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" "${auswahl[@]}"
@@ -134,7 +136,9 @@ jobs:
           JOBS: ${{ toJSON(needs) }}
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "schedule" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            auswahl=(--werkzeugtests-aus-liste)
+          elif [ "$EVENT_NAME" = "schedule" ]; then
             auswahl=(--alle-werkzeugtests)
           fi
           npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" "${auswahl[@]}"
