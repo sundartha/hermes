@@ -24,16 +24,16 @@ function basisRepo(context) {
   return { ordner, basis: runIn(ordner, "git", ["rev-parse", "HEAD"]).stdout.trim() };
 }
 
-for (const [name, datei, optionen, erwartet] of FALL) {
-  test(`der Prüfleiter nennt bei ${name}: Werkzeugtests gewollt = ${erwartet}`, (context) => {
+test("der Prüfleiter nennt je nach Änderung, ob er die Werkzeugtests fährt", (context) => {
+  for (const [name, datei, optionen, erwartet] of FALL) {
     const { ordner, basis } = basisRepo(context);
     writeFiles(ordner, { [datei]: GEAENDERT });
     commitAll(ordner, "Änderung");
     const lauf = runIn(ordner, process.execPath, [PRUEFLEITER_TOOL, "--basis", basis, ...optionen]);
-    assert.equal(lauf.status, 0, lauf.stderr);
-    assert.equal(lauf.stdout.trim(), erwartet);
-  });
-}
+    assert.equal(lauf.status, 0, `${name}: ${lauf.stderr}`);
+    assert.equal(lauf.stdout.trim(), erwartet, name);
+  }
+});
 
 test("--werkzeugtests-gewollt lässt sich nicht mit einer anderen Betriebsart mischen", (context) => {
   const { ordner, basis } = basisRepo(context);

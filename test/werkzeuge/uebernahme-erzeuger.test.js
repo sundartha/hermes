@@ -115,17 +115,17 @@ const VERWEIGERUNGEN = [
   ],
 ];
 
-for (const [name, aenderung, grund] of VERWEIGERUNGEN) {
-  test(`nichts wird übernommen bei: ${name}`, async (context) => {
+test("bei jeder verletzten Bedingung des Erzeugers wird nichts übernommen und der Grund genannt", async (context) => {
+  for (const [name, aenderung, grund] of VERWEIGERUNGEN) {
     const plan = await planNachPush(context, aenderung);
-    assert.equal(plan.teilUebernehmbar, false);
+    assert.equal(plan.teilUebernehmbar, false, name);
     const gruende = [...plan.dateien, ...plan.erzeuger].map((eintrag) => eintrag.grund ?? "");
     assert.ok(
       gruende.some((text) => grund.test(text)),
-      gruende.join(" | "),
+      `${name}: ${gruende.join(" | ")}`,
     );
-  });
-}
+  }
+});
 
 test("eine Datei des Teils ohne Ergebnis im Erzeuger macht den ganzen Teil nicht übernehmbar", async (context) => {
   const plan = await planNachPush(context, { dateien: [DATEI_A, DATEI_B, "test/neu.test.js"] });
