@@ -159,8 +159,8 @@ test("WSP-S4: jedes Widget-Werkzeug nennt Mandantensprache und Inhaltssprache, o
 });
 
 test("WSP-S5: list_calls schreibt jeden Anruf in eine eigene Textzeile, eine leere Liste in die Leer-Zeile des Mandanten", async () => {
-  const zeilen = async (calls) => {
-    const { result } = await inhaltssprache({ tool: "list_calls", mandant: "de", gateway: { calls } });
+  const zeilen = async (calls, mandant = "de") => {
+    const { result } = await inhaltssprache({ tool: "list_calls", mandant, gateway: { calls } });
     const [{ text }] = result.content;
     return text.split("\n");
   };
@@ -168,7 +168,10 @@ test("WSP-S5: list_calls schreibt jeden Anruf in eine eigene Textzeile, eine lee
   assert.equal(drei.length, 3, "drei Anrufe, drei Zeilen");
   assert.ok(drei.every((zeile) => zeile.trim().length > 0), "keine leere Zeile");
   assert.equal((await zeilen([FERTIGER_ANRUF])).length, 1, "ein Anruf, eine Zeile");
-  assert.equal((await zeilen([])).length, 1, "leere Liste, genau eine Zeile");
+  const leerzeilen = { de: "Noch keine Anrufe.", en: "No calls yet.", fr: "Aucun appel pour le moment." };
+  for (const [mandant, erwartet] of Object.entries(leerzeilen)) {
+    assert.deepEqual(await zeilen([], mandant), [erwartet], `leere Liste: ${mandant}`);
+  }
 });
 
 test("WSP-S6: ein Fehlerergebnis eines Widget-Werkzeugs kommt ohne Sprach-Metadaten zurueck, ein Erfolg mit", async () => {
