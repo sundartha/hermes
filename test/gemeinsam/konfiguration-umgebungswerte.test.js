@@ -584,3 +584,189 @@ test("ein ungueltiger Wert einer safety- oder voice-Variable erzeugt genau einen
     "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
   );
 });
+
+const KOSTENDECKE_STANDARD_CENT = 3000;
+const TENANT_BUDGET_STANDARD_CENT = 1500;
+const TARIF_INLAND_STANDARD_CENT = 20;
+const TARIF_AUSLAND_STANDARD_CENT = 30;
+const TARIF_EINGEHEND_STANDARD_CENT = 6;
+const TARIF_VOLLKOSTEN_UNTERGRENZE_STANDARD_CENT = 15;
+const MS_JE_STUNDE = 3_600_000;
+const MS_JE_MINUTE = 60_000;
+const AUSFALL_ENTPRELLUNG_STANDARD_MS = 6 * MS_JE_STUNDE;
+const AUSFALL_WIEDERHOLUNG_STANDARD_MS = 15 * MS_JE_MINUTE;
+const AUSFALL_SELBSTTEST_STANDARD_MS = 30 * MS_JE_TAG;
+const EINGEHEND_AUSFALL_FENSTER_STANDARD_MS = 6 * MS_JE_STUNDE;
+const PLATTFORM_HALT_ESKALATION_STANDARD_MS = 24 * MS_JE_STUNDE;
+const BEZAHLT_OHNE_NUMMER_FRIST_STANDARD_MS = MS_JE_STUNDE;
+const KOSTENDECKE_ACHTEINHALB_EUR_CENT = 850;
+
+test("[NIE1] ohne gesetzte Variablen gelten im Namensraum billing die heutigen Kostendecken und Tarife", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "MAX_BUDGET_EUR",
+      "DEFAULT_TENANT_BUDGET_CENTS",
+      "VOICE_TARIFF_DOMESTIC_CENTS",
+      "VOICE_TARIFF_DEFAULT_CENTS",
+      "VOICE_TARIFF_INBOUND_CENTS",
+      "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
+      "SMS_COST_CENTS",
+    ]),
+    [
+      "billing.platformSpendCapCents",
+      "billing.defaultTenantBudgetCents",
+      "billing.voiceTariffDomesticCents",
+      "billing.voiceTariffDefaultCents",
+      "billing.voiceTariffInboundCents",
+      "billing.voiceTariffFullCostFloorCents",
+      "billing.smsCostCents",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "billing.platformSpendCapCents": KOSTENDECKE_STANDARD_CENT,
+    "billing.defaultTenantBudgetCents": TENANT_BUDGET_STANDARD_CENT,
+    "billing.voiceTariffDomesticCents": TARIF_INLAND_STANDARD_CENT,
+    "billing.voiceTariffDefaultCents": TARIF_AUSLAND_STANDARD_CENT,
+    "billing.voiceTariffInboundCents": TARIF_EINGEHEND_STANDARD_CENT,
+    "billing.voiceTariffFullCostFloorCents": TARIF_VOLLKOSTEN_UNTERGRENZE_STANDARD_CENT,
+    "billing.smsCostCents": 0,
+  });
+});
+
+test("ohne gesetzte Zahlungs- und Alarmvariablen liefert der Namensraum billing die Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "PAYMENT_ENABLED",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_API_BASE",
+      "PAYMENT_CURRENCY",
+      "PROVIDER_CURRENCY",
+      "STRIPE_STARTER_PRICE_ID",
+      "STRIPE_BUSINESS_PRICE_ID",
+      "STRIPE_WEBHOOK_SECRET",
+      "OUTAGE_ALERT_DEBOUNCE_MS",
+      "OUTAGE_ALERT_RETRY_MS",
+      "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+      "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+      "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+      "PAID_WITHOUT_NUMBER_GRACE_MS",
+    ]),
+    [
+      "billing.paymentEnabled",
+      "billing.stripeSecretKey",
+      "billing.stripeApiBase",
+      "billing.paymentCurrency",
+      "billing.providerCurrency",
+      "billing.stripeStarterPriceId",
+      "billing.stripeBusinessPriceId",
+      "billing.stripeWebhookSecret",
+      "billing.outageAlertDebounceMs",
+      "billing.outageAlertRetryMs",
+      "billing.outageAlertSelfTestIntervalMs",
+      "billing.inboundOutageAlertWindowMs",
+      "billing.platformHoldEscalationMaxAgeMs",
+      "billing.paidWithoutNumberGraceMs",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "billing.paymentEnabled": false,
+    "billing.stripeSecretKey": "",
+    "billing.stripeApiBase": "https://api.stripe.com",
+    "billing.paymentCurrency": "eur",
+    "billing.providerCurrency": "USD",
+    "billing.stripeStarterPriceId": "",
+    "billing.stripeBusinessPriceId": "",
+    "billing.stripeWebhookSecret": "",
+    "billing.outageAlertDebounceMs": AUSFALL_ENTPRELLUNG_STANDARD_MS,
+    "billing.outageAlertRetryMs": AUSFALL_WIEDERHOLUNG_STANDARD_MS,
+    "billing.outageAlertSelfTestIntervalMs": AUSFALL_SELBSTTEST_STANDARD_MS,
+    "billing.inboundOutageAlertWindowMs": EINGEHEND_AUSFALL_FENSTER_STANDARD_MS,
+    "billing.platformHoldEscalationMaxAgeMs": PLATTFORM_HALT_ESKALATION_STANDARD_MS,
+    "billing.paidWithoutNumberGraceMs": BEZAHLT_OHNE_NUMMER_FRIST_STANDARD_MS,
+  });
+});
+
+test("MAX_BUDGET_EUR mit Nachkommastelle ergibt die Plattform-Kostendecke in Cent ohne Fatal", async () => {
+  const fresh = await mitUmgebung(
+    "MAX_BUDGET_EUR",
+    "8.5",
+    () => import("../../src/config.js?kostendecke-nachkomma"),
+  );
+  assert.equal(fresh.config.billing.platformSpendCapCents, KOSTENDECKE_ACHTEINHALB_EUR_CENT);
+  assert.deepEqual(befundeZu(fresh.configFatalErrors(), "MAX_BUDGET_EUR"), []);
+});
+
+test("Waehrungen werden klein bzw. gross normalisiert, die Stripe-Basis verliert den Schraegstrich am Ende", async () => {
+  const fresh = await mitUmgebungen(
+    { PAYMENT_CURRENCY: "CHF", PROVIDER_CURRENCY: "usd", STRIPE_API_BASE: "https://stripe.test/" },
+    () => import("../../src/config.js?billing-normalisiert"),
+  );
+  assert.equal(fresh.config.billing.paymentCurrency, "chf");
+  assert.equal(fresh.config.billing.providerCurrency, "USD");
+  assert.equal(fresh.config.billing.stripeApiBase, "https://stripe.test");
+});
+
+test("ein ungueltiger Wert einer billing-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "MAX_BUDGET_EUR",
+    "PAYMENT_ENABLED",
+    "NUMBER_SETUP_FEE_CENTS",
+    "BILLING_FLUSH_EPOCH",
+    "COST_TRUING_DELAY_MINUTES",
+    "COST_TRUING_SWEEP_INTERVAL_MS",
+    "COST_TRUING_MAX_ATTEMPTS",
+    "COST_SETTLE_DEADLINE_HOURS",
+    "EL_EVIDENCE_MIN_AGE_MINUTES",
+    "COST_TRUING_MIN_COVERAGE_PERCENT",
+    "COST_TRUING_COVERAGE_STALL_SWEEPS",
+    "KOSTEN_HEARTBEAT_FENSTER_H",
+    "COST_DRIFT_WARN_PERCENT",
+    "COST_ALERT_DEBOUNCE_MS",
+    "COST_CALIBRATION_MIN_SAMPLES",
+    "VOICE_TARIFF_DOMESTIC_CENTS",
+    "VOICE_TARIFF_DEFAULT_CENTS",
+    "VOICE_TARIFF_INBOUND_CENTS",
+    "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS",
+    "DEFAULT_TENANT_BUDGET_CENTS",
+    "SMS_COST_CENTS",
+    "PLATFORM_SPEND_WARN_PERCENT",
+    "OUTAGE_ALERT_WINDOW_MS",
+    "OUTAGE_ALERT_MIN_FAILURES",
+    "OUTAGE_ALERT_MIN_ATTEMPTS",
+    "OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    "OUTAGE_ALERT_DEBOUNCE_MS",
+    "OUTAGE_ALERT_RETRY_MS",
+    "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+    "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+    "INBOUND_OUTAGE_ALERT_MIN_FAILURES",
+    "INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS",
+    "INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+    "PAID_WITHOUT_NUMBER_GRACE_MS",
+    "BUDGET_MONTH_ENABLED",
+    "TTS_CHARACTER_QUOTA",
+    "TTS_CHARACTER_QUOTA_WARN_PERCENT",
+    "TTS_QUOTA_CYCLE_ANCHOR_DAY",
+    "PLATFORM_FIXED_COST_CENTS_PER_MONTH",
+    "NUMBER_MONTHLY_COST_CENTS",
+    "PRICE_DRIFT_MIN_INTERVAL_MS",
+    "PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER",
+    "STRIPE_CUSTOMER_RETRY_DELAY_MS",
+  ];
+  const fresh = await mitUmgebungen(
+    { ...Object.fromEntries(namen.map((name) => [name, "kaputt"])), PROVIDER_TO_BUCKET_RATE_MICRO: "kaputt" },
+    () => import("../../src/config.js?billing-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
+  assert.equal(
+    befundeZu(alleBefunde, "PROVIDER_TO_BUCKET_RATE_MICRO").length,
+    2,
+    "PROVIDER_TO_BUCKET_RATE_MICRO wird in billing und llm gelesen, je Lesestelle ein Fatal",
+  );
+});
