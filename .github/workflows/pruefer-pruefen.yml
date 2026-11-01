@@ -2,19 +2,19 @@ name: Prüfer prüfen
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Lieferkette"]
     types: [completed]
 
 permissions: {}
 
 concurrency:
-  group: pruefer-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
+  group: pruefer-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}${{ github.event.workflow_run.conclusion == 'cancelled' && format('-abgebrochen-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
 
 jobs:
   pruefen:
     name: Commits prüfen
-    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    if: (github.event.workflow_run.path == '.github/workflows/lieferkette.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/lieferkette.yml@')) && github.event.workflow_run.event == 'pull_request' && contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion)
     runs-on: ubuntu-latest
     environment: pruefer
     timeout-minutes: 360
@@ -92,7 +92,7 @@ jobs:
   melden:
     name: Status melden
     needs: pruefen
-    if: always() && (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request'
+    if: always() && (github.event.workflow_run.path == '.github/workflows/lieferkette.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/lieferkette.yml@')) && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

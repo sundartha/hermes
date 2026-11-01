@@ -19,7 +19,7 @@ import {
   SCHEIN_TOKEN,
   WORKFLOW_NUMMERN,
   aufzeichnung,
-  ciLauf,
+  lieferketteLauf,
   ereignisDatei,
   ersatzPruefer,
   ohneGitVariablen,
@@ -284,8 +284,8 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
       ],
       ["GET /repos/sundartha/hermes/actions/artifacts", { artifacts: [] }],
       [
-        "GET /repos/sundartha/hermes/actions/workflows/ci.yml",
-        { id: WORKFLOW_NUMMERN.get("ci.yml") },
+        "GET /repos/sundartha/hermes/actions/workflows/lieferkette.yml",
+        { id: WORKFLOW_NUMMERN.get("lieferkette.yml") },
       ],
     ]),
   );
@@ -299,7 +299,7 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
     GH_TOKEN: "gh-schein",
     GITHUB_API_URL: github.url,
     GITHUB_REPOSITORY: "sundartha/hermes",
-    GITHUB_EVENT_PATH: ereignisDatei(context, ciLauf()),
+    GITHUB_EVENT_PATH: ereignisDatei(context, lieferketteLauf()),
   };
   const args = [
     "pruefer",
@@ -337,7 +337,7 @@ async function pruefenMitAblage(context, ablageIn, aufnahme = aufzeichnung("sich
     new Map([
       [`GET /repos/sundartha/hermes/commits/${commit.sha}/pulls`, [pr]],
       ["GET /repos/sundartha/hermes/actions/artifacts", { artifacts: [] }],
-      ["GET /repos/sundartha/hermes/actions/workflows/ci.yml", { id: WORKFLOW_NUMMERN.get("ci.yml") }],
+      ["GET /repos/sundartha/hermes/actions/workflows/lieferkette.yml", { id: WORKFLOW_NUMMERN.get("lieferkette.yml") }],
     ]),
   );
   const werkzeug = probeDirectory(context, { "ausgabe.txt": "" });
@@ -349,7 +349,7 @@ async function pruefenMitAblage(context, ablageIn, aufnahme = aufzeichnung("sich
     GH_TOKEN: "gh-schein",
     GITHUB_API_URL: github.url,
     GITHUB_REPOSITORY: "sundartha/hermes",
-    GITHUB_EVENT_PATH: ereignisDatei(context, ciLauf()),
+    GITHUB_EVENT_PATH: ereignisDatei(context, lieferketteLauf()),
     GITHUB_OUTPUT: join(werkzeug, "ausgabe.txt"),
   };
   const ablage = join(ablageIn ? aus : werkzeug, "ablage");

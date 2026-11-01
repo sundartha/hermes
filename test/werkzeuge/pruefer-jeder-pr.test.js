@@ -8,7 +8,7 @@ import { probeDirectory } from "./probe-repo.js";
 import {
   SCHEIN_TOKEN,
   aufzeichnung,
-  ciLauf,
+  lieferketteLauf,
   ersatzPruefer,
   ohneGitVariablen,
   probeRepo,
@@ -91,7 +91,7 @@ async function pruefeUndMelde(
     beobachtet: { datei: join(aus, "ergebnis.json"), liste: aufrufe },
   });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token ?? SCHEIN_TOKEN;
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const github = scheinGithub({ basis, head, davor, issueText, verknuepft });
   await pruefen({ head, "pr-branch": branch, "pr-repo": prRepo, aus }, repo.ordner, {
     github,

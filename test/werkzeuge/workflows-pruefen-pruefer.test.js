@@ -8,6 +8,7 @@ import { TOOL, expectClean, expectFinding, runCheck } from "./workflows-probe.mj
 
 const LISTED_NAME = "pruefer-pruefen.yml";
 const FOLLOW_UP_NAME = "pruefer-nachstellen.yml";
+const TRIGGER_NAME = "lieferkette.yml";
 const OTHER_NAME = "nachtlauf.yml";
 const CHECKOUT = "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262";
 const SECRET_LINE = "          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}";
@@ -243,7 +244,7 @@ test("workflows-pruefen-pruefer: Namen, die Pruefer nur enthalten, sind erlaubt"
 
 test("workflows-pruefen-pruefer: die echten Workflows pruefer-pruefen.yml und pruefer-nachstellen.yml sind erlaubt", (context) => {
   const files = Object.fromEntries(
-    [LISTED_NAME, FOLLOW_UP_NAME].map((name) => [
+    [LISTED_NAME, FOLLOW_UP_NAME, TRIGGER_NAME].map((name) => [
       name,
       readFileSync(join(REPO_ROOT, ".github/workflows", name), "utf8"),
     ]),

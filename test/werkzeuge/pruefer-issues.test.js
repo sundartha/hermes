@@ -7,8 +7,7 @@ import { issueText, legeIssuesAn } from "../../tools/auftrag/pruefer-issues.mjs"
 import { urteile } from "../../tools/auftrag/pruefer-urteil.mjs";
 import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import {
-  ciLauf,
-  ereignisDatei,
+  lieferketteLauf,
   prueferLauf,
   scheinGithub as scheinServer,
   scheinSha,
@@ -116,7 +115,7 @@ test("ein normales Issue mit gleichem Titel bleibt ein Doppel, auch bei anderem 
 });
 
 test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue nur einmal an", async (context) => {
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const commit = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [hinweis()] };
   const ordner = ergebnisOrdner(context, [commit]);
   const github = scheinGithub();
@@ -136,7 +135,7 @@ test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue n
 });
 
 async function angelegt(context, commits) {
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const ordner = ergebnisOrdner(context, commits, { pr: GUELTIGE_PR });
   const github = scheinGithub();
   await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
@@ -187,21 +186,27 @@ test("ein sehr langer Dateipfad kostet im Titel weder die Zeile noch die PR-Numm
   }
 });
 
-test("fehlt das Ergebnis, setzt entscheiden error; war der auslösende Lauf rot, setzt es nichts", async (context) => {
+async function entscheideOhneErgebnis(context, ausloeser) {
   const leer = probeDirectory(context, {});
   const github = scheinGithub();
-  setzeAusloeser(context, ciLauf());
-  await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github });
-  assert.deepEqual(
-    github.gesendet.map(({ daten }) => [daten.state, daten.description]),
-    [["error", "Prüfer nicht gelaufen: kein Ergebnis"]],
-  );
-  process.env.GITHUB_EVENT_PATH = ereignisDatei(context, ciLauf({ conclusion: "failure" }));
-  assert.equal(
-    await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github }),
-    0,
-  );
-  assert.equal(github.gesendet.length, 1);
+  setzeAusloeser(context, ausloeser);
+  const ausgang = await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github });
+  return { ausgang, gesendet: github.gesendet.map(({ daten }) => [daten.state, daten.description]) };
+}
+
+const KEIN_ERGEBNIS = [["error", "Prüfer nicht gelaufen: kein Ergebnis"]];
+
+test("fehlt das Ergebnis, setzt entscheiden error; war der auslösende Lauf abgebrochen, setzt es nichts", async (context) => {
+  const gruen = await entscheideOhneErgebnis(context, lieferketteLauf());
+  assert.deepEqual(gruen.gesendet, KEIN_ERGEBNIS);
+  const abgebrochen = await entscheideOhneErgebnis(context, lieferketteLauf({ conclusion: "cancelled" }));
+  assert.equal(abgebrochen.ausgang, 0);
+  assert.deepEqual(abgebrochen.gesendet, []);
+});
+
+test("ein fehlgeschlagener auslösender Lauf hindert entscheiden nicht, den Status zu setzen", async (context) => {
+  const fehlgeschlagen = await entscheideOhneErgebnis(context, lieferketteLauf({ conclusion: "failure" }));
+  assert.deepEqual(fehlgeschlagen.gesendet, KEIN_ERGEBNIS);
 });
 
 test("eine gefälschte Nachstellung mit unbekanntem Schlüssel oder Wert gilt als fehlend", async (context) => {
@@ -344,7 +349,7 @@ test("ein Folge-Issue nennt PR und Commit; ein schon geschlossenes Issue mit gle
 });
 
 test("entscheiden übernimmt nur eine positive ganze PR-Nummer und verwirft das Ergebnis bei jeder anderen Angabe", async (context) => {
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const commit = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [hinweis()] };
   const gesendetBei = async (pr) => {
     const ordner = ergebnisOrdner(context, [commit], { pr });
@@ -362,7 +367,7 @@ test("entscheiden übernimmt nur eine positive ganze PR-Nummer und verwirft das 
 });
 
 async function entscheideZweimal(context, befunde, github = scheinGithub()) {
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const ordner = ergebnisOrdner(context, [{ sha: HEAD, patchId: "", zustand: "geprueft", befunde }], { pr: GUELTIGE_PR });
   const zeilen = context.mock.method(console, "log", () => {});
   const ohneStatus = () => github.gesendet.filter(({ pfad }) => pfad !== `/statuses/${HEAD}`);

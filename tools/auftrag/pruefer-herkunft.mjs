@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { env } from "node:process";
 
 export const CI_LAUF = { datei: "ci.yml", ereignis: "pull_request" };
+export const AUSLOESER_LAUF = { datei: "lieferkette.yml", ereignis: "pull_request" };
+export const PRUEFBARE_ABSCHLUESSE = ["success", "failure"];
 export const PRUEFER_LAUF = { datei: "pruefer-pruefen.yml", ereignis: "workflow_run" };
 const WORKFLOW_ORDNER = ".github/workflows/";
 const REF_TRENNER = "@";
@@ -12,6 +14,10 @@ export function ausloesenderLauf() {
   } catch {
     return null;
   }
+}
+
+export function abschlussPruefbar(lauf) {
+  return PRUEFBARE_ABSCHLUESSE.includes(lauf?.conclusion);
 }
 
 function pfadDer(herkunft) {
