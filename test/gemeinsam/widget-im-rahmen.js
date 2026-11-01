@@ -13,6 +13,7 @@ const START_TIMEOUT_MS = 15000;
 const HOST_GROUND = [255, 0, 255];
 const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
+const SETTLED_BINDING = "hermesFrameSettled";
 
 function findInCache(cache) {
   if (!existsSync(cache)) return null;
@@ -42,8 +43,6 @@ const frame = document.getElementById("f");
 const nextFrame = () => new Promise((done) => requestAnimationFrame(() => done()));
 let reports = 0;
 let loaded = false;
-let settleOnce;
-window.__settled = new Promise((resolve) => { settleOnce = resolve; });
 async function settleWhenQuiet() {
   if (!loaded || reports === 0) return;
   const seen = reports;
@@ -52,7 +51,7 @@ async function settleWhenQuiet() {
   await nextFrame();
   if (seen !== reports) return;
   const box = frame.getBoundingClientRect();
-  settleOnce({ width: box.width, height: box.height });
+  window[${JSON.stringify(SETTLED_BINDING)}](JSON.stringify({ width: box.width, height: box.height }));
 }
 window.addEventListener("message", (event) => {
   const m = event.data;
@@ -128,11 +127,6 @@ function connect(url) {
   return { opened, send, nextEvent, close: () => socket.close() };
 }
 
-async function settledFrameSize(send, session) {
-  const result = await send("Runtime.evaluate", { expression: "window.__settled", awaitPromise: true, returnByValue: true }, session);
-  return result.result.value;
-}
-
 export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, honorWidth = false }) {
   const browser = launch(chrome);
   let client;
@@ -143,12 +137,12 @@ export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, hon
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
     await send("Emulation.setDeviceMetricsOverride", { width: frameWidth, height: HOST_VIEWPORT_HEIGHT, deviceScaleFactor: 1, mobile: false }, sessionId);
-    await send("Page.enable", {}, sessionId);
+    await send("Runtime.enable", {}, sessionId);
+    await send("Runtime.addBinding", { name: SETTLED_BINDING }, sessionId);
     const page = hostPage(widgetHtml, frameWidth, honorWidth);
-    const pageLoaded = nextEvent("Page.loadEventFired");
+    const settled = nextEvent("Runtime.bindingCalled");
     await send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(page).toString("base64")}` }, sessionId);
-    await pageLoaded;
-    const { height, width } = await settledFrameSize(send, sessionId);
+    const { height, width } = JSON.parse((await settled).payload);
     const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } }, sessionId);
     return { width, height, png: Buffer.from(shot.data, "base64") };
   } finally {
