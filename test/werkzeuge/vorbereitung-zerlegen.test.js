@@ -123,6 +123,21 @@ const GRUEN = [
     modul("function h(q) {", "  const v = { n: q.a };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  return v;", "}"),
   ],
   [
+    "Rückgabename: die Hilfe weist ihn vor der Rückgabe direkt neu zu, auch in Block und Schleife",
+    modul("export function g(c) {", "  let v = { n: c.a };", "  v = c.b;", "  if (c.b) {", "    ({ v } = o);", "  }", "  for (v of xs) {", "    log(v);", "  }", "  return v;", "}"),
+    modul("function h(q) {", "  let v = { n: q.a };", "  v = q.b;", "  if (q.b) {", "    ({ v } = o);", "  }", "  for (v of xs) {", "    log(v);", "  }", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  return v;", "}"),
+  ],
+  [
+    "Rückgabename: eine Closure der Hilfe schreibt einen anderen Namen, nicht den Rückgabenamen",
+    modul("export function g(c) {", "  let v = { n: c.a };", "  let z2 = 0;", "  c.zaehle = () => {", "    z2++;", "  };", "  return v;", "}"),
+    modul("function h(q) {", "  let v = { n: q.a };", "  let z2 = 0;", "  q.zaehle = () => {", "    z2++;", "  };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  return v;", "}"),
+  ],
+  [
+    "Rückgabename: dieselbe Schreibweise in einer Closure einer anderen Funktion der Datei",
+    modul("export function k(c) {", "  let v = 0;", "  c.f = () => {", "    v++;", "  };", "  return v;", "}", "export function g(c) {", "  let v = { n: c.a };", "  return v;", "}"),
+    modul("export function k(c) {", "  let v = 0;", "  c.f = () => {", "    v++;", "  };", "  return v;", "}", "function h(q) {", "  let v = { n: q.a };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  return v;", "}"),
+  ],
+  [
     "Zuweisung an einen Parameter wird zum Rückgabewert",
     modul("export function g(c) {", "  let t = c.a;", "  t = t + c.b;", "  return t;", "}"),
     modul("function h(w, q) {", "  w = w + q.b;", "  return w;", "}", "export function g(c) {", "  let t = c.a;", "  t = h(t, c);", "  return t;", "}"),
@@ -544,6 +559,21 @@ const ROT = [
     modul("function h(q) {", "  return [1].map((t) => t);", "}", "export function g(c) {", "  const t = h(c);", "  return t;", "}"),
   ],
   [
+    "B11 eine Closure in der Hilfe zählt den Rückgabenamen hoch",
+    modul("export function g(c) {", "  let v = 0;", "  c.zaehle = () => {", "    v++;", "  };", "  c.zaehle();", "  return v;", "}"),
+    modul("function h(q) {", "  let v = 0;", "  q.zaehle = () => {", "    v++;", "  };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  c.zaehle();", "  return v;", "}"),
+  ],
+  [
+    "B11 eine Closure in der Hilfe belegt den Rückgabenamen per Destrukturierung neu",
+    modul("export function g(c) {", "  let v = { n: c.a };", "  c.setze = () => {", "    if (c.b) {", "      ({ v } = o);", "    }", "  };", "  c.setze();", "  return v;", "}"),
+    modul("function h(q) {", "  let v = { n: q.a };", "  q.setze = () => {", "    if (q.b) {", "      ({ v } = o);", "    }", "  };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  c.setze();", "  return v;", "}"),
+  ],
+  [
+    "B11 eine Closure in der Hilfe belegt den Rückgabenamen als Schleifenvariable neu",
+    modul("export function g(c) {", "  let v = { n: c.a };", "  c.laufe = () => {", "    for (v of xs) {", "      log(v);", "    }", "  };", "  c.laufe();", "  return v;", "}"),
+    modul("function h(q) {", "  let v = { n: q.a };", "  q.laufe = () => {", "    for (v of xs) {", "      log(v);", "    }", "  };", "  return v;", "}", "export function g(c) {", "  const v = h(c);", "  c.laufe();", "  return v;", "}"),
+  ],
+  [
     "B14 eval in der Datei",
     modul("export function g(c) {", "  const s = c.a + 1;", "  return eval(s);", "}"),
     modul(...HILFE_PLUS, "export function g(c) {", "  const s = h(c);", "  return eval(s);", "}"),
@@ -561,6 +591,83 @@ test("hilfe-zerlegen: jede Verletzung einer Bedingung bleibt rot und nennt die Z
     assert.equal(ergebnis.gleich, false, fall);
     assert.match(ergebnis.befund, BEFUND, fall);
   }
+});
+
+test("Zerlegen: Closure in der Hilfsfunktion weist den Rückgabenamen neu zu – nicht gleichwertig", async () => {
+  const vorher = modul(
+    "export function g(c) {",
+    "  let v = { n: c.a };",
+    "  c.leere = () => {",
+    "    v = null;",
+    "  };",
+    "  c.leere();",
+    "  return v;",
+    "}",
+  );
+  const nachher = modul(
+    "function h(q) {",
+    "  let v = { n: q.a };",
+    "  q.leere = () => {",
+    "    v = null;",
+    "  };",
+    "  return v;",
+    "}",
+    "export function g(c) {",
+    "  const v = h(c);",
+    "  c.leere();",
+    "  return v;",
+    "}",
+  );
+  const ergebnis = await vergleich(vorher, nachher);
+  assert.equal(ergebnis.gleich, false);
+  assert.match(ergebnis.befund, BEFUND);
+});
+
+async function finallyBleibtRot(zeilen) {
+  const rumpf = (parameter) => zeilen.map((zeile) => zeile.replaceAll("P", parameter));
+  const vorher = modul("export function g(c) {", ...rumpf("c"), "}");
+  const nachher = modul("function h(p) {", ...rumpf("p"), "}", "export function g(c) {", "  return h(c);", "}");
+  const ergebnis = await vergleich(vorher, nachher);
+  assert.equal(ergebnis.gleich, false);
+  assert.match(ergebnis.befund, BEFUND);
+}
+
+test("Zerlegen: finally weist den Rückgabenamen nach dem return neu zu – nicht gleichwertig", async () => {
+  await finallyBleibtRot([
+    "  let v = { n: P.a };",
+    "  try {",
+    "    log(P);",
+    "    return v;",
+    "  } finally {",
+    "    v = null;",
+    "  }",
+  ]);
+});
+
+test("Zerlegen: finally ändert ein Feld des Rückgabewerts nach dem return – nicht gleichwertig", async () => {
+  await finallyBleibtRot([
+    "  let v = { n: P.a };",
+    "  try {",
+    "    log(P);",
+    "    return v;",
+    "  } finally {",
+    "    v.n = 0;",
+    "  }",
+  ]);
+});
+
+test("Zerlegen: return im catch mit Schreibstelle im finally – nicht gleichwertig", async () => {
+  await finallyBleibtRot([
+    "  let v = { n: P.a };",
+    "  try {",
+    "    log(P);",
+    "  } catch {",
+    "    return v;",
+    "  } finally {",
+    "    v = null;",
+    "  }",
+    "  return v;",
+  ]);
 });
 
 test("hilfe-zerlegen: eine reine Hilfe mit Aufruf in einem case bleibt Sache von hilfe-einsetzen", async () => {
