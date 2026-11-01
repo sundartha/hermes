@@ -2,11 +2,13 @@ import { Router } from "express";
 import { AUTH_FAILED_GRUND } from "../util.js";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.js";
+import { createRateLimiter } from "../middleware.js";
 import { HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 
 export const STATUS_PATH = "/intern/status";
 export const STATUS_TOKEN_MIN_LENGTH = 32;
 const DATENBANK_FRIST_MS = 2000;
+const ABRUFE_PRO_MINUTE = 30;
 
 const HTTP_OK = 200;
 
@@ -33,6 +35,7 @@ function innerhalbDerFrist(versuch, fristMs) {
 
 export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATENBANK_FRIST_MS }) {
   const router = Router();
+  const begrenzer = createRateLimiter(ABRUFE_PRO_MINUTE);
   const probeDerDatenbank = makeKeyedSingleFlight(async () => store.pruefeVerbindung());
 
   async function zustand() {
@@ -40,7 +43,7 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
     return { datenbank, commit: config.server.deployedCommit };
   }
 
-  router.get(STATUS_PATH, (req, res, next) => {
+  router.get(STATUS_PATH, begrenzer, (req, res, next) => {
     if (statusSchluesselAbgewiesen(config, req, res)) return undefined;
     return zustand()
       .then((punkte) => {

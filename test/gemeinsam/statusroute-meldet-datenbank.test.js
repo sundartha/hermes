@@ -261,3 +261,35 @@ test("B2-13: ohne HERMES_STATUS_TOKEN ist der Schluessel die leere Zeichenkette"
   assert.equal(fehlend, "");
   assert.equal(nurLeerraum, "");
 });
+
+const ABRUFE_PRO_MINUTE = 30;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+async function abrufeNacheinander(basis, anzahl, authorization) {
+  const antworten = [];
+  for (let nr = 0; nr < anzahl; nr += 1) antworten.push(await statusAbrufen(basis, authorization));
+  return antworten;
+}
+
+test("B2-14: bis zur Grenze je Minute antwortet die Route wie sonst, der Abruf darueber bekommt 429", async () => {
+  const store = attrappenSpeicher();
+  const antworten = await mitStatusroute({ store }, (basis) =>
+    abrufeNacheinander(basis, ABRUFE_PRO_MINUTE + 1),
+  );
+  const innerhalb = antworten.slice(0, ABRUFE_PRO_MINUTE);
+  assert.deepEqual(new Set(innerhalb.map(({ status }) => status)), new Set([HTTP_OK]));
+  assert.equal(antworten[ABRUFE_PRO_MINUTE].status, HTTP_TOO_MANY_REQUESTS);
+  assert.equal(store.probenAufrufe, ABRUFE_PRO_MINUTE);
+});
+
+test("B2-15: auch Abrufe mit falschem Schluessel zaehlen, der Abruf darueber bekommt 429 statt 401", async () => {
+  const store = attrappenSpeicher();
+  const falsch = `Bearer ${"x".repeat(STATUS_TOKEN_MIN_LENGTH)}`;
+  const antworten = await stumm(() =>
+    mitStatusroute({ store }, (basis) => abrufeNacheinander(basis, ABRUFE_PRO_MINUTE + 1, falsch)),
+  );
+  const innerhalb = antworten.slice(0, ABRUFE_PRO_MINUTE);
+  assert.deepEqual(new Set(innerhalb.map(({ status }) => status)), new Set([HTTP_UNAUTHORIZED]));
+  assert.equal(antworten[ABRUFE_PRO_MINUTE].status, HTTP_TOO_MANY_REQUESTS);
+  assert.equal(store.probenAufrufe, 0);
+});

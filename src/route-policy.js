@@ -162,7 +162,7 @@ export const PUBLIC_ROUTES = Object.freeze([
     method: "GET",
     path: STATUS_PATH,
     reason:
-      "HANDLER-INTERNE AUTH (Paket B2, Statusroute fuer die Wache): Better Stack und OpenClaw fragen ohne Sitzung, ob die Datenbank antwortet. Eigener Nur-Lese-Schluessel, nicht das Deploy-Token: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_STATUS_TOKEN>'; leer oder kuerzer als STATUS_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit. Antwort nur {datenbank: <boolean>, commit} mit no-store, 200 wenn die Datenbank antwortet, sonst 503; nie ein Fehlertext. Liest nur, schreibt nichts, loest nichts aus. Drossel ist der globale Per-IP-Limiter.",
+      "HANDLER-INTERNE AUTH (Paket B2, Statusroute fuer die Wache): Better Stack und OpenClaw fragen ohne Sitzung, ob die Datenbank antwortet. Eigener Nur-Lese-Schluessel, nicht das Deploy-Token: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_STATUS_TOKEN>'; leer oder kuerzer als STATUS_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit. Antwort nur {datenbank: <boolean>, commit} mit no-store, 200 wenn die Datenbank antwortet, sonst 503; nie ein Fehlertext. Liest nur, schreibt nichts, loest nichts aus. Drossel: eigener Begrenzer der Route vor der Schluesselpruefung, 30 Abrufe je Minute und Adresse.",
   },
   {
     method: "GET",
