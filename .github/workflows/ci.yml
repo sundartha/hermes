@@ -611,11 +611,6 @@ jobs:
           echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
           exit "$code"
 
-      - name: Schattenvergleich
-        if: always() && needs.mutationsplan.outputs.messen == 'ja'
-        continue-on-error: true
-        run: node tools/mutationspruefung/schatten-vergleich.mjs "$RUNNER_TEMP/mutation"
-
       - name: Absicherungsbeleg schreiben
         if: always() && needs.mutationsplan.outputs.messen == 'ja' && inputs.alter_stand
         env:
