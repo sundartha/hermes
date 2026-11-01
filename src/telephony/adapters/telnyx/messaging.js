@@ -2,6 +2,7 @@ import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 
 const MESSAGES_PATH = "/v2/messages";
+const SMS_SENDEN_FRIST_MS = 10_000;
 
 export const telnyxMessaging = {
   async sendSms({ from, to, body }) {
@@ -13,6 +14,7 @@ export const telnyxMessaging = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ from, to, text: body }),
+      signal: AbortSignal.timeout(SMS_SENDEN_FRIST_MS),
     });
     await assertTelnyxOk(res, "sendSms");
   },

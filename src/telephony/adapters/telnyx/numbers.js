@@ -10,13 +10,18 @@ const INCLUDE_TELNYX_DETAIL = { includeDetail: true };
 
 const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
+const NUMMERN_LESEN_FRIST_MS = 10_000;
+const NUMMER_FREIGEBEN_FRIST_MS = 15_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function resolveNumberId(e164) {
   for (let attempt = 0; attempt < RESOURCE_POLL_ATTEMPTS; attempt++) {
-    const q = new URLSearchParams();
-    q.set("filter[phone_number]", e164);
-    const res = await fetch(`${url(NUMBERS_PATH)}?${q}`, { headers: authHeaders() });
+    const query = new URLSearchParams();
+    query.set("filter[phone_number]", e164);
+    const res = await fetch(`${url(NUMBERS_PATH)}?${query}`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(NUMMERN_LESEN_FRIST_MS),
+    });
     await assertTelnyxOk(res, "resolveNumberId", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const data = json.data || [];
@@ -38,12 +43,15 @@ function providerPriceOf(costInformation) {
 
 export const telnyxNumberProvisioning = {
   async searchNumbers({ countryCode, type, limit = DEFAULT_SEARCH_LIMIT }) {
-    const q = new URLSearchParams();
-    q.set("filter[country_code]", countryCode);
-    q.append("filter[features][]", "voice");
-    q.set("filter[limit]", String(limit));
-    if (type) q.set("filter[phone_number_type]", type);
-    const res = await fetch(`${url(AVAILABLE_PATH)}?${q}`, { headers: authHeaders() });
+    const query = new URLSearchParams();
+    query.set("filter[country_code]", countryCode);
+    query.append("filter[features][]", "voice");
+    query.set("filter[limit]", String(limit));
+    if (type) query.set("filter[phone_number_type]", type);
+    const res = await fetch(`${url(AVAILABLE_PATH)}?${query}`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(NUMMERN_LESEN_FRIST_MS),
+    });
     await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     return (json.data || []).map((d) => {
@@ -70,6 +78,7 @@ export const telnyxNumberProvisioning = {
     const res = await fetch(`${url(NUMBERS_PATH)}/${providerNumberId}`, {
       method: "DELETE",
       headers: authHeaders(),
+      signal: AbortSignal.timeout(NUMMER_FREIGEBEN_FRIST_MS),
     });
     await assertTelnyxOk(res, "releaseNumber", { ...INCLUDE_TELNYX_DETAIL, attachStatus: true });
   },
