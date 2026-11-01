@@ -2294,6 +2294,16 @@
   .mh-uses > .mh-dots {
     grid-row: 5;
   }
+  .mh-uses > .mh-label,
+  .mh-uses > .mh-h2,
+  .mh-uses > .mh-lead--wide,
+  .mh-uses > .mh-dots,
+  .mh-price > .mh-label,
+  .mh-price > .mh-h2,
+  .mh-price .mh-plan-tabs,
+  .mh-price .mh-plan__end {
+    translate: 20px 0;
+  }
   .mh-uses > .mh-stage {
     grid-row: 1 / -1;
     height: min(660px, calc(100svh - 168px));
