@@ -33,7 +33,9 @@ test("rote Runden aus der Commit-Nachricht des Auftragswegs stehen mit Belegzeil
   const text = ergebnisseFuer(context, `${KOPF}\n${ROTER_ABSCHNITT}\n${HERKUNFT}`);
   const block = zweckBlock("lint").map((zeile) => `    ${zeile}`).join("\n");
   assert.ok(text.includes(`\nRunde 1: lint, Exit 1\n    ${BELEGZEILE}\n\nZweck lint:\n${block}\n`), text);
-  assert.ok(text.indexOf("## Rote Prüfungen im Auftragsweg vor diesem Commit") > text.indexOf("CI-Lauf: grün"), text);
+  assert.ok(text.indexOf("## Rote Prüfungen im Auftragsweg vor diesem Commit") > text.indexOf("CI-Lauf: nicht abgewartet"), text);
+  assert.ok(text.includes("CI-Lauf: nicht abgewartet"), text);
+  assert.ok(!text.includes("CI-Lauf: grün"), text);
 });
 
 test("eine vom Agenten zitierte rote Runde wird nicht übernommen, ein Commit ohne Auftrags-Trailer bekommt keine Angabe", (context) => {
