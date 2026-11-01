@@ -2,6 +2,7 @@ import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 import { ANRUFE_LAUFEND_PATH } from "./routes/intern-anrufe-laufend.js";
 import { ANRUFPAUSE_PATH } from "./routes/intern-anrufpause.js";
+import { STATUS_PATH } from "./routes/intern-status.js";
 import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
 
 export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
@@ -156,6 +157,12 @@ export const PUBLIC_ROUTES = Object.freeze([
     path: ANRUFPAUSE_PATH,
     reason:
       "HANDLER-INTERNE AUTH (Paket V6, Anrufpause): der Betreiber schaltet die Pause ausgehender Anrufe ohne Neustart und ohne Sitzung. Dieselbe Token-Pruefung wie GET /intern/anrufe-laufend (deployTokenAbgewiesen), vor jeder Koerperpruefung; ohne gueltiges Token 401 und nichts aendert sich. Koerper genau {an: <boolean>}, sonst 400 und nichts aendert sich. Die Route kann nur SPERREN: an=true laesst das Gate outbound_frozen jeden neuen Anruf ablehnen, an=false hebt nur die Pause auf, nie OUTBOUND_FROZEN. Sie startet keinen Anruf, beruehrt keinen laufenden Anruf, antwortet erst nach dem dauerhaften Schreiben; scheitert das Schreiben, gilt der alte Wert weiter und die Antwort ist 503 {error: 'persist_failed'} ohne Fehlerdetails (Audit anrufpause_fehlgeschlagen). no-store, Audit ohne Personenbezug. Drossel ist der globale Per-IP-Limiter.",
+  },
+  {
+    method: "GET",
+    path: STATUS_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (Paket B2, Statusroute fuer die Wache): Better Stack und OpenClaw fragen ohne Sitzung, ob die Datenbank antwortet. Eigener Nur-Lese-Schluessel, nicht das Deploy-Token: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_STATUS_TOKEN>'; leer oder kuerzer als STATUS_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit. Antwort nur {datenbank: <boolean>, commit} mit no-store, 200 wenn die Datenbank antwortet, sonst 503; nie ein Fehlertext. Liest nur, schreibt nichts, loest nichts aus. Drossel: eigener Begrenzer der Route vor der Schluesselpruefung, 30 Abrufe je Minute und Adresse.",
   },
   {
     method: "GET",

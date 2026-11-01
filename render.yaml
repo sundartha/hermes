@@ -336,6 +336,8 @@ services:
         sync: false
       - key: HERMES_DEPLOY_TOKEN
         sync: false
+      - key: HERMES_STATUS_TOKEN
+        sync: false
       - key: WORKOS_API_BASE
         value: https://api.workos.com
       - key: ADMIN_EMAILS

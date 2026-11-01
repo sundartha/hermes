@@ -1,20 +1,11 @@
 import { Router } from "express";
-import { AUTH_FAILED_GRUND, auditAuthFailed, safeEqual } from "../util.js";
-import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.js";
+import { AUTH_FAILED_GRUND } from "../util.js";
+import { bearerAbgewiesen } from "./bearer-schluessel.js";
 
 export const ANRUFE_LAUFEND_PATH = "/intern/anrufe-laufend";
 export const DEPLOY_TOKEN_MIN_LENGTH = 32;
 
 const AKTIVER_STATUS = "active";
-const BEARER_PRAEFIX = "Bearer ";
-const KEIN_ZWISCHENSPEICHER = "no-store";
-const ABGELEHNT = "unauthorized";
-
-function deployTokenGueltig(config, authorization) {
-  const erwartet = config.auth.deployToken;
-  if (typeof erwartet !== "string" || erwartet.length < DEPLOY_TOKEN_MIN_LENGTH) return false;
-  return safeEqual(authorization, `${BEARER_PRAEFIX}${erwartet}`);
-}
 
 function laeuft(call, nowMs, store) {
   if (call.status !== AKTIVER_STATUS) return false;
@@ -27,11 +18,12 @@ export function laufendeAnrufe(store, nowMs) {
 }
 
 export function deployTokenAbgewiesen(config, req, res) {
-  res.set("Cache-Control", KEIN_ZWISCHENSPEICHER);
-  if (deployTokenGueltig(config, req.headers.authorization)) return false;
-  auditAuthFailed(req, AUTH_FAILED_GRUND.DEPLOY_TOKEN);
-  antworteFehler(res, HTTP_UNAUTHORIZED, ABGELEHNT);
-  return true;
+  const schluessel = {
+    erwartet: config.auth.deployToken,
+    mindestLaenge: DEPLOY_TOKEN_MIN_LENGTH,
+    grund: AUTH_FAILED_GRUND.DEPLOY_TOKEN,
+  };
+  return bearerAbgewiesen(schluessel, req, res);
 }
 
 export function makeInternAnrufeLaufendRoutes({ config, store }) {

@@ -34,6 +34,7 @@ oeffentlich|POST|/webhooks/elevenlabs/init|403|keine|Init-Token fehlt -> 403, au
 oeffentlich|GET|/intern/anrufe-laufend|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket 15)
 oeffentlich|GET|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
 oeffentlich|POST|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
+oeffentlich|GET|/intern/status|401|keine|Status-Schluessel fehlt -> 401, auch bei leerem HERMES_STATUS_TOKEN (Paket B2)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login

@@ -26,6 +26,7 @@ export function schluesselErzeugen() {
       .toString("base64"),
     telnyxPrivatPem: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
     werkzeugToken: geheimnis(),
+    statusToken: geheimnis(),
     initToken: geheimnis(),
     bestaetigungsGeheimnis: geheimnis(),
   };
@@ -47,6 +48,7 @@ export function hermesUmgebung({ schluessel, urls, pgUrl }) {
     ELEVENLABS_RESULT_POLL_MS: ERGEBNIS_ABRUF_MS,
     ELEVENLABS_TOOL_TOKEN: schluessel.werkzeugToken,
     ELEVENLABS_INIT_WEBHOOK_TOKEN: schluessel.initToken,
+    HERMES_STATUS_TOKEN: schluessel.statusToken,
     CONSULT_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: "true",
     IN_CALL_CONSULT_ENABLED: "true",

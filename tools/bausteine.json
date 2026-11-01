@@ -135,14 +135,17 @@
       "zweck": "Interne Betriebsrouten (Deploy-Info, Anrufpause, laufende Anrufe) und Eingabeprüfung.",
       "quellen": [
         "src/routes/api-deploy-info.js",
+        "src/routes/bearer-schluessel.js",
         "src/routes/intern-anrufe-laufend.js",
         "src/routes/intern-anrufpause.js",
+        "src/routes/intern-status.js",
         "src/routes/_validation.js"
       ],
       "eingaenge": [
         "src/routes/_validation.js",
         "src/routes/intern-anrufe-laufend.js",
-        "src/routes/intern-anrufpause.js"
+        "src/routes/intern-anrufpause.js",
+        "src/routes/intern-status.js"
       ],
       "nutzt": []
     },
