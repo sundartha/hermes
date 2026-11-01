@@ -1,6 +1,7 @@
 export async function createPgPoolRunner(connectionString) {
   const pg = (await import("pg")).default;
   const pool = new pg.Pool({ connectionString });
+  pool.on("error", (err) => console.error("[pool] Verbindung im Leerlauf verloren:", err.message));
   const runner = {
     async withClient(fn) {
       const client = await pool.connect();
@@ -14,5 +15,9 @@ export async function createPgPoolRunner(connectionString) {
       }
     },
   };
-  return { runner, close: () => pool.end() };
+  return {
+    runner,
+    close: () => pool.end(),
+    poolZustand: () => ({ wartend: pool.waitingCount, offen: pool.totalCount }),
+  };
 }
