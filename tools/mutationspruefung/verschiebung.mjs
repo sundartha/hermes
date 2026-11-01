@@ -203,10 +203,24 @@ function istWeiterreichung(datei, anweisung, neue) {
   return WEITERREICHUNG.has(anweisung.type) && holtAusNeuer(datei, anweisung, neue);
 }
 
-function verteilt(folge, ziele) {
+function bezogeneNamen(nachher, zielPfad) {
+  const geholt = importeVon(nachher.baum).filter((anweisung) => holtAusNeuer(nachher.pfad, anweisung, [zielPfad]));
+  return new Set(geholt.flatMap(({ specifiers }) => specifiers.map(({ local }) => local.name)));
+}
+
+function ohneErgaenztesExport(anweisung, bezogen) {
+  if (anweisung.type !== "ExportNamedDeclaration" || bezogen === undefined) return anweisung;
+  return namenDerDeklaration(anweisung.declaration).every((eintrag) => bezogen.has(eintrag)) ? anweisung.declaration : anweisung;
+}
+
+function gleichVerschoben(verschoben, alt, bezogen) {
+  return gleicherBaum(verschoben, alt) || gleicherBaum(ohneErgaenztesExport(verschoben, bezogen), alt);
+}
+
+function verteilt(folge, ziele, bezogen = []) {
   const zeiger = ziele.map(() => 0);
   for (const anweisung of folge) {
-    const index = ziele.findIndex((liste, stelle) => zeiger[stelle] < liste.length && gleicherBaum(liste[zeiger[stelle]], anweisung));
+    const index = ziele.findIndex((liste, stelle) => zeiger[stelle] < liste.length && gleichVerschoben(liste[zeiger[stelle]], anweisung, bezogen[stelle]));
     if (index === -1) return false;
     zeiger[index] += 1;
   }
@@ -376,7 +390,8 @@ function verschobeneAnweisungen(vorher, nachher, neue) {
   const neuePfade = neue.map(({ pfad }) => pfad);
   const bleibt = nachher.baum.body.filter((anweisung) => !istImport(anweisung) && !istWeiterreichung(nachher.pfad, anweisung, neuePfade));
   const ausgelagert = neue.map(({ baum }) => baum.body.filter((anweisung) => !istImport(anweisung)));
-  return verteilt(vorher.baum.body.filter((anweisung) => !istImport(anweisung)), [bleibt, ...ausgelagert]) ? ausgelagert : null;
+  const bezogen = [undefined, ...neue.map(({ pfad }) => bezogeneNamen(nachher, pfad))];
+  return verteilt(vorher.baum.body.filter((anweisung) => !istImport(anweisung)), [bleibt, ...ausgelagert], bezogen) ? ausgelagert : null;
 }
 
 function gleicheExporte(vorher, nachher, neue) {
@@ -512,7 +527,7 @@ function zielWirdAnDerStelleGeladen(vorher, nachher, ziel) {
 
 function anweisungenWandern({ quelleAlt, quelleNeu, zielNeu }, anhang) {
   const bleibt = nichtImporte(quelleNeu).filter((anweisung) => !istWeiterreichung(quelleNeu.pfad, anweisung, [zielNeu.pfad]));
-  const verschoben = verteilt(nichtImporte(quelleAlt), [bleibt, anhang.anhang]);
+  const verschoben = verteilt(nichtImporte(quelleAlt), [bleibt, anhang.anhang], [undefined, bezogeneNamen(quelleNeu, zielNeu.pfad)]);
   const wirkungslos = ohneWirkungBeimLaden(anhang.anhang) && ortsfest({ type: "Program", body: anhang.anhang });
   return verschoben && wirkungslos && jedeNeueWeitergereicht(quelleNeu, [zielNeu]);
 }
