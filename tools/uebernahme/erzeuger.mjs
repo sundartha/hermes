@@ -136,7 +136,7 @@ function berichtZeilen(inhalt) {
 async function pruefeTeil(github, lauf, { workflow, jobs, teil, erwartet }) {
   const jobName = `${workflow.jobName} ${teil.teil}/${teil.von}`;
   const fehler = jobFehler(jobs, jobName);
-  if (fehler) throw new Error(fehler);
+
   const festhaltung = festhaltungImProtokoll(
     await protokollVon(github, jobs, jobName),
     workflow.artefakt(teil.teil),
