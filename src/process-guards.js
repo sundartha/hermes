@@ -1,5 +1,6 @@
 import path from "node:path";
 import { mitLogMaske } from "./log-maske.js";
+import { SCHADEN_FEHLER, meldeSchaden } from "./utils/lokale-gesundheit.js";
 
 const STDIO_MCP_EINSTIEG = "mcp-server.js";
 
@@ -13,6 +14,7 @@ export function onUnhandledRejection(reason) {
 }
 
 export function onUncaughtException(err) {
+  meldeSchaden(SCHADEN_FEHLER);
   console.error("[guard] uncaughtException:", describe(err));
 }
 
