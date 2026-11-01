@@ -116,6 +116,7 @@ test("der Reporter rechnet Testsumme, Kindprozess und Ausklingzeit je Datei aus 
       ausklingen_ms: KINDPROZESS_MS - ERSTER_TEST_MS - ZWEITER_TEST_MS,
       tests_ms: ERSTER_TEST_MS + ZWEITER_TEST_MS,
       kind_ms: KINDPROZESS_MS,
+      bestanden: false,
     },
   ]);
 });
@@ -128,6 +129,7 @@ test("ohne test:summary meldet der Reporter weder Kindprozess noch Ausklingzeit"
       ausklingen_ms: null,
       tests_ms: ERSTER_TEST_MS + ZWEITER_TEST_MS,
       kind_ms: null,
+      bestanden: false,
     },
   ]);
 });
