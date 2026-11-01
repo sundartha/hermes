@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, copyFileSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -323,4 +323,34 @@ test("ein Werkzeugteil ohne Datei endet rot und fährt nicht die ganze Suite", (
   assert.notEqual(result.status, 0);
   assert.match(result.stdout + result.stderr, /enthält keine Testdatei/);
   assert.ok(!existsSync(join(directory, REPORT_DIRECTORY, `werkzeugteil-${EMPTY_PART}.jsonl`)));
+});
+
+function partWithFileList(context, lines) {
+  const directory = probe(context);
+  change(directory, TOOL_CHANGE_FILE);
+  writeFileSync(join(directory, "werkzeugdateien.txt"), lines.map((line) => `${line}\n`).join(""));
+  const result = runPruefleiter(directory, ["--werkzeugteil", `1/${PARTS}`, "--werkzeugdateien", "werkzeugdateien.txt"]);
+  return { directory, result };
+}
+
+test("ein Werkzeugteil mit --werkzeugdateien fährt genau die genannten Dateien", (context) => {
+  const { directory, result } = partWithFileList(context, [TOOL_TEST_FILES[1]]);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(filesIn(directory, "werkzeugteil-1.jsonl"), [TOOL_TEST_FILES[1]]);
+});
+
+test("ein Werkzeugteil mit leerer --werkzeugdateien-Liste fährt nichts und bleibt grün", (context) => {
+  const { directory, result } = partWithFileList(context, []);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(join(directory, REPORT_DIRECTORY, "werkzeugteil-1.jsonl")), false);
+});
+
+test("--werkzeugdateien ohne --werkzeugteil ist ein Aufruffehler", (context) => {
+  const directory = probe(context);
+
+  const result = runPruefleiter(directory, ["--werkzeugdateien", "werkzeugdateien.txt"]);
+
+  assert.equal(result.status, EXIT_USAGE);
 });

@@ -24,7 +24,7 @@ export function zweiBaeume(context) {
 
 export function berichtText(ergebnisse) {
   return ergebnisse
-    .map(([datei, bestanden]) => `${JSON.stringify({ datei, bestanden })}\n`)
+    .map(([datei, bestanden, zusatz = {}]) => `${JSON.stringify({ datei, bestanden, ...zusatz })}\n`)
     .join("");
 }
 

@@ -146,7 +146,14 @@ function runToolBank(files, { cwd = process.cwd(), laufzeit, rot, still = false 
   return result.status ?? EXIT_FAILURE;
 }
 
-function toolTestFiles(plan, part) {
+function listedFiles(listFile) {
+  return readFileSync(listFile, "utf8")
+    .split("\n")
+    .filter((line) => line !== "");
+}
+
+function toolTestFiles(plan, part, listFile) {
+  if (listFile !== undefined) return listedFiles(listFile);
   if (plan.art === LIST_TOOL_TESTS) {
     if (part === undefined) return plan.dateien;
     return dateienDesTeils({ dateien: plan.dateien, teil: part.index, anzahl: part.total }).dateien;
@@ -156,8 +163,8 @@ function toolTestFiles(plan, part) {
   return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total });
 }
 
-function toolTests(plan, part) {
-  const files = toolTestFiles(plan, part);
+function toolTests(plan, part, listFile) {
+  const files = toolTestFiles(plan, part, listFile);
   if (files === null) return EXIT_FAILURE;
   if (files.length === 0) {
     console.log(`Werkzeugtests Teil ${part?.index}/${part?.total}: keine Datei der Liste in diesem Teil.`);
@@ -185,6 +192,7 @@ function parseOptions() {
       "werkzeugtests-gewollt": { type: "boolean", default: false },
       "fuer-ereignis": { type: "string" },
       werkzeugteil: { type: "string" },
+      werkzeugdateien: { type: "string" },
       "teile-pruefen": { type: "string" },
       jobs: { type: "string" },
     },
@@ -232,7 +240,7 @@ async function partRun(options, part) {
     );
     return 0;
   }
-  return toolTests(plan, part);
+  return toolTests(plan, part, options.werkzeugdateien);
 }
 
 async function announceToolTests(options) {
@@ -318,6 +326,9 @@ function usageError(options) {
     return `Nur eine dieser Optionen auf einmal: ${modes.map((mode) => `--${mode}`).join(", ")}.`;
   if (options.werkzeugteil !== undefined && parsePart(options.werkzeugteil) === null) {
     return `--werkzeugteil erwartet Teil/Teile wie 2/4 mit 1 ≤ Teil ≤ Teile, nicht „${options.werkzeugteil}“.`;
+  }
+  if (options.werkzeugdateien !== undefined && options.werkzeugteil === undefined) {
+    return "--werkzeugdateien gehört zu --werkzeugteil.";
   }
   if (options["teile-pruefen"] === "")
     return "--teile-pruefen braucht den Ordner mit den Berichten der Teile.";
