@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMemoryQueue } from "../src/queue/adapters/memory/queue.js";
+import { neueUhr, pgBossUmgebung } from "./gemeinsam/pgboss-umgebung.js";
 import { handleProvisionJob } from "../src/worker/provisioning.js";
 import { fakeProvisioner, fakeBilling } from "./helpers.js";
 import {
@@ -174,4 +175,55 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.paymentIntentId, null, "kein PI ohne billing");
   assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+});
+
+test("K1-7: nach Absturz nach dem Kauf stellt pg-boss den Auftrag erneut zu, der Marker verhindert den zweiten Kauf", async (t) => {
+  const clock = neueUhr();
+  const umgebung = await pgBossUmgebung(t, { clock });
+  const { db, queue } = umgebung;
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner();
+  const idempotencyKey = `provision_${numberId}`;
+  const queueId = await queue.enqueue({
+    kind: PROVISION_NUMBER_JOB,
+    payload: { numberId },
+    idempotencyKey,
+  });
+  recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
+  const kaufen = (job) =>
+    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling() }, PAY_ARGS);
+
+  await queue.drain(kaufen);
+  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.ACTIVE);
+  await db.abfragen(
+    "UPDATE pgboss.job SET state = 'active', completed_on = NULL, started_on = to_timestamp($1 / 1000.0) WHERE name = $2",
+    [clock.now(), PROVISION_NUMBER_JOB],
+  );
+  await clock.tick(30 * 60 * 1000);
+  const ergebnisse = [];
+  const verarbeitet = await queue.drain(async (job) => ergebnisse.push(await kaufen(job)));
+
+  assert.equal(verarbeitet, 1, "der Auftrag wird nach dem Absturz erneut zugestellt");
+  assert.deepEqual(ergebnisse, [{ skipped: true, status: NUMBER_STATUS.ACTIVE }]);
+  assert.equal(prov.orderCalls.length, 1, "Nummernkauf genau einmal");
+  assert.equal(await queue.jobStatus(queueId), PROVISIONING_JOB_STATUS.DONE);
+});
+
+test("K1-8: ein erneutes enqueue nach erledigtem Auftrag kauft keine zweite Nummer", async (t) => {
+  const umgebung = await pgBossUmgebung(t);
+  const { queue } = umgebung;
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner();
+  const idempotencyKey = `provision_${numberId}`;
+  recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
+  const auftrag = { kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey };
+  const kaufen = (job) =>
+    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling() }, PAY_ARGS);
+
+  await queue.enqueue(auftrag);
+  await queue.drain(kaufen);
+  await queue.enqueue(auftrag);
+  await queue.drain(kaufen);
+
+  assert.equal(prov.orderCalls.length, 1, "Nummernkauf genau einmal");
 });

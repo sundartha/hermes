@@ -25,6 +25,14 @@ function isNewPaidNumber(result, billingConfig) {
   return Boolean(billingConfig.paymentEnabled && result.number);
 }
 
+function enqueueProvisioningJob(queue, job) {
+  return queue.enqueue({
+    kind: PROVISION_NUMBER_JOB,
+    payload: { numberId: job.numberId },
+    idempotencyKey: job.idempotencyKey,
+  });
+}
+
 export function makeProvisioningOrchestrator({
   store,
   config,
@@ -49,8 +57,8 @@ export function makeProvisioningOrchestrator({
         store.save();
         return { ok: true, jobId: job.id };
       })
-      .then((res) => {
-        queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+      .then(async (res) => {
+        await queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
         return res;
       })
       .catch((e) => {
@@ -140,13 +148,10 @@ export function makeProvisioningOrchestrator({
   const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
 
   function redriveProvisioningJobs(jobs) {
-    for (const j of jobs)
-      queue.enqueue({
-        kind: PROVISION_NUMBER_JOB,
-        payload: { numberId: j.numberId },
-        idempotencyKey: j.idempotencyKey,
-      });
-    if (jobs.length) void runProvisioningDrainExclusive();
+    if (!jobs.length) return;
+    Promise.all(jobs.map((job) => enqueueProvisioningJob(queue, job)))
+      .then(() => runProvisioningDrainExclusive())
+      .catch((err) => console.error("[provision-redrive]", err.message));
   }
 
   function closeSettledProvisioningJobs(jobs) {
