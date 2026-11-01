@@ -8,6 +8,7 @@ import pg from "pg";
 import {
   flushAnfang,
   hauptPoolOptionen,
+  mitStartFrist,
   POOL_GRENZEN,
   poolFehlerZeile,
   portalPoolOptionen,
@@ -23,6 +24,7 @@ const ABBRUCH_SPAETESTENS_MS = 4000;
 const UNERREICHBAR = "postgres://postgres@127.0.0.1:1/postgres";
 const FLUSH_FRIST_ALS_TEXT = "2min";
 const STANDARD_FRIST_ALS_TEXT = "30s";
+const START_FRIST_ALS_TEXT = "5min";
 
 class VerbindungOhneNetz extends EventEmitter {
   connect(fertig) {
@@ -68,6 +70,20 @@ await probe.query("CREATE FUNCTION frist_merken() RETURNS trigger LANGUAGE plpgs
 await probe.query("CREATE TRIGGER frist_merken AFTER INSERT OR UPDATE ON tenant FOR EACH ROW EXECUTE FUNCTION frist_merken()");
 await speicher.save();
 await speicher.drainFlushes();
+const { rows } = await probe.query("SELECT frist FROM frist_protokoll");
+process.stdout.write(JSON.stringify(rows.map((zeile) => zeile.frist)));
+process.exit(0);
+`;
+
+const START_FRIST_PROTOKOLL = `
+import pg from "pg";
+await import("./src/store.js");
+const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await probe.connect();
+await probe.query("CREATE TABLE frist_protokoll (frist text)");
+await probe.query("CREATE FUNCTION frist_merken() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO frist_protokoll VALUES (current_setting('statement_timeout')); RETURN NEW; END $$");
+await probe.query("CREATE TRIGGER frist_merken BEFORE INSERT OR UPDATE ON tenant FOR EACH ROW EXECUTE FUNCTION frist_merken()");
+await import("./src/store.js?zweiter-start");
 const { rows } = await probe.query("SELECT frist FROM frist_protokoll");
 process.stdout.write(JSON.stringify(rows.map((zeile) => zeile.frist)));
 process.exit(0);
@@ -153,6 +169,38 @@ test("Pool-Schutz: der Flush beginnt mit BEGIN und hebt statement_timeout danach
   assert.match(frist.text, /^SELECT set_config\('statement_timeout', \$1, true\)$/);
   assert.deepEqual(frist.params, [String(POOL_GRENZEN.flushStatementTimeoutMs)]);
   assert.ok(POOL_GRENZEN.flushStatementTimeoutMs > POOL_GRENZEN.statementTimeoutMs);
+});
+
+test("Pool-Schutz: der Start hebt die Abfragefrist der Sitzung an und gibt sie danach zurück, auch nach einem Fehler", async () => {
+  const gesehen = [];
+  const verbindung = {
+    query: async (text, parameter) => {
+      gesehen.push(parameter);
+    },
+  };
+  const ergebnis = await mitStartFrist(verbindung, async () => {
+    gesehen.push("Arbeit");
+    return "fertig";
+  });
+  assert.equal(ergebnis, "fertig");
+  assert.deepEqual(gesehen, [[String(POOL_GRENZEN.startStatementTimeoutMs)], "Arbeit", [String(POOL_GRENZEN.statementTimeoutMs)]]);
+  assert.ok(POOL_GRENZEN.startStatementTimeoutMs > POOL_GRENZEN.statementTimeoutMs);
+  gesehen.length = 0;
+  await assert.rejects(
+    mitStartFrist(verbindung, async () => {
+      throw new Error("Migration gescheitert");
+    }),
+    { message: "Migration gescheitert" },
+  );
+  assert.deepEqual(gesehen, [[String(POOL_GRENZEN.startStatementTimeoutMs)], [String(POOL_GRENZEN.statementTimeoutMs)]]);
+});
+
+test("Echtes Postgres: Migration und Laden beim Start laufen mit der Startfrist von fünf Minuten statt der Abfragefrist", { timeout: KINDPROZESS_GRENZE_MS * 2 }, async (t) => {
+  const db = await echteDatenbank(t);
+  if (!db) return;
+  const fristen = JSON.parse(speicherMitKindprozess(db.adresse, START_FRIST_PROTOKOLL));
+  assert.ok(fristen.length > 0);
+  assert.deepEqual([...new Set(fristen)], [START_FRIST_ALS_TEXT]);
 });
 
 test("Echtes Postgres: jedes Schreiben im Flush des Speichers läuft mit der Flush-Frist von zwei Minuten", { timeout: KINDPROZESS_GRENZE_MS * 2 }, async (t) => {

@@ -5,6 +5,7 @@ export const POOL_GRENZEN = Object.freeze({
   connectionTimeoutMillis: 10_000,
   statementTimeoutMs: 30_000,
   flushStatementTimeoutMs: 120_000,
+  startStatementTimeoutMs: 300_000,
   datenbankBudget: 80,
   instanzen: 2,
   zusatzInstanzenBeimDeploy: 1,
@@ -40,4 +41,17 @@ export function flushAnfang() {
       params: [String(POOL_GRENZEN.flushStatementTimeoutMs)],
     },
   ];
+}
+
+async function setzeSitzungsFrist(client, millisekunden) {
+  await client.query(`SELECT set_config('statement_timeout', $1, false)`, [String(millisekunden)]);
+}
+
+export async function mitStartFrist(client, arbeit) {
+  await setzeSitzungsFrist(client, POOL_GRENZEN.startStatementTimeoutMs);
+  try {
+    return await arbeit();
+  } finally {
+    await setzeSitzungsFrist(client, POOL_GRENZEN.statementTimeoutMs);
+  }
 }
