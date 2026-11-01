@@ -256,6 +256,9 @@
   ".github/workflows/pruefleiter.yml › werkzeugtests › Node 22, npm ci und Install-Skripte": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
+  ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests im Prüfleiter gewollt": {
+    "meldet": "Fragt nur in der Warteschlange, ob der Prüfleiter in diesem Commit die Werkzeugtests fährt, und gibt die Antwort an die Übernahme weiter; urteilt nicht über Tests."
+  },
   ".github/workflows/pruefleiter.yml › werkzeugtests › Übernahme im Schatten": {
     "aufbau": "Lokale Action .github/actions/uebernahme-im-schatten; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },
@@ -353,7 +356,7 @@
     "meldet": "Startet nach einer Label-Änderung am Issue den Testschutz der verknüpften PRs neu; urteilt selbst nicht."
   },
   ".github/actions/uebernahme-im-schatten/action.yml › Übernahme im Schatten": {
-    "meldet": "Berechnet nur im Schattenmodus, welche Testdateien aus einem früheren grünen Lauf am gleichen Git-Baum übernommen würden, schreibt die Vorhersage als Artefakt und urteilt nicht; Fehler landen in der Vorhersage, der Schritt endet grün."
+    "meldet": "Berechnet, welche Testdateien aus einem früheren grünen Lauf am gleichen Git-Baum übernommen werden können, schreibt die Vorhersage als Artefakt und urteilt nicht; nur mit UEBERNAHME=an schreibt sie die Liste der Dateien, die noch laufen, sonst wird nichts ausgelassen; Fehler landen in der Vorhersage, der Schritt endet grün."
   },
   ".github/actions/node-npm-ci/action.yml › npm ci": {
     "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."

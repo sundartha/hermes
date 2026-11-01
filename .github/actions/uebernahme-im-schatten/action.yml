@@ -1,5 +1,5 @@
 name: Übernahme im Schatten
-description: Berechnet, welche Testdateien dieses Teils aus einem früheren grünen Lauf am gleichen Git-Baum übernommen würden, und lädt die Vorhersage als Artefakt hoch. Es wird nichts übernommen und nichts ausgelassen.
+description: Berechnet, welche Testdateien dieses Teils aus einem früheren grünen Lauf am gleichen Git-Baum übernommen werden können, und lädt die Vorhersage als Artefakt hoch. Nur mit UEBERNAHME=an schreibt sie die Liste der Dateien, die noch laufen, und meldet deren Zahl; sonst wird nichts ausgelassen.
 inputs:
   art:
     description: ci für die Tests der CI, pruefleiter für die Werkzeugtests des Prüfleiters.
@@ -14,10 +14,23 @@ inputs:
     description: Datei mit den Testdateien des Teils, eine je Zeile; nur für art ci.
     required: false
     default: ""
+  rest:
+    description: Datei, in die bei UEBERNAHME=an die Testdateien geschrieben werden, die noch laufen müssen.
+    required: false
+    default: ""
+  gewollt:
+    description: ja, wenn der Prüfleiter in diesem Commit die Werkzeugtests fährt; nur für art pruefleiter.
+    required: false
+    default: ""
+outputs:
+  uebrig:
+    description: Zahl der Testdateien, die noch laufen müssen; leer, wenn nichts übernommen wurde.
+    value: ${{ steps.planen.outputs.uebrig }}
 runs:
   using: composite
   steps:
     - name: Übernahme im Schatten
+      id: planen
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -25,7 +38,9 @@ runs:
         TEIL: ${{ inputs.teil }}
         TEILE: ${{ inputs.teile }}
         DATEIEN: ${{ inputs.dateien }}
-      run: node tools/uebernahme/baum.mjs planen --art "$ART" --teil "$TEIL" --teile "$TEILE" --dateien "$DATEIEN"
+        REST: ${{ inputs.rest }}
+        GEWOLLT: ${{ inputs.gewollt }}
+      run: node tools/uebernahme/baum.mjs planen --art "$ART" --teil "$TEIL" --teile "$TEILE" --dateien "$DATEIEN" --rest "$REST" --gewollt "$GEWOLLT"
 
     - name: Vorhersage der Übernahme hochladen
       if: always()
