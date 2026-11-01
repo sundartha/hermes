@@ -25,7 +25,7 @@ const gesehen = anderer && anderer !== "-" ? existsSync(join(ort, "start-" + and
 const text = art === "umlaute" ? "äb".repeat(100000) : "a".repeat(1500) + "ENDE";
 const zeilen = [
   { type: "result", result: (gesehen ? "gleichzeitig " : "nacheinander ") + text, is_error: false },
-  { type: "assistant", message: { id: "m1", usage: { input_tokens: 150000 }, content: [{ type: "text", text: "zwischen" }] } },
+  { type: "assistant", message: { id: "m1", usage: { input_tokens: Number(art) || 150000 }, content: [{ type: "text", text: "zwischen" }] } },
   { type: "assistant", message: { id: "m2", usage: { input_tokens: 70000, cache_read_input_tokens: 5000 }, content: [{ type: "text", text: "x" }] } },
 ];
 for (const zeile of zeilen) console.log(JSON.stringify(zeile));
@@ -52,6 +52,11 @@ function bauMitKopf(ort, kopf) {
   mkdirSync(join(ort, ".claude/agents"), { recursive: true });
   writeFileSync(join(ort, ".claude/agents/bau.md"), `---\nname: bau\n${kopf}---\n\nBaut.\n`);
   return starteAgent({ rolle: "bau", auftrag: BAU_AUFTRAG, root: ort }, "eins").befehl.split(" ");
+}
+
+function aktionBeiKontext(ort, { rolle, kontext, bereich = "tools/beispiel.mjs", start = {} }) {
+  const auftrag = { ...BAU_AUFTRAG, bereich };
+  return starteAgent({ rolle, auftrag, root: ort }, `eins - ${kontext}`, start);
 }
 
 function antwortMitKontext(kontext, eltern = null) {
@@ -104,6 +109,37 @@ test("ohne Wunsch liefert starteAgent dieselben Felder wie bisher", (context) =>
   assert.deepEqual(Object.keys(lauf), ["rolle", "agent", "sitzung", "befehl", "exitCode", "aktion", "fehlerausgabe", "antwort", "limit"]);
   assert.equal(lauf.aktion.art, UEBERGABE);
   assert.equal(lauf.antwort.length, 1000);
+});
+
+test("die Test-Rolle wird bei 150.000 Token Kontext nicht übergeben", (context) => {
+  const lauf = aktionBeiKontext(mitErsatz(context), { rolle: "test", kontext: 150_000 });
+  assert.equal(lauf.agent, "test");
+  assert.equal(lauf.aktion, null);
+});
+
+test("die Test-Rolle wird bei 210.000 Token Kontext übergeben", (context) => {
+  const lauf = aktionBeiKontext(mitErsatz(context), { rolle: "test", kontext: 210_000 });
+  assert.equal(lauf.aktion.art, UEBERGABE);
+});
+
+test("die Test-Rolle an einem kritischen Bereich gilt wie die Test-Rolle", (context) => {
+  const ort = mitErsatz(context);
+  const ohne = aktionBeiKontext(ort, { rolle: "test", kontext: 150_000, bereich: "src/billing/rechnung.js" });
+  assert.equal(ohne.agent, "test-kritisch");
+  assert.equal(ohne.aktion, null);
+  assert.equal(aktionBeiKontext(ort, { rolle: "test", kontext: 210_000, bereich: "src/billing/rechnung.js" }).aktion.art, UEBERGABE);
+});
+
+test("die Bau-Rolle wird bei 150.000 Token Kontext übergeben", (context) => {
+  const lauf = aktionBeiKontext(mitErsatz(context), { rolle: "bau", kontext: 150_000 });
+  assert.equal(lauf.aktion.art, UEBERGABE);
+});
+
+test("eine sonstige Rolle wird ab 100.000 Token Kontext übergeben", (context) => {
+  const ort = mitErsatz(context);
+  const start = { agent: "bau", argumente: [] };
+  assert.equal(aktionBeiKontext(ort, { rolle: "notiz", kontext: 99_999, start }).aktion, null);
+  assert.equal(aktionBeiKontext(ort, { rolle: "notiz", kontext: 100_000, start }).aktion.art, UEBERGABE);
 });
 
 test("lauf startet eine Rolle mit dem Effort ihrer Agentendatei", (context) => {

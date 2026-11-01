@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 export const STILLSTAND = "stillstand";
 export const UEBERGABE = "übergabe";
 export const KONTEXT_GRENZE = 100_000;
+const TEST_KONTEXT_GRENZE = 200_000;
+const KONTEXT_GRENZE_JE_ROLLE = new Map([["test", TEST_KONTEXT_GRENZE]]);
 const WIEDERHOLUNGEN_BIS_STILLSTAND = 3;
 const MAX_ANTWORT_ZEICHEN = 1000;
 const MAX_EINGABE_ZEICHEN = 200;
@@ -11,6 +13,10 @@ const ERSTE_MILLISEKUNDEN_ZEIT = 1e12;
 const LIMIT_MELDUNG = /limit reached|hit your limit/i;
 const LIMIT_ZEIT = /\|(\d+)/;
 const ABGELEHNT = "rejected";
+
+export function kontextGrenzeFuer(rolle) {
+  return KONTEXT_GRENZE_JE_ROLLE.get(rolle) ?? KONTEXT_GRENZE;
+}
 
 function alsObjekt(zeile) {
   try {
