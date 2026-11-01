@@ -2117,10 +2117,19 @@
   .mh-s-hero,
   .mh-s-close,
   body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
-    justify-content: center;
+    --mh-hero-x: clamp(var(--mh-edge), 15vw, 360px);
+    --mh-hero-bottom: clamp(var(--space-block, 48px), 10svh, 120px);
+    justify-content: flex-end;
     align-items: flex-start;
-    padding: var(--space-section, 80px) var(--mh-side) var(--space-section, 80px) var(--mh-edge);
+    padding: var(--space-section, 80px) var(--mh-side) var(--mh-hero-bottom) var(--mh-hero-x);
     text-align: left;
+  }
+  .mh-s-close {
+    padding-bottom: calc(var(--mh-hero-bottom) + clamp(6px, 1.2svh, 12px) + 12px + 19.2px);
+  }
+  .mh .mh-s-hero .mh-lead,
+  .mh .mh-s-close .mh-lead {
+    max-width: 440px;
   }
 
   .mh-s-content {
