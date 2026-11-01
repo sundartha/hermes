@@ -12,6 +12,7 @@ const TOOL_TESTS = { file: "pruefleiter.yml", step: "Werkzeugtests" };
 const CHECK_PARTS = { file: "pruefleiter.yml", step: "Alle Teile erfolgreich und vollständig" };
 const WITHOUT_TOOL_TESTS = "--ohne-werkzeugtests";
 const ALL_TOOL_TESTS = "--alle-werkzeugtests";
+const LISTED_TOOL_TESTS = "--werkzeugtests-aus-liste";
 const ARGUMENTS_FILE = "npm-argumente.txt";
 const SCRIPT_FILE = "schritt.sh";
 const CHECKED_PART = 2;
@@ -84,23 +85,25 @@ test("CI: bei push auf master fahren die Testteile die volle Suite samt test/wer
   assert.deepEqual(testRunnerArguments(argumentsList), [ROUND_ROBIN_PART_FILE, ROUND_ROBIN_PART_TOOL_FILE]);
 });
 
-test("CI: in der Merge-Queue fahren die Testteile die volle Suite samt test/werkzeuge", (context) => {
+test("CI: in der Merge-Queue fahren die Testteile ohne erkennbaren Produkt-Stand die volle Suite samt test/werkzeuge", (context) => {
   const argumentsList = npmArguments(context, CI_TESTS, "merge_group");
 
   assert.deepEqual(testRunnerArguments(argumentsList), [ROUND_ROBIN_PART_FILE, ROUND_ROBIN_PART_TOOL_FILE]);
 });
 
-test("Prüfleiter: im pull_request fahren die Werkzeugteile alle Werkzeugtests", (context) => {
+test("Prüfleiter: im pull_request fahren die Werkzeugteile die Werkzeugtests nach der Liste, bei einer Werkzeug-Änderung alle", (context) => {
   const argumentsList = npmArguments(context, TOOL_TESTS, "pull_request");
 
-  assert.ok(argumentsList.includes(ALL_TOOL_TESTS), argumentsList.join(" "));
+  assert.ok(argumentsList.includes(LISTED_TOOL_TESTS), argumentsList.join(" "));
+  assert.ok(!argumentsList.includes(WITHOUT_TOOL_TESTS), argumentsList.join(" "));
   assert.ok(argumentsList.includes(PART_ARGUMENT), argumentsList.join(" "));
 });
 
-test("Prüfleiter: im pull_request erwartet die Prüfung der Teile alle Werkzeugtests", (context) => {
+test("Prüfleiter: im pull_request erwartet die Prüfung der Teile dieselbe Auswahl wie die Werkzeugteile", (context) => {
   const argumentsList = npmArguments(context, CHECK_PARTS, "pull_request");
 
-  assert.ok(argumentsList.includes(ALL_TOOL_TESTS), argumentsList.join(" "));
+  assert.ok(argumentsList.includes(LISTED_TOOL_TESTS), argumentsList.join(" "));
+  assert.ok(!argumentsList.includes(WITHOUT_TOOL_TESTS), argumentsList.join(" "));
 });
 
 test("Prüfleiter: in der Merge-Queue entscheiden Werkzeugteile und Prüfung der Teile nach der Änderung", (context) => {

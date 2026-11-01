@@ -1,14 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { TOOL_TEST_DIRECTORY, TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
+import { TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
-import { changedFiles } from "./betroffene-tests.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
-import { waehleTeil } from "./testlaufzeit/teilung.mjs";
+import { dateienDesTeils, waehleTeil } from "./testlaufzeit/teilung.mjs";
+import { planToolTests } from "./werkzeugtests/auswahl.mjs";
+import { guardedRun } from "./werkzeugtests/waechter.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -22,13 +24,16 @@ const DEFAULT_BASE_REF = "upstream/master";
 const TOOL_BANK = "regression";
 const TEST_CONCURRENCY = 4;
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
-const DELETED = "D";
-const PRODUCT_PREFIXES = ["src/", "test/"];
 const FIRST_ARGUMENT = 2;
 const PART_PATTERN = /^([1-9]\d*)\/([1-9]\d*)$/;
 const PART_REPORT_PREFIX = "werkzeugteil-";
 const PART_REPORT_SUFFIX = ".jsonl";
 const FILE_REPORTER = fileURLToPath(new URL("./testlaufzeit-reporter.mjs", import.meta.url));
+const RED_FILES_REPORTER = fileURLToPath(new URL("./werkzeugtests/rote-dateien-reporter.mjs", import.meta.url));
+const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
+const NO_TOOL_TESTS = "keine";
+const LIST_TOOL_TESTS = "liste";
+const ALL_TOOL_TESTS = "alle";
 const JOB_SUCCESS = "success";
 const EXCLUSIVE_MODES = [
   "vor-push",
@@ -94,44 +99,72 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
-function isProductChange({ status, path }) {
-  const isProductPath = PRODUCT_PREFIXES.some((prefix) => path.startsWith(prefix));
-  return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_DIRECTORY);
-}
-
-async function needsToolTests(baseRef) {
-  const changes = await changedFiles(baseRef);
-  return changes === null || changes.some((change) => !isProductChange(change));
-}
-
-async function toolTestsWanted(options) {
-  return options["alle-werkzeugtests"] || needsToolTests(selectedBaseRef(options));
+async function toolTestPlan(options) {
+  const plan = await planToolTests(selectedBaseRef(options));
+  if (options["alle-werkzeugtests"]) return { ...plan, art: ALL_TOOL_TESTS };
+  if (!plan.reinProdukt || options["werkzeugtests-aus-liste"]) return plan;
+  return { ...plan, art: NO_TOOL_TESTS };
 }
 
 function partReportPath({ index }) {
   return join(PROTOCOL_DIR, `${PART_REPORT_PREFIX}${index}${PART_REPORT_SUFFIX}`);
 }
 
-function partFlags(part) {
-  if (part === undefined) return [];
+function reporterFlags({ laufzeit, rot }) {
+  const pairs = [
+    [FILE_REPORTER, laufzeit],
+    [RED_FILES_REPORTER, rot],
+  ].filter(([, destination]) => destination !== undefined);
+  if (pairs.length === 0) return [];
   return [
     "--test-reporter-destination=stdout",
-    `--test-reporter=${FILE_REPORTER}`,
-    `--test-reporter-destination=${partReportPath(part)}`,
+    ...pairs.flatMap(([reporter, destination]) => [
+      `--test-reporter=${reporter}`,
+      `--test-reporter-destination=${destination}`,
+    ]),
   ];
 }
 
-function toolTests(part) {
-  const files =
-    part === undefined
-      ? [TOOL_TEST_GLOB]
-      : waehleTeil({ dateien: globSync(TOOL_TEST_GLOB), teil: part.index, anzahl: part.total });
-  if (files === null) return EXIT_FAILURE;
-  const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`, ...partFlags(part)];
+function withoutCostFile() {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => name !== COST_FILE_VARIABLE));
+}
+
+function runToolBank(files, { cwd = process.cwd(), laufzeit, rot, still = false } = {}) {
+  const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`, ...reporterFlags({ laufzeit, rot })];
   const result = spawnSync(process.execPath, [RUNNER, TOOL_BANK, ...files, ...flags], {
-    stdio: "inherit",
+    cwd,
+    env: still ? withoutCostFile() : env,
+    stdio: still ? "ignore" : "inherit",
   });
   return result.status ?? EXIT_FAILURE;
+}
+
+function toolTestFiles(plan, part) {
+  if (plan.art === LIST_TOOL_TESTS) {
+    if (part === undefined) return plan.dateien;
+    return dateienDesTeils({ dateien: plan.dateien, teil: part.index, anzahl: part.total }).dateien;
+  }
+  const all = globSync(TOOL_TEST_GLOB);
+  if (part === undefined) return all;
+  return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total });
+}
+
+function toolTests(plan, part) {
+  const files = toolTestFiles(plan, part);
+  if (files === null) return EXIT_FAILURE;
+  if (files.length === 0) {
+    console.log(`Werkzeugtests Teil ${part?.index}/${part?.total}: keine Datei der Liste in diesem Teil.`);
+    return 0;
+  }
+  mkdirSync(PROTOCOL_DIR, { recursive: true });
+  const listed = new Set(plan.liste);
+  const guarded = plan.art === ALL_TOOL_TESTS ? files.filter((file) => !listed.has(file)) : [];
+  const direct = files.filter((file) => !guarded.includes(file));
+  const report = part === undefined ? undefined : partReportPath(part);
+  const directStatus = direct.length === 0 ? 0 : runToolBank(direct, { laufzeit: report });
+  const guardedStatus =
+    guarded.length === 0 ? 0 : guardedRun({ files: guarded, runBank: runToolBank, laufzeitBericht: report });
+  return directStatus === 0 ? guardedStatus : directStatus;
 }
 
 function parseOptions() {
@@ -141,6 +174,7 @@ function parseOptions() {
       "vor-push": { type: "boolean", default: false },
       "ohne-werkzeugtests": { type: "boolean", default: false },
       "alle-werkzeugtests": { type: "boolean", default: false },
+      "werkzeugtests-aus-liste": { type: "boolean", default: false },
       "werkzeugtests-gewollt": { type: "boolean", default: false },
       werkzeugteil: { type: "string" },
       "teile-pruefen": { type: "string" },
@@ -175,25 +209,27 @@ async function fullRun(options) {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
   const affectedStatus = affectedTests(affectedTestArgs(options));
-  if (!runsToolTests(options) || !(await toolTestsWanted(options))) {
-    return affectedStatus;
-  }
-  const toolStatus = toolTests();
+  if (!runsToolTests(options)) return affectedStatus;
+  const plan = await toolTestPlan(options);
+  if (plan.art === NO_TOOL_TESTS) return affectedStatus;
+  const toolStatus = toolTests(plan);
   return affectedStatus === 0 ? toolStatus : affectedStatus;
 }
 
 async function partRun(options, part) {
-  if (!(await toolTestsWanted(options))) {
+  const plan = await toolTestPlan(options);
+  if (plan.art === NO_TOOL_TESTS) {
     console.log(
       `Werkzeugtests Teil ${part.index}/${part.total}: keine Änderung außerhalb von src/ und test/.`,
     );
     return 0;
   }
-  return toolTests(part);
+  return toolTests(plan, part);
 }
 
 async function announceToolTests(options) {
-  console.log((await toolTestsWanted(options)) ? TOOL_TESTS_WANTED : TOOL_TESTS_NOT_WANTED);
+  const plan = await toolTestPlan(options);
+  console.log(plan.art === NO_TOOL_TESTS ? TOOL_TESTS_NOT_WANTED : TOOL_TESTS_WANTED);
   return 0;
 }
 
@@ -235,21 +271,22 @@ function coverageFindings(expected, reported) {
   ];
 }
 
-function expectedToolTestFiles(toolTestsNeeded) {
-  if (!toolTestsNeeded) return [];
+function expectedToolTestFiles(plan) {
+  if (plan.art === NO_TOOL_TESTS) return [];
+  if (plan.art === LIST_TOOL_TESTS) return plan.dateien;
   return globSync(TOOL_TEST_GLOB).sort();
 }
 
-function emptyGlobFindings(toolTestsNeeded, expected) {
-  if (expected.length > 0 || !toolTestsNeeded) return [];
+function emptyGlobFindings(plan, expected) {
+  if (expected.length > 0 || plan.art !== ALL_TOOL_TESTS) return [];
   return [`${TOOL_TEST_GLOB} findet keine Werkzeug-Testdatei.`];
 }
 
 async function checkParts(options) {
-  const toolTestsNeeded = await toolTestsWanted(options);
-  const expected = expectedToolTestFiles(toolTestsNeeded);
+  const plan = await toolTestPlan(options);
+  const expected = expectedToolTestFiles(plan);
   const findings = [
-    ...emptyGlobFindings(toolTestsNeeded, expected),
+    ...emptyGlobFindings(plan, expected),
     ...failedJobs(options.jobs),
     ...coverageFindings(expected, reportedFiles(options["teile-pruefen"])),
   ];

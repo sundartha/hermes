@@ -1,0 +1,18 @@
+{
+  "titel": "Neue Werkzeug-Testdatei liest src/config.js und steht nicht in der Liste",
+  "vorher": {
+    "package.json": ["{\"type\": \"module\", \"private\": true}"],
+    "tools/basis/werkzeugtests-mit-produkt.json": ["{}"],
+    "src/config.js": ["export const wert = 1;"]
+  },
+  "dateien": {
+    "test/werkzeuge/liest-produkt.test.js": [
+      "import { readFileSync } from \"node:fs\";",
+      "import { test } from \"node:test\";",
+      "test(\"liest die Konfiguration\", () => {",
+      "  readFileSync(\"src/config.js\", \"utf8\");",
+      "});"
+    ]
+  },
+  "erwartet": "liest Produktcode"
+}

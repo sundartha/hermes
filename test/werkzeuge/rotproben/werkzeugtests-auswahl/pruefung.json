@@ -1,0 +1,24 @@
+{
+  "titel": "Auswahl und Wächter der Werkzeugtests",
+  "pfade": [
+    "tools/pruefleiter.mjs",
+    "tools/werkzeugtests/",
+    "tools/testlaufzeit/teil-dateien.mjs",
+    "tools/basis/werkzeugtests-mit-produkt.json"
+  ],
+  "probe": {
+    "mitnehmen": [],
+    "befehl": [
+      "env",
+      "-u",
+      "NODE_TEST_CONTEXT",
+      "node",
+      "{wurzel}/tools/pruefleiter.mjs",
+      "--basis",
+      "HEAD~1",
+      "--werkzeugteil",
+      "1/1",
+      "--werkzeugtests-aus-liste"
+    ]
+  }
+}
