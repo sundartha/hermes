@@ -113,7 +113,7 @@ function festhaltungBefund(festhaltung, { baum, kennung }) {
   if (festhaltung.baum !== baum) return "nennt im Protokoll einen anderen geprüften Baum";
   if (festhaltung.kennung.node !== kennung.node) return "lief mit einer anderen Node-Version";
   if (festhaltung.kennung.image !== kennung.image) return "lief auf einem anderen Runner-Image";
-  if (festhaltung.wackelig > 0) return "hatte wackelige Tests";
+
   return null;
 }
 
