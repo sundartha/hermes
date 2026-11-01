@@ -6,20 +6,22 @@ import { env, version } from "node:process";
 import { isDeepStrictEqual } from "node:util";
 
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
-import { abrufLaufBefund, gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
+import { abrufLaufBefund, gh, ghRepo, mitUrteilAbgeschlossen } from "./gh.mjs";
 import { bestaetigungAbgestuerzt } from "./bestaetigung.mjs";
+import { pullRequestNummer, vorlaufImPullRequest } from "./vorlauf-pr.mjs";
 import { werkzeugEingaben } from "./vorher-speicher.mjs";
 
 const MAX_GIT_AUSGABE = 268_435_456;
 const TESTORDNER = "test/";
 const ARBEITSORDNER = ".mutationspruefung/";
 const NUR_COMMIT = "^{commit}";
+const NUR_BAUM = "^{tree}";
+const KOPF_NICHT_NACHPRUEFBAR = "Kopf des Vorlaufs nicht nachprüfbar";
 const ABRUF_ZWEIG = "lauf-mutation/";
 const ABRUF_EREIGNIS = "workflow_dispatch";
 const ABRUF_AUFTRAG = /^Auftrag: lauf\/in-ci$/m;
 const VORLAUF_ZEILE = /^Vorlauf: ([1-9]\d*)$/m;
 const COMMIT = /^[0-9a-f]{40}$/;
-const ABGESCHLOSSEN = new Set(["success", "failure"]);
 const ARTEFAKTE = "mutation-teil-*";
 const TEILDATEI = /^mutation-teil-\d+\.json$/;
 const BESTAETIGT = "getoetet";
@@ -40,6 +42,10 @@ function einzeiler(text) {
 
 function aufgeloest(ref) {
   return git(["rev-parse", "--verify", ref + NUR_COMMIT]).trim();
+}
+
+function baumVon(ref) {
+  return git(["rev-parse", "--verify", ref + NUR_BAUM]).trim();
 }
 
 function dateienVon(commit) {
@@ -160,6 +166,7 @@ function schattenFeld(vorergebnis) {
 export function teilMetadaten(pruefungen, vorergebnis) {
   return {
     kopf: aufgeloest("HEAD"),
+    baum: baumVon("HEAD"),
     umgebung: version,
     pruefungen: pruefungen.map(({ seite, von, bis }) => ({ seite, von: aufgeloest(von), bis: bis === undefined ? null : aufgeloest(bis) })),
     vorergebnis: vorergebnis.kennung ?? null,
@@ -295,9 +302,8 @@ export function zusammengefuehrt(teilung, datei, neu) {
   return [...behalten, ...neu];
 }
 
-function laufPruefen(lauf, id) {
-  const abgeschlossen = lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion);
-  const befund = abgeschlossen ? abrufLaufBefund(lauf, ghRepo()) : "ist nicht mit Urteil abgeschlossen";
+function laufPruefen(lauf, id, herkunft) {
+  const befund = mitUrteilAbgeschlossen(lauf) ? abrufLaufBefund(lauf, ghRepo(), herkunft) : "ist nicht mit Urteil abgeschlossen";
   return befund === null ? null : `der Lauf ${id} ${befund}`;
 }
 
@@ -310,7 +316,7 @@ function commitHolen(commit) {
   }
 }
 
-function geladeneTeildateien(ordner) {
+export function geladeneTeildateien(ordner) {
   const namen = readdirSync(ordner, { recursive: true }).map(String).filter((name) => TEILDATEI.test(basename(name)));
   return namen.map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")));
 }
@@ -329,13 +335,18 @@ function nummernVollstaendig(berichte, teile) {
   return nummern.length === teile && nummern.every((nummer, index) => nummer === index + 1);
 }
 
-function berichteVollstaendig(berichte, lauf) {
+function baumStimmt(berichte, lauf) {
+  const baum = baumVon(lauf.head_sha);
+  return berichte.every((bericht) => bericht.baum === baum);
+}
+
+function berichteVollstaendig(berichte, lauf, imPullRequest) {
   if (berichte.length === 0) return "enthält keine Teilergebnisse";
   const erster = berichte[0];
   if (altesFormat(erster)) return "hat Teilergebnisse in einem älteren Format";
   if (!pruefungenBrauchbar(erster.pruefungen)) return "nennt unbrauchbare Prüfungen";
   const gleich = (bericht) =>
-    bericht.pruefsumme === erster.pruefsumme && bericht.kopf === lauf.head_sha && bericht.teile === erster.teile && bericht.umgebung === erster.umgebung && isDeepStrictEqual(bericht.pruefungen, erster.pruefungen);
+    bericht.pruefsumme === erster.pruefsumme && (imPullRequest || bericht.kopf === lauf.head_sha) && bericht.teile === erster.teile && bericht.umgebung === erster.umgebung && isDeepStrictEqual(bericht.pruefungen, erster.pruefungen);
   if (!berichte.every(gleich)) return "hat Teilergebnisse, die nicht zu einem Plan und Commit gehören";
   return nummernVollstaendig(berichte, erster.teile) ? null : "hat nicht alle Teilergebnisse";
 }
@@ -348,20 +359,22 @@ function zugesagtVonLauf(berichte, lauf) {
   });
 }
 
-function abrufen(id) {
+function abrufen({ id, herkunft, echt }) {
   const repo = ghRepo();
   const lauf = JSON.parse(gh(["api", `repos/${repo}/actions/runs/${id}`]));
-  const unpassend = laufPruefen(lauf, id);
+  const unpassend = laufPruefen(lauf, id, herkunft);
   if (unpassend !== null) return ohneVorergebnis(unpassend);
   commitHolen(lauf.head_sha);
   const ordner = neuerTempOrdner("vorergebnis-");
   try {
     gh(["run", "download", String(id), "-R", repo, "-D", ordner, "-p", ARTEFAKTE]);
     const berichte = geladeneTeildateien(ordner);
-    const luecke = berichteVollstaendig(berichte, lauf);
+    const imPullRequest = herkunft !== undefined;
+    if (imPullRequest && !baumStimmt(berichte, lauf)) return ohneVorergebnis(KOPF_NICHT_NACHPRUEFBAR);
+    const luecke = berichteVollstaendig(berichte, lauf, imPullRequest);
     if (luecke !== null) return ohneVorergebnis(`der Lauf ${id} ${luecke}`);
     for (const { von, bis } of berichte[0].pruefungen) [von, bis].filter(Boolean).forEach(commitHolen);
-    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt: REGEL_HEUTE, pruefungen: zugesagtVonLauf(berichte, lauf) };
+    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt, pruefungen: zugesagtVonLauf(berichte, lauf) };
     return { ...inhalt, kennung: hashVon(inhalt) };
   } finally {
     entferneTempOrdner(ordner);
@@ -369,18 +382,20 @@ function abrufen(id) {
 }
 
 function laufNummer(umgebung) {
+  const pullRequest = pullRequestNummer(umgebung);
+  if (pullRequest !== null) return vorlaufImPullRequest(umgebung, pullRequest);
   const nachricht = git(["log", "-1", "--format=%B", "HEAD"]);
   if (umgebung.GITHUB_EVENT_NAME !== ABRUF_EREIGNIS || !String(umgebung.GITHUB_REF_NAME).startsWith(ABRUF_ZWEIG)) return { grund: "kein Abruf der Mutationsprüfung" };
   const treffer = VORLAUF_ZEILE.exec(nachricht);
   if (!ABRUF_AUFTRAG.test(nachricht) || treffer === null) return { grund: "der Commit nennt keinen Vorlauf" };
   if (Number(treffer[1]) >= Number(umgebung.GITHUB_RUN_ID)) return { grund: "der genannte Lauf ist nicht älter als dieser" };
-  return { id: Number(treffer[1]) };
+  return { id: Number(treffer[1]), echt: REGEL_HEUTE };
 }
 
 function abgerufen(umgebung) {
   try {
-    const { id, grund } = laufNummer(umgebung);
-    return id === undefined ? ohneVorergebnis(grund) : abrufen(id);
+    const gewaehlt = laufNummer(umgebung);
+    return gewaehlt.id === undefined ? ohneVorergebnis(gewaehlt.grund) : abrufen({ ...gewaehlt, echt: gewaehlt.echt ?? (gewaehlt.uebernimmt ? REGEL_GEPRUEFT : null) });
   } catch (fehler) {
     return ohneVorergebnis(`Abruf fehlgeschlagen: ${einzeiler(fehler.message)}`);
   }
@@ -396,5 +411,6 @@ export function holeVorergebnis(ziel, umgebung = env) {
   writeFileSync(ziel, `${JSON.stringify(ergebnis)}\n`);
   if (ergebnis.lauf === null) return keinVorergebnisZeile(ergebnis.grund);
   const zahl = ergebnis.pruefungen.reduce((summe, { eintraege }) => summe + eintraege.filter(bestaetigtGetoetet).length, 0);
-  return `Mutationsprüfung: Vorergebnis aus Lauf ${ergebnis.lauf}, ${zahl} bestätigt getötete Mutanten.`;
+  const schatten = ergebnis.echt === null ? " Schattenmodus: nichts wird übernommen." : "";
+  return `Mutationsprüfung: Vorergebnis aus Lauf ${ergebnis.lauf}, ${zahl} bestätigt getötete Mutanten.${schatten}`;
 }
