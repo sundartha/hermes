@@ -1,0 +1,20 @@
+{
+  "titel": "Ein Produkt-PR ändert eine Datei, die ein gelisteter Werkzeugtest liest",
+  "vorher": {
+    "package.json": ["{\"type\": \"module\", \"private\": true}"],
+    "tools/basis/werkzeugtests-mit-produkt.json": ["{\"test/werkzeuge/liest-wert.test.js\": \"liest src/wert.js\"}"],
+    "src/wert.js": ["export const wert = 1;"],
+    "test/werkzeuge/liest-wert.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { readFileSync } from \"node:fs\";",
+      "import { test } from \"node:test\";",
+      "test(\"Wert ist eins\", () => {",
+      "  assert.match(readFileSync(\"src/wert.js\", \"utf8\"), /= 1;/);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "src/wert.js": ["export const wert = 2;"]
+  },
+  "erwartet": "Wert ist eins"
+}
