@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { existsSync } from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
@@ -339,6 +340,15 @@ const rawConfig = {
 
   metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
   logRequestId: boolEnv("LOG_REQUEST_ID", process.env.LOG_REQUEST_ID, { fallback: false }),
+
+  telemetryOtlpUrl: (process.env.METRIKEN_OTLP_URL || "").trim(),
+  telemetryOtlpUser: (process.env.METRIKEN_OTLP_BENUTZER || "").trim(),
+  telemetryOtlpToken: (process.env.METRIKEN_OTLP_TOKEN || "").trim(),
+  telemetryInstanceId: (process.env.RENDER_INSTANCE_ID || os.hostname()).trim(),
+  telemetryIntervalMs: numEnv("METRIKEN_INTERVALL_MS", process.env.METRIKEN_INTERVALL_MS, {
+    fallback: MS_PER_MINUTE,
+    min: 10,
+  }),
 
   telnyxApiKey: process.env.TELNYX_API_KEY || "",
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "",
