@@ -4,23 +4,36 @@ import { anrufpauseSetzen } from "./store/state-ops.js";
 import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 
-async function createPgBackend() {
-  const { createPgPoolRunner } = await import("./store/pg-runner.js");
-  const { makePgStore } = await import("./store/pg.js");
-  const { runner } = await createPgPoolRunner(config.store.databaseUrl);
-  const store = makePgStore(runner);
-  await store.init();
-  return store;
-}
+const VERBINDUNGS_PROBE_SQL = "SELECT 1";
+
+const JSON_SPEICHER_OHNE_DATENBANK = Object.freeze({
+  pruefeVerbindung: async () => {},
+});
 
 function mitZustandsFunktionen(speicher) {
   return { ...speicher, ...zustandsFunktionen(speicher) };
 }
 
+export async function pgBackendFuerRunner(runner) {
+  const { makePgStore } = await import("./store/pg.js");
+  const store = makePgStore(runner);
+  await store.init();
+  return mitZustandsFunktionen({
+    ...store,
+    pruefeVerbindung: () => runner.withClient((client) => client.query(VERBINDUNGS_PROBE_SQL)),
+  });
+}
+
+async function createPgBackend() {
+  const { createPgPoolRunner } = await import("./store/pg-runner.js");
+  const { runner } = await createPgPoolRunner(config.store.databaseUrl);
+  return pgBackendFuerRunner(runner);
+}
+
 let backend;
 if (config.store.storeBackend === "pg") {
   try {
-    backend = mitZustandsFunktionen(await createPgBackend());
+    backend = await createPgBackend();
   } catch (err) {
     console.error(
       "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
@@ -30,13 +43,14 @@ if (config.store.storeBackend === "pg") {
     process.exit(1);
   }
 } else {
-  backend = mitZustandsFunktionen(jsonBackend);
+  backend = mitZustandsFunktionen({ ...jsonBackend, ...JSON_SPEICHER_OHNE_DATENBANK });
 }
 
 export const {
   load,
   save,
   drainFlushes,
+  pruefeVerbindung,
   newId,
   createCall,
   getCall,

@@ -54,6 +54,7 @@ const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
   "devLoginEnabled",
   "callConfirmationSecret",
   "deployToken",
+  "statusToken",
 ]);
 
 test("Paket 15: die Anmelde-Konfiguration bietet genau diese Schlüssel an, darunter deployToken", async () => {

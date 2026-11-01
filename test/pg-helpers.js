@@ -27,6 +27,12 @@ export async function makePgTestStore() {
   return { store, db, runner };
 }
 
+export async function makePgTestBackend() {
+  const { runner } = await makePgTestStore();
+  const { pgBackendFuerRunner } = await import("../src/store.js");
+  return { backend: await pgBackendFuerRunner(runner), runner };
+}
+
 export async function pgliteAlsRolleOhneSuperuser() {
   const db = await neuePglite();
   await db.exec(
