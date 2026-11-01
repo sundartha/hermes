@@ -1,3 +1,5 @@
+import { hauptPoolOptionen, poolFehlerZeile } from "../utils/pg-pool.js";
+
 export async function createPgPoolRunner(connectionString) {
   const pg = (await import("pg")).default;
   const pool = new pg.Pool({ connectionString });

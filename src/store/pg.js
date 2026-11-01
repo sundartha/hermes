@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { flushAnfang } from "../utils/pg-pool.js";
 import * as ops from "./state-ops.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
@@ -1204,8 +1205,10 @@ function rowToNotification(r) {
 }
 
 async function flush(client, state, preFlush) {
-  await client.query("BEGIN");
+  const [beginn, frist] = flushAnfang();
+  await client.query(beginn.text);
   try {
+    await client.query(frist.text, frist.params);
     if (preFlush) await preFlush(client);
     await flushTenants(client, state.tenants);
     await flushPlatformNumberUse(client, state.platformNumberUse);
