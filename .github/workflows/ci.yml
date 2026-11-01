@@ -34,7 +34,7 @@ permissions:
   pull-requests: read
 
 env:
-  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
+  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || (github.event_name == 'push' || github.event_name == 'merge_group') && 'an' || 'schatten' }}
   WERKZEUGTESTS_EINMAL: an
 
 concurrency:
@@ -354,15 +354,18 @@ jobs:
           node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
 
       - name: Übernahme im Schatten
+        id: uebernahme
         uses: ./.github/actions/uebernahme-im-schatten
         with:
           art: ci
           teil: ${{ matrix.teil }}
           teile: ${{ strategy.job-total }}
           dateien: ${{ runner.temp }}/teil-dateien.txt
+          rest: ${{ runner.temp }}/rest-dateien.txt
 
       - name: Tests
         id: tests
+        if: steps.uebernahme.outputs.uebrig != '0'
         env:
           EVENT_NAME: ${{ github.event_name }}
           OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
@@ -374,8 +377,14 @@ jobs:
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
             auswahl=(--ohne-werkzeugtests)
           fi
+          liste="$RUNNER_TEMP/teil-dateien.txt"
+          if [ -f "$RUNNER_TEMP/rest-dateien.txt" ]; then liste="$RUNNER_TEMP/rest-dateien.txt"; fi
           dateien=()
-          while IFS= read -r datei; do dateien+=("$datei"); done < "$RUNNER_TEMP/teil-dateien.txt"
+          while IFS= read -r datei; do dateien+=("$datei"); done < "$liste"
+          if [ "${#dateien[@]}" -eq 0 ]; then
+            echo "Alle Testdateien dieses Teils sind übernommen, nichts zu fahren." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           npm test -- "${auswahl[@]}" "${dateien[@]}" -- --test-concurrency=4 \
             --test-reporter-destination=stdout \
             --test-reporter=./tools/testlaufzeit-reporter.mjs \

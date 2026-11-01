@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
+  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || (github.event_name == 'push' || github.event_name == 'merge_group') && 'an' || 'schatten' }}
 
 concurrency:
   group: pruefleiter-${{ github.event.pull_request.number || github.sha }}
@@ -57,14 +57,25 @@ jobs:
       - name: Node 22, npm ci und Install-Skripte
         uses: ./.github/actions/node-npm-ci
 
+      - name: Werkzeugtests im Prüfleiter gewollt
+        id: gewollt
+        if: github.event_name == 'merge_group'
+        env:
+          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: echo "gewollt=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --werkzeugtests-gewollt)" >> "$GITHUB_OUTPUT"
+
       - name: Übernahme im Schatten
+        id: uebernahme
         uses: ./.github/actions/uebernahme-im-schatten
         with:
           art: pruefleiter
           teil: ${{ matrix.teil }}
           teile: ${{ strategy.job-total }}
+          rest: ${{ runner.temp }}/rest-werkzeugtests.txt
+          gewollt: ${{ steps.gewollt.outputs.gewollt }}
 
       - name: Werkzeugtests
+        if: steps.uebernahme.outputs.uebrig != '0'
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
@@ -72,7 +83,11 @@ jobs:
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
         run: |
-          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --fuer-ereignis "$EVENT_NAME"
+          auswahl=()
+          if [ -f "$RUNNER_TEMP/rest-werkzeugtests.txt" ]; then
+            auswahl=(--werkzeugdateien "$RUNNER_TEMP/rest-werkzeugtests.txt")
+          fi
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --fuer-ereignis "$EVENT_NAME" "${auswahl[@]}"
 
       - name: Testlaufzeit
         if: always()

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, symlinkSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -14,22 +14,36 @@ import {
   runIn,
   writeFiles,
 } from "./probe-repo.js";
-import { workflowStepScript } from "./workflow-dateien.js";
+import { workflowStepLines, workflowStepScript } from "./workflow-dateien.js";
 
 const ENTSCHEIDUNG = "Werkzeugtests im Prüfleiter";
 const AUSWAHL = "Testdateien des Teils";
 const AUSGABE = "ausgabe.txt";
 const NORMALER_TEST = "test/n1.test.js";
 const WERKZEUG_TEST = "test/werkzeuge/w1.test.js";
+const AUSFUEHRBAR = 0o755;
+const EINZEILER_BEGINN = "run: ";
 
-function fuehreAus(verzeichnis, schritt, umgebung) {
-  const skript = workflowStepScript("ci.yml", schritt).replaceAll("tools/pruefleiter.mjs", JSON.stringify(PRUEFLEITER_TOOL));
+function schrittSkript(workflow, schritt) {
+  return workflowStepScript(workflow, schritt).replaceAll("tools/pruefleiter.mjs", JSON.stringify(PRUEFLEITER_TOOL));
+}
+
+function schrittEinzeiler(schritt) {
+  const zeile = workflowStepLines("ci.yml", schritt).find((kandidat) => kandidat.trim().startsWith(EINZEILER_BEGINN));
+  return zeile.trim().slice(EINZEILER_BEGINN.length);
+}
+
+function fuehreSkriptAus(verzeichnis, skript, umgebung) {
   const ergebnis = spawnSync("bash", ["-e", "-c", skript], {
     cwd: verzeichnis,
     encoding: "utf8",
     env: { ...isolatedEnvironment(), GITHUB_OUTPUT: join(verzeichnis, AUSGABE), GITHUB_STEP_SUMMARY: join(verzeichnis, "zusammenfassung.md"), ...umgebung },
   });
   assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+}
+
+function fuehreAus(verzeichnis, schritt, umgebung) {
+  fuehreSkriptAus(verzeichnis, schrittSkript("ci.yml", schritt), umgebung);
 }
 
 function entscheidung(context, { geaendert, schalter }) {
@@ -68,4 +82,72 @@ test("OHNE_WERKZEUGTESTS=true lässt die Testdateien des Teils ohne test/werkzeu
 test("ohne OHNE_WERKZEUGTESTS wählt der Teil in der Queue auch die Werkzeugtests aus", (context) => {
   const dateien = ausgewaehlteDateien(context, { EVENT_NAME: "merge_group" });
   assert.deepEqual(dateien, [NORMALER_TEST, WERKZEUG_TEST]);
+});
+
+const PROTOKOLL = "npm-aufruf.txt";
+const NPM_ATTRAPPE = `#!/bin/sh\nprintf '%s\\n' "$@" > "$AUFRUF_PROTOKOLL"\n`;
+const TEILE_LISTE = "teil-dateien.txt";
+const REST_LISTE = "rest-dateien.txt";
+const REST_WERKZEUGE = "rest-werkzeugtests.txt";
+const REGRESSION = ".pruefung/regression.json";
+
+function mitAttrappe(context, dateien) {
+  const verzeichnis = probeDirectory(context, { ...dateien, "bin/npm": NPM_ATTRAPPE });
+  chmodSync(join(verzeichnis, "bin/npm"), AUSFUEHRBAR);
+  return verzeichnis;
+}
+
+function aufrufe(verzeichnis, skript, umgebung) {
+  fuehreSkriptAus(verzeichnis, skript, {
+    PATH: `${join(verzeichnis, "bin")}:${process.env.PATH}`,
+    RUNNER_TEMP: verzeichnis,
+    AUFRUF_PROTOKOLL: join(verzeichnis, PROTOKOLL),
+    ...umgebung,
+  });
+  const protokoll = join(verzeichnis, PROTOKOLL);
+  return existsSync(protokoll) ? readFileSync(protokoll, "utf8").split("\n") : null;
+}
+
+test("der Schritt Tests fährt mit der Liste der laufenden Dateien, wenn die Übernahme eine geschrieben hat", (context) => {
+  const verzeichnis = mitAttrappe(context, { [TEILE_LISTE]: `${NORMALER_TEST}\n${WERKZEUG_TEST}\n`, [REST_LISTE]: `${WERKZEUG_TEST}\n` });
+  const argumente = aufrufe(verzeichnis, schrittSkript("ci.yml", "Tests"), { EVENT_NAME: "push" });
+  assert.ok(argumente.includes(WERKZEUG_TEST));
+  assert.equal(argumente.includes(NORMALER_TEST), false);
+});
+
+test("der Schritt Tests fährt nichts, wenn die Liste der laufenden Dateien leer ist, statt die ganze Suite zu starten", (context) => {
+  const verzeichnis = mitAttrappe(context, { [TEILE_LISTE]: `${NORMALER_TEST}\n`, [REST_LISTE]: "" });
+  assert.equal(aufrufe(verzeichnis, schrittSkript("ci.yml", "Tests"), { EVENT_NAME: "push" }), null);
+});
+
+test("der Schritt Tests fährt ohne Liste der laufenden Dateien alle Dateien des Teils", (context) => {
+  const verzeichnis = mitAttrappe(context, { [TEILE_LISTE]: `${NORMALER_TEST}\n${WERKZEUG_TEST}\n` });
+  const argumente = aufrufe(verzeichnis, schrittSkript("ci.yml", "Tests"), { EVENT_NAME: "push" });
+  assert.ok(argumente.includes(NORMALER_TEST) && argumente.includes(WERKZEUG_TEST));
+});
+
+test("der Schritt Werkzeugtests fährt mit der Liste der laufenden Werkzeugtests, wenn die Übernahme eine geschrieben hat", (context) => {
+  const verzeichnis = mitAttrappe(context, { [REST_WERKZEUGE]: `${WERKZEUG_TEST}\n` });
+  const argumente = aufrufe(verzeichnis, schrittSkript("pruefleiter.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
+  assert.equal(argumente[argumente.indexOf("--werkzeugdateien") + 1], join(verzeichnis, REST_WERKZEUGE));
+});
+
+test("der Schritt Werkzeugtests wählt ohne Liste der laufenden Werkzeugtests den Teil selbst", (context) => {
+  const verzeichnis = mitAttrappe(context, {});
+  const argumente = aufrufe(verzeichnis, schrittSkript("pruefleiter.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
+  assert.equal(argumente.includes("--werkzeugdateien"), false);
+});
+
+function bestandenAusgabe(context, dateien) {
+  const verzeichnis = probeDirectory(context, { ...dateien, [AUSGABE]: "" });
+  fuehreSkriptAus(verzeichnis, schrittEinzeiler("Bestandene Tests melden"), { TEIL: "3" });
+  return readFileSync(join(verzeichnis, AUSGABE), "utf8").trim();
+}
+
+test("Bestandene Tests melden nennt die Zahl aus regression.json", (context) => {
+  assert.equal(bestandenAusgabe(context, { [REGRESSION]: JSON.stringify({ bestanden: 42 }) }), "teil-3=42");
+});
+
+test("Bestandene Tests melden bleibt ohne regression.json grün und meldet nichts, wenn alle Dateien übernommen wurden", (context) => {
+  assert.equal(bestandenAusgabe(context, {}), "teil-3=");
 });
