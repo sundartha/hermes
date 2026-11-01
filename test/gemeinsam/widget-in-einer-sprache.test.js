@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
+import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const WIDGET_LOCALE_META_KEY = "hermes/locale";
 const WIDGET_CONTENT_LOCALE_META_KEY = "hermes/content_locale";
@@ -12,8 +12,9 @@ const WIDGET_CALLS = "calls";
 const WIDGET_CALL = "call";
 const WIDGETS = await ausgelieferteWidgets();
 const widgetHtml = (id) => WIDGETS[id];
-const SKRIPT_BLOCK = /<script>\n([\s\S]*?)\n\s*<\/script>/g;
-const skriptbloecke = (html) => [...html.matchAll(SKRIPT_BLOCK)].map(([, code]) => code);
+const SKRIPT_ELEMENT = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
+const STIL_ELEMENT = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
+const ohneSkriptUndStil = (html) => html.replace(SKRIPT_ELEMENT, "").replace(STIL_ELEMENT, "");
 const skriptMit = (html, teil) => skriptbloecke(html).find((code) => code.includes(teil));
 const I18N_SKRIPT = skriptMit(widgetHtml("call"), "HermesI18n = {");
 const WIDGET_DICT = JSON.parse(I18N_SKRIPT.match(/var WIDGET_DICT = (.*);\n/)[1]);
@@ -152,8 +153,7 @@ test("WSP-3 (Umschalten) - schon geschriebene Texte folgen einer spaeteren Sprac
 });
 
 function schluesselAusMarkup(html) {
-  const ohneSkripte = html.replace(/<script>[\s\S]*?<\/script>/g, "").replace(/<style>[\s\S]*?<\/style>/g, "");
-  return [...ohneSkripte.matchAll(/data-i18n="([^"]+)"/g)].map(([, key]) => key);
+  return [...ohneSkriptUndStil(html).matchAll(/data-i18n="([^"]+)"/g)].map(([, key]) => key);
 }
 
 const TEXT = String.raw`"((?:[^"\\]|\\.)+)"`;
@@ -191,8 +191,8 @@ test("WSP-5 (Vollstaendigkeit) - die Woerterbuecher fuehren dieselben Schluessel
 });
 
 const NICHT_SICHTBAR = [
-  /<script>[\s\S]*?<\/script>/g,
-  /<style>[\s\S]*?<\/style>/g,
+  SKRIPT_ELEMENT,
+  STIL_ELEMENT,
   /<!--[\s\S]*?-->/g,
   /<svg[\s\S]*?<\/svg>/g,
   /<head>[\s\S]*?<\/head>/g,
@@ -428,7 +428,7 @@ const IN_NUTZERSPRACHE = Object.freeze({
 });
 
 function angezeigteFelder(html) {
-  const markup = html.replace(/<script>[\s\S]*?<\/script>/g, "").replace(/<style>[\s\S]*?<\/style>/g, "");
+  const markup = ohneSkriptUndStil(html);
   const slots = [...markup.matchAll(/data-mcp="([^"]+)"/g)].map(([, name]) => name);
   const anzeigen = [...markup.matchAll(/\b(data-(?:[a-z_]+-display|status-label|hud-phase|confirm-(?:to|objective|hint-text|notice-text)))\b/g)].map(([, name]) => name);
   return [...new Set([...slots, ...anzeigen])];
