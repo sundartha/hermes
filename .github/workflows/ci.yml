@@ -461,6 +461,7 @@ jobs:
           ALTER_STAND: ${{ inputs.alter_stand }}
           TESTUMBAU: ${{ inputs.testumbau }}
           GH_TOKEN: ${{ github.token }}
+          MUTATION_UEBERNAHME_PR: schatten
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -558,7 +559,7 @@ jobs:
           path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
           if-no-files-found: error
           overwrite: true
-          retention-days: 7
+          retention-days: 14
 
   mutationsurteil:
     name: Mutationsurteil
@@ -609,6 +610,11 @@ jobs:
           code=${PIPESTATUS[0]}
           echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
           exit "$code"
+
+      - name: Schattenvergleich
+        if: always() && needs.mutationsplan.outputs.messen == 'ja'
+        continue-on-error: true
+        run: node tools/mutationspruefung/schatten-vergleich.mjs "$RUNNER_TEMP/mutation"
 
       - name: Absicherungsbeleg schreiben
         if: always() && needs.mutationsplan.outputs.messen == 'ja' && inputs.alter_stand
