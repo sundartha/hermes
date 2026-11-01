@@ -249,24 +249,17 @@ export function attachNumberRegistration(state, numberId, providerAgentPhoneNumb
   return number;
 }
 
-const INBOUND_TRUNK_BELEG_FELDER = Object.freeze([
-  "elInboundTrunkBelegtAt",
-  "elInboundTrunkZugangFp",
-]);
+const INBOUND_TRUNK_BELEG_FELDER = Object.freeze(["elInboundTrunkBelegtAt", "elInboundTrunkZugangFp"]);
 
 function hatInboundTrunkBeleg(number) {
-  return INBOUND_TRUNK_BELEG_FELDER.some(
-    (feld) => number[feld] !== undefined && number[feld] !== null,
-  );
+  return INBOUND_TRUNK_BELEG_FELDER.some((feld) => number[feld] !== undefined && number[feld] !== null);
 }
 
 export function markNumberElInboundTrunkBelegt(state, numberId, { nowIso, zugangFp }) {
-  if (!nowIso || !zugangFp)
-    throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
+  if (!nowIso || !zugangFp) throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
   const number = findNumber(state, numberId);
   if (number?.status !== NUMBER_STATUS.ACTIVE) return { number, changed: false };
-  if (number.elInboundTrunkZugangFp === zugangFp && number.elInboundTrunkBelegtAt)
-    return { number, changed: false };
+  if (number.elInboundTrunkZugangFp === zugangFp && number.elInboundTrunkBelegtAt) return { number, changed: false };
   number.elInboundTrunkBelegtAt = nowIso;
   number.elInboundTrunkZugangFp = zugangFp;
   return { number, changed: true };
