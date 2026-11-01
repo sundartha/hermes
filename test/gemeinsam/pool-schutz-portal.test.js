@@ -54,7 +54,7 @@ test(
     const server = await startServer({ env: serverUmgebung(db.adresse) });
     try {
       assert.equal((await einwilligung(server)).status, HTTP_NO_CONTENT);
-      await db.verbindungenBeenden();
+      await db.leerlaufVerbindungenBeenden();
       await wartenBisGemeldet(server, [PORTAL_MELDUNG, HAUPT_MELDUNG]);
       assert.equal(server.child.exitCode, null, server.stdout);
       assert.ok(server.stdout.includes(PORTAL_MELDUNG), server.stdout);

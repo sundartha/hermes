@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { after } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
