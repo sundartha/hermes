@@ -2086,7 +2086,7 @@
   body:has(.consent[data-placement="hero"]:not([hidden])) .mh-s-hero {
     justify-content: flex-end;
     align-items: flex-start;
-    padding: var(--space-section, 80px) var(--mh-side) calc(max(12svh, 96px) + 28px) calc(var(--mh-edge) + var(--space-tight, 8px) + 44px);
+    padding: var(--space-section, 80px) var(--mh-side) calc(max(12svh, 96px) + 56px) calc(var(--mh-edge) + var(--space-tight, 8px) + 44px);
     text-align: left;
   }
   .mh .mh-s-hero .mh-h1,
