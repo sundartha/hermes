@@ -532,7 +532,7 @@ nie gemessen.
 > "Data practices: Do not engage in surveillance, tracking, or behavioral profiling—including metadata collection such as timestamps, IP addresses, or query patterns—unless explicitly disclosed, narrowly scoped, subject to meaningful user control, and aligned with OpenAI’s usage policies." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Transparency and user control")
 
 - Einschlaegig: ja. Hermes schreibt ein Audit-Log mit Zeitstempel, handelnder Identitaet,
-  Mandant und Aktion (`src/db/schema.sql#audit_log`), append-only (`src/audit-store.js#makeAuditStore`) und ohne
+  Mandant und Aktion (`src/db/migrations/0001_ausgang.sql#audit_log`), append-only (`src/audit-store.js#makeAuditStore`) und ohne
   Loeschfrist im Code.
 - Mechanismus: kein Profiling-Code bekannt; die Offenlegung der Metadaten ist Rechtstext.
 - Status: `offen` (Rechtstext). Luecke 6 in Teil C (keine Frist).
@@ -620,23 +620,23 @@ danach alle 6 Stunden (`src/boot.js#RETENTION_SWEEP_INTERVAL_HOURS`, `src/boot.j
 
 | Kategorie | Quelle im Code | Zweck | Aufbewahrung (Code-Default) | Empfaenger |
 |---|---|---|---|---|
-| Konto: Login-Kennung, E-Mail, Rolle | Tabelle `account` (`src/db/schema.sql#account`) | Anmeldung, Zuordnung zum Mandanten | keine Frist im Code; Einzelzeilen fallen nur beim Abgleich verwaister Identitaeten (`src/web-auth.js#makeAccounts.dropAccount`) | Login-Anbieter |
-| Sitzung | Tabelle `session` (`src/db/schema.sql#session`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
-| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql#tenant`), Spalten `owner_name` (`src/db/schema.sql#tenant`), `private_number` (`src/db/schema.sql#tenant`), `stripe_customer_id` (`src/db/schema.sql#tenant`), `stripe_subscription_id` (`src/db/schema.sql#tenant`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js#pickAgentStatus.owner`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js#dynamicVariables.owner_name`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js#PROMPT_EN.persona`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js#openingText`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js#LOCALES.en.disclosure`). Vorname (Spalte `first_name`, `src/db/schema.sql#tenant`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js#ownerFirstMessage`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js#pickCall`). Abrechnungs-Kennungen: Zahlungsanbieter |
-| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql#number`), Spalte `provider` (`src/db/schema.sql#number`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js#router.get("/api/state")`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js#pruneOldData`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js#pickMyNumber.number`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js#pickAgentStatus.number`) |
-| Einstellungen | Tabelle `settings` (`src/db/schema.sql#settings`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js#pickAgentStatus.permissions`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js#PROMPT_EN.persona`, `src/i18n/prompts/en.js#PROMPT_EN.speechRules`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js#boundaryRules`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js#finishCall`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
-| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql#call`): `from_e164`/`to_e164` (`src/db/schema.sql#call`), `goal` (`src/db/schema.sql#call`), `briefing` (`src/db/schema.sql#call`), `constraints` (`src/db/schema.sql#call`), `context` (`src/db/schema.sql#call`), `mandate` (`src/db/schema.sql#call`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js#rawConfig.retentionDays`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js#keepCall`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
-| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql#call`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js#awaitEventView.questions`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js#uiTool("answer_consult")`, Route `src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer")`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql#transcript_segment`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js#finishCall`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js#finishCall`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js#LAST_TRANSCRIPT_LINES`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js#callStatusResult`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
+| Konto: Login-Kennung, E-Mail, Rolle | Tabelle `account` (`src/db/migrations/0001_ausgang.sql#account`) | Anmeldung, Zuordnung zum Mandanten | keine Frist im Code; Einzelzeilen fallen nur beim Abgleich verwaister Identitaeten (`src/web-auth.js#makeAccounts.dropAccount`) | Login-Anbieter |
+| Sitzung | Tabelle `session` (`src/db/migrations/0001_ausgang.sql#session`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
+| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/migrations/0001_ausgang.sql#tenant`), Spalten `owner_name` (`src/db/migrations/0001_ausgang.sql#tenant`), `private_number` (`src/db/migrations/0001_ausgang.sql#tenant`), `stripe_customer_id` (`src/db/migrations/0001_ausgang.sql#tenant`), `stripe_subscription_id` (`src/db/migrations/0001_ausgang.sql#tenant`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js#pickAgentStatus.owner`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js#dynamicVariables.owner_name`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js#PROMPT_EN.persona`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js#openingText`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js#LOCALES.en.disclosure`). Vorname (Spalte `first_name`, `src/db/migrations/0001_ausgang.sql#tenant`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js#ownerFirstMessage`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js#pickCall`). Abrechnungs-Kennungen: Zahlungsanbieter |
+| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/migrations/0001_ausgang.sql#number`), Spalte `provider` (`src/db/migrations/0001_ausgang.sql#number`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js#router.get("/api/state")`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js#pruneOldData`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js#pickMyNumber.number`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js#pickAgentStatus.number`) |
+| Einstellungen | Tabelle `settings` (`src/db/migrations/0001_ausgang.sql#settings`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js#pickAgentStatus.permissions`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js#PROMPT_EN.persona`, `src/i18n/prompts/en.js#PROMPT_EN.speechRules`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js#boundaryRules`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js#finishCall`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
+| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/migrations/0001_ausgang.sql#call`): `from_e164`/`to_e164` (`src/db/migrations/0001_ausgang.sql#call`), `goal` (`src/db/migrations/0001_ausgang.sql#call`), `briefing` (`src/db/migrations/0001_ausgang.sql#call`), `constraints` (`src/db/migrations/0001_ausgang.sql#call`), `context` (`src/db/migrations/0001_ausgang.sql#call`), `mandate` (`src/db/migrations/0001_ausgang.sql#call`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js#rawConfig.retentionDays`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js#keepCall`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
+| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/migrations/0001_ausgang.sql#call`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js#awaitEventView.questions`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js#uiTool("answer_consult")`, Route `src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer")`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/migrations/0001_ausgang.sql#transcript_segment`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js#finishCall`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js#finishCall`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js#LAST_TRANSCRIPT_LINES`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js#callStatusResult`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
 | Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js#rawConfig.diagnosticRetentionDays`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js#diagnosticRetentionGranted`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js#diagnosticRetentionGranted`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js#pickCallStatus.last_transcript_lines`, `src/diagnostic-retention.js#keepsTranscriptForDiagnosis`) |
-| Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql#call`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
+| Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/migrations/0001_ausgang.sql#call`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js#rawConfig.evidenceRetentionDays`) | - |
-| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql#action_item`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js#keepActionItem`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js#actionItemsText`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js#inboxEntryView`) |
-| Benachrichtigungen | Tabelle `notification` (`src/db/schema.sql#notification`) | Hinweise an den Nutzer | 30 Tage | - |
-| Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/schema.sql#call`), Gesehen-Markierung (`src/store/state-ops.js#takeInboxEntries`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
-| Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql#usage`), `usage_event` (`src/db/schema.sql#usage_event`), `call_cost_evidence` (`src/db/schema.sql#call_cost_evidence`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js#pickAgentStatus.calls`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js#pickAgentStatus.planUsagePercent`), kein Geldbetrag |
-| Kalender | Tabelle `calendar_event` (`src/db/schema.sql#calendar_event`) | Anzeige der naechsten Termine | keine Frist im Code | keiner mehr - das MCP-Kalender-Werkzeug ist entfallen, die Daten bleiben im Store, gehen aber ueber kein Werkzeug mehr nach aussen |
-| Audit-Log | Tabelle `audit_log` (`src/db/schema.sql#audit_log`), append-only (`src/audit-store.js#makeAuditStore`) | Nachvollziehbarkeit sicherheitsrelevanter Aktionen | keine Frist im Code | - |
+| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/migrations/0001_ausgang.sql#action_item`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js#keepActionItem`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js#actionItemsText`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js#inboxEntryView`) |
+| Benachrichtigungen | Tabelle `notification` (`src/db/migrations/0001_ausgang.sql#notification`) | Hinweise an den Nutzer | 30 Tage | - |
+| Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/migrations/0001_ausgang.sql#call`), Gesehen-Markierung (`src/store/state-ops.js#takeInboxEntries`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
+| Nutzung und Kosten | Tabellen `usage` (`src/db/migrations/0001_ausgang.sql#usage`), `usage_event` (`src/db/migrations/0001_ausgang.sql#usage_event`), `call_cost_evidence` (`src/db/migrations/0001_ausgang.sql#call_cost_evidence`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js#pickAgentStatus.calls`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js#pickAgentStatus.planUsagePercent`), kein Geldbetrag |
+| Kalender | Tabelle `calendar_event` (`src/db/migrations/0001_ausgang.sql#calendar_event`) | Anzeige der naechsten Termine | keine Frist im Code | keiner mehr - das MCP-Kalender-Werkzeug ist entfallen, die Daten bleiben im Store, gehen aber ueber kein Werkzeug mehr nach aussen |
+| Audit-Log | Tabelle `audit_log` (`src/db/migrations/0001_ausgang.sql#audit_log`), append-only (`src/audit-store.js#makeAuditStore`) | Nachvollziehbarkeit sicherheitsrelevanter Aktionen | keine Frist im Code | - |
 
 ### Empfaenger laut Code
 
@@ -803,8 +803,8 @@ bestehende Durchsetzung.
    high-stakes decisions in sensitive areas without human review".
    Ziel: Entscheidung des Betreibers: ob eine serverseitige Sperre fuer Mandate in diesen
    Bereichen gebaut wird.
-6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql#audit_log`), Nutzungs- und
-   Kostendaten (`src/db/schema.sql#usage_event`), Konten (`src/db/schema.sql#account`); offene Aufgaben
+6. **Keine Loeschfrist** fuer Audit-Log (`src/db/migrations/0001_ausgang.sql#audit_log`), Nutzungs- und
+   Kostendaten (`src/db/migrations/0001_ausgang.sql#usage_event`), Konten (`src/db/migrations/0001_ausgang.sql#account`); offene Aufgaben
    unbefristet (`src/store/state-ops.js#keepActionItem`). Klauseln: "data retention timelines",
    "Data practices".
    Ziel: Entscheidung des Betreibers: Loeschfristen je Datenart.
@@ -932,7 +932,7 @@ src/self-service-routes.js#router.post("/api/self-service/settings") | rejected=
 src/mcp-tools.js#LAST_TRANSCRIPT_LINES | const LAST_TRANSCRIPT_LINES = 6;
 src/mcp-tools.js#uiTool("get_call_result") | pickTranscript(call_id, c, loc.mcp)
 src/i18n/prompts/en.js#PROMPT_EN.clarificationRules | never claim something is done or booked
-src/db/schema.sql#audit_log | CREATE TABLE IF NOT EXISTS audit_log
+src/db/migrations/0001_ausgang.sql#audit_log | CREATE TABLE IF NOT EXISTS audit_log
 src/audit-store.js#makeAuditStore | Append-only Audit-Log-Schreiber
 src/precall-briefing.js#BRIEFING_OUT_OF_SCOPE_VALUES | MANDATE_OUT_OF_SCOPE.ACCEPT_BEST
 src/precall-briefing.js#withoutSelfGrantedAcceptBest | function withoutSelfGrantedAcceptBest(mandate)
@@ -949,37 +949,37 @@ src/store/json.js#pruneOldData | export function pruneOldData(
 src/store/pg.js#makePgStore.pruneOldData | pruneOldData(
 src/boot.js#RETENTION_SWEEP_INTERVAL_HOURS | const RETENTION_SWEEP_INTERVAL_HOURS = 6;
 src/boot.js#bootServer | runRetention(store, config)
-src/db/schema.sql#account | CREATE TABLE IF NOT EXISTS account
+src/db/migrations/0001_ausgang.sql#account | CREATE TABLE IF NOT EXISTS account
 src/web-auth.js#makeAccounts.dropAccount | async dropAccount(sub)
-src/db/schema.sql#session | CREATE TABLE IF NOT EXISTS session
-src/db/schema.sql#tenant | CREATE TABLE IF NOT EXISTS tenant
-src/db/schema.sql#tenant | owner_name
-src/db/schema.sql#tenant | private_number
-src/db/schema.sql#tenant | stripe_customer_id
-src/db/schema.sql#tenant | stripe_subscription_id
-src/db/schema.sql#settings | CREATE TABLE IF NOT EXISTS settings
-src/db/schema.sql#call | CREATE TABLE IF NOT EXISTS call
-src/db/schema.sql#call | to_e164
-src/db/schema.sql#call | goal
-src/db/schema.sql#call | briefing
-src/db/schema.sql#call | constraints
-src/db/schema.sql#call | context JSONB
-src/db/schema.sql#call | mandate JSONB
+src/db/migrations/0001_ausgang.sql#session | CREATE TABLE IF NOT EXISTS session
+src/db/migrations/0001_ausgang.sql#tenant | CREATE TABLE IF NOT EXISTS tenant
+src/db/migrations/0001_ausgang.sql#tenant | owner_name
+src/db/migrations/0001_ausgang.sql#tenant | private_number
+src/db/migrations/0001_ausgang.sql#tenant | stripe_customer_id
+src/db/migrations/0001_ausgang.sql#tenant | stripe_subscription_id
+src/db/migrations/0001_ausgang.sql#settings | CREATE TABLE IF NOT EXISTS settings
+src/db/migrations/0001_ausgang.sql#call | CREATE TABLE IF NOT EXISTS call
+src/db/migrations/0001_ausgang.sql#call | to_e164
+src/db/migrations/0001_ausgang.sql#call | goal
+src/db/migrations/0001_ausgang.sql#call | briefing
+src/db/migrations/0001_ausgang.sql#call | constraints
+src/db/migrations/0001_ausgang.sql#call | context JSONB
+src/db/migrations/0001_ausgang.sql#call | mandate JSONB
 src/config.js#rawConfig.retentionDays | retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 })
 src/store/state-ops.js#keepCall | const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;
-src/db/schema.sql#transcript_segment | CREATE TABLE IF NOT EXISTS transcript_segment
+src/db/migrations/0001_ausgang.sql#transcript_segment | CREATE TABLE IF NOT EXISTS transcript_segment
 src/config.js#rawConfig.diagnosticRetentionDays | fallback: 7
-src/db/schema.sql#call | result JSONB
+src/db/migrations/0001_ausgang.sql#call | result JSONB
 src/config.js#rawConfig.evidenceRetentionDays | fallback: 0
-src/db/schema.sql#action_item | CREATE TABLE IF NOT EXISTS action_item
+src/db/migrations/0001_ausgang.sql#action_item | CREATE TABLE IF NOT EXISTS action_item
 src/store/state-ops.js#keepActionItem | const keepActionItem = (a) => !a.done || a.createdAt >= cutoff;
-src/db/schema.sql#notification | CREATE TABLE IF NOT EXISTS notification
-src/db/schema.sql#call | inbox_entry_at
+src/db/migrations/0001_ausgang.sql#notification | CREATE TABLE IF NOT EXISTS notification
+src/db/migrations/0001_ausgang.sql#call | inbox_entry_at
 src/store/state-ops.js#takeInboxEntries | includeSeen || !call.inboxSeenAt
-src/db/schema.sql#usage | CREATE TABLE IF NOT EXISTS usage
-src/db/schema.sql#usage_event | CREATE TABLE IF NOT EXISTS usage_event
-src/db/schema.sql#call_cost_evidence | CREATE TABLE IF NOT EXISTS call_cost_evidence
-src/db/schema.sql#calendar_event | CREATE TABLE IF NOT EXISTS calendar_event
+src/db/migrations/0001_ausgang.sql#usage | CREATE TABLE IF NOT EXISTS usage
+src/db/migrations/0001_ausgang.sql#usage_event | CREATE TABLE IF NOT EXISTS usage_event
+src/db/migrations/0001_ausgang.sql#call_cost_evidence | CREATE TABLE IF NOT EXISTS call_cost_evidence
+src/db/migrations/0001_ausgang.sql#calendar_event | CREATE TABLE IF NOT EXISTS calendar_event
 src/config.js#rawConfig.telnyxApiBase | https://api.telnyx.com
 src/config.js#ELEVENLABS_API_BASE | https://api.elevenlabs.io
 src/llm/adapters/deepseek.js#DEEPSEEK_API_BASE | https://api.deepseek.com
@@ -1058,10 +1058,10 @@ src/routes/api-calls.js#router.post("/api/calls/:id/cancel") | status: "cancelle
 src/routes/api-read.js#router.get("/api/state") | number: activeNumberFor(s, tenantId)
 src/store/state-ops.js#inboxEntryView | export function inboxEntryView(call, actionItemTexts)
 src/store/state-ops.js#pruneOldData | export function pruneOldData(s, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays })
-src/db/schema.sql#tenant | first_name TEXT
-src/db/schema.sql#call | consults JSONB
-src/db/schema.sql#number | CREATE TABLE IF NOT EXISTS number (
-src/db/schema.sql#number | provider
+src/db/migrations/0001_ausgang.sql#tenant | first_name TEXT
+src/db/migrations/0001_ausgang.sql#call | consults JSONB
+src/db/migrations/0001_ausgang.sql#number | CREATE TABLE IF NOT EXISTS number (
+src/db/migrations/0001_ausgang.sql#number | provider
 src/elevenlabs/outbound.js#dynamicVariables.owner_name | owner_name: owner,
 src/elevenlabs/outbound.js#ownerFirstMessage | const vorname = alsText(firstName);
 src/i18n/prompts/en.js#PROMPT_EN.persona | You are "${s.agentName}", ${owner}'s personal AI phone assistant.

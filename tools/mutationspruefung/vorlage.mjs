@@ -9,7 +9,7 @@ import { FOLDER } from "../migrationen-orte.mjs";
 
 export const VORLAGE_UNABHAENGIG = "HERMES_VORLAGE_UNABHAENGIG";
 export const KETTENANFANG = "src/db/migrate.js";
-export const SCHEMA = "src/db/schema.sql";
+export const SCHEMA = `${FOLDER}0001_ausgang.sql`;
 const LOKAL = "local";
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const jeWurzel = new Map();
@@ -34,7 +34,9 @@ function schemadateien(wurzel) {
         .map((eintrag) => relative(wurzel, join(eintrag.parentPath, eintrag.name)))
         .sort()
     : [];
-  return [SCHEMA, ...migrationen].filter((datei) => existsSync(join(wurzel, datei)));
+  return [SCHEMA, ...migrationen.filter((datei) => datei !== SCHEMA)].filter((datei) =>
+    existsSync(join(wurzel, datei)),
+  );
 }
 
 export function kettensumme(kette, wurzel) {
