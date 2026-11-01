@@ -29,6 +29,11 @@ const TENANT_ID = "t_user1";
 
 const ACTIVE_PURCHASE_COUNTRIES = Object.freeze(["DE", "FR", "GB", "US"]);
 
+const GEO_CONFIG = Object.freeze({
+  provisioningCountry: config.provisioning.provisioningCountry,
+  telnyxConnectionId: config.telephony.telnyxConnectionId,
+});
+
 function requestFor(s, tenantId, country) {
   registerTenant(s, tenantId);
   return requestNumber(s, { tenantId, country, ...CAPS }).number.id;
@@ -43,13 +48,13 @@ function drainWithGeo(queue, s, deps, defaultHoldCents, onHold) {
   return queue.drain(async (queuedJob) => {
     const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
     const number = findNumber(s, queuedJob.payload.numberId);
-    const geo = searchParamsForCountry(number?.country);
+    const geo = searchParamsForCountry(number?.country, GEO_CONFIG);
     const holdAmountCents =
-      defaultHoldCents !== undefined
-        ? holdAmountForCountry(number?.country, defaultHoldCents)
-        : undefined;
+      defaultHoldCents === undefined
+        ? undefined
+        : holdAmountForCountry(number?.country, defaultHoldCents);
     if (onHold) onHold(holdAmountCents);
-    const opts = { ...geo, ...(holdAmountCents !== undefined ? { holdAmountCents } : {}) };
+    const opts = { ...geo, ...(holdAmountCents === undefined ? {} : { holdAmountCents }) };
     try {
       await handleProvisionJob(s, queuedJob, deps, opts);
       if (record) record.status = PROVISIONING_JOB_STATUS.DONE;
@@ -67,37 +72,42 @@ function enqueueProvision(queue, s, numberId) {
 }
 
 test("searchParamsForCountry: FR -> +33-Suche (countryCode FR)", () => {
-  const params = searchParamsForCountry("FR");
+  const params = searchParamsForCountry("FR", GEO_CONFIG);
   assert.equal(params.countryCode, "FR");
 });
 
 test("searchParamsForCountry: DE -> globaler config-Fallback (byte-identisch)", () => {
-  const params = searchParamsForCountry("DE");
+  const params = searchParamsForCountry("DE", GEO_CONFIG);
   assert.equal(params.countryCode, config.provisioning.provisioningCountry);
   assert.equal(params.connectionId, config.telephony.telnyxConnectionId);
 });
 
 test("searchParamsForCountry: unbekannt/leer -> config-Fallback (kein Crash, R7)", () => {
   for (const c of ["ZZ", "", null, undefined]) {
-    const params = searchParamsForCountry(c);
+    const params = searchParamsForCountry(c, GEO_CONFIG);
     assert.equal(params.countryCode, config.provisioning.provisioningCountry, `Fallback fuer ${c}`);
   }
 });
 
 test("searchParamsForCountry: case-insensitiv (fr -> FR)", () => {
-  assert.equal(searchParamsForCountry("fr").countryCode, "FR");
+  assert.equal(searchParamsForCountry("fr", GEO_CONFIG).countryCode, "FR");
 });
 
 test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)", () => {
-  assert.equal(searchParamsForCountry("US").countryCode, "US");
-  assert.equal(searchParamsForCountry("us").countryCode, "US");
-  assert.equal(searchParamsForCountry("US").connectionId, config.telephony.telnyxConnectionId);
+  assert.equal(searchParamsForCountry("US", GEO_CONFIG).countryCode, "US");
+  assert.equal(searchParamsForCountry("us", GEO_CONFIG).countryCode, "US");
+  assert.equal(
+    searchParamsForCountry("US", GEO_CONFIG).connectionId,
+    config.telephony.telnyxConnectionId,
+  );
 });
 
 const LAENDER_OHNE_EINTRAG = Object.freeze(["CA", "IE", "AU", "CH", "AT", "ES", "IT"]);
 
 test("DID-05 (SOLL, rot) - reale Laender ohne Tabellen-Eintrag kaufen im eigenen Land, nicht still im Provisioning-Default", () => {
-  const stillUmgeleitet = LAENDER_OHNE_EINTRAG.filter((c) => searchParamsForCountry(c).countryCode !== c);
+  const stillUmgeleitet = LAENDER_OHNE_EINTRAG.filter(
+    (c) => searchParamsForCountry(c, GEO_CONFIG).countryCode !== c,
+  );
   assert.deepEqual(
     stillUmgeleitet,
     [],
@@ -107,7 +117,9 @@ test("DID-05 (SOLL, rot) - reale Laender ohne Tabellen-Eintrag kaufen im eigenen
 });
 
 test("DID-09 (SOLL, rot) - jedes bespielte Kauf-Land waehlt seinen phone_number_type explizit", () => {
-  const ohneTyp = ACTIVE_PURCHASE_COUNTRIES.filter((c) => searchParamsForCountry(c).type === undefined);
+  const ohneTyp = ACTIVE_PURCHASE_COUNTRIES.filter(
+    (c) => searchParamsForCountry(c, GEO_CONFIG).type === undefined,
+  );
   assert.deepEqual(
     ohneTyp,
     [],
