@@ -349,3 +349,82 @@ test("die Prüfung zählt genau die Regel des umgezogenen Eintrags: der Umzug is
   const basisDateien = { ...BASIS, [MANIFEST]: pruefungsManifest(WORT_REGEL) };
   await bleibtGleich(context, UMZUG, basisDateien);
 });
+
+const QUELLE = [
+  'export const timezone = "Europe/Berlin";',
+  "export function resolveTimeZone(timeZone) {",
+  "  return timeZone ?? timezone;",
+  "}",
+];
+const WEITERLEITUNG = 'export { resolveTimeZone, timezone } from "./y.js";';
+const WEITERLEITUNG_ANDERSWOHIN = 'export { resolveTimeZone, timezone } from "./w.js";';
+const MEHR_NAMEN = [
+  "export {",
+  "  timezone as timezoneEins,",
+  "  timezone as timezoneZwei,",
+  "  timezone as timezoneDrei,",
+  "  timezone as timezoneVier,",
+  '} from "./y.js";',
+];
+const LISTE_MIT_Y = konfiguration({
+  [ANRUFZEIT]: ["src/x.js", "src/y.js"],
+  [TRUNK]: TRUNK_DATEIEN,
+});
+const MIT_QUELLE = { ...BASIS, "src/x.js": zeilen(...QUELLE, REST) };
+
+const WEITERGELEITET = {
+  "eslint.config.js": LISTE_MIT_Y,
+  "src/x.js": zeilen(WEITERLEITUNG, REST),
+  "src/y.js": zeilen(...QUELLE),
+  "notiz.md": "Der Umzug.\n",
+};
+
+test("die alte Datei bleibt auf der Liste und reicht die umgezogenen Namen nur weiter, die neue kommt dazu: gleich", async (context) => {
+  await bleibtGleich(context, WEITERGELEITET, MIT_QUELLE);
+});
+
+test("die alte Datei behält neben der Weiterleitung eigenen neuen Code mit dem geschützten Wort: lockerer", async (context) => {
+  const eigener = "export const eigeneZone = timezone;";
+  const x = zeilen(WEITERLEITUNG, eigener, REST);
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/x.js": x }, MIT_QUELLE);
+});
+
+test("die alte Datei leitet auf eine andere Datei weiter als die neue: lockerer", async (context) => {
+  const x = zeilen(WEITERLEITUNG_ANDERSWOHIN, REST);
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/x.js": x }, MIT_QUELLE);
+});
+
+test("die neue Datei bringt zur umgezogenen Weiterleitung eine neue Zeile mit dem geschützten Wort mit: lockerer", async (context) => {
+  const y = zeilen(...QUELLE, 'export const neueZone = "timezone";');
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/y.js": y }, MIT_QUELLE);
+});
+
+test("die Liste wächst um eine neue Datei mit Treffern, aus der alten Datei fehlt kein Code: lockerer", async (context) => {
+  const aenderung = { "eslint.config.js": LISTE_MIT_Y, "src/y.js": zeilen(...QUELLE) };
+  await wirdLockerer(context, aenderung, MIT_QUELLE);
+});
+
+test("die Liste wächst bei einer Weiterleitung um die neue Datei und um eine weitere: lockerer", async (context) => {
+  const liste = konfiguration({
+    [ANRUFZEIT]: ["src/x.js", "src/y.js", "src/w.js"],
+    [TRUNK]: TRUNK_DATEIEN,
+  });
+  await wirdLockerer(context, { ...WEITERGELEITET, "eslint.config.js": liste }, MIT_QUELLE);
+});
+
+test("die alte Datei behält die umgezogenen Zeilen nur noch als Text, die Weiterleitung steht: lockerer", async (context) => {
+  const alsText = QUELLE.map((zeile) => `// ${zeile}`);
+  const x = zeilen(WEITERLEITUNG, ...alsText, REST);
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/x.js": x }, MIT_QUELLE);
+});
+
+test("die alte Datei leitet mit mehr Namen weiter, als sie vorher Treffer hatte: lockerer", async (context) => {
+  const x = zeilen(...MEHR_NAMEN, REST);
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/x.js": x }, MIT_QUELLE);
+});
+
+test("die neue Datei hatte vorher schon einen Treffer, die alte leitet weiter: lockerer", async (context) => {
+  const basisDateien = { ...MIT_QUELLE, "src/y.js": zeilen(QUELLE[0]) };
+  const y = zeilen(...QUELLE);
+  await wirdLockerer(context, { ...WEITERGELEITET, "src/y.js": y }, basisDateien);
+});

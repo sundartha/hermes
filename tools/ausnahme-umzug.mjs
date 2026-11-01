@@ -5,6 +5,7 @@ import { ESLint } from "eslint";
 
 import { dateiAm } from "./auftrag/git.mjs";
 import { stammtAusAltemText } from "./auslagerung-eintraege.mjs";
+import { nurWeiterleitungenAuf, waechstNurUm } from "./ausnahme-weiterleitung.mjs";
 
 const REGEL = "hermes/wort-nur-in";
 const OHNE_UNTERDRUECKUNGEN = "eslint-suppressions.empty.json";
@@ -20,18 +21,25 @@ async function konfigurationDer(eslint, root, datei) {
   }
 }
 
-async function optionen(eslint, root, datei) {
+async function regelDer(eslint, root, datei) {
   const konfiguration = await konfigurationDer(eslint, root, datei);
   const regel = konfiguration?.rules?.[REGEL];
-  return Array.isArray(regel) ? regel.slice(1) : [];
+  return Array.isArray(regel) ? regel : [];
+}
+
+async function optionen(eslint, root, datei) {
+  return (await regelDer(eslint, root, datei)).slice(1);
+}
+
+function getroffene(meldungen, name) {
+  return meldungen.filter(
+    ({ severity, message }) => severity === FEHLER && message.startsWith(`${name}: `),
+  );
 }
 
 function getroffeneZeilen(text, meldungen, name) {
   const zeilen = text.split("\n");
-  const treffer = meldungen.filter(
-    ({ severity, message }) => severity === FEHLER && message.startsWith(`${name}: `),
-  );
-  return treffer.map(({ line }) => zeilen[line - 1]);
+  return getroffene(meldungen, name).map(({ line }) => zeilen[line - 1]);
 }
 
 function eslintOhneUnterdrueckungen(root) {
@@ -92,19 +100,83 @@ function textNach(wurzeln, pfade) {
   return vorhanden.map((pfad) => readFileSync(pfad, "utf8")).join("\n");
 }
 
+async function zieldateiOhneBestandstreffer(wurzeln, { zeilen, datei, name }) {
+  const bestand = dateiAm(wurzeln.basis, datei, wurzeln.pr);
+  if (zeilen.some((zeile) => stammtAusAltemText(zeile, bestand))) return false;
+  return (await bestandstrefferDerZieldatei(wurzeln, { text: bestand, datei, name })) === 0;
+}
+
 async function verbraucheUmgezogeneTreffer(wurzeln, { name, weg, datei }) {
   const zeilen = await zeilenInDerNeuenDatei(wurzeln, { datei, name });
   const vorrat = await vorratDerAlten(wurzeln, { weg, name });
   const neu = textNach(wurzeln, weg);
   const stehtNochInDerAlten = (zeile) => stammtAusAltemText(zeile, neu);
-  const bestand = dateiAm(wurzeln.basis, datei, wurzeln.pr);
-  const stehtSchonInDerZieldatei = (zeile) => stammtAusAltemText(zeile, bestand);
   const rest = ohneZugeordnete(vorrat, zeilen);
   if (rest === undefined || zeilen.some(stehtNochInDerAlten)) return 0;
-  if (zeilen.some(stehtSchonInDerZieldatei)) return 0;
-  if ((await bestandstrefferDerZieldatei(wurzeln, { text: bestand, datei, name })) > 0) return 0;
+  if (!(await zieldateiOhneBestandstreffer(wurzeln, { zeilen, datei, name }))) return 0;
   wurzeln.vorrat.set(name, rest);
   return zeilen.length;
+}
+
+async function eslintOhneAusnahme(wurzeln, { quelle, name }) {
+  const [stufe, ...eintraege] = await regelDer(
+    wurzeln.eslint.get(wurzeln.hilfe),
+    wurzeln.hilfe,
+    quelle,
+  );
+  const ohneQuelle = (eintrag) =>
+    eintrag.name === name
+      ? { ...eintrag, nurIn: eintrag.nurIn.filter((pfad) => pfad !== quelle) }
+      : eintrag;
+  return new ESLint({
+    cwd: wurzeln.hilfe,
+    suppressionsLocation: join(wurzeln.hilfe, OHNE_UNTERDRUECKUNGEN),
+    overrideConfig: [
+      { files: [quelle], rules: { [REGEL]: [stufe, ...eintraege.map(ohneQuelle)] } },
+    ],
+  });
+}
+
+async function treffer(eslint, { wurzeln, quelle, text, name }) {
+  const [{ messages }] = await eslint.lintText(text, { filePath: join(wurzeln.hilfe, quelle) });
+  return getroffene(messages, name);
+}
+
+async function leitetNurWeiter(wurzeln, { quelle, datei, name, zeilen }) {
+  const alt = dateiAm(wurzeln.basis, quelle, wurzeln.pr);
+  const neu = readFileSync(join(wurzeln.pr, quelle), "utf8");
+  if (alt === null || zeilen.some((zeile) => stammtAusAltemText(zeile, neu))) return false;
+  const eslint = await eslintOhneAusnahme(wurzeln, { quelle, name });
+  const vorher = await treffer(eslint, { wurzeln, quelle, text: alt, name });
+  const nachher = await treffer(eslint, { wurzeln, quelle, text: neu, name });
+  const vorrat = vorher.map(({ line }) => alt.split("\n")[line - 1]);
+  if (nachher.length > vorher.length || ohneZugeordnete(vorrat, zeilen) === undefined) return false;
+  return nurWeiterleitungenAuf({
+    ...{ root: wurzeln.hilfe, eslint: wurzeln.eslint.get(wurzeln.hilfe), text: neu },
+    ...{ meldungen: nachher, quelle, ziel: datei },
+  });
+}
+
+async function verbraucheWeitergeleiteteTreffer(wurzeln, { name, alt, datei }) {
+  const zeilen = await zeilenInDerNeuenDatei(wurzeln, { datei, name });
+  if (!(await zieldateiOhneBestandstreffer(wurzeln, { zeilen, datei, name }))) return 0;
+  const quellen = alt.filter(
+    (pfad) => wurzeln.dateien.includes(pfad) && existsSync(join(wurzeln.pr, pfad)),
+  );
+  for (const quelle of quellen) {
+    if (await leitetNurWeiter(wurzeln, { quelle, datei, name, zeilen })) return zeilen.length;
+  }
+  return 0;
+}
+
+async function umgezogenNach(wurzeln, { name, alt, nurIn, datei }) {
+  if (alt === undefined) return 0;
+  if (alt.length === nurIn.length) {
+    const weg = alt.filter((pfad) => !nurIn.includes(pfad));
+    return verbraucheUmgezogeneTreffer(wurzeln, { name, weg, datei });
+  }
+  if (!waechstNurUm(alt, nurIn, datei)) return 0;
+  return verbraucheWeitergeleiteteTreffer(wurzeln, { name, alt, datei });
 }
 
 async function umgezogeneTrefferJeDatei(wurzeln, datei) {
@@ -114,9 +186,7 @@ async function umgezogeneTrefferJeDatei(wurzeln, datei) {
   let summe = 0;
   for (const { name, nurIn } of nachher.filter((eintrag) => eintrag.nurIn.includes(datei))) {
     const alt = vorher.find((eintrag) => eintrag.name === name)?.nurIn;
-    if (alt?.length !== nurIn.length) continue;
-    const weg = alt.filter((pfad) => !nurIn.includes(pfad));
-    summe += await verbraucheUmgezogeneTreffer(wurzeln, { name, weg, datei });
+    summe += await umgezogenNach(wurzeln, { name, alt, nurIn, datei });
   }
   return summe;
 }
@@ -124,7 +194,7 @@ async function umgezogeneTrefferJeDatei(wurzeln, datei) {
 export async function ausnahmeUmzug({ basis, hilfe, pr, dateien, gezaehlteRegel }) {
   if (gezaehlteRegel !== undefined && gezaehlteRegel !== REGEL) return 0;
   const eslint = new Map([hilfe, pr].map((root) => [root, new ESLint({ cwd: root })]));
-  const wurzeln = { basis, hilfe, pr, eslint, vorrat: new Map() };
+  const wurzeln = { basis, hilfe, pr, eslint, dateien, vorrat: new Map() };
   let summe = 0;
   for (const datei of dateien.filter((pfad) => existsSync(join(hilfe, pfad))))
     summe += await umgezogeneTrefferJeDatei(wurzeln, datei);
