@@ -31,7 +31,7 @@ import {
   measureChecks,
 } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
-import { closedIssueNumbers, getJson, graphql, repositoryName } from "./testschutz/github.mjs";
+import { approvedAtHead, closedIssueNumbers, getJson, graphql, repositoryName } from "./testschutz/github.mjs";
 import { vorhandenerPfad } from "./zwillingspfad.mjs";
 import {
   gleicheAenderungGegenBasis,
@@ -323,14 +323,7 @@ async function approvals(pullRequest, headSha) {
   const reviews = await getJson(
     `/repos/${full}/pulls/${pullRequest}/reviews?per_page=${REVIEWS_PER_PAGE}`,
   );
-  const latest = new Map();
-  for (const review of reviews) {
-    const login = review.user?.login;
-    if (APPROVERS.includes(login) && review.state !== "COMMENTED") latest.set(login, review);
-  }
-  return [...latest.values()].filter(
-    (review) => review.state === "APPROVED" && review.commit_id === headSha,
-  );
+  return approvedAtHead(reviews, APPROVERS, headSha);
 }
 
 async function setKindLabel(pull, kind) {
