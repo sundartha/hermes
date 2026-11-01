@@ -150,6 +150,9 @@
   ".github/workflows/ci.yml › tests › Testdateien des Teils": {
     "meldet": "Wählt nur die Testdateien dieses Teils aus der gemessenen Laufzeit; urteilt nicht über Tests und bricht den Lauf nur ab, wenn kein Teil gebildet werden kann."
   },
+  ".github/workflows/ci.yml › tests › Werkzeugtests im Prüfleiter": {
+    "meldet": "Entscheidet nur in der Warteschlange, ob dieser Job die Werkzeugtests auslässt (erst bei WERKZEUGTESTS_EINMAL an und wenn der Prüfleiter sie im selben Commit fährt), und meldet die Antwort des Prüfleiters; urteilt nicht über Tests."
+  },
   ".github/workflows/ci.yml › tests › Übernahme im Schatten": {
     "aufbau": "Lokale Action .github/actions/uebernahme-im-schatten; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
   },

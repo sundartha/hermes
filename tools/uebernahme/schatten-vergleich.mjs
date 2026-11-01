@@ -13,7 +13,8 @@ const EXIT_AUFRUF = 2;
 const SCHATTEN_NAME = /^uebernahme-schatten-/;
 const SCHATTEN_DATEI = "uebernahme-schatten.json";
 const WORKFLOWS = { ci: CI, pruefleiter: PRUEFLEITER };
-const AUFRUF = "Aufruf: node tools/uebernahme/schatten-vergleich.mjs --lauf <id>";
+const AUFRUF =
+  "Aufruf: node tools/uebernahme/schatten-vergleich.mjs --lauf <id> [--pruefleiter <id des Prüfleiter-Laufs>]";
 
 async function artefaktInhalt(github, artefakt, datei) {
   const dateien = entpacke(await github.roh(`/actions/artifacts/${artefakt.id}/zip`));
@@ -59,12 +60,49 @@ export async function vergleicheLauf(github, laufId) {
   return summe;
 }
 
+async function berichteDesLaufs(github, laufId, workflow) {
+  const artefakte = await github.alle(`/actions/runs/${laufId}/artifacts`, (antwort) => antwort.artifacts);
+  const zeilen = new Map();
+  for (const artefakt of artefakte.filter(({ name }) => name.startsWith(workflow.artefakt("")))) {
+    const teil = artefakt.name.slice(workflow.artefakt("").length);
+    const text = await artefaktInhalt(github, artefakt, workflow.bericht(teil));
+    for (const [datei, zeile] of frischeZeilen(text)) zeilen.set(datei, zeile);
+  }
+  return zeilen;
+}
+
+export async function vergleicheWerkzeugtests(github, { ciLauf, pruefleiterLauf }) {
+  const ci = await berichteDesLaufs(github, ciLauf, CI);
+  const werkzeuge = await berichteDesLaufs(github, pruefleiterLauf, PRUEFLEITER);
+  const abweichend = [...werkzeuge]
+    .filter(([datei, zeile]) => ci.get(datei)?.bestanden !== zeile.bestanden)
+    .map(([datei]) => datei);
+  return { dateien: werkzeuge.size, abweichend };
+}
+
+async function werkzeugtestsVergleichen(github, { lauf, pruefleiter }) {
+  const summe = await vergleicheWerkzeugtests(github, { ciLauf: lauf, pruefleiterLauf: pruefleiter });
+  console.log(
+    `Lauf ${lauf} gegen Prüfleiter-Lauf ${pruefleiter}: Werkzeug-Testdateien ${summe.dateien}, gleich ${summe.dateien - summe.abweichend.length}, abweichend ${summe.abweichend.length} [${summe.abweichend.join(", ")}]`,
+  );
+  return summe.dateien > 0 && summe.abweichend.length === 0 ? EXIT_GLEICH : EXIT_ABWEICHUNG;
+}
+
+function laufNummer(text) {
+  return /^[1-9]\d*$/.test(text ?? "");
+}
+
 export async function main(argumente, github = githubZugang()) {
-  const { lauf } = parseArgs({ args: argumente, options: { lauf: { type: "string" } } }).values;
-  if (!/^[1-9]\d*$/.test(lauf ?? "")) {
+  const werte = parseArgs({
+    args: argumente,
+    options: { lauf: { type: "string" }, pruefleiter: { type: "string" } },
+  }).values;
+  const { lauf } = werte;
+  if (!laufNummer(lauf) || (werte.pruefleiter !== undefined && !laufNummer(werte.pruefleiter))) {
     console.error(AUFRUF);
     return EXIT_AUFRUF;
   }
+  if (werte.pruefleiter !== undefined) return werkzeugtestsVergleichen(github, werte);
   const summe = await vergleicheLauf(github, lauf);
   console.log(
     `Lauf ${lauf}: ${summe.vorhersagen} Vorhersagen, übernehmbar ${summe.uebernehmbar}, gleich ${summe.gleich}, abweichend ${summe.abweichend.length} [${summe.abweichend.join(", ")}]`,
