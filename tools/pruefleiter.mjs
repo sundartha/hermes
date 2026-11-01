@@ -42,6 +42,7 @@ const EXCLUSIVE_MODES = [
   "teile-pruefen",
   "werkzeugtests-gewollt",
 ];
+const EVENT_SELECTION = { pull_request: "werkzeugtests-aus-liste", schedule: "alle-werkzeugtests" };
 const TOOL_TESTS_WANTED = "ja";
 const TOOL_TESTS_NOT_WANTED = "nein";
 
@@ -99,7 +100,13 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
-async function toolTestPlan(options) {
+function withEventSelection(options) {
+  const flag = EVENT_SELECTION[options["fuer-ereignis"]];
+  return flag === undefined ? options : { ...options, [flag]: true };
+}
+
+async function toolTestPlan(rawOptions) {
+  const options = withEventSelection(rawOptions);
   const plan = await planToolTests(selectedBaseRef(options));
   if (options["alle-werkzeugtests"]) return { ...plan, art: ALL_TOOL_TESTS };
   if (!plan.reinProdukt || options["werkzeugtests-aus-liste"]) return plan;
@@ -176,6 +183,7 @@ function parseOptions() {
       "alle-werkzeugtests": { type: "boolean", default: false },
       "werkzeugtests-aus-liste": { type: "boolean", default: false },
       "werkzeugtests-gewollt": { type: "boolean", default: false },
+      "fuer-ereignis": { type: "string" },
       werkzeugteil: { type: "string" },
       "teile-pruefen": { type: "string" },
       jobs: { type: "string" },

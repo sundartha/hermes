@@ -24,6 +24,7 @@ const REPORT_DIRECTORY = ".pruefung";
 const REPORT_PATTERN = /^werkzeugteil-\d+\.jsonl$/;
 const ALL_GREEN = { vorpruefung: { result: "success" }, werkzeugtests: { result: "success" } };
 const LISTED_OPTION = "--werkzeugtests-aus-liste";
+const EVENT_OPTION = "--fuer-ereignis";
 const EXIT_USAGE = 2;
 const PART_FILES_TOOL = join(REPO_ROOT, "tools/testlaufzeit/teil-dateien.mjs");
 const PRODUCT_TEST_FILE = "test/basis.test.js";
@@ -120,6 +121,35 @@ test("bei einer reinen Änderung unter src fahren die Teile nur die gelistete We
   const check = checkParts(directory);
   assert.equal(check.status, 0, check.stdout + check.stderr);
   assert.match(check.stdout, /1 Werkzeug-Testdateien je genau einmal/);
+});
+
+test("--fuer-ereignis pull_request wählt bei einer reinen Änderung unter src nur die gelistete Werkzeug-Testdatei", (context) => {
+  const directory = probe(context);
+  change(directory, PRODUCT_FILE);
+
+  const results = runParts(directory, [EVENT_OPTION, "pull_request"]);
+
+  assert.ok(results.some(({ status }) => status !== 0));
+  assert.deepEqual(filesThatRan(directory), [LISTED_FILE]);
+});
+
+test("--fuer-ereignis schedule fährt bei einer reinen Änderung unter src alle Werkzeug-Testdateien", (context) => {
+  const directory = probe(context, { extraFiles: { [LISTED_FILE]: passingTest("gelisteter Werkzeugtest") } });
+  change(directory, PRODUCT_FILE);
+
+  assertAllGreen(runParts(directory, [EVENT_OPTION, "schedule"]));
+
+  assert.deepEqual(filesThatRan(directory), ALL_TOOL_TEST_FILES);
+});
+
+test("--fuer-ereignis mit einem anderen Ereignis fährt bei einer reinen Änderung unter src keine Werkzeugtests", (context) => {
+  const directory = probe(context);
+  change(directory, PRODUCT_FILE);
+
+  const results = runParts(directory, [EVENT_OPTION, "push"]);
+
+  assertAllGreen(results);
+  assert.match(output(results), /keine Änderung außerhalb von src\/ und test\//);
 });
 
 test("ein roter gelisteter Werkzeugtest macht die Teile bei einer reinen Änderung unter src rot", (context) => {

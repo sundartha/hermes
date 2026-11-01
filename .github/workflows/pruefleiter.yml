@@ -72,13 +72,7 @@ jobs:
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
         run: |
-          auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            auswahl=(--werkzeugtests-aus-liste)
-          elif [ "$EVENT_NAME" = "schedule" ]; then
-            auswahl=(--alle-werkzeugtests)
-          fi
-          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" "${auswahl[@]}"
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --fuer-ereignis "$EVENT_NAME"
 
       - name: Testlaufzeit
         if: always()
@@ -135,10 +129,4 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
           JOBS: ${{ toJSON(needs) }}
         run: |
-          auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            auswahl=(--werkzeugtests-aus-liste)
-          elif [ "$EVENT_NAME" = "schedule" ]; then
-            auswahl=(--alle-werkzeugtests)
-          fi
-          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" "${auswahl[@]}"
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" --fuer-ereignis "$EVENT_NAME"
