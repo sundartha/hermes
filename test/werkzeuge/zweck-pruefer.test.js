@@ -12,7 +12,7 @@ import { KATALOG_PRAEFIX, PRUEFER_ZWECK, befundZweck, statusZweck } from "../../
 import { reparaturPhase } from "../../tools/auftrag/reparatur.mjs";
 import { MELDUNG, kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
-import { ciLauf, scheinSha, setzeAusloeser, workflowAbfrage } from "./pruefer/hilfen.mjs";
+import { lieferketteLauf, scheinSha, setzeAusloeser, workflowAbfrage } from "./pruefer/hilfen.mjs";
 
 const TEXTE = JSON.parse(readFileSync(join(REPO_ROOT, "tools/zweck/pruefer.json"), "utf8"));
 const QUELLEN = ["tools/auftrag/pruefer-urteil.mjs", "tools/auftrag/pruefer-befehle.mjs"];
@@ -110,7 +110,7 @@ function scheinGithub() {
 }
 
 async function entscheideMit(context, commits) {
-  setzeAusloeser(context, ciLauf());
+  setzeAusloeser(context, lieferketteLauf());
   const ordner = probeDirectory(context, { "ergebnis.json": JSON.stringify({ format: 1, head: SHA, branch: "fix/zahl", commits }) });
   const github = scheinGithub();
   const log = [];

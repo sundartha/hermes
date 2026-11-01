@@ -6,9 +6,10 @@ import { test } from "node:test";
 import { artefakt, entscheiden, pruefen } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { probeDirectory } from "./probe-repo.js";
 import {
-  ciLauf,
+  lieferketteLauf,
   prueferLauf,
   scheinSha,
+  schrittAusgabe,
   setzeAusloeser,
   workflowAbfrage,
 } from "./pruefer/hilfen.mjs";
@@ -121,7 +122,7 @@ test("ein echter Lauf von pruefer-pruefen.yml setzt den Status nach der Nachstel
 });
 
 test("melden setzt keinen Status, wenn der grüne CI-Lauf aus einem gleichnamigen Workflow stammt", async (context) => {
-  setzeAusloeser(context, ciLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
+  setzeAusloeser(context, lieferketteLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
   const ordner = ordnerMitErgebnis(context);
   const github = scheinGithub();
   const status = await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
@@ -130,7 +131,7 @@ test("melden setzt keinen Status, wenn der grüne CI-Lauf aus einem gleichnamige
 });
 
 test("ein gleichnamiger CI-Workflow startet keine Prüfung und schreibt kein Ergebnis", async (context) => {
-  setzeAusloeser(context, ciLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
+  setzeAusloeser(context, lieferketteLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
   const aus = join(probeDirectory(context, {}), "ergebnis");
   const github = scheinGithub();
   const optionen = { head: HEAD, "pr-branch": "fix/zahl", aus };
@@ -141,7 +142,7 @@ test("ein gleichnamiger CI-Workflow startet keine Prüfung und schreibt kein Erg
 });
 
 test("ein gleichnamiger CI-Workflow bekommt keinen Artefakt-Namen", async (context) => {
-  setzeAusloeser(context, ciLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
+  setzeAusloeser(context, lieferketteLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
   const ausgabe = join(probeDirectory(context, {}), "github-output.txt");
   process.env.GITHUB_OUTPUT = ausgabe;
   context.after(() => {
@@ -152,4 +153,54 @@ test("ein gleichnamiger CI-Workflow bekommt keinen Artefakt-Namen", async (conte
   assert.equal(status, EXIT_HERKUNFT);
   assert.equal(existsSync(ausgabe), false);
   assert.deepEqual(github.gefragt, []);
+});
+
+const NICHT_PRUEFBAR = ["cancelled", "action_required", "skipped", "stale", "neutral", "timed_out", "startup_failure"];
+
+test("nach einem Abschluss außer success und failure setzt entscheiden keinen Status", async (context) => {
+  const ordner = ordnerMitErgebnis(context);
+  for (const conclusion of NICHT_PRUEFBAR) {
+    setzeAusloeser(context, lieferketteLauf({ conclusion }));
+    const github = scheinGithub();
+    const status = await entscheiden({ ergebnis: ordner, head: HEAD }, ordner, { github });
+    assert.equal(status, 0, conclusion);
+    assert.deepEqual(github.gesendet, [], conclusion);
+  }
+});
+
+test("nach einem Abschluss außer success und failure prüft der Prüfer nicht und schreibt kein Ergebnis", async (context) => {
+  for (const conclusion of NICHT_PRUEFBAR) {
+    setzeAusloeser(context, lieferketteLauf({ conclusion }));
+    const aus = join(probeDirectory(context, {}), "ergebnis");
+    const github = scheinGithub();
+    const optionen = { head: HEAD, "pr-branch": "fix/zahl", aus };
+    assert.equal(await pruefen(optionen, aus, { github }), EXIT_HERKUNFT, conclusion);
+    assert.equal(existsSync(aus), false, conclusion);
+    assert.ok(
+      github.gefragt.every((pfad) => pfad.startsWith("/actions/workflows/")),
+      `${conclusion}: ${github.gefragt}`,
+    );
+  }
+});
+
+test("nach einem Abschluss außer success und failure bekommt der Lauf keinen Artefakt-Namen", async (context) => {
+  const ausgabe = schrittAusgabe(context);
+  for (const conclusion of NICHT_PRUEFBAR) {
+    setzeAusloeser(context, lieferketteLauf({ conclusion }));
+    const github = scheinGithub();
+    assert.equal(await artefakt({ head: HEAD }, ausgabe, { github }), EXIT_HERKUNFT, conclusion);
+    assert.equal(existsSync(ausgabe), false, conclusion);
+  }
+});
+
+test("nach success und nach failure bekommt der Lauf einen Artefakt-Namen", async (context) => {
+  const ausgabe = schrittAusgabe(context);
+  for (const conclusion of ["success", "failure"]) {
+    setzeAusloeser(context, lieferketteLauf({ conclusion }));
+    const github = scheinGithub();
+    const pr = { state: "open", number: 5, head: { sha: HEAD }, base: { ref: "master" } };
+    github.hole = async (pfad) => (pfad.startsWith("/actions/workflows/") ? workflowAbfrage(pfad) : [pr]);
+    assert.equal(await artefakt({ head: HEAD }, ausgabe, { github }), 0, conclusion);
+    assert.equal(existsSync(ausgabe), true, conclusion);
+  }
 });

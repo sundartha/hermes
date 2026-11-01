@@ -17,7 +17,7 @@ import { abbruchOhneAbsicht, absichtFuerPr, vorgabenFuerPr } from "./pruefer-abs
 import { gitAusgabe, istEigenesRepo, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
 import { artefaktName, bekanntesErgebnis, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
-import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
+import { AUSLOESER_LAUF, PRUEFER_LAUF, abschlussPruefbar, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
 import { issueTitel, legeIssuesAn } from "./pruefer-issues.mjs";
 import {
   ANMELDUNG_GRUND,
@@ -65,7 +65,6 @@ const MERGE_GRUND = "Merge-Commit im PR, bitte rebasen";
 const ZIEL_BRANCH = "master";
 const ZWISCHENDATEI = ".ergebnis.json.neu";
 const JSON_EINRUECKUNG = 2;
-const ERFOLG = "success";
 const FEHLER = "error";
 const EXIT_HERKUNFT = 1;
 const EXIT_BEFUNDE = 1;
@@ -76,6 +75,13 @@ const NUR_LOKAL =
 function falscheHerkunft(herkunft) {
   console.error(
     `Der auslösende Lauf stammt nicht aus .github/workflows/${herkunft.datei} mit dem Ereignis ${herkunft.ereignis}; der Prüfer setzt keinen Status.`,
+  );
+  return EXIT_HERKUNFT;
+}
+
+function unpruefbarerAbschluss(ausloeser) {
+  console.error(
+    `Der auslösende Lauf endete mit ${ausloeser?.conclusion ?? "keinem Ergebnis"}; der Prüfer startet nur nach success oder failure und setzt keinen Status.`,
   );
   return EXIT_HERKUNFT;
 }
@@ -136,7 +142,9 @@ async function gedaechtnis(github, pr, auswahl) {
 }
 
 async function artefakt(optionen, root, { github = githubZugang() } = {}) {
-  if (!(await stammtAus(github, ausloesenderLauf(), CI_LAUF))) return falscheHerkunft(CI_LAUF);
+  const ausloeser = ausloesenderLauf();
+  if (!(await stammtAus(github, ausloeser, AUSLOESER_LAUF))) return falscheHerkunft(AUSLOESER_LAUF);
+  if (!abschlussPruefbar(ausloeser)) return unpruefbarerAbschluss(ausloeser);
   const name = artefaktName((await offenerPr(github, optionen.head)).number);
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artefakt=${name}\n`);
   console.log(`Artefakt-Name: ${name}`);
@@ -255,7 +263,8 @@ async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
 async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
   const token = nimmToken();
   const ausloeser = ausloesenderLauf();
-  if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
+  if (!(await stammtAus(github, ausloeser, AUSLOESER_LAUF))) return falscheHerkunft(AUSLOESER_LAUF);
+  if (!abschlussPruefbar(ausloeser)) return unpruefbarerAbschluss(ausloeser);
   const { head, "pr-branch": branch, "pr-repo": prRepo } = optionen;
   if (ablageImArtefakt(optionen)) throw new Error("Die Ablage darf nicht im Ordner --aus liegen, der hochgeladen wird.");
   const pr = await offenerPr(github, head);
@@ -310,13 +319,13 @@ function laufAdresse() {
 }
 
 function grundOhneStatus(optionen, ziel, ausloeser) {
-  if (!optionen.nachstellung && ausloeser.conclusion !== ERFOLG)
-    return "Der auslösende Lauf ist nicht grün";
+  if (!optionen.nachstellung && !abschlussPruefbar(ausloeser))
+    return `Der auslösende Lauf endete mit ${ausloeser.conclusion}`;
   return ziel ? null : "Kein Head-Commit bekannt";
 }
 
 async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
-  const herkunft = optionen.nachstellung ? PRUEFER_LAUF : CI_LAUF;
+  const herkunft = optionen.nachstellung ? PRUEFER_LAUF : AUSLOESER_LAUF;
   const ausloeser = ausloesenderLauf();
   if (!(await stammtAus(github, ausloeser, herkunft))) return falscheHerkunft(herkunft);
   const ergebnis = ergebnisAus(leseDatei(optionen.ergebnis, ERGEBNIS_DATEI) ?? "");

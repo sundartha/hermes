@@ -125,9 +125,11 @@ export async function scheinGithub(context, routen) {
 }
 
 const CI_NUMMER = 11;
+const LIEFERKETTE_NUMMER = 33;
 const PRUEFER_NUMMER = 22;
 export const WORKFLOW_NUMMERN = new Map([
   ["ci.yml", CI_NUMMER],
+  ["lieferkette.yml", LIEFERKETTE_NUMMER],
   ["pruefer-pruefen.yml", PRUEFER_NUMMER],
 ]);
 const WORKFLOW_ORDNER = ".github/workflows/";
@@ -141,6 +143,14 @@ export function ciLauf(felder = {}) {
     html_url: "https://github.com/sundartha/hermes/actions/runs/1",
     ...felder,
   };
+}
+
+export function lieferketteLauf(felder = {}) {
+  return ciLauf({
+    path: `${WORKFLOW_ORDNER}lieferkette.yml`,
+    workflow_id: WORKFLOW_NUMMERN.get("lieferkette.yml"),
+    ...felder,
+  });
 }
 
 export function prueferLauf(felder = {}) {
@@ -169,4 +179,13 @@ export function setzeAusloeser(context, lauf) {
 
 export async function workflowAbfrage(pfad) {
   return { id: WORKFLOW_NUMMERN.get(pfad.slice(pfad.lastIndexOf("/") + 1)) };
+}
+
+export function schrittAusgabe(context) {
+  const ausgabe = join(probeDirectory(context, {}), "github-output.txt");
+  process.env.GITHUB_OUTPUT = ausgabe;
+  context.after(() => {
+    delete process.env.GITHUB_OUTPUT;
+  });
+  return ausgabe;
 }
