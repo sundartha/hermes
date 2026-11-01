@@ -1,5 +1,6 @@
 import pg from "pg";
 import { config } from "./config.js";
+import { poolFehlerZeile, portalPoolOptionen } from "./utils/pg-pool.js";
 
 const IS_SUPERUSER_ON = "on";
 
@@ -35,17 +36,21 @@ export async function assertNoBypassRls(client) {
   }
 }
 
-export async function createPortalRunner({
-  pool = new pg.Pool({ connectionString: config.store.databaseUrl }),
-} = {}) {
+function neuerPortalPool() {
+  const pool = new pg.Pool(portalPoolOptionen(config.store.databaseUrl));
+  pool.on("error", (fehler) => console.error(poolFehlerZeile("portal", fehler)));
+  return pool;
+}
+
+export async function createPortalRunner({ pool = neuerPortalPool() } = {}) {
   let client;
   try {
     client = await pool.connect();
     await assertNoBypassRls({ query: (t, p) => client.query(t, p) });
-  } catch (e) {
+  } catch (fehler) {
     if (client) client.release();
     await pool.end();
-    throw e;
+    throw fehler;
   }
   client.release();
   return {
