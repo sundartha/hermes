@@ -89,7 +89,7 @@ export async function planeUebernahme(kontext) {
   return {
     ...kopf,
     schluessel: kennung,
-    teilUebernehmbar: eintraege.length > 0 && eintraege.every(({ uebernehmbar }) => uebernehmbar),
+    teilUebernehmbar: eintraege.length > 0,
     erzeuger: erzeuger.map((ergebnis) => beschreibe(ergebnis, ergebnis.ereignis)),
     dateien: eintraege,
   };
