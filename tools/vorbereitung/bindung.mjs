@@ -105,7 +105,9 @@ function geschriebeneBindungen(schreibungen, tabelle) {
 export function weltAus(programm, eintraege) {
   const alle = eintraege.flatMap(deklarationenVon);
   const tabelle = jeName(alle.map((eins) => [eins.name, eins]));
-  const schreibungen = eintraege.flatMap(({ knoten }) => geschriebeneKnoten(knoten));
+  const schreibungen = eintraege.flatMap(({ knoten, eltern }) =>
+    geschriebeneKnoten(knoten).map((stelle) => ({ knoten: stelle, eltern })),
+  );
   const bezeichner = eintraege.filter(({ knoten }) => knoten.type === "Identifier");
   return {
     programm,
@@ -113,6 +115,10 @@ export function weltAus(programm, eintraege) {
     tabelle,
     bezuege: eintraege.filter(istBezug),
     bezeichner: jeName(bezeichner.map((eins) => [eins.knoten.name, eins])),
-    geschriebeneIds: geschriebeneBindungen(schreibungen, tabelle),
+    schreibungen,
+    geschriebeneIds: geschriebeneBindungen(
+      schreibungen.map(({ knoten }) => knoten),
+      tabelle,
+    ),
   };
 }

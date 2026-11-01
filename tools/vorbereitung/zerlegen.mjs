@@ -300,17 +300,31 @@ function sonderDeklaration(stand, name) {
   return deklarator?.id.type === "Identifier" && deklarator.init ? deklaration : undefined;
 }
 
-function sonderOk(stand, name) {
+function inHilfeGeschrieben(stand, name) {
+  const { deklaration, welt } = stand;
+  const inClosure = ({ knoten, eltern }) =>
+    knoten.name === name &&
+    umfasst(deklaration.body, knoten) &&
+    innerhalbEinerFunktion(eltern, deklaration);
+  return welt.schreibungen.some(inClosure);
+}
+
+function imAufruferFrei(stand, name) {
   const { form, welt } = stand;
-  const deklaration = sonderDeklaration(stand, name);
-  const gleicheArt =
-    deklaration?.kind === form.art || (deklaration?.kind === "let" && form.art === "const");
   const imAufrufer = (welt.tabelle.get(name) ?? []).filter(({ key }) =>
     umfasst(form.funktion, key),
   );
   const bindung = aufloesen(welt.tabelle, form.empfaenger);
   const geschrieben = bindung && welt.geschriebeneIds.has(bindungsId(name, bindung.key));
-  return Boolean(gleicheArt) && imAufrufer.length === EINZIGE && Boolean(bindung) && !geschrieben;
+  return imAufrufer.length === EINZIGE && Boolean(bindung) && !geschrieben;
+}
+
+function sonderOk(stand, name) {
+  const { form } = stand;
+  const deklaration = sonderDeklaration(stand, name);
+  const gleicheArt =
+    deklaration?.kind === form.art || (deklaration?.kind === "let" && form.art === "const");
+  return Boolean(gleicheArt) && imAufruferFrei(stand, name) && !inHilfeGeschrieben(stand, name);
 }
 
 function lokaleFrei(stand, ausnahme) {
