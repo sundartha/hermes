@@ -14,6 +14,7 @@ const HOST_GROUND = [255, 0, 255];
 const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
 const SETTLED_BINDING = "hermesFrameSettled";
+const STABLE_PHOTO_ATTEMPTS = 20;
 
 function findInCache(cache) {
   if (!existsSync(cache)) return null;
@@ -127,6 +128,39 @@ function connect(url) {
   return { opened, send, nextEvent, close: () => socket.close() };
 }
 
+async function photographFrame(send, sessionId) {
+  const { result } = await send(
+    "Runtime.evaluate",
+    { expression: "JSON.stringify(document.getElementById('f').getBoundingClientRect())", returnByValue: true },
+    sessionId,
+  );
+  const { width, height } = JSON.parse(result.value);
+  const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } }, sessionId);
+  return { width, height, png: Buffer.from(shot.data, "base64") };
+}
+
+function sameFrame(first, second) {
+  if (first.width !== second.width || first.height !== second.height) return false;
+  const a = decodePng(first.png);
+  const b = decodePng(second.png);
+  for (let y = 0; y < a.height; y += 1) {
+    for (let x = 0; x < a.width; x += 1) {
+      if (isHostGround(a.at(x, y)) !== isHostGround(b.at(x, y))) return false;
+    }
+  }
+  return true;
+}
+
+async function stablePhoto(send, sessionId) {
+  let previous = await photographFrame(send, sessionId);
+  for (let attempt = 0; attempt < STABLE_PHOTO_ATTEMPTS; attempt += 1) {
+    const photo = await photographFrame(send, sessionId);
+    if (sameFrame(previous, photo)) return photo;
+    previous = photo;
+  }
+  throw new Error("Der Rahmen wird nicht still: zwei Fotos nacheinander zeigen verschiedene Host-Fläche");
+}
+
 export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, honorWidth = false }) {
   const browser = launch(chrome);
   let client;
@@ -142,9 +176,8 @@ export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, hon
     const page = hostPage(widgetHtml, frameWidth, honorWidth);
     const settled = nextEvent("Runtime.bindingCalled");
     await send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(page).toString("base64")}` }, sessionId);
-    const { height, width } = JSON.parse((await settled).payload);
-    const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } }, sessionId);
-    return { width, height, png: Buffer.from(shot.data, "base64") };
+    await settled;
+    return await stablePhoto(send, sessionId);
   } finally {
     if (client) client.close();
     browser.stop();
