@@ -26,10 +26,6 @@
     "src/telephony/adapters/telnyx/numbers.js|e05287a7b8bc6335",
     "src/telephony/adapters/telnyx/numbers.js|fcacd4aad8487a47",
     "src/telephony/adapters/telnyx/voice.js|0898279ccc0028de",
-    "src/telephony/adapters/telnyx/voice.js|1b33f5914eddc1ba",
-    "src/telephony/adapters/telnyx/voice.js|405289b28ab6fdf1",
-    "src/telephony/adapters/telnyx/voice.js|67a355e9689de7a8",
-    "src/telephony/adapters/telnyx/voice.js|9e6501d98a459674",
     "src/web-auth.js|df90d592b6a7512d",
     "src/workos-management.js|a7ca0820ab80654e",
     "src/workos-management.js|bd0ffac4c13e09ef"

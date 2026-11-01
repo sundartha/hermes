@@ -67,6 +67,9 @@ const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
 
 const ATTACH_STATUS = { attachStatus: true };
 
+const ANRUF_STEUERN_FRIST_MS = 8_000;
+const KOSTENABRUF_FRIST_MS = 15_000;
+
 function headers(contentType = FORM_HEADERS_TYPE) {
   return { Authorization: `Bearer ${config.telephony.telnyxApiKey}`, "Content-Type": contentType };
 }
@@ -87,7 +90,12 @@ async function parseTelnyxResource(res) {
 async function postCallControlAction(callControlId, { action, body, op }) {
   const res = await fetch(
     `${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
-    { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify(body) },
+    {
+      method: "POST",
+      headers: headers(JSON_HEADERS_TYPE),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+    },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
   logCallControlOk(op, res.status, Boolean(callControlId));
@@ -99,7 +107,12 @@ async function updateTexmlCall(callSid, { form, op }) {
     throw new Error(`Telnyx ${op}: TELNYX_ACCOUNT_SID fehlt`);
   const res = await fetch(
     `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
-    { method: "POST", headers: headers(), body: form },
+    {
+      method: "POST",
+      headers: headers(),
+      body: form,
+      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+    },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
 }
@@ -210,16 +223,17 @@ function createPoolFetchRun(throttle) {
 }
 
 async function attemptCostRecordPage(recordType, pageNumber, poolRun) {
-  const q = new URLSearchParams();
-  q.set("filter[record_type]", recordType);
-  q.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
-  q.set("page[number]", String(pageNumber));
+  const query = new URLSearchParams();
+  query.set("filter[record_type]", recordType);
+  query.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
+  query.set("page[number]", String(pageNumber));
   let rateLimit = null;
   try {
     await poolRun.throttle.reserveSlot();
     poolRun.zaehleAnfrage();
-    const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
+    const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${query}`, {
       headers: headers(),
+      signal: AbortSignal.timeout(KOSTENABRUF_FRIST_MS),
     });
     if (res.status === RATE_LIMITED_STATUS) rateLimit = { hintMs: rateLimitResetHintMs(res) };
     await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
@@ -388,12 +402,13 @@ export const telnyxVoice = {
   async fetchMonthlyInvoiceTotal({ month }) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
     try {
-      const q = new URLSearchParams({
+      const query = new URLSearchParams({
         sort: INVOICE_SORT_NEWEST_FIRST,
         "page[size]": String(INVOICE_LOOKBACK_PAGE_SIZE),
       });
-      const res = await fetch(`${config.telephony.telnyxApiBase}${INVOICES_BASE}?${q}`, {
+      const res = await fetch(`${config.telephony.telnyxApiBase}${INVOICES_BASE}?${query}`, {
         headers: headers(),
+        signal: AbortSignal.timeout(KOSTENABRUF_FRIST_MS),
       });
       await assertTelnyxOk(res, "fetchMonthlyInvoiceTotal", ATTACH_STATUS);
       const { data } = await parseTelnyxBody(res);
