@@ -56,6 +56,7 @@ import { consultAllowedForCall } from "./consult/gate.js";
 import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
+import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.js";
 
 const provisioningQueue = createQueue();
 
@@ -204,6 +205,8 @@ const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarn
 const consultDelivery = makeConsultDelivery({ store });
 
 const voiceRender = makeVoiceRender({ config });
+
+setzeKennungInLogzeilen(config.metrics.logRequestId);
 
 const deps = {
   config,

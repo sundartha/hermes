@@ -102,6 +102,10 @@
       "^src/config\\.[jt]s$",
       "^src/(telephony|geo|llm|queue|research|ui)/registry\\.[jt]s$"
     ],
-    "fachlogik": ["^src/restricted-data\\.[jt]s$", "^src/utils/month\\.[jt]s$"]
+    "fachlogik": [
+      "^src/restricted-data\\.[jt]s$",
+      "^src/utils/month\\.[jt]s$",
+      "^src/utils/anfrage-kennung\\.[jt]s$"
+    ]
   }
 ]

@@ -338,6 +338,7 @@ const rawConfig = {
   exaApiBase: stripTrailingSlash((process.env.EXA_API_BASE || "https://api.exa.ai").trim()),
 
   metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
+  logRequestId: boolEnv("LOG_REQUEST_ID", process.env.LOG_REQUEST_ID, { fallback: false }),
 
   telnyxApiKey: process.env.TELNYX_API_KEY || "",
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "",
@@ -905,7 +906,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
-  metrics: ["metricsEnabled"],
+  metrics: ["metricsEnabled", "logRequestId"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
   werkzeug: ["renderApiKey"],
