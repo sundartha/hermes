@@ -24,6 +24,7 @@ const ONLY_SCAN_ROOT = "test";
 const PACKAGE_JSON = "package.json";
 const ONLY_PATTERNS = [/\.only\s*\(/, /\bonly["']?\s*:\s*true\b/, /--test-only\b/];
 const COMPARED_SECTIONS = { linterOptions: "linterOptions.", rules: "Regel " };
+const EMPTY_CONFIG = { linterOptions: {}, rules: {} };
 const JSON_INDENT = 2;
 const WRITE_OPTION = "basis-schreiben";
 const WRITE_HINT = `Ist die Änderung gewollt, schreibt „node tools/eslint-konfig-pruefen.mjs --${WRITE_OPTION}“ die Kopie ${BASELINE_FILE} neu.`;
@@ -59,9 +60,11 @@ function scannedFolders(root) {
 }
 
 function javascriptProbes(root, folders) {
-  return folders
-    .map((folder) => ({ folder, key: JAVASCRIPT_KEY, file: filesIn(root, folder).find(isLintedFile) }))
-    .filter(({ file }) => file !== undefined);
+  return folders.flatMap((folder) =>
+    filesIn(root, folder)
+      .filter(isLintedFile)
+      .map((file) => ({ folder, key: JAVASCRIPT_KEY, file })),
+  );
 }
 
 function typescriptProbes(folders) {
@@ -90,11 +93,19 @@ function canonical(value) {
   );
 }
 
+const internedConfigs = new Map();
+
+function interned(config) {
+  const text = JSON.stringify(config);
+  if (!internedConfigs.has(text)) internedConfigs.set(text, config);
+  return internedConfigs.get(text);
+}
+
 async function effectiveConfig(eslint, root, file) {
   const config = await eslint.calculateConfigForFile(join(root, file));
   if (config === undefined) return null;
   const printed = JSON.parse(JSON.stringify(config));
-  return canonical({ linterOptions: printed.linterOptions ?? {}, rules: printed.rules ?? {} });
+  return interned(canonical({ linterOptions: printed.linterOptions ?? {}, rules: printed.rules ?? {} }));
 }
 
 async function twinsOf(eslint, root, probe) {
@@ -129,17 +140,87 @@ function recordedFolder(baseline, folder, key) {
 }
 
 function isSameConfig(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
+function groupsOf(measured) {
+  const groups = new Map();
+  for (const entry of measured) {
+    const id = `${entry.folder}${entry.key}`;
+    groups.set(id, [...(groups.get(id) ?? []), entry]);
+  }
+  return [...groups.values()];
+}
+
+function byCountThenText([left, leftCount], [right, rightCount]) {
+  const leftText = JSON.stringify(left);
+  const rightText = JSON.stringify(right);
+  if (leftCount !== rightCount) return rightCount - leftCount;
+  return leftText < rightText ? -1 : 1;
+}
+
+function commonConfig(group) {
+  const counts = new Map();
+  for (const { config } of group) counts.set(config, (counts.get(config) ?? 0) + 1);
+  const [[common]] = [...counts.entries()].sort(byCountThenText);
+  return common;
+}
+
+function changedEntries(before = {}, after = {}) {
+  return Object.fromEntries(
+    [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .filter((name) => !isSameConfig(before[name], after[name]))
+      .map((name) => [name, after[name] ?? null]),
+  );
+}
+
+function deltaOf(base, config) {
+  if (config === null) return null;
+  const from = base ?? EMPTY_CONFIG;
+  return Object.fromEntries(
+    Object.keys(COMPARED_SECTIONS)
+      .map((section) => [section, changedEntries(from[section], config[section])])
+      .filter(([, changes]) => Object.keys(changes).length > 0),
+  );
+}
+
+function appliedEntries(before = {}, changes = {}) {
+  const merged = { ...before, ...changes };
+  return Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== null));
+}
+
+function withDelta(base, delta) {
+  if (delta === null) return null;
+  const from = base ?? EMPTY_CONFIG;
+  return canonical(
+    Object.fromEntries(
+      Object.keys(COMPARED_SECTIONS).map((section) => [section, appliedEntries(from[section], delta[section])]),
+    ),
+  );
+}
+
+function folderEntry(baseline, group, common) {
+  const [{ folder, key }] = group;
+  const inherited = recordedFolder(baseline, dirname(folder), key);
+  if (inherited === undefined) return { [`${ROOT_FOLDER}${key}`]: common };
+  return isSameConfig(baseline[inherited], common) ? {} : { [`${folder}${key}`]: common };
+}
+
+function fileEntries(group, common) {
+  return Object.fromEntries(
+    group
+      .filter(({ config }) => !isSameConfig(config, common))
+      .map(({ file, config }) => [file, deltaOf(common, config)]),
+  );
+}
+
+function recordGroup(baseline, group) {
+  const common = commonConfig(group);
+  return { ...baseline, ...folderEntry(baseline, group, common), ...fileEntries(group, common) };
 }
 
 function baselineFrom(measured) {
-  const baseline = {};
-  for (const { folder, key, config } of measured) {
-    const inherited = recordedFolder(baseline, dirname(folder), key);
-    if (inherited === undefined) baseline[`${ROOT_FOLDER}${key}`] = config;
-    else if (!isSameConfig(baseline[inherited], config)) baseline[`${folder}${key}`] = config;
-  }
-  return baseline;
+  return groupsOf(measured).reduce(recordGroup, {});
 }
 
 function describe(value) {
@@ -172,12 +253,55 @@ function lintedStateFindings({ folder, key, file, config }, expected) {
   return [`${folder}${key}: ${file} ${state}`];
 }
 
-function baselineFindings(baseline, probe) {
-  const recorded = recordedFolder(baseline, probe.folder, probe.key);
-  if (recorded === undefined) return [`${probe.folder}${probe.key}: keine Kopie in ${BASELINE_FILE}`];
-  const expected = baseline[recorded];
-  if (probe.config === null || expected === null) return lintedStateFindings(probe, expected);
-  return driftFindings(`${probe.folder}${probe.key}`, expected, probe.config);
+function hasOwnRecord(baseline, entry) {
+  return Object.hasOwn(baseline, entry.file);
+}
+
+function expectedConfig(baseline, entry) {
+  const recorded = recordedFolder(baseline, entry.folder, entry.key);
+  if (recorded === undefined) return undefined;
+  return hasOwnRecord(baseline, entry) ? withDelta(baseline[recorded], baseline[entry.file]) : baseline[recorded];
+}
+
+function configGroups(entries) {
+  const groups = new Map();
+  for (const entry of entries) groups.set(entry.config, [...(groups.get(entry.config) ?? []), entry]);
+  return [...groups.values()];
+}
+
+function inheritingFindings(label, entries) {
+  return configGroups(entries).flatMap((same) => {
+    const [{ config, expected }] = same;
+    if (same.length === entries.length) return driftFindings(label, expected, config);
+    return same.flatMap(({ file }) => driftFindings(file, expected, config));
+  });
+}
+
+function ownFindings(entries) {
+  return entries.flatMap(({ file, config, expected }) => driftFindings(file, expected, config));
+}
+
+function baselineFindings(baseline, group) {
+  const [{ folder, key }] = group;
+  const label = `${folder}${key}`;
+  const checked = group.map((entry) => ({
+    ...entry,
+    expected: expectedConfig(baseline, entry),
+    own: hasOwnRecord(baseline, entry),
+  }));
+  if (checked.some(({ expected }) => expected === undefined)) {
+    return [`${label}: keine Kopie in ${BASELINE_FILE}`];
+  }
+  const unlinted = checked.filter(({ config, expected }) => config === null || expected === null);
+  const linted = checked.filter(({ config, expected }) => config !== null && expected !== null);
+  return [
+    ...unlinted.flatMap((entry) => lintedStateFindings(entry, entry.expected)),
+    ...inheritingFindings(
+      label,
+      linted.filter(({ own }) => !own),
+    ),
+    ...ownFindings(linted.filter(({ own }) => own)),
+  ];
 }
 
 function twinFindings({ folder, file, config, twins = [] }) {
@@ -229,17 +353,19 @@ function writeBaseline(root, baseline) {
 function configFindings(root, measured) {
   const baseline = readBaseline(root);
   if (baseline === undefined) return [`${BASELINE_FILE} fehlt`];
-  return measured.flatMap((probe) => baselineFindings(baseline, probe));
+  return groupsOf(measured).flatMap((group) => baselineFindings(baseline, group));
 }
 
 function report(root, measured) {
   const copyFindings = configFindings(root, measured);
   const findings = [
-    ...copyFindings,
-    ...measured.flatMap(inlineConfigFindings),
-    ...measured.flatMap(twinFindings),
-    ...nestedConfigFindings(root),
-    ...onlyFindings(root),
+    ...new Set([
+      ...copyFindings,
+      ...measured.flatMap(inlineConfigFindings),
+      ...measured.flatMap(twinFindings),
+      ...nestedConfigFindings(root),
+      ...onlyFindings(root),
+    ]),
   ];
   for (const finding of findings) console.error(finding);
   if (copyFindings.length > 0) console.error(WRITE_HINT);
