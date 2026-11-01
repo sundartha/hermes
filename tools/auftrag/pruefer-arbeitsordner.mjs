@@ -260,8 +260,8 @@ function ergebnisseText(commit, { ciLauf }) {
   return [
     "# Ergebnisse der Prüfbefehle",
     "",
-    "CI-Lauf: grün",
-    `Adresse: ${ciLauf || "unbekannt"}`,
+    "CI-Lauf: nicht abgewartet (der Prüfer startet, sobald die Lieferkette fertig ist, auch wenn die CI noch läuft)",
+    `Adresse des auslösenden Laufs: ${ciLauf || "unbekannt"}`,
     "",
     ROTE_RUNDEN,
     "",
