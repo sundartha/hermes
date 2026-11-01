@@ -77,7 +77,7 @@ async function laeufeDesPullRequests(github, { workflow }, ref) {
   const { workflow_runs: laeufe } = await github.hole(
     `/actions/workflows/${workflow.datei}/runs?${abfrage}`,
   );
-  return laeufe.filter((lauf) => lauf.pull_requests?.some((pr) => pr.number === nummer));
+  return laeufe;
 }
 
 function neuesteZuerst(laeufe) {
