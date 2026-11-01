@@ -35,6 +35,7 @@ permissions:
 
 env:
   UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
+  WERKZEUGTESTS_EINMAL: schatten
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -322,14 +323,29 @@ jobs:
         with:
           web: "false"
 
+      - name: Werkzeugtests im Prüfleiter
+        id: werkzeuge
+        if: github.event_name == 'merge_group'
+        env:
+          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          ohne=false
+          gewollt=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --werkzeugtests-gewollt)
+          echo "Der Prüfleiter fährt die Werkzeugtests dieses Commits: $gewollt (WERKZEUGTESTS_EINMAL: $WERKZEUGTESTS_EINMAL)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$gewollt" = "ja" ] && [ "$WERKZEUGTESTS_EINMAL" = "an" ]; then
+            ohne=true
+          fi
+          echo "ohne=$ohne" >> "$GITHUB_OUTPUT"
+
       - name: Testdateien des Teils
         env:
           EVENT_NAME: ${{ github.event_name }}
+          OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
             auswahl=(--ohne-werkzeugtests)
           fi
           node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
@@ -346,12 +362,13 @@ jobs:
         id: tests
         env:
           EVENT_NAME: ${{ github.event_name }}
+          OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
           TESTS_ZWEITER_LAUF: ja
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: |
           auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
             auswahl=(--ohne-werkzeugtests)
           fi
           dateien=()

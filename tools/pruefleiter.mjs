@@ -30,7 +30,15 @@ const PART_REPORT_PREFIX = "werkzeugteil-";
 const PART_REPORT_SUFFIX = ".jsonl";
 const FILE_REPORTER = fileURLToPath(new URL("./testlaufzeit-reporter.mjs", import.meta.url));
 const JOB_SUCCESS = "success";
-const EXCLUSIVE_MODES = ["vor-push", "ohne-werkzeugtests", "werkzeugteil", "teile-pruefen"];
+const EXCLUSIVE_MODES = [
+  "vor-push",
+  "ohne-werkzeugtests",
+  "werkzeugteil",
+  "teile-pruefen",
+  "werkzeugtests-gewollt",
+];
+const TOOL_TESTS_WANTED = "ja";
+const TOOL_TESTS_NOT_WANTED = "nein";
 
 function npmRun(script, args, stdio) {
   const result = spawnSync("npm", ["run", "--silent", script, "--", ...args], {
@@ -133,6 +141,7 @@ function parseOptions() {
       "vor-push": { type: "boolean", default: false },
       "ohne-werkzeugtests": { type: "boolean", default: false },
       "alle-werkzeugtests": { type: "boolean", default: false },
+      "werkzeugtests-gewollt": { type: "boolean", default: false },
       werkzeugteil: { type: "string" },
       "teile-pruefen": { type: "string" },
       jobs: { type: "string" },
@@ -181,6 +190,11 @@ async function partRun(options, part) {
     return 0;
   }
   return toolTests(part);
+}
+
+async function announceToolTests(options) {
+  console.log((await toolTestsWanted(options)) ? TOOL_TESTS_WANTED : TOOL_TESTS_NOT_WANTED);
+  return 0;
 }
 
 function failedJobs(text) {
@@ -275,6 +289,7 @@ async function main() {
     console.error(error);
     return EXIT_USAGE;
   }
+  if (options["werkzeugtests-gewollt"]) return announceToolTests(options);
   await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "), {
     vorrangFuerPush: true,
   });
