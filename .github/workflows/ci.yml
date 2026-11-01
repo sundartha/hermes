@@ -7,6 +7,8 @@ on:
     branches: [master]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       basis:
@@ -30,6 +32,9 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+
+env:
+  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -329,6 +334,14 @@ jobs:
           fi
           node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
 
+      - name: Übernahme im Schatten
+        uses: ./.github/actions/uebernahme-im-schatten
+        with:
+          art: ci
+          teil: ${{ matrix.teil }}
+          teile: ${{ strategy.job-total }}
+          dateien: ${{ runner.temp }}/teil-dateien.txt
+
       - name: Tests
         id: tests
         env:
@@ -368,6 +381,11 @@ jobs:
         run: |
           set -o pipefail
           node tools/testlaufzeit-pruefen.mjs --teil "$TEIL" --kosten .pruefung/testkosten.jsonl ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Ergebnis festhalten
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: node tools/uebernahme/baum.mjs festhalten --bericht .pruefung/dateien.jsonl --name "testlaufzeit-teil-$TEIL"
 
       - name: Testlaufzeit hochladen
         if: always()
