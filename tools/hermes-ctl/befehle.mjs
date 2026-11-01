@@ -32,6 +32,10 @@ export const WEBHOOKS = new Map([
   ...TELNYX_PFADE.map((teil) => [`telnyx-${teil}`, { pfad: `/voice/${teil}`, art: TELNYX }]),
 ]);
 
+export const INTERNE_ROUTEN = new Map([
+  ["status", { methode: "GET", pfad: "/intern/status", token: "status" }],
+]);
+
 function werkzeugErgebnis(name, ergebnis) {
   if (ergebnis.isError === true) {
     throw new HermesCtlFehler(
@@ -122,6 +126,22 @@ export async function webhook({ sitzung, argumente: [art, json], falscheSignatur
     LANGE_FRIST_MS,
   );
   return { webhook: art, status, koerper: alsJson(text), anfrage_ms: anfrageMs };
+}
+
+export async function intern({ sitzung, argumente: [name] }) {
+  const ziel = INTERNE_ROUTEN.get(name);
+  if (ziel === undefined) {
+    throw new HermesCtlFehler(
+      `Unbekannte interne Route: ${name}`,
+      `Nimm einen dieser Namen: ${[...INTERNE_ROUTEN.keys()].join(", ")}.`,
+    );
+  }
+  const zustand = laufendeSitzung(sitzung);
+  const { status, text, anfrageMs } = await anfrage(`${zustand.url}${ziel.pfad}`, {
+    method: ziel.methode,
+    headers: { authorization: `Bearer ${zustand.token[ziel.token]}` },
+  });
+  return { intern: name, status, koerper: alsJson(text), anfrage_ms: anfrageMs };
 }
 
 async function gespraechsKennung(zustand, json) {
