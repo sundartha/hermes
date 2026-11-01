@@ -8,6 +8,7 @@ import {
 import { makeWorkosManagement } from "../src/workos-management.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
+import { antwortetNie, mitKurzerFrist } from "./gemeinsam/kurze-antwortfrist.mjs";
 
 const TENANT = "t_end";
 const WORKOS_SUBJECT = "user_pii_should_never_leak_01";
@@ -371,4 +372,27 @@ test("makeWorkosManagement.deleteUser: Fehlerstatus -> Meldung traegt NUR den HT
       return true;
     },
   );
+});
+
+const NUTZER_LOESCHEN_FRIST_MS = 15_000;
+const NUTZER_PRUEFEN_FRIST_MS = 10_000;
+
+test("WorkOS-Fristen: antwortet WorkOS auf das Löschen nicht, bricht deleteUser nach 15 Sekunden ab", async () => {
+  const workos = makeWorkosManagement(WORKOS_CFG, { _fetch: antwortetNie });
+
+  const fristen = await mitKurzerFrist(() =>
+    assert.rejects(workos.deleteUser("user_01ABC"), { name: "TimeoutError" }),
+  );
+
+  assert.deepEqual(fristen, [NUTZER_LOESCHEN_FRIST_MS]);
+});
+
+test("WorkOS-Fristen: antwortet WorkOS auf die Nutzerprüfung nicht, bricht userExists nach 10 Sekunden ab", async () => {
+  const workos = makeWorkosManagement(WORKOS_CFG, { _fetch: antwortetNie });
+
+  const fristen = await mitKurzerFrist(() =>
+    assert.rejects(workos.userExists("user_01ABC"), { name: "TimeoutError" }),
+  );
+
+  assert.deepEqual(fristen, [NUTZER_PRUEFEN_FRIST_MS]);
 });

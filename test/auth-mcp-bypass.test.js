@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
-import { legacyLocalBypassAllowed, makeMcpAuth } from "../src/auth.js";
+import { _resetJwksCache, legacyLocalBypassAllowed, makeMcpAuth } from "../src/auth.js";
 import { makeConfigOverrides } from "./helpers.js";
+import { antwortetNie, mitKurzerFrist } from "./gemeinsam/kurze-antwortfrist.mjs";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 const ERLAUBT = () => ({ allowed: true, retryAfterS: 0 });
@@ -108,4 +109,25 @@ test("PA-17: mcpAuth Modus-Matrix (off/oauth/token/legacy) - Verzweigung unverae
       statusCode: 401,
     });
   });
+});
+
+const OAUTH_METADATEN_FRIST_MS = 5_000;
+
+test("WorkOS-Fristen: antwortet der Aussteller auf die OAuth-Metadaten nicht, bricht jeder der zwei Pfade nach 5 Sekunden ab", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = antwortetNie;
+  _resetJwksCache();
+  try {
+    await withMcpConfig({ mcpAuth: "oauth", oauthIssuerUrl: "https://aussteller.test" }, async () => {
+      const fristen = await mitKurzerFrist(async () => {
+        const ergebnis = await runMcpAuth(reqWith({ auth: "Bearer ein.token.hier" }));
+        assert.deepEqual(ergebnis, { nexted: false, statusCode: 401 });
+      });
+
+      assert.deepEqual(fristen, [OAUTH_METADATEN_FRIST_MS, OAUTH_METADATEN_FRIST_MS]);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    _resetJwksCache();
+  }
 });
