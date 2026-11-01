@@ -101,7 +101,7 @@ function isProductChange({ status, path }) {
 
 async function needsToolTests(baseRef) {
   const changes = await changedFiles(baseRef);
-  return changes === null || changes.some((change) => !isProductChange(change));
+  return changes === null;
 }
 
 async function toolTestsWanted(options) {
