@@ -35,7 +35,7 @@ permissions:
 
 env:
   UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || 'schatten' }}
-  WERKZEUGTESTS_EINMAL: schatten
+  WERKZEUGTESTS_EINMAL: an
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
