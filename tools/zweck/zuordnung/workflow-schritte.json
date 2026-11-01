@@ -174,7 +174,7 @@
     "beleg": "tools/testlaufzeit-pruefen.mjs"
   },
   ".github/workflows/ci.yml › tests › Ergebnis festhalten": {
-    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum, Werkzeugbaum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
+    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/ci.yml › tests › Bestandene Tests melden": {
     "meldet": "T12: gibt nur die Zahl bestandener Tests an den Sammeljob weiter."
@@ -277,7 +277,7 @@
     "beleg": "tools/testlaufzeit-pruefen.mjs"
   },
   ".github/workflows/pruefleiter.yml › werkzeugtests › Ergebnis festhalten": {
-    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
+    "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum, Werkzeugbaum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
   },
   ".github/workflows/pruefleiter.yml › pruefleiter › Node 22 und npm ci": {
     "aufbau": "Lokale Action .github/actions/node-npm-ci-werkzeuge; ihre Schritte stehen einzeln unter ihrer eigenen Datei."

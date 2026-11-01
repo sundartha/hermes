@@ -2,8 +2,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { gh, ghRepo } from "../mutationspruefung/gh.mjs";
-import { dauernAus, holeLaufzeiten } from "../mutationspruefung/laufzeiten.mjs";
+import { ghRepo } from "../mutationspruefung/gh.mjs";
+import { holeLaufzeiten, laufzeitenDesLaufs } from "../mutationspruefung/laufzeiten.mjs";
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
 import { gerundeteTabelle, MESSDATEI, WERKZEUG_MESSDATEI } from "./teilung.mjs";
 
@@ -16,30 +16,21 @@ const WERKZEUG_ARTEFAKTE = "werkzeugteil-*";
 const WERKZEUG_BERICHT = /^werkzeugteil-\d+\.jsonl$/;
 const AUFRUF = "Aufruf: node tools/testlaufzeit/laufzeiten-erzeugen.mjs [--werkzeuge <id eines Prüfleiter-Laufs mit allen Werkzeugtests>]";
 
-function inTempOrdner(praefix, arbeit) {
-  const ordner = neuerTempOrdner(praefix);
+function geholt() {
+  const ordner = neuerTempOrdner("testdauern-");
   try {
-    return arbeit(ordner);
+    const ziel = join(ordner, "laufzeiten.json");
+    holeLaufzeiten(ziel);
+    return JSON.parse(readFileSync(ziel, "utf8"));
   } finally {
     entferneTempOrdner(ordner);
   }
 }
 
-function geholt() {
-  return inTempOrdner("testdauern-", (ordner) => {
-    const ziel = join(ordner, "laufzeiten.json");
-    holeLaufzeiten(ziel);
-    return JSON.parse(readFileSync(ziel, "utf8"));
-  });
-}
-
 function werkzeugDauern(lauf) {
-  return inTempOrdner("werkzeugdauern-", (ordner) => {
-    gh(["run", "download", lauf, "-R", ghRepo(), "-D", ordner, "-p", WERKZEUG_ARTEFAKTE]);
-    const dauern = dauernAus(ordner, (datei) => WERKZEUG_BERICHT.test(datei));
-    const leer = Object.keys(dauern).length === 0;
-    return leer ? { lauf: null, grund: `keine Werkzeug-Laufzeiten im Lauf ${lauf}` } : { lauf: Number(lauf), dauern };
-  });
+  const passt = (datei) => WERKZEUG_BERICHT.test(datei);
+  const { dauern, grund } = laufzeitenDesLaufs({ repo: ghRepo(), lauf: Number(lauf), artefakte: WERKZEUG_ARTEFAKTE, passt });
+  return dauern ? { lauf: Number(lauf), dauern } : { lauf: null, grund };
 }
 
 function schreibe(ziel, { lauf, dauern, grund }) {

@@ -13,7 +13,8 @@ import { dirname, join } from "node:path";
 
 import { TOOL_TEST_DIRECTORY } from "../../test/testbaenke-run.mjs";
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
-import { HIDDEN_DIRECTORIES, isToolTreePath, LIST_FILE } from "./werkzeugbaum.mjs";
+import { LIST_FILE } from "./liste.mjs";
+import { HIDDEN_DIRECTORIES, isToolTreePath } from "./werkzeugbaum.mjs";
 
 const LIST_NAME = LIST_FILE.split("/").at(-1);
 const MESSAGE = `liest Produktcode, gehört in ${LIST_NAME} oder auf ein Beispiel-Repo`;

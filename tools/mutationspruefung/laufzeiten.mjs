@@ -51,7 +51,7 @@ function neuesterLauf(repo) {
   return liste[0]?.databaseId;
 }
 
-export function dauernAus(ordner, passt = (datei) => datei === LAUFZEITDATEI) {
+function dauernAus(ordner, passt = (datei) => datei === LAUFZEITDATEI) {
   const dauern = {};
   for (const name of readdirSync(ordner, { recursive: true }).filter((eintrag) => passt(basename(eintrag)))) {
     for (const { datei, dauer_ms: ms } of zeilenAus(join(ordner, name))) {
@@ -61,17 +61,21 @@ export function dauernAus(ordner, passt = (datei) => datei === LAUFZEITDATEI) {
   return gueltigeDauern(dauern);
 }
 
-function abrufen(repo) {
-  const lauf = neuesterLauf(repo);
-  if (lauf === undefined) return { grund: "kein grüner Master-Lauf" };
+export function laufzeitenDesLaufs({ repo, lauf, artefakte = ARTEFAKTE, passt }) {
   const ordner = neuerTempOrdner(ORDNERPRAEFIX);
   try {
-    gh(["run", "download", String(lauf), "-R", repo, "-D", ordner, "-p", ARTEFAKTE]);
-    const dauern = dauernAus(ordner);
+    gh(["run", "download", String(lauf), "-R", repo, "-D", ordner, "-p", artefakte]);
+    const dauern = dauernAus(ordner, passt);
     return Object.keys(dauern).length === 0 ? { grund: `keine Laufzeiten im Lauf ${lauf}` } : { lauf, dauern };
   } finally {
     entferneTempOrdner(ordner);
   }
+}
+
+function abrufen(repo) {
+  const lauf = neuesterLauf(repo);
+  if (lauf === undefined) return { grund: "kein grüner Master-Lauf" };
+  return laufzeitenDesLaufs({ repo, lauf });
 }
 
 function abgerufen() {

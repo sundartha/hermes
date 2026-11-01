@@ -2,7 +2,8 @@ import { globSync } from "node:fs";
 
 import { TOOL_TEST_GLOB } from "../../test/testbaenke-run.mjs";
 import { changedFiles } from "../betroffene-tests.mjs";
-import { isToolTreePath, readList } from "./werkzeugbaum.mjs";
+import { readList } from "./liste.mjs";
+import { isToolTreePath } from "./werkzeugbaum.mjs";
 
 const DELETED = "D";
 const ALL = Object.freeze({ art: "alle" });
