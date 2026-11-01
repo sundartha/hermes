@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 import { TOOL_TEST_GLOB } from "../../test/testbaenke-run.mjs";
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { waehleTeil } from "../testlaufzeit/teilung.mjs";
-import { erzeugerFuer, QUELLEN } from "./erzeuger.mjs";
+import { erzeugerFuer, MAX_ALTER_MS, QUELLEN } from "./erzeuger.mjs";
 import {
   festhaltungsZeile,
   geprueftBaum,
@@ -31,15 +31,18 @@ const EXIT_AUFRUF = 2;
 const FORMAT = 1;
 const JSON_EINZUG = 2;
 const MODUS_SCHATTEN = "schatten";
+const MODUS_AN = "an";
 const MODUS_AUS = "aus";
-const MODI = [MODUS_SCHATTEN, MODUS_AUS];
+const MODI = [MODUS_SCHATTEN, MODUS_AN, MODUS_AUS];
+const WERKZEUGTESTS_GEWOLLT = "ja";
 const ART_CI = "ci";
 const ART_PRUEFLEITER = "pruefleiter";
 const ARTEN = [ART_CI, ART_PRUEFLEITER];
 const SCHATTEN_DATEI = ".pruefung/uebernahme-schatten.json";
 const WACKELIG_DATEI = ".pruefung/wackelig.json";
+const UEBERNOMMEN_DATEI = ".pruefung/uebernommen.jsonl";
 const AUFRUF =
-  "Aufruf: node tools/uebernahme/baum.mjs planen --art ci|pruefleiter --teil <k> --teile <n> [--dateien <liste>]\n" +
+  "Aufruf: node tools/uebernahme/baum.mjs planen --art ci|pruefleiter --teil <k> --teile <n> [--dateien <liste>] [--rest <liste>] [--gewollt ja|nein]\n" +
   "        node tools/uebernahme/baum.mjs festhalten --bericht <datei> --name <artefakt>";
 
 export function dateienDesTeils({ art, teil, teile, dateienDatei }) {
@@ -49,15 +52,36 @@ export function dateienDesTeils({ art, teil, teile, dateienDatei }) {
   return waehleTeil({ dateien: globSync(TOOL_TEST_GLOB), teil, anzahl: teile });
 }
 
-function entscheideDatei(datei, erzeuger) {
+function ursprungDes(zeile, treffer) {
+  return zeile.uebernommen ?? { lauf: treffer.lauf, workflow: treffer.workflow, zeitpunkt: treffer.erstellt };
+}
+
+function entscheideDatei(datei, erzeuger, jetzt) {
   const treffer = erzeuger.flatMap((quelle) =>
-    (quelle.zeilen.get(datei) ?? []).map((zeile) => ({ zeile, lauf: quelle.lauf.id })),
+    (quelle.zeilen.get(datei) ?? []).map((zeile) => ({
+      zeile,
+      lauf: quelle.lauf.id,
+      workflow: quelle.workflow,
+      erstellt: quelle.lauf.created_at,
+    })),
   );
   if (treffer.length === 0) return { datei, uebernehmbar: false, grund: "kein Ergebnis im Erzeuger" };
   if (treffer.some(({ zeile }) => zeile.bestanden !== true)) {
     return { datei, uebernehmbar: false, grund: "im Erzeuger nicht bestanden" };
   }
-  return { datei, uebernehmbar: true, erwartet: { bestanden: true }, quelle: treffer[0].lauf };
+  const [erstes] = treffer;
+  const ursprung = ursprungDes(erstes.zeile, erstes);
+  if (!(jetzt - Date.parse(ursprung.zeitpunkt) <= MAX_ALTER_MS)) {
+    return { datei, uebernehmbar: false, grund: "Ergebnis ist älter als 24 Stunden" };
+  }
+  return {
+    datei,
+    uebernehmbar: true,
+    erwartet: { bestanden: true },
+    quelle: erstes.lauf,
+    workflow: erstes.workflow,
+    ursprung,
+  };
 }
 
 function beschreibe(ergebnis, ereignis) {
@@ -78,13 +102,13 @@ async function sammleErzeuger(kontext) {
 
 export async function planeUebernahme(kontext) {
   const { art, teil, dateien, ereignis, kennung } = kontext;
-  const kopf = { format: FORMAT, modus: MODUS_SCHATTEN, art, teil, ereignis, baum: kontext.baum };
+  const kopf = { format: FORMAT, modus: kontext.modus ?? MODUS_SCHATTEN, art, teil, ereignis, baum: kontext.baum };
   const erzeuger = kennung === null ? [] : await sammleErzeuger({ ...kontext, erwartet: { baum: kontext.baum, kennung } });
   const brauchbar = erzeuger.filter(({ zeilen }) => zeilen !== undefined);
   const eintraege = dateien.map((datei) =>
     kennung === null
       ? { datei, uebernehmbar: false, grund: "Runner-Image unbekannt" }
-      : entscheideDatei(datei, brauchbar),
+      : entscheideDatei(datei, brauchbar, kontext.jetzt),
   );
   return {
     ...kopf,
@@ -103,12 +127,56 @@ function zusammenfassung(plan) {
   return `Übernahme im Schatten, ${plan.art} Teil ${plan.teil}: ${bereit} von ${plan.dateien.length} Dateien wären übernehmbar aus Baum ${plan.baum}; Erzeuger: ${quellen.join("; ") || "keiner"}`;
 }
 
-function schreibePlan(plan, ausgabe) {
-  mkdirSync(dirname(ausgabe), { recursive: true });
-  writeFileSync(ausgabe, `${JSON.stringify(plan, null, JSON_EINZUG)}\n`);
-  const text = zusammenfassung(plan);
+function melde(text) {
   console.log(text);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
+}
+
+function schreibeDatei(pfad, inhalt) {
+  mkdirSync(dirname(pfad), { recursive: true });
+  writeFileSync(pfad, inhalt);
+}
+
+function schreibePlan(plan, ausgabe) {
+  schreibeDatei(ausgabe, `${JSON.stringify(plan, null, JSON_EINZUG)}\n`);
+}
+
+function uebernommeneDateien(plan) {
+  return plan.dateien.filter(({ uebernehmbar }) => uebernehmbar);
+}
+
+function uebernommeneZeilen(plan) {
+  return uebernommeneDateien(plan).map(({ datei, ursprung }) => ({
+    datei,
+    bestanden: true,
+    uebernommen: { ...ursprung, baum: plan.baum },
+  }));
+}
+
+function ausfallText(plan) {
+  return `Übernahme ausgefallen (${plan.fehler}), alle Dateien laufen`;
+}
+
+function uebernahmeText(plan, dateien, uebernommen) {
+  const laufen = dateien.length - uebernommen.length;
+  const kopf = `Übernahme, ${plan.art} Teil ${plan.teil}: ${uebernommen.length} von ${dateien.length} Dateien übernommen, ${laufen} laufen`;
+  const grund = plan.fehler ? [ausfallText(plan)] : [];
+  const zeilen = uebernommen.map(
+    ({ datei, ursprung }) => `- ${datei}: Lauf ${ursprung.lauf} (${ursprung.workflow}), Baum ${plan.baum}`,
+  );
+  return [kopf, ...grund, ...zeilen].join("\n");
+}
+
+function wendeUebernahmeAn(plan, dateien, rest) {
+  const uebernommen = uebernommeneDateien(plan);
+  const bleiben = new Set(uebernommen.map(({ datei }) => datei));
+  const laufen = dateien.filter((datei) => !bleiben.has(datei));
+  schreibeDatei(rest, laufen.map((datei) => `${datei}\n`).join(""));
+  if (uebernommen.length > 0) {
+    schreibeDatei(UEBERNOMMEN_DATEI, uebernommeneZeilen(plan).map((zeile) => `${JSON.stringify(zeile)}\n`).join(""));
+  }
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `uebrig=${laufen.length}\n`);
+  melde(uebernahmeText(plan, dateien, uebernommen));
 }
 
 function optionen(argumente) {
@@ -119,6 +187,8 @@ function optionen(argumente) {
       teil: { type: "string" },
       teile: { type: "string" },
       dateien: { type: "string" },
+      rest: { type: "string" },
+      gewollt: { type: "string" },
       bericht: { type: "string" },
       name: { type: "string" },
       ausgabe: { type: "string", default: SCHATTEN_DATEI },
@@ -146,10 +216,10 @@ function planungsKontext(werte) {
   };
 }
 
-function ausgefallen(werte, grund) {
+function ausgefallen(werte, grund, modus) {
   return {
     format: FORMAT,
-    modus: MODUS_SCHATTEN,
+    modus,
     art: werte.art,
     teil: Number(werte.teil),
     ereignis: env.GITHUB_EVENT_NAME,
@@ -161,26 +231,61 @@ function ausgefallen(werte, grund) {
   };
 }
 
+function keineVorhersage(modus, werte) {
+  if (modus === MODUS_AUS || !QUELLEN[env.GITHUB_EVENT_NAME]?.[werte.art]) return true;
+  return modus === MODUS_AN && werte.art === ART_PRUEFLEITER && werte.gewollt !== WERKZEUGTESTS_GEWOLLT;
+}
+
+async function vorhersage(werte, modus) {
+  let kontext;
+  try {
+    kontext = planungsKontext(werte);
+  } catch (grund) {
+    return { plan: ausgefallen(werte, grund.message, modus) };
+  }
+  try {
+    return { plan: await planeUebernahme({ ...kontext, modus }), dateien: kontext.dateien };
+  } catch (grund) {
+    return { plan: ausgefallen(werte, grund.message, modus), dateien: kontext.dateien };
+  }
+}
+
+function aufrufFehler(werte, modus) {
+  if (!ARTEN.includes(werte.art) || !werte.teil || !werte.teile) return AUFRUF;
+  if (!MODI.includes(modus)) return `UEBERNAHME=${modus} ist unbekannt; erlaubt: ${MODI.join(", ")}.`;
+  if (modus === MODUS_AN && !werte.rest) return `${AUFRUF}\nMit UEBERNAHME=an braucht planen --rest.`;
+  return null;
+}
+
+function meldeErgebnis({ plan, dateien, modus, rest }) {
+  if (modus === MODUS_AN && dateien === undefined) melde(ausfallText(plan));
+  else if (modus === MODUS_AN) wendeUebernahmeAn(plan, dateien, rest);
+  else melde(zusammenfassung(plan));
+}
+
 async function planen(werte) {
-  if (!ARTEN.includes(werte.art) || !werte.teil || !werte.teile) {
-    console.error(AUFRUF);
-    return EXIT_AUFRUF;
-  }
   const modus = env.UEBERNAHME ?? MODUS_SCHATTEN;
-  if (!MODI.includes(modus)) {
-    console.error(`UEBERNAHME=${modus} ist nicht gebaut; erlaubt: ${MODI.join(", ")}.`);
+  const fehler = aufrufFehler(werte, modus);
+  if (fehler !== null) {
+    console.error(fehler);
     return EXIT_AUFRUF;
   }
-  if (modus === MODUS_AUS || !QUELLEN[env.GITHUB_EVENT_NAME]?.[werte.art]) {
+  if (keineVorhersage(modus, werte)) {
     console.log("Übernahme: keine Vorhersage nötig.");
     return EXIT_OK;
   }
-  try {
-    schreibePlan(await planeUebernahme(planungsKontext(werte)), werte.ausgabe);
-  } catch (grund) {
-    schreibePlan(ausgefallen(werte, grund.message), werte.ausgabe);
-  }
+  const { plan, dateien } = await vorhersage(werte, modus);
+  schreibePlan(plan, werte.ausgabe);
+  meldeErgebnis({ plan, dateien, modus, rest: werte.rest });
   return EXIT_OK;
+}
+
+function berichtMitUebernommenen(bericht) {
+  const eigene = existsSync(bericht) ? readFileSync(bericht) : Buffer.alloc(0);
+  if (!existsSync(UEBERNOMMEN_DATEI)) return eigene;
+  const inhalt = Buffer.concat([eigene, readFileSync(UEBERNOMMEN_DATEI)]);
+  writeFileSync(bericht, inhalt);
+  return inhalt;
 }
 
 function festhalten(werte) {
@@ -189,14 +294,14 @@ function festhalten(werte) {
     console.error(`${AUFRUF}\nImageOS und ImageVersion müssen gesetzt sein.`);
     return EXIT_AUFRUF;
   }
-  if (!existsSync(werte.bericht)) {
+  if (!existsSync(werte.bericht) && !existsSync(UEBERNOMMEN_DATEI)) {
     console.log(`Übernahme: ${werte.bericht} fehlt, nichts festgehalten.`);
     return EXIT_OK;
   }
   console.log(
     festhaltungsZeile({
       name: werte.name,
-      summe: pruefsumme(readFileSync(werte.bericht)),
+      summe: pruefsumme(berichtMitUebernommenen(werte.bericht)),
       baum: geprueftBaum(),
       kennung,
       wackelig: wackeligeDateien(WACKELIG_DATEI),
