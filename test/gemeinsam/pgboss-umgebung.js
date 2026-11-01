@@ -1,0 +1,49 @@
+import { TestClock, fromPglite } from "pg-boss";
+import { config } from "../../src/config.js";
+import { createQueue } from "../../src/queue/registry.js";
+import { neuePglite } from "../pglite-helfer.js";
+import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
+
+const TESTBEGINN_MS = Date.UTC(2026, 10, 1, 8, 0, 0);
+
+export function neueUhr() {
+  return new TestClock(TESTBEGINN_MS);
+}
+
+async function datenbank(t) {
+  if (process.env[POSTGRES_VARIABLE]) {
+    const echt = await echteDatenbank(t);
+    const verbindung = await echt.verbinden();
+    return {
+      art: "postgres",
+      queueOptionen: { connectionString: echt.adresse },
+      abfragen: (sql, parameter) => verbindung.query(sql, parameter),
+    };
+  }
+  const eingebettet = await neuePglite();
+  return {
+    art: "pglite",
+    queueOptionen: { bossOptions: { db: fromPglite(eingebettet), backend: "pglite" } },
+    abfragen: (sql, parameter) => eingebettet.query(sql, parameter),
+  };
+}
+
+export async function pgBossUmgebung(t, optionen = {}) {
+  const queues = [];
+  t.after(async () => {
+    await Promise.all(queues.map((queue) => queue.stop()));
+  });
+  const db = await datenbank(t);
+  const weitereQueue = (weitere = {}) => {
+    const original = config.store.queueBackend;
+    config.store.queueBackend = "pgboss";
+    try {
+      const queue = createQueue({ ...db.queueOptionen, ...optionen, ...weitere });
+      queues.push(queue);
+      return queue;
+    } finally {
+      config.store.queueBackend = original;
+    }
+  };
+  return { db, queue: weitereQueue(), weitereQueue };
+}

@@ -25,9 +25,9 @@ test("S1-17a: QUEUE_BACKEND=memory -> QueuePort-Form (enqueue/drain/jobStatus al
   });
 });
 
-test("S1-17b: QUEUE_BACKEND=pgboss -> wirft (deferred, noch nicht implementiert)", () => {
+test("S1-17b: QUEUE_BACKEND=pgboss ohne DATABASE_URL -> wirft fail-closed", () => {
   withQueueBackend("pgboss", () => {
-    assert.throws(() => createQueue(), /noch nicht implementiert/);
+    assert.throws(() => createQueue({ connectionString: "" }), /DATABASE_URL/);
   });
 });
 
