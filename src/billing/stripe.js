@@ -24,6 +24,9 @@ const CUSTOMER_PARAM = "customer";
 
 const AUTHENTICATION_REQUIRED_CODE = "authentication_required";
 
+const STRIPE_LESEN_FRIST_MS = 10_000;
+const STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS = 15_000;
+
 export const STRIPE_METER_EVENT_NAME = Object.freeze({
   voice_minute: "voice_minutes",
   ai_token: "ai_tokens",
@@ -195,6 +198,7 @@ export const stripeBilling = {
     const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?${expand}`, {
       method: "GET",
       headers: authHeaders(),
+      signal: AbortSignal.timeout(STRIPE_LESEN_FRIST_MS),
     });
     assertOk(res, "getCheckoutSessionResult");
     const json = await res.json().catch(() => ({}));
@@ -234,7 +238,12 @@ export const stripeBilling = {
     body.set("metadata[tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][plan_slug]", planSlug);
-    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), { method: "POST", headers, body });
+    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS),
+    });
     await assertOkWithDetail(res, "createSubscriptionCheckoutSession");
     const json = await res.json().catch(() => ({}));
     return { url: json.url, sessionId: json.id };
@@ -245,6 +254,7 @@ export const stripeBilling = {
     const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?${expand}`, {
       method: "GET",
       headers: authHeaders(),
+      signal: AbortSignal.timeout(STRIPE_LESEN_FRIST_MS),
     });
     assertOk(res, "getSubscriptionCheckoutResult");
     const json = await res.json().catch(() => ({}));
@@ -272,6 +282,7 @@ export const stripeBilling = {
     const res = await fetch(`${url(PAYMENT_METHODS_PATH)}/${paymentMethodId}`, {
       method: "GET",
       headers: authHeaders(),
+      signal: AbortSignal.timeout(STRIPE_LESEN_FRIST_MS),
     });
     assertOk(res, "retrievePaymentMethodType");
     const json = await res.json().catch(() => ({}));
@@ -279,7 +290,11 @@ export const stripeBilling = {
   },
 
   async retrievePriceAmount(priceId) {
-    const res = await fetch(`${url(PRICES_PATH)}/${priceId}`, { method: "GET", headers: authHeaders() });
+    const res = await fetch(`${url(PRICES_PATH)}/${priceId}`, {
+      method: "GET",
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(STRIPE_LESEN_FRIST_MS),
+    });
     assertOk(res, "retrievePriceAmount");
     const json = await res.json().catch(() => ({}));
     return {
@@ -298,7 +313,12 @@ export const stripeBilling = {
       payment_behavior: SUBSCRIPTION_FAILCLOSED_BEHAVIOR,
     });
     body.set("metadata[tenant_ref]", tenantRef);
-    const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
+    const res = await fetch(url(SUBSCRIPTIONS_PATH), {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS),
+    });
     await assertOkClassified(res, "createSubscription");
     const json = await res.json().catch(() => ({}));
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
@@ -308,6 +328,7 @@ export const stripeBilling = {
     const res = await fetch(`${url(SUBSCRIPTIONS_PATH)}/${subscriptionId}?expand[]=latest_invoice`, {
       method: "GET",
       headers: authHeaders(),
+      signal: AbortSignal.timeout(STRIPE_LESEN_FRIST_MS),
     });
     assertOk(res, "retrieveSubscription");
     const json = await res.json().catch(() => ({}));
@@ -335,6 +356,7 @@ async function patchCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd, idempot
     method: "POST",
     headers,
     body,
+    signal: AbortSignal.timeout(STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS),
   });
   assertOk(res, cancelAtPeriodEnd ? "scheduleCancellation" : "unscheduleCancellation");
   const json = await res.json().catch(() => ({}));
