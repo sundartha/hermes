@@ -95,7 +95,7 @@ jobs:
           printf 'anzahl=%s\nnummern=%s\nstuecke=%s\n' "$anzahl" "$nummern" "$stuecke" >> "$GITHUB_OUTPUT"
 
       - name: Plan hochladen
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: vorher-plan
           path: ${{ runner.temp }}/vorher/plan.json
@@ -152,7 +152,7 @@ jobs:
           npm run test:mutation -- --basis "$COMMIT" --tests "$TESTS" --vorher-stueck "$stueck" --ergebnis "$RUNNER_TEMP/vorher/stueck-$NUMMER.json"
 
       - name: Stück hochladen
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: vorher-stueck-${{ matrix.nummer }}
           path: ${{ runner.temp }}/vorher/stueck-${{ matrix.nummer }}.json
@@ -182,14 +182,14 @@ jobs:
           install-skripte: "false"
 
       - name: Plan laden
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: vorher-plan
           path: ${{ runner.temp }}/vorher
 
       - name: Stücke laden
         if: needs.plan.outputs.anzahl != '0'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: vorher-stueck-*
           path: ${{ runner.temp }}/vorher
@@ -220,7 +220,7 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Ergebnis hochladen
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: vorher-ergebnis
           path: ${{ runner.temp }}/vorher-ergebnis.json
