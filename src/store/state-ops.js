@@ -48,7 +48,8 @@ import { isKnownPlanSlug } from "../plans.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
-import { MS_PER_DAY, newId } from "./zustand/grundlagen.js";
+import { MS_PER_DAY } from "../utils/timer.js";
+import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
 import {
   findTenant,

@@ -1,5 +1,3 @@
-export const MS_PER_DAY = 86400000;
-
 const ID_RADIX = 36;
 const ID_RANDOM_START = 2;
 const ID_RANDOM_END = 6;
