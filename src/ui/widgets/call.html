@@ -35,18 +35,15 @@
        (G5/S2), s. [data-wing] und .wing-canvas-mount canvas unten. */
     --wing-glow-filter:drop-shadow(0 0 22px var(--color-accent-light-glow)) drop-shadow(0 2px 10px rgba(3,10,24,.6));
   }
-  body{margin:0;font-family:var(--font-sans);color:var(--color-white);background:transparent}
+  body{margin:0;width:fit-content;font-family:var(--font-sans);color:var(--color-white);background:transparent}
   .card{
-    position:relative;max-width:min(540px,100%);padding:26px 28px 22px;
+    position:relative;box-sizing:border-box;width:min(598px,100vw);padding:26px 28px 22px;
     border-radius:var(--radius-card);overflow:hidden;
     background:
       radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.16) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
       linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
     border:1px solid rgba(var(--color-accent-light-rgb),.28);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,.06) inset,
-      0 30px 60px -24px rgba(3,10,24,.75),
-      0 0 70px -22px var(--color-accent-light-glow);
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset;
   }
   .card::after{
     /* feines Scanline-Overlay, rein dekorativ, keine Animation (kein
