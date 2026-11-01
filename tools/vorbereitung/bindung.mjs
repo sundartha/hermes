@@ -1,4 +1,4 @@
-import { FUNKTIONEN, bereichVon, knotenImMuster, namenImMuster } from "./ast.mjs";
+import { FUNKTIONEN, NAME_ALS_SCHLUESSEL, bereichVon, geschriebeneKnoten, namenImMuster } from "./ast.mjs";
 
 const BLOECKE = new Set([
   "BlockStatement",
@@ -12,14 +12,7 @@ const BLOECKE = new Set([
 const VAR_GRENZEN = new Set([...FUNKTIONEN, "StaticBlock", "Program"]);
 const KLASSEN = new Set(["ClassDeclaration", "ClassExpression"]);
 const IMPORTE = new Set(["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"]);
-const SCHLEIFEN = new Set(["ForInStatement", "ForOfStatement"]);
 const MARKEN = new Set(["LabeledStatement", "BreakStatement", "ContinueStatement"]);
-const NAME_ALS_SCHLUESSEL = {
-  MemberExpression: "property",
-  Property: "key",
-  MethodDefinition: "key",
-  PropertyDefinition: "key",
-};
 
 export function umfasst(aussen, innen) {
   return aussen.range[0] <= innen.range[0] && innen.range[1] <= aussen.range[1];
@@ -100,14 +93,6 @@ function istBezug({ knoten, eltern }) {
   if (knoten.type !== "Identifier" || MARKEN.has(elter?.type)) return false;
   const schluessel = NAME_ALS_SCHLUESSEL[elter?.type];
   return !(schluessel && elter[schluessel] === knoten && !elter.computed);
-}
-
-function geschriebeneKnoten(knoten) {
-  if (knoten.type === "AssignmentExpression") return knotenImMuster(knoten.left);
-  if (knoten.type === "UpdateExpression") return knotenImMuster(knoten.argument);
-  return SCHLEIFEN.has(knoten.type) && knoten.left.type !== "VariableDeclaration"
-    ? knotenImMuster(knoten.left)
-    : [];
 }
 
 function geschriebeneBindungen(schreibungen, tabelle) {

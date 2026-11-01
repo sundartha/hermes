@@ -1,13 +1,7 @@
 import { VisitorKeys } from "espree";
 
-import { bereichVon } from "./ast.mjs";
+import { NAME_ALS_SCHLUESSEL, bereichVon } from "./ast.mjs";
 
-const NAME_ALS_SCHLUESSEL = {
-  MemberExpression: "property",
-  Property: "key",
-  MethodDefinition: "key",
-  PropertyDefinition: "key",
-};
 export function keineZerlegung() {
   return { plaene: new Map(), helfer: new Set(), eingesetzt: new Set() };
 }

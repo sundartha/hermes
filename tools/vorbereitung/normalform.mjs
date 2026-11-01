@@ -11,6 +11,7 @@ import {
   einmalGebunden,
   einzigesArgument,
   festerName,
+  geschriebeneNamen,
   lesestelle,
   lokalAn,
   mitEltern,
@@ -25,7 +26,6 @@ const NIE_SYMBOL = new Set(["Literal", "TemplateLiteral", "UnaryExpression", "Bi
 const ZWEIG_PAARE = { LogicalExpression: ["left", "right"], ConditionalExpression: ["consequent", "alternate"] };
 const NUR_NAME = { VariableDeclarator: "id", ClassDeclaration: "id", ClassExpression: "id", CatchClause: "param" };
 const IMPORTE = new Set(["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"]);
-const SCHLEIFEN = new Set(["ForInStatement", "ForOfStatement"]);
 const UNSICHERE_NAMEN = new Set(["eval", "arguments"]);
 const VAR_GRENZEN = new Set([...FUNKTIONEN, "StaticBlock", "Program"]);
 const LAENGE = "length";
@@ -52,12 +52,6 @@ function gebundeneNamen({ knoten, eltern }) {
   if (IMPORTE.has(knoten.type)) return mitOrt([knoten.local.name], eltern[0]);
   const feld = NUR_NAME[knoten.type];
   return feld ? mitOrt(namenImMuster(knoten[feld]), bindungsOrt(knoten, eltern)) : [];
-}
-
-function geschriebeneNamen(knoten) {
-  if (knoten.type === "AssignmentExpression") return namenImMuster(knoten.left);
-  if (knoten.type === "UpdateExpression") return namenImMuster(knoten.argument);
-  return SCHLEIFEN.has(knoten.type) && knoten.left.type !== "VariableDeclaration" ? namenImMuster(knoten.left) : [];
 }
 
 function obersteDeklarationen(programm) {
