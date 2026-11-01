@@ -219,7 +219,7 @@ test("ein Vorlauf mit höherer Nummer als der laufende wird nicht angenommen", F
 });
 
 test("außerhalb eines Abrufs der Mutationsprüfung wird kein Vorlauf geholt", FRIST, () => {
-  abgelehnt({ umgebung: { GITHUB_EVENT_NAME: "pull_request" } }, /kein Abruf der Mutationsprüfung/);
+  abgelehnt({ umgebung: { GITHUB_EVENT_NAME: "pull_request", GITHUB_REF: "refs/heads/probe" } }, /kein Abruf der Mutationsprüfung/);
 });
 
 test("auf einem anderen Zweig als lauf-mutation wird kein Vorlauf geholt", FRIST, () => {
