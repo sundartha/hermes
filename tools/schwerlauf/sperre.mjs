@@ -258,7 +258,7 @@ function erhaltenMeldung({ anlass }, platz, ms) {
 
 function antragFuer({ allein, vorrang, anzahl }) {
   if (allein) return { art: ART_ALLEIN, plaetze: nummern(anzahl) };
-  return { art: ART_PLATZ, plaetze: vorrang ? [PUSH_PLATZ] : nummern(anzahl) };
+  return { art: ART_PLATZ, plaetze: vorrang ? [PUSH_PLATZ, ...nummern(anzahl)] : nummern(anzahl) };
 }
 
 function platzVon(antrag, nummer) {
