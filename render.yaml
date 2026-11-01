@@ -302,6 +302,8 @@ services:
         value: "900000"
       - key: METRICS_ENABLED
         value: "true"
+      - key: LOG_REQUEST_ID
+        value: "true"
       - key: RESERVE_RELEASE_GRACE_MS
         value: "15000"
       - key: BUDGET_WATCHDOG_INTERVAL_MS

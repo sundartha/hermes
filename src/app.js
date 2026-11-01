@@ -49,6 +49,7 @@ import {
   tenantOwnsCall,
 } from "./request-tenant.js";
 import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
+import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
 const BODY_LIMIT = "100kb";
@@ -100,6 +101,7 @@ function makeInitTokenSchranke(config) {
 }
 
 export function installGlobalMiddleware({ app, config }) {
+  app.use(anfrageKennungMiddleware);
   app.use(securityHeaders);
   app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
 
