@@ -1,7 +1,13 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { resolveTenant, bindSubToTenant } from "../src/store/state-ops.js";
+import {
+  resolveTenant,
+  bindSubToTenant,
+  tenantsOf,
+  findTenant,
+  createCall,
+} from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_B = "B";
@@ -70,6 +76,30 @@ test("Fassade json.js exportiert resolveTenant", () => {
     typeof jsonBackend.resolveTenant,
     "function",
     "json.resolveTenant fehlt (Re-Export-Landmine)",
+  );
+});
+
+test("tenantsOf: Zustand ohne tenants liefert leere Liste, findTenant ohne id findet nichts", () => {
+  const zustandOhneMandanten = seedState({});
+  assert.deepEqual(tenantsOf(zustandOhneMandanten), []);
+  assert.equal(findTenant(zustandOhneMandanten, undefined), null);
+});
+
+test("[NIE1] createCall vergibt call_ + Zeitstempel(36) + Zufallsstellen 2 bis 5 (36)", (t) => {
+  const FESTER_ZUFALL = 0.123456789;
+  const FESTE_UHRZEIT_MS = 1_700_000_000_000;
+  t.mock.method(Math, "random", () => FESTER_ZUFALL);
+  t.mock.method(Date, "now", () => FESTE_UHRZEIT_MS);
+  const zustand = seedState({});
+  const call = createCall(zustand, {
+    direction: "outbound",
+    from: "+4930123456",
+    to: "+4930654321",
+    tenantId: TENANT_B,
+  });
+  assert.equal(
+    call.id,
+    "call_" + FESTE_UHRZEIT_MS.toString(36) + FESTER_ZUFALL.toString(36).slice(2, 6),
   );
 });
 

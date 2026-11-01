@@ -4,6 +4,9 @@ import { tempDataDir } from "./helpers.js";
 import {
   makeDefaultState,
   settingsFor,
+  bindSubToTenant,
+  resolveTenant,
+  setProfile,
   calendarFor,
   updateSettings,
   addCalendarEvent,
@@ -162,4 +165,64 @@ test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantI
     jsonBackend.getCalendar(BOOTSTRAP_TENANT_ID).some((e) => e.title === "Fassaden-Termin"),
     true,
   );
+});
+
+const STIL_WARM = "warm-persoenlich";
+
+test("updateSettings: null und leerer Text setzen eine optionale Auswahl zurueck und gelten als geaendert", () => {
+  for (const leer of [null, ""]) {
+    const zustand = makeDefaultState();
+    updateSettings(zustand, TENANT_B, { agentStyle: STIL_WARM });
+    const ergebnis = updateSettings(zustand, TENANT_B, { agentStyle: leer });
+    assert.deepEqual(ergebnis.changed, ["agentStyle"]);
+    assert.equal(settingsFor(zustand, TENANT_B).agentStyle, null);
+  }
+});
+
+test("updateSettings: Auswahl wird gross/klein-unabhaengig auf die Schreibweise der Liste gesetzt", () => {
+  const zustand = makeDefaultState();
+  const ergebnis = updateSettings(zustand, TENANT_B, { agentStyle: STIL_WARM.toUpperCase() });
+  assert.deepEqual(ergebnis.changed, ["agentStyle"]);
+  assert.equal(settingsFor(zustand, TENANT_B).agentStyle, STIL_WARM);
+});
+
+test("updateSettings: Nicht-Text und unbekannter Text bei einer Auswahl werden abgelehnt, nichts aendert sich", () => {
+  const zustand = makeDefaultState();
+  updateSettings(zustand, TENANT_B, { agentStyle: STIL_WARM });
+  const ergebnis = updateSettings(zustand, TENANT_B, { agentStyle: 5, language: "gibt-es-nicht" });
+  assert.deepEqual(ergebnis.changed, []);
+  assert.equal(settingsFor(zustand, TENANT_B).agentStyle, STIL_WARM);
+  assert.equal(settingsFor(zustand, TENANT_B).language, null);
+});
+
+test("updateSettings: unbekannte Schluessel werden ignoriert", () => {
+  const zustand = makeDefaultState();
+  const ergebnis = updateSettings(zustand, TENANT_B, { unbekannt: undefined, toString: undefined });
+  assert.deepEqual(ergebnis.changed, []);
+  assert.equal(Object.hasOwn(settingsFor(zustand, TENANT_B), "unbekannt"), false);
+});
+
+test("bindSubToTenant: ohne Subjekt oder ohne Mandant wird nichts eingetragen", () => {
+  const zustand = makeDefaultState();
+  bindSubToTenant(zustand, "sub-1", "");
+  bindSubToTenant(zustand, "", TENANT_A);
+  bindSubToTenant(zustand, "sub-2", undefined);
+  assert.deepEqual(zustand.subIndex, {});
+  bindSubToTenant(zustand, "sub-3", TENANT_B);
+  assert.deepEqual(zustand.subIndex, { "sub-3": TENANT_B });
+});
+
+test("resolveTenant: ohne Subjekt gibt es null, auch wenn ein Mandant kein Subjekt hat", () => {
+  const zustand = makeDefaultState();
+  zustand.tenants.push({ id: TENANT_B });
+  assert.equal(resolveTenant(zustand, undefined), null);
+  assert.equal(resolveTenant(zustand, ""), null);
+});
+
+test("setProfile: spaetere Aenderung behaelt die frueheren Felder des Mandanten", () => {
+  const zustand = makeDefaultState();
+  setProfile(zustand, TENANT_B, { allowCalendar: true });
+  const ergebnis = setProfile(zustand, TENANT_B, { allowBooking: false });
+  assert.deepEqual(ergebnis.changed, ["allowBooking"]);
+  assert.deepEqual(zustand.profiles[TENANT_B], { allowCalendar: true, allowBooking: false });
 });

@@ -10,8 +10,25 @@ import {
   tenantHasLiveNumber,
   setKycLevel,
   tenantActiveSubscriber,
+  kycReached,
+  setTenantStripe,
+  tenantStripe,
+  setTenantSubscription,
+  tenantSubscription,
+  findTenantBySubscription,
+  findTenantByCustomer,
+  setBillingHold,
+  clearBillingHold,
+  billingHoldActive,
+  normalizePrivateNumber,
+  findTenant,
+  setPrivateNumber,
 } from "../src/store/state-ops.js";
-import { KYC_LEVEL, KYC_OUTBOUND_MIN, NUMBER_STATUS } from "../src/store/defaults.js";
+import {
+  KYC_LEVEL,
+  KYC_OUTBOUND_MIN,
+  NUMBER_STATUS,
+} from "../src/store/defaults.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
 
 const HIGH_CAP = 100;
@@ -344,4 +361,121 @@ test("A(l) Suspend stempelt suspended_at (setSuspendedAtIfAbsent), Activate loes
   );
   assert.deepEqual(act.calls.clearSuspend, ["t_l"], "Reaktivierung loescht den Grace-Anker");
   assert.deepEqual(act.calls.suspend, [], "Activate stempelt nicht");
+});
+
+const UNBEKANNTER_MANDANT = "t_gibt_es_nicht";
+const UNBEKANNTE_STUFE = "stufe_unbekannt";
+
+test("C(c) kycReached/tenantActiveSubscriber: ohne Mandant oder ohne KYC-Stufe nie erreicht", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_ohne_kyc", {});
+  assert.equal(kycReached(zustand, UNBEKANNTER_MANDANT, KYC_LEVEL.NONE), false, "kein Mandant");
+  assert.equal(kycReached(zustand, "t_ohne_kyc", UNBEKANNTE_STUFE), false, "ohne Stufe nie erreicht");
+  assert.equal(
+    tenantActiveSubscriber(zustand, "t_ohne_kyc", UNBEKANNTE_STUFE),
+    false,
+    "ohne Stufe kein Abonnent",
+  );
+  setKycLevel(zustand, "t_ohne_kyc", KYC_LEVEL.CARD);
+  assert.equal(kycReached(zustand, "t_ohne_kyc", KYC_LEVEL.CARD), true);
+  assert.equal(kycReached(zustand, "t_ohne_kyc", KYC_LEVEL.ID_VERIFIED), false);
+});
+
+test("C(d) Stripe-Daten: Teil-Update laesst Rest stehen, unbekannter Mandant liefert null", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_str", {});
+  setTenantStripe(zustand, "t_str", { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
+  setTenantStripe(zustand, "t_str", { customerId: "cus_2" });
+  assert.deepEqual(tenantStripe(zustand, "t_str"), {
+    customerId: "cus_2",
+    paymentMethodId: "pm_1",
+    paymentMethodType: "card",
+  });
+  assert.deepEqual(tenantStripe(zustand, UNBEKANNTER_MANDANT), {
+    customerId: null,
+    paymentMethodId: null,
+    paymentMethodType: null,
+  });
+});
+
+test("C(e) Abo-Daten: unbekannter Mandant wirft, leerer Plan erlaubt, Standardwerte, Suche ohne Id", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_abo", {});
+  assert.throws(
+    () => setTenantSubscription(zustand, UNBEKANNTER_MANDANT, { subscriptionId: "sub_x" }),
+    /setTenantSubscription: Tenant t_gibt_es_nicht nicht gefunden/,
+  );
+  assert.doesNotThrow(() => setTenantSubscription(zustand, "t_abo", { planSlug: "" }));
+  assert.deepEqual(tenantSubscription(zustand, "t_abo"), {
+    subscriptionId: null,
+    planSlug: "",
+    currentPeriodEnd: null,
+    currentPeriodStart: null,
+    numberSetupFeeExempt: false,
+    activationPending: false,
+    periodCreditRevoked: false,
+    cancelAtPeriodEnd: false,
+  });
+  assert.equal(tenantSubscription(zustand, UNBEKANNTER_MANDANT).activationPending, false);
+  setTenantStripe(zustand, "t_abo", { customerId: "cus_abo" });
+  setTenantSubscription(zustand, "t_abo", { subscriptionId: "sub_abo" });
+  assert.equal(findTenantBySubscription(zustand, "sub_abo").id, "t_abo");
+  assert.equal(findTenantBySubscription(zustand, undefined), null);
+  assert.equal(findTenantByCustomer(zustand, "cus_abo").id, "t_abo");
+  assert.equal(findTenantByCustomer(zustand, undefined), null);
+});
+
+test("C(f) Billing-Hold: unbekannter Mandant stoert nicht, Faelligkeit ab genau dem Zeitpunkt aktiv", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_hold", {});
+  const faellig = "2030-01-01T00:00:00.000Z";
+  assert.doesNotThrow(() => setBillingHold(zustand, UNBEKANNTER_MANDANT, { reason: "x" }));
+  assert.doesNotThrow(() => clearBillingHold(zustand, UNBEKANNTER_MANDANT));
+  assert.equal(billingHoldActive(zustand, UNBEKANNTER_MANDANT, faellig), null);
+  assert.equal(billingHoldActive(zustand, "t_hold", faellig), null, "ohne Hold null");
+  setBillingHold(zustand, "t_hold", { reason: "zahlung", dueAtIso: faellig });
+  assert.equal(billingHoldActive(zustand, "t_hold", "2029-12-31T23:59:59.999Z"), null, "vor Faelligkeit");
+  assert.equal(billingHoldActive(zustand, "t_hold", faellig), "zahlung", "genau zur Faelligkeit aktiv");
+  assert.equal(billingHoldActive(zustand, "t_hold", "2030-01-02T00:00:00.000Z"), "zahlung");
+});
+
+test("C(g) normalizePrivateNumber: leer -> null, ungueltig wirft", () => {
+  assert.equal(normalizePrivateNumber("   ", "DE"), null, "nur Leerzeichen -> keine Nummer");
+  assert.equal(normalizePrivateNumber(null, "DE"), null);
+  assert.equal(normalizePrivateNumber("+49 30 123456", "DE"), "+4930123456");
+  assert.throws(() => normalizePrivateNumber("abc", "DE"), /ungueltiges E\.164-Format/);
+  assert.throws(() => normalizePrivateNumber(12345, "DE"), /ungueltiges E\.164-Format/);
+});
+
+test("C(g) tenantGeo: unbekannter Mandant liefert Land und Sprache null", () => {
+  const zustand = makeDefaultState();
+  assert.deepEqual(tenantGeo(zustand, UNBEKANNTER_MANDANT), { country: null, defaultLanguage: null });
+});
+
+test("C(h) Schreiber geben den gespeicherten Mandantensatz zurueck", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_ret", {});
+  const gespeichert = () => findTenant(zustand, "t_ret");
+  assert.equal(setKycLevel(zustand, "t_ret", KYC_LEVEL.CARD), gespeichert());
+  assert.equal(setTenantStripe(zustand, "t_ret", { customerId: "cus_ret" }), gespeichert());
+  assert.equal(setTenantSubscription(zustand, "t_ret", { subscriptionId: "sub_ret" }), gespeichert());
+  assert.equal(setPrivateNumber(zustand, "t_ret", "+49 30 123456"), gespeichert());
+  assert.equal(setTenantGeo(zustand, "t_ret", { timezone: "Europe/Berlin" }), gespeichert());
+});
+
+test("C(i) Widerruf des Perioden-Guthabens wird gespeichert und zurueckgelesen", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_widerruf", {});
+  setTenantSubscription(zustand, "t_widerruf", { periodCreditRevoked: true });
+  assert.equal(tenantSubscription(zustand, "t_widerruf").periodCreditRevoked, true);
+  assert.equal(findTenant(zustand, "t_widerruf").stripePeriodCreditRevoked, true);
+});
+
+test("C(j) clearBillingHold loescht Hold und Faelligkeit im Mandantensatz", () => {
+  const zustand = makeDefaultState();
+  registerTenant(zustand, "t_clear", {});
+  setBillingHold(zustand, "t_clear", { reason: "zahlung", dueAtIso: "2030-01-01T00:00:00.000Z" });
+  clearBillingHold(zustand, "t_clear");
+  assert.equal(findTenant(zustand, "t_clear").billingHold, null);
+  assert.equal(findTenant(zustand, "t_clear").billingHoldDueAt, null);
 });

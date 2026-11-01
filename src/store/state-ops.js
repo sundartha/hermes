@@ -1,15 +1,11 @@
 import crypto from "crypto";
 import {
-  defaultSettings,
   defaultSettingsMap,
   calendarMap,
-  emptyUsage,
   emptyUsageMap,
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
   BOOTSTRAP_TENANT_ID,
-  sanitizeProfile,
-  resolveProfileFrom,
   MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
@@ -18,20 +14,12 @@ import {
   DEFAULT_LANGUAGE,
   normNum,
   E164,
-  countryAllowed,
-  allowedPrivateNumberCodes,
   NUMBER_STATUS,
-  NUMBER_TRANSITIONS,
   KEY_FACTS_LIMITS,
   CONSULT_STATUS,
   CONSULT_ANSWER,
   CONSULT_WAIT,
-  GLOBAL_CAP_REASON,
-  NEEDS_MANUAL_RECONCILE_REASON,
-  REQUEST_NUMBER_REASON,
   TENANT_STATUS,
-  PROVISIONING_JOB_STATUS,
-  PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
   MICRO_CENTS_PER_CENT,
@@ -43,10 +31,7 @@ import {
   PROVIDER_RATE_SCALE,
   USAGE_CORRUPT_REASON,
   globalCapCents,
-  KYC_LEVEL,
-  KYC_ORDER,
   COST_TRUING_SOURCE,
-  NUMBER_HOLD_REASON,
 } from "./defaults.js";
 import {
   assertCostEvidenceInput,
@@ -55,20 +40,155 @@ import {
   costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "./cost-evidence.js";
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
+import { languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
-import { resolvePeriodStartIso } from "../billing/period.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isKnownPlanSlug } from "../plans.js";
-import { hasInboundNotice } from "../i18n/inbound-notice.js";
-import { isDenied } from "../telephony/number-denylist.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
-import { safeEqual } from "../util.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
+import { MS_PER_DAY } from "../utils/timer.js";
+import { newId } from "./zustand/grundlagen.js";
+export { newId, tenantsOf } from "./zustand/grundlagen.js";
+import {
+  findTenant,
+  applyOwnerIdentity,
+  seedBootstrapKyc,
+  normalizePrivateNumber,
+} from "./zustand/mandant.js";
+export {
+  numberRecordByE164,
+  findTenantByNumber,
+  seedBootstrapIdpSubject,
+  canTransitionNumber,
+  findNumber,
+  findTenant,
+  applyOwnerIdentity,
+  setTenantIdentityIfAbsent,
+  setKycLevel,
+  seedBootstrapKyc,
+  kycReached,
+  tenantActiveSubscriber,
+  tenantInactive,
+  setSuspendedAtIfAbsent,
+  clearSuspendedAt,
+  tenantSuspendedAt,
+  setTenantStripe,
+  tenantStripe,
+  setTenantSubscription,
+  tenantSubscription,
+  findTenantBySubscription,
+  findTenantByCustomer,
+  tenantExists,
+  setBillingHold,
+  clearBillingHold,
+  billingHoldActive,
+  normalizePrivateNumber,
+  setPrivateNumber,
+  tenantPrivateNumber,
+  setTenantGeo,
+  tenantGeo,
+  tenantTimezone,
+  failedNumberCount,
+  tenantMayRequestNumber,
+} from "./zustand/mandant.js";
+import {
+  usageFor,
+  globalUsageTotals,
+  inputTokensOf,
+  pendingMeterEvents,
+  METER_FLUSH_SKIP,
+  PLATFORM_TTS_COST_CENTER_ID,
+  ttsQuotaExhausted,
+  recordTenantTtsCharacters,
+} from "./zustand/nutzung.js";
+export {
+  usageFor,
+  usageOf,
+  globalUsageTotals,
+  inputTokensOf,
+  recordUsageEvent,
+  dailySmsCount,
+  voiceMinutesUsedSince,
+  planMinutesExceeded,
+  pendingMeterEvents,
+  METER_FLUSH_SKIP,
+  markMeterEventsSent,
+  callCostEvidence,
+  PLATFORM_TTS_COST_CENTER_ID,
+  ttsQuotaExhausted,
+  actualCostMicroCentsForMonth,
+  recordTenantTtsCharacters,
+} from "./zustand/nutzung.js";
+import { settingsFor } from "./zustand/einstellungen.js";
+export {
+  settingsFor,
+  updateSettings,
+  resolveProfile,
+  bindSubToTenant,
+  resolveTenant,
+  listProfiles,
+  setProfile,
+  deleteProfile,
+} from "./zustand/einstellungen.js";
+export {
+  tenantHasLiveNumber,
+  markTenantNeedsManualReconcile,
+  requestNumber,
+  platformNumberBindings,
+  openPlatformBindingByPurpose,
+  numberBusyReason,
+  bindPlatformNumber,
+  unbindPlatformNumber,
+  unbindOwnPlatformBindings,
+  syncPlatformBindings,
+  openOutageAlert,
+  claimOutageAlert,
+  closeOutageAlert,
+  transitionNumber,
+  beginProvisioning,
+  attachNumberPaymentIntent,
+  attachNumberRegistration,
+  markNumberElInboundTrunkBelegt,
+  clearNumberElInboundTrunkBeleg,
+  beginCapturing,
+  activateNumber,
+  failNumber,
+  releaseNumber,
+  recordProvisioningJob,
+  redriveAgeHoldReason,
+  classifyQueuedProvisioningJobs,
+  RELEASE_VERDICT,
+  numberReleaseVerdict,
+  classifyNumbersForRelease,
+  tenantNumbersForErase,
+  setContractEndCleanupPending,
+  contractEndCleanupPending,
+  tenantsPendingContractEndCleanup,
+  platformHoldEscalationCandidates,
+  paidWithoutNumberCandidates,
+} from "./zustand/nummern.js";
+export {
+  allTenantIds,
+  tenantIdpSubject,
+  setCancellationMailPending,
+  cancellationMailPending,
+  tenantsPendingCancellationMail,
+  tenantsForStripeReconcile,
+  tenantsForStaleSubscriptionReconcile,
+  tenantsForPaymentMethodTypeReconcile,
+  setNewsletterConsent,
+  tenantNewsletterConsent,
+  tenantNewsletterRecipients,
+  confirmedNewsletterRecipients,
+  dailyNewsletterConfirmMailCount,
+  addNewsletterRecipient,
+  removeNewsletterRecipient,
+  confirmNewsletterRecipientByToken,
+  unsubscribeNewsletterRecipientByToken,
+} from "./zustand/listen.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
 
 export function makeDefaultState() {
@@ -110,10 +230,6 @@ export async function anrufpauseSetzen(speicher, an) {
     throw err;
   }
   return an;
-}
-
-export function newId(prefix) {
-  return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 function requireTenantId(tenantId) {
@@ -991,15 +1107,6 @@ export function findConflict(s, tenantId, startIso, endIso) {
   return getCalendar(s, tenantId).find((ev) => ev.start < endIso && startIso < ev.end) || null;
 }
 
-export function numberRecordByE164(state, e164) {
-  if (!e164) return null;
-  return state.numbers.find((number) => number.e164 === e164 && number.status === NUMBER_STATUS.ACTIVE) || null;
-}
-
-export function findTenantByNumber(state, e164) {
-  return numberRecordByE164(state, e164)?.tenantId ?? null;
-}
-
 export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   const settingsLang = settingsFor(state, tenantId).language;
   const tenant = findTenant(state, tenantId);
@@ -1040,29 +1147,6 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
-export function seedBootstrapIdpSubject(state, rawSub, tenantId) {
-  const owner = findTenant(state, tenantId);
-  if (!owner || owner.idpSubject) return false;
-  const sub = typeof rawSub === "string" ? rawSub.trim() : "";
-  if (!sub) return false;
-  owner.idpSubject = sub;
-  return true;
-}
-
-export function canTransitionNumber(from, to) {
-  return (NUMBER_TRANSITIONS[from] || []).includes(to);
-}
-
-export function findNumber(state, id) {
-  return state.numbers.find((number) => number.id === id) || null;
-}
-
-export const tenantsOf = (state) => state.tenants || [];
-
-export function findTenant(state, id) {
-  return tenantsOf(state).find((tenant) => tenant.id === id) || null;
-}
-
 export function tenantContext(state, ownerName, tenantId) {
   const tenant = findTenant(state, tenantId);
   const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
@@ -1077,21 +1161,6 @@ export function tenantContext(state, ownerName, tenantId) {
 
 function firstNameOf(fullName) {
   return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
-}
-
-export function applyOwnerIdentity(tenant, firstName, lastName) {
-  const fn = typeof firstName === "string" ? firstName.trim() : "";
-  const ln = typeof lastName === "string" ? lastName.trim() : "";
-  const full = [fn, ln].filter(Boolean).join(" ");
-  if (fn) tenant.firstName = fn;
-  if (full) tenant.ownerName = full;
-}
-
-export function setTenantIdentityIfAbsent(state, tenantId, { firstName, lastName } = {}) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.ownerName) return false;
-  applyOwnerIdentity(tenant, firstName, lastName);
-  return Boolean(tenant.ownerName);
 }
 
 function tenantBudgetRow(state, tenantId) {
@@ -1127,109 +1196,6 @@ export function registerTenant(
   return tenant;
 }
 
-export function setKycLevel(state, tenantId, level) {
-  if (!KYC_ORDER.includes(level)) throw new Error(`setKycLevel: unbekannte KYC-Stufe ${level}`);
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`setKycLevel: Tenant ${tenantId} nicht gefunden`);
-  tenant.kycLevel = level;
-  return tenant;
-}
-
-export function seedBootstrapKyc(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.kycLevel != null) return false;
-  setKycLevel(state, tenantId, KYC_LEVEL.ID_VERIFIED);
-  return true;
-}
-
-export function kycReached(state, tenantId, minLevel) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.kycLevel == null) return false;
-  return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
-}
-
-export function tenantActiveSubscriber(state, tenantId, minLevel) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return false;
-  if (tenant.kycLevel == null) return false;
-  return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
-}
-
-export function tenantInactive(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return !!tenant && tenant.status !== TENANT_STATUS.ACTIVE;
-}
-
-export function setSuspendedAtIfAbsent(state, tenantId, nowIso) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.suspendedAt) return { tenant, changed: false };
-  tenant.suspendedAt = nowIso;
-  return { tenant, changed: true };
-}
-
-export function clearSuspendedAt(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || !tenant.suspendedAt) return { tenant, changed: false };
-  tenant.suspendedAt = null;
-  return { tenant, changed: true };
-}
-
-export function tenantSuspendedAt(state, tenantId) {
-  return findTenant(state, tenantId)?.suspendedAt ?? null;
-}
-
-export function setTenantStripe(
-  state,
-  tenantId,
-  { customerId, paymentMethodId, paymentMethodType } = {},
-) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`setTenantStripe: Tenant ${tenantId} nicht gefunden`);
-  if (customerId !== undefined) tenant.stripeCustomerId = customerId;
-  if (paymentMethodId !== undefined) tenant.stripePaymentMethodId = paymentMethodId;
-  if (paymentMethodType !== undefined) tenant.stripePaymentMethodType = paymentMethodType;
-  return tenant;
-}
-
-export function tenantStripe(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return {
-    customerId: tenant?.stripeCustomerId ?? null,
-    paymentMethodId: tenant?.stripePaymentMethodId ?? null,
-    paymentMethodType: tenant?.stripePaymentMethodType ?? null,
-  };
-}
-
-export function setTenantSubscription(
-  s,
-  tenantId,
-  {
-    subscriptionId,
-    planSlug,
-    currentPeriodEnd,
-    currentPeriodStart,
-    numberSetupFeeExempt,
-    activationPending,
-    periodCreditRevoked,
-    cancelAtPeriodEnd,
-  } = {},
-) {
-  const tenant = findTenant(s, tenantId);
-  if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
-  if (planSlug != null && planSlug !== "" && !isKnownPlanSlug(planSlug)) {
-    throw new Error(`setTenantSubscription: unbekannter Plan-Slug '${planSlug}' (kein Katalog-Eintrag)`);
-  }
-  if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
-  if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
-  if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
-  if (currentPeriodStart !== undefined) tenant.stripeCurrentPeriodStart = currentPeriodStart;
-  if (numberSetupFeeExempt !== undefined) tenant.stripeNumberSetupFeeExempt = numberSetupFeeExempt;
-  if (activationPending !== undefined) tenant.stripeActivationPending = activationPending;
-  if (periodCreditRevoked !== undefined) tenant.stripePeriodCreditRevoked = periodCreditRevoked;
-  if (cancelAtPeriodEnd !== undefined) tenant.stripeCancelAtPeriodEnd = cancelAtPeriodEnd;
-  return tenant;
-}
-
 export function deriveTenantBudgetFromPlan(state, tenantId, cfg) {
   const tenant = findTenant(state, tenantId);
   if (!tenant) return;
@@ -1253,414 +1219,6 @@ export function deriveTenantBudgetFromPlan(state, tenantId, cfg) {
   setTenantBudget(state, tenantId, { budgetCents: capCents, hardCapCents: capCents });
 }
 
-export function tenantSubscription(s, tenantId) {
-  const tenant = findTenant(s, tenantId);
-  return {
-    subscriptionId: tenant?.stripeSubscriptionId ?? null,
-    planSlug: tenant?.stripePlanSlug ?? null,
-    currentPeriodEnd: tenant?.stripeCurrentPeriodEnd ?? null,
-    currentPeriodStart: tenant?.stripeCurrentPeriodStart ?? null,
-    numberSetupFeeExempt: tenant?.stripeNumberSetupFeeExempt ?? false,
-    activationPending: tenant?.stripeActivationPending ?? false,
-    periodCreditRevoked: tenant?.stripePeriodCreditRevoked ?? false,
-    cancelAtPeriodEnd: tenant?.stripeCancelAtPeriodEnd ?? false,
-  };
-}
-
-export function findTenantBySubscription(state, subscriptionId) {
-  if (!subscriptionId) return null;
-  return state.tenants.find((tenant) => tenant.stripeSubscriptionId === subscriptionId) ?? null;
-}
-
-export function findTenantByCustomer(state, customerId) {
-  if (!customerId) return null;
-  return state.tenants.find((tenant) => tenant.stripeCustomerId === customerId) ?? null;
-}
-
-export function tenantExists(state, tenantId) {
-  return findTenant(state, tenantId) !== null;
-}
-
-export function setBillingHold(state, tenantId, { reason, dueAtIso = null } = {}) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return;
-  tenant.billingHold = reason;
-  tenant.billingHoldDueAt = dueAtIso;
-}
-
-export function clearBillingHold(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return;
-  tenant.billingHold = null;
-  tenant.billingHoldDueAt = null;
-}
-
-export function billingHoldActive(state, tenantId, nowIso) {
-  const tenant = findTenant(state, tenantId);
-  const reason = tenant?.billingHold ?? null;
-  if (!reason) return null;
-  const dueAtIso = tenant.billingHoldDueAt;
-  if (!dueAtIso) return reason;
-  return nowIso >= dueAtIso ? reason : null;
-}
-
-export function normalizePrivateNumber(raw, tenantCountryIso) {
-  if (raw == null || (typeof raw === "string" && raw.trim() === "")) return null;
-  const e164 = normNum(raw);
-  if (!E164.test(e164)) throw new Error("private number: ungueltiges E.164-Format");
-  if (isDenied(e164)) throw new Error("private number: gesperrter Nummernbereich");
-  if (!countryAllowed(e164, allowedPrivateNumberCodes(tenantCountryIso)))
-    throw new Error("private number: Laendercode nicht erlaubt");
-  return e164;
-}
-
-export function setPrivateNumber(state, tenantId, raw) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`setPrivateNumber: Tenant ${tenantId} nicht gefunden`);
-  const e164 = normalizePrivateNumber(raw, tenant.country);
-  if (e164 === null) delete tenant.privateNumber;
-  else tenant.privateNumber = e164;
-  return tenant;
-}
-
-export function tenantPrivateNumber(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return tenant?.privateNumber ?? null;
-}
-
-export function setTenantGeo(state, tenantId, { country, defaultLanguage, timezone } = {}) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`setTenantGeo: Tenant ${tenantId} nicht gefunden`);
-  if (country !== undefined) tenant.country = country;
-  if (defaultLanguage !== undefined) tenant.defaultLanguage = defaultLanguage;
-  if (timezone !== undefined) tenant.timezone = timezone;
-  return tenant;
-}
-
-export function tenantGeo(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return { country: tenant?.country ?? null, defaultLanguage: tenant?.defaultLanguage ?? null };
-}
-
-export function tenantTimezone(state, tenantId) {
-  return findTenant(state, tenantId)?.timezone ?? null;
-}
-
-function occupiesCapacity(number) {
-  return number.status !== NUMBER_STATUS.RELEASED && number.status !== NUMBER_STATUS.FAILED;
-}
-
-function liveNumbers(state, tenantId = null) {
-  return state.numbers.filter((number) => occupiesCapacity(number) && (tenantId == null || number.tenantId === tenantId));
-}
-
-export function tenantHasLiveNumber(state, tenantId) {
-  return liveNumbers(state, tenantId).length > 0;
-}
-
-function markNumberProvisionSkipped(tenant, reason) {
-  tenant.numberProvisionSkipReason = reason;
-  tenant.numberProvisionSkipAt = new Date().toISOString();
-}
-
-function clearNumberProvisionSkip(tenant) {
-  tenant.numberProvisionSkipReason = null;
-  tenant.numberProvisionSkipAt = null;
-}
-
-export function failedNumberCount(state, tenantId) {
-  return state.numbers.filter(
-    (number) => number.tenantId === tenantId && number.status === NUMBER_STATUS.FAILED,
-  ).length;
-}
-
-export function markTenantNeedsManualReconcile(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.numberProvisionSkipReason === NEEDS_MANUAL_RECONCILE_REASON)
-    return { tenant: tenant ?? null, changed: false };
-  markNumberProvisionSkipped(tenant, NEEDS_MANUAL_RECONCILE_REASON);
-  return { tenant, changed: true };
-}
-
-export function tenantMayRequestNumber(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return false;
-  if (tenant.status === TENANT_STATUS.ACTIVE) return true;
-  if (tenant.status === TENANT_STATUS.CLOSED) return false;
-  if (tenant.suspendedAt) return false;
-  return tenant.stripeActivationPending === true;
-}
-
-export function requestNumber(
-  state,
-  {
-    tenantId,
-    provider = DEFAULT_PROVIDER,
-    country = DEFAULT_COUNTRY,
-    language = languageForCountry(country),
-    maxNumbers,
-    maxNumbersPerTenant,
-  },
-) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenantMayRequestNumber(state, tenantId))
-    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
-  if (liveNumbers(state).length >= maxNumbers) {
-    markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
-    return { ok: false, reason: GLOBAL_CAP_REASON };
-  }
-  if (liveNumbers(state, tenantId).length >= maxNumbersPerTenant)
-    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_CAP };
-  const number = {
-    id: newId("num"),
-    e164: null,
-    tenantId,
-    provider,
-    country,
-    language,
-    status: NUMBER_STATUS.REQUESTED,
-    providerNumberId: null,
-    paymentIntentId: null,
-  };
-  state.numbers.push(number);
-  clearNumberProvisionSkip(tenant);
-  return { ok: true, number };
-}
-
-const CALL_STATUS_ACTIVE = "active";
-
-function isOpenBinding(binding) {
-  return binding.releasedAt === null;
-}
-
-function findOpenBinding(state, e164, purpose) {
-  return state.platformNumberUse.find(
-    (binding) => binding.e164 === e164 && binding.purpose === purpose && isOpenBinding(binding),
-  );
-}
-
-function closingTimestamp() {
-  return new Date().toISOString();
-}
-
-export function platformNumberBindings(state, e164) {
-  if (!e164) return [];
-  return state.platformNumberUse.filter((binding) => binding.e164 === e164 && isOpenBinding(binding));
-}
-
-export function openPlatformBindingByPurpose(state, purpose) {
-  return state.platformNumberUse.find((binding) => binding.purpose === purpose && isOpenBinding(binding));
-}
-
-function bindingBelongsTo(binding, tenantId) {
-  return binding.tenantId === tenantId;
-}
-
-export function numberBusyReason(state, number, { forTenantId = null } = {}) {
-  const bindings = platformNumberBindings(state, number.e164);
-  const blockedByForeignBinding = bindings.some(
-    (binding) => forTenantId === null || !bindingBelongsTo(binding, forTenantId),
-  );
-  if (blockedByForeignBinding) return NUMBER_HOLD_REASON.PLATFORM_IN_USE;
-  if (
-    number.e164 &&
-    state.calls.some(
-      (call) => call.status === CALL_STATUS_ACTIVE && (call.from === number.e164 || call.to === number.e164),
-    )
-  )
-    return NUMBER_HOLD_REASON.ACTIVE_CALL;
-  return null;
-}
-
-export function bindPlatformNumber(state, { e164, purpose, provider, tenantId = null, providerNumberId = null, note = null }) {
-  const open = findOpenBinding(state, e164, purpose);
-  if (open) return open;
-  const binding = {
-    id: newId("pnu"), e164, purpose, provider, tenantId, providerNumberId,
-    boundAt: new Date().toISOString(), releasedAt: null, note,
-  };
-  state.platformNumberUse.push(binding);
-  return binding;
-}
-
-export function unbindPlatformNumber(state, { e164, purpose }) {
-  const open = findOpenBinding(state, e164, purpose);
-  if (!open) return null;
-  open.releasedAt = closingTimestamp();
-  return open;
-}
-
-export function unbindOwnPlatformBindings(state, number) {
-  if (!number.e164) return [];
-  const closed = [];
-  for (const binding of platformNumberBindings(state, number.e164)) {
-    if (!bindingBelongsTo(binding, number.tenantId)) continue;
-    binding.releasedAt = closingTimestamp();
-    closed.push(binding);
-  }
-  return closed;
-}
-
-export function syncPlatformBindings(state, desired) {
-  for (const { purpose, e164, provider, tenantId = null, note = null } of desired) {
-    for (const binding of state.platformNumberUse)
-      if (binding.purpose === purpose && isOpenBinding(binding) && binding.e164 !== e164)
-        binding.releasedAt = closingTimestamp();
-    if (e164) bindPlatformNumber(state, { e164, purpose, provider, tenantId, note });
-  }
-  return state.platformNumberUse.filter(isOpenBinding);
-}
-
-export function openOutageAlert(state, code) {
-  return state.outageAlerts.find((alert) => alert.code === code && alert.closedAt === null);
-}
-
-export function claimOutageAlert(state, { code, nowMs, sent = false, channels = [] }) {
-  const nowIso = new Date(nowMs).toISOString();
-  let marker = openOutageAlert(state, code);
-  if (marker) {
-    marker.lastSeenAt = nowIso;
-  } else {
-    marker = {
-      id: newId("otg"),
-      code,
-      firstSeenAt: nowIso,
-      lastSeenAt: nowIso,
-      lastAttemptAt: null,
-      reportedAt: null,
-      deliveredChannels: null,
-      closedAt: null,
-    };
-    state.outageAlerts.push(marker);
-  }
-  if (sent) {
-    marker.lastAttemptAt = nowIso;
-    if (channels.length > 0) {
-      marker.reportedAt = nowIso;
-      marker.deliveredChannels = channels.join(",");
-    }
-  }
-  return marker;
-}
-
-export function closeOutageAlert(state, { code, nowMs }) {
-  const marker = openOutageAlert(state, code);
-  if (!marker) return null;
-  marker.closedAt = new Date(nowMs).toISOString();
-  return marker;
-}
-
-const NUMBER_OUT_OF_SERVICE = new Set([NUMBER_STATUS.RELEASED, NUMBER_STATUS.SUSPENDED]);
-
-export function transitionNumber(state, numberId, toStatus) {
-  const number = findNumber(state, numberId);
-  if (!number) throw new Error(`transitionNumber: Nummer ${numberId} nicht gefunden`);
-  if (!canTransitionNumber(number.status, toStatus))
-    throw new Error(`transitionNumber: illegaler Uebergang ${number.status} -> ${toStatus}`);
-  if (NUMBER_OUT_OF_SERVICE.has(toStatus)) {
-    const busy = numberBusyReason(state, number);
-    if (busy)
-      throw new Error(
-        `transitionNumber: Nummer ${numberId} ist gesperrt (${busy}) - Uebergang nach ${toStatus} abgelehnt`,
-      );
-  }
-  number.status = toStatus;
-  return number;
-}
-
-export function beginProvisioning(state, numberId) {
-  return transitionNumber(state, numberId, NUMBER_STATUS.PROVISIONING);
-}
-
-export function attachNumberPaymentIntent(state, numberId, paymentIntentId) {
-  const number = findNumber(state, numberId);
-  if (!number) throw new Error(`attachNumberPaymentIntent: Nummer ${numberId} nicht gefunden`);
-  number.paymentIntentId = paymentIntentId;
-  return number;
-}
-
-export function attachNumberRegistration(state, numberId, providerAgentPhoneNumberId) {
-  const number = findNumber(state, numberId);
-  if (!number) throw new Error(`attachNumberRegistration: Nummer ${numberId} nicht gefunden`);
-  if (number.providerAgentPhoneNumberId) return number;
-  number.providerAgentPhoneNumberId = providerAgentPhoneNumberId;
-  return number;
-}
-
-const INBOUND_TRUNK_BELEG_FELDER = Object.freeze(["elInboundTrunkBelegtAt", "elInboundTrunkZugangFp"]);
-
-function hatInboundTrunkBeleg(number) {
-  return INBOUND_TRUNK_BELEG_FELDER.some((feld) => number[feld] !== undefined && number[feld] !== null);
-}
-
-export function markNumberElInboundTrunkBelegt(state, numberId, { nowIso, zugangFp }) {
-  if (!nowIso || !zugangFp) throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
-  const number = findNumber(state, numberId);
-  if (number?.status !== NUMBER_STATUS.ACTIVE) return { number, changed: false };
-  if (number.elInboundTrunkZugangFp === zugangFp && number.elInboundTrunkBelegtAt) return { number, changed: false };
-  number.elInboundTrunkBelegtAt = nowIso;
-  number.elInboundTrunkZugangFp = zugangFp;
-  return { number, changed: true };
-}
-
-export function clearNumberElInboundTrunkBeleg(state, numberId) {
-  const number = findNumber(state, numberId);
-  if (!number || !hatInboundTrunkBeleg(number)) return { number, changed: false };
-  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
-  return { number, changed: true };
-}
-
-export function beginCapturing(state, numberId) {
-  return transitionNumber(state, numberId, NUMBER_STATUS.CAPTURING);
-}
-
-export function activateNumber(state, numberId, { e164, providerNumberId, monthlyCostCents = null }) {
-  const number = transitionNumber(state, numberId, NUMBER_STATUS.ACTIVE);
-  number.e164 = e164;
-  number.providerNumberId = providerNumberId ?? null;
-  if (monthlyCostCents !== null) number.monthlyCostCents = monthlyCostCents;
-  state.numberAssignments.push({
-    id: newId("asg"),
-    numberId: number.id,
-    tenantId: number.tenantId,
-    assignedAt: new Date().toISOString(),
-    releasedAt: null,
-  });
-  return number;
-}
-
-export function failNumber(state, numberId) {
-  return transitionNumber(state, numberId, NUMBER_STATUS.FAILED);
-}
-
-export function releaseNumber(state, numberId) {
-  const number = transitionNumber(state, numberId, NUMBER_STATUS.RELEASED);
-  number.e164 = null;
-  number.providerAgentPhoneNumberId = null;
-  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
-  const asg = state.numberAssignments.find((assignment) => assignment.numberId === numberId && !assignment.releasedAt);
-  if (asg) asg.releasedAt = new Date().toISOString();
-  return number;
-}
-
-export function recordProvisioningJob(state, { numberId, tenantId, idempotencyKey }) {
-  const existing = state.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
-  if (existing) return existing;
-  const job = {
-    id: newId("job"),
-    numberId,
-    tenantId,
-    kind: PROVISION_NUMBER_JOB,
-    status: PROVISIONING_JOB_STATUS.QUEUED,
-    idempotencyKey,
-    attempts: 0,
-    lastError: null,
-    createdAt: new Date().toISOString(),
-  };
-  state.provisioningJobs.push(job);
-  return job;
-}
-
 export function markProvisioningJob(s, jobId, status, lastError = null) {
   const job = s.provisioningJobs.find((j) => j.id === jobId);
   if (!job) return null;
@@ -1668,307 +1226,6 @@ export function markProvisioningJob(s, jobId, status, lastError = null) {
   job.attempts += 1;
   if (lastError) job.lastError = lastError;
   return job;
-}
-
-const PROVISION_CLOSE_NUMBER_STATUS = new Set([
-  NUMBER_STATUS.ACTIVE,
-  NUMBER_STATUS.FAILED,
-  NUMBER_STATUS.RELEASED,
-  NUMBER_STATUS.SUSPENDED,
-]);
-
-export function redriveAgeHoldReason(job, nowMs, maxAgeMs) {
-  const createdMs = Date.parse(job.createdAt ?? "");
-  if (!job.createdAt || Number.isNaN(createdMs)) return "unknown_age";
-  if (nowMs - createdMs > maxAgeMs) return "too_old";
-  return null;
-}
-
-export function classifyQueuedProvisioningJobs(state, { nowMs, maxAgeMs, kycMinLevel }) {
-  const buckets = { close: [], hold: [], redrive: [] };
-  for (const job of state.provisioningJobs) {
-    if (job.status !== PROVISIONING_JOB_STATUS.QUEUED) continue;
-    const number = findNumber(state, job.numberId);
-    if (!number || PROVISION_CLOSE_NUMBER_STATUS.has(number.status)) {
-      buckets.close.push(job);
-      continue;
-    }
-    if (number.status !== NUMBER_STATUS.REQUESTED) {
-      buckets.hold.push({ job, reason: `mid_flight_${number.status}` });
-      continue;
-    }
-    if (!tenantActiveSubscriber(state, job.tenantId, kycMinLevel)) {
-      buckets.hold.push({ job, reason: "no_active_subscriber" });
-      continue;
-    }
-    const ageHoldReason = redriveAgeHoldReason(job, nowMs, maxAgeMs);
-    if (ageHoldReason) {
-      buckets.hold.push({ job, reason: ageHoldReason });
-      continue;
-    }
-    buckets.redrive.push(job);
-  }
-  return buckets;
-}
-
-export const RELEASE_VERDICT = Object.freeze({ RELEASE: "release", HOLD: "hold", SKIP: "skip" });
-
-export function numberReleaseVerdict(state, number, { nowMs, graceMs }) {
-  if (number.status !== NUMBER_STATUS.ACTIVE)
-    return { action: RELEASE_VERDICT.SKIP, reason: `not_active_${number.status}` };
-  const suspendedAt = tenantSuspendedAt(state, number.tenantId);
-  if (!suspendedAt) return { action: RELEASE_VERDICT.SKIP, reason: "tenant_not_suspended" };
-  const suspendedMs = Date.parse(suspendedAt);
-  if (Number.isNaN(suspendedMs))
-    return { action: RELEASE_VERDICT.SKIP, reason: "suspended_at_unparsebar" };
-  if (nowMs - suspendedMs <= graceMs)
-    return { action: RELEASE_VERDICT.SKIP, reason: "grace_not_reached" };
-  const busy = numberBusyReason(state, number, { forTenantId: number.tenantId });
-  if (busy) return { action: RELEASE_VERDICT.HOLD, reason: busy };
-  if (number.provider !== PROVIDER.TELNYX)
-    return { action: RELEASE_VERDICT.HOLD, reason: NUMBER_HOLD_REASON.NON_TELNYX };
-  return { action: RELEASE_VERDICT.RELEASE, reason: null };
-}
-
-export function classifyNumbersForRelease(state, { nowMs, graceMs }) {
-  const buckets = { release: [], hold: [], skip: [] };
-  for (const number of state.numbers) {
-    const { action, reason } = numberReleaseVerdict(state, number, { nowMs, graceMs });
-    if (action === RELEASE_VERDICT.RELEASE) buckets.release.push(number);
-    else if (action === RELEASE_VERDICT.HOLD) buckets.hold.push({ number, reason });
-    else buckets.skip.push({ number, reason });
-  }
-  return buckets;
-}
-
-export function tenantNumbersForErase(state, tenantId) {
-  const buckets = { release: [], hold: [] };
-  for (const number of state.numbers) {
-    if (number.tenantId !== tenantId) continue;
-    if (number.status !== NUMBER_STATUS.ACTIVE) continue;
-    if (number.provider !== PROVIDER.TELNYX) continue;
-    const busy = numberBusyReason(state, number, { forTenantId: tenantId });
-    if (busy) buckets.hold.push({ number: number, reason: busy });
-    else buckets.release.push(number);
-  }
-  return buckets;
-}
-
-export function setContractEndCleanupPending(
-  state,
-  tenantId,
-  { numberReleasePending, workosDeletePending } = {},
-) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return null;
-  if (numberReleasePending !== undefined) tenant.numberReleasePending = numberReleasePending;
-  if (workosDeletePending !== undefined) tenant.workosDeletePending = workosDeletePending;
-  return tenant;
-}
-
-export function contractEndCleanupPending(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return {
-    numberReleasePending: tenant?.numberReleasePending ?? false,
-    workosDeletePending: tenant?.workosDeletePending ?? false,
-  };
-}
-
-export function tenantsPendingContractEndCleanup(state) {
-  return tenantsOf(state).filter((tenant) => tenant.numberReleasePending || tenant.workosDeletePending);
-}
-
-export function platformHoldEscalationCandidates(state, { nowMs, maxAgeMs }) {
-  const candidates = [];
-  for (const tenant of tenantsPendingContractEndCleanup(state)) {
-    if (!tenant.numberReleasePending) continue;
-    const suspendedMs = Date.parse(tenant.suspendedAt ?? "");
-    if (Number.isNaN(suspendedMs)) continue;
-    if (nowMs - suspendedMs <= maxAgeMs) continue;
-    const { hold } = tenantNumbersForErase(state, tenant.id);
-    for (const { number, reason } of hold)
-      if (reason === NUMBER_HOLD_REASON.PLATFORM_IN_USE) candidates.push(number);
-  }
-  return candidates;
-}
-
-export function paidWithoutNumberCandidates(state, { nowMs, graceMs, kycMinLevel }) {
-  const candidates = [];
-  for (const tenant of state.tenants) {
-    if (!tenantActiveSubscriber(state, tenant.id, kycMinLevel)) continue;
-    if (tenantHasLiveNumber(state, tenant.id)) continue;
-    const paidSinceIso = resolvePeriodStartIso(tenantSubscription(state, tenant.id));
-    if (!paidSinceIso) continue;
-    const paidSinceMs = Date.parse(paidSinceIso);
-    if (Number.isNaN(paidSinceMs)) continue;
-    if (nowMs - paidSinceMs <= graceMs) continue;
-    candidates.push({ tenantId: tenant.id, paidSinceIso });
-  }
-  return candidates;
-}
-
-export function allTenantIds(state) {
-  return tenantsOf(state).map((tenant) => tenant.id);
-}
-
-export function tenantIdpSubject(state, tenantId) {
-  return findTenant(state, tenantId)?.idpSubject ?? null;
-}
-
-export function setCancellationMailPending(state, tenantId, { pending, receivedAt } = {}) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return null;
-  if (pending !== undefined) tenant.cancellationMailPending = pending;
-  if (receivedAt !== undefined) tenant.cancellationMailReceivedAt = receivedAt;
-  return tenant;
-}
-
-export function cancellationMailPending(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return {
-    pending: tenant?.cancellationMailPending ?? false,
-    receivedAt: tenant?.cancellationMailReceivedAt ?? null,
-  };
-}
-
-export function tenantsPendingCancellationMail(state) {
-  return tenantsOf(state).filter((tenant) => tenant.cancellationMailPending);
-}
-
-export function tenantsForStripeReconcile(state) {
-  return tenantsOf(state).filter((tenant) => tenant.stripeSubscriptionId && !tenant.suspendedAt);
-}
-
-export function tenantsForStaleSubscriptionReconcile(state) {
-  return tenantsOf(state).filter(
-    (tenant) => tenant.stripeSubscriptionId && tenant.status !== TENANT_STATUS.ACTIVE,
-  );
-}
-
-export function tenantsForPaymentMethodTypeReconcile(state) {
-  return tenantsOf(state).filter(
-    (tenant) => tenant.stripePaymentMethodId && !tenant.stripePaymentMethodType,
-  );
-}
-
-export function setNewsletterConsent(state, tenantId, consent) {
-  if (typeof consent !== "boolean")
-    throw new Error("setNewsletterConsent: consent muss boolean sein");
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`setNewsletterConsent: Tenant ${tenantId} nicht gefunden`);
-  tenant.newsletterConsent = consent;
-  tenant.newsletterConsentAt = new Date().toISOString();
-  return tenant;
-}
-
-export function tenantNewsletterConsent(state, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  return {
-    consent: tenant?.newsletterConsent === true,
-    consentAt: tenant?.newsletterConsentAt ?? null,
-  };
-}
-
-export function tenantNewsletterRecipients(state, tenantId) {
-  return findTenant(state, tenantId)?.newsletterRecipients ?? [];
-}
-
-export function confirmedNewsletterRecipients(state, tenantId) {
-  return tenantNewsletterRecipients(state, tenantId).filter((recipient) => recipient.status === "confirmed");
-}
-
-export function dailyNewsletterConfirmMailCount(state, tenantId, sinceIso) {
-  const tenant = findTenant(state, tenantId);
-  return (tenant?.newsletterConfirmMailLog ?? []).filter((sentAt) => sentAt >= sinceIso).length;
-}
-
-export function addNewsletterRecipient(state, tenantId, { email, tokenHash, tokenExpiresAt, unsubToken, now }) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`addNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
-  const nowIso = now ?? new Date().toISOString();
-  tenant.newsletterRecipients ??= [];
-  tenant.newsletterRecipients.push({
-    email,
-    status: "pending",
-    createdAt: nowIso,
-    confirmedAt: null,
-    tokenHash,
-    tokenExpiresAt,
-    unsubToken,
-  });
-  const cutoff = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
-  tenant.newsletterConfirmMailLog = (tenant.newsletterConfirmMailLog ?? [])
-    .filter((sentAt) => sentAt >= cutoff)
-    .concat(nowIso);
-  return tenant.newsletterRecipients[tenant.newsletterRecipients.length - 1];
-}
-
-export function removeNewsletterRecipient(state, tenantId, email) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) throw new Error(`removeNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
-  const before = (tenant.newsletterRecipients ?? []).length;
-  tenant.newsletterRecipients = (tenant.newsletterRecipients ?? []).filter((recipient) => recipient.email !== email);
-  return tenant.newsletterRecipients.length !== before;
-}
-
-export function confirmNewsletterRecipientByToken(state, tokenHash, nowIso) {
-  for (const tenant of tenantsOf(state)) {
-    const match = (tenant.newsletterRecipients ?? []).find(
-      (recipient) =>
-        recipient.status === "pending" &&
-        recipient.tokenHash &&
-        safeEqual(recipient.tokenHash, tokenHash) &&
-        recipient.tokenExpiresAt > nowIso,
-    );
-    if (match) {
-      match.status = "confirmed";
-      match.confirmedAt = nowIso;
-      match.tokenHash = null;
-      match.tokenExpiresAt = null;
-      return { tenantId: tenant.id, email: match.email };
-    }
-  }
-  return null;
-}
-
-export function unsubscribeNewsletterRecipientByToken(state, token) {
-  for (const tenant of tenantsOf(state)) {
-    const recipients = tenant.newsletterRecipients ?? [];
-    const idx = recipients.findIndex((recipient) => recipient.unsubToken && safeEqual(recipient.unsubToken, token));
-    if (idx !== -1) {
-      const [removed] = recipients.splice(idx, 1);
-      return { tenantId: tenant.id, email: removed.email };
-    }
-  }
-  return null;
-}
-
-export function usageFor(s, tenantId) {
-  return (s.usage[tenantId] ||= emptyUsage());
-}
-
-export function usageOf(state, tenantId) {
-  return usageFor(state, tenantId);
-}
-
-export function globalUsageTotals(state) {
-  let inputTokens = 0,
-    outputTokens = 0,
-    calls = 0,
-    microTotal = 0;
-  for (const bucket of Object.values(state.usage)) {
-    inputTokens += bucket.inputTokens;
-    outputTokens += bucket.outputTokens;
-    calls += bucket.calls;
-    microTotal += bucket.costCents * MICRO_CENTS_PER_CENT + (bucket.costMicroCentsRem || 0);
-  }
-  return {
-    inputTokens,
-    outputTokens,
-    calls,
-    costCents: Math.floor(microTotal / MICRO_CENTS_PER_CENT),
-    costMicroCentsRem: microTotal % MICRO_CENTS_PER_CENT,
-  };
 }
 
 function worstCasePrice(prices) {
@@ -1983,10 +1240,6 @@ function worstCasePrice(prices) {
 
 function priceForModel(model, prices) {
   return Object.hasOwn(prices, model) ? prices[model] : worstCasePrice(prices);
-}
-
-export function inputTokensOf(tokens) {
-  return tokens.inputUncachedTokens + tokens.inputCacheWriteTokens + tokens.inputCacheReadTokens;
 }
 
 function tokenCostUsd(tokens, cfg) {
@@ -2270,54 +1523,6 @@ export function aiCostCents(tokens, cfg) {
   return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
 }
 
-export function recordUsageEvent(
-  state,
-  {
-    tenantId,
-    callId = null,
-    numberId = null,
-    kind,
-    quantity,
-    costCents,
-    costMicroCents = null,
-    occurredAt = new Date().toISOString(),
-  },
-) {
-  if (!Object.values(USAGE_EVENT_KIND).includes(kind))
-    throw new Error(`recordUsageEvent: unbekanntes kind '${kind}'`);
-  const event = {
-    id: newId("ue"),
-    tenantId,
-    callId,
-    numberId,
-    kind,
-    quantity,
-    costCents,
-    costMicroCents,
-    occurredAt,
-    stripeMeterSent: false,
-  };
-  state.usageEvents.push(event);
-  return event;
-}
-
-export function dailySmsCount(state, tenantId, sinceIso) {
-  return state.usageEvents.filter(
-    (usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.SMS && usageEvent.tenantId === tenantId && usageEvent.occurredAt >= sinceIso,
-  ).length;
-}
-
-export function voiceMinutesUsedSince(state, tenantId, sinceIso) {
-  return state.usageEvents
-    .filter(
-      (usageEvent) =>
-        usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE &&
-        usageEvent.tenantId === tenantId &&
-        usageEvent.occurredAt >= sinceIso,
-    )
-    .reduce((sum, usageEvent) => sum + usageEvent.quantity, 0);
-}
-
 export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   const monthKey = spendMonthKeyOf(nowIso);
   if (!monthKey) return [];
@@ -2336,17 +1541,6 @@ export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   );
 }
 
-export function planMinutesExceeded(state, tenantId, { includedMinutes, periodStartIso } = {}) {
-  if (!periodStartIso || !Number.isFinite(includedMinutes)) return true;
-  return voiceMinutesUsedSince(state, tenantId, periodStartIso) >= includedMinutes;
-}
-
-export function pendingMeterEvents(state) {
-  return state.usageEvents.filter((usageEvent) => !usageEvent.stripeMeterSent);
-}
-
-export const METER_FLUSH_SKIP = Object.freeze({ NO_EPOCH: "no_flush_epoch" });
-
 export function flushableMeterEvents(state, { flushEpochIso } = {}) {
   const pending = pendingMeterEvents(state);
   const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
@@ -2355,18 +1549,6 @@ export function flushableMeterEvents(state, { flushEpochIso } = {}) {
   const epochIso = epoch.toISOString();
   const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
   return { events, skipped: pending.length - events.length, skipReason: null };
-}
-
-export function markMeterEventsSent(state, eventIds) {
-  const ids = new Set(eventIds);
-  let sentCount = 0;
-  for (const usageEvent of state.usageEvents) {
-    if (ids.has(usageEvent.id) && !usageEvent.stripeMeterSent) {
-      usageEvent.stripeMeterSent = true;
-      sentCount++;
-    }
-  }
-  return sentCount;
 }
 
 function findCostEvidence(state, callId, traeger) {
@@ -2396,12 +1578,6 @@ export function recordCallCostEvidence(state, eingabe) {
   vorhanden.reife = reife;
   Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
   return { evidence: vorhanden, changed: true };
-}
-
-export function callCostEvidence(state, callId) {
-  return state.callCostEvidence
-    .filter((zeile) => zeile.callId === callId)
-    .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
 export function reservationFor(state, tenantId) {
@@ -2453,12 +1629,6 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
   if (s.platformSpendWarnedMonth === monthKey) return null;
   s.platformSpendWarnedMonth = monthKey;
   return { totalCents, monthKey };
-}
-
-export const PLATFORM_TTS_COST_CENTER_ID = "platform:play-tts";
-
-export function ttsQuotaExhausted({ characters, quota }) {
-  return quota > 0 && characters >= quota;
 }
 
 function ttsCycleKeyOf(nowIso, anchorDay) {
@@ -2521,29 +1691,10 @@ export function markCrossCheckAttempted(s, monthKey) {
   s.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, monthKey);
 }
 
-export function actualCostMicroCentsForMonth(state, monthKey) {
-  return state.calls
-    .filter(
-      (call) =>
-        call.provider === PROVIDER.TELNYX &&
-        call.costTruedAt !== null &&
-        Number.isSafeInteger(call.actualCostMicroCents) &&
-        call.actualCostMicroCents >= 0 &&
-        call.estimatedCostSpendMonthKey === monthKey,
-    )
-    .reduce((sum, call) => sum + call.actualCostMicroCents, 0);
-}
-
 export function carrierGateCostCentsForMonth(state, monthKey) {
   return state.usageEvents
     .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
     .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
-}
-
-export function recordTenantTtsCharacters(state, tenantId, chars) {
-  if (!Number.isSafeInteger(chars) || chars <= 0) return { changed: false };
-  usageFor(state, tenantId).ttsCharacters += chars;
-  return { changed: true };
 }
 
 export function addNotification(s, title, body, callId) {
@@ -2609,79 +1760,4 @@ export function pruneOldData(state, { retentionDays, diagnosticRetentionDays, ev
 
 export function hasPrunedSomething(removed) {
   return Object.values(removed).some((count) => count > 0);
-}
-
-export function settingsFor(s, tenantId) {
-  return (s.settings[tenantId] ||= defaultSettings());
-}
-
-function resolveOptionalEnumOverride(value, allowedValues) {
-  if (value === null || value === "") return { accepted: true, value: null };
-  if (typeof value !== "string") return { accepted: false, value: null };
-  const canonical = allowedValues.find((allowed) => allowed.toLowerCase() === value.toLowerCase());
-  return canonical === undefined ? { accepted: false, value: null } : { accepted: true, value: canonical };
-}
-
-const OPTIONAL_ENUM_FIELDS = Object.freeze({
-  language: SUPPORTED_LANGUAGES,
-  agentStyle: PERSONA_STYLE_IDS,
-});
-
-const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
-
-export function updateSettings(state, tenantId, patch) {
-  const allowed = defaultSettings();
-  const changed = [];
-  const target = settingsFor(state, tenantId);
-  for (const [key, value] of Object.entries(patch || {})) {
-    if (!(key in allowed)) continue;
-    const enumValues = OPTIONAL_ENUM_FIELDS[key];
-    if (enumValues) {
-      const override = resolveOptionalEnumOverride(value, enumValues);
-      if (!override.accepted) continue;
-      target[key] = override.value;
-      changed.push(key);
-    } else if (typeof value === typeof allowed[key]) {
-      const guard = FIELD_GUARDS[key];
-      if (guard && !guard(value)) continue;
-      target[key] = value;
-      changed.push(key);
-    }
-  }
-  return { settings: target, changed };
-}
-
-export function resolveProfile(state, tenantId) {
-  return resolveProfileFrom(tenantId, tenantId ? state.profiles[tenantId] : undefined);
-}
-
-const subIndexOf = (state) => state.subIndex || {};
-
-export function bindSubToTenant(s, sub, tenantId) {
-  if (!sub || !tenantId) return;
-  (s.subIndex ||= {})[sub] = tenantId;
-}
-
-export function resolveTenant(state, idpSubject) {
-  if (!idpSubject) return null;
-  const merged = subIndexOf(state)[idpSubject];
-  if (merged) return merged;
-  const tenant = tenantsOf(state).find((tenantEntry) => tenantEntry.idpSubject === idpSubject);
-  return tenant ? tenant.id : null;
-}
-
-export function listProfiles(state) {
-  return state.profiles;
-}
-
-export function setProfile(s, tenantId, patch) {
-  const clean = sanitizeProfile(patch);
-  s.profiles[tenantId] = { ...(s.profiles[tenantId] || {}), ...clean };
-  return { profile: s.profiles[tenantId], changed: Object.keys(clean) };
-}
-
-export function deleteProfile(s, tenantId) {
-  if (!(tenantId in s.profiles)) return false;
-  delete s.profiles[tenantId];
-  return true;
 }
