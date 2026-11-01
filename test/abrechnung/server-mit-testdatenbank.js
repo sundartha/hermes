@@ -1,5 +1,6 @@
 import { after } from "node:test";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 import pg from "pg";
 import { BASE_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
@@ -76,8 +77,18 @@ async function unbelegtenAnrufAnlegen(store) {
   await store.drainFlushes();
 }
 
-function poolAufPglite(db) {
-  pg.Pool = class PglitePool {
+export function poolAufPglite(db) {
+  const angelegt = [];
+  pg.Pool = class PglitePool extends EventEmitter {
+    waitingCount = 0;
+    totalCount = 0;
+
+    constructor(optionen) {
+      super();
+      this.optionen = optionen;
+      angelegt.push(this);
+    }
+
     async connect() {
       return {
         query: async (text, params) => {
@@ -91,6 +102,7 @@ function poolAufPglite(db) {
 
     async end() {}
   };
+  return angelegt;
 }
 
 function aussenweltAbfangen(testPostfach) {

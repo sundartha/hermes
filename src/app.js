@@ -37,6 +37,7 @@ import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeInternAnrufeLaufendRoutes } from "./routes/intern-anrufe-laufend.js";
 import { makeInternAnrufpauseRoutes } from "./routes/intern-anrufpause.js";
+import { makeHealthzRoutes } from "./utils/healthz-route.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
@@ -125,8 +126,8 @@ export function installGlobalMiddleware({ app, config }) {
   return { mcpDrosseln, mcpBodyParsers: [urlencodedParser, jsonParser] };
 }
 
-export function registerPublicRoutes({ app, config }) {
-  app.get("/healthz", (_req, res) => res.json({ ok: true, commit: config.server.deployedCommit }));
+export function registerPublicRoutes({ app, config, store, healthzOptionen = {} }) {
+  app.use(makeHealthzRoutes({ config, poolZustand: store.poolZustand, ...healthzOptionen }));
 
   app.get(SECURITY_TXT_PATH, (_req, res) => res.type("text/plain").send(SECURITY_TXT_BODY));
 
@@ -287,13 +288,14 @@ export async function buildApp(deps) {
     consultDelivery,
     durableAuditFor,
     createPortalRunner = defaultCreatePortalRunner,
+    healthzOptionen,
   } = deps;
 
   const app = express();
   app.set("trust proxy", 1);
 
   const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
-  registerPublicRoutes({ app, config });
+  registerPublicRoutes({ app, config, store, healthzOptionen });
   registerPathRedirects({ app });
   app.use(makeInternAnrufeLaufendRoutes({ config, store }));
   app.use(makeInternAnrufpauseRoutes({ config, store }));
