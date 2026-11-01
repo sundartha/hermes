@@ -549,3 +549,84 @@ test("vorbereitung-pruefen: reine Auslagerung: ein angehängter Teil, der nicht 
   assert.match(lauf.output, /^src\/call-result\.js:\d+: Änderung, die keine Umformung aus tools\/vorbereitung\/katalog\.json ist$/m);
   assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
 });
+
+const RUNDEN = "function runde(wert) {\n  return Math.round(wert);\n}";
+const GRENZEN = "const GRENZE_A = 1, GRENZE_B = 2;";
+const INTERN = "function intern() {\n  return 1;\n}";
+const OHNE_EXPORT_BASIS = { [ALT]: datei(KOPF, MIETER, STATUS, RUNDEN, GRENZEN, INTERN) };
+const WEITER_STATUS = 'export { NUMBER_STATUS } from "./begriffe-nummern.js";';
+const MIT_EXPORT = [STATUS, `export ${RUNDEN}`, `export ${GRENZEN}`];
+
+function holt(...namen) {
+  return `${KOPF}\nimport { ${namen.join(", ")} } from "./begriffe-nummern.js";`;
+}
+
+function ohneExportAuslagern(context, { alt = datei(holt("GRENZE_A", "GRENZE_B", "NUMBER_STATUS", "runde"), WEITER_STATUS, MIETER, INTERN), neu = datei(...MIT_EXPORT) } = {}) {
+  return auslagern(context, { basis: OHNE_EXPORT_BASIS, alt, neu });
+}
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export an verschobenen Deklarationen, die die alte Datei unter demselben Namen importiert, ist gleichwertig, alte und neue Datei", (context) => {
+  const lauf = ohneExportAuslagern(context);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.output);
+  assert.match(lauf.output, /^src\/store\/defaults\.js: gleichwertig \(reine-auslagerung\)$/m);
+  assert.match(lauf.output, /^src\/store\/begriffe-nummern\.js: gleichwertig \(reine-auslagerung\)$/m);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export ist rot, wenn die alte Datei den Namen nicht importiert", (context) => {
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B"), WEITER_STATUS, MIETER, INTERN) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export ist rot, wenn die alte Datei den Namen unter einem anderen Namen importiert", (context) => {
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B", "runde as rund"), WEITER_STATUS, MIETER, INTERN) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export ist rot, wenn die alte Datei den Namen aus einer anderen Datei importiert", (context) => {
+  const anders = 'import { runde } from "./hinweise.js";';
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B"), anders, WEITER_STATUS, MIETER, INTERN) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export ist rot, wenn die alte Datei den Namen nur mit export … from weiterreicht", (context) => {
+  const weiter = 'export { NUMBER_STATUS, runde } from "./begriffe-nummern.js";';
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B"), weiter, MIETER, INTERN) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export ist rot, wenn die alte Datei von den Namen einer Deklaration nur einen importiert", (context) => {
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "runde"), WEITER_STATUS, MIETER, INTERN) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export plus eine geänderte Zeile im Rumpf ist rot", (context) => {
+  rot(ohneExportAuslagern(context, { neu: datei(STATUS, `export ${RUNDEN.replace("round", "floor")}`, MIT_EXPORT[2]) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export an einer Deklaration, die nicht aus der alten Datei stammt, ist rot", (context) => {
+  const fremd = "export function fremd() {\n  return 2;\n}";
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B", "fremd", "runde"), WEITER_STATUS, MIETER, INTERN), neu: datei(...MIT_EXPORT, fremd) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export an einer Deklaration, die in der alten Datei bleibt, ist rot", (context) => {
+  rot(ohneExportAuslagern(context, { alt: datei(holt("GRENZE_A", "GRENZE_B", "runde"), WEITER_STATUS, MIETER, `export ${INTERN}`) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export default an einer Funktion, die die alte Datei importiert, ist rot", (context) => {
+  rot(ohneExportAuslagern(context, { neu: datei(STATUS, `export default ${RUNDEN}`, `export ${GRENZEN}`) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export an einer Klasse, die die alte Datei importiert, ist rot", (context) => {
+  const klasse = "class Zaehler {}";
+  const basis = { [ALT]: datei(KOPF, MIETER, STATUS, klasse) };
+  rot(auslagern(context, { basis, alt: datei(holt("Zaehler"), WEITER_STATUS, MIETER), neu: datei(STATUS, `export ${klasse}`) }));
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export am Ende der bestehenden Datei, dessen Namen die alte Datei unter demselben Namen importiert, ist gleichwertig, alte und bestehende Datei", (context) => {
+  const holend = `${KOPF}\nimport { GRENZE_A, GRENZE_B, NUMBER_STATUS, runde } from "../call-result.js";`;
+  const lauf = anhaengen(context, { dazu: { [ALT]: OHNE_EXPORT_BASIS[ALT] }, alt: datei(holend, 'export { NUMBER_STATUS } from "../call-result.js";', MIETER, INTERN), ziel: datei(ANRUF_KOPF, ANRUF_FUNKTION, ...MIT_EXPORT) });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.output);
+  assert.match(lauf.output, /^src\/store\/defaults\.js: gleichwertig \(reine-auslagerung\)$/m);
+  assert.match(lauf.output, /^src\/call-result\.js: gleichwertig \(reine-auslagerung\)$/m);
+});
+
+test("vorbereitung-pruefen: reine Auslagerung: ein ergänztes export am Ende der bestehenden Datei ist rot, wenn die alte Datei den Namen nicht importiert", (context) => {
+  const lauf = anhaengen(context, { dazu: { [ALT]: OHNE_EXPORT_BASIS[ALT] }, alt: datei(KOPF, 'export { NUMBER_STATUS } from "../call-result.js";', MIETER, INTERN), ziel: datei(ANRUF_KOPF, ANRUF_FUNKTION, ...MIT_EXPORT) });
+  assert.equal(lauf.status, EXIT_ROT, lauf.output);
+  assert.doesNotMatch(lauf.output, /gleichwertig \(reine-auslagerung\)/);
+});

@@ -450,3 +450,30 @@ test("Quellauslagerung: bekommt die Quelle eine andere Ladeanweisung dazu oder t
   const vorher = datei(`${KOPF}\n${leer}`, STATUS, UEBERGAENGE, ZUSTAND);
   vollGerechnet(context, angehaengt(context, { vorher, werte: datei(`${leer}\n${KOPF}`, WEITER, ZUSTAND), basisDazu }));
 });
+
+const RUNDE = "function runde(wert) {\n  return Math.round(wert);\n}";
+const MIT_RUNDE = datei(KOPF, STATUS, RUNDE, ZUSTAND);
+const HOLT_RUNDE = `${KOPF}\nimport { runde } from "./status.js";`;
+
+test("Quellauslagerung: ein ergänztes export an der verschobenen Funktion, die die Quelle unter demselben Namen importiert, ist eine reine Auslagerung in eine neue Datei", (context) => {
+  const werte = datei(HOLT_RUNDE, 'export { STATUS } from "./status.js";', ZUSTAND);
+  erkannt(context, ausgelagert(context, { vorher: MIT_RUNDE, werte, status: datei(STATUS, `export ${RUNDE}`) }));
+});
+
+test("Quellauslagerung: ein ergänztes export an der verschobenen Funktion, die die Quelle unter demselben Namen importiert, ist eine reine Auslagerung ans Ende einer bestehenden Datei", (context) => {
+  const werte = datei(HOLT_RUNDE, 'export { STATUS } from "./status.js";', ZUSTAND);
+  erkannt(context, angehaengt(context, { vorher: MIT_RUNDE, werte, ziel: datei(ZIEL_ALT, STATUS, `export ${RUNDE}`) }), angehaengtErkannt(2));
+});
+
+test("Quellauslagerung: ein ergänztes export rechnet voll, wenn die Quelle den Namen nicht importiert", (context) => {
+  const werte = datei(KOPF, 'export { STATUS } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, ausgelagert(context, { vorher: MIT_RUNDE, werte, status: datei(STATUS, `export ${RUNDE}`) }));
+  vollGerechnet(context, angehaengt(context, { vorher: MIT_RUNDE, werte, ziel: datei(ZIEL_ALT, STATUS, `export ${RUNDE}`) }));
+});
+
+test("Quellauslagerung: ein ergänztes export rechnet voll, wenn die Quelle den Namen umbenennt importiert oder die Funktion im Rumpf geändert ist", (context) => {
+  const umbenannt = datei(`${KOPF}\nimport { runde as rund } from "./status.js";`, 'export { STATUS } from "./status.js";', ZUSTAND);
+  vollGerechnet(context, ausgelagert(context, { vorher: MIT_RUNDE, werte: umbenannt, status: datei(STATUS, `export ${RUNDE}`) }));
+  const geaendert = datei(STATUS, `export ${RUNDE.replace("round", "floor")}`);
+  vollGerechnet(context, ausgelagert(context, { vorher: MIT_RUNDE, werte: datei(HOLT_RUNDE, 'export { STATUS } from "./status.js";', ZUSTAND), status: geaendert }));
+});
