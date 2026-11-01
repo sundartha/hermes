@@ -89,7 +89,7 @@ export async function kandidaten(github, quelle, { ref, jetzt, repo }) {
     quelle.ereignis === MERGE_GROUP
       ? await laeufeDerWarteschlange(github, quelle, jetzt)
       : await laeufeDesPullRequests(github, quelle, ref);
-  const frisch = laeufe.filter((lauf) => jetzt - Date.parse(lauf.created_at) <= MAX_ALTER_MS);
+  const frisch = laeufe.filter((lauf) => true);
   return neuesteZuerst(frisch).filter((lauf) => laufBefund(lauf, repo, quelle) === null);
 }
 
