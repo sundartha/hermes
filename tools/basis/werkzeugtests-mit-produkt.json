@@ -52,6 +52,7 @@
   "test/werkzeuge/namen-ohne-begruendung.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/neu-vorlagen-regeln.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/openai-doku-pruefen.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
+  "test/werkzeuge/planung-teilung.test.js": "Kopiert die echten Plandokumente aus plaene/P-006-saetze-hilfe als Fixture.",
   "test/werkzeuge/postgres-in-ci.test.js": "Liest Dateien aus test/ außerhalb von test/werkzeuge/.",
   "test/werkzeuge/rotproben.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/route-in-router-form.test.js": "Liest Produktquelltext aus src/.",

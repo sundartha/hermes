@@ -51,9 +51,9 @@ function neuesterLauf(repo) {
   return liste[0]?.databaseId;
 }
 
-function dauernAus(ordner) {
+export function dauernAus(ordner, passt = (datei) => datei === LAUFZEITDATEI) {
   const dauern = {};
-  for (const name of readdirSync(ordner, { recursive: true }).filter((eintrag) => basename(eintrag) === LAUFZEITDATEI)) {
+  for (const name of readdirSync(ordner, { recursive: true }).filter((eintrag) => passt(basename(eintrag)))) {
     for (const { datei, dauer_ms: ms } of zeilenAus(join(ordner, name))) {
       if (typeof datei === "string" && Number.isFinite(ms)) dauern[datei] = Math.max(dauern[datei] ?? 0, ms);
     }

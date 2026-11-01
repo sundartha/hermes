@@ -4,7 +4,15 @@ import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { dateienDesTeils, gerundeteTabelle, leseDauern, schneide } from "../../tools/testlaufzeit/teilung.mjs";
+import {
+  dateienDesTeils,
+  gerundeteTabelle,
+  leseDauern,
+  schneide,
+  WERKZEUG_SUMME_JE_TEIL_MS,
+  WERKZEUG_TEILE_HOECHSTENS,
+  werkzeugTeilzahl,
+} from "../../tools/testlaufzeit/teilung.mjs";
 import { probeDirectory, REPO_ROOT } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/testlaufzeit/teil-dateien.mjs");
@@ -205,5 +213,64 @@ test("Testteile: der Erzeuger lässt die Messdatei ohne grünen Lauf unveränder
   const { lauf, datei } = erzeuger(context, { GH_LISTE: "[]", GH_LISTE_EXIT: "0" });
 
   assert.equal(lauf.status, EXIT_FEHLER);
+  assert.equal(datei, VORHER);
+});
+
+const JE_TEIL = WERKZEUG_SUMME_JE_TEIL_MS;
+const WERKZEUG_MESSDATEI_IM_REPO = "tools/testlaufzeit/werkzeug-laufzeiten.json";
+const TEILZAHLEN = [
+  ["eine Datei unter der Grenze eines Teils", { "test/werkzeuge/a.test.js": JE_TEIL / 2 }, ["test/werkzeuge/a.test.js"], 1],
+  ["Dateien knapp über einem Teil", { "test/werkzeuge/a.test.js": JE_TEIL, "test/werkzeuge/b.test.js": 1 }, ["test/werkzeuge/a.test.js", "test/werkzeuge/b.test.js"], 2],
+  ["eine neue Datei zählt mit dem Median", { "test/werkzeuge/a.test.js": JE_TEIL, "test/werkzeuge/b.test.js": JE_TEIL, "test/werkzeuge/c.test.js": 1 }, ["test/werkzeuge/a.test.js", "test/werkzeuge/neu.test.js"], 2],
+  ["nie mehr Teile als Dateien", { "test/werkzeuge/a.test.js": JE_TEIL * 5 }, ["test/werkzeuge/a.test.js"], 1],
+  ["keine Datei", { "test/werkzeuge/a.test.js": JE_TEIL }, [], 1],
+  ["höchstens die Obergrenze", Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`test/werkzeuge/s${index}.test.js`, JE_TEIL])), Array.from({ length: 30 }, (_, index) => `test/werkzeuge/s${index}.test.js`), WERKZEUG_TEILE_HOECHSTENS],
+];
+
+test("Werkzeugteile: die Zahl der Teile folgt der gemessenen Summe je Teil", (context) => {
+  for (const [fall, dauern, dateien, erwartet] of TEILZAHLEN) {
+    assert.equal(werkzeugTeilzahl(dateien, messdatei(context, messung(dauern))), erwartet, fall);
+  }
+});
+
+test("Werkzeugteile: ohne Messdatei läuft jede Datei bis zur Obergrenze in einem eigenen Teil", (context) => {
+  const dateien = Array.from({ length: 3 }, (_, index) => `test/werkzeuge/s${index}.test.js`);
+
+  assert.equal(werkzeugTeilzahl(dateien, messdatei(context, undefined)), 3);
+});
+
+const GH_WERKZEUG_ATTRAPPE = `#!/bin/sh
+printf '%s\\n' "$@" > "$GH_AUFRUF"
+while [ $# -gt 0 ]; do if [ "$1" = "-D" ]; then ziel="$2"; fi; shift; done
+mkdir -p "$ziel/werkzeugteil-1" "$ziel/werkzeugteil-2"
+printf '{"datei":"test/werkzeuge/a.test.js","dauer_ms":12.6}\\n{"datei":"test/werkzeuge/u.test.js","bestanden":true}\\n' > "$ziel/werkzeugteil-1/werkzeugteil-1.jsonl"
+printf '{"datei":"test/werkzeuge/b.test.js","dauer_ms":7}\\n' > "$ziel/werkzeugteil-2/werkzeugteil-2.jsonl"
+printf '{"datei":"test/werkzeuge/b.test.js","art":"echtWarten","anzahl":1,"summe":9}\\n' > "$ziel/werkzeugteil-2/testkosten-werkzeugteil-2.jsonl"
+`;
+
+function werkzeugErzeuger(context, argumente) {
+  const ordner = probeDirectory(context, { gh: GH_WERKZEUG_ATTRAPPE, [WERKZEUG_MESSDATEI_IM_REPO]: VORHER });
+  chmodSync(join(ordner, "gh"), 0o755);
+  const aufruf = join(ordner, "aufruf.txt");
+  const lauf = spawnSync(process.execPath, [ERZEUGER, ...argumente], {
+    cwd: ordner,
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${ordner}:${process.env.PATH}`, GITHUB_REPOSITORY: "ziel/repo", GH_AUFRUF: aufruf },
+  });
+  return { lauf, datei: readFileSync(join(ordner, WERKZEUG_MESSDATEI_IM_REPO), "utf8"), aufruf };
+}
+
+test("Werkzeugteile: der Erzeuger schreibt die gemessenen Dauern eines Prüfleiter-Laufs und lässt übernommene Dateien ohne Dauer weg", (context) => {
+  const { lauf, datei, aufruf } = werkzeugErzeuger(context, ["--werkzeuge", "77"]);
+
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.deepEqual(JSON.parse(datei), { lauf: 77, dauern: { "test/werkzeuge/a.test.js": 13, "test/werkzeuge/b.test.js": 7 } });
+  assert.match(readFileSync(aufruf, "utf8"), /^run\ndownload\n77\n-R\nziel\/repo\n/);
+});
+
+test("Werkzeugteile: der Erzeuger lehnt eine Laufnummer ab, die keine ist, und lässt die Messdatei unverändert", (context) => {
+  const { lauf, datei } = werkzeugErzeuger(context, ["--werkzeuge", "77; rm"]);
+
+  assert.equal(lauf.status, EXIT_AUFRUF);
   assert.equal(datei, VORHER);
 });

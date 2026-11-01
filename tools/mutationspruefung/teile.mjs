@@ -25,7 +25,7 @@ export function pruefsumme(teile, kopf) {
   return createHash("sha256").update(JSON.stringify({ kopf, teile })).digest("hex");
 }
 
-function mittlere(werte) {
+export function mittlere(werte) {
   const sortiert = [...werte].sort((links, rechts) => links - rechts);
   return sortiert[Math.floor(sortiert.length / HAELFTE)];
 }
