@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 import { TOOL_TEST_GLOB } from "../../test/testbaenke-run.mjs";
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { waehleTeil, werkzeugMessdatei } from "../testlaufzeit/teilung.mjs";
-import { readList } from "../werkzeugtests/werkzeugbaum.mjs";
+import { readList } from "../werkzeugtests/liste.mjs";
 import { erzeugerFuer, MAX_ALTER_MS, QUELLEN, WERKZEUG_TEILBAUM } from "./erzeuger.mjs";
 import {
   festhaltungsZeile,

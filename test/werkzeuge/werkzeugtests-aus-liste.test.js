@@ -14,6 +14,7 @@ import {
   REPO_ROOT,
   runIn,
 } from "./probe-repo.js";
+import { WERKZEUG_SUMME_JE_TEIL_MS } from "../../tools/testlaufzeit/teilung.mjs";
 import { workflowStepScript } from "./workflow-dateien.js";
 
 const PARTS = 2;
@@ -375,6 +376,10 @@ test("der Wächter macht eine Werkzeug-Testdatei außerhalb der Liste rot, die e
   }
 });
 
+const HEAVY_ENOUGH_FOR_ONE_PART_EACH = WERKZEUG_SUMME_JE_TEIL_MS;
+const LIGHT_ENOUGH_FOR_ONE_PART_TOGETHER = Math.floor(WERKZEUG_SUMME_JE_TEIL_MS / ALL_TOOL_TEST_FILES.length);
+const ONE_PART_PER_FILE = ALL_TOOL_TEST_FILES.map((_file, index) => index + 1);
+
 function measuredProbe(context, milliseconds) {
   const dauern = Object.fromEntries(ALL_TOOL_TEST_FILES.map((file) => [file, milliseconds]));
   return probe(context, {
@@ -393,21 +398,21 @@ function plannedParts(directory, event) {
 }
 
 test("die Zahl der Werkzeugteile folgt der gemessenen Dauer der Dateien, die laufen", (context) => {
-  const heavy = measuredProbe(context, 1_000_000);
+  const heavy = measuredProbe(context, HEAVY_ENOUGH_FOR_ONE_PART_EACH);
   change(heavy, "tools/werkzeug.mjs");
-  const light = measuredProbe(context, 1000);
+  const light = measuredProbe(context, LIGHT_ENOUGH_FOR_ONE_PART_TOGETHER);
   change(light, "tools/werkzeug.mjs");
-  const product = measuredProbe(context, 1_000_000);
+  const product = measuredProbe(context, HEAVY_ENOUGH_FOR_ONE_PART_EACH);
   change(product, PRODUCT_FILE);
 
-  assert.deepEqual(plannedParts(heavy, "merge_group"), [1, 2, 3]);
+  assert.deepEqual(plannedParts(heavy, "merge_group"), ONE_PART_PER_FILE);
   assert.deepEqual(plannedParts(light, "merge_group"), [1]);
   assert.deepEqual(plannedParts(product, "merge_group"), [1]);
   assert.deepEqual(plannedParts(product, "pull_request"), [1]);
 });
 
 test("der Schritt Teile nach Laufzeit planen gibt die geplanten Teile als Matrix aus", (context) => {
-  const directory = measuredProbe(context, 1_000_000);
+  const directory = measuredProbe(context, HEAVY_ENOUGH_FOR_ONE_PART_EACH);
   const base = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
   change(directory, "tools/werkzeug.mjs");
   const [script] = workflowStepScript("pruefleiter.yml", PLANNING_STEP)
@@ -422,5 +427,5 @@ test("der Schritt Teile nach Laufzeit planen gibt die geplanten Teile als Matrix
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(readFileSync(outputFile, "utf8"), "teile=[1,2,3]\n");
+  assert.equal(readFileSync(outputFile, "utf8"), `teile=${JSON.stringify(ONE_PART_PER_FILE)}\n`);
 });
