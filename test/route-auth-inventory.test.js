@@ -257,13 +257,7 @@ test("Routen-Inventar: jede Ausnahme in der Oeffentlich-Liste traegt eine Begrue
   assert.deepEqual(ohneBegruendung, []);
 });
 
-test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration und Speicher mit", async (kontext) => {
-  const vorher = config.auth.deployToken;
-  config.auth.deployToken = DEPLOY_TOKEN;
-  kontext.after(() => {
-    config.auth.deployToken = vorher;
-  });
-  const deps = { ...inventoryDeps(), store: speicherMitEinemLaufendenAnruf() };
+async function adresseDerEchtenApp(kontext, deps, pfad) {
   const app = await buildAppFor(PRODUKTIONS_BACKEND, deps);
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -271,7 +265,17 @@ test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration u
     server.closeAllConnections();
     server.close();
   });
-  const adresse = `http://127.0.0.1:${server.address().port}${ANRUFE_LAUFEND_PATH}`;
+  return `http://127.0.0.1:${server.address().port}${pfad}`;
+}
+
+test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration und Speicher mit", async (kontext) => {
+  const vorher = config.auth.deployToken;
+  config.auth.deployToken = DEPLOY_TOKEN;
+  kontext.after(() => {
+    config.auth.deployToken = vorher;
+  });
+  const deps = { ...inventoryDeps(), store: speicherMitEinemLaufendenAnruf() };
+  const adresse = await adresseDerEchtenApp(kontext, deps, ANRUFE_LAUFEND_PATH);
   const ohneToken = await withSilencedConsole(() => abrufMitFrist(adresse));
   assert.equal(ohneToken.status, HTTP_UNAUTHORIZED);
   assert.deepEqual(await ohneToken.json(), { error: "unauthorized" });
