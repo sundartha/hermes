@@ -1,3 +1,4 @@
+import { clampWithoutSplittingRestrictedData } from "./restricted-data.js";
 import { shapeForSpeech } from "./speech-shape.js";
 import { clampAtWordBoundary } from "./utils/text.js";
 
@@ -5,9 +6,14 @@ export const THINKING_SIGNAL_MAX_CHARS = 120;
 
 const BRIDGE_TAIL_SEPARATOR = " ";
 
+function clampBridge(text) {
+  const wordBoundaryCut = clampAtWordBoundary(text, THINKING_SIGNAL_MAX_CHARS).length;
+  return clampWithoutSplittingRestrictedData(text, wordBoundaryCut);
+}
+
 function bridgeSpeechFrom(roundText) {
   if (typeof roundText !== "string") return "";
-  const shaped = shapeForSpeech(clampAtWordBoundary(roundText.trim(), THINKING_SIGNAL_MAX_CHARS));
+  const shaped = shapeForSpeech(clampBridge(roundText.trim()));
   return shaped ? shaped + BRIDGE_TAIL_SEPARATOR : "";
 }
 
