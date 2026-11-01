@@ -18,6 +18,7 @@ export const PRE_PUSH_HOOK = join(REPO_ROOT, ".githooks/pre-push");
 const INHERITED_TEST_RUNNER_VARIABLE = "NODE_TEST_CONTEXT";
 const GIT_VARIABLE_PREFIX = "GIT_";
 const CLAUDE_CONFIGURATION_VARIABLE = "CLAUDE_CONFIG_DIR";
+const TAKEOVER_SWITCH_VARIABLE = "UEBERNAHME";
 const EXECUTABLE_MODE = 0o755;
 const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
 const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
@@ -28,6 +29,7 @@ export function isolatedEnvironment() {
       ([name]) =>
         name !== INHERITED_TEST_RUNNER_VARIABLE &&
         name !== CLAUDE_CONFIGURATION_VARIABLE &&
+        name !== TAKEOVER_SWITCH_VARIABLE &&
         !name.startsWith(GIT_VARIABLE_PREFIX),
     ),
   );
