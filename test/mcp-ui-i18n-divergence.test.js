@@ -170,3 +170,13 @@ test("WSP-S5: list_calls schreibt jeden Anruf in eine eigene Textzeile, eine lee
   assert.equal((await zeilen([FERTIGER_ANRUF])).length, 1, "ein Anruf, eine Zeile");
   assert.equal((await zeilen([])).length, 1, "leere Liste, genau eine Zeile");
 });
+
+test("WSP-S6: ein Fehlerergebnis eines Widget-Werkzeugs kommt ohne Sprach-Metadaten zurueck, ein Erfolg mit", async () => {
+  const unbestaetigt = { confirmed: false, preview: { to: "+4930123456", objective: "Termin" } };
+  const fehler = await inhaltssprache({ tool: "place_call", mandant: "de", gateway: unbestaetigt, args: { to: "+4930123456", objective: "Termin" } });
+  assert.equal(fehler.result.isError, true, "ohne Bestaetigungscode wird nicht angerufen");
+  assert.equal(fehler.result._meta, undefined, "am Fehler haengen keine Sprach-Metadaten");
+  const erfolg = await inhaltssprache({ tool: "get_agent_number", mandant: "de", gateway: { agent: { number: "+4930" } } });
+  assert.notEqual(erfolg.result.isError, true);
+  assert.equal(erfolg.result._meta["hermes/locale"], "de", "der Erfolg traegt die Mandantensprache");
+});
