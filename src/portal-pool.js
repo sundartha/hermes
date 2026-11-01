@@ -35,17 +35,21 @@ export async function assertNoBypassRls(client) {
   }
 }
 
-export async function createPortalRunner({
-  pool = new pg.Pool({ connectionString: config.store.databaseUrl }),
-} = {}) {
+function neuerPortalPool() {
+  const pool = new pg.Pool({ connectionString: config.store.databaseUrl });
+  pool.on("error", (err) => console.error("[pool] Verbindung im Leerlauf verloren:", err.message));
+  return pool;
+}
+
+export async function createPortalRunner({ pool = neuerPortalPool() } = {}) {
   let client;
   try {
     client = await pool.connect();
     await assertNoBypassRls({ query: (t, p) => client.query(t, p) });
-  } catch (e) {
+  } catch (fehler) {
     if (client) client.release();
     await pool.end();
-    throw e;
+    throw fehler;
   }
   client.release();
   return {

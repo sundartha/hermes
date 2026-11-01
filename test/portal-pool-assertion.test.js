@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import pg from "pg";
+import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 import { neuePglite } from "./pglite-helfer.js";
 import { assertNoBypassRls, createPortalRunner } from "../src/portal-pool.js";
 
@@ -122,6 +125,32 @@ test("S1-13b: withClient released den Work-Client auch wenn fn wirft (finally-Ga
     /boom-in-fn/,
   );
   assert.equal(workReleasedCount(), 1, "Work-Client muss trotz Wurf released werden");
+});
+
+test("B8-Portal: der Pool der Anmeldung loggt verlorene Leerlauf-Verbindungen statt den Prozess zu stuerzen", async (t) => {
+  const echterPool = pg.Pool;
+  t.after(() => {
+    pg.Pool = echterPool;
+  });
+  pg.Pool = class PoolMitEreignissen extends EventEmitter {
+    constructor(optionen) {
+      super();
+      this.optionen = optionen;
+    }
+
+    async connect() {
+      return {
+        query: async () => ({ rows: [{ is_su: "off", rolbypassrls: false }] }),
+        release: () => {},
+      };
+    }
+  };
+  const runner = await createPortalRunner();
+  assert.deepEqual(runner._pool.optionen, { connectionString: process.env.DATABASE_URL || "" });
+  const zeilen = fehlerausgabeVon(() =>
+    runner._pool.emit("error", new Error("terminating connection")),
+  );
+  assert.deepEqual(zeilen, ["[pool] Verbindung im Leerlauf verloren: terminating connection"]);
 });
 
 test("assertNoBypassRls: PGlite NOLOGIN NOBYPASSRLS app_user -> kein Fehler", async () => {
