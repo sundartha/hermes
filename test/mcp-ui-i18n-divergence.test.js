@@ -157,3 +157,16 @@ test("WSP-S4: jedes Widget-Werkzeug nennt Mandantensprache und Inhaltssprache, o
   const ohneWidget = await inhaltssprache({ tool: "get_call_status", mandant: "de", gateway: ANBIETER_ANRUF, args: { call_id: "call_1" } });
   assert.equal(ohneWidget.hat, false, "get_call_status hat kein Widget");
 });
+
+test("WSP-S5: list_calls schreibt jeden Anruf in eine eigene Textzeile, eine leere Liste in die Leer-Zeile des Mandanten", async () => {
+  const zeilen = async (calls) => {
+    const { result } = await inhaltssprache({ tool: "list_calls", mandant: "de", gateway: { calls } });
+    const [{ text }] = result.content;
+    return text.split("\n");
+  };
+  const drei = await zeilen([FERTIGER_ANRUF, EIGENER_ANRUF, ANBIETER_ANRUF]);
+  assert.equal(drei.length, 3, "drei Anrufe, drei Zeilen");
+  assert.ok(drei.every((zeile) => zeile.trim().length > 0), "keine leere Zeile");
+  assert.equal((await zeilen([FERTIGER_ANRUF])).length, 1, "ein Anruf, eine Zeile");
+  assert.equal((await zeilen([])).length, 1, "leere Liste, genau eine Zeile");
+});
