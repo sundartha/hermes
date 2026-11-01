@@ -43,6 +43,14 @@ function typescriptBlock({ files = TYPESCRIPT_FILES, noEval = "error" }) {
   return { files, rules: { "no-eval": noEval } };
 }
 
+function withBlock(...blocks) {
+  return rootConfig().replace("];", `,${blocks.map((block) => JSON.stringify(block)).join(",")}];`);
+}
+
+function withFileBlock(files, rules) {
+  return withBlock({ files, rules });
+}
+
 function packageJson(scripts = {}) {
   return `${JSON.stringify({ type: "module", scripts })}\n`;
 }
@@ -139,12 +147,122 @@ test("eslint-konfig-pruefen: neuer Ordner ohne eigenen Eintrag in der Kopie wird
   assert.equal(result.status, EXIT_OK, result.output);
 });
 
+test("eslint-konfig-pruefen: neue Datei, die vor einer Datei mit eigenem files-Block sortiert, aendert das Ergebnis nicht", () => {
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": withFileBlock(["src/app.js"], { "no-eval": "error" }),
+      "src/anderes.js": "export const anderes = 1;\n",
+      "src/weiteres.js": "export const weiteres = 1;\n",
+    },
+    after: { "src/abschalten.js": "export const abschalten = 1;\n" },
+  });
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.equal(result.output, "");
+});
+
+test("eslint-konfig-pruefen: Override fuer genau eine hinten sortierte Datei stoppt die Pruefung und nennt die Datei", () => {
+  const result = checkAfterChange({
+    before: { "src/zebra.js": "export const zebra = 1;\n" },
+    after: { "eslint.config.js": withFileBlock(["src/zebra.js"], { "no-var": "off" }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^src\/zebra\.js: Regel no-var ist \[0\], die Kopie sagt \[2\]$/m);
+  assert.doesNotMatch(result.output, /^src: /m);
+});
+
+test("eslint-konfig-pruefen: entfallener Override einer hinten sortierten Datei stoppt die Pruefung und nennt die Datei", () => {
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": withFileBlock(["src/zebra.js"], { "no-eval": "error" }),
+      "src/zebra.js": "export const zebra = 1;\n",
+      "src/anderes.js": "export const anderes = 1;\n",
+      "src/weiteres.js": "export const weiteres = 1;\n",
+    },
+    after: { "eslint.config.js": rootConfig() },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^src\/zebra\.js: Regel no-eval ist nicht gesetzt, die Kopie sagt \[2,\{"allowIndirect":false\}\]$/m);
+});
+
+test("eslint-konfig-pruefen: Regel, die fuer einen ganzen Ordner wegfaellt, wird einmal je Ordner gemeldet", () => {
+  const result = checkAfterChange({
+    before: { "src/routes/zusatz.js": "export const zusatz = 1;\n" },
+    after: { "eslint.config.js": withFileBlock(["src/routes/**"], { "no-var": "off" }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.equal(result.output.match(/^src\/routes: Regel no-var ist \[0\], die Kopie sagt \[2\]$/gm)?.length, 1);
+  assert.doesNotMatch(result.output, /^src\/routes\/\w+\.js: /m);
+});
+
+test("eslint-konfig-pruefen: Regel, die fuer einen Ordner mit einer Sonderdatei wegfaellt, wird je Ordner und fuer die Sonderdatei gemeldet", () => {
+  const special = { files: ["src/routes/sonder.js"], rules: { "no-eval": "error" } };
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": withBlock(special),
+      "src/routes/sonder.js": "export const sonder = 1;\n",
+      "src/routes/zusatz.js": "export const zusatz = 1;\n",
+    },
+    after: {
+      "eslint.config.js": withBlock(special, { files: ["src/routes/**"], rules: { "no-var": "off" } }),
+    },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.equal(result.output.match(/^src\/routes: Regel no-var ist \[0\], die Kopie sagt \[2\]$/gm)?.length, 1);
+  assert.match(result.output, /^src\/routes\/sonder\.js: Regel no-var ist \[0\], die Kopie sagt \[2\]$/m);
+  assert.doesNotMatch(result.output, /^src\/routes\/(voice|zusatz)\.js: /m);
+});
+
+test("eslint-konfig-pruefen: Datei, die nicht mehr gelintet wird, stoppt die Pruefung und nennt die Datei", () => {
+  const result = checkAfterChange({
+    before: { "src/zebra.js": "export const zebra = 1;\n" },
+    after: { "eslint.config.js": withBlock({ ignores: ["src/zebra.js"] }) },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^src: src\/zebra\.js wird nicht mehr gelintet$/m);
+});
+
+test("eslint-konfig-pruefen: Datei, die laut Kopie nicht gelintet wurde und es jetzt wird, stoppt die Pruefung", () => {
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": withBlock({ ignores: ["src/zebra.js"] }),
+      "src/zebra.js": "export const zebra = 1;\n",
+      "src/anderes.js": "export const anderes = 1;\n",
+    },
+    after: { "eslint.config.js": rootConfig() },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.match(result.output, /^src: src\/zebra\.js wird gelintet, laut Kopie nicht$/m);
+});
+
+test("eslint-konfig-pruefen: mehrheitlich nicht gelinteter Ordner mit einer gelinteten Datei bleibt ohne Befund", () => {
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": withBlock({ ignores: ["src/erste.js", "src/zweite.js"] }),
+      "src/erste.js": "export const erste = 1;\n",
+      "src/zweite.js": "export const zweite = 1;\n",
+    },
+  });
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.equal(result.output, "");
+});
+
 test("eslint-konfig-pruefen: fehlendes noInlineConfig stoppt die Pruefung, auch wenn die Kopie dazu passt", () => {
   const result = checkAfterChange({
     before: { "eslint.config.js": rootConfig({ noInlineConfig: false }) },
   });
   assert.equal(result.status, EXIT_FINDING);
   assert.match(result.output, /^src: noInlineConfig ist nicht gesetzt$/m);
+});
+
+test("eslint-konfig-pruefen: fehlendes noInlineConfig wird je Ordner einmal gemeldet, auch bei mehreren Dateien", () => {
+  const result = checkAfterChange({
+    before: {
+      "eslint.config.js": rootConfig({ noInlineConfig: false }),
+      "src/zweite.js": "export const zweite = 1;\n",
+    },
+  });
+  assert.equal(result.status, EXIT_FINDING);
+  assert.equal(result.output.match(/^src: noInlineConfig ist nicht gesetzt$/gm)?.length, 1);
 });
 
 test("eslint-konfig-pruefen: fehlende Kopie stoppt die Pruefung", () => {
