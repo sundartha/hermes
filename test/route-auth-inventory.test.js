@@ -13,12 +13,15 @@ import {
   routeKey,
 } from "../src/route-policy.js";
 import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
+import { STATUS_PATH } from "../src/routes/intern-status.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { importNachKonfiguration } from "./gemeinsam/umgebung-import.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const DEPLOY_TOKEN = "d".repeat(DEPLOY_TOKEN_MIN_LENGTH);
+const STATUS_TOKEN = "s".repeat(DEPLOY_TOKEN_MIN_LENGTH);
+const HTTP_SERVICE_UNAVAILABLE = 503;
 const PRODUKTIONS_BACKEND = "pg";
 const EIN_LAUFENDER_ANRUF = Object.freeze({ id: "call_inventar_laufend", status: "active" });
 const MAX_DAUER_S = 600;
@@ -168,6 +171,7 @@ const ROUTE_FINGERPRINT = [
   "GET /healthz",
   "GET /intern/anrufe-laufend",
   "GET /intern/anrufpause",
+  "GET /intern/status",
   "GET /login",
   "GET /mcp",
   "GET /newsletter/confirm",
@@ -284,6 +288,31 @@ test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration u
   });
   assert.equal(mitToken.status, HTTP_OK);
   assert.deepEqual(await mitToken.json(), { laufend: 1 });
+});
+
+test("Routen-Inventar: die echte App gibt /intern/status Konfiguration und Speicher mit", async (kontext) => {
+  const vorher = config.auth.statusToken;
+  config.auth.statusToken = STATUS_TOKEN;
+  kontext.after(() => {
+    config.auth.statusToken = vorher;
+  });
+  const store = {
+    ...inventoryDeps().store,
+    pruefeVerbindung: async () => {
+      throw new Error("inventar_datenbank_kaputt");
+    },
+  };
+  const adresse = await adresseDerEchtenApp(kontext, { ...inventoryDeps(), store }, STATUS_PATH);
+  const ohneSchluessel = await withSilencedConsole(() => abrufMitFrist(adresse));
+  assert.equal(ohneSchluessel.status, HTTP_UNAUTHORIZED);
+  const mitSchluessel = await abrufMitFrist(adresse, {
+    headers: { authorization: `Bearer ${STATUS_TOKEN}` },
+  });
+  assert.equal(mitSchluessel.status, HTTP_SERVICE_UNAVAILABLE);
+  assert.deepEqual(await mitSchluessel.json(), {
+    datenbank: false,
+    commit: config.server.deployedCommit,
+  });
 });
 
 test("Routen-Inventar: der Routen-Fingerprint ist unveraendert", () => {
