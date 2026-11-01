@@ -12,6 +12,7 @@ import { ABSICHT, TESTUMBAU, bereichSchluessel, bereichsEintraege, funktionskart
 import { NUL, git } from "./git.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
+import { kontextGrenzeFuer } from "./verlauf.mjs";
 
 const KRITISCH_SUFFIX = "-kritisch";
 const KOPF = /^---\n([\s\S]*?)\n---\n/;
@@ -304,7 +305,8 @@ function vorbereitung({ rolle, phase, auftrag, root, fortsetzung }, prompt, star
   const erwartet = JSON.stringify(geplanteTests(auftrag));
   const basis = auftragsbasis({ rolle, phase, auftrag, root });
   const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme, HERMES_ERWARTET: erwartet, HERMES_AUFTRAGSBASIS: basis };
-  const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze: start.kontextGrenze, vollstaendig: start.vollstaendig });
+  const { kontextGrenze = kontextGrenzeFuer(rolle) } = start;
+  const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze, vollstaendig: start.vollstaendig });
   return { kopf: { rolle, agent, sitzung, befehl: befehl.join(" ") }, umgebung, daten };
 }
 
