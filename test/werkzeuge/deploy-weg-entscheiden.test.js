@@ -284,87 +284,116 @@ test("entscheiden grün: die Reihenfolge der Läufe in der GitHub-Antwort änder
   assert.equal(lauf.ergebnis.deploy, true);
 });
 
-const ROTE_FAELLE = [
-  [
-    "der jüngste Lauf ist failure, ein älterer war success",
+async function pflichtRotPruefen(kontext, laeufe, erwartet) {
+  const lauf = await entscheidenMit(kontext, { welt: pflichtLaeufe("CI", laeufe) });
+  rotPruefen(lauf, erwartet);
+}
+
+test("entscheiden rot: der jüngste Lauf ist failure, ein älterer war success", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: ERSTER_START, conclusion: "success" },
       { startet: ZWEITER_START, conclusion: "failure" },
     ],
     /Pflicht-Check CI ist nicht success \(failure\)/,
-  ],
-  [
-    "der jüngste Lauf ist abgebrochen, ein älterer war success",
+  );
+});
+
+test("entscheiden rot: der jüngste Lauf ist abgebrochen, ein älterer war success", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: ERSTER_START, conclusion: "success" },
       { startet: ZWEITER_START, conclusion: "cancelled" },
     ],
     /Pflicht-Check CI ist nicht success \(cancelled\)/,
-  ],
-  [
-    "der jüngste Lauf hat noch keine conclusion",
+  );
+});
+
+test("entscheiden rot: der jüngste Lauf hat noch keine conclusion", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: ERSTER_START, conclusion: "success" },
       { startet: ZWEITER_START, conclusion: null },
     ],
     /Pflicht-Check CI ist nicht success \(offen\)/,
-  ],
-  [
-    "ein jüngerer success einer fremden App hebt das Rot des Actions-Laufs nicht auf",
+  );
+});
+
+test("entscheiden rot: ein jüngerer success einer fremden App hebt das Rot des Actions-Laufs nicht auf", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: ERSTER_START, conclusion: "cancelled" },
       { startet: ZWEITER_START, conclusion: "success", app: { id: FREMDE_APP } },
     ],
     /Pflicht-Check CI ist nicht success \(cancelled\)/,
-  ],
-  [
-    "zwei Läufe mit gleichem started_at, einer davon nicht success",
+  );
+});
+
+test("entscheiden rot: zwei Läufe mit gleichem started_at, einer davon nicht success", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: ERSTER_START, conclusion: "cancelled" },
       { startet: ERSTER_START, conclusion: "success" },
     ],
     /Pflicht-Check CI ist nicht success \(cancelled\)/,
-  ],
-  [
-    "der jüngere Lauf hat kein started_at und ist nicht success",
-    [
-      { startet: ERSTER_START, conclusion: "success" },
-      { conclusion: "failure" },
-    ],
+  );
+});
+
+test("entscheiden rot: der jüngere Lauf hat kein started_at und ist nicht success", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
+    [{ startet: ERSTER_START, conclusion: "success" }, { conclusion: "failure" }],
     /Pflicht-Check CI ist nicht success \(failure\)/,
-  ],
-  [
-    "der Lauf ohne started_at ist success, der datierte nicht",
-    [
-      { startet: ERSTER_START, conclusion: "failure" },
-      { conclusion: "success" },
-    ],
+  );
+});
+
+test("entscheiden rot: der Lauf ohne started_at ist success, der datierte nicht", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
+    [{ startet: ERSTER_START, conclusion: "failure" }, { conclusion: "success" }],
     /Pflicht-Check CI ist nicht success \(failure\)/,
-  ],
-  [
-    "ein success, der erst nach dem Merge beginnt, hebt das Rot davor nicht auf",
+  );
+});
+
+test("entscheiden rot: ein success, der erst nach dem Merge beginnt, hebt das Rot davor nicht auf", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: VOR_MERGE, conclusion: "cancelled" },
       { startet: NACH_MERGE, conclusion: "success" },
     ],
     /Pflicht-Check CI ist nicht success \(cancelled\)/,
-  ],
-  [
-    "ein Lauf nach dem Merge, der nicht success ist, bleibt rot",
+  );
+});
+
+test("entscheiden rot: ein Lauf nach dem Merge, der nicht success ist, bleibt rot", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
     [
       { startet: VOR_MERGE, conclusion: "success" },
       { startet: NACH_MERGE, conclusion: "failure" },
     ],
     /Pflicht-Check CI ist nicht success \(failure\)/,
-  ],
-];
+  );
+});
 
-for (const [titel, laeufe, erwartet] of ROTE_FAELLE) {
-  test("entscheiden rot: " + titel, async (kontext) => {
-    const lauf = await entscheidenMit(kontext, { welt: pflichtLaeufe("CI", laeufe) });
-    rotPruefen(lauf, erwartet);
-  });
-}
+test("entscheiden rot: zwei Läufe ohne started_at, einer davon nicht success", async (kontext) => {
+  await pflichtRotPruefen(
+    kontext,
+    [{ conclusion: "success" }, { conclusion: "failure" }],
+    /Pflicht-Check CI ist nicht success \(failure\)/,
+  );
+});
+
+test("entscheiden rot: hat der Pflicht-Check nur einen success-Lauf nach dem Merge, fehlt er", async (kontext) => {
+  const welt = pflichtLaeufe("CI", [{ startet: NACH_MERGE, conclusion: "success" }]);
+  rotPruefen(await entscheidenMit(kontext, { welt }), /Pflicht-Check CI fehlt/);
+});
 
 test("entscheiden rot: nur Läufe einer fremden App, auch wenn sie success sind, ersetzen den Pflicht-Check nicht", async (kontext) => {
   const welt = pflichtLaeufe("CI", [

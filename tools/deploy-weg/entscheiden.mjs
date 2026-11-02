@@ -47,8 +47,8 @@ async function aufMasterPruefen(github, commit) {
 }
 
 async function commitPruefen(github, commit) {
-  const { gruende, kopf } = await prKopf({ github, commit });
-  const checks = kopf === null ? [] : await checksPruefen({ github, kopf });
+  const { gruende, kopf, gemergtAm } = await prKopf({ github, commit });
+  const checks = kopf === null ? [] : await checksPruefen({ github, kopf, gemergtAm });
   return [...gruende, ...checks, ...(await aufMasterPruefen(github, commit))];
 }
 
