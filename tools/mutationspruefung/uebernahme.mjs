@@ -6,30 +6,27 @@ import { env, version } from "node:process";
 import { isDeepStrictEqual } from "node:util";
 
 import { entferneTempOrdner, neuerTempOrdner } from "../temp-ordner.mjs";
-import { abrufLaufBefund, gh, ghRepo, mitUrteilAbgeschlossen } from "./gh.mjs";
+import { abrufLaufBefund, gh, ghRepo } from "./gh.mjs";
 import { bestaetigungAbgestuerzt } from "./bestaetigung.mjs";
-import { pullRequestNummer, vorlaufImPullRequest } from "./vorlauf-pr.mjs";
-import { werkzeugEingaben } from "./vorher-speicher.mjs";
+import { ortsschluessel } from "./teile.mjs";
+import { beendet, pullRequestNummer, vorlaeufeImPullRequest } from "./vorlauf-pr.mjs";
 
 const MAX_GIT_AUSGABE = 268_435_456;
-const TESTORDNER = "test/";
-const ARBEITSORDNER = ".mutationspruefung/";
 const NUR_COMMIT = "^{commit}";
 const NUR_BAUM = "^{tree}";
-const KOPF_NICHT_NACHPRUEFBAR = "Kopf des Vorlaufs nicht nachprüfbar";
 const ABRUF_ZWEIG = "lauf-mutation/";
 const ABRUF_EREIGNIS = "workflow_dispatch";
 const ABRUF_AUFTRAG = /^Auftrag: lauf\/in-ci$/m;
 const VORLAUF_ZEILE = /^Vorlauf: ([1-9]\d*)$/m;
-const COMMIT = /^[0-9a-f]{40}$/;
 const ARTEFAKTE = "mutation-teil-*";
 const TEILDATEI = /^mutation-teil-\d+\.json$/;
 const BESTAETIGT = "getoetet";
 const GETOETET = "Killed";
+const SEITEN = new Set(["alt", "neu"]);
+const COMMIT = /^[0-9a-f]{40}$/;
 const MELDUNG_ZEICHEN = 160;
 const LEERRAUM = /\s+/g;
-const REGEL_HEUTE = "quellen";
-const REGEL_GEPRUEFT = "geprueft";
+const OHNE_BELEG = "kein bestätigt getöteter Mutant mit Stand der betroffenen Dateien";
 const schattenUebernehmbar = [];
 
 function git(argumente) {
@@ -48,78 +45,8 @@ function baumVon(ref) {
   return git(["rev-parse", "--verify", ref + NUR_BAUM]).trim();
 }
 
-function dateienVon(commit) {
-  const dateien = new Map();
-  for (const zeile of git(["ls-tree", "-r", "-z", commit]).split("\0").filter(Boolean)) {
-    const tab = zeile.indexOf("\t");
-    dateien.set(zeile.slice(tab + 1), zeile.slice(0, tab).split(" ")[2]);
-  }
-  return dateien;
-}
-
-function werkzeugInTests() {
-  return new Set(werkzeugEingaben(".").filter((pfad) => pfad.startsWith(TESTORDNER)));
-}
-
-function nachPfad([links], [rechts]) {
-  return links < rechts ? -1 : 1;
-}
-
-function hashVon(eintraege) {
-  return createHash("sha256").update(JSON.stringify(eintraege)).digest("hex");
-}
-
-function ausserhalbVonTests(dateien) {
-  const werkzeug = werkzeugInTests();
-  return [...dateien].filter(([pfad]) => werkzeug.has(pfad) || (!pfad.startsWith(TESTORDNER) && !pfad.startsWith(ARBEITSORDNER))).sort(nachPfad);
-}
-
-function baumHash(dateien) {
-  return hashVon(ausserhalbVonTests(dateien));
-}
-
-function werkzeugHash(dateien) {
-  const werkzeug = new Set(werkzeugEingaben("."));
-  return hashVon([...dateien].filter(([pfad]) => werkzeug.has(pfad)).sort(nachPfad));
-}
-
-function testBlobs(dateien) {
-  return Object.fromEntries([...dateien].filter(([pfad]) => pfad.startsWith(TESTORDNER)));
-}
-
-function hashJeCommit(commit, zwischenspeicher) {
-  if (commit === null) return { hash: null, dateien: new Map() };
-  if (!zwischenspeicher.has(commit)) {
-    const dateien = dateienVon(commit);
-    zwischenspeicher.set(commit, { hash: baumHash(dateien), dateien });
-  }
-  return zwischenspeicher.get(commit);
-}
-
-export function standVon({ seite, von, bis }, kopf) {
-  const zwischenspeicher = new Map();
-  const [vonCommit, bisCommit] = [aufgeloest(von), bis === undefined || bis === null ? null : aufgeloest(bis)];
-  const prueft = seite === "alt" ? vonCommit : kopf;
-  const quellen = { kopf: hashJeCommit(kopf, zwischenspeicher).hash, von: hashJeCommit(vonCommit, zwischenspeicher).hash, bis: hashJeCommit(bisCommit, zwischenspeicher).hash };
-  return {
-    seite,
-    von: vonCommit,
-    bis: bisCommit,
-    quellen,
-    geprueft: seite === "alt" ? { ...quellen, kopf: werkzeugHash(hashJeCommit(kopf, zwischenspeicher).dateien) } : quellen,
-    tests: testBlobs(hashJeCommit(prueft, zwischenspeicher).dateien),
-  };
-}
-
-export function lauffaehig(stand, zugesagt, regel = REGEL_HEUTE) {
-  const gleich = (name) => isDeepStrictEqual(stand[name], zugesagt[name]);
-  if (!gleich("seite")) return "andere Seite der Prüfung";
-  if (!gleich(regel)) return "Dateien außerhalb von test/ geändert";
-  return null;
-}
-
-function arbeitsbaumSauber() {
-  return git(["status", "--porcelain"]).trim() === "";
+function hashVon(wert) {
+  return createHash("sha256").update(JSON.stringify(wert)).digest("hex");
 }
 
 function auffaellig(eintrag) {
@@ -148,18 +75,21 @@ export function bestaetigtGetoetet(eintrag) {
   return sauber && eintrag.status === GETOETET && eintrag.bestaetigung === BESTAETIGT && Array.isArray(eintrag.toeter) && eintrag.toeter.length > 0;
 }
 
+function mitBeleg(eintrag) {
+  return bestaetigtGetoetet(eintrag) && typeof eintrag.stand === "string" && eintrag.lage !== undefined;
+}
+
 function dateiVon(schluessel) {
   return schluessel.split(":")[0];
 }
 
-function jeDatei(eintraege) {
-  const karte = {};
-  for (const eintrag of eintraege) (karte[dateiVon(eintrag.schluessel)] ??= []).push(eintrag);
-  return karte;
+function testBlobs() {
+  const zeilen = git(["ls-files", "-s", "-z", "--", "test/"]).split("\0").filter(Boolean);
+  return Object.fromEntries(zeilen.map((zeile) => [zeile.slice(zeile.indexOf("\t") + 1), zeile.split(" ")[1]]));
 }
 
 function schattenFeld(vorergebnis) {
-  if (vorergebnis.lauf === null || vorergebnis.echt === REGEL_GEPRUEFT) return {};
+  if (vorergebnis.lauf === null || vorergebnis.echt) return {};
   return { schatten: { uebernehmbar: schattenUebernehmbar } };
 }
 
@@ -170,6 +100,7 @@ export function teilMetadaten(pruefungen, vorergebnis) {
     umgebung: version,
     pruefungen: pruefungen.map(({ seite, von, bis }) => ({ seite, von: aufgeloest(von), bis: bis === undefined ? null : aufgeloest(bis) })),
     vorergebnis: vorergebnis.kennung ?? null,
+    testdateien: testBlobs(),
     ...schattenFeld(vorergebnis),
   };
 }
@@ -195,104 +126,68 @@ export function leseVorergebnis(pfad) {
   if (!existsSync(pfad)) throw new Error(`Vorergebnisdatei fehlt: ${pfad}`);
   const inhalt = dateiLesen(pfad);
   if (typeof inhalt !== "object" || inhalt === null) return ohneVorergebnis("Vorergebnisdatei unlesbar");
-  if (inhalt.lauf === null || !Array.isArray(inhalt.pruefungen)) return ohneVorergebnis(typeof inhalt.grund === "string" && inhalt.grund !== "" ? inhalt.grund : "leer");
+  if (inhalt.lauf === null || !Array.isArray(inhalt.belege)) return ohneVorergebnis(typeof inhalt.grund === "string" && inhalt.grund !== "" ? inhalt.grund : "leer");
   return inhalt;
 }
 
-function stimmtUeberein(vorergebnis, pruefungen) {
+function belegIndex(belege) {
+  const index = new Map();
+  for (const beleg of belege) {
+    const jeSeite = index.get(beleg.seite) ?? new Map();
+    const jeDatei = jeSeite.get(dateiVon(beleg.eintrag.schluessel)) ?? new Map();
+    jeDatei.set(beleg.eintrag.schluessel, [...(jeDatei.get(beleg.eintrag.schluessel) ?? []), beleg]);
+    jeSeite.set(dateiVon(beleg.eintrag.schluessel), jeDatei);
+    index.set(beleg.seite, jeSeite);
+  }
+  return index;
+}
+
+function stimmtUeberein(vorergebnis) {
   if (vorergebnis.lauf === null) return vorergebnis.grund;
   if (vorergebnis.umgebung !== version) return `andere Node-Version (${vorergebnis.umgebung})`;
-  if (vorergebnis.pruefungen.length !== pruefungen.length) return "andere Zahl von Prüfungen";
-  if (!arbeitsbaumSauber()) return "Arbeitsbaum nicht sauber";
   return null;
 }
 
-function kontextNach(regel, { vorergebnis, zugesagt, jetzt }) {
-  const abweichung = lauffaehig(jetzt, zugesagt, regel);
-  const kontext = abweichung === null ? { lauf: vorergebnis.lauf, eintraege: jeDatei(zugesagt.eintraege), vorher: zugesagt.tests, jetzt: jetzt.tests } : null;
-  return { abweichung, kontext };
-}
-
-function schattenNoetig(echt, jetzt) {
-  if (echt === REGEL_GEPRUEFT) return false;
-  return echt === null || !isDeepStrictEqual(jetzt.geprueft, jetzt.quellen);
-}
-
 export function kontexteFuer(vorergebnis, pruefungen) {
-  const grund = stimmtUeberein(vorergebnis, pruefungen);
+  const grund = stimmtUeberein(vorergebnis);
   if (grund !== null) return { kontexte: pruefungen.map(() => null), zeile: keinVorergebnisZeile(grund) };
-  const kopf = aufgeloest("HEAD");
-  const echt = vorergebnis.echt === undefined ? REGEL_HEUTE : vorergebnis.echt;
-  const gruende = [];
-  const kontexte = pruefungen.map((pruefung, pruefungIndex) => {
-    const zugesagt = vorergebnis.pruefungen[pruefungIndex];
-    const lage = { vorergebnis, zugesagt, jetzt: standVon(pruefung, kopf) };
-    const gilt = echt === null ? { abweichung: null, kontext: null } : kontextNach(echt, lage);
-    if (gilt.abweichung !== null) gruende.push(gilt.abweichung);
-    const schatten = schattenNoetig(echt, lage.jetzt) ? kontextNach(REGEL_GEPRUEFT, lage).kontext : null;
-    return gilt.kontext === null && schatten === null ? null : { pruefung: pruefungIndex, echt: gilt.kontext, schatten };
-  });
-  const zeile = gruende.length > 0 ? `Mutationsprüfung: Vorergebnis passt nicht zum Stand (${[...new Set(gruende)].join("; ")}), voller Neulauf.` : null;
-  return { kontexte, zeile };
+  const index = belegIndex(vorergebnis.belege);
+  const tests = { vorher: vorergebnis.testdateien ?? {}, jetzt: testBlobs() };
+  return { kontexte: pruefungen.map((_pruefung, pruefung) => ({ pruefung, echt: vorergebnis.echt === true, index, tests })), zeile: null };
 }
 
-function geaendert(vorher, jetzt) {
-  const pfade = new Set([...Object.keys(vorher), ...Object.keys(jetzt)]);
-  const abweichend = [...pfade].filter((pfad) => vorher[pfad] !== jetzt[pfad]);
-  return { neu: abweichend.filter((pfad) => jetzt[pfad] !== undefined), geloescht: abweichend.filter((pfad) => jetzt[pfad] === undefined) };
+function belegFuer(belege, { datei, alle, stand }) {
+  return belege.find(({ eintrag }) => eintrag.toeter.every((test) => alle.includes(test)) && eintrag.stand === stand(datei, eintrag.toeter)) ?? null;
 }
 
-function betroffeneTests(kontext, erreichende) {
-  const { neu, geloescht } = geaendert(kontext.vorher, kontext.jetzt);
-  if (geloescht.length > 0) return null;
-  const betroffen = new Set();
-  for (const pfad of neu) {
-    const tests = erreichende(pfad);
-    if (tests.length === 0) return null;
-    for (const test of tests) betroffen.add(test);
-  }
-  return betroffen;
+function teilungNach(kontext, datei, { seite, mutanten, alle, stand }) {
+  const belege = kontext?.index.get(seite)?.get(datei);
+  if (belege === undefined || !Array.isArray(mutanten) || stand === null) return null;
+  const treffer = mutanten.map((mutant) => belegFuer(belege.get(mutant.schluessel) ?? [], { datei, alle, stand }));
+  const offeneOrte = new Set(mutanten.filter((_mutant, nummer) => treffer[nummer] === null).map(({ lage }) => ortsschluessel(lage)));
+  const uebernommen = treffer.filter((beleg) => beleg !== null && !offeneOrte.has(ortsschluessel(beleg.eintrag.lage)));
+  if (uebernommen.length === 0) return null;
+  const offen = new Map(mutanten.filter(({ lage }) => offeneOrte.has(ortsschluessel(lage))).map(({ lage }) => [ortsschluessel(lage), lage]));
+  const laeufe = [...new Set(uebernommen.map(({ lauf }) => lauf))].sort((links, rechts) => rechts - links);
+  return { lauf: laeufe.join(", "), laeufe, uebernommen: uebernommen.map(({ eintrag }) => eintrag), offen: [...offen.values()] };
 }
 
-function imBereich(eintrag, bereiche) {
-  const [von, bis] = eintrag.zeilen;
-  return bereiche.some(([anfang, ende]) => von >= anfang && bis <= ende);
-}
-
-function bleibtGetoetet(eintrag, { betroffen, alle }) {
-  return bestaetigtGetoetet(eintrag) && eintrag.toeter.every((test) => !betroffen.has(test) && alle.includes(test));
-}
-
-function teilungNach(kontext, datei, { alle, erreichende, zeilen }) {
-  const bisher = kontext?.eintraege[datei];
-  if (bisher === undefined || !bisher.every((eintrag) => imBereich(eintrag, zeilen))) return null;
-  const betroffen = betroffeneTests(kontext, erreichende);
-  if (betroffen === null) return null;
-  const pruefung = { betroffen, alle };
-  const behalten = bisher.filter((eintrag) => bleibtGetoetet(eintrag, pruefung));
-  if (behalten.length === 0) return null;
-  return { lauf: kontext.lauf, betroffen, uebernommen: behalten, offen: bisher.filter((eintrag) => !behalten.includes(eintrag)).map(({ lage }) => lage) };
-}
-
-function uebertragen(teilung) {
-  if (teilung === null) return [];
-  const offeneOrte = new Set(teilung.offen.map((lage) => JSON.stringify(lage)));
-  return teilung.uebernommen.filter(({ lage }) => !offeneOrte.has(JSON.stringify(lage)));
-}
-
-function merkeSchatten({ pruefung, schatten, echt, datei }) {
-  const schonUebernommen = new Set(uebertragen(echt).map(({ schluessel }) => schluessel));
-  const neue = uebertragen(schatten).filter(({ schluessel }) => !schonUebernommen.has(schluessel));
-  const unbekannt = neue.filter(({ schluessel }) => !schattenUebernehmbar.some((eintrag) => eintrag.pruefung === pruefung && eintrag.schluessel === schluessel));
+function merkeSchatten({ pruefung, teilung, datei }) {
+  const unbekannt = teilung.uebernommen.filter(({ schluessel }) => !schattenUebernehmbar.some((eintrag) => eintrag.pruefung === pruefung && eintrag.schluessel === schluessel));
   schattenUebernehmbar.push(...unbekannt.map(({ schluessel }) => ({ pruefung, schluessel })));
-  if (unbekannt.length > 0) console.log(`${datei}: ${unbekannt.length} Mutanten aus Lauf ${schatten.lauf} wären übernommen worden (Schatten), alle frisch geprüft`);
+  if (unbekannt.length > 0) console.log(`${datei}: ${unbekannt.length} Mutanten aus Lauf ${teilung.lauf} wären übernommen worden (Schatten), alle frisch geprüft`);
 }
 
-export function uebernommen(kontext, datei, pruefung) {
-  const echt = teilungNach(kontext?.echt, datei, pruefung);
-  const schatten = teilungNach(kontext?.schatten, datei, pruefung);
-  if (schatten !== null) merkeSchatten({ pruefung: kontext.pruefung, schatten, echt, datei });
-  return echt;
+export function uebernommen(kontext, datei, lage) {
+  const teilung = teilungNach(kontext, datei, lage);
+  if (teilung === null || kontext.echt) return teilung;
+  merkeSchatten({ pruefung: kontext.pruefung, teilung, datei });
+  return null;
+}
+
+export function seitVorlaufGeaendert(kontext, teilung) {
+  const { vorher, jetzt } = kontext.tests;
+  return (test) => teilung.laeufe.some((lauf) => vorher[lauf]?.[test] !== jetzt[test]);
 }
 
 export function zusammengefuehrt(teilung, datei, neu) {
@@ -302,108 +197,134 @@ export function zusammengefuehrt(teilung, datei, neu) {
   return [...behalten, ...neu];
 }
 
-function laufPruefen(lauf, id, herkunft) {
-  const befund = mitUrteilAbgeschlossen(lauf) ? abrufLaufBefund(lauf, ghRepo(), herkunft) : "ist nicht mit Urteil abgeschlossen";
-  return befund === null ? null : `der Lauf ${id} ${befund}`;
-}
-
-function commitHolen(commit) {
-  try {
-    aufgeloest(commit);
-  } catch {
-    git(["fetch", "--quiet", "--no-tags", "origin", commit]);
-    aufgeloest(commit);
-  }
-}
-
 export function geladeneTeildateien(ordner) {
   const namen = readdirSync(ordner, { recursive: true }).map(String).filter((name) => TEILDATEI.test(basename(name)));
   return namen.map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")));
 }
 
+function altesFormat(bericht) {
+  return !Array.isArray(bericht.messungen) || !Number.isInteger(bericht.teile) || !Array.isArray(bericht.pruefungen) || typeof bericht.umgebung !== "string";
+}
+
 function pruefungenBrauchbar(pruefungen) {
   const commit = (wert) => wert === null || COMMIT.test(String(wert));
-  return pruefungen.every(({ seite, von, bis }) => ["alt", "neu"].includes(seite) && COMMIT.test(String(von)) && commit(bis));
+  return pruefungen.every(({ seite, von, bis }) => SEITEN.has(seite) && COMMIT.test(String(von)) && commit(bis));
 }
 
-function altesFormat(bericht) {
-  return !Number.isInteger(bericht.teile) || !Array.isArray(bericht.pruefungen) || typeof bericht.umgebung !== "string";
-}
-
-function nummernVollstaendig(berichte, teile) {
-  const nummern = berichte.map(({ teil }) => teil).sort((links, rechts) => links - rechts);
-  return nummern.length === teile && nummern.every((nummer, index) => nummer === index + 1);
-}
-
-function elternVon(commit) {
-  return git(["rev-list", "--parents", "-n", "1", commit]).trim().split(LEERRAUM).slice(1);
-}
-
-function geprueftesKopf(berichte, lauf) {
-  const kopf = berichte[0].kopf;
-  if (!COMMIT.test(String(kopf)) || !berichte.every((bericht) => bericht.kopf === kopf)) return null;
-  commitHolen(kopf);
-  if (kopf !== lauf.head_sha && elternVon(kopf)[1] !== lauf.head_sha) return null;
-  return berichte.every((bericht) => bericht.baum === baumVon(kopf)) ? kopf : null;
-}
-
-function berichteVollstaendig(berichte, lauf, imPullRequest) {
-  if (berichte.length === 0) return "enthält keine Teilergebnisse";
-  const erster = berichte[0];
-  if (altesFormat(erster)) return "hat Teilergebnisse in einem älteren Format";
-  if (!pruefungenBrauchbar(erster.pruefungen)) return "nennt unbrauchbare Prüfungen";
+function einPlan(berichte) {
+  const [erster] = berichte;
   const gleich = (bericht) =>
-    bericht.pruefsumme === erster.pruefsumme && (imPullRequest || bericht.kopf === lauf.head_sha) && bericht.teile === erster.teile && bericht.umgebung === erster.umgebung && isDeepStrictEqual(bericht.pruefungen, erster.pruefungen);
-  if (!berichte.every(gleich)) return "hat Teilergebnisse, die nicht zu einem Plan und Commit gehören";
-  return nummernVollstaendig(berichte, erster.teile) ? null : "hat nicht alle Teilergebnisse";
+    bericht.pruefsumme === erster.pruefsumme && bericht.kopf === erster.kopf && bericht.teile === erster.teile && bericht.umgebung === erster.umgebung && isDeepStrictEqual(bericht.pruefungen, erster.pruefungen);
+  return berichte.every(gleich);
 }
 
-function zugesagtVonLauf(berichte, kopf) {
-  const stand = (pruefung) => standVon(pruefung, kopf);
-  return berichte[0].pruefungen.map((pruefung, index) => {
-    const festgestellt = stand(pruefung);
-    return { seite: festgestellt.seite, quellen: festgestellt.quellen, geprueft: festgestellt.geprueft, tests: festgestellt.tests, eintraege: eintragsListe(berichte, index) };
-  });
+function luecke(berichte) {
+  if (berichte.length === 0) return "enthält keine Teilergebnisse";
+  if (berichte.some(altesFormat)) return "hat Teilergebnisse in einem älteren Format";
+  if (!berichte.every(({ pruefungen }) => pruefungenBrauchbar(pruefungen))) return "nennt unbrauchbare Prüfungen";
+  if (!einPlan(berichte)) return "hat Teilergebnisse, die nicht zu einem Plan und Commit gehören";
+  const nummern = berichte.map(({ teil }) => teil);
+  return new Set(nummern).size === nummern.length ? null : "hat doppelte Teilergebnisse";
 }
 
-function abrufen({ id, herkunft, echt }) {
-  const repo = ghRepo();
-  const lauf = JSON.parse(gh(["api", `repos/${repo}/actions/runs/${id}`]));
-  const unpassend = laufPruefen(lauf, id, herkunft);
-  if (unpassend !== null) return ohneVorergebnis(unpassend);
-  commitHolen(lauf.head_sha);
+function vollstaendigGemessen(eintraege) {
+  const von = eintraege[0].messanteil?.[1];
+  const anteile = new Set(eintraege.map(({ messanteil }) => (messanteil?.[1] === von ? messanteil[0] : null)));
+  return Number.isInteger(von) && Array.from({ length: von }, (_leer, index) => index + 1).every((anteil) => anteile.has(anteil));
+}
+
+function messungenJePruefung(berichte) {
+  const nachMutant = new Map();
+  for (const { messungen } of berichte) {
+    for (const { pruefung, ergebnisse } of messungen.filter((messung) => Array.isArray(messung.ergebnisse))) {
+      for (const eintrag of ergebnisse.filter((kandidat) => kandidat.lage !== undefined)) {
+        const schluessel = JSON.stringify([pruefung, eintrag.schluessel]);
+        nachMutant.set(schluessel, [...(nachMutant.get(schluessel) ?? []), eintrag]);
+      }
+    }
+  }
+  return nachMutant;
+}
+
+function beobachtungenDesLaufs(berichte, lauf) {
+  const seiten = berichte[0].pruefungen.map(({ seite }) => seite);
+  const beobachtet = new Map();
+  for (const [schluessel, eintraege] of messungenJePruefung(berichte)) {
+    const [pruefung, mutant] = JSON.parse(schluessel);
+    if (seiten[pruefung] === undefined || !vollstaendigGemessen(eintraege)) continue;
+    const eintrag = eintraege.reduce((bisher, naechster) => fuerUebernahme(bisher, naechster), undefined);
+    const ort = `${seiten[pruefung]}\0${mutant}`;
+    const bisher = beobachtet.has(ort) ? beobachtet.get(ort) : [];
+    beobachtet.set(ort, bisher === null || !mitBeleg(eintrag) ? null : [...bisher, { seite: seiten[pruefung], lauf, eintrag }]);
+  }
+  return beobachtet;
+}
+
+function berichteDesLaufs(id, repo) {
   const ordner = neuerTempOrdner("vorergebnis-");
   try {
     gh(["run", "download", String(id), "-R", repo, "-D", ordner, "-p", ARTEFAKTE]);
-    const berichte = geladeneTeildateien(ordner);
-    const imPullRequest = herkunft !== undefined;
-    const luecke = berichteVollstaendig(berichte, lauf, imPullRequest);
-    if (luecke !== null) return ohneVorergebnis(`der Lauf ${id} ${luecke}`);
-    const geprueft = imPullRequest ? geprueftesKopf(berichte, lauf) : lauf.head_sha;
-    if (geprueft === null) return ohneVorergebnis(KOPF_NICHT_NACHPRUEFBAR);
-    for (const { von, bis } of berichte[0].pruefungen) [von, bis].filter(Boolean).forEach(commitHolen);
-    const inhalt = { lauf: id, kopf: lauf.head_sha, umgebung: berichte[0].umgebung, echt, pruefungen: zugesagtVonLauf(berichte, geprueft) };
-    return { ...inhalt, kennung: hashVon(inhalt) };
+    return geladeneTeildateien(ordner);
   } finally {
     entferneTempOrdner(ordner);
   }
 }
 
-function laufNummer(umgebung) {
+function laufPruefen(lauf, id, herkunft) {
+  const befund = beendet(lauf) ? abrufLaufBefund(lauf, ghRepo(), herkunft) : "ist nicht beendet";
+  return befund === null ? null : `der Lauf ${id} ${befund}`;
+}
+
+function belegeAusLauf(id, herkunft) {
+  try {
+    const repo = ghRepo();
+    const unpassend = laufPruefen(JSON.parse(gh(["api", `repos/${repo}/actions/runs/${id}`])), id, herkunft);
+    if (unpassend !== null) return { beobachtet: new Map(), gruende: [unpassend] };
+    const berichte = berichteDesLaufs(id, repo);
+    const fehlt = luecke(berichte);
+    if (fehlt !== null) return { beobachtet: new Map(), gruende: [`der Lauf ${id} ${fehlt}`] };
+    if (berichte[0].umgebung !== version) return { beobachtet: new Map(), gruende: [`andere Node-Version (${berichte[0].umgebung})`] };
+    const testdateien = typeof berichte[0].testdateien === "object" && berichte[0].testdateien !== null ? berichte[0].testdateien : {};
+    return { beobachtet: beobachtungenDesLaufs(berichte, id), gruende: [], testdateien };
+  } catch (fehler) {
+    return { beobachtet: new Map(), gruende: [`der Lauf ${id}: Abruf fehlgeschlagen: ${einzeiler(fehler.message)}`] };
+  }
+}
+
+function juengsteBelege(gesammelt) {
+  const entschieden = new Map();
+  for (const { beobachtet } of gesammelt) {
+    for (const [ort, belege] of beobachtet) if (!entschieden.has(ort)) entschieden.set(ort, belege);
+  }
+  const einmalig = new Map([...entschieden.values()].flatMap((belege) => belege ?? []).map((beleg) => [JSON.stringify([beleg.seite, beleg.eintrag.schluessel, beleg.eintrag.stand]), beleg]));
+  return [...einmalig.values()];
+}
+
+function abrufen({ ids, herkunft, echt }) {
+  const gesammelt = ids.map((id) => belegeAusLauf(id, herkunft));
+  const belege = juengsteBelege(gesammelt);
+  if (belege.length === 0) return ohneVorergebnis([...new Set(gesammelt.flatMap(({ gruende }) => gruende))].join("; ") || OHNE_BELEG);
+  const laeufe = [...new Set(belege.map(({ lauf }) => lauf))].sort((links, rechts) => rechts - links);
+  const testdateien = Object.fromEntries(laeufe.map((lauf) => [lauf, gesammelt[ids.indexOf(lauf)].testdateien]));
+  const inhalt = { lauf: laeufe[0], laeufe, umgebung: version, echt, belege, testdateien };
+  return { ...inhalt, kennung: hashVon(inhalt) };
+}
+
+function laufNummern(umgebung) {
   const pullRequest = pullRequestNummer(umgebung);
-  if (pullRequest !== null) return vorlaufImPullRequest(umgebung, pullRequest);
+  if (pullRequest !== null) return vorlaeufeImPullRequest(umgebung, pullRequest);
   const nachricht = git(["log", "-1", "--format=%B", "HEAD"]);
   if (umgebung.GITHUB_EVENT_NAME !== ABRUF_EREIGNIS || !String(umgebung.GITHUB_REF_NAME).startsWith(ABRUF_ZWEIG)) return { grund: "kein Abruf der Mutationsprüfung" };
   const treffer = VORLAUF_ZEILE.exec(nachricht);
   if (!ABRUF_AUFTRAG.test(nachricht) || treffer === null) return { grund: "der Commit nennt keinen Vorlauf" };
   if (Number(treffer[1]) >= Number(umgebung.GITHUB_RUN_ID)) return { grund: "der genannte Lauf ist nicht älter als dieser" };
-  return { id: Number(treffer[1]), echt: REGEL_HEUTE };
+  return { ids: [Number(treffer[1])], uebernimmt: true };
 }
 
 function abgerufen(umgebung) {
   try {
-    const gewaehlt = laufNummer(umgebung);
-    return gewaehlt.id === undefined ? ohneVorergebnis(gewaehlt.grund) : abrufen({ ...gewaehlt, echt: gewaehlt.echt ?? (gewaehlt.uebernimmt ? REGEL_GEPRUEFT : null) });
+    const gewaehlt = laufNummern(umgebung);
+    return gewaehlt.ids === undefined ? ohneVorergebnis(gewaehlt.grund) : abrufen({ ids: gewaehlt.ids, herkunft: gewaehlt.herkunft, echt: gewaehlt.uebernimmt === true });
   } catch (fehler) {
     return ohneVorergebnis(`Abruf fehlgeschlagen: ${einzeiler(fehler.message)}`);
   }
@@ -418,7 +339,6 @@ export function holeVorergebnis(ziel, umgebung = env) {
   const ergebnis = abgerufen(umgebung);
   writeFileSync(ziel, `${JSON.stringify(ergebnis)}\n`);
   if (ergebnis.lauf === null) return keinVorergebnisZeile(ergebnis.grund);
-  const zahl = ergebnis.pruefungen.reduce((summe, { eintraege }) => summe + eintraege.filter(bestaetigtGetoetet).length, 0);
-  const schatten = ergebnis.echt === null ? " Schattenmodus: nichts wird übernommen." : "";
-  return `Mutationsprüfung: Vorergebnis aus Lauf ${ergebnis.lauf}, ${zahl} bestätigt getötete Mutanten.${schatten}`;
+  const schatten = ergebnis.echt ? "" : " Schattenmodus: nichts wird übernommen.";
+  return `Mutationsprüfung: Vorergebnis aus Lauf ${ergebnis.laeufe.join(", ")}, ${ergebnis.belege.length} bestätigt getötete Mutanten.${schatten}`;
 }

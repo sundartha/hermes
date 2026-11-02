@@ -7,7 +7,6 @@ const STANDARD_REPO = "sundartha/hermes";
 const EXIT_GRUEN = 0;
 export const MAX_GH_AUSGABE = 268_435_456;
 export const LAUF_FERTIG = "completed";
-export const ABGESCHLOSSEN = new Set(["success", "failure"]);
 const WORKFLOW_PFAD = ".github/workflows/ci.yml";
 const ABRUF_EREIGNIS = "workflow_dispatch";
 const ABRUF_ZWEIG = "lauf-mutation/";
@@ -27,10 +26,6 @@ export function gh(argumente) {
   const lauf = spawnSync("gh", argumente, { encoding: "utf8", maxBuffer: MAX_GH_AUSGABE });
   if (lauf.status === EXIT_GRUEN) return lauf.stdout;
   throw new Error(`gh ${argumente.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`);
-}
-
-export function mitUrteilAbgeschlossen(lauf) {
-  return lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion);
 }
 
 function gehoertZumPullRequest(lauf, pullRequest) {

@@ -22,12 +22,13 @@ import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindab
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
-import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnummer } from "./mutationspruefung/teile.mjs";
+import { anteile, anteilig, aufteilen, einheitGewicht, einheitName, matrix, pruefsumme, stueckeln, teilnummer } from "./mutationspruefung/teile.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
 import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
-import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
+import { bestaetigtGetoetet, holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, seitVorlaufGeaendert, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
+import { standRechner } from "./mutationspruefung/mutantenstand.mjs";
 import { quellauslagerungsZeile, reineQuellauslagerung, zieldateien } from "./mutationspruefung/quellauslagerung.mjs";
 import { lokaleUmbenennung } from "./lokale-umbenennung.mjs";
 import { postgresDa, vorherAusCi } from "./mutationspruefung/vorher-aus-ci.mjs";
@@ -41,7 +42,7 @@ import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbestand.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
-import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
+import { hatMutanten, mutantenListe, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
 import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
@@ -286,6 +287,7 @@ async function importierer() {
   return {
     importe: umkehren(nachQuelle, (ziele) => ziele.importe),
     gesamt: umkehren(nachQuelle, (ziele) => [...ziele.importe, ...ziele.genannt]),
+    vorwaerts: new Map([...nachQuelle].map(([quelle, ziele]) => [quelle, [...ziele.importe, ...ziele.genannt]])),
   };
 }
 
@@ -492,32 +494,47 @@ async function schwereArbeit(datei, zeilen, loeschung) {
   return loeschung !== null && loeschbareZeilen(datei, zeilen).length > 0;
 }
 
-async function erstlaufDerNeuenTests(datei, teilung, tests) {
-  if (!tests.erste.some((test) => teilung.betroffen.has(test))) return;
-  await mutantenproben(datei, teilung.uebernommen.slice(0, 1).map(({ lage }) => lage), tests);
+function kleinsteStelle(eintraege) {
+  const zahl = new Map();
+  for (const { lage } of eintraege) zahl.set(JSON.stringify(lage), (zahl.get(JSON.stringify(lage)) ?? 0) + 1);
+  return eintraege.reduce((beste, eintrag) => (zahl.get(JSON.stringify(eintrag.lage)) < zahl.get(JSON.stringify(beste.lage)) ? eintrag : beste)).lage;
 }
 
-async function mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests }) {
-  const erreichende = (pfad) => erreichendeTests(pfad, graph.gesamt).alle;
-  const teilung = uebernommen(anteil.uebernahme, datei, { alle: auswahl.alle, erreichende, zeilen });
+async function erstlaufDerNeuenTests(datei, teilung, { tests, geaendert }) {
+  if (!tests.erste.some(geaendert)) return;
+  await mutantenproben(datei, [kleinsteStelle(teilung.uebernommen)], tests);
+}
+
+async function mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests, stand }) {
+  const teilung = uebernommen(anteil.uebernahme, datei, { seite: stand.seite, mutanten: anteil.mutanten, alle: auswahl.alle, stand: stand.rechner });
   if (teilung === null) return mutantenproben(datei, zeilen, tests);
-  if (teilung.offen.length === 0) await erstlaufDerNeuenTests(datei, teilung, tests);
+  const geaendert = stand.seite === "alt" ? (test) => graph.geaendert.has(test) : seitVorlaufGeaendert(anteil.uebernahme, teilung);
+  if (teilung.offen.length === 0) await erstlaufDerNeuenTests(datei, teilung, { tests, geaendert });
   const neu = teilung.offen.length === 0 ? [] : await mutantenproben(datei, teilung.offen, tests);
   return zusammengefuehrt(teilung, datei, neu);
 }
 
-async function pruefeDatei(datei, zeilen, { graph, loeschung, anteil }) {
+function gestempelt(ergebnisse, datei, { rechner, anteil }) {
+  const messanteil = [anteil.anteil, anteil.von];
+  return ergebnisse.map((eintrag) => {
+    const ohneStand = { ...omitKeys(eintrag, ["stand"]), messanteil };
+    const stand = bestaetigtGetoetet(eintrag) ? rechner(datei, eintrag.toeter) : null;
+    return stand === null ? ohneStand : { ...ohneStand, stand };
+  });
+}
+
+async function pruefeDatei(datei, { zeilen, bereiche }, { graph, loeschung, anteil, stand }) {
   const auswahl = testauswahl(datei, graph);
   if (auswahl.alle.length === 0) {
-    return zeilen.map(([von]) => ohneTestdatei(datei, von));
+    return anteil.stueck > 1 ? [] : bereiche.map(([von]) => ohneTestdatei(datei, von));
   }
-  if (await schwereArbeit(datei, zeilen, loeschung)) await sperreVorTestprozessen();
+  if (await schwereArbeit(datei, bereiche, loeschung)) await sperreVorTestprozessen();
   else console.log(`${datei}: keine Mutanten und keine löschbare Anweisung in den geänderten Zeilen, Erstlauf ohne Sperrplatz.`);
   const tests = anteilig(auswahl, anteil);
-  const ergebnisse = await mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests });
+  const ergebnisse = gestempelt(await mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests, stand }), datei, { rechner: stand.rechner, anteil });
   if (loeschung === null) return ergebnisse;
   const beginn = Date.now();
-  const geloescht = await loeschung.pruefe({ datei, zeilen, ergebnisse, tests });
+  const geloescht = await loeschung.pruefe({ datei, zeilen: bereiche, ergebnisse: [...ergebnisse, ...(anteil.alleMutanten ?? [])], tests });
   notiereLoeschprobe(Date.now() - beginn, { datei });
   return [...ergebnisse, ...geloescht];
 }
@@ -664,7 +681,7 @@ async function imStand(pruefung, arbeit) {
 async function vorschauDerSeite(gemessen, { nachDatei, graph, seite }) {
   if (!budgetLaeuft()) return;
   const dateien = [];
-  for (const { datei } of gemessen) {
+  for (const datei of new Set(gemessen.map((anteil) => anteil.datei))) {
     const tests = testauswahl(datei, graph).alle;
     if (tests.length > 0) dateien.push({ tests, datei, bereiche: nachDatei.get(datei).bereiche });
   }
@@ -679,18 +696,29 @@ async function vorschauDerSeite(gemessen, { nachDatei, graph, seite }) {
   });
 }
 
+function ersterAnteil({ anteil, stueck = 1 }) {
+  return anteil === 1 && stueck === 1;
+}
+
+function zeilenDes(anteil, bereiche) {
+  return anteil.stuecke > 1 ? [...new Map(anteil.mutanten.map(({ lage }) => [JSON.stringify(lage), lage])).values()] : bereiche;
+}
+
 async function messe(einheiten, { graph, auswahl, seite }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
-  const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
+  const ergebnisse = auswahl.flatMap((anteil) => (ersterAnteil(anteil) ? nachDatei.get(anteil.datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
   if (gemessen.length === 0) return ergebnisse;
   await vorschauDerSeite(gemessen, { nachDatei, graph, seite });
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   const abmelden = loeschung === null ? null : beimHalt(loeschung.abbauen);
+  const stand = { seite, rechner: standRechner({ seite, wurzel: WURZEL, vorwaerts: graph.vorwaerts }) };
   try {
     for (const [index, anteil] of gemessen.entries()) {
       dateiBeginnt(anteil.datei, { nummer: index + 1, von: gemessen.length, seite });
-      const geprueft = await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { graph, loeschung, anteil });
+      const bereiche = nachDatei.get(anteil.datei).bereiche;
+      const optionen = { graph, loeschung: anteil.stueck > 1 ? null : loeschung, anteil, stand };
+      const geprueft = await pruefeDatei(anteil.datei, { zeilen: zeilenDes(anteil, bereiche), bereiche }, optionen);
       dateiEndet(geprueft, ueberlebt);
       ergebnisse.push(...geprueft);
     }
@@ -794,17 +822,25 @@ async function pruefe(pruefung, gleichwertige) {
   return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung), zugriffe });
 }
 
+async function einheitenDerDatei({ pruefung, datei, bereiche }, graph, dauern) {
+  if (bereiche === undefined) return [{ pruefung, datei, bereiche, anteil: 1, von: 1, mutanten: null, gewicht: einheitGewicht(null, [], dauern) }];
+  const auswahl = testauswahl(datei, graph);
+  const von = anteile(auswahl.alle.length);
+  const mutanten = await mutantenListe(datei, bereiche);
+  return Array.from({ length: von }, (_leer, index) => {
+    const tests = anteilig(auswahl, { anteil: index + 1, von, dauern }).alle;
+    return { pruefung, datei, bereiche, anteil: index + 1, von, mutanten, gewicht: einheitGewicht(mutanten, tests, dauern) };
+  });
+}
+
 async function planen(pruefungen, laufzeiten) {
   const einheiten = [];
   for (const [pruefung, stand] of pruefungen.entries()) {
-    await imStand(stand, (bestand, graph) => {
-      for (const { datei, bereiche } of bestand) {
-        const von = bereiche === undefined ? 1 : anteile(testauswahl(datei, graph).alle.length);
-        einheiten.push(...Array.from({ length: von }, (_leer, index) => ({ pruefung, datei, bereiche, anteil: index + 1, von })));
-      }
+    await imStand(stand, async (bestand, graph) => {
+      for (const { datei, bereiche } of bestand) einheiten.push(...(await einheitenDerDatei({ pruefung, datei, bereiche }, graph, laufzeiten.dauern)));
     });
   }
-  const teile = aufteilen(einheiten);
+  const teile = aufteilen(stueckeln(einheiten));
   if (laufzeiten.dauern === null) console.log(rueckfallZeile(laufzeiten.grund));
   const kopf = git(["rev-parse", "HEAD"]).trim();
   return { teile, pruefsumme: pruefsumme(teile, laufzeiten.kennung === null ? kopf : `${kopf}:${laufzeiten.kennung}`) };
