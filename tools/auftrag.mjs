@@ -25,7 +25,7 @@ const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
 const AUFRUF = [
   "Aufruf: node tools/auftrag.mjs pruefe <phasendatei>",
-  "        node tools/auftrag.mjs lauf <phasendatei>",
+  "        node tools/auftrag.mjs lauf <phasendatei>   (Halt: Datei .fortschritt/<phase>/HALT anlegen, Inhalt = Grund; lauf beendet den laufenden Auftrag, beginnt keinen weiteren und endet mit Exit 75, ein neuer Start setzt beim nächsten Auftrag fort; SIGTERM/SIGINT beenden sofort)",
   "        node tools/auftrag.mjs teillauf <phasendatei>",
   "        node tools/auftrag.mjs absichern <phasendatei>   (führt die Mutationsprüfung am alten Stand für die offenen Aufträge ohne Verbindung zum laufenden vorab in einem eigenen Worktree; schreibt Testcommits und Beleg-Vermerke in den Branch absicherung/<phase>)",
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
