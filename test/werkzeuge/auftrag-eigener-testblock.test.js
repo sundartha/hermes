@@ -145,3 +145,43 @@ test("eigener Testblock: der Start des Test-Agenten gibt den Commit vor den Comm
     assert.equal(readFileSync(ziel, "utf8"), erwartet, `${rolle} ${id} ${root}`);
   }
 });
+
+const SUCHTIEFE_DER_AUFTRAGSBASIS = 100;
+
+function repoMitEigenenCommits(context, anzahl) {
+  const repo = probeRepository(context, { [DATEI]: ALT });
+  const vorDemAuftrag = kopf(repo);
+  for (let nummer = 1; nummer <= anzahl; nummer += 1) festhalten(repo, `${PHASE}/u1`, { [DATEI]: `${ALT}// ${nummer}\n` });
+  return { repo, vorDemAuftrag };
+}
+
+function mitgegebeneBasis(context, repo) {
+  const ziel = ersatzClaude(context, ERSATZ_CLAUDE, { HERMES_AUFTRAGSBASIS: "geerbt" });
+  const auftrag = { id: "u1", bereich: "src/x.js", abnahme: "test/x.test.js", erwarteteDateien: [] };
+  const lauf = starteAgent({ rolle: "test", phase: { phase: PHASE }, auftrag, root: repo }, "Auftrag");
+  assert.equal(lauf.exitCode, 0, lauf.fehlerausgabe);
+  return readFileSync(ziel, "utf8");
+}
+
+test("eigener Testblock: die Auftragsbasis wird bis zu 100 Commits tief gesucht, darüber gilt der Arbeitsstand", (context) => {
+  const nochGefunden = repoMitEigenenCommits(context, SUCHTIEFE_DER_AUFTRAGSBASIS - 1);
+  assert.equal(mitgegebeneBasis(context, nochGefunden.repo), nochGefunden.vorDemAuftrag, "99 eigene Commits");
+  const zuTief = repoMitEigenenCommits(context, SUCHTIEFE_DER_AUFTRAGSBASIS);
+  assert.equal(mitgegebeneBasis(context, zuTief.repo), "fehlt", "100 eigene Commits");
+});
+
+const FUELLZEILE = "// Füllung, damit die Datei über einer Mebibyte liegt\n";
+const ZEILEN_UEBER_EINER_MEBIBYTE = 25_000;
+const LETZTE_ZEILE = 'test("ganz hinten", () => {});\n';
+
+test("eigener Testblock: eine Testdatei über einer Mebibyte an der Auftragsbasis wird nie lockerer geschützt als der Arbeitsstand", (context) => {
+  const gross = `${FUELLZEILE.repeat(ZEILEN_UEBER_EINER_MEBIBYTE)}${LETZTE_ZEILE}`;
+  assert.ok(Buffer.byteLength(gross) > 2 ** 20, "Vorbedingung: Datei größer als eine Mebibyte");
+  const repo = probeRepository(context, { [DATEI]: gross });
+  const basis = kopf(repo);
+  const geaendert = hook(repo, ersetzen(repo, DATEI, { alt: LETZTE_ZEILE, neu: SCHAERFER }), { basis });
+  assert.equal(geaendert.status, BLOCKING_EXIT_CODE, geaendert.stderr);
+  assert.match(geaendert.stderr, /nur angehängt/);
+  const angehaengt = hook(repo, schreiben(repo, DATEI, `${gross}${EIGEN}`), { basis });
+  assert.equal(angehaengt.status, 0, angehaengt.stderr);
+});
