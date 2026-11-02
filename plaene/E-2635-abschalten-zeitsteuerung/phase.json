@@ -1,0 +1,24 @@
+{
+  "phase": "E-2635-abschalten-zeitsteuerung",
+  "issue": 2635,
+  "absicht": "Hermes soll später zwei Instanzen tragen und ohne Pause deployen (Bauplan Abschnitt B0). Die Folgepakete B7 (Lebenszeichen), B10 (sauberes Stoppen) und S6 (zeitgesteuerte Läufe) ändern heute alle `src/boot.js`. B0a zieht deshalb das Abschalten (`makeGracefulShutdown`) und den Sweep-Takt (`runSweepTick`) in zwei eigene Dateien im Baustein `start`, ohne jede Verhaltensänderung. Nicht gewollt: Umformulieren, Umbenennen oder Umformatieren (sonst fällt die reine Auslagerung weg), ein Umbau von `makeGracefulShutdown` (B10), Eingriffe in `src/store/`, `src/config.js`, `src/mcp-tools.js`, die Takt-Konstanten und `bootServer` (B0b). Im Zweifel lieber kleiner schneiden als raten.",
+  "entwurf": {
+    "src/": "Was sich ändert: `makeGracefulShutdown` steht wörtlich in neu `src/abschalten.js`, `runSweepTick` wörtlich in neu `src/zeitsteuerung.js` (dort mit `import { SWEEP_TRIGGER } from \"./billing/cost-truing.js\";`); `src/boot.js` importiert beide und reicht sie per `export { … } from` weiter, `SWEEP_TRIGGER` entfällt aus dem Import von `cost-truing.js` in `boot.js`; die zwei Einträge in `tools/bausteine.json` (Baustein `start`, nach `src/boot.js`) stehen schon in einem Commit vor `lauf`, weil `tools/` geschützt ist und nicht zum Bereich eines Auftrags gehört.\nWie: reine Auslagerung, Anweisungen Wort für Wort gleich einschließlich `export`, keine Umbenennung, Formatierung oder neuer Kommentar; neue Importe in `boot.js` hinter den bestehenden, dann eine Leerzeile und die zwei Re-Exporte; `bootServer`, die Takt-Konstanten und `runRetention` bleiben unangetastet.\nBleibt gleich: nichts Besonderes, weil reine Auslagerung, Anweisungen Wort für Wort gleich; gedeckt durch die vier bestehenden Direkttests, ausfall-server-wiring.test.js und kostenabgleich-vormonat.test.js; kein Kunde und kein Angerufener merkt etwas.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün (test/ausfall-server-wiring.test.js, test/graceful-shutdown.test.js, test/al-p13-consult-channel.test.js, test/kv-m4-monthly-cross-check.test.js, test/sweep-fabrik-vertrag.test.js). Bestehende Tests ändern sich nicht; Absicherungstests des alten Stands sind erlaubt.\nNicht-Ziele: Takt-Konstanten, `runRetention`, `setInterval` in `bootServer`, weil das B0b ist; Umbau von `makeGracefulShutdown`, weil das B10 ist; Eingriffe in `src/store/`, `src/config.js`, `src/mcp-tools.js`, weil dort Zerlegungen laufen.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil `boot.js` die Funktion nur importiert und nicht weiterreicht, brechen Tests, die `makeGracefulShutdown` oder `runSweepTick` aus `boot.js` laden, und `bootServer` stürzt beim Start ab. | hingenommen: reine Auslagerung, Anweisungen Wort für Wort gleich; gedeckt durch die vier bestehenden Direkttests, ausfall-server-wiring.test.js und kostenabgleich-vormonat.test.js (Entscheidung Betreuung 02.11.2026, keine Folge für Kunden) |\n| PM2 | Weil die Funktion beim Verschieben ein Wort verliert (etwa ein Zweig im Abschalten), hängt der Server beim Stoppen oder löst einen Sweep nicht aus, ohne dass ein Test es merkt. | hingenommen: reine Auslagerung, Anweisungen Wort für Wort gleich; gedeckt durch die vier bestehenden Direkttests, ausfall-server-wiring.test.js und kostenabgleich-vormonat.test.js (Entscheidung Betreuung 02.11.2026, keine Folge für Kunden) |\n| PM3 | Weil `boot.js` `runSweepTick` nur weiterreicht und nicht lokal importiert, bleiben die direkten Importtests grün; beim ersten Takt im Betrieb wirft `bootServer` einen ReferenceError, Healthz bleibt dauerhaft krank, und Kostenabgleich, Monatsabrechnung sowie Ausfall- und Preisdrift-Wächter laufen nicht mehr. | hingenommen: reine Auslagerung, Anweisungen Wort für Wort gleich; gedeckt durch die vier bestehenden Direkttests, ausfall-server-wiring.test.js und kostenabgleich-vormonat.test.js (Entscheidung Betreuung 02.11.2026, keine Folge für Kunden) |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "umbau",
+      "ziel": "Abschalten und Sweep-Tick aus boot.js in eigene Dateien",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/boot.js",
+        "src/abschalten.js",
+        "src/zeitsteuerung.js",
+        "test/graceful-shutdown.test.js"
+      ],
+      "abnahme": "test/graceful-shutdown.test.js",
+      "wasDarfNiePassieren": []
+    }
+  ]
+}
