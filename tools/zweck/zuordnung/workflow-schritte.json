@@ -246,6 +246,13 @@
     ],
     "beleg": "tools/freigabe-gruende.mjs"
   },
+  ".github/workflows/freigabe.yml › approve-inhalt › Node 22 und npm ci": {
+    "aufbau": "Lokale Action .github/actions/node-npm-ci ohne apps/web und ohne Install-Skripte; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+  },
+  ".github/workflows/freigabe.yml › approve-inhalt › Approve gleicher Inhalt": {
+    "zweck": "github/approve-inhalt",
+    "beleg": "tools/approve-inhalt.mjs"
+  },
   ".github/workflows/lieferkette.yml › lieferkette › Mindestalter neuer Paketversionen prüfen": {
     "zweck": "uebrige/lieferkette",
     "beleg": "tools/lockfile-alter.mjs"

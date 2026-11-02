@@ -80,3 +80,29 @@ jobs:
           else
             node tools/freigabe-pruefung.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
           fi
+
+  approve-inhalt:
+    name: Approve gleicher Inhalt
+    if: github.event_name == 'merge_group' || github.event.pull_request.base.ref == 'master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+          install-skripte: "false"
+
+      - name: Approve gleicher Inhalt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/approve-inhalt.mjs
