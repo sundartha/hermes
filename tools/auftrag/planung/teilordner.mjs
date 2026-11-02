@@ -187,9 +187,8 @@ export function doppelAenderungen(teilung, eintrag, elternOrdner) {
 }
 
 function dateienAndererTeile(teilung, eintrag, elternOrdner) {
-  const eigene = new Set(liste(eintrag.dateien));
   const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
-  return andere.flatMap((anderer) => geaenderteDateienDes(teilung, anderer).filter((datei) => !eigene.has(datei)).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+  return andere.flatMap((anderer) => geaenderteDateienDes(teilung, anderer).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
 }
 
 function fremdeDateien(teilung, eintrag, { elternOrdner, nach, root }) {
