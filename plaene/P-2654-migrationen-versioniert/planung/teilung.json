@@ -1,0 +1,74 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "migrationen-versionstabelle",
+      "nummern": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S13",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/db/migrate.js",
+        "src/db/migrations/0002_versionstabelle.sql",
+        "src/store/pg.js",
+        "src/store.js",
+        "src/store/pg-runner.js",
+        "tools/migrationen-pruefen.mjs",
+        "scripts/lib/pg-schema-abgleich.mjs",
+        "test/pg-helpers.js",
+        "test/gemeinsam/migrationen-versioniert.test.js",
+        "test/openai-t2-20-reviewer-seed-pg.test.js",
+        "docs/RUNBOOK-RESTORE.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "R1 und R2 ohne S12 bilden zusammen die Versionstabelle mit Prüfsumme, Übernahme, einer Transaktion je Datei und dem Abbruch mit Dateinamen; das ist allein ohne Sperre lauffähig und prüfbar."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "migrationen-sperre-bereich",
+      "nummern": [
+        "S8",
+        "S9",
+        "S10",
+        "S11",
+        "S12",
+        "S14",
+        "B1"
+      ],
+      "tWege": [
+        "T2",
+        "T4",
+        "T5"
+      ],
+      "dateien": [
+        "src/db/migrate.js",
+        "src/store/pg.js",
+        "src/store/pg-runner.js",
+        "src/config.js",
+        "src/telephony/outbound-gates.js",
+        "src/web-auth.js",
+        "src/portal-pool.js",
+        "src/wiring/web-login.js",
+        "test/pg-helpers.js",
+        "test/gemeinsam/migrationen-versioniert.test.js",
+        "docs/RUNBOOK-RESTORE.md",
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Advisory-Sperre in Zwei-Schlüssel-Form mit Freigabe und Warte-Log (R4), Plattformbereich vor jeder Migration (R3), das lock_timeout der Übernahme gegen fremde Sitzungen (S12) und die Nachzüge unter derselben Sperre (B1) legen sich um den Ablauf aus t1 und brauchen dessen Versionstabelle und Übernahme."
+    }
+  ]
+}
