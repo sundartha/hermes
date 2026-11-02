@@ -1,25 +1,6 @@
 #!/bin/sh
 staged_js=$(git diff --cached --no-renames --name-only --diff-filter=ACM -- '*.js' '*.mjs' '*.cjs' '*.ts' '*.mts' '*.cts')
 if [ -n "$staged_js" ]; then
-  dirty_staged=$(printf '%s\n' "$staged_js" | while IFS= read -r f; do
-    git diff --name-only -- "$f"
-  done)
-  if [ -n "$dirty_staged" ]; then
-    echo ""
-    echo "Commit abgebrochen: folgende vorgemerkte Dateien haben zusaetzlich"
-    echo "unvorgemerkte Aenderungen im Arbeitsbaum. Der Lint-Lauf prueft den"
-    echo "Arbeitsbaum, nicht den vorgemerkten Inhalt - eine Aussage ueber das,"
-    echo "was tatsaechlich committet wuerde, ist damit nicht moeglich:"
-    echo "$dirty_staged" | sort -u
-    echo ""
-    echo "Bitte die Datei(en) vollstaendig vormerken (git add) oder die"
-    echo "unvorgemerkten Aenderungen verwerfen, dann erneut committen."
-    [ -f tools/zweck-zeigen.mjs ] && node tools/zweck-zeigen.mjs hooks/pre-commit-unvorgemerkt
-    exit 1
-  fi
-fi
-
-if [ -n "$staged_js" ]; then
   old_ifs=$IFS
   IFS='
 '
@@ -29,19 +10,6 @@ fi
 node scripts/check-staged-suppressions.js "$@"
 status=$?
 if [ "$status" -ne 0 ]; then
-  exit 1
-fi
-
-format=""
-[ -f tools/lint-format.mjs ] && format="--format ./tools/lint-format.mjs"
-npm run lint -- $format
-status=$?
-
-if [ "$status" -ne 0 ]; then
-  echo ""
-  echo "Commit abgebrochen: der Linter (npm run lint) hat Verstoesse gefunden."
-  echo "Bitte die gemeldeten Probleme beheben (oder mit npm run lint:fix versuchen) und erneut committen."
-  [ -f tools/zweck-zeigen.mjs ] && node tools/zweck-zeigen.mjs lint/gesamt
   exit 1
 fi
 

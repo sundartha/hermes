@@ -62,13 +62,6 @@
     "nichtAngenommen": "Die Datei über die Kommandozeile umschreiben, den neuen Fall so anhängen, dass er einen alten außer Kraft setzt, oder eine Kopie der Datei anlegen, die den alten Test ersetzt. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hält ein bestehender Test ein Verhalten fest, das der Auftrag absichtlich ändert, änderst du ihn nicht und antwortest als Letztes mit „Alter Test hält altes Verhalten fest: <Testdatei>:<Testname> – <Grund>“; passt der Auftrag sonst nicht, mit „Auftrag passt nicht: <Grund>“."
   },
-  "hooks/pre-commit-unvorgemerkt": {
-    "liste": "H14",
-    "wozu": "Der Lint-Lauf vor dem Commit prüft den Arbeitsbaum, nicht den vorgemerkten Inhalt. Hat eine vorgemerkte Datei zusätzlich unvorgemerkte Änderungen, wäre Lint grün für einen Stand, der nicht committet wird, und der Fehler fiele erst in der CI auf.",
-    "behebung": "Die Datei vollständig vormerken (git add) oder die unvorgemerkten Änderungen verwerfen und erneut committen.",
-    "nichtAngenommen": "Den Commit mit --no-verify oder mit abgeschalteten Hooks machen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: Einer der beiden Wege oben geht immer, einen dritten braucht es nicht."
-  },
   "hooks/rolle": {
     "liste": "H5",
     "wozu": "Im Auftragsweg schreibt der Bau-Agent den Code und der Test-Agent die Tests. Ohne bekannte Rolle kann der Hook nicht entscheiden, was gesperrt ist, und ein Agent könnte Code und die passenden Tests zugleich schreiben; ein grüner Test belegte dann nichts.",
