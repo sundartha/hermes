@@ -26,6 +26,10 @@ export function gemeinsamerOrdner(root, ...teile) {
   return join(resolve(root, gemeinsam), ...teile);
 }
 
+export function imGitRepo(cwd) {
+  return spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, encoding: "utf8" }).stdout?.trim() === "true";
+}
+
 export function gibtEsIn(commit, pfad, cwd) {
   return spawnSync("git", ["cat-file", "-e", `${commit}:${pfad}`], { cwd }).status === 0;
 }
