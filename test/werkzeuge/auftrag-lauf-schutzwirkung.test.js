@@ -21,21 +21,26 @@ const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";
 const argumente = process.argv.slice(2);
 const testdatei = readFileSync("test/rechnen.test.js", "utf8");
 const name = /test\\("(\\[NIE1\\][^"]*)"/.exec(testdatei)?.[1];
-if (!argumente.includes("--schutzwirkung") && !testdatei.includes("verdopple(2), 4")) {
+const ausgabe = (...zeilen) => console.log(zeilen.join("\\n"));
+const wirkungslos = (...zeilen) => {
+  ausgabe(...zeilen);
+  process.exitCode = argumente.includes("--schutz-gesondert") ? 0 : 1;
+};
+if (argumente.includes("--schutzwirkung")) {
+  console.error("lauf darf die Schutzwirkung nicht mehr lokal messen");
+  process.exitCode = 2;
+} else if (!testdatei.includes("verdopple(2), 4")) {
   console.log("Verstoß: Mutant überlebt: src/rechnen.js:2:10 ArithmeticOperator → zahl / 2");
+  console.log("rot: 1 von 1 Mutanten überleben in den neuen Zeilen unter src/; kein Test verlangt diese Zeilen.");
   process.exitCode = 1;
-} else if (!argumente.includes("--schutzwirkung")) console.log("grün: keiner überlebt");
-else if (name.includes("ohne neue Zeile")) console.log(${JSON.stringify(NICHT_PRUEFBAR)});
-else if (testdatei.includes("gross(")) console.log("Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: " + name);
-else if (!testdatei.includes("notDeepEqual")) console.log("Schutztest wirksam: " + name);
-else if (argumente.includes(${JSON.stringify(ALTER_SCHUTZ)})) console.log("Hinweis: Schutz im alten Code belegt (src/text.js:2): " + name);
+} else if (name === undefined) ausgabe("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.");
+else if (name.includes("ohne neue Zeile")) ausgabe("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", ${JSON.stringify(NICHT_PRUEFBAR)}, "grün: keine Wirkung zu prüfen.");
+else if (testdatei.includes("gross(")) ausgabe("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", "Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: " + name, "grün: 1 Schutztests, 0 ohne nachgewiesene Wirkung.");
+else if (!testdatei.includes("notDeepEqual")) ausgabe("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", "Schutztest wirksam: " + name, "grün: 1 Schutztests, 0 ohne nachgewiesene Wirkung.");
+else if (argumente.includes(${JSON.stringify(ALTER_SCHUTZ)})) ausgabe("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", "Hinweis: Schutz im alten Code belegt (src/text.js:2): " + name, "grün: 1 Schutztests, 0 ohne nachgewiesene Wirkung.");
 else if (argumente.includes(${JSON.stringify(FALSCHER_SCHUTZ)})) {
-  console.log("Verstoß: Alter Schutz nicht belegt (src/text.js:1, der Fall tötet dort keinen Mutanten): " + name);
-  process.exitCode = 1;
-} else {
-  console.log("Verstoß: Schutztest wirkungslos: " + name);
-  process.exitCode = 1;
-}
+  wirkungslos("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", "Verstoß: Alter Schutz nicht belegt (src/text.js:1, der Fall tötet dort keinen Mutanten): " + name, "rot: 1 Schutztests, 1 ohne nachgewiesene Wirkung.");
+} else wirkungslos("grün: 1 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", "Verstoß: Schutztest wirkungslos: " + name, "rot: 1 Schutztests, 1 ohne nachgewiesene Wirkung.");
 `;
 
 function schutzfall(fall, ...importe) {
@@ -72,6 +77,9 @@ test("ein wirksamer Schutztest bleibt grün und braucht keine Nachrunde", (conte
   const { werkzeug, lauf, beleg } = laufMit(context, schutzfall(MIT_WIRKUNG));
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(exitCodes(beleg, "schutzwirkung"), [0]);
+  assert.deepEqual(beleg.pruefungen.filter(({ befehl }) => befehl.includes("--schutzwirkung")), [], "lauf startet keinen eigenen lokalen Schutzwirkungs-Lauf");
+  assert.ok(beleg.pruefungen.filter(({ name }) => name === "mutation").every(({ befehl }) => befehl.includes("--schutz-gesondert")), "die Mutationsprüfung meldet die Schutzwirkung gesondert");
+  assert.equal(beleg.pruefungen.filter(({ name }) => name === "mutation").length, 1, "die Schutzwirkung kommt aus dem Urteil der Mutationsprüfung, ohne zweiten Lauf");
   assert.equal(existsSync(join(werkzeug, "prompt-test-nach.txt")), false);
 });
 
@@ -146,4 +154,17 @@ test("eine Alter-Schutz-Antwort zu einem wirksamen oder unbekannten Fall steht n
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const zeilen = nachricht(repo).split("\n").filter((zeile) => zeile.startsWith("Alter Schutz"));
   assert.deepEqual(zeilen, [`Alter Schutz nicht geprüft: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`, "Alter Schutz nicht geprüft: [NIE2] src/text.js:2, weil es den Satz nicht gibt"]);
+});
+
+test("mit HERMES_MUTATION_IN_CI=1 kommt die Schutzwirkung aus dem Urteil der CI, auch mit altem Schutz, und lauf misst nichts lokal", (context) => {
+  const antwort = `${ABSATZ}\nAlter Schutz: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`;
+  const drehbuch = { test: schutzfall(OHNE_WIRKUNG), bau: { "src/rechnen.js": VERDOPPELT }, nach: NACHRUNDE, "test-nach-antwort": antwort };
+  const dateien = { ...MIT_MUTATION, "mutation.mjs": ERSATZ_MUTATION };
+  const { lauf, beleg } = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [SATZ] }, drehbuch, dateien, umgebung: { HERMES_MUTATION_IN_CI: "1" } });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const befehle = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation") || name.startsWith("schutzwirkung")).map(({ befehl }) => befehl);
+  assert.ok(befehle.length >= 3, befehle.join("\n"));
+  for (const befehl of befehle) assert.match(befehl, /^npm --silent run test:mutation -- --in-ci --basis /);
+  assert.deepEqual(befehle.filter((befehl) => befehl.includes("--schutzwirkung")), []);
+  assert.ok(befehle.some((befehl) => befehl.includes(`--alter-schutz ${ALTER_SCHUTZ}`)), "der Anspruch auf alten Schutz geht mit der CI-Mutation, die ihn im Urteil belegt");
 });
