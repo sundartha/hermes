@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
+import { BUDGET_ABSCHNITT, BUDGET_PFAD, istBudgetWert } from "./funktionskarte/antwortzeiten.mjs";
 import { fileAt } from "./pruefungen-messen.mjs";
 
 export const STRENGER = "strenger";
@@ -7,6 +8,7 @@ export const STRENGER = "strenger";
 const FALL_ALTBEFUNDE = "(a) Altbefunde gestrichen";
 const FALL_TESTDATEI = "(c) neue Testdatei";
 const FALL_KARTE = "(d) Bausteinkarte nur strenger";
+const FALL_BUDGET = "(e) Antwortzeit-Budget nur kleiner";
 const KARTE = "tools/bausteine.json";
 const ALLE_EINGAENGE = "alle";
 const KARTE_SCHLUESSEL = new Set(["schichten", "bausteine", "altlast"]);
@@ -125,9 +127,12 @@ function blockStricter(before, after) {
   );
 }
 
+function sameSortedKeys(before, after) {
+  return isDeepStrictEqual(Object.keys(before).toSorted(), Object.keys(after).toSorted());
+}
+
 function sameKnownKeys(before, after) {
-  const [oldKeys, newKeys] = [Object.keys(before).toSorted(), Object.keys(after).toSorted()];
-  return isDeepStrictEqual(oldKeys, newKeys) && newKeys.every((key) => KARTE_SCHLUESSEL.has(key));
+  return sameSortedKeys(before, after) && Object.keys(after).every((key) => KARTE_SCHLUESSEL.has(key));
 }
 
 export function onlyTightensMap(before, after) {
@@ -145,9 +150,25 @@ export function onlyTightensMap(before, after) {
   );
 }
 
+function onlyLowersBudgets(before, after) {
+  if (!isRecord(before) || !isRecord(after) || !sameSortedKeys(before, after)) return false;
+  const [old, current] = [before[BUDGET_ABSCHNITT], after[BUDGET_ABSCHNITT]];
+  if (!isRecord(old) || !isRecord(current) || !sameSortedKeys(old, current)) return false;
+  const rest = ([abschnitt]) => abschnitt !== BUDGET_ABSCHNITT;
+  const sameRest = isDeepStrictEqual(
+    Object.entries(before).filter(rest),
+    Object.entries(after).filter(rest),
+  );
+  const lower = Object.entries(current).every(
+    ([name, ms]) => istBudgetWert(ms) && ms <= old[name],
+  );
+  return sameRest && lower && !isDeepStrictEqual(before, after);
+}
+
 const RULES = [
   { fall: FALL_ALTBEFUNDE, settings: OLD_FINDING_LISTS, holds: onlyDropsEntries },
   { fall: FALL_KARTE, settings: new Map([[KARTE, WHOLE_FILE]]), holds: onlyTightensMap },
+  { fall: FALL_BUDGET, settings: new Map([[BUDGET_PFAD, WHOLE_FILE]]), holds: onlyLowersBudgets },
 ];
 
 function stricterCase(basis, { status, path }) {
