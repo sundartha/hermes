@@ -187,3 +187,101 @@ test("Web-Login legt den Tenant mit country/defaultLanguage/timezone an (ex LANG
   assert.notEqual(rows[0].default_language, null, "Web-Login-Pfad setzt tenant.defaultLanguage");
   assert.notEqual(rows[0].timezone, null, "Web-Login-Pfad setzt tenant.timezone");
 });
+
+const { default: pg } = await import("pg");
+const { config } = await import("../src/config.js");
+const { buildApp } = await import("../src/app.js");
+const { poolAufPglite } = await import("./abrechnung/server-mit-testdatenbank.js");
+
+const DEV_LOGIN_SUB = "dev-user";
+const ABHAENGIGKEITEN_OHNE_BELANG = [
+  "callFinish lifecycle provisioning ttsStore directiveSynth voiceRender",
+  "messaging elevenLabsOutbound inboundBridges consultDelivery durableAuditFor",
+].flatMap((zeile) => zeile.split(" "));
+
+const leererDienst = new Proxy(function leererDienst() {}, {
+  get: (_ziel, name) => (name === "then" ? undefined : leererDienst),
+  apply: () => leererDienst,
+});
+
+function pgStartKonfiguration(auth = {}) {
+  return {
+    ...config,
+    store: { ...config.store, storeBackend: "pg" },
+    auth: { ...config.auth, sessionSecret: "nie-web-login-sitzungsgeheimnis", ...auth },
+  };
+}
+
+function pgPoolAufPglite(t, db) {
+  const echterPool = pg.Pool;
+  t.after(() => {
+    pg.Pool = echterPool;
+  });
+  return poolAufPglite(db);
+}
+
+async function appAusBuildApp(t, zusatz) {
+  const capture = captureConsole();
+  let app;
+  try {
+    ({ app } = await buildApp({
+      ...Object.fromEntries(ABHAENGIGKEITEN_OHNE_BELANG.map((name) => [name, leererDienst])),
+      store: fakeStore,
+      audit: noopAudit,
+      ...zusatz,
+    }));
+  } finally {
+    capture.restore();
+  }
+  const srv = await listen(app);
+  t.after(() => srv.close());
+  return srv;
+}
+
+async function pgliteOhneSonderrechte() {
+  const db = await neuePglite();
+  await db.exec(`CREATE ROLE nie_web_login NOSUPERUSER NOBYPASSRLS;
+    GRANT CREATE, USAGE ON SCHEMA public TO nie_web_login;
+    SET ROLE nie_web_login;`);
+  return db;
+}
+
+test("[NIE1] Start mit pg und SESSION_SECRET ohne eingespritzten createPortalRunner bietet /auth/login an und baut den Portal-Pool aus src/portal-pool.js", async (t) => {
+  const pools = pgPoolAufPglite(t, await pgliteOhneSonderrechte());
+  const srv = await appAusBuildApp(t, { config: pgStartKonfiguration() });
+
+  assert.equal(pools.length, 1, "genau ein Portal-Pool beim Start");
+  assert.equal(pools[0].optionen.connectionString, config.store.databaseUrl);
+  const res = await abrufMitFrist(`${srv.url}/auth/login`, { redirect: "manual" });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get("location") || "", /code_challenge=/);
+});
+
+test("[NIE2] ein über buildApp durchgereichter createPortalRunner wird von wireWebLogin unverändert benutzt", async (t) => {
+  const runner = await makePgliteRunner();
+  const aufrufe = [];
+  const pools = pgPoolAufPglite(t, await neuePglite());
+  const srv = await appAusBuildApp(t, {
+    config: pgStartKonfiguration({ devLoginEnabled: true }),
+    createPortalRunner: async (...argumente) => {
+      aufrufe.push(argumente);
+      return runner;
+    },
+  });
+
+  assert.equal(aufrufe.length, 1, "der eingespritzte Runner baut den Portal-Zugang genau einmal");
+  assert.equal(
+    pools.length,
+    0,
+    "kein Portal-Pool aus src/portal-pool.js neben dem eingespritzten Runner",
+  );
+  const res = await abrufMitFrist(`${srv.url}/auth/dev-login`, {
+    method: "POST",
+    redirect: "manual",
+  });
+  assert.equal(res.status, 302);
+  const { rows } = await runner.withClient((c) =>
+    c.query("SELECT id FROM tenant WHERE id = $1", [tenantIdForSubject(DEV_LOGIN_SUB)]),
+  );
+  assert.equal(rows.length, 1, "der Login schreibt in die Datenbank des eingespritzten Runners");
+});
