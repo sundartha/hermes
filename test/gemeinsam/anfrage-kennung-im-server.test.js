@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
-import { placeCall, postTelnyxIncoming, seedState, seedWithTelnyxNumber, startServer, waitForLog } from "../helpers.js";
+import { makeTelnyxSigner, placeCall, postTelnyxIncoming, seedState, seedWithTelnyxNumber, startServer, stdioServerTransport, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
@@ -118,4 +120,85 @@ test("Anfrage-ID: ein ungueltiger LOG_REQUEST_ID-Wert bleibt aus und wird beim S
   const frisch = await ladeKonfigurationMit("vielleicht", () => import("../../src/config.js?anfrage-kennung-ungueltig"));
   assert.strictEqual(frisch.config.metrics.logRequestId, false);
   assert.ok(frisch.configFatalErrors().some((befund) => befund.includes("LOG_REQUEST_ID")));
+});
+
+function sammleNurStdout(srv) {
+  const nurStdout = { text: "" };
+  srv.child.stdout.on("data", (stueck) => (nurStdout.text += stueck.toString()));
+  return nurStdout;
+}
+
+test("Anfrage-ID: mit Schalter traegt auch die normale stdout-Ausgabe waehrend einer Anfrage die ID", async () => {
+  const optionen = { seed: seedWithTelnyxNumber({ language: "de" }), env: MIT_KENNUNG_IN_LOGS };
+  await mitServer(optionen, async (srv) => {
+    const nurStdout = sammleNurStdout(srv);
+    const antwort = await postTelnyxIncoming(srv, { callSid: "CAnurstdout" });
+    const kennung = antwort.headers.get(KENNUNG_HEADER);
+    await waitForLog(srv, /\[voice-antwort\] weg=\/voice\/incoming ms=\d+ status=\d+ ende=beendet$/m);
+    const erwartet = new RegExp(`^rid=${kennung} \\[voice-antwort\\] weg=\\/voice\\/incoming`, "m");
+    assert.match(nurStdout.text, erwartet, `Log-Pattern ${erwartet} fehlt auf stdout:\n${nurStdout.text}`);
+  });
+});
+
+const NUMMER_IM_LOG = "+491701234567";
+const MASKIERTE_ZEILE = /^(rid=[0-9a-f-]{36} )?\[voice\/outbound\] unbekannter Call \(callId=\*\*\*4567#[0-9a-f]+\) -> Hangup$/m;
+const UNBEKANNTE_ZIELNUMMER = "+491709876543";
+const MASKIERTE_STDOUT_ZEILE = /^(rid=[0-9a-f-]{36} )?\[audit\] inbound_unrouted ip=\S+ to=\*\*\*6543#[0-9a-f]{6}$/m;
+
+test("[NIE1] mit Schalter bleibt eine Nummer in einer Logzeile waehrend der Anfrage maskiert", async () => {
+  const optionen = { seed: seedWithTelnyxNumber({ language: "de" }), env: MIT_KENNUNG_IN_LOGS };
+  await mitServer(optionen, async (srv) => {
+    const nurStdout = sammleNurStdout(srv);
+    const ziel = `${srv.localUrl}/voice/outbound?callId=${encodeURIComponent(NUMMER_IM_LOG)}`;
+    await abrufMitFrist(ziel, { method: "POST" });
+    await postTelnyxIncoming(srv, { callSid: "CAunbekannt", to: UNBEKANNTE_ZIELNUMMER });
+    await waitForLog(srv, /\[voice\/outbound\] unbekannter Call/);
+    await waitForLog(srv, /\[audit\] inbound_unrouted/);
+    assert.ok(!srv.stdout.includes(NUMMER_IM_LOG), "die Nummer steht unmaskiert im Log");
+    assert.match(srv.stdout, MASKIERTE_ZEILE);
+    assert.ok(!nurStdout.text.includes(UNBEKANNTE_ZIELNUMMER), `die Zielnummer steht unmaskiert auf stdout:\n${nurStdout.text}`);
+    assert.match(nurStdout.text, MASKIERTE_STDOUT_ZEILE);
+  });
+});
+
+const NUMMER_IM_WERKZEUG = "+491511234567";
+
+async function mitGatewayAttrappe(koerper, lauf) {
+  const gateway = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(koerper));
+  });
+  await new Promise((fertig) => gateway.listen(0, "127.0.0.1", fertig));
+  try {
+    return await lauf(`http://127.0.0.1:${gateway.address().port}`);
+  } finally {
+    await new Promise((fertig) => gateway.close(fertig));
+  }
+}
+
+test("[NIE2] mit Schalter liefert der stdio-MCP-Einstieg die Werkzeugantwort auf stdout unmaskiert", async () => {
+  const koerper = { agent: { number: NUMMER_IM_WERKZEUG, owner: "Jonas" }, usage: { calls: 1 }, settings: {} };
+  await mitGatewayAttrappe(koerper, async (gatewayUrl) => {
+    const { transport, stderr } = stdioServerTransport({ ...MIT_KENNUNG_IN_LOGS, GATEWAY_URL: gatewayUrl });
+    const client = new Client({ name: "anfrage-kennung-stdio", version: "0.0.0" });
+    try {
+      await client.connect(transport);
+      const ergebnis = await client.callTool({ name: "get_agent_status", arguments: {} });
+      assert.equal(ergebnis.structuredContent?.number, NUMMER_IM_WERKZEUG, `stderr: ${stderr.text}`);
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+const HTTP_FORBIDDEN = 403;
+
+test("[NIE3] mit Schalter weist der Webhook einen unsignierten Anruf weiter ab und legt keinen Anruf an", async () => {
+  const signierer = makeTelnyxSigner();
+  const env = { ...MIT_KENNUNG_IN_LOGS, SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signierer.publicKeyBase64 };
+  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env }, async (srv) => {
+    const antwort = await postTelnyxIncoming(srv, { callSid: "CAunsigniert" });
+    assert.equal(antwort.status, HTTP_FORBIDDEN);
+    assert.equal(srv.readStore().calls.length, 0);
+  });
 });
