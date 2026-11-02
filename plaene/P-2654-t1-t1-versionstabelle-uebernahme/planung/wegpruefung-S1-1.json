@@ -1,0 +1,29 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "befund",
+      "befund": "Die Kette selbst stimmt: src/store.js:12 → src/store/pg.js:35 (prepareSchema ist standardmäßig migrate, src/store/pg.js:22) → src/db/migrate.js:178 applySchema, alles auf einem Client (src/store/pg-runner.js:6-15); /healthz ist eine bestehende Route (src/app.js:130). Aber der Weg führt als zweiten Eingang test/gemeinsam/migrationen-start.test.js mit dem Ausweg „nicht gefunden, weil `npm start` entsteht neu in …“. Das ist falsch: `npm start` gibt es, nämlich `node src/server.js` (package.json:14). src/server.js:3 importiert src/store.js, und src/store.js:23 ruft createPgBackend beim Laden des Moduls auf. Der Erkunder soll den Testdatei-Eintrag aus dem Weg nehmen und als Eingang package.json:14 → src/server.js:3 → src/store.js:23 → createPgBackend melden; die Testdatei gehört nur zu den Änderungen.",
+      "fundstelle": "package.json:14"
+    },
+    {
+      "schluessel": "weg:S13",
+      "ergebnis": "befund",
+      "befund": "Die Kette bis migrate stimmt (src/store.js:12 → src/store/pg.js:35 → src/db/migrate.js:178), und MIGRATION_READERS (src/db/migrate.js:11) ist die richtige Stelle, um je Datei einen Namen einzutragen. Wie bei S1 ist aber der Eingang test/gemeinsam/migrationen-start.test.js mit dem Ausweg „`npm start` entsteht neu“ falsch: `npm start` ist `node src/server.js` (package.json:14), und dessen Import von src/store.js (src/server.js:3) ruft createPgBackend beim Laden auf (src/store.js:23). Den Eintrag durch package.json:14 → src/server.js:3 → src/store.js:23 ersetzen.",
+      "fundstelle": "src/server.js:3"
+    },
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "befund",
+      "befund": "Die Kette trägt S3: 0001_ausgang.sql legt jede Tabelle mit CREATE TABLE IF NOT EXISTS an (z. B. account in :985), ein zweiter Lauf auf einer Datenbank mit Konten ist also ohne Wirkung. Weder migrate (src/db/migrate.js:29-184) noch seedDefaults legen Konten an oder löschen sie. Falsch ist aber der Eingang test/gemeinsam/migrationen-start.test.js mit dem Ausweg „`npm start` entsteht neu“: `npm start` ist `node src/server.js` (package.json:14), und src/store.js:23 ruft createPgBackend beim Laden auf. Den Eintrag durch package.json:14 → src/server.js:3 → src/store.js:23 ersetzen.",
+      "fundstelle": "src/store.js:23"
+    },
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "befund",
+      "befund": "Die Kette trägt S4: Ein Fehler aus applyMigrations geht durch init/withClient (src/store/pg-runner.js:8-15) zu src/store.js:24-30. Dort wird err.message ausgegeben und der Prozess endet mit Exit 1; die Dateinamen müssen also in der Fehlermeldung von applyMigrations stehen. Die Transaktion ist möglich, weil derselbe Client über den ganzen Lauf weitergegeben wird. Falsch ist aber wie bei S1 der Eingang test/gemeinsam/migrationen-start.test.js mit dem Ausweg „`npm start` entsteht neu“: `npm start` ist `node src/server.js` (package.json:14). Den Eintrag durch package.json:14 → src/server.js:3 → src/store.js:23 ersetzen.",
+      "fundstelle": "src/store.js:30"
+    }
+  ],
+  "befunde": []
+}

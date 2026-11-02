@@ -1,0 +1,12 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:23"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet"
+  }
+]
