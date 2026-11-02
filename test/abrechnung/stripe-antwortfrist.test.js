@@ -8,7 +8,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { makeStripeStub } from "../helpers.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
+import request from "../gemeinsam/testserver-anfrage.mjs";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
 
 const withStripeStub = makeStripeStub(config, "sk_test_koerper");
@@ -41,7 +41,7 @@ const KONFIGURATION = {
     stripeCustomerRetryDelayMs: 0,
     numberSetupFeeCents: 0,
   },
-  provisioning: { releaseGraceMs: 0, provisioningCountry: "DE", provisioningRetryMaxAttempts: 3 },
+  provisioning: { releaseGraceMs: 0, provisioningCountry: "DE" },
 };
 
 const ABO_POSITIONEN = { data: [{ current_period_start: PERIODE_START, current_period_end: PERIODE_ENDE }] };
@@ -51,7 +51,7 @@ function stripeGutfall(url, init) {
   if (init.method === "POST" && pfad === "/v1/subscriptions")
     return Response.json({ id: ABO, items: ABO_POSITIONEN });
   if (init.method === "GET" && pfad === `/v1/subscriptions/${ABO}`)
-    return Response.json({ id: ABO, status: "active", latest_invoice: { total: 999 } });
+    return Response.json({ id: ABO, status: "active" });
   if (init.method === "POST" && pfad === "/v1/checkout/sessions")
     return Response.json({ id: SITZUNG, url: CHECKOUT_URL });
   if (init.method === "GET" && pfad === `/v1/checkout/sessions/${SITZUNG}`)
@@ -138,22 +138,10 @@ const KUENDIGEN = { method: "POST", pfad: `${ABRECHNUNG}/cancel` };
 const FORTSETZEN = { method: "POST", pfad: `${ABRECHNUNG}/resume` };
 const STATUS = { method: "GET", pfad: `${ABRECHNUNG}/status` };
 
-function anfrage(s, { method, pfad, body }) {
-  const daten = body ? JSON.stringify(body) : "";
-  const headers = { cookie: s.cookie, "content-type": "application/json", "content-length": Buffer.byteLength(daten) };
-  return new Promise((resolve, reject) => {
-    const req = anfrageMitFrist({ host: "127.0.0.1", port: s.port, path: pfad, method, headers }, (res) => {
-      let text = "";
-      res.setEncoding("utf8");
-      res.on("data", (teil) => (text += teil));
-      const istJson = /application\/json/.test(res.headers["content-type"]);
-      res.on("end", () =>
-        resolve({ status: res.statusCode, location: res.headers.location, body: istJson ? JSON.parse(text) : text }),
-      );
-    });
-    req.on("error", reject);
-    req.end(daten);
-  });
+async function anfrage(s, { method, pfad, body }) {
+  const antwort = await request(method, `http://127.0.0.1:${s.port}${pfad}`, { cookie: s.cookie, body });
+  const istJson = /application\/json/.test(antwort.headers["content-type"]);
+  return { status: antwort.status, location: antwort.location, body: istJson ? JSON.parse(antwort.body) : antwort.body };
 }
 
 async function mitStripe(stripe, s, route) {
