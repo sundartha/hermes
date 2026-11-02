@@ -267,3 +267,18 @@ test("Gleichheit: Schema-Vorlage plus init gleicht frischer Datenbank plus init"
   }
   assert.deepEqual(erhalten.daten, erwartet.daten);
 });
+
+test("Versionstabelle: nach init gibt es schema_migrations mit version, name und checksum", async () => {
+  const frisch = await neuePglite();
+  const frischerStore = makePgStore({ withClient: (fn) => fn(frisch) });
+  await frischerStore.init();
+  await frischerStore.drainFlushes();
+
+  const { rows } = await frisch.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' ORDER BY column_name",
+  );
+  assert.deepEqual(
+    rows.map((zeile) => zeile.column_name),
+    ["checksum", "name", "version"],
+  );
+});
