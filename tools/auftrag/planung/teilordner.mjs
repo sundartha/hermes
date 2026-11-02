@@ -161,7 +161,8 @@ function umbauDesEintrags(teilung, eintrag) {
 function dateienAndererTeile(teilung, eintrag, elternOrdner) {
   const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
   const belege = new Set(liste(teilung.umfang?.belegDateien));
-  const geaendert = (datei) => !belege.has(datei);
+  const eigene = new Set(liste(eintrag.dateien));
+  const geaendert = (datei) => !belege.has(datei) && !eigene.has(datei);
   return andere.flatMap((anderer) => liste(anderer?.dateien).filter(geaendert).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
 }
 
