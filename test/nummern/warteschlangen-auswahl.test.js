@@ -36,3 +36,13 @@ test("S1-17c: unbekanntes QUEUE_BACKEND -> wirft fail-closed", () => {
     assert.throws(() => createQueue(), /Unbekanntes QUEUE_BACKEND/);
   });
 });
+
+test("S1-17d: pgboss baut mit gültiger DATABASE_URL ohne Verbindung auf, wirft aber bei fehlender oder nicht-textlicher", () => {
+  withQueueBackend("pgboss", () => {
+    const adresse = "postgres://hermes@127.0.0.1:1/hermes";
+    assert.doesNotThrow(() => createQueue({ connectionString: adresse }));
+    assert.doesNotThrow(() => createQueue({ connectionString: undefined, bossOptions: { db: {} } }));
+    for (const ungueltig of [undefined, null, 42])
+      assert.throws(() => createQueue({ connectionString: ungueltig }), /DATABASE_URL/);
+  });
+});

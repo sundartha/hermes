@@ -47,3 +47,29 @@ export async function pgBossUmgebung(t, optionen = {}) {
   };
   return { db, queue: weitereQueue(), weitereQueue };
 }
+
+export async function wackeligeWarteschlange(t) {
+  const queues = [];
+  t.after(async () => {
+    await Promise.all(queues.map((queue) => queue.stop()));
+  });
+  const eingebettet = await neuePglite();
+  const echt = fromPglite(eingebettet);
+  const zustand = { ausfall: true };
+  const db = {
+    ...echt,
+    executeSql: (...argumente) =>
+      zustand.ausfall
+        ? Promise.reject(new Error("Datenbank nicht erreichbar"))
+        : echt.executeSql(...argumente),
+  };
+  const original = config.store.queueBackend;
+  config.store.queueBackend = "pgboss";
+  try {
+    const queue = createQueue({ bossOptions: { db, backend: "pglite" } });
+    queues.push(queue);
+    return { queue, zustand };
+  } finally {
+    config.store.queueBackend = original;
+  }
+}
