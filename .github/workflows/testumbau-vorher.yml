@@ -111,13 +111,6 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:16.15@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 2s --health-retries 30
     strategy:
       fail-fast: false
       matrix:
@@ -127,6 +120,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
 
       - name: Basis holen
         env:

@@ -7,6 +7,7 @@ import { git } from "../auftrag/git.mjs";
 
 const PRUEFUNG = fileURLToPath(new URL("../src-nur-lauf.mjs", import.meta.url));
 const EXIT_ABBRUCH = 2;
+const PR_NUMMER = /^[1-9]\d*$/;
 
 function gh(argumente) {
   const lauf = spawnSync(env.HERMES_GH ?? "gh", argumente, { encoding: "utf8" });
@@ -20,6 +21,12 @@ function alsListe(text) {
   } catch {
     return [];
   }
+}
+
+function genannterOderOffenerPullRequest(pr) {
+  if (pr === undefined) return offenerPullRequest();
+  if (!PR_NUMMER.test(pr)) throw new Error(`--pr erwartet eine PR-Nummer, nicht ${JSON.stringify(pr)}`);
+  return { nummer: pr, zweig: "aus --pr" };
 }
 
 function offenerPullRequest() {
@@ -46,8 +53,8 @@ function aufrufFuer(basis, { nummer, zweig, hinweis }) {
   return { argumente: ["--basis", basis, "--ereignis", "pull_request", "--pr", nummer], umgebung: { ...env, ...githubZugang() } };
 }
 
-const { values } = parseArgs({ options: { basis: { type: "string" } } });
-if (values.basis === undefined) throw new Error("Aufruf: node tools/src-nur-lauf/lokal.mjs --basis <sha>");
-const { argumente, umgebung } = aufrufFuer(values.basis, offenerPullRequest());
+const { values } = parseArgs({ options: { basis: { type: "string" }, pr: { type: "string" } } });
+if (values.basis === undefined) throw new Error("Aufruf: node tools/src-nur-lauf/lokal.mjs --basis <sha> [--pr <nummer>]");
+const { argumente, umgebung } = aufrufFuer(values.basis, genannterOderOffenerPullRequest(values.pr));
 const lauf = spawnSync(execPath, [PRUEFUNG, ...argumente], { stdio: "inherit", env: umgebung });
 process.exitCode = lauf.status ?? EXIT_ABBRUCH;

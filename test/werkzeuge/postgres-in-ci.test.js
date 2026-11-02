@@ -1,24 +1,37 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { hauptversionLautSquawk } from "../gemeinsam/echtes-postgres.js";
+import { REPO_ROOT } from "./probe-repo.js";
 import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 
-const CI = "ci.yml";
 const VARIABLE = "HERMES_TEST_POSTGRES_URL";
-const BILD = /^ {8}image: postgres:(\d+)\.\d+@sha256:[0-9a-f]{64}$/;
+const ACTION = ".github/actions/postgres/action.yml";
+const BILD = /^ {8}POSTGRES_IMAGE: postgres:(\d+)\.\d+@sha256:[0-9a-f]{64}$/m;
+const START = ["      - name: Postgres starten", "        uses: ./.github/actions/postgres"];
+const MIT_POSTGRES = [
+  { datei: "ci.yml", job: "pruefungen", schritt: "Testwirkung" },
+  { datei: "ci.yml", job: "tests", schritt: "Tests" },
+  { datei: "vorpruefung.yml", job: "ci-lokal", schritt: "ci-lokal mit teuren Schritten" },
+];
 
-function postgresBild(job) {
-  const zeilen = workflowJobLines(CI, job);
-  const dienst = zeilen.indexOf("      postgres:");
-  assert.ok(zeilen.includes("    services:") && dienst !== -1, `Job ${job} hat keinen Dienst postgres`);
-  const treffer = BILD.exec(zeilen[dienst + 1] ?? "");
-  assert.ok(treffer, `Job ${job}: Bild postgres mit Version und Digest fehlt`);
+function hauptversionDerAction() {
+  const treffer = BILD.exec(readFileSync(join(REPO_ROOT, ACTION), "utf8"));
+  assert.ok(treffer, `${ACTION}: Bild postgres mit Version und Digest fehlt`);
   return Number(treffer[1]);
 }
 
-function setztAdresse(schritt) {
-  const zeilen = workflowStepLines(CI, schritt);
+function startetPostgresVor({ datei, job, schritt }) {
+  const zeilen = workflowJobLines(datei, job);
+  const start = zeilen.indexOf(START[0]);
+  assert.ok(start !== -1 && zeilen[start + 1] === START[1], `${datei} › ${job}: Postgres starten mit ./.github/actions/postgres fehlt`);
+  assert.ok(start < zeilen.indexOf(`      - name: ${schritt}`), `${datei} › ${job}: Postgres startet erst nach ${schritt}`);
+}
+
+function setztAdresse({ datei, schritt }) {
+  const zeilen = workflowStepLines(datei, schritt);
   const umgebung = zeilen.indexOf("        env:");
   const befehl = zeilen.findIndex((zeile) => zeile.startsWith("        run:"));
   const eintraege = umgebung === -1 || befehl < umgebung ? [] : zeilen.slice(umgebung + 1, befehl);
@@ -26,9 +39,9 @@ function setztAdresse(schritt) {
 }
 
 test("CI: Tests und Testwirkung laufen gegen echtes Postgres in der Hauptversion aus tools/basis/squawk.toml", () => {
-  const hauptversion = hauptversionLautSquawk();
-  assert.equal(postgresBild("tests"), hauptversion);
-  assert.equal(postgresBild("pruefungen"), hauptversion);
-  assert.ok(setztAdresse("Tests"), `Schritt Tests setzt ${VARIABLE} nicht`);
-  assert.ok(setztAdresse("Testwirkung"), `Schritt Testwirkung setzt ${VARIABLE} nicht`);
+  assert.equal(hauptversionDerAction(), hauptversionLautSquawk());
+  for (const ort of MIT_POSTGRES) {
+    startetPostgresVor(ort);
+    assert.ok(setztAdresse(ort), `${ort.datei} › ${ort.schritt} setzt ${VARIABLE} nicht`);
+  }
 });
