@@ -834,9 +834,11 @@
       "src/telephony/alert-sms.js",
       "src/telephony/outage-report.js",
       "src/telephony/outbound-gates.js",
+      "test/abrechnung/stripe-webhook.test.js",
       "test/alert-sms.test.js",
       "test/ausfall-boot-guard.test.js",
       "test/ausfall-meldeweg.test.js",
+      "test/cost-truing-observe.test.js",
       "test/gap-07-alert-channel-fatal.test.js",
       "test/mail-boot-probe.test.js",
       "tools/bausteine.json"
@@ -890,7 +892,9 @@
         "src/billing/webhook.js",
         "src/routes/api-billing.js",
         "src/billing/cost-calibration.js",
-        "test/alert-sms.test.js"
+        "test/alert-sms.test.js",
+        "test/abrechnung/stripe-webhook.test.js",
+        "test/cost-truing-observe.test.js"
       ],
       "umbau": [
         "src/telephony/alert-sms.js:onError"
