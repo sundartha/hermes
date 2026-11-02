@@ -16,6 +16,7 @@ import {
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
+import { PROVISION_REASON } from "../src/billing/provision-outcome.js";
 import {
   applyStripeWebhook,
   verifyStripeSignature,
@@ -89,13 +90,15 @@ function fakeBilling(spy = {}) {
 
 function realProvision(store) {
   return async (tenantId) => {
-    requestNumberForPaidTenant(store.load(), {
+    const result = requestNumberForPaidTenant(store.load(), {
       tenantId,
       fallbackCountry: "DE",
       maxNumbers: HIGH_CAP,
       maxNumbersPerTenant: HIGH_CAP,
     });
-    store.save();
+    await store.save();
+    if (!result.ok) return result;
+    return { ok: true, reason: PROVISION_REASON.DRY_RUN, numberId: result.number.id };
   };
 }
 
@@ -107,13 +110,17 @@ async function setup({ activated = false } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
+  const login = await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
+  assert.equal(login.tenantId, TENANT, "Build: Login legt den erwarteten Tenant an");
+  await store.ensureTenant(TENANT);
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
   ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
-  store.save();
-
-  await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
-  if (activated) await accounts.setStatus(TENANT, "active");
+  await store.save();
+  if (activated) {
+    await accounts.setStatus(TENANT, "active");
+    await store.ensureTenant(TENANT);
+  }
   const { id: sessionId } = await sessions.create({
     sub: SUB,
     tenantId: TENANT,
