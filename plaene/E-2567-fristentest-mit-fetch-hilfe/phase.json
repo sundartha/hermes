@@ -1,0 +1,24 @@
+{
+  "phase": "E-2567-fristentest-mit-fetch-hilfe",
+  "issue": 2567,
+  "absicht": "Antwortet WorkOS nicht, soll Hermes nicht hängen: Jeder der vier WorkOS-Aufrufe bricht nach einer festen, je Aufruf gewählten Frist mit `TimeoutError` ab, den die Aufrufer schon heute wie jeden anderen Anbieterfehler behandeln. Nicht gewollt: neue Wiederholungen, eine Frist für alle, ein Listeneintrag statt einer Frist, neue Konfiguration, Änderungen an der Anmeldelogik (Token-Prüfung, Sitzungen, Rechte). Im Zweifel bleibt ein Aufruf unverändert und wird gemeldet.",
+  "entwurf": {
+    "test/auth-mcp-bypass.test.js": "Was sich ändert: Im neuen Test \"WorkOS-Fristen: antwortet der Aussteller auf die OAuth-Metadaten nicht, bricht jeder der zwei Pfade nach 5 Sekunden ab\" in test/auth-mcp-bypass.test.js ersetzt withFetch(antwortetNie, …) aus ./helpers.js den von Hand geschriebenen Tausch von globalThis.fetch samt originalFetch und try/finally; _resetJwksCache() steht vor dem withFetch-Aufruf und im finally darum herum. withFetch kommt als eigene neue Importzeile direkt unter Zeile 6 (import { makeConfigOverrides } from \"./helpers.js\";), Zeile 6 selbst bleibt unverändert.\nBleibt gleich: Name des Tests, die Konfiguration (mcpAuth oauth, oauthIssuerUrl https://aussteller.test), der Aufruf mit Bearer-Token, die Erwartung { nexted: false, statusCode: 401 } und die Erwartung der Fristen [5000, 5000]; alle anderen Tests der Datei und jede andere Zeile außer der neuen Importzeile und dem Rumpf dieses einen Tests.\nAbnahme: Abnahmetest: keiner, weil Testumbau: alle Fälle der Datei bleiben unverändert grün; es ändert sich nur, wie der Test fetch austauscht.\nNicht-Ziele: eine Änderung an Zeile 6 oder an anderen Tests der Datei, weil der Testschutz jede Änderung bestehender Zeilen ohne Label anhält; eine Änderung an den Tests in test/web-auth.test.js und test/312k-p4-contract-end-cleanup.test.js, weil der Befund nur diesen Test nennt; eine Änderung an src/auth.js, weil die Frist selbst richtig ist; der Audit-Grund bei Zeitüberschreitung (code 23), weil er ein Folge-Issue wird.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\nKeine Gründe gefunden, weil der Auftrag nur ändert, wie ein einziger Test fetch austauscht, und withFetch (test/helpers.js:457-465) dasselbe tut wie der Handtausch; _resetJwksCache ruft kein fetch auf, die Reihenfolge davor macht nichts aus."
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "testumbau",
+      "ziel": "Fristentest tauscht fetch über withFetch statt von Hand",
+      "bereich": "test/auth-mcp-bypass.test.js",
+      "erwarteteDateien": [
+        "test/auth-mcp-bypass.test.js"
+      ],
+      "abnahme": "test/auth-mcp-bypass.test.js",
+      "wasDarfNiePassieren": [
+        "Der Test „WorkOS-Fristen: antwortet der Aussteller auf die OAuth-Metadaten nicht, bricht jeder der zwei Pfade nach 5 Sekunden ab“ heißt danach genauso, ruft mcpAuth im Modus oauth mit Bearer-Token auf, erwartet weiter nexted false und statusCode 401 und die Fristen [5000, 5000], und setzt globalThis.fetch nach dem Lauf auf den alten Wert zurück, auch wenn eine Erwartung fehlschlägt.",
+        "Zeile 6 und alle anderen Zeilen von test/auth-mcp-bypass.test.js außer einer neuen Importzeile und dem Rumpf dieses einen Tests bleiben Zeichen für Zeichen unverändert, und keine andere Datei ändert sich."
+      ]
+    }
+  ]
+}
