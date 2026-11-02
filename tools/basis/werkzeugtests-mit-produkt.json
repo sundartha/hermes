@@ -23,6 +23,7 @@
   "test/werkzeuge/kopien-auslagerung-umzug.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/log-geheimnisse-pruefen.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/mutationspruefung-arbeitsprozesse.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/mutationspruefung-artefakt-hash.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-bestaetigungslauf.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-budget.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-einbettung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
