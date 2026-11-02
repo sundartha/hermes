@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { env } from "node:process";
 
-import { testAgentPrompt } from "./agenten.mjs";
+import { testAgentPrompt, testumbauPrompt } from "./agenten.mjs";
 import { vorabGeprueft, vorabHerkunft } from "./absicherungsbeleg.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { PATCH_FORMAT, ablagePfad, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
@@ -15,6 +15,8 @@ import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 const SKRIPT = "test:mutation";
 const MUTATION_IN_CI = "HERMES_MUTATION_IN_CI";
 const IN_CI = ["--in-ci"];
+const TESTUMBAU_MESSUNG = "--testumbau";
+const TESTUMBAU = "testumbau";
 const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
@@ -72,7 +74,7 @@ function skriptAufruf(argumente) {
 }
 
 export function mutationsBefehl(lauf, argumente) {
-  const gemeldet = gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
+  const gemeldet = argumente.includes(TESTUMBAU_MESSUNG) ? [] : gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
   const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
   return skriptAufruf([...weg, ...argumente, ...gemeldet]);
 }
@@ -164,7 +166,8 @@ function schutzAbschnitt(auftrag, offen) {
 function testNachrunde(kontext, ueberlebende, vorgabe) {
   const { auftrag } = kontext;
   const mutantenTeil = mitMutantenAbschnitt(ueberlebende, vorgabe) ? mutantenAbschnitt(auftrag, ueberlebende, vorgabe) : [];
-  return [testAgentPrompt(kontext), ...mutantenTeil, ...schutzAbschnitt(auftrag, vorgabe.offen ?? [])].join("\n");
+  const auftragsteil = auftrag.art === TESTUMBAU ? testumbauPrompt(kontext.phase, auftrag, kontext.root) : testAgentPrompt(kontext);
+  return [auftragsteil, ...mutantenTeil, ...schutzAbschnitt(auftrag, vorgabe.offen ?? [])].join("\n");
 }
 
 function meldungsZeilen(weg) {
@@ -197,11 +200,11 @@ function neuGemeldet(erste, zweite) {
   return { noetig: nachMutant([...erste.noetig, ...zweite.noetig]), gleichwertig: nachMutant([...erste.gleichwertig, ...zweite.gleichwertig]) };
 }
 
-function genaueMeldungen(lauf, weg, ueberlebende) {
+function genaueMeldungen(lauf, weg, { ueberlebende, rolle = "bau" }) {
   const zeilen = ohneSchluessel(weg, ueberlebende);
   if (zeilen.length === 0) return weg;
   const nachher = arbeitsstand(lauf.kontext.root);
-  const antwort = lauf.fragtNach("bau", meldungNachfrage(zeilen, ueberlebende), { nachher, geaendert: "Die Nachfrage zur Meldung hat Dateien geändert." });
+  const antwort = lauf.fragtNach(rolle, meldungNachfrage(zeilen, ueberlebende), { nachher, geaendert: "Die Nachfrage zur Meldung hat Dateien geändert." });
   if (antwort === null) return null;
   for (const zeile of zeilen) lauf.hinweise.push(`Hinweis: Meldung ohne genauen Schlüssel, nachgefragt: ${meldungsZeile(zeile)}`);
   const weiter = ohneSchluessel(antwort, ueberlebende);
@@ -218,7 +221,7 @@ function bauNachrundeGemeldet(lauf, ueberlebende, widerspruch = []) {
   lauf.meldet(PRUEFUNG.MUTATION, "bau");
   const erste = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende, widerspruch), sitzung);
   if (erste === null) return null;
-  const weg = genaueMeldungen(lauf, erste, ueberlebende);
+  const weg = genaueMeldungen(lauf, erste, { ueberlebende });
   if (weg === null) return null;
   const { noetig } = weg;
   const gleichwertig = weg.gleichwertig.filter(({ mutant }) => !noetig.some((eintrag) => eintrag.mutant === mutant));
@@ -526,6 +529,29 @@ export function vorabAbsichern(lauf) {
   };
   const gruen = alterStandRunden(lauf, { offen: [], anfang: lauf.basis }, { einspielen: spieleUnveraendertenPatchEin, festhalten: vorabFesthalten, abschluss });
   return { gruen: gruen === true, ausgabe: letzter.ausgabe ?? "", gleichwertig: gleichwertige(lauf) };
+}
+
+function srcSeit(lauf, von) {
+  return git(["diff", "--name-only", von, "HEAD", "--", "src"], { cwd: lauf.kontext.root }).trim() !== "";
+}
+
+function phasenHinweis(ueberlebende) {
+  return `Hinweis: nach der Testrunde überleben ${ueberlebende.length} Mutanten der Phase, z. B. ${ueberlebende[0]}; die Mutationsprüfung der CI entscheidet, ob ein späterer Auftrag sie tötet.`;
+}
+
+export function testrundeZuPhasenMutanten(lauf) {
+  const von = phasenbasis(lauf.kontext.root);
+  if (von === null || !srcSeit(lauf, von)) return true;
+  const stand = mutanten(lauf, PRUEFUNG.MUTATION, ["--basis", von]);
+  if (stand.ende !== undefined) return stand.ende;
+  const weg = testNachgeholt(lauf, stand.ueberlebende, { stand: "in den neuen Zeilen der Phase", melden: true });
+  if (weg === null) return false;
+  const genau = genaueMeldungen(lauf, weg, { ueberlebende: stand.ueberlebende, rolle: "test" });
+  if (genau === null) return false;
+  gemeldetUebernommen(lauf, { gleichwertig: genau.gleichwertig, ueberlebende: stand.ueberlebende }, new Map());
+  const danach = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", von]);
+  if (danach.ende === undefined) lauf.hinweise.push(phasenHinweis(danach.ueberlebende));
+  return danach.ende ?? true;
 }
 
 function wirkung(lauf, name, alteStellen) {
