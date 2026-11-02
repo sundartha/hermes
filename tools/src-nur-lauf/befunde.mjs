@@ -3,9 +3,10 @@ import { isDeepStrictEqual } from "node:util";
 import { AUFTRAG_LAUT_PHASE, gezeigterAuftrag } from "../auftrag/agenten.mjs";
 import { NUL, auftragsCommits, auftragsTrailer, dateiAm, gebautIn, git } from "../auftrag/git.mjs";
 import { altbestandPruefer } from "./altbestand.mjs";
+import { istProduktpfad } from "./produktpfad.mjs";
+import { umgelegtPruefer } from "./umgelegt.mjs";
 import { VERTRAULICH_LABEL, vertraulichProblem } from "./vertraulich.mjs";
 
-const PRODUKTCODE = "src/";
 const AUFTRAG_ZEILE = /^Auftrag: ([A-Za-z0-9][\w.-]*)\/([A-Za-z0-9][\w.-]*)$/gm;
 const ART_ZEILE = /^Art: (\S+)$/gm;
 const AUFTRAG_BLOCK = /^```json\n([\s\S]*?)\n```$/m;
@@ -96,19 +97,19 @@ function gruendeFuer({ sha, nachricht, dateien, root, trailer }) {
   return stimmtMitPhase({ nachricht, dateien, phase, auftrag: auftragIn(passend, id), trailer });
 }
 
-function istProdukt(datei) {
-  return datei.toLowerCase().startsWith(PRODUKTCODE) || datei.startsWith(ANFUEHRUNG);
+function produktOderAngefuehrt(datei) {
+  return istProduktpfad(datei) || datei.startsWith(ANFUEHRUNG);
 }
 
 function geaenderteProduktdateien(sha, root) {
   const ausgabe = git(["diff-tree", "-r", "--no-commit-id", "--no-renames", "--name-only", "-z", sha], { cwd: root });
-  return ausgabe.split(NUL).filter(istProdukt);
+  return ausgabe.split(NUL).filter(produktOderAngefuehrt);
 }
 
 function eigeneProduktdateienDerZusammenfuehrung(sha, root) {
   const ausgabe = git(["-c", "core.quotepath=off", "diff-tree", "--cc", "-p", "-U0", "--no-color", "--no-commit-id", sha], { cwd: root });
   const pfade = ausgabe.split("\n").filter((zeile) => zeile.startsWith(KOMBINIERT)).map((zeile) => zeile.slice(KOMBINIERT.length));
-  return pfade.filter(istProdukt);
+  return pfade.filter(produktOderAngefuehrt);
 }
 
 function zusammenfuehrungsGruende(sha, root) {
@@ -135,14 +136,19 @@ async function ohneZeileGruende({ sha, nachricht, dateien, root, trailer }, altb
   return altbestandGruende ?? gruendeFuer({ sha, nachricht, dateien, root, trailer });
 }
 
-async function commitBefunde({ sha, zusammenfuehrung }, { root, trailer, gate, altbestand }) {
+async function umgelegteGruende(umgelegt, sha, nachricht) {
+  return AUFTRAG_ZEILE_VORHANDEN.test(nachricht) ? umgelegt.gruende(sha, nachricht) : [];
+}
+
+async function commitBefunde({ sha, zusammenfuehrung }, { root, trailer, gate, altbestand, umgelegt }) {
   const merge = zusammenfuehrung ? zusammenfuehrungsGruende(sha, root) : undefined;
   const dateien = merge?.dateien ?? geaenderteProduktdateien(sha, root);
   if (dateien.length === 0) return [];
   const nachricht = git(["log", "-1", "--format=%B", sha], { cwd: root });
   const gruende = merge?.gruende ?? (await ohneZeileGruende({ sha, nachricht, dateien, root, trailer }, altbestand));
   const aufgeloest = Array.isArray(gruende) ? gruende : await vertraulichGrund(gruende.vertraulich, gate);
-  return aufgeloest.map((grund) => `${sha}: ${grund}; geändert: ${dateien.join(", ")}`);
+  const umgelegtGruende = merge === undefined ? await umgelegteGruende(umgelegt, sha, nachricht) : [];
+  return [...aufgeloest, ...umgelegtGruende].map((grund) => `${sha}: ${grund}; geändert: ${dateien.join(", ")}`);
 }
 
 export async function befunde({ basis: basisRef, kopf, pr: nummer, ereignis }, root) {
@@ -153,11 +159,12 @@ export async function befunde({ basis: basisRef, kopf, pr: nummer, ereignis }, r
   let urteil;
   const gate = () => (urteil ??= pruefeGate(nummer));
   const altbestand = altbestandPruefer({ ereignis, nummer, basis, kopf }, root);
+  const umgelegt = umgelegtPruefer({ ereignis, nummer, basis }, root);
   const fruehere = [];
   const ergebnisse = [altbestand.probleme];
   for (const zeile of zeilen) {
     const commit = eltern(zeile);
-    ergebnisse.push(await commitBefunde(commit, { root, trailer: [...trailerBasis, ...fruehere], gate, altbestand }));
+    ergebnisse.push(await commitBefunde(commit, { root, trailer: [...trailerBasis, ...fruehere], gate, altbestand, umgelegt }));
     if (trailerJeCommit.has(commit.sha)) fruehere.push(trailerJeCommit.get(commit.sha));
   }
   return ergebnisse.flat();
