@@ -9,7 +9,7 @@ function gelesen(text, stand) {
     const roh = JSON.parse(text);
     if (typeof roh !== "object" || roh === null || Array.isArray(roh)) throw new Error("keine Zuordnung PR-Nummer → Eintrag");
     const schlecht = Object.entries(roh).find(([nummer, eintrag]) => !NUMMER.test(nummer) || typeof eintrag?.kuerzel !== "string" || typeof eintrag?.grund !== "string");
-    if (schlecht !== undefined) throw new Error(`Eintrag ${JSON.stringify(schlecht[0])} hat keine PR-Nummer, kein Kürzel oder keinen Grund`);
+    if (schlecht !== undefined) throw new Error(`Eintrag „${schlecht[0]}“ hat keine PR-Nummer, kein Kürzel oder keinen Grund`);
     return { eintraege: new Map(Object.entries(roh)) };
   } catch (fehler) {
     return { eintraege: new Map(), problem: `${ALTBESTAND_DATEI} am Stand ${stand} nicht lesbar: ${fehler.message}` };
