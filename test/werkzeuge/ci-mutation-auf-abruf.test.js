@@ -6,7 +6,7 @@ import { env } from "node:process";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { workflowJobLines, workflowLines, workflowStepLines } from "./workflow-dateien.js";
+import { sammeljob, workflowJobLines, workflowLines, workflowStepLines } from "./workflow-dateien.js";
 
 const CI = "ci.yml";
 const AUSFUEHRBAR = 0o755;
@@ -21,7 +21,6 @@ const MUTATIONSSCHRITTE = [PLAN, TEIL, URTEIL];
 const MUTATIONSJOBS = ["mutationsplan", "mutationspruefung", "mutationsurteil"];
 const OHNE_ABRUF = { pruefungen: "    if: github.event_name != 'workflow_dispatch'", tests: "    if: github.event_name != 'workflow_dispatch'" };
 const SAMMELJOB = "    if: always()";
-const SAMMELSCHRITT = "Alle Jobs erfolgreich";
 const ABRUF_ERGEBNISSE = { pruefungen: "skipped", tests: "skipped", mutationsplan: "success", mutationspruefung: "success", mutationsurteil: "success" };
 const JOB_BEDINGUNG = /^ {4}if: /;
 const ABRUF = "workflow_dispatch";
@@ -124,10 +123,14 @@ test("beim Abruf von Hand laufen Prüfungen und Tests nicht, die drei Mutationsj
   assert.equal(jobBedingung("ci"), SAMMELJOB);
 });
 
-test("beim Abruf von Hand endet der Pflicht-Check CI rot, nie übersprungen oder grün", () => {
-  const lauf = spawnSync("bash", ["-c", skript(SAMMELSCHRITT)], { encoding: "utf8", env: { ...env, NEEDS: JSON.stringify(Object.fromEntries(Object.entries(ABRUF_ERGEBNISSE).map(([job, result]) => [job, { result }]))) } });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /pruefungen: skipped/);
+test("beim Abruf von Hand macht ein fehlgeschlagener oder abgebrochener Mutationsjob den Pflicht-Check CI rot, auch wenn Prüfungen und Tests übersprungen sind", () => {
+  const faelle = MUTATIONSJOBS.flatMap((job) => ["failure", "cancelled"].map((result) => `${job}: ${result}`));
+  const ausgang = faelle.map((fall) => {
+    const [job, result] = fall.split(": ");
+    const { status, meldung } = sammeljob(ABRUF, { ...ABRUF_ERGEBNISSE, [job]: result });
+    return [fall, status, meldung.includes(fall)];
+  });
+  assert.deepEqual(ausgang, faelle.map((fall) => [fall, EXIT_ROT, true]));
 });
 
 test("der Mutationsplan misst im PR, beim Abruf und in der Queue mit anderem Stand, sonst nicht", (context) => {

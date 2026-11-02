@@ -1,23 +1,12 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { env } from "node:process";
 import { test } from "node:test";
 
-import { workflowStepScript } from "./workflow-dateien.js";
+import { sammeljob } from "./workflow-dateien.js";
 
-const CI = "ci.yml";
-const SAMMELSCHRITT = "Alle Jobs erfolgreich";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const ALLE_ERFOLGREICH = { pruefungen: "success", tests: "success", mutationsplan: "success", mutationspruefung: "success", mutationsurteil: "success" };
 const ABRUF_OHNE_PRUEFUNGEN = { ...ALLE_ERFOLGREICH, pruefungen: "skipped", tests: "skipped" };
-
-function sammeljob(ereignis, ergebnisse) {
-  const needs = Object.fromEntries(Object.entries(ergebnisse).map(([job, result]) => [job, { result }]));
-  const umgebung = { ...env, NEEDS: JSON.stringify(needs), EREIGNIS: ereignis };
-  const lauf = spawnSync("bash", ["-c", workflowStepScript(CI, SAMMELSCHRITT)], { encoding: "utf8", env: umgebung });
-  return { status: lauf.status, meldung: lauf.stdout + lauf.stderr };
-}
 
 test("Sammeljob: workflow_dispatch mit übersprungenen Prüfungen und Tests ist grün", () => {
   const lauf = sammeljob("workflow_dispatch", ABRUF_OHNE_PRUEFUNGEN);
