@@ -104,15 +104,27 @@ test("Sollwert: ein festgehaltener Wert, der kein 64-stelliges Hex ist, wird nic
   assert.match(unveraendertRot(ergebnis, alterTest), /„Ausgabe gleicht dem gepinnten Sollwert“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
 });
 
-test("Sollwert: lauf nimmt seinen gesetzten Wert vor der Grenzprüfung zurück, aber nicht, wenn der Stand ihn schon festhält", (context) => {
+function gebautesRepo(context, testtext) {
   const kontext = env.NODE_TEST_CONTEXT;
   delete env.NODE_TEST_CONTEXT;
   context.after(() => {
     if (kontext !== undefined) env.NODE_TEST_CONTEXT = kontext;
   });
-  const repo = probeRepository(context, { ...BASIS, [PRODUKT]: ausgabe(ALT), [GEPINNT]: gepinnt() });
+  const repo = probeRepository(context, { ...BASIS, [PRODUKT]: ausgabe(ALT), [GEPINNT]: testtext });
   const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
   writeFileSync(join(repo, PRODUKT), ausgabe(NEU));
+  return { repo, basis };
+}
+
+function nichtsGesetzt({ repo, basis }, testtext) {
+  const { eintraege, gesetzt, befunde } = setzeSollwerte({ root: repo, basis, dateien: [GEPINNT] });
+  assert.deepEqual([eintraege, gesetzt], [[], []]);
+  assert.equal(readFileSync(join(repo, GEPINNT), "utf8"), testtext);
+  return befunde.join("\n");
+}
+
+test("Sollwert: lauf nimmt seinen gesetzten Wert vor der Grenzprüfung zurück, aber nicht, wenn der Stand ihn schon festhält", (context) => {
+  const { repo, basis } = gebautesRepo(context, gepinnt());
   const { eintraege, gesetzt, befunde } = setzeSollwerte({ root: repo, basis, dateien: [GEPINNT] });
   assert.deepEqual([gesetzt.map(({ neu }) => neu), befunde], [[sha256(NEU)], []]);
   sollwerteZuruecknehmen({ root: repo, basis }, eintraege);
@@ -122,4 +134,17 @@ test("Sollwert: lauf nimmt seinen gesetzten Wert vor der Grenzprüfung zurück, 
   const zwischenstand = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
   sollwerteZuruecknehmen({ root: repo, basis: zwischenstand }, wieder.eintraege);
   assert.equal(readFileSync(join(repo, GEPINNT), "utf8"), gepinnt({ soll: sha256(NEU) }));
+});
+
+test("Sollwert: führt der Auftrag ein Hash-Literal erst ein, das am Anfang nicht in der Datei stand, setzt lauf nichts", (context) => {
+  const gebaut = gebautesRepo(context, gepinnt());
+  const eingefuehrt = gepinnt({ soll: sha256("zwischen") });
+  writeFileSync(join(gebaut.repo, GEPINNT), eingefuehrt);
+  assert.match(nichtsGesetzt(gebaut, eingefuehrt), /steht nicht schon am Anfang des Auftrags als Literal in der Datei/);
+});
+
+test("Sollwert: hat derselbe alte Sollwert in zwei Fällen verschiedene Ist-Werte, setzt lauf nichts", (context) => {
+  const zweiterFall = 'test("Ausgabe mit Zusatz gleicht dem Sollwert", () => assert.equal(createHash("sha256").update(`${ausgabe()}!`).digest("hex"), SOLL));';
+  const testtext = gepinnt({ weitere: [zweiterFall] });
+  assert.match(nichtsGesetzt(gebautesRepo(context, testtext), testtext), /in zwei Fällen verschiedene Ist-Werte/);
 });
