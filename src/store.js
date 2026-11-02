@@ -10,7 +10,8 @@ async function createPgBackend() {
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
-  return { ...store, poolZustand };
+  const pruefeVerbindung = () => runner.withClient((client) => client.query("SELECT 1"));
+  return { ...store, poolZustand, pruefeVerbindung };
 }
 
 function mitZustandsFunktionen(speicher) {
@@ -30,11 +31,12 @@ if (config.store.storeBackend === "pg") {
     process.exit(1);
   }
 } else {
-  backend = mitZustandsFunktionen({ ...jsonBackend, poolZustand: () => null });
+  backend = mitZustandsFunktionen({ ...jsonBackend, poolZustand: () => null, pruefeVerbindung: async () => {} });
 }
 
 export const {
   poolZustand,
+  pruefeVerbindung,
   load,
   save,
   drainFlushes,
