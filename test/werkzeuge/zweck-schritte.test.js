@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { GRUND, MELDUNG, PRUEFUNG, kenntZweck } from "../../tools/auftrag/zweck.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
-import { dateienMitEndung, eintraegeDerZuordnung, jobnamenVon, quelltext, urteilt, workflowSchritte } from "./zweck-quellen.js";
+import { ZUORDNUNG, dateiFuerSchritt, dateienMitEndung, eintraegeDerZuordnung, jobnamenVon, quelltext, urteilt, workflowSchritte } from "./zweck-quellen.js";
 
 const SOLL = ".github/soll/einstellungen.json";
 const TRENNER = " › ";
@@ -74,7 +74,8 @@ test("jeder Schritt mit run und jede lokale Action der Pflicht-Checks ist einer 
   const erwartet = schritteDerPflichtChecks().map(schluessel);
   assert.deepEqual(erwartet.filter((name, stelle) => erwartet.indexOf(name) !== stelle), [], "zwei Schritte mit demselben Namen im selben Job");
   const eingetragen = Object.keys(eintraegeDerZuordnung());
-  assert.deepEqual(erwartet.filter((name) => !eingetragen.includes(name)), [], "Schritt ohne Eintrag in tools/zweck/zuordnung/workflow-schritte.json");
+  const ohneEintrag = erwartet.filter((name) => !eingetragen.includes(name));
+  assert.deepEqual(ohneEintrag, [], `Schritt ohne Eintrag, fehlende Dateien: ${ohneEintrag.map((name) => `${ZUORDNUNG}/${dateiFuerSchritt(name)}`).join(", ")}`);
   assert.deepEqual(eingetragen.filter((name) => !erwartet.includes(name)), [], "Eintrag ohne Schritt");
 });
 

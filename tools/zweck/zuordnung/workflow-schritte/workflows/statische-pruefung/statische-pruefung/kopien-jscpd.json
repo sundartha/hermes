@@ -1,0 +1,8 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Kopien (jscpd)",
+  "zweck": [
+    "jscpd",
+    "basis/versionswechsel"
+  ],
+  "beleg": "tools/basis-vergleich.mjs"
+}

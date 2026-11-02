@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/actions/node-npm-ci/action.yml › Zweck der Install-Skripte",
+  "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+}

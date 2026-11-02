@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Install-Skripte",
+  "zweck": "github/install-skripte",
+  "beleg": ".github/workflows/ci.yml"
+}

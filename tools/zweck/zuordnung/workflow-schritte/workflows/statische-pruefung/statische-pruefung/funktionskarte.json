@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Funktionskarte",
+  "zweck": "uebrige/funktionskarte",
+  "beleg": "tools/funktionskarte.mjs"
+}

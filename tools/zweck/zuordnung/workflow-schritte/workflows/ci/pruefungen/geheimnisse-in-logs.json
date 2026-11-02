@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Geheimnisse in Logs",
+  "zweck": "uebrige/log-geheimnisse",
+  "beleg": "tools/log-geheimnisse-pruefen.mjs"
+}

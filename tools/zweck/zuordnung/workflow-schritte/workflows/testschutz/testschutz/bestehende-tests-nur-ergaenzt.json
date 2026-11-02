@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt",
+  "zweck": "github/testschutz",
+  "beleg": "tools/tests-nur-ergaenzt.mjs"
+}

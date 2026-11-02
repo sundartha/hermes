@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Typprüfung",
+  "zweck": "typprüfung",
+  "beleg": ".github/workflows/ci.yml"
+}

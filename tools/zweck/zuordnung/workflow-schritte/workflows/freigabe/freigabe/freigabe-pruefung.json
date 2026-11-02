@@ -1,0 +1,17 @@
+{
+  "schritt": ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung",
+  "zweck": [
+    "github/freigabe-pruefungsdateien",
+    "github/freigabe-lockerer",
+    "github/freigabe-ohne-fehlalarm",
+    "github/freigabe-neue-pakete",
+    "github/freigabe-entfernte-pakete",
+    "github/freigabe-skripte",
+    "github/freigabe-paketfelder",
+    "github/freigabe-werkzeugtexte",
+    "github/freigabe-junge-version",
+    "github/freigabe-alter-unbekannt",
+    "github/freigabe-warteschlange"
+  ],
+  "beleg": "tools/freigabe-gruende.mjs"
+}

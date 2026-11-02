@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/freigabe.yml › freigabe › Semgrep bereitstellen",
+  "aufbau": "Installiert Semgrep in fester Fassung für die Messung der Freigabe-Prüfung; prüft keine Änderung."
+}

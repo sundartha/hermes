@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Anbieter im Datenschutz",
+  "zweck": "uebrige/anbieter-datenschutz",
+  "beleg": "tools/anbieter-datenschutz-pruefen.mjs"
+}

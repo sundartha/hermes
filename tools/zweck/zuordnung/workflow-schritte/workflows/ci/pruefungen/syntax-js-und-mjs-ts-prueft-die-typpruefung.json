@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Syntax (.js und .mjs; .ts prüft die Typprüfung)",
+  "zweck": "lint/syntax",
+  "beleg": ".github/workflows/ci.yml"
+}

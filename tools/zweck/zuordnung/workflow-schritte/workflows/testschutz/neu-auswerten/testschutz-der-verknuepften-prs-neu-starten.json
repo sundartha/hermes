@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/testschutz.yml › neu-auswerten › Testschutz der verknüpften PRs neu starten",
+  "meldet": "Startet nach einer Label-Änderung am Issue den Testschutz der verknüpften PRs neu; urteilt selbst nicht."
+}

@@ -1,0 +1,9 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Unterdrückungen steigen nicht",
+  "zweck": [
+    "lint/unterdrueckungen-steigen",
+    "lint/altdatei-neue-befunde",
+    "lint/altlast-pin"
+  ],
+  "beleg": "scripts/check-staged-suppressions.js"
+}

@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Lint",
+  "gruppen": "tools/zweck/zuordnung/lint-regeln.json",
+  "beleg": "tools/lint-format.mjs"
+}
