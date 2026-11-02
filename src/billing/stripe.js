@@ -78,6 +78,15 @@ async function readErrorBody(res) {
   }
 }
 
+async function leseJsonKoerper(res) {
+  try {
+    return await res.json();
+  } catch (err) {
+    if (err instanceof SyntaxError) return {};
+    throw err;
+  }
+}
+
 function billingErrorFor(errorBody, message) {
   const err = (errorBody && errorBody.error) || {};
   if (err.code === AUTHENTICATION_REQUIRED_CODE)
@@ -245,7 +254,7 @@ export const stripeBilling = {
       signal: AbortSignal.timeout(STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS),
     });
     await assertOkWithDetail(res, "createSubscriptionCheckoutSession");
-    const json = await res.json().catch(() => ({}));
+    const json = await leseJsonKoerper(res);
     return { url: json.url, sessionId: json.id };
   },
 
@@ -320,7 +329,7 @@ export const stripeBilling = {
       signal: AbortSignal.timeout(STRIPE_SCHREIBEN_MIT_KEY_FRIST_MS),
     });
     await assertOkClassified(res, "createSubscription");
-    const json = await res.json().catch(() => ({}));
+    const json = await leseJsonKoerper(res);
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },
 
