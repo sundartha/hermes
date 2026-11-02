@@ -206,6 +206,7 @@ async function karteSpielen(karte, flaechen, budgets) {
       return {
         blockiert: [`${karte.pfad}: hermes-ctl start scheiterte: ${start.ausgabe.fehler}`],
         befunde: [],
+        messwerte: [],
       };
     }
     const kontext = {

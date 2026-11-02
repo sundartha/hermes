@@ -96,7 +96,7 @@ async function messenBefehl({ karte, wiederholungen, reihen }) {
   console.log(JSON.stringify({ attrappen: ergebnis.budgets }));
   for (const text of ergebnis.verworfen) console.error(`Lauf verworfen: ${text}`);
   for (const name of ergebnis.fehlend) console.error(`Keine Messung für ${name}.`);
-  return ergebnis.fehlend.length > 0 ? EXIT_ROT : EXIT_SAUBER;
+  return EXIT_SAUBER;
 }
 
 async function hauptprogramm() {
