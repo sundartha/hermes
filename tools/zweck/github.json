@@ -1,4 +1,11 @@
 {
+  "github/approve-inhalt": {
+    "liste": "G13",
+    "wozu": "Ein Approve gilt für genau die Änderung, die Antonio gesehen hat. Ohne „Dismiss stale approvals“ bliebe ein Approve nach jedem Push stehen; dieser Check lässt es nur gelten, wenn das Diff am Kopf gegen master dieselbe Patch-ID hat wie das Diff des freigegebenen Stands gegen seine Basis. Sonst käme eine Änderung auf master, die kein Mensch freigegeben hat.",
+    "behebung": "Antonio gibt den aktuellen Stand des PR mit einem neuen Approve frei; danach läuft der Check über „Freigabe nach Review“ neu. Nach einem reinen Rebase ohne Inhaltsänderung bleibt der Check grün.",
+    "nichtAngenommen": "Den Vergleich lockern, etwa nur Dateinamen oder nur geänderte Zeilen ohne Umgebung vergleichen, ein Approve auf einem anderen PR oder Stand gelten lassen oder den Check bei einem Lesefehler grün enden lassen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "In einer Paket-Sitzung schreibt die Sitzung „Wartet auf Freigabe“ ins Issue, damit Antonio den neuen Stand freigibt."
+  },
   "github/ci-sammeljob": {
     "liste": "G7",
     "wozu": "Der Sammeljob CI ist der eine Pflicht-Check für alle Teiljobs der CI (Prüfungen, Tests, Mutationsplan, Mutationsprüfung, Mutationsurteil). Er ist nur grün, wenn jeder Teiljob erfolgreich war; sonst ginge ein übersprungener oder abgebrochener Teiljob als bestanden durch, und Code käme etwa ohne gelaufene Tests auf master.",
