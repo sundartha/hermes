@@ -1,0 +1,126 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "anbieter-messung-nummernsuche",
+      "nummern": [
+        "S1",
+        "S2",
+        "S6",
+        "S8",
+        "B1",
+        "B2",
+        "B4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/utils/anbieter-messung.js",
+        "src/telephony/registry.js",
+        "src/telephony/adapters/telnyx/numbers.js",
+        "test/utils/anbieter-aufrufe-werden-gemessen.test.js",
+        "test/telnyx-numbers.test.js",
+        "src/metrics.js",
+        "src/onboarding.js",
+        "src/routes/api-onboard.js",
+        "src/telephony/adapters/telnyx/errors.js",
+        "tools/abhaengigkeiten/bausteine.mjs",
+        "tools/eslint-rules/anfrage-mit-frist.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Der Durchstich legt das Messmodul mit Ergebnis- und Telnyx-Statusleser an, umhüllt in registry.js zuerst nur den Eintrag NUMBER_PROVISIONING für searchNumbers samt attachStatus und hält dabei fest, dass WEBHOOK_EVENTS ohne Hülle bleibt (B4)."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "anbieter-messung-anrufsteuerung",
+      "nummern": [
+        "S7",
+        "B5",
+        "B8",
+        "B10",
+        "B11",
+        "B12",
+        "B13",
+        "B14"
+      ],
+      "tWege": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "dateien": [
+        "src/utils/anbieter-messung.js",
+        "src/telephony/registry.js",
+        "src/routes/api-calls.js",
+        "src/telephony/adapters/telnyx/voice.js",
+        "src/telephony/call-termination.js",
+        "src/telephony/call-lifecycle.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Die Hülle am Eintrag VOICE_CONTROL berührt alle Anruf-, Auflege- und Kostenwege (place_call, cancel_call, assignCostRecords, Kostenabrufe ohne Schlüssel), deshalb stehen ihre Bleibt-Szenarien und T1 bis T4 hier; der Teil hängt wegen registry.js und dem Messmodul von t1 ab."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "anbieter-messung-nummernkauf-sms",
+      "nummern": [
+        "S10",
+        "B9"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/utils/anbieter-messung.js",
+        "src/telephony/registry.js",
+        "src/telephony/adapters/telnyx/messaging.js",
+        "src/telephony/adapters/telnyx/config-read.js",
+        "test/telnyx-errors.test.js",
+        "src/release-reconcile.js",
+        "src/telephony/call-finish.js",
+        "src/telephony/ani-ownership-recheck.js",
+        "src/telephony/outbound-gates.js",
+        "src/server.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t2"
+      ],
+      "grund": "Der Teil vervollständigt die Telnyx-Vorgangsliste: orderNumber mit Code 10011, releaseNumber sowie sendSms und findPhoneNumber mit attachStatus über die Einträge MESSAGING und PROVIDER_CONFIG_READ; orderNumber selbst bleibt unverändert (B9), und der Teil hängt wegen registry.js und dem Messmodul von t2 ab."
+    },
+    {
+      "kuerzel": "t4",
+      "name": "anbieter-messung-mail-zahlung-anmeldung",
+      "nummern": [
+        "S3",
+        "S4",
+        "S5",
+        "S9",
+        "B3",
+        "B6",
+        "B7"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/utils/anbieter-messung.js",
+        "src/billing/stripe.js",
+        "src/wiring/web-login.js",
+        "src/brevo-mail.js",
+        "src/self-service-routes.js",
+        "src/routes/api-billing.js",
+        "src/web-auth.js",
+        "src/workos-management.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t3"
+      ],
+      "grund": "Brevo, Stripe und WorkOS hängen an den eigenen Erzeugungsstellen (Export von stripeBilling, selectMailer und wireWebLogin), getrennt von der Telnyx-Tabelle; der Teil ergänzt nur deren Vorgänge und Statusleser im gemeinsamen Messmodul und hängt deshalb von t3 ab."
+    }
+  ]
+}
