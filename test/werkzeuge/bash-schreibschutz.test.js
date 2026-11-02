@@ -264,6 +264,13 @@ function assertFaelle(context, { gesperrt, erlaubt }) {
   }
 }
 
+test("widget-pins ist für Test- und Bau-Agent erlaubt, aber nur ohne Option und nur dieses Skript", (context) => {
+  assertFaelle(context, {
+    gesperrt: ["node tools/widget-pins.mjs --schreiben", "node tools/widget-pins2.mjs", "node --input-type=module -e 'import(\"./tools/widget-pins.mjs\")'"],
+    erlaubt: ["node tools/widget-pins.mjs", "node tools/widget-pins.mjs | head -5"],
+  });
+});
+
 test("uniq nimmt das Wort - als Eingabe-Operand und sperrt eine zweite Datei", (context) => {
   assertFaelle(context, {
     gesperrt: ["echo a | uniq - src/m", "uniq -c - src/m"],
