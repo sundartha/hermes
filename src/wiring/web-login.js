@@ -10,6 +10,7 @@ import {
   LOGIN_ROUTE,
 } from "../web-auth.js";
 import { makePortalStore } from "../store/portal.js";
+import { createPortalRunner as defaultCreatePortalRunner } from "../portal-pool.js";
 import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
@@ -92,7 +93,7 @@ export async function wireWebLogin({
   store,
   audit,
   provision,
-  createPortalRunner,
+  createPortalRunner = defaultCreatePortalRunner,
   stripeWebhookPath,
   appPath,
   messaging,

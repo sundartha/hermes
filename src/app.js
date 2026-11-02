@@ -42,7 +42,6 @@ import { makeHealthzRoutes } from "./utils/healthz-route.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
-import { createPortalRunner as defaultCreatePortalRunner } from "./portal-pool.js";
 import {
   isTrustedLocalCaller,
   internalIdentity,
@@ -290,7 +289,7 @@ export async function buildApp(deps) {
     inboundBridges,
     consultDelivery,
     durableAuditFor,
-    createPortalRunner = defaultCreatePortalRunner,
+    createPortalRunner,
     healthzOptionen,
   } = deps;
 
