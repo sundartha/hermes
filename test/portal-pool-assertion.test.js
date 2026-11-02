@@ -5,6 +5,7 @@ import pg from "pg";
 import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
 import { neuePglite } from "./pglite-helfer.js";
 import { assertNoBypassRls, createPortalRunner } from "../src/portal-pool.js";
+import { portalPoolOptionen } from "../src/utils/pg-pool.js";
 
 function stubClient(rows) {
   return { query: async () => ({ rows }) };
@@ -146,11 +147,11 @@ test("B8-Portal: der Pool der Anmeldung loggt verlorene Leerlauf-Verbindungen st
     }
   };
   const runner = await createPortalRunner();
-  assert.deepEqual(runner._pool.optionen, { connectionString: process.env.DATABASE_URL || "" });
+  assert.deepEqual(runner._pool.optionen, portalPoolOptionen(process.env.DATABASE_URL || ""));
   const zeilen = fehlerausgabeVon(() =>
     runner._pool.emit("error", new Error("terminating connection")),
   );
-  assert.deepEqual(zeilen, ["[pool] Verbindung im Leerlauf verloren: terminating connection"]);
+  assert.deepEqual(zeilen, ["[pool:portal] Verbindung im Leerlauf verloren: terminating connection"]);
 });
 
 test("assertNoBypassRls: PGlite NOLOGIN NOBYPASSRLS app_user -> kein Fehler", async () => {

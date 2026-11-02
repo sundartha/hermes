@@ -2,8 +2,8 @@ import { hauptPoolOptionen, poolFehlerZeile } from "../utils/pg-pool.js";
 
 export async function createPgPoolRunner(connectionString) {
   const pg = (await import("pg")).default;
-  const pool = new pg.Pool({ connectionString });
-  pool.on("error", (err) => console.error("[pool] Verbindung im Leerlauf verloren:", err.message));
+  const pool = new pg.Pool(hauptPoolOptionen(connectionString));
+  pool.on("error", (err) => console.error(poolFehlerZeile("haupt", err)));
   const runner = {
     async withClient(fn) {
       const client = await pool.connect();

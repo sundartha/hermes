@@ -37,8 +37,8 @@ export async function assertNoBypassRls(client) {
 }
 
 function neuerPortalPool() {
-  const pool = new pg.Pool({ connectionString: config.store.databaseUrl });
-  pool.on("error", (err) => console.error("[pool] Verbindung im Leerlauf verloren:", err.message));
+  const pool = new pg.Pool(portalPoolOptionen(config.store.databaseUrl));
+  pool.on("error", (err) => console.error(poolFehlerZeile("portal", err)));
   return pool;
 }
 
