@@ -15,6 +15,7 @@ import {
 import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { importNachKonfiguration } from "./gemeinsam/umgebung-import.js";
+import { mitRoutenServer } from "./anrufe/routen-server.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -168,6 +169,7 @@ const ROUTE_FINGERPRINT = [
   "GET /healthz",
   "GET /intern/anrufe-laufend",
   "GET /intern/anrufpause",
+  "GET /intern/status",
   "GET /login",
   "GET /mcp",
   "GET /newsletter/confirm",
@@ -365,4 +367,30 @@ test("AUTH-P6-8: ohne pg-Backend sind die Betreiber-Routen gar nicht gemountet (
         "operatorAuth (webAuthMw+adminMw) gar nicht gemountet sein (fail-closed by construction).",
     );
   }
+});
+
+const STATUS_PATH = "/intern/status";
+const STATUS_TOKEN = "s".repeat(DEPLOY_TOKEN_MIN_LENGTH);
+
+test("Routen-Inventar: die echte App gibt /intern/status Konfiguration und Speicher mit", async (kontext) => {
+  const vorherigerSchluessel = config.auth.statusToken;
+  config.auth.statusToken = STATUS_TOKEN;
+  kontext.after(() => {
+    config.auth.statusToken = vorherigerSchluessel;
+  });
+  const speicher = await import("../src/store.js");
+  const app = await buildAppFor(PRODUKTIONS_BACKEND, { ...inventoryDeps(), store: speicher });
+  const [ohneSchluessel, mitSchluessel] = await mitRoutenServer(app, async (basis) => [
+    await withSilencedConsole(() => abrufMitFrist(`${basis}${STATUS_PATH}`)),
+    await abrufMitFrist(`${basis}${STATUS_PATH}`, {
+      headers: { authorization: `Bearer ${STATUS_TOKEN}` },
+    }),
+  ]);
+  assert.equal(ohneSchluessel.status, HTTP_UNAUTHORIZED);
+  assert.deepEqual(await ohneSchluessel.json(), { error: "unauthorized" });
+  assert.equal(mitSchluessel.status, HTTP_OK);
+  assert.deepEqual(await mitSchluessel.json(), {
+    datenbank: true,
+    commit: config.server.deployedCommit,
+  });
 });
