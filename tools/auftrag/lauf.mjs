@@ -29,6 +29,7 @@ import { absichtImIssueBefunde, issueBefunde } from "./phase.mjs";
 import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen, phasenbasis } from "./phasenende.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
+import { SOLLWERTE, setzeSollwerte, sollwertHinweis, sollwertZeile, sollwerteZuruecknehmen } from "./sollwerte.mjs";
 import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
@@ -122,7 +123,7 @@ function gemessen(name, wo, ausfuehren) {
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null, befund = null }) {
+  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null, befund = null, freigegeben = [] }) {
     this.kontext = { phase, auftrag, root, design };
     this.aufraeumen = aufraeumen;
     this.vorbau = vorbau;
@@ -150,7 +151,10 @@ class AuftragsLauf {
     this.vorigeBerichtet = false;
     this.pruefungen = [];
     this.hinweise = [];
-    this.zusaetze = [];
+    this.zusaetze = sollwertHinweis(freigegeben);
+    this.freigegeben = freigegeben;
+    this.sollwerte = [];
+    this.gesetzteSollwerte = [];
     this.berichtszeilen = [];
     this.grund = null;
     this.roteIds = [];
@@ -324,8 +328,29 @@ class AuftragsLauf {
   }
 
   grenzen(rolle, basis) {
-    if (rolle === "bau") umzugZuruecknehmen(this.kontext.root, this.listenumzug);
+    if (rolle === "bau") {
+      umzugZuruecknehmen(this.kontext.root, this.listenumzug);
+      this.nimmSollwerteZurueck(basis);
+    }
     return this.gruen(GRENZ_PRUEFUNG[rolle], this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis), zweckBeleg);
+  }
+
+  nimmSollwerteZurueck(basis) {
+    sollwerteZuruecknehmen({ root: this.kontext.root, basis }, this.sollwerte);
+    this.sollwerte = [];
+  }
+
+  sollwerteSetzen() {
+    if (this.freigegeben.length === 0) return true;
+    const { eintraege, gesetzt, befunde } = setzeSollwerte({ root: this.kontext.root, basis: this.basis, dateien: this.freigegeben });
+    this.sollwerte.push(...eintraege);
+    const zeilen = gesetzt.map(sollwertZeile);
+    for (const zeile of zeilen) if (!this.gesetzteSollwerte.includes(zeile)) this.gesetzteSollwerte.push(zeile);
+    this.berichtszeilen.push(...zeilen.filter((zeile) => !this.berichtszeilen.includes(zeile)));
+    if (zeilen.length + befunde.length === 0) return true;
+    const ergebnis = { name: SOLLWERTE, befehl: `setzeSollwerte ${this.freigegeben.join(" ")}`, exitCode: 0, ausgabe: [...zeilen, ...befunde].join("\n") };
+    this.belegt(SOLLWERTE, () => ergebnis, vollerBeleg);
+    return true;
   }
 
   bauHatGeaendert() {
@@ -607,6 +632,7 @@ class AuftragsLauf {
       () => this.allesVormerken(),
       () => this.alleMitGruenden(this.schnelleBauPruefungen()),
       () => this.injektion(),
+      () => this.sollwerteSetzen(),
       () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
   }
@@ -644,6 +670,7 @@ class AuftragsLauf {
       nachfragen: this.nachfragen,
       pruefungen: this.pruefungen,
       hinweise: this.hinweise,
+      sollwerte: this.gesetzteSollwerte,
       kosten: kostenDesAuftrags(root, [...this.agenten, ...this.nachfragen]),
       zeit: new Date().toISOString(),
     };
@@ -706,7 +733,7 @@ function freigabe(kontext) {
   const freigabedatei = join(ordner, `${auftrag.id}.freigabe.phase.json`);
   writeFileSync(freigabedatei, JSON.stringify(abgeleitet));
   for (const datei of freie) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
-  return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
+  return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei, freigegeben: freie };
 }
 
 function ciLokal(phase, root) {

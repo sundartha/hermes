@@ -336,12 +336,14 @@ function sichern(lauf, basis) {
 function neueZeilenGesichert(lauf) {
   const basis = lauf.basisBau;
   if (lauf.fortsetzung === null ? neueZeilen(lauf) : neueZeilenFortgesetzt(lauf)) return true;
+  lauf.nimmSollwerteZurueck(basis);
   if (lauf.ueberlebt !== null) sichereFortsetzung(lauf, basis);
   return lauf.gesichert(sichern(lauf, basis));
 }
 
 function zurueckstellen(lauf) {
   const { root } = lauf.kontext;
+  lauf.nimmSollwerteZurueck(lauf.basisBau);
   const datei = sichern(lauf, lauf.basisBau);
   git(["reset", "-q", "--hard", lauf.basisBau], { cwd: root });
   git(["clean", "-q", "-fd"], { cwd: root });
