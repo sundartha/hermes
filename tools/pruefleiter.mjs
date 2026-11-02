@@ -8,8 +8,9 @@ import { parseArgs } from "node:util";
 import { TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
-import { dateienDesTeils, waehleTeil, werkzeugMessdatei, werkzeugTeilzahl } from "./testlaufzeit/teilung.mjs";
+import { dateienDesTeils, werkzeugMessdatei, werkzeugTeilzahl } from "./testlaufzeit/teilung.mjs";
 import { planToolTests } from "./werkzeugtests/auswahl.mjs";
+import { dateienAusListe, werkzeugtestsDesTeils } from "./werkzeugtests/teil.mjs";
 import { guardedRun } from "./werkzeugtests/waechter.mjs";
 
 const PROTOCOL_DIR = ".pruefung";
@@ -147,14 +148,8 @@ function runToolBank(files, { cwd = process.cwd(), laufzeit, rot, still = false 
   return result.status ?? EXIT_FAILURE;
 }
 
-function listedFiles(listFile) {
-  return readFileSync(listFile, "utf8")
-    .split("\n")
-    .filter((line) => line !== "");
-}
-
 function toolTestFiles(plan, part, listFile) {
-  if (listFile !== undefined) return listedFiles(listFile);
+  if (listFile !== undefined) return dateienAusListe(listFile);
   if (plan.art === LIST_TOOL_TESTS) {
     if (part === undefined) return plan.dateien;
     return dateienDesTeils({
@@ -164,9 +159,7 @@ function toolTestFiles(plan, part, listFile) {
       messdatei: werkzeugMessdatei(),
     }).dateien;
   }
-  const all = globSync(TOOL_TEST_GLOB);
-  if (part === undefined) return all;
-  return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total, messdatei: werkzeugMessdatei() });
+  return werkzeugtestsDesTeils(part);
 }
 
 function toolTests(plan, part, listFile) {
