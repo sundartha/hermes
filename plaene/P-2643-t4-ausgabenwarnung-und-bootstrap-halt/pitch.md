@@ -2,6 +2,7 @@
 
 Status: freigegeben
 Freigabe Betreuung 02.11. 19:4x: reine Nachführung veralteter Zeilenangaben nach SOZ, Inhalt unverändert
+Freigabe Betreuung 02.11. 20:2x: Datei der Konfigurationsvariable nachgetragen (Rückmeldung design.md:148, Regel neue Variable nach src/konfiguration/)
 Issue: 2674
 Teil von: P-2643-alarmziel-tauschen; nach: P-2643-t2-vorfall-schliessen-hold, P-2643-t3-einmalige-meldungen
 Design Doc: ja, weil es mehr als einen ernsthaften Weg für das Schlüsselschema der Vorfälle und für den Umgang mit der Absender-Bindung `alert_sms_sender` gibt, die Entscheidung fünf Aufrufer und die Startprüfung trägt und sich nach dem Abschalten von SMS und Mail schwer zurücknehmen lässt.
@@ -49,6 +50,7 @@ Der Betreiber sieht Meldungen als Vorfälle in Better Stack, nicht mehr als SMS 
 - `tools/bausteine.json`
 - `eslint-suppressions.json`
 - `src/config.js`
+- `src/konfiguration/betterstack-alarm.js`
 - `.env.example`
 - `render.yaml`
 - `test/alert-sms.test.js`
