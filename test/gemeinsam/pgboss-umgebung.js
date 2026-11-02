@@ -1,20 +1,13 @@
 import { TestClock, fromPglite } from "pg-boss";
 import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
+import { makeConfigOverrides } from "../helpers.js";
 import { neuePglite } from "../pglite-helfer.js";
 import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
 
-const TESTBEGINN_MS = Date.UTC(2026, 10, 1, 8, 0, 0);
+const { withConfigOverrides } = makeConfigOverrides(config);
 
-export function withQueueBackend(value, fn) {
-  const original = config.store.queueBackend;
-  config.store.queueBackend = value;
-  try {
-    return fn();
-  } finally {
-    config.store.queueBackend = original;
-  }
-}
+const TESTBEGINN_MS = Date.UTC(2026, 10, 1, 8, 0, 0);
 
 export function neueUhr() {
   return new TestClock(TESTBEGINN_MS);
@@ -45,7 +38,7 @@ export async function pgBossUmgebung(t, optionen = {}) {
   });
   const db = await datenbank(t);
   const weitereQueue = (weitere = {}) =>
-    withQueueBackend("pgboss", () => {
+    withConfigOverrides({ queueBackend: "pgboss" }, () => {
       const queue = createQueue({ ...db.queueOptionen, ...optionen, ...weitere });
       queues.push(queue);
       return queue;
@@ -68,7 +61,7 @@ export async function wackeligeWarteschlange(t) {
         ? Promise.reject(new Error("Datenbank nicht erreichbar"))
         : echt.executeSql(...argumente),
   };
-  return withQueueBackend("pgboss", () => {
+  return withConfigOverrides({ queueBackend: "pgboss" }, () => {
     const queue = createQueue({ bossOptions: { db, backend: "pglite" } });
     queues.push(queue);
     return { queue, zustand };
