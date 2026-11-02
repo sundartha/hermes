@@ -31,14 +31,14 @@ function bericht(messungen, faelle = FAELLE) {
   return { schutz: { faelle, messungen } };
 }
 
-const KEIN_STRYKER = () => assert.fail("ohne Anspruch auf alten Schutz startet das Urteil keinen Stryker");
+const KEIN_LIVELAUF = () => assert.fail("ohne Anspruch auf alten Schutz startet das Urteil keinen Stryker");
 
 test("B3a L2: erreichen [NIE1] und [NIE3] neue Zeilen und töten dort keinen Mutanten, [NIE2] aber einen, nennt das Urteil genau diese beiden", async () => {
   const berichte = [
     bericht([messung(GUARDS.datei, NIE1, { erreicht: true }), messung(GUARDS.datei, NIE2, { getoetet: true }), messung(GUARDS.datei, NIE3, { erreicht: true })]),
     bericht([messung(KENNUNG.datei, NIE1, {}), messung(KENNUNG.datei, NIE2, { erreicht: true }), messung(KENNUNG.datei, NIE3, {})]),
   ];
-  const urteil = await schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_STRYKER);
+  const urteil = await schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_LIVELAUF);
   assert.deepEqual(urteil.zeilen, [B3A_ROTE_ZEILEN[0], `Schutztest wirksam: ${NIE2}`, B3A_ROTE_ZEILEN[1]]);
   assert.equal(`rot: ${urteil.anzahl} Schutztests, ${urteil.verstoesse} ohne nachgewiesene Wirkung.`, B3A_ROTE_ZEILEN[2]);
 });
@@ -53,24 +53,24 @@ const FAELLE_TABELLE = [
 for (const { name, messungen, erwartet } of FAELLE_TABELLE) {
   test(`ein Schutztest, der ${name}, ergibt „${erwartet.split(":")[0]}“`, async () => {
     const berichte = [bericht(messungen.map(([einheit, wert]) => messung(einheit.datei, NIE1, wert)), [FAELLE[0]])];
-    const urteil = await schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_STRYKER);
+    const urteil = await schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_LIVELAUF);
     assert.deepEqual(urteil.zeilen, [`${erwartet}${NIE1}`]);
     assert.equal(urteil.verstoesse, erwartet.startsWith("Verstoß") ? 1 : 0);
   });
 }
 
 test("ohne Schutzmessung in den Teilergebnissen (kein [NIE]-Fall im Pull Request) bleibt das Urteil unverändert", async () => {
-  assert.equal(await schutzDesUrteils({ berichte: [{}, { messungen: [] }], einheiten: [GUARDS], angaben: [] }, KEIN_STRYKER), null);
-  assert.equal(await schutzDesUrteils({ berichte: [bericht([], [])], einheiten: [GUARDS], angaben: [] }, KEIN_STRYKER), null);
+  assert.equal(await schutzDesUrteils({ berichte: [{}, { messungen: [] }], einheiten: [GUARDS], angaben: [] }, KEIN_LIVELAUF), null);
+  assert.equal(await schutzDesUrteils({ berichte: [bericht([], [])], einheiten: [GUARDS], angaben: [] }, KEIN_LIVELAUF), null);
 });
 
 test("fehlt die Schutzmessung zu einer neuen Zeile, bricht das Urteil ab, statt den Schutztest zu übergehen", async () => {
   const berichte = [bericht([messung(GUARDS.datei, NIE1, { getoetet: true })], [FAELLE[0]])];
-  await assert.rejects(schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_STRYKER), /Schutzmessung fehlt: \[NIE1\] .* in src\/utils\/anfrage-kennung\.js/);
+  await assert.rejects(schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_LIVELAUF), /Schutzmessung fehlt: \[NIE1\] .* in src\/utils\/anfrage-kennung\.js/);
 });
 
 test("ohne neue Zeile unter src/ ist die Wirkung nicht prüfbar und kein Verstoß", async () => {
-  const urteil = await schutzDesUrteils({ berichte: [bericht([], [FAELLE[0]])], einheiten: [], angaben: [] }, KEIN_STRYKER);
+  const urteil = await schutzDesUrteils({ berichte: [bericht([], [FAELLE[0]])], einheiten: [], angaben: [] }, KEIN_LIVELAUF);
   assert.deepEqual(urteil.zeilen, ["Hinweis: Wirkung der Schutztests nicht prüfbar, keine neue oder geänderte Zeile unter src/."]);
   assert.equal(urteil.verstoesse, 0);
 });
