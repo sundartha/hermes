@@ -18,6 +18,7 @@
   "test/werkzeuge/frist-eintraege-umzug.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/funktionskarte.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
   "test/werkzeuge/hermes-ctl.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/hermes-ctl-startbestand.test.js": "Der Datenbank-Wirt liest die SQL-Dateien aus src/db/migrations.",
   "test/werkzeuge/keine-steuerung-ueber-meldung.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
   "test/werkzeuge/kopien-auslagerung-umzug.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/log-geheimnisse-pruefen.test.js": "Liest Produktquelltext aus src/.",

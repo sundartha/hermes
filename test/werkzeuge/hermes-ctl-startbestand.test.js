@@ -17,8 +17,10 @@ const VORNAME = "Jonas";
 const NACHNAME = "Beispiel";
 const EIGENTUEMER = "owner";
 
+const IMPORT_AUS_SRC = /(?:\bfrom\s*|\bimport\s*\(?\s*)["'][^"']*\/src\//;
+
 function dateien() {
-  return readdirSync(WERKZEUG_ORDNER)
+  return readdirSync(WERKZEUG_ORDNER, { recursive: true })
     .filter((name) => name.endsWith(".mjs"))
     .map((name) => join(WERKZEUG_ORDNER, name));
 }
@@ -42,8 +44,8 @@ function pgWirtStarten() {
   return { kind, url };
 }
 
-test("hermes-ctl importiert nichts aus src/store", () => {
-  const treffer = dateien().filter((datei) => /src\/store/.test(readFileSync(datei, "utf8")));
+test("hermes-ctl importiert nichts aus src/", () => {
+  const treffer = dateien().filter((datei) => IMPORT_AUS_SRC.test(readFileSync(datei, "utf8")));
   assert.deepEqual(treffer, []);
 });
 

@@ -15,11 +15,12 @@ async function schemaAnlegen(datenbank) {
 }
 
 export async function startbestandAnlegen(datenbank, { vorname, nachname }) {
+  const rufname = vorname.trim();
   await schemaAnlegen(datenbank);
   await datenbank.query(MANDANT_MIT_NAMEN_ANLEGEN, [
     EIGENTUEMER_MANDANT,
     MANDANT_AKTIV,
-    `${vorname} ${nachname}`,
-    vorname,
+    `${rufname} ${nachname.trim()}`,
+    rufname,
   ]);
 }
