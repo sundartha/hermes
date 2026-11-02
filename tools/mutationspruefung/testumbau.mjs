@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { cwd, env } from "node:process";
+import { cwd, env, execPath } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
@@ -16,10 +17,16 @@ import { weitergeleitet } from "./weiterleitung.mjs";
 
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
 const TESTSEITE = /^test\//;
+const TESTDATEI = /\.test\.[cm]?[jt]s$/;
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const POSTGRES_AUFRUF = /(?<!function )\bechteDatenbank\(/;
+const TESTLAUF_GRENZE_MS = 600_000;
+const MAX_TESTAUSGABE = 67_108_864;
+const KEIN_TESTFALL = 0;
+const ERGEBNISZEILE = /^(?:not )?ok \d+ - (.*)$/;
+const ZURUECKGESTELLT = / # (?:SKIP|TODO)\b/;
 
 async function importe() {
   const { output } = await cruise(["src", "test"], CRUISE_OPTIONEN);
@@ -172,13 +179,46 @@ export async function ohneMutanten(basis) {
   return auslagerung === null ? null : auslagerungsZeile(auslagerung);
 }
 
-async function postgresDateien(tests) {
-  const { graph } = await importe();
-  const besucht = new Set(tests);
+function testseitigErreicht(start, graph) {
+  const besucht = new Set([start]);
   for (const datei of besucht) {
     for (const ziel of graph.get(datei) ?? []) if (TESTSEITE.test(ziel)) besucht.add(ziel);
   }
-  return [...besucht].filter((datei) => POSTGRES_AUFRUF.test(readFileSync(datei, "utf8"))).sort();
+  return besucht;
+}
+
+function ruftEchteDatenbank(datei) {
+  return POSTGRES_AUFRUF.test(readFileSync(datei, "utf8"));
+}
+
+async function postgresKandidaten(tests) {
+  const { graph } = await importe();
+  return tests.filter((test) => TESTDATEI.test(test) && [...testseitigErreicht(test, graph)].some(ruftEchteDatenbank)).sort();
+}
+
+function zahlImBericht(bericht, name) {
+  const kopf = `# ${name} `;
+  const zeile = bericht.split("\n").find((eintrag) => eintrag.startsWith(kopf));
+  return zeile === undefined ? undefined : Number(zeile.slice(kopf.length));
+}
+
+function ausgefuehrteTestfaelle(bericht, datei) {
+  const namen = bericht.split("\n").map((zeile) => ERGEBNISZEILE.exec(zeile)?.[1]);
+  return namen.filter((name) => name !== undefined && !ZURUECKGESTELLT.test(name) && name !== datei && !name.endsWith(`/${datei}`));
+}
+
+function ueberspringtOhnePostgres(datei) {
+  const umgebung = { ...env, NODE_ENV: "test" };
+  delete umgebung[POSTGRES_VARIABLE];
+  const lauf = spawnSync(execPath, ["--test", "--test-reporter=tap", datei], { cwd: cwd(), encoding: "utf8", env: umgebung, maxBuffer: MAX_TESTAUSGABE, timeout: TESTLAUF_GRENZE_MS });
+  const bericht = lauf.stdout ?? "";
+  const uebersprungen = zahlImBericht(bericht, "skipped");
+  const unvollstaendig = lauf.error !== undefined || lauf.signal !== null || uebersprungen === undefined;
+  return unvollstaendig || uebersprungen > KEIN_TESTFALL || ausgefuehrteTestfaelle(bericht, datei).length === KEIN_TESTFALL;
+}
+
+async function postgresDateien(tests) {
+  return (await postgresKandidaten(tests)).filter(ueberspringtOhnePostgres);
 }
 
 export async function ohnePostgresPruefbar(basis, geaendert, werkzeug) {
@@ -187,7 +227,7 @@ export async function ohnePostgresPruefbar(basis, geaendert, werkzeug) {
   const nachher = await betroffeneTests(geaendert, cwd(), aenderungsReichweite(basis, geaendert, cwd()));
   const dateien = [...new Set([...vorher, ...(await postgresDateien(nachher))])].sort();
   if (dateien.length === 0) return;
-  throw new Error(`${dateien.join(", ")} brauchen Postgres und überspringen ohne ${POSTGRES_VARIABLE}; der Testumbau wäre dort nicht aussagekräftig, kein Urteil.`);
+  throw new Error(`${dateien.join(", ")} brauchen Postgres und überspringen ohne ${POSTGRES_VARIABLE} (der Testlauf meldet übersprungen oder führt keinen Testfall aus); der Testumbau wäre dort nicht aussagekräftig, kein Urteil.`);
 }
 
 export async function testumbauPruefung(basis, werkzeug) {

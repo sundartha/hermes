@@ -147,6 +147,86 @@ test("Testumbau in der CI-Strecke bricht ohne Postgres ab, wenn nur die Tests am
   brichtOhnePostgresAb(repo, join(probeDirectory(context, {}), "plan.json"));
 });
 
+const LOKALE_UMGEBUNG = [
+  'import { echteDatenbank } from "./echtes-postgres.js";',
+  "export async function datenbankFuer(t) {",
+  `  if (process.env.${POSTGRES}) return echteDatenbank(t);`,
+  "  return { adresse: \"lokal\" };",
+  "}",
+  "",
+].join("\n");
+
+function lokalerTest(...faelle) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { datenbankFuer } from "./gemeinsam/lokale-umgebung.js";',
+    'import { einordnen } from "../src/zahl.js";',
+    ...faelle,
+    "",
+  ].join("\n");
+}
+
+const LOKAL_NEGATIV = ['test("negativ", async (t) => {', "  assert.ok(await datenbankFuer(t));", '  assert.equal(einordnen(-1), "negativ");', "});"];
+const LOKAL_NUR_POSITIV = ['test("positiv", async (t) => {', "  assert.ok(await datenbankFuer(t));", '  assert.equal(einordnen(1), "positiv");', "});"];
+
+function urteilOhnePostgres(context, repo) {
+  const ordner = probeDirectory(context, {});
+  const plan = ohnePostgres(repo, "--plan", join(ordner, "plan.txt"));
+  assert.equal(plan.status, EXIT_GRUEN, plan.stdout + plan.stderr);
+  const angaben = JSON.parse(readFileSync(join(ordner, "plan.txt"), "utf8"));
+  for (const teil of angaben.teile) {
+    const gemessen = ohnePostgres(repo, "--teil", String(teil), "--teile", String(angaben.anzahl), "--ergebnis", join(ordner, `mutation-teil-${teil}.json`));
+    assert.equal(gemessen.status, EXIT_GRUEN, gemessen.stdout + gemessen.stderr);
+  }
+  return ohnePostgres(repo, "--urteil", ordner);
+}
+
+test("Testumbau in der CI-Strecke ohne Postgres ist grün statt abgebrochen, wenn die Testhilfe echteDatenbank nur bei gesetzter Variable ruft und sonst ohne Überspringen läuft", (context) => {
+  const dateien = { ...PROBE, "test/gemeinsam/echtes-postgres.js": POSTGRES_HILFE, "test/gemeinsam/lokale-umgebung.js": LOKALE_UMGEBUNG };
+  const repo = probeRepository(context, { ...dateien, "test/zahl.test.js": lokalerTest(...LOKAL_NEGATIV) });
+  writeFiles(repo, { "test/zahl.test.js": lokalerTest(...LOKAL_NEGATIV, "// umgebaut") });
+  const urteil = urteilOhnePostgres(context, repo);
+  assert.equal(urteil.status, EXIT_GRUEN, urteil.stdout + urteil.stderr);
+  assert.match(urteil.stdout, /^grün: [1-9]\d* vorher getötete Mutanten in 1 Quelldateien \(src\/zahl\.js\) werden nach dem Testumbau weiter getötet\.$/m);
+});
+
+test("Testumbau in der CI-Strecke ohne Postgres ist rot mit der Verstoß-Zeile, wenn die Testhilfe ohne Überspringen läuft und der Umbau einen Mutanten nicht mehr tötet", (context) => {
+  const dateien = { ...PROBE, "test/gemeinsam/echtes-postgres.js": POSTGRES_HILFE, "test/gemeinsam/lokale-umgebung.js": LOKALE_UMGEBUNG };
+  const repo = probeRepository(context, { ...dateien, "test/zahl.test.js": lokalerTest(...LOKAL_NEGATIV) });
+  writeFiles(repo, { "test/zahl.test.js": lokalerTest(...LOKAL_NUR_POSITIV) });
+  const urteil = urteilOhnePostgres(context, repo);
+  assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
+  assert.match(urteil.stdout, /^Verstoß: Mutant nicht mehr getötet: src\/zahl\.js:3:24-3:33 StringLiteral → ""$/m);
+});
+
+const SKIP_HILFE = 'import { echteDatenbank } from "./echtes-postgres.js";\nexport function datenbankFuer(t) {\n  return echteDatenbank(t);\n}\n';
+
+test("Testumbau in der CI-Strecke bricht ohne Postgres ab und nennt die Testdatei, wenn nur die importierte Testhilfe echteDatenbank ruft und der Test dadurch überspringt", (context) => {
+  const test = [
+    'import { test } from "node:test";',
+    'import { datenbankFuer } from "./gemeinsam/skip-hilfe.js";',
+    'import { einordnen } from "../src/zahl.js";',
+    'test("negativ", async (t) => {',
+    "  if ((await datenbankFuer(t)) === null) return;",
+    "  einordnen(-1);",
+    "});",
+    "",
+  ].join("\n");
+  const dateien = { ...PROBE, "test/gemeinsam/echtes-postgres.js": POSTGRES_HILFE, "test/gemeinsam/skip-hilfe.js": SKIP_HILFE };
+  const repo = probeRepository(context, { ...dateien, "test/zahl.test.js": test });
+  writeFiles(repo, { "test/zahl.test.js": `${test}// umgebaut\n` });
+  brichtOhnePostgresAb(repo, join(probeDirectory(context, {}), "plan.json"));
+});
+
+test("Testumbau in der CI-Strecke bricht ohne Postgres ab und nennt die Testdatei, wenn die Testdatei die Postgres-Hilfe importiert und ohne Postgres keinen Testfall ausführt", (context) => {
+  const leer = 'import "./gemeinsam/skip-hilfe.js";\n';
+  const dateien = { ...PROBE, "test/gemeinsam/echtes-postgres.js": POSTGRES_HILFE, "test/gemeinsam/skip-hilfe.js": SKIP_HILFE };
+  const repo = probeRepository(context, { ...dateien, "test/zahl.test.js": leer });
+  writeFiles(repo, { "test/zahl.test.js": `${leer}// umgebaut\n` });
+  brichtOhnePostgresAb(repo, join(probeDirectory(context, {}), "plan.json"));
+});
+
 test("Testumbau in der CI-Strecke ohne Postgres ist unbeanstandet, solange keine betroffene Testdatei Postgres braucht", (context) => {
   const repo = probeRepository(context, PROBE);
   writeFiles(repo, { "test/zahl.test.js": `${zahlTest()}// umgebaut\n` });

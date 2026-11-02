@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { testumbauPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { git } from "./git.mjs";
-import { mutationsBefehl } from "./mutation.mjs";
+import { mutationsBefehl, testrundeZuPhasenMutanten } from "./mutation.mjs";
 import { zusicherungenGleich } from "./testtitel.mjs";
 import { ENTFERNT } from "./testumbau.mjs";
 import { GRUND, PRUEFUNG } from "./zweck.mjs";
@@ -28,7 +28,8 @@ function pruefeUndVermerkeEntfernteFaelle(lauf, ausgabe, antwort) {
   if (ohneGrund.length > 0) {
     return lauf.scheitert(`Der Testumbau entfernt Fälle, die die Antwort nicht mit „${ENTFERNT}<Datei>: <Fall>, weil <Grund>“ nennt: ${ohneGrund.join("; ")}`, GRUND.ENTFERNT_OHNE_GRUND);
   }
-  lauf.berichtszeilen.push(...entfernt.map((fall) => `${ENTFERNT}${fall}, weil ${gruende.get(fall)}`));
+  const zeilen = entfernt.map((fall) => `${ENTFERNT}${fall}, weil ${gruende.get(fall)}`);
+  lauf.berichtszeilen.push(...zeilen.filter((zeile) => !lauf.berichtszeilen.includes(zeile)));
   return true;
 }
 
@@ -57,13 +58,12 @@ function mutationNichtSchlechter(lauf) {
   return true;
 }
 
-export function testumbauSchritte(lauf) {
+function phasenTestrunde(lauf) {
+  return !hatSkript(lauf.kontext.root, MUTATION) || testrundeZuPhasenMutanten(lauf);
+}
+
+function folgePruefungen(lauf) {
   return [
-    () => lauf.vorherGruen(),
-    () => {
-      const antwort = umbauAntwort(lauf);
-      return antwort !== null && lauf.grenzen("test", lauf.basis) && faelleGruen(lauf, antwort);
-    },
     () => vorbauNurErgaenzt(lauf),
     () => lauf.allesVormerken(),
     () => lauf.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
@@ -73,4 +73,27 @@ export function testumbauSchritte(lauf) {
     () => lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)),
     () => mutationNichtSchlechter(lauf),
   ];
+}
+
+function vorgemerkterBaum(lauf) {
+  lauf.allesVormerken();
+  return git(["write-tree"], { cwd: lauf.kontext.root }).trim();
+}
+
+function gleichwertigNachgeholt(lauf, antwort) {
+  const vorher = vorgemerkterBaum(lauf);
+  if (!phasenTestrunde(lauf)) return false;
+  if (vorgemerkterBaum(lauf) === vorher) return true;
+  const erneut = [() => lauf.grenzen("test", lauf.basis), () => faelleGruen(lauf, antwort), ...folgePruefungen(lauf)];
+  return erneut.every((schritt) => schritt());
+}
+
+function umbauMitPruefungen(lauf) {
+  const antwort = umbauAntwort(lauf);
+  if (antwort === null || !lauf.grenzen("test", lauf.basis) || !faelleGruen(lauf, antwort)) return false;
+  return folgePruefungen(lauf).every((schritt) => schritt()) && gleichwertigNachgeholt(lauf, antwort);
+}
+
+export function testumbauSchritte(lauf) {
+  return [() => lauf.vorherGruen(), () => umbauMitPruefungen(lauf)];
 }
