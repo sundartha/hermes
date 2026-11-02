@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { AUFTRAG_TOOL, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
-const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const PHASE = "F-001-probe";
@@ -54,7 +52,7 @@ function repo(context, dateien = ABHAENGIGKEITSREGELN) {
 
 function pruefe(ordner, auftraege) {
   writeFiles(ordner, { "phase.json": JSON.stringify({ phase: PHASE, issue: 7, entwurf: { "src/d.js": "Entwurf", "test/": "Entwurf" }, auftraege }) });
-  return runIn(ordner, process.execPath, [EINSTIEG, "pruefe", "phase.json"]);
+  return runIn(ordner, process.execPath, [AUFTRAG_TOOL, "pruefe", "phase.json"]);
 }
 
 function befundzeilen(lauf) {
@@ -136,11 +134,12 @@ test("auftrag-pruefe vor lauf: eine .ts-Testdatei außerhalb eines Bereichsordne
   assert.equal(gruen.status, EXIT_GRUEN, gruen.stderr);
 });
 
-test("auftrag-pruefe vor lauf: lassen sich die gebauten Aufträge nicht bestimmen, meldet pruefe keine Testhilfe, die Testordnung aber weiter", (context) => {
+test("auftrag-pruefe vor lauf: ohne Git-Repo meldet pruefe statt der Testhilfe einen Hinweis, die Testordnung aber weiter", (context) => {
   const ordner = probeDirectory(context, { ...BESTAND, ...ABHAENGIGKEITSREGELN });
   const hilfe = pruefe(ordner, [behebung({ erwarteteDateien: ["src/d.js", "test/abrechnung/antwortfrist.test.js", BESTEHENDE_HILFE] })]);
   assert.equal(hilfe.status, EXIT_GRUEN, hilfe.stderr);
   assert.doesNotMatch(hilfe.stderr, TESTHILFE);
+  assert.match(hilfe.stderr, /^Hinweis: Testhilfen in erwarteteDateien nicht geprüft; ohne Git-Repo/m);
   const ordnung = pruefe(ordner, [behebung({ abnahme: "test/billing/antwortfrist.test.js" })]);
   assert.equal(ordnung.status, EXIT_ROT, ordnung.stdout);
   assert.match(ordnung.stderr, TESTORDNUNG);
