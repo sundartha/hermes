@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
 import { befundeImOrdner } from "../../tools/auftrag/planung/abdeckung.mjs";
+import { doppelAenderungen } from "../../tools/auftrag/planung/teilordner.mjs";
 import { nummernImOrdner } from "../../tools/auftrag/planung/nummern.mjs";
 import { AUFTRAG, EXIT_AUFRUF, EXIT_BEFUNDE, abgelegt, ersetze, mitIssue, planeAntworten, planungsBericht, vorgaengerGemergt } from "./planung-plane-probe.js";
 import { mitKopfzeile } from "./planung-freigabe-probe.js";
@@ -206,7 +208,7 @@ test("eine Zeile „Teil von“, die keinen Ordner neben dem Teil nennt, ergibt 
   assert.ok(lauf.stderr.includes("braucht die Form „Teil von: <Eltern-Ordner>; nach:"), lauf.stderr);
 });
 
-function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder, teil = HINTERLEGEN, gruppe = GRUPPEN[0], nachTeilung = () => {} }) {
+function teilMitDesign(context, { genannt, dazu = {}, geaendert, erkunder, teil = HINTERLEGEN, gruppe = GRUPPEN[0], nachTeilung = () => {} }) {
   const { wurzel, ...teilung } = geteilt(context, { vorher: (ordner) => {
     if (geaendert !== undefined) mitGeaendertenDateien(ordner, geaendert);
     const design = join(ordner, ORDNER, "design.md");
@@ -216,7 +218,7 @@ function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder, t
   exit(teilung, EXIT_GETEILT);
   const teileDatei = join(wurzel, ORDNER, "planung", "teile.json");
   const eltern = JSON.parse(readFileSync(teileDatei, "utf8"));
-  const mitGeteilten = eltern.teile.map((teil) => (teil.kuerzel === "t2" ? { ...teil, dateien: [...teil.dateien, ...auchInT2] } : teil));
+  const mitGeteilten = eltern.teile.map((teil) => ({ ...teil, dateien: [...teil.dateien, ...(dazu[teil.kuerzel] ?? [])] }));
   writeFileSync(teileDatei, JSON.stringify({ ...eltern, teile: mitGeteilten }));
   mitIssue(wurzel, teil, 97);
   nachTeilung(wurzel);
@@ -226,8 +228,8 @@ function teilMitDesign(context, { genannt, auchInT2 = [], geaendert, erkunder, t
 
 const HINWEIS_GRUPPE = { ...GRUPPEN[1], nummern: ["S4", "S5", "B1", "B2"], ueberschriften: [LOESUNG] };
 
-function hinweisTeilNachT1(context, { genannt, auchInT2 = [], nachTeilung = (wurzel) => vorgaengerGemergt(wurzel, HINTERLEGEN) }) {
-  return teilMitDesign(context, { genannt, auchInT2, teil: HINWEIS_ORDNER, gruppe: HINWEIS_GRUPPE, nachTeilung });
+function hinweisTeilNachT1(context, { genannt, dazu = {}, nachTeilung = (wurzel) => vorgaengerGemergt(wurzel, HINTERLEGEN) }) {
+  return teilMitDesign(context, { genannt, dazu, teil: HINWEIS_ORDNER, gruppe: HINWEIS_GRUPPE, nachTeilung });
 }
 
 function gemergtHinweis(lauf, datei) {
@@ -235,8 +237,12 @@ function gemergtHinweis(lauf, datei) {
   return `${datei} gehört ${basename(HINTERLEGEN)}, gemergt ${sha}`;
 }
 
+function befundZeilen(lauf) {
+  return lauf.stderr.split("\n").filter((zeile) => zeile.includes("teile.json"));
+}
+
 function befundZu(lauf, datei) {
-  return lauf.stderr.split("\n").find((zeile) => zeile.startsWith("Gruppe ") && zeile.includes(datei)) ?? "";
+  return befundZeilen(lauf).find((zeile) => zeile.includes(datei)) ?? "";
 }
 
 function planungLaeuftWeiter(lauf, datei) {
@@ -250,27 +256,27 @@ function teilHaeltAn(lauf, datei, teilOrdner) {
   assert.ok(befundZu(lauf, datei).includes(basename(teilOrdner)), lauf.stderr);
 }
 
-test("eine Gruppe, deren Design-Abschnitte Code-Dateien eines anderen Teils nennen, endet vor den Erkundern mit Exit 4 und nennt die Dateien und den Teil", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`, ROUTE], auchInT2: [ROUTE] });
+test("teilordner: nennen die Design-Abschnitte einer Gruppe Dateien eines anderen offenen Teils, ist das Beleg und plane plant weiter", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`, ROUTE, UMBAU_DATEI], dazu: { t2: [ROUTE] } });
 
-  exit(lauf, EXIT_BEFUNDE);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
-  assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), [], lauf.stderr);
-  assert.ok(befundZu(lauf, HINWEIS).includes(basename(HINWEIS_ORDNER)), lauf.stderr);
-  assert.equal(planungsBericht(lauf, HINTERLEGEN).exit, EXIT_BEFUNDE);
+  planungLaeuftWeiter(lauf, HINWEIS);
+  assert.equal(befundZu(lauf, UMBAU_DATEI), "", lauf.stderr);
 });
 
-test("teilordner: eine Datei, die der Teil selbst ändert, ist keine fremde Datei, auch wenn ein noch offener anderer Teil sie ebenfalls ändert", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = teilMitDesign(context, { genannt: [ROUTE], auchInT2: [ROUTE] });
+test("teilordner: eine Datei, die der Teil und ein über nach hinter ihm geordneter offener Teil beide ändern, ist keine fremde Datei", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [ROUTE], dazu: { t2: [ROUTE] } });
 
   planungLaeuftWeiter(lauf, ROUTE);
 });
 
-test("teilordner: eine Datei, die nur ein anderer offener Teil ändert, bleibt fremd, auch wenn der Teil mit diesem Teil eine andere Datei gemeinsam ändert", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = teilMitDesign(context, { genannt: [ROUTE, HINWEIS], auchInT2: [ROUTE] });
+test("teilordner: ändern zwei Teile ohne nach-Beziehung dieselbe Datei, endet plane vor jedem Agenten mit Exit 4 und nennt genau diese Datei und den anderen Teil", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [ROUTE], dazu: { t1: [UMBAU_DATEI], t2: [UMBAU_DATEI] } });
 
-  teilHaeltAn(lauf, HINWEIS, HINWEIS_ORDNER);
-  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
+  teilHaeltAn(lauf, UMBAU_DATEI, UMBAU_ORDNER);
+  assert.deepEqual(aufrufe(lauf, "planer"), [], lauf.stderr);
+  assert.equal(befundZu(lauf, UMBAU_DATEI).includes(basename(HINWEIS_ORDNER)), false, lauf.stderr);
+  assert.equal(befundZeilen(lauf).length, 1, lauf.stderr);
+  assert.equal(planungsBericht(lauf, HINTERLEGEN).exit, EXIT_BEFUNDE);
 });
 
 test("eine Gruppe, die nur Dateien des eigenen Teils nennt, plant weiter wie bisher", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -297,14 +303,14 @@ test("ändert die Erkundung im Teil eine Datei, die der Pitch nur für einen and
   assert.ok(lauf.stderr.split("\n").some((zeile) => zeile.includes(HINWEIS) && zeile.includes("Geänderte Dateien")), lauf.stderr);
 });
 
-test("eine im Pitch als geändert genannte Datei eines anderen Teils in einem gemeinsamen Abschnitt hält den Teil weiter mit Exit 4 an", { timeout: LAUF_FRIST_MS }, (context) => {
+test("teilordner: eine im Pitch als geändert genannte Datei eines anderen Teils, die der Teil nur im Design Doc nennt, ist Beleg und plane plant weiter", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`], geaendert: [ROUTE, HINWEIS, UMBAU_DATEI] });
 
-  teilHaeltAn(lauf, HINWEIS, HINWEIS_ORDNER);
+  planungLaeuftWeiter(lauf, HINWEIS);
 });
 
 test("teilordner: eine eigene Datei, die auch ein gemergter Vorgänger aus nach ändert, ist keine Datei eines anderen Teils", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], auchInT2: [ROUTE] });
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], dazu: { t2: [ROUTE] } });
 
   planungLaeuftWeiter(lauf, ROUTE);
 });
@@ -317,8 +323,8 @@ test("teilordner: Dateien eines gemergten Vorgängers aus nach sind keine fremde
   assert.ok(lauf.stdout.split("\n").includes(gemergtHinweis(lauf, ROUTE)), lauf.stdout);
 });
 
-test("teilordner: Dateien eines anderen offenen Teils bleiben fremde Dateien, auch neben einem gemergten Vorgänger", { timeout: LAUF_FRIST_MS }, (context) => {
-  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE, UMBAU_DATEI] });
+test("teilordner: eine Datei, die auch ein ungeordneter offener Teil ändert, bleibt fremd, auch neben einem gemergten Vorgänger", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], dazu: { t2: [UMBAU_DATEI] } });
 
   teilHaeltAn(lauf, UMBAU_DATEI, UMBAU_ORDNER);
   assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
@@ -354,3 +360,40 @@ test("teilordner: fehlt einem geteilten Vorgänger aus nach ein gemergter Unter-
   assert.ok(lauf.stderr.includes(`Vorgänger ${basename(HINTERLEGEN_UNTERTEILE[1])} (Unter-Teil des geteilten Vorgängers ${basename(HINTERLEGEN)}`), lauf.stderr);
   assert.equal(lauf.stdout.includes(`${ROUTE} gehört`), false, lauf.stdout);
 });
+
+const TEILUNGEN = join(dirname(fileURLToPath(import.meta.url)), "teilungen");
+
+function echteTeilung(paket) {
+  return JSON.parse(readFileSync(join(TEILUNGEN, `${paket}.json`), "utf8"));
+}
+
+function ohneNach(teilung, kuerzel) {
+  return { ...teilung, teile: teilung.teile.map((teil) => (teil.kuerzel === kuerzel ? { ...teil, abhaengigVon: [] } : teil)) };
+}
+
+const ECHTE_TEILUNGEN = [
+  { fall: "K2: t1 teilt leitungsplaetze.js, api-calls.js und mehr mit t2 bis t4, alle hinter t1", paket: "P-2642-leitungsplaetze", teil: "t1", erwartet: [] },
+  { fall: "B5: t1 teilt anbieter-messung.js und registry.js mit t2 bis t4, alle hinter t1", paket: "P-2655-anbieter-messung", teil: "t1", erwartet: [] },
+  { fall: "B9: t1 teilt alert-sms.js und outage-report.js mit t2 bis t5, alle hinter t1", paket: "P-2643-alarmziel-tauschen", teil: "t1", erwartet: [] },
+  { fall: "B9: t2 und t3 stehen beide nur hinter t1 und ändern keine gemeinsame Datei", paket: "P-2643-alarmziel-tauschen", teil: "t2", erwartet: [] },
+  { fall: "B15: t1 teilt schema.sql, kennzahlen.js und config.js mit t2 bis t5, alle hinter t1", paket: "P-2656-kennzahlen-sichten", teil: "t1", erwartet: [] },
+  { fall: "B15: t5 steht nur hinter t1, t2 bis t4 ändern keine Datei von t5", paket: "P-2656-kennzahlen-sichten", teil: "t5", erwartet: [] },
+  { fall: "S1db: t1 teilt migrate.js und Tests mit t2, das hinter t1 steht", paket: "P-2654-migrationen-versioniert", teil: "t1", erwartet: [] },
+  {
+    fall: "S1db ohne nach bei t2: genau die gemeinsam geänderten Dateien, Beleg-Dateien nicht",
+    paket: "P-2654-migrationen-versioniert",
+    teil: "t1",
+    ohneNachBei: "t2",
+    erwartet: ["src/db/migrate.js", "test/pg-helpers.js", "test/gemeinsam/migrationen-versioniert.test.js", "docs/RUNBOOK-RESTORE.md"].map((datei) => ({ datei, teil: "P-2654-t2-migrationen-sperre-bereich" })),
+  },
+];
+
+for (const { fall, paket, teil, ohneNachBei, erwartet } of ECHTE_TEILUNGEN) {
+  test(`teilordner: echte Teilung ${fall}`, () => {
+    const echt = echteTeilung(paket);
+    const teilung = ohneNachBei === undefined ? echt : ohneNach(echt, ohneNachBei);
+    const eintrag = teilung.teile.find(({ kuerzel }) => kuerzel === teil);
+
+    assert.deepEqual(doppelAenderungen(teilung, eintrag, paket), erwartet);
+  });
+}
