@@ -6,6 +6,16 @@ import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
 
 const TESTBEGINN_MS = Date.UTC(2026, 10, 1, 8, 0, 0);
 
+export function withQueueBackend(value, fn) {
+  const original = config.store.queueBackend;
+  config.store.queueBackend = value;
+  try {
+    return fn();
+  } finally {
+    config.store.queueBackend = original;
+  }
+}
+
 export function neueUhr() {
   return new TestClock(TESTBEGINN_MS);
 }
@@ -34,17 +44,12 @@ export async function pgBossUmgebung(t, optionen = {}) {
     await Promise.all(queues.map((queue) => queue.stop()));
   });
   const db = await datenbank(t);
-  const weitereQueue = (weitere = {}) => {
-    const original = config.store.queueBackend;
-    config.store.queueBackend = "pgboss";
-    try {
+  const weitereQueue = (weitere = {}) =>
+    withQueueBackend("pgboss", () => {
       const queue = createQueue({ ...db.queueOptionen, ...optionen, ...weitere });
       queues.push(queue);
       return queue;
-    } finally {
-      config.store.queueBackend = original;
-    }
-  };
+    });
   return { db, queue: weitereQueue(), weitereQueue };
 }
 
@@ -63,13 +68,9 @@ export async function wackeligeWarteschlange(t) {
         ? Promise.reject(new Error("Datenbank nicht erreichbar"))
         : echt.executeSql(...argumente),
   };
-  const original = config.store.queueBackend;
-  config.store.queueBackend = "pgboss";
-  try {
+  return withQueueBackend("pgboss", () => {
     const queue = createQueue({ bossOptions: { db, backend: "pglite" } });
     queues.push(queue);
     return { queue, zustand };
-  } finally {
-    config.store.queueBackend = original;
-  }
+  });
 }
