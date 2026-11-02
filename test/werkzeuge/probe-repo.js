@@ -21,8 +21,8 @@ const GIT_VARIABLE_PREFIX = "GIT_";
 const CLAUDE_CONFIGURATION_VARIABLE = "CLAUDE_CONFIG_DIR";
 const TAKEOVER_SWITCH_VARIABLE = "UEBERNAHME";
 const EXECUTABLE_MODE = 0o755;
-const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
-const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
+export const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
+export const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
 export function isolatedEnvironment() {
   return Object.fromEntries(

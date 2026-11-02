@@ -15,6 +15,9 @@ import {
 const WORKTREES_DIRECTORY = join(".claude", "worktrees");
 const PRODUCT_CODE = "src/";
 const BUILD_ROLE = "bau";
+const REBASE_DIRECTORIES = ["rebase-merge", "rebase-apply"];
+const NUL = "\0";
+const TAB = "\t";
 
 function mainCheckout(directory) {
   const common = git(directory, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
@@ -44,9 +47,28 @@ function blockMainCheckout(path, target, checkout) {
   ]);
 }
 
+function rebaseRuns(directory) {
+  const gitDirectory = git(directory, ["rev-parse", "--absolute-git-dir"]);
+  if (!gitDirectory.ok) return false;
+  return REBASE_DIRECTORIES.some((name) => existsSync(join(gitDirectory.text, name)));
+}
+
+function unmergedPaths(directory) {
+  const listing = git(directory, ["ls-files", "-u", "-z", "--full-name"]);
+  if (!listing.ok) return new Set();
+  const entries = listing.text.split(NUL).filter(Boolean);
+  return new Set(entries.map((entry) => entry.slice(entry.indexOf(TAB) + 1)));
+}
+
+function unmergedDuringRebase(code, target) {
+  const directory = existingDirectory(target);
+  return rebaseRuns(directory) && unmergedPaths(directory).has(code);
+}
+
 function blockProductCode(target, checkout) {
   const code = productCodePath(target, checkout);
   if (code === null || env.HERMES_ROLLE === BUILD_ROLE) return;
+  if (unmergedDuringRebase(code, target)) return;
   block("hooks/src-nur-lauf", [
     `Schreibzugriff auf ${code} blockiert: Code unter src/ schreibt nur der Bau-Agent über lauf.`,
     "Beginne mit dem Skill aenderung: erst Fragen, dann Einstufung, dann Pitch bzw. Dokumente, dann lauf.",
