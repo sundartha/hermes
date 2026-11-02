@@ -65,21 +65,16 @@ import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { turnBudgetOverrun } from "./turn-budget.js";
-import { MS_PER_MINUTE } from "./utils/timer.js";
 import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
 import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { makeGracefulShutdown } from "./abschalten.js";
-import { runSweepTick } from "./zeitsteuerung.js";
+import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
 export { runSweepTick } from "./zeitsteuerung.js";
-
-const MINUTES_PER_HOUR = 60;
-const RETENTION_SWEEP_INTERVAL_HOURS = 6;
-const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
 
@@ -694,7 +689,6 @@ export async function bootServer({
   config,
   store,
   lifecycle,
-  callFinish,
   provisioning,
   costTruing,
   costCrossCheck,
@@ -716,8 +710,7 @@ export async function bootServer({
     process.exit(1);
   }
 
-  runRetention(store, config);
-  setInterval(() => runRetention(store, config), RETENTION_SWEEP_INTERVAL_MS).unref();
+  starteAufbewahrung(() => runRetention(store, config));
 
   await healBootstrapStore({ config, store, messaging });
   const openPlatformBindings = derivePlatformNumberBindings({ config, store });
@@ -725,10 +718,15 @@ export async function bootServer({
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
 
-  setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }),
-    config.billing.costTruingSweepIntervalMs,
-  ).unref();
+  starteSweepTakt(config, {
+    costTruing,
+    provisioning,
+    costCrossCheck,
+    outageWatch,
+    paidWithoutNumberWatch,
+    provisionRetryWatch,
+    priceDriftWatch,
+  });
 
   lifecycle.rearmActiveCallTimers();
 

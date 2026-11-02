@@ -1,4 +1,18 @@
 import { SWEEP_TRIGGER } from "./billing/cost-truing.js";
+import { MS_PER_MINUTE } from "./utils/timer.js";
+
+const MINUTES_PER_HOUR = 60;
+const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
+
+export function starteAufbewahrung(aufraeumen) {
+  aufraeumen();
+  setInterval(aufraeumen, RETENTION_SWEEP_INTERVAL_MS).unref();
+}
+
+export function starteSweepTakt(config, waechter) {
+  setInterval(() => runSweepTick(waechter), config.billing.costTruingSweepIntervalMs).unref();
+}
 
 export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
   void costTruing
