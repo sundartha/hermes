@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { BUDGET_ABSCHNITT, BUDGET_PFAD, istBudgetWert } from "./funktionskarte/antwortzeiten.mjs";
 import { fileAt } from "./pruefungen-messen.mjs";
 
 export const STRENGER = "strenger";
@@ -10,6 +9,8 @@ const FALL_TESTDATEI = "(c) neue Testdatei";
 const FALL_KARTE = "(d) Bausteinkarte nur strenger";
 const FALL_BUDGET = "(e) Antwortzeit-Budget nur kleiner";
 const KARTE = "tools/bausteine.json";
+const BUDGET_PFAD = ".github/antwortzeiten.json";
+const BUDGET_ABSCHNITT = "attrappen";
 const ALLE_EINGAENGE = "alle";
 const KARTE_SCHLUESSEL = new Set(["schichten", "bausteine", "altlast"]);
 const BAUSTEIN_FELDER = new Set(["baustein", "zweck", "quellen", "eingaenge", "nutzt", "importiertJedeDatei"]);
@@ -160,7 +161,7 @@ function onlyLowersBudgets(before, after) {
     Object.entries(after).filter(rest),
   );
   const lower = Object.entries(current).every(
-    ([name, ms]) => istBudgetWert(ms) && ms <= old[name],
+    ([name, ms]) => Number.isInteger(ms) && ms > 0 && ms <= old[name],
   );
   return sameRest && lower && !isDeepStrictEqual(before, after);
 }

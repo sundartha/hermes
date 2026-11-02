@@ -1,14 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 
 export const BUDGET_PFAD = ".github/antwortzeiten.json";
-export const BUDGET_ABSCHNITT = "attrappen";
+const BUDGET_ABSCHNITT = "attrappen";
 const WEITERE_ABSCHNITTE = ["staging"];
 const NAME_MUSTER = /^[a-z][a-z0-9-]*$/;
 const P95 = 0.95;
 const SICHERHEITSFAKTOR = 1.5;
 const AUFRUNDEN_AUF_MS = 10;
 
-export const istBudgetWert = (ms) => Number.isInteger(ms) && ms > 0;
+const istBudgetWert = (ms) => Number.isInteger(ms) && ms > 0;
 
 const istObjekt = (wert) => wert !== null && typeof wert === "object" && !Array.isArray(wert);
 

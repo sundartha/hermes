@@ -101,19 +101,37 @@ function einstufung(context, nachher) {
   return JSON.parse(lauf.stdout);
 }
 
-const BUDGET_FAELLE = [
-  ["ein kleineres Budget bei gleichen Schlüsseln ist strenger", { ...VORHER, "elevenlabs-consult": 700 }, {}, true],
-  ["ein größeres Budget ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 101 }, {}, false],
-  ["ein zusätzlicher Schlüssel ist keine strengere Änderung", { ...VORHER, "neu-hinzu": 50 }, {}, false],
-  ["ein Budget von 0 ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 0 }, {}, false],
-  ["ein Budget mit Nachkommastellen ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 99.5 }, {}, false],
-  ["ein fehlender Schlüssel ist keine strengere Änderung", { "elevenlabs-consult": 700 }, {}, false],
-  ["ein Budget für Staging ist keine strengere Änderung", { ...VORHER, "elevenlabs-consult": 700 }, { "elevenlabs-consult": 5000 }, false],
-];
-
-for (const [titel, attrappen, staging, strenger] of BUDGET_FAELLE) {
-  test(`freigabe-strenger: in .github/antwortzeiten.json ${titel}`, (context) => {
-    const faelle = einstufung(context, { attrappen, staging });
-    assert.deepEqual(faelle, strenger ? [{ path: BUDGET_DATEI, fall: STRENGER_FALL }] : null);
-  });
+function budgetFall(context, attrappen, staging = {}) {
+  return einstufung(context, { attrappen, staging });
 }
+
+const NUR_KLEINER = [{ path: BUDGET_DATEI, fall: STRENGER_FALL }];
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein kleineres Budget bei gleichen Schlüsseln strenger", (context) => {
+  assert.deepEqual(budgetFall(context, { ...VORHER, "elevenlabs-consult": 700 }), NUR_KLEINER);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein größeres Budget keine strengere Änderung", (context) => {
+  assert.equal(budgetFall(context, { ...VORHER, "elevenlabs-lookup": 101 }), null);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein Budget von 0 keine strengere Änderung", (context) => {
+  assert.equal(budgetFall(context, { ...VORHER, "elevenlabs-lookup": 0 }), null);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein Budget mit Nachkommastellen keine strengere Änderung", (context) => {
+  assert.equal(budgetFall(context, { ...VORHER, "elevenlabs-lookup": 99.5 }), null);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein zusätzlicher Schlüssel keine strengere Änderung", (context) => {
+  assert.equal(budgetFall(context, { ...VORHER, "neu-hinzu": 50 }), null);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein fehlender Schlüssel keine strengere Änderung", (context) => {
+  assert.equal(budgetFall(context, { "elevenlabs-consult": 700 }), null);
+});
+
+test("freigabe-strenger: in .github/antwortzeiten.json ist ein Budget für Staging keine strengere Änderung", (context) => {
+  const staging = { "elevenlabs-consult": 5000 };
+  assert.equal(budgetFall(context, { ...VORHER, "elevenlabs-consult": 700 }, staging), null);
+});
