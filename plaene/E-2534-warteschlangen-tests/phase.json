@@ -1,0 +1,39 @@
+{
+  "phase": "E-2534-warteschlangen-tests",
+  "issue": 2534,
+  "absicht": "Hermes soll später zwei Instanzen tragen und ohne Pause deployen (Spur K, Paket K1; ADR-05). Heute liegt die Warteschlange für den Nummernkauf im Arbeitsspeicher: ein Neustart verliert wartende Aufträge, und zwei Instanzen würden dieselbe Nummer zweimal bestellen wollen. Dieses Paket liefert die Datenbank-Warteschlange pg-boss als zweites, wählbares Backend neben dem bisherigen: Aufträge in Postgres, Wiederholung nach Absturz, höchstens drei Wiederholungen, danach Totpost-Ablage.\n\nAusgeliefert, aber nicht eingeschaltet: QUEUE_BACKEND bleibt memory, render.yaml und src/config.js bleiben unverändert. Das Umschalten in Staging und Produktion ist ein eigener Schritt nach Antonios Entscheidung. Nicht gewollt: das Anschließen an Start und Abschalten (das ist K1b), das Löschen des Memory-Adapters oder seiner Tests, mehr als der Nummernkauf als Nutzer. Im Zweifel gilt: keine Abkürzung, kein Qualitätsverlust, nichts einschalten.",
+  "entwurf": {
+    "test/nummern/pgboss-warteschlange.test.js": "Was sich ändert: Ein neuer Test „K1-21: nach einem erledigten Auftrag legt enqueue mit demselben Schlüssel einen neuen Auftrag an und liefert dessen Kennung, nicht die des alten“ am Ende von test/nummern/pgboss-warteschlange.test.js. Er reiht über pgBossUmgebung(t) und auftrag(nummer) einen Auftrag ein, arbeitet ihn mit queue.drain ab, reiht denselben Schlüssel erneut ein und erwartet: die zweite Kennung ist eine andere als die erste, jobStatus der zweiten ist \"queued\", jobStatus der ersten bleibt \"done\". Er hält fest, dass enqueue die Kennung aus send nimmt, wenn pg-boss einen neuen Auftrag angelegt hat (src/queue/adapters/pgboss/queue.js:142); ohne diesen Zweig liefert findJobs, sortiert nach created_on, den alten erledigten Auftrag zuerst (node_modules/pg-boss/dist/plans.js:4625). Damit stirbt der Mutant src/queue/adapters/pgboss/queue.js:142:9-142:11 ConditionalExpression → false.\nBleibt gleich: alle bestehenden Tests, Hilfen, Konstanten und Importe der Datei Zeichen für Zeichen; test/gemeinsam/pgboss-umgebung.js; src/.\nAbnahme: Abnahmetest: keiner, weil Testumbau: alle Fälle der Datei bleiben unverändert grün; der neue Fall ist auf dem heutigen Stand grün.\nNicht-Ziele: die beiden übrigen überlebenden Mutanten (queue.js:1 DEFAULT_SCHEMA und queue.js:164 catch(() => null)), weil sie gleichwertig sind und eigens gemeldet werden; der Hinweis G26 (findJobs ohne Zustandsfilter), weil er eine Änderung unter src/ wäre; jede Änderung an src/.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| 1 | Liegen beide Aufträge in derselben Zeiteinheit, entscheidet die zufällige id die Reihenfolge von findJobs, und der Mutant stirbt nur manchmal. | Der Test reiht den zweiten Auftrag erst nach dem drain ein; created_on kommt aus now() einer späteren Transaktion. Wird der Mutant im Lauf nicht sicher getötet, meldet der Lauf ihn als Überlebenden. |",
+    "test/provisioning-enqueue-order.test.js": "Was sich ändert: Ein neuer Test „K1-25: scheitert das Einreihen eines neuen Nummernauftrags, meldet queueProvisioning ok false, loggt den Fehler und lässt die Job-Spur für das Wiedereinreihen stehen“ am Ende von test/provisioning-enqueue-order.test.js. Er baut wie K1-24 mit makeOrchestrator und makeFakeStore(withNumbers(makeNumber(\"num1\", \"t1\"))) auf, ersetzt queue.enqueue mit t.mock.method durch eine async-Funktion, die mit „Warteschlange nicht erreichbar“ scheitert, ruft orchestrator.queueProvisioning(\"num1\", \"t1\") und erwartet: das Ergebnis ist { ok: false }; console.error meldet genau „[provision] Job-Spur fehlgeschlagen: Warteschlange nicht erreichbar“; die Job-Spur für num1 steht noch im Zustand mit dem Status queued (PROVISIONING_JOB_STATUS) und dem idempotencyKey provision_num1, damit reconcileOrphanedProvisioning sie beim nächsten Start wieder einreiht.\nBleibt gleich: alle bestehenden Tests und Hilfen der Datei Zeichen für Zeichen, auch makeOrchestrator, makeFakeStore, silenceErrors und loggedErrors; src/.\nAbnahme: Abnahmetest: keiner, weil Testumbau: alle Fälle der Datei bleiben unverändert grün; der neue Fall hält das heutige Verhalten von src/worker/provisioning-orchestrator.js:57-67 fest.\nNicht-Ziele: eine Änderung an src/worker/provisioning-orchestrator.js; ist der neue Fall auf dem heutigen Stand rot, ist das ein Befund für einen eigenen Auftrag unter src/, kein Grund, die Erwartung anzupassen.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| 1 | Der neue Fall gleicht K1-24 im Aufbau so sehr, dass jscpd ihn als Kopie meldet. | Gemeinsamen Aufbau als neue Hilfe ergänzen, die nur der neue Fall nutzt, oder den Aufbau knapp halten; K1-24 bleibt unverändert. |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "testumbau",
+      "ziel": "Teste die Kennung beim erneuten Einreihen nach Erledigung",
+      "bereich": "test/nummern/pgboss-warteschlange.test.js",
+      "erwarteteDateien": [
+        "test/nummern/pgboss-warteschlange.test.js"
+      ],
+      "abnahme": "test/nummern/pgboss-warteschlange.test.js",
+      "wasDarfNiePassieren": [
+        "Nach dem Lauf steht in test/nummern/pgboss-warteschlange.test.js ein Test, der nach einem erledigten Auftrag denselben idempotencyKey erneut einreiht und erwartet, dass enqueue eine andere Kennung als beim ersten Mal liefert, deren jobStatus queued ist, während die erste Kennung done bleibt.",
+        "Alle bestehenden Tests, Hilfen, Konstanten und Importe von test/nummern/pgboss-warteschlange.test.js bleiben Zeichen für Zeichen unverändert, und keine andere Datei ändert sich."
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "testumbau",
+      "ziel": "Teste das Scheitern des Einreihens eines Nummernauftrags",
+      "bereich": "test/provisioning-enqueue-order.test.js",
+      "erwarteteDateien": [
+        "test/provisioning-enqueue-order.test.js"
+      ],
+      "abnahme": "test/provisioning-enqueue-order.test.js",
+      "wasDarfNiePassieren": [
+        "Nach dem Lauf steht in test/provisioning-enqueue-order.test.js ein Test, in dem queue.enqueue asynchron scheitert und der erwartet, dass queueProvisioning { ok: false } liefert, den Fehler mit „[provision] Job-Spur fehlgeschlagen“ meldet und die Job-Spur der Nummer mit Status queued stehen lässt.",
+        "Alle bestehenden Tests und Hilfen von test/provisioning-enqueue-order.test.js bleiben Zeichen für Zeichen unverändert, und keine andere Datei ändert sich."
+      ]
+    }
+  ]
+}
