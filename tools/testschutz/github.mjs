@@ -60,13 +60,15 @@ export function closedIssueNumbers(body) {
   return [...new Set([...matches].map((match) => Number(match[1])))];
 }
 
-export function approvedAtHead(reviews, logins, headSha) {
+export function latestApprovals(reviews, logins) {
   const latest = new Map();
   for (const review of reviews) {
     const login = review.user?.login;
     if (logins.includes(login) && review.state !== "COMMENTED") latest.set(login, review);
   }
-  return [...latest.values()].filter(
-    (review) => review.state === "APPROVED" && review.commit_id === headSha,
-  );
+  return [...latest.values()].filter((review) => review.state === "APPROVED");
+}
+
+export function approvedAtHead(reviews, logins, headSha) {
+  return latestApprovals(reviews, logins).filter((review) => review.commit_id === headSha);
 }
