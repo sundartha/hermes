@@ -13,6 +13,7 @@ const FREIGEBER = "Antonio20045";
 const PULL = `GET ${API_PFAD}/pulls/${NUMMER}`;
 const EREIGNISSE = `GET ${API_PFAD}/issues/${NUMMER}/events`;
 const REVIEWS = `GET ${API_PFAD}/pulls/${NUMMER}/reviews`;
+const KEINE_FORCE_PUSHES = { data: { repository: { pullRequest: { timelineItems: { nodes: [], pageInfo: { hasPreviousPage: false } } } } } };
 const ALTER_KOPF = "a".repeat(40);
 const VERTRAULICH = "Ändere a.js\n\nUrsache: Auftrag a1 der Phase F-V1-wartung.\n\nAuftrag: F-V1-wartung/a1\nArt: fehlerbehebung\n";
 
@@ -33,11 +34,12 @@ async function pruefeMitGithub(context, commitText, angaben) {
   const basis = sha(verzeichnis);
   aendereA(verzeichnis, commitText);
   const kopf = sha(verzeichnis);
-  const { labels = [{ name: LABEL }], ereignisse = [gesetzt()], reviews = [review(kopf)], optionen = ["--pr", String(NUMMER)] } = angaben(kopf);
+  const { labels = [{ name: LABEL }], ereignisse = [gesetzt()], reviews = [review(kopf)], optionen = ["--pr", String(NUMMER)], zeitleiste = null } = angaben(kopf);
   const routen = new Map([[PULL, { head: { sha: kopf }, labels }], [REVIEWS, reviews]]);
   if (ereignisse !== null) routen.set(EREIGNISSE, ereignisse);
+  if (zeitleiste !== null) routen.set("POST /graphql", zeitleiste);
   const github = await scheinGithub(context, routen);
-  const umgebung = { GITHUB_API_URL: github.url, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO };
+  const umgebung = { GITHUB_API_URL: github.url, GITHUB_GRAPHQL_URL: `${github.url}/graphql`, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO };
   const argumente = [WERKZEUG, "--basis", basis, "--kopf", "HEAD", ...optionen];
   const lauf = await starteWerkzeug(argumente, { cwd: verzeichnis, umgebung });
   return { ...lauf, anfragen: github.anfragen };
@@ -138,7 +140,7 @@ const WARTESCHLANGE = `refs/heads/gh-readonly-queue/master/pr-${NUMMER}-${"b".re
 const AUS_DER_WARTESCHLANGE = ["--ereignis", "merge_group", "--pr", "", "--queue-ref", WARTESCHLANGE];
 
 test("im pull_request-Lauf geht die Nummer aus --pr an die Abfrage des PR", async (context) => {
-  const lauf = await pruefeMitGithub(context, VERTRAULICH, () => ({ optionen: ["--ereignis", "pull_request", "--pr", String(NUMMER), "--queue-ref", ""] }));
+  const lauf = await pruefeMitGithub(context, VERTRAULICH, () => ({ optionen: ["--ereignis", "pull_request", "--pr", String(NUMMER), "--queue-ref", ""], zeitleiste: KEINE_FORCE_PUSHES }));
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.ok(lauf.anfragen.some(({ pfad }) => pfad === `${API_PFAD}/pulls/${NUMMER}`));
 });
