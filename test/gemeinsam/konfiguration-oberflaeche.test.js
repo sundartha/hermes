@@ -15,7 +15,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   safety: 17,
   billing: 56,
   provisioning: 17,
-  auth: 18,
+  auth: 19,
   mail: 7,
   llm: 17,
   telnyx: 1,
@@ -29,7 +29,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   research: 7,
   werkzeug: 1,
 };
-const EXPECTED_TOTAL_KEYS = 198;
+const EXPECTED_TOTAL_KEYS = 199;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -86,7 +86,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  const EXPECTED_PRIMITIVE_LEAVES = 184;
+  const EXPECTED_PRIMITIVE_LEAVES = 185;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
