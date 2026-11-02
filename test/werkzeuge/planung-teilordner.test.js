@@ -239,14 +239,38 @@ function befundZu(lauf, datei) {
   return lauf.stderr.split("\n").find((zeile) => zeile.startsWith("Gruppe ") && zeile.includes(datei)) ?? "";
 }
 
+function planungLaeuftWeiter(lauf, datei) {
+  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
+  assert.equal(befundZu(lauf, datei), "", lauf.stderr);
+}
+
+function teilHaeltAn(lauf, datei, teilOrdner) {
+  exit(lauf, EXIT_BEFUNDE);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
+  assert.ok(befundZu(lauf, datei).includes(basename(teilOrdner)), lauf.stderr);
+}
+
 test("eine Gruppe, deren Design-Abschnitte Code-Dateien eines anderen Teils nennen, endet vor den Erkundern mit Exit 4 und nennt die Dateien und den Teil", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`, ROUTE], auchInT2: [ROUTE] });
 
   exit(lauf, EXIT_BEFUNDE);
   assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
   assert.deepEqual(aufrufe(lauf, "planer", "## Teilung"), [], lauf.stderr);
-  for (const datei of [HINWEIS, ROUTE]) assert.ok(befundZu(lauf, datei).includes(basename(HINWEIS_ORDNER)), `${datei}\n\n${lauf.stderr}`);
+  assert.ok(befundZu(lauf, HINWEIS).includes(basename(HINWEIS_ORDNER)), lauf.stderr);
   assert.equal(planungsBericht(lauf, HINTERLEGEN).exit, EXIT_BEFUNDE);
+});
+
+test("teilordner: eine Datei, die der Teil selbst ändert, ist keine fremde Datei, auch wenn ein noch offener anderer Teil sie ebenfalls ändert", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [ROUTE], auchInT2: [ROUTE] });
+
+  planungLaeuftWeiter(lauf, ROUTE);
+});
+
+test("teilordner: eine Datei, die nur ein anderer offener Teil ändert, bleibt fremd, auch wenn der Teil mit diesem Teil eine andere Datei gemeinsam ändert", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = teilMitDesign(context, { genannt: [ROUTE, HINWEIS], auchInT2: [ROUTE] });
+
+  teilHaeltAn(lauf, HINWEIS, HINWEIS_ORDNER);
+  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
 });
 
 test("eine Gruppe, die nur Dateien des eigenen Teils nennt, plant weiter wie bisher", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -259,8 +283,7 @@ test("eine Gruppe, die nur Dateien des eigenen Teils nennt, plant weiter wie bis
 test("eine Beleg-Datei eines gemeinsamen Abschnitts gilt im Teil nicht als fremde Datei", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`], geaendert: [ROUTE, UMBAU_DATEI] });
 
-  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
-  assert.equal(befundZu(lauf, HINWEIS), "", lauf.stderr);
+  planungLaeuftWeiter(lauf, HINWEIS);
 });
 
 test("ändert die Erkundung im Teil eine Datei, die der Pitch nur für einen anderen Teil als geändert nennt, hält plane den Teil vor dem Zuschnitt mit Exit 4 an", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -277,16 +300,13 @@ test("ändert die Erkundung im Teil eine Datei, die der Pitch nur für einen and
 test("eine im Pitch als geändert genannte Datei eines anderen Teils in einem gemeinsamen Abschnitt hält den Teil weiter mit Exit 4 an", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = teilMitDesign(context, { genannt: [`${HINWEIS}${ZEILENANGABE}`], geaendert: [ROUTE, HINWEIS, UMBAU_DATEI] });
 
-  exit(lauf, EXIT_BEFUNDE);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
-  assert.ok(befundZu(lauf, HINWEIS).includes(basename(HINWEIS_ORDNER)), lauf.stderr);
+  teilHaeltAn(lauf, HINWEIS, HINWEIS_ORDNER);
 });
 
 test("teilordner: eine eigene Datei, die auch ein gemergter Vorgänger aus nach ändert, ist keine Datei eines anderen Teils", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE], auchInT2: [ROUTE] });
 
-  assert.equal(aufrufe(lauf, "erkunder").length, 1, lauf.stderr);
-  assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
+  planungLaeuftWeiter(lauf, ROUTE);
 });
 
 test("teilordner: Dateien eines gemergten Vorgängers aus nach sind keine fremden Dateien und stehen als Hinweis im Protokoll", { timeout: LAUF_FRIST_MS }, (context) => {
@@ -300,9 +320,7 @@ test("teilordner: Dateien eines gemergten Vorgängers aus nach sind keine fremde
 test("teilordner: Dateien eines anderen offenen Teils bleiben fremde Dateien, auch neben einem gemergten Vorgänger", { timeout: LAUF_FRIST_MS }, (context) => {
   const lauf = hinweisTeilNachT1(context, { genannt: [ROUTE, UMBAU_DATEI] });
 
-  exit(lauf, EXIT_BEFUNDE);
-  assert.deepEqual(aufrufe(lauf, "erkunder"), [], lauf.stderr);
-  assert.ok(befundZu(lauf, UMBAU_DATEI).includes(basename(UMBAU_ORDNER)), lauf.stderr);
+  teilHaeltAn(lauf, UMBAU_DATEI, UMBAU_ORDNER);
   assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
 });
 
