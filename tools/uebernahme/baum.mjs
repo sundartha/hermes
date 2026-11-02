@@ -1,7 +1,6 @@
 import {
   appendFileSync,
   existsSync,
-  globSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -12,10 +11,9 @@ import { env, version } from "node:process";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 
-import { TOOL_TEST_GLOB } from "../../test/testbaenke-run.mjs";
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
-import { waehleTeil, werkzeugMessdatei } from "../testlaufzeit/teilung.mjs";
 import { readList } from "../werkzeugtests/liste.mjs";
+import { dateienAusListe, werkzeugtestsDesTeils } from "../werkzeugtests/teil.mjs";
 import { erzeugerFuer, MAX_ALTER_MS, QUELLEN, WERKZEUG_TEILBAUM } from "./erzeuger.mjs";
 import {
   festhaltungsZeile,
@@ -49,10 +47,8 @@ const AUFRUF =
   "        node tools/uebernahme/baum.mjs festhalten --bericht <datei> --name <artefakt> [--mit-werkzeugbaum]";
 
 export function dateienDesTeils({ art, teil, teile, dateienDatei }) {
-  if (art === ART_CI) {
-    return readFileSync(dateienDatei, "utf8").split("\n").filter((zeile) => zeile !== "");
-  }
-  return waehleTeil({ dateien: globSync(TOOL_TEST_GLOB), teil, anzahl: teile, messdatei: werkzeugMessdatei() });
+  if (art === ART_CI) return dateienAusListe(dateienDatei);
+  return werkzeugtestsDesTeils({ index: teil, total: teile });
 }
 
 function ursprungDes(zeile, treffer) {
