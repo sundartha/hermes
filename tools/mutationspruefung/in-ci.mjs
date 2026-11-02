@@ -53,9 +53,10 @@ function git(argumente, root, umgebung = env) {
   throw new Error(`git ${argumente.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`);
 }
 
-function nachricht(gleichwertige, vorlauf) {
+function nachricht({ gleichwertige, alterSchutz }, vorlauf) {
   const vorlaufZeile = vorlauf === null ? [] : [`Vorlauf: ${vorlauf}`];
-  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
+  const schutzZeilen = alterSchutz.map((angabe) => `Alter Schutz: ${angabe}, weil ${GEMELDET}`);
+  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ...schutzZeilen, ""].join("\n");
 }
 
 function vorlaufDatei(root, art) {
@@ -87,14 +88,14 @@ function merkeVorlauf({ root, ...art }, lauf) {
   }
 }
 
-function friereEin(root, gleichwertige, vorlauf) {
+function friereEin(root, meldungen, vorlauf) {
   const ordner = neuerTempOrdner();
   const eigenerIndex = { ...env, GIT_INDEX_FILE: join(ordner, "index") };
   git(["read-tree", "HEAD"], root, eigenerIndex);
   git(["add", "-A"], root, eigenerIndex);
   const baum = git(["write-tree"], root, eigenerIndex);
   const datei = join(ordner, "nachricht");
-  writeFileSync(datei, nachricht(gleichwertige, vorlauf));
+  writeFileSync(datei, nachricht(meldungen, vorlauf));
   return git(["commit-tree", baum, "-p", "HEAD", "-F", datei], root);
 }
 
@@ -211,10 +212,10 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige, alterSchutz = [] }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const plaetze = plaetzeSchalter();
-  const stand = friereEin(root, gleichwertige, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
+  const stand = friereEin(root, { gleichwertige, alterSchutz }, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
   const abgelehnt = abgelehnterPush(root, stand, zweig);
   if (abgelehnt !== null) return { lokal: `Hinweis: Mutationsprüfung läuft lokal, weil der Push nach ${REMOTE} abgelehnt wurde: ${abgelehnt}` };
