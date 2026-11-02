@@ -50,6 +50,7 @@ import {
 } from "./request-tenant.js";
 import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.js";
+import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
 const BODY_LIMIT = "100kb";
@@ -100,8 +101,9 @@ function makeInitTokenSchranke(config) {
   return initTokenSchranke({ config, zaehler });
 }
 
-export function installGlobalMiddleware({ app, config }) {
+export function installGlobalMiddleware({ app, config, telemetrie = KEINE_TELEMETRIE }) {
   app.use(anfrageKennungMiddleware);
+  app.use(anfrageMessung(telemetrie));
   app.use(securityHeaders);
   app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
 
@@ -289,6 +291,7 @@ export async function buildApp(deps) {
     inboundBridges,
     consultDelivery,
     durableAuditFor,
+    telemetrie,
     createPortalRunner,
     healthzOptionen,
   } = deps;
@@ -296,7 +299,7 @@ export async function buildApp(deps) {
   const app = express();
   app.set("trust proxy", 1);
 
-  const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
+  const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config, telemetrie });
   registerPublicRoutes({ app, config, store, healthzOptionen });
   registerPathRedirects({ app });
   app.use(makeInternAnrufeLaufendRoutes({ config, store }));

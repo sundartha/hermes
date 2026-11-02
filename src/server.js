@@ -57,6 +57,7 @@ import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.js";
+import { starteTelemetrie } from "./utils/telemetrie.js";
 
 const provisioningQueue = createQueue();
 
@@ -208,6 +209,15 @@ const voiceRender = makeVoiceRender({ config });
 
 setzeKennungInLogzeilen(config.metrics.logRequestId);
 
+const telemetrie = await starteTelemetrie({
+  url: config.telemetry.telemetryOtlpUrl,
+  benutzer: config.telemetry.telemetryOtlpUser,
+  token: config.telemetry.telemetryOtlpToken,
+  instanzKennung: config.telemetry.telemetryInstanceId,
+  version: config.server.deployedCommit,
+  intervallMs: config.telemetry.telemetryIntervalMs,
+});
+
 const deps = {
   config,
   store,
@@ -235,6 +245,7 @@ const deps = {
   elevenLabsOutbound,
   inboundBridges,
   inboundTrunkSweep,
+  telemetrie,
 };
 const { app, accounts, auditStore } = await buildApp(deps);
 accountsRef.current = accounts;
