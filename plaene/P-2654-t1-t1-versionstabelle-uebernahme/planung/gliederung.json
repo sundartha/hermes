@@ -1,0 +1,44 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S13",
+        "S3",
+        "S4"
+      ],
+      "eingang": "Start einer Instanz mit `npm start`: `src/store.js` erzeugt den Pool und ruft `init()`; `init()` holt einen Client, setzt den Plattform-Mandanten und ruft `prepareSchema` (= `migrate` aus `src/db/migrate.js`) auf diesem Client (`src/store/pg.js:32-35`); Übernahme von `0001` und `0002` in einer Transaktion, wenn `schema_migrations` fehlt",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Welchen Weg nimmt `npm start` bis zur Ausführung von `src/db/migrations/0001_ausgang.sql`? Bitte jede Stelle mit Datei, Funktion und Zeilen: Erzeugung des Pools und Aufruf von `init()` in `src/store.js` (laut Design Doc etwa Zeilen 10-12), `init()` in `src/store/pg.js` (etwa 32-35), `withClient`/Rückgabe des Clients in `src/store/pg-runner.js` (etwa 1-16), `migrate`/`prepareSchema`, `MIGRATION_READERS` (etwa `src/db/migrate.js:11`), `schemaDdl()`, `applySchema` und der Aufruf um `src/db/migrate.js:178`.",
+        "Wo laufen heute die vier Nachzüge und `seedDefaults` relativ zu `migrate` (Datei, Funktion, Zeilen)? Sie sollen unverändert bei jedem Start laufen; die neue Versionsprüfung muss davor liegen, ohne sie zu überspringen.",
+        "Läuft `0001_ausgang.sql` heute in einer Transaktion, oder enthält die Datei eigene `BEGIN`/`COMMIT` oder Anweisungen, die in einer Transaktion nicht laufen (etwa `CREATE INDEX CONCURRENTLY`, `VACUUM`)? Geplant ist, `0001` und die neue `0002_versionstabelle.sql` bei fehlender Tabelle `schema_migrations` in genau einer Transaktion anzuwenden und beide mit Nummer, Name ohne `.sql` und Prüfsumme (aus `node:crypto`) einzutragen.",
+        "Wie wird ein Fehler beim Start heute zum Prozessende mit Exit 1, und welcher Text kommt in die Meldung (`src/store.js` etwa Zeilen 25-30)? Nennt die Meldung heute einen Dateinamen? S4 verlangt, dass die Meldung `0001_ausgang.sql` und `0002_versionstabelle.sql` nennt; die Meldung soll den Primärtext des Postgres-Fehlers tragen, nicht dessen Detail mit Werten.",
+        "Wie kann ein Test erreichen, dass `0002_versionstabelle.sql` auf einer Datenbank ohne `schema_migrations` scheitert (S4), ohne einen per Umgebungsvariable oder Option wählbaren Migrationsordner (Nicht-Ziel)? Gibt es eine Stelle, an der ein Test den Client des Starts umhüllen kann (Form `{ query, exec }`), oder lässt sich ein Objekt in der Datenbank anlegen, an dem eine `CREATE TABLE schema_migrations` scheitern würde, etwa eine Sicht oder ein Typ gleichen Namens?",
+        "Welche bestehenden Tests und Testhilfen starten Hermes gegen PGlite oder echtes Postgres (`test/pg-helpers.js`, `test/gemeinsam/echtes-postgres.js` etwa Zeile 36, `test/openai-t2-20-reviewer-seed-pg.test.js` etwa Zeile 180)? Kann ein Test dort den echten Start (`npm start` bzw. den Serverprozess) auslösen, `GET /healthz` abfragen und den Exit-Code des Prozesses lesen? Läuft der Mutationsjob nur mit PGlite?",
+        "Wie setzt `test/pg-helpers.js` die Datenbank zwischen Tests zurück (etwa `DROP SCHEMA`/`TRUNCATE`), und müsste es künftig `schema_migrations` mit zurücksetzen, damit bestehende Tests grün bleiben?",
+        "Wie heißt in `0001_ausgang.sql` die Tabelle der Konten (für S3: Anzahl der Konten bleibt unverändert), mit Zeile?",
+        "Was verlangt `tools/migrationen-pruefen.mjs` (etwa Zeilen 99-117, und Zeile 149 zur Ablehnung geänderter gemergter Migrationen) von einer neuen Migrationsdatei, insbesondere `SET LOCAL lock_timeout` und `SET LOCAL statement_timeout`, Dateinamensform und Eintrag in der Liste im Code? Prüft das Werkzeug auch, dass jede Datei im Ordner in `MIGRATION_READERS` steht (S13)?",
+        "Gibt es heute schon irgendwo `schema_migrations`, `pg_advisory_lock` oder eine Prüfsumme über Migrationsdateien im Code (Design Doc nennt nur `src/web-auth.js:289` und `docs/RUNBOOK-RESTORE.md:257`)? Bitte Stellen mit Zeilen."
+      ]
+    },
+    {
+      "nummern": [
+        "S2"
+      ],
+      "eingang": "Erneuter Start einer Instanz mit `npm start` gegen eine schon migrierte Datenbank: `init()` in `src/store/pg.js:32-35` ruft `prepareSchema` (= `migrate` aus `src/db/migrate.js`), das eingetragene Migrationen anhand von `schema_migrations` überspringt",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo legt `src/db/migrations/0001_ausgang.sql` den Index `account_email_idx` an (Zeile, mit oder ohne `IF NOT EXISTS`)? Legt irgendein anderer Code beim Start ihn an, insbesondere die vier Nachzüge oder `seedDefaults` (Datei, Funktion, Zeilen)? S2 verlangt, dass er nach einem zweiten Start weiter fehlt, während Nachzüge und `seedDefaults` unverändert bei jedem Start laufen.",
+        "Welchen Weg nimmt ein zweiter Start bis zur erneuten Ausführung von `0001_ausgang.sql` heute (Datei, Funktion, Zeilen in `src/store.js`, `src/store/pg.js`, `src/db/migrate.js`, einschließlich `MIGRATION_READERS` etwa Zeile 11, `schemaDdl()`, `applySchema`, Aufruf um Zeile 178)? Wo genau müsste die Prüfung gegen `schema_migrations` (Name und Prüfsumme je Datei) den Lauf überspringen?",
+        "Ist der Inhalt, den `schemaDdl()` für `0001_ausgang.sql` liefert, bei jedem Start byte-gleich (keine Ersetzung von Platzhaltern, Umgebungswerten oder Zeilenenden), sodass eine Prüfsumme über ihn stabil ist?",
+        "Welche bestehenden Tests verlassen sich darauf, dass ein Start eine bestehende Datenbank heilt oder `0001` erneut ganz ausführt? Bitte jeden mit Pfad und Zeile; bekannt ist `test/openai-t2-20-reviewer-seed-pg.test.js:180` (`Reviewer-Seed pg: Positiv-Kontrolle - der Server-Boot (makePgStore ohne Optionen) migriert weiter`), der laut Pitch künftig vor dem Start die Einträge in `schema_migrations` löschen soll. Gibt es weitere, etwa Wächtertests wie `test/sec-p6-waechter-rls.test.js`, die mehrfach gegen dieselbe Datenbank starten?",
+        "Kann ein Test zweimal hintereinander den echten Start gegen dieselbe PGlite- oder Postgres-Datenbank auslösen (Hilfen in `test/pg-helpers.js`, `test/gemeinsam/echtes-postgres.js`) und dazwischen per SQL `DROP INDEX account_email_idx` ausführen? Welche Funktion der Hilfen tut das am nächsten?"
+      ]
+    }
+  ]
+}

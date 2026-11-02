@@ -1,0 +1,210 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/zwei-prozesse.js:42"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/pg.js:35"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/zwei-prozesse.js:42"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:178"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:30"
+  },
+  {
+    "schluessel": "weg:S13",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/schema-foundation.test.js:8"
+  },
+  {
+    "schluessel": "umbau:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/pglite-helfer.test.js:250"
+  },
+  {
+    "schluessel": "umbau:tu1",
+    "ergebnis": "befund",
+    "befund": "tu1 ändert zwei Testdateien, die `abnahme` läuft aber nur über test/openai-t2-20-reviewer-seed-pg.test.js. Der Umbau in test/iel-b4a-brueckenzustand.test.js (IEL-B4a-22: makePgTestStore → init trägt ein, DROP COLUMN, erneutes init) wird damit nicht abgenommen; dass er vor und nach a2 grün ist, zeigt kein Lauf. Der Planer soll test/iel-b4a-brueckenzustand.test.js in die Abnahme von tu1 aufnehmen.",
+    "fundstelle": "test/iel-b4a-brueckenzustand.test.js:382"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:13"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "nie-saetze:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/pg-helpers.js:10"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/zwei-prozesse.js:42"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, #### Szenario S3: Bestehende Datenbank ohne Versionstabelle"
+  },
+  {
+    "schluessel": "nie-saetze:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/openai-t2-20-reviewer-seed-pg.test.js:186"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/openai-t2-20-reviewer-seed-pg.test.js:180"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:28"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "befund",
+    "befund": "a2 legt zwei getrennt baubare und getrennt rot prüfbare Verhalten zusammen: S2 (eingetragene Migrationen überspringen) und S4 (Übernahme von 0001 und 0002 in einer Transaktion, ROLLBACK, Fehlermeldung nennt beide Dateien, schema_migrations existiert danach nicht). S4 ist nach a1 auch ohne das Überspringen rot, weil die Meldung von applySchema heute keine Dateinamen trägt und 0001 ohne Transaktion stehen bleibt. Die Dateikarte legt den S4-Test zudem in test/gemeinsam/migrationen-start.test.js, die nicht in den erwarteten Dateien von a2 steht. Der Planer soll S4 als eigenen Auftrag nach a1 schneiden, mit eigenem Abnahmetest, oder begründen, warum S4 ohne S2 nicht rot werden kann.",
+    "fundstelle": "pitch.md, #### Szenario S4: Übernahme scheitert"
+  },
+  {
+    "schluessel": "bereichsgrund:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "ausweg:S1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "package.json:14"
+  },
+  {
+    "schluessel": "ausweg:S1:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:21"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": ".github/CODEOWNERS:24"
+  },
+  {
+    "schluessel": "ausweg:S13:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "package.json:14"
+  },
+  {
+    "schluessel": "ausweg:S13:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "ausweg:S13:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": ".github/CODEOWNERS:24"
+  },
+  {
+    "schluessel": "ausweg:S3:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "package.json:14"
+  },
+  {
+    "schluessel": "ausweg:S3:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:21"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": ".github/CODEOWNERS:24"
+  },
+  {
+    "schluessel": "ausweg:S4:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:30"
+  },
+  {
+    "schluessel": "ausweg:S4:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:30"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": ".github/CODEOWNERS:24"
+  },
+  {
+    "schluessel": "ausweg:S2:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:23"
+  },
+  {
+    "schluessel": "ausweg:S2:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:22"
+  },
+  {
+    "schluessel": "ausweg:S2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": ".github/CODEOWNERS:24"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Bei keinem Auftrag stehen, obwohl a2 sie bricht, wenn es die Übernahme-Transaktion und die Fehlermeldung baut: (1) pitch.md, ## Grobe Lösung: „trifft diese Transaktion eine Sperre einer anderen Sitzung, gibt sie nach 2 Sekunden auf, statt andere Sitzungen zu blockieren, und der Start endet mit Exit 1.“ und dazu design.md, ## Ausgangslage und Annahmen: „Die Übernahme-Transaktion setzt vor `0001` ein `lock_timeout` von 2 Sekunden (aus JavaScript gesetzt, keine DDL), damit sie bei einer Sperre einer anderen Sitzung abbricht, statt zu blockieren; Wert wie in `0002`“. Die Annahme zu a2 nimmt nur R2, R3 und R4 aus, nicht diese Zeitgrenze. (2) sicherheit.md, ## 4. Offene Fragen: „Angenommen: Die Fehlermeldung bei Exit 1 enthält den Primärtext des Postgres-Fehlers, nicht dessen Detail mit Schlüsselwerten.“ (ebenso H12 in sicherheit.md, ## 3. Lückenprüfung); a2 baut genau diese Meldung. (3) sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet, Ausgang: „bis dahin hingenommen (PM8) mit Runbook-Hinweis „Ein Neustart repariert nichts mehr“ in `docs/RUNBOOK-RESTORE.md`“. a2 beendet in dieser Phase das Heilen beim Start (S2), aber der Hinweis, unter dem das hingenommen ist, steht bei keinem Auftrag und ist laut Annahme der Planung auf einen späteren Teil verschoben.",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  }
+]

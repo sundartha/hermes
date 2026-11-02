@@ -1,0 +1,93 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/pg.js:35"
+  },
+  {
+    "schluessel": "weg:S2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/zwei-prozesse.js:42"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:30"
+  },
+  {
+    "schluessel": "umbau:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/openai-t2-20-reviewer-seed-pg.test.js:186"
+  },
+  {
+    "schluessel": "umbau:tu2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/iel-b4a-brueckenzustand.test.js:389"
+  },
+  {
+    "schluessel": "nie-saetze:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/openai-t2-20-reviewer-seed-pg.test.js:182"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:tu1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/openai-t2-20-reviewer-seed-pg.test.js:180"
+  },
+  {
+    "schluessel": "nie-saetze:tu2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:tu2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/iel-b4a-brueckenzustand.test.js:52"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:tu2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/iel-b4a-brueckenzustand.test.js:382"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/f1-geo-store.test.js:348"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:178"
+  },
+  {
+    "schluessel": "nie-saetze:a3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Nicht-Ziele"
+  },
+  {
+    "schluessel": "allein-gruen:a3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:28"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:22"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Punkte (1) und (2) der vorigen Prüfung sind erledigt: die 2-Sekunden-Grenze gehört zu S12 aus einem anderen Teil, und die Annahme zur Fehlermeldung steht bei a3. Offen bleibt (3). a2 beendet in dieser Phase das Heilen beim Start (S2). Die Hinnahme dieser Folge ist an einen Runbook-Hinweis gebunden, und dieser Satz steht bei keinem Auftrag: sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet: „Ausgang: übertragen an das Folgepaket #2679 (RLS-Startprüfung, unmittelbar nach dieser Änderung, vor S2a), entschieden am 02.11. durch die Betreuung; bis dahin hingenommen (PM8) mit Runbook-Hinweis „Ein Neustart repariert nichts mehr“ in `docs/RUNBOOK-RESTORE.md`.“ Ebenso pitch.md, ## Premortem, PM8, Ausgang: „hingenommen bis zum Folgepaket #2679 (RLS-Startprüfung, unmittelbar nach dieser Änderung, vor S2a): das Ende des Heilens ist die Absicht (S2); Hinweis „Ein Neustart repariert nichts mehr“ im Runbook“. Die Antwort des Planers trägt nicht. Dass eine Dokumentdatei keinen Bereich mit src/db/ teilen kann, schließt sie nur aus dem Bereich von a2 aus, nicht aus einem eigenen Auftrag. pitch.md, ## Grobe Lösung und ## Geänderte Dateien nennen docs/RUNBOOK-RESTORE.md für diese Änderung. Der Eintrag unter fehlendeSzenarien empfiehlt nur, den Hinweis vor dem Einschalten von a2 zu liefern; kein Auftrag stellt das sicher. Der Planer soll einen eigenen Auftrag mit Bereich docs/RUNBOOK-RESTORE.md für den T1-Hinweis anlegen, von dem a2 abhängt, oder den T1-Ausgang als wasDarfNiePassieren an a2 setzen.",
+    "fundstelle": "sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet"
+  }
+]

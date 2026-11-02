@@ -1,0 +1,31 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S2",
+      "ergebnis": "befund",
+      "befund": "Der Weg von S2 beginnt nicht beim echten Eingang. Als Eingang steht die neue Testdatei test/migrationen-neustart-pg.test.js mit dem Ausweg „npm start entsteht neu“, aber derselbe Ausweg nennt package.json:14 als vorhandenes Skript start. Es fehlt das Glied package.json:14 → src/server.js:3 → src/store.js:21-23 (Modulebene ruft createPgBackend), das S1, S13, S3 und S4 melden. Die Angaben zum Test (Suche nach makePgStore/reopened) deuten außerdem auf zwei direkte Aufrufe von init() ohne zweiten Serverstart. Das Szenario verlangt aber ausdrücklich einen erneuten Start mit `npm start`. Der Erkunder soll den Eingang package.json:14 mit src/store.js:21-23 aufnehmen, die Testdatei aus dem Weg nehmen und den Test so anlegen, dass er den Prozess zweimal startet, etwa mit startServer wie in test/gemeinsam/zwei-prozesse.js:42-44 auf echter Datenbank. Ab createPgBackend ist der Weg richtig: Der Index entsteht nur in 0001_ausgang.sql:999, und die Nachzüge in migrate (src/db/migrate.js:179-183) legen ihn nicht neu an.",
+      "fundstelle": "src/store.js:23"
+    },
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/pg.js:35"
+    },
+    {
+      "schluessel": "weg:S13",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrate.js:11"
+    },
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrate.js:178"
+    },
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store.js:30"
+    }
+  ],
+  "befunde": []
+}

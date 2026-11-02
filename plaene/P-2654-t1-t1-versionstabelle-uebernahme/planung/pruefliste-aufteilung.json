@@ -1,0 +1,56 @@
+[
+  {
+    "gruppe": 0,
+    "sitzung": "b0de5d0d-1492-4ea2-bb18-3fabaa5d401e",
+    "schluessel": [
+      "nie-saetze:a1",
+      "allein-gruen:a1",
+      "ausweg:S1:weg eingang",
+      "ausweg:S1:vorhanden",
+      "ausweg:S1:ownerEntscheidung",
+      "ausweg:S13:weg eingang",
+      "ausweg:S13:vorhanden",
+      "ausweg:S13:ownerEntscheidung",
+      "ausweg:S3:weg eingang",
+      "ausweg:S3:vorhanden",
+      "ausweg:S3:ownerEntscheidung",
+      "ausweg:S4:weg eingang",
+      "ausweg:S4:vorhanden",
+      "ausweg:S4:ownerEntscheidung"
+    ]
+  },
+  {
+    "gruppe": 1,
+    "sitzung": "531d4ee0-53d3-4dd1-b44a-618a20137de1",
+    "schluessel": [
+      "ausweg:S2:weg eingang",
+      "ausweg:S2:vorhanden",
+      "ausweg:S2:ownerEntscheidung"
+    ]
+  },
+  {
+    "gruppe": null,
+    "sitzung": "a098f3bd-addf-4754-916d-23984603c638",
+    "schluessel": [
+      "durchstich:a1",
+      "umbau:u1",
+      "umbau:u2",
+      "umbau:tu1",
+      "nie-saetze:u1",
+      "allein-gruen:u1",
+      "nicht-zusammengelegt:u1",
+      "nie-saetze:u2",
+      "allein-gruen:u2",
+      "nicht-zusammengelegt:u2",
+      "nicht-zusammengelegt:a1",
+      "nie-saetze:tu1",
+      "allein-gruen:tu1",
+      "nicht-zusammengelegt:tu1",
+      "nie-saetze:a2",
+      "allein-gruen:a2",
+      "nicht-zusammengelegt:a2",
+      "bereichsgrund:u2",
+      "gegenfrage:alle"
+    ]
+  }
+]
