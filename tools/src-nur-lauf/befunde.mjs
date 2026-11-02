@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { AUFTRAG_LAUT_PHASE, gezeigterAuftrag } from "../auftrag/agenten.mjs";
 import { NUL, auftragsCommits, auftragsTrailer, dateiAm, gebautIn, git } from "../auftrag/git.mjs";
+import { altbestandPruefer } from "./altbestand.mjs";
 import { VERTRAULICH_LABEL, vertraulichProblem } from "./vertraulich.mjs";
 
 const PRODUKTCODE = "src/";
@@ -12,6 +13,7 @@ const VERTRAULICH = /^F-V\d/;
 const ANFUEHRUNG = '"';
 const KOMBINIERT = "diff --cc ";
 const MERGE_GRUND = "Merge-Commit ändert src/ selbst, nicht zulässig";
+const AUFTRAG_ZEILE_VORHANDEN = /^Auftrag:/m;
 const ZEILE_FEHLT = "keine einzelne Zeile „Auftrag: <Phase>/<Auftrag>“ in der Nachricht";
 
 function phasenPfad(phase) {
@@ -128,28 +130,34 @@ async function vertraulichGrund(phase, gate) {
   return problem === undefined ? [] : [`vertrauliche Phase ${phase}, Nachweis nicht prüfbar: ${problem}; erlaubt nur mit Label ${VERTRAULICH_LABEL} vom Bot und Approve am Kopf`];
 }
 
-async function commitBefunde({ sha, zusammenfuehrung }, { root, trailer, gate }) {
+async function ohneZeileGruende({ sha, nachricht, dateien, root, trailer }, altbestand) {
+  const altbestandGruende = AUFTRAG_ZEILE_VORHANDEN.test(nachricht) ? null : await altbestand.gruende(sha);
+  return altbestandGruende ?? gruendeFuer({ sha, nachricht, dateien, root, trailer });
+}
+
+async function commitBefunde({ sha, zusammenfuehrung }, { root, trailer, gate, altbestand }) {
   const merge = zusammenfuehrung ? zusammenfuehrungsGruende(sha, root) : undefined;
   const dateien = merge?.dateien ?? geaenderteProduktdateien(sha, root);
   if (dateien.length === 0) return [];
   const nachricht = git(["log", "-1", "--format=%B", sha], { cwd: root });
-  const gruende = merge?.gruende ?? gruendeFuer({ sha, nachricht, dateien, root, trailer });
+  const gruende = merge?.gruende ?? (await ohneZeileGruende({ sha, nachricht, dateien, root, trailer }, altbestand));
   const aufgeloest = Array.isArray(gruende) ? gruende : await vertraulichGrund(gruende.vertraulich, gate);
   return aufgeloest.map((grund) => `${sha}: ${grund}; geändert: ${dateien.join(", ")}`);
 }
 
-export async function befunde({ basis: basisRef, kopf, pr: nummer }, root) {
+export async function befunde({ basis: basisRef, kopf, pr: nummer, ereignis }, root) {
   const basis = git(["rev-parse", basisRef], { cwd: root }).trim();
   const zeilen = git(["rev-list", "--parents", "--reverse", `${basis}..${kopf}`], { cwd: root }).split("\n").filter(Boolean);
   const trailerBasis = auftragsTrailer(root, basis);
   const trailerJeCommit = new Map(auftragsCommits(root, kopf).map(({ sha, trailer }) => [sha, trailer]));
   let urteil;
   const gate = () => (urteil ??= pruefeGate(nummer));
+  const altbestand = altbestandPruefer({ ereignis, nummer, basis, kopf }, root);
   const fruehere = [];
-  const ergebnisse = [];
+  const ergebnisse = [altbestand.probleme];
   for (const zeile of zeilen) {
     const commit = eltern(zeile);
-    ergebnisse.push(await commitBefunde(commit, { root, trailer: [...trailerBasis, ...fruehere], gate }));
+    ergebnisse.push(await commitBefunde(commit, { root, trailer: [...trailerBasis, ...fruehere], gate, altbestand }));
     if (trailerJeCommit.has(commit.sha)) fruehere.push(trailerJeCommit.get(commit.sha));
   }
   return ergebnisse.flat();
