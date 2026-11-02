@@ -169,3 +169,93 @@ test("Messwerte: ohne Token oder ohne TLS-Adresse sendet der Server nichts", asy
     await empfaenger.stop();
   }
 });
+
+import express from "express";
+
+import { installGlobalMiddleware } from "../../src/app.js";
+import { externalIp } from "../helpers.js";
+import { mitRoutenServer } from "../anrufe/routen-server.js";
+
+const KENNUNG_HEADER = "x-request-id";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const HTTP_OK = 200;
+const UNERREICHBARES_LIMIT_PRO_MIN = 1000;
+const KONFIG_OHNE_TELEMETRIE = Object.freeze({ safety: Object.freeze({ rateLimitPerMin: UNERREICHBARES_LIMIT_PRO_MIN }) });
+
+async function zaehlenderEmpfaengerAuf(adresse) {
+  const anfragen = [];
+  const empfaenger = http.createServer((req, res) => {
+    anfragen.push(req.url);
+    res.end("{}");
+  });
+  await new Promise((lauscht) => empfaenger.listen(0, adresse, lauscht));
+  return {
+    url: `http://${adresse}:${empfaenger.address().port}/otlp`,
+    anfragen,
+    stop: () => new Promise((fertig) => empfaenger.close(fertig)),
+  };
+}
+
+function exportOderFensterende(empfaenger, pruefung) {
+  const erwarteterExport = warteAufExport(empfaenger, pruefung).catch(() => null);
+  return Promise.race([erwarteterExport, echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS)]);
+}
+
+test("[NIE1] mit Token, aber unverschluesselter Adresse ausserhalb von Loopback, sendet der Server nichts", async () => {
+  const externeAdresse = externalIp();
+  assert.ok(externeAdresse, "keine Netzwerkadresse ausser Loopback fuer den Empfaenger");
+  const fremderEmpfaenger = await zaehlenderEmpfaengerAuf(externeAdresse);
+  try {
+    await mitMessung({ METRIKEN_OTLP_URL: fremderEmpfaenger.url }, async ({ srv, empfaenger }) => {
+      const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+      assert.equal(antwort.status, HTTP_OK);
+      await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+      assert.deepEqual(fremderEmpfaenger.anfragen, [], "kein Export ueber unverschluesseltes HTTP");
+      assert.equal(empfaenger.empfangen.length, 0);
+    });
+  } finally {
+    await fremderEmpfaenger.stop();
+  }
+});
+
+test("[NIE2] mit eingeschalteter Messung traegt jede Antwort ihre eigene Anfrage-Kennung und die Sicherheitskoepfe", async () => {
+  await mitMessung({}, async ({ srv }) => {
+    const bekannt = await abrufMitFrist(`${srv.localUrl}/healthz`);
+    const unbekannt = await abrufMitFrist(`${srv.localUrl}/gibt-es-nicht`, { method: "POST" });
+    const kaputterKoerper = await abrufMitFrist(`${srv.localUrl}/api/plans`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{kein json",
+    });
+    const antworten = [bekannt, unbekannt, kaputterKoerper];
+    for (const antwort of antworten) {
+      assert.match(antwort.headers.get(KENNUNG_HEADER), UUID);
+      assert.equal(antwort.headers.get("x-content-type-options"), "nosniff");
+    }
+    const kennungen = new Set(antworten.map((antwort) => antwort.headers.get(KENNUNG_HEADER)));
+    assert.equal(kennungen.size, antworten.length);
+  });
+});
+
+test("[NIE3] eine Telefonnummer in Pfad oder Anfrageparameter erscheint in keinem Export", async () => {
+  await mitMessung({}, async ({ srv, empfaenger }) => {
+    await abrufMitFrist(`${srv.localUrl}/api/calls/call_1?to=%2B${TELEFONNUMMER}`);
+    await abrufMitFrist(`${srv.localUrl}/voice/${TELEFONNUMMER}`, { method: "POST" });
+    await exportOderFensterende(empfaenger, hatRoute("/api/calls/:id"));
+    for (const eintrag of empfaenger.empfangen) {
+      assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Telefonnummer im Export");
+    }
+  });
+});
+
+test("[NIE4] installGlobalMiddleware ohne telemetrie beantwortet Anfragen weiter normal", async () => {
+  const router = express.Router();
+  installGlobalMiddleware({ app: router, config: KONFIG_OHNE_TELEMETRIE });
+  router.get("/antwort", (_req, res) => res.send("normal beantwortet"));
+  await mitRoutenServer(router, async (url) => {
+    const antwort = await abrufMitFrist(`${url}/antwort`);
+    assert.equal(antwort.status, HTTP_OK);
+    assert.equal(await antwort.text(), "normal beantwortet");
+    assert.match(antwort.headers.get(KENNUNG_HEADER), UUID);
+  });
+});
