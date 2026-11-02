@@ -4,49 +4,14 @@ import { test } from "node:test";
 import { aufgeteilt } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT } from "./mutationspruefung-probe.js";
 import { commitAll, probeRepository, writeFiles } from "./probe-repo.js";
+import { ALTE_SEITE, FREMDE_EINTRAEGE, FREMDER_TENANT, MIT_WIRKUNG, NEGATIV, NEUE_SEITE, NORMAL, OFFSET, OHNE_WIRKUNG, TENANT, geaendert, quelle, seitentest } from "./schutzwirkung-probe.js";
 
-const KOPF = "export function seite(eintraege, offset, tenant, besitzer) {";
-const TENANT = "  if (tenant !== besitzer) return { status: 403 };";
-const OFFSET = '  if (!/^\\d+$/.test(offset)) return { status: 400, fehler: "offset" };';
-const ALTE_SEITE = "  return { status: 200, eintraege: eintraege.slice(offset) };";
-const NEUE_SEITE = "  return { status: 200, eintraege: eintraege.slice(Number(offset)) };";
-const NORMAL = 'test("normal", () => assert.deepEqual(seite(L, "1", "t", "t").eintraege, ["b", "c"]));';
-const NEGATIV = 'test("negatives offset ist 400", () => assert.equal(seite(L, "-1", "t", "t").status, 400));';
-const OHNE_WIRKUNG = 'test("[NIE1] offset 1.5 liefert keine Seite", () => assert.notDeepEqual(seite(L, "1.5", "t", "t").eintraege, "a"));';
-const MIT_WIRKUNG = 'test("[NIE1] offset x20 ist 400", () => assert.equal(seite(L, "x20", "t", "t").status, 400));';
 const ZWEITE_OHNE_WIRKUNG = 'test("[NIE3] offset 2.5 liefert keine Seite", () => assert.notDeepEqual(seite(L, "2.5", "t", "t").eintraege, "a"));';
 const ZWEITE_MIT_WIRKUNG = 'test("[NIE2] offset a ist 400", () => assert.equal(seite(L, "a", "t", "t").status, 400));';
 const ZWEISTELLIG = 'test("zweistelliges offset", () => assert.deepEqual(seite(L, "10", "t", "t").eintraege, []));';
 const ZEICHEN_VOR = 'test("Zeichen vor der Zahl", () => assert.deepEqual(seite(L, "x1", "t", "t"), { status: 400, fehler: "offset" }));';
 const ZEICHEN_NACH = 'test("Zeichen nach der Zahl", () => assert.equal(seite(L, "1x", "t", "t").status, 400));';
 const ALLGEMEIN = [NEGATIV, ZWEISTELLIG, ZEICHEN_VOR, ZEICHEN_NACH];
-const FREMDER_TENANT = 'test("[NIE1] fremder Tenant bekommt 403", () => assert.equal(seite(L, "0", "t", "u").status, 403));';
-const FREMDE_EINTRAEGE = 'test("[NIE1] fremder Tenant sieht keine Einträge", () => assert.equal(seite(L, "0", "t", "u").eintraege, undefined));';
-
-function quelle(...zeilen) {
-  return [KOPF, ...zeilen, "}", ""].join("\n");
-}
-
-function seitentest(...faelle) {
-  return [
-    'import assert from "node:assert/strict";',
-    'import { test } from "node:test";',
-    'import { seite } from "../src/seite.js";',
-    'const L = ["a", "b", "c"];',
-    ...faelle,
-    "",
-  ].join("\n");
-}
-
-function geaendert(context, quelltext, ...faelle) {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
-    "src/seite.js": quelle(TENANT, ALTE_SEITE),
-    "test/seite.test.js": seitentest(NORMAL),
-  });
-  writeFiles(repo, { "src/seite.js": quelltext, "test/seite.test.js": seitentest(NORMAL, ...ALLGEMEIN, ...faelle) });
-  return repo;
-}
 
 function urteil(context, repo) {
   const { urteil: lauf } = aufgeteilt(context, repo, { basis: "HEAD" });
@@ -55,7 +20,7 @@ function urteil(context, repo) {
 }
 
 test("(a) ein Schutztest, der einen Mutanten seiner Zeile tötet, ist im Mutationsurteil wirksam und das Urteil grün", (context) => {
-  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), MIT_WIRKUNG));
+  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, MIT_WIRKUNG));
   assert.equal(lauf.status, 0, meldung);
   assert.deepEqual(zeilen("Schutztest wirksam: "), ["Schutztest wirksam: [NIE1] offset x20 ist 400"]);
   assert.deepEqual(zeilen("Verstoß: "), []);
@@ -63,7 +28,7 @@ test("(a) ein Schutztest, der einen Mutanten seiner Zeile tötet, ist im Mutatio
 });
 
 test("(b) ein Schutztest, der die neuen Zeilen durchläuft und keinen Mutanten tötet, macht das Mutationsurteil rot", (context) => {
-  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), OHNE_WIRKUNG));
+  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, OHNE_WIRKUNG));
   assert.equal(lauf.status, EXIT_ROT, meldung);
   assert.deepEqual(zeilen("Verstoß: "), ["Verstoß: Schutztest wirkungslos: [NIE1] offset 1.5 liefert keine Seite"]);
   assert.deepEqual(zeilen("rot: 1 Schutztests"), ["rot: 1 Schutztests, 1 ohne nachgewiesene Wirkung."]);
@@ -72,7 +37,7 @@ test("(b) ein Schutztest, der die neuen Zeilen durchläuft und keinen Mutanten t
 
 test("(b) wie B3a L2: von drei Schutztests macht der wirkungslose erste und dritte das Urteil rot, der wirksame zweite nicht", (context) => {
   const faelle = [OHNE_WIRKUNG, ZWEITE_MIT_WIRKUNG, ZWEITE_OHNE_WIRKUNG];
-  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...faelle));
+  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, ...faelle));
   assert.equal(lauf.status, EXIT_ROT, meldung);
   assert.deepEqual(zeilen("Verstoß: "), ["Verstoß: Schutztest wirkungslos: [NIE1] offset 1.5 liefert keine Seite", "Verstoß: Schutztest wirkungslos: [NIE3] offset 2.5 liefert keine Seite"]);
   assert.deepEqual(zeilen("Schutztest wirksam: "), ["Schutztest wirksam: [NIE2] offset a ist 400"]);
@@ -80,21 +45,21 @@ test("(b) wie B3a L2: von drei Schutztests macht der wirkungslose erste und drit
 });
 
 test("(c) ein Schutztest, der keine neue Zeile erreicht, ist nur ein Hinweis und kein Verstoß", (context) => {
-  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), FREMDER_TENANT));
+  const { lauf, meldung, zeilen } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, FREMDER_TENANT));
   assert.equal(lauf.status, 0, meldung);
   assert.deepEqual(zeilen("Hinweis: Schutztest"), ["Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: [NIE1] fremder Tenant bekommt 403"]);
   assert.deepEqual(zeilen("Verstoß: "), []);
 });
 
 test("(d) ein Pull Request ohne Schutztest mit [NIE]-Kennung bekommt keine Zeile zur Schutzwirkung, das Urteil bleibt unverändert", (context) => {
-  const { lauf, meldung } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), MIT_WIRKUNG.replace("[NIE1] ", "")));
+  const { lauf, meldung } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, MIT_WIRKUNG.replace("[NIE1] ", "")));
   assert.equal(lauf.status, 0, meldung);
   assert.doesNotMatch(meldung, /Schutztest|Schutztests|Schutzwirkung|Alter Schutz/);
 });
 
 test("ein übersprungener [NIE]-Fall zählt nicht als Schutztest", (context) => {
   const uebersprungen = MIT_WIRKUNG.replace("test(", "test.skip(");
-  const { lauf, meldung } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), uebersprungen));
+  const { lauf, meldung } = urteil(context, geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), ...ALLGEMEIN, uebersprungen));
   assert.equal(lauf.status, 0, meldung);
   assert.doesNotMatch(meldung, /Verstoß: Schutztest/);
 });
@@ -113,7 +78,7 @@ function mitAnspruch(context, zeilenummer) {
 }
 
 test("alter Schutz aus der Commit-Nachricht gilt im Urteil nur, wenn der Fall Mutanten genau dieser unveränderten Zeile tötet", (context) => {
-  const ohne = geaendert(context, quelle(OFFSET, TENANT, NEUE_SEITE), FREMDE_EINTRAEGE);
+  const ohne = geaendert(context, quelle(OFFSET, TENANT, NEUE_SEITE), ...ALLGEMEIN, FREMDE_EINTRAEGE);
   const ohneAnspruch = aufgeteilt(context, ohne, { basis: "HEAD" }).urteil;
   assert.equal(ohneAnspruch.status, EXIT_ROT, ohneAnspruch.stdout + ohneAnspruch.stderr);
   const belegt = aufgeteilt(context, mitAnspruch(context, 3), { basis: "HEAD~1" }).urteil;

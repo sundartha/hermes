@@ -2,44 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ABSCHALTEN_NAECHSTE, EXIT_ABBRUCH, EXIT_ROT, pruefe } from "./mutationspruefung-hilfen.js";
-import { probeRepository, writeFiles } from "./probe-repo.js";
-
-const KOPF = "export function seite(eintraege, offset, tenant, besitzer) {";
-const TENANT = "  if (tenant !== besitzer) return { status: 403 };";
-const OFFSET = '  if (!/^\\d+$/.test(offset)) return { status: 400, fehler: "offset" };';
-const ALTE_SEITE = "  return { status: 200, eintraege: eintraege.slice(offset) };";
-const NEUE_SEITE = "  return { status: 200, eintraege: eintraege.slice(Number(offset)) };";
-const NORMAL = 'test("normal", () => assert.deepEqual(seite(L, "1", "t", "t").eintraege, ["b", "c"]));';
-const NEGATIV = 'test("negatives offset ist 400", () => assert.equal(seite(L, "-1", "t", "t").status, 400));';
-const OHNE_WIRKUNG = 'test("[NIE1] offset 1.5 liefert keine Seite", () => assert.notDeepEqual(seite(L, "1.5", "t", "t").eintraege, "a"));';
-const MIT_WIRKUNG = 'test("[NIE1] offset x20 ist 400", () => assert.equal(seite(L, "x20", "t", "t").status, 400));';
-const FREMDER_TENANT = 'test("[NIE1] fremder Tenant bekommt 403", () => assert.equal(seite(L, "0", "t", "u").status, 403));';
-const FREMDE_EINTRAEGE = 'test("[NIE1] fremder Tenant sieht keine Einträge", () => assert.equal(seite(L, "0", "t", "u").eintraege, undefined));';
-
-function quelle(...zeilen) {
-  return [KOPF, ...zeilen, "}", ""].join("\n");
-}
-
-function seitentest(...faelle) {
-  return [
-    'import assert from "node:assert/strict";',
-    'import { test } from "node:test";',
-    'import { seite } from "../src/seite.js";',
-    'const L = ["a", "b", "c"];',
-    ...faelle,
-    "",
-  ].join("\n");
-}
-
-function geaendert(context, quelltext, ...faelle) {
-  const repo = probeRepository(context, {
-    "package.json": '{ "type": "module" }\n',
-    "src/seite.js": quelle(TENANT, ALTE_SEITE),
-    "test/seite.test.js": seitentest(NORMAL),
-  });
-  writeFiles(repo, { "src/seite.js": quelltext, "test/seite.test.js": seitentest(NORMAL, ...faelle) });
-  return repo;
-}
+import { ALTE_SEITE, FREMDE_EINTRAEGE, FREMDER_TENANT, MIT_WIRKUNG, NEGATIV, NEUE_SEITE, OFFSET, OHNE_WIRKUNG, TENANT, geaendert, quelle } from "./schutzwirkung-probe.js";
 
 function stelle(quelltext, zeile) {
   return `[NIE1] src/seite.js:${quelltext.split("\n").indexOf(zeile) + 1}`;
