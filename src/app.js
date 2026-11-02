@@ -37,6 +37,7 @@ import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeInternAnrufeLaufendRoutes } from "./routes/intern-anrufe-laufend.js";
 import { makeInternAnrufpauseRoutes } from "./routes/intern-anrufpause.js";
+import { makeInternStatusRoutes } from "./routes/intern-status.js";
 import { makeHealthzRoutes } from "./utils/healthz-route.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
@@ -301,6 +302,7 @@ export async function buildApp(deps) {
   registerPathRedirects({ app });
   app.use(makeInternAnrufeLaufendRoutes({ config, store }));
   app.use(makeInternAnrufpauseRoutes({ config, store }));
+  app.use(makeInternStatusRoutes({ config, store }));
 
   let operatorAuth = null;
   if (config.auth.sessionSecret && config.store.storeBackend === "pg") {
