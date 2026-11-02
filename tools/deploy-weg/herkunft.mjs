@@ -126,8 +126,8 @@ export async function prKopf({ github, commit }) {
   const prs = Array.isArray(daten) ? daten : [];
   const pr = prs.find((eintrag) => gemergtAufMaster(eintrag, rahmen));
   const kopf = gueltigerCommit(pr?.head?.sha);
-  if (kopf === null) return { gruende: [grund("rot_kein_pr")], kopf };
-  return { gruende: [], kopf };
+  if (kopf === null) return { gruende: [grund("rot_kein_pr")], kopf, gemergtAm: null };
+  return { gruende: [], kopf, gemergtAm: pr.merged_at };
 }
 
 function pflichtChecks(regeln) {
@@ -138,7 +138,27 @@ function pflichtChecks(regeln) {
     .filter((pflicht) => typeof pflicht?.context === "string");
 }
 
-function checkUrteil(laeufe, pflicht) {
+function zeitpunkt(wert) {
+  const zeit = typeof wert === "string" ? Date.parse(wert) : Number.NaN;
+  return Number.isNaN(zeit) ? null : zeit;
+}
+
+function erstNachMerge(lauf, gemergtAm) {
+  const merge = zeitpunkt(gemergtAm);
+  const start = zeitpunkt(lauf.started_at);
+  return lauf.conclusion === ERFOLG && merge !== null && start !== null && start > merge;
+}
+
+function juengste(laeufe) {
+  const zeiten = laeufe.map((lauf) => zeitpunkt(lauf.started_at)).filter((zeit) => zeit !== null);
+  const neuester = Math.max(...zeiten);
+  return laeufe.filter((lauf) => {
+    const zeit = zeitpunkt(lauf.started_at);
+    return zeit === null || zeit === neuester;
+  });
+}
+
+function checkUrteil(laeufe, { pflicht, gemergtAm }) {
   const check = pflicht.context;
   if (laeufe.length === 0) return [grund("rot_check_fehlt", { check })];
   const erwartet = pflicht.integration_id ?? GITHUB_ACTIONS_APP;
@@ -146,12 +166,14 @@ function checkUrteil(laeufe, pflicht) {
   if (erwartet !== GITHUB_ACTIONS_APP || vonActions.length === 0) {
     return [grund("rot_check_app", { check })];
   }
-  const rot = vonActions.find((lauf) => lauf.conclusion !== ERFOLG);
+  const zaehlend = vonActions.filter((lauf) => !erstNachMerge(lauf, gemergtAm));
+  if (zaehlend.length === 0) return [grund("rot_check_fehlt", { check })];
+  const rot = juengste(zaehlend).find((lauf) => lauf.conclusion !== ERFOLG);
   if (rot === undefined) return [];
   return [grund("rot_check_nicht_gruen", { check, status: statusWort(rot.conclusion) })];
 }
 
-async function checkPruefen({ github, kopf, pflicht }) {
+async function checkPruefen({ github, kopf, pflicht, gemergtAm }) {
   const filter = new URLSearchParams({
     check_name: pflicht.context,
     filter: "latest",
@@ -163,16 +185,16 @@ async function checkPruefen({ github, kopf, pflicht }) {
   const alle = Array.isArray(daten?.check_runs) ? daten.check_runs : [];
   return checkUrteil(
     alle.filter((lauf) => lauf?.name === pflicht.context),
-    pflicht,
+    { pflicht, gemergtAm },
   );
 }
 
-export async function checksPruefen({ github, kopf }) {
+export async function checksPruefen({ github, kopf, gemergtAm }) {
   const { status, daten } = await github.lesen("/rules/branches/" + MASTER);
   if (status !== HTTP_OK) return [githubFehler("pflicht_checks", status)];
   const pflichten = pflichtChecks(daten);
   if (pflichten.length === 0) return [grund("rot_keine_pflicht_checks")];
   const gruende = [];
-  for (const pflicht of pflichten) gruende.push(...(await checkPruefen({ github, kopf, pflicht })));
+  for (const pflicht of pflichten) gruende.push(...(await checkPruefen({ github, kopf, pflicht, gemergtAm })));
   return gruende;
 }
