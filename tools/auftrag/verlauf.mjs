@@ -10,7 +10,7 @@ const MAX_ANTWORT_ZEICHEN = 1000;
 const MAX_EINGABE_ZEICHEN = 200;
 const MS_JE_SEKUNDE = 1000;
 const ERSTE_MILLISEKUNDEN_ZEIT = 1e12;
-const LIMIT_MELDUNG = /limit reached|hit your limit/i;
+const LIMIT_MELDUNG = /limit reached|hit your (?:[\w-]+ )?limit/i;
 const LIMIT_ZEIT = /\|(\d+)/;
 const ABGELEHNT = "rejected";
 
