@@ -192,3 +192,30 @@ test("[NIE3] mit Schalter weist der Webhook einen unsignierten Anruf weiter ab u
     assert.equal(srv.readStore().calls.length, 0);
   });
 });
+
+function warteAufStderrZeile(srv, stderrText, muster) {
+  return new Promise((fertig) => {
+    if (muster.test(stderrText.text)) return fertig();
+    const pruefe = () => {
+      if (!muster.test(stderrText.text)) return;
+      srv.child.stderr.off("data", pruefe);
+      fertig();
+    };
+    srv.child.stderr.on("data", pruefe);
+  });
+}
+
+test("Anfrage-ID: mit Schalter beginnt eine stderr-Zeile waehrend der Anfrage mit rid=<ID> und Leerzeichen", async () => {
+  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: MIT_KENNUNG_IN_LOGS }, async (srv) => {
+    const nurStderr = { text: "" };
+    srv.child.stderr.on("data", (stueck) => (nurStderr.text += stueck.toString()));
+    const ziel = `${srv.localUrl}/voice/outbound?callId=erfundene-kennung-stderr`;
+    const antwort = await abrufMitFrist(ziel, { method: "POST" });
+    const kennung = antwort.headers.get(KENNUNG_HEADER);
+    assert.match(kennung, UUID);
+    await warteAufStderrZeile(srv, nurStderr,/\[voice\/outbound\] unbekannter Call/);
+    const zeilen = nurStderr.text.split("\n").filter((zeile) => zeile.includes("[voice/outbound] unbekannter Call"));
+    assert.equal(zeilen.length, 1, `stderr:\n${nurStderr.text}`);
+    assert.ok(zeilen[0].startsWith(`rid=${kennung} `), `stderr-Zeile ohne rid=${kennung} am Anfang:\n${nurStderr.text}`);
+  });
+});
