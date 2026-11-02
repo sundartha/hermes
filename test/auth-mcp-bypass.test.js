@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
-import { _resetJwksCache, legacyLocalBypassAllowed, makeMcpAuth } from "../src/auth.js";
+import { legacyLocalBypassAllowed, makeMcpAuth } from "../src/auth.js";
+import { _resetJwksCache } from "../src/auth.js";
 import { makeConfigOverrides } from "./helpers.js";
 import { antwortetNie, mitKurzerFrist } from "./gemeinsam/kurze-antwortfrist.mjs";
 
