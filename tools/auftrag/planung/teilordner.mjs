@@ -6,7 +6,7 @@ import { liste } from "./erkundung.mjs";
 import { teilName, teilVon, teilVonZeile } from "./kopfzeile.mjs";
 import { EXIT_AUFRUF, EXIT_BEFUNDE, EXIT_GETEILT } from "./nachricht.mjs";
 import { ANFORDERUNGEN, ANGRIFFSWEG, ANGRIFFSWEGE, BLEIBT_UNVERAENDERT, PITCH, PITCH_SZENARIO, SICHERHEIT, sollNummern } from "./nummern.mjs";
-import { belegHalt, teilungHalt } from "./teilung.mjs";
+import { belegHalt, geordnet, teilungHalt } from "./teilung.mjs";
 
 const DESIGN = "design.md";
 const DOKUMENTE = [PITCH, SICHERHEIT, DESIGN];
@@ -161,24 +161,9 @@ function geaenderteDateienDes(teilung, teil) {
   return liste(teil?.dateien).filter((datei) => !belege.has(datei));
 }
 
-function vorgaengerHuelle(teilung) {
-  const nach = new Map(teilung.teile.map((teil) => [teil?.kuerzel, liste(teil?.abhaengigVon)]));
-  return (kuerzel) => {
-    const gesehen = new Set();
-    const offen = [...(nach.get(kuerzel) ?? [])];
-    while (offen.length > 0) {
-      const naechster = offen.pop();
-      if (!gesehen.has(naechster)) offen.push(...(nach.get(naechster) ?? []));
-      gesehen.add(naechster);
-    }
-    return gesehen;
-  };
-}
-
 function ungeordneteAndere(teilung, eintrag) {
-  const vorgaenger = vorgaengerHuelle(teilung);
-  const eigeneVorgaenger = vorgaenger(eintrag.kuerzel);
-  return teilung.teile.filter((anderer) => anderer !== eintrag && !eigeneVorgaenger.has(anderer?.kuerzel) && !vorgaenger(anderer?.kuerzel).has(eintrag.kuerzel));
+  const nach = new Map(teilung.teile.map((teil) => [teil?.kuerzel, liste(teil?.abhaengigVon)]));
+  return teilung.teile.filter((anderer) => anderer !== eintrag && !geordnet(nach, eintrag.kuerzel, anderer?.kuerzel));
 }
 
 export function doppelAenderungen(teilung, eintrag, elternOrdner) {

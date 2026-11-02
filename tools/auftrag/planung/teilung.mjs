@@ -142,6 +142,10 @@ function erreichbar(nach, start) {
   return gesehen;
 }
 
+export function geordnet(nach, links, rechts) {
+  return erreichbar(nach, links).has(rechts) || erreichbar(nach, rechts).has(links);
+}
+
 function pfad(datei) {
   return datei.endsWith(ORDNER_ENDE) ? datei.slice(0, -ORDNER_ENDE.length) : datei;
 }
@@ -157,7 +161,7 @@ function gemeinsameDateien(links, rechts) {
 
 function ueberschneidungsBefunde(teile, nach) {
   return teile.flatMap((links, stelle) => teile.slice(stelle + 1).flatMap((rechts) => {
-    if (erreichbar(nach, links.kuerzel).has(rechts.kuerzel) || erreichbar(nach, rechts.kuerzel).has(links.kuerzel)) return [];
+    if (geordnet(nach, links.kuerzel, rechts.kuerzel)) return [];
     const gemeinsam = gemeinsameDateien(links.dateien, rechts.dateien);
     return gemeinsam.length === 0 ? [] : [regel(`${links.kuerzel} und ${rechts.kuerzel} hängen nicht voneinander ab und teilen ${gemeinsam.join(", ")}; nenn eine Abhängigkeit oder trenn die Dateien`)];
   }));
