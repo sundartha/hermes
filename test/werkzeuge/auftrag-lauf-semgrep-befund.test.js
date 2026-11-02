@@ -4,8 +4,19 @@ import { delimiter, join } from "node:path";
 import { test } from "node:test";
 
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { KOPIEN_LISTE, MELDUNG_OHNE_SEMGREP, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
-import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import {
+  ABSATZ_ALTER_STAND,
+  KOPIEN_LISTE,
+  MELDUNG_OHNE_SEMGREP,
+  MIT_MUTATION,
+  ROTER_TEST,
+  VERDOPPELT,
+  funktion,
+  namen,
+  pruefung,
+  rotAn,
+} from "./auftrag-lauf-hilfen.js";
+import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
 const SEMGREP = "semgrep";
@@ -111,4 +122,40 @@ test("läuft semgrep im Auftrag nicht mehr, wird die Runde rot mit der Meldung u
   assert.ok(ergebnis.beleg.grund.startsWith(MELDUNG_OHNE_SEMGREP), ergebnis.beleg.grund);
   assert.ok(ergebnis.beleg.roteIds.includes(MELDUNG.SEMGREP_FEHLT), JSON.stringify(ergebnis.beleg.roteIds));
   zweiteRunde(ergebnis, "bau", zweckBlock(MELDUNG.SEMGREP_FEHLT));
+});
+
+const TESTUMBAU = { ...UMBAU, art: "testumbau", ziel: "Ziehe die Rechen-Tests in eine eigene Datei", bereich: "test/", erwarteteDateien: ["test/rechnen.test.js"], vorbild: "test/text.test.js" };
+const PAKET = JSON.parse(BASIS["package.json"]);
+const MUTATION_DES_UMBAUS = "mutation testumbau";
+const MIT_MUTATION_DES_UMBAUS = { ...LISTEN, "src/rechnen.js": VERDOPPELT, "package.json": JSON.stringify({ ...PAKET, scripts: { ...PAKET.scripts, "test:mutation": "node -e 0 --" } }) };
+const UMBAU_QUELLE = { "src/text.js": "export function gross(text) {\n  return text.toLocaleUpperCase();\n}\n" };
+const TEST_FUER_ALTEN_STAND_ZUR_LAUFZEIT = `${BASIS["test/text.test.js"]}test("leer", () => assert.ok(new RegExp(String(1)).test("1")));\n`;
+
+test("semgrep läuft im Testumbau nach lint und vor der Mutation", (context) => {
+  const { lauf: ende, beleg } = lauf(context, { auftrag: TESTUMBAU, drehbuch: { test: { "test/rechnen.test.js": ROTER_TEST } }, dateien: MIT_MUTATION_DES_UMBAUS });
+  assert.equal(ende.status, 0, ende.stdout + ende.stderr);
+  const liste = namen(beleg);
+  assert.ok(liste.indexOf("lint") < liste.indexOf(SEMGREP), liste.join(", "));
+  assert.ok(liste.indexOf(SEMGREP) < liste.indexOf(MUTATION_DES_UMBAUS), liste.join(", "));
+  assert.equal(pruefung(beleg, SEMGREP), 0, JSON.stringify(beleg.pruefungen));
+});
+
+test("baut der Testumbau-Agent einen regulären Ausdruck zur Laufzeit zusammen, wird die Runde vor der Mutation an semgrep rot und der Testumbau-Agent bekommt Befund und Zweck-Text", (context) => {
+  const drehbuch = { test: { "test/rechnen.test.js": TEST_ZUR_LAUFZEIT }, "test-antwort": ABSATZ };
+  const ergebnis = lauf(context, { auftrag: TESTUMBAU, drehbuch, dateien: MIT_MUTATION_DES_UMBAUS });
+  rotAn(SEMGREP, ergebnis.lauf, ergebnis.beleg);
+  assert.ok(!namen(ergebnis.beleg).includes(MUTATION_DES_UMBAUS), namen(ergebnis.beleg).join(", "));
+  zweiteRunde(ergebnis, "test", ["## Testumbau", `test/rechnen.test.js:5 ${REGEL}`, WOZU, `dem Test-Agenten: ${SEMGREP}`]);
+});
+
+test("baut der Test-Agent in der Testrunde der Mutation einen regulären Ausdruck zur Laufzeit zusammen, wird die Runde an semgrep rot und der Test-Agent bekommt Befund und Zweck-Text", (context) => {
+  const drehbuch = {
+    bau: UMBAU_QUELLE,
+    "test-nachrunde": { "test/text.test.js": TEST_FUER_ALTEN_STAND_ZUR_LAUFZEIT },
+    "test-nachrunde-antwort": ABSATZ_ALTER_STAND,
+    "test-antwort": ABSATZ,
+  };
+  const ergebnis = lauf(context, { auftrag: UMBAU, drehbuch, dateien: { ...LISTEN, ...MIT_MUTATION } });
+  rotAn(SEMGREP, ergebnis.lauf, ergebnis.beleg);
+  zweiteRunde(ergebnis, "test", [`test/text.test.js:5 ${REGEL}`, WOZU, `dem Test-Agenten: mutation alter Stand, ${SEMGREP}`]);
 });
