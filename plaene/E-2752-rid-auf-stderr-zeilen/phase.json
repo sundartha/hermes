@@ -1,0 +1,24 @@
+{
+  "phase": "E-2752-rid-auf-stderr-zeilen",
+  "issue": 2752,
+  "absicht": "Mit `LOG_REQUEST_ID=true` sollen auch stderr-Zeilen (console.warn/console.error) während einer Anfrage das Präfix `rid=<ID> ` tragen, und ein Test soll das festhalten: eine stderr-Zeile aus einer Anfrage getrennt über `srv.child.stderr` lesen und `rid=<Kennung aus X-Request-Id> ` am Zeilenanfang verlangen. Nicht gewollt ist eine Verhaltensänderung oder das Lockern bestehender Erwartungen; nur ein angehängter Testfall.",
+  "entwurf": {
+    "test/gemeinsam/anfrage-kennung-im-server.test.js": "Was sich ändert: `test/gemeinsam/anfrage-kennung-im-server.test.js` bekommt am Ende einen neuen Testfall: Mit `LOG_REQUEST_ID=true` startet er den Server, liest `srv.child.stderr` getrennt von stdout, schickt `POST /voice/outbound?callId=<erfundene Kennung>` (die Route schreibt dazu `console.warn` „unbekannter Call“, `src/routes/voice.js:421`) und verlangt in der stderr-Ausgabe eine Zeile, die mit `rid=<Wert aus dem Antwort-Header X-Request-Id> ` beginnt und `[voice/outbound] unbekannter Call` enthält.\nBleibt gleich: `src/` und alle bestehenden Testfälle der Datei bleiben unverändert (Namen, Eingaben, Erwartungen, Assert-Meldungen); der neue Fall hängt nur an; erfundene Kennung, keine echten Nummern.\nAbnahme: Abnahmetest über den echten Eingang (Server als Kindprozess, HTTP-Route `POST /voice/outbound`, stderr über `srv.child.stderr`); er ist grün von Anfang an, weil das Verhalten schon gebaut ist (`src/process-guards.js:23`, B3a, #2501). Bestehende Tests ändern sich nicht.\nNicht-Ziele: keine Änderung an `src/process-guards.js` oder `src/utils/anfrage-kennung.js`, weil kein Verhalten geändert wird; kein Umbau der bestehenden Fälle, weil nur angehängt wird; keine weitere Datei, weil Helfer (`startServer`, `abrufMitFrist`, `waitForLog`) schon reichen; mehrzeilige stderr-Ausgaben tragen die Kennung nur in der ersten Zeile (`src/utils/anfrage-kennung.js:31-34`), weil ein Präfix je Zeile eine Verhaltensänderung wäre und in ein eigenes Issue gehört.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil die Mutationsprüfung des Testumbaus den Fall nicht auf Wirkung prüft und keinen Mutanten für den stderr-Schreiber erzeugt, wird die Abnahme auch grün, wenn der neue Fall wirkungslos ist (etwa gegen das gemischte `srv.stdout` statt `srv.child.stderr`), und ein späterer Umbau, der `mitAnfrageKennung` vom stderr-Schreiber entfernt, bleibt unbemerkt. | hingenommen: Die Mutationsprüfung des Testumbaus fragt nicht, ob ein neuer Fall etwas Neues tötet (`tools/mutationspruefung/testumbau.mjs:117-130`), importiert `src/process-guards.js` nicht als Quelle (der Test lädt es nur im Kindprozess), und Stryker erzeugt keinen Mutanten, der den Wrapper-Aufruf `mitAnfrageKennung(...)` entfernt; den einzigen Schutz bildet der Satz in wasDarfNiePassieren (eine Zeile, Präfix und Meldung zusammen, nur aus `srv.child.stderr`) (Entscheidung Betreuung 02.11.2026). |\n| PM2 | Weil `mitAnfrageKennung` die Marke nur einmal vor den ganzen Schreib-Block setzt, trägt bei mehrzeiliger stderr-Ausgabe (etwa Fehler mit Stack) nur die erste Zeile `rid=`, und der neue Fall hält nur den einzeiligen Stand fest. | Nicht-Ziel: mehrzeilige stderr-Ausgaben, weil ein Präfix je Zeile eine Verhaltensänderung an `src/utils/anfrage-kennung.js` wäre und in ein eigenes Issue gehört. |"
+  },
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "testumbau",
+      "ziel": "Test: rid= steht auf stderr-Zeilen mit LOG_REQUEST_ID",
+      "bereich": "test/gemeinsam/anfrage-kennung-im-server.test.js",
+      "erwarteteDateien": [
+        "test/gemeinsam/anfrage-kennung-im-server.test.js"
+      ],
+      "abnahme": "test/gemeinsam/anfrage-kennung-im-server.test.js",
+      "wasDarfNiePassieren": [
+        "Jeder bestehende Testfall in test/gemeinsam/anfrage-kennung-im-server.test.js trägt danach denselben Namen, prüft dieselben Eingaben und Erwartungen wie vorher und ist grün.",
+        "Der neue Testfall liest die stderr-Zeile über srv.child.stderr getrennt von stdout und verlangt rid=<Wert aus X-Request-Id der Antwort> mit einem Leerzeichen am Zeilenanfang; er lockert keine bestehende Erwartung."
+      ]
+    }
+  ]
+}
