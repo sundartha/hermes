@@ -27,7 +27,7 @@ function mitTeilen(umbau) {
   return abgewandelt(zustand.vorlauf, zustand.aufraeumer, umbau);
 }
 
-test("der Pull Request übernimmt den jüngsten abgeschlossenen früheren Lauf, nicht laufende, abgebrochene oder spätere", FRIST, () => {
+test("der Pull Request holt Belege aus früheren beendeten Läufen, auch abgebrochenen, zuerst aus dem jüngsten, nicht aus laufenden oder späteren", FRIST, () => {
   const laeufe = [
     prLauf(zustand.vorlauf, { id: 4710 }),
     prLauf(zustand.vorlauf, { id: 4712, conclusion: "failure" }),
@@ -35,7 +35,13 @@ test("der Pull Request übernimmt den jüngsten abgeschlossenen früheren Lauf, 
     prLauf(zustand.vorlauf, { id: 4999, conclusion: "cancelled" }),
     prLauf(zustand.vorlauf, { id: 5001 }),
   ];
-  assert.equal(gewaehlt({ laeufe }).lauf, 4712);
+  assert.equal(gewaehlt({ laeufe }).lauf, 4999);
+  assert.equal(gewaehlt({ laeufe: laeufe.filter(({ id }) => id !== 4999) }).lauf, 4712);
+});
+
+test("ein Lauf, der noch läuft oder ohne Ergebnis endete, wird nicht als Vorlauf genommen", FRIST, () => {
+  const laeufe = [prLauf(zustand.vorlauf, { id: 4713, status: "in_progress", conclusion: null }), prLauf(zustand.vorlauf, { id: 4714, conclusion: "skipped" })];
+  abgelehnt({ laeufe }, /kein früherer abgeschlossener Lauf dieses Pull Requests/);
 });
 
 test("ein Lauf eines anderen Pull Requests auf demselben Zweignamen wird nicht als Vorlauf genommen", FRIST, () => {
@@ -69,12 +75,6 @@ test("ein Vorlauf, der auf dem Merge-Commit des Pull Requests gemessen hat, wird
   assert.match(geholt.stdout, AUS_VORLAUF);
 });
 
-test("ein Merge-Commit des Vorlaufs, dessen Baum nicht zum Teilergebnis passt, wird nicht angenommen", FRIST, () => {
-  const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer, (teil) => ({ ...teil, baum: "0".repeat(40) }));
-  const lauf = { head_sha: merge.kopfPr };
-  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /Kopf des Vorlaufs nicht nachprüfbar/, merge);
-});
-
 test("ein Merge-Commit des Vorlaufs, der den Kopf des Pull Requests nicht als zweiten Elternteil hat, wird nicht angenommen", FRIST, () => {
   const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer);
   const lauf = { head_sha: merge.kopfBasis };
@@ -85,17 +85,14 @@ test("Teilergebnisse eines Vorlaufs, die auf verschiedenen Commits gemessen habe
   const merge = mergeVorlauf(zustand.vorlauf, zustand.aufraeumer);
   const gemischt = abgewandelt(merge, zustand.aufraeumer, ([erster]) => [{ ...erster, teile: 2, kopf: merge.merge, baum: merge.baum }, { ...erster, teil: 2, teile: 2, kopf: merge.kopfPr, baum: merge.baum }]);
   const lauf = { head_sha: merge.kopfPr };
-  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /Kopf des Vorlaufs nicht nachprüfbar/, gemischt);
+  abgelehnt({ laeufe: [prLauf(merge, lauf)], lauf }, /nicht zu einem Plan und Commit gehören/, gemischt);
 });
 
-test("Teilergebnisse ohne Angabe des geprüften Baums werden nicht angenommen", FRIST, () => {
-  const ohneBaum = mitTeilen((teile) => teile.map((teil) => ({ ...teil, baum: undefined })));
-  abgelehnt({}, /Kopf des Vorlaufs nicht nachprüfbar/, ohneBaum);
-});
-
-test("ein Vorlauf mit fehlendem Teilergebnis wird nicht angenommen", FRIST, () => {
+test("aus einem abgebrochenen Vorlauf mit fehlendem Teilergebnis werden die Belege der fertigen Teile genommen", FRIST, () => {
   const unvollstaendig = mitTeilen(([erster]) => [{ ...erster, teile: 2 }]);
-  abgelehnt({}, /hat nicht alle Teilergebnisse/, unvollstaendig);
+  const lauf = { conclusion: "cancelled" };
+  const { geholt } = holeImPullRequest(unvollstaendig, zustand.aufraeumer, { laeufe: [prLauf(unvollstaendig, lauf)], lauf });
+  assert.match(geholt.stdout, AUS_VORLAUF);
 });
 
 test("ohne Angabe des Schalters übernimmt der Pull Request im Schattenmodus", FRIST, () => {

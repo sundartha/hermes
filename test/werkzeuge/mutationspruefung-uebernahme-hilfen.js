@@ -86,6 +86,8 @@ const WEITERLEITUNG = [
   "const argumente = process.argv.slice(2);",
   'const einstellung = JSON.parse(readFileSync(join(hier, "listung.json"), "utf8"));',
   'if (argumente[0] === "api" && argumente[1].includes("/workflows/")) { process.stdout.write(JSON.stringify({ workflow_runs: einstellung.laeufe })); process.exit(0); }',
+  'const eigene = argumente[0] === "run" && argumente[1] === "download" ? (einstellung.artefakteJeLauf ?? {})[argumente[2]] : undefined;',
+  'if (eigene !== undefined) { require("node:fs").cpSync(eigene, argumente[argumente.indexOf("-D") + 1], { recursive: true }); process.exit(0); }',
   'const weiter = spawnSync(join(einstellung.original, "gh"), argumente, { stdio: "inherit" });',
   "process.exit(weiter.status ?? 1);",
   "",
@@ -107,10 +109,10 @@ export function prLauf(vorlauf, aenderungen = {}) {
   };
 }
 
-function prAttrappe(vorlauf, aufraeumer, { laeufe, lauf }) {
+function prAttrappe(vorlauf, aufraeumer, { laeufe, lauf, artefakteJeLauf = {} }) {
   const original = ghAttrappe(vorlauf, aufraeumer, { lauf: prLauf(vorlauf, lauf) });
   const ordner = temporaer(aufraeumer, "uebernahme-pr-gh-");
-  writeFiles(ordner, { gh: WEITERLEITUNG, "listung.json": JSON.stringify({ laeufe, original }) });
+  writeFiles(ordner, { gh: WEITERLEITUNG, "listung.json": JSON.stringify({ laeufe, original, artefakteJeLauf }) });
   chmodSync(join(ordner, "gh"), AUSFUEHRBAR);
   return ordner;
 }
@@ -133,6 +135,25 @@ export function holeImPullRequest(vorlauf, aufraeumer, { dateien = {}, laeufe = 
   const geholt = holeVorergebnis(repo, prAttrappe(vorlauf, aufraeumer, { laeufe, lauf }), { ziel, basis: vorlauf.basis, aenderungen: { ...PR_UMGEBUNG, ...umgebung } });
   assert.equal(geholt.status, 0, geholt.stdout + geholt.stderr);
   return { repo, ziel, geholt };
+}
+
+export function holeNachForcePush(vorlauf, aufraeumer, { dateien = {}, laeufe = [prLauf(vorlauf)], lauf = {}, umgebung = {}, artefakteJeLauf }) {
+  const repo = temporaer(aufraeumer, "uebernahme-force-push-");
+  const geklont = runIn(vorlauf.repo, "git", ["clone", "-q", vorlauf.repo, repo]);
+  assert.equal(geklont.status, 0, geklont.stderr);
+  const neuerZweig = runIn(repo, "git", ["checkout", "-q", "-B", "neu", vorlauf.basis]);
+  assert.equal(neuerZweig.status, 0, neuerZweig.stderr);
+  writeFiles(repo, { "src/andere.js": ANDERE });
+  commitAll(repo, "Neuer Hauptstand");
+  const basis = rev(repo, "HEAD");
+  const geholtDateien = runIn(repo, "git", ["checkout", vorlauf.kopf, "--", "."]);
+  assert.equal(geholtDateien.status, 0, geholtDateien.stderr);
+  writeFiles(repo, dateien);
+  commitAll(repo, "Runde 1 nach Force-Push");
+  const ziel = join(temporaer(aufraeumer, "uebernahme-force-push-vorergebnis-"), "vorergebnis.json");
+  const geholt = holeVorergebnis(repo, prAttrappe(vorlauf, aufraeumer, { laeufe, lauf, artefakteJeLauf }), { ziel, basis, aenderungen: { ...PR_UMGEBUNG, ...umgebung } });
+  assert.equal(geholt.status, 0, geholt.stdout + geholt.stderr);
+  return { repo, basis, ziel, geholt };
 }
 
 export function teilberichte(ordner) {

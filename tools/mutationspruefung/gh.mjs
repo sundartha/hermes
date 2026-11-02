@@ -8,13 +8,12 @@ const STANDARD_REPO = "sundartha/hermes";
 const EXIT_GRUEN = 0;
 export const MAX_GH_AUSGABE = 268_435_456;
 export const LAUF_FERTIG = "completed";
-export const ABGESCHLOSSEN = new Set(["success", "failure"]);
 const MS_JE_SEKUNDE = 1000;
 const SUCHLISTE = "10";
 const LAUF_URL = /\/actions\/runs\/(\d+)/;
 const WORKFLOW_PFAD = ".github/workflows/ci.yml";
-const ABRUF_EREIGNIS = "workflow_dispatch";
-const ABRUF_ZWEIG = "lauf-mutation/";
+export const ABRUF_EREIGNIS = "workflow_dispatch";
+export const ABRUF_ZWEIG = "lauf-mutation/";
 const ABRUF = {
   pfad: WORKFLOW_PFAD,
   ereignis: ABRUF_EREIGNIS,
@@ -59,10 +58,6 @@ export function loescheWegwerfZweig(repo, zweig) {
   } catch (fehler) {
     console.error(`Hinweis: Wegwerf-Branch ${zweig} nicht gelöscht: ${fehler.message}`);
   }
-}
-
-export function mitUrteilAbgeschlossen(lauf) {
-  return lauf.status === LAUF_FERTIG && ABGESCHLOSSEN.has(lauf.conclusion);
 }
 
 function gehoertZumPullRequest(lauf, pullRequest) {
