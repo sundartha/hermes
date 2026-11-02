@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { MIT_MUTATION, ROTER_TEST, VERDOPPELT, exitCodes, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
-import { UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { TESTUMBAU, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const LINT_NEUE_FUNKTIONEN = "lint neuer funktionen";
@@ -24,7 +24,6 @@ const TEST_MIT_AUSGABE = [
 ].join("\n");
 const GROSS_MIT_AUSGABE = "export function gross(wort) {\n  console.log(wort);\n  return wort.toUpperCase();\n}\n";
 const NACH_TEST_UND_NACH_BAU_GRUEN = [0, 0];
-const TESTUMBAU = { ...UMBAU, art: "testumbau", ziel: "Ziehe die Rechen-Tests in eine eigene Datei", bereich: "test/", erwarteteDateien: ["test/rechnen.test.js"], vorbild: "test/text.test.js" };
 
 function zweiteRundeEnthaelt(werkzeug, rolle, teile) {
   const prompt = readFileSync(join(werkzeug, `prompt-${rolle}.txt`), "utf8");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { sammeljob } from "./workflow-dateien.js";
+import { sammeljob } from "./ci-sammelschritt.js";
 
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;

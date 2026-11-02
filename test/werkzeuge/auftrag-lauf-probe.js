@@ -98,6 +98,15 @@ export const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
+export const TESTUMBAU = {
+  ...UMBAU,
+  art: "testumbau",
+  ziel: "Ziehe die Rechen-Tests in eine eigene Datei",
+  bereich: "test/",
+  erwarteteDateien: ["test/rechnen.test.js"],
+  vorbild: "test/text.test.js",
+};
+
 export function ghSkript(ordner, skript) {
   const programm = join(ordner, "gh.mjs");
   writeFileSync(programm, `#!/usr/bin/env node\n${skript}\n`);
