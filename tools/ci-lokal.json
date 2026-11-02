@@ -65,6 +65,7 @@
     ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": "Mutationsprüfung über den ganzen PR, teuer; lauf prüft Mutanten je Auftrag selbst.",
     ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": "Sammelt die Ergebnisse der anderen GitHub-Jobs; lokal ist das der Exit von ci-lokal.",
     ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung": "Liest PR, Review und Label auf GitHub; lokal gibt es keinen PR.",
+    ".github/workflows/freigabe.yml › approve-inhalt › Approve gleicher Inhalt": "Liest PR und Reviews auf GitHub und vergleicht mit dem freigegebenen Stand; lokal gibt es keinen PR.",
     ".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt": "Liest die PR-Nummer und die Freigaben im Issue auf GitHub; lokal gibt es keinen PR.",
     ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": "Fährt lint und die betroffenen Tests über den ganzen PR, im Zweifel die volle Suite; lauf fährt beides je Auftrag, ci-lokal fährt lint.",
     ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": "Alle Werkzeugtests in Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
