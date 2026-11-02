@@ -1,0 +1,23 @@
+{
+  "phase": "E-2567-testimport-unveraendert",
+  "issue": 2567,
+  "absicht": "Antwortet WorkOS nicht, soll Hermes nicht hängen: Jeder der vier WorkOS-Aufrufe bricht nach einer festen, je Aufruf gewählten Frist mit `TimeoutError` ab, den die Aufrufer schon heute wie jeden anderen Anbieterfehler behandeln. Nicht gewollt: neue Wiederholungen, eine Frist für alle, ein Listeneintrag statt einer Frist, neue Konfiguration, Änderungen an der Anmeldelogik (Token-Prüfung, Sitzungen, Rechte). Im Zweifel bleibt ein Aufruf unverändert und wird gemeldet.",
+  "entwurf": {
+    "test/auth-mcp-bypass.test.js": "Was sich ändert: In test/auth-mcp-bypass.test.js wird Zeile 4 auf den Stand von master zurückgesetzt (import { legacyLocalBypassAllowed, makeMcpAuth } from \"../src/auth.js\";) und der Import von _resetJwksCache steht als eigene neue Zeile direkt unter Zeile 4, vor dem Import von makeConfigOverrides.\nBleibt gleich: Der neue Test \"WorkOS-Fristen: antwortet der Aussteller auf die OAuth-Metadaten nicht, bricht jeder der zwei Pfade nach 5 Sekunden ab\" und alle bestehenden Tests der Datei laufen unverändert grün; keine Zeile außer Zeile 4 und der neuen Importzeile ändert sich gegenüber dem Stand vor dieser Phase.\nAbnahme: Abnahmetest: keiner, weil Testumbau: alle Fälle der Datei bleiben unverändert grün; es ändert sich nur die Form des Imports.\nNicht-Ziele: eine andere Stelle für die neue Importzeile als direkt unter Zeile 4, weil der Entwurf sonst zwei Orte nennt; eine Änderung an src/auth.js, weil die Frist selbst richtig ist; eine Änderung an Erwartungen bestehender Tests, weil der Testschutz sie nur mit Label verhalten-geaendert zulässt.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil der Test-Agent beim Zurücksetzen von Zeile 4 mehr als diese Zeile anfasst, ändert sich ein bestehender Test des Safety-Gates Anmeldung, und die Folge ist, dass der Testschutz wieder rot wird oder eine Erwartung unbemerkt abweicht. | Test: Satz 1 in wasDarfNiePassieren |\n| PM2 | Weil der doppelte Import aus ../src/auth.js ein Lint-Befund sein könnte, bricht ci:lokal ab, und die Folge ist ein weiterer Push. | hingenommen: eslint.config.js kennt weder no-duplicate-imports noch import/no-duplicates, ci:lokal läuft am Ende von lauf |\n| PM3 | Weil Absicht und Entwurf zwei verschiedene Stellen für die neue Importzeile nennen könnten, setzt der Test-Agent sie an die andere Stelle, und die Folge ist eine Abweichung vom Entwurf ohne Verhaltensänderung. | Nicht-Ziel: eine andere Stelle als direkt unter Zeile 4 |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "testumbau",
+      "ziel": "Zeile 4 des Anmelde-Tests zurücksetzen, Import eigene Zeile",
+      "bereich": "test/auth-mcp-bypass.test.js",
+      "erwarteteDateien": [
+        "test/auth-mcp-bypass.test.js"
+      ],
+      "abnahme": "test/auth-mcp-bypass.test.js",
+      "wasDarfNiePassieren": [
+        "Alle Tests der Datei test/auth-mcp-bypass.test.js, die auf master stehen, bleiben Zeichen für Zeichen unverändert, auch Zeile 4, und die Modus-Matrix von mcpAuth (off, oauth, token, legacy) ändert sich nicht."
+      ]
+    }
+  ]
+}
