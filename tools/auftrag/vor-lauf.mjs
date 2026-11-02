@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -6,7 +5,7 @@ import { REGELDATEI } from "../abhaengigkeiten/regeldatei.mjs";
 import { bereiche, ordnungsBefunde } from "../abhaengigkeiten/testordnung.mjs";
 
 import { brauchtRotenTest, istTestdatei, jsZwillingDes, reihenfolge } from "./format.mjs";
-import { gebauteAuftraege } from "./git.mjs";
+import { gebauteAuftraege, imGitRepo } from "./git.mjs";
 import { testVerstoss } from "./pruefungen.mjs";
 
 const TEST_ORDNER = "test/";
@@ -16,10 +15,6 @@ function vorhanden(root, pfad) {
 }
 
 const OHNE_GIT = "Hinweis: Testhilfen in erwarteteDateien nicht geprüft; ohne Git-Repo lässt sich nicht bestimmen, welche Aufträge schon gebaut sind.";
-
-function imGitRepo(root) {
-  return spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root, encoding: "utf8" }).stdout?.trim() === "true";
-}
 
 function neueTestpfade(auftrag, root) {
   const pfade = new Set([auftrag.abnahme, ...auftrag.erwarteteDateien].filter((pfad) => pfad.startsWith(TEST_ORDNER)));
