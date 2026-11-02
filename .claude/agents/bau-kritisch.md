@@ -16,7 +16,7 @@ Deine Aufgabe:
 2. Baue die kleinste Änderung, die den Abnahmetest grün macht. Bei einem Umbau bleibt er grün, und das Verhalten ändert sich nicht.
 3. Du änderst nur Dateien im Bereich des Auftrags, höchstens 400 neue Zeilen Produktcode (gelöschte Zeilen zählen nicht), keine Tests und keine geschützten Dateien. Halte dich an den Stil der Musterdatei. Bei Widerspruch zwischen der geänderten Datei und dem Muster gilt das Muster. Das gilt für die Zeilen, die du schreibst oder ohnehin änderst; anderen Code der Datei baust du dafür nicht um.
    Neue Logik legst du in eine Funktion, die sich ohne Server, Datenbank oder Kindprozess aufrufen lässt; Route, Abfrage und Prozessstart bleiben eine dünne Hülle darum. So kann der Test sie direkt aufrufen, und jeder Test, der Server oder Datenbank startet, prüft nur noch das Zusammenspiel.
-4. Du committest nicht. Das Skript prüft Bereich, Lint und Tests selbst und committet.
+4. Du committest nicht. Das Skript prüft Bereich, Lint und Tests selbst und committet. Ändert dein Auftrag das ausgelieferte Widget-HTML (`src/ui/widget-catalog.js` und was es einbettet), hängst du in `src/ui/widget-versions.json` je betroffenem Widget die nächste Version an; die neuen SHA-256-Werte liefert `node tools/widget-pins.mjs` (nur lesend, JSON je Widget-ID), und alte Einträge überschreibst du nie.
 5. `node --test` rufst du nie direkt auf. Für breite Suchen nimmst du den Agenten `suche`.
 
 Hältst du den Abnahmetest für falsch, den Auftrag für unmöglich oder widersprüchlich, oder braucht die Änderung mehr als 400 neue Zeilen, änderst du nichts weiter und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`. Das zählt nicht als rote Runde.

@@ -324,8 +324,9 @@ const READ = regeln({ kurz: "rs", kurzWert: [["a", EIGENE_BINDUNG], ["d", BELIEB
 const PRINTF = regeln({ kurzWert: [["v", EIGENE_BINDUNG]], stopp: true });
 const WAIT = regeln({ kurz: "nf" });
 const BASIS_VERGLEICH = regeln({ lang: ["--je-ordner"], langWert: [["--basis", FESTER_WERT]] });
+const OHNE_OPTIONEN = regeln({});
 const NPX = new Map([["eslint", ESLINT], ["prettier", PRETTIER], ["jscpd", JSCPD]]);
-const NODE_SKRIPTE = new Map([["tools/basis-vergleich.mjs", BASIS_VERGLEICH], ["tools/lint-neue-funktionen.mjs", null], [".claude/hooks/lint-datei.mjs", null]]);
+const NODE_SKRIPTE = new Map([["tools/basis-vergleich.mjs", BASIS_VERGLEICH], ["tools/lint-neue-funktionen.mjs", null], [".claude/hooks/lint-datei.mjs", null], ["tools/widget-pins.mjs", OHNE_OPTIONEN]]);
 
 function kannOptionSein(arg) {
   if (!arg.dyn && arg.text === "-") return false;
