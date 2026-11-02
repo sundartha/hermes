@@ -47,6 +47,19 @@ Für Kunden und Angerufene ändert sich nichts. Jeder Aufruf an einen der vier A
 - nicht berührt: `src/workos-management.js:deleteUser`, weil die Messung am Erzeugen der WorkOS-Verwaltung in `wireWebLogin` hängt, nicht in dieser Funktion
 - nicht berührt: `src/web-auth.js:exchange`, weil die Messung am OIDC-Client in `wireWebLogin` hängt, nicht in dieser Funktion
 - nicht berührt: `src/wiring/web-login.js:anonym ab Zeile 150`, weil die Messung am Erzeugen von Mailer, OIDC-Client und WorkOS-Verwaltung hängt, nicht in dieser Funktion
+- nicht berührt: `src/routes/api-calls.js:makeCallRoutes`, weil Beleg: `place_call` und `cancel_call` bleiben unverändert, die Messung hängt an der Telnyx-Tabelle in `registry.js`
+- nicht berührt: `src/routes/api-calls.js:anonym ab Zeile 233`, weil Beleg für den Fehlerzweig von `place_call` (502/500), den die Messung unverändert lässt; die Messung hängt an der Telnyx-Tabelle in `registry.js`
+- nicht berührt: `src/routes/api-calls.js:onHangUpError`, weil Beleg für den Auflegeweg von `cancel_call`; die Messung hängt an der Telnyx-Tabelle in `registry.js`
+- nicht berührt: `src/self-service-routes.js:anonym ab Zeile 269`, weil Beleg für die Newsletter-Route, die Mailfehler abfängt; die Messung hängt am Brevo-Mailer in `web-login.js`
+- nicht berührt: `src/self-service-routes.js:makeSelfServiceRoutes`, weil Beleg für Newsletter- und Abrechnungsrouten; die Messung hängt an den Erzeugungsstellen der Anbieterobjekte
+- nicht berührt: `src/telephony/adapters/telnyx/errors.js:anonym ab Zeile 21`, weil Beleg für die Fehlertexte von Telnyx; `assertTelnyxOk` bleibt unverändert, die Messung liest den Text nie
+- nicht berührt: `src/telephony/adapters/telnyx/voice.js:anonym ab Zeile 417`, weil Beleg für die Kostenabrufe, die nicht gemessen werden
+- nicht berührt: `src/telephony/adapters/telnyx/voice.js:assignCostRecords`, weil Beleg: die Methode ist synchron und steht nicht in der Vorgangsliste
+- nicht berührt: `src/telephony/call-finish.js:finishCall`, weil Beleg für SMS und Verbrauchsbuchung; die Messung hängt an der Telnyx-Tabelle in `registry.js`
+- nicht berührt: `src/telephony/call-termination.js:anonym ab Zeile 14`, weil Beleg für die Abrechnung nach dem Auflegen (B13, B14); die Funktion bleibt unverändert
+- nicht berührt: `src/telephony/call-termination.js:terminateAndBillCall`, weil Beleg für die Abrechnung nach dem Auflegen (B13, B14); die Funktion bleibt unverändert
+- nicht berührt: `src/telephony/registry.js:renderDirectives`, weil Beleg für den Eintrag `VOICE_RENDERER`, der ohne Hülle bleibt
+- nicht berührt: `src/web-auth.js:anonym ab Zeile 136`, weil Beleg für `GET /auth/callback`; die Messung hängt am OIDC-Client in `wireWebLogin`
 
 ## Anforderungen
 
