@@ -15,6 +15,7 @@ import { geschuetzteMuster, istVertraulich, ladePhase, phasenBefunde } from "./f
 import { aenderungenSeit, gibtEsIn, git } from "./git.mjs";
 import { nurTypenNachgezogen } from "./importendungen.mjs";
 import { PHASE_PASST_NICHT, VERSTOSS, fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./pruefungen.mjs";
+import { vorLaufBefunde } from "./vor-lauf.mjs";
 import { MELDUNG, zweckBlock } from "./zweck.mjs";
 
 export const EXIT_GRUEN = 0;
@@ -80,7 +81,8 @@ function phasenUndIssueBefunde(phasendatei, root) {
 }
 
 export function pruefe(phasendatei, root) {
-  const { phase, befunde } = phasenUndIssueBefunde(phasendatei, root);
+  const { phase, befunde: form } = phasenUndIssueBefunde(phasendatei, root);
+  const befunde = form.length > 0 ? form : vorLaufBefunde(phase, root);
   if (befunde.length > 0) {
     meldeBefunde(befunde);
     console.log(`rot: ${befunde.length} Befunde in ${phasendatei}.`);

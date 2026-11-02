@@ -137,6 +137,11 @@ export function gebautIn(trailer, phase, auftrag) {
   return trailer.some((gesetzt) => zeilen.every((zeile) => gesetzt.has(zeile)));
 }
 
+export function gebauteAuftraege(phase, root) {
+  const commits = auftragsTrailer(root);
+  return new Set(phase.auftraege.filter((auftrag) => gebautIn(commits, phase.phase, auftrag)).map(({ id }) => id));
+}
+
 export function weichZuruecksetzen(basis, cwd) {
   git(["reset", "-q", "--soft", basis], { cwd });
 }

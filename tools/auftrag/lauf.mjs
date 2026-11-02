@@ -15,7 +15,7 @@ import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
 import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
-import { aenderungenSeit, arbeitsstand, auftragsTrailer, aufVorgemerktemStand, festhalten, gebautIn, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { aenderungenSeit, arbeitsstand, aufVorgemerktemStand, festhalten, gebauteAuftraege, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -30,6 +30,7 @@ import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
+import { ABHAENGIGKEITSREGELN } from "./vor-lauf.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
@@ -47,7 +48,6 @@ const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools
 const BASIS_VERGLEICHE = [KOPIEN, INJEKTION];
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
-const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
 const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
 const LINT_REGELN = "eslint.config.js";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
@@ -650,11 +650,6 @@ class AuftragsLauf {
     druckeBeleg(ergebnis, schreibeBeleg(root, ergebnis));
     return ergebnis;
   }
-}
-
-export function gebauteAuftraege(phase, root) {
-  const commits = auftragsTrailer(root);
-  return new Set(phase.auftraege.filter((auftrag) => gebautIn(commits, phase.phase, auftrag)).map(({ id }) => id));
 }
 
 function startBefunde(phasendatei, root) {
