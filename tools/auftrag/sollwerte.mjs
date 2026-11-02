@@ -15,7 +15,7 @@ function literale(hash) {
   return ANFUEHRUNGEN.map((zeichen) => `${zeichen}${hash}${zeichen}`);
 }
 
-function hashPaar({ vergleich }) {
+export function hashPaar({ vergleich }) {
   if (vergleich === undefined || !GLEICHHEIT.has(vergleich.operator)) return null;
   const { ist, soll } = vergleich;
   return HASH.test(ist) && HASH.test(soll) && ist !== soll ? { alt: soll, neu: ist } : null;

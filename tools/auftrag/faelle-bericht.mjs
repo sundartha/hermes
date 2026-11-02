@@ -3,7 +3,7 @@ import { inspect } from "node:util";
 const ERGEBNISSE = new Set(["test:pass", "test:fail"]);
 const FEHLER_TIEFE = 4;
 
-function vergleichDes(fehler) {
+export function vergleichDes(fehler) {
   const ursache = fehler?.cause;
   if (typeof ursache?.actual !== "string" || typeof ursache?.expected !== "string") return undefined;
   return { ist: ursache.actual, soll: ursache.expected, operator: ursache.operator };
