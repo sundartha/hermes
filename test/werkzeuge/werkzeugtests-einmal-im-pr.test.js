@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync, symlinkSync } from "node:fs";
+import { appendFileSync, chmodSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { isolatedEnvironment, probeDirectory, REPO_ROOT } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 import { workflowStepScript } from "./workflow-dateien.js";
 
 const CI_TESTS = { file: "ci.yml", step: "Tests", before: "Testdateien des Teils" };
@@ -21,6 +21,8 @@ const PART_ARGUMENT = `${CHECKED_PART}/${PARTS}`;
 const SUITE_FILES = Array.from({ length: PARTS }, (_, index) => [`test/n${index + 1}.test.js`, `test/werkzeuge/w${index + 1}.test.js`]).flat();
 const ROUND_ROBIN_PART_FILE = `test/n${CHECKED_PART}.test.js`;
 const ROUND_ROBIN_PART_TOOL_FILE = `test/werkzeuge/w${CHECKED_PART}.test.js`;
+const WERKZEUGTEST_LISTE = "tools/basis/werkzeugtests-mit-produkt.json";
+const PRODUKT_DATEI = "src/basis.js";
 const NPM_STUB = `#!/bin/sh\nprintf '%s\\n' "$@" > "$NPM_ARGUMENTE"\n`;
 
 function stepScript({ file, step, before }) {
@@ -89,6 +91,33 @@ test("CI: in der Merge-Queue fahren die Testteile ohne erkennbaren Produkt-Stand
   const argumentsList = npmArguments(context, CI_TESTS, "merge_group");
 
   assert.deepEqual(testRunnerArguments(argumentsList), [ROUND_ROBIN_PART_FILE, ROUND_ROBIN_PART_TOOL_FILE]);
+});
+
+function queueRepository(context) {
+  const repository = probeRepository(context, {
+    [WERKZEUGTEST_LISTE]: JSON.stringify({ [ROUND_ROBIN_PART_TOOL_FILE]: "liest src/basis.js" }),
+    [PRODUKT_DATEI]: "export const wert = 1;\n",
+    ...Object.fromEntries(SUITE_FILES.map((suiteFile) => [suiteFile, ""])),
+  });
+  symlinkSync(join(REPO_ROOT, "tools/testlaufzeit"), join(repository, "tools/testlaufzeit"));
+  const base = runIn(repository, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  appendFileSync(join(repository, PRODUKT_DATEI), "export const geaendert = 1;\n");
+  return { repository, base };
+}
+
+test("CI: in der Merge-Queue fahren die Testteile bei einer reinen Produkt-Änderung gegenüber der echten Basis nur die gelistete Werkzeug-Testdatei", (context) => {
+  const { repository, base } = queueRepository(context);
+  const stubs = stepDirectory(context, CI_TESTS);
+  const result = spawnSync("bash", ["-e", join(stubs, SCRIPT_FILE)], {
+    cwd: repository,
+    encoding: "utf8",
+    env: { ...stepEnvironment(stubs, "merge_group"), PR_BASE_SHA: base, TEIL: "1", TEILE: "1" },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+
+  const argumentsList = readFileSync(join(stubs, ARGUMENTS_FILE), "utf8").split("\n").filter((line) => line !== "");
+  const productTests = SUITE_FILES.filter((suiteFile) => !suiteFile.startsWith("test/werkzeuge/"));
+  assert.deepEqual(testRunnerArguments(argumentsList).toSorted(), [...productTests, ROUND_ROBIN_PART_TOOL_FILE].toSorted());
 });
 
 test("Prüfleiter: im pull_request fahren die Werkzeugteile die Werkzeugtests nach der Liste, bei einer Werkzeug-Änderung alle", (context) => {

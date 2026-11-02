@@ -213,6 +213,26 @@ test("fehlt die Liste, fahren die Teile bei einer reinen Änderung unter src all
   assert.deepEqual(filesThatRan(directory), ALL_TOOL_TEST_FILES);
 });
 
+const UNBRAUCHBARE_LISTEN = {
+  "unlesbares JSON": "{ das ist kein JSON",
+  "ein Array statt eines Objekts": JSON.stringify([LISTED_FILE]),
+  "ein leerer Grund": JSON.stringify({ [LISTED_FILE]: "" }),
+  "ein Grund aus Leerzeichen": JSON.stringify({ [LISTED_FILE]: "   " }),
+  "ein Grund, der keine Zeichenkette ist": JSON.stringify({ [LISTED_FILE]: 1 }),
+};
+
+test("ist die Liste unbrauchbar, fahren die Teile bei einer reinen Änderung unter src alle Werkzeug-Testdateien", (context) => {
+  for (const [fall, text] of Object.entries(UNBRAUCHBARE_LISTEN)) {
+    const directory = probe(context, { extraFiles: { [LIST_FILE]: text } });
+    change(directory, PRODUCT_FILE);
+
+    const results = runParts(directory);
+
+    assert.ok(results.some(({ status }) => status !== 0), fall);
+    assert.deepEqual(filesThatRan(directory), ALL_TOOL_TEST_FILES, fall);
+  }
+});
+
 test("nennt die Liste eine Datei, die es nicht gibt, fahren die Teile alle Werkzeug-Testdateien", (context) => {
   const directory = probe(context, { listed: [LISTED_FILE, "test/werkzeuge/gibt-es-nicht.test.js"] });
   change(directory, PRODUCT_FILE);
