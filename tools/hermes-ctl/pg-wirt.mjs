@@ -8,13 +8,13 @@ const HOST = "127.0.0.1";
 const FREIER_PORT = 0;
 const ELTERN_TAKT_MS = 1000;
 
-const [wirt, verbindungen, nummer, vorname, nachname] = process.argv.slice(ERSTES_ARGUMENT);
+const [wirt, verbindungen, vorname, nachname] = process.argv.slice(ERSTES_ARGUMENT);
 const maxConnections = Number(verbindungen);
 setInterval(() => {
   if (process.ppid !== Number(wirt)) process.exit(0);
 }, ELTERN_TAKT_MS);
 const datenbank = await PGlite.create();
-await startbestandAnlegen(datenbank, { nummer, vorname, nachname });
+await startbestandAnlegen(datenbank, { vorname, nachname });
 const socket = new PGLiteSocketServer({
   db: datenbank,
   host: HOST,

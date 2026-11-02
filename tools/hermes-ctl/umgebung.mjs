@@ -4,6 +4,7 @@ import pg from "pg";
 
 import { BENCH_EXA_API_KEY } from "../../scripts/convo-bench/exa-fake.mjs";
 
+const ANBIETER = "telnyx";
 const AGENT_ID = "agent_hermes_ctl";
 const ED25519_ROHSCHLUESSEL_LAENGE = 32;
 const GEHEIMNIS_BYTES = 24;
@@ -31,13 +32,19 @@ export function schluesselErzeugen() {
   };
 }
 
-export function hermesUmgebung({ schluessel, urls, pgUrl }) {
+export function hermesUmgebung({ schluessel, urls, pgUrl, eigentuemerNummer }) {
   return {
     SKIP_TWILIO_SIGNATURE_CHECK: "false",
     TELNYX_PUBLIC_KEY: schluessel.telnyxOeffentlich,
     TELNYX_API_BASE: urls.anbieterOhneAntwort,
     STRIPE_API_BASE: urls.anbieterOhneAntwort,
     STORE_BACKEND: "pg",
+    BOOTSTRAP_E164: eigentuemerNummer,
+    BOOTSTRAP_PROVIDER: ANBIETER,
+    PROVISIONING_ENABLED: "true",
+    ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "true",
+    TELNYX_SIP_TRUNK_USERNAME: "hermes-ctl",
+    TELNYX_SIP_TRUNK_PASSWORD: "hermes-ctl-attrappe",
     DATABASE_URL: pgUrl,
     ELEVENLABS_OUTBOUND_ENABLED: "true",
     ELEVENLABS_AGENT_ID: AGENT_ID,
