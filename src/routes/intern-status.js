@@ -6,7 +6,7 @@ import { createRateLimiter } from "../middleware.js";
 import { HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 
 export const STATUS_PATH = "/intern/status";
-export const STATUS_TOKEN_MIN_LENGTH = 32;
+const STATUS_TOKEN_MIN_LENGTH = 32;
 const DATENBANK_FRIST_MS = 2000;
 const ABRUFE_PRO_MINUTE = 30;
 
