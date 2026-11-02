@@ -1,0 +1,59 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S13",
+        "S2"
+      ],
+      "eingang": "Start einer Instanz (`npm start`): `init()` holt einen Client, setzt den Plattform-Mandanten und ruft `prepareSchema` (= `migrate` aus `src/db/migrate.js`) auf diesem Client (`src/store/pg.js:32-35`); Migrationen kommen aus der festen Liste `MIGRATION_READERS` (`src/db/migrate.js:9-23`)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Welcher Weg führt von `npm start` bis zum Aufruf von `migrate`? Gemeint sind der Einstieg in `src/server.js`, die Erzeugung des Pools und der Aufruf von `init()` in `src/store.js:10-12` sowie `init()` in `src/store/pg.js:32-35`. Nenn jede Stelle mit Datei, Funktion und Zeilen.",
+        "Wie sieht `src/db/migrate.js` heute aus? Gemeint sind die Liste `MIGRATION_READERS`, `schemaDdl()`, `applySchema` und `migrate`, außerdem die Stelle, an der `0001_ausgang.sql` bei jedem Start ganz ausgeführt wird (laut Sicherheitsprüfung `src/db/migrate.js:21-23` und `:178`). Wo laufen die vier Nachzüge und `seedDefaults`? Laut Pitch laufen sie weiter bei jedem Start und dürfen sich nicht ändern.",
+        "Geplant ist: Der Start liest `schema_migrations` (Spalten `version`, `name`, `checksum`), wendet jede noch nicht eingetragene Datei der Liste in eigener Transaktion an und trägt sie erst nach Erfolg ein. Die neue Datei `src/db/migrations/0002_versionstabelle.sql` legt `schema_migrations` an. An welchen Funktionen in `src/db/migrate.js` setzt das an? Gibt es dort schon eine Transaktionshilfe oder eine Prüfsummenberechnung (etwa mit `node:crypto`), die man nutzen kann?",
+        "Welche bestehenden Tests starten Hermes gegen Postgres oder PGlite und fragen danach `GET /healthz` ab, sodass ein neuer Test unter `test/gemeinsam/` den echten Start erreicht? Zu prüfen sind besonders `test/pg-helpers.js`, `test/gemeinsam/echtes-postgres.js:36` und `test/openai-t2-20-reviewer-seed-pg.test.js:180` (Positiv-Kontrolle `makePgStore ohne Optionen`). Läuft dabei wirklich `npm start` bzw. `src/server.js`, oder nur `makePgStore`?",
+        "Welche bestehenden Tests prüfen heute, dass ein zweiter Start das Schema wieder herstellt, etwa einen von Hand entfernten Index wie `account_email_idx`? Solche Tests würden mit S2 rot. Wo ist `account_email_idx` in `0001_ausgang.sql` definiert?",
+        "Welche bestehenden Tests rufen `migrate`, `applySchema` oder `schemaDdl` direkt auf oder hängen davon ab, dass `0001` bei jedem Start ganz läuft? Gesucht sind auch Tests, die `src/store/pg.js` oder `src/db/migrate.js` importieren. Nenn jeden mit Pfad.",
+        "Prüft `tools/migrationen-pruefen.mjs` (laut Design Doc `:99-117` und `:149`) neue Dateien unter `src/db/migrations/` in `npm test` oder nur in der CI? Was verlangt die Prüfung von `0002_versionstabelle.sql` genau, etwa `SET LOCAL lock_timeout` und `SET LOCAL statement_timeout`?"
+      ]
+    },
+    {
+      "nummern": [
+        "S3",
+        "S4"
+      ],
+      "eingang": "Start einer Instanz (`npm start`) gegen eine bestehende Datenbank ohne `schema_migrations`: `init()` ruft `prepareSchema` (= `migrate`) auf dem Client (`src/store/pg.js:32-35`); die Übernahme trägt `0001` und `0002` in einer Transaktion ein und setzt davor aus JavaScript `lock_timeout` von 2 Sekunden",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Geplant ist eine Übernahme: Fehlt `schema_migrations`, laufen `0001_ausgang.sql` und `0002_versionstabelle.sql` in einer gemeinsamen Transaktion und werden darin eingetragen. Vor `0001` wird aus JavaScript `SET LOCAL lock_timeout = '2s'` gesetzt. Wo in `src/db/migrate.js` bzw. `src/store/pg.js` setzt das an? Wie stellt man heute fest, ob eine Tabelle existiert, etwa über `to_regclass` oder `information_schema`, und gibt es dafür schon eine Hilfe?",
+        "Enthält `0001_ausgang.sql` Anweisungen, die in einer Transaktion nicht laufen, etwa `CREATE INDEX CONCURRENTLY` oder `VACUUM`, oder eigene `BEGIN`/`COMMIT`? Die Übernahme hängt davon ab, dass `0001` zusammen mit `0002` in einer Transaktion laufen kann.",
+        "Wie entsteht im Test eine Datenbank mit Konten, aber ohne `schema_migrations`, also der Stand vor dieser Änderung? Gibt es in `test/pg-helpers.js` oder `test/gemeinsam/` eine Hilfe, die das alte Gesamtschema anlegt und Konten einfügt? Wie heißt die Kontentabelle?",
+        "Wie kann ein Test S4 erzwingen, also dass `0002_versionstabelle.sql` bei der Übernahme scheitert? Lässt sich die Verbindung des Starts über einen Wrapper `{ query, exec }` oder über eine Option von `makePgStore` austauschen? Oder müsste man vorab ein Objekt namens `schema_migrations` anders anlegen? Das darf es laut S4 aber nicht geben.",
+        "Wie endet der Prozess heute bei einem Fehler in `init()`? Gemeint sind `src/store.js:25-30`: welche Felder des Fehlers in die Meldung gehen, ob der Exit-Code 1 ist und ob die Meldung über `src/log-maske.js` läuft. Kann die Meldung beide Dateinamen `0001_ausgang.sql` und `0002_versionstabelle.sql` tragen?"
+      ]
+    },
+    {
+      "nummern": [
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "eingang": "Start einer Instanz (`npm start`) gegen eine Datenbank mit `schema_migrations`: `init()` ruft `prepareSchema` (= `migrate`) auf dem Client (`src/store/pg.js:32-35`); der Start vergleicht die Einträge mit der festen Liste `MIGRATION_READERS` (`src/db/migrate.js:9-23`) samt Prüfsumme je Datei",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Geplant ist ein Abgleich: Der Start liest alle Zeilen aus `schema_migrations` (`version`, `name`, `checksum`) und vergleicht sie mit der Liste `MIGRATION_READERS`. Weicht die Prüfsumme einer eingetragenen Datei ab, endet der Start mit Exit 1 und dem Dateinamen. Ein Eintrag ohne Datei (etwa `0009_spaeter`) erzeugt nur eine Logzeile, und der Start läuft weiter. Wo in `src/db/migrate.js` gehört dieser Abgleich hin? Welche Logfunktion nutzt der Start heute, um eine Zeile zu schreiben, die ein Test lesen kann? Nenn Datei und Funktion.",
+        "Liefern die Leser in `MIGRATION_READERS` den Dateinamen, den Inhalt oder beides? Lässt sich aus ihnen eine Prüfsumme über den Dateiinhalt bilden, ohne die Liste umzubauen?",
+        "S6 verlangt einen Wrapper um die Verbindung des Starts (`{ query, exec }`), der die Ausführung von `0002_versionstabelle.sql` mit einem SQL-Fehler abbrechen lässt. Wie ruft `migrate` heute SQL auf dem Client auf, über `query`, `exec` oder etwas anderes? Kann ein Test diesen Client über `makePgStore`-Optionen, `src/store/pg-runner.js` oder eine Testhilfe in `test/pg-helpers.js` durch einen Wrapper ersetzen und trotzdem über den Start gehen?",
+        "Wie kann ein Test die Ausgabe des Starts lesen, also Exit-Code, Fehlermeldung und Logzeilen? Gibt es eine Hilfe, die `npm start` bzw. `src/server.js` als Kindprozess gegen eine Testdatenbank startet und stdout/stderr einsammelt? Oder fangen Tests stattdessen den Fehler aus `init()` bzw. das Log ab? Wo ist die Stelle in `src/store.js`, die den Fehler in Exit 1 übersetzt?",
+        "Läuft der Mutationsjob der CI ohne Postgres nur gegen PGlite? Welche bestehenden Tests unter `test/` decken `src/db/migrate.js` gegen PGlite ab? Unterstützt PGlite in diesem Repo Transaktionen über `exec`, die bei einem Fehler zurückrollen?"
+      ]
+    }
+  ]
+}
