@@ -102,14 +102,15 @@ function realProvision(store) {
   };
 }
 
-async function loginUndTenantSpiegeln({ accounts, store }) {
+async function loginTenantSpiegelnUndStripeKundeHinterlegen({ accounts, store }) {
   const login = await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
   assert.equal(login.tenantId, TENANT, "Build: Login legt den erwarteten Tenant an");
-  await store.ensureTenant(login.tenantId);
+  assert.equal(await store.ensureTenant(login.tenantId), true, "Build: Store spiegelt den Tenant aus der DB");
   const s = store.load();
   ops.registerTenant(s, login.tenantId, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
   ops.setTenantStripe(s, login.tenantId, { customerId: CUSTOMER });
-  await store.save();
+  store.save();
+  await store.drainFlushes();
 }
 
 async function setup({ activated = false } = {}) {
@@ -120,7 +121,7 @@ async function setup({ activated = false } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  await loginUndTenantSpiegeln({ accounts, store });
+  await loginTenantSpiegelnUndStripeKundeHinterlegen({ accounts, store });
   if (activated) {
     await accounts.setStatus(TENANT, "active");
     await store.ensureTenant(TENANT);
@@ -190,7 +191,8 @@ async function seedVoiceMinute(store, tenantId, quantity) {
     costCents: 0,
   });
   event.occurredAt = USAGE_OCCURRED_AT;
-  await store.save();
+  store.save();
+  await store.drainFlushes();
 }
 
 test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
