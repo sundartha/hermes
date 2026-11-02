@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { listeMitErsatz, stammtAusAltemText } from "../auslagerung-eintraege.mjs";
-import { eslintCollectorFindings } from "../basis-vergleich.mjs";
+import { SOURCE_FILES, eslintCollectorFindings } from "../basis-vergleich.mjs";
 import { gezaehlt, knotenSchluessel, kontingent, pfadAusSchluessel } from "../eslint-rules/bestand.js";
 import { anfragenOhneFrist } from "../eslint-rules/anfrage-mit-frist.js";
 import { dateiAm, gibtEsIn } from "./git.mjs";
@@ -37,7 +37,6 @@ export function abhaengigkeitenUmgezogen(liste, { neuFuer }) {
 
 export const FRIST_LISTE = "tools/basis/anfrage-mit-frist.json";
 const FRIST_REGEL = "anfrage-mit-frist";
-const FRIST_QUELLEN = ["src/**"];
 const SCHLUESSEL_TRENNER = "|";
 
 function schluesselTeile(schluessel) {
@@ -86,7 +85,7 @@ export function umschliessendeEinheit(knoten) {
 
 async function fristFunde(root) {
   const funde = await eslintCollectorFindings(root, FRIST_REGEL, {
-    files: FRIST_QUELLEN,
+    files: SOURCE_FILES,
     keysOf: (context, datei) =>
       anfragenOhneFrist(context.sourceCode, datei).map((knoten) => ({
         key: JSON.stringify({ key: knotenSchluessel(context.sourceCode, datei, knoten), text: context.sourceCode.getText(umschliessendeEinheit(knoten)) }),
