@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ROUTE_KIND, TOOL_KIND, WEBHOOK_KIND } from "../flaechen.mjs";
+import { antwortzeitUrteil } from "./antwortzeiten.mjs";
 
 const HERMES_CTL = fileURLToPath(new URL("../hermes-ctl.mjs", import.meta.url));
 const BEFEHL_FRIST_MS = 90000;
@@ -146,15 +147,20 @@ function getroffeneFlaechen(aufrufe, schritt, { url, muster, werkzeuge }) {
   return getroffen;
 }
 
-function schrittUrteil(schritt, { exit, ausgabe }, gemerkt) {
+function schrittUrteil(schritt, { exit, ausgabe }, { gemerkt, budgets }) {
   if (exit !== 0 || ausgabe.ok !== true) {
-    return [
-      `hermes-ctl endete mit ${exit}: ${ausgabe.fehler ?? JSON.stringify(ausgabe).slice(0, AUSZUG_ZEICHEN)}`,
-    ];
+    return {
+      messwerte: [],
+      befunde: [
+        `hermes-ctl endete mit ${exit}: ${ausgabe.fehler ?? JSON.stringify(ausgabe).slice(0, AUSZUG_ZEICHEN)}`,
+      ],
+    };
   }
-  return einsetzen(schritt.erwarte, gemerkt)
+  const befunde = einsetzen(schritt.erwarte, gemerkt)
     .map((erwartung) => erwartungVerfehlt(ausgabe, erwartung))
     .filter(Boolean);
+  if (befunde.length > 0) return { messwerte: [], befunde };
+  return antwortzeitUrteil({ name: schritt.antwortzeit, ausgabe, budgets });
 }
 
 async function schritteSpielen(karte, sitzung, kontext) {
@@ -162,6 +168,7 @@ async function schritteSpielen(karte, sitzung, kontext) {
   const hintergrund = new Map();
   const abgedeckt = new Set();
   const befunde = [];
+  const messwerte = [];
   for (const [index, schritt] of karte.rezept.schritte.entries()) {
     const nummer = index + 1;
     const fehlend = fehlendePlatzhalter([schritt.befehl, schritt.erwarte], gemerkt);
@@ -176,9 +183,10 @@ async function schritteSpielen(karte, sitzung, kontext) {
     const lauf = await (schritt.abwarten === undefined
       ? hermesCtl(sitzung, einsetzen(schritt.befehl, gemerkt))
       : hintergrund.get(schritt.abwarten));
-    const verfehlt = schrittUrteil(schritt, lauf, gemerkt);
-    if (verfehlt.length > 0) {
-      befunde.push(...verfehlt.map((text) => `${karte.pfad} Schritt ${nummer}: ${text}`));
+    const urteil = schrittUrteil(schritt, lauf, { gemerkt, budgets: kontext.budgets });
+    messwerte.push(...urteil.messwerte);
+    if (urteil.befunde.length > 0) {
+      befunde.push(...urteil.befunde.map((text) => `${karte.pfad} Schritt ${nummer}: ${text}`));
       break;
     }
     if (schritt.merke !== undefined) gemerkt[schritt.merke] = lauf.ausgabe;
@@ -186,10 +194,10 @@ async function schritteSpielen(karte, sitzung, kontext) {
       abgedeckt.add(flaeche);
   }
   await Promise.all(hintergrund.values());
-  return { abgedeckt, befunde };
+  return { abgedeckt, befunde, messwerte };
 }
 
-async function karteSpielen(karte, flaechen) {
+async function karteSpielen(karte, flaechen, budgets) {
   const sitzung = `karte-${basename(karte.pfad, ".md")}-${process.pid}`;
   const beginn = performance.now();
   const start = await hermesCtl(sitzung, ["start"]);
@@ -201,13 +209,14 @@ async function karteSpielen(karte, flaechen) {
       };
     }
     const kontext = {
+      budgets,
       url: start.ausgabe.url,
       muster: routenMuster(flaechen),
       werkzeuge: new Set(
         flaechen.filter(({ art }) => art === TOOL_KIND).map(({ flaeche }) => flaeche),
       ),
     };
-    const { abgedeckt, befunde } = await schritteSpielen(karte, sitzung, kontext);
+    const { abgedeckt, befunde, messwerte } = await schritteSpielen(karte, sitzung, kontext);
     const nichtGeprueft = karte.rezept.flaechen.filter((flaeche) => !abgedeckt.has(flaeche));
     if (befunde.length === 0) {
       befunde.push(
@@ -216,16 +225,16 @@ async function karteSpielen(karte, flaechen) {
         ),
       );
     }
-    return { blockiert: [], befunde, ms: Math.round(performance.now() - beginn) };
+    return { blockiert: [], befunde, messwerte, ms: Math.round(performance.now() - beginn) };
   } finally {
     await hermesCtl(sitzung, ["stopp"]);
   }
 }
 
-export async function kartenSpielen(karten, flaechen) {
+export async function kartenSpielen(karten, flaechen, budgets) {
   const ergebnisse = [];
   for (const karte of karten) {
-    ergebnisse.push({ pfad: karte.pfad, ...(await karteSpielen(karte, flaechen)) });
+    ergebnisse.push({ pfad: karte.pfad, ...(await karteSpielen(karte, flaechen, budgets)) });
   }
   return ergebnisse;
 }

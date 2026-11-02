@@ -349,6 +349,9 @@
     "zweck": "uebrige/funktionskarte",
     "beleg": "tools/funktionskarte.mjs"
   },
+  ".github/workflows/statische-pruefung.yml › statische-pruefung › Antwortzeiten messen": {
+    "meldet": "Misst die Antwortzeiten der markierten Schritte, wenn sich .github/antwortzeiten.json ändert; gibt nur Zahlen aus und urteilt nicht."
+  },
   ".github/workflows/testschutz.yml › testschutz › npm ci": {
     "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
   },
