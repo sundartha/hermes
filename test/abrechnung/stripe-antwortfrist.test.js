@@ -73,6 +73,18 @@ const koerperReisstAb = () => ({
 });
 const koerperOhneJson = () => new Response("{kein json", { status: 200 });
 
+function merkeGrund(koerper, gruende) {
+  return (url, init) => {
+    const antwort = koerper(url, init);
+    const json = () =>
+      antwort.json().catch((fehler) => {
+        gruende.push(fehler.message);
+        throw fehler;
+      });
+    return { ...antwort, json };
+  };
+}
+
 function stripeFetch(abweichungen) {
   const antworten = { ...STRIPE_REGULAER, ...abweichungen };
   return async (url, init = {}) => {
@@ -173,6 +185,23 @@ test("Stripe-Körperfrist: bleibt der Körper der Checkout-Sitzung aus, antworte
   );
   assert.equal(ergebnis.status, 502, ERWARTETER_FEHLER);
   assert.deepEqual(ergebnis.inhalt, BILLING_UNAVAILABLE);
+});
+
+test("Stripe-Körperfrist: das Fehlerprotokoll der Route nennt den Abbruch im Körper statt eines Folgefehlers", async (t) => {
+  const protokoll = t.mock.method(console, "error", () => {});
+  const faelle = [
+    [SUBSCRIBE, "POST /v1/subscriptions", koerperBleibtAus],
+    [SUBSCRIBE, "POST /v1/subscriptions", koerperReisstAb],
+    [SETUP_CHECKOUT, "POST /v1/checkout/sessions", koerperBleibtAus],
+  ];
+  for (const [pfad, aufruf, koerper] of faelle) {
+    const gruende = [];
+    protokoll.mock.resetCalls();
+    await starteMitStripe({ [aufruf]: merkeGrund(koerper, gruende) }, (s) => anfrage(s, pfad, { plan: "starter" }));
+    const zeilen = protokoll.mock.calls.map((aufzeichnung) => aufzeichnung.arguments.join(" "));
+    assert.equal(gruende.length, 1);
+    assert.ok(zeilen.some((zeile) => zeile.includes(gruende[0])), ERWARTETER_FEHLER);
+  }
 });
 
 test("[NIE1] ausbleibender oder abgerissener Körper der Abo-Anlage: 502, keine Freischaltung, keine Abo-Referenz", async () => {
