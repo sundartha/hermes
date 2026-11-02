@@ -126,6 +126,7 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Route | GET /intern/anrufe-laufend | SG-03, SG-09, SG-13, SG-22 |
 | Route | GET /intern/anrufpause | SG-03, SG-13, SG-22 |
 | Route | POST /intern/anrufpause | SG-03, SG-09, SG-13, SG-22 |
+| Route | GET /intern/status | SG-03, SG-13, SG-22 |
 | Route | POST /mcp | SG-01, SG-03, SG-09, SG-23 |
 | Route | GET /mcp | SG-22, SG-23 |
 | Route | DELETE /mcp | SG-22, SG-23 |

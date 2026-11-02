@@ -1,10 +1,12 @@
 import { parseArgs } from "node:util";
 
 import {
+  INTERNE_ROUTEN,
   WEBHOOKS,
   anbieter,
   bestaetigen,
   flaechen,
+  intern,
   webhook,
   werkzeug,
   zustandLesen,
@@ -20,6 +22,7 @@ import { aufrufe } from "./hermes-ctl/zugriff.mjs";
 
 const EXIT_OK = 0;
 const EXIT_AUFRUF = 2;
+const INTERN_NAMEN = [...INTERNE_ROUTEN.keys()].join("|");
 const WEBHOOK_NAMEN = [...WEBHOOKS.keys()].join("|");
 const WEBHOOK_AUFRUF = ["webhook <", WEBHOOK_NAMEN, "> '<json>' [--falsche-signatur]"].join("");
 
@@ -47,6 +50,11 @@ const hilfe = () => ({
       zweck: "Liest den Anruf über die lokale Route, wartet auf Wunsch auf einen Status.",
     },
     {
+      aufruf: `intern <${INTERN_NAMEN}>`,
+      zweck:
+        "Ruft eine interne Route mit dem Bearer-Schlüssel der Sitzung auf; gibt Status und Antwort aus.",
+    },
+    {
       aufruf: "flaechen",
       zweck: "Werkzeuge, Routen und Webhooks wie node tools/katalog-pruefen.mjs --flaechen.",
     },
@@ -71,6 +79,7 @@ const BEFEHLE = new Map(
     anbieter: (aufruf) =>
       anbieter({ ...aufruf, argumente: [aufruf.argumente[0], jsonArgument(aufruf.argumente[1])] }),
     zustand: zustandLesen,
+    intern,
     flaechen,
     hilfe,
   }),

@@ -95,7 +95,11 @@ function zustandSchreiben({ schluessel, urls, pgUrl, server }) {
     ports: { hermes: server.port, pg: Number(new URL(pgUrl).port) },
     attrappen: urls,
     prozesse: prozessListe(laufend.pg.pid, server.child.pid),
-    token: { werkzeug: schluessel.werkzeugToken, init: schluessel.initToken },
+    token: {
+      werkzeug: schluessel.werkzeugToken,
+      init: schluessel.initToken,
+      status: schluessel.statusToken,
+    },
     telnyxPrivatPem: schluessel.telnyxPrivatPem,
     protokolle: { hermes: join(ordner, SERVER_PROTOKOLL), wirt: join(ordner, WIRT_PROTOKOLL) },
     gestartet: new Date().toISOString(),
