@@ -17,6 +17,7 @@ const ARGUMENTS_FILE = "npm-argumente.txt";
 const SCRIPT_FILE = "schritt.sh";
 const CHECKED_PART = 2;
 const PARTS = 6;
+const EIN_TEIL_FUER_ALLE_DATEIEN = "1";
 const PART_ARGUMENT = `${CHECKED_PART}/${PARTS}`;
 const SUITE_FILES = Array.from({ length: PARTS }, (_, index) => [`test/n${index + 1}.test.js`, `test/werkzeuge/w${index + 1}.test.js`]).flat();
 const ROUND_ROBIN_PART_FILE = `test/n${CHECKED_PART}.test.js`;
@@ -114,7 +115,7 @@ test("CI: in der Merge-Queue fahren die Testteile bei einer reinen Produkt-Ände
   const argumentsList = npmArgumentsIn(context, CI_TESTS, {
     event: "merge_group",
     cwd: repository,
-    environment: { PR_BASE_SHA: base, TEIL: "1", TEILE: "1" },
+    environment: { PR_BASE_SHA: base, TEIL: EIN_TEIL_FUER_ALLE_DATEIEN, TEILE: EIN_TEIL_FUER_ALLE_DATEIEN },
   });
   const productTests = SUITE_FILES.filter((suiteFile) => !suiteFile.startsWith("test/werkzeuge/"));
   assert.deepEqual(testRunnerArguments(argumentsList).toSorted(), [...productTests, ROUND_ROBIN_PART_TOOL_FILE].toSorted());
