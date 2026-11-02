@@ -87,14 +87,13 @@ test("Nachrunde mit geänderter Konfiguration prüft alle Mutanten neu", FRIST, 
   const { geholt, lauf } = mitVorergebnis({ "test/null.test.js": NULLTEST, "package.json": '{ "type": "module", "private": true }\n' });
   assert.match(geholt.stdout, AUS_VORLAUF);
   assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
-  assert.match(lauf.ausgaben, /^Mutationsprüfung: Vorergebnis passt nicht zum Stand \(.+\), voller Neulauf\.$/m);
   assert.equal(ersteLaeufe(lauf.ausgaben), alle);
 });
 
 test("Nachrunde mit geändertem Produktcode prüft alle Mutanten neu", FRIST, () => {
   const { lauf } = mitVorergebnis({ "test/null.test.js": NULLTEST, "src/zahl.js": quelle(NEGATIV, NULL, "  if (zahl === 10) return \"zehn\";") + VERDOPPELN });
   assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
-  assert.match(lauf.ausgaben, /^Mutationsprüfung: Vorergebnis passt nicht zum Stand \(.+\), voller Neulauf\.$/m);
+  assert.ok(ersteLaeufe(lauf.ausgaben) > zahlen().alle);
 });
 
 test("Urteil aus Teilmenge und Übernahme gleicht dem Urteil eines vollen Neulaufs", FRIST, () => {
@@ -157,11 +156,14 @@ test("ein im Commit liegendes Vorergebnis mit erfundenem Status wird nicht gegla
   assert.deepEqual(zusammenfassung(lauf.urteil.stdout), zusammenfassung(voll.urteil.stdout));
 });
 
-test("Nachrunde mit gelöschter Testdatei prüft alle Mutanten neu", FRIST, () => {
-  const { alle } = zahlen();
+test("Nachrunde mit gelöschter Testdatei, die keinen Mutanten getötet hat, übernimmt die getöteten Mutanten", FRIST, () => {
   const { lauf } = mitVorergebnis({ "test/null.test.js": NULLTEST }, { entfernen: ["test/weitere.test.js"] });
-  assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
-  assert.equal(ersteLaeufe(lauf.ausgaben), alle);
+  pruefeAuswahl(lauf, []);
+});
+
+test("Nachrunde mit gelöschter tötender Testdatei prüft deren Mutanten neu", FRIST, () => {
+  const { lauf } = mitVorergebnis({ "test/null.test.js": NULLTEST }, { entfernen: ["test/verdoppeln.test.js"] });
+  assert.ok(ersteLaeufe(lauf.ausgaben) > erwartung(alleEintraege(vorlauf.ordner), []).geprueft);
 });
 
 test("Nachrunde mit geänderter Datei unter test/, die kein Test erreicht, prüft alle Mutanten neu", FRIST, () => {

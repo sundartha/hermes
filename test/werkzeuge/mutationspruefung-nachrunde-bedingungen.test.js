@@ -76,8 +76,8 @@ test("ein mit success abgeschlossener Vorlauf wird angenommen", FRIST, () => {
   assert.equal(angenommen({ gh: { conclusion: "success" } }), zahlBestaetigt());
 });
 
-test("ein abgebrochener Vorlauf wird nicht angenommen", FRIST, () => {
-  abgelehnt({ gh: { conclusion: "cancelled" } }, /nicht mit Urteil abgeschlossen/);
+test("ein abgebrochener Vorlauf wird angenommen, seine fertigen Teile sind Belege", FRIST, () => {
+  assert.equal(angenommen({ gh: { conclusion: "cancelled" } }), zahlBestaetigt());
 });
 
 test("ein Vorlauf eines anderen Ereignisses als des Abrufs wird nicht angenommen", FRIST, () => {
@@ -192,22 +192,16 @@ test("Teilergebnisse mit verschiedenen Prüfungen gehören nicht zu einem Plan",
   );
 });
 
-test("zwei Teilergebnisse mit derselben Nummer sind nicht vollständig", FRIST, () => {
-  abgelehnt(zweiTeile({ teil: 1 }), /nicht alle Teilergebnisse/);
+test("zwei Teilergebnisse mit derselben Nummer werden nicht angenommen", FRIST, () => {
+  abgelehnt(zweiTeile({ teil: 1 }), /doppelte Teilergebnisse/);
 });
 
-test("ein Teilergebnis von zwei geplanten Teilen ist nicht vollständig", FRIST, () => {
-  abgelehnt(
-    mitTeilen(([erster]) => [{ ...erster, teile: 2 }]),
-    /nicht alle Teilergebnisse/,
-  );
+test("ein Teilergebnis von zwei geplanten Teilen liefert die Belege des fertigen Teils", FRIST, () => {
+  assert.equal(angenommen(mitTeilen(([erster]) => [{ ...erster, teile: 2 }])), zahlBestaetigt());
 });
 
-test("ein einziges Teilergebnis mit der Nummer 2 ist nicht vollständig", FRIST, () => {
-  abgelehnt(
-    mitTeilen(([erster]) => [{ ...erster, teil: 2 }]),
-    /nicht alle Teilergebnisse/,
-  );
+test("ein einziges Teilergebnis mit der Nummer 2 liefert seine Belege", FRIST, () => {
+  assert.equal(angenommen(mitTeilen(([erster]) => [{ ...erster, teil: 2 }])), zahlBestaetigt());
 });
 
 test("ein Vorlauf mit derselben Nummer wie der laufende wird nicht angenommen", FRIST, () => {
@@ -388,8 +382,23 @@ test("ein Mutant, bei dem einer von zwei Tötern die Quelle nicht erreicht, wird
   ganzNeuGeprueft(mitEintraegen((eintraege) => eintraege.map((eintrag) => ({ ...eintrag, toeter: ["test/zahl.test.js", "test/weitere.test.js"] }))));
 });
 
-test("liegt ein Eintrag der Datei außerhalb der geprüften Zeilen, wird die ganze Datei neu geprüft", FRIST, () => {
-  ganzNeuGeprueft(mitEintraegen(([erster, ...rest]) => [{ ...erster, zeilen: [900, 900] }, ...rest]));
+function fremderBelegNeuGeprueft(schluessel) {
+  const fremd = mitEintraegen((eintraege) => {
+    const ort = (eintrag) => JSON.stringify(eintrag.lage);
+    const index = eintraege.findIndex((eintrag) => bestaetigtGetoetet(eintrag) && eintraege.filter((anderer) => ort(anderer) === ort(eintrag)).every(bestaetigtGetoetet));
+    return eintraege.map((eintrag, nummer) => (nummer === index ? { ...eintrag, schluessel } : eintrag));
+  });
+  const { lauf } = ausVorergebnis(fremd);
+  const gewoehnlich = ausVorergebnis((berichte) => berichte).lauf;
+  assert.ok(ersteLaeufe(lauf.ausgaben) > ersteLaeufe(gewoehnlich.ausgaben), lauf.ausgaben);
+}
+
+test("ein Beleg für einen Mutanten, den die Quelle nicht hat, wird nicht übernommen; der echte Mutant an seiner Stelle wird neu geprüft", FRIST, () => {
+  fremderBelegNeuGeprueft("src/zahl.js:900:1-900:5 Fremd → x");
+});
+
+test("ein Beleg für einen Mutanten vor dem Beginn der geprüften Zeilen wird nicht übernommen; der echte Mutant an seiner Stelle wird neu geprüft", FRIST, () => {
+  fremderBelegNeuGeprueft("src/zahl.js:1:1-1:5 ConditionalExpression → false");
 });
 
 test("fehlt im Vorlauf ein Mutant und ist kein Töter mehr gültig, wird die Datei vollständig neu geprüft", FRIST, () => {
@@ -411,17 +420,8 @@ test("ein Vorergebnis von einer anderen Node-Version wird nicht übernommen", FR
   assert.match(kontextZeilen((vorergebnis) => ({ ...vorergebnis, umgebung: "v1.2.3" })), /kein Vorergebnis \(andere Node-Version \(v1\.2\.3\)\), voller Neulauf\./);
 });
 
-test("ein Vorergebnis mit anderer Zahl von Prüfungen wird nicht übernommen", FRIST, () => {
-  assert.match(kontextZeilen((vorergebnis) => ({ ...vorergebnis, pruefungen: [...vorergebnis.pruefungen, ...vorergebnis.pruefungen] })), /kein Vorergebnis \(andere Zahl von Prüfungen\), voller Neulauf\./);
-});
-
-test("ein Vorergebnis von der anderen Seite der Prüfung wird nicht übernommen", FRIST, () => {
-  const alt = (vorergebnis) => ({ ...vorergebnis, pruefungen: vorergebnis.pruefungen.map((pruefung) => ({ ...pruefung, seite: "alt" })) });
-  assert.match(kontextZeilen(alt), /Vorergebnis passt nicht zum Stand \(andere Seite der Prüfung\), voller Neulauf\./);
-});
-
-test("ein Vorergebnis für einen anderen Stand der Dateien außerhalb von test/ wird nicht übernommen", FRIST, () => {
-  assert.match(kontextZeilen((vorergebnis) => vorergebnis), /Vorergebnis passt nicht zum Stand \(Dateien außerhalb von test\/ geändert\), voller Neulauf\./);
+test("ein Beleg von der anderen Seite der Prüfung wird nicht übernommen", FRIST, () => {
+  ganzNeuGeprueft((teile) => teile.map((teil) => ({ ...teil, pruefungen: teil.pruefungen.map((pruefung) => ({ ...pruefung, seite: "alt" })) })));
 });
 
 test("ein Arbeitsbaum mit losen Dateien nimmt kein Vorergebnis an", FRIST, () => {
@@ -436,7 +436,11 @@ test("Dateien im Arbeitsordner der Mutationsprüfung machen den Arbeitsbaum nich
   };
   const zeilen = kontextZeilen((vorergebnis) => vorergebnis, arbeitsordner);
   assert.doesNotMatch(zeilen, /Arbeitsbaum nicht sauber/);
-  assert.match(zeilen, /Vorergebnis passt nicht zum Stand/);
+  assert.doesNotMatch(zeilen, KEIN_VORERGEBNIS);
+});
+
+test("ein Vorergebnis im älteren Format ohne Belege je Mutant heißt leer", FRIST, () => {
+  assert.match(kontextZeilen((vorergebnis) => ({ ...vorergebnis, belege: undefined, pruefungen: [] })), /kein Vorergebnis \(leer\), voller Neulauf\./);
 });
 
 test("ein Vorergebnis ohne Lauf nennt seinen Grund in der Logzeile", FRIST, () => {
@@ -470,12 +474,8 @@ test("das Urteil verwirft Teilergebnisse, die zu einem anderen Vorergebnis gehö
   assert.match(ohne.stdout + ohne.stderr, /gehören zu einem anderen Vorergebnis/);
 });
 
-test("liegt ein Eintrag der Datei vor dem Beginn der geprüften Zeilen, wird die ganze Datei neu geprüft", FRIST, () => {
-  ganzNeuGeprueft(mitEintraegen(([erster, ...rest]) => [{ ...erster, zeilen: [0, 1] }, ...rest]));
-});
-
 test("ein noch laufender Vorlauf mit gesetztem Ergebnis wird nicht angenommen", FRIST, () => {
-  abgelehnt({ gh: { status: "in_progress", conclusion: "failure" } }, /nicht mit Urteil abgeschlossen/);
+  abgelehnt({ gh: { status: "in_progress", conclusion: "failure" } }, /nicht beendet/);
 });
 
 test("ein Vorergebnis ohne Teil oder Urteil ist ein Aufruffehler", FRIST, () => {
@@ -492,7 +492,10 @@ test("das Holen des Vorergebnisses neben anderen Angaben ist ein Aufruffehler", 
   assert.match(lauf.stderr, /--vorergebnis-holen <datei>/);
 });
 
-const ALLE_GETOETET = mitEintraegen((eintraege) => eintraege.map((eintrag) => ({ ...eintrag, status: "Killed", bestaetigung: "getoetet", toeter: ["test/zahl.test.js"], hinweis: undefined, befund: undefined })));
+const ALLE_GETOETET = mitEintraegen((eintraege) => {
+  const stand = eintraege.find((eintrag) => bestaetigtGetoetet(eintrag) && eintrag.toeter.join() === "test/zahl.test.js").stand;
+  return eintraege.map((eintrag) => ({ ...eintrag, status: "Killed", bestaetigung: "getoetet", toeter: ["test/zahl.test.js"], hinweis: undefined, befund: undefined, stand }));
+});
 
 function alleUebernommen(dateien) {
   const { lauf } = ausVorergebnis(ALLE_GETOETET, dateien);

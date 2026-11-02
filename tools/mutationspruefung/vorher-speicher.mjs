@@ -11,7 +11,7 @@ export const SCHLUESSEL_ANZEIGE = 12;
 const GELOESCHT = "fehlt";
 const NUL = "\0";
 export const HERKUNFT_CI = "ci";
-const PFADE_AUS_DEM_NEUEN_STAND = [
+export const PFADE_AUS_DEM_NEUEN_STAND = [
   "tools",
   "stryker.config.json",
   "package.json",
@@ -22,9 +22,13 @@ const PFADE_AUS_DEM_NEUEN_STAND = [
 ];
 export const INSTALLIERTE_MODULE = "node_modules/.package-lock.json";
 
+export function verfolgteDateien(root, pfade) {
+  const liste = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...pfade], { cwd: root });
+  return [...new Set(liste.split(NUL).filter(Boolean))].sort();
+}
+
 export function werkzeugEingaben(root) {
-  const liste = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...PFADE_AUS_DEM_NEUEN_STAND], { cwd: root });
-  return [...new Set([...liste.split(NUL).filter(Boolean), INSTALLIERTE_MODULE])].sort();
+  return [...new Set([...verfolgteDateien(root, PFADE_AUS_DEM_NEUEN_STAND), INSTALLIERTE_MODULE])].sort();
 }
 
 function inhaltsHash(root, pfad) {
@@ -35,8 +39,12 @@ function inhaltsHash(root, pfad) {
   return createHash("sha256").update(readFileSync(datei)).digest("hex");
 }
 
+export function mitInhalt(root, pfade) {
+  return pfade.map((pfad) => [pfad, inhaltsHash(root, pfad)]);
+}
+
 export function werkzeugStand(root) {
-  const werkzeug = werkzeugEingaben(root).map((pfad) => [pfad, inhaltsHash(root, pfad)]);
+  const werkzeug = mitInhalt(root, werkzeugEingaben(root));
   if (werkzeug.some(([, hash]) => hash === null)) return null;
   return { werkzeug, node: version, plattform: `${platform}-${arch}` };
 }

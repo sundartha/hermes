@@ -1,4 +1,4 @@
-import { abrufLaufBefund, gh, ghRepo, mitUrteilAbgeschlossen } from "./gh.mjs";
+import { abrufLaufBefund, gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
 
 const PR_EREIGNIS = "pull_request";
 const PR_REFERENZ = /^refs\/pull\/([1-9]\d*)\/merge$/;
@@ -7,6 +7,12 @@ const MODUS_SCHATTEN = "schatten";
 const MODUS_AN = "an";
 const MODUS_AUS = "aus";
 const MODI = new Set([MODUS_SCHATTEN, MODUS_AN, MODUS_AUS]);
+const BEENDET = new Set(["success", "failure", "cancelled"]);
+const VORLAEUFE_HOECHSTENS = 3;
+
+export function beendet(lauf) {
+  return lauf.status === LAUF_FERTIG && BEENDET.has(lauf.conclusion);
+}
 
 export function pullRequestNummer(umgebung) {
   if (umgebung.GITHUB_EVENT_NAME !== PR_EREIGNIS) return null;
@@ -25,15 +31,15 @@ function laeufeDesBranches(umgebung) {
   return JSON.parse(gh(["api", `repos/${ghRepo()}/actions/workflows/ci.yml/runs?${abfrage}`])).workflow_runs ?? [];
 }
 
-export function vorlaufImPullRequest(umgebung, pullRequest) {
+export function vorlaeufeImPullRequest(umgebung, pullRequest) {
   const modus = modusVon(umgebung);
   if (!MODI.has(modus)) return { grund: `MUTATION_UEBERNAHME_PR hat den unbekannten Wert ${JSON.stringify(modus)}` };
   if (modus === MODUS_AUS) return { grund: "die Übernahme im Pull Request ist ausgeschaltet" };
   if (!umgebung.GITHUB_HEAD_REF) return { grund: "der Zweig des Pull Requests ist unbekannt" };
   const herkunft = { ereignis: PR_EREIGNIS, pullRequest };
   const frueher = laeufeDesBranches(umgebung)
-    .filter((lauf) => lauf.id < Number(umgebung.GITHUB_RUN_ID) && mitUrteilAbgeschlossen(lauf) && abrufLaufBefund(lauf, ghRepo(), herkunft) === null)
+    .filter((lauf) => lauf.id < Number(umgebung.GITHUB_RUN_ID) && beendet(lauf) && abrufLaufBefund(lauf, ghRepo(), herkunft) === null)
     .sort((links, rechts) => rechts.id - links.id);
   if (frueher.length === 0) return { grund: "kein früherer abgeschlossener Lauf dieses Pull Requests" };
-  return { id: frueher[0].id, herkunft, uebernimmt: modus === MODUS_AN };
+  return { ids: frueher.slice(0, VORLAEUFE_HOECHSTENS).map(({ id }) => id), herkunft, uebernimmt: modus === MODUS_AN };
 }

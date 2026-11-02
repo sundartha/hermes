@@ -12,9 +12,10 @@ export const NUL = "\0";
 const AUFTRAG_ZEILE = "^Auftrag: ";
 const RUECKNAHME_ZEILE = "^This reverts commit ";
 const ZURUECKGENOMMEN = /^This reverts commit ([0-9a-f]{40})\.$/gm;
+const MAX_AUSGABE = 268_435_456;
 
 export function git(args, { cwd, eingabe } = {}) {
-  const lauf = spawnSync("git", args, { cwd, encoding: "utf8", input: eingabe });
+  const lauf = spawnSync("git", args, { cwd, encoding: "utf8", input: eingabe, maxBuffer: MAX_AUSGABE });
   if (lauf.status !== 0) {
     throw new Error(`git ${args.join(" ")} ist mit Exit ${lauf.status} gescheitert: ${lauf.stderr}`);
   }
