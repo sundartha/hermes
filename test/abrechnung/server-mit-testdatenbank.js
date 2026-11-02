@@ -53,12 +53,31 @@ function telnyxLehntAnrufstartAb() {
   process.env.TELNYX_API_BASE = TELNYX_BASIS;
 }
 
-async function datenbankOhneSonderrechte(storeHolen) {
+function sqlName(name) {
+  if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`Testaufbau: ungültiger Rollen- oder Datenbankname ${String(name)}`);
+  return `"${name}"`;
+}
+
+async function rechteVorbereiten(db, { zusatzRollen, appRolleDatenbankAnlegen, appRolleVerwaltetZusatzRollen }) {
+  const anweisungen = zusatzRollen.map((rolle) => `CREATE ROLE ${sqlName(rolle)} NOLOGIN NOSUPERUSER NOBYPASSRLS;`);
+  if (appRolleDatenbankAnlegen) {
+    const { rows } = await db.query("SELECT current_database() AS name");
+    anweisungen.push(`GRANT CREATE ON DATABASE ${sqlName(rows[0].name)} TO kv2_app;`);
+  }
+  if (appRolleVerwaltetZusatzRollen) {
+    anweisungen.push(...zusatzRollen.map((rolle) => `GRANT ${sqlName(rolle)} TO kv2_app WITH ADMIN OPTION;`));
+  }
+  return anweisungen.join("\n");
+}
+
+async function datenbankOhneSonderrechte(storeHolen, rechte) {
   const anlegen = aufraeumenVormerken(storeHolen);
   const db = await anlegen(await vorlage("leer", async () => {}, []));
   await db.exec(`CREATE ROLE kv2_app NOSUPERUSER NOBYPASSRLS;
-    GRANT CREATE, USAGE ON SCHEMA public TO kv2_app;
-    SET ROLE kv2_app;`);
+    GRANT CREATE, USAGE ON SCHEMA public TO kv2_app;`);
+  const zusaetzlich = await rechteVorbereiten(db, rechte);
+  if (zusaetzlich) await db.exec(zusaetzlich);
+  await db.exec("SET ROLE kv2_app;");
   return db;
 }
 
@@ -77,6 +96,32 @@ async function unbelegtenAnrufAnlegen(store) {
   await store.drainFlushes();
 }
 
+function abfrageAn(db) {
+  return async (text, params) => {
+    if (params !== undefined) return db.query(text, params);
+    const ergebnisse = await db.exec(text);
+    return ergebnisse.at(-1) ?? { rows: [] };
+  };
+}
+
+function clientAufPglite(db) {
+  const angelegt = [];
+  pg.Client = class PgliteClient extends EventEmitter {
+    constructor(optionen) {
+      super();
+      this.optionen = optionen;
+      angelegt.push(this);
+    }
+
+    async connect() {}
+
+    query = abfrageAn(db);
+
+    async end() {}
+  };
+  return angelegt;
+}
+
 export function poolAufPglite(db) {
   const angelegt = [];
   pg.Pool = class PglitePool extends EventEmitter {
@@ -90,14 +135,7 @@ export function poolAufPglite(db) {
     }
 
     async connect() {
-      return {
-        query: async (text, params) => {
-          if (params !== undefined) return db.query(text, params);
-          const ergebnisse = await db.exec(text);
-          return ergebnisse.at(-1) ?? { rows: [] };
-        },
-        release() {},
-      };
+      return { query: abfrageAn(db), release() {} };
     }
 
     async end() {}
@@ -164,7 +202,20 @@ export async function starteHermesMitPglite(optionen) {
   };
 }
 
-async function hermesAufbauen({ alarmPostfach, anrufstartAbgelehnt = false }) {
+const ERNEUTE_STORE_STARTS = [
+  () => import("../../src/store.js?schema-erneut-1"),
+  () => import("../../src/store.js?schema-erneut-2"),
+  () => import("../../src/store.js?schema-erneut-3"),
+];
+
+async function hermesAufbauen({
+  alarmPostfach,
+  anrufstartAbgelehnt = false,
+  zusatzRollen = [],
+  appRolleDatenbankAnlegen = false,
+  appRolleVerwaltetZusatzRollen = false,
+  clientBruecke = false,
+}) {
   const testPostfach = [];
   let server = null;
   let store = null;
@@ -174,8 +225,9 @@ async function hermesAufbauen({ alarmPostfach, anrufstartAbgelehnt = false }) {
   });
   umgebungSetzen(alarmPostfach);
   if (anrufstartAbgelehnt) telnyxLehntAnrufstartAb();
-  const db = await datenbankOhneSonderrechte(() => store);
+  const db = await datenbankOhneSonderrechte(() => store, { zusatzRollen, appRolleDatenbankAnlegen, appRolleVerwaltetZusatzRollen });
   poolAufPglite(db);
+  if (clientBruecke) clientAufPglite(db);
   aussenweltAbfangen(testPostfach);
   store = await import("../../src/store.js");
   await unbelegtenAnrufAnlegen(store);
@@ -219,5 +271,18 @@ async function hermesAufbauen({ alarmPostfach, anrufstartAbgelehnt = false }) {
     return tenantId;
   }
 
-  return { db, testPostfach, anfrage, anmelden, warteAufProtokoll, betreiberDarfAnrufen };
+  let schemaLaeufe = 0;
+  async function schemaErneutAnwenden() {
+    const frischerStore = ERNEUTE_STORE_STARTS[schemaLaeufe];
+    if (!frischerStore) throw new Error(`Testaufbau: Schema lässt sich höchstens ${ERNEUTE_STORE_STARTS.length}-mal erneut anwenden`);
+    schemaLaeufe += 1;
+    await mitFrist(frischerStore(), START_FRIST_MS, "Schema erneut anwenden");
+  }
+
+  function neuerClient() {
+    if (!clientBruecke) throw new Error("Testaufbau: neuerClient braucht die Option clientBruecke");
+    return new pg.Client({ connectionString: process.env.DATABASE_URL });
+  }
+
+  return { db, testPostfach, anfrage, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }
