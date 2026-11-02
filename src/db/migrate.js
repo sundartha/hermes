@@ -7,11 +7,16 @@ import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUSGANG_NAME = "0001_ausgang.sql";
+const VERSIONSTABELLE_NAME = "0002_versionstabelle.sql";
 
 const MIGRATION_READERS = [
   {
     name: AUSGANG_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", AUSGANG_NAME), "utf8"),
+  },
+  {
+    name: VERSIONSTABELLE_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", VERSIONSTABELLE_NAME), "utf8"),
   },
 ];
 
