@@ -9,12 +9,11 @@ const PLAYWRIGHT_CACHE = join(homedir(), "Library", "Caches", "ms-playwright");
 const LINUX_PLAYWRIGHT_CACHE = join(homedir(), ".cache", "ms-playwright");
 const SYSTEM_BROWSERS = ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
 const SHELL_NAME = "chrome-headless-shell";
-const START_TIMEOUT_MS = 15000;
 const HOST_GROUND = [255, 0, 255];
 const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
 const SETTLED_BINDING = "hermesFrameSettled";
-const STABLE_PHOTO_ATTEMPTS = 20;
+const FRAME_STATE = "hermesFrameState";
 
 function findInCache(cache) {
   if (!existsSync(cache)) return null;
@@ -41,28 +40,36 @@ function hostPage(widgetHtml, frameWidth, honorWidth) {
 <iframe id="f" style="display:block;border:0;width:${frameWidth}px;height:10px"></iframe>
 <script>
 const frame = document.getElementById("f");
-const nextFrame = () => new Promise((done) => requestAnimationFrame(() => done()));
+let report = null;
 let reports = 0;
 let loaded = false;
-async function settleWhenQuiet() {
-  if (!loaded || reports === 0) return;
+function consistentReport() {
+  if (!loaded || !report) return null;
+  const body = frame.contentDocument.body;
+  const box = frame.getBoundingClientRect();
+  const width = ${honorWidth} ? Math.min(report.width, ${frameWidth}) : ${frameWidth};
+  if (body.scrollWidth !== report.width || body.scrollHeight !== report.height) return null;
+  if (box.width !== width || box.height !== report.height) return null;
+  return reports;
+}
+window.${FRAME_STATE} = consistentReport;
+async function settleWhenConsistent() {
+  if (!loaded || !report) return;
   const seen = reports;
   await frame.contentDocument.fonts.ready;
-  await nextFrame();
-  await nextFrame();
-  if (seen !== reports) return;
-  const box = frame.getBoundingClientRect();
-  window[${JSON.stringify(SETTLED_BINDING)}](JSON.stringify({ width: box.width, height: box.height }));
+  if (seen !== reports || consistentReport() !== seen) return;
+  window[${JSON.stringify(SETTLED_BINDING)}](String(seen));
 }
 window.addEventListener("message", (event) => {
   const m = event.data;
   if (!m || m.method !== "ui/notifications/size-changed" || !(m.params.height > 0)) return;
   frame.style.height = m.params.height + "px";
   if (${honorWidth}) frame.style.width = Math.min(m.params.width, ${frameWidth}) + "px";
+  report = m.params;
   reports += 1;
-  settleWhenQuiet();
+  settleWhenConsistent();
 });
-frame.addEventListener("load", () => { loaded = true; settleWhenQuiet(); });
+frame.addEventListener("load", () => { loaded = true; settleWhenConsistent(); });
 frame.srcdoc = new TextDecoder().decode(Uint8Array.from(atob("${source}"), (c) => c.charCodeAt(0)));
 </script></body></html>`;
 }
@@ -74,8 +81,8 @@ function launch(chrome) {
     ["--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"],
     { stdio: ["ignore", "ignore", "pipe"] },
   );
+  const exited = new Promise((resolve) => child.once("exit", resolve));
   const endpoint = new Promise((resolve, reject) => {
-    AbortSignal.timeout(START_TIMEOUT_MS).addEventListener("abort", () => reject(new Error("Browser startet nicht")));
     let log = "";
     child.stderr.on("data", (chunk) => {
       log += chunk;
@@ -84,10 +91,12 @@ function launch(chrome) {
         resolve(found[1]);
       }
     });
-    child.on("exit", () => reject(new Error("Browser beendet")));
+    exited.then(() => reject(new Error("Browser beendet")));
   });
-  const stop = () => {
-    child.kill("SIGKILL");
+  const stop = async (send) => {
+    if (send) send("Browser.close").catch(() => child.kill("SIGKILL"));
+    else child.kill("SIGKILL");
+    await exited;
     rmSync(profile, { recursive: true, force: true });
   };
   return { endpoint, stop };
@@ -97,12 +106,14 @@ function connect(url) {
   const socket = new WebSocket(url);
   const pending = new Map();
   const eventWaiters = new Map();
+  const unclaimedEvents = new Map();
   let next = 0;
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.method) {
-      for (const done of eventWaiters.get(message.method) || []) done(message.params);
-      eventWaiters.delete(message.method);
+      const waiting = eventWaiters.get(message.method) || [];
+      if (waiting.length > 0) waiting.shift()(message.params);
+      else unclaimedEvents.set(message.method, [...(unclaimedEvents.get(message.method) || []), message.params]);
       return;
     }
     const waiting = pending.get(message.id);
@@ -123,7 +134,9 @@ function connect(url) {
     });
   const nextEvent = (method) =>
     new Promise((resolve) => {
-      eventWaiters.set(method, [...(eventWaiters.get(method) || []), resolve]);
+      const unclaimed = unclaimedEvents.get(method) || [];
+      if (unclaimed.length > 0) resolve(unclaimed.shift());
+      else eventWaiters.set(method, [...(eventWaiters.get(method) || []), resolve]);
     });
   return { opened, send, nextEvent, close: () => socket.close() };
 }
@@ -139,26 +152,13 @@ async function photographFrame(send, sessionId) {
   return { width, height, png: Buffer.from(shot.data, "base64") };
 }
 
-function sameFrame(first, second) {
-  if (first.width !== second.width || first.height !== second.height) return false;
-  const a = decodePng(first.png);
-  const b = decodePng(second.png);
-  for (let y = 0; y < a.height; y += 1) {
-    for (let x = 0; x < a.width; x += 1) {
-      if (isHostGround(a.at(x, y)) !== isHostGround(b.at(x, y))) return false;
-    }
-  }
-  return true;
-}
-
-async function stablePhoto(send, sessionId) {
-  let previous = await photographFrame(send, sessionId);
-  for (let attempt = 0; attempt < STABLE_PHOTO_ATTEMPTS; attempt += 1) {
+async function settledPhoto(send, nextEvent, sessionId) {
+  for (;;) {
+    const settled = await nextEvent("Runtime.bindingCalled");
     const photo = await photographFrame(send, sessionId);
-    if (sameFrame(previous, photo)) return photo;
-    previous = photo;
+    const { result } = await send("Runtime.evaluate", { expression: `${FRAME_STATE}()`, returnByValue: true }, sessionId);
+    if (String(result.value) === settled.payload) return photo;
   }
-  throw new Error("Der Rahmen wird nicht still: zwei Fotos nacheinander zeigen verschiedene Host-Fläche");
 }
 
 export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, honorWidth = false }) {
@@ -174,13 +174,11 @@ export async function renderInFrame(chrome, widgetHtml, { width: frameWidth, hon
     await send("Runtime.enable", {}, sessionId);
     await send("Runtime.addBinding", { name: SETTLED_BINDING }, sessionId);
     const page = hostPage(widgetHtml, frameWidth, honorWidth);
-    const settled = nextEvent("Runtime.bindingCalled");
     await send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(page).toString("base64")}` }, sessionId);
-    await settled;
-    return await stablePhoto(send, sessionId);
+    return await settledPhoto(send, nextEvent, sessionId);
   } finally {
+    await browser.stop(client && client.send);
     if (client) client.close();
-    browser.stop();
   }
 }
 
