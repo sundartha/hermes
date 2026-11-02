@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { SYSTEM_LABEL, aeltestesSystemIssue } from "../auftrag/system.mjs";
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
 import { ersetzeSteuerzeichen } from "../auftrag/pruefer-schema.mjs";
-import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
+import { nimmTokenReihe } from "../auftrag/token-reihe.mjs";
+import { agentBefehl, agentZeit, istWartend, starteAgent } from "./agent.mjs";
 import {
   BLOCKIERT,
   GEAENDERT,
@@ -211,13 +212,13 @@ async function imArchiv(root, ausfuehren) {
   }
 }
 
-async function vorschlagsLauf(root, { zaehlung, token }) {
+async function vorschlagsLauf(root, { zaehlung, reihe }) {
   const { fehlt, knapp, sekunden } = agentZeit(root, BUDGET_NAME, { start: zaehlung.start, reserve: RESERVE_ISSUE_SEKUNDEN });
   if (fehlt) return { grund: fehlt, tokens: 0, zuege: 0 };
   if (knapp) return { grund: knapp, wartend: true, tokens: 0, zuege: 0 };
   const befehl = agentBefehl({ werkzeuge: "Read,Grep,Glob", erlaubt: [], modell: "opus", schema: SCHEMA, prompt: PROMPT });
   return imArchiv(root, (stand) =>
-    starteAgent({ root: stand, befehl, eingabe: vorschlagsAuftrag(zaehlung.kandidat), sekunden, token, pruefeAntwort: gueltigerVorschlag }),
+    starteAgent({ root: stand, befehl, eingabe: vorschlagsAuftrag(zaehlung.kandidat), sekunden, reihe, pruefeAntwort: gueltigerVorschlag }),
   );
 }
 
@@ -229,10 +230,10 @@ function vorschlagsErgebnis(lauf) {
 }
 
 export async function vorschlagen({ ordner }, root) {
-  const token = nimmToken();
+  const reihe = nimmTokenReihe();
   const zaehlung = leseJson(join(ordner, ZAEHL_ORDNER), ZAEHL_DATEI);
   if (!zaehlung?.kandidat) throw new Error("es gibt keinen Kandidaten für einen Vorschlag");
-  const lauf = await vorschlagsLauf(root, { zaehlung, token });
+  const lauf = await vorschlagsLauf(root, { zaehlung, reihe });
   const { ergebnis, rot } = vorschlagsErgebnis(lauf);
   schreibeJson(join(ordner, VORSCHLAG_ORDNER), VORSCHLAG_DATEI, ergebnis);
   setzeAusgaben({ ausgang: ergebnis.ausgang, grund: ergebnis.grund });

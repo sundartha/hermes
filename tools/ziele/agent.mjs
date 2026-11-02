@@ -5,13 +5,14 @@ import { env } from "node:process";
 
 import {
   CLI_PFAD,
-  LIMIT_GRUND,
+  istLimit,
   REGELN,
   TOKEN_GRUND,
   alsObjekt,
   starteMitFrist,
   verbrauch,
 } from "../auftrag/pruefer-lauf.mjs";
+import { alsReihe } from "../auftrag/token-reihe.mjs";
 import { WERKZEUG_ROOT } from "./werkzeuge.mjs";
 
 const BUDGET_DATEI = ".github/budget.json";
@@ -46,12 +47,6 @@ export function agentZeit(root, name, { start, jetzt = Date.now(), reserve }) {
   const sekunden = restSekunden(minuten, { start, jetzt, reserve });
   if (sekunden < MIN_AGENT_SEKUNDEN) return { knapp: `nur noch ${sekunden} s im Budget`, sekunden, minuten };
   return { sekunden, minuten };
-}
-
-export function nimmToken() {
-  const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
-  delete env.CLAUDE_CODE_OAUTH_TOKEN;
-  return token;
 }
 
 export function agentBefehl({ werkzeuge, erlaubt, modell, schema, prompt }) {
@@ -101,8 +96,7 @@ export function werteLaufAus(lauf, { token, pruefeAntwort }) {
   return { grund, antwort: grund ? null : antwort, ...zaehler };
 }
 
-export async function starteAgent({ root, befehl, eingabe, sekunden, token, pruefeAntwort }) {
-  if (!token) return { grund: TOKEN_GRUND, antwort: null, tokens: 0, zuege: 0 };
+async function starteMitToken({ root, befehl, eingabe, sekunden, token, pruefeAntwort }) {
   const home = mkdtempSync(join(tmpdir(), "ziele-home-"));
   try {
     const lauf = await starteMitFrist(befehl, {
@@ -117,6 +111,12 @@ export async function starteAgent({ root, befehl, eingabe, sekunden, token, prue
   }
 }
 
+export async function starteAgent({ reihe: gegeben, token, ...lauf }) {
+  const reihe = alsReihe(gegeben ?? token);
+  if (reihe.leer) return { grund: TOKEN_GRUND, antwort: null, tokens: 0, zuege: 0 };
+  return reihe.versuche((eins) => starteMitToken({ ...lauf, token: eins }), { istLimit });
+}
+
 export function istWartend(grund) {
-  return grund === LIMIT_GRUND;
+  return istLimit({ grund });
 }

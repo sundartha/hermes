@@ -21,6 +21,7 @@ import {
   gehoertInAblage,
   gekuerzt,
 } from "./pruefer-schema.mjs";
+import { alsReihe } from "./token-reihe.mjs";
 
 export const CLI_PFAD = "tools/pruefer/node_modules/@anthropic-ai/claude-code-linux-x64/claude";
 const AGENT_DATEI = ".claude/agents/pruefer.md";
@@ -32,6 +33,9 @@ const EXIT_OHNE_STATUS = 1;
 const MAX_ZEILEN = 100_000;
 export const LIMIT_GRUND = "Nutzungslimit erreicht";
 export const ANMELDUNG_GRUND = "Anmeldung gescheitert (authentication_failed)";
+export function istLimit({ grund }) {
+  return grund === LIMIT_GRUND;
+}
 export const TOKEN_GRUND = "Token fehlt";
 export const ZEIT_GRUND = "Zeit des Prüfer-Jobs reicht nicht";
 const LIMIT = /limit/i;
@@ -373,6 +377,12 @@ export function nichtGelaufen(commit, grund) {
   });
 }
 
+async function versuchMitToken(commit, kontext, token) {
+  const zeitgrenzeMs = zeitgrenzeFuer(kontext.restzeit?.() ?? Infinity);
+  if (zeitgrenzeMs === null) return nichtGelaufen(commit, ZEIT_GRUND);
+  return eintrag(commit, await rufeAuf(commit, { ...kontext, token, zeitgrenzeMs }));
+}
+
 export async function pruefeCommit(commit, kontext) {
   if (commit.dateien.length === 0 && !commit.letzter) {
     return eintrag(commit, {
@@ -382,8 +392,7 @@ export async function pruefeCommit(commit, kontext) {
       zaehler: zaehlerDer([], null),
     });
   }
-  if (!kontext.token) return nichtGelaufen(commit, TOKEN_GRUND);
-  const zeitgrenzeMs = zeitgrenzeFuer(kontext.restzeit?.() ?? Infinity);
-  if (zeitgrenzeMs === null) return nichtGelaufen(commit, ZEIT_GRUND);
-  return eintrag(commit, await rufeAuf(commit, { ...kontext, zeitgrenzeMs }));
+  const reihe = alsReihe(kontext.reihe ?? kontext.token);
+  if (reihe.leer) return nichtGelaufen(commit, TOKEN_GRUND);
+  return reihe.versuche((token) => versuchMitToken(commit, kontext, token), { istLimit });
 }
