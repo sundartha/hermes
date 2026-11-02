@@ -4,7 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const FUNKTIONSKARTE = join(REPO, "tools", "funktionskarte.mjs");
@@ -72,3 +74,46 @@ test("Budget ohne markierten Schritt ist rot", TEST_FRIST, async () => {
   assert.equal(lauf.exit, EXIT_ROT, lauf.ausgabe);
   assert.match(lauf.ausgabe, /gibt-es-nicht[^\n]*hat keinen Schritt/);
 });
+
+const BUDGET_DATEI = ".github/antwortzeiten.json";
+const STRENGER_FALL = "(e) Antwortzeit-Budget nur kleiner";
+const AUFRUF_STRENGER = [
+  `import { stricterCases } from ${JSON.stringify(pathToFileURL(join(REPO, "tools/freigabe-strenger.mjs")).href)};`,
+  "const [, pfad] = process.argv;",
+  'const faelle = stricterCases("HEAD~1", [{ status: "M", path: pfad }]);',
+  "console.log(JSON.stringify(faelle ?? null));",
+].join("\n");
+const VORHER = { "elevenlabs-consult": 800, "elevenlabs-lookup": 100 };
+
+function einstufung(context, nachher) {
+  const verzeichnis = probeRepository(context, {
+    [BUDGET_DATEI]: `${JSON.stringify({ attrappen: VORHER, staging: {} })}\n`,
+  });
+  writeFiles(verzeichnis, { [BUDGET_DATEI]: `${JSON.stringify(nachher)}\n` });
+  commitAll(verzeichnis, "geaendert");
+  const lauf = runIn(verzeichnis, process.execPath, [
+    "--input-type=module",
+    "-e",
+    AUFRUF_STRENGER,
+    BUDGET_DATEI,
+  ]);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  return JSON.parse(lauf.stdout);
+}
+
+const BUDGET_FAELLE = [
+  ["ein kleineres Budget bei gleichen Schlüsseln ist strenger", { ...VORHER, "elevenlabs-consult": 700 }, {}, true],
+  ["ein größeres Budget ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 101 }, {}, false],
+  ["ein zusätzlicher Schlüssel ist keine strengere Änderung", { ...VORHER, "neu-hinzu": 50 }, {}, false],
+  ["ein Budget von 0 ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 0 }, {}, false],
+  ["ein Budget mit Nachkommastellen ist keine strengere Änderung", { ...VORHER, "elevenlabs-lookup": 99.5 }, {}, false],
+  ["ein fehlender Schlüssel ist keine strengere Änderung", { "elevenlabs-consult": 700 }, {}, false],
+  ["ein Budget für Staging ist keine strengere Änderung", { ...VORHER, "elevenlabs-consult": 700 }, { "elevenlabs-consult": 5000 }, false],
+];
+
+for (const [titel, attrappen, staging, strenger] of BUDGET_FAELLE) {
+  test(`freigabe-strenger: in .github/antwortzeiten.json ${titel}`, (context) => {
+    const faelle = einstufung(context, { attrappen, staging });
+    assert.deepEqual(faelle, strenger ? [{ path: BUDGET_DATEI, fall: STRENGER_FALL }] : null);
+  });
+}
