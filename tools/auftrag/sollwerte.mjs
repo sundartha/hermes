@@ -3,14 +3,16 @@ import { join } from "node:path";
 
 import { laufe } from "./faelle.mjs";
 import { dateiAm, vormerken } from "./git.mjs";
+import { umzugZuruecknehmen } from "./listenumzug.mjs";
 
 export const SOLLWERTE = "sollwerte";
 const HASH = /^[0-9a-f]{64}$/;
 const GLEICHHEIT = new Set(["strictEqual", "deepStrictEqual", "equal", "deepEqual", "=="]);
 const VON_LAUF = "von lauf gesetzt";
+const ANFUEHRUNGEN = ['"', "'", "`"];
 
-function literal(hash) {
-  return new RegExp(`(["'\`])${hash}\\1`, "g");
+function literale(hash) {
+  return ANFUEHRUNGEN.map((zeichen) => `${zeichen}${hash}${zeichen}`);
 }
 
 function hashPaar({ vergleich }) {
@@ -36,7 +38,7 @@ function ersetzungen(pfad, rote) {
 }
 
 function zeilenMit(text, hash) {
-  return text.split("\n").flatMap((zeile, index) => (literal(hash).test(zeile) ? [index + 1] : []));
+  return text.split("\n").flatMap((zeile, index) => (literale(hash).some((wert) => zeile.includes(wert)) ? [index + 1] : []));
 }
 
 function ersetzt(pfad, { text, basistext, ersatz }) {
@@ -47,7 +49,7 @@ function ersetzt(pfad, { text, basistext, ersatz }) {
     if (zeilen.length === 0 || basistext === null || zeilenMit(basistext, alt).length === 0) {
       return { befund: `${pfad}: Der Sollwert ${alt} steht nicht schon am Anfang des Auftrags als Literal in der Datei; lauf setzt in der Datei nichts.` };
     }
-    neu = neu.replace(literal(alt), (treffer, zeichen) => `${zeichen}${ist}${zeichen}`);
+    for (const zeichen of ANFUEHRUNGEN) neu = neu.replaceAll(`${zeichen}${alt}${zeichen}`, `${zeichen}${ist}${zeichen}`);
     gesetzt.push(...zeilen.map((zeile) => ({ datei: pfad, zeile, alt, neu: ist })));
   }
   return { neu, gesetzt };
@@ -88,13 +90,7 @@ export function setzeSollwerte({ root, basis, dateien }) {
 }
 
 export function sollwerteZuruecknehmen({ root, basis }, eintraege) {
-  const zurueck = eintraege.filter(({ pfad, vorher, nachher }) => {
-    const ort = join(root, pfad);
-    if (!existsSync(ort) || readFileSync(ort, "utf8") !== nachher || dateiAm(basis, pfad, root) === nachher) return false;
-    writeFileSync(ort, vorher);
-    return true;
-  });
-  vormerken(zurueck.map(({ pfad }) => pfad), root);
+  umzugZuruecknehmen(root, eintraege.filter(({ pfad, nachher }) => dateiAm(basis, pfad, root) !== nachher));
 }
 
 export function sollwertHinweis(dateien) {
