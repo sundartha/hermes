@@ -82,7 +82,8 @@ function phasenUndIssueBefunde(phasendatei, root) {
 
 export function pruefe(phasendatei, root) {
   const { phase, befunde: form } = phasenUndIssueBefunde(phasendatei, root);
-  const befunde = form.length > 0 ? form : vorLaufBefunde(phase, root);
+  const { befunde, hinweise } = form.length > 0 ? { befunde: form, hinweise: [] } : vorLaufBefunde(phase, root);
+  for (const hinweis of hinweise) console.error(hinweis);
   if (befunde.length > 0) {
     meldeBefunde(befunde);
     console.log(`rot: ${befunde.length} Befunde in ${phasendatei}.`);

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,12 +15,10 @@ function vorhanden(root, pfad) {
   return existsSync(join(root, pfad));
 }
 
-function gebaut(phase, root) {
-  try {
-    return gebauteAuftraege(phase, root);
-  } catch {
-    return null;
-  }
+const OHNE_GIT = "Hinweis: Testhilfen in erwarteteDateien nicht geprüft; ohne Git-Repo lässt sich nicht bestimmen, welche Aufträge schon gebaut sind.";
+
+function imGitRepo(root) {
+  return spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root, encoding: "utf8" }).stdout?.trim() === "true";
 }
 
 function neueTestpfade(auftrag, root) {
@@ -48,8 +47,9 @@ function testhilfeBefunde(auftraege, root) {
 }
 
 export function vorLaufBefunde(phase, root) {
-  const fertig = gebaut(phase, root);
-  const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => fertig?.has(id) !== true);
-  const testhilfen = fertig === null ? [] : testhilfeBefunde(auftraege, root);
-  return [...testordnungBefunde(auftraege, root), ...testhilfen];
+  const mitGit = imGitRepo(root);
+  const fertig = mitGit ? gebauteAuftraege(phase, root) : new Set();
+  const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
+  const testhilfen = mitGit ? testhilfeBefunde(auftraege, root) : [];
+  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen], hinweise: mitGit ? [] : [OHNE_GIT] };
 }
