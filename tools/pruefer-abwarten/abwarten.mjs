@@ -1,13 +1,6 @@
-import { artefaktName, entpacke, vertrauteLaeufe } from "../auftrag/pruefer-gedaechtnis.mjs";
+import { artefaktName, inhaltDes, vertrauteLaeufe } from "../auftrag/pruefer-gedaechtnis.mjs";
 import { PRUEFER_LAUF, workflowNummer } from "../auftrag/pruefer-herkunft.mjs";
-import {
-  BLOCKER,
-  ERGEBNIS_DATEI,
-  HINWEIS,
-  SOLLTE,
-  ergebnisAus,
-  ersetzeSteuerzeichen,
-} from "../auftrag/pruefer-schema.mjs";
+import { BLOCKER, HINWEIS, SOLLTE, ersetzeSteuerzeichen } from "../auftrag/pruefer-schema.mjs";
 import { KONTEXT } from "../auftrag/pruefer-urteil.mjs";
 
 export const EXIT = { ok: 0, befunde: 1, aufruf: 2, ausgeblieben: 3, nichtGelaufen: 4, keinPr: 5 };
@@ -43,18 +36,6 @@ async function prueferStatus(github, kopf) {
   );
 }
 
-async function ergebnisDes(github, artefakt, kopf) {
-  try {
-    const inhalt = entpacke(await github.roh(`/actions/artifacts/${artefakt.id}/zip`)).get(
-      ERGEBNIS_DATEI,
-    );
-    const ergebnis = inhalt ? ergebnisAus(inhalt.toString("utf8")) : null;
-    return ergebnis?.head === kopf ? ergebnis : null;
-  } catch {
-    return null;
-  }
-}
-
 async function ergebnisAmKopf(github, { kopf, pr }) {
   const name = artefaktName(pr);
   const antwort = await github.hole(`/actions/artifacts?name=${name}&per_page=100`);
@@ -68,8 +49,8 @@ async function ergebnisAmKopf(github, { kopf, pr }) {
   for (const artefakt of frisch) {
     const lauf = artefakt.workflow_run?.id;
     if (lauf === undefined || !(await vertraut(lauf))) continue;
-    const ergebnis = await ergebnisDes(github, artefakt, kopf);
-    if (ergebnis !== null) return ergebnis;
+    const ergebnis = await inhaltDes(github, artefakt);
+    if (ergebnis?.head === kopf) return ergebnis;
   }
   return null;
 }

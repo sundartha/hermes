@@ -81,7 +81,7 @@ export function artefaktName(pr) {
   return `${ARTEFAKT_PRAEFIX}${pr}`;
 }
 
-async function inhaltDes(github, artefakt) {
+export async function inhaltDes(github, artefakt) {
   try {
     const inhalt = entpacke(await github.roh(`/actions/artifacts/${artefakt.id}/zip`)).get(
       ERGEBNIS_DATEI,
