@@ -1,0 +1,168 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "alarm-kern",
+      "nummern": [
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S16",
+        "B4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/telephony/alert-sms.js",
+        "src/konfiguration/betterstack-alarm.js",
+        "src/config.js",
+        "src/boot.js",
+        "src/store/begriffe-nummern-vergabe.js",
+        "src/boot-guard.js",
+        "src/store/zustand/nummern.js",
+        "src/server.js",
+        "src/routes/voice.js",
+        "src/routes/stripe-webhook.js",
+        "src/billing/webhook.js",
+        "src/routes/api-billing.js",
+        "src/billing/cost-calibration.js",
+        "test/alert-sms.test.js"
+      ],
+      "umbau": [
+        "src/telephony/alert-sms.js:onError"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Die Kernfunktion in alert-sms.js mit Adresse, Frist und Schlüsselbildung trägt jeden späteren Teil und lässt sich allein über die einmaligen Anlässe von sendBootstrapAlertSms abnehmen, zu denen der Wegfall der Absender-Bindung und damit der neue Bootstrap-Halt gehört."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "meldeweg-zustand",
+      "nummern": [
+        "S1",
+        "S11",
+        "S17",
+        "S19",
+        "S12",
+        "B1",
+        "B2",
+        "B6"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/telephony/outage-report.js",
+        "src/telephony/alert-sms.js",
+        "src/boot.js",
+        "src/telephony/call-finish.js",
+        "src/telephony/call-termination.js",
+        "src/telephony/failure-reason.js",
+        "src/telephony/outage-detection.js",
+        "src/telephony/adapters/telnyx/messaging.js",
+        "test/ausfall-meldeweg.test.js",
+        "test/alarmkanal-selbsttest.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Alle Zustands-Anlässe mit alert und Wiederholung laufen über meldeBetreiberAlarm und die Reservierung in outage-report.js; hier entstehen meldeMitWiederholung, der Wegfall von SMS- und Mailkanal sowie des Kanal-Selbsttests."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "vorfall-schliessen",
+      "nummern": [
+        "S10",
+        "S14",
+        "S13",
+        "S20",
+        "B5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/telephony/outage-report.js",
+        "src/billing/cost-truing.js",
+        "src/billing/price-drift-watch.js",
+        "src/billing/paid-without-number-watch.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t2"
+      ],
+      "grund": "Das Schließen nach Annahme ist eine eigene Funktion schliesseBefund, die auf dem alert-Weg aus t2 aufsetzt und die drei Stellen anbindet, die heute Marker still schließen."
+    },
+    {
+      "kuerzel": "t4",
+      "name": "ausgabenwarnung",
+      "nummern": [
+        "S2",
+        "S15",
+        "S21",
+        "B3"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/telephony/outbound-gates.js",
+        "src/store/state-ops.js",
+        "src/store/json.js"
+      ],
+      "umbau": [
+        "src/telephony/outbound-gates.js:emitPlatformSpendWarning",
+        "src/store/state-ops.js:claimPlatformSpendWarning"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t2"
+      ],
+      "grund": "Die Ausgabenwarnung hat mit dem dauerhaften Monatsmarker und dem Gate von place_call einen eigenen Eingang und eigene Dateien und braucht nur meldeMitWiederholung aus t2."
+    },
+    {
+      "kuerzel": "t5",
+      "name": "startpruefung-eingang",
+      "nummern": [
+        "S7",
+        "S8",
+        "S9",
+        "S18",
+        "S22",
+        "S23",
+        "S24",
+        "S25"
+      ],
+      "tWege": [
+        "T1",
+        "T3"
+      ],
+      "dateien": [
+        "src/boot-guard.js",
+        "src/boot.js",
+        "src/config.js",
+        "src/konfiguration/betterstack-alarm.js",
+        "src/log-maske.js",
+        "src/brevo-mail.js",
+        "src/mail-boot-probe.js",
+        "tools/bausteine.json",
+        "eslint-suppressions.json",
+        ".env.example",
+        "render.yaml",
+        "src/process-guards.js",
+        "src/telephony/outage-classes.js",
+        "src/wiring/web-login.js",
+        "test/ausfall-boot-guard.test.js",
+        "test/gap-07-alert-channel-fatal.test.js",
+        "test/mail-boot-probe.test.js",
+        "test/brevo-mail.test.js",
+        "test/nodemailer-lernvertrag.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1",
+        "t2",
+        "t4"
+      ],
+      "grund": "Die Startprüfung mit Log-Maske, Mail-Probe und dem Entfernen der alten Variablen kommt zuletzt, weil ein entfernter Konfigurationsschlüssel jeden noch vorhandenen Leser in alert-sms.js, outage-report.js und outbound-gates.js mit einem TypeError brechen würde."
+    }
+  ]
+}
