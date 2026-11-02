@@ -9,7 +9,7 @@ import { mutationInCi, ohneSchreibrecht } from "../../tools/mutationspruefung/in
 import { schutzansprueche } from "../../tools/mutationspruefung/schutzmessung.mjs";
 import { jsonZeilenAus } from "../_iel-messbaum.mjs";
 import { werkzeug } from "./mutationspruefung-probe.js";
-import { commitAll, PRE_PUSH_HOOK, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
+import { commitAll, gitAusgabe as git, PRE_PUSH_HOOK, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
@@ -82,12 +82,6 @@ function setzeUmgebung(context, werte) {
       else env[name] = alt;
     }
   });
-}
-
-function git(repo, ...argumente) {
-  const lauf = runIn(repo, "git", argumente);
-  assert.equal(lauf.status, 0, `git ${argumente.join(" ")}: ${lauf.stderr}`);
-  return lauf.stdout.trim();
 }
 
 function ghAttrappe(context, { staende = [FERTIG_GRUEN], urteil, log, ausloesen = `${LAUF_URL}\n`, liste }) {
