@@ -138,3 +138,19 @@ test("[NIE4] beim Start steht vor jedem Schreiben in settings der Mandant gesetz
   assert.ok(geschrieben.includes(FREMDER_MANDANT));
   assert.ok(geschrieben.includes(ZWEITER_FREMDER_MANDANT));
 });
+
+test("[NIE1] beim Start steht nach der Startfrist der Bootstrap-Mandant vor dem Aufbau des Schemas", async () => {
+  const { protokoll, startAnweisungen } = await startOhnePostgres();
+  const start = protokoll.slice(0, startAnweisungen);
+  const frist = start.findIndex((eintrag) => /set_config\('statement_timeout'/.test(eintrag.text));
+  assert.notEqual(frist, -1);
+  const nachFrist = start.slice(frist + 1);
+  const ersterMandant = nachFrist.findIndex((eintrag) => MANDANT_SETZEN.test(eintrag.text));
+  assert.notEqual(ersterMandant, -1);
+  assert.equal(nachFrist[ersterMandant].params[0], BOOTSTRAP_MANDANT);
+  const davor = nachFrist.slice(0, ersterMandant);
+  assert.deepEqual(
+    davor.filter((eintrag) => !/set_config|^\s*(BEGIN|SHOW)\b/i.test(eintrag.text)),
+    [],
+  );
+});
