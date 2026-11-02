@@ -9,8 +9,10 @@ const TEST_DATEI = "test/gemeinsam/anfrage-kennung-im-server.test.js";
 const NIE1 = "[NIE1] mit Schalter bleibt eine Nummer in einer Logzeile waehrend der Anfrage maskiert";
 const NIE2 = "[NIE2] ohne Schalter bleibt die Zeile unveraendert";
 const NIE3 = "[NIE3] mit Schalter weist der Webhook einen unsignierten Anruf weiter ab und legt keinen Anruf an";
-const GUARDS = { datei: "src/process-guards.js", bereiche: [[20, 40]] };
-const KENNUNG = { datei: "src/utils/anfrage-kennung.js", bereiche: [[1, 30]] };
+const GEAENDERTE_ZEILEN_DER_GUARDS = [[20, 40]];
+const GEAENDERTE_ZEILEN_DER_KENNUNG = [[1, 30]];
+const GUARDS = { datei: "src/process-guards.js", bereiche: GEAENDERTE_ZEILEN_DER_GUARDS };
+const KENNUNG = { datei: "src/utils/anfrage-kennung.js", bereiche: GEAENDERTE_ZEILEN_DER_KENNUNG };
 const FAELLE = [NIE1, NIE2, NIE3].map((name) => ({ name, pfad: TEST_DATEI }));
 
 const B3A_COMMIT_NACHRICHT = `Prozess-Guards setzen die Anfrage-Kennung vor stdout und stderr
@@ -43,21 +45,34 @@ test("B3a L2: erreichen [NIE1] und [NIE3] neue Zeilen und töten dort keinen Mut
   assert.equal(`rot: ${urteil.anzahl} Schutztests, ${urteil.verstoesse} ohne nachgewiesene Wirkung.`, B3A_ROTE_ZEILEN[2]);
 });
 
-const FAELLE_TABELLE = [
-  { name: "in irgendeiner Einheit einen Mutanten tötet", messungen: [[GUARDS, { erreicht: true }], [KENNUNG, { getoetet: true }]], erwartet: "Schutztest wirksam: " },
-  { name: "nichts tötet, aber eine neue Zeile erreicht", messungen: [[GUARDS, { erreicht: true }], [KENNUNG, {}]], erwartet: "Verstoß: Schutztest wirkungslos: " },
-  { name: "keine neue Zeile erreicht", messungen: [[GUARDS, {}], [KENNUNG, {}]], erwartet: "Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: " },
-  { name: "in einer Einheit tötet und in einer anderen überlebt", messungen: [[GUARDS, { erreicht: true, getoetet: true }], [KENNUNG, { erreicht: true }]], erwartet: "Schutztest wirksam: " },
-];
-
-for (const { name, messungen, erwartet } of FAELLE_TABELLE) {
-  test(`ein Schutztest, der ${name}, ergibt „${erwartet.split(":")[0]}“`, async () => {
-    const berichte = [bericht(messungen.map(([einheit, wert]) => messung(einheit.datei, NIE1, wert)), [FAELLE[0]])];
-    const urteil = await schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_LIVELAUF);
-    assert.deepEqual(urteil.zeilen, [`${erwartet}${NIE1}`]);
-    assert.equal(urteil.verstoesse, erwartet.startsWith("Verstoß") ? 1 : 0);
-  });
+async function urteilZumSchutztest(messungen) {
+  const berichte = [bericht(messungen.map(([einheit, wert]) => messung(einheit.datei, NIE1, wert)), [FAELLE[0]])];
+  return schutzDesUrteils({ berichte, einheiten: [GUARDS, KENNUNG], angaben: [] }, KEIN_LIVELAUF);
 }
+
+test("ein Schutztest, der in irgendeiner Einheit einen Mutanten tötet, ist wirksam", async () => {
+  const urteil = await urteilZumSchutztest([[GUARDS, { erreicht: true }], [KENNUNG, { getoetet: true }]]);
+  assert.deepEqual(urteil.zeilen, [`Schutztest wirksam: ${NIE1}`]);
+  assert.equal(urteil.verstoesse, 0);
+});
+
+test("ein Schutztest, der eine neue Zeile erreicht und nichts tötet, ist ein Verstoß", async () => {
+  const urteil = await urteilZumSchutztest([[GUARDS, { erreicht: true }], [KENNUNG, {}]]);
+  assert.deepEqual(urteil.zeilen, [`Verstoß: Schutztest wirkungslos: ${NIE1}`]);
+  assert.equal(urteil.verstoesse, 1);
+});
+
+test("ein Schutztest, der keine neue Zeile erreicht, ist nur ein Hinweis", async () => {
+  const urteil = await urteilZumSchutztest([[GUARDS, {}], [KENNUNG, {}]]);
+  assert.deepEqual(urteil.zeilen, [`Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: ${NIE1}`]);
+  assert.equal(urteil.verstoesse, 0);
+});
+
+test("tötet ein Schutztest in einer Einheit und überlebt der Mutant in einer anderen, ist er wirksam", async () => {
+  const urteil = await urteilZumSchutztest([[GUARDS, { erreicht: true, getoetet: true }], [KENNUNG, { erreicht: true }]]);
+  assert.deepEqual(urteil.zeilen, [`Schutztest wirksam: ${NIE1}`]);
+  assert.equal(urteil.verstoesse, 0);
+});
 
 test("ohne Schutzmessung in den Teilergebnissen (kein [NIE]-Fall im Pull Request) bleibt das Urteil unverändert", async () => {
   assert.equal(await schutzDesUrteils({ berichte: [{}, { messungen: [] }], einheiten: [GUARDS], angaben: [] }, KEIN_LIVELAUF), null);

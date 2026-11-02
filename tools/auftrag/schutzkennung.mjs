@@ -37,13 +37,20 @@ export function satzNummer(name, anzahl) {
 }
 
 const VERSTOSS = "Verstoß: ";
-const SCHUTZ_ZEILE = new RegExp(`^${VERSTOSS}(?:${SCHUTZ_WIRKUNGSLOS}|${ALTER_SCHUTZ_NICHT_BELEGT} \\([^)]*\\)): .+$`);
-const SCHUTZ_ZUSAMMENFASSUNG = /^rot: \d+ Schutztests, /;
+const ROT_ANFANG = "rot: ";
+export const OHNE_WIRKUNG_MUSTER = `^${VERSTOSS}((?:${SCHUTZ_WIRKUNGSLOS}|${ALTER_SCHUTZ_NICHT_BELEGT} \\([^)]*\\)): .+)$`;
+const SCHUTZ_ZEILE = new RegExp(OHNE_WIRKUNG_MUSTER);
+const ZUSAMMENFASSUNG_MITTE = " Schutztests, ";
+const SCHUTZ_ZUSAMMENFASSUNG = new RegExp(`^${ROT_ANFANG}\\d+${ZUSAMMENFASSUNG_MITTE}`);
+
+export function schutzZusammenfassung(anzahl, verstoesse) {
+  return `${verstoesse === 0 ? "grün: " : ROT_ANFANG}${anzahl}${ZUSAMMENFASSUNG_MITTE}${verstoesse} ohne nachgewiesene Wirkung.`;
+}
 
 export function nurSchutzRot(ausgabe) {
   const zeilen = ausgabe.split("\n");
   const verstoesse = zeilen.filter((zeile) => zeile.startsWith(VERSTOSS));
   const abgeschaltet = zeilen.some((zeile) => zeile.startsWith(ABSCHALTUNG_VERSTOSS));
-  const andereRot = zeilen.some((zeile) => zeile.startsWith("rot: ") && !SCHUTZ_ZUSAMMENFASSUNG.test(zeile));
+  const andereRot = zeilen.some((zeile) => zeile.startsWith(ROT_ANFANG) && !SCHUTZ_ZUSAMMENFASSUNG.test(zeile));
   return verstoesse.length > 0 && verstoesse.every((zeile) => SCHUTZ_ZEILE.test(zeile)) && !abgeschaltet && !andereRot;
 }

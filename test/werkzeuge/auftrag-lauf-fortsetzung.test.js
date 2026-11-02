@@ -14,7 +14,7 @@ test("nach einem abgebrochenen Lauf setzt der nächste auf dem gesicherten Stand
   assert.deepEqual(rollen(beleg), ["test"]);
   assert.deepEqual(namen(beleg).filter((name) => name.startsWith("mutation")), ["mutation nach Test"]);
   const voll = beleg.pruefungen.find(({ name }) => name === "mutation nach Test");
-  assert.match(voll.befehl, new RegExp(`^npm --silent run test:mutation -- (--in-ci )?--basis ${erster.basis}$`));
+  assert.match(voll.befehl, new RegExp(`^npm --silent run test:mutation -- (--in-ci )?--basis ${erster.basis} --schutz-gesondert$`));
   assert.equal(pruefung(beleg, "mutation nach Test"), 0);
   assert.equal(zeigt(repo, "test/rechnen.test.js"), ACHT_TEST);
   assert.equal(zeigt(repo, "src/rechnen.js"), MIT_SIEBEN["src/rechnen.js"]);

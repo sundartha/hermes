@@ -26,8 +26,7 @@ import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruef
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnummer } from "./mutationspruefung/teile.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
 import { meldeSchutz, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
-import { nurSchutzRot } from "./auftrag/schutzkennung.mjs";
-import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
+import { ohneReinenSchutzbefund, schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
@@ -720,11 +719,19 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
   }
 }
 
+function strykerEinmal(lauf) {
+  return stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
+}
+
+function neueSchutzfaelle(basis) {
+  return schutzfaelle(basis, [...geaenderteTests({ von: basis })]);
+}
+
 function schutzMesswerkzeug(basis, graph) {
   return {
-    faelle: () => schutzfaelle(basis, [...geaenderteTests({ von: basis })]),
+    faelle: () => neueSchutzfaelle(basis),
     erreicht: (datei, pfad) => erreichendeTests(datei, graph.gesamt).alle.includes(pfad),
-    stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
+    stryker: strykerEinmal,
   };
 }
 
@@ -893,8 +900,7 @@ function schutzAngaben(basis, angaben) {
 }
 
 async function schutzImUrteil({ berichte, einheiten, basis }, angaben) {
-  const live = (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
-  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben) }, live);
+  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben) }, strykerEinmal);
   if (urteil === null) return [];
   meldeSchutz(urteil);
   return urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : [];
@@ -1131,7 +1137,7 @@ async function urteilAusCi(values) {
   const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig, alterSchutz: values[ALTER_SCHUTZ] });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
   if (ergebnis.lokal !== undefined) return undefined;
-  return values[GESONDERT] && ergebnis.exitCode === EXIT_ROT && nurSchutzRot(ergebnis.zeilen.join("\n")) ? EXIT_GRUEN : ergebnis.exitCode;
+  return values[GESONDERT] ? ohneReinenSchutzbefund(ergebnis.exitCode, ergebnis.zeilen.join("\n")) : ergebnis.exitCode;
 }
 
 async function eigenerAblauf(values) {
@@ -1143,9 +1149,9 @@ async function eigenerAblauf(values) {
 
 function schutzwerkzeug(basis) {
   return {
-    faelle: () => schutzfaelle(basis, [...geaenderteTests({ von: basis })]),
+    faelle: () => neueSchutzfaelle(basis),
     einheiten: () => bestandteile({ von: basis, seite: "neu" }),
-    stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
+    stryker: strykerEinmal,
     freigabe: sperreVorTestprozessen,
   };
 }
