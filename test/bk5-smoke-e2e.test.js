@@ -102,6 +102,16 @@ function realProvision(store) {
   };
 }
 
+async function loginUndTenantSpiegeln({ accounts, store }) {
+  const login = await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
+  assert.equal(login.tenantId, TENANT, "Build: Login legt den erwarteten Tenant an");
+  await store.ensureTenant(login.tenantId);
+  const s = store.load();
+  ops.registerTenant(s, login.tenantId, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
+  ops.setTenantStripe(s, login.tenantId, { customerId: CUSTOMER });
+  await store.save();
+}
+
 async function setup({ activated = false } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
@@ -110,13 +120,7 @@ async function setup({ activated = false } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  const login = await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
-  assert.equal(login.tenantId, TENANT, "Build: Login legt den erwarteten Tenant an");
-  await store.ensureTenant(TENANT);
-  const s = store.load();
-  ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
-  ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
-  await store.save();
+  await loginUndTenantSpiegeln({ accounts, store });
   if (activated) {
     await accounts.setStatus(TENANT, "active");
     await store.ensureTenant(TENANT);
@@ -178,7 +182,7 @@ const requestedNumbersFor = (store, tenantId) =>
     .load()
     .numbers.filter((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.REQUESTED);
 
-function seedVoiceMinute(store, tenantId, quantity) {
+async function seedVoiceMinute(store, tenantId, quantity) {
   const event = ops.recordUsageEvent(store.load(), {
     tenantId,
     kind: USAGE_EVENT_KIND.VOICE_MINUTE,
@@ -186,7 +190,7 @@ function seedVoiceMinute(store, tenantId, quantity) {
     costCents: 0,
   });
   event.occurredAt = USAGE_OCCURRED_AT;
-  store.save();
+  await store.save();
 }
 
 test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
@@ -326,7 +330,7 @@ test("(7) /state leitet das verbrauchte Kontingent live aus dem Ledger ab", asyn
   const s = await setup();
   try {
     await subscribeViaReturn(s);
-    seedVoiceMinute(s.store, TENANT, VOICE_MINUTES_USED);
+    await seedVoiceMinute(s.store, TENANT, VOICE_MINUTES_USED);
     const res = await getState(s);
     const body = JSON.parse(res.body);
     assert.equal(body.quota.usedMinutes, VOICE_MINUTES_USED);
