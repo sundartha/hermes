@@ -1,28 +1,25 @@
-import { BOOTSTRAP_TENANT_ID, makePgStore } from "../../src/store/pg.js";
-import { setTenantIdentityIfAbsent } from "../../src/store/state-ops.js";
-import { findActiveNumber } from "../../src/store/views.js";
-import { registrierungAnhaengen } from "../../src/store/zustand/nummern.js";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ANBIETER = "telnyx";
-const STARTBESTAND_REGISTRIERUNG = "phnum_hermes_ctl_start";
+const MIGRATIONEN = fileURLToPath(new URL("../../src/db/migrations", import.meta.url));
+const SQL_ENDUNG = ".sql";
+const EIGENTUEMER_MANDANT = "owner";
+const MANDANT_AKTIV = "active";
+const MANDANT_MIT_NAMEN_ANLEGEN =
+  "INSERT INTO tenant (id, status, owner_name, first_name) VALUES ($1, $2, $3, $4)";
 
-export async function startbestandAnlegen(datenbank, { nummer, vorname, nachname }) {
-  const runner = {
-    withClient: (arbeit) =>
-      arbeit({
-        query: (text, parameter) => datenbank.query(text, parameter),
-        exec: (sql) => datenbank.exec(sql),
-      }),
-  };
-  const store = makePgStore(runner);
-  await store.init();
-  await store.bootstrapTenant(nummer, BOOTSTRAP_TENANT_ID, ANBIETER);
-  const state = store.load();
-  registrierungAnhaengen(state, findActiveNumber(state, BOOTSTRAP_TENANT_ID).id, STARTBESTAND_REGISTRIERUNG);
-  setTenantIdentityIfAbsent(state, BOOTSTRAP_TENANT_ID, {
-    firstName: vorname,
-    lastName: nachname,
-  });
-  await store.save();
-  await store.drainFlushes();
+async function schemaAnlegen(datenbank) {
+  const dateien = readdirSync(MIGRATIONEN).filter((name) => name.endsWith(SQL_ENDUNG)).sort();
+  for (const name of dateien) await datenbank.exec(readFileSync(join(MIGRATIONEN, name), "utf8"));
+}
+
+export async function startbestandAnlegen(datenbank, { vorname, nachname }) {
+  await schemaAnlegen(datenbank);
+  await datenbank.query(MANDANT_MIT_NAMEN_ANLEGEN, [
+    EIGENTUEMER_MANDANT,
+    MANDANT_AKTIV,
+    `${vorname} ${nachname}`,
+    vorname,
+  ]);
 }

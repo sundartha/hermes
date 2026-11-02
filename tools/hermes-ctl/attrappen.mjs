@@ -10,6 +10,8 @@ import { HTTP_OK } from "./zugriff.mjs";
 
 export const STEUER_PFAD_ENDE = "/hermes-ctl/ende/";
 const ANRUFSTART_PFAD = "/v1/convai/sip-trunk/outbound-call";
+const NUMMERN_PFAD = "/v1/convai/phone-numbers";
+const REGISTRIERUNG = "phnum_hermes_ctl_start";
 const GESPRAECH_PFAD = "/v1/convai/conversations/";
 const ZUSAMMENFASSUNG_PARAMETER = "zusammenfassung";
 const HTTP_NICHT_GEFUNDEN = 404;
@@ -24,7 +26,7 @@ function gespraechFertig(kennung, zusammenfassung) {
   return { ...CONVERSATION_DONE_WITH_ANALYSIS, conversation_id: kennung, analysis: analyse };
 }
 
-function elevenLabsAntworten() {
+function elevenLabsAntworten(nummer) {
   const beendet = new Map();
   let zaehler = 0;
   return (pfadMitAnfrage) => {
@@ -37,6 +39,9 @@ function elevenLabsAntworten() {
         status: HTTP_OK,
         koerper: { success: true, conversation_id: kennung, sip_call_id: `sip_${kennung}` },
       };
+    }
+    if (pfad === NUMMERN_PFAD) {
+      return { status: HTTP_OK, koerper: [{ phone_number: nummer, phone_number_id: REGISTRIERUNG }] };
     }
     if (pfad.startsWith(STEUER_PFAD_ENDE)) {
       const kennung = decodeURIComponent(pfad.slice(STEUER_PFAD_ENDE.length));
@@ -64,8 +69,8 @@ const sackgasse = () => ({
   koerper: { error: "hermes-ctl-Attrappe ohne Antwort" },
 });
 
-export async function attrappenStarten() {
-  const elevenLabs = await starteAufzeichnendeAttrappe(elevenLabsAntworten());
+export async function attrappenStarten(eigentuemerNummer) {
+  const elevenLabs = await starteAufzeichnendeAttrappe(elevenLabsAntworten(eigentuemerNummer));
   const anbieterOhneAntwort = await starteAufzeichnendeAttrappe(sackgasse);
   const exa = await startExaFake({ facts: EXA_FAKTEN });
   return {

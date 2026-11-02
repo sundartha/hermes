@@ -39,7 +39,7 @@ const sitzung = basename(ordner);
 const laufend = { attrappen: null, pg: null, server: null, start: null, endet: false };
 
 function pgWirtStarten(maxConnections) {
-  const startbestand = [TELNYX_TEST_OWNER_NUMBER.e164, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME];
+  const startbestand = [OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME];
   const argumente = [String(process.pid), String(maxConnections), ...startbestand];
   const kind = spawn(process.execPath, [PG_WIRT, ...argumente], {
     env: { NODE_ENV: "test" },
@@ -104,12 +104,12 @@ function zustandSchreiben({ schluessel, urls, pgUrl, server }) {
 
 async function starten() {
   const schluessel = schluesselErzeugen();
-  laufend.attrappen = await attrappenStarten();
+  laufend.attrappen = await attrappenStarten(TELNYX_TEST_OWNER_NUMBER.e164);
   if (laufend.endet) return;
   const urls = { ...laufend.attrappen.urls, anthropic: anthropicAttrappe.url };
   const pgUrl = await pgWirtStarten(await poolgroesseHermes());
   if (laufend.endet) return;
-  const umgebung = hermesUmgebung({ schluessel, urls, pgUrl });
+  const umgebung = hermesUmgebung({ schluessel, urls, pgUrl, eigentuemerNummer: TELNYX_TEST_OWNER_NUMBER.e164 });
   laufend.server = await startServer({
     env: { ...EL_INBOUND_ACCESS_BOOT_ENV, ...umgebung },
     ownerNumber: null,
