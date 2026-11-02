@@ -6,7 +6,8 @@ import { env } from "node:process";
 import { test } from "node:test";
 
 import { probeDirectory } from "./probe-repo.js";
-import { sammeljob, workflowJobLines, workflowLines, workflowStepLines } from "./workflow-dateien.js";
+import { sammeljob } from "./ci-sammelschritt.js";
+import { workflowJobLines, workflowLines, workflowStepLines } from "./workflow-dateien.js";
 
 const CI = "ci.yml";
 const AUSFUEHRBAR = 0o755;

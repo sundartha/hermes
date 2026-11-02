@@ -21,6 +21,12 @@ export const KOPIEN_LISTE = {
   "tools/basis/jscpd.json": `${JSON.stringify({ version: JSON.parse(readFileSync(join(REPO_ROOT, "tools/basis/jscpd.json"), "utf8")).version, befunde: [] })}\n`,
 };
 
+export const MUTATION_DES_TESTUMBAUS = "mutation testumbau";
+const PAKET = JSON.parse(BASIS["package.json"]);
+export const MIT_MUTATION_DES_TESTUMBAUS = {
+  "package.json": JSON.stringify({ ...PAKET, scripts: { ...PAKET.scripts, "test:mutation": "node -e 0 --" } }),
+};
+
 export const ROTER_TEST = [
   'import assert from "node:assert/strict";',
   'import { test } from "node:test";',

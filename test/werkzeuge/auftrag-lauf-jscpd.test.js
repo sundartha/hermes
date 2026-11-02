@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
-import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { KOPIEN_LISTE, MIT_MUTATION_DES_TESTUMBAUS, MUTATION_DES_TESTUMBAUS, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung, rotAn } from "./auftrag-lauf-hilfen.js";
+import { TESTUMBAU, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 const JSCPD = "jscpd";
 const WOZU = "Wozu: Zwei Kopien derselben Logik lassen sich nur gemeinsam richtig ändern";
@@ -76,10 +76,7 @@ test("löscht der Bau-Agent tools/basis/jscpd.json, entfällt die Kopien-Prüfun
   rotAn(JSCPD, lauf, beleg);
 });
 
-const TESTUMBAU = { ...UMBAU, art: "testumbau", ziel: "Ziehe die Rechen-Tests in eine eigene Datei", bereich: "test/", erwarteteDateien: ["test/rechnen.test.js"], vorbild: "test/text.test.js" };
-const PAKET = JSON.parse(BASIS["package.json"]);
-const MUTATION = "mutation testumbau";
-const MIT_MUTATION_UND_KOPIEN = { ...KOPIEN_LISTE, "src/rechnen.js": VERDOPPELT, "package.json": JSON.stringify({ ...PAKET, scripts: { ...PAKET.scripts, "test:mutation": "node -e 0 --" } }) };
+const MIT_MUTATION_UND_KOPIEN = { ...KOPIEN_LISTE, "src/rechnen.js": VERDOPPELT, ...MIT_MUTATION_DES_TESTUMBAUS };
 
 function testumbau(context, drehbuch) {
   return starte(context, { auftrag: TESTUMBAU, drehbuch, dateien: MIT_MUTATION_UND_KOPIEN });
@@ -90,13 +87,13 @@ test("die Kopien-Prüfung läuft im Testumbau direkt nach lint und vor der Mutat
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const liste = namen(beleg);
   assert.equal(liste[liste.indexOf("lint") + 1], JSCPD, liste.join(", "));
-  assert.ok(liste.indexOf(JSCPD) < liste.indexOf(MUTATION), liste.join(", "));
+  assert.ok(liste.indexOf(JSCPD) < liste.indexOf(MUTATION_DES_TESTUMBAUS), liste.join(", "));
 });
 
 test("schreibt der Testumbau-Agent zwei Testfälle mit gleichem Rumpf, wird die Runde vor der Mutation an jscpd rot und der Testumbau-Agent bekommt Befund und Zweck-Text", (context) => {
   const { werkzeug, lauf, beleg } = testumbau(context, { test: { "test/rechnen.test.js": TEST_MIT_KOPIE }, "test-antwort": ABSATZ });
   rotAn(JSCPD, lauf, beleg);
-  assert.ok(!namen(beleg).includes(MUTATION), namen(beleg).join(", "));
+  assert.ok(!namen(beleg).includes(MUTATION_DES_TESTUMBAUS), namen(beleg).join(", "));
   const zweiteRunde = readFileSync(join(werkzeug, "prompt-test.txt"), "utf8");
   for (const teil of ["## Testumbau", "gleicht test/rechnen.test.js:", WOZU, `dem Test-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
 });

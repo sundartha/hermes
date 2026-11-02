@@ -56,15 +56,19 @@ function stepEnvironment(directory, event) {
   };
 }
 
-function npmArguments(context, workflowStep, event) {
+function npmArgumentsIn(context, workflowStep, { event, cwd, environment = {} }) {
   const directory = stepDirectory(context, workflowStep);
   const result = spawnSync("bash", ["-e", join(directory, SCRIPT_FILE)], {
-    cwd: directory,
+    cwd: cwd ?? directory,
     encoding: "utf8",
-    env: stepEnvironment(directory, event),
+    env: { ...stepEnvironment(directory, event), ...environment },
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   return readFileSync(join(directory, ARGUMENTS_FILE), "utf8").split("\n").filter((line) => line !== "");
+}
+
+function npmArguments(context, workflowStep, event) {
+  return npmArgumentsIn(context, workflowStep, { event });
 }
 
 function testRunnerArguments(argumentsList) {
@@ -107,15 +111,11 @@ function queueRepository(context) {
 
 test("CI: in der Merge-Queue fahren die Testteile bei einer reinen Produkt-Änderung gegenüber der echten Basis nur die gelistete Werkzeug-Testdatei", (context) => {
   const { repository, base } = queueRepository(context);
-  const stubs = stepDirectory(context, CI_TESTS);
-  const result = spawnSync("bash", ["-e", join(stubs, SCRIPT_FILE)], {
+  const argumentsList = npmArgumentsIn(context, CI_TESTS, {
+    event: "merge_group",
     cwd: repository,
-    encoding: "utf8",
-    env: { ...stepEnvironment(stubs, "merge_group"), PR_BASE_SHA: base, TEIL: "1", TEILE: "1" },
+    environment: { PR_BASE_SHA: base, TEIL: "1", TEILE: "1" },
   });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-
-  const argumentsList = readFileSync(join(stubs, ARGUMENTS_FILE), "utf8").split("\n").filter((line) => line !== "");
   const productTests = SUITE_FILES.filter((suiteFile) => !suiteFile.startsWith("test/werkzeuge/"));
   assert.deepEqual(testRunnerArguments(argumentsList).toSorted(), [...productTests, ROUND_ROBIN_PART_TOOL_FILE].toSorted());
 });
