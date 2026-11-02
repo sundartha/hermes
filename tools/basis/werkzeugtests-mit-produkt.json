@@ -38,6 +38,8 @@
   "test/werkzeuge/mutationspruefung-lokale-umbenennung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-pfadnennung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-quellauslagerung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/mutationsurteil-schutzwirkung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/mutationspruefung-schutz-gesondert.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-schutzwirkung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-sperre.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-stdio-umgebung.test.js": "Liest Produktquelltext aus src/.",

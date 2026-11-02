@@ -3,7 +3,7 @@ import { cwd } from "node:process";
 
 import { geaenderteFaelle } from "../auftrag/faelle.mjs";
 import { muster } from "../tests-ausmisten/ausnehmen.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS } from "../auftrag/schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS, schutzZusammenfassung } from "../auftrag/schutzkennung.mjs";
 
 const GETOETET = new Set(["Killed", "Timeout"]);
 const GELAUFEN_UEBERLEBT = "Survived";
@@ -40,14 +40,26 @@ async function gemeinsamGetoetet(einheiten, faelle, werkzeug) {
   return wirksam;
 }
 
+export async function messeFall(fall, ziel, werkzeug) {
+  const ergebnisse = await werkzeug.stryker({ datei: ziel.datei, zeilen: ziel.bereiche, tests: [fall.pfad], namensmuster: muster(fall.name) });
+  return {
+    getoetet: ergebnisse.some(({ status }) => GETOETET.has(status)),
+    erreicht: ergebnisse.some(({ status }) => status === GELAUFEN_UEBERLEBT),
+  };
+}
+
+function urteilAus(messungen) {
+  if (messungen.some(({ getoetet }) => getoetet)) return SCHUTZ_WIRKSAM;
+  return messungen.some(({ erreicht }) => erreicht) ? WIRKUNGSLOS : SCHUTZ_UNERREICHT;
+}
+
 async function einzeln(fall, ziele, werkzeug) {
-  let erreicht = false;
-  for (const { datei, bereiche } of ziele) {
-    const ergebnisse = await werkzeug.stryker({ datei, zeilen: bereiche, tests: [fall.pfad], namensmuster: muster(fall.name) });
-    if (ergebnisse.some(({ status }) => GETOETET.has(status))) return SCHUTZ_WIRKSAM;
-    erreicht ||= ergebnisse.some(({ status }) => status === GELAUFEN_UEBERLEBT);
+  const gemessen = [];
+  for (const ziel of ziele) {
+    gemessen.push(await messeFall(fall, ziel, werkzeug));
+    if (gemessen.at(-1).getoetet) break;
   }
-  return erreicht ? WIRKUNGSLOS : SCHUTZ_UNERREICHT;
+  return urteilAus(gemessen);
 }
 
 function alteSchutzstellen(angaben) {
@@ -90,8 +102,7 @@ export function aufgezeichnet(messungen) {
     for (const { datei } of ziele) {
       if (!eigene.some((messung) => messung.datei === datei)) throw new Error(`Schutzmessung fehlt: ${fall.name} in ${datei}`);
     }
-    if (eigene.some(({ getoetet }) => getoetet)) return SCHUTZ_WIRKSAM;
-    return eigene.some(({ erreicht }) => erreicht) ? WIRKUNGSLOS : SCHUTZ_UNERREICHT;
+    return urteilAus(eigene);
   };
 }
 
@@ -126,7 +137,7 @@ export async function schutzUrteil(angaben, werkzeug) {
 
 export function meldeSchutz({ geprueft, anzahl, verstoesse, zeilen }) {
   for (const zeile of zeilen) console.log(zeile);
-  if (geprueft) console.log(`${verstoesse === 0 ? "grün" : "rot"}: ${anzahl} Schutztests, ${verstoesse} ohne nachgewiesene Wirkung.`);
+  if (geprueft) console.log(schutzZusammenfassung(anzahl, verstoesse));
   return verstoesse === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 

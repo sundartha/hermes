@@ -4,14 +4,25 @@ import { test } from "node:test";
 import { aufgeteilt } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT } from "./mutationspruefung-probe.js";
 import { commitAll, probeRepository, writeFiles } from "./probe-repo.js";
-import { ALTE_SEITE, FREMDE_EINTRAEGE, FREMDER_TENANT, MIT_WIRKUNG, NEGATIV, NEUE_SEITE, NORMAL, OFFSET, OHNE_WIRKUNG, TENANT, geaendert, quelle, seitentest } from "./schutzwirkung-probe.js";
-
-const ZWEITE_OHNE_WIRKUNG = 'test("[NIE3] offset 2.5 liefert keine Seite", () => assert.notDeepEqual(seite(L, "2.5", "t", "t").eintraege, "a"));';
-const ZWEITE_MIT_WIRKUNG = 'test("[NIE2] offset a ist 400", () => assert.equal(seite(L, "a", "t", "t").status, 400));';
-const ZWEISTELLIG = 'test("zweistelliges offset", () => assert.deepEqual(seite(L, "10", "t", "t").eintraege, []));';
-const ZEICHEN_VOR = 'test("Zeichen vor der Zahl", () => assert.deepEqual(seite(L, "x1", "t", "t"), { status: 400, fehler: "offset" }));';
-const ZEICHEN_NACH = 'test("Zeichen nach der Zahl", () => assert.equal(seite(L, "1x", "t", "t").status, 400));';
-const ALLGEMEIN = [NEGATIV, ZWEISTELLIG, ZEICHEN_VOR, ZEICHEN_NACH];
+import {
+  ALLGEMEIN,
+  ALTE_SEITE,
+  FREMDE_EINTRAEGE,
+  FREMDER_TENANT,
+  GEAENDERTE_OFFSET_ZEILE,
+  MIT_WIRKUNG,
+  NEUE_SEITE,
+  NORMAL,
+  OFFSET,
+  OHNE_WIRKUNG,
+  TENANT,
+  UNVERAENDERTE_MANDANTENZEILE,
+  ZWEITE_MIT_WIRKUNG,
+  ZWEITE_OHNE_WIRKUNG,
+  geaendert,
+  quelle,
+  seitentest,
+} from "./schutzwirkung-probe.js";
 
 function urteil(context, repo) {
   const { urteil: lauf } = aufgeteilt(context, repo, { basis: "HEAD" });
@@ -81,13 +92,13 @@ test("alter Schutz aus der Commit-Nachricht gilt im Urteil nur, wenn der Fall Mu
   const ohne = geaendert(context, quelle(OFFSET, TENANT, NEUE_SEITE), ...ALLGEMEIN, FREMDE_EINTRAEGE);
   const ohneAnspruch = aufgeteilt(context, ohne, { basis: "HEAD" }).urteil;
   assert.equal(ohneAnspruch.status, EXIT_ROT, ohneAnspruch.stdout + ohneAnspruch.stderr);
-  const belegt = aufgeteilt(context, mitAnspruch(context, 3), { basis: "HEAD~1" }).urteil;
+  const belegt = aufgeteilt(context, mitAnspruch(context, UNVERAENDERTE_MANDANTENZEILE), { basis: "HEAD~1" }).urteil;
   assert.equal(belegt.status, 0, belegt.stdout + belegt.stderr);
   assert.match(belegt.stdout, /^Hinweis: Schutz im alten Code belegt \(src\/seite\.js:3\): \[NIE1\] fremder Tenant sieht keine Einträge$/m);
 });
 
 test("alter Schutz aus der Commit-Nachricht auf einer geänderten Zeile bleibt ein Verstoß", (context) => {
-  const lauf = aufgeteilt(context, mitAnspruch(context, 2), { basis: "HEAD~1" }).urteil;
+  const lauf = aufgeteilt(context, mitAnspruch(context, GEAENDERTE_OFFSET_ZEILE), { basis: "HEAD~1" }).urteil;
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Alter Schutz nicht belegt \(src\/seite\.js:2 ist seit der Basis geändert\): \[NIE1\] fremder Tenant sieht keine Einträge$/m);
 });

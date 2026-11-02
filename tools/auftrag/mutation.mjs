@@ -8,7 +8,7 @@ import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { PATCH_FORMAT, ablagePfad, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
 import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKUNGSLOS, schutzSaetze } from "./schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, OHNE_WIRKUNG_MUSTER, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, schutzSaetze } from "./schutzkennung.mjs";
 import { phasenbasis } from "./phasenende.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
@@ -21,7 +21,7 @@ const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
 const AM_BUDGET = /^Abbruch: Budget\b.*kein Urteil\.$/m;
-const OHNE_WIRKUNG = new RegExp(`^Verstoß: ((?:${SCHUTZ_WIRKUNGSLOS}|${ALTER_SCHUTZ_NICHT_BELEGT} \\([^)]*\\)): .+)$`, "gm");
+const OHNE_WIRKUNG = new RegExp(OHNE_WIRKUNG_MUSTER, "gm");
 const SCHUTZ_HINWEIS = new RegExp(`^((?:${SCHUTZ_NICHT_PRUEFBAR}|${SCHUTZ_UNERREICHT}|${ALTER_SCHUTZ_BELEGT}).*)$`, "gm");
 const LETZTER_LAUF = new WeakMap();
 const SCHUTZ_GESONDERT = "--schutz-gesondert";

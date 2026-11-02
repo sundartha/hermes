@@ -16,6 +16,7 @@ const NACHRUNDE = "## Schutztests ohne Wirkung";
 const ABSATZ = "Zweck schutzwirkung: Drehbuchtext des Ersatz-Agenten.";
 const ALTER_SCHUTZ = "[NIE1] src/text.js:2";
 const FALSCHER_SCHUTZ = "[NIE1] src/text.js:1";
+const MUTATIONSLAEUFE_MIT_NACHRUNDE = 3;
 const NICHT_PRUEFBAR = "Hinweis: Wirkung der Schutztests nicht prüfbar, keine neue oder geänderte Zeile unter src/.";
 const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";
 const argumente = process.argv.slice(2);
@@ -163,7 +164,7 @@ test("mit HERMES_MUTATION_IN_CI=1 kommt die Schutzwirkung aus dem Urteil der CI,
   const { lauf, beleg } = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [SATZ] }, drehbuch, dateien, umgebung: { HERMES_MUTATION_IN_CI: "1" } });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const befehle = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation") || name.startsWith("schutzwirkung")).map(({ befehl }) => befehl);
-  assert.ok(befehle.length >= 3, befehle.join("\n"));
+  assert.ok(befehle.length >= MUTATIONSLAEUFE_MIT_NACHRUNDE, befehle.join("\n"));
   for (const befehl of befehle) assert.match(befehl, /^npm --silent run test:mutation -- --in-ci --basis /);
   assert.deepEqual(befehle.filter((befehl) => befehl.includes("--schutzwirkung")), []);
   assert.ok(befehle.some((befehl) => befehl.includes(`--alter-schutz ${ALTER_SCHUTZ}`)), "der Anspruch auf alten Schutz geht mit der CI-Mutation, die ihn im Urteil belegt");
