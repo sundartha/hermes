@@ -29,3 +29,13 @@ export function reachingFiles(start, dependents) {
 export function testsReaching(start, dependents) {
   return [...reachingFiles(start, dependents)].filter((file) => TEST_FILE.test(file));
 }
+
+export const LAUFZEIT_LESER = [{ ordner: "src/db/migrations/", leser: "src/db/migrate.js" }];
+
+export function leserDer(datei) {
+  return LAUFZEIT_LESER.filter(({ ordner }) => datei.startsWith(ordner)).map(({ leser }) => leser);
+}
+
+export function testsReachingMitLeser(start, dependents) {
+  return [...new Set([start, ...leserDer(start)].flatMap((datei) => testsReaching(datei, dependents)))];
+}
