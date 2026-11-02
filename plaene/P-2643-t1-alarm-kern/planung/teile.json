@@ -24,7 +24,9 @@
       "src/telephony/alert-sms.js"
     ],
     "testDateien": [
-      "test/alert-sms.test.js"
+      "test/abrechnung/stripe-webhook.test.js",
+      "test/alert-sms.test.js",
+      "test/cost-truing-observe.test.js"
     ],
     "funktionen": 40,
     "altfunktionen": 5,
@@ -806,7 +808,9 @@
       "src/konfiguration/betterstack-alarm.js",
       "src/store/begriffe-nummern-vergabe.js",
       "src/telephony/alert-sms.js",
-      "test/alert-sms.test.js"
+      "test/abrechnung/stripe-webhook.test.js",
+      "test/alert-sms.test.js",
+      "test/cost-truing-observe.test.js"
     ],
     "belegDateien": [
       "src/billing/cost-calibration.js",
@@ -837,7 +841,9 @@
         "src/routes/api-billing.js",
         "src/routes/voice.js",
         "src/server.js",
-        "test/alert-sms.test.js"
+        "test/alert-sms.test.js",
+        "test/abrechnung/stripe-webhook.test.js",
+        "test/cost-truing-observe.test.js"
       ],
       "umbau": [
         "src/telephony/alert-sms.js:onError"
