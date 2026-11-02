@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { cwd } from "node:process";
 
 import { geaenderteFaelle } from "../auftrag/faelle.mjs";
@@ -14,9 +14,11 @@ const WIRKUNGSLOS = `${VERSTOSS}${SCHUTZ_WIRKUNGSLOS}`;
 const NICHT_BELEGT = `${VERSTOSS}${ALTER_SCHUTZ_NICHT_BELEGT}`;
 const UNGEPRUEFT = `Hinweis: ${ALTER_SCHUTZ_UNGEPRUEFT}, kein wirkungsloser Schutztest mit dieser Kennung`;
 
-function schutzfaelle(basis, testdateien) {
+const KENNUNG_IM_TEXT = "[NIE";
+
+export function schutzfaelle(basis, testdateien) {
   return testdateien
-    .filter((pfad) => existsSync(pfad))
+    .filter((pfad) => existsSync(pfad) && readFileSync(pfad, "utf8").includes(KENNUNG_IM_TEXT))
     .flatMap((pfad) => geaenderteFaelle(basis, cwd(), pfad).map((fall) => ({ ...fall, pfad })))
     .filter((fall) => fall.neu && !fall.still && satzNummer(fall.name, Infinity) !== null);
 }
@@ -82,33 +84,54 @@ async function alterSchutz(fall, { einheiten, stellen }, werkzeug) {
   return [`${NICHT_BELEGT} (${ort}, der Fall tötet dort keinen Mutanten): ${fall.name}`];
 }
 
+export function aufgezeichnet(messungen) {
+  return (fall, ziele) => {
+    const eigene = messungen.filter((messung) => messung.pfad === fall.pfad && messung.fall === fall.name);
+    for (const { datei } of ziele) {
+      if (!eigene.some((messung) => messung.datei === datei)) throw new Error(`Schutzmessung fehlt: ${fall.name} in ${datei}`);
+    }
+    if (eigene.some(({ getoetet }) => getoetet)) return SCHUTZ_WIRKSAM;
+    return eigene.some(({ erreicht }) => erreicht) ? WIRKUNGSLOS : SCHUTZ_UNERREICHT;
+  };
+}
+
+async function fallurteil(fall, kontext, werkzeug) {
+  return werkzeug.fall === undefined ? einzeln(fall, kontext.einheiten, werkzeug) : werkzeug.fall(fall, kontext.einheiten);
+}
+
 async function urteile(faelle, kontext, werkzeug) {
-  const wirksam = await gemeinsamGetoetet(kontext.einheiten, faelle, werkzeug);
+  const wirksam = werkzeug.fall === undefined ? await gemeinsamGetoetet(kontext.einheiten, faelle, werkzeug) : new Set();
   const zeilen = [];
   const geprueft = new Set();
   for (const fall of faelle) {
-    const urteil = wirksam.has(fall) ? SCHUTZ_WIRKSAM : await einzeln(fall, kontext.einheiten, werkzeug);
+    const urteil = wirksam.has(fall) ? SCHUTZ_WIRKSAM : await fallurteil(fall, kontext, werkzeug);
     if (urteil === WIRKUNGSLOS) geprueft.add(kennungVon(fall));
     zeilen.push(...(urteil === WIRKUNGSLOS ? await alterSchutz(fall, kontext, werkzeug) : [`${urteil}: ${fall.name}`]));
   }
   return [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)];
 }
 
-export async function schutzwirkungPruefung(basis, angaben, werkzeug) {
+export async function schutzUrteil(angaben, werkzeug) {
   const stellen = alteSchutzstellen(angaben);
-  const faelle = schutzfaelle(basis, werkzeug.testdateien());
+  const faelle = werkzeug.faelle();
   const einheiten = (await werkzeug.einheiten()).filter(({ bereiche }) => bereiche !== undefined);
   if (faelle.length === 0 || einheiten.length === 0) {
     const grund = faelle.length === 0 ? "kein neuer Fall mit [NIE<n>]-Kennung" : "keine neue oder geänderte Zeile unter src/";
-    console.log(`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`);
-    for (const zeile of ungepruefteStellen(stellen, new Set())) console.log(zeile);
-    console.log("grün: keine Wirkung zu prüfen.");
-    return EXIT_GRUEN;
+    return { geprueft: false, anzahl: faelle.length, verstoesse: 0, zeilen: [`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`, ...ungepruefteStellen(stellen, new Set())] };
   }
   await werkzeug.freigabe();
   const zeilen = await urteile(faelle, { einheiten, stellen }, werkzeug);
+  return { geprueft: true, anzahl: faelle.length, verstoesse: zeilen.filter((zeile) => zeile.startsWith(VERSTOSS)).length, zeilen };
+}
+
+export function meldeSchutz({ geprueft, anzahl, verstoesse, zeilen }) {
   for (const zeile of zeilen) console.log(zeile);
-  const verstoesse = zeilen.filter((zeile) => zeile.startsWith(VERSTOSS)).length;
-  console.log(`${verstoesse === 0 ? "grün" : "rot"}: ${faelle.length} Schutztests, ${verstoesse} ohne nachgewiesene Wirkung.`);
+  if (geprueft) console.log(`${verstoesse === 0 ? "grün" : "rot"}: ${anzahl} Schutztests, ${verstoesse} ohne nachgewiesene Wirkung.`);
   return verstoesse === 0 ? EXIT_GRUEN : EXIT_ROT;
+}
+
+export async function schutzwirkungPruefung(angaben, werkzeug) {
+  const urteil = await schutzUrteil(angaben, werkzeug);
+  if (!urteil.geprueft) urteil.zeilen.push("grün: keine Wirkung zu prüfen.");
+  return meldeSchutz(urteil);
 }

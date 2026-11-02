@@ -25,7 +25,9 @@ import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, ze
 import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnummer } from "./mutationspruefung/teile.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
-import { schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
+import { meldeSchutz, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
+import { nurSchutzRot } from "./auftrag/schutzkennung.mjs";
+import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
@@ -105,6 +107,7 @@ const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-k
 const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZWECK_UEBERLEBT = "tests/mutation";
 const ZWECK_ZUSTAND = "tests/stryker-zustand";
+const ZWECK_SCHUTZ = "schutzwirkung";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
@@ -136,7 +139,9 @@ const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const VORHER_AUS_CI = "vorher-aus-ci";
 const IN_CI = "in-ci";
-const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig", "testumbau"];
+const ALTER_SCHUTZ_OPTION = "alter-schutz";
+const GESONDERT = "schutz-gesondert";
+const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig", "testumbau", ALTER_SCHUTZ_OPTION, GESONDERT];
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
@@ -146,7 +151,8 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
-  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>] [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"] [--schutz-gesondert]",
+  "   Das Urteil prüft die Schutzwirkung der [NIE<n>]-Fälle mit; --schutz-gesondert meldet sie nur und lässt den Exit-Code an den Mutanten.",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --schutzwirkung [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
   "   oder: node tools/mutationspruefung.mjs --laufzeiten-holen <datei>",
@@ -158,7 +164,7 @@ const LAUFZEITEN_HOLEN = "laufzeiten-holen";
 const VORERGEBNIS_HOLEN = "vorergebnis-holen";
 const TESTUMBAU = "testumbau";
 const SCHUTZWIRKUNG = "schutzwirkung";
-const ALTER_SCHUTZ = "alter-schutz";
+const ALTER_SCHUTZ = ALTER_SCHUTZ_OPTION;
 const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, SCHUTZWIRKUNG, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
@@ -691,7 +697,7 @@ async function vorschauDerSeite(gemessen, { nachDatei, graph, seite }) {
   });
 }
 
-async function messe(einheiten, { graph, auswahl, seite }) {
+async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap(({ datei, anteil }) => (anteil === 1 ? nachDatei.get(datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
@@ -705,6 +711,7 @@ async function messe(einheiten, { graph, auswahl, seite }) {
       const geprueft = await pruefeDatei(anteil.datei, nachDatei.get(anteil.datei).bereiche, { graph, loeschung, anteil });
       dateiEndet(geprueft, ueberlebt);
       ergebnisse.push(...geprueft);
+      if (schutz !== null && anteil.anteil === 1) await schutz.nimmAuf({ datei: anteil.datei, bereiche: nachDatei.get(anteil.datei).bereiche });
     }
     return ergebnisse;
   } finally {
@@ -713,9 +720,24 @@ async function messe(einheiten, { graph, auswahl, seite }) {
   }
 }
 
-function mutiere(pruefung, auswahl = null) {
+function schutzMesswerkzeug(basis, graph) {
+  return {
+    faelle: () => schutzfaelle(basis, [...geaenderteTests({ von: basis })]),
+    erreicht: (datei, pfad) => erreichendeTests(datei, graph.gesamt).alle.includes(pfad),
+    stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
+  };
+}
+
+function schutzDerSeite(pruefung, sammler, { einheiten, graph }) {
+  if (sammler === null || pruefung.seite !== "neu") return null;
+  sammler.einheiten.push(...einheiten.filter(({ bereiche }) => bereiche !== undefined));
+  sammler.messgeraet(schutzMesswerkzeug(pruefung.von, graph));
+  return sammler;
+}
+
+function mutiere(pruefung, auswahl = null, sammler = null) {
   return imStand(pruefung, (einheiten, graph) =>
-    messe(einheiten, { graph, seite: pruefung.seite, auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
+    messe(einheiten, { graph, seite: pruefung.seite, schutz: schutzDerSeite(pruefung, sammler, { einheiten, graph }), auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
   );
 }
 
@@ -801,9 +823,9 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   return roteZwecke({ ueberlebende, abgestuerzte, zugriffe });
 }
 
-async function pruefe(pruefung, gleichwertige) {
+async function pruefe(pruefung, gleichwertige, sammler) {
   const zugriffe = zustandszugriffe(pruefung);
-  return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung), zugriffe });
+  return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung, null, sammler), zugriffe });
 }
 
 async function planen(pruefungen, laufzeiten) {
@@ -843,14 +865,15 @@ async function messeTeil(pruefungen, optionen, vorgaben) {
   const eigene = teile[nummer - 1] ?? [];
   console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
   const messungen = [];
+  const sammler = schutzsammler();
   for (const [index, stand] of pruefungen.entries()) {
     const auswahl = eigene.filter(({ pruefung }) => pruefung === index).map((einheit) => ({ ...einheit, dauern: laufzeiten.dauern, uebernahme: kontexte[index] }));
-    if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl) });
+    if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl, index === 0 ? sammler : null) });
   }
   const alle = messungen.flatMap(({ ergebnisse }) => ergebnisse);
   const offen = alle.filter(ueberlebt).length;
   console.log(`Teil ${nummer}: ${alle.length} Ergebnisse, ${offen} in diesen Testdateien nicht getötet; das Urteil fällt im Job Mutationsurteil.`);
-  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), messungen }));
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), ...sammler.bericht(), messungen }));
   return EXIT_GRUEN;
 }
 
@@ -864,7 +887,26 @@ function vereineAnteile(berichte, pruefung) {
   return [...nachSchluessel.values()];
 }
 
-async function urteilen(pruefungen, { urteil, gleichwertige }, vorgaben) {
+function schutzAngaben(basis, angaben) {
+  const nachrichten = git(["log", "-z", "--format=%B", `${basis}..HEAD`]).split("\0");
+  return [...new Set([...angaben, ...schutzansprueche(nachrichten)])];
+}
+
+async function schutzImUrteil({ berichte, einheiten, basis }, angaben) {
+  const live = (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
+  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben) }, live);
+  if (urteil === null) return [];
+  meldeSchutz(urteil);
+  return urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : [];
+}
+
+function messbareEinheiten(plan) {
+  const einheiten = plan.teile.flat();
+  const ersteAnteile = einheiten.filter(({ pruefung, anteil, bereiche }) => pruefung === 0 && anteil === 1 && bereiche !== undefined);
+  return ersteAnteile.map(({ datei, bereiche }) => ({ datei, bereiche }));
+}
+
+async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben) {
   const { laufzeiten, vorergebnis } = vorgaben;
   const plan = await planen(pruefungen, laufzeiten);
   const berichte = teilberichte(urteil, plan, vorergebnis);
@@ -873,13 +915,25 @@ async function urteilen(pruefungen, { urteil, gleichwertige }, vorgaben) {
     const ergebnisse = vereineAnteile(berichte, index);
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
+  if (pruefungen[0].seite === "neu") {
+    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
+  }
   zeigeZweck(rot);
   return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-async function gesamtlauf(pruefungen, gleichwertige) {
+async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
   const rot = new Set();
-  for (const pruefung of pruefungen) for (const id of await pruefe(pruefung, gleichwertige)) rot.add(id);
+  const sammler = schutzsammler();
+  for (const [index, pruefung] of pruefungen.entries()) {
+    for (const id of await pruefe(pruefung, gleichwertige, index === 0 ? sammler : null)) rot.add(id);
+  }
+  if (pruefungen[0].seite === "neu") {
+    const berichte = [sammler.bericht()];
+    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
+      if (!gesondert) rot.add(id);
+    }
+  }
   zeigeZweck(rot);
   return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
@@ -928,8 +982,14 @@ function schutzAufrufGueltig(values) {
   return values[SCHUTZWIRKUNG] && values.basis !== undefined && nurAngegeben(values, ["basis", SCHUTZWIRKUNG, ALTER_SCHUTZ]);
 }
 
+function gesondertErlaubt(values) {
+  const verteilt = [values.plan, values.teil, values.urteil, ...VORHER_ARTEN.map((art) => values[art]), values[VORHER_AUS_CI]].some((wert) => wert !== undefined);
+  return !values[SCHUTZWIRKUNG] && !values.testumbau && !values["alter-stand"] && !verteilt;
+}
+
 function aufrufGueltig(values) {
-  if (values[SCHUTZWIRKUNG] || values[ALTER_SCHUTZ].length > 0) return schutzAufrufGueltig(values);
+  if (values[GESONDERT] && !gesondertErlaubt(values)) return false;
+  if (values[SCHUTZWIRKUNG] || (values[ALTER_SCHUTZ].length > 0 && !values[IN_CI])) return schutzAufrufGueltig(values);
   if (values[IN_CI]) return inCiAufrufGueltig(values);
   if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
@@ -1068,9 +1128,10 @@ function hilfsablaufFuer(values) {
 }
 
 async function urteilAusCi(values) {
-  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig });
+  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig, alterSchutz: values[ALTER_SCHUTZ] });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
-  return ergebnis.lokal === undefined ? ergebnis.exitCode : undefined;
+  if (ergebnis.lokal !== undefined) return undefined;
+  return values[GESONDERT] && ergebnis.exitCode === EXIT_ROT && nurSchutzRot(ergebnis.zeilen.join("\n")) ? EXIT_GRUEN : ergebnis.exitCode;
 }
 
 async function eigenerAblauf(values) {
@@ -1082,7 +1143,7 @@ async function eigenerAblauf(values) {
 
 function schutzwerkzeug(basis) {
   return {
-    testdateien: () => [...geaenderteTests({ von: basis })],
+    faelle: () => schutzfaelle(basis, [...geaenderteTests({ von: basis })]),
     einheiten: () => bestandteile({ von: basis, seite: "neu" }),
     stryker: (lauf) => stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() }),
     freigabe: sperreVorTestprozessen,
@@ -1118,6 +1179,7 @@ async function main() {
       testumbau: { type: "boolean", default: false },
       [SCHUTZWIRKUNG]: { type: "boolean", default: false },
       [ALTER_SCHUTZ]: { type: "string", multiple: true, default: [] },
+      [GESONDERT]: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
       plan: { type: "string" },
       teil: { type: "string" },
@@ -1144,7 +1206,7 @@ async function main() {
   kindprozesseInEigenemTempOrdner();
   if (values[SCHUTZWIRKUNG]) {
     starteBudget(NORMAL);
-    return schutzwirkungPruefung(values.basis, values[ALTER_SCHUTZ], schutzwerkzeug(values.basis));
+    return schutzwirkungPruefung(values[ALTER_SCHUTZ], schutzwerkzeug(values.basis));
   }
   if (values.testumbau) return testumbauAblauf(values);
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
@@ -1154,9 +1216,9 @@ async function main() {
   const vorgaben = vorgabenFuer(values);
   if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan, vorgaben.laufzeiten);
   if (values.teil !== undefined) return messeTeil(pruefungen, values, vorgaben);
-  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige }, vorgaben);
+  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige, angaben: values[ALTER_SCHUTZ] }, vorgaben);
   starteBudget(NORMAL);
-  return gesamtlauf(pruefungen, gleichwertige);
+  return gesamtlauf(pruefungen, { gleichwertige, angaben: values[ALTER_SCHUTZ], gesondert: values[GESONDERT] });
 }
 
 function roteTests(mitschrift) {
