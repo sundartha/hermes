@@ -8,7 +8,7 @@ import { parseArgs } from "node:util";
 import { TOOL_TEST_GLOB } from "../test/testbaenke-run.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
-import { dateienDesTeils, waehleTeil, werkzeugMessdatei, werkzeugTeilzahl } from "./testlaufzeit/teilung.mjs";
+import { dateienDesTeils, meldeOhneMesswert, waehleTeil, werkzeugMessdatei, werkzeugTeilzahl } from "./testlaufzeit/teilung.mjs";
 import { planToolTests } from "./werkzeugtests/auswahl.mjs";
 import { guardedRun } from "./werkzeugtests/waechter.mjs";
 
@@ -169,9 +169,14 @@ function toolTestFiles(plan, part, listFile) {
   return waehleTeil({ dateien: all, teil: part.index, anzahl: part.total, messdatei: werkzeugMessdatei() });
 }
 
-function toolTests(plan, part, listFile) {
+function reportMissingMeasurements(files, part, summaryFile) {
+  if (part !== undefined) meldeOhneMesswert({ dateien: files, messdatei: werkzeugMessdatei(), zusammenfassung: summaryFile });
+}
+
+function toolTests(plan, part, { listFile, summaryFile }) {
   const files = toolTestFiles(plan, part, listFile);
   if (files === null) return EXIT_FAILURE;
+  reportMissingMeasurements(files, part, summaryFile);
   if (files.length === 0) {
     console.log(`Werkzeugtests Teil ${part?.index}/${part?.total}: keine Datei der Liste in diesem Teil.`);
     return 0;
@@ -200,6 +205,7 @@ function parseOptions() {
       "fuer-ereignis": { type: "string" },
       werkzeugteil: { type: "string" },
       werkzeugdateien: { type: "string" },
+      zusammenfassung: { type: "string" },
       "teile-pruefen": { type: "string" },
       jobs: { type: "string" },
     },
@@ -235,7 +241,7 @@ async function fullRun(options) {
   if (!runsToolTests(options)) return affectedStatus;
   const plan = await toolTestPlan(options);
   if (plan.art === NO_TOOL_TESTS) return affectedStatus;
-  const toolStatus = toolTests(plan);
+  const toolStatus = toolTests(plan, undefined, {});
   return affectedStatus === 0 ? toolStatus : affectedStatus;
 }
 
@@ -247,7 +253,7 @@ async function partRun(options, part) {
     );
     return 0;
   }
-  return toolTests(plan, part, options.werkzeugdateien);
+  return toolTests(plan, part, { listFile: options.werkzeugdateien, summaryFile: options.zusammenfassung });
 }
 
 async function announceToolTests(options) {
@@ -340,9 +346,8 @@ function usageError(options) {
   if (options.werkzeugteil !== undefined && parsePart(options.werkzeugteil) === null) {
     return `--werkzeugteil erwartet Teil/Teile wie 2/4 mit 1 ≤ Teil ≤ Teile, nicht „${options.werkzeugteil}“.`;
   }
-  if (options.werkzeugdateien !== undefined && options.werkzeugteil === undefined) {
-    return "--werkzeugdateien gehört zu --werkzeugteil.";
-  }
+  const withoutPart = ["werkzeugdateien", "zusammenfassung"].find((name) => options[name] !== undefined && options.werkzeugteil === undefined);
+  if (withoutPart !== undefined) return `--${withoutPart} gehört zu --werkzeugteil.`;
   if (options["teile-pruefen"] === "")
     return "--teile-pruefen braucht den Ordner mit den Berichten der Teile.";
   if ((options["teile-pruefen"] === undefined) !== (options.jobs === undefined)) {

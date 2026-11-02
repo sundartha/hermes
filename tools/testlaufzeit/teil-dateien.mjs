@@ -1,12 +1,12 @@
 import { parseArgs } from "node:util";
 
 import { planToolTests } from "../werkzeugtests/auswahl.mjs";
-import { alleTestdateien, MESSDATEI, waehleTeil } from "./teilung.mjs";
+import { alleTestdateien, MESSDATEI, meldeOhneMesswert, waehleTeil } from "./teilung.mjs";
 
 const EXIT_OK = 0;
 const EXIT_FEHLER = 1;
 const EXIT_AUFRUF = 2;
-const AUFRUF = "Aufruf: node tools/testlaufzeit/teil-dateien.mjs --teil <k> --teile <n> [--ohne-werkzeugtests | --werkzeugtests-aus-liste --basis <ref>] [--messdatei <json>]";
+const AUFRUF = "Aufruf: node tools/testlaufzeit/teil-dateien.mjs --teil <k> --teile <n> [--ohne-werkzeugtests | --werkzeugtests-aus-liste --basis <ref>] [--messdatei <json>] [--zusammenfassung <datei>]";
 const WERKZEUGORDNER = "test/werkzeuge/";
 
 function optionen() {
@@ -18,6 +18,7 @@ function optionen() {
       "werkzeugtests-aus-liste": { type: "boolean", default: false },
       basis: { type: "string" },
       messdatei: { type: "string", default: MESSDATEI },
+      zusammenfassung: { type: "string" },
     },
   }).values;
 }
@@ -52,6 +53,7 @@ async function main() {
   const dateien = werte["werkzeugtests-aus-liste"] ? await mitWerkzeugtestsAusDerListe(alle, werte.basis) : alle;
   const gewaehlt = waehleTeil({ dateien, teil, anzahl, messdatei: werte.messdatei });
   if (gewaehlt === null) return EXIT_FEHLER;
+  meldeOhneMesswert({ dateien: gewaehlt, messdatei: werte.messdatei, zusammenfassung: werte.zusammenfassung });
   console.log(gewaehlt.join("\n"));
   return EXIT_OK;
 }

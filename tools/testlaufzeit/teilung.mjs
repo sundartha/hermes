@@ -1,11 +1,11 @@
-import { existsSync, globSync } from "node:fs";
+import { appendFileSync, existsSync, globSync } from "node:fs";
 
 import { leseLaufzeiten } from "../mutationspruefung/laufzeiten.mjs";
 import { gewichtung, nachGewicht } from "../mutationspruefung/teile.mjs";
 
 export const MESSDATEI = "tools/testlaufzeit/laufzeiten.json";
 export const WERKZEUG_MESSDATEI = "tools/testlaufzeit/werkzeug-laufzeiten.json";
-export const WERKZEUG_SUMME_JE_TEIL_MS = 1_230_000;
+export const WERKZEUG_SUMME_JE_TEIL_MS = 900_000;
 export const WERKZEUG_TEILE_HOECHSTENS = 20;
 const TESTDATEIEN = "test/**/*.test.{js,ts}";
 const WERKZEUGORDNER = "test/werkzeuge/";
@@ -52,6 +52,25 @@ export function waehleTeil({ dateien, teil, anzahl, messdatei, meldung = console
   if (gewaehlt.dateien.length > 0) return gewaehlt.dateien;
   meldung(`Teil ${teil}/${anzahl} enthält keine Testdatei; ein leerer Teil liefe sonst die ganze Suite.`);
   return null;
+}
+
+export function ohneMesswert(dateien, dauern) {
+  if (dauern === null || dauern === undefined) return [];
+  return [...new Set(dateien)].filter((datei) => !Object.hasOwn(dauern, datei)).sort(vergleich);
+}
+
+export function hinweisOhneMesswert(dateien, dauern) {
+  const fehlen = ohneMesswert(dateien, dauern);
+  if (fehlen.length === 0) return "";
+  const liste = fehlen.map((datei) => `- ${datei}`).join("\n");
+  return `Testdateien ohne Messwert: ${fehlen.length} von ${new Set(dateien).size} Dateien dieses Teils zählen mit dem Median. Messdatei erneuern: node tools/testlaufzeit/laufzeiten-erzeugen.mjs\n${liste}`;
+}
+
+export function meldeOhneMesswert({ dateien, messdatei = MESSDATEI, meldung = console.error, zusammenfassung }) {
+  const hinweis = hinweisOhneMesswert(dateien, leseDauern(messdatei).dauern);
+  if (hinweis === "") return;
+  meldung(hinweis);
+  if (zusammenfassung) appendFileSync(zusammenfassung, `${hinweis}\n\n`);
 }
 
 export function werkzeugMessdatei() {
