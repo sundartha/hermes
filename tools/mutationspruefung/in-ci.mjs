@@ -9,14 +9,13 @@ import { gemeinsamerOrdner } from "../auftrag/git.mjs";
 import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
-import { gh, ghRepo, LAUF_FERTIG } from "./gh.mjs";
+import { gh, ghRepo, LAUF_FERTIG, loescheWegwerfZweig, loeseWorkflowAus } from "./gh.mjs";
 import { nurInfrastrukturGescheitert } from "./lauf-einordnung.mjs";
 import { ghMitWiederholung, stoerungsfilter } from "./stoerung.mjs";
 
 const WEGWERF_ZWEIG = "lauf-mutation/";
 const KURZ = 12;
 const WORKFLOW = "ci.yml";
-const ABRUF = "workflow_dispatch";
 const ARTEFAKT = "mutationsurteil";
 const AUSGABE = "ausgabe.txt";
 const EXIT_DATEI = "exit-code";
@@ -33,8 +32,6 @@ const ANFANG_MINUTEN = 5;
 const ANFANG_MS = ANFANG_MINUTEN * MS_JE_MINUTE;
 const LAUF_ROT = "failure";
 const SUCHVERSUCHE = 3;
-const SUCHLISTE = "5";
-const LAUF_URL = /\/actions\/runs\/(\d+)/;
 const LAUFNUMMER = /^[1-9]\d*$/;
 const VORLAUF_ABLAGE = join("hermes", "mutation-vorlauf");
 const ABBRUCHZEILE = /(Abbruch: .*)$/;
@@ -111,29 +108,16 @@ function abgelehnterPush(root, stand, zweig) {
   throw new Error(`git push nach ${REMOTE} endete mit Exit ${lauf.status} ohne Hinweis auf fehlendes Schreibrecht: ${meldung}`);
 }
 
-async function sucheLauf(suche, suchabstandMs, versuch = 1) {
-  await warte(suchabstandMs);
-  const { repo, zweig, seit } = suche;
-  const laeufe = JSON.parse(gh(["run", "list", "-R", repo, "-w", WORKFLOW, "-b", zweig, "-e", ABRUF, "--json", "databaseId,createdAt", "-L", SUCHLISTE]));
-  const neu = laeufe.filter(({ createdAt }) => Date.parse(createdAt) >= seit).sort((frueher, spaeter) => Date.parse(spaeter.createdAt) - Date.parse(frueher.createdAt));
-  if (neu.length > 0) return String(neu[0].databaseId);
-  if (versuch >= SUCHVERSUCHE) throw new Error(`kein Lauf von ${WORKFLOW} auf ${zweig} nach ${SUCHVERSUCHE} Suchen gefunden`);
-  return sucheLauf(suche, suchabstandMs, versuch + 1);
-}
-
 function plaetzeSchalter() {
   const plaetze = env[PLAETZE_VARIABLE];
-  if (plaetze === undefined || plaetze === "") return [];
+  if (plaetze === undefined || plaetze === "") return {};
   if (!PLAETZE_MUSTER.test(plaetze)) throw new Error(`${PLAETZE_VARIABLE} muss eine positive ganze Zahl bis 999 sein, ist aber ${plaetze}`);
-  return ["-f", `plaetze=${plaetze}`];
+  return { plaetze };
 }
 
 function loeseAus({ repo, zweig, basis, alterStand, testumbau, plaetze }, suchabstandMs) {
-  const seit = Math.floor(Date.now() / MS_JE_SEKUNDE) * MS_JE_SEKUNDE;
-  const schalter = [...(alterStand ? ["-f", "alter_stand=true"] : []), ...(testumbau ? ["-f", "testumbau=true"] : [])];
-  const ausgabe = gh(["workflow", "run", WORKFLOW, "-R", repo, "--ref", zweig, "-f", `basis=${basis}`, ...schalter, ...plaetze]);
-  const treffer = LAUF_URL.exec(ausgabe);
-  return treffer ? treffer[1] : sucheLauf({ repo, zweig, seit }, suchabstandMs);
+  const eingaben = { basis, ...(alterStand ? { alter_stand: true } : {}), ...(testumbau ? { testumbau: true } : {}), ...plaetze };
+  return loeseWorkflowAus({ repo, workflow: WORKFLOW, ref: zweig, eingaben }, { suchabstandMs, suchversuche: SUCHVERSUCHE });
 }
 
 function standMelder(url, beginn) {
@@ -203,14 +187,6 @@ function abbruchZeilen(repo, lauf) {
   }
 }
 
-function loescheZweig(repo, zweig) {
-  try {
-    gh(["api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${zweig}`]);
-  } catch (fehler) {
-    console.error(`Hinweis: Wegwerf-Branch ${zweig} nicht gelöscht: ${fehler.message}`);
-  }
-}
-
 async function urteilAusLauf(abruf, kopf, zeiten) {
   const { repo } = abruf;
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
@@ -239,6 +215,6 @@ export async function mutationInCi({ root, basis, alterStand, testumbau, gleichw
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
     return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs, anfangMs });
   } finally {
-    loescheZweig(repo, zweig);
+    loescheWegwerfZweig(repo, zweig);
   }
 }

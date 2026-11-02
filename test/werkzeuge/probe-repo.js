@@ -51,7 +51,7 @@ export function probeDirectory(context, files) {
   return directory;
 }
 
-function setzeUmgebung(context, werte) {
+export function setzeUmgebung(context, werte) {
   const vorher = new Map(Object.keys(werte).map((name) => [name, env[name]]));
   Object.assign(env, werte);
   context.after(() => {
@@ -81,6 +81,11 @@ export function runIn(directory, command, args) {
 function git(directory, args) {
   const result = runIn(directory, "git", args);
   if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+export function gitAusgabe(directory, ...args) {
+  return git(directory, args);
 }
 
 export function commitPaths(directory, paths, message) {
