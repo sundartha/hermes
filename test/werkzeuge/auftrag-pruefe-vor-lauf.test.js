@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_GRUEN = 0;
@@ -123,4 +123,25 @@ test("auftrag-pruefe vor lauf: ein schon gebauter Auftrag macht die Phase mit se
   const rot = pruefe(ordner, [gebaut, spaeter]);
   assert.equal(rot.status, EXIT_ROT, rot.stdout);
   assert.deepEqual(befundzeilen(rot).map((zeile) => zeile.split(":")[0]), ["a2"]);
+});
+
+test("auftrag-pruefe vor lauf: eine .ts-Testdatei außerhalb eines Bereichsordners ist rot, mit vorhandenem .js-Zwilling grün, weil erst der Bau zeigt, ob sie nur umbenannt ist", (context) => {
+  const ordner = repo(context);
+  const auftrag = behebung({ erwarteteDateien: ["src/d.js", "test/abrechnung/antwortfrist.test.js", "test/billing/frist.test.ts"] });
+  const rot = pruefe(ordner, [auftrag]);
+  assert.equal(rot.status, EXIT_ROT, rot.stdout);
+  assert.match(rot.stderr, /^a1: test\/billing\/frist\.test\.ts: neue Testdateien liegen unter test\/<bereich>\//m);
+  writeFiles(ordner, { "test/billing/frist.test.js": BESTAND[ALTER_TEST] });
+  const gruen = pruefe(ordner, [auftrag]);
+  assert.equal(gruen.status, EXIT_GRUEN, gruen.stderr);
+});
+
+test("auftrag-pruefe vor lauf: lassen sich die gebauten Aufträge nicht bestimmen, meldet pruefe keine Testhilfe, die Testordnung aber weiter", (context) => {
+  const ordner = probeDirectory(context, { ...BESTAND, ...ABHAENGIGKEITSREGELN });
+  const hilfe = pruefe(ordner, [behebung({ erwarteteDateien: ["src/d.js", "test/abrechnung/antwortfrist.test.js", BESTEHENDE_HILFE] })]);
+  assert.equal(hilfe.status, EXIT_GRUEN, hilfe.stderr);
+  assert.doesNotMatch(hilfe.stderr, TESTHILFE);
+  const ordnung = pruefe(ordner, [behebung({ abnahme: "test/billing/antwortfrist.test.js" })]);
+  assert.equal(ordnung.status, EXIT_ROT, ordnung.stdout);
+  assert.match(ordnung.stderr, TESTORDNUNG);
 });
