@@ -1,0 +1,8 @@
+{
+  "schritt": ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil",
+  "zweck": [
+    "tests/mutation",
+    "tests/stryker-zustand"
+  ],
+  "beleg": "tools/mutationspruefung.mjs"
+}

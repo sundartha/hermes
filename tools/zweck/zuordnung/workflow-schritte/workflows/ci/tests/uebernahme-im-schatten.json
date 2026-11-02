@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › tests › Übernahme im Schatten",
+  "aufbau": "Lokale Action .github/actions/uebernahme-im-schatten; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+}

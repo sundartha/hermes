@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › OpenAI-Doku",
+  "zweck": "uebrige/openai-doku",
+  "beleg": "tools/openai-doku-pruefen.mjs"
+}

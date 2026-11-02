@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/actions/node-npm-ci/action.yml › npm ci für apps/web",
+  "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
+}

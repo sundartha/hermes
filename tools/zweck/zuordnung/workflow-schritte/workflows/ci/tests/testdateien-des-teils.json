@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › tests › Testdateien des Teils",
+  "meldet": "Wählt nur die Testdateien dieses Teils aus der gemessenen Laufzeit; urteilt nicht über Tests und bricht den Lauf nur ab, wenn kein Teil gebildet werden kann."
+}

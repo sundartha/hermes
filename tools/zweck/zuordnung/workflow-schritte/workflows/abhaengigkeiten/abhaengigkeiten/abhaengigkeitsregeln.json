@@ -1,0 +1,10 @@
+{
+  "schritt": ".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Abhängigkeitsregeln",
+  "zweck": [
+    "basis/abhaengigkeitsregeln",
+    "basis/test-importe",
+    "basis/testregel-bestaende",
+    "basis/testordnung"
+  ],
+  "beleg": "tools/abhaengigkeiten.mjs"
+}

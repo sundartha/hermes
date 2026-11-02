@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/actions/uebernahme-im-schatten/action.yml › Übernahme im Schatten",
+  "meldet": "Berechnet, welche Testdateien aus einem früheren grünen Lauf am gleichen Git-Baum übernommen werden können, schreibt die Vorhersage als Artefakt und urteilt nicht; nur mit UEBERNAHME=an schreibt sie die Liste der Dateien, die noch laufen, sonst wird nichts ausgelassen; Fehler landen in der Vorhersage, der Schritt endet grün."
+}

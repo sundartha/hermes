@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Commit-Prüfung",
+  "zweck": "uebrige/commit-pruefung",
+  "beleg": ".github/workflows/ci.yml"
+}

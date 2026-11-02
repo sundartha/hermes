@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › ci › Zweck und Ausweg des Sammeljobs",
+  "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+}
