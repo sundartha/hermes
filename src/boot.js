@@ -58,7 +58,7 @@ import {
   syncPlatformBindings,
 } from "./store/state-ops.js";
 import { CONSULT_OPEN_MS } from "./consult/in-call.js";
-import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
+import { costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { priceIdForPlan } from "./billing/subscribe.js";
@@ -71,6 +71,11 @@ import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
+import { makeGracefulShutdown } from "./abschalten.js";
+import { runSweepTick } from "./zeitsteuerung.js";
+
+export { makeGracefulShutdown } from "./abschalten.js";
+export { runSweepTick } from "./zeitsteuerung.js";
 
 const MINUTES_PER_HOUR = 60;
 const RETENTION_SWEEP_INTERVAL_HOURS = 6;
@@ -667,36 +672,6 @@ export function derivePlatformNumberBindings({ config, store }) {
   return open;
 }
 
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
-  void costTruing
-    .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-    .catch((err) => console.error("[cost-truing]", err.message));
-  void provisioning
-    .settleDueNumberMonthMeters()
-    .catch((err) => console.error("[number-month]", err.message));
-  void costCrossCheck
-    .runMonthlyCrossCheck()
-    .catch((err) => console.error("[cost-cross-check]", err.message));
-  void outageWatch
-    .runRecoverySweep()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void outageWatch
-    .runAlertChannelSelfTest()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void outageWatch
-    .runHoldEscalationSweep()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void paidWithoutNumberWatch
-    .runPaidWithoutNumberSweep()
-    .catch((err) => console.error("[paid-no-number]", err.message));
-  void provisionRetryWatch
-    .runProvisionRetrySweep()
-    .catch((err) => console.error("[provision-retry-sweep]", err.message));
-  void priceDriftWatch
-    .runPriceDriftSweep()
-    .catch((err) => console.error("[price-drift]", err.message));
-}
-
 function expireOrphanedConsults(store) {
   const state = store.load();
   const nowMs = Date.now();
@@ -785,42 +760,4 @@ export async function bootServer({
   });
   process.once("SIGTERM", gracefulShutdown);
   process.once("SIGINT", gracefulShutdown);
-}
-
-export function makeGracefulShutdown({
-  httpServer,
-  store,
-  config,
-  releaseLongPolls = () => {},
-  exit = process.exit,
-  log = console.log,
-  logError = console.error,
-}) {
-  let shuttingDown = false;
-  return async function gracefulShutdown(signal) {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    const watchdog = setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref();
-    releaseLongPolls();
-    const closed = new Promise((resolve) => httpServer.close(resolve));
-    if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
-    await closed;
-    let flushError = null;
-    try {
-      await store.save();
-      await store.drainFlushes();
-    } catch (err) {
-      flushError = err;
-    }
-    clearTimeout(watchdog);
-    if (flushError) {
-      logError(
-        `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN - Datenverlust moeglich: ${flushError.message}`,
-      );
-      exit(1);
-      return;
-    }
-    exit(0);
-  };
 }
