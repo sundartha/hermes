@@ -1,7 +1,7 @@
 import { TOOL_TEST_DIRECTORY } from "../../test/testbaenke-run.mjs";
 
 const HARNESS_FILES = ["test/testbaenke-run.mjs", "test/i18n-catalog-run.mjs", "test/package.json"];
-export const HIDDEN_DIRECTORIES = ["src/", "plaene/"];
+export const HIDDEN_DIRECTORIES = ["src/", "plaene/", "apps/web/"];
 const TEST_DIRECTORY = "test/";
 
 export function isToolTreePath(path) {
