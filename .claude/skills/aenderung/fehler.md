@@ -6,7 +6,7 @@ Ablage: `plaene/F-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
 {
   "phase": "F-<Nummer>-<kurzname>",
   "issue": <Nummer des Issues>,
-  "absicht": "<2 bis 4 Sätze: wofür die Behebung da ist, welche Abkürzung nicht gewollt ist, wie im Zweifel zu wählen ist>",
+  "absicht": "<2 bis 4 Sätze, höchstens 1000 Zeichen: wofür die Behebung da ist, welche Abkürzung nicht gewollt ist, wie im Zweifel zu wählen ist>",
   "entwurf": {
     "<bereich>": "<Entwurf, siehe unten, Zeilen mit \\n getrennt>"
   },
@@ -17,7 +17,7 @@ Ablage: `plaene/F-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
       "ziel": "<was nach dem Fix richtig ist, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem der Fix liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
-      "abnahme": "test/<name>.test.js",
+      "abnahme": "test/<bereich aus tools/bereiche.json>/<name>.test.js",
       "erwarteterFehler": "<wörtlicher Text der Meldung, mit der der Abnahmetest heute aus dem gemeldeten Grund rot wird, eine Zeile>",
       "wasDarfNiePassieren": ["<das Verhalten, das gleich bleiben muss, als prüfbarer Satz>"]
     }
