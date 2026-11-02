@@ -1,0 +1,108 @@
+{
+  "gruppe": [
+    "S4"
+  ],
+  "nummern": {
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/voice.js",
+          "funktion": "makeVoiceRoutes",
+          "von": 376,
+          "bis": 411
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendTurnOutcome",
+          "von": 290,
+          "bis": 296
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/routes/voice.js",
+          "funktion": "sendVoiceXml",
+          "von": 258,
+          "bis": 261
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/tts/directive-synth.js",
+          "funktion": "synthesizeDirectiveAudio",
+          "von": 16,
+          "bis": 30
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/tts/directive-synth.js",
+          "funktion": "withPlayAudio",
+          "von": 32,
+          "bis": 41
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/tts/directive-synth.js",
+          "funktion": "synthToServeUrl",
+          "von": 43,
+          "bis": 73
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/store/state-ops.js",
+          "funktion": "bumpPlatformTtsQuota",
+          "von": 1646,
+          "bis": 1662
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/server.js",
+          "funktion": "onTtsQuotaWarning",
+          "von": 196,
+          "bis": 200
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/alert-sms.test.js",
+        "test/tts-quota-counter.test.js",
+        "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Weg und Kette: `kette` belegt makeVoiceRoutes→sendTurnOutcome→sendVoiceXml, synthesizeDirectiveAudio→withPlayAudio→synthToServeUrl und onTtsQuotaWarning→sendBootstrapAlertSms. Nicht belegt sind sendVoiceXml→synthesizeDirectiveAudio (Aufruf über das Objekt `directiveSynth.synthesizeDirectiveAudio`, `src/routes/voice.js:259`), synthToServeUrl→recordTtsCharacters und synthToServeUrl→onTtsQuotaWarning (Aufruf über `store.recordTtsCharacters` und die injizierte Funktion `onQuotaWarning`, `src/tts/directive-synth.js:66` und `:71`; verdrahtet in `src/server.js:202`). Die Aufrufe stehen im Code, siehe die genannten Zeilen.",
+    "Eingang: `/voice/turn` ist der Handler in `src/routes/voice.js:376-411`, in `karte` als „anonym ab Zeile 376“ geführt und hier unter `makeVoiceRoutes` gemeldet, weil er darin liegt. Auch `/voice/incoming` (`:333`) und `/voice/outbound` (`:413`) rufen `sendVoiceXml` auf.",
+    "Argumente der heutigen TTS-Warnung (`src/server.js:194-199`): logTag `tts_quota_warning`; prefix `\"[Hermes] ElevenLabs-Kontingent-Warnschwelle erreicht: \"`; detail `zeichen=<characters>/<quota> zyklus=<cycleKey>`; messaging, config und store werden durchgereicht. Vorher läuft `audit(\"tts_quota_warning\", null, detail)`. Der Aufrufer muss unverändert bleiben.",
+    "Auslösung: In `bumpPlatformTtsQuota` (`src/store/state-ops.js:1646-1662`) wird erst gezählt, dann geprüft: `scaledThresholdCrossed(row.characters, quota, warnPercent)` und `row.warnedCycle !== key`. Bei Zählerstand 700, 60 Zeichen, Kontingent 1000 und 75 % ergeben sich 760 ≥ 750. Das löst genau eine Warnung aus, vorausgesetzt der Zähler stand vorher unter 750. Die Sperre ist `row.warnedCycle`: Sie liegt im Zustand `platformTtsUsage` (`json.js:671` und `pg.js:385` rufen `ops.recordTtsCharacters`) und gilt je Zyklus. Beim Test-Zählerstand 700 darf `warnedCycle` nicht schon auf den Zyklus gesetzt sein. Bei `characters ≥ quota` vor dem Schritt gilt `exhausted`, dann gibt es keine Warnung, sondern Azure-Fallback (`directive-synth.js:67-70`).",
+    "Zähler im Test setzen: In `test/helpers.js:248-249` steht `TTS_CHARACTER_QUOTA` 39981 und `TTS_CHARACTER_QUOTA_WARN_PERCENT` 0 (Warnung aus). Der Test muss deshalb 1000 und 75 per Umgebung setzen. Den Zähler auf 700 setzen kann `recordTtsCharacters`, aufgerufen mit `{ctx}`-Store über `store.recordTtsCharacters(700, nowIso)` (`src/store.js:122`) vor dem Schritt, oder ein vorgefüllter Zustand `platformTtsUsage` in einem Test-Store. Ich habe diesen Weg im Code nicht in einem laufenden Test gesehen. Bestehende Tests mit Kontingent 1000 und 75 % (`test/tts-quota-counter.test.js:19`, `test/kv-p7-latent-paths.test.js:16`) rufen die Operationen direkt auf, nicht über die Route.",
+    "Sprachsynthese im Test: `test/gemeinsam/play-tts-server.mjs` bringt `playTtsEnv(originUrl)` (setzt `ELEVENLABS_PLAY_TTS_ENABLED` auf true, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_API_BASE`) und `startSyntheseOrigin`, eine HTTP-Attrappe für ElevenLabs. Sie wird in `test/anrufe/eingang-ansage-vor-auflegen.test.js:6`, `eingang-fehlerweg-ohne-synthese.test.js:6`, `eingang-logzeilen.test.js:8`, `ausgehende-begruessung.test.js:11` und `test/ie7-play-tts-streaming.test.js:20` benutzt; die Schritte gehen über `/voice/turn?callId=…` (z. B. `eingang-ansage-vor-auflegen.test.js:158`). Die Zeichenzahl ist die Länge des Satzes (`text.length`, `directive-synth.js:50`), also ein 60 Zeichen langer Antworttext. Signatur: `SKIP_TWILIO_SIGNATURE_CHECK: \"true\"` steht in `test/helpers.js:119`, der Webhook-Weg ist damit ohne Telnyx-Schlüssel erreichbar.",
+    "Test, der rot würde: `test/alert-sms.test.js:159-166` prüft `sendBootstrapAlertSms` mit `logTag: \"tts_quota_warning\"` und erwartet `body = prefix + detail`, Empfänger aus `config` und die Bootstrap-Nummer als Absender über eine Messaging-Attrappe. Er wird rot, ebenso `:169-181` (kein Versand ohne Empfänger oder ohne Bootstrap-Nummer), sobald die Funktion an Better Stack sendet. Der Test prüft die Funktion mit Attrappen, nicht über den echten Eingang. Auch `test/alert-sms.test.js` importiert `sendFailSoftAlertSms` und `resolveBootstrapAlertSender` (`:3`), die laut Design Doc entfallen. Bei den Tests für den echten Eingang sehe ich keinen, der eine SMS für die TTS-Warnung erwartet.",
+    "Alter Test-Name aus der Konfiguration: `PLATFORM_ALERT_SMS_TO` steht in `test/abrechnung/server-mit-testdatenbank.js:47`, `test/cost-drift-boot.test.js:6-25` und `test/abrechnung/stripe-webhook.test.js:394`. Sie gehören zu S2, S5 und S7 bis S9, nicht zu S4, werden aber mit der entfallenden Variable rot.",
+    "Änderung für S4: Die Funktion `sendBootstrapAlertSms` (`src/telephony/alert-sms.js:32-40`) wird auf die Kernfunktion umgestellt. Dafür entsteht kein eigener Anteil in `server.js`; `onTtsQuotaWarning` bleibt wie es ist. Die geschätzten 6 Zeilen sind nur der Anteil, den S4 selbst braucht: Der Schlüssel `tts_quota_warning:<ISO-Zeitstempel>:<Kurz-Hash>` entsteht hier aus `logTag`, Zeitstempel und Kurz-Hash der Zeile `prefix + detail`. Die Kernfunktion selbst gehört zu anderen Nummern.",
+    "Absicht: Im Code sehe ich keinen Weg, der die Abkürzung nimmt. Nur `sendBootstrapAlertSms` und die Warnung mit Schlüssel `tts_quota_warning` nutzen den Aufrufer, und die Sperre `warnedCycle` verhindert Doppelmeldungen je Zyklus, nicht je Prozess. Folge: Fällt die Zustellung an Better Stack aus, wird die Warnung für diesen Zyklus nicht wiederholt (`state-ops.js:1657-1658` setzt `warnedCycle` vor dem Senden), und `sendBootstrapAlertSms` sendet fire-and-forget. Das entspricht dem im Design Doc genannten Nicht-Ziel („für TTS und Heilung siehe vorgeschlagenes Nicht-Ziel“), widerspricht aber ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht. Der Planer sollte das beim Zuschnitt sehen."
+  ]
+}
