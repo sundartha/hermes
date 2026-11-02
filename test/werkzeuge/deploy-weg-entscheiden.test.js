@@ -9,6 +9,7 @@ import {
   FRISCH_GEWECKT_AB_MS,
 } from "../../tools/deploy-weg/takt.mjs";
 import {
+  ACTIONS_APP,
   anfragenAn,
   COMMIT_C,
   COMMIT_P,
@@ -244,4 +245,137 @@ test("entscheiden: eine erste Weck-Antwort nach 40 Sekunden gilt als frisch gewe
   const schnell = await entscheidenMit(kontext, { welt: { healthzDauerMs: [FRISCH_GEWECKT_AB_MS, 0] } });
   assert.equal(schnell.ergebnis.deploy, true);
   assert.equal(schnell.ergebnis.frischGeweckt, false);
+});
+
+const VOR_MERGE = "2026-10-01T09:00:00Z";
+const ERSTER_START = "2026-10-01T09:05:00Z";
+const ZWEITER_START = "2026-10-01T09:10:00Z";
+const NACH_MERGE = "2026-10-01T10:30:00Z";
+
+function pflichtLaeufe(name, laeufe) {
+  const fremde = GRUENE_CHECKS.filter((lauf) => lauf.name !== name);
+  const eigene = laeufe.map(({ startet, ...rest }) => ({
+    name,
+    app: { id: ACTIONS_APP },
+    ...(startet === undefined ? {} : { started_at: startet }),
+    ...rest,
+  }));
+  return { checks: [...fremde, ...eigene] };
+}
+
+test("entscheiden grün: ein älterer abgebrochener Lauf überstimmt den jüngeren grünen Lauf desselben Pflicht-Checks nicht", async (kontext) => {
+  for (const name of ["CI", "Freigabe-Prüfung"]) {
+    const welt = pflichtLaeufe(name, [
+      { startet: ERSTER_START, conclusion: "cancelled" },
+      { startet: ZWEITER_START, conclusion: "success" },
+    ]);
+    const lauf = await entscheidenMit(kontext, { welt });
+    assert.equal(lauf.ergebnis.ok, true);
+    assert.equal(lauf.ergebnis.deploy, true);
+  }
+});
+
+test("entscheiden grün: die Reihenfolge der Läufe in der GitHub-Antwort ändert das Urteil nicht", async (kontext) => {
+  const welt = pflichtLaeufe("CI", [
+    { startet: ZWEITER_START, conclusion: "success" },
+    { startet: ERSTER_START, conclusion: "failure" },
+  ]);
+  const lauf = await entscheidenMit(kontext, { welt });
+  assert.equal(lauf.ergebnis.deploy, true);
+});
+
+const ROTE_FAELLE = [
+  [
+    "der jüngste Lauf ist failure, ein älterer war success",
+    [
+      { startet: ERSTER_START, conclusion: "success" },
+      { startet: ZWEITER_START, conclusion: "failure" },
+    ],
+    /Pflicht-Check CI ist nicht success \(failure\)/,
+  ],
+  [
+    "der jüngste Lauf ist abgebrochen, ein älterer war success",
+    [
+      { startet: ERSTER_START, conclusion: "success" },
+      { startet: ZWEITER_START, conclusion: "cancelled" },
+    ],
+    /Pflicht-Check CI ist nicht success \(cancelled\)/,
+  ],
+  [
+    "der jüngste Lauf hat noch keine conclusion",
+    [
+      { startet: ERSTER_START, conclusion: "success" },
+      { startet: ZWEITER_START, conclusion: null },
+    ],
+    /Pflicht-Check CI ist nicht success \(offen\)/,
+  ],
+  [
+    "ein jüngerer success einer fremden App hebt das Rot des Actions-Laufs nicht auf",
+    [
+      { startet: ERSTER_START, conclusion: "cancelled" },
+      { startet: ZWEITER_START, conclusion: "success", app: { id: FREMDE_APP } },
+    ],
+    /Pflicht-Check CI ist nicht success \(cancelled\)/,
+  ],
+  [
+    "zwei Läufe mit gleichem started_at, einer davon nicht success",
+    [
+      { startet: ERSTER_START, conclusion: "cancelled" },
+      { startet: ERSTER_START, conclusion: "success" },
+    ],
+    /Pflicht-Check CI ist nicht success \(cancelled\)/,
+  ],
+  [
+    "der jüngere Lauf hat kein started_at und ist nicht success",
+    [
+      { startet: ERSTER_START, conclusion: "success" },
+      { conclusion: "failure" },
+    ],
+    /Pflicht-Check CI ist nicht success \(failure\)/,
+  ],
+  [
+    "der Lauf ohne started_at ist success, der datierte nicht",
+    [
+      { startet: ERSTER_START, conclusion: "failure" },
+      { conclusion: "success" },
+    ],
+    /Pflicht-Check CI ist nicht success \(failure\)/,
+  ],
+  [
+    "ein success, der erst nach dem Merge beginnt, hebt das Rot davor nicht auf",
+    [
+      { startet: VOR_MERGE, conclusion: "cancelled" },
+      { startet: NACH_MERGE, conclusion: "success" },
+    ],
+    /Pflicht-Check CI ist nicht success \(cancelled\)/,
+  ],
+  [
+    "ein Lauf nach dem Merge, der nicht success ist, bleibt rot",
+    [
+      { startet: VOR_MERGE, conclusion: "success" },
+      { startet: NACH_MERGE, conclusion: "failure" },
+    ],
+    /Pflicht-Check CI ist nicht success \(failure\)/,
+  ],
+];
+
+for (const [titel, laeufe, erwartet] of ROTE_FAELLE) {
+  test("entscheiden rot: " + titel, async (kontext) => {
+    const lauf = await entscheidenMit(kontext, { welt: pflichtLaeufe("CI", laeufe) });
+    rotPruefen(lauf, erwartet);
+  });
+}
+
+test("entscheiden rot: nur Läufe einer fremden App, auch wenn sie success sind, ersetzen den Pflicht-Check nicht", async (kontext) => {
+  const welt = pflichtLaeufe("CI", [
+    { startet: ERSTER_START, conclusion: "success", app: { id: FREMDE_APP } },
+    { startet: ZWEITER_START, conclusion: "success", app: { id: FREMDE_APP } },
+  ]);
+  rotPruefen(await entscheidenMit(kontext, { welt }), /Pflicht-Check CI stammt nicht von GitHub Actions/);
+});
+
+test("entscheiden rot: fehlt der Pflicht-Check ganz, hilft kein Lauf eines anderen Namens", async (kontext) => {
+  const welt = pflichtLaeufe("Anderer Check", [{ startet: ERSTER_START, conclusion: "success" }]);
+  const ohneCi = { checks: welt.checks.filter(({ name }) => name !== "CI") };
+  rotPruefen(await entscheidenMit(kontext, { welt: ohneCi }), /Pflicht-Check CI fehlt/);
 });
