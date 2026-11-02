@@ -1,0 +1,137 @@
+{
+  "stand": {
+    "kopfBaum": "8d6117112ec8d69b62376c7e59e6673690623f37",
+    "arbeitsbaum": "8d6117112ec8d69b62376c7e59e6673690623f37",
+    "dateien": {
+      ".claude/agents/entwurf.md": "c85d87ce8c561ddf29a286af6477df0bf47007f66e0001b168f395c6c95d3cae",
+      ".claude/agents/erkunder.md": "8d9551820749ce7c4ffbb9c6f69e5a798d158f0cd7f83d45daf4333274fb25d1",
+      ".claude/agents/planer.md": "2c99ea18998fc6943efecc39fe55975476084b07c44ba9693a3c8f37a8a9dd71",
+      ".claude/agents/pruefer-planung.md": "0b735d0d872f8baf012a4f8268d9451cac067b51a16d6a2bc56d48b2418cb400",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "23e9ecdc84bef477f569ca4e9cda40b0445f5b48bcbddcf505ddcfc1b19721a0",
+      "plaene/P-2643-t1-t1-alarm-kern/design.md": "0841c92e193ec0c2fea7786b333e7fffba21fbaaef5175e6ddf80471f71a2714",
+      "plaene/P-2643-t1-t1-alarm-kern/pitch.md": "c028f164332d35dd9240b04cbaca6b32b782312adcb17131e8d6b97547ae00b4",
+      "plaene/P-2643-t1-t1-alarm-kern/sicherheit.md": "a4b389e7a0a15b1f132c0feb8ac18413385235fab4342fc0b4ca833639a46718",
+      "tools/bereiche.json": "596ac41f5497c0883a29770b144cc40291110b34169da4e2f499738c186f4598"
+    },
+    "kopfOhneWerkzeug": "377e807d01d28923cda2cdb026e56a430517a7b3a94a3042a65591e833de45b3",
+    "arbeitsbaumOhneWerkzeug": "377e807d01d28923cda2cdb026e56a430517a7b3a94a3042a65591e833de45b3",
+    "werkzeugBaum": "84dbaffc795d22e7095def94b82e99f5ac32c38c"
+  },
+  "ablage": {
+    "gliederung.json": "0448147bd2e343e42460de84648a2442cfd702c335d0c76d3a516ddb9e6b1595",
+    "nachfragen.json": "384c152fc74503c51602d3fd461ef2817bb3aca5fe02b43967c4c4e4f90d1227",
+    "erkundung-g1.json": "db1687c8e4baf7bc4607d011fff2504b559a9bc61b06fc435a9244a7cb398a94",
+    "erkundung-g2.json": "b39abf609049ec8152789eebb4c26ab019ed8e52bdb2bd029039fed241966df0"
+  },
+  "zustand": {
+    "gesehen": [
+      "S3\u0000src/routes/api-billing.js\u0000makeBillingRoutes",
+      "S3\u0000src/billing/cost-truing.js\u0000runCostTruingSweep",
+      "S3\u0000src/billing/cost-truing.js\u0000sweepAllCandidates",
+      "S3\u0000src/billing/cost-truing.js\u0000reportTariffDrift",
+      "S3\u0000src/billing/cost-truing.js\u0000alertDrift",
+      "S3\u0000src/billing/cost-truing.js\u0000shouldEmitFinding",
+      "S3\u0000src/telephony/alert-sms.js\u0000sendBootstrapAlertSms",
+      "S16\u0000src/routes/api-billing.js\u0000makeBillingRoutes",
+      "S16\u0000src/billing/cost-truing.js\u0000runCostTruingSweep",
+      "S16\u0000src/billing/cost-truing.js\u0000sweepAllCandidates",
+      "S16\u0000src/billing/cost-truing.js\u0000reportTariffDrift",
+      "S16\u0000src/billing/cost-truing.js\u0000alertDrift",
+      "S16\u0000src/billing/cost-truing.js\u0000shouldEmitFinding",
+      "S16\u0000src/telephony/alert-sms.js\u0000sendBootstrapAlertSms",
+      "S4\u0000src/routes/voice.js\u0000makeVoiceRoutes",
+      "S4\u0000src/routes/voice.js\u0000sendTurnOutcome",
+      "S4\u0000src/routes/voice.js\u0000sendVoiceXml",
+      "S4\u0000src/tts/directive-synth.js\u0000synthesizeDirectiveAudio",
+      "S4\u0000src/tts/directive-synth.js\u0000withPlayAudio",
+      "S4\u0000src/tts/directive-synth.js\u0000synthToServeUrl",
+      "S4\u0000src/store/state-ops.js\u0000bumpPlatformTtsQuota",
+      "S4\u0000src/server.js\u0000onTtsQuotaWarning",
+      "S4\u0000src/telephony/alert-sms.js\u0000sendBootstrapAlertSms"
+    ],
+    "ausgeschoepft": [
+      "S3",
+      "S4",
+      "S16"
+    ],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S4"
+        ],
+        "sitzung": "910abe6a-ac69-4012-a549-ce917241bfca",
+        "runden": 1,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S3",
+          "S16"
+        ],
+        "sitzung": "3bd027e6-228c-4db0-a36a-5a238ebb3452",
+        "runden": 1,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "sitzung": "2ddff2b8-0b0b-41dc-b74c-3da6b809cadc",
+        "runden": 1,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S4",
+        1
+      ],
+      [
+        "S3",
+        2
+      ]
+    ],
+    "nachfrageWellen": 1,
+    "wegAbnahmen": [
+      {
+        "nummer": "S3",
+        "summe": "93b56de9efff8505f513006eff9609deddeb409915e929531c89dec46431172b",
+        "werkzeug": "84dbaffc795d22e7095def94b82e99f5ac32c38c",
+        "zeile": {
+          "schluessel": "weg:S3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/billing/cost-truing.js:490"
+        }
+      },
+      {
+        "nummer": "S4",
+        "summe": "510d96de0b488b0c711473c336989796074df6f8b330e61163322fe69568f2b1",
+        "werkzeug": "84dbaffc795d22e7095def94b82e99f5ac32c38c",
+        "zeile": {
+          "schluessel": "weg:S4",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/server.js:202"
+        }
+      },
+      {
+        "nummer": "S16",
+        "summe": "402e94f68e7a6833c9d27133b59a9e35b647cd37a9df0ced7b8317c36a759e9d",
+        "werkzeug": "84dbaffc795d22e7095def94b82e99f5ac32c38c",
+        "zeile": {
+          "schluessel": "weg:S16",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/billing/cost-calibration.js:108"
+        }
+      }
+    ]
+  }
+}
