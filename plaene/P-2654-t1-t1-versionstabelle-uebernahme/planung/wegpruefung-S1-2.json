@@ -1,0 +1,25 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "package.json:14"
+    },
+    {
+      "schluessel": "weg:S13",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrate.js:11"
+    },
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrations/0001_ausgang.sql:985"
+    },
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store.js:30"
+    }
+  ],
+  "befunde": []
+}

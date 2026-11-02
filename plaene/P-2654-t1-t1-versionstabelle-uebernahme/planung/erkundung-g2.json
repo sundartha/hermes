@@ -1,0 +1,134 @@
+{
+  "gruppe": [
+    "S2"
+  ],
+  "nummern": {
+    "S2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "package.json",
+          "ausweg": "nicht gefunden, weil `npm start` das Skript start in package.json:14 ist (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-23) createPgBackend aufruft; beides liegt in keiner Funktion"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/gemeinsam/migrationen-neustart.test.js",
+          "ausweg": "nicht gefunden, weil `npm start` entsteht neu in test/gemeinsam/migrationen-neustart.test.js"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 14
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applyMigrations",
+          "neu": "funktion",
+          "neueZeilen": 10,
+          "vorhanden": {
+            "suche": [
+              "applyMigrations",
+              "applySchema",
+              "MIGRATION_READERS"
+            ],
+            "treffer": [
+              "src/db/migrate.js:21",
+              "src/db/migrate.js:11"
+            ],
+            "urteil": "kein Treffer passt, weil applySchema (src/db/migrate.js:21-23) jeden Text bei jedem Start ausführt und keine Versionstabelle kennt; applySchema bleibt für Tests unverändert"
+          }
+        },
+        {
+          "datei": "test/gemeinsam/migrationen-neustart.test.js",
+          "funktion": "Test: zweiter Start heilt den entfernten Index nicht",
+          "neu": "datei",
+          "neueZeilen": 35,
+          "vorhanden": {
+            "suche": [
+              "startServer",
+              "echteDatenbank"
+            ],
+            "treffer": [
+              "test/gemeinsam/zwei-prozesse.js:42",
+              "test/gemeinsam/echtes-postgres.js:36"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "test/gemeinsam/echtes-postgres.js",
+              "funktion": "echteDatenbank"
+            }
+          }
+        }
+      ],
+      "tests": [
+        "test/gemeinsam/zwei-prozesse.test.js",
+        "test/call-actual-cost-roundtrip.test.js",
+        "test/openai-t2-20-reviewer-seed-pg.test.js",
+        "test/iel-b4a-brueckenzustand.test.js",
+        "test/f1-geo-store.test.js",
+        "test/312k-p1-cancel-at-period-end-pg.test.js"
+      ],
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "src/db/migrations/0002_versionstabelle.sql (neu): Tabelle schema_migrations; 0001_ausgang.sql:999 legt account_email_idx an und bleibt unverändert"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil der Pitch (Absicht) die Versionstabelle und das einmalige Anwenden ausdrücklich verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "`npm start` ist das Skript `start` in package.json:14 (`node src/server.js`). Der Server lädt src/store.js, und dort läuft `createPgBackend` mit `store.init()`. Der neue Test löst denselben Weg mit `makePgStore(runner).init()` aus, so wie test/call-actual-cost-roundtrip.test.js:138-143 es tut.",
+    "Der Index steht in src/db/migrations/0001_ausgang.sql:999 mit IF NOT EXISTS. Außer dieser Zeile legt kein Code in src/ ihn an, auch keine der vier Nachzüge (src/db/migrate.js:179-182) und nicht `seedDefaults`.",
+    "Bestehende Tests, die auf eine Heilung beim Start bauen: test/openai-t2-20-reviewer-seed-pg.test.js:180-199 wird rot, wenn vor dem Start nichts `schema_migrations` leert. test/iel-b4a-brueckenzustand.test.js:385 und test/f1-geo-store.test.js:324, 348 und 379 habe ich nicht im Einzelnen geprüft; ob sie rot werden, ist offen.",
+    "`kette` belegt den Weg von `init` zu `migrate` nicht, weil `prepareSchema` ein Parameter ist (src/store/pg.js:22). Ich habe ihn von Hand gelesen: src/store/pg.js:35 ruft `prepareSchema`, Vorgabe ist `migrate`. Belegt ist `migrate` → `applySchema` (src/db/migrate.js:178).",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Namens-Check: `npm start` steht nirgends wörtlich in einer Datei unter src/. Es ist nur das Skript `\"start\": \"node src/server.js\"` in package.json:14 und eine Zeile in README.md:72. Kette: src/server.js:3 importiert src/store.js, und dort läuft beim Laden `createPgBackend` (src/store.js:7-14, aufgerufen in Zeile 23) mit `store.init()` (Zeile 12). Das ist der echte Eingang. Der Planer kann `npm start` als package.json:14 lesen.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 1: `src/db/migrations/0001_ausgang.sql:999` legt den Index an: `CREATE INDEX IF NOT EXISTS account_email_idx ON account (email);`. Er hat IF NOT EXISTS. Ein anderer Code legt ihn nicht an: Die Suche nach `account_email_idx` findet in src/ nur diese Zeile. Die Nachzüge in `migrate` (src/db/migrate.js:179-182: backfillPeriodStart, rekeyProfilesToTenant, backfillAccountEmailCase, backfillNumberGeo) und `seedDefaults` (123-170) legen keinen Index an. Auch `backfillAccountEmailCase` (44-46) ist ein Nachzug, der nur Daten ändert. Ohne Änderung an den Nachzügen bleibt der Index nach dem zweiten Start weg, sobald `applySchema` die Datei überspringt.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 2: Der Weg des zweiten Starts ist: package.json:14 `node src/server.js` → src/server.js:3 `import * as store` → src/store.js:21-23 und `createPgBackend` 7-14 mit `makePgStore(runner)` (Zeile 11) und `await store.init()` (Zeile 12) → src/store/pg.js:22 `makePgStore(runner, { prepareSchema = migrate })` und `init` 32-52 mit `setTenant` (34) und `prepareSchema(client, BOOTSTRAP_TENANT_ID)` (35) → src/db/migrate.js:177-184 `migrate` ruft in Zeile 178 `applySchema(db)` → 21-23 führt jeden Text aus `migrationTexts()` per `db.exec` aus. `MIGRATION_READERS` steht in Zeile 11, ein Eintrag liest `AUSGANG_FILE` (Zeile 9). Die Prüfung gegen `schema_migrations` gehört in `applySchema` (22), um die Schleife je Datei: zuerst die Versionstabelle anlegen und Name und Prüfsumme prüfen, dann ausführen und eintragen. Dabei hält die Sitzungs-Sperre auf demselben Client (siehe Design Doc). `kette` belegt den Weg von `init` zu `migrate` nicht, weil `prepareSchema` ein Parameter ist. Der Rest der Kette ist belegt: `migrate` → `applySchema`.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 3: Der Inhalt ist byte-gleich. `MIGRATION_READERS` (src/db/migrate.js:11) liest nur `fs.readFileSync(AUSGANG_FILE, \"utf8\")`. Es gibt weder Platzhalter noch Umgebungswerte noch Zeilenende-Umwandlung. Eine Prüfsumme über den Text ist stabil. Die Tests nutzen `schemaDdl()` (Zeilen 17-19) als Vorlagenschlüssel in test/pg-helpers.js:10.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 4: Tests, die sich auf Heilung oder erneute Ausführung verlassen: (a) test/openai-t2-20-reviewer-seed-pg.test.js:180-199 entfernt per `db.exec(SABOTAGE_FAELLE[0].ddl)` (Zeile 182, `ALTER TABLE call DROP COLUMN inbox_seen_at`, Zeile 144) eine Spalte, startet `makePgStore(runner).init()` (186) und erwartet die Spalte wieder. Dieser Test wird rot, wenn nichts davor `schema_migrations` leert. (b) test/call-actual-cost-roundtrip.test.js:131-144 startet `init()` zweimal und erwartet nur, dass nichts wirft und die Zeile bleibt; das bleibt grün. (c) test/312k-p1-cancel-at-period-end-pg.test.js:64-68 ruft `applySchema(conn)` zweimal und erwartet Idempotenz, also bleibt es grün, solange `applySchema` selbst beim zweiten Mal fehlerfrei ist. Das zweite Aufrufen von `applySchema` direkt ist nicht der Start. (d) test/f1-geo-store.test.js:324, 348 und 379 rufen `migrate(conn, LEGACY_TENANT)` direkt nach einem von Hand hergestellten Altzustand und könnten bei Übersprung der Nachzüge oder des Schemas anders laufen. Das habe ich nicht im Einzelnen geprüft. (e) test/iel-b4a-brueckenzustand.test.js:385 enthält `ALTER TABLE call DROP COLUMN el_bound_at, …`. Ob danach ein Start die Spalten heilen soll, habe ich nicht nachgelesen. Dieser Punkt ist vermutet. (f) 57 Treffer bei `applySchema` in test/: Die Tests verwenden es als Aufbau in test/pg-helpers.js:10 (`schemaVorlageHolen` 9-12, `makePgTestStore` 14-28) und kommen mit dem Übersprung zurecht, solange `applySchema` auf einer leeren Datenbank das Schema anlegt. test/sec-p6-waechter-rls.test.js habe ich nicht gelesen; die Suche nach DROP INDEX, DROP POLICY, DROP TRIGGER und DROP CONSTRAINT in test/ (ohne werkzeuge) hat keinen Treffer.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Frage 5: Ja, aber keine Hilfe tut das fertig. `makePgTestStore` (test/pg-helpers.js:14-28) liefert einen Store über PGlite. Mit `makePgStore(runner)` und `await store.init()` lässt sich der echte Start mehrfach gegen dieselbe Datenbank auslösen, so wie test/call-actual-cost-roundtrip.test.js:124-125 und 138-143 es macht (`reopened = makePgStore(runner); await reopened.init()`). Dazwischen reicht `db.exec(\"DROP INDEX account_email_idx\")` auf demselben PGlite-Handle; der Weg dafür ist `seededStore()` und `recordingRunner(db)` im Reviewer-Seed-Test (Zeilen 181-186). Gegen echtes Postgres bietet test/gemeinsam/echtes-postgres.js `echteDatenbank` (36-62) mit `verbinden` (56-60). Der Test für S2 wäre eine neue Datei oder ein neuer Fall; er gehört unter `tests` erst, wenn er besteht.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Absicht: Im Code gibt es keinen Weg, der die ausgeschlossene Abkürzung nimmt. Es gibt heute weder Migrationsordner per Umgebungsvariable noch JavaScript-DDL. `AUSGANG_FILE` (src/db/migrate.js:9) ist ein fester Pfad. Eine Kollision gibt es mit test/openai-t2-20-reviewer-seed-pg.test.js:180-199 (siehe Frage 4a), die der Pitch schon vorsieht.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Die Sperre im Design Doc (Ausgangslage, Zeile zu `init()`) ist an die Sitzung des Clients in `init` gebunden. Der Client geht nach dem `withClient`-Block in den Pool zurück (src/store/pg.js:33, 50). Die Freigabe im `finally` ist nötig."
+  ]
+}

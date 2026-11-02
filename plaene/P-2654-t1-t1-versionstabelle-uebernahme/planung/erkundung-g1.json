@@ -1,0 +1,501 @@
+{
+  "gruppe": [
+    "S1",
+    "S13",
+    "S3",
+    "S4"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "package.json",
+          "ausweg": "nicht gefunden, weil `npm start` das Skript start in package.json:14 ist (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-23) createPgBackend aufruft; beides liegt in keiner Funktion"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "ausweg": "nicht gefunden, weil `npm start` entsteht neu in test/gemeinsam/migrationen-start.test.js"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 14
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184,
+          "neueZeilen": 3
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applyMigrations",
+          "neu": "funktion",
+          "neueZeilen": 18,
+          "vorhanden": {
+            "suche": [
+              "applyMigrations",
+              "applySchema",
+              "MIGRATION_READERS"
+            ],
+            "treffer": [
+              "src/db/migrate.js:21",
+              "src/db/migrate.js:11"
+            ],
+            "urteil": "kein Treffer passt, weil applySchema (src/db/migrate.js:21-23) alle Texte der Liste ohne Versionstabelle und Prüfsumme ausführt"
+          }
+        },
+        {
+          "datei": "src/db/migrations/0002_versionstabelle.sql",
+          "funktion": "schema_migrations anlegen",
+          "neu": "datei",
+          "neueZeilen": 8,
+          "vorhanden": {
+            "suche": [
+              "0002_versionstabelle",
+              "0001_ausgang"
+            ],
+            "treffer": [
+              "src/db/migrate.js:9"
+            ],
+            "urteil": "kein Treffer passt, weil nur 0001_ausgang.sql als Migration existiert und keine Versionstabelle"
+          }
+        },
+        {
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "funktion": "Test: leere Datenbank, healthz und schema_migrations",
+          "neu": "datei",
+          "neueZeilen": 20,
+          "vorhanden": {
+            "suche": [
+              "migrationen-start",
+              "echteDatenbank"
+            ],
+            "treffer": [
+              "test/gemeinsam/echtes-postgres.js:36"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "test/gemeinsam/echtes-postgres.js",
+              "funktion": "echteDatenbank"
+            }
+          }
+        }
+      ],
+      "tests": [
+        "test/gemeinsam/postgres-echt.test.js",
+        "test/boot-decoupling.test.js",
+        "test/gemeinsam/zwei-prozesse.test.js"
+      ],
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "src/db/migrations/0002_versionstabelle.sql (neu): Tabelle schema_migrations"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt; .github/CODEOWNERS nennt src/db/migrations/ nicht, nur src/db/migrations/rueckbau/",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S13": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "package.json",
+          "ausweg": "nicht gefunden, weil `npm start` das Skript start in package.json:14 ist (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-23) createPgBackend aufruft; beides liegt in keiner Funktion"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "ausweg": "nicht gefunden, weil `npm start` entsteht neu in test/gemeinsam/migrationen-start.test.js"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 14
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "anonym ab Zeile 11",
+          "von": 11,
+          "bis": 11,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applyMigrations",
+          "neu": "funktion",
+          "neueZeilen": 8,
+          "vorhanden": {
+            "suche": [
+              "applyMigrations",
+              "MIGRATION_READERS"
+            ],
+            "treffer": [
+              "src/db/migrate.js:11"
+            ],
+            "urteil": "kein Treffer passt, weil MIGRATION_READERS nur Lesefunktionen ohne Namen liefert und nichts einträgt"
+          }
+        },
+        {
+          "datei": "src/db/migrations/0002_versionstabelle.sql",
+          "funktion": "schema_migrations anlegen",
+          "neu": "datei",
+          "neueZeilen": 2,
+          "vorhanden": {
+            "suche": [
+              "0002_versionstabelle",
+              "0001_ausgang"
+            ],
+            "treffer": [
+              "src/db/migrate.js:9"
+            ],
+            "urteil": "kein Treffer passt, weil es die Datei noch nicht gibt; diese Nummer braucht nur den Dateinamen als Eintrag"
+          }
+        },
+        {
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "funktion": "Test: Namen in schema_migrations",
+          "neu": "datei",
+          "neueZeilen": 10,
+          "vorhanden": {
+            "suche": [
+              "migrationen-start",
+              "echteDatenbank"
+            ],
+            "treffer": [
+              "test/gemeinsam/echtes-postgres.js:36"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "test/gemeinsam/echtes-postgres.js",
+              "funktion": "echteDatenbank"
+            }
+          }
+        }
+      ],
+      "tests": [
+        "test/gemeinsam/postgres-echt.test.js",
+        "test/gemeinsam/zwei-prozesse.test.js"
+      ],
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "src/db/migrations/0002_versionstabelle.sql (neu): Tabelle schema_migrations"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "package.json",
+          "ausweg": "nicht gefunden, weil `npm start` das Skript start in package.json:14 ist (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-23) createPgBackend aufruft; beides liegt in keiner Funktion"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "ausweg": "nicht gefunden, weil `npm start` entsteht neu in test/gemeinsam/migrationen-start.test.js"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 14
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applyMigrations",
+          "neu": "funktion",
+          "neueZeilen": 14,
+          "vorhanden": {
+            "suche": [
+              "applyMigrations",
+              "applySchema"
+            ],
+            "treffer": [
+              "src/db/migrate.js:21"
+            ],
+            "urteil": "kein Treffer passt, weil applySchema bei fehlender Versionstabelle nichts übernimmt oder einträgt"
+          }
+        },
+        {
+          "datei": "src/db/migrations/0002_versionstabelle.sql",
+          "funktion": "schema_migrations anlegen",
+          "neu": "datei",
+          "neueZeilen": 4,
+          "vorhanden": {
+            "suche": [
+              "0002_versionstabelle",
+              "0001_ausgang"
+            ],
+            "treffer": [
+              "src/db/migrate.js:9"
+            ],
+            "urteil": "kein Treffer passt, weil es keine Versionstabelle gibt"
+          }
+        },
+        {
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "funktion": "Test: Übernahme einer Datenbank mit Konten",
+          "neu": "datei",
+          "neueZeilen": 15,
+          "vorhanden": {
+            "suche": [
+              "migrationen-start",
+              "echteDatenbank"
+            ],
+            "treffer": [
+              "test/gemeinsam/echtes-postgres.js:36"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "test/gemeinsam/echtes-postgres.js",
+              "funktion": "echteDatenbank"
+            }
+          }
+        }
+      ],
+      "tests": [
+        "test/gemeinsam/postgres-echt.test.js",
+        "test/gemeinsam/zwei-prozesse.test.js"
+      ],
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "src/db/migrations/0002_versionstabelle.sql (neu): Tabelle schema_migrations; Konten liegen in Tabelle account (src/db/migrations/0001_ausgang.sql:985) und werden nicht angefasst"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "package.json",
+          "ausweg": "nicht gefunden, weil `npm start` das Skript start in package.json:14 ist (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-31) createPgBackend aufruft und bei Fehler mit Exit 1 endet; beides liegt in keiner Funktion"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "ausweg": "nicht gefunden, weil `npm start` entsteht neu in test/gemeinsam/migrationen-start.test.js"
+        },
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 14
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applyMigrations",
+          "neu": "funktion",
+          "neueZeilen": 12,
+          "vorhanden": {
+            "suche": [
+              "applyMigrations",
+              "process.exit"
+            ],
+            "treffer": [
+              "src/store.js:30"
+            ],
+            "urteil": "kein Treffer passt, weil src/store.js:24-30 nur die Meldung mit Ursache ausgibt und mit Exit 1 endet, aber keine Dateinamen und keine Transaktion kennt"
+          }
+        },
+        {
+          "datei": "src/db/migrations/0002_versionstabelle.sql",
+          "funktion": "schema_migrations anlegen",
+          "neu": "datei",
+          "neueZeilen": 2,
+          "vorhanden": {
+            "suche": [
+              "0002_versionstabelle",
+              "0001_ausgang"
+            ],
+            "treffer": [
+              "src/db/migrate.js:9"
+            ],
+            "urteil": "kein Treffer passt, weil es die Datei, die in diesem Szenario scheitert, noch nicht gibt"
+          }
+        },
+        {
+          "datei": "test/gemeinsam/migrationen-start.test.js",
+          "funktion": "Test: 0002 scheitert, Exit 1 und Dateinamen",
+          "neu": "datei",
+          "neueZeilen": 15,
+          "vorhanden": {
+            "suche": [
+              "migrationen-start",
+              "echteDatenbank"
+            ],
+            "treffer": [
+              "test/gemeinsam/echtes-postgres.js:36"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "test/gemeinsam/echtes-postgres.js",
+              "funktion": "echteDatenbank"
+            }
+          }
+        }
+      ],
+      "tests": [
+        "test/boot-decoupling.test.js"
+      ],
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "src/db/migrations/0002_versionstabelle.sql (neu); bei Fehler bleibt schema_migrations ungeschrieben, weil 0001 und 0002 in einer Transaktion laufen"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Owner-Entscheidung für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Zu `npm start`: `npm start` existiert, nämlich das Skript start in package.json:14 (`node src/server.js`); src/server.js:3 importiert src/store.js, dessen Modulebene (src/store.js:21-23) createPgBackend aufruft. Der zweite Eingang auf test/gemeinsam/migrationen-start.test.js mit „entsteht neu“ steht nur im Bericht, weil das Skript den Namen `npm start` in einer Eingangsdatei verlangt und im Code keine Datei den Text trägt. Die Testdatei gehört nicht zum Weg, sondern ist der neue Test, der `npm start` ausführt und den Namen führt. Der Widerspruch zwischen der Prüfung des Skripts und dem Prüfer ist damit offen; entscheiden muss der Planer.",
+    "Weg Pool bis Start: createPgPoolRunner (src/store/pg-runner.js:1-22) baut den Pool, `withClient` (:6-16) gibt in `finally` den Client frei. `init` (src/store/pg.js:32-52) ruft `prepareSchema(client, BOOTSTRAP_TENANT_ID)` (:35, Standard `migrate`, Parameter in :22). `kette` findet den Weg nicht, weil `init` eine Closure ist und `migrate` als Parameter übergeben wird.",
+    "Reihenfolge in `migrate` (src/db/migrate.js:177-184): `applySchema` (:178), `backfillPeriodStart` (:179), `rekeyProfilesToTenant` (:180), `backfillAccountEmailCase` (:181), `backfillNumberGeo` (:182), `seedDefaultsInTenantScope` (:183). Die Versionsprüfung ersetzt nur Zeile 178; Nachzüge und `seedDefaults` bleiben unverändert danach.",
+    "`applySchema` und `schemaDdl` werden von test/pg-helpers.js:3,10 und ca. 25 Testdateien benutzt (`applySchema(conn)` direkt auf PGlite). Ändert sich ihr Verhalten oder ihre Signatur, brechen diese Tests.",
+    "`0001_ausgang.sql` hat kein `COMMIT`, `CONCURRENTLY`, `VACUUM`, keine `CREATE EXTENSION` und keinen `lock_timeout`; `BEGIN` nur in PL/pgSQL-Blöcken (:662, :833). Die Datei kann in einer Transaktion laufen. Die Tabelle der Konten heißt `account` (:985).",
+    "Exit 1: src/store.js:21-31 schreibt `[store] FATAL: … Ursache: <err.message>` und ruft `process.exit(1)`, ohne Dateinamen. Die Dateinamen müssen in der Fehlermeldung aus `applyMigrations` stehen; `store.js` bleibt unverändert. test/boot-decoupling.test.js:25-36 prüft Exit 1 und dass keine Zugangsdaten in der Ausgabe stehen.",
+    "Test für S4 ohne wählbaren Ordner: Der Test startet den Prozess mit STORE_BACKEND=pg und DATABASE_URL; der Auslöser muss in der Datenbank liegen, etwa eine Sicht oder ein Typ namens `schema_migrations`. Das ist nur mein Vorschlag, nicht ausprobiert.",
+    "Echter Start im Test: test/helpers.js:860 `startServerExpectExit` (Exit-Code) und :891 `startServer` (`/healthz`) mit BASE_ENV STORE_BACKEND=json (:161); ein Test setzt `STORE_BACKEND: \"pg\"` und `DATABASE_URL`. Echtes Postgres liefert `echteDatenbank` (test/gemeinsam/echtes-postgres.js:36). test/gemeinsam/postgres-echt.test.js:21-29 startet `src/store.js` zweimal, ohne `/healthz` und Versionstabelle zu prüfen.",
+    "Zurücksetzen: test/pg-helpers.js:14-28 baut jede Datenbank aus einer Vorlage (:10) und kennt kein DROP SCHEMA oder TRUNCATE. Die Vorlage hängt an `schemaDdl()` und dem Text von `applySchema`; mit 0002 in der Liste wird sie neu gebaut.",
+    "Migrationsprüfung (tools/migrationen-pruefen.mjs): Name `NNNN_name.sql` (:16, :61-77), Nummer größer als die höchste gemergte (:155-173), gemergte Migrationen unveränderlich (:140-153), DDL in .js unter src/ verboten (:99-117). Die Timeouts prüft Squawk (tools/basis/squawk.toml), ich habe es nicht gelesen. Das Werkzeug prüft nicht, ob jede Datei im Ordner in `MIGRATION_READERS` steht.",
+    "Bisher im Code: `pg_advisory` nur src/web-auth.js:289, `schema_migrations` nur in docs/RUNBOOK-RESTORE.md:257, `createHash` nirgends unter src/ und tools/.",
+    "Absicht: `CREATE TABLE schema_migrations` darf nur in 0002_versionstabelle.sql stehen, nicht im Ausführer, sonst schlägt ddlFindings (tools/migrationen-pruefen.mjs:99-117) an.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Eingang `npm start`: Es ist das Skript start in package.json:14 (`node src/server.js`). src/server.js:3 importiert src/store.js; dessen Modulebene (src/store.js:21-31) ruft createPgBackend (:23) auf und endet bei einem Fehler mit process.exit(1) (:30). `kette` von src/server.js zu createPgBackend meldet „kein Pfad belegt“, weil das auf Modulebene steht. Der Text `npm start` steht in keiner Datei unter src/ oder test/. Tests starten denselben Prozess mit `startServer` und `startServerExpectExit` (test/helpers.js:860 und :891)."
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "erkundung": "d96d003fd7f52f954b00d99752f58257c8186a1f227e078a4638054bbf4e7d38",
+  "schnitt": "188a9a3a2dd6356ea26464e13310ed7b127e32e16c6b804bc63d021dcd7cde62",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "umbau:tu1",
+        "befund": "tu1 ändert zwei Testdateien, die `abnahme` läuft aber nur über test/openai-t2-20-reviewer-seed-pg.test.js. Der Umbau in test/iel-b4a-brueckenzustand.test.js (IEL-B4a-22: makePgTestStore → init trägt ein, DROP COLUMN, erneutes init) wird damit nicht abgenommen; dass er vor und nach a2 grün ist, zeigt kein Lauf. Der Planer soll test/iel-b4a-brueckenzustand.test.js in die Abnahme von tu1 aufnehmen.",
+        "antwort": "korrigiert: tu1 ändert nur noch test/openai-t2-20-reviewer-seed-pg.test.js und wird mit ihm abgenommen; neuer Testumbau tu2 ändert test/iel-b4a-brueckenzustand.test.js mit dieser Datei als Abnahme; a2 hängt von beiden ab, die Owner-Aufgabe für das Testschutz-Label steht je Testumbau."
+      },
+      {
+        "schluessel": "nicht-zusammengelegt:a2",
+        "befund": "a2 legt zwei getrennt baubare und getrennt rot prüfbare Verhalten zusammen: S2 (eingetragene Migrationen überspringen) und S4 (Übernahme von 0001 und 0002 in einer Transaktion, ROLLBACK, Fehlermeldung nennt beide Dateien, schema_migrations existiert danach nicht). S4 ist nach a1 auch ohne das Überspringen rot, weil die Meldung von applySchema heute keine Dateinamen trägt und 0001 ohne Transaktion stehen bleibt. Die Dateikarte legt den S4-Test zudem in test/gemeinsam/migrationen-start.test.js, die nicht in den erwarteten Dateien von a2 steht. Der Planer soll S4 als eigenen Auftrag nach a1 schneiden, mit eigenem Abnahmetest, oder begründen, warum S4 ohne S2 nicht rot werden kann.",
+        "antwort": "korrigiert: a2 prüft nur noch S2 (eingetragene Migrationen überspringen); neuer Auftrag a3 nach a2 prüft S4 (Übernahme in einer Transaktion, ROLLBACK, Meldung mit beiden Dateinamen) mit eigenem Abnahmetest test/gemeinsam/migrationen-uebernahme-scheitert.test.js, weil test/gemeinsam/migrationen-start.test.js schon der Abnahmetest von a1 ist."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Punkte (1) und (2) der vorigen Prüfung sind erledigt: die 2-Sekunden-Grenze gehört zu S12 aus einem anderen Teil, und die Annahme zur Fehlermeldung steht bei a3. Offen bleibt (3). a2 beendet in dieser Phase das Heilen beim Start (S2). Die Hinnahme dieser Folge ist an einen Runbook-Hinweis gebunden, und dieser Satz steht bei keinem Auftrag: sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet: „Ausgang: übertragen an das Folgepaket #2679 (RLS-Startprüfung, unmittelbar nach dieser Änderung, vor S2a), entschieden am 02.11. durch die Betreuung; bis dahin hingenommen (PM8) mit Runbook-Hinweis „Ein Neustart repariert nichts mehr“ in `docs/RUNBOOK-RESTORE.md`.“ Ebenso pitch.md, ## Premortem, PM8, Ausgang: „hingenommen bis zum Folgepaket #2679 (RLS-Startprüfung, unmittelbar nach dieser Änderung, vor S2a): das Ende des Heilens ist die Absicht (S2); Hinweis „Ein Neustart repariert nichts mehr“ im Runbook“. Die Antwort des Planers trägt nicht. Dass eine Dokumentdatei keinen Bereich mit src/db/ teilen kann, schließt sie nur aus dem Bereich von a2 aus, nicht aus einem eigenen Auftrag. pitch.md, ## Grobe Lösung und ## Geänderte Dateien nennen docs/RUNBOOK-RESTORE.md für diese Änderung. Der Eintrag unter fehlendeSzenarien empfiehlt nur, den Hinweis vor dem Einschalten von a2 zu liefern; kein Auftrag stellt das sicher. Der Planer soll einen eigenen Auftrag mit Bereich docs/RUNBOOK-RESTORE.md für den T1-Hinweis anlegen, von dem a2 abhängt, oder den T1-Ausgang als wasDarfNiePassieren an a2 setzen.",
+        "antwort": "korrigiert: Der eigene Auftrag u3 für docs/RUNBOOK-RESTORE.md ist nach der Skriptprüfung nicht zulässig (Regel Umbau-Test: für die Datei gibt es keinen bestehenden Test als Abnahme), und als wasDarfNiePassieren an a2 könnte der Bau-Agent den Hinweis nicht liefern, weil die Datei außerhalb des Bereichs src/db/migrate.js liegt. Der Hinweis „Ein Neustart repariert nichts mehr“ samt den übrigen drei Runbook-Hinweisen steht jetzt als Owner-Aufgabe mit Fundstelle sicherheit.md, ### T1 und dem Auftrag a2, weil er Bedingung der von der Betreuung am 02.11. entschiedenen Hinnahme ist und vor dem Merge von a2 stehen muss; a2 nennt das in seinen Annahmen, die Abhängigkeit von u3 ist entfernt."
+      }
+    ],
+    "zurueckgewiesen": [
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Bei keinem Auftrag stehen, obwohl a2 sie bricht, wenn es die Übernahme-Transaktion und die Fehlermeldung baut: (1) pitch.md, ## Grobe Lösung: „trifft diese Transaktion eine Sperre einer anderen Sitzung, gibt sie nach 2 Sekunden auf, statt andere Sitzungen zu blockieren, und der Start endet mit Exit 1.“ und dazu design.md, ## Ausgangslage und Annahmen: „Die Übernahme-Transaktion setzt vor `0001` ein `lock_timeout` von 2 Sekunden (aus JavaScript gesetzt, keine DDL), damit sie bei einer Sperre einer anderen Sitzung abbricht, statt zu blockieren; Wert wie in `0002`“. Die Annahme zu a2 nimmt nur R2, R3 und R4 aus, nicht diese Zeitgrenze. (2) sicherheit.md, ## 4. Offene Fragen: „Angenommen: Die Fehlermeldung bei Exit 1 enthält den Primärtext des Postgres-Fehlers, nicht dessen Detail mit Schlüsselwerten.“ (ebenso H12 in sicherheit.md, ## 3. Lückenprüfung); a2 baut genau diese Meldung. (3) sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet, Ausgang: „bis dahin hingenommen (PM8) mit Runbook-Hinweis „Ein Neustart repariert nichts mehr“ in `docs/RUNBOOK-RESTORE.md`“. a2 beendet in dieser Phase das Heilen beim Start (S2), aber der Hinweis, unter dem das hingenommen ist, steht bei keinem Auftrag und ist laut Annahme der Planung auf einen späteren Teil verschoben.",
+        "antwort": "trifft nicht zu, weil keiner der drei Sätze in diesen Aufträgen als wasDarfNiePassieren gehört: (1) die 2-Sekunden-Grenze der Übernahme ist das Verhalten von S12 (pitch.md, ## Premortem, PM2 → S12), das nicht zu den Nummern dieses Teils gehört und dort mit Szenario geprüft wird; a3 baut die Transaktion, in die der Teil mit S12 sie setzt (Annahme bei a3); (2) sicherheit.md, ## 4. Offene Fragen nennt die Fehlermeldung nur als „Angenommen“, keine feste Regel; sie steht jetzt als Annahme bei a3, das die Meldung baut; (3) der Runbook-Hinweis ist eine Dokumentänderung ohne Nummer und ohne Test, die nach Regel 2 keinen Bereich mit src/db/ teilen kann; sie steht unter Annahmen und als fehlendes Szenario mit der Empfehlung, sie vor dem Einschalten von a2 zu liefern (sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet)."
+      }
+    ]
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "13a9afab-12de-4d8a-b16c-b7d878d6c358",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S2",
+        "weg:S4",
+        "umbau:tu1",
+        "umbau:tu2",
+        "nie-saetze:tu1",
+        "allein-gruen:tu1",
+        "nicht-zusammengelegt:tu1",
+        "nie-saetze:tu2",
+        "allein-gruen:tu2",
+        "nicht-zusammengelegt:tu2",
+        "nie-saetze:a2",
+        "allein-gruen:a2",
+        "nicht-zusammengelegt:a2",
+        "nie-saetze:a3",
+        "allein-gruen:a3",
+        "nicht-zusammengelegt:a3",
+        "gegenfrage:alle"
+      ],
+      "befunde": 1,
+      "entfallen": []
+    },
+    {
+      "runde": 2,
+      "sitzung": "8d38ee54-5129-481d-bb32-b53af3756316",
+      "schluessel": [
+        "durchstich:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

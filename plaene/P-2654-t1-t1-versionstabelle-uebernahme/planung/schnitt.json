@@ -1,0 +1,256 @@
+{
+  "annahmen": [
+    {
+      "text": "Das Schema ändert sich (neue Tabelle `schema_migrations`), deshalb drei Schritte: u1 (verträglich: Liste mit Dateinamen, arbeitet mit und ohne Versionstabelle), u2 (Änderung: `0002_versionstabelle.sql` in der Liste, läuft mit dem heutigen `applySchema` bei jedem Start), a1/a2/a3 (Nutzung durch den neuen Ausführer in `migrate`)."
+    },
+    {
+      "auftrag": "u2",
+      "text": "`0002_versionstabelle.sql` muss nach u2 mit dem heutigen `applySchema` bei jedem Start wiederholt laufen können und ist nach dem Merge unveränderlich (tools/migrationen-pruefen.mjs, Prüfung gemergter Migrationen); deshalb `CREATE TABLE IF NOT EXISTS schema_migrations (version, name, checksum)` ohne Zeitstempel-Spalte, weil test/pglite-helfer.test.js Katalog und alle Zeilen nach init vergleicht; davor `SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '30s';` wie in test/werkzeuge/migrationen-pruefen.test.js. Angenommen, nicht ausprobiert: `SET LOCAL` am Dateianfang führt bei `db.exec` eines Mehrfach-Texts (implizite Transaktion) auf PGlite und node-postgres zu keinem Fehler."
+    },
+    {
+      "auftrag": "a1",
+      "text": "a1 ist der Durchstich in der einfachsten Form: `migrate` führt die Liste weiter bei jedem Start aus und trägt danach je Datei Nummer, Namen ohne `.sql` und Prüfsumme (sha256 aus `node:crypto`) ein, falls noch nicht eingetragen. Damit sind S1, S13 und S3 erfüllt; S3 gehört in a1, weil eine bestehende Datenbank ohne Versionstabelle mit dieser Form schon übernommen wird und ein eigener Abnahmetest nie rot würde. Das Einfügen der Zeilen ist DML aus JavaScript, keine DDL."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Abnahmetests von a1, a2 und a3 starten den echten Serverprozess wie test/gemeinsam/zwei-prozesse.js mit `STORE_BACKEND: \"pg\"` gegen `echteDatenbank` (test/gemeinsam/echtes-postgres.js); ohne HERMES_TEST_POSTGRES_URL werden sie übersprungen. Angenommen ist, dass der CI-Job „Tests“ diese Adresse setzt (design.md, Ausgangslage: Postgres 16 in „Tests“ und „Prüfungen“). a3 nutzt für den erwarteten Exit `startServerExpectExit` aus test/helpers.js, das stdout und stderr zusammenführt."
+    },
+    {
+      "auftrag": "a2",
+      "text": "a2: Existiert `schema_migrations`, überspringt `migrate` jede eingetragene Datei; jede nicht eingetragene läuft in eigener Transaktion und wird erst nach Erfolg eingetragen. Der Weg bei fehlender Tabelle bleibt in a2 wie nach a1. `applySchema` und `schemaDdl` behalten Name, Signatur und Verhalten, weil test/pg-helpers.js und rund 25 Testdateien sie direkt nutzen. Prüfsummenabweichung (R2), Sperre (R4) und Plattformbereich je Migration (R3) sind nicht Teil dieser Phase."
+    },
+    {
+      "auftrag": "a2",
+      "text": "Der Runbook-Hinweis „Ein Neustart repariert nichts mehr“ (sicherheit.md, T1; pitch.md, PM8) ist Bedingung der Hinnahme, die die Betreuung am 02.11. entschieden hat, und muss vor dem Merge von a2 stehen. Kein Auftrag kann ihn tragen: `docs/RUNBOOK-RESTORE.md` hat keinen bestehenden Test, an dem ein Umbau abgenommen werden könnte (Regel Umbau-Test), keine Nummer dieses Teils verlangt ihn als Dann, und kein Test koppelt die Datei an `src/db/migrate.js`. Deshalb steht er als Owner-Aufgabe mit a2."
+    },
+    {
+      "auftrag": "a3",
+      "text": "S4 ist nach a1 und a2 rot, weil der Weg bei fehlender Tabelle die Dateien einzeln ohne gemeinsame Transaktion ausführt und die Meldung keine Dateinamen trägt. a3: Fehlt `schema_migrations` als Tabelle, laufen alle Dateien der Liste (heute `0001` und `0002`) samt Einträgen in einer Transaktion; bei Fehler `ROLLBACK` und ein Fehler, dessen Meldung jede Datei dieser Transaktion und den Primärtext des Postgres-Fehlers nennt, nicht dessen Detail mit Werten (sicherheit.md, 4. Offene Fragen, als Annahme übernommen); `src/store.js` gibt `err.message` aus, endet mit Exit 1 und bleibt unverändert."
+    },
+    {
+      "auftrag": "a3",
+      "text": "Für S4 kann der Test `0002_versionstabelle.sql` ohne wählbaren Ordner scheitern lassen, indem er vor dem Start ein Objekt anlegt, das keine Tabelle ist und `CREATE TABLE IF NOT EXISTS schema_migrations` trotzdem scheitern lässt (etwa einen Aufzählungstyp `schema_migrations`); angenommen, nicht ausprobiert. Die Erkennung „Tabelle fehlt“ muss auf eine Tabelle prüfen, nicht auf jeden Namen."
+    },
+    {
+      "auftrag": "a3",
+      "text": "Die Zeitgrenze von 2 Sekunden für die Übernahme-Transaktion (pitch.md, Grobe Lösung; design.md, Ausgangslage) ist das Verhalten von S12 (pitch.md, Premortem PM2 → S12), das nicht zu den Nummern dieses Teils gehört; angenommen ist, dass der Teil mit S12 sie vor `0001` in die Transaktion aus a3 setzt."
+    },
+    {
+      "auftrag": "tu1",
+      "text": "Nach a2 heilt ein Start eingetragene Migrationen nicht mehr; laut Erkundung würden dann test/openai-t2-20-reviewer-seed-pg.test.js (Positiv-Kontrolle, DROP und erneutes `init()`) und test/iel-b4a-brueckenzustand.test.js (IEL-B4a-22: DROP COLUMN, danach `init()`) rot. tu1 und tu2 lassen je einen der beiden vor dem erneuten `init()` die Einträge in `schema_migrations` löschen, wie der Pitch unter „Fallen“ für den ersten vorsieht; je Testdatei ein Umbau, damit jeder mit seiner eigenen Datei abgenommen wird. Das ist vor und nach a2 grün, weil die Tabelle ab u2 in jeder Testdatenbank existiert und ein leeres `schema_migrations` jede Datei wieder laufen lässt."
+    },
+    {
+      "text": "Die Vertrauensannahme und die Katalogzeile in `docs/sicherheitsgrenzen.md` (sicherheit.md, 5.) stehen in keinem Auftrag dieser Phase: die Datei steht in CODEOWNERS, und beide betreffen R3/S8 und die Sitzungsverbindung, nicht die Nummern dieses Teils; angenommen ist, dass sie mit dem Teil zu Sperre und Plattformbereich kommen."
+    },
+    {
+      "text": "`test/pg-helpers.js` aus „Geänderte Dateien“ ändert sich in dieser Phase nicht: die Vorlage hängt an `schemaDdl()` und wird mit `0002` in der Liste von selbst neu gebaut; angenommen ist, dass die Änderung dort zu den PGlite-Tests für Sperre und Plattformbereich gehört."
+    }
+  ],
+  "fehlendeSzenarien": [
+    {
+      "text": "Ein erneuter Start lässt eine schon eingetragene Migration aus, aber die vier Nachzüge und `seedDefaults` laufen weiter (etwa: ein von Hand gelöschter Standarddatensatz ist nach dem zweiten Start wieder da).",
+      "empfehlung": "Als B-Szenario zu R1 aufnehmen, weil das Überspringen in `migrate` genau neben den Nachzügen liegt und der Pitch ihr Weiterlaufen nur als Nicht-Ziel nennt."
+    }
+  ],
+  "ownerAufgaben": [
+    {
+      "aufgabe": "Antonio setzt am PR das Testschutz-Label für die gewollte Änderung des bestehenden Tests test/openai-t2-20-reviewer-seed-pg.test.js (Einträge in schema_migrations vor dem erneuten Start löschen).",
+      "fundstelle": "pitch.md, ## Fallen",
+      "auftrag": "tu1"
+    },
+    {
+      "aufgabe": "Antonio setzt am PR das Testschutz-Label für die gewollte Änderung des bestehenden Tests test/iel-b4a-brueckenzustand.test.js (Einträge in schema_migrations vor dem erneuten Start löschen).",
+      "fundstelle": "pitch.md, ## Fallen",
+      "auftrag": "tu2"
+    },
+    {
+      "aufgabe": "Der Owner ergänzt vor dem Merge von a2 in docs/RUNBOOK-RESTORE.md den Hinweis „Ein Neustart repariert nichts mehr“ (Bedingung der am 02.11. entschiedenen Hinnahme von T1/PM8) sowie die übrigen Hinweise aus pitch.md, Grobe Lösung: der erste Deploy kann mit Exit 1 enden und ist zu wiederholen; ein Rollback auf den Stand vor dieser Änderung wird nicht unterstützt; Migrieren geht nur über eine direkte Sitzungsverbindung.",
+      "fundstelle": "sicherheit.md, ### T1: Eine abgeschaltete Zeilensicherheit bleibt nach dem nächsten Start abgeschaltet",
+      "auftrag": "a2"
+    }
+  ],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "schema": "vertraeglich",
+      "ziel": "Migrationsliste führt je Eintrag den Dateinamen",
+      "bereich": "src/db/migrate.js",
+      "erwarteteDateien": [
+        "src/db/migrate.js"
+      ],
+      "abnahme": "test/schema-foundation.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    },
+    {
+      "id": "u2",
+      "art": "umbau",
+      "schema": "aenderung",
+      "ziel": "0002_versionstabelle.sql anlegen und in die Migrationsliste eintragen",
+      "bereich": "src/db/",
+      "bereichsgrund": "Die Schemaänderung besteht aus der neuen Datei src/db/migrations/0002_versionstabelle.sql und ihrer Zeile in `MIGRATION_READERS` (src/db/migrate.js); getrennt wäre sie nicht wirksam: die Datei allein läuft nie mit (Pitch, Fallen: eine nicht eingetragene Datei im Ordner läuft nie mit), die Zeile allein liest eine fehlende Datei und lässt jeden Start scheitern. Ein Umbau davor bringt beides nicht in einen Ordner, weil die Migrationen unter src/db/migrations/ liegen müssen und die Liste fest in src/db/migrate.js steht.",
+      "erwarteteDateien": [
+        "src/db/migrations/0002_versionstabelle.sql",
+        "src/db/migrate.js"
+      ],
+      "abnahme": "test/pglite-helfer.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": [
+        {
+          "id": "u1",
+          "grund": "der neue Eintrag braucht die Listenform mit Dateinamen"
+        }
+      ]
+    },
+    {
+      "id": "a1",
+      "art": "funktion",
+      "schema": "nutzung",
+      "ziel": "Start trägt jede Migration mit Name und Prüfsumme in schema_migrations",
+      "bereich": "src/db/migrate.js",
+      "erwarteteDateien": [
+        "src/db/migrate.js",
+        "test/gemeinsam/migrationen-start.test.js"
+      ],
+      "abnahme": "test/gemeinsam/migrationen-start.test.js",
+      "erwarteterFehler": "0001_ausgang",
+      "prueft": [
+        "S1",
+        "S13",
+        "S3"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht Teil dieser Änderung: Schemaänderungen in JavaScript, auch nicht die Versionstabelle, weil die Migrationsprüfung DDL in JavaScript sperrt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: Änderungen an den vier Nachzügen oder an `seedDefaults`, weil sie unverändert bei jedem Start laufen sollen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u2",
+          "grund": "die Tabelle schema_migrations und der Eintrag 0002 müssen da sein"
+        }
+      ],
+      "eingang": "erreicht"
+    },
+    {
+      "id": "tu1",
+      "art": "testumbau",
+      "ziel": "Reviewer-Seed-Positivkontrolle leert schema_migrations vor init()",
+      "bereich": "test/openai-t2-20-reviewer-seed-pg.test.js",
+      "erwarteteDateien": [
+        "test/openai-t2-20-reviewer-seed-pg.test.js"
+      ],
+      "abnahme": "test/openai-t2-20-reviewer-seed-pg.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": [
+        {
+          "id": "u2",
+          "grund": "erst ab u2 gibt es schema_migrations in jeder Testdatenbank"
+        }
+      ]
+    },
+    {
+      "id": "tu2",
+      "art": "testumbau",
+      "ziel": "IEL-B4a-Brückenzustand leert schema_migrations vor erneutem init()",
+      "bereich": "test/iel-b4a-brueckenzustand.test.js",
+      "erwarteteDateien": [
+        "test/iel-b4a-brueckenzustand.test.js"
+      ],
+      "abnahme": "test/iel-b4a-brueckenzustand.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": [
+        {
+          "id": "u2",
+          "grund": "erst ab u2 gibt es schema_migrations in jeder Testdatenbank"
+        }
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "funktion",
+      "schema": "nutzung",
+      "ziel": "Start überspringt schon eingetragene Migrationen",
+      "bereich": "src/db/migrate.js",
+      "erwarteteDateien": [
+        "src/db/migrate.js",
+        "test/gemeinsam/migrationen-neustart.test.js"
+      ],
+      "abnahme": "test/gemeinsam/migrationen-neustart.test.js",
+      "erwarteterFehler": "account_email_idx",
+      "prueft": [
+        "S2"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht Teil dieser Änderung: Änderungen an den vier Nachzügen oder an `seedDefaults`, weil sie unverändert bei jedem Start laufen sollen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "a1",
+          "grund": "baut auf dem Eintragen in schema_migrations auf"
+        },
+        {
+          "id": "tu1",
+          "grund": "ohne die Testumstellung wird die Reviewer-Seed-Positivkontrolle durch das Überspringen rot"
+        },
+        {
+          "id": "tu2",
+          "grund": "ohne die Testumstellung wird der IEL-B4a-Brückenzustandstest durch das Überspringen rot"
+        }
+      ],
+      "eingang": "erreicht"
+    },
+    {
+      "id": "a3",
+      "art": "funktion",
+      "schema": "nutzung",
+      "ziel": "Übernahme in einer Transaktion, Abbruch nennt die Migrationsdateien",
+      "bereich": "src/db/migrate.js",
+      "erwarteteDateien": [
+        "src/db/migrate.js",
+        "test/gemeinsam/migrationen-uebernahme-scheitert.test.js"
+      ],
+      "abnahme": "test/gemeinsam/migrationen-uebernahme-scheitert.test.js",
+      "erwarteterFehler": "0002_versionstabelle.sql",
+      "prueft": [
+        "S4"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Nicht Teil dieser Änderung: ein Migrationsordner, der sich über Umgebungsvariable oder Option wählen lässt, weil das den Ort der Schemaänderungen vom Code lösen würde.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: Änderungen an den vier Nachzügen oder an `seedDefaults`, weil sie unverändert bei jedem Start laufen sollen.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "a1",
+          "grund": "baut auf dem Eintragen in schema_migrations auf"
+        },
+        {
+          "id": "a2",
+          "grund": "beide ändern src/db/migrate.js und laufen deshalb nacheinander"
+        }
+      ],
+      "eingang": "erreicht"
+    }
+  ]
+}
