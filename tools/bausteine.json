@@ -25,6 +25,8 @@
       "quellen": [
         "src/server.js",
         "src/boot.js",
+        "src/abschalten.js",
+        "src/zeitsteuerung.js",
         "src/app.js",
         "src/boot-guard.js",
         "src/mcp-server.js",
