@@ -1,6 +1,7 @@
 # P-2643 Alarmziel tauschen: Betriebsmeldungen an Better Stack: Teil t1 ausfall-meldeweg-betterstack
 
 Status: freigegeben
+Freigabe Betreuung 02.11. 19:4x: reine Nachführung veralteter Zeilenangaben nach SOZ, Inhalt unverändert
 Issue: 2671
 Teil von: P-2643-alarmziel-tauschen; nach: –
 Design Doc: ja, weil es mehr als einen ernsthaften Weg für das Schlüsselschema der Vorfälle und für den Umgang mit der Absender-Bindung `alert_sms_sender` gibt, die Entscheidung fünf Aufrufer und die Startprüfung trägt und sich nach dem Abschalten von SMS und Mail schwer zurücknehmen lässt.
@@ -28,8 +29,8 @@ Der Betreiber sieht Meldungen als Vorfälle in Better Stack, nicht mehr als SMS 
 - Die Maske für Log-Geheimnisse erkennt nur Namen mit den Endungen `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASS`, `PWD` (`src/log-maske.js:5`): `BETTERSTACK_ALERT_URL` wird sonst nicht maskiert. Entscheidung: die Maske lernt diesen Namen; ein Netzfehler darf die Adresse nicht in die Ausgabe bringen (S17).
 - Staging und Produktion brauchen je einen eigenen Better-Stack-Eingang, weil `incident.id` keine Umgebung trägt und ein `resolved` aus Staging sonst einen Produktionsvorfall schließen würde: Bedingung zu H13 für Antonio, kein Umgebungs-Präfix im Schlüssel.
 - Die Stripe-Meldungszeilen enthalten `tenant=<id>` (`src/billing/webhook.js:190`, `:268`) und gehen damit erstmals an einen Dritten. Entschieden (Antonio, 02.11.): die Mandanten-ID darf an Better Stack, unter der festen Bedingung eines Auftragsverarbeitungsvertrags mit Better Stack vor Produktion.
-- Die Bootstrap-Nummer hängt heute an der Absender-Bindung `alert_sms_sender` (`src/store/state-ops.js:1459-1464`, `:1504-1512`): Fällt die Bindung weg, muss der Halt gegen die Freigabe beim Anbieter erhalten bleiben (B4); das Design Doc entscheidet den Weg.
-- Einmalige Anlässe haben keinen Marker und damit keine Wiederholung. Die Ausgabenwarnung setzt ihren Monatsmarker heute vor dem Senden (`src/store/state-ops.js:2447-2456`): Sie setzt ihn künftig erst nach der Zustellung (S15). Das Stripe-Ereignis bleibt ohne Wiederholung (hingenommen, steht im Stripe-Dashboard).
+- Die Bootstrap-Nummer hängt heute an der Absender-Bindung `alert_sms_sender` (`src/store/zustand/nummern.js:121-126`, `:166-174`): Fällt die Bindung weg, muss der Halt gegen die Freigabe beim Anbieter erhalten bleiben (B4); das Design Doc entscheidet den Weg.
+- Einmalige Anlässe haben keinen Marker und damit keine Wiederholung. Die Ausgabenwarnung setzt ihren Monatsmarker heute vor dem Senden (`src/store/state-ops.js:1623-1632`): Sie setzt ihn künftig erst nach der Zustellung (S15). Das Stripe-Ereignis bleibt ohne Wiederholung (hingenommen, steht im Stripe-Dashboard).
 - Eine neue Variable verlangt nach der Regel in `steuerung/abhaengigkeiten.json` den Stand nach KFZ: B9 kommt nach KFZ, und der Wert gehört nach `src/konfiguration/` statt in `src/config.js`.
 
 ## Geänderte Dateien

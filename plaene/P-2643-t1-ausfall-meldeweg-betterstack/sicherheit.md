@@ -1,6 +1,7 @@
 # P-2643 Alarmziel tauschen: Sicherheitsprüfung
 
 Status: freigegeben
+Freigabe Betreuung 02.11. 19:4x: reine Nachführung veralteter Zeilenangaben nach SOZ, Inhalt unverändert
 Grundlage: pitch.md, design.md, Code-Stand ebeecfe
 
 ## Zur Freigabe
@@ -36,7 +37,7 @@ Alle Betriebsmeldungen gehen künftig als `POST` mit JSON an eine Adresse aus `B
 - Betreiber-Route `POST /api/billing/cost-truing/sweep` (Wirkung geändert): Beleg: `docs/sicherheitsgrenzen.md`, Angriffsfläche (SG-03). Angriffswege: keiner, weil nur der Betreiber sie erreicht und B6 das Hängen begrenzt.
 - Eingehende Anrufer nach Ausfallmeldung der eingehenden Klasse: Beleg: `src/telephony/outage-report.js:149-150`. Angriffswege: keiner neu, weil die Klasse am Brückenzustand hängt, nicht an der Nummer des Anrufers, und die Meldung künftig keine SMS mehr kostet.
 - Takte (Erholung, Hold-Eskalation, Preis-Wächter): kein äußerer Eingang. Angriffswege: keiner, weil nur Zustand im Speicher und Antworten von Stripe (signiert abgefragt) sie bewegen (`src/billing/price-drift-watch.js:52-72`).
-- Halte-Bindung der Bootstrap-Nummer (Speicher nach Freigabe beim Anbieter, geändert): Beleg: `src/store/state-ops.js:1459-1464`, `:1504-1512`, `src/db/schema.sql:834-835`. Angriffswege: keiner, weil `numberBusyReason` jede Bindung ohne Mandant gegen jeden hält, der Datenbank-Riegel den Zweck nicht auswertet und B4 im Pitch den Halt prüft.
+- Halte-Bindung der Bootstrap-Nummer (Speicher nach Freigabe beim Anbieter, geändert): Beleg: `src/store/zustand/nummern.js:121-126`, `:166-174`, `src/db/migrations/0001_ausgang.sql:834-835`. Angriffswege: keiner, weil `numberBusyReason` jede Bindung ohne Mandant gegen jeden hält, der Datenbank-Riegel den Zweck nicht auswertet und B4 im Pitch den Halt prüft.
 ### Werte
 - Die Adresse des Eingangs: wer sie kennt, spricht als Hermes zu Better Stack.
 - Die Wahrnehmung des Betreibers: Ausfall-, Kosten- und Preisvorfälle sind sein einziger Weg, Missbrauch und Ausfälle rechtzeitig zu sehen; nach der Änderung gibt es keinen zweiten Kanal (pitch.md, Nicht-Ziele).
@@ -84,7 +85,7 @@ Ausgang: übertragen an Antonio (H13) (Vorschlag), weil der Pitch das als Beding
 |---|---|
 | H1, H6, H7, H8 | trifft nicht zu, weil die Änderung keinen Anruf auslöst, weder Gespräch noch Telefon-Agent berührt und die Offenlegung nicht anfasst; sie entfernt SMS-Wege (pitch.md, Löschen) |
 | H2, H3 | trifft nicht zu, weil die Gates von `place_call` unverändert bleiben (design.md, Werkzeugvertrag), SMS als Alarmweg wegfällt (`src/telephony/alert-sms.js:19-40`, `src/telephony/outbound-gates.js:350`) und Aufrufe an Better Stack durch Reservierung, Entprellung und die bestehenden Auslöser begrenzt sind (`src/telephony/outage-report.js:88-103`, `src/billing/cost-truing.js:301-306`); Better Stack berechnet keine Vorfälle einzeln (design.md, Ausgangslage). Die Ausgabenwarnung warnt nach einem Neustart im selben Monat nicht noch einmal (design.md, Zur Freigabe 2); die harte Plattformgrenze bleibt davon unberührt |
-| H4 | trifft nicht zu, weil kein Kunde Meldungen, Schlüssel oder Marker sieht; die Marker sind global ohne Mandant (`src/db/schema.sql:848-849`) |
+| H4 | trifft nicht zu, weil kein Kunde Meldungen, Schlüssel oder Marker sieht; die Marker sind global ohne Mandant (`src/db/migrations/0001_ausgang.sql:848-849`) |
 | H5 | trifft nicht zu, weil keine Tokens angenommen oder weitergereicht werden |
 | H9 | trifft nicht zu, weil die eingehende Ausfall-Klasse am Brückenzustand hängt, nicht an der Nummer (`src/telephony/outage-report.js:149-150`), und nichts zurückgerufen wird |
 | H10 | trifft nicht zu, weil kein eingehender Webhook neu ist; Stripe wird wie bisher zuerst geprüft (`src/routes/stripe-webhook.js:23-32`), doppelte Ereignisse nach einem Neustart erzeugen einen zweiten Vorfall wie heute eine zweite SMS, ohne Wirkung auf Geld (design.md, Fehlerfälle) |
@@ -114,7 +115,7 @@ Die Angriffsfläche ändert sich nicht, weil keine Route, kein Webhook und kein 
 ## 6. Gegenprüfung
 | Nr. | Art | Bezug | Befund mit Beleg | Vorschlag |
 |---|---|---|---|---|
-| 1 | Schutz umgangen (bedingt) | T3, Grenze „nur https im Hosting“ | Die Prüfung läuft in `assertBootGates` (`src/boot.js:326`), nach `await healBootstrapStore(...)` (`src/boot.js:747-751`); die Heilung sendet fire-and-forget über `sendBootstrapAlertSms` (`src/boot.js:634-641`). Ein `POST` an eine `http://`-Adresse wäre gestartet, bevor Exit 1 greift; heute geht nur deshalb kein Byte hinaus, weil zwischen `:747` und `:329` kein I/O liegt. | Adresse vor der Heilung prüfen oder Heilungsmeldung nach `assertBootGates` senden; neues Szenario S25 im Pitch |
+| 1 | Schutz umgangen (bedingt) | T3, Grenze „nur https im Hosting“ | Die Prüfung läuft in `assertBootGates` (`src/boot.js:331`), nach `await healBootstrapStore(...)` (`src/boot.js:722-726`); die Heilung sendet fire-and-forget über `sendBootstrapAlertSms` (`src/boot.js:639-646`). Ein `POST` an eine `http://`-Adresse wäre gestartet, bevor Exit 1 greift; heute geht nur deshalb kein Byte hinaus, weil zwischen `:722` und `:334` kein I/O liegt. | Adresse vor der Heilung prüfen oder Heilungsmeldung nach `assertBootGates` senden; neues Szenario S25 im Pitch |
 | 2 | Szenario prüft nicht | T3 („lesbar“), T1 im Hosting | Ein Wert mit `https://`, aber ungültigem Port besteht eine reine Präfix-Prüfung und lässt `fetch` mit „Failed to parse URL from <Eingabe>“ scheitern (Node 22, `package.json:68-69`). | Neues Szenario S24 im Pitch |
-| 3 | Szenario prüft nicht | T3 (Bedingung) | `alertChannelFindings` ist eine Kette bedingter Zweige (`src/boot-guard.js:305-349`); eine https-Prüfung im selben bedingten Zweig ließe Zahlung aus und Ausfall-Erkennung aus mit `http://` starten, obwohl TTS (`src/server.js:199`), Heilung (`src/boot.js:634`), Hold-Eskalation und eingehende Ausfall-Klasse (`src/config.js:119`) senden. | Neues Szenario S23 im Pitch |
+| 3 | Szenario prüft nicht | T3 (Bedingung) | `alertChannelFindings` ist eine Kette bedingter Zweige (`src/boot-guard.js:305-349`); eine https-Prüfung im selben bedingten Zweig ließe Zahlung aus und Ausfall-Erkennung aus mit `http://` starten, obwohl TTS (`src/server.js:199`), Heilung (`src/boot.js:639`), Hold-Eskalation und eingehende Ausfall-Klasse (`src/config.js:119`) senden. | Neues Szenario S23 im Pitch |
 | 4 | Szenario prüft nicht | T1 (S17) | Bei einem Port ohne Listener nennt `fetch` in Node 22 nur Host und Port, nicht den Pfad; S17 wäre auch ohne Maske grün. | S17 bleibt als Prüfung „kein Absturz bei Netzfehler“; als Beleg zu T1 trägt S24 (Nutzer entscheidet über Streichen oder Umschreiben von S17) |
