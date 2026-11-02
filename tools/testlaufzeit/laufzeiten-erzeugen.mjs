@@ -14,7 +14,7 @@ const EXIT_AUFRUF = 2;
 const LAUFNUMMER = /^[1-9]\d*$/;
 const WERKZEUG_ARTEFAKTE = "werkzeugteil-*";
 const WERKZEUG_BERICHT = /^werkzeugteil-\d+\.jsonl$/;
-const AUFRUF = "Aufruf: node tools/testlaufzeit/laufzeiten-erzeugen.mjs [--werkzeuge <id eines Prüfleiter-Laufs mit allen Werkzeugtests>]";
+const AUFRUF = "Aufruf: node tools/testlaufzeit/laufzeiten-erzeugen.mjs [--tests <id eines CI-Laufs> | --werkzeuge <id eines Prüfleiter-Laufs mit allen Werkzeugtests>]";
 
 function geholt() {
   const ordner = neuerTempOrdner("testdauern-");
@@ -25,6 +25,11 @@ function geholt() {
   } finally {
     entferneTempOrdner(ordner);
   }
+}
+
+function testDauern(lauf) {
+  const { dauern, grund } = laufzeitenDesLaufs({ repo: ghRepo(), lauf: Number(lauf) });
+  return dauern ? { lauf: Number(lauf), dauern } : { lauf: null, grund };
 }
 
 function werkzeugDauern(lauf) {
@@ -45,13 +50,15 @@ function schreibe(ziel, { lauf, dauern, grund }) {
 }
 
 function main() {
-  const { werkzeuge } = parseArgs({ options: { werkzeuge: { type: "string" } } }).values;
-  if (werkzeuge === undefined) return schreibe(MESSDATEI, geholt());
-  if (!LAUFNUMMER.test(werkzeuge)) {
+  const { tests, werkzeuge } = parseArgs({ options: { tests: { type: "string" }, werkzeuge: { type: "string" } } }).values;
+  const gewaehlt = [tests, werkzeuge].filter((lauf) => lauf !== undefined);
+  if (gewaehlt.length > 1 || gewaehlt.some((lauf) => !LAUFNUMMER.test(lauf))) {
     console.error(AUFRUF);
     return EXIT_AUFRUF;
   }
-  return schreibe(WERKZEUG_MESSDATEI, werkzeugDauern(werkzeuge));
+  if (tests !== undefined) return schreibe(MESSDATEI, testDauern(tests));
+  if (werkzeuge !== undefined) return schreibe(WERKZEUG_MESSDATEI, werkzeugDauern(werkzeuge));
+  return schreibe(MESSDATEI, geholt());
 }
 
 process.exitCode = main();

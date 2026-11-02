@@ -113,7 +113,7 @@ jobs:
           if [ -f "$RUNNER_TEMP/rest-werkzeugtests.txt" ]; then
             auswahl=(--werkzeugdateien "$RUNNER_TEMP/rest-werkzeugtests.txt")
           fi
-          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --fuer-ereignis "$EVENT_NAME" "${auswahl[@]}"
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --zusammenfassung "$GITHUB_STEP_SUMMARY" --fuer-ereignis "$EVENT_NAME" "${auswahl[@]}"
 
       - name: Testlaufzeit
         if: always()

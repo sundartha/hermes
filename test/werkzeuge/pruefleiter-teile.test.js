@@ -354,3 +354,27 @@ test("--werkzeugdateien ohne --werkzeugteil ist ein Aufruffehler", (context) => 
 
   assert.equal(result.status, EXIT_USAGE);
 });
+
+test("die Werkzeugteile nennen im Job-Summary genau die Dateien ohne Messwert und fahren sie trotzdem", (context) => {
+  const gemessen = Object.fromEntries(Object.entries(MEASURED_DURATIONS).filter(([file]) => file !== TOOL_TEST_FILES[4]));
+  const directory = probe(context, { dauern: gemessen });
+  change(directory, TOOL_CHANGE_FILE);
+  const summary = join(directory, "summary.md");
+
+  const results = Array.from({ length: PARTS }, (_unused, index) =>
+    runPruefleiter(directory, ["--werkzeugteil", `${index + 1}/${PARTS}`, "--zusammenfassung", summary]),
+  );
+
+  assertEveryToolTestRanOnce(directory, results);
+  const text = readFileSync(summary, "utf8");
+  assert.ok(text.includes(`- ${TOOL_TEST_FILES[4]}`));
+  for (const file of TOOL_TEST_FILES.slice(0, 4)) assert.ok(!text.includes(`- ${file}`), file);
+});
+
+test("--zusammenfassung ohne --werkzeugteil ist ein Aufruffehler", (context) => {
+  const directory = probe(context);
+
+  const result = runPruefleiter(directory, ["--zusammenfassung", "summary.md"]);
+
+  assert.equal(result.status, EXIT_USAGE);
+});
