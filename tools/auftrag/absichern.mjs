@@ -8,8 +8,8 @@ import { absicherungsLauf, trailerZeile, vorabHerkunft } from "./absicherungsbel
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase } from "./befehle.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { reihenfolge } from "./format.mjs";
-import { dateiAm, git, hartZuruecksetzen, vormerken } from "./git.mjs";
-import { auftragsKontext, gebauteAuftraege, neuerAuftragsLauf } from "./lauf.mjs";
+import { dateiAm, gebauteAuftraege, git, hartZuruecksetzen, vormerken } from "./git.mjs";
+import { auftragsKontext, neuerAuftragsLauf } from "./lauf.mjs";
 import { vorabAbsichern } from "./mutation.mjs";
 import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
 

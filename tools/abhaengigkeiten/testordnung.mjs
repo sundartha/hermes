@@ -55,13 +55,15 @@ function meldung(pfad, erlaubt) {
   return `${pfad}: neue Testdateien liegen unter test/<bereich>/ (Bereiche: ${erlaubt.join(", ")}) und heißen nach Verhalten, z. B. test/anrufe/anruf-starten.test.js. Ticket-Nummern gehören in Commit-Text und Testtitel. Ist ein Teil des Namens ein Fachbegriff, ist das eine Änderung an einer Prüfung und braucht eine Freigabe von Antonio oder Jonas; im Zweifel den Namen nach Verhalten wählen.`;
 }
 
+export function ordnungsBefunde(neu, erlaubt) {
+  return neu.filter((pfad) => !liegtGeordnet(pfad, erlaubt)).map((pfad) => meldung(pfad, erlaubt));
+}
+
 export async function testordnung(basis) {
   const erlaubt = bereiche();
   const { nurTypen } = await umbenennungen({ von: basis, bis: "HEAD" });
   const neu = neueDateien(basis).filter((pfad) => nurTypen(pfad) === undefined);
-  const befunde = neu
-    .filter((pfad) => !liegtGeordnet(pfad, erlaubt))
-    .map((pfad) => meldung(pfad, erlaubt));
+  const befunde = ordnungsBefunde(neu, erlaubt);
   const zusammenfassung = `${neu.length} ${ZUSAMMENFASSUNG}`;
   return { befunde, zusammenfassung };
 }
