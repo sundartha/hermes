@@ -1,17 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
-
-function withQueueBackend(value, fn) {
-  const original = config.store.queueBackend;
-  config.store.queueBackend = value;
-  try {
-    return fn();
-  } finally {
-    config.store.queueBackend = original;
-  }
-}
+import { withQueueBackend } from "../gemeinsam/pgboss-umgebung.js";
 
 test("S1-17a: QUEUE_BACKEND=memory -> QueuePort-Form (enqueue/drain/jobStatus als Funktionen)", () => {
   withQueueBackend("memory", () => {
