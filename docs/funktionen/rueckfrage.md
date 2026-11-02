@@ -30,6 +30,7 @@ Während eines laufenden Anrufs ruft ElevenLabs die beiden Webhooks mit dem Werk
     },
     {
       "befehl": ["webhook", "elevenlabs-lookup", { "conversation_id": "{{anruf.conversation_id}}", "query": "Öffnungszeiten Restaurant am Markt" }],
+      "antwortzeit": "elevenlabs-lookup",
       "erwarte": [
         { "pfad": "status", "gleich": 200 },
         { "pfad": "koerper.status", "gleich": "ok" }
@@ -57,6 +58,7 @@ Während eines laufenden Anrufs ruft ElevenLabs die beiden Webhooks mit dem Werk
     },
     {
       "abwarten": "rueckfrage",
+      "antwortzeit": "elevenlabs-consult",
       "erwarte": [
         { "pfad": "status", "gleich": 200 },
         { "pfad": "koerper.status", "gleich": "answered" },
@@ -72,3 +74,4 @@ Während eines laufenden Anrufs ruft ElevenLabs die beiden Webhooks mit dem Werk
 - Eine Rückfrage höchstens einmal je Anruf, Recherche höchstens zweimal.
 - Die Quittung `answer_consult` mit `status: "working"` beendet den offenen Webhook nicht; erst Antworten tun das.
 - Die Rückfrage arbeitet im 250-ms-Takt; die Dauer des Webhooks schwankt deshalb um rund 250 ms.
+- Die Schritte mit `antwortzeit` haben ein Zeitbudget in `.github/antwortzeiten.json`; der Läufer vergleicht damit die reine Anfragezeit des Webhooks (`anfrage_ms`).

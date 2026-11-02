@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { budgetNameFehler } from "./antwortzeiten.mjs";
+
 export const KARTEN_ORDNER = "docs/funktionen";
 const KARTEN_ENDUNG = ".md";
 const ABSCHNITTE = [
@@ -100,6 +102,15 @@ function hintergrundPruefenUndEintragen(schritt, nummer, { hatBefehl, hintergrue
   return fehler;
 }
 
+function antwortzeitFehler(schritt, nummer) {
+  if (schritt.antwortzeit === undefined) return [];
+  const namensfehler = budgetNameFehler(schritt.antwortzeit);
+  if (namensfehler !== undefined) return [`Schritt ${nummer}: ${namensfehler}`];
+  return schritt.hintergrund === undefined
+    ? []
+    : [`Schritt ${nummer}: „antwortzeit“ gehört an den Schritt mit „abwarten“, nicht an den im Hintergrund`];
+}
+
 function schrittFehler(schritt, nummer, hintergruende) {
   if (!istObjekt(schritt)) return [`Schritt ${nummer}: muss ein JSON-Objekt sein`];
   const fehler = [];
@@ -108,6 +119,7 @@ function schrittFehler(schritt, nummer, hintergruende) {
     fehler.push(`Schritt ${nummer}: braucht entweder „befehl“ oder „abwarten“`);
   }
   fehler.push(...hintergrundPruefenUndEintragen(schritt, nummer, { hatBefehl, hintergruende }));
+  fehler.push(...antwortzeitFehler(schritt, nummer));
   if (schritt.hintergrund !== undefined) return fehler;
   if (!Array.isArray(schritt.erwarte) || schritt.erwarte.length === 0) {
     fehler.push(`Schritt ${nummer}: braucht mindestens eine Erwartung an die Antwort („erwarte“)`);

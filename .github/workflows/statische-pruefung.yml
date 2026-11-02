@@ -93,3 +93,9 @@ jobs:
         env:
           BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node tools/funktionskarte.mjs pruefen --basis "$BASIS"
+
+      - name: Antwortzeiten messen
+        if: ${{ !cancelled() }}
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: git diff --quiet "$BASIS" -- .github/antwortzeiten.json || node tools/funktionskarte.mjs messen
