@@ -1,0 +1,75 @@
+{
+  "phase": "E-2496-statusroute-neubau",
+  "issue": 2496,
+  "absicht": "Better Stack (Prüfung von außen, jede Minute) und später OpenClaw sollen erkennen, dass Hermes läuft, aber nicht mehr speichern kann. `/healthz` bleibt flach (immer 200, nur Commit), damit Render bei einer kurzen Datenbankstörung nicht alle Instanzen neu startet. Neu ist `GET /intern/status` mit eigenem Nur-Lese-Schlüssel: nur ja oder nein, ob die Datenbank binnen 2 s antwortet, und der Commit; 200 bei ja, sonst 503, nie mit Fehlertext. Der Punkt „letzter Flush gelungen“ folgt als eigenes Paket B2b nach der Zerlegung von `makePgStore` (PGZ). Nicht gewollt: der Deploy-Token als Schlüssel, eine Datenbankabfrage in `/healthz`, Änderungen an `src/boot.js`, `src/server.js`, `src/store/pg-runner.js` oder `src/store/json.js`, neue Abhängigkeiten, die Punkte Schreibsperre und Lebenszeichen. Im Zweifel kleiner schneiden und nachfragen.",
+  "entwurf": {
+    "src/store.js": "Was sich ändert (a1): Die Fassade src/store.js bekommt die Datenbankprobe pruefeVerbindung und den Export pgBackendFuerRunner, auf dem Stand von master neu gebaut (Paket B2 wurde nach einem Konflikt mit master neu über lauf aufgesetzt). Vorlage zum Lesen: der alte, von Antonio freigegebene Stand 7f10bbc, abrufbar mit git show 7f10bbc:<pfad>; übernimm nichts blind, sondern passe es an den Stand von master an.\nWie: master behält seinen Aufbau, createPgBackend liefert weiter store samt poolZustand, und der JSON-Zweig bleibt mitZustandsFunktionen mit jsonBackend und poolZustand: () => null. Im pg-Zweig führt pruefeVerbindung SELECT 1 über runner.withClient aus und gibt das Ergebnis der Abfrage zurück; ein Fehler der Datenbank oder des Runners wirft sie unverändert. Im JSON-Zweig ist sie eine Funktion, die sofort ohne Wert erfüllt. pgBackendFuerRunner(runner) ist neu exportiert und baut das pg-Backend aus einem fertigen Runner über denselben Weg wie createPgBackend, damit die neue Testhilfe makePgTestBackend in test/pg-helpers.js es nutzen kann; poolZustand liefert dort wie im JSON-Zweig null, solange kein Pool dazugehört. pruefeVerbindung wird wie die übrigen Funktionen aus der Fassade exportiert. Bestehende Hilfen in test/pg-helpers.js bleiben unverändert, makePgTestBackend kommt dazu.\nBleibt gleich: poolZustand meldet im pg-Betrieb den Zustand des Pools und im JSON-Betrieb null; alle übrigen Exporte der Fassade; makePgStore, json.js und pg-runner.js bleiben unberührt; keine Änderung an Gates, Kostendecke, Offenlegung oder Signaturprüfung.\nAbnahme: Abnahmetest über den echten Eingang (die Fassade): test/gemeinsam/speicher-meldet-datenbankverbindung-pg.test.js, heute rot; dazu test/gemeinsam/speicher-meldet-datenbankverbindung-json.test.js für den JSON-Speicher und ein Test über den Produktionsweg createPgBackend (Pool auf pglite umgelegt, siehe test/gemeinsam/pool-ohne-datenbankserver-meldet-zustand-und-verlust.test.js). Vorlage der beiden ersten: git show 7f10bbc:test/gemeinsam/speicher-meldet-datenbankverbindung-pg.test.js.\nNicht-Ziele: der Flush-Punkt der Statusroute, weil er als Paket B2b nach der Zerlegung von makePgStore folgt; eine Verbindungsfrist im Pool, weil die Absicht Änderungen an src/store/pg-runner.js ausschließt; Änderungen an src/store/pg.js, src/store/pg-runner.js und src/store/json.js, weil dort nichts fehlt; ein Umbau von poolZustand oder mitZustandsFunktionen, weil master sie so gebaut hat.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil kein Test den Produktionsweg createPgBackend prüft und pruefeVerbindung nur an pgBackendFuerRunner hängen könnte, ist store.pruefeVerbindung im echten pg-Betrieb undefined, die Statusroute antwortet bei gesunder Datenbank immer 503, und die Folge ist ein Dauer-Alarm der Wache, der einen echten Ausfall entwertet. | Test: Satz 4 in wasDarfNiePassieren |\n| PM2 | Weil der Verbindungsaufbau des Pools keine Frist hat (src/store/pg-runner.js) und die Probe geteilt läuft, kann eine hängende Probe nach der Erholung der Datenbank weiter 503 liefern, und die Folge ist ein falscher Alarm der Wache. | Nicht-Ziel: Verbindungsfrist im Pool und Frist für die Abfrage der Probe selbst (auch eine halb tote Verbindung hält die geteilte Probe), weil beides eine Änderung an src/store/pg-runner.js braucht, die die Absicht ausschließt |\n| PM3 | Weil SELECT 1 nur Verbinden und Lesen zeigt, meldet die Statusroute einen Speicher, der verbindet, aber nicht mehr schreiben kann, als gesund, und die Folge ist, dass verlorene Anrufdaten die Prüfung von außen nicht auslösen. | Nicht-Ziel: Flush-Punkt folgt als Paket B2b; bis dahin darf sich niemand im Betrieb auf die Route für diesen Fall verlassen |",
+    "src/config.js": "Was sich ändert (a2): Die Anmelde-Konfiguration bekommt den Schlüssel statusToken (HERMES_STATUS_TOKEN), einen eigenen Nur-Lese-Schlüssel für GET /intern/status, getrimmt und standardmäßig leer; nicht der Deploy-Token. Vorlage zum Lesen: der alte, von Antonio freigegebene Stand 7f10bbc, abrufbar mit git show 7f10bbc:<pfad>; übernimm nichts blind, sondern passe es an den Stand von master an.\nWie: in src/config.js ein Feld statusToken neben deployToken, gelesen aus process.env.HERMES_STATUS_TOKEN, getrimmt, Standard leer, und der Name in der Liste auth von CONFIG_NAMESPACES. .env.example und render.yaml tragen den Schlüssel schon (Commit mit Hook davor).\nBleibt gleich: alle anderen Schlüssel und Namensräume; deployToken, mcpAuthToken und die übrigen Anmeldeschlüssel; kein Default, der die Route öffnet: leer oder kürzer als 32 Zeichen weist die Route später jeden Aufruf ab.\nAbnahme: bestehende Tests wachsen nur um den neuen Schlüssel: test/config-auth.test.js (Liste der Anmelde-Schlüssel) und test/gemeinsam/konfiguration-oberflaeche.test.js (Zählwerte auth 18 zu 19, gesamt 197 zu 198, Blätter 183 zu 184); keine Zusicherung wird abgeschwächt.\nNicht-Ziele: die Route selbst, weil sie Auftrag a3 ist; eine Mindestlänge in der Konfiguration, weil die Route sie prüft.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\nKeine Gründe gefunden, weil der Schlüssel nur eine Zeichenkette liest und ohne die Route nichts auslöst.",
+    "src/": "Was sich ändert (a3): Die Route GET /intern/status für die Wache. Sie verlangt den Schlüssel statusToken, meldet nur ja oder nein, ob die Datenbank binnen 2 s antwortet, und den Commit: 200 bei ja, sonst 503, nie ein Fehlertext; ohne gültigen Schlüssel antwortet jeder Aufruf 401 mit Audit, und der Speicher wird nicht gefragt. Vorlage zum Lesen: der alte, von Antonio freigegebene Stand 7f10bbc, abrufbar mit git show 7f10bbc:<pfad>; übernimm nichts blind, sondern passe es an den Stand von master an.\nWie: neue Dateien src/routes/intern-status.js (Router mit STATUS_PATH, eigenem Begrenzer von 30 Abrufen je Minute und Adresse vor der Schlüsselprüfung, Datenbankprobe über makeKeyedSingleFlight ohne eigenen Schlüssel, Frist 2 s mit abgeräumtem Zeitgeber, Antwort { datenbank, commit }) und src/routes/bearer-schluessel.js (die Bearer-Prüfung und die 401-Abweisung einmal, Schlüssel, Mindestlänge und Audit-Grund als Parameter; intern-anrufe-laufend.js nutzt sie, sein Verhalten bleibt gleich); in src/util.js der Grund status_token in AUTH_FAILED_GRUND; in src/route-policy.js der Eintrag der Route in der Öffentlich-Liste mit Begründung; in src/app.js der Import und app.use(makeInternStatusRoutes({ config, store })) nach der Anrufpause-Route, ohne makeHealthzRoutes zu berühren. Die Route ruft store.pruefeVerbindung aus a1 und liest config.auth.statusToken aus a2.\nBleibt gleich: Status, Körper und Header von /intern/anrufe-laufend und /intern/anrufpause (401 mit no-store und Audit deploy_token, beide nur mit dem Deploy-Token); /healthz bleibt flach; die Route liest nur, schreibt nichts und löst keinen Anruf und keine SMS aus; die Gates (Kostendecke, Kill-Switch, Offenlegung, Signaturprüfung) bleiben unberührt; Schlüsselvergleich timing-sicher mit safeEqual.\nAbnahme: Abnahmetest über den echten Eingang: test/gemeinsam/statusroute-meldet-datenbank.test.js (Vorlage: git show 7f10bbc:test/gemeinsam/statusroute-meldet-datenbank.test.js), dazu wächst test/route-auth-inventory.test.js um die Route (Routen-Fingerprint, neuer Fall: an der echten App ohne Schlüssel 401, mit Schlüssel und scheiternder Datenbank 503 mit { datenbank: false, commit }); keine Zusicherung wird abgeschwächt. Das Inventar ist ein Safety-Gate der Anmeldung: es darf nur um die neue Route wachsen.\nNicht-Ziele: die Ablehnung eines Status-Schlüssels, der dem Deploy-Token gleicht, weil der freigegebene Stand 7f10bbc das nicht prüft; der Flush-Punkt, weil er als Paket B2b folgt; Änderungen an Dateien außerhalb der erwarteten Dateien; eine Datenbankabfrage in /healthz; der Deploy-Token als Schlüssel.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil src/routes/intern-anrufpause.js die Prüfung deployTokenAbgewiesen aus intern-anrufe-laufend.js nutzt und a3 sie nach bearer-schluessel.js umbaut, kann ein Rückfall auf statusToken den Status-Schlüssel, den ein Dritter (Better Stack) hält, zum Schlüssel für POST /intern/anrufpause machen, und die Folge ist, dass jemand die Notbremse für ausgehende Anrufe löst. | Test: Satz 6 in wasDarfNiePassieren |\n| PM2 | Weil die Route nur den Namen der Variable HERMES_STATUS_TOKEN vom Deploy-Token trennt, kann der Betreiber im Dashboard denselben Wert für beide eintragen, und die Folge ist, dass bei Better Stack der Deploy-Token liegt und bei Abfluss die Anrufpause und anrufe-laufend öffnet. | Nicht-Ziel: Ablehnung eines Status-Schlüssels, der dem Deploy-Token gleicht, weil der von Antonio freigegebene Stand 7f10bbc das nicht prüft und die Route damit neues Verhalten bekäme; die Betreuung bekommt es als Folge-Issue vorgeschlagen |\n| PM3 | Weil die Absicht im Issue sagt, /healthz sei immer 200, master /healthz aber seit fb60f01 bei 300 s Pool-Stau mit 503 antwortet und die Probe denselben Pool nutzt, kann eine Entscheidung auf einer falschen Annahme beruhen. | Nicht-Ziel: Änderung des Absicht-Textes im Issue, weil die Betreuung den Issue-Text führt; der Hinweis geht in die Anfrage. Die Probe wartet nur, wenn alle Plätze im Pool schon hängen, und die geteilte Probe bringt höchstens einen Wartenden dazu |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Datenbankprobe pruefeVerbindung an der Speicher-Fassade",
+      "bereich": "src/store.js",
+      "erwarteteDateien": [
+        "src/store.js",
+        "test/pg-helpers.js",
+        "test/gemeinsam/speicher-meldet-datenbankverbindung-pg.test.js",
+        "test/gemeinsam/speicher-meldet-datenbankverbindung-json.test.js",
+        "test/gemeinsam/pruefeverbindung-im-echten-pg-betrieb.test.js"
+      ],
+      "abnahme": "test/gemeinsam/speicher-meldet-datenbankverbindung-pg.test.js",
+      "erwarteterFehler": "pgBackendFuerRunner is not a function",
+      "wasDarfNiePassieren": [
+        "Der pg-Speicher fragt mit pruefeVerbindung die Datenbank über den Runner (SELECT 1) und gibt deren Ergebnis zurück; scheitert der Runner, wirft pruefeVerbindung den Fehler weiter und meldet nie Erfolg.",
+        "Der JSON-Speicher erfüllt pruefeVerbindung sofort ohne Wert, ohne eine Datenbank zu brauchen.",
+        "poolZustand der Fassade meldet im JSON-Betrieb weiter null und im pg-Betrieb weiter den Zustand des Pools.",
+        "Im echten pg-Betrieb, den die Fassade über createPgBackend aufbaut (STORE_BACKEND=pg, Pool auf pglite umgelegt), liefert pruefeVerbindung das Ergebnis von SELECT 1 und lehnt ab, wenn der Pool keine Verbindung gibt; sie ist dort nie undefined."
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "funktion",
+      "ziel": "Konfigurationsschlüssel statusToken für die Statusroute",
+      "bereich": "src/config.js",
+      "erwarteteDateien": [
+        "src/config.js",
+        "test/config-auth.test.js",
+        "test/gemeinsam/konfiguration-oberflaeche.test.js"
+      ],
+      "abnahme": "test/config-auth.test.js",
+      "erwarteterFehler": "Expected values to be strictly deep-equal",
+      "wasDarfNiePassieren": [
+        "Der Schlüssel statusToken ist leer, solange HERMES_STATUS_TOKEN nicht gesetzt ist, und ist von deployToken unabhängig: ein gesetzter Deploy-Token füllt ihn nicht."
+      ]
+    },
+    {
+      "id": "a3",
+      "art": "funktion",
+      "ziel": "Statusroute GET /intern/status für die Wache",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/routes/intern-status.js",
+        "src/routes/bearer-schluessel.js",
+        "src/routes/intern-anrufe-laufend.js",
+        "src/util.js",
+        "src/route-policy.js",
+        "src/app.js",
+        "test/gemeinsam/statusroute-meldet-datenbank.test.js",
+        "test/route-auth-inventory.test.js"
+      ],
+      "abnahme": "test/gemeinsam/statusroute-meldet-datenbank.test.js",
+      "erwarteterFehler": "Cannot find module",
+      "wasDarfNiePassieren": [
+        "GET /intern/status ohne Schlüssel, mit falschem Schlüssel, mit leerem oder kürzer als 32 Zeichen gesetztem statusToken antwortet 401 mit Audit und fragt den Speicher nicht.",
+        "Mit gültigem Schlüssel antwortet die Route 200 mit { datenbank: true, commit }, wenn die Datenbank binnen 2 s antwortet, sonst 503 mit { datenbank: false, commit }; nie mit einem Fehlertext.",
+        "Der Deploy-Token öffnet die Statusroute nicht, und der Status-Schlüssel öffnet /intern/anrufe-laufend nicht; /intern/anrufe-laufend antwortet unverändert.",
+        "Mehr als 30 Abrufe je Minute und Adresse beantwortet die Route mit 429, auch mit gültigem Schlüssel.",
+        "Eine hängende Datenbankprobe belegt höchstens eine Verbindung, und die Antwort kommt nach der Frist von 2 s.",
+        "Der Status-Schlüssel öffnet /intern/anrufpause weder mit GET noch mit POST (401, Pause unverändert); mit dem Deploy-Token antwortet /intern/anrufpause unverändert."
+      ]
+    }
+  ]
+}
