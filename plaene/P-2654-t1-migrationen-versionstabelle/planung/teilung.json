@@ -1,0 +1,55 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "versionstabelle-uebernahme",
+      "nummern": [
+        "S1",
+        "S13",
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/db/migrate.js",
+        "src/db/migrations/0002_versionstabelle.sql",
+        "docs/RUNBOOK-RESTORE.md",
+        "docs/sicherheitsgrenzen.md",
+        "src/store.js",
+        "src/store/pg.js",
+        "src/store/pg-runner.js",
+        "scripts/lib/pg-schema-abgleich.mjs",
+        "tools/migrationen-pruefen.mjs",
+        "test/pg-helpers.js",
+        "test/gemeinsam/migrationen-versioniert.test.js",
+        "test/openai-t2-20-reviewer-seed-pg.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Frische Datenbank und Übernahme einer Datenbank ohne `schema_migrations` gehen denselben Weg: `0002` legt die Versionstabelle erst an, also laufen beide Male `0001` und `0002` in einer Transaktion und werden darin eingetragen. Deshalb bilden die Gruppen S1/S13/S2 und S3/S4 zusammen den ersten Teil, den man allein deployen kann."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "migrationen-abgleich",
+      "nummern": [
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/db/migrate.js",
+        "test/pg-helpers.js",
+        "test/gemeinsam/migrationen-abgleich.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Prüfsummenabgleich, Abbruch einer einzelnen Migration und Eintrag ohne Datei setzen eine bestehende Versionstabelle voraus und ändern dieselbe Datei `src/db/migrate.js`, deshalb folgen sie als eigener Teil nach t1."
+    }
+  ]
+}
