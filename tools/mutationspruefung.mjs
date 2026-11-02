@@ -39,6 +39,7 @@ import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbestand.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
 import { hatMutanten, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
 import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
@@ -774,7 +775,7 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   const angenommene = [];
   const ueberlebende = [];
   for (const eintrag of ergebnisse.filter(ueberlebt)) (angenommen(eintrag, gleichwertige) ? angenommene : ueberlebende).push(eintrag);
-  for (const { schluessel } of angenommene) console.log(`${GLEICHWERTIG_ANGENOMMEN}: ${schluessel}`);
+  for (const { schluessel } of angenommene) console.log([`${GLEICHWERTIG_ANGENOMMEN}: ${schluessel}`, altbestandZeile(schluessel)].filter(Boolean).join("\n"));
   for (const { schluessel } of ueberlebende.filter(({ status }) => ABGESCHALTET.has(status))) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
@@ -878,9 +879,10 @@ function umbauCommits(basis) {
 
 function gemeldet(basis) {
   const nachrichten = git(["log", "-z", "--format=%B", `${basis}..HEAD`]).split("\0");
-  return nachrichten
-    .filter((nachricht) => AUFTRAGSWEG.test(nachricht))
-    .flatMap((nachricht) => gleichwertigGemeldet(nachricht));
+  const mitAuftrag = nachrichten.filter((nachricht) => AUFTRAGSWEG.test(nachricht));
+  const ohneAuftrag = nachrichten.filter((nachricht) => !AUFTRAGSWEG.test(nachricht));
+  const altbestand = altbestandGemeldet({ nachrichten: ohneAuftrag, basis, root: WURZEL, umgebung: env });
+  return [...mitAuftrag.flatMap((nachricht) => gleichwertigGemeldet(nachricht)), ...altbestand];
 }
 
 function ohneAndereBetriebsart(values) {
