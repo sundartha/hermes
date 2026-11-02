@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import {
   dateienDesTeils,
   gerundeteTabelle,
+  hinweisOhneMesswert,
   leseDauern,
+  meldeOhneMesswert,
   schneide,
   WERKZEUG_SUMME_JE_TEIL_MS,
   WERKZEUG_TEILE_HOECHSTENS,
@@ -248,8 +250,16 @@ printf '{"datei":"test/werkzeuge/b.test.js","dauer_ms":7}\\n' > "$ziel/werkzeugt
 printf '{"datei":"test/werkzeuge/b.test.js","art":"echtWarten","anzahl":1,"summe":9}\\n' > "$ziel/werkzeugteil-2/testkosten-werkzeugteil-2.jsonl"
 `;
 
-function werkzeugErzeuger(context, argumente) {
-  const ordner = probeDirectory(context, { gh: GH_WERKZEUG_ATTRAPPE, [WERKZEUG_MESSDATEI_IM_REPO]: VORHER });
+const GH_TESTS_ATTRAPPE = `#!/bin/sh
+printf '%s\\n' "$@" > "$GH_AUFRUF"
+while [ $# -gt 0 ]; do if [ "$1" = "-D" ]; then ziel="$2"; fi; shift; done
+mkdir -p "$ziel/testlaufzeit-teil-1" "$ziel/testlaufzeit-teil-2"
+printf '{"datei":"test/a.test.js","dauer_ms":12.6}\\n{"datei":"test/u.test.js","bestanden":true}\\n' > "$ziel/testlaufzeit-teil-1/dateien.jsonl"
+printf '{"datei":"test/b.test.js","dauer_ms":7}\\n' > "$ziel/testlaufzeit-teil-2/dateien.jsonl"
+`;
+
+function werkzeugErzeuger(context, argumente, { ziel = WERKZEUG_MESSDATEI_IM_REPO, attrappe = GH_WERKZEUG_ATTRAPPE } = {}) {
+  const ordner = probeDirectory(context, { gh: attrappe, [ziel]: VORHER });
   chmodSync(join(ordner, "gh"), 0o755);
   const aufruf = join(ordner, "aufruf.txt");
   const lauf = spawnSync(process.execPath, [ERZEUGER, ...argumente], {
@@ -257,7 +267,7 @@ function werkzeugErzeuger(context, argumente) {
     encoding: "utf8",
     env: { ...process.env, PATH: `${ordner}:${process.env.PATH}`, GITHUB_REPOSITORY: "ziel/repo", GH_AUFRUF: aufruf },
   });
-  return { lauf, datei: readFileSync(join(ordner, WERKZEUG_MESSDATEI_IM_REPO), "utf8"), aufruf };
+  return { lauf, datei: readFileSync(join(ordner, ziel), "utf8"), aufruf };
 }
 
 test("Werkzeugteile: der Erzeuger schreibt die gemessenen Dauern eines Prüfleiter-Laufs und lässt übernommene Dateien ohne Dauer weg", (context) => {
@@ -273,4 +283,58 @@ test("Werkzeugteile: der Erzeuger lehnt eine Laufnummer ab, die keine ist, und l
 
   assert.equal(lauf.status, EXIT_AUFRUF);
   assert.equal(datei, VORHER);
+});
+
+test("Testteile: der Erzeuger schreibt mit --tests die Dauern des genannten Laufs und nur dort", (context) => {
+  const { lauf, datei, aufruf } = werkzeugErzeuger(context, ["--tests", "55"], { ziel: MESSDATEI_IM_REPO, attrappe: GH_TESTS_ATTRAPPE });
+
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.deepEqual(JSON.parse(datei), { lauf: 55, dauern: { "test/a.test.js": 13, "test/b.test.js": 7 } });
+  assert.match(readFileSync(aufruf, "utf8"), /^run\ndownload\n55\n-R\nziel\/repo\n/);
+  assert.match(readFileSync(aufruf, "utf8"), /testlaufzeit-teil-\*/);
+});
+
+test("Testteile: der Erzeuger lehnt eine falsche oder doppelte Laufnummer ab und lässt die Messdatei unverändert", (context) => {
+  for (const argumente of [["--tests", "55; rm"], ["--tests", "55", "--werkzeuge", "77"]]) {
+    const { lauf, datei } = werkzeugErzeuger(context, argumente, { ziel: MESSDATEI_IM_REPO });
+
+    assert.equal(lauf.status, EXIT_AUFRUF, argumente.join(" "));
+    assert.equal(datei, VORHER);
+  }
+});
+
+test("Testteile: der Hinweis nennt genau die Dateien ohne Messwert und schweigt, wenn alle gemessen sind", () => {
+  const hinweis = hinweisOhneMesswert([...DATEIEN, ...NEU, NEU[0]], GEMESSEN);
+
+  assert.match(hinweis, /^Testdateien ohne Messwert: 2 von 8 Dateien/);
+  assert.deepEqual(hinweis.split("\n").filter((zeile) => zeile.startsWith("- ")), NEU.map((datei) => `- ${datei}`));
+  assert.equal(hinweisOhneMesswert(DATEIEN, GEMESSEN), "");
+  assert.equal(hinweisOhneMesswert(NEU, null), "", "ohne Tabelle meldet schon der Rückfall");
+});
+
+test("Testteile: der Hinweis geht in die Zusammenfassung des Jobs und ändert den Teil nicht", (context) => {
+  const ordner = probeDirectory(context, { [MESSDATEI]: messung(GEMESSEN), ...Object.fromEntries([...DATEIEN, ...NEU].map((datei) => [datei, ""])) });
+  const zusammenfassung = join(ordner, "zusammenfassung.md");
+
+  const ergebnis = spawnSync(process.execPath, [TOOL, "--teil", "1", "--teile", "1", "--messdatei", MESSDATEI, "--zusammenfassung", zusammenfassung], { cwd: ordner, encoding: "utf8" });
+
+  assert.equal(ergebnis.status, EXIT_OK);
+  const geliefert = ergebnis.stdout.split("\n").filter((zeile) => zeile !== "");
+  assert.deepEqual(geliefert.sort(), [...DATEIEN, ...NEU].sort());
+  for (const datei of NEU) {
+    assert.ok(readFileSync(zusammenfassung, "utf8").includes(`- ${datei}`), datei);
+    assert.ok(ergebnis.stderr.includes(datei), datei);
+  }
+});
+
+test("Testteile: ohne Zusammenfassungsdatei oder ohne fehlende Messwerte schreibt der Hinweis keine Datei", (context) => {
+  const ziel = join(probeDirectory(context, {}), "zusammenfassung.md");
+  const meldungen = [];
+  const melde = (dateien, zusammenfassung) => meldeOhneMesswert({ dateien, messdatei: messdatei(context, messung(GEMESSEN)), meldung: (text) => meldungen.push(text), zusammenfassung });
+
+  melde(DATEIEN, ziel);
+  melde(NEU, undefined);
+
+  assert.equal(existsSync(ziel), false);
+  assert.equal(meldungen.length, 1);
 });

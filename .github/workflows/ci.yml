@@ -362,7 +362,7 @@ jobs:
           elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$PR_BASE_SHA" ]; then
             auswahl=(--werkzeugtests-aus-liste --basis "$PR_BASE_SHA")
           fi
-          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
+          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" --zusammenfassung "$GITHUB_STEP_SUMMARY" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
 
       - name: Übernahme im Schatten
         id: uebernahme
