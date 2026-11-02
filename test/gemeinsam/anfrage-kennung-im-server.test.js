@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
 import { makeTelnyxSigner, placeCall, postTelnyxIncoming, seedState, seedWithTelnyxNumber, startServer, stdioServerTransport, waitForLog } from "../helpers.js";
+import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
@@ -163,23 +163,11 @@ test("[NIE1] mit Schalter bleibt eine Nummer in einer Logzeile waehrend der Anfr
 
 const NUMMER_IM_WERKZEUG = "+491511234567";
 
-async function mitGatewayAttrappe(koerper, lauf) {
-  const gateway = http.createServer((req, res) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(koerper));
-  });
-  await new Promise((fertig) => gateway.listen(0, "127.0.0.1", fertig));
-  try {
-    return await lauf(`http://127.0.0.1:${gateway.address().port}`);
-  } finally {
-    await new Promise((fertig) => gateway.close(fertig));
-  }
-}
-
 test("[NIE2] mit Schalter liefert der stdio-MCP-Einstieg die Werkzeugantwort auf stdout unmaskiert", async () => {
   const koerper = { agent: { number: NUMMER_IM_WERKZEUG, owner: "Jonas" }, usage: { calls: 1 }, settings: {} };
-  await mitGatewayAttrappe(koerper, async (gatewayUrl) => {
-    const { transport, stderr } = stdioServerTransport({ ...MIT_KENNUNG_IN_LOGS, GATEWAY_URL: gatewayUrl });
+  const gateway = await starteJsonAttrappe(koerper);
+  try {
+    const { transport, stderr } = stdioServerTransport({ ...MIT_KENNUNG_IN_LOGS, GATEWAY_URL: gateway.url });
     const client = new Client({ name: "anfrage-kennung-stdio", version: "0.0.0" });
     try {
       await client.connect(transport);
@@ -188,7 +176,9 @@ test("[NIE2] mit Schalter liefert der stdio-MCP-Einstieg die Werkzeugantwort auf
     } finally {
       await client.close();
     }
-  });
+  } finally {
+    await gateway.close();
+  }
 });
 
 const HTTP_FORBIDDEN = 403;
