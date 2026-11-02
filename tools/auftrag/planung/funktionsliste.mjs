@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { bereichDerDatei, leseBereiche } from "../../tests-ausmisten/pfade.mjs";
-import { TEST_FILE, dependentsGraph, testsReaching } from "../../testgraph.mjs";
+import { TEST_FILE, dependentsGraph, leserDer, testsReachingMitLeser } from "../../testgraph.mjs";
 import { istQuelltext } from "../../ziele/funktionen.mjs";
 import { istKritisch } from "../agenten.mjs";
 import { geschuetzteMuster, istGeschuetzt, istTestdatei } from "../format.mjs";
@@ -45,12 +45,12 @@ export async function dateiKarte(root, berichte) {
     bereich: bereichDerDatei(datei, bereiche) ?? null,
     codeowners: istGeschuetzt(muster, datei),
     kritisch: istKritisch(datei),
-    tests: testsReaching(datei, graph).toSorted(),
+    tests: testsReachingMitLeser(datei, graph).toSorted(),
   }));
 }
 
 function direkteTests(datei, graph) {
-  const importierende = (graph.get(datei) ?? []).map(({ source }) => source).filter((pfad) => TEST_FILE.test(pfad));
+  const importierende = [datei, ...leserDer(datei)].flatMap((pfad) => (graph.get(pfad) ?? []).map(({ source }) => source)).filter((pfad) => TEST_FILE.test(pfad));
   return [...new Set(importierende)].toSorted();
 }
 
