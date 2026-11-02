@@ -1,0 +1,29 @@
+{
+  "phase": "E-2498-anfrage-kennung-process-guards",
+  "issue": 2498,
+  "entwurf": {
+    "src/process-guards.js": "Was sich ändert: Beim Rebase von Paket B3a (PR #2501) auf master blieb in src/process-guards.js genau das Stück aus der Konfliktstelle zurück. Master importiert dort inzwischen SCHADEN_FEHLER und meldeSchaden aus ./utils/lokale-gesundheit.js; der PR-Commit 96b227a ergänzte an derselben Stelle den Import mitAnfrageKennung aus ./utils/anfrage-kennung.js und wickelte damit die Schreibfunktionen in installProcessGuards. Beim Rebase wurde die Seite von master übernommen, damit fehlen dem PR der Import und die zwei Umwicklungen. Die Hilfe src/utils/anfrage-kennung.js selbst, der Schalter LOG_REQUEST_ID in src/config.js und die Header-Vergabe in src/app.js sind schon im PR und bleiben unberührt.\nAnsatzstelle: src/process-guards.js, Importblock (Zeilen 1-5) und `installProcessGuards` (ab Zeile 25). Dort steht heute `process.stderr.write = mitLogMaske(process.stderr.write)` und, außer im stdio-MCP-Einstieg `mcp-server.js`, `process.stdout.write = mitLogMaske(process.stdout.write)`.\nSoll: Der Importblock behält die Importe von master (`mitLogMaske`, `SCHADEN_FEHLER`, `meldeSchaden`) und bekommt `import { mitAnfrageKennung } from \"./utils/anfrage-kennung.js\"`. In `installProcessGuards` wird jede der beiden Schreibfunktionen so umwickelt, dass `mitLogMaske` außen und `mitAnfrageKennung` innen steht: `mitLogMaske(mitAnfrageKennung(process.stderr.write))` und ebenso für stdout. So maskiert die Log-Maske den Text zuerst, und die Kennung wird danach vorangestellt. Die Bedingung für stdout (nicht im stdio-MCP-Einstieg) bleibt, weil auf stdout dort das MCP-Protokoll läuft. Alles übrige in der Datei, insbesondere `onUnhandledRejection`, `onUncaughtException`, `meldeSchaden(SCHADEN_FEHLER)` und die Listener-Zeilen, bleibt wörtlich wie auf master.\nNicht ändern: src/utils/anfrage-kennung.js, src/app.js, src/config.js, src/server.js, alle Tests. Die Abnahmedatei test/gemeinsam/anfrage-kennung-im-server.test.js kommt unverändert aus dem PR und ist heute rot; sie darf der Auftrag nicht anfassen.\nFehlerfälle: Ohne gesetzten Schalter LOG_REQUEST_ID liefert `mitAnfrageKennung` die Schreibfunktion unverändert zurück oder setzt nichts davor, alle Zeilen bleiben byteweise gleich; Zeilen außerhalb einer Anfrage (Start, Hintergrundarbeit) tragen keine Kennung; [metrics]-Zeilen bleiben maschinenlesbar ohne Kennung. Das regelt die Hilfe aus dem PR, nicht diese Datei."
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Prozess-Guards setzen die Anfrage-Kennung vor stdout und stderr",
+      "bereich": "src/process-guards.js",
+      "erwarteteDateien": [
+        "src/process-guards.js"
+      ],
+      "abnahme": "test/gemeinsam/anfrage-kennung-im-server.test.js",
+      "erwarteterFehler": "Log-Pattern /^rid=",
+      "wasDarfNiePassieren": [
+        "Die Log-Maske (`mitLogMaske`) bleibt die äußere Umwicklung von stderr und stdout und maskiert jeden Text, bevor die Kennung davorgesetzt wird; kein Geheimnis erscheint in einer Logzeile, nur weil sie jetzt `rid=` trägt.",
+        "Im stdio-MCP-Einstieg `mcp-server.js` bleibt stdout unangetastet, weil dort das MCP-Protokoll läuft; die Bedingung in `installProcessGuards` ändert sich nicht.",
+        "`onUnhandledRejection`, `onUncaughtException`, der Aufruf `meldeSchaden(SCHADEN_FEHLER)` und die Listener-Registrierung aus master bleiben wörtlich erhalten; die Gesundheitsmeldung bei einer abgefangenen Ausnahme (Healthz dauerhaft krank) darf nicht verloren gehen.",
+        "Ohne gesetzten Schalter LOG_REQUEST_ID bleiben alle Logzeilen unverändert, mit Schalter tragen nur Zeilen während einer Anfrage `rid=<ID> `, Startzeilen und [metrics]-Zeilen nicht.",
+        "Keine Änderung an src/utils/anfrage-kennung.js, an Tests oder an einem Gate (Signaturprüfung, Kostendecke, Kill-Switch): der Auftrag verdrahtet nur die vorhandene Hilfe."
+      ],
+      "prueft": [],
+      "abhaengigVon": []
+    }
+  ]
+}
