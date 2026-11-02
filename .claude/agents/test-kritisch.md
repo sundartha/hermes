@@ -21,6 +21,7 @@ Hat dein Auftrag die Art `testumbau`, gelten statt 1 bis 4 die Regeln aus dem Ab
 5. Du committest nicht. Das Skript prüft deine Änderung selbst und committet.
 6. `node --test` rufst du nie direkt auf. Für breite Suchen nimmst du den Agenten `suche`.
 7. Speicher nutzt du in Abnahmetests nur über echte Store-Implementierungen (`makePgTestStore` aus `test/pg-helpers.js` oder den JSON-Store mit frischem Laden), nie über einen eigenen Store, ein Objekt mit `load`, `save` oder `withStoreLock` oder ersetzte Store-Methoden; ist ein Mutant mit echtem Speicher nicht tötbar, baust du keine Attrappe und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Mutant> ist mit echtem Speicher nicht prüfbar, weil <ein Satz>`.
+8. Legst du eine neue Testdatei an, liegt sie unter `test/<bereich>/`, mit einem Bereich aus `tools/bereiche.json`, und heißt nach dem Verhalten, nicht nach einem Ticket (Prüfung `tools/abhaengigkeiten/testordnung.mjs:40`). Ändert ein Mutant kein beobachtbares Verhalten, weil kein Eingang ihn erreicht, erzwingst du ihn nicht über Direktimport oder Attrappe, sondern antwortest mit `Gleichwertig: <Mutant>, weil <ein Satz>` (`tools/auftrag/mutation.mjs:28-30`).
 
 Hältst du den Auftrag für unmöglich oder widersprüchlich, schreibst du keinen Test und antwortest als Letztes mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`. Das zählt nicht als rote Runde.
 

@@ -6,7 +6,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
 {
   "phase": "E-<Nummer>-<kurzname>",
   "issue": <Nummer des Issues>,
-  "absicht": "<2 bis 4 Sätze: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist, wie im Zweifel zu wählen ist>",
+  "absicht": "<2 bis 4 Sätze, höchstens 1000 Zeichen: wofür die Änderung da ist, welche Abkürzung nicht gewollt ist, wie im Zweifel zu wählen ist>",
   "entwurf": {
     "<bereich>": "<Entwurf, siehe unten, Zeilen mit \\n getrennt>"
   },
@@ -17,7 +17,7 @@ Ablage: `plaene/E-<Nummer>-<kurzname>/phase.json`. `<Nummer>` ist die Nummer des
       "ziel": "<was sich ändert, eine Zeile, höchstens 72 Zeichen>",
       "bereich": "<Datei, oder Ordner mit / am Ende, in dem die Änderung liegt>",
       "erwarteteDateien": ["<Dateien im Bereich, die sich ändern>", "<Pfad aus abnahme>"],
-      "abnahme": "test/<name>.test.js",
+      "abnahme": "test/<bereich aus tools/bereiche.json>/<name>.test.js",
       "erwarteterFehler": "<nur bei funktion: wörtlicher Text der Meldung, mit der der Abnahmetest heute rot wird, eine Zeile>",
       "wasDarfNiePassieren": ["<das Verhalten, das gleich bleiben muss, als prüfbarer Satz>"]
     }
