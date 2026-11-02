@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { zitiert } from "./zeilen.mjs";
 
 export const BELEGE = ".fortschritt";
+export const HALT_DATEI = "HALT";
 export const GRUEN = "grün";
 export const ROT = "rot";
 const SEKUNDE_MS = 1000;
@@ -56,11 +57,28 @@ export function belegPfad(root, phase, kennung) {
   return join(belegVerzeichnis(root, phase), `${kennung}.json`);
 }
 
+export function haltPfad(root, phase) {
+  return join(belegVerzeichnis(root, phase), HALT_DATEI);
+}
+
+function istHaltDatei(root, name) {
+  const phase = dirname(name);
+  return basename(phase) === phase && join(root, BELEGE, name) === haltPfad(root, phase);
+}
+
+function nurHalt(root, verzeichnis, name) {
+  if (istHaltDatei(root, name)) return true;
+  const ordner = join(verzeichnis, name);
+  if (!statSync(ordner).isDirectory()) return false;
+  const inhalt = readdirSync(ordner);
+  return inhalt.length > 0 && inhalt.every((eintrag) => istHaltDatei(root, join(name, eintrag)));
+}
+
 export function fingerabdruck(root) {
   const verzeichnis = join(root, BELEGE);
   const hash = createHash("sha256");
   if (!existsSync(verzeichnis)) return hash.digest("hex");
-  const namen = readdirSync(verzeichnis, { recursive: true }).map(String).sort();
+  const namen = readdirSync(verzeichnis, { recursive: true }).map(String).filter((name) => !nurHalt(root, verzeichnis, name)).sort();
   for (const name of namen) {
     const datei = join(verzeichnis, name);
     hash.update(name);

@@ -18,6 +18,7 @@ import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVer
 import { aenderungenSeit, arbeitsstand, auftragsTrailer, aufVorgemerktemStand, festhalten, gebautIn, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
+import { verbraucheHalt, meldeHalt } from "./haltepunkt.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
@@ -718,6 +719,12 @@ function phasenende({ phase, fertig, vorher, amPhasenende }, root) {
   return fertig.size > vorher ? ciLokal(phase, root) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
 }
 
+function beendeOderVerbraucheHalt(plan, root, auftrag) {
+  if (auftrag === undefined) return phasenende(plan, root);
+  const halt = verbraucheHalt(root, plan.phase.phase);
+  return halt === null ? null : meldeHalt(halt, auftrag.id);
+}
+
 function meldeFertige(fertig) {
   for (const kennung of fertig) console.log(`Auftrag ${kennung}: schon gebaut, übersprungen.`);
 }
@@ -749,7 +756,8 @@ export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
     if (!absicherungUebernommen(root, plan.phase)) return EXIT_ROT;
     const { ordnung } = reihenfolge(plan.phase.auftraege);
     const auftrag = ordnung.find(({ id }) => !plan.fertig.has(id));
-    if (auftrag === undefined) return phasenende(plan, root);
+    const ende = beendeOderVerbraucheHalt(plan, root, auftrag);
+    if (ende !== null) return ende;
     const kontext = { ...auftragsKontext(plan.phase, auftrag, root), phasendatei, plan };
     const frei = freigabe(kontext);
     const ergebnis = fuehreRundenAus(kontext, (runde) => new AuftragsLauf(runde.auftrag.id === auftrag.id ? { ...runde, ...frei } : runde).fuehreAus());
