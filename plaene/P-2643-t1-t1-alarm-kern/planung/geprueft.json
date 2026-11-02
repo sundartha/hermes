@@ -1,0 +1,30 @@
+{
+  "erkundung": "13b0ba683caab093d289dc49a3d20d65e45de6766899ceb7eae31703601a0055",
+  "schnitt": "73bfe52f44067f3efe38b982012d52fb60b30484e83c7ce1fdf59101f95e40f3",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Diese Grenzen stehen bei keinem Auftrag, obwohl a1 sie brechen kann; a1 sollte sie in `wasDarfNiePassieren` aufnehmen. (1) pitch.md, ## Grobe Lösung: „Als zugestellt gilt eine Meldung nur bei einer Antwort 2xx binnen 5 Sekunden; sonst bleibt sie unzugestellt, und die bestehende Wiederholung nach `OUTAGE_ALERT_RETRY_MS` greift.“ Dazu design.md, ## Lösung: „Sie sendet einen `POST` mit `content-type: application/json` und dem Körper `{ \"incident\": { \"id\", \"status\" }, \"text\" }` an `BETTERSTACK_ALERT_URL`, mit einer benannten Frist von 5000 ms über `AbortSignal.timeout`.“ Und design.md, ## Fehlerfälle, Zeile „Eingang hängt (nimmt die Verbindung an, antwortet nicht)“: „Abbruch nach 5 s, danach wie Fehler“. (2) design.md, ## Lösung: „`sendBootstrapAlertSms` behält die Signatur. Die Funktion sendet fire-and-forget als `alert` mit dem Schlüssel `<logTag>:<ISO-Zeitstempel>` und der Zeile `prefix + detail`, und `messaging` und `store` bleiben unbenutzt.“ Mit dem Ausgang aus design.md, ## Fehlerfälle: „Stripe bekommt unverändert sofort 200“. a1 ändert die Funktion, die die Stripe-Route ohne Warten aufruft (src/routes/stripe-webhook.js:44). (3) pitch.md, ### Vor dem Bau zu klären: „Entschieden (Betreuung, Freigabe): Meldezeile höchstens 1000 Zeichen“. Der übernommene Satz aus ## Fallen verlangt nur eine Begrenzung, nennt aber den Wert nicht. (4) sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md: „Die Adresse ist ein Geheimnis, kommt nur aus der Konfiguration, ist im Hosting nur mit https zulässig (T3), steht nie in Ausgabe, Audit oder Antwort (T1) und wird nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus.“ Davon betrifft a1 der Teil „nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus“.",
+        "antwort": "korrigiert: a1 trägt jetzt unter `wasDarfNiePassieren` diese Sätze wörtlich: (1) aus pitch.md, ## Grobe Lösung den Satz zu 2xx binnen 5 Sekunden und aus design.md, ## Lösung den Satz zu `POST`, Körper und Frist von 5000 ms über `AbortSignal.timeout`; (2) aus design.md, ## Lösung die Sätze, dass `sendBootstrapAlertSms` die Signatur behält und fire-and-forget sendet, ohne `messaging` und `store` zu nutzen; dieser Satz deckt den Stripe-Aufruf ohne Warten ab, dazu der Satz zur Schlüsselbildung mit den ersten 8 Hexzeichen des SHA-256; (3) aus pitch.md, ### Vor dem Bau zu klären den ganzen Satz mit „Meldezeile höchstens 1000 Zeichen“; (4) aus sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md den ganzen Satz mit „nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus“. Die Tabellenzelle „Abbruch nach 5 s, danach wie Fehler“ aus design.md, ## Fehlerfälle ist kein ganzer Satz und keine ganze Zeile. Ihr Inhalt steckt in den übernommenen Sätzen zur Frist von 5000 ms und zu „sonst bleibt sie unzugestellt“. Für die Zelle „Stripe bekommt unverändert sofort 200“ gilt dasselbe: Sie ist kein ganzer Satz, und ihr Inhalt steckt im Satz zu fire-and-forget."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "914b1e39-d068-4f01-9b6c-7210411ae0b3",
+      "schluessel": [
+        "durchstich:a1",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "bereichsgrund:a1",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}
