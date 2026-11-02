@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { SYSTEM_LABEL, aeltestesSystemIssue } from "../auftrag/system.mjs";
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
 import { ersetzeSteuerzeichen } from "../auftrag/pruefer-schema.mjs";
-import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
+import { nimmTokenReihe } from "../auftrag/token-reihe.mjs";
+import { agentBefehl, agentZeit, istWartend, starteAgent } from "./agent.mjs";
 import {
   BLOCKIERT,
   GEAENDERT,
@@ -229,7 +230,7 @@ function vorschlagsErgebnis(lauf) {
 }
 
 export async function vorschlagen({ ordner }, root) {
-  const token = nimmToken();
+  const token = nimmTokenReihe();
   const zaehlung = leseJson(join(ordner, ZAEHL_ORDNER), ZAEHL_DATEI);
   if (!zaehlung?.kandidat) throw new Error("es gibt keinen Kandidaten für einen Vorschlag");
   const lauf = await vorschlagsLauf(root, { zaehlung, token });

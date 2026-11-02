@@ -2,10 +2,11 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
+import { nimmTokenReihe } from "../auftrag/token-reihe.mjs";
 import { zweckBlock } from "../auftrag/zweck.mjs";
 import { IDS, befund } from "./befunde.mjs";
 import { BLOCKIERT, WEITER, ergebnisVon, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
-import { agentBefehl, agentZeit, istWartend, nimmToken, starteAgent } from "./agent.mjs";
+import { agentBefehl, agentZeit, istWartend, starteAgent } from "./agent.mjs";
 import { BUDGET_NAME, FIXER_PATCH } from "./fixer.mjs";
 import { patchPruefsumme, schreibePatch, wendeAn } from "./patch.mjs";
 import { DATEI as VORPRUEFUNG, ORDNER } from "./vorpruefen.mjs";
@@ -102,13 +103,13 @@ async function fuehreAgentAus({ root, ordner, ziel, token }) {
 function sichererPatch(root, ausgabe, token) {
   const pfad = join(ausgabe, AGENT_PATCH);
   const patch = schreibePatch(root, pfad);
-  if (!token || !patch.includes(token)) return { pruefsumme: patchPruefsumme(patch) };
+  if (!token.tokens.some((geheim) => patch.includes(geheim))) return { pruefsumme: patchPruefsumme(patch) };
   rmSync(pfad, { force: true });
   return { grund: TOKEN_IM_PATCH };
 }
 
 export async function befehl({ ordner }, root) {
-  const token = nimmToken();
+  const token = nimmTokenReihe();
   const ziel = leseJson(join(ordner, ORDNER), ZIEL);
   if (ziel?.agent !== true) throw new Error("das Ziel verlangt keinen Agenten");
   const ausgabe = join(ordner, AGENT_ORDNER);

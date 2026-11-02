@@ -42,6 +42,7 @@ import {
 import { belegeUmgehungen } from "./pruefer-umgehung.mjs";
 import { KONTEXT, urteileMitZweck } from "./pruefer-urteil.mjs";
 import { PRUEFER_ZWECK, statusZweck, zweckZeilen } from "./pruefer-zweck.mjs";
+import { nimmTokenReihe } from "./token-reihe.mjs";
 
 export const PRUEFER_OPTIONEN = new Map([
   ["artefakt", ["head"]],
@@ -230,12 +231,6 @@ function meldeSumme(ergebnis) {
   console.log(`Prüfer: ${ergebnis.commits.length} Commits; Befunde ${jeSchwere.join(", ")}.`);
 }
 
-function nimmToken() {
-  const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
-  delete env.CLAUDE_CODE_OAUTH_TOKEN;
-  return token;
-}
-
 function mitLetztem(commits) {
   return commits.map((commit, index) => ({ ...commit, letzter: index === commits.length - 1 }));
 }
@@ -261,7 +256,7 @@ async function pruefeUndLege(optionen, { auswahl, frueher, kontext, kopf }) {
 }
 
 async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
-  const token = nimmToken();
+  const reihe = nimmTokenReihe();
   const ausloeser = ausloesenderLauf();
   if (!(await stammtAus(github, ausloeser, AUSLOESER_LAUF))) return falscheHerkunft(AUSLOESER_LAUF);
   if (!abschlussPruefbar(ausloeser)) return unpruefbarerAbschluss(ausloeser);
@@ -275,7 +270,7 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   const fork = Boolean(prRepo) && !istEigenesRepo(prRepo);
   const kontext = {
     root,
-    token,
+    reihe,
     programm,
     ciLauf: ausloeser.html_url ?? "",
     auftragstext: auftragstext(issue),
@@ -375,7 +370,7 @@ function lokalerExit(commits) {
 }
 
 async function lokal(optionen, root, { github = githubZugang(), programm } = {}) {
-  const token = nimmToken();
+  const reihe = nimmTokenReihe();
   if (ablageImArtefakt(optionen)) throw new Error("Die Ablage darf nicht im Ordner --aus liegen.");
   const head = gitAusgabe(["rev-parse", "HEAD"], root).trim();
   const branch = gitAusgabe(["rev-parse", "--abbrev-ref", "HEAD"], root).trim();
@@ -386,7 +381,7 @@ async function lokal(optionen, root, { github = githubZugang(), programm } = {})
   if (issue.body === null) throw new Error(`Issue #${optionen.issue} nicht lesbar; ohne Issue-Text wiche die Eingabe von der CI ab.`);
   const absicht = absichtFuerPr({ branch, issue, basis, head, root });
   const vorgaben = vorgabenFuerPr({ basis, head, root });
-  const kontext = { root, token, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht, vorgaben };
+  const kontext = { root, reihe, programm, ciLauf: "", auftragstext: auftragstext(issue), absicht, vorgaben };
   const kopf = { format: FORMAT, head, basis, branch, pr: null, probeBranch: false, lokal: true };
   const commits = await pruefeUndLege(optionen, { auswahl, frueher: new Map(), kontext, kopf });
   console.log(NUR_LOKAL);
