@@ -1,0 +1,1534 @@
+[
+  {
+    "antworten": [
+      {
+        "frage": "Wie kommt der Wert von `BETTERSTACK_ALERT_URL` heute am einfachsten nach `src/telephony/alert-sms.js`? Gibt es eine Lint- oder Architekturregel (eslint, `.dependency-cruiser.cjs`), die `process.env` außerhalb von `src/config.js` bzw. `src/konfiguration/` verbietet? Was schreibt `src/konfiguration/CLAUDE.md` zu Form, Dateiname und Lesern eines neuen Werts, und ist der Stand nach KFZ (laut Design Doc Voraussetzung, `steuerung/abhaengigkeiten.json:206-215`) in diesem Worktree schon da, also gibt es irgendwo ein lauffähiges Lesemuster unter `src/konfiguration/`? Falls der Wert stattdessen über das `config`-Objekt aus `src/config.js` kommen müsste: Welche Zeilen in `src/config.js` (Liste der Schlüssel `:897`, Zugriffswächter `:871-884`) müssten sich dafür ändern?",
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S4",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S4": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "makeVoiceRoutes",
+                  "von": 376,
+                  "bis": 411
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendTurnOutcome",
+                  "von": 290,
+                  "bis": 296
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendVoiceXml",
+                  "von": 258,
+                  "bis": 261
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthesizeDirectiveAudio",
+                  "von": 16,
+                  "bis": 30
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "withPlayAudio",
+                  "von": 32,
+                  "bis": 41
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthToServeUrl",
+                  "von": 43,
+                  "bis": 73
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/store/state-ops.js",
+                  "funktion": "bumpPlatformTtsQuota",
+                  "von": 1646,
+                  "bis": 1662
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/server.js",
+                  "funktion": "onTtsQuotaWarning",
+                  "von": 196,
+                  "bis": 200
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/alert-sms.test.js",
+                "test/tts-quota-counter.test.js",
+                "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      },
+      {
+        "frage": "Gibt es einen bestehenden Test, der Konfigurationsschlüssel aus `src/config.js` oder `src/konfiguration/` gegen `.env.example` oder `render.yaml` abgleicht (etwa „jede Variable ist dokumentiert“)? Bitte mit Pfad und Zeilen, und welche Dateien er zwingend koppelt.",
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S4",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S4": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "makeVoiceRoutes",
+                  "von": 376,
+                  "bis": 411
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendTurnOutcome",
+                  "von": 290,
+                  "bis": 296
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendVoiceXml",
+                  "von": 258,
+                  "bis": 261
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthesizeDirectiveAudio",
+                  "von": 16,
+                  "bis": 30
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "withPlayAudio",
+                  "von": 32,
+                  "bis": 41
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthToServeUrl",
+                  "von": 43,
+                  "bis": 73
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/store/state-ops.js",
+                  "funktion": "bumpPlatformTtsQuota",
+                  "von": 1646,
+                  "bis": 1662
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/server.js",
+                  "funktion": "onTtsQuotaWarning",
+                  "von": 196,
+                  "bis": 200
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/alert-sms.test.js",
+                "test/tts-quota-counter.test.js",
+                "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      },
+      {
+        "frage": "Welche bestehenden Tests werden rot, sobald `sendBootstrapAlertSms` (`src/telephony/alert-sms.js:32-40`) keine SMS über `messaging` mehr sendet, sondern einen `POST` an `BETTERSTACK_ALERT_URL` (bei leerer Adresse gar nichts)? Bekannt sind `test/alert-sms.test.js:159-185` und `test/abrechnung/stripe-webhook.test.js:380-434`. Bitte zusätzlich prüfen: Tests der Heilung beim Start (Aufruf `src/boot.js:639`, Anlass `bootstrap-heal`), Tests der TTS-Warnung über `src/server.js:199`, Tests des Kostenabgleichs mit Messaging-Attrappe, und ob `test/alarmkanal-selbsttest.test.js` diese Funktion überhaupt erreicht. Je Test Pfad, Zeilen und die Annahme, an der er hängt.",
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S4",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S4": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "makeVoiceRoutes",
+                  "von": 376,
+                  "bis": 411
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendTurnOutcome",
+                  "von": 290,
+                  "bis": 296
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendVoiceXml",
+                  "von": 258,
+                  "bis": 261
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthesizeDirectiveAudio",
+                  "von": 16,
+                  "bis": 30
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "withPlayAudio",
+                  "von": 32,
+                  "bis": 41
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthToServeUrl",
+                  "von": 43,
+                  "bis": 73
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/store/state-ops.js",
+                  "funktion": "bumpPlatformTtsQuota",
+                  "von": 1646,
+                  "bis": 1662
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/server.js",
+                  "funktion": "onTtsQuotaWarning",
+                  "von": 196,
+                  "bis": 200
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/alert-sms.test.js",
+                "test/tts-quota-counter.test.js",
+                "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      },
+      {
+        "frage": "Gibt es in `test/helpers.js`, `test/gemeinsam/` oder `test/abrechnung/server-mit-testdatenbank.js` schon eine HTTP-Attrappe für ausgehende Aufrufe (lokaler Port, der Anfragen mit Körper aufzeichnet, ähnlich `startSyntheseOrigin` in `test/gemeinsam/play-tts-server.mjs`), die als Attrappe des Better-Stack-Eingangs dienen kann? Bitte Datei, Funktion und Zeilen nennen.",
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S4",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S4": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "makeVoiceRoutes",
+                  "von": 376,
+                  "bis": 411
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendTurnOutcome",
+                  "von": 290,
+                  "bis": 296
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendVoiceXml",
+                  "von": 258,
+                  "bis": 261
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthesizeDirectiveAudio",
+                  "von": 16,
+                  "bis": 30
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "withPlayAudio",
+                  "von": 32,
+                  "bis": 41
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthToServeUrl",
+                  "von": 43,
+                  "bis": 73
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/store/state-ops.js",
+                  "funktion": "bumpPlatformTtsQuota",
+                  "von": 1646,
+                  "bis": 1662
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/server.js",
+                  "funktion": "onTtsQuotaWarning",
+                  "von": 196,
+                  "bis": 200
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/alert-sms.test.js",
+                "test/tts-quota-counter.test.js",
+                "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      },
+      {
+        "frage": "Was steht in `tools/auftrag/vorbereitung-bereich.json` und `tools/vorbereitung/katalog.json` zu `src/telephony/alert-sms.js`? Ist die Datei für eine Umbenennung nach `.ts` vorgesehen, und beanstandet eine Prüfung im Ablauf eine Verhaltensänderung in dieser Datei (welche Prüfung, welche Regel, mit Fundstelle)? Hat `sendFailSoftAlertSms` (`src/telephony/alert-sms.js:19-30`) oder eine andere Funktion der Datei einen Eintrag in `eslint-suppressions.json` (mit Zeile)?",
+        "nummern": [
+          "S3",
+          "S4",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S4",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S4": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "makeVoiceRoutes",
+                  "von": 376,
+                  "bis": 411
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendTurnOutcome",
+                  "von": 290,
+                  "bis": 296
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/routes/voice.js",
+                  "funktion": "sendVoiceXml",
+                  "von": 258,
+                  "bis": 261
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthesizeDirectiveAudio",
+                  "von": 16,
+                  "bis": 30
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "withPlayAudio",
+                  "von": 32,
+                  "bis": 41
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/tts/directive-synth.js",
+                  "funktion": "synthToServeUrl",
+                  "von": 43,
+                  "bis": 73
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/store/state-ops.js",
+                  "funktion": "bumpPlatformTtsQuota",
+                  "von": 1646,
+                  "bis": 1662
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/server.js",
+                  "funktion": "onTtsQuotaWarning",
+                  "von": 196,
+                  "bis": 200
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/alert-sms.test.js",
+                "test/tts-quota-counter.test.js",
+                "test/anrufe/eingang-ansage-vor-auflegen.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: Kein Schema)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für S4 eine Entscheidung des Owners verlangt; Alert-Weg und Schlüssel sind in design.md, ## Zur Freigabe (Punkt 1) festgelegt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      },
+      {
+        "frage": "Kann `test/api-cost-truing-sweep.test.js:22-48` (Route über `makeBillingRoutes` mit `makeCostTruing` und `operatorAuthPassThrough`) so vorbereitet werden, dass abgerechnete Anrufe zweier Vorwahl-Präfixe mit mehr als 50 % Tarif-Abweichung vorliegen und `reportTariffDrift` (`src/billing/cost-truing.js:493-498`) für beide `alertDrift` aufruft? Welche Store-Daten oder Testhilfen braucht ein solcher Befund (Stichprobenzahl, Tarif-Slug), und mit welchem `config`-Objekt wird `sendBootstrapAlertSms` dort erreicht, damit ein neuer Wert wie `BETTERSTACK_ALERT_URL` im Test ankommt?",
+        "nummern": [
+          "S3",
+          "S16"
+        ],
+        "bericht": {
+          "gruppe": [
+            "S3",
+            "S16"
+          ],
+          "nummern": {
+            "S3": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 25
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js",
+                "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            },
+            "S16": {
+              "weg": [
+                {
+                  "rolle": "eingang",
+                  "datei": "src/routes/api-billing.js",
+                  "funktion": "makeBillingRoutes",
+                  "von": 62,
+                  "bis": 66
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "runCostTruingSweep",
+                  "von": 556,
+                  "bis": 567
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "sweepAllCandidates",
+                  "von": 522,
+                  "bis": 554
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "reportTariffDrift",
+                  "von": 493,
+                  "bis": 498
+                },
+                {
+                  "rolle": "logik",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "alertDrift",
+                  "von": 485,
+                  "bis": 491
+                },
+                {
+                  "rolle": "speicher",
+                  "datei": "src/billing/cost-truing.js",
+                  "funktion": "shouldEmitFinding",
+                  "von": 301,
+                  "bis": 306
+                },
+                {
+                  "rolle": "wirkung",
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40
+                }
+              ],
+              "aenderungen": [
+                {
+                  "datei": "src/telephony/alert-sms.js",
+                  "funktion": "sendBootstrapAlertSms",
+                  "von": 32,
+                  "bis": 40,
+                  "neueZeilen": 6
+                }
+              ],
+              "tests": [
+                "test/api-cost-truing-sweep.test.js",
+                "test/alert-sms.test.js",
+                "test/cost-truing-observe.test.js"
+              ],
+              "schema": {
+                "aenderung": false,
+                "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+              },
+              "codeowners": [],
+              "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+              "eingangImTest": "erreichbar",
+              "widersprueche": []
+            }
+          },
+          "hinweise": [
+            "Wert nach alert-sms.js: Der Wert kommt über das `config`-Objekt, nicht über `process.env`. `process.env` ist per ESLint `no-restricted-properties` außerhalb von `src/config.js` verboten (eslint.config.js:598-606; die Meldung nennt `rawConfig`, `CONFIG_NAMESPACES`, `.env.example` und den Zugriff über `config.<namensraum>.<schluessel>`). Eine Regel in `.dependency-cruiser.cjs` dazu habe ich nicht gefunden (Suche nach `process.env` und `konfiguration` dort ohne Treffer). `sendBootstrapAlertSms({messaging, config, store, prefix, detail, logTag})` bekommt `config` von allen vier Aufrufern (cost-truing.js:490, boot.js:639, stripe-webhook.js:44, server.js:199), der Wert wäre dort `config.<namensraum>.<schluessel>`, ohne dass ein Aufrufer sich ändert.",
+            "src/konfiguration/ im Worktree: Es liegt nur `CLAUDE.md` dort, KFZ ist hier nicht gemergt, ein lauffähiges Lesemuster unter `src/konfiguration/` gibt es nicht. Die CLAUDE.md sagt: „Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren“. Zweck: Umgebungsvariablen lesen, beim Start prüfen und `config` nach Namensräumen liefern. Darf nutzen: `basis`. Ort für Neues: Neue Dateien dort gehören zum Baustein konfiguration, solange `tools/bausteine.json` sie keinem anderen nennt. Kein Eingang liegt dort. Zu Dateiname und Form eines neuen Werts steht dort nichts.",
+            "Falls der Wert über `src/config.js` kommen muss: (1) in `rawConfig` die Variable `BETTERSTACK_ALERT_URL` lesen, vergleichbar mit :500 für `platformAlertSmsTo`; (2) den Schlüssel in die Liste `CONFIG_NAMESPACES.billing` aufnehmen (:897, dort stehen `platformAlertSmsTo` und `outageAlertSelfTestIntervalMs`); (3) der Zugriffswächter `guardedConfig` (:871-884) braucht keine Änderung: Er wirft nur bei Schlüsseln, die nicht in `config` vorhanden sind (:874-883). Zusätzlich gehören `.env.example` und `render.yaml` dazu (CLAUDE.md, Referenzen). In `test/cost-truing-harness.js:54-80` setzt `fakeConfig` das Feld wie bisher `platformAlertSmsTo: \"\"` (:71); ein neuer Schlüssel muss dort per `overrides` oder Standard ergänzt werden, sonst gibt es keine Adresse. Das Gerüst `withConfigNamespaces` baut daraus `config.billing` (:55). Wohin der Schlüssel in der Namensraum-Liste kommt (hier `billing`), ist eine Zuschnittsfrage.",
+            "Tests, die .env.example/render.yaml gegen Schlüssel abgleichen: Einen allgemeinen Test „jede Variable ist dokumentiert“ habe ich nicht gefunden. Es gibt nur Tests je Variable: test/anrufe/zug-zeitbudget.test.js:99, test/budget-month-flip.test.js:218-220, test/checkout-stale-stripe-customer-env-docs.test.js:12, test/cost-calibration.test.js:197, test/iel-b1-schalter.test.js:223, test/kv-p0-flush-epoch.test.js:289, test/openai-e7-challenge.test.js:98. Außerdem prüft test/env-docs-spend-cap-coherence.test.js:40, dass `.env.example` keine Konfiguration dokumentiert, die der eigene Start verweigert. Eine neue Variable zwingt also kein Test, sie in `.env.example` oder `render.yaml` aufzunehmen, die Regel steht nur in CLAUDE.md (Referenzen). Entfallen die Variablen `PLATFORM_ALERT_SMS_TO` oder `OUTAGE_ALERT_SELF_TEST_INTERVAL_MS`, können Doku-Tests daran hängen; das habe ich nicht im Einzelnen geprüft.",
+            "Tests, die rot werden, sobald `sendBootstrapAlertSms` an Better Stack statt per `messaging` sendet: (a) test/alert-sms.test.js:159-166 (Body = prefix+detail, Empfänger aus `config.billing.platformAlertSmsTo`, Absender aus der aktiven Bootstrap-Nummer über Messaging-Attrappe), :169-174 (kein Empfänger, kein Versand), :177-182 (keine Bootstrap-Nummer, kein Versand). Zeile 3 importiert dazu `sendFailSoftAlertSms` und `resolveBootstrapAlertSender`, die laut Design Doc entfallen; die Tests :19-125 hängen an diesen Funktionen. (b) test/cost-truing-observe.test.js:535-551 (P5-S1, erwartet `messaging.calls.length` 1), :553-577 (P5-S2, Entprellung zählt SMS, 1 dann 2), :579-598 (P5-S3, `sendSms` nie bei zu wenig Stichproben; bleibt grün, weil nichts gesendet wird), :600-614 (P5-S4, `platformAlertSmsTo` leer, `messaging` nie; bleibt grün), :616-630 (P5-S5, ohne Bootstrap-Nummer kein SMS; bleibt grün), :632-666 (P5-S6a/b: Sweep läuft bei werfender Messaging-Attrappe durch; bleibt grün), :668-692 (P5-S7: Sweep-Rückgabe, bleibt grün). Rot werden P5-S1 und P5-S2, weil sie `messaging.calls` zählen. Das ist der Kostenabgleich mit Messaging-Attrappe. Sie hängen an der Annahme „Tarif-Drift geht per SMS über `messaging`“. (c) test/abrechnung/stripe-webhook.test.js:384-392 (erwartet 1 SMS mit `type=charge.dispute.created` und `tenant=…`), :394-400 und :402-408 bleiben grün, weil sie nur 0 Aufrufe erwarten; :429-436 (`speicherRoute` mit `platformAlertSmsTo` und `messaging`) zählt vermutlich ebenfalls SMS (Rest nicht gelesen). Die Annahme ist `PLATFORM_ALERT_SMS_TO` plus Bootstrap-Absender. (d) Heilung beim Start: test/bootstrap-heal-boot.test.js:17-28 prüft nur Log und Audit (`[bootstrap-heal] Leerer Store … geheilt`, `bootstrap_store_geheilt`), keine SMS; :65-81 ruft `healBootstrapStore` mit leerer Messaging-Attrappe, die Ladefehler-Pfade senden nie. Diese Tests werden durch `sendBootstrapAlertSms` nicht rot. Sie hängen aber an einem Start ohne `BETTERSTACK_ALERT_URL`; verweigert der Start die leere Adresse (Design Doc, Fehlerfälle, Zeile „Start ohne BETTERSTACK_ALERT_URL“, und `boot.js:722-726`), dann laufen :17-43, :83-95 nur, wenn `startServer` in test/helpers.js (BASE_ENV) die Adresse setzt. (e) TTS-Warnung über `src/server.js:199`: kein bestehender Test erreicht sie (Suche nach `tts_quota_warning` in test/ findet nur test/alert-sms.test.js:163, Aufrufer und Funktion bleiben dort getrennt). test/tts-quota-counter.test.js und test/kv-p7-latent-paths.test.js rufen die Zähler-Operationen direkt auf, keine SMS. (f) test/alarmkanal-selbsttest.test.js erreicht `sendBootstrapAlertSms` nicht: Es importiert `runAlertChannelSelfTest` und `runOutageRecoverySweep` aus src/telephony/outage-report.js (:3). outage-report.js importiert `sendFailSoftAlertSms` und `platformAlertSender` aus alert-sms.js (outage-report.js:9). Die Messaging-Attrappe dort (:45) fängt diese Aufrufe, nicht `sendBootstrapAlertSms`. Der Test wird durch die Umstellung von `sendFailSoftAlertSms` rot, gehört aber zu anderen Nummern.",
+            "HTTP-Attrappe für ausgehende Aufrufe: In test/helpers.js gibt es `startTelnyxProvisioningMock` (:491-519). Sie startet `http.createServer` auf 127.0.0.1 mit Port 0, zeichnet `{method, path, body}` in `requests` auf (:497) und liefert `{url, requests, close}`. Ihre Antworten sind aber auf Telnyx-Pfade zugeschnitten (:499-511), sonst `{data:{}}` mit Status 200. Das ist als Better-Stack-Attrappe nutzbar, weil jeder andere Pfad 200 bekommt; sie heißt aber Telnyx-Attrappe. Eine reine Better-Stack-Attrappe mit Status-Steuerung (500, Hängen) habe ich nicht gefunden. In test/gemeinsam/ liegt `play-tts-server.mjs` mit `startSyntheseOrigin` und `playTtsEnv(originUrl)` für ElevenLabs. In test/abrechnung/server-mit-testdatenbank.js habe ich keine solche Attrappe gesehen.",
+            "tools/auftrag/vorbereitung-bereich.json:74 führt `src/telephony/alert-sms.js` in der Liste des Anrufbereichs. `karte` meldet dazu: Ein Umbau an einer JavaScript-Datei des Anrufbereichs bereitet die TypeScript-Umstellung vor und darf das Verhalten für keine Eingabe ändern; die Prüfung bringt den Syntaxbaum vorher und nachher mit den Umformungen aus tools/vorbereitung/katalog.json in eine Normalform und verlangt Gleichheit. Ausweg dort: letzte Zeile „Auftrag passt nicht: <Datei>:<Zeile> braucht eine Verhaltensänderung, die nicht im Katalog steht“, die Stelle kommt auf die Warteliste, die Datei bleibt JavaScript. `sendBootstrapAlertSms` auf POST umzustellen ist eine Verhaltensänderung und steht nicht im Katalog; die Prüfung beanstandet das also vermutlich. In katalog.json selbst habe ich zu alert-sms.js nichts gefunden (Suche ohne Treffer). Ob die Datei zur Umbenennung nach `.ts` vorgesehen ist, steht in diesen beiden Dateien nicht. Der Planer sollte das beim Zuschnitt beachten. `eslint-suppressions.json:821-825`: für `src/telephony/alert-sms.js` steht `id-length` mit `count: 2`; das entspricht den zwei Befunden aus `karte` in `sendFailSoftAlertSms` (:19-30, ein Parameter mit einem Buchstaben) und `onError` (:38). Ein Eintrag für `sendBootstrapAlertSms` selbst existiert nicht. Entfällt `sendFailSoftAlertSms`, sinkt der Befund auf 1; die Zählung in der Suppressions-Datei muss dann mitgehen (Zeilen weiß ich dort nicht, `count` ist je Datei, nicht je Funktion).",
+            "Absicht: Erst in `bumpPlatformTtsQuota` wird `warnedCycle` gesetzt (state-ops.js:1657-1658), bevor gesendet wird. Fällt die Zustellung aus, kommt die Warnung in diesem Zyklus nicht noch einmal. Das widerspricht ‚im Zweifel lieber einmal zu viel als gar nicht‘ aus der Absicht, entspricht aber dem im Design Doc genannten Nicht-Ziel. Der Planer sollte das beim Zuschnitt sehen.",
+            "S3/S16 im Test (test/api-cost-truing-sweep.test.js:22-48): Die Vorbereitung ist möglich, mit diesen Änderungen am Testaufbau. Für den Befund braucht `tariffDriftReportFromConfig` (src/billing/cost-calibration.js:92-101) je Präfix mindestens `costCalibrationMinSamples` Stichproben (`fakeConfig` setzt 20, test/cost-truing-harness.js:70), Anrufe mit `costTruedSource` DETAIL_RECORDS, `to` und `from` beide mit dem Präfix (`isDriftSample`, cost-calibration.js:38-45), mindestens eine abgerechnete Minute (`answeredAt` vor `endedAt`) und `actualCostMicroCents`. Den Tarif-Slug braucht es nicht, der Tarif ist `voiceTariffDomesticCents` (20) aus der Konfiguration; `fakeConfig` hat die Präfixe `+49`, `+33`, `+44` (:68) und `costDriftWarnPercent` 50 (:64). Wegen `classifyDrift` (cost-calibration.js:71-76) entsteht ein Befund `overestimate`, wenn (20 − gemessen) × 100 > gemessen × 50, also bei gemessen unter 13,34 ct je Minute; `makeDriftCall` in test/cost-truing-observe.test.js:18-28 mit 80 ct je Minute erzeugt dagegen `underestimate` (20 < 80), das ebenfalls alarmiert (cost-calibration.js:25-29). Hilfsfunktion: `makeDriftCall`/`makeDriftCalls` stehen in test/cost-truing-observe.test.js:18-32 und sind nicht exportiert; `from` ist dort fest \"+49\" (:20), für ein zweites Präfix wie \"+33\" muss `from` ebenfalls das Präfix tragen, sonst zählt der Anruf nicht als Stichprobe. Die Kandidaten des Sweeps (`isTruingCandidate`) brauchen die Drift-Anrufe nicht: `reportTariffDrift` wertet alle `state.calls` aus (cost-truing.js:494), und die Route läuft auch bei Store ohne Kandidaten (test/api-cost-truing-sweep.test.js:65-88). Zum `config`-Objekt: `startSweepApp` ruft `fakeConfig()` (:24), reicht es an `makeCostTruing` (:25) und `makeBillingRoutes`; `messaging: {}` (:25). `sendBootstrapAlertSms` bekommt dieses `config` über `alertDrift` (cost-truing.js:490). Ein neuer Wert wie die Better-Stack-Adresse kommt dort also an, wenn der Test ihn per `fakeConfig({...})` setzt und `fakeConfig` den Schlüssel in seinem Namensraum führt (siehe Hinweis zu `src/config.js`). Der Port der Attrappe (z. B. `startTelnyxProvisioningMock().url`) wird als Adresse eingesetzt. Entprellung: `shouldEmitFinding` (cost-truing.js:301-306) ist je Instanz von `makeCostTruing` und je Schlüssel `${prefix} ${code}`; im ersten Sweep einer frischen Instanz ist nichts entprellt, so dass bei zwei Präfixen genau zwei Aufrufe entstehen. Bootstrap-Nummer (`withBootstrapNumber`, cost-truing-observe.test.js:34-37) braucht der neue Weg nicht mehr. `config.billing.platformAlertSmsTo` ist in `fakeConfig` leer (:71); dass der Weg ohne SMS-Empfänger sendet, folgt aus dem Design Doc (sendet nur an `BETTERSTACK_ALERT_URL`)."
+          ]
+        },
+        "befunde": []
+      }
+    ],
+    "enden": [
+      "S3",
+      "S4",
+      "S16"
+    ]
+  }
+]

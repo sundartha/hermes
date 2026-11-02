@@ -1,0 +1,15 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/billing/cost-truing.js:490"
+    },
+    {
+      "schluessel": "weg:S16",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/billing/cost-calibration.js:108"
+    }
+  ],
+  "befunde": []
+}

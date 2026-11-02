@@ -1,0 +1,83 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/server.js:199"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/billing/cost-truing.js:490"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/server.js:202"
+  },
+  {
+    "schluessel": "weg:S16",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/billing/cost-calibration.js:108"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/alert-sms.js:38"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/alert-sms.js:38"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/alert-sms.test.js:159"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/telephony/alert-sms.js:32"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/helpers.js:106"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/config.js:897"
+  },
+  {
+    "schluessel": "bereichsgrund:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/config.js:897"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:S16:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Vor dem Bau zu klären"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Diese Grenzen stehen bei keinem Auftrag, obwohl a1 sie brechen kann; a1 sollte sie in `wasDarfNiePassieren` aufnehmen. (1) pitch.md, ## Grobe Lösung: „Als zugestellt gilt eine Meldung nur bei einer Antwort 2xx binnen 5 Sekunden; sonst bleibt sie unzugestellt, und die bestehende Wiederholung nach `OUTAGE_ALERT_RETRY_MS` greift.“ Dazu design.md, ## Lösung: „Sie sendet einen `POST` mit `content-type: application/json` und dem Körper `{ \"incident\": { \"id\", \"status\" }, \"text\" }` an `BETTERSTACK_ALERT_URL`, mit einer benannten Frist von 5000 ms über `AbortSignal.timeout`.“ Und design.md, ## Fehlerfälle, Zeile „Eingang hängt (nimmt die Verbindung an, antwortet nicht)“: „Abbruch nach 5 s, danach wie Fehler“. (2) design.md, ## Lösung: „`sendBootstrapAlertSms` behält die Signatur. Die Funktion sendet fire-and-forget als `alert` mit dem Schlüssel `<logTag>:<ISO-Zeitstempel>` und der Zeile `prefix + detail`, und `messaging` und `store` bleiben unbenutzt.“ Mit dem Ausgang aus design.md, ## Fehlerfälle: „Stripe bekommt unverändert sofort 200“. a1 ändert die Funktion, die die Stripe-Route ohne Warten aufruft (src/routes/stripe-webhook.js:44). (3) pitch.md, ### Vor dem Bau zu klären: „Entschieden (Betreuung, Freigabe): Meldezeile höchstens 1000 Zeichen“. Der übernommene Satz aus ## Fallen verlangt nur eine Begrenzung, nennt aber den Wert nicht. (4) sicherheit.md, ## 5. Vorschlag für docs/sicherheitsgrenzen.md: „Die Adresse ist ein Geheimnis, kommt nur aus der Konfiguration, ist im Hosting nur mit https zulässig (T3), steht nie in Ausgabe, Audit oder Antwort (T1) und wird nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus.“ Davon betrifft a1 der Teil „nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus“.",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  }
+]
