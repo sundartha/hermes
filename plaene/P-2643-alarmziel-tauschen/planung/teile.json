@@ -873,9 +873,7 @@
         "B1",
         "B2"
       ],
-      "tWege": [
-        "T1"
-      ],
+      "tWege": [],
       "dateien": [
         "src/telephony/alert-sms.js",
         "src/telephony/outage-report.js",
@@ -1000,7 +998,8 @@
         "S25"
       ],
       "tWege": [
-        "T3"
+        "T3",
+        "T1"
       ],
       "dateien": [
         "src/boot-guard.js",
