@@ -22,7 +22,17 @@ const EXIT_FEHLER = 1;
 const EXIT_AUFRUF = 2;
 const PID_OHNE_PROZESS = 99999999;
 const SPERRDATEI_IN_ANWEISUNG = /lösche (\S+)\.$/;
-const SITZUNGEN = ["anruf", "last", "stopp", "doppelt", "abbruch", "waehrend", "verwaist", "neustart"];
+const SITZUNGEN = [
+  "anruf",
+  "last",
+  "stopp",
+  "doppelt",
+  "abbruch",
+  "waehrend",
+  "verwaist",
+  "neustart",
+  "intern",
+];
 const GERADE_IN_ARBEIT = /wird gerade gestartet oder gestoppt/;
 const SUCH_TAKT_MS = 20;
 const LOKALE_ADRESSE = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+/;
@@ -34,6 +44,7 @@ const UNTERBEFEHLE = [
   "webhook",
   "anbieter",
   "zustand",
+  "intern",
   "flaechen",
   "stopp",
   "hilfe",
@@ -258,7 +269,7 @@ test("ein Sitzungsname mit Pfadteilen wird abgelehnt und löscht nichts außerha
   assert.equal(existsSync(join(fremd, "bleibt.txt")), true);
 });
 
-test("hilfe nennt genau die neun Unterbefehle", async () => {
+test("hilfe nennt genau die zehn Unterbefehle", async () => {
   const ausgabe = await sitzungMit("nie-gestartet")("hilfe");
   assert.deepEqual(
     ausgabe.befehle.map(({ aufruf }) => aufruf.split(" ")[0]),
@@ -302,6 +313,32 @@ test("der geerbte Objektname constructor wird als unbekannter Webhook abgelehnt"
     ["webhook", "constructor", "{}"],
     EXIT_FEHLER,
     /Unbekannter Webhook: constructor/,
+  ));
+
+test(
+  "intern status meldet 200 mit datenbank und commit, der Schluessel steht weder in der Ausgabe noch im Protokoll",
+  TEST_FRIST,
+  async () => {
+    const ctl = sitzungMit("intern");
+    const start = await ctl("start");
+    const zustand = JSON.parse(readFileSync(start.zustandsdatei, "utf8"));
+    const ausgabe = await ctl("intern", "status");
+    assert.equal(ausgabe.status, 200);
+    assert.equal(ausgabe.koerper.datenbank, true);
+    assert.equal(typeof ausgabe.koerper.commit, "string");
+    assert.equal(JSON.stringify(ausgabe).includes(zustand.token.status), false);
+    assert.equal(
+      readFileSync(zustand.protokolle.hermes, "utf8").includes(zustand.token.status),
+      false,
+    );
+  },
+);
+
+test("der geerbte Objektname constructor wird als unbekannte interne Route abgelehnt", () =>
+  alsUnbekanntAbgelehnt(
+    ["intern", "constructor"],
+    EXIT_FEHLER,
+    /Unbekannte interne Route: constructor/,
   ));
 
 const sitzungsOrdner = (sitzung) => join(arbeitsordner, "hermes-ctl", sitzung);
