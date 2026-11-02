@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { bausteinBefunde } from "./abhaengigkeiten/bausteine.mjs";
 import { aufDerBasis, bestaendeNurKuerzer, imArbeitsbaum } from "./abhaengigkeiten/bestaende.mjs";
 import { run } from "./abhaengigkeiten/prozess.mjs";
+import { REGELDATEI } from "./abhaengigkeiten/regeldatei.mjs";
 import { sammeldateiBefunde, sammeldateiZusammenfassung } from "./abhaengigkeiten/sammeldatei-exporte.mjs";
 import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
@@ -14,7 +15,7 @@ import { aufgeteilt, rueckfuehrung, unveraendert } from "./bestand-rueckfuehrung
 import { reineQuellauslagerung } from "./mutationspruefung/quellauslagerung.mjs";
 import { TYPESCRIPT } from "./umbenennung.mjs";
 
-const CONFIG_PATH = ".dependency-cruiser.cjs";
+const CONFIG_PATH = REGELDATEI;
 const SOURCE_DIRECTORY = "src";
 const TEST_DIRECTORY = "test";
 const DEPCRUISE_BIN = fileURLToPath(

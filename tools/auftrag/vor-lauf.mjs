@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { REGELDATEI } from "../abhaengigkeiten/regeldatei.mjs";
 import { bereiche, ordnungsBefunde } from "../abhaengigkeiten/testordnung.mjs";
 
 import { brauchtRotenTest, istTestdatei, jsZwillingDes, reihenfolge } from "./format.mjs";
 import { gebauteAuftraege } from "./git.mjs";
 import { testVerstoss } from "./pruefungen.mjs";
 
-export const ABHAENGIGKEITSREGELN = ".dependency-cruiser.cjs";
 const TEST_ORDNER = "test/";
 
 function vorhanden(root, pfad) {
@@ -18,13 +18,8 @@ function gebaut(phase, root) {
   try {
     return gebauteAuftraege(phase, root);
   } catch {
-    return new Set();
+    return null;
   }
-}
-
-function offeneAuftraege(phase, root) {
-  const fertig = gebaut(phase, root);
-  return reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
 }
 
 function neueTestpfade(auftrag, root) {
@@ -36,7 +31,7 @@ function neueTestpfade(auftrag, root) {
 }
 
 function testordnungBefunde(auftraege, root) {
-  if (!vorhanden(root, ABHAENGIGKEITSREGELN)) return [];
+  if (!vorhanden(root, REGELDATEI)) return [];
   const erlaubt = bereiche(root);
   return auftraege.flatMap((auftrag) => ordnungsBefunde(neueTestpfade(auftrag, root), erlaubt).map((befund) => `${auftrag.id}: ${befund}`));
 }
@@ -53,6 +48,8 @@ function testhilfeBefunde(auftraege, root) {
 }
 
 export function vorLaufBefunde(phase, root) {
-  const auftraege = offeneAuftraege(phase, root);
-  return [...testordnungBefunde(auftraege, root), ...testhilfeBefunde(auftraege, root)];
+  const fertig = gebaut(phase, root);
+  const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => fertig?.has(id) !== true);
+  const testhilfen = fertig === null ? [] : testhilfeBefunde(auftraege, root);
+  return [...testordnungBefunde(auftraege, root), ...testhilfen];
 }
