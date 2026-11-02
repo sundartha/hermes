@@ -23,7 +23,8 @@ function review(kopf, login = FREIGEBER, state = "APPROVED") {
 }
 
 function mitListe(stand) {
-  return stand === null ? {} : { [LISTE]: json(stand) };
+  if (stand === null) return {};
+  return { [LISTE]: typeof stand === "string" ? stand : json(stand) };
 }
 
 function umgebungFuer(github) {
@@ -117,13 +118,13 @@ test("die Ausnahme gilt nur für Commits ohne Zeile Auftrag: eine kaputte Zeile 
 const WARTESCHLANGE = `refs/heads/gh-readonly-queue/master/pr-${NUMMER}-${"b".repeat(40)}`;
 const AUS_DER_WARTESCHLANGE = ["--ereignis", "merge_group", "--queue-ref", WARTESCHLANGE];
 
-async function pruefeInDerGruppe(context, { gruppenText = null, reviews = (kopf) => [review(kopf)] } = {}) {
+async function pruefeInDerGruppe(context, { gruppenText = null, reviews = (kopf) => [review(kopf)], abrufbar = true, kopfLautApi = null } = {}) {
   const verzeichnis = probeRepository(context, { ...ANFANGSDATEIEN, ...mitListe({ [NUMMER]: EINTRAG }) });
   const haupt = gitIn(verzeichnis, "rev-parse", "--abbrev-ref", "HEAD");
   gitIn(verzeichnis, "checkout", "-q", "-b", "pr");
   aendereA(verzeichnis, HANDARBEIT);
   const prKopf = sha(verzeichnis);
-  gitIn(verzeichnis, "update-ref", `refs/pull/${NUMMER}/head`, prKopf);
+  if (abrufbar) gitIn(verzeichnis, "update-ref", `refs/pull/${NUMMER}/head`, prKopf);
   gitIn(verzeichnis, "remote", "add", "origin", verzeichnis);
   gitIn(verzeichnis, "checkout", "-q", haupt);
   writeFiles(verzeichnis, { "docs/m.md": "m\n" });
@@ -131,7 +132,7 @@ async function pruefeInDerGruppe(context, { gruppenText = null, reviews = (kopf)
   const basis = sha(verzeichnis);
   if (gruppenText === null) gitIn(verzeichnis, "cherry-pick", prKopf);
   else aendereA(verzeichnis, gruppenText);
-  const github = await scheinGithub(context, new Map([[PULL, { head: { sha: prKopf } }], [REVIEWS, reviews(prKopf)]]));
+  const github = await scheinGithub(context, new Map([[PULL, { head: { sha: kopfLautApi ?? prKopf } }], [REVIEWS, reviews(kopfLautApi ?? prKopf)]]));
   const argumente = [WERKZEUG, "--basis", basis, "--kopf", "HEAD", ...AUS_DER_WARTESCHLANGE];
   return starteWerkzeug(argumente, { cwd: verzeichnis, umgebung: umgebungFuer(github) });
 }
@@ -151,4 +152,35 @@ test("in der Merge-Gruppe ist ein Commit mit anderem Diff rot, auch wenn der gel
   const lauf = await pruefeInDerGruppe(context, { gruppenText: "Ändere a.js ganz anders von Hand\n" });
   assert.equal(lauf.status, EXIT_BEFUND);
   assert.match(lauf.stderr, OHNE_ZEILE);
+});
+
+test("in der Merge-Gruppe ist der Commit rot mit Grund, wenn refs/pull/N/head nicht abrufbar ist", async (context) => {
+  const lauf = await pruefeInDerGruppe(context, { abrufbar: false });
+  assert.equal(lauf.status, EXIT_BEFUND);
+  assert.match(lauf.stderr, /Altbestand: Zuordnung des Commits zum PR nicht prüfbar \(git fetch [^)]*refs\/pull\/7\/head ist mit Exit \d+ gescheitert/);
+});
+
+test("in der Merge-Gruppe ist der Commit rot mit Grund, wenn der abgerufene Kopf nicht der approvte Kopf ist", async (context) => {
+  const lauf = await pruefeInDerGruppe(context, { kopfLautApi: "c".repeat(40) });
+  assert.equal(lauf.status, EXIT_BEFUND);
+  assert.match(lauf.stderr, /Altbestand: Zuordnung des Commits zum PR nicht prüfbar \(der Kopf des PR hat sich beim Abruf geändert\)/);
+});
+
+test("eine Liste am Kopf-Stand, die kein gültiges JSON ist, macht den Check rot mit Grund", async (context) => {
+  const lauf = await pruefeAltbestand(context, { basisListe: { [NUMMER]: EINTRAG }, kopfListe: "{kaputt", commitText: "Ändere a.js\n\nAuftrag: x/y\n" });
+  assert.equal(lauf.status, EXIT_BEFUND);
+  assert.match(lauf.stderr, /tools\/basis\/altbestand-ohne-auftrag\.json am Stand Kopf nicht lesbar/);
+});
+
+test("eine Liste am Basis-Stand, die kein gültiges JSON ist, macht den Check rot mit Grund und nimmt dem PR die Ausnahme", async (context) => {
+  const lauf = await pruefeAltbestand(context, { basisListe: "{kaputt", kopfListe: { [NUMMER]: EINTRAG } });
+  assert.equal(lauf.status, EXIT_BEFUND);
+  assert.match(lauf.stderr, /tools\/basis\/altbestand-ohne-auftrag\.json am Stand Basis nicht lesbar/);
+  assert.match(lauf.stderr, OHNE_ZEILE);
+});
+
+test("eine Liste, deren Eintrag kein Kürzel oder keinen Grund hat, macht den Check rot mit Grund", async (context) => {
+  const lauf = await pruefeAltbestand(context, { basisListe: { [NUMMER]: { kuerzel: "B3a" } }, commitText: "Ändere a.js\n\nAuftrag: x/y\n" });
+  assert.equal(lauf.status, EXIT_BEFUND);
+  assert.match(lauf.stderr, /Eintrag „7“ hat keine PR-Nummer, kein Kürzel oder keinen Grund/);
 });
