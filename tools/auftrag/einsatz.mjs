@@ -18,6 +18,7 @@ const VIERTE_NETZ_WARTEZEIT_MINUTEN = 30;
 const NETZ_WARTEZEITEN_MS = [ERSTE_NETZ_WARTEZEIT_MINUTEN, ZWEITE_NETZ_WARTEZEIT_MINUTEN, DRITTE_NETZ_WARTEZEIT_MINUTEN, VIERTE_NETZ_WARTEZEIT_MINUTEN].map((minuten) => minuten * MS_JE_MINUTE);
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
 const PAUSE_NACH_VERSTRICHENER_ZEIT_MINUTEN = 1;
+const MAX_UEBERGABEN = 2;
 const BAU = "bau";
 const LESE_WERKZEUGE = ["Read", "Grep", "Glob"];
 const LESE_MODELL = "opus";
@@ -137,22 +138,42 @@ function starteMitNetzWiederholung(kontext, prompt, start) {
   return netzabbrueche.length > 0 ? { ...roh, netzabbrueche } : roh;
 }
 
+function uebergabeVerweigert(grund, staendeBeiUebergabe, root) {
+  if (staendeBeiUebergabe.length >= MAX_UEBERGABEN) {
+    return `${grund} Keine weitere Übergabe: Der Agent wurde schon ${MAX_UEBERGABEN}-mal übergeben; mehr Übergaben gibt das Skript keinem Agenten. Der Auftrag ist für einen Agenten zu groß und gehört geteilt.`;
+  }
+  const seitDerLetzten = staendeBeiUebergabe.at(-1);
+  if (seitDerLetzten === undefined || seitDerLetzten !== stand(root)) return null;
+  return `${grund} Keine weitere Übergabe: Seit der letzten Übergabe hat der Agent weder den Arbeitsbaum noch einen Commit noch die Belege geändert; ein frischer Agent läse nur dasselbe noch einmal.`;
+}
+
+function naechsterSchritt(sitzung, { kontext, sperre, staendeBeiUebergabe }) {
+  const uebergeben = !sitzung.limit && sitzung.aktion?.art === UEBERGABE;
+  const gemeldet = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
+  const verweigert = uebergeben ? uebergabeVerweigert(gemeldet, staendeBeiUebergabe, kontext.root) : null;
+  return { grund: verweigert ?? gemeldet, weiter: verweigert === null && (Boolean(sitzung.limit) || uebergeben), uebergeben };
+}
+
+function abschluss(sitzung, { grund, sitzungen, rolle }) {
+  const weg = ausgang(sitzung.volleAntwort, rolle);
+  return { ...sitzung, grund, sitzungen, ausgang: weg, voraussetzung: weg.voraussetzung, ausstieg: weg.ausstieg, alterTest: weg.alterTest };
+}
+
 export function setzeEin(kontext, prompt, start = {}) {
   const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ergebnisDesBaus(kontext.auftrag)}` : prompt;
   const sperre = limitSperre(kontext);
   const sitzungen = [];
+  const staendeBeiUebergabe = [];
   let vorgaenger = null;
   for (;;) {
     warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
     const roh = starteMitNetzWiederholung({ ...kontext, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, { ...start, vollstaendig: true });
     const sitzung = alsEintrag(roh, start);
-    const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
+    const { grund, weiter, uebergeben } = naechsterSchritt(sitzung, { kontext, sperre, staendeBeiUebergabe });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
-    if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
-      const weg = ausgang(sitzung.volleAntwort, kontext.rolle);
-      return { ...sitzung, grund, sitzungen, ausgang: weg, voraussetzung: weg.voraussetzung, ausstieg: weg.ausstieg, alterTest: weg.alterTest };
-    }
+    if (!weiter) return abschluss(sitzung, { grund, sitzungen, rolle: kontext.rolle });
+    if (uebergeben) staendeBeiUebergabe.push(stand(kontext.root));
     vorgaenger = { grund, antwort: sitzung.antwort, kontextGrenze: !sitzung.limit };
   }
 }
