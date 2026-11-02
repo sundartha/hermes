@@ -24,6 +24,8 @@ const PID_EINES_FREMDEN_PROZESSES = process.pid + 1;
 const OHNE_ELTERN_PID = /Elternprozess/;
 const OHNE_PIPE = /Elternwächter ohne stdin-Pipe vom Elternprozess/;
 const OHNE_PPID_ABFRAGE = /Elternwächter ohne ppid-Abfrage: /;
+const FREMDER_WORKER_BLEIBT_MS = 300;
+const EXIT_OK = 0;
 
 const KIND = `
 import { writeSync } from "node:fs";
@@ -83,6 +85,16 @@ createServer().listen(0);
 starteElternwaechter();
 `;
 
+const ELTERN_MIT_FREMDEM_WORKER = `
+import { Worker } from "node:worker_threads";
+const laden = 'const { parentPort } = require("node:worker_threads"); import(' + JSON.stringify(${JSON.stringify(TESTHILFEN)}) + ').then(() => parentPort.postMessage("geladen"));';
+const fremd = new Worker(laden, { eval: true, execArgv: [], workerData: { rolle: "fremd" } });
+fremd.on("error", (fehler) => { console.error(fehler); process.exit(2); });
+await new Promise((weiter) => fremd.once("message", weiter));
+await new Promise((weiter) => setTimeout(weiter, ${FREMDER_WORKER_BLEIBT_MS}));
+await fremd.terminate();
+`;
+
 async function verwaistesKind(elternCode) {
   const eltern = spawn(process.execPath, ["--input-type=module", "-e", elternCode], {
     stdio: ["inherit", "pipe", "pipe"],
@@ -126,6 +138,17 @@ test("ein Testserver ohne stdin-Pipe bricht trotz protokollierendem Guard hart a
   assert.ok(beendet, `Kind ohne stdin-Pipe lief nach Ablauf der Frist noch:\n${fehler}`);
   assert.equal(signal, "SIGKILL");
   assert.match(fehler, OHNE_PIPE);
+});
+
+test("ein fremder Worker, der die Testhilfen lädt, startet keinen Wächter und der Prozess endet mit Exit 0", async () => {
+  const kind = spawn(process.execPath, ["--input-type=module", "-e", ELTERN_MIT_FREMDEM_WORKER], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let fehler = "";
+  kind.stderr.on("data", (stueck) => (fehler += stueck));
+  const [code, signal] = await once(kind, "exit", { signal: AbortSignal.timeout(START_FRIST_MS) });
+  assert.equal(signal, null, `Prozess wurde von einem fremden Wächter beendet:\n${fehler}`);
+  assert.equal(code, EXIT_OK, fehler);
 });
 
 test("ein verwaister stdio-Testserver mit blockierter Ereignisschleife endet von selbst", async () => {
