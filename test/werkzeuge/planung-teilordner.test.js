@@ -232,9 +232,9 @@ function hinweisTeilNachT1(context, { genannt, dazu = {}, nachTeilung = (wurzel)
   return teilMitDesign(context, { genannt, dazu, teil: HINWEIS_ORDNER, gruppe: HINWEIS_GRUPPE, nachTeilung });
 }
 
-function gemergtHinweis(lauf, datei) {
+function gemergtHinweis(lauf, datei, teilOrdner = HINTERLEGEN) {
   const sha = runIn(lauf.wurzel, "git", ["rev-parse", "--short=7", "upstream/master"]).stdout.trim();
-  return `${datei} gehört ${basename(HINTERLEGEN)}, gemergt ${sha}`;
+  return `${datei} gehört ${basename(teilOrdner)}, gemergt ${sha}`;
 }
 
 function befundZeilen(lauf) {
@@ -330,6 +330,14 @@ test("teilordner: eine Datei, die auch ein ungeordneter offener Teil ändert, bl
   assert.equal(befundZu(lauf, ROUTE), "", lauf.stderr);
 });
 
+test("teilordner: eine Datei, die auch ein ungeordneter, schon gemergter Teil ändert, ist keine fremde Datei und steht als Hinweis im Protokoll", { timeout: LAUF_FRIST_MS }, (context) => {
+  const umbauGemergt = (wurzel) => vorgaengerGemergt(wurzel, UMBAU_ORDNER);
+  const lauf = teilMitDesign(context, { genannt: [ROUTE], dazu: { t1: [UMBAU_DATEI] }, nachTeilung: umbauGemergt });
+
+  planungLaeuftWeiter(lauf, UMBAU_DATEI);
+  assert.ok(lauf.stdout.split("\n").includes(gemergtHinweis(lauf, UMBAU_DATEI, UMBAU_ORDNER)), lauf.stdout);
+});
+
 test("teilordner: ein Vorgänger, der nur auf dem eigenen Branch steht, gibt keine Dateien frei und plane hält vor den Erkundern", { timeout: LAUF_FRIST_MS }, (context) => {
   const nurImBranch = (wurzel) => {
     vorgaengerGemergt(wurzel, HINTERLEGEN);
@@ -388,12 +396,12 @@ const ECHTE_TEILUNGEN = [
   },
 ];
 
-for (const { fall, paket, teil, ohneNachBei, erwartet } of ECHTE_TEILUNGEN) {
-  test(`teilordner: echte Teilung ${fall}`, () => {
+test("teilordner: in den echten Teilungen von K2, B5, B9, B15 und S1db meldet ein Teil nur Dateien, die er mit einem ungeordneten Teil gemeinsam ändert", () => {
+  for (const { fall, paket, teil, ohneNachBei, erwartet } of ECHTE_TEILUNGEN) {
     const echt = echteTeilung(paket);
     const teilung = ohneNachBei === undefined ? echt : ohneNach(echt, ohneNachBei);
     const eintrag = teilung.teile.find(({ kuerzel }) => kuerzel === teil);
 
-    assert.deepEqual(doppelAenderungen(teilung, eintrag, paket), erwartet);
-  });
-}
+    assert.deepEqual(doppelAenderungen(teilung, eintrag, paket), erwartet, fall);
+  }
+});
