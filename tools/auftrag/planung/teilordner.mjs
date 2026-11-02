@@ -21,8 +21,6 @@ const SZENARIEN_ANDERSWO = "dieser Teil baut nur um; die Szenarien des Eltern-Pi
 const SATZ_ANFORDERUNGEN = `keine neuen, weil ${SZENARIEN_ANDERSWO}`;
 const SATZ_BLEIBT = `keins, weil ${SZENARIEN_ANDERSWO}`;
 const SATZ_ANGRIFFSWEGE = "Für diesen Teil keine Angriffswege gefunden: die Angriffswege des Eltern-Ordners mit Ausgang verhindern stehen in den anderen Teilen.";
-const KEIN_PFADZEICHEN = /[^\w./-]+/u;
-const PFADRAND = /^\.\/|\.+$/gu;
 
 function abschnitte(text) {
   const ergebnis = [];
@@ -158,20 +156,49 @@ function umbauDesEintrags(teilung, eintrag) {
   return teilung.teile.some((kandidat) => Array.isArray(kandidat?.umbau)) ? liste(eintrag.umbau) : undefined;
 }
 
-function dateienAndererTeile(teilung, eintrag, elternOrdner) {
-  const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
+function geaenderteDateienDes(teilung, teil) {
   const belege = new Set(liste(teilung.umfang?.belegDateien));
+  return liste(teil?.dateien).filter((datei) => !belege.has(datei));
+}
+
+function vorgaengerHuelle(teilung) {
+  const nach = new Map(teilung.teile.map((teil) => [teil?.kuerzel, liste(teil?.abhaengigVon)]));
+  return (kuerzel) => {
+    const gesehen = new Set();
+    const offen = [...(nach.get(kuerzel) ?? [])];
+    while (offen.length > 0) {
+      const naechster = offen.pop();
+      if (!gesehen.has(naechster)) offen.push(...(nach.get(naechster) ?? []));
+      gesehen.add(naechster);
+    }
+    return gesehen;
+  };
+}
+
+function ungeordneteAndere(teilung, eintrag) {
+  const vorgaenger = vorgaengerHuelle(teilung);
+  const eigeneVorgaenger = vorgaenger(eintrag.kuerzel);
+  return teilung.teile.filter((anderer) => anderer !== eintrag && !eigeneVorgaenger.has(anderer?.kuerzel) && !vorgaenger(anderer?.kuerzel).has(eintrag.kuerzel));
+}
+
+export function doppelAenderungen(teilung, eintrag, elternOrdner) {
+  const eigene = new Set(geaenderteDateienDes(teilung, eintrag));
+  return ungeordneteAndere(teilung, eintrag).flatMap((anderer) => geaenderteDateienDes(teilung, anderer).filter((datei) => eigene.has(datei)).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+}
+
+function dateienAndererTeile(teilung, eintrag, elternOrdner) {
   const eigene = new Set(liste(eintrag.dateien));
-  const geaendert = (datei) => !belege.has(datei) && !eigene.has(datei);
-  return andere.flatMap((anderer) => liste(anderer?.dateien).filter(geaendert).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
+  const andere = teilung.teile.filter((kandidat) => kandidat !== eintrag);
+  return andere.flatMap((anderer) => geaenderteDateienDes(teilung, anderer).filter((datei) => !eigene.has(datei)).map((datei) => ({ datei, teil: teilOrdnerName(elternOrdner, anderer) })));
 }
 
 function fremdeDateien(teilung, eintrag, { elternOrdner, nach, root }) {
-  const gemergt = new Map(gemergteVorgaenger(root, nach).map(({ vorgaenger, sha }) => [vorgaenger, sha]));
-  const genannt = dateienAndererTeile(teilung, eintrag, elternOrdner);
+  const doppelt = doppelAenderungen(teilung, eintrag, elternOrdner);
+  const gemergt = new Map(gemergteVorgaenger(root, [...new Set([...nach, ...doppelt.map(({ teil }) => teil)])]).map(({ vorgaenger, sha }) => [vorgaenger, sha]));
+  const vonGemergten = dateienAndererTeile(teilung, eintrag, elternOrdner).filter(({ teil }) => gemergt.has(teil));
   return {
-    fremd: genannt.filter(({ teil }) => !gemergt.has(teil)),
-    hinweise: genannt.filter(({ teil }) => gemergt.has(teil)).map(({ datei, teil }) => `${datei} gehört ${teil}, gemergt ${gemergt.get(teil)}`),
+    fremd: doppelt.filter(({ teil }) => !gemergt.has(teil)),
+    hinweise: vonGemergten.map(({ datei, teil }) => `${datei} gehört ${teil}, gemergt ${gemergt.get(teil)}`),
   };
 }
 
@@ -181,15 +208,8 @@ function meldeGemergteUndGibTeil({ teilung, eintrag, elternOrdner, nach, root })
   return { dateien: liste(eintrag.dateien), umbau: umbauDesEintrags(teilung, eintrag), fremd };
 }
 
-function genanntePfade(text) {
-  return new Set(text.split(KEIN_PFADZEICHEN).map((wort) => wort.replace(PFADRAND, "")));
-}
-
-export function fremdeDateienBefunde(fremd, gruppen) {
-  return gruppen.flatMap(({ nummern, text }) => {
-    const genannt = genanntePfade(text);
-    return fremd.filter(({ datei }) => genannt.has(datei)).map(({ datei, teil }) => `Gruppe ${nummern.join(", ")}: die Design-Abschnitte der Gruppe nennen ${datei}, laut ${TEILE} eine Datei des Teils ${teil}`);
-  });
+export function fremdeDateienBefunde(fremd) {
+  return fremd.map(({ datei, teil }) => `${datei}: laut ${TEILE} ändern dieser Teil und ${teil} die Datei, und „nach:“ ordnet die beiden nicht hintereinander`);
 }
 
 function pruefeTeil(root, ordner, { teil, herkunft }) {

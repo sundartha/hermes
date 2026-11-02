@@ -844,9 +844,8 @@ export class Planung {
 
   pruefeFremdeDateien() {
     if (!this.teil) return;
-    const gruppen = this.gliederung.gruppen.map(({ nummern, ueberschriften }) => ({ nummern, text: this.designAbschnitte(ueberschriften) }));
-    const befunde = fremdeDateienBefunde(this.fremd, gruppen);
-    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "der Schnitt der Teilung ist unvollständig: das Design Doc nennt für eine Gruppe Dateien eines anderen Teils; plane startet keinen Erkunder und teilt nicht", befunde);
+    const befunde = fremdeDateienBefunde(this.fremd);
+    if (befunde.length > 0) throw new Ende(EXIT_BEFUNDE, "der Schnitt der Teilung ist unvollständig: zwei Teile, die gleichzeitig gebaut werden dürfen, ändern dieselbe Datei; ordne sie in teile.json über abhaengigVon hintereinander oder gib die Datei einem Teil. plane startet keinen Agenten und teilt nicht", befunde);
   }
 
   pruefeGeaenderteDateien() {
@@ -872,8 +871,8 @@ export class Planung {
 
   async laufe() {
     this.stand = this.ausgangsstand();
-    await this.gliedere();
     this.pruefeFremdeDateien();
+    await this.gliedere();
     await this.nachsteuern();
     await this.erkundeGruppen();
     this.legeFingerabdruck();
