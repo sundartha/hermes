@@ -16,4 +16,4 @@ if [ "${HERMES_PUSH_LAUF_MUTATION:-}" = "1" ]; then
     exit 0
   fi
 fi
-exec npm run --silent pruefleiter -- --basis upstream/master --ohne-werkzeugtests
+exec npm run --silent pruefleiter -- --lint-und-typen

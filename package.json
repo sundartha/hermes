@@ -48,6 +48,7 @@
     "lint:fix": "eslint . --fix --pass-on-unpruned-suppressions",
     "lint:strict": "eslint . --suppressions-location eslint-suppressions.empty.json",
     "typecheck": "tsc --noEmit && node tools/typabdeckung.mjs",
+    "typpruefung": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dup": "jscpd .",

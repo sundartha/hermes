@@ -103,7 +103,7 @@ Für Änderungen mit Claude Code (Skill `aenderung`, `plane` und `lauf` aus `too
 
 1. Node 22 (Fassung aus `engines` in `package.json`).
 2. `npm ci`, dann `npm run prepare`: setzt die Git-Hooks aus `.githooks/` und legt das Remote `upstream` (`https://github.com/sundartha/hermes`) an, wenn es fehlt.
-3. `git fetch upstream`: Pre-Push und `npm run test:betroffen` vergleichen mit `upstream/master` und enden ohne diese Basis rot.
+3. `git fetch upstream`: `npm run test:betroffen` vergleicht mit `upstream/master` und endet ohne diese Basis rot. Der Pre-Push-Hook fährt nur Lint und Typprüfung; Tests, Mutation und die teuren Schritte aus `tools/ci-lokal.json` laufen vor dem PR-Update in der Vorprüfung auf GitHub (`node tools/vorpruefung.mjs`, Workflow `.github/workflows/vorpruefung.yml`).
 4. Postgres in der Hauptversion aus `tools/basis/squawk.toml` starten und `HERMES_TEST_POSTGRES_URL=postgres://<nutzer>@localhost:<port>/postgres` setzen.
 5. semgrep in der Fassung aus `tools/basis/semgrep.json` (Feld `version`) in den `PATH` bringen.
 6. `gh auth login`.

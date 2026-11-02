@@ -7,7 +7,7 @@ import { FRIST, SCHWERLAUF, arbeit, halter, stand, starte, starteArbeit, starteS
 
 const UPSTREAM_BASE_REF = "refs/remotes/upstream/master";
 const VORRANG_VON_AUSSEN = { SCHWERLAUF_VORRANG: "push" };
-const PUSH_HALTER = "pruefleiter --basis upstream\\/master --ohne-werkzeugtests";
+const PUSH_HALTER = "pruefleiter --lint-und-typen";
 const ZWEI_PLAETZE = 2;
 const ALLE_DREI_PLAETZE_BELEGT = 3;
 
@@ -20,7 +20,7 @@ function pushRepo(context, env, { name, verschachtelt }) {
       private: true,
       scripts: {
         lint: "true",
-        "test:betroffen": verschachtelt ? `${JSON.stringify(process.execPath)} ${JSON.stringify(SCHWERLAUF)} -- ${arbeitAufruf}` : arbeitAufruf,
+        typpruefung: verschachtelt ? `${JSON.stringify(process.execPath)} ${JSON.stringify(SCHWERLAUF)} -- ${arbeitAufruf}` : arbeitAufruf,
         pruefleiter,
       },
     }),
