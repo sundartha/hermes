@@ -113,7 +113,7 @@ export function rotUrteil({ exitCode, ausgabe, fehlermeldungen = [] }, erwartete
   };
 }
 
-function testVerstoss({ auftrag, bestand }, pfad) {
+export function testVerstoss({ auftrag, bestand }, pfad) {
   if (!istTestdatei(pfad)) return `${ROLLE.PRODUKT_IM_TEST}: ${pfad}`;
   const eigene = auftrag.art === TESTUMBAU ? auftrag.erwarteteDateien : [auftrag.abnahme, ...auftrag.erwarteteDateien];
   if (!eigene.includes(pfad)) return `${ROLLE.FREMDER_TEST}: ${pfad}`;
