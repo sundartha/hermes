@@ -92,7 +92,7 @@ async function inhaltDes(github, artefakt) {
   }
 }
 
-function vertrauteLaeufe(github, nummer) {
+export function vertrauteLaeufe(github, nummer) {
   const bekannt = new Map();
   return async (laufId) => {
     if (!bekannt.has(laufId)) {
