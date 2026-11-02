@@ -3,6 +3,12 @@ import { inspect } from "node:util";
 const ERGEBNISSE = new Set(["test:pass", "test:fail"]);
 const FEHLER_TIEFE = 4;
 
+function vergleichDes(fehler) {
+  const ursache = fehler?.cause;
+  if (typeof ursache?.actual !== "string" || typeof ursache?.expected !== "string") return undefined;
+  return { ist: ursache.actual, soll: ursache.expected, operator: ursache.operator };
+}
+
 export default async function* faelleBericht(quelle) {
   let tiefeDavor = -1;
   for await (const { type: art, data: daten } of quelle) {
@@ -11,7 +17,7 @@ export default async function* faelleBericht(quelle) {
     tiefeDavor = daten.nesting;
     if (!blatt) continue;
     const fehler = daten.details?.error === undefined ? "" : inspect(daten.details.error, { depth: FEHLER_TIEFE });
-    const fall = JSON.stringify({ name: daten.name, zeile: daten.line, rot: art === "test:fail", still: Boolean(daten.skip || daten.todo), fehler });
+    const fall = JSON.stringify({ name: daten.name, zeile: daten.line, rot: art === "test:fail", still: Boolean(daten.skip || daten.todo), fehler, vergleich: vergleichDes(daten.details?.error) });
     yield `${fall}\n`;
   }
 }
