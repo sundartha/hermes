@@ -1,0 +1,29 @@
+{
+  "phase": "F-2535-messung-nach-rebase-verdrahten",
+  "issue": 2535,
+  "absicht": "Hermes soll messen, wie lange seine Anfragen dauern, und die Messwerte alle 60 Sekunden per OTLP an Grafana Cloud senden (Konzept 6.1, ADR-07, Bauplan B3). Das ist die Grundlage fuer B5, B6, B8 und B15. Gemessen wird je Anfrage nur Routenmuster, Methode und Statusklasse in einem Histogramm mit genau 8 Grenzen, nie ein konkreter Pfad, keine IDs, keine Mandanten, keine E-Mail. Nicht gewollt: automatische Instrumentierung, Traces, Logs an Dritte, ein zusaetzliches Label, eine neunte Histogramm-Grenze, ein Export ueber unverschluesseltes HTTP (ausser Loopback fuer Tests), eine Aenderung an boot.js oder makeGracefulShutdown. Im Zweifel bleibt die Messung aus: ohne https-Adresse oder ohne Token verhaelt sich der Server wie heute und laedt die SDK-Pakete nicht.",
+  "entwurf": {
+    "src/": "Was passiert: Nach dem Rebase von B3b auf B3a ist die Messung nicht mehr in Hermes eingehängt: app.js und server.js kennen utils/telemetrie.js nicht, und CONFIG_NAMESPACES führt die fünf telemetry-Schlüssel nicht. Hermes misst keine Anfrage und sendet nichts, auch mit gesetzter https-Adresse und gesetztem Token.\nWas passieren sollte: server.js startet die Telemetrie, buildApp reicht sie an installGlobalMiddleware, und app.use(anfrageMessung(telemetrie)) steht direkt hinter app.use(anfrageKennungMiddleware); CONFIG_NAMESPACES hat den Namensraum telemetry mit den fünf Schlüsseln.\nWie man es auslöst: Server mit METRIKEN_OTLP_URL (Loopback-Empfänger) und METRIKEN_OTLP_TOKEN starten, Anfragen senden und auf den Export warten; so läuft test/gemeinsam/messwerte-gehen-an-otlp.test.js.\nBleibt gleich: Ohne https-Adresse (Loopback ausgenommen) oder ohne Token verhält sich der Server wie heute und lädt die SDK-Pakete nicht; gemessen werden nur Routenmuster, Methode und Statusklasse in einem Histogramm mit 8 Grenzen; die Anfrage-Kennung aus B3a (anfrageKennungMiddleware) und LOG_REQUEST_ID bleiben unverändert.\nVermutete Diagnose: git rebase -X ours hat die Konflikt-Hunks von app.js, server.js und config.js zur Basis-Seite aufgelöst; die Verdrahtung aus Commit 9869d13 (vorher 4772665) ging verloren. Die Datei utils/telemetrie.js, die rawConfig-Schlüssel, .env.example und der Pin-Test (metrics 2, telemetry 5, 203, 189) sind schon wieder da.\nAbnahme-Meldung: Der Messwert-Test bricht heute mit „kein passender Export empfangen“ ab; der Pin-Test ist rot, weil telemetry in CONFIG_NAMESPACES fehlt.\nEchte Inhalte gelesen: keine\nNicht-Ziele: keine Änderung an utils/telemetrie.js, weil sie vollständig im Altcommit liegt und nur nicht eingehängt ist; keine Änderung an boot.js oder makeGracefulShutdown (Spülen beim Stoppen ist B0a/B10), weil die Absicht des Issues sie ausschließt; keine Änderung an anfrageKennungMiddleware, weil sie zu B3a gehört.; kein Abfangen eines Fehlers beim Start der Telemetrie, weil das neues Verhalten in utils/telemetrie.js oder server.js wäre und nicht zur Wiederherstellung nach dem Rebase gehört (offen, Meldung an die Betreuung); keine Untergrenze für METRIKEN_INTERVALL_MS, weil der Abnahmetest 50 ms braucht und der Schlüssel samt Mindestwert 10 aus dem Altcommit stammt.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil starteTelemetrie bei einer Adresse mit Leerzeichen in der Mitte den Exporter mit einer Ausnahme abbrechen lässt und server.js den Aufruf mit await auf oberster Ebene ohne Abfangen macht, startet der Prozess nicht, und die Folge ist, dass Hermes nach einem Neustart keine Anrufe annimmt, nur weil eine Variable für die Messung falsch gesetzt ist. | Nicht-Ziel: kein Abfangen eines Fehlers beim Start der Telemetrie (Verhalten des Altcommits, Meldung an die Betreuung) |\n| PM2 | Weil bestehende Aufrufer installGlobalMiddleware oder buildApp ohne telemetrie rufen, wirft telemetrie.aktiv ohne Vorgabewert bei jeder Anfrage, und die Folge ist, dass jede Anfrage mit 500 endet. | Test: Satz 4 in wasDarfNiePassieren |\n| PM3 | Weil METRIKEN_INTERVALL_MS ab 10 ms zulässt, exportiert Hermes bei einem Wert 60 statt 60000 etwa 1000 Datenpunkte pro Minute, und die Folge sind nicht freigegebene Kosten bei Grafana Cloud. | Nicht-Ziel: keine Untergrenze für METRIKEN_INTERVALL_MS |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "fehlerbehebung",
+      "ziel": "Messung ist in app.js, server.js und config.js wieder eingehängt",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/app.js",
+        "src/server.js",
+        "src/config.js"
+      ],
+      "abnahme": "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
+      "erwarteterFehler": "kein passender Export empfangen",
+      "wasDarfNiePassieren": [
+        "Ohne https-Adresse (Loopback ausgenommen) oder ohne Token sendet der Server nichts und lädt die SDK-Pakete nicht.",
+        "Jede Anfrage trägt weiter ihre Anfrage-Kennung aus B3a; anfrageMessung läuft direkt nach anfrageKennungMiddleware und vor securityHeaders.",
+        "Im Export steht nur Routenmuster, Methode und Statusklasse, nie ein konkreter Pfad mit Telefonnummer.",
+        "Ein Aufruf von installGlobalMiddleware oder buildApp ohne telemetrie beantwortet Anfragen weiter normal, weil KEINE_TELEMETRIE der Vorgabewert ist."
+      ]
+    }
+  ]
+}
