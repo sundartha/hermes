@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { relative } from "node:path";
 import { cwd, env } from "node:process";
@@ -12,7 +12,6 @@ const GEMESSENE_KERNE_JE_LAUF = 2;
 const MS_JE_SEKUNDE = 1000;
 const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
-const MAX_AUSGABE = 268_435_456;
 const MELDER = fileURLToPath(new URL("melder.mjs", import.meta.url));
 const OHNE_PRUEFUNG = fileURLToPath(new URL("ohne-pruefung.mjs", import.meta.url));
 export const UNTER_ATTRAPPE = ["--import", OHNE_PRUEFUNG];
@@ -53,16 +52,6 @@ function abgebrochen(grund) {
 
 function eintraegeAus(ausgabe, verzeichnis) {
   return ausgabe.split("\n").filter(Boolean).map(eintragIn(verzeichnis));
-}
-
-export function testlauf({ mitUebersprungenen = false, ...lauf }) {
-  const { argumente, optionen } = aufruf(lauf);
-  const beginn = Date.now();
-  const ergebnis = spawnSync(process.execPath, argumente, { ...optionen, encoding: "utf8", maxBuffer: MAX_AUSGABE });
-  berichteDauer(beginn);
-  if (ergebnis.error !== undefined || ergebnis.signal !== null) throw abgebrochen(ergebnis.error?.message ?? ergebnis.signal);
-  const eintraege = eintraegeAus(ergebnis.stdout, optionen.cwd);
-  return eintraege.filter(({ uebersprungen }) => mitUebersprungenen || !uebersprungen);
 }
 
 function grenze() {
