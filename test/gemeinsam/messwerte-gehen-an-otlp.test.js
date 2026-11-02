@@ -259,3 +259,50 @@ test("[NIE4] installGlobalMiddleware ohne telemetrie beantwortet Anfragen weiter
     assert.match(antwort.headers.get(KENNUNG_HEADER), UUID);
   });
 });
+
+import { postTelnyxIncoming, waitForLog } from "../helpers.js";
+import { startHermesMitAnmeldung } from "../sicherheit/hermes-mit-anmeldung.js";
+
+const NUR_LEERZEICHEN = "   ";
+const WEBHOOK_ZEILE_MIT_KENNUNG = /^rid=(\S+) \[voice-antwort\] weg=\/voice\/incoming /m;
+
+test("[NIE1] ein Token nur aus Leerzeichen zaehlt als fehlend, der Server sendet nichts", async () => {
+  await mitMessung({ METRIKEN_OTLP_TOKEN: NUR_LEERZEICHEN }, async ({ srv, empfaenger }) => {
+    const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+    assert.equal(antwort.status, HTTP_OK);
+    await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+    assert.equal(empfaenger.empfangen.length, 0, "kein Export ohne echtes Token");
+  });
+});
+
+test("[NIE2] mit Messung steht vor der Webhook-Logzeile dieselbe Kennung wie in der Antwort", async () => {
+  await mitMessung({ LOG_REQUEST_ID: "true" }, async ({ srv }) => {
+    const antwort = await postTelnyxIncoming(srv, { callSid: "CAmessung" });
+    const kennung = antwort.headers.get(KENNUNG_HEADER);
+    assert.match(kennung, UUID);
+    await waitForLog(srv, WEBHOOK_ZEILE_MIT_KENNUNG);
+    const [, kennungImLog] = srv.stdout.match(WEBHOOK_ZEILE_MIT_KENNUNG);
+    assert.equal(kennungImLog, kennung);
+  });
+});
+
+test("[NIE3] eine Telefonnummer in Anfragekoerper oder Kopfzeile erscheint in keinem Export", async () => {
+  await mitMessung({}, async ({ srv, empfaenger }) => {
+    await abrufMitFrist(`${srv.localUrl}/api/plans`, {
+      method: "POST",
+      headers: { "content-type": "application/json", referer: `https://beispiel.invalid/+${TELEFONNUMMER}` },
+      body: JSON.stringify({ to: `+${TELEFONNUMMER}` }),
+    });
+    await exportOderFensterende(empfaenger, (e) => punkteVon(e).some((p) => attribute(p).method === "POST"));
+    for (const eintrag of empfaenger.empfangen) {
+      assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Telefonnummer aus Koerper oder Kopfzeile im Export");
+    }
+  });
+});
+
+test("[NIE4] buildApp ohne telemetrie beantwortet Anfragen weiter normal", async (t) => {
+  const hermes = await startHermesMitAnmeldung(t);
+  const antwort = await abrufMitFrist(`${hermes.url}/healthz`);
+  assert.equal(antwort.status, HTTP_OK);
+  assert.match(antwort.headers.get(KENNUNG_HEADER), UUID);
+});
