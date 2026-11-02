@@ -5,44 +5,21 @@ import os from "node:os";
 import path from "node:path";
 
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { appOhneAbhaengigkeiten } from "./app-ohne-abhaengigkeiten.js";
 
 const HTTP_OK = 200;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const POOL_STAU_MS = 300_000;
 const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "healthz-app-"));
-const ABHAENGIGKEITEN = [
-  "callFinish lifecycle provisioning ttsStore directiveSynth voiceRender messaging",
-  "elevenLabsOutbound inboundBridges consultDelivery durableAuditFor",
-].flatMap((zeile) => zeile.split(" "));
 
 const { config } = await import("../../src/config.js");
 Object.assign(config.server, { dataDir: DATENORDNER, webDistDir: path.join(DATENORDNER, "web") });
 const speicher = await import("../../src/store.js");
-const { buildApp } = await import("../../src/app.js");
 
 after(() => fs.rmSync(DATENORDNER, { recursive: true, force: true }));
 
-const standIn = new Proxy(function standIn() {}, {
-  get: (_ziel, schluessel) => (schluessel === "then" ? undefined : standIn),
-  apply: () => standIn,
-});
-
 async function healthzDerApp(t, zusatz) {
-  const abhaengigkeiten = {
-    ...Object.fromEntries(ABHAENGIGKEITEN.map((name) => [name, standIn])),
-    config,
-    audit: () => {},
-    ...zusatz,
-  };
-  const { app } = await buildApp(abhaengigkeiten);
-  const server = await new Promise((fertig) => {
-    const lauscht = app.listen(0, "127.0.0.1", () => fertig(lauscht));
-  });
-  t.after(() => {
-    server.closeAllConnections();
-    server.close();
-  });
-  const basis = `http://127.0.0.1:${server.address().port}`;
+  const basis = await appOhneAbhaengigkeiten(t, { config, audit: () => {}, ...zusatz });
   const abfrage = async () => (await abrufMitFrist(`${basis}/healthz`)).status;
   return abfrage;
 }
