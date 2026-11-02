@@ -1,17 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
-
-function withQueueBackend(value, fn) {
-  const original = config.store.queueBackend;
-  config.store.queueBackend = value;
-  try {
-    return fn();
-  } finally {
-    config.store.queueBackend = original;
-  }
-}
+import { withQueueBackend } from "../gemeinsam/pgboss-umgebung.js";
 
 test("S1-17a: QUEUE_BACKEND=memory -> QueuePort-Form (enqueue/drain/jobStatus als Funktionen)", () => {
   withQueueBackend("memory", () => {
@@ -25,14 +15,24 @@ test("S1-17a: QUEUE_BACKEND=memory -> QueuePort-Form (enqueue/drain/jobStatus al
   });
 });
 
-test("S1-17b: QUEUE_BACKEND=pgboss -> wirft (deferred, noch nicht implementiert)", () => {
+test("S1-17b: QUEUE_BACKEND=pgboss ohne DATABASE_URL -> wirft fail-closed", () => {
   withQueueBackend("pgboss", () => {
-    assert.throws(() => createQueue(), /noch nicht implementiert/);
+    assert.throws(() => createQueue({ connectionString: "" }), /DATABASE_URL/);
   });
 });
 
 test("S1-17c: unbekanntes QUEUE_BACKEND -> wirft fail-closed", () => {
   withQueueBackend("was-anderes", () => {
     assert.throws(() => createQueue(), /Unbekanntes QUEUE_BACKEND/);
+  });
+});
+
+test("S1-17d: pgboss baut mit gültiger DATABASE_URL ohne Verbindung auf, wirft aber bei fehlender oder nicht-textlicher", () => {
+  withQueueBackend("pgboss", () => {
+    const adresse = "postgres://hermes@127.0.0.1:1/hermes";
+    assert.doesNotThrow(() => createQueue({ connectionString: adresse }));
+    assert.doesNotThrow(() => createQueue({ connectionString: undefined, bossOptions: { db: {} } }));
+    for (const ungueltig of [undefined, null, 42])
+      assert.throws(() => createQueue({ connectionString: ungueltig }), /DATABASE_URL/);
   });
 });

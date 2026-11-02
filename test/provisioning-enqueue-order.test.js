@@ -111,6 +111,8 @@ function makeOrchestrator(
     handleProvisionJob = fakeHandleProvisionJob,
     billing = {},
     numberProvisioning = () => ({}),
+    konfig = {},
+    redrive = [],
   } = {},
 ) {
   const queue = makeMemoryQueue();
@@ -120,6 +122,7 @@ function makeOrchestrator(
       paymentEnabled,
       numberSetupFeeCents: SETUP_FEE_CENTS,
       paymentCurrency: "usd",
+      ...konfig,
     }),
     queue,
     billing,
@@ -130,7 +133,7 @@ function makeOrchestrator(
     audit: () => {},
     recordProvisioningJob,
     markProvisioningJob,
-    classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
+    classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive }),
     findNumber,
   });
   return { orchestrator, queue };
@@ -426,4 +429,51 @@ test("Wurf im Monatsbeleg laesst den Job der gekauften Nummer done", async (t) =
   assert.deepEqual(loggedErrors(errors), [
     "[provision-worker] Monatsbeleg fehlgeschlagen: Ledger nicht schreibbar",
   ]);
+});
+
+const REDRIVE_KONFIG = { provisioningEnabled: true, provisioningRedriveMaxAgeMs: 3600000 };
+
+function abwarten() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+test("K1-22: beim Start wird ein verwaister Nummernauftrag erneut eingereiht und gekauft", async () => {
+  const s = withNumbers(makeNumber("num1", "t1"));
+  const store = makeFakeStore(s);
+  const verwaist = { id: "job1", numberId: "num1", tenantId: "t1", idempotencyKey: "provision_num1" };
+  const { orchestrator } = makeOrchestrator(store, { konfig: REDRIVE_KONFIG, redrive: [verwaist] });
+
+  orchestrator.reconcileOrphanedProvisioning();
+  await abwarten();
+  await orchestrator.runProvisioningDrainExclusive();
+
+  assert.equal(findNumber(s, "num1").status, NUMBER_STATUS.ACTIVE);
+});
+
+test("K1-23: ohne verwaiste Nummernaufträge wird beim Start nichts abgearbeitet", async (t) => {
+  const store = makeFakeStore(withNumbers(makeNumber("num1", "t1")));
+  const { orchestrator, queue } = makeOrchestrator(store, { konfig: REDRIVE_KONFIG });
+  const abfluss = t.mock.method(queue, "drain");
+
+  orchestrator.reconcileOrphanedProvisioning();
+  await abwarten();
+
+  assert.equal(abfluss.mock.callCount(), 0);
+});
+
+test("K1-24: scheitert das erneute Einreihen beim Start, wird es gemeldet und nichts abgearbeitet", async (t) => {
+  const errors = silenceErrors(t);
+  const store = makeFakeStore(withNumbers(makeNumber("num1", "t1")));
+  const verwaist = { id: "job1", numberId: "num1", tenantId: "t1", idempotencyKey: "provision_num1" };
+  const { orchestrator, queue } = makeOrchestrator(store, { konfig: REDRIVE_KONFIG, redrive: [verwaist] });
+  t.mock.method(queue, "enqueue", async () => {
+    throw new Error("Warteschlange nicht erreichbar");
+  });
+  const abfluss = t.mock.method(queue, "drain");
+
+  orchestrator.reconcileOrphanedProvisioning();
+  await abwarten();
+
+  assert.deepEqual(loggedErrors(errors), ["[provision-redrive] Warteschlange nicht erreichbar"]);
+  assert.equal(abfluss.mock.callCount(), 0);
 });
