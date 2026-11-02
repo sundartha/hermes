@@ -1,0 +1,69 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "alarm-kern",
+      "nummern": [
+        "S3",
+        "S16",
+        "S4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/telephony/alert-sms.js",
+        "src/konfiguration/betterstack-alarm.js",
+        "src/billing/cost-calibration.js",
+        "src/routes/api-billing.js",
+        "src/routes/voice.js",
+        "src/server.js",
+        "test/alert-sms.test.js"
+      ],
+      "umbau": [
+        "src/telephony/alert-sms.js:onError"
+      ],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Die Kernfunktion in `alert-sms.js` mit Adresse aus `src/konfiguration/`, Frist und Schlüssel samt Kurz-Hash ist das, worauf jeder andere Anlass baut; Kostenabgleich (S3, S16) und TTS-Kontingent (S4) rufen sie unverändert über `sendBootstrapAlertSms` auf und prüfen sie zuerst an zwei echten Eingängen."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "start-und-halt",
+      "nummern": [
+        "S6",
+        "B4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/boot.js",
+        "src/boot-guard.js",
+        "src/config.js",
+        "src/store/begriffe-nummern-vergabe.js",
+        "src/store/zustand/nummern.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Heilung beim Start (S6) und Halt der Bootstrap-Nummer (B4) laufen beide durch den Start in `boot.js` und `boot-guard.js` (Startprüfung ohne SMS-/Mail-Ziel, Ersatz der Bindung `alert_sms_sender`) und nutzen die Kernfunktion aus t1."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "stripe-meldung",
+      "nummern": [
+        "S5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/billing/webhook.js",
+        "src/routes/stripe-webhook.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Das Stripe-Geldereignis hat einen eigenen Eingang (`POST /webhooks/stripe`) und braucht nur die fertige Kernfunktion aus t1, teilt keine Datei mit t2 und kann deshalb neben ihm laufen."
+    }
+  ]
+}
