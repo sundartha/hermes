@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -21,6 +21,9 @@ const UPSTREAM_BASE_REF = "refs/remotes/upstream/master";
 const RED_PRODUCT_TEST_MARKER = "roter betroffener Test";
 const RED_TOOL_TEST_MARKER = "roter Werkzeugtest";
 const RED_FULL_SUITE_MARKER = "roter Test der vollen Suite";
+const GREEN_TYPE_CHECK = "process.exitCode = 0;\n";
+const RED_TYPE_CHECK_MARKER = "Typfehler in src/basis.js";
+const RED_TYPE_CHECK = `console.log(${JSON.stringify(RED_TYPE_CHECK_MARKER)});\nprocess.exitCode = 1;\n`;
 
 const FOREIGN_REPOSITORY_SCRIPT = [
   'import { spawnSync } from "node:child_process";',
@@ -74,9 +77,11 @@ function probeWithPruefleiter(context) {
       scripts: {
         lint: `node ${JSON.stringify(ESLINT_BIN)} .`,
         "test:betroffen": `node ${JSON.stringify(AFFECTED_TESTS_TOOL)}`,
+        typpruefung: "node typen.mjs",
         pruefleiter: `SCHWERLAUF_SPERRDATEI=${JSON.stringify(lockFile)} node ${JSON.stringify(PRUEFLEITER_TOOL)}`,
       },
     }),
+    "typen.mjs": GREEN_TYPE_CHECK,
     "eslint.config.js": 'export default [{ rules: { "no-debugger": "error" } }];\n',
     "src/basis.js": "export const wert = 1;\n",
     "src/rot.js": "export const rot = 1;\n",
@@ -108,14 +113,56 @@ test("Der pre-push-Hook startet bei einer Aenderung unter tools weder Werkzeugte
   assert.doesNotMatch(hook.stdout, new RegExp(RED_FULL_SUITE_MARKER));
 });
 
-test("Der pre-push-Hook faehrt bei einer Aenderung unter src die betroffenen Tests", (context) => {
+test("Der pre-push-Hook faehrt bei einer Aenderung unter src keine betroffenen Tests, die laufen in der Vorpruefung auf GitHub", (context) => {
   const directory = probeWithPruefleiter(context);
   appendTo(directory, "src/rot.js", "export const geaendert = 2;\n");
 
   const hook = runHookAsGitDoes(directory);
 
+  assert.equal(hook.status, 0, hook.stdout + hook.stderr);
+  assert.doesNotMatch(hook.stdout, new RegExp(RED_PRODUCT_TEST_MARKER));
+});
+
+test("Der pre-push-Hook ist rot, wenn die Typpruefung rot ist", (context) => {
+  const directory = probeWithPruefleiter(context);
+  writeFileSync(join(directory, "typen.mjs"), RED_TYPE_CHECK);
+
+  const hook = runHookAsGitDoes(directory);
+
   assert.notEqual(hook.status, 0);
-  assert.match(hook.stdout, new RegExp(RED_PRODUCT_TEST_MARKER));
+  assert.match(hook.stdout, new RegExp(RED_TYPE_CHECK_MARKER));
+});
+
+const RECORDED_SCRIPTS = ["lint", "typpruefung", "test", "test:betroffen", "test:mutation", "test:wirkung", "ci:lokal"];
+const RECORDING_SCRIPT = 'import { appendFileSync, readFileSync, writeFileSync } from "node:fs";\nappendFileSync("aufrufe.txt", process.argv[2] + "\\n");\n';
+
+function probeWithRecordedScripts(context) {
+  const lockFile = join(probeDirectory(context, {}), "sperre");
+  const directory = probeRepository(context, {
+    "package.json": JSON.stringify({
+      name: "pre-push-aufrufe-probe",
+      private: true,
+      type: "module",
+      scripts: {
+        ...Object.fromEntries(RECORDED_SCRIPTS.map((name) => [name, `node merke.mjs ${name}`])),
+        pruefleiter: `SCHWERLAUF_SPERRDATEI=${JSON.stringify(lockFile)} node ${JSON.stringify(PRUEFLEITER_TOOL)}`,
+      },
+    }),
+    "merke.mjs": RECORDING_SCRIPT,
+    "src/basis.js": "export const wert = 1;\n",
+  });
+  runIn(directory, "git", ["update-ref", UPSTREAM_BASE_REF, "HEAD"]);
+  return directory;
+}
+
+test("Der pre-push-Hook ruft nur Lint und Typpruefung auf, keine Tests, keine Mutation und kein ci-lokal", (context) => {
+  const directory = probeWithRecordedScripts(context);
+  appendTo(directory, "src/basis.js", "export const geaendert = 1;\n");
+
+  const hook = runHookAsGitDoes(directory);
+
+  assert.equal(hook.status, 0, hook.stdout + hook.stderr);
+  assert.deepEqual(readFileSync(join(directory, "aufrufe.txt"), "utf8").split("\n").filter(Boolean), ["lint", "typpruefung"]);
 });
 
 test("Der pre-push-Hook faehrt Lint und nennt die Fundstelle", (context) => {

@@ -36,7 +36,9 @@ const NO_TOOL_TESTS = "keine";
 const LIST_TOOL_TESTS = "liste";
 const ALL_TOOL_TESTS = "alle";
 const JOB_SUCCESS = "success";
+const TYPE_CHECK_SCRIPT = "typpruefung";
 const EXCLUSIVE_MODES = [
+  "lint-und-typen",
   "vor-push",
   "ohne-werkzeugtests",
   "werkzeugteil",
@@ -96,6 +98,12 @@ function lint() {
   const lines = errors.length > 0 ? findingLines(errors) : abortLines(result);
   for (const line of lines) console.log(line);
   return result.status;
+}
+
+function lintAndTypes() {
+  const lintStatus = lint();
+  if (lintStatus !== 0) return lintStatus;
+  return npmRun(TYPE_CHECK_SCRIPT, [], "inherit").status;
 }
 
 function affectedTests(args) {
@@ -189,6 +197,7 @@ function parseOptions() {
   const { values } = parseArgs({
     options: {
       basis: { type: "string" },
+      "lint-und-typen": { type: "boolean", default: false },
       "vor-push": { type: "boolean", default: false },
       "ohne-werkzeugtests": { type: "boolean", default: false },
       "alle-werkzeugtests": { type: "boolean", default: false },
@@ -361,6 +370,7 @@ async function main() {
   await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "), {
     vorrangFuerPush: true,
   });
+  if (options["lint-und-typen"]) return lintAndTypes();
   if (options["teile-pruefen"] !== undefined) return checkParts(options);
   if (options.werkzeugteil !== undefined) return partRun(options, parsePart(options.werkzeugteil));
   return fullRun(options);
