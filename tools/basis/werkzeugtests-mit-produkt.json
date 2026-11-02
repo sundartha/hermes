@@ -2,6 +2,7 @@
   "test/werkzeuge/ablehnungsgruende.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/anbieter-datenschutz-pruefen.test.js": "Wird ohne src/ und ohne test/ des Produkts rot (Wächter-Lauf), weil es Produktdateien braucht.",
   "test/werkzeuge/anfrage-mit-frist.test.js": "Liest Dateien aus test/ außerhalb von test/werkzeuge/.",
+  "test/werkzeuge/antwortzeiten.test.js": "Das geprüfte Werkzeug startet Hermes und liest Quelltext aus src/.",
   "test/werkzeuge/anweisungen-konfiguration.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/auftrag-lauf-umzug-nach-testrunde.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/auftrag-musterdateien-altlast.test.js": "Liest Produktquelltext aus src/.",
