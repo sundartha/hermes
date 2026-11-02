@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
+import { hauptPoolOptionen } from "../../src/utils/pg-pool.js";
 
 const WARTENDE_ANFRAGEN = 3;
 const OFFENE_VERBINDUNGEN = 7;
-const VERLUST_ZEILE = "[pool] Verbindung im Leerlauf verloren: terminating connection";
+const VERLUST_ZEILE = "[pool:haupt] Verbindung im Leerlauf verloren: terminating connection";
 
 test("B8-Pool ohne Datenbankserver: der pg-Speicher meldet Warteschlange und offene Verbindungen seines Pools; ein Verlust im Leerlauf wird geloggt statt zu werfen", async () => {
   const pools = poolAufPglite(await neuePglite());
@@ -15,7 +16,7 @@ test("B8-Pool ohne Datenbankserver: der pg-Speicher meldet Warteschlange und off
   process.env.DATABASE_URL = "postgres://attrappe.invalid/hermes";
   const speicher = await import("../../src/store.js");
   const [pool] = pools;
-  assert.deepEqual(pool.optionen, { connectionString: "postgres://attrappe.invalid/hermes" });
+  assert.deepEqual(pool.optionen, hauptPoolOptionen("postgres://attrappe.invalid/hermes"));
   pool.waitingCount = WARTENDE_ANFRAGEN;
   pool.totalCount = OFFENE_VERBINDUNGEN;
   assert.deepEqual(speicher.poolZustand(), {

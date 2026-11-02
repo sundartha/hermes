@@ -7,7 +7,7 @@ import { fehlerausgabeVonAsync } from "./fehlerausgabe.js";
 
 const ABFRAGE_PAUSE_MS = 20;
 const ABFRAGE_VERSUCHE = 100;
-const VERLUST_ZEILE = "[pool] Verbindung im Leerlauf verloren:";
+const VERLUST_ZEILE = "[pool:haupt] Verbindung im Leerlauf verloren:";
 const ALLE_ANDEREN_VERBINDUNGEN =
   "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()";
 

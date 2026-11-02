@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 
+import express from "express";
 import pg from "pg";
 
 import {
@@ -13,8 +14,12 @@ import {
   poolFehlerZeile,
   portalPoolOptionen,
 } from "../../src/utils/pg-pool.js";
+import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 import { ROOT } from "../helpers.js";
+import { neuePglite } from "../pglite-helfer.js";
 import { echteDatenbank } from "./echtes-postgres.js";
+import { fehlerausgabeVon } from "./fehlerausgabe.js";
+import { webLoginBasisKonfiguration } from "./web-login-konfiguration.js";
 
 const KURZE_FRIST_MS = 30;
 const ZEITGRENZE_MS = 5000;
@@ -233,4 +238,142 @@ test("Echtes Postgres: eine Verbindung aus dem Pool trägt die Abfragefrist, und
   } finally {
     await Promise.all([standard.end(), kurz.end()]);
   }
+});
+
+const VERLUST_URSACHE = "terminating connection";
+const WARTENDE_ANFRAGEN = 3;
+const OFFENE_VERBINDUNGEN = 7;
+
+class PortalPoolAttrappe extends EventEmitter {
+  static angelegt = [];
+
+  constructor(optionen) {
+    super();
+    this.optionen = optionen;
+    PortalPoolAttrappe.angelegt.push(this);
+  }
+
+  async connect() {
+    return {
+      query: async () => ({ rows: [{ is_su: "off", rolbypassrls: false }] }),
+      release: () => {},
+    };
+  }
+
+  async end() {}
+}
+
+async function mitErsetztemPool(ersetzen, aufgabe) {
+  const echterPool = pg.Pool;
+  const angelegt = ersetzen();
+  try {
+    await aufgabe();
+  } finally {
+    pg.Pool = echterPool;
+  }
+  return angelegt;
+}
+
+async function hauptPoolUeberSpeicher() {
+  const db = await neuePglite();
+  let speicher;
+  const angelegt = await mitErsetztemPool(
+    () => poolAufPglite(db),
+    async () => {
+      process.env.STORE_BACKEND = "pg";
+      process.env.DATABASE_URL = UNERREICHBAR;
+      speicher = await import("../../src/store.js");
+    },
+  );
+  return { speicher, angelegt };
+}
+
+async function portalPoolUeberWebLogin() {
+  const { speicher } = await speicherOhnePostgres();
+  const { wireWebLogin } = await import("../../src/wiring/web-login.js");
+  return mitErsetztemPool(
+    () => {
+      pg.Pool = PortalPoolAttrappe;
+      return PortalPoolAttrappe.angelegt;
+    },
+    () =>
+      wireWebLogin({
+        app: express(),
+        config: webLoginBasisKonfiguration("https://api.workos.test"),
+        store: speicher,
+        audit: () => {},
+        provision: async () => ({}),
+        stripeWebhookPath: "/webhooks/stripe",
+        appPath: "/app",
+      }),
+  );
+}
+
+let speicherAufPglite;
+function speicherOhnePostgres() {
+  speicherAufPglite ??= hauptPoolUeberSpeicher();
+  return speicherAufPglite;
+}
+
+let portalPools;
+function portalPoolsOhnePostgres() {
+  portalPools ??= portalPoolUeberWebLogin();
+  return portalPools;
+}
+
+function verlustZeilen(pool, fehler) {
+  return fehlerausgabeVon(() => pool.emit("error", fehler));
+}
+
+test("Pool-Schutz ohne Postgres: ein Verlust im Leerlauf nennt bei Haupt- und Portal-Pool den Poolnamen", async () => {
+  const [hauptPool] = (await speicherOhnePostgres()).angelegt;
+  const [portalPool] = await portalPoolsOhnePostgres();
+  const [hauptZeile] = verlustZeilen(hauptPool, new Error(VERLUST_URSACHE));
+  const [portalZeile] = verlustZeilen(portalPool, new Error(VERLUST_URSACHE));
+  assert.match(hauptZeile ?? "", /^\[pool:haupt\] Verbindung im Leerlauf verloren: /);
+  assert.match(portalZeile ?? "", /^\[pool:portal\] Verbindung im Leerlauf verloren: /);
+});
+
+test("[NIE1] poolZustand() des pg-Speichers meldet wartend und offen des Haupt-Pools, und der Speicher bietet kein close", async () => {
+  const { speicher, angelegt } = await speicherOhnePostgres();
+  const [hauptPool] = angelegt;
+  hauptPool.waitingCount = WARTENDE_ANFRAGEN;
+  hauptPool.totalCount = OFFENE_VERBINDUNGEN;
+  try {
+    assert.deepEqual(speicher.poolZustand(), { wartend: WARTENDE_ANFRAGEN, offen: OFFENE_VERBINDUNGEN });
+  } finally {
+    hauptPool.waitingCount = 0;
+    hauptPool.totalCount = 0;
+  }
+  assert.equal(angelegt.length, 1);
+  assert.equal("close" in speicher, false);
+});
+
+test("[NIE2] ein Verlust im Leerlauf von Haupt- und Portal-Pool wird als genau eine Zeile mit Poolname und Ursache protokolliert und wirft nicht", async () => {
+  const [hauptPool] = (await speicherOhnePostgres()).angelegt;
+  const [portalPool] = await portalPoolsOhnePostgres();
+  for (const [name, pool] of [
+    ["haupt", hauptPool],
+    ["portal", portalPool],
+  ]) {
+    let zeilen;
+    assert.doesNotThrow(() => {
+      zeilen = verlustZeilen(pool, new Error(`${name} beendet`));
+    });
+    assert.deepEqual(zeilen, [`[pool:${name}] Verbindung im Leerlauf verloren: ${name} beendet`]);
+  }
+});
+
+test("[NIE3] ohne Postgres werden Haupt-Pool über den Speicher und Portal-Pool über wireWebLogin mit den Pool-Grenzen gebaut und melden einen Fehler als genau eine Zeile poolFehlerZeile", async () => {
+  const { angelegt } = await speicherOhnePostgres();
+  const portal = await portalPoolsOhnePostgres();
+  assert.equal(angelegt.length, 1);
+  assert.equal(portal.length, 1);
+  const [hauptPool] = angelegt;
+  const [portalPool] = portal;
+  assert.deepEqual(hauptPool.optionen, hauptPoolOptionen(UNERREICHBAR));
+  assert.deepEqual(portalPool.optionen, portalPoolOptionen(UNERREICHBAR));
+  const fehler = new Error(VERLUST_URSACHE);
+  assert.deepEqual(verlustZeilen(hauptPool, fehler), [poolFehlerZeile("haupt", fehler)]);
+  assert.deepEqual(verlustZeilen(portalPool, fehler), [poolFehlerZeile("portal", fehler)]);
 });
