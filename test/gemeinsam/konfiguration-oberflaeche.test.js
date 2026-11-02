@@ -170,6 +170,11 @@ server.webDistDir
 store.databaseUrl
 store.queueBackend
 store.storeBackend
+telemetry.telemetryInstanceId
+telemetry.telemetryIntervalMs
+telemetry.telemetryOtlpToken
+telemetry.telemetryOtlpUrl
+telemetry.telemetryOtlpUser
 telephony.machineDetection
 telephony.telnyxAccountSid
 telephony.telnyxApiBase
