@@ -33,14 +33,14 @@ const FAELLE = [
   { name: "Liste fehlt am Basis-Stand: die Meldung zählt nicht", umgebung: IM_PULL_REQUEST(7), liste: null, kopfListe: { 7: EINTRAG }, erwartet: [] },
 ];
 
-for (const { name, umgebung, liste, kopfListe, erwartet } of FAELLE) {
-  test(`Gleichwertig ohne Auftrag-Zeile, ${name}`, (context) => {
+test("Gleichwertig-Meldungen ohne Zeile Auftrag zählen nur im Lauf eines gelisteten PR mit wirksamer Liste", (context) => {
+  for (const { name, umgebung, liste, kopfListe, erwartet } of FAELLE) {
     ALTBESTAND_MELDUNGEN.clear();
     const { verzeichnis, basis } = repo(context, { basisListe: liste, kopfListe });
     const gemeldet = altbestandGemeldet({ nachrichten: [NACHRICHT, "Ohne Meldung\n"], basis, root: verzeichnis, umgebung });
-    assert.deepEqual(gemeldet, erwartet);
-  });
-}
+    assert.deepEqual(gemeldet, erwartet, name);
+  }
+});
 
 test("eine Altbestand-Meldung steht im Bericht als Altbestand mit PR und Kürzel", (context) => {
   ALTBESTAND_MELDUNGEN.clear();
