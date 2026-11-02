@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Anweisungen nur streichen",
+  "zweck": "basis/anweisungen",
+  "beleg": "tools/basis-vergleich.mjs"
+}

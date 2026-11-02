@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Lint neuer Funktionen",
+  "zweck": "lint/neue-funktionen",
+  "beleg": "tools/lint-neue-funktionen.mjs"
+}

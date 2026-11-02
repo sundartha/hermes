@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/actions/node-npm-ci/action.yml › Install-Skripte",
+  "zweck": "github/install-skripte",
+  "beleg": ".github/actions/node-npm-ci/action.yml"
+}

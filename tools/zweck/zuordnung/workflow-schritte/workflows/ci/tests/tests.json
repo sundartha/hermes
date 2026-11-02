@@ -1,0 +1,11 @@
+{
+  "schritt": ".github/workflows/ci.yml › tests › Tests",
+  "zweck": [
+    "tests/regression",
+    "tests/prozess-uebrig"
+  ],
+  "beleg": [
+    ".github/workflows/ci.yml",
+    "tools/testgruppe.mjs"
+  ]
+}

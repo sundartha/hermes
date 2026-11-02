@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Kommentare in YAML und Shell",
+  "zweck": "lint/kommentare-yaml-shell",
+  "beleg": "tools/kommentare-yaml-shell.mjs"
+}

@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit",
+  "zweck": "tests/testlaufzeit",
+  "beleg": "tools/testlaufzeit-pruefen.mjs"
+}

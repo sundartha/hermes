@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS",
+  "zweck": "github/codeowners",
+  "beleg": "tools/codeowners-abgleich.mjs"
+}

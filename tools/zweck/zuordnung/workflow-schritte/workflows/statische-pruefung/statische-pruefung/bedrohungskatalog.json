@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Bedrohungskatalog",
+  "zweck": "uebrige/bedrohungskatalog",
+  "beleg": "tools/katalog-pruefen.mjs"
+}

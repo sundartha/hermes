@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich",
+  "zweck": "github/ci-sammeljob",
+  "beleg": ".github/workflows/ci.yml"
+}

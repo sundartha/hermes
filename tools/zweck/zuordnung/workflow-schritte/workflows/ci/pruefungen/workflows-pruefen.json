@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Workflows prüfen",
+  "zweck": "github/workflows",
+  "beleg": "tools/workflows-pruefen.mjs"
+}

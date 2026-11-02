@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests",
+  "zweck": "prüfleiter",
+  "beleg": "tools/pruefleiter.mjs"
+}

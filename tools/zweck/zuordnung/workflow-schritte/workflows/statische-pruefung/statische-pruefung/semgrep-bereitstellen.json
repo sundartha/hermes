@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Semgrep bereitstellen",
+  "aufbau": "Installiert Semgrep in fester Fassung; prüft keine Änderung."
+}

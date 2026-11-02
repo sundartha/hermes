@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import { REPO_ROOT } from "./probe-repo.js";
@@ -9,14 +9,53 @@ const QUELLORDNER = ["tools", "scripts"];
 const QUELLENDUNGEN = [".mjs", ".js"];
 const WORKFLOWORDNER = ".github";
 const WORKFLOWENDUNG = ".yml";
-const ZUORDNUNG = "tools/zweck/zuordnung/workflow-schritte.json";
+export const ZUORDNUNG = "tools/zweck/zuordnung/workflow-schritte";
+const SCHRITT_TRENNER = " › ";
+const ZUORDNUNGSENDUNG = ".json";
+const UMLAUTE = { ä: "ae", ö: "oe", ü: "ue", ß: "ss" };
 
 export function quelltext(pfad) {
   return readFileSync(join(REPO_ROOT, pfad), "utf8");
 }
 
+function ohneUmlaute(text) {
+  return text.toLowerCase().replace(/[äöüß]/g, (zeichen) => UMLAUTE[zeichen]);
+}
+
+function kurzname(text) {
+  return ohneUmlaute(text).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export function dateiFuerSchritt(schritt) {
+  const [datei, ...teile] = schritt.split(SCHRITT_TRENNER);
+  const quelle = datei.replace(/^\.github\//, "").replace(/\.yml$/, "").replace(/\/action$/, "");
+  return [quelle, ...teile.slice(0, -1), `${kurzname(teile.at(-1))}${ZUORDNUNGSENDUNG}`].join("/");
+}
+
+export function zuordnungAus(dateien) {
+  const eintraege = {};
+  for (const { pfad, text } of dateien) {
+    assert.ok(pfad.endsWith(ZUORDNUNGSENDUNG), `${ZUORDNUNG}/${pfad}: keine JSON-Datei`);
+    const { schritt, ...eintrag } = JSON.parse(text);
+    assert.ok(typeof schritt === "string" && schritt.includes(SCHRITT_TRENNER), `${ZUORDNUNG}/${pfad}: Feld schritt fehlt`);
+    assert.equal(pfad, dateiFuerSchritt(schritt), `${ZUORDNUNG}/${pfad}: der Eintrag für „${schritt}“ gehört nach ${ZUORDNUNG}/${dateiFuerSchritt(schritt)}`);
+    eintraege[schritt] = eintrag;
+  }
+  return eintraege;
+}
+
+function dateienUnter(ordner) {
+  const dateien = readdirSync(ordner, { recursive: true, withFileTypes: true }).filter((eintrag) => eintrag.isFile());
+  return dateien.map((eintrag) => relative(ordner, join(eintrag.parentPath, eintrag.name))).toSorted();
+}
+
+function zuordnungsdateien() {
+  const pfade = dateienUnter(join(REPO_ROOT, ZUORDNUNG));
+  return pfade.map((pfad) => ({ pfad, text: quelltext(join(ZUORDNUNG, pfad)) }));
+}
+
 export function eintraegeDerZuordnung() {
-  return JSON.parse(quelltext(ZUORDNUNG));
+  return zuordnungAus(zuordnungsdateien());
 }
 
 export function urteilt(eintrag) {

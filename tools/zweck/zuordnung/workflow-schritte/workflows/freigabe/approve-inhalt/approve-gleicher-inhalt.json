@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/freigabe.yml › approve-inhalt › Approve gleicher Inhalt",
+  "zweck": "github/approve-inhalt",
+  "beleg": "tools/approve-inhalt.mjs"
+}
