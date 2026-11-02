@@ -1,0 +1,10 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/tts/directive-synth.js:71"
+    }
+  ],
+  "befunde": []
+}

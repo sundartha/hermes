@@ -1,0 +1,32 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/routes/api-billing.js:62"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/config.js:880"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "bereichsgrund:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/config.js:871"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Fehlerfälle"
+  }
+]
