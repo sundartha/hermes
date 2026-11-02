@@ -5,6 +5,7 @@ Freigabe Betreuung 02.11. 19:4x: reine Nachführung veralteter Zeilenangaben nac
 Freigabe Betreuung 02.11. 20:2x: Datei der Konfigurationsvariable nachgetragen (Rückmeldung design.md:148, Regel neue Variable nach src/konfiguration/)
 Freigabe Betreuung 02.11. 21:2x: Hinweis zur Teilung im Kopf, kein Inhaltsabschnitt
 Hinweis: T1 wird über S24 und die Startprüfung (src/boot.js, src/boot-guard.js) belegt; T1 gehört in denselben Teil wie S24.
+Freigabe Betreuung 02.11. 22:0x: Kernänderung in t1-t1 ändert bestehende Tests aller Eingänge
 Issue: 2643
 Design Doc: ja, weil es mehr als einen ernsthaften Weg für das Schlüsselschema der Vorfälle und für den Umgang mit der Absender-Bindung `alert_sms_sender` gibt, die Entscheidung fünf Aufrufer und die Startprüfung trägt und sich nach dem Abschalten von SMS und Mail schwer zurücknehmen lässt.
 
@@ -55,6 +56,8 @@ Der Betreiber sieht Meldungen als Vorfälle in Better Stack, nicht mehr als SMS 
 - `.env.example`
 - `render.yaml`
 - `test/alert-sms.test.js`
+- `test/abrechnung/stripe-webhook.test.js`
+- `test/cost-truing-observe.test.js`
 - `test/mail-boot-probe.test.js`
 - `test/ausfall-meldeweg.test.js`
 - `test/ausfall-boot-guard.test.js`
