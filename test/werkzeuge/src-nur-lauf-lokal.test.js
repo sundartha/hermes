@@ -43,7 +43,7 @@ function laufe(befehl, { cwd, umgebung }) {
   });
 }
 
-async function pruefeLokal(context, { offen = [NUMMER], reviews = (kopf) => [{ user: { login: "Antonio20045" }, state: "APPROVED", commit_id: kopf }] } = {}) {
+async function pruefeLokal(context, { offen = [NUMMER], pr = {}, reviews = (kopf) => [{ user: { login: "Antonio20045" }, state: "APPROVED", commit_id: kopf }] } = {}) {
   const repo = probeRepository(context, { ...ANFANGSDATEIEN, [LISTE]: json({ [NUMMER]: EINTRAG }) });
   gitIn(repo, "checkout", "-q", "-b", ZWEIG);
   const basis = sha(repo);
@@ -56,7 +56,7 @@ async function pruefeLokal(context, { offen = [NUMMER], reviews = (kopf) => [{ u
   const github = await scheinGithub(context, routen);
   const werkzeug = probeDirectory(context, { "gh.mjs": ghMitOffenenPrs(offen) });
   chmodSync(join(werkzeug, "gh.mjs"), AUSFUEHRBAR);
-  const umgebung = { BASIS: basis, HERMES_GH: join(werkzeug, "gh.mjs"), GITHUB_API_URL: github.url, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO };
+  const umgebung = { BASIS: basis, HERMES_GH: join(werkzeug, "gh.mjs"), GITHUB_API_URL: github.url, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: REPO, ...pr };
   return { ...(await laufe(echterBefehl(), { cwd: repo, umgebung })), anfragen: github.anfragen };
 }
 
@@ -84,4 +84,10 @@ test("bei mehr als einem offenen PR zum Zweig prüft ci-lokal src-nur-lauf stren
   const lauf = await pruefeLokal(context, { offen: [NUMMER, NUMMER + 1] });
   assert.equal(lauf.status, EXIT_BEFUND, lauf.ausgabe);
   assert.match(lauf.ausgabe, OHNE_ZEILE);
+});
+
+test("mit der PR-Nummer aus --pr prüft ci-lokal src-nur-lauf wie im PR, auch wenn der ausgecheckte Zweig selbst keinen PR hat", async (context) => {
+  const lauf = await pruefeLokal(context, { offen: [], pr: { PR: String(NUMMER) } });
+  assert.equal(lauf.status, EXIT_OK, lauf.ausgabe);
+  assert.doesNotMatch(lauf.ausgabe, OHNE_ZEILE);
 });

@@ -21,6 +21,8 @@ const ROT = {
 };
 const TEUER = { name: "teuer", teuer: true, befehl: "touch teuer.txt" };
 const BRAUCHT_POSTGRES = { name: "wirkung", werkzeug: "postgres", befehl: "touch wirkung.txt" };
+const LIEST_PR = { name: "liest-pr", befehl: 'printf %s "${PR-leer}" > pr.txt' };
+const MIT_PR = { name: "am-pr", mitPr: true, befehl: 'printf %s "$PR" > pr.txt' };
 
 function ciLokal(repo, argumente, umgebung = {}) {
   const lauf = spawnSync(process.execPath, [WERKZEUG, ...argumente], {
@@ -68,6 +70,36 @@ test("ci-lokal fährt einen teuren Schritt nur mit --mit-teuren und nennt ihn so
   assert.equal(mit.status, 0, mit.ausgabe);
   assert.ok(existsSync(join(repo, "teuer.txt")));
   assert.match(mit.stdout, /^teuer grün \d+(\.\d+)?s$/m);
+});
+
+test("ci-lokal fährt einen Schritt, der den PR braucht, nur mit --pr, gibt ihm die Nummer in PR und nennt ihn sonst als nicht gelaufen", (context) => {
+  const repo = repoMitCiLokalListe(context, [MIT_PR]);
+  const ohne = ciLokal(repo, ["--basis", "HEAD~1"]);
+  assert.equal(ohne.status, 0, ohne.ausgabe);
+  assert.ok(!existsSync(join(repo, "pr.txt")));
+  assert.match(ohne.stdout, /^am-pr nicht gelaufen \(braucht den PR, nur mit --pr\)$/m);
+  const mit = ciLokal(repo, ["--basis", "HEAD~1", "--pr", "2701"]);
+  assert.equal(mit.status, 0, mit.ausgabe);
+  assert.equal(readFileSync(join(repo, "pr.txt"), "utf8"), "2701");
+  assert.match(mit.stdout, /^am-pr grün \d+(\.\d+)?s$/m);
+});
+
+test("ci-lokal reicht eine PR-Nummer aus der aufrufenden Shell nicht an die Schritte weiter, solange --pr fehlt", (context) => {
+  const repo = repoMitCiLokalListe(context, [LIEST_PR]);
+  const ohne = ciLokal(repo, ["--basis", "HEAD~1"], { PR: "999" });
+  assert.equal(ohne.status, 0, ohne.ausgabe);
+  assert.equal(readFileSync(join(repo, "pr.txt"), "utf8"), "leer");
+  const mit = ciLokal(repo, ["--basis", "HEAD~1", "--pr", "2701"], { PR: "999" });
+  assert.equal(mit.status, 0, mit.ausgabe);
+  assert.equal(readFileSync(join(repo, "pr.txt"), "utf8"), "2701");
+});
+
+test("ci-lokal bricht mit --pr ohne gültige PR-Nummer ab, bevor ein Schritt läuft", (context) => {
+  const repo = repoMitCiLokalListe(context, [SCHREIBT_BASIS]);
+  const lauf = ciLokal(repo, ["--basis", "HEAD~1", "--pr", "2701; touch boese.txt"]);
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.ausgabe);
+  assert.ok(!existsSync(join(repo, "basis.txt")), lauf.ausgabe);
+  assert.match(lauf.stderr, /--pr erwartet eine PR-Nummer/);
 });
 
 test("ci-lokal meldet einen Schritt rot mit Grund und Zweck, wenn sein Werkzeug fehlt, und startet ihn nicht", (context) => {

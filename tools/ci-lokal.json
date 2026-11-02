@@ -3,7 +3,11 @@
     { "name": "workflows", "befehl": "node tools/workflows-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Workflows prüfen"] },
     { "name": "codeowners", "befehl": "node tools/codeowners-abgleich.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS"] },
     { "name": "commitlint", "befehl": "npx --no-install commitlint --from \"$BASIS\" --to HEAD --verbose", "ci": [".github/workflows/ci.yml › pruefungen › Commit-Prüfung"] },
-    { "name": "src-nur-lauf", "befehl": "node tools/src-nur-lauf/lokal.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Src nur aus lauf"] },
+    {
+      "name": "src-nur-lauf",
+      "befehl": "node tools/src-nur-lauf/lokal.mjs --basis \"$BASIS\" ${PR:+--pr \"$PR\"}",
+      "ci": [".github/workflows/ci.yml › pruefungen › Src nur aus lauf"]
+    },
     { "name": "lint", "befehl": "npm run lint -- --format ./tools/lint-format.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Lint"] },
     { "name": "tsc", "befehl": "npx --no-install tsc --noEmit", "ci": [".github/workflows/ci.yml › pruefungen › Typprüfung"] },
     { "name": "typabdeckung", "befehl": "node tools/typabdeckung.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Typabdeckung"] },
@@ -47,6 +51,12 @@
     { "name": "tsconfig", "befehl": "node tools/tsconfig-pruefen.mjs", "ci": [".github/workflows/pruefungen-pruefen.yml › pruefungen-pruefen › TypeScript-Konfiguration prüfen"] },
     { "name": "abhaengigkeiten", "befehl": "node tools/abhaengigkeiten.mjs --basis \"$BASIS\"", "ci": [".github/workflows/abhaengigkeiten.yml › abhaengigkeiten › Abhängigkeitsregeln"] },
     { "name": "lockfile-alter", "befehl": "node tools/lockfile-alter.mjs --basis \"$BASIS\"", "ci": [".github/workflows/lieferkette.yml › lieferkette › Mindestalter neuer Paketversionen prüfen"] },
+    {
+      "name": "testschutz",
+      "mitPr": true,
+      "befehl": "node tools/tests-nur-ergaenzt.mjs --basis \"$BASIS\" --pr \"$PR\"",
+      "ci": [".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt"]
+    },
     { "name": "test-statisch", "befehl": "node tools/test-statisch.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Statische Testprüfung"] },
     {
       "name": "test:wirkung",
@@ -66,7 +76,6 @@
     ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": "Sammelt die Ergebnisse der anderen GitHub-Jobs; lokal ist das der Exit von ci-lokal.",
     ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung": "Liest PR, Review und Label auf GitHub; lokal gibt es keinen PR.",
     ".github/workflows/freigabe.yml › approve-inhalt › Approve gleicher Inhalt": "Liest PR und Reviews auf GitHub und vergleicht mit dem freigegebenen Stand; lokal gibt es keinen PR.",
-    ".github/workflows/testschutz.yml › testschutz › Bestehende Tests nur ergänzt": "Liest die PR-Nummer und die Freigaben im Issue auf GitHub; lokal gibt es keinen PR.",
     ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": "Fährt lint und die betroffenen Tests über den ganzen PR, im Zweifel die volle Suite; lauf fährt beides je Auftrag, ci-lokal fährt lint.",
     ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": "Alle Werkzeugtests in Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
     ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit": "Liest die Laufzeiten der Werkzeugtests aus dem Schritt davor.",

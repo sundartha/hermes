@@ -288,15 +288,13 @@ test("Vorher aus der CI: falsche Aufrufe brechen ab, ohne GitHub zu fragen", (co
   assert.match(keineNummer.stderr, /--vorher-aus-ci verlangt die Nummer eines Laufs, nicht \.\.\/4711/);
 });
 
-const NAECHSTER_JOB_SCHLUESSEL = /^ {4}\S/;
 const POSTGRES_ADRESSE = "          HERMES_TEST_POSTGRES_URL: ";
 
-function dienste(datei, job) {
+function postgresStart(datei, job) {
   const zeilen = workflowJobLines(datei, job);
-  const anfang = zeilen.indexOf("    services:");
-  assert.notEqual(anfang, -1, `Job ${job} in ${datei} hat keine Dienste`);
-  const ende = zeilen.findIndex((zeile, nummer) => nummer > anfang && NAECHSTER_JOB_SCHLUESSEL.test(zeile));
-  return zeilen.slice(anfang, ende === -1 ? undefined : ende);
+  const anfang = zeilen.indexOf("      - name: Postgres starten");
+  assert.notEqual(anfang, -1, `Job ${job} in ${datei} startet kein Postgres`);
+  return zeilen.slice(anfang, anfang + 2);
 }
 
 function postgresAdresse(datei, schritt) {
@@ -304,7 +302,7 @@ function postgresAdresse(datei, schritt) {
 }
 
 test("Vorher aus der CI: der Stück-Job startet dasselbe Postgres wie die Tests der CI", () => {
-  assert.deepEqual(dienste("testumbau-vorher.yml", "stueck"), dienste("ci.yml", "tests"));
+  assert.deepEqual(postgresStart("testumbau-vorher.yml", "stueck"), postgresStart("ci.yml", "tests"));
   const adresse = postgresAdresse("ci.yml", "Tests");
   assert.equal(adresse.length, 1);
   assert.deepEqual(postgresAdresse("testumbau-vorher.yml", "Stück rechnen"), adresse);

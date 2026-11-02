@@ -7,6 +7,16 @@ on:
     types: [checks_requested]
   schedule:
     - cron: "0 3 * * *"
+  workflow_call:
+    inputs:
+      basis:
+        description: Basis-Commit (40 Zeichen), gegen den Lint, betroffene Tests und Werkzeugtests gewählt werden
+        type: string
+        required: true
+      ereignis:
+        description: Ereignis, für das die Werkzeugtests gewählt werden wie mit --fuer-ereignis, etwa pull_request
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -34,7 +44,7 @@ jobs:
 
       - name: Lint und betroffene Tests
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis || github.sha }}
         run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --ohne-werkzeugtests
 
   teile:
@@ -55,8 +65,8 @@ jobs:
       - name: Teile nach Laufzeit planen
         id: planen
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          EVENT_NAME: ${{ inputs.ereignis || github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis || github.sha }}
         run: |
           teile=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --fuer-ereignis "$EVENT_NAME" --teile-planen)
           echo "Prüfleiter-Teile: $teile" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -103,8 +113,8 @@ jobs:
       - name: Werkzeugtests
         if: steps.uebernahme.outputs.uebrig != '0'
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          EVENT_NAME: ${{ inputs.ereignis || github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis || github.sha }}
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
@@ -118,7 +128,7 @@ jobs:
       - name: Testlaufzeit
         if: always()
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           TEIL: ${{ matrix.teil }}
         run: |
           set -o pipefail
@@ -163,8 +173,8 @@ jobs:
 
       - name: Alle Teile erfolgreich und vollständig
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          EVENT_NAME: ${{ inputs.ereignis || github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis || github.sha }}
           JOBS: ${{ toJSON(needs) }}
         run: |
           npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS" --fuer-ereignis "$EVENT_NAME"

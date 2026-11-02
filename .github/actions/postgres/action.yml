@@ -1,0 +1,21 @@
+name: Postgres starten
+description: Startet Postgres in fester Fassung ohne Passwort (trust) auf localhost:5432 und wartet, bis es Verbindungen über TCP annimmt; die Tests erreichen es unter postgres://postgres@localhost:5432/postgres.
+runs:
+  using: composite
+  steps:
+    - name: Postgres starten
+      shell: bash
+      env:
+        POSTGRES_IMAGE: postgres:16.15@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
+      run: |
+        set -euo pipefail
+        docker run --detach --name postgres --publish 5432:5432 --env POSTGRES_HOST_AUTH_METHOD=trust "$POSTGRES_IMAGE" > /dev/null
+        for _ in $(seq 1 60); do
+          if docker exec postgres pg_isready --quiet --host localhost --port 5432; then
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "Postgres nimmt nach 120 s keine Verbindungen an"
+        docker logs postgres
+        exit 1
