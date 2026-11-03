@@ -47,24 +47,18 @@ function eigeneEinheiten(herkunft, shas) {
   });
 }
 
-function vollstaendigGemessen(eigene, gemessen) {
-  const dateien = new Set(gemessen.map(({ datei }) => datei));
-  return eigene.every(({ datei }) => dateien.has(datei));
-}
-
 export function schutzzuordnung(basis, root) {
-  return (faelle, { gemessen, geaendert }) => {
+  return (faelle, einheiten) => {
     const auftraege = auftraegeSeit(basis, root);
     if (auftraege.size === 0) return new Map();
-    const herkunft = herkunftJeZeile(geaendert, root);
+    const herkunft = herkunftJeZeile(einheiten, root);
     const zuordnung = new Map();
     for (const fall of faelle) {
       const commit = einfuehrenderCommit(fall, basis, root);
       const auftrag = auftraege.get(commit);
       if (auftrag === undefined) continue;
       const shas = new Set([...auftraege].filter(([, name]) => name === auftrag).map(([sha]) => sha));
-      const eigene = eigeneEinheiten(herkunft, shas);
-      if (vollstaendigGemessen(eigene, gemessen)) zuordnung.set(fall, { auftrag, commit, einheiten: eigene });
+      zuordnung.set(fall, { auftrag, commit, einheiten: eigeneEinheiten(herkunft, shas) });
     }
     return zuordnung;
   };
