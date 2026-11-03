@@ -46,7 +46,7 @@ jobs:
     name: Prüfungen
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16.15@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
@@ -298,6 +298,7 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+        timeout-minutes: 75
         run: npm run test:wirkung -- --basis "$PR_BASE_SHA"
 
   tests:
