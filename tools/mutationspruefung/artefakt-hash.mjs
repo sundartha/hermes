@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { hashPaar } from "../auftrag/sollwerte.mjs";
 import { auslassungen as skipFlags, muster } from "../tests-ausmisten/ausnehmen.mjs";
+import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
 
 const BERICHT = fileURLToPath(new URL("./erstlauf-bericht.mjs", import.meta.url));
 const ZEILENENDE = "\n";
@@ -18,6 +19,7 @@ const ABSTAND = " ";
 const AUSGELASSEN = new Map();
 const BANK = "regression";
 const BERICHT_NAME = "faelle.jsonl";
+const MS_JE_SEKUNDE = 1000;
 
 export const ARTEFAKT_HASH_GRUND = "fester Artefakt-Hash, in der Sandbox nicht aussagekräftig";
 
@@ -55,13 +57,21 @@ function roterHashVergleich(faelle, rot) {
   return treffer.length === 1 && treffer[0].rot && hashPaar(treffer[0]) !== null;
 }
 
+function meldeHaengende(faelle) {
+  for (const fall of faelle.filter((eintrag) => eintrag.rot && eintrag.name === eintrag.datei)) {
+    console.error(`Gegenprobe ohne Sandbox: ${fall.datei} nach ${DATEIGRENZE_MS / MS_JE_SEKUNDE} s ohne Ende abgebrochen`);
+  }
+}
+
 function ohneSandbox(rot, tests) {
   const ordner = mkdtempSync(join(tmpdir(), "artefakt-hash-"));
   try {
     const bericht = join(ordner, BERICHT_NAME);
-    const argumente = ["--test", `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), `--test-name-pattern=${muster(vollerName(rot))}`, ...tests];
+    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), `--test-name-pattern=${muster(vollerName(rot))}`, ...tests];
     spawnSync(execPath, argumente, { cwd: cwd(), env: { ...env, NODE_ENV: "test" }, stdio: "ignore" });
-    return lies(bericht).filter((fall) => !fall.suite && [blatt(rot), vollerName(rot)].includes(fall.name));
+    const faelle = lies(bericht);
+    meldeHaengende(faelle);
+    return faelle.filter((fall) => !fall.suite && [blatt(rot), vollerName(rot)].includes(fall.name));
   } finally {
     rmSync(ordner, { recursive: true, force: true });
   }
