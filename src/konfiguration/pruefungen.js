@@ -7,7 +7,7 @@ import {
 import { LLM_PROVIDER } from "../llm/provider.js";
 import { detectProduction } from "./umgebung.js";
 
-export function isInsecureHttpIssuer(issuerUrl) {
+function isInsecureHttpIssuer(issuerUrl) {
   return (
     !!issuerUrl &&
     issuerUrl.startsWith("http://") &&

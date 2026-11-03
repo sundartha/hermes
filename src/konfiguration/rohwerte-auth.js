@@ -38,6 +38,7 @@ function zugangsTokenRohwerte(env) {
     oauthAudience: env.OAUTH_AUDIENCE || "",
     callConfirmationSecret: env.CALL_CONFIRMATION_SECRET || "",
     deployToken: (env.HERMES_DEPLOY_TOKEN || "").trim(),
+    statusToken: (env.HERMES_STATUS_TOKEN || "").trim(),
   };
 }
 

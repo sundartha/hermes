@@ -50,7 +50,6 @@ const rawConfig = {
     publicDir: path.join(__dirname, "..", "public"),
     webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
   }),
-  logRequestId: boolEnv("LOG_REQUEST_ID", process.env.LOG_REQUEST_ID, { fallback: false }),
 
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
@@ -67,7 +66,6 @@ const rawConfig = {
     sipPassword: (process.env.ELEVENLABS_INBOUND_SIP_PASSWORD || "").trim(),
     initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(),
   },
-  statusToken: (process.env.HERMES_STATUS_TOKEN || "").trim(),
 };
 
 export const CONFIG_NAMESPACES = Object.freeze({
