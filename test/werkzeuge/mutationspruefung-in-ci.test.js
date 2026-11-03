@@ -418,3 +418,27 @@ test("Mutationsprüfung in der CI: eine Lauf-Nummer mit führender Null wird nic
   await imCi(probe);
   assert.deepEqual(vorlaeufeIn(probe.upstream), []);
 });
+
+function standabfragenBisher(probe) {
+  const zaehler = join(probe.gh, "zaehler.txt");
+  return existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
+}
+
+test("Mutationsprüfung in der CI: während des Wartens nennt sie sofort die Lauf-Adresse und danach jeden Wechsel des Stands genau einmal", FRIST, async (context) => {
+  const probe = fall(context, { staende: [LAEUFT, LAEUFT, LAEUFT, FERTIG_GRUEN], urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
+  const meldungen = [];
+  context.mock.method(console, "error", (zeile) => meldungen.push({ zeile, abfragen: standabfragenBisher(probe) }));
+  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  assert.equal(ergebnis.exitCode, 0, ergebnis.zeilen.join("\n"));
+  assert.equal(ergebnis.zeilen[1], GRUENES_URTEIL);
+  const [start, ...staende] = meldungen;
+  assert.equal(start?.abfragen, 0, "die Lauf-Adresse steht vor der ersten Standabfrage");
+  assert.ok(start.zeile.startsWith(`CI-Lauf gestartet: ${LAUF_URL}; `), start.zeile);
+  assert.deepEqual(
+    staende.map(({ zeile, abfragen }) => [abfragen, zeile.replace(/, nach \d+ min$/, "")]),
+    [
+      [1, `CI-Lauf ${LAUF_URL}: in_progress, Versuch 1`],
+      [4, `CI-Lauf ${LAUF_URL}: completed, success, Versuch 1`],
+    ],
+  );
+});
