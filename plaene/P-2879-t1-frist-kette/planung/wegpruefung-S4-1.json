@@ -1,0 +1,16 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "befund",
+      "befund": "Die Rolle 'wirkung' (src/abschalten.js:27-35) passt nicht zu S4. Diese Zeilen laufen erst, wenn `await store.drainFlushes()` in Zeile 23 zurückkehrt. Bei einem Flush, der nie zurückkehrt, erreicht der Ablauf sie nie, also kommt dort weder das exit(1) noch die Zeile '[shutdown] Gesamtfrist abgelaufen - Exit 1' an. Wirken kann nur ein Timer, der unabhängig vom Flush feuert. Heute ist das der Watchdog in src/abschalten.js:15 (`setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref()`), der exit(0) ohne Logzeile aufruft. Der Erkunder soll die Wirkung auf Zeile 15 legen, also auf die Gesamtfrist, die den Watchdog ersetzt, loggt und exit(1) aufruft, und dazusagen, dass Zeile 27 diesen Timer auf dem Weg mit Flush löschen muss. Die Rolle 'speicher' (20-26) bleibt die Stelle, die hängt. Eingang (src/server.js:242 -> src/boot.js:753-760) und Änderungsbereich 1-37 stimmen.",
+      "fundstelle": "src/abschalten.js:15"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/abschalten.js:35"
+    }
+  ],
+  "befunde": []
+}

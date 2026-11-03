@@ -1,0 +1,138 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/helpers.js:901"
+  },
+  {
+    "schluessel": "weg:S3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:759"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "weg:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/json.js:266"
+  },
+  {
+    "schluessel": "weg:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:35"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:17"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:108"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:64"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:17"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Premortem"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:164"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/al-p13-consult-channel.test.js:631"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "ausweg:S3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:B1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Bleibt unverändert"
+  },
+  {
+    "schluessel": "ausweg:B3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Bleibt unverändert"
+  },
+  {
+    "schluessel": "ausweg:S4:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Absicht"
+  },
+  {
+    "schluessel": "ausweg:S4:eingangImTest",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:22"
+  },
+  {
+    "schluessel": "ausweg:B2:aenderungen",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:35"
+  },
+  {
+    "schluessel": "ausweg:B2:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Bleibt unverändert"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Zwei Sätze aus den Dokumenten stehen bei keinem Auftrag, der sie brechen kann. (1) pitch.md, ## Grobe Lösung: „sauberer Flush heißt Exit `0` und die Logzeile `[shutdown] Finaler Store-Flush abgeschlossen`, ein Flush-Fehler Exit `1` wie heute.“ Den Teil mit dem Flush-Fehler und Exit 1 nennt weder a1 noch a2 in prueft, wasDarfNiePassieren oder den Annahmen. a1 verschiebt den Flush hinter die Teilfrist. a2 legt einen neuen Timer mit exit(1) um genau diesen Weg; dabei kann ein zweiter exit oder ein nicht gelöschter Timer entstehen, und der Test test/graceful-shutdown.test.js:169-188 erwartet genau ein exit(1). (2) pitch.md, ## Fallen: „Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.“ (Tests mit `fakeHttpServer` und `FAKE_CONFIG`, test/graceful-shutdown.test.js:164-202, und AL-P13-28). Das steht nur bei u1 und a1, nicht bei a2, obwohl a2 dieselbe Funktion makeGracefulShutdown umbaut. Der Planer soll beides bei a2 als Annahme oder in prueft eintragen (die bestehenden Tests in test/graceful-shutdown.test.js:169-202 und test/al-p13-consult-channel.test.js:629-649 bleiben unverändert grün) und bei a1 den Fall Flush-Fehler mit Exit 1 ergänzen.",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  }
+]

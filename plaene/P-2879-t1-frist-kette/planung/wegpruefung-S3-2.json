@@ -1,0 +1,20 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/boot.js:759"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/json.js:266"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/abschalten.js:17"
+    }
+  ],
+  "befunde": []
+}
