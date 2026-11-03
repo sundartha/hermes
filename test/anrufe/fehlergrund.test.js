@@ -309,6 +309,22 @@ test("[NIE1] ohne Kanalgrenzen-Merkmal bleibt jeder Konfigurations- und Serverab
   );
 });
 
+test("[NIE1] ein Auflegegrund, der kein Text ist, traegt kein Kanalgrenzen-Merkmal: der 403 bleibt not-placed", () => {
+  const keinText = [["channel_limit"], { toString: () => "channel_limit" }];
+  for (const hangupCause of keinText) {
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(SIP_FORBIDDEN), hangupCause }),
+      "not-placed:invite-403",
+      `hangupCause ${JSON.stringify(hangupCause)}`,
+    );
+    assert.equal(
+      telnyxAbbruch({ hangupCause }),
+      "failed",
+      `ohne SIP: ${JSON.stringify(hangupCause)}`,
+    );
+  }
+});
+
 test("[NIE2] beim Anrufstart ist nur HTTP 429 ausgelastet: andere 4xx bleiben not-placed, 5xx result-unknown", () => {
   for (let code = HTTP_CLIENT_ERROR_FIRST; code <= HTTP_CLIENT_ERROR_LAST; code += 1) {
     if (code === HTTP_TOO_MANY_REQUESTS) continue;
