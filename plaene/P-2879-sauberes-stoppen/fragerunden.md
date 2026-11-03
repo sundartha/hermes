@@ -27,3 +27,9 @@ Siehe die nummerierte Liste in der Frage-Datei der Sitzung vom 03.11.2026; die A
 
 ### Antworten Runde 2
 Betreuung 03.11.2026: 1 ja. 3, 4, 5 ja, unter dem Vorbehalt der Antwort von Antonio zu 2. 2 und 6 entscheidet Antonio (Frage an ihn gestellt). 7 entschieden ohne Antonio: `render.yaml` setzt `SHUTDOWN_DRAIN_TIMEOUT_MS` auf 25000 und setzt `maxShutdownDelaySeconds` nicht; der Code-Deckel 110000 ist erlaubt; PM5 bleibt Nicht-Ziel; Teilfrist 80 % = 20 s, Flush 5 s. 8, 9, 10 ja (bei 8 nennt das Runbook den Preis mit 25 s). 11 bis 17 ja (16 nur solange 2 hingenommen wird). D: a) und c) als vertrauliche Fehler, Schwere hoch (a vor B10, Bedingung zu 2); b) nicht eigens, Gegenstand von S2a (#2869). Status „freigegeben“ erst nach Antonios Antwort zu 2 und 6.
+
+## Runde 3
+1. Unter „Geänderte Dateien“ kommt die Zeile `src/abschaltweiche.js` dazu: neues Modul für Abschaltweiche und Zähler offener Anfragen (S2), von der Erkundung der Planung gemeldet. Empfehlung: ja, weil es nur die Dateiliste betrifft und kein Verhalten, Szenario oder keine Sicherheitsaussage ändert.
+
+### Antworten Runde 3
+Betreuung 03.11.2026: ja; sonst nichts ändern. Teil-Ordner und `planung/` werden gelöscht, `plane` läuft auf den Eltern-Pitch neu. Zieht die neue Teilung `src/config.js` und `render.yaml` in Teil 1 und braucht S1 sie, wird so weitergeplant (nicht von Hand umteilen) und es steht in der Schlussmeldung; KFZ zerlegt `src/config.js` gerade, Konflikte löst `lauf` beim Rebase.
