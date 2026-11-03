@@ -135,9 +135,22 @@ function loeseAus({ repo, zweig, basis, alterStand, testumbau, plaetze }, suchab
   return treffer ? treffer[1] : sucheLauf({ repo, zweig, seit }, suchabstandMs);
 }
 
+function standMelder(url, beginn) {
+  let zuletzt = null;
+  return ({ status, conclusion, attempt }, jetzt) => {
+    const kennung = JSON.stringify([status, conclusion, attempt]);
+    if (kennung === zuletzt) return;
+    zuletzt = kennung;
+    const ergebnis = conclusion ? `, ${conclusion}` : "";
+    console.error(`CI-Lauf ${url}: ${status}${ergebnis}, Versuch ${attempt ?? 1}, nach ${Math.round((jetzt - beginn) / MS_JE_MINUTE)} min`);
+  };
+}
+
 async function warteAufLauf(repo, lauf, frist) {
   const stand = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "status,conclusion,attempt"], frist));
-  if ((stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) || Date.now() >= frist.ende) return stand;
+  const jetzt = Date.now();
+  frist.melde(stand, jetzt);
+  if ((stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) || jetzt >= frist.ende) return stand;
   await warte(frist.taktMs);
   return warteAufLauf(repo, lauf, frist);
 }
@@ -170,7 +183,7 @@ async function startetNeu(repo, lauf, { stand, frist }) {
 
 async function standMitUrteil(repo, lauf, { zeiten, darfNeustart, ab }) {
   const beginn = Date.now();
-  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: zeiten.ende, ab };
+  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: zeiten.ende, ab, melde: zeiten.melde };
   const stand = await warteAufLauf(repo, lauf, frist);
   const urteil = stand.status === LAUF_FERTIG ? await abgelegtesUrteil(repo, lauf, frist) : null;
   if (urteil === null && darfNeustart && (await startetNeu(repo, lauf, { stand, frist }))) {
@@ -201,7 +214,9 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const { repo } = abruf;
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
-  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: Date.now() + zeiten.hoechstMs }, darfNeustart: true, ab: 1 });
+  const beginn = Date.now();
+  console.error(`CI-Lauf gestartet: ${url}; Stand alle ${Math.round(zeiten.taktMs / MS_JE_SEKUNDE)} s, höchstens ${Math.round(zeiten.hoechstMs / MS_JE_MINUTE)} min, eine Zeile bei jedem Wechsel des Stands.`);
+  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: beginn + zeiten.hoechstMs, melde: standMelder(url, beginn) }, darfNeustart: true, ab: 1 });
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
   if (urteil) {
     merkeVorlauf(abruf, lauf);
