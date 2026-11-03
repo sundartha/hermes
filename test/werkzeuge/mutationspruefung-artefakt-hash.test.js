@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { BASIS, EXIT_ABBRUCH, EXIT_ROT, pruefe, schluessel, UEBERLEBT } from "./mutationspruefung-hilfen.js";
-import { probeRepository, writeFiles } from "./probe-repo.js";
+import { isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+
+const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
+const ERSATZ = fileURLToPath(new URL("mutationspruefung-artefakt-hash-ersatz.mjs", import.meta.url));
+const HAENGER_FRIST_MS = 120_000;
+const HAENGER_MELDUNG = "Gegenprobe ohne Sandbox: test/haengt.test.js nach 3 s ohne Ende abgebrochen";
 
 const WOERTER = 'export const woerter = { hallo: "Hallo" };\n';
 const ZWEI = 'export const zwei = "zwei";\n';
@@ -127,4 +135,18 @@ test("ein oberster Test mit dem zusammengesetzten Namen eines verschachtelten Ha
   const lauf = pruefe(repo, "--basis", "HEAD");
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stderr.split("\n").includes(`Abbruch: Erstlauf rot: test/artefakt.test.js › ${VERSCHACHTELT}`), lauf.stderr);
+});
+
+test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die Prüfung nicht fest und wird benannt", (context) => {
+  const haengt = ['import { test } from "node:test";', 'import "../src/woerter.js";', 'if (!process.cwd().includes("sandbox")) setInterval(() => {}, 1000);', 'test("haengt", () => {});', ""].join("\n");
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": haengt });
+  const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+    env: isolatedEnvironment(),
+    timeout: HAENGER_FRIST_MS,
+  });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(OHNE_AUSGABE), lauf.stdout);
+  assert.ok(lauf.stderr.split("\n").includes(HAENGER_MELDUNG), lauf.stderr);
 });
