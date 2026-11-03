@@ -1,0 +1,62 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:759"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:19"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:35"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:17"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:11"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:172"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Absicht"
+  }
+]

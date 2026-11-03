@@ -1,0 +1,61 @@
+{
+  "erkundung": "593d486983546a82f629e1cd6334fef25b5bd2cd9db7af83a40d2486ad998134",
+  "schnitt": "e7414cf403b0505e15e5f0b35317a412acbacf8429b246e714f909d6d2c4c05c",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Zwei Sätze aus den Dokumenten stehen bei keinem Auftrag, der sie brechen kann. (1) pitch.md, ## Grobe Lösung: „sauberer Flush heißt Exit `0` und die Logzeile `[shutdown] Finaler Store-Flush abgeschlossen`, ein Flush-Fehler Exit `1` wie heute.“ Den Teil mit dem Flush-Fehler und Exit 1 nennt weder a1 noch a2 in prueft, wasDarfNiePassieren oder den Annahmen. a1 verschiebt den Flush hinter die Teilfrist. a2 legt einen neuen Timer mit exit(1) um genau diesen Weg; dabei kann ein zweiter exit oder ein nicht gelöschter Timer entstehen, und der Test test/graceful-shutdown.test.js:169-188 erwartet genau ein exit(1). (2) pitch.md, ## Fallen: „Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.“ (Tests mit `fakeHttpServer` und `FAKE_CONFIG`, test/graceful-shutdown.test.js:164-202, und AL-P13-28). Das steht nur bei u1 und a1, nicht bei a2, obwohl a2 dieselbe Funktion makeGracefulShutdown umbaut. Der Planer soll beides bei a2 als Annahme oder in prueft eintragen (die bestehenden Tests in test/graceful-shutdown.test.js:169-202 und test/al-p13-consult-channel.test.js:629-649 bleiben unverändert grün) und bei a1 den Fall Flush-Fehler mit Exit 1 ergänzen.",
+        "antwort": "korrigiert: Bei a1 und a2 steht unter wasDarfNiePassieren jetzt wörtlich der Satz aus pitch.md, ## Grobe Lösung zum Flush nach der Teilfrist („… sauberer Flush heißt Exit `0` …, ein Flush-Fehler Exit `1` wie heute.“). Bei a1 steht zusätzlich „Abgebrochene Anfragen allein machen kein Exit `1`.“, bei a1 und a2 außerdem der Satz aus pitch.md, ## Fallen „Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.“ Neue Annahmen: Bei a1 bleibt der Flush-Fehlerweg mit genau einem exit(1) erhalten. Bei a2 wird der Gesamtfrist-Timer gelöscht, sobald der Flush zurückkehrt, sodass kein zweites exit entsteht, und die Tests „S1-2 … rejectender/erfolgreicher finaler Flush“ in test/graceful-shutdown.test.js sowie AL-P13-28 in test/al-p13-consult-channel.test.js bleiben unverändert grün."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Die Punkte aus der vorigen Prüfung (Flush-Fehler mit Exit 1, Signatur) sind behoben. Es fehlt aber die Grenze zum Außenschutz. Sie steht bei keinem Auftrag, obwohl a1 sie brechen kann. Fehlende Sätze, wörtlich: (1) pitch.md, ## Absicht: „Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.“ (2) pitch.md, Kopf vor ## Absicht (Zuordnung zur Teilung): „S1 gehört in denselben Teil wie S2 oder in einen späteren, weil der Server nach dem Signal nur dann weiter Verbindungen annehmen darf (S1), wenn die Abschaltweiche Anfragen von außen abweist (S2); sonst wäre der Außenschutz aufgeweicht (Absicht, letzter Satz).“ In diesem Teil t1 gibt es keine Abschaltweiche (S2). Die Annahme zu a1 sagt aber, a1 warte auf den Zähler „vor dem Schließen“. Steht `httpServer.close` dadurch hinter dem Warten (heute src/abschalten.js:17, direkt nach dem Signal), nimmt der Server bis zur Teilfrist neue Verbindungen und Anfragen von außen an. Das ist genau der aufgeweichte Außenschutz. Der Planer soll beide Sätze bei a1 eintragen, unter wasDarfNiePassieren oder als Annahme. Dazu soll er festhalten, dass `httpServer.close` in a1 weiter sofort nach dem Signal läuft und der Zähler erst danach abgewartet wird. Die Annahme mit „vor dem Schließen“ soll er entsprechend berichtigen.",
+        "antwort": "korrigiert: Bei a1 steht der Satz aus pitch.md, ## Absicht „Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.“ jetzt wörtlich unter wasDarfNiePassieren, ebenso bei a2 wegen des Flush-Teils. Den Satz zur Zuordnung zur Teilung aus dem Kopf des Pitches habe ich wörtlich als Annahme bei a1 eingetragen, weil er unter keiner Abschnittsüberschrift steht. Eine neue Annahme bei a1 legt fest: `httpServer.close` und `closeIdleConnections` laufen wie heute sofort nach dem Signal, erst danach wird der Zähler abgewartet. Die Annahme zu B2 heißt jetzt „nach dem Schließen“ statt „vor dem Schließen“."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "bceb8b36-3e39-4d17-9b20-032f42ced4ea",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S4",
+        "b-nummer:B1",
+        "b-nummer:B2",
+        "b-nummer:B3",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "nie-saetze:a2",
+        "allein-gruen:a2",
+        "nicht-zusammengelegt:a2",
+        "gegenfrage:alle"
+      ],
+      "befunde": 1,
+      "entfallen": []
+    },
+    {
+      "runde": 2,
+      "sitzung": "f423920b-5ea5-4bf6-bc70-160f8f4e621d",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S4",
+        "b-nummer:B1",
+        "b-nummer:B2",
+        "b-nummer:B3",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "nie-saetze:a2",
+        "allein-gruen:a2",
+        "nicht-zusammengelegt:a2",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

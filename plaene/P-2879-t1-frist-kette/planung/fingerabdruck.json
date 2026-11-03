@@ -1,0 +1,132 @@
+{
+  "stand": {
+    "kopfBaum": "ae86901ec1b982922ffb3513e6835c03fd7c6d4c",
+    "arbeitsbaum": "ae86901ec1b982922ffb3513e6835c03fd7c6d4c",
+    "dateien": {
+      ".claude/agents/entwurf.md": "c85d87ce8c561ddf29a286af6477df0bf47007f66e0001b168f395c6c95d3cae",
+      ".claude/agents/erkunder.md": "8d9551820749ce7c4ffbb9c6f69e5a798d158f0cd7f83d45daf4333274fb25d1",
+      ".claude/agents/planer.md": "2c99ea18998fc6943efecc39fe55975476084b07c44ba9693a3c8f37a8a9dd71",
+      ".claude/agents/pruefer-planung.md": "0b735d0d872f8baf012a4f8268d9451cac067b51a16d6a2bc56d48b2418cb400",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "23e9ecdc84bef477f569ca4e9cda40b0445f5b48bcbddcf505ddcfc1b19721a0",
+      "plaene/P-2879-t1-frist-kette/design.md": "1317a78c024541b131b657c46ee5dd65d5fa6558b59ca698363b263cf6b6736d",
+      "plaene/P-2879-t1-frist-kette/pitch.md": "5e2dfbb567ed323f8bde6420aa49eef5d253c1c31376f1b2455ec0067082251c",
+      "plaene/P-2879-t1-frist-kette/sicherheit.md": "4850ed3e419defae16224a0a7d36bcd93b4b00a45b033265ba153ceac24480e3",
+      "tools/bereiche.json": "ab80b4d12f28d7356877a57e252114297ca7a6ef3980f506489ad39fd173a522"
+    },
+    "kopfOhneWerkzeug": "a6032f7587f8b3d994bdcc2560358a612118ae74b7a1c3cad08a2ddbdfb141ce",
+    "arbeitsbaumOhneWerkzeug": "a6032f7587f8b3d994bdcc2560358a612118ae74b7a1c3cad08a2ddbdfb141ce",
+    "werkzeugBaum": "baebadf2bbfff5e858d222b074c775a7a7b3ae03"
+  },
+  "ablage": {
+    "gliederung.json": "8bf1778286b94aef76cff397d0232fa3ff1945c935ca6121b740804e73d1eacb",
+    "nachfragen.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "erkundung-g1.json": "97ccf4bee7c382f79403b33aeb4c21cfe2555d0c59d90a31e3102c0f739e7c8d",
+    "erkundung-g2.json": "45cd5ca585a873f1eb3cb58ea88b145fd283c7f4dd2d130de07adece27554d36"
+  },
+  "zustand": {
+    "gesehen": [
+      "S3\u0000src/boot.js\u0000bootServer",
+      "S3\u0000src/abschalten.js\u0000makeGracefulShutdown",
+      "B1\u0000src/boot.js\u0000bootServer",
+      "B1\u0000src/abschalten.js\u0000makeGracefulShutdown",
+      "B3\u0000src/boot.js\u0000bootServer",
+      "B3\u0000src/abschalten.js\u0000makeGracefulShutdown",
+      "S4\u0000src/boot.js\u0000bootServer",
+      "S4\u0000src/abschalten.js\u0000makeGracefulShutdown",
+      "B2\u0000src/boot.js\u0000bootServer",
+      "B2\u0000src/abschalten.js\u0000makeGracefulShutdown"
+    ],
+    "ausgeschoepft": [],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "S4",
+          "B2"
+        ],
+        "sitzung": "5b11a446-dd84-493e-963b-64f7946d3f8d",
+        "runden": 2,
+        "offen": []
+      },
+      {
+        "nummern": [
+          "S3",
+          "B1",
+          "B3"
+        ],
+        "sitzung": "30d16f6f-88b2-4ef4-b6a9-f4fe79d37173",
+        "runden": 2,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "S4",
+        2
+      ],
+      [
+        "S3",
+        2
+      ]
+    ],
+    "nachfrageWellen": 0,
+    "wegAbnahmen": [
+      {
+        "nummer": "S4",
+        "summe": "980ab0c1bdf155743a7517ccd30a2d150e120ef24330373d447ce00a5286a158",
+        "werkzeug": "baebadf2bbfff5e858d222b074c775a7a7b3ae03",
+        "zeile": {
+          "schluessel": "weg:S4",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/abschalten.js:15"
+        }
+      },
+      {
+        "nummer": "B2",
+        "summe": "f9323ee927e81f1e2d5e1577e60b5bcd7e13617487719598c2a0924d0766eadb",
+        "werkzeug": "baebadf2bbfff5e858d222b074c775a7a7b3ae03",
+        "zeile": {
+          "schluessel": "weg:B2",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/abschalten.js:35"
+        }
+      },
+      {
+        "nummer": "S3",
+        "summe": "ceed8842b0d033ec4a2283dc5fce2b45bb938ff383496719360192d4da076fef",
+        "werkzeug": "baebadf2bbfff5e858d222b074c775a7a7b3ae03",
+        "zeile": {
+          "schluessel": "weg:S3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/boot.js:759"
+        }
+      },
+      {
+        "nummer": "B1",
+        "summe": "c3687ff0a2acf92e12abb0ea7ebef2dd806e0ad35ff748815ba34d19a277dbac",
+        "werkzeug": "baebadf2bbfff5e858d222b074c775a7a7b3ae03",
+        "zeile": {
+          "schluessel": "weg:B1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/store/json.js:266"
+        }
+      },
+      {
+        "nummer": "B3",
+        "summe": "faa2014fa3c181e50727d61d51850390e6c7d14f4d2e1f03b558b2218aa01463",
+        "werkzeug": "baebadf2bbfff5e858d222b074c775a7a7b3ae03",
+        "zeile": {
+          "schluessel": "weg:B3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/abschalten.js:17"
+        }
+      }
+    ]
+  }
+}

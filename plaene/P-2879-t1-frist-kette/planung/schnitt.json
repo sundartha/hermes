@@ -1,0 +1,180 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "u1",
+      "text": "Der Test „SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen Store-Flush zu erreichen“ in test/graceful-shutdown.test.js beschreibt das alte Verhalten (Exit 0 ohne Flush). Laut pitch.md, ## Fallen ersetzen S3 und S4 ihn absichtlich. u1 entfernt ihn vor a1. Die übrigen Tests der Datei bleiben unverändert grün, auch die Tests mit `fakeHttpServer` und `FAKE_CONFIG`. Die Freigabe mit dem Label `verhalten-geaendert` gibt laut Pitch der unabhängige Prüf-Agent."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Zähler am Ereignis `request` und `closeAllConnections` sind in `makeGracefulShutdown` nur aktiv, wenn `httpServer` diese Funktionen hat. Grund: Die Fakes in test/graceful-shutdown.test.js und in test/al-p13-consult-channel.test.js (AL-P13-28) haben nur `close` und `closeIdleConnections`, und diese Tests ändern sich laut pitch.md, ## Fallen nicht. Die Prüfung folgt dem Muster, das `closeIdleConnections` schon hat."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der `httpServer` entsteht in `bootServer` (src/boot.js) vor dem Aufruf von `makeGracefulShutdown` und wird ihm übergeben. Deshalb kann der Zähler in src/abschalten.js ab dem Serverstart zählen. src/boot.js und src/config.js ändern sich in diesem Teil nicht. Die Teilfrist wird aus `shutdownDrainTimeoutMs` abgeleitet; der Deckel 110000 gehört zu S5 in einem späteren Teil."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Reihenfolge in `gracefulShutdown` (src/abschalten.js): `httpServer.close` und `closeIdleConnections` laufen wie heute sofort nach dem Signal, sodass der Server keine neuen Verbindungen mehr annimmt. Erst danach wartet a1 auf den Zähler, bis er 0 ist oder die Teilfrist abläuft. Dann folgen `closeAllConnections` und der Flush. a1 stellt das Schließen nicht hinter das Warten."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Grenze zum Außenschutz (pitch.md, Kopf vor ## Absicht, Zuordnung zur Teilung): „S1 gehört in denselben Teil wie S2 oder in einen späteren, weil der Server nach dem Signal nur dann weiter Verbindungen annehmen darf (S1), wenn die Abschaltweiche Anfragen von außen abweist (S2); sonst wäre der Außenschutz aufgeweicht (Absicht, letzter Satz).“ Dieser Teil t1 enthält weder S1 noch S2. a1 lässt den Server deshalb nach dem Signal keine neuen Verbindungen annehmen und baut keine Abschaltweiche. Anfragen auf schon offenen Keep-alive-Verbindungen nach dem Signal weist erst die Abschaltweiche (S2) in einem späteren Teil ab; a1 schafft dafür keinen neuen Eingang."
+    },
+    {
+      "auftrag": "a1",
+      "text": "B2 hat laut Bericht keine Änderungsdatei, weil ein ruhender Server schon heute schließt, flusht und mit Exit 0 endet. B2 gehört zu a1, weil das neue Warten auf den Zähler nach dem Schließen einen ruhenden Stopp verzögern kann."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Bis a2 bleibt der heutige Watchdog in `gracefulShutdown` (src/abschalten.js) stehen und endet mit Exit 0 ohne Flush. a2 ersetzt ihn durch die Gesamtfrist. Für S3 mit 2000 ms (Teilfrist 1600 ms, JSON-Flush synchron) feuert er nicht vor dem Exit nach dem Flush."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Flush-Fehlerweg bleibt wie heute: Er schreibt `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN` und ruft genau einmal exit(1), auch wenn der Flush erst nach Ablauf der Teilfrist läuft. Abgebrochene Anfragen allein führen nicht zu Exit 1. Den Fehlerweg prüft der bestehende Test „S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + lauter Alarm“ in test/graceful-shutdown.test.js. Er bleibt unverändert grün, ebenso AL-P13-28 in test/al-p13-consult-channel.test.js."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die neuen Logzeilen gehen über den Parameter `log` bzw. `logError` von `makeGracefulShutdown` (Standard `console.log`/`console.error`). Damit laufen sie laut Bericht durch die zentrale Log-Maske in src/process-guards.js."
+    },
+    {
+      "auftrag": "a2",
+      "text": "nicht erreicht, weil kein Eingang einen hängenden Flush im echten Prozess herstellt; der Speicher mit nie zurückkehrendem `drainFlushes` wird über die Parameter `store`, `exit` und `log` von `makeGracefulShutdown` eingesetzt, und das Gerüst test/abrechnung/server-mit-testdatenbank.js bleibt unverändert (pitch.md, ## Fallen)."
+    },
+    {
+      "auftrag": "a2",
+      "text": "Der Gesamtfrist-Timer ersetzt den Watchdog und bleibt `unref`. Kehrt der Flush zurück, wird er gelöscht, ob erfolgreich oder mit Fehler. Ein Flush-Fehler endet deshalb mit genau einem exit(1) wie heute, ein sauberer Flush mit genau einem exit(0), und der Timer löst kein zweites `exit` aus."
+    },
+    {
+      "auftrag": "a2",
+      "text": "Die Signatur von `makeGracefulShutdown` bleibt so verwendbar wie heute (pitch.md, ## Fallen). Diese bestehenden Tests bleiben unverändert grün: „S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + lauter Alarm“ und „S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)“ in test/graceful-shutdown.test.js sowie AL-P13-28 in test/al-p13-consult-channel.test.js."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "testumbau",
+      "ziel": "Alten Watchdog-Test entfernen, den S3 und S4 laut Pitch ersetzen",
+      "bereich": "test/graceful-shutdown.test.js",
+      "erwarteteDateien": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "abnahme": "test/graceful-shutdown.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": []
+    },
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Stopp wartet auf offene Anfragen bis zur Teilfrist, dann Flush",
+      "bereich": "src/abschalten.js",
+      "erwarteteDateien": [
+        "src/abschalten.js",
+        "test/gemeinsam/stopp-wartet-auf-offene-anfragen.test.js"
+      ],
+      "abnahme": "test/gemeinsam/stopp-wartet-auf-offene-anfragen.test.js",
+      "erwarteterFehler": "[shutdown] Teilfrist abgelaufen - 1 offene Anfragen abgebrochen",
+      "prueft": [
+        "S3",
+        "B1",
+        "B2",
+        "B3"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "**Zähler offener Anfragen.** Eine Anfrage zählt vom Eingang der Kopfzeilen bis zum Ende der Antwort.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Teilfrist für das Warten auf den Zähler = 80 % der Gesamtfrist, bei 25000 also 20 s.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Läuft die Teilfrist ab, bevor der Zähler 0 ist, werden die offenen Anfragen abgebrochen, die Logzeile `[shutdown] Teilfrist abgelaufen - <n> offene Anfragen abgebrochen` nennt ihre Zahl, und der Flush läuft trotzdem; sauberer Flush heißt Exit `0` und die Logzeile `[shutdown] Finaler Store-Flush abgeschlossen`, ein Flush-Fehler Exit `1` wie heute.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Abgebrochene Anfragen allein machen kein Exit `1`.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Neue Logzeilen (`[shutdown] …`): Angriffswege: keiner, weil sie nur Zahlen und feste Texte enthalten (Pitch, Neue Begriffe) und durch die zentrale Log-Maske laufen (SG-13).",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Eingänge und Grenzen"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u1",
+          "grund": "der alte Watchdog-Test erwartet Exit 0 ohne Flush und würde durch das neue Verhalten rot"
+        }
+      ],
+      "eingang": "erreicht"
+    },
+    {
+      "id": "a2",
+      "art": "funktion",
+      "ziel": "Gesamtfrist ersetzt Watchdog: hängender Flush endet mit Exit 1",
+      "bereich": "src/abschalten.js",
+      "erwarteteDateien": [
+        "src/abschalten.js",
+        "test/gemeinsam/stopp-gesamtfrist-haengender-flush.test.js"
+      ],
+      "abnahme": "test/gemeinsam/stopp-gesamtfrist-haengender-flush.test.js",
+      "erwarteterFehler": "[shutdown] Gesamtfrist abgelaufen - Exit 1",
+      "prueft": [
+        "S4"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Läuft die Teilfrist ab, bevor der Zähler 0 ist, werden die offenen Anfragen abgebrochen, die Logzeile `[shutdown] Teilfrist abgelaufen - <n> offene Anfragen abgebrochen` nennt ihre Zahl, und der Flush läuft trotzdem; sauberer Flush heißt Exit `0` und die Logzeile `[shutdown] Finaler Store-Flush abgeschlossen`, ein Flush-Fehler Exit `1` wie heute.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Absicht"
+        },
+        {
+          "satz": "Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Neue Logzeilen (`[shutdown] …`): Angriffswege: keiner, weil sie nur Zahlen und feste Texte enthalten (Pitch, Neue Begriffe) und durch die zentrale Log-Maske laufen (SG-13).",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### Eingänge und Grenzen"
+        },
+        {
+          "satz": "Entscheidung: S4 hat keinen Test über einen echten Eingang, weil das Gerüst `test/abrechnung/server-mit-testdatenbank.js` den Server im Testprozess startet und den Pool durch eine PGlite-Attrappe ersetzt, die immer antwortet; die Phase trägt die Begründung „nicht erreichbar, weil kein Eingang einen hängenden Flush im echten Prozess herstellt“, und das Gerüst bleibt unverändert.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "a1",
+          "grund": "dieselbe Datei; die Gesamtfrist umschließt die Kette aus Teilfrist und Flush, die a1 baut"
+        }
+      ],
+      "eingang": "nicht erreicht, weil kein Eingang einen hängenden Flush im echten Prozess herstellt"
+    }
+  ]
+}

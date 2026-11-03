@@ -1,0 +1,46 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S3",
+        "B1",
+        "B3"
+      ],
+      "eingang": "SIGTERM an den laufenden Prozess (Render nach Hermes), während eine Anfrage `POST /voice/turn` an einen aktiven Anruf offen ist; das Design Doc beschreibt nur die Ausgangslage, der Eingang steht in sicherheit.md, ### Eingänge und Grenzen (Render nach Hermes; vor dem Signal begonnene Anfragen von außen)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie läuft das Stoppen heute vom Signal bis zum Exit? Gesucht sind die Stelle, an der SIGTERM registriert wird (vermutlich `src/boot.js`), und `makeGracefulShutdown` in `src/abschalten.js` mit Zeilen: wann `httpServer.close()` und `closeIdleConnections` laufen, der Watchdog nach `shutdownDrainTimeoutMs` mit Exit 0 (laut sicherheit.md `src/abschalten.js:15-19`), der Flush (`src/abschalten.js:22-23`), Exit-Codes und heutige Logzeilen (laut Design Doc steht in `src/abschalten.js:14` ein Logtext mit „in-flight“).",
+        "Laut Pitch kommt ein Zähler offener Anfragen in `src/abschalten.js`: Er wird am übergebenen `httpServer` über das Ereignis `request` eingerichtet und zählt ab den Kopfzeilen bis zum Ende der Antwort, abgewiesene Anfragen zählen nicht. Wo wird der `httpServer` erzeugt und an `makeGracefulShutdown` übergeben (Datei, Funktion, Zeilen)? Ist er beim Aufruf von `makeGracefulShutdown` schon vorhanden, sodass Anfragen ab dem Start gezählt werden und nicht erst ab dem Signal?",
+        "B3: Eine Gegenseite schließt die Verbindung vor der Antwort, während der Handler von `POST /voice/turn` weiterläuft. Welche Ereignisse liefert die eingesetzte Node-Version (Feld `engines` in `package.json`) dafür an `res` (`finish`, `close`), damit der Zähler genau einmal heruntergezählt wird, auch wenn der Handler danach noch `res.end` versucht?",
+        "S3: Nach Ablauf der Teilfrist (80 % von `shutdownDrainTimeoutMs`, also 1600 ms bei 2000) sollen offene Anfragen abgebrochen werden, und der Aufrufer sieht ein abgebrochenes Verbindungsende. Gibt es `closeAllConnections` in dieser Node-Version, oder braucht es eine Liste der Sockets? Gibt es im Code schon eine Stelle, die Sockets verfolgt oder zerstört?",
+        "Bestehende Tests rufen laut Pitch `makeGracefulShutdown` mit `fakeHttpServer` (nur `close` und `closeIdleConnections`) und `FAKE_CONFIG` auf (`test/graceful-shutdown.test.js:164-202`); diese Tests sollen sich nicht ändern. Welche Methoden von `httpServer` ruft `makeGracefulShutdown` heute auf? Würde ein Aufruf von `httpServer.on('request', …)` diese Tests brechen? Liste jeden Test in `test/graceful-shutdown.test.js` mit Namen und Zeilen.",
+        "Liegt der Test „SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen Store-Flush zu erreichen“ innerhalb von `test/graceful-shutdown.test.js:164-202` oder außerhalb? Wie startet er den Server (Kindprozess oder im Testprozess), wie bildet er die Sprachmodell-Attrappe nach (mit Verzögerung, nie antwortend) und welchen Speicher nutzt er (JSON-Speicherdatei)?",
+        "Gibt es einen bestehenden Test oder eine Testhilfe, die den echten Server als Kindprozess startet, einen aktiven Anruf anlegt, `POST /voice/turn` stellt, SIGTERM schickt und Exit-Code und Ausgabe liest? Datei, Funktion und Zeilen; ist darin die Verzögerung der Sprachmodell-Attrappe (800 ms, nie) einstellbar, und lässt sich `SHUTDOWN_DRAIN_TIMEOUT_MS` setzen?",
+        "B1 verlangt, dass der Agent-Turn nach dem Stopp in der Speicherdatei steht. Wo schreibt der JSON-Speicher den Turn von `POST /voice/turn` (Datei, Funktion, Zeilen), und schreibt er synchron (laut Design Doc ist `drainFlushes` in `src/store/json.js:249` leer)?",
+        "Über welchen Logger schreibt `src/abschalten.js` (die neuen Zeilen `[shutdown] Teilfrist abgelaufen - <n> offene Anfragen abgebrochen` und `[shutdown] Finaler Store-Flush abgeschlossen` sollen durch die zentrale Log-Maske SG-13 laufen)? Wo liegt diese Maske, und gibt es die Zeile „Finaler Store-Flush abgeschlossen“ heute schon?",
+        "Welchem Bereich aus `tools/bereiche.json` ordnet sich `src/abschalten.js` zu, und unter welchem Ordner `test/<bereich>/` läge ein neuer Abnahmetest? Steht `src/abschalten.js` oder ein Test dazu in `.github/CODEOWNERS`?"
+      ]
+    },
+    {
+      "nummern": [
+        "S4",
+        "B2"
+      ],
+      "eingang": "SIGTERM an den laufenden Prozess (Render nach Hermes) ohne offene Anfrage; bei S4 mit einem Speicher, dessen Flush nicht zurückkehrt (im Test nachgebildet, laut Pitch ## Fallen ohne echten Eingang); das Design Doc beschreibt nur die Ausgangslage, der Eingang steht in sicherheit.md, ### Eingänge und Grenzen (Render nach Hermes; Hermes nach Postgres)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie ruft `makeGracefulShutdown` in `src/abschalten.js` den letzten Flush auf (Name der Methode am Speicher, etwa `drainFlushes`), mit Zeilen? Was passiert heute bei einem Flush-Fehler (Exit 1, Logzeile)? Laut Design Doc ist `drainFlushes` im JSON-Speicher leer (`src/store/json.js:249`), der Postgres-Speicher wartet auf `flushChain` (`src/store/pg.js:70-80`).",
+        "Neu soll eine Gesamtfrist (= `shutdownDrainTimeoutMs`) vom Signal bis zum Ende des Flush laufen; läuft sie ab, schreibt der Prozess `[shutdown] Gesamtfrist abgelaufen - Exit 1` und endet mit Exit 1. Wie werden heute Speicher, `process.exit` und Logger an `makeGracefulShutdown` übergeben (Parameter, Signatur, Zeilen)? Kann ein Test über diese Parameter einen Speicher einsetzen, dessen Flush nie zurückkehrt, ohne das Gerüst `test/abrechnung/server-mit-testdatenbank.js` zu ändern?",
+        "Wie sind die Timer heute angelegt (Watchdog nach `shutdownDrainTimeoutMs`)? Sind sie mit `unref` versehen, und hält ein Timer den Prozess bei einem ruhenden Server (B2: keine offene Anfrage, Exit 0 innerhalb von 2 Sekunden) am Leben?",
+        "Gibt es einen bestehenden Test, der den Server ohne offene Anfrage stoppt und Exit 0 in kurzer Zeit erwartet (B2)? Datei, Testname, Zeilen; läuft er über einen Kindprozess mit echtem SIGTERM oder über `makeGracefulShutdown` mit `fakeHttpServer` und `FAKE_CONFIG`?",
+        "Wo steht der Schlüssel `shutdownDrainTimeoutMs` mit der Variable `SHUTDOWN_DRAIN_TIMEOUT_MS` (Default 8000, Deckel 30000 über `numEnv`, laut Design Doc `src/config.js:62`)? Liegt er noch in `src/config.js` oder schon in `src/konfiguration/` (Zerlegung KFZ #2306)? Gesucht ist die Stelle über den Schlüsselnamen.",
+        "Wie hängt der Aufrufer in `src/boot.js` an `makeGracefulShutdown` (Registrierung von SIGTERM/SIGINT, übergebene Konfiguration, Speicher, Exit-Funktion), mit Zeilen? Muss sich `src/boot.js` ändern, damit Gesamtfrist und Exit 1 wirken, oder liegt alles in `src/abschalten.js`?",
+        "Welchem Bereich aus `tools/bereiche.json` ordnet sich `src/abschalten.js` zu, und unter welchem Ordner `test/<bereich>/` läge ein neuer Abnahmetest?"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "gruppe": [
+    "S4",
+    "B2"
+  ],
+  "nummern": {
+    "S4": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 753,
+          "bis": 760
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 11,
+          "bis": 19
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 20,
+          "bis": 26
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 15,
+          "bis": 15
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 1,
+          "bis": 37,
+          "neueZeilen": 15
+        }
+      ],
+      "tests": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/abschalten.js:1-37 (kein Schema berührt)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil Pitch und Absicht die Fristen und den Exit 1 festlegen",
+      "eingangImTest": "nicht erreichbar, weil der Speicher mit nie zurückkehrendem Flush nur über die Parameter store und exit von makeGracefulShutdown eingesetzt werden kann (test/graceful-shutdown.test.js:169-188); ein Kindprozess über startServer hat einen echten Speicher",
+      "widersprueche": []
+    },
+    "B2": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 753,
+          "bis": 760
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 11,
+          "bis": 36
+        }
+      ],
+      "aenderungen": "keine Änderung, weil ohne offene Anfrage schon heute httpServer.close, Flush und exit(0) in src/abschalten.js:17-35 laufen; der Watchdog in Zeile 15 ist unref und hält den Prozess nicht am Leben. Die neue Gesamtfrist für S4 muss ebenfalls unref sein, dafür sind die Zeilen unter S4 mitgezählt.",
+      "tests": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/abschalten.js:1-37 (kein Schema berührt)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil sich das Verhalten ohne offene Anfrage nicht ändert",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "S4, Wirkung: Die Wirkung liegt auf Zeile 15, dem Timer. Die Gesamtfrist ersetzt den heutigen Watchdog, loggt '[shutdown] Gesamtfrist abgelaufen - Exit 1' und ruft exit(1) statt exit(0). Zeile 27 (clearTimeout) muss diesen Timer auf dem Weg mit Flush löschen, sonst feuert er nach erfolgreichem Flush. Der Eingang für S4 ist src/server.js:242 -> src/boot.js:753-760. Die Stelle, die hängt, ist die Rolle speicher (Zeilen 20-26).",
+    "Flush: abschalten.js:22-23 ruft in einem try nacheinander store.save() und store.drainFlushes() auf. Ein Fehler wird in flushError gespeichert (24-26). Danach löscht Zeile 27 den Watchdog, Zeile 29-31 loggt per logError '[shutdown] Finaler Store-Flush FEHLGESCHLAGEN ...', und Zeile 32 ruft exit(1). Sonst folgt exit(0) in Zeile 35. drainFlushes ist im JSON-Speicher leer (src/store/json.js:249), der Postgres-Speicher wartet auf flushChain (src/store/pg.js:70).",
+    "Parameter: makeGracefulShutdown({httpServer, store, config, releaseLongPolls = () => {}, exit = process.exit, log = console.log, logError = console.error}) in src/abschalten.js:1-9. Ein Test kann über store und exit einen Speicher einsetzen, dessen drainFlushes nie zurückkehrt, ohne test/abrechnung/server-mit-testdatenbank.js zu ändern (test/graceful-shutdown.test.js:169-202 mit fakeHttpServer und FAKE_CONFIG). Die Logzeile prüft man über log oder logError; welcher der beiden sie bekommt, entscheidet der Bau.",
+    "Timer: heute gibt es genau einen, den Watchdog in src/abschalten.js:15, setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref(). Er ruft exit(0) ohne Flush und ohne Logzeile. Weil er unref ist, hält er einen ruhenden Server nicht am Leben (B2).",
+    "Bestehender Test für B2: test/graceful-shutdown.test.js:190-202 ('S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)') läuft über makeGracefulShutdown mit fakeHttpServer und FAKE_CONFIG, ohne Kindprozess und ohne echtes SIGTERM. Mit Kindprozess und echtem SIGTERM laufen nur die Tests in Zeile 64 und 108, beide mit offener Anfrage. Der Test in Zeile 108 erwartet den heutigen Watchdog mit exit 0 und ohne Flush (Zeilen 141-155). Er widerspricht der neuen Gesamtfrist mit Exit 1. Dafür ist die Testschutz-Freigabe nötig (plaene/P-2879-sauberes-stoppen/fragerunden.md:16).",
+    "Schlüssel: shutdownDrainTimeoutMs steht noch in src/config.js:737-740 (numEnv('SHUTDOWN_DRAIN_TIMEOUT_MS', ..., {fallback: 8000, min: 0, max: 30000})). Die Namensraumliste steht in src/config.js:908. src/konfiguration/ enthält bisher nur CLAUDE.md. Das gehört nicht zu S4 und B2.",
+    "Aufrufer: src/boot.js:753-758 ruft makeGracefulShutdown({httpServer, store, config, releaseLongPolls: consultDelivery.releaseOpenPolls}) auf und registriert in Zeile 759-760 per process.once SIGTERM und SIGINT. exit, log und logError bleiben auf den Standardwerten. Für die Gesamtfrist und den Exit 1 muss sich src/boot.js nicht ändern.",
+    "Bereich: src/abschalten.js passt nur auf die Quellen von 'gemeinsam' (^src/). Ein neuer Abnahmetest läge unter test/gemeinsam/.",
+    "CODEOWNERS: .github/CODEOWNERS nennt nur /src/db/migrations/rueckbau/, also keine Änderungsdatei.",
+    "Absicht: Der heutige Watchdog (abschalten.js:15) beendet mit exit(0) ohne Flush. Das ist der Ausgang, den die Absicht ausschließt. Die Änderung in S4 muss ihn ersetzen und nicht daneben stehen lassen."
+  ]
+}
