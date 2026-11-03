@@ -10,6 +10,6 @@
 | E2 | <Plane-Ablehnung, z. B. „Datei `src/x.js` fehlt in Geänderte Dateien“> | <behoben: Zeile ergänzt> | <Fundstelle der Ablehnung> |
 
 ## Offen bei Antonio
-(Nur Punkte mit Folgen für Kunden, Geld, Recht, einer Lockerung einer Prüfung, einer neuen Abhängigkeit, der Produktion oder etwas Unumkehrbarem. Je Punkt die Frage, die Empfehlung und der Beleg. Gibt es keinen, steht hier „keiner“.)
+(Nur die Antonio-Fälle aus Nummer 3 im Abschnitt „Ohne Menschen in der Sitzung“ im Skill `aenderung`. Je Punkt die Frage, die Empfehlung und der Beleg. Gibt es keinen, steht hier „keiner“.)
 
 - A1: <Frage?> Empfehlung: <Antwort>, weil <Beleg>.
