@@ -12,14 +12,28 @@ import {
   tenantStripe,
   tenantSubscription,
 } from "./store/state-ops.js";
-import {
-  holdAmountForProviderPrice,
-  monthlyCostCentsForProviderPrice,
-} from "./telephony/provisioning-geo.js";
+import { config } from "./config.js";
+import { providerMicroCentsToBucketCents } from "./billing/cost-calibration.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
 
 const PROVISION_SEARCH_LIMIT = 10;
+
+function bucketCentsFromProviderPrice(price, providerMicroCents) {
+  if (!price) return null;
+  if (price.currency !== config.billing.providerCurrency) return null;
+  if (!Number.isInteger(providerMicroCents)) return null;
+  return providerMicroCentsToBucketCents(providerMicroCents, config.billing.providerToBucketRateMicro);
+}
+
+function holdAmountForProviderPrice(price, defaultHoldCents) {
+  const cents = bucketCentsFromProviderPrice(price, price?.upfrontMicroCents);
+  return cents !== null && cents > 0 ? cents : defaultHoldCents;
+}
+
+function monthlyCostCentsForProviderPrice(price) {
+  return bucketCentsFromProviderPrice(price, price?.monthlyMicroCents);
+}
 
 export async function provisionNumber(
   state,
