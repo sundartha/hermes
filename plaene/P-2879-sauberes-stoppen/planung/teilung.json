@@ -1,0 +1,82 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "frist-kette",
+      "nummern": [
+        "S3",
+        "B1",
+        "B3",
+        "S4",
+        "B2"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschalten.js",
+        "src/boot.js",
+        "src/routes/voice.js",
+        "src/store/json.js",
+        "src/store/pg.js",
+        "src/precall-briefing.js",
+        "test/graceful-shutdown.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Zähler offener Anfragen, Teilfrist und Gesamtfrist sind laut Pitch („Feste Sätze für a1 und a2“) eine zusammenhängende Kette in src/abschalten.js. Sie lässt sich bauen, während die Verbindungsannahme beim Signal wie heute sofort schließt. Der Außenschutz wird so nicht aufgeweicht, bevor die Abschaltweiche da ist."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "aussenschutz",
+      "nummern": [
+        "S2",
+        "S1"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschaltweiche.js",
+        "src/app.js",
+        "src/boot.js",
+        "src/abschalten.js",
+        "src/routes/_tenant.js",
+        "src/wiring/internal-only.js",
+        "src/mcp-tools.js",
+        "src/routes/mcp.js",
+        "src/routes/api-calls.js",
+        "src/routes/api-call-confirmations.js",
+        "src/telephony/outbound-gates.js",
+        "src/telephony/call-lifecycle.js",
+        "src/elevenlabs/outbound.js",
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "S1 und S2 brauchen beide, dass der Server nach dem Signal neue Verbindungen annimmt. Das darf laut Pitch („Zuordnung zur Teilung“) nur zusammen mit der Abschaltweiche geschehen. S1 baut außerdem auf dem Zähler aus t1 auf, damit der äußere MCP-Aufruf zwischen den Sprüngen offen gezählt bleibt."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "fristwerte",
+      "nummern": [
+        "S5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/config.js",
+        ".env.example",
+        "render.yaml",
+        "docs/RUNBOOK-LAB-LIVE.md",
+        "src/routes/intern-anrufpause.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1",
+        "t2"
+      ],
+      "grund": "Der Pitch verlangt die Werte aus S5 (Deckel 110000, render.yaml 25000, Runbook mit Anrufpause als erstem Schritt eines Notaus) im letzten Teil. So wird eine Gesamtfrist von 25 s erst ausgeliefert, wenn Frist-Kette und Flush aus t1 und t2 gebaut sind."
+    }
+  ]
+}
