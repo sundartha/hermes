@@ -341,13 +341,6 @@ test("feste-pfade: Listen im Code, Workflow-Pfade, Abnahmeliste und Hausregel-Da
     ],
     [
       {
-        "tools/auftrag/lauf.mjs":
-          'export const PIN_PRUEFUNG = "scripts/weg.js";\nexport const PIN_HAKEN = ".githooks/pre-commit";\n',
-      },
-      `tools/auftrag/lauf.mjs PIN_PRUEFUNG: scripts/weg.js ${MISSING}`,
-    ],
-    [
-      {
         "tools/mutationspruefung/vorlage.mjs":
           'export const KETTENANFANG = "src/a.js";\nexport const SCHEMA = "src/weg.sql";\n',
       },

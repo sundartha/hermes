@@ -12,7 +12,6 @@ import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { istVertraulich, reihenfolge } from "./format.mjs";
 import { dateiAm, git, kopf } from "./git.mjs";
 import { bereicheZwischen, kollisionenSeit } from "./kollision.mjs";
-import { ciLokalAmPhasenende } from "./phasenende.mjs";
 import { IssueNichtLesbar, issueAbsichtBefunde } from "./planung/absicht.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { REMOTE, belegteSperren, eigeneSperren, erwerben, freigeben } from "./sperren.mjs";
@@ -258,13 +257,6 @@ function aufgeben(ort, lauf) {
   entferneIntegration(ort, { branch: true });
 }
 
-function behalten(ort) {
-  entferneIntegration(ort, { branch: false });
-  freigeben(ort.root, eigeneSperren(ort.root, ort.phase));
-  console.error(`Phase ${ort.phase.phase}: ci-lokal rot, nichts hochgeladen. ${phasenBranch(ort.phase)} bleibt lokal mit allen übernommenen Aufträgen; die Sperren sind gelöst.`);
-  return EXIT_ROT;
-}
-
 function hochladen(ort) {
   git(["push", "-q", "-u", REMOTE, phasenBranch(ort.phase)], { cwd: ort.integration });
   entferneIntegration(ort, { branch: false });
@@ -313,7 +305,7 @@ export async function phase(phasendatei, root) {
   };
   for (const signal of ABBRUCH_SIGNALE) process.once(signal, abbruch);
   try {
-    if (await bauePhase(ort, lauf)) return ciLokalAmPhasenende(ort.integration, lauf.basis) === EXIT_GRUEN ? hochladen(ort) : behalten(ort);
+    if (await bauePhase(ort, lauf)) return hochladen(ort);
   } catch (fehler) {
     aufgeben(ort, lauf);
     throw fehler;

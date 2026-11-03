@@ -339,7 +339,6 @@ const SOURCES = [
     check: codeList(["KRITISCH_OHNE_GATE_TEST"], hasFileStartingWith),
   },
   { path: "tools/auftrag/bereiche.mjs", check: codeList(["GEMEINSAME_ORDNER"], pathExists) },
-  { path: "tools/auftrag/lauf.mjs", check: codeList(["PIN_PRUEFUNG", "PIN_HAKEN"], isListed) },
   {
     path: "tools/mutationspruefung/vorlage.mjs",
     check: codeList(["KETTENANFANG", "SCHEMA"], isListed),

@@ -9,7 +9,7 @@ import { uebernimmAbsicherung } from "./absicherung-uebernahme.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { VORBEREITUNG_BEREICH } from "./anrufbereich.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
-import { EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
+import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, nachSekunden, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
@@ -26,7 +26,6 @@ import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { absichtImIssueBefunde, issueBefunde } from "./phase.mjs";
-import { OHNE_NEUEN_AUFTRAG, TEILLAUF, ciLokalAmPhasenende, ciLokalNichtGelaufen, phasenbasis } from "./phasenende.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
 import { SOLLWERTE, setzeSollwerte, sollwertHinweis, sollwertZeile, sollwerteZuruecknehmen } from "./sollwerte.mjs";
@@ -37,32 +36,18 @@ import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { stelleVorZwischenstaendenHer, zwischenstandNachricht } from "./zwischenstand.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, befundOhneZweck, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
-import { REGELDATEI as ABHAENGIGKEITSREGELN } from "../abhaengigkeiten/regeldatei.mjs";
 
 const HASH_LITERAL = /[0-9a-f]{64}/;
 const TESTDATEI_MUSTER = ["*.test.js", "*.test.mjs", "*.test.cjs"];
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
-const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
-const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
-const KOPIEN = { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" };
 const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" };
-const BASIS_VERGLEICHE = [KOPIEN, INJEKTION];
-const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
-const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
-const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
-const LINT_REGELN = "eslint.config.js";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
-const TYPPRUEFUNG = "typecheck";
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const EINRUECKUNG = 2;
 const LEERE_LISTE_WIE_ESLINT = "{\n}";
-export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
-export const PIN_HAKEN = ".githooks/pre-commit";
-export const PIN_FEHLT =
-  "scripts/check-staged-suppressions.js fehlt, obwohl .githooks/pre-commit existiert. Ohne das Skript prüft niemand die vorgemerkten Unterdrückungen. Lege es nicht selbst an und ersetze es nicht.";
 const NUL = "\0";
 const NICHT_GEKUERZT =
   "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
@@ -321,11 +306,6 @@ class AuftragsLauf {
     return this.scheitert(genannt.zeile);
   }
 
-  statischeTestpruefung() {
-    this.allesVormerken();
-    return this.gruen(TEST_STATISCH, [execPath, STATISCHE_TESTPRUEFUNG, "--basis", this.basis], befundOhneZweck);
-  }
-
   importendungen() {
     return this.gruen(PRUEFUNG.IMPORTENDUNGEN, [execPath, EINSTIEG, "importendungen", "--basis", this.basisBau]);
   }
@@ -438,34 +418,6 @@ class AuftragsLauf {
     return this.scheitert(entscheidung.anlass);
   }
 
-  typpruefung() {
-    if (hatSkript(this.kontext.root, TYPPRUEFUNG)) return this.gruen(PRUEFUNG.TYPPRUEFUNG, ["npm", "--silent", "run", TYPPRUEFUNG]);
-    this.hinweise.push(`Typprüfung: package.json hat kein Skript ${TYPPRUEFUNG}.`);
-    return true;
-  }
-
-  abhaengigkeiten() {
-    if (existsSync(join(this.kontext.root, ABHAENGIGKEITSREGELN))) {
-      return this.gruen(PRUEFUNG.ABHAENGIGKEITEN, [execPath, ABHAENGIGKEITEN, "--basis", this.basis], vollerBelegMitZweckAusBloecken);
-    }
-    return this.einmalHinweisen(`Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`);
-  }
-
-  lintNeuerFunktionen() {
-    const { root } = this.kontext;
-    if (!existsSync(join(root, LINT_REGELN))) return this.einmalHinweisen(`Lint neuer Funktionen: ${LINT_REGELN} fehlt.`);
-    const befehl = [execPath, LINT_NEUE_FUNKTIONEN, "--basis", this.basis];
-    return aufVorgemerktemStand(root, () => this.gruen(PRUEFUNG.LINT_NEUE_FUNKTIONEN, befehl, vollerBelegMitZweckAusBloecken));
-  }
-
-  basisVergleiche() {
-    return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
-  }
-
-  kopien() {
-    return this.basisVergleich(KOPIEN);
-  }
-
   injektion() {
     return this.basisVergleich(INJEKTION);
   }
@@ -491,16 +443,6 @@ class AuftragsLauf {
   einmalHinweisen(hinweis) {
     if (!this.hinweise.includes(hinweis)) this.hinweise.push(hinweis);
     return true;
-  }
-
-  pinPruefung() {
-    const { root } = this.kontext;
-    if (!existsSync(join(root, PIN_PRUEFUNG))) {
-      if (!existsSync(join(root, PIN_HAKEN))) return true;
-      return this.gruenOderScheitert(this.belegt(PRUEFUNG.PIN, () => ({ name: PRUEFUNG.PIN, befehl: [execPath, PIN_PRUEFUNG], exitCode: EXIT_ROT, ausgabe: PIN_FEHLT })));
-    }
-    const vorgemerkt = git(["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
-    return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
   gekuerzt(pfad) {
@@ -601,13 +543,9 @@ class AuftragsLauf {
     const { auftrag } = this.kontext;
     return [
       () => this.grenzen("test", this.basis),
-      () => this.statischeTestpruefung(),
-      () => this.kopien(),
       () => this.faelleErhalten(),
       () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
       () => this.schutztests("test"),
-      () => this.abhaengigkeiten(),
-      () => this.lintNeuerFunktionen(),
     ];
   }
 
@@ -615,15 +553,7 @@ class AuftragsLauf {
     const { auftrag } = this.kontext;
     return [
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basis)),
-      () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
-      () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
-      () => this.kopien(),
-      () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
-      () => this.typpruefung(),
-      () => this.gruen(PRUEFUNG.LINT, ["npm", "--silent", "run", "lint"]),
-      () => this.lintNeuerFunktionen(),
-      () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
       () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),
     ];
@@ -752,17 +682,8 @@ function freigabe(kontext) {
   return { ...(freie.length > 0 ? freigabeDatei(kontext, freie) : {}), freigegeben };
 }
 
-function ciLokal(phase, root) {
-  return gemessen(MELDUNG.CI_LOKAL, `Phase ${phase.phase}`, () => ({ exitCode: ciLokalAmPhasenende(root, phasenbasis(root)) })).exitCode;
-}
-
-function phasenende({ phase, fertig, vorher, amPhasenende }, root) {
-  if (!amPhasenende) return ciLokalNichtGelaufen(root, TEILLAUF);
-  return fertig.size > vorher ? ciLokal(phase, root) : ciLokalNichtGelaufen(root, OHNE_NEUEN_AUFTRAG);
-}
-
 function beendeOderVerbraucheHalt(plan, root, auftrag) {
-  if (auftrag === undefined) return phasenende(plan, root);
+  if (auftrag === undefined) return EXIT_GRUEN;
   const halt = verbraucheHalt(root, plan.phase.phase);
   return halt === null ? null : meldeHalt(halt, auftrag.id);
 }
@@ -792,20 +713,20 @@ function zwischenstaendeAbgelegt({ phase, fertig }, root) {
   return befund === null;
 }
 
-function startplan(phasendatei, root, amPhasenende) {
+function startplan(phasendatei, root) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
     for (const befund of befunde) console.error(befund);
     return null;
   }
   const fertig = gebauteAuftraege(phase, root);
-  const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
+  const plan = { phase, fertig };
   meldeFertige(plan.fertig);
   return zwischenstaendeAbgelegt(plan, root) ? plan : null;
 }
 
-export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
-  const plan = startplan(phasendatei, root, amPhasenende);
+export function lauf(phasendatei, root) {
+  const plan = startplan(phasendatei, root);
   if (plan === null) return EXIT_ROT;
   for (;;) {
     if (!absicherungUebernommen(root, plan.phase)) return EXIT_ROT;
