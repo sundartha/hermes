@@ -19,7 +19,7 @@ const REMOVALS = new Map([
     SUPPRESSIONS,
     [
       "eslint-suppressions.json, eslint-suppressions.empty.json und eslint-legacy-exceptions.json",
-      "scripts/check-staged-suppressions.js mit seinem Aufruf in .githooks/pre-commit und dem CI-Schritt „Unterdrückungen steigen nicht“",
+      "scripts/check-staged-suppressions.js mit dem CI-Schritt „Unterdrückungen steigen nicht“",
       "die Sonderlogik in tools/lint-neue-funktionen.mjs (applySuppressions: false, ganze Funktion bei Berührung)",
       "der Schalter --pass-on-unpruned-suppressions in package.json und tools/ziele/werkzeuge.mjs",
       "die Sorte altfunktion und die Basis unterdrueckungen in tools/ziele",

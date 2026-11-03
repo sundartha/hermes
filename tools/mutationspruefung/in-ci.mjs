@@ -47,7 +47,7 @@ const KEIN_SCHREIBRECHT = /Permission to \S+ denied|returned error: 403|Authenti
 const ZEILENUMBRUCH = /\n/g;
 const PLAETZE_VARIABLE = "HERMES_MUTATION_PLAETZE";
 const PLAETZE_MUSTER = /^[1-9]\d{0,2}$/;
-const NUR_LAUF_MUTATION = { GIT_TERMINAL_PROMPT: "0", HERMES_PUSH_LAUF_MUTATION: "1" };
+const OHNE_ANMELDEABFRAGE = { GIT_TERMINAL_PROMPT: "0" };
 
 function git(argumente, root, umgebung = env) {
   const lauf = spawnSync("git", argumente, { cwd: root, encoding: "utf8", env: umgebung });
@@ -106,7 +106,7 @@ export function ohneSchreibrecht(meldung) {
 }
 
 function abgelehnterPush(root, stand, zweig) {
-  const lauf = spawnSync("git", ["push", REMOTE, `${stand}:refs/heads/${zweig}`], { cwd: root, encoding: "utf8", env: { ...env, ...NUR_LAUF_MUTATION } });
+  const lauf = spawnSync("git", ["push", REMOTE, `${stand}:refs/heads/${zweig}`], { cwd: root, encoding: "utf8", env: { ...env, ...OHNE_ANMELDEABFRAGE } });
   if (lauf.status === EXIT_GRUEN) return null;
   const meldung = String(lauf.stderr ?? "").trim().replace(ZEILENUMBRUCH, " / ");
   if (ohneSchreibrecht(meldung)) return meldung;

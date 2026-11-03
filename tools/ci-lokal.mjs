@@ -9,7 +9,7 @@ import { Abbruch, ausfuehren, gepruefteBasis, git } from "./pr-aenderungen.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 
 const LISTE = "tools/ci-lokal.json";
-const AUFRUF = "Aufruf: [SCHWERLAUF_VORRANG=push] node tools/ci-lokal.mjs --basis <commit> [--mit-teuren] [--pr <nummer>]";
+const AUFRUF = "Aufruf: node tools/ci-lokal.mjs --basis <commit> [--mit-teuren] [--pr <nummer>]";
 const PR_NUMMER = /^[1-9]\d*$/;
 const ERSTES_ARGUMENT = 2;
 const EXIT_GRUEN = 0;
@@ -82,6 +82,6 @@ await ausfuehren(async (root) => {
   const { values } = parseArgs({ options: { basis: { type: "string" }, "mit-teuren": { type: "boolean", default: false }, pr: { type: "string" } } });
   const basis = git(["rev-parse", "--verify", gepruefteBasis(values.basis, AUFRUF, root)], root).trim();
   if (values.pr !== undefined && !PR_NUMMER.test(values.pr)) throw new Abbruch(`--pr erwartet eine PR-Nummer, nicht ${JSON.stringify(values.pr)}. ${AUFRUF}`);
-  await nimmSperreAuchFuerKindprozesse(["ci-lokal", ...argv.slice(ERSTES_ARGUMENT)].join(" "), { vorrangFuerPush: true });
+  await nimmSperreAuchFuerKindprozesse(["ci-lokal", ...argv.slice(ERSTES_ARGUMENT)].join(" "));
   return pruefen(root, { basis, mitTeuren: values["mit-teuren"], pr: values.pr });
 });
