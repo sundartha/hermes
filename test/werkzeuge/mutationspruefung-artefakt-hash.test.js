@@ -41,12 +41,15 @@ const FALSCHER_SOLLWERT = "0".repeat(64);
 const SCHUTZ_TEST = "[NIE1] die Seite trägt den Pin des ausgelieferten Quelltexts";
 const SCHUTZ_FALL = [
   `test(${JSON.stringify(SCHUTZ_TEST)}, async () => {`,
+  "  clearInterval(takt);",
   '  const { readFileSync } = await import("node:fs");',
   '  const { createHash } = await import("node:crypto");',
   '  const karte = JSON.parse(readFileSync(new URL("./pin.json", import.meta.url), "utf8"));',
   '  assert.deepEqual({ version: karte.version, pin: createHash("sha256").update(readFileSync(new URL("../src/seite.js", import.meta.url))).digest("hex").slice(0, 16) }, karte);',
   "});",
 ].join("\n");
+const OFFENER_HAKEN = "const takt = setInterval(() => {}, 1000);";
+const RAEUMT_AUF = 'test("räumt auf", () => clearInterval(takt));';
 const ALTE_SEITE = quelle(TENANT, OFFSET, "  return { status: 200, eintraege: eintraege.slice(offset) };");
 const NEUE_FASSUNG = quelle(TENANT, OFFSET, NEUE_SEITE);
 const OHNE_SCHUTZ = `ohne test/seite.test.js › ${SCHUTZ_TEST}: ${GRUND}`;
@@ -226,7 +229,7 @@ function schutzRepo(context, pin) {
     "test/seite.test.js": seitentest(NORMAL),
     "test/pin.json": pinDatei(ALTE_SEITE),
   });
-  writeFiles(repo, { "src/seite.js": NEUE_FASSUNG, "test/seite.test.js": seitentest(NORMAL, NEGATIV, SCHUTZ_FALL), "test/pin.json": pin });
+  writeFiles(repo, { "src/seite.js": NEUE_FASSUNG, "test/seite.test.js": seitentest(OFFENER_HAKEN, NORMAL, NEGATIV, RAEUMT_AUF, SCHUTZ_FALL), "test/pin.json": pin });
   return repo;
 }
 

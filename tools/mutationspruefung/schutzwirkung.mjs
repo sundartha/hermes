@@ -48,9 +48,10 @@ function genannt(grund, name) {
 async function gemeinsamGetoetet(einheiten, faelle, werkzeug) {
   const wirksam = new Set();
   for (const pfad of new Set(faelle.map((fall) => fall.pfad))) {
+    const dieser = faelle.filter((eintrag) => eintrag.pfad === pfad);
     for (const { datei, bereiche } of einheiten) {
-      const ergebnisse = await werkzeug.stryker({ datei, zeilen: bereiche, tests: [pfad], namensmuster: SCHUTZFAELLE_MUSTER });
-      for (const fall of faelle.filter((eintrag) => eintrag.pfad === pfad)) {
+      const ergebnisse = await werkzeug.stryker({ datei, zeilen: bereiche, tests: [pfad], namensmuster: SCHUTZFAELLE_MUSTER, faelle: dieser.map(({ name }) => name) });
+      for (const fall of dieser) {
         if (ergebnisse.some(({ status, grund }) => GETOETET.has(status) && genannt(grund, fall.name))) wirksam.add(fall);
       }
     }
@@ -59,7 +60,7 @@ async function gemeinsamGetoetet(einheiten, faelle, werkzeug) {
 }
 
 export async function messeFall(fall, ziel, werkzeug) {
-  const ergebnisse = await werkzeug.stryker({ datei: ziel.datei, zeilen: ziel.bereiche, tests: [fall.pfad], namensmuster: muster(fall.name) });
+  const ergebnisse = await werkzeug.stryker({ datei: ziel.datei, zeilen: ziel.bereiche, tests: [fall.pfad], namensmuster: muster(fall.name), faelle: [fall.name] });
   const { getoetet, erreicht } = zaehlung(ergebnisse);
   return { getoetet, erreicht, mutanten: ergebnisse.map(({ status, zeilen }) => ({ status, zeilen })) };
 }
