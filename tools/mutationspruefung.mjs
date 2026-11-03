@@ -109,6 +109,7 @@ const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZWECK_UEBERLEBT = "tests/mutation";
 const ZWECK_ZUSTAND = "tests/stryker-zustand";
 const ZWECK_SCHUTZ = "schutzwirkung";
+const ZWECK_WARTET = "tests/schutzwirkung-wartet";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
@@ -904,10 +905,10 @@ function schutzAngaben(basis, angaben) {
 async function schutzImUrteil({ berichte, einheiten, geaendert, basis }, angaben) {
   const zuordnung = schutzzuordnung(basis, WURZEL);
   const urteil = await schutzDesUrteils({ berichte, einheiten, geaendert, angaben: schutzAngaben(basis, angaben), zuordnung, freigaben: schutzfreigaben }, strykerEinmal);
-  if (urteil === null) return { rot: [], wartet: false };
+  if (urteil === null) return [];
   meldeSchutz(urteil);
   schreibeNichtPruefbar(urteil.nichtPruefbar);
-  return { rot: urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : [], wartet: urteil.wartend > 0 };
+  return [...(urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : []), ...(urteil.wartend > 0 ? [ZWECK_WARTET] : [])];
 }
 
 function messbareEinheiten(plan) {
@@ -930,10 +931,11 @@ async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben
     const ergebnisse = vereineAnteile(berichte, index);
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
-  const schutz = pruefungen[0].seite === "neu" ? await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), geaendert: geaenderteEinheiten(plan), basis: pruefungen[0].von }, angaben) : { rot: [], wartet: false };
-  for (const id of schutz.rot) rot.add(id);
+  if (pruefungen[0].seite === "neu") {
+    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), geaendert: geaenderteEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
+  }
   zeigeZweck(rot);
-  return rot.size === 0 && !schutz.wartet ? EXIT_GRUEN : EXIT_ROT;
+  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
 async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
@@ -942,10 +944,14 @@ async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
   for (const [index, pruefung] of pruefungen.entries()) {
     for (const id of await pruefe(pruefung, gleichwertige, index === 0 ? sammler : null)) rot.add(id);
   }
-  const schutz = pruefungen[0].seite === "neu" ? await schutzImUrteil({ berichte: [sammler.bericht()], einheiten: sammler.einheiten, geaendert: sammler.einheiten, basis: pruefungen[0].von }, angaben) : { rot: [], wartet: false };
-  if (!gesondert) for (const id of schutz.rot) rot.add(id);
+  if (pruefungen[0].seite === "neu") {
+    const berichte = [sammler.bericht()];
+    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, geaendert: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
+      if (!gesondert) rot.add(id);
+    }
+  }
   zeigeZweck(rot);
-  return rot.size === 0 && (gesondert || !schutz.wartet) ? EXIT_GRUEN : EXIT_ROT;
+  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
 function umbauCommits(basis) {
