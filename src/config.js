@@ -1095,6 +1095,13 @@ const REQUIRED_CONFIG = Object.freeze([
 
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 
+function sharedTokenFindings({ statusToken, deployToken }) {
+  if (!statusToken || statusToken !== deployToken) return [];
+  return [
+    "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
+  ];
+}
+
 function fatalConfigFindings(isProduction) {
   const alertChannelConfig = alertChannelInputs({
     billing: config.billing,
@@ -1103,6 +1110,7 @@ function fatalConfigFindings(isProduction) {
   });
   return configFatalErrors()
     .concat(productionFootguns(config, isProduction))
+    .concat(sharedTokenFindings(config.auth))
     .concat(
       alertChannelFindings(alertChannelConfig)
         .filter((befund) => befund.fatal)
