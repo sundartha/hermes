@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { NEGATIV, NULL, VERDOPPELN, ZAHLTEST, abgewandelt, alleEintraege, ersteLaeufe, erwartung, mitEintraegen, nachrunde, quelle, temporaer, zusammenfassung } from "./mutationspruefung-nachrunde-hilfen.js";
+import { NEGATIV, NULL, VERDOPPELN, VERDOPPELNTEST, ZAHLTEST, abgewandelt, alleEintraege, ersteLaeufe, erwartung, mitEintraegen, nachrunde, quelle, temporaer, zusammenfassung } from "./mutationspruefung-nachrunde-hilfen.js";
 import { holeNachForcePush, prLauf, vorlaufJeDatei } from "./mutationspruefung-uebernahme-hilfen.js";
 import { commitAll, runIn, writeFiles } from "./probe-repo.js";
 
@@ -17,7 +17,8 @@ const ANDERER_STAND = [
   ["Workflow", { ".github/workflows/ci.yml": "name: CI\n" }],
   ["Daten unter test/", { "test/daten.json": '{ "neu": true }\n' }],
 ];
-const zustand = vorlaufJeDatei(FRIST);
+const DATEI_AUSSERHALB = "vorlagen/wert.json";
+const zustand = vorlaufJeDatei(FRIST, { "test/verdoppeln.test.js": `${VERDOPPELNTEST}// liest ${DATEI_AUSSERHALB}\n`, [DATEI_AUSSERHALB]: '{ "wert": 1 }\n' });
 
 function eintraege() {
   return alleEintraege(zustand.vorlauf.ordner);
@@ -57,6 +58,12 @@ test("ändert der Force-Push die tötende Testdatei, prüft der Pull Request der
   const { lauf } = gemessenNachForcePush({ "test/zahl.test.js": `${ZAHLTEST}// geändert\n` });
   const erwartet = pruefeUebernahme(lauf.ausgaben, ["test/zahl.test.js"]);
   assert.ok(erwartet.geprueft > 0);
+});
+
+test("ändert der Force-Push eine Datendatei außerhalb von src/ und test/, die die tötende Testdatei beim Namen nennt, prüft der Pull Request deren Mutanten neu", FRIST, () => {
+  const { lauf } = gemessenNachForcePush({ [DATEI_AUSSERHALB]: '{ "wert": 2 }\n' });
+  assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
+  assert.equal(ersteLaeufe(lauf.ausgaben), eintraege().length);
 });
 
 test("ändert der Force-Push die Quelle, übernimmt der Pull Request keinen ihrer Mutanten", FRIST, () => {
